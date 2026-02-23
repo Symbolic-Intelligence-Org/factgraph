@@ -131,6 +131,8 @@ class SDKStore:
             expose=bool(compiled.get("expose", False)),
         )
         active_registry = registry if registry is not None else RuleRegistry()
+        if registry is None:
+            self._register_rule_dependencies(active_registry, rule)
         return run_rule(self._store, rule_spec, active_registry, temporal_view=temporal_view)
 
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
@@ -219,6 +221,38 @@ class SDKStore:
             return compile_authoring_rule_v1(payload, schema_ir=self._schema_ir)
         except Exception as exc:
             raise SDKStoreError(f"invalid rule input: {exc}") from exc
+
+    def _register_rule_dependencies(self, registry: RuleRegistry, rule: Any) -> None:
+        if not hasattr(rule, "dependency_rules"):
+            return
+        deps = rule.dependency_rules()
+        if not isinstance(deps, list):
+            return
+        visited: set[tuple[str, str]] = set()
+
+        def add_dep(dep_rule: Any) -> None:
+            if not hasattr(dep_rule, "to_authoring_payload"):
+                return
+            dep_compiled = self._compile_rule_input(dep_rule)
+            key = (dep_compiled["rule_id"], dep_compiled["version"])
+            if key in visited:
+                return
+            visited.add(key)
+            if hasattr(dep_rule, "dependency_rules"):
+                for child in dep_rule.dependency_rules():
+                    add_dep(child)
+            registry.register(
+                RuleSpec(
+                    rule_id=dep_compiled["rule_id"],
+                    version=dep_compiled["version"],
+                    select_vars=list(dep_compiled["select_vars"]),
+                    where=list(dep_compiled["where"]),
+                    expose=bool(dep_compiled.get("expose", False)),
+                )
+            )
+
+        for dep in deps:
+            add_dep(dep)
 
     def _compile_derivation_input(self, derivation: Any) -> dict[str, Any]:
         if isinstance(derivation, dict) and {

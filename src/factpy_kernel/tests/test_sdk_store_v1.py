@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from factpy_kernel.adapters.souffle.package import ExportOptions
-from factpy_kernel.sdk import Entity, Field, Identity, SDKStore, SDKStoreError
+from factpy_kernel.sdk import Derivation, Entity, Field, Identity, Rule, RuleRef, SDKStore, SDKStoreError, vars
 
 
 class Company(Entity):
@@ -121,6 +121,53 @@ class SDKStoreV1Tests(unittest.TestCase):
         asrt_id = res.written_assertions[0]["asrt_id"]
         approved_meta = self.sdk.ledger.find_meta(asrt_id=asrt_id, key="approved_by", kind="str")
         self.assertEqual([m.value for m in approved_meta], ["alice"])
+
+    def test_run_and_evaluate_accept_support_sdk_objects(self) -> None:
+        self.sdk.set(Person.country, self.p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7"})
+        with vars("p", "c") as (p, c):
+            rule = Rule(
+                id="q_country_rows_obj",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+            drv = Derivation(
+                id="drv.country_copy_obj",
+                version="1.0.0",
+                target="person:country",
+                head_vars=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+                materialize_as="fact",
+            )
+        rows = self.sdk.run(rule)
+        self.assertEqual(rows, [(self.p_ref, "de")])
+        cands = self.sdk.evaluate(drv)
+        self.assertEqual(len(cands), 1)
+        res = self.sdk.accept(cands[0], approved_by="bob")
+        self.assertEqual(res.run_id, cands[0].run_id)
+
+    def test_run_supports_rule_ref_with_rule_object_dependencies(self) -> None:
+        self.sdk.set(Person.country, self.p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t8"})
+        with vars("p", "c", "x") as (p, c, x):
+            base = Rule(
+                id="q_country_rows_base",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+                expose=True,
+            )
+            top = Rule(
+                id="q_country_rows_ref",
+                version="1.0.0",
+                select=[p],
+                where=[
+                    RuleRef(base)(p, c),
+                    x == "xx",
+                    c != x,
+                ],
+            )
+        rows = self.sdk.run(top)
+        self.assertEqual(rows, [(self.p_ref,)])
 
 
 if __name__ == "__main__":
