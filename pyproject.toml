@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "symir"
+name = "factpy-kernel"
 version = "0.1.0"
-description = "Lightweight, IR-first logic representation and mapping."
+description = "FactPy kernel for append-only facts, policy/view projection, and logic export."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["pydantic>=2", "diskcache>=5"]
@@ -14,4 +14,4 @@ dependencies = ["pydantic>=2", "diskcache>=5"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-symir = ["samples/*.csv", "examples/*.py"]
+factpy_kernel = ["samples/*.csv", "examples/*.py"]
