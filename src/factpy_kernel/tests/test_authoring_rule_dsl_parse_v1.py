@@ -83,6 +83,28 @@ Rule(
         self.assertEqual(payload["where"][0], ("pred", "person:country", ["$E", "de"]))
         self.assertEqual(payload["where"][1], ("not", [("pred", "person:blacklist", ["$E", "x"])]))
 
+    def test_parse_rule_dsl_supports_infix_comparators_and_ruleref_nested_call(self) -> None:
+        payload = parse_authoring_rule_dsl_v1(
+            """
+with vars() as (e, r1, r2):
+    Rule(
+        rule_id="r",
+        version="1.0.0",
+        select=["e"],
+        where=[
+            RuleRef("q_rank", version="1.0.0")(e, r1),
+            RuleRef("q_rank", version="1.0.0")(e, r2),
+            r1 >= 3,
+            r1 != r2,
+        ],
+    )
+"""
+        )
+        self.assertEqual(payload["where"][0], ("ruleref", "q_rank", "1.0.0", ["$e", "$r1"]))
+        self.assertEqual(payload["where"][1], ("ruleref", "q_rank", "1.0.0", ["$e", "$r2"]))
+        self.assertEqual(payload["where"][2], ("ge", "$r1", 3))
+        self.assertEqual(payload["where"][3], ("not", [("eq", "$r1", "$r2")]))
+
     def test_parse_rule_dsl_blueprint_where_sugar_with_vars_and_paths(self) -> None:
         payload = parse_authoring_rule_dsl_v1(
             """

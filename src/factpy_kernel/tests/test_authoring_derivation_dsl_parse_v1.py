@@ -133,6 +133,26 @@ Derivation(
         )
         self.assertEqual(payload["where"][1], ("not", [("pred", "person:blacklist", ["$E", "x"])]))
 
+    def test_parse_derivation_dsl_supports_infix_comparators_and_ruleref_nested_call(self) -> None:
+        payload = parse_authoring_derivation_dsl_v1(
+            """
+with vars() as (e, c):
+    Derivation(
+      derivation_id="drv.country_copy",
+      target="person:country_copy",
+      select=["e", "c"],
+      where=[
+        RuleRef("q_country", version="1.0.0")(e, c),
+        c != "xx",
+        c >= "aa"
+      ]
+    )
+"""
+        )
+        self.assertEqual(payload["where"][0], ("ruleref", "q_country", "1.0.0", ["$e", "$c"]))
+        self.assertEqual(payload["where"][1], ("not", [("eq", "$c", "xx")]))
+        self.assertEqual(payload["where"][2], ("ge", "$c", "aa"))
+
     def test_reject_derivation_dsl_positional_args(self) -> None:
         with self.assertRaises(AuthoringDerivationDSLParseError):
             parse_authoring_derivation_dsl_v1('Derivation("x")')

@@ -128,6 +128,8 @@ def _where_atom(node: ast.AST, *, path: str, record_var_types: dict[str, str]) -
 def _where_dsl_call(node: ast.Call, *, path: str, record_var_types: dict[str, str]) -> Any:
     name = _call_name(node.func)
     if name is None:
+        if isinstance(node.func, ast.Call):
+            return _where_rule_ref_call(node, path=path)
         raise _helper_err("unsupported DSL helper call", path=path, detail_code="helper_callable", helper=None)
     if node.keywords:
         raise _helper_err(
@@ -241,6 +243,34 @@ def _where_term(node: ast.AST, *, path: str) -> Any:
     return _literal(node, path=path)
 
 
+def _where_rule_ref_call(node: ast.Call, *, path: str) -> tuple[str, str, str, list[Any]]:
+    if node.keywords:
+        raise _err("RuleRef(...)(...) outer call does not support keyword arguments", path=f"{path}.keywords")
+    inner = node.func
+    if not isinstance(inner, ast.Call):
+        raise _helper_err("unsupported DSL helper call", path=path, detail_code="helper_callable", helper=None)
+    if not (isinstance(inner.func, ast.Name) and inner.func.id == "RuleRef"):
+        raise _helper_err("unsupported DSL helper call", path=path, detail_code="helper_callable", helper=None)
+    if len(inner.args) != 1:
+        raise _err("RuleRef(...) requires rule_id as the first positional argument", path=f"{path}.func.args")
+    rule_id = _literal(inner.args[0], path=f"{path}.func.args[0]")
+    if not isinstance(rule_id, str) or not rule_id:
+        raise _err("RuleRef(...) rule_id must be non-empty string", path=f"{path}.func.args[0]")
+    version: Any = None
+    for kw_idx, kw in enumerate(inner.keywords):
+        if kw.arg is None:
+            raise _err("RuleRef(...) **kwargs are not supported", path=f"{path}.func.keywords[{kw_idx}]")
+        if kw.arg != "version":
+            raise _err(f"unsupported RuleRef keyword: {kw.arg}", path=f"{path}.func.{kw.arg}")
+        version = _literal(kw.value, path=f"{path}.func.version")
+    if not isinstance(version, str) or not version:
+        raise _err("RuleRef(...) requires non-empty version keyword", path=f"{path}.func.version")
+    terms = [_where_term(arg, path=f"{path}.args[{idx}]") for idx, arg in enumerate(node.args)]
+    if not terms:
+        raise _err("RuleRef(...)(...) requires at least one term", path=f"{path}.args")
+    return ("ruleref", rule_id, version, terms)
+
+
 def _where_record_exists_call(node: ast.Call, *, path: str, record_var_types: dict[str, str]) -> tuple[str, str, list[Any]]:
     if not isinstance(node.func, ast.Name):
         raise _helper_err("unsupported DSL helper call", path=path, detail_code="helper_callable", helper=None)
@@ -257,14 +287,27 @@ def _where_record_exists_call(node: ast.Call, *, path: str, record_var_types: di
 def _where_compare(node: ast.Compare, *, path: str, record_var_types: dict[str, str]) -> Any:
     if len(node.ops) != 1 or len(node.comparators) != 1:
         raise _err("where comparison syntax supports exactly one comparator", path=path)
-    if not isinstance(node.ops[0], ast.Eq):
-        raise _err("where path comparison syntax currently supports only ==", path=path)
+    op = node.ops[0]
     left_attr = _record_attr_ref(node.left)
     right_attr = _record_attr_ref(node.comparators[0])
     if left_attr is None and right_attr is None:
         left = _where_term(node.left, path=f"{path}.left")
         right = _where_term(node.comparators[0], path=f"{path}.right")
-        return ("eq", left, right)
+        if isinstance(op, ast.Eq):
+            return ("eq", left, right)
+        if isinstance(op, ast.NotEq):
+            return ("not", [("eq", left, right)])
+        if isinstance(op, ast.Gt):
+            return ("gt", left, right)
+        if isinstance(op, ast.GtE):
+            return ("ge", left, right)
+        if isinstance(op, ast.Lt):
+            return ("lt", left, right)
+        if isinstance(op, ast.LtE):
+            return ("le", left, right)
+        raise _err("unsupported where comparison operator", path=path)
+    if not isinstance(op, ast.Eq):
+        raise _err("where path comparison syntax currently supports only ==", path=path)
     if left_attr is not None and right_attr is not None:
         raise _err("comparison between two record attributes is not supported in v1 where sugar", path=path)
     attr_side = left_attr if left_attr is not None else right_attr
