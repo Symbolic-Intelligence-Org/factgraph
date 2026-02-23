@@ -1,0 +1,9 @@
+# 15
+
+class Person(Entity)
+SDKStore
+SDKRegistry
+compile_schema_from_classes
+schema_preflight_from_classes
+build_authoring_schema_from_classes
+apply_schema_classes
