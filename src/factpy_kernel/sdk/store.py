@@ -4,11 +4,14 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
+from factpy_kernel.authoring.derivation_compile import compile_authoring_derivation_v1
+from factpy_kernel.authoring.rule_compile import compile_authoring_rule_v1
 from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptResult
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
 from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
+from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
 from factpy_kernel.adapters.souffle.runner import run_package
 from factpy_kernel.core.store.api import Store
 from factpy_kernel.core.store.ledger import Ledger
@@ -112,10 +115,77 @@ class SDKStore:
     def retract(self, asrt_id: str, *, meta: dict[str, Any] | None = None) -> str | None:
         return retract_by_asrt(self._store.ledger, asrt_id, meta)
 
+    def run(
+        self,
+        rule: Any,
+        *,
+        temporal_view: str = "record",
+        registry: RuleRegistry | None = None,
+    ) -> list[tuple[Any, ...]]:
+        compiled = self._compile_rule_input(rule)
+        rule_spec = RuleSpec(
+            rule_id=compiled["rule_id"],
+            version=compiled["version"],
+            select_vars=list(compiled["select_vars"]),
+            where=list(compiled["where"]),
+            expose=bool(compiled.get("expose", False)),
+        )
+        active_registry = registry if registry is not None else RuleRegistry()
+        return run_rule(self._store, rule_spec, active_registry, temporal_view=temporal_view)
+
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
+        if args and hasattr(args[0], "to_authoring_payload"):
+            derivation = args[0]
+            compiled = self._compile_derivation_input(derivation)
+            return self._store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=list(compiled["head_vars"]),
+                where=list(compiled["where"]),
+                mode=kwargs.pop("mode", compiled.get("mode", "python")),
+                temporal_view=kwargs.pop("temporal_view", compiled.get("temporal_view", "record")),
+                materialize_as=compiled.get("materialize_as"),
+                head=compiled.get("head"),
+                id_policy=compiled.get("id_policy"),
+            )
+        if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
+            compiled = self._compile_derivation_input(args[0])
+            return self._store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=list(compiled["head_vars"]),
+                where=list(compiled["where"]),
+                mode=kwargs.pop("mode", compiled.get("mode", "python")),
+                temporal_view=kwargs.pop("temporal_view", compiled.get("temporal_view", "record")),
+                materialize_as=compiled.get("materialize_as"),
+                head=compiled.get("head"),
+                id_policy=compiled.get("id_policy"),
+            )
+        return self._store.evaluate(*args, **kwargs)
+
+    def evaluate_compiled(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
         return self._store.evaluate(*args, **kwargs)
 
     def accept(self, *args: Any, **kwargs: Any) -> AcceptResult:
+        if args and isinstance(args[0], CandidateSet):
+            if len(args) != 1:
+                raise SDKStoreError("accept(candidate_set, ...) accepts exactly one positional argument")
+            candidate_set = args[0]
+            options = self._accept_options_from_user_kwargs(kwargs)
+            if kwargs:
+                unknown = ", ".join(sorted(kwargs.keys()))
+                raise SDKStoreError(f"unknown accept keyword(s): {unknown}")
+            return self._store.accept(
+                derivation_id=candidate_set.derivation_id,
+                version=candidate_set.derivation_version,
+                candidate_set=candidate_set,
+                options=options,
+            )
+        return self._store.accept(*args, **kwargs)
+
+    def accept_compiled(self, *args: Any, **kwargs: Any) -> AcceptResult:
         return self._store.accept(*args, **kwargs)
 
     def explain_fact(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -129,6 +199,73 @@ class SDKStore:
 
     def run_package(self, package_dir, *, entrypoints: list[str], engine: str = "souffle"):
         return run_package(package_dir, entrypoints=entrypoints, engine=engine)
+
+    def _compile_rule_input(self, rule: Any) -> dict[str, Any]:
+        if isinstance(rule, RuleSpec):
+            return {
+                "rule_id": rule.rule_id,
+                "version": rule.version,
+                "select_vars": list(rule.select_vars),
+                "where": list(rule.where),
+                "expose": rule.expose,
+            }
+        if hasattr(rule, "to_authoring_payload"):
+            payload = rule.to_authoring_payload()
+        elif isinstance(rule, dict):
+            payload = dict(rule)
+        else:
+            raise SDKStoreError("rule must be RuleSpec, SDK Rule object, or authoring rule payload dict")
+        try:
+            return compile_authoring_rule_v1(payload, schema_ir=self._schema_ir)
+        except Exception as exc:
+            raise SDKStoreError(f"invalid rule input: {exc}") from exc
+
+    def _compile_derivation_input(self, derivation: Any) -> dict[str, Any]:
+        if isinstance(derivation, dict) and {
+            "derivation_id",
+            "version",
+            "target_pred_id",
+            "head_vars",
+            "where",
+        }.issubset(set(derivation.keys())):
+            return dict(derivation)
+        if hasattr(derivation, "to_authoring_payload"):
+            payload = derivation.to_authoring_payload()
+        elif isinstance(derivation, dict):
+            payload = dict(derivation)
+        else:
+            raise SDKStoreError(
+                "derivation must be SDK Derivation object, compiled derivation dict, or authoring derivation payload dict"
+            )
+        try:
+            return compile_authoring_derivation_v1(payload, schema_ir=self._schema_ir)
+        except Exception as exc:
+            raise SDKStoreError(f"invalid derivation input: {exc}") from exc
+
+    @staticmethod
+    def _accept_options_from_user_kwargs(kwargs: dict[str, Any]) -> AcceptOptions:
+        raw_meta_overrides = kwargs.pop("meta_overrides", None)
+        if raw_meta_overrides is None:
+            meta_overrides: dict[str, Any] = {}
+        elif isinstance(raw_meta_overrides, dict):
+            meta_overrides = dict(raw_meta_overrides)
+        else:
+            raise SDKStoreError("meta_overrides must be dict when provided")
+
+        # Blueprints commonly use meta_overrides={"approved_by": ...}; also support keyword sugar.
+        for key in ("approved_by", "note", "dry_run"):
+            if key in kwargs:
+                if key in meta_overrides:
+                    raise SDKStoreError(f"duplicate accept option: {key} provided in meta_overrides and keyword")
+                meta_overrides[key] = kwargs.pop(key)
+
+        approved_by = meta_overrides.pop("approved_by", None)
+        note = meta_overrides.pop("note", None)
+        dry_run = meta_overrides.pop("dry_run", False)
+        if meta_overrides:
+            unknown = ", ".join(sorted(meta_overrides.keys()))
+            raise SDKStoreError(f"unsupported meta_overrides keys for accept(): {unknown}")
+        return AcceptOptions(approved_by=approved_by, note=note, dry_run=bool(dry_run))
 
     def _index_schema(self) -> None:
         pred_index: dict[tuple[str, str], dict[str, Any]] = {}

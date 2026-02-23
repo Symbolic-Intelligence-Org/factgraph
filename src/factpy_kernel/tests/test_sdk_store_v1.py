@@ -96,6 +96,32 @@ class SDKStoreV1Tests(unittest.TestCase):
         ref = sdk.ref(Language, code="de")
         self.assertIn("idref_v1:", ref)
 
+    def test_run_accept_facades_align_with_blueprint_style(self) -> None:
+        self.sdk.set(Person.country, self.p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t6"})
+        rows = self.sdk.run(
+            {
+                "rule_id": "q_country_rows",
+                "version": "1.0.0",
+                "select": ["p", "c"],
+                "where": [("pred", "person:country", ["$p", "$c"])],
+            }
+        )
+        self.assertEqual(rows, [(self.p_ref, "de")])
+
+        candidate = self.sdk.store.evaluate_dummy(
+            derivation_id="drv.copy_country",
+            version="1.0.0",
+            target="person:country",
+            e_ref=self.p_ref,
+            rest_terms=[("string", "fr")],
+            dims_terms=[],
+        )
+        res = self.sdk.accept(candidate, meta_overrides={"approved_by": "alice"})
+        self.assertEqual(res.accepted_count, 1)
+        asrt_id = res.written_assertions[0]["asrt_id"]
+        approved_meta = self.sdk.ledger.find_meta(asrt_id=asrt_id, key="approved_by", kind="str")
+        self.assertEqual([m.value for m in approved_meta], ["alice"])
+
 
 if __name__ == "__main__":
     unittest.main()
