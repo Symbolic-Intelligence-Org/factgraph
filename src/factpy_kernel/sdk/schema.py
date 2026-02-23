@@ -114,8 +114,30 @@ class Field(_DeclaredMember):
             out["dims"] = _normalize_dims_for_authoring(self.dims)
         return out
 
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        if args:
+            raise SDKSchemaError("Field head call does not support positional arguments")
+        if not kwargs:
+            raise SDKSchemaError("Field head call requires keyword arguments")
+        if not any(_is_sdk_dsl_value(v) for v in kwargs.values()):
+            raise SDKSchemaError("Field head call expects SDK DSL values (e.g. vars())")
+        try:
+            from .dsl.expr import build_field_head_call
+        except Exception as exc:
+            raise SDKSchemaError(f"SDK DSL is unavailable: {exc}") from exc
+        return build_field_head_call(self, kwargs)
+
 
 class EntityMeta(type):
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
+        if cls.__name__ != "Entity" and _looks_like_sdk_dsl_entity_call(args, kwargs):
+            try:
+                from .dsl.expr import build_entity_dsl_call
+            except Exception as exc:
+                raise SDKSchemaError(f"SDK DSL is unavailable: {exc}") from exc
+            return build_entity_dsl_call(cls, args, kwargs)
+        return super().__call__(*args, **kwargs)
+
     def __new__(mcls, name: str, bases: tuple[type, ...], namespace: dict[str, Any]):
         cls = super().__new__(mcls, name, bases, namespace)
         if name == "Entity":
@@ -178,6 +200,24 @@ def _extract_meta(meta_cls: Any) -> dict[str, Any]:
             continue
         out[key] = value
     return out
+
+
+def _is_sdk_dsl_value(value: Any) -> bool:
+    try:
+        from .dsl.expr import is_dsl_head_kwarg_value
+    except Exception:
+        return False
+    return bool(is_dsl_head_kwarg_value(value))
+
+
+def _looks_like_sdk_dsl_entity_call(args: tuple[Any, ...], kwargs: dict[str, Any]) -> bool:
+    if args and kwargs:
+        return False
+    if kwargs:
+        return any(_is_sdk_dsl_value(v) for v in kwargs.values())
+    if len(args) == 1:
+        return _is_sdk_dsl_value(args[0])
+    return False
 
 
 def _annotation_to_type_domain_runtime(annotation: Any) -> str:
