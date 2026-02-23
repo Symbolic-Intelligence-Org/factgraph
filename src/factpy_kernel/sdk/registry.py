@@ -9,6 +9,8 @@ from factpy_kernel.authoring import (
     FileAuthoringRegistry,
     build_authoring_publish_workflow_apply_bundle_dto,
 )
+from factpy_kernel.authoring.derivation_compile import compile_authoring_derivation_v1
+from factpy_kernel.authoring.rule_compile import compile_authoring_rule_v1
 
 from .compile import build_authoring_schema_from_classes
 from .errors import SDKRegistryError
@@ -93,11 +95,31 @@ class SDKRegistry:
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
+    def register_rule(self, rule: Any, *, schema_ir: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = rule.to_authoring_payload() if hasattr(rule, "to_authoring_payload") else rule
+        if not isinstance(payload, dict):
+            raise SDKRegistryError("rule must be SDK Rule object or authoring rule payload dict")
+        try:
+            compiled = compile_authoring_rule_v1(payload, schema_ir=schema_ir)
+        except Exception as exc:
+            raise SDKRegistryError(str(exc)) from exc
+        return self.register_rule_spec(compiled)
+
     def register_derivation_spec(self, derivation_spec_payload: dict[str, Any]) -> dict[str, Any]:
         try:
             return self._registry.register_derivation_spec(derivation_spec_payload)
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
+
+    def register_derivation(self, derivation: Any, *, schema_ir: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = derivation.to_authoring_payload() if hasattr(derivation, "to_authoring_payload") else derivation
+        if not isinstance(payload, dict):
+            raise SDKRegistryError("derivation must be SDK Derivation object or authoring derivation payload dict")
+        try:
+            compiled = compile_authoring_derivation_v1(payload, schema_ir=schema_ir)
+        except Exception as exc:
+            raise SDKRegistryError(str(exc)) from exc
+        return self.register_derivation_spec(compiled)
 
     def get_schema_entry(self) -> dict[str, Any] | None:
         try:

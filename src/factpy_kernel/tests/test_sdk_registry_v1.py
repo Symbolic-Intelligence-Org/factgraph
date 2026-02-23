@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from factpy_kernel.sdk import Entity, Field, Identity, SDKRegistry, SDKRegistryError
+from factpy_kernel.sdk import Derivation, Entity, Field, Identity, Rule, SDKRegistry, SDKRegistryError, vars
 
 
 class Person(Entity):
@@ -95,6 +95,30 @@ class SDKRegistryV1Tests(unittest.TestCase):
             sdk_registry = SDKRegistry(tmpdir)
             with self.assertRaises(SDKRegistryError):
                 SDKRegistry(Path(tmpdir) / "other", registry=sdk_registry.registry)
+
+    def test_register_rule_and_derivation_sdk_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sdk_registry = SDKRegistry(tmpdir)
+            with vars("e", "c") as (e, c):
+                rule = Rule(
+                    id="rule.country_rows_obj",
+                    version="1.0.0",
+                    select=[e, c],
+                    where=[("pred", "person:country", ["$e", "$c"])],
+                    expose=True,
+                )
+                derivation = Derivation(
+                    id="drv.country_copy_obj",
+                    version="1.0.0",
+                    target="person:country_copy",
+                    head_vars=[e, c],
+                    where=[("pred", "person:country", ["$e", "$c"])],
+                    materialize_as="fact",
+                )
+            rule_res = sdk_registry.register_rule(rule)
+            derivation_res = sdk_registry.register_derivation(derivation)
+            self.assertEqual(rule_res["status"], "applied")
+            self.assertEqual(derivation_res["status"], "applied")
 
 
 if __name__ == "__main__":
