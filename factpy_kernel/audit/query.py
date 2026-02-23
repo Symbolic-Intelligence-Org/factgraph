@@ -139,6 +139,62 @@ class AuditQuery:
             if isinstance(row, dict) and row.get("pred_id") == pred_id
         ]
 
+    def list_authoring_apply_events(
+        self,
+        *,
+        kind: str | None = None,
+        status: str | None = None,
+        section: str | None = None,
+        apply_request_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        rows = [dict(row) for row in self.package.authoring_apply_events]
+        if kind is not None:
+            rows = [row for row in rows if row.get("kind") == kind]
+        if status is not None:
+            rows = [row for row in rows if row.get("status") == status]
+        if section is not None:
+            rows = [row for row in rows if row.get("section") == section]
+        if apply_request_id is not None:
+            rows = [row for row in rows if row.get("apply_request_id") == apply_request_id]
+        return sorted(rows, key=self._authoring_apply_sort_key)
+
+    def list_authoring_apply_runs(self) -> list[dict[str, Any]]:
+        return self.list_authoring_apply_events(kind="authoring_apply_execute_run")
+
+    def get_authoring_apply_run(self, apply_request_id: str) -> dict[str, Any] | None:
+        if not isinstance(apply_request_id, str) or not apply_request_id:
+            raise AuditQueryError("apply_request_id must be non-empty string")
+        rows = self.list_authoring_apply_runs()
+        for row in rows:
+            if row.get("apply_request_id") == apply_request_id:
+                return row
+        return None
+
+    def get_authoring_apply_bundle(self, apply_request_id: str) -> dict[str, Any]:
+        run = self.get_authoring_apply_run(apply_request_id)
+        if run is None:
+            raise AuditQueryError(f"authoring apply run not found: {apply_request_id}")
+        events = self.list_authoring_apply_events(apply_request_id=apply_request_id)
+        status_counts: dict[str, int] = {}
+        section_counts: dict[str, int] = {}
+        for row in events:
+            status = row.get("status")
+            if isinstance(status, str) and status:
+                status_counts[status] = status_counts.get(status, 0) + 1
+            section = row.get("section")
+            if isinstance(section, str) and section:
+                section_counts[section] = section_counts.get(section, 0) + 1
+        summary = {
+            "event_count": len(events),
+            "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+            "section_counts": {key: section_counts[key] for key in sorted(section_counts)},
+        }
+        return {
+            "run": run,
+            "events": events,
+            "summary": summary,
+        }
+
     @staticmethod
     def _row_has_run_id(row: dict[str, Any], run_id: str) -> bool:
         direct = row.get("run_id")
@@ -165,4 +221,12 @@ class AuditQuery:
         return (
             event_ts_key,
             str(row.get("decision_id", "")),
+        )
+
+    @staticmethod
+    def _authoring_apply_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
+        return (
+            str(row.get("apply_request_id", "")),
+            str(row.get("kind", "")),
+            str(row.get("action_id", "")),
         )

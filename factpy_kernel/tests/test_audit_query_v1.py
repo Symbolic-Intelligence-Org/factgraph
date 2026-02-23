@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -135,6 +136,52 @@ class AuditQueryV1Tests(unittest.TestCase):
         self.assertEqual(len(mapping_rows), 1)
         self.assertEqual(mapping_rows[0]["status"], "conflict")
 
+    def test_audit_query_authoring_apply_runs(self) -> None:
+        store = Store(schema_ir=_mapping_schema(tie_break="latest_by_ingested_at_then_min_assertion_id"))
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_dir = Path(tmp) / "pkg"
+            export_package(store, pkg_dir, ExportOptions(package_kind="audit", policy_mode="edb"))
+            _write_authoring_apply_events(
+                pkg_dir,
+                [
+                    {
+                        "kind": "authoring_apply_execute_action",
+                        "apply_request_id": "req-a",
+                        "action_id": "schema-1",
+                        "section": "schema_preflight",
+                        "status": "applied",
+                    },
+                    {
+                        "kind": "authoring_apply_execute_run",
+                        "apply_request_id": "req-a",
+                        "status": "ok",
+                        "ok": True,
+                        "idempotency": {"apply_request_id": "req-a", "plan_digest": "sha256:x", "replayed": False},
+                        "transaction": {"policy": "best_effort_no_rollback_v1", "prevalidate_before_write": True, "partial_apply": False},
+                        "summary": {"applied_count": 1},
+                    },
+                    {
+                        "kind": "authoring_apply_execute_run",
+                        "apply_request_id": "req-b",
+                        "status": "warning",
+                        "ok": True,
+                        "summary": {"noop_count": 1},
+                    },
+                ],
+            )
+            data = load_audit_package(pkg_dir)
+
+        query = AuditQuery(data)
+        runs = query.list_authoring_apply_runs()
+        self.assertEqual([row["apply_request_id"] for row in runs], ["req-a", "req-b"])
+        self.assertEqual(query.get_authoring_apply_run("req-b")["status"], "warning")
+        bundle = query.get_authoring_apply_bundle("req-a")
+        self.assertEqual(bundle["run"]["kind"], "authoring_apply_execute_run")
+        self.assertEqual(bundle["summary"]["event_count"], 2)
+        self.assertEqual(bundle["run"]["idempotency"]["apply_request_id"], "req-a")
+        self.assertTrue(bundle["run"]["transaction"]["prevalidate_before_write"])
+        self.assertEqual(len(query.list_authoring_apply_events(status="applied")), 1)
+
 
 def _mapping_schema(tie_break: object) -> dict:
     predicate: dict[str, object] = {
@@ -185,6 +232,17 @@ def _set_ingested_at(store: Store, asrt_id: str, epoch_nanos: int) -> None:
     if not replaced:
         raise AssertionError(f"missing ingested_at for asrt_id={asrt_id}")
     store.ledger._meta_rows = updated
+
+
+def _write_authoring_apply_events(pkg_dir: Path, rows: list[dict]) -> None:
+    path = pkg_dir / "authoring_apply_events.jsonl"
+    path.write_text(
+        "".join(
+            json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+            for row in rows
+        ),
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":

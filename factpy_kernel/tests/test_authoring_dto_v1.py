@@ -11,6 +11,8 @@ from factpy_kernel.authoring import (
     build_schema_preflight_from_authoring_dto,
 )
 from factpy_kernel.authoring.diagnostic_codes import (
+    AUTHORING_DIAGNOSTIC_CODES_V1,
+    AUTHORING_DIAGNOSTIC_PHASES_V1,
     CODE_EMPTY_PREDICATES,
     CODE_PREVIEW_TRUNCATED,
     CODE_RULE_COMPILE_ERROR,
@@ -30,6 +32,12 @@ class AuthoringDTOV1Tests(unittest.TestCase):
         self.assertEqual(dto["source_kind"], "schema")
         self.assertTrue(dto["ok"])
         self.assertEqual(dto["status"], "warning")
+        self.assertEqual(
+            dto["diagnostics_contract"]["diagnostics_contract_version"],
+            "authoring_diagnostics_contract_v1",
+        )
+        self.assertEqual(dto["diagnostics_contract"]["codes"], list(AUTHORING_DIAGNOSTIC_CODES_V1))
+        self.assertEqual(dto["diagnostics_contract"]["phases"], list(AUTHORING_DIAGNOSTIC_PHASES_V1))
         self.assertEqual(dto["counts"]["diagnostic_count"], 0)
         self.assertEqual(dto["counts"]["warning_count"], 1)
         self.assertEqual(dto["warnings"][0]["code"], CODE_EMPTY_PREDICATES)

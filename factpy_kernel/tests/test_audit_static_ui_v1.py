@@ -50,6 +50,8 @@ class AuditStaticUIV1Tests(unittest.TestCase):
             self.assertIn("indexes/predicates.html", site_manifest["indexes"])
             self.assertEqual(site_manifest["search"], "search.html")
             self.assertEqual(site_manifest["ui_index"], "ui_index.json")
+            self.assertEqual(site_manifest["authoring_apply_events"], "authoring_apply_events.html")
+            self.assertEqual(site_manifest["authoring_apply_event_count"], 0)
             index_path = site_dir / "index.html"
             self.assertTrue(index_path.exists())
             index_html = index_path.read_text(encoding="utf-8")
@@ -58,6 +60,7 @@ class AuditStaticUIV1Tests(unittest.TestCase):
             self.assertIn("indexes/event_kinds.html", index_html)
             self.assertIn("indexes/predicates.html", index_html)
             self.assertIn("search.html", index_html)
+            self.assertIn("authoring_apply_events.html", index_html)
             search_html = (site_dir / "search.html").read_text(encoding="utf-8")
             self.assertIn("Audit Search", search_html)
             self.assertIn("ui_index.json", search_html)
@@ -66,11 +69,16 @@ class AuditStaticUIV1Tests(unittest.TestCase):
             self.assertIn("id='results'", search_html)
             self.assertIn('qp.has("type")', search_html)
             self.assertIn("option value='event_kind'", search_html)
+            self.assertIn("option value='authoring_apply_request_id'", search_html)
+            self.assertIn("option value='authoring_apply_status'", search_html)
+            self.assertIn("option value='authoring_apply_section'", search_html)
             ui_index = json.loads((site_dir / "ui_index.json").read_text(encoding="utf-8"))
             self.assertEqual(ui_index["audit_ui_index_version"], "audit_ui_index_v1")
             self.assertEqual(ui_index["counts"]["runs"], 1)
             self.assertEqual(ui_index["counts"]["assertions"], 1)
+            self.assertEqual(ui_index["counts"]["authoring_apply_events"], 0)
             self.assertEqual(ui_index["links"]["search"], "search.html")
+            self.assertEqual(ui_index["links"]["authoring_apply_events"], "authoring_apply_events.html")
             self.assertTrue(any(item["event_kind"] == "accept_write" for item in ui_index["filters"]["event_kinds"]))
             self.assertTrue(any(item["event_kind"] == "mapping_decision" for item in ui_index["filters"]["event_kinds"]))
             self.assertTrue(any(item["pred_id"] == "er:canon_of" for item in ui_index["filters"]["predicates"]))
@@ -114,6 +122,9 @@ class AuditStaticUIV1Tests(unittest.TestCase):
             self.assertIn(asrt_id, ui_index["lookup"]["decision_to_assertions"][decision_id])
             self.assertEqual(ui_index["lookup"]["assertion_to_runs"][asrt_id], ["run-auditui-1"])
             self.assertIn(decision_id, ui_index["lookup"]["assertion_to_decisions"][asrt_id])
+            authoring_apply_html = (site_dir / "authoring_apply_events.html").read_text(encoding="utf-8")
+            self.assertIn("Authoring Apply Events", authoring_apply_html)
+            self.assertIn("event_count=0", authoring_apply_html)
 
     def test_render_audit_static_site_conflict_failure_page(self) -> None:
         store = Store(schema_ir=_mapping_schema(tie_break=None))
@@ -161,6 +172,59 @@ class AuditStaticUIV1Tests(unittest.TestCase):
             self.assertIn(decision_id, ui_index["lookup"]["decision_to_runs"])
             self.assertEqual(ui_index["lookup"]["decision_to_runs"][decision_id], ["run-auditui-2"])
             self.assertEqual(set(ui_index["lookup"]["decision_to_assertions"][decision_id]), {asrt_1, asrt_2})
+
+    def test_render_audit_static_site_includes_authoring_apply_events_summary(self) -> None:
+        store = Store(schema_ir=_mapping_schema(tie_break="latest_by_ingested_at_then_min_assertion_id"))
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_dir = Path(tmp) / "pkg"
+            site_dir = Path(tmp) / "site"
+            export_package(store, pkg_dir, ExportOptions(package_kind="audit", policy_mode="edb"))
+            (pkg_dir / "authoring_apply_events.jsonl").write_text(
+                "\n".join(
+                    [
+                        '{"kind":"authoring_apply_execute_action","action_id":"action:0:schema_preflight","section":"schema_preflight","status":"applied"}',
+                        '{"kind":"authoring_apply_execute_run","apply_request_id":"req-1","status":"ok","ok":true,"idempotency":{"apply_request_id":"req-1","plan_digest":"sha256:abc","replayed":false},"transaction":{"policy":"best_effort_no_rollback_v1","prevalidate_before_write":true,"partial_apply":false}}',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            site_manifest = render_audit_static_site(pkg_dir, site_dir)
+            self.assertEqual(site_manifest["authoring_apply_event_count"], 2)
+            ui_index = json.loads((site_dir / "ui_index.json").read_text(encoding="utf-8"))
+            self.assertEqual(ui_index["counts"]["authoring_apply_events"], 2)
+            self.assertEqual(ui_index["authoring_apply"]["status_counts"]["applied"], 1)
+            self.assertTrue(any(item["status"] == "applied" for item in ui_index["filters"]["authoring_apply_statuses"]))
+            self.assertTrue(any(item["apply_request_id"] == "req-1" for item in ui_index["filters"]["authoring_apply_request_ids"]))
+            self.assertTrue(any(item["section"] == "schema_preflight" for item in ui_index["filters"]["authoring_apply_sections"]))
+            self.assertEqual(
+                ui_index["lookup"]["authoring_apply_request_pages"]["req-1"],
+                f"authoring_apply_runs/{quote('req-1', safe='')}.html",
+            )
+            self.assertEqual(
+                ui_index["lookup"]["authoring_apply_run_pages"]["req-1"],
+                f"authoring_apply_runs/{quote('req-1', safe='')}.html",
+            )
+            html = (site_dir / "authoring_apply_events.html").read_text(encoding="utf-8")
+            self.assertIn("action:0:schema_preflight", html)
+            self.assertIn("req-1", html)
+            self.assertIn(f"id='req-{quote('req-1', safe='')}'", html)
+            self.assertIn(f"authoring_apply_runs/{quote('req-1', safe='')}.html", html)
+            detail_html = (
+                site_dir / "authoring_apply_runs" / f"{quote('req-1', safe='')}.html"
+            ).read_text(encoding="utf-8")
+            self.assertIn("Authoring Apply Run req-1", detail_html)
+            self.assertIn("authoring_apply_execute_run", detail_html)
+            self.assertIn("Idempotency", detail_html)
+            self.assertIn("Transaction", detail_html)
+            self.assertIn("prevalidate_before_write=True", detail_html)
+            self.assertIn("plan_digest=sha256:abc", detail_html)
+            self.assertIn("execution_path=success", detail_html)
+            self.assertIn("execution_path_label=Success", detail_html)
+            self.assertIn("execution_path_counts={&quot;success&quot;: 1}", detail_html)
+            self.assertIn("failure_summary.first_failure_action_id=None", detail_html)
+            self.assertIn("failure_summary.blocked_action_diagnostic_codes=[]", detail_html)
+            self.assertIn("action_stats.diagnostic_code_counts={}", detail_html)
 
 
 def _mapping_schema(tie_break: object) -> dict:

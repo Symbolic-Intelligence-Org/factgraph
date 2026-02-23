@@ -3,6 +3,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from factpy_kernel.authoring.where_schema_lowering import (
+    WhereSchemaLoweringError,
+    lower_blueprint_where_sugar_with_schema_v1,
+)
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -13,7 +17,11 @@ class AuthoringRuleCompileError(Exception):
         self.path = path
 
 
-def compile_authoring_rule_v1(authoring_rule: dict[str, Any]) -> dict[str, Any]:
+def compile_authoring_rule_v1(
+    authoring_rule: dict[str, Any],
+    *,
+    schema_ir: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if not isinstance(authoring_rule, dict):
         raise _compile_error("authoring_rule must be object", path="$")
 
@@ -26,7 +34,7 @@ def compile_authoring_rule_v1(authoring_rule: dict[str, Any]) -> dict[str, Any]:
         raise _compile_error("version must be non-empty string", path="$.version")
 
     select_vars = _compile_select_vars(authoring_rule)
-    where = _compile_where(authoring_rule)
+    where = _compile_where(authoring_rule, schema_ir=schema_ir)
     expose = _compile_expose(authoring_rule)
 
     payload: dict[str, Any] = {
@@ -70,7 +78,7 @@ def _compile_select_vars(authoring_rule: dict[str, Any]) -> list[str]:
     return out
 
 
-def _compile_where(authoring_rule: dict[str, Any]) -> list[Any]:
+def _compile_where(authoring_rule: dict[str, Any], *, schema_ir: dict[str, Any] | None = None) -> list[Any]:
     has_where = "where" in authoring_rule
     has_body = "body" in authoring_rule
     if not has_where and not has_body:
@@ -81,7 +89,10 @@ def _compile_where(authoring_rule: dict[str, Any]) -> list[Any]:
     path = "$.where" if has_where else "$.body"
     if not isinstance(raw, list) or not raw:
         raise _compile_error("where must be non-empty list", path=path)
-    return raw
+    try:
+        return lower_blueprint_where_sugar_with_schema_v1(raw, schema_ir=schema_ir, path=path)
+    except WhereSchemaLoweringError as exc:
+        raise _compile_error(str(exc), path=getattr(exc, "path", path) or path)
 
 
 def _compile_expose(authoring_rule: dict[str, Any]) -> bool:

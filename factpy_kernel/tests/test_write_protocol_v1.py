@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy_kernel.evidence.write_protocol import retract_by_asrt, set_field
+from factpy_kernel.evidence.write_protocol import WriteProtocolError, retract_by_asrt, set_field
 from factpy_kernel.store.ledger import Ledger
 
 
@@ -93,6 +93,30 @@ class WriteProtocolV1Tests(unittest.TestCase):
         )
         self.assertEqual(len(ingested_rows), 1)
         self.assertIsInstance(ingested_rows[0].value, int)
+
+    def test_reject_user_supplied_system_managed_meta_keys(self) -> None:
+        with self.assertRaises(WriteProtocolError):
+            set_field(
+                self.ledger,
+                self.pred_id,
+                self.e_ref,
+                [("string", "de")],
+                {"source": "test", "ingested_at": 123},
+            )
+
+        asrt_id = set_field(
+            self.ledger,
+            self.pred_id,
+            self.e_ref,
+            [("string", "fr")],
+            {"source": "test"},
+        )
+        with self.assertRaises(WriteProtocolError):
+            retract_by_asrt(
+                self.ledger,
+                asrt_id,
+                {"source": "test", "revoked_asrt_id": asrt_id},
+            )
 
 
 if __name__ == "__main__":

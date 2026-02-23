@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from factpy_kernel.authoring.diagnostic_codes import build_diagnostics_contract_meta_v1
 from factpy_kernel.authoring.dto import (
     AuthoringDTOError,
     build_derivation_preview_dto,
@@ -86,6 +87,7 @@ def build_authoring_session_dto(
     return {
         "authoring_session_dto_version": "authoring_session_dto_v1",
         "kind": "authoring_session",
+        "diagnostics_contract": build_diagnostics_contract_meta_v1(),
         "ok": ok,
         "status": status,
         "order": order,

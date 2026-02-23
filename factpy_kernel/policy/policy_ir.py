@@ -14,7 +14,12 @@ class PolicyIRValidationError(Exception):
 _REQUIRED_SCHEMA_PROTOCOL_KEYS = ("idref_v1", "tup_v1", "export_v1")
 
 
-def build_policy_ir_v1(schema_ir: dict, policy_mode: str = "edb") -> dict:
+def build_policy_ir_v1(
+    schema_ir: dict,
+    policy_mode: str = "edb",
+    *,
+    generated_at: int | None = None,
+) -> dict:
     if not isinstance(schema_ir, dict):
         raise PolicyIRValidationError("schema_ir must be dict")
     if policy_mode not in {"edb", "idb"}:
@@ -33,13 +38,17 @@ def build_policy_ir_v1(schema_ir: dict, policy_mode: str = "edb") -> dict:
             )
         copied_protocol[key] = value
 
+    generated_at_value = time.time_ns() if generated_at is None else generated_at
+    if not isinstance(generated_at_value, int):
+        raise PolicyIRValidationError("generated_at must be int when provided")
+
     return {
         "policy_ir_version": "policy_ir_v1",
         "protocol_version": {
             "policy_v1": "policy_v1",
             **copied_protocol,
         },
-        "generated_at": time.time_ns(),
+        "generated_at": generated_at_value,
         "active": {"model": "revokes_only"},
         "chosen": {
             "strategy": "latest_by_ingested_at_then_min_assertion_id",

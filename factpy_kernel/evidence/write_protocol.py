@@ -18,6 +18,9 @@ class PolicyNonDeterminismError(WriteProtocolError):
     pass
 
 
+_SYSTEM_MANAGED_META_KEYS = {"ingested_at", "ingest_key", "revoked_asrt_id"}
+
+
 def new_assertion_id() -> str:
     return uuid4().hex
 
@@ -153,6 +156,8 @@ def _normalize_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
     for key in meta:
         if not isinstance(key, str) or not key:
             raise WriteProtocolError("meta keys must be non-empty strings")
+        if key in _SYSTEM_MANAGED_META_KEYS:
+            raise WriteProtocolError(f"meta[{key}] is reserved and system-managed")
     return dict(meta)
 
 
@@ -217,7 +222,7 @@ def _meta_rows_for_claim(
 def _user_meta_rows(asrt_id: str, meta: dict[str, Any]) -> list[MetaRow]:
     rows: list[MetaRow] = []
     for key in sorted(meta.keys()):
-        if key in {"ingested_at", "ingest_key"}:
+        if key in _SYSTEM_MANAGED_META_KEYS:
             continue
         value = meta[key]
         kind = _infer_meta_kind(key, value)

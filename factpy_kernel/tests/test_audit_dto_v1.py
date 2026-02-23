@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,8 @@ from pathlib import Path
 from factpy_kernel.audit import (
     AuditDTOError,
     AuditQuery,
+    build_authoring_apply_run_detail_dto,
+    build_authoring_apply_run_list_dto,
     build_decision_detail_dto,
     build_run_detail_dto,
     build_run_list_dto,
@@ -144,6 +147,134 @@ class AuditDTOV1Tests(unittest.TestCase):
         with self.assertRaises(AuditDTOError):
             build_decision_detail_dto(query, "missing")
 
+    def test_build_authoring_apply_run_dtos(self) -> None:
+        store = Store(schema_ir=_mapping_schema(tie_break="latest_by_ingested_at_then_min_assertion_id"))
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_dir = Path(tmp) / "pkg"
+            export_package(store, pkg_dir, ExportOptions(package_kind="audit", policy_mode="edb"))
+            _write_authoring_apply_events(
+                pkg_dir,
+                [
+                    {
+                        "kind": "authoring_apply_execute_action",
+                        "apply_request_id": "req-dto-1",
+                        "action_id": "act-1",
+                        "section": "schema_preflight",
+                        "status": "applied",
+                    },
+                    {
+                        "kind": "authoring_apply_execute_run",
+                        "apply_request_id": "req-dto-1",
+                        "status": "ok",
+                        "ok": True,
+                        "idempotency": {
+                            "apply_request_id": "req-dto-1",
+                            "plan_digest": "sha256:abc",
+                            "replayed": False,
+                        },
+                        "transaction": {
+                            "policy": "best_effort_no_rollback_v1",
+                            "prevalidate_before_write": True,
+                            "partial_apply": False,
+                        },
+                        "summary": {"applied_count": 1, "noop_count": 0, "blocked_count": 0, "skipped_count": 0},
+                    },
+                ],
+            )
+            query = AuditQuery(load_audit_package(pkg_dir))
+
+        run_list = build_authoring_apply_run_list_dto(query)
+        self.assertEqual(run_list["kind"], "authoring_apply_run_list")
+        self.assertEqual(run_list["count"], 1)
+        self.assertEqual(run_list["runs"][0]["apply_request_id"], "req-dto-1")
+        detail = build_authoring_apply_run_detail_dto(query, "req-dto-1")
+        self.assertEqual(detail["kind"], "authoring_apply_run_detail")
+        self.assertEqual(detail["summary"]["event_count"], 2)
+        self.assertEqual(detail["stats"]["event_count"], 2)
+        self.assertEqual(detail["idempotency"]["apply_request_id"], "req-dto-1")
+        self.assertEqual(detail["transaction"]["policy"], "best_effort_no_rollback_v1")
+        self.assertFalse(detail["classifications"]["replayed"])
+        self.assertFalse(detail["classifications"]["prevalidate_blocked"])
+        self.assertEqual(detail["execution_path"], "success")
+        self.assertEqual(detail["execution_path_label"], "Success")
+        self.assertEqual(detail["execution_path_counts"], {"success": 1})
+        self.assertEqual(detail["action_stats"]["status_counts"]["applied"], 1)
+        self.assertEqual(detail["action_stats"]["diagnostic_code_counts"], {})
+        self.assertEqual(detail["failure_summary"]["first_failure_action_id"], None)
+        self.assertEqual(detail["failure_summary"]["blocked_action_reason_codes"], [])
+        self.assertEqual(detail["failure_summary"]["blocked_action_diagnostic_codes"], [])
+
+    def test_build_authoring_apply_run_dto_uses_diagnostics_summary_for_failure_aggregation(self) -> None:
+        store = Store(schema_ir=_mapping_schema(tie_break="latest_by_ingested_at_then_min_assertion_id"))
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_dir = Path(tmp) / "pkg"
+            export_package(store, pkg_dir, ExportOptions(package_kind="audit", policy_mode="edb"))
+            _write_authoring_apply_events(
+                pkg_dir,
+                [
+                    {
+                        "kind": "authoring_apply_execute_action",
+                        "apply_request_id": "req-dto-2",
+                        "action_id": "act-2",
+                        "section": "rule_preflight",
+                        "status": "blocked",
+                        "reason_code": "apply_blocked_action",
+                        "diagnostics_summary": {"count": 1, "codes": ["apply_blocked_action"]},
+                    },
+                    {
+                        "kind": "authoring_apply_execute_run",
+                        "apply_request_id": "req-dto-2",
+                        "status": "error",
+                        "ok": False,
+                        "idempotency": {"apply_request_id": "req-dto-2", "plan_digest": "sha256:def", "replayed": False},
+                        "transaction": {
+                            "policy": "best_effort_no_rollback_v1",
+                            "prevalidate_before_write": True,
+                            "prevalidate_status": "passed",
+                            "writes_started": True,
+                            "failure_phase": "write",
+                            "partial_apply": False,
+                        },
+                        "summary": {"applied_count": 0, "noop_count": 0, "blocked_count": 1, "skipped_count": 0},
+                    },
+                ],
+            )
+            query = AuditQuery(load_audit_package(pkg_dir))
+
+        detail = build_authoring_apply_run_detail_dto(query, "req-dto-2")
+        self.assertEqual(detail["execution_path"], "runtime_partial")
+        self.assertEqual(detail["execution_path_label"], "Runtime partial apply")
+        self.assertEqual(detail["action_stats"]["diagnostic_code_counts"], {"apply_blocked_action": 1})
+        self.assertEqual(detail["failure_summary"]["first_failure_action_id"], "act-2")
+        self.assertEqual(detail["failure_summary"]["first_failure_section"], "rule_preflight")
+        self.assertEqual(detail["failure_summary"]["blocked_action_reason_codes"], ["apply_blocked_action"])
+        self.assertEqual(detail["failure_summary"]["blocked_action_diagnostic_codes"], ["apply_blocked_action"])
+
+    def test_fixtures_doc_authoring_apply_run_detail_snippet_shape(self) -> None:
+        fixtures_doc = Path(__file__).resolve().parents[2] / "docs" / "Authoring 层契约 fixtures.md"
+        text = fixtures_doc.read_text(encoding="utf-8")
+        snippet = _extract_json_code_block_after_header(
+            text,
+            "`audit_ui_dto_v1` 中 `authoring_apply_run_detail` 最小片段（执行态摘要）：",
+        )
+        self.assertEqual(snippet["kind"], "authoring_apply_run_detail")
+        self.assertEqual(snippet["apply_request_id"], "req-rt-1")
+        self.assertEqual(snippet["execution_path"], "runtime_partial")
+        self.assertEqual(snippet["execution_path_label"], "Runtime partial apply")
+        self.assertEqual(snippet["execution_path_counts"], {"runtime_partial": 1})
+        self.assertEqual(
+            snippet["action_stats"]["diagnostic_code_counts"],
+            {"apply_blocked_action": 1},
+        )
+        self.assertEqual(
+            snippet["failure_summary"]["blocked_action_reason_codes"],
+            ["apply_blocked_action"],
+        )
+        self.assertEqual(
+            snippet["failure_summary"]["blocked_action_diagnostic_codes"],
+            ["apply_blocked_action"],
+        )
+
 
 def _export_and_load(store: Store):
     with tempfile.TemporaryDirectory() as tmp:
@@ -199,6 +330,29 @@ def _set_ingested_at(store: Store, asrt_id: str, epoch_nanos: int) -> None:
     if not replaced:
         raise AssertionError(f"missing ingested_at for asrt_id={asrt_id}")
     store.ledger._meta_rows = updated
+
+
+def _write_authoring_apply_events(pkg_dir: Path, rows: list[dict]) -> None:
+    (pkg_dir / "authoring_apply_events.jsonl").write_text(
+        "".join(
+            json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+            for row in rows
+        ),
+        encoding="utf-8",
+    )
+
+
+def _extract_json_code_block_after_header(text: str, header: str) -> dict:
+    idx = text.find(header)
+    if idx < 0:
+        raise AssertionError(f"missing header: {header}")
+    tail = text[idx:]
+    import re
+
+    match = re.search(r"```json\s*\n(.*?)\n```", tail, flags=re.S)
+    if match is None:
+        raise AssertionError(f"missing json code block after: {header}")
+    return json.loads(match.group(1))
 
 
 if __name__ == "__main__":

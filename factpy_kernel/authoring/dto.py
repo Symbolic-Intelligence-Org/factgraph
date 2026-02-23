@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from factpy_kernel.authoring.diagnostic_codes import build_diagnostics_contract_meta_v1
 from factpy_kernel.authoring.preflight import (
     derivation_dry_run_preview,
     derivation_dry_run_preview_authoring,
@@ -114,6 +115,7 @@ def _wrap_preflight_payload(dto_kind: str, payload: dict[str, Any]) -> dict[str,
         "authoring_ui_dto_version": "authoring_ui_dto_v1",
         "kind": dto_kind,
         "source_kind": payload.get("kind"),
+        "diagnostics_contract": build_diagnostics_contract_meta_v1(),
         "status": status,
         "ok": ok,
         "diagnostics": diagnostics,

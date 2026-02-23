@@ -59,6 +59,10 @@ class PolicyIRV1Tests(unittest.TestCase):
 
         self.assertEqual(policy_digest(policy_a), policy_digest(policy_b))
 
+    def test_build_policy_ir_generated_at_override(self) -> None:
+        policy_ir = build_policy_ir_v1(self.schema_ir, generated_at=0)
+        self.assertEqual(policy_ir["generated_at"], 0)
+
     def test_export_manifest_policy_path_and_digest(self) -> None:
         store = Store(schema_ir=self.schema_ir)
         with tempfile.TemporaryDirectory() as tmp:

@@ -3,7 +3,11 @@ from __future__ import annotations
 import unittest
 
 from factpy_kernel.authoring import AuthoringSessionError, build_authoring_session_dto
-from factpy_kernel.authoring.diagnostic_codes import CODE_RULE_COMPILE_ERROR
+from factpy_kernel.authoring.diagnostic_codes import (
+    AUTHORING_DIAGNOSTIC_CODES_V1,
+    AUTHORING_DIAGNOSTIC_PHASES_V1,
+    CODE_RULE_COMPILE_ERROR,
+)
 from factpy_kernel.evidence.write_protocol import set_field
 from factpy_kernel.store.api import Store
 
@@ -39,6 +43,12 @@ class AuthoringSessionDTOV1Tests(unittest.TestCase):
             },
         )
         self.assertEqual(dto["authoring_session_dto_version"], "authoring_session_dto_v1")
+        self.assertEqual(
+            dto["diagnostics_contract"]["diagnostics_contract_version"],
+            "authoring_diagnostics_contract_v1",
+        )
+        self.assertEqual(dto["diagnostics_contract"]["codes"], list(AUTHORING_DIAGNOSTIC_CODES_V1))
+        self.assertEqual(dto["diagnostics_contract"]["phases"], list(AUTHORING_DIAGNOSTIC_PHASES_V1))
         self.assertTrue(dto["ok"])
         self.assertEqual(dto["status"], "ok")
         self.assertEqual(dto["order"], ["schema_preflight", "rule_preflight", "derivation_preview"])

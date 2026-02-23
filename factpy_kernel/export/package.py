@@ -73,7 +73,11 @@ def export_package(
         schema_bytes.decode("utf-8"), encoding="utf-8", newline="\n"
     )
 
-    policy_ir = build_policy_ir_v1(store.schema_ir, policy_mode=options.policy_mode)
+    policy_ir = build_policy_ir_v1(
+        store.schema_ir,
+        policy_mode=options.policy_mode,
+        generated_at=0,
+    )
     policy_ir_bytes = canonicalize_policy_ir_jcs(policy_ir)
     policy_ir_path = policy_dir / "policy_ir.json"
     policy_ir_path.write_text(

@@ -6,24 +6,46 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from .authoring_events import load_authoring_apply_events, summarize_authoring_apply_events
 from .assertions import load_assertion_index
-from .dto import build_decision_detail_dto, build_run_detail_dto, build_run_list_dto
+from .dto import (
+    build_authoring_apply_run_detail_dto,
+    build_decision_detail_dto,
+    build_run_detail_dto,
+    build_run_list_dto,
+)
 from .query import AuditQuery
 from .reader import load_audit_package
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    return str(value)
 
 
 def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> dict[str, Any]:
     data = load_audit_package(package_dir)
     query = AuditQuery(data)
+    authoring_apply_events = load_authoring_apply_events(package_dir)
+    authoring_apply_summary = summarize_authoring_apply_events(authoring_apply_events)
     root = Path(out_dir)
     runs_dir = root / "runs"
     decisions_dir = root / "decisions"
     assertions_dir = root / "assertions"
+    authoring_apply_runs_dir = root / "authoring_apply_runs"
     indexes_dir = root / "indexes"
     root.mkdir(parents=True, exist_ok=True)
     runs_dir.mkdir(parents=True, exist_ok=True)
     decisions_dir.mkdir(parents=True, exist_ok=True)
     assertions_dir.mkdir(parents=True, exist_ok=True)
+    authoring_apply_runs_dir.mkdir(parents=True, exist_ok=True)
     indexes_dir.mkdir(parents=True, exist_ok=True)
 
     run_list = build_run_list_dto(query)
@@ -61,11 +83,28 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         page = _render_decision_detail_page(decision_detail, assertion_index=assertion_index)
         (decisions_dir / f"{_slug_id(decision_id)}.html").write_text(page, encoding="utf-8")
 
+    authoring_apply_run_ids: list[str] = []
+    for row in query.list_authoring_apply_runs():
+        apply_request_id = row.get("apply_request_id")
+        if not isinstance(apply_request_id, str) or not apply_request_id:
+            continue
+        authoring_apply_run_ids.append(apply_request_id)
+        detail = build_authoring_apply_run_detail_dto(query, apply_request_id)
+        page = _render_authoring_apply_run_detail_page(detail)
+        (authoring_apply_runs_dir / f"{_slug_id(apply_request_id)}.html").write_text(page, encoding="utf-8")
+
     index_pages = _render_filter_index_pages(query)
     for rel_name, html in index_pages.items():
         (indexes_dir / rel_name).write_text(html, encoding="utf-8")
 
-    index_html = _render_index_page(run_list, index_pages=sorted(index_pages.keys()))
+    authoring_apply_page = _render_authoring_apply_events_page(authoring_apply_events, authoring_apply_summary)
+    (root / "authoring_apply_events.html").write_text(authoring_apply_page, encoding="utf-8")
+
+    index_html = _render_index_page(
+        run_list,
+        index_pages=sorted(index_pages.keys()),
+        authoring_apply_summary=authoring_apply_summary,
+    )
     (root / "index.html").write_text(index_html, encoding="utf-8")
     (root / "search.html").write_text(_render_search_page(), encoding="utf-8")
     ui_index_payload = _build_ui_index_payload(
@@ -74,7 +113,9 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         run_ids=sorted(set(run_ids)),
         decision_ids=sorted(decision_ids),
         assertion_ids=assertion_ids,
+        authoring_apply_run_ids=sorted(set(authoring_apply_run_ids)),
         index_pages=sorted(index_pages.keys()),
+        authoring_apply_summary=authoring_apply_summary,
     )
     (root / "ui_index.json").write_text(
         json.dumps(ui_index_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
@@ -86,12 +127,18 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         "run_count": len(run_ids),
         "decision_count": len(decision_ids),
         "assertion_count": len(assertion_ids),
+        "authoring_apply_event_count": authoring_apply_summary.get("event_count", 0),
         "runs": [f"runs/{_slug_id(run_id)}.html" for run_id in sorted(set(run_ids))],
         "assertions": [f"assertions/{_slug_id(asrt_id)}.html" for asrt_id in assertion_ids],
+        "authoring_apply_runs": [
+            f"authoring_apply_runs/{_slug_id(apply_request_id)}.html"
+            for apply_request_id in sorted(set(authoring_apply_run_ids))
+        ],
         "indexes": [f"indexes/{name}" for name in sorted(index_pages.keys())],
         "index": "index.html",
         "search": "search.html",
         "ui_index": "ui_index.json",
+        "authoring_apply_events": "authoring_apply_events.html",
     }
     (root / "site_manifest.json").write_text(
         json.dumps(site_manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
@@ -100,7 +147,12 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
     return site_manifest
 
 
-def _render_index_page(run_list: dict[str, Any], *, index_pages: list[str]) -> str:
+def _render_index_page(
+    run_list: dict[str, Any],
+    *,
+    index_pages: list[str],
+    authoring_apply_summary: dict[str, Any] | None = None,
+) -> str:
     rows = []
     for run in run_list.get("runs", []):
         if not isinstance(run, dict):
@@ -117,11 +169,17 @@ def _render_index_page(run_list: dict[str, Any], *, index_pages: list[str]) -> s
             "</tr>"
         )
     body = "".join(rows) if rows else "<tr><td colspan='5'>No runs</td></tr>"
+    apply_count = (
+        authoring_apply_summary.get("event_count", 0)
+        if isinstance(authoring_apply_summary, dict)
+        else 0
+    )
     return _html_page(
         title="Audit Runs",
         body=(
             "<h1>Audit Runs</h1>"
             "<p><a href='search.html'>Search</a></p>"
+            f"<p><a href='authoring_apply_events.html'>Authoring Apply Events</a> ({escape(str(apply_count))})</p>"
             "<h2>Indexes</h2>"
             f"<ul>{''.join(_index_page_links(index_pages)) if index_pages else '<li>None</li>'}</ul>"
             "<h2>Runs</h2>"
@@ -379,7 +437,9 @@ def _build_ui_index_payload(
     run_ids: list[str],
     decision_ids: list[str],
     assertion_ids: list[str],
+    authoring_apply_run_ids: list[str],
     index_pages: list[str],
+    authoring_apply_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     decisions = query.list_decisions()
     failures = query.list_failures()
@@ -409,6 +469,46 @@ def _build_ui_index_payload(
         if isinstance(pred_id, str) and pred_id:
             predicate_materialize_counts[pred_id] = predicate_materialize_counts.get(pred_id, 0) + 1
 
+    authoring_apply_events = load_authoring_apply_events(query.package.package_dir)
+    authoring_apply_runs: list[dict[str, Any]] = []
+    authoring_apply_status_counts: dict[str, int] = {}
+    authoring_apply_section_counts: dict[str, int] = {}
+    authoring_apply_request_ids: set[str] = set()
+    for event in authoring_apply_events:
+        raw = event.raw if isinstance(event.raw, dict) else {}
+        status = raw.get("status")
+        if isinstance(status, str) and status:
+            authoring_apply_status_counts[status] = authoring_apply_status_counts.get(status, 0) + 1
+        section = raw.get("section")
+        if isinstance(section, str) and section:
+            authoring_apply_section_counts[section] = authoring_apply_section_counts.get(section, 0) + 1
+        apply_request_id = raw.get("apply_request_id")
+        if isinstance(apply_request_id, str) and apply_request_id:
+            authoring_apply_request_ids.add(apply_request_id)
+        if raw.get("kind") == "authoring_apply_execute_run":
+            summary = raw.get("summary") if isinstance(raw.get("summary"), dict) else {}
+            authoring_apply_runs.append(
+                {
+                    "apply_request_id": raw.get("apply_request_id"),
+                    "status": raw.get("status"),
+                    "ok": bool(raw.get("ok")),
+                    "path": "authoring_apply_events.html"
+                    + (
+                        f"#req-{_slug_id(str(raw.get('apply_request_id')))}"
+                        if isinstance(raw.get("apply_request_id"), str) and raw.get("apply_request_id")
+                        else ""
+                    ),
+                    "applied_count": summary.get("applied_count", 0),
+                    "noop_count": summary.get("noop_count", 0),
+                    "blocked_count": summary.get("blocked_count", 0),
+                    "skipped_count": summary.get("skipped_count", 0),
+                }
+            )
+    authoring_apply_runs = sorted(
+        authoring_apply_runs,
+        key=lambda row: str(row.get("apply_request_id", "")),
+    )
+
     run_rows = []
     for row in run_list.get("runs", []):
         if not isinstance(row, dict):
@@ -432,6 +532,17 @@ def _build_ui_index_payload(
     run_pages = {run_id: f"runs/{_slug_id(run_id)}.html" for run_id in run_ids}
     decision_pages = {decision_id: f"decisions/{_slug_id(decision_id)}.html" for decision_id in decision_ids}
     assertion_pages = {asrt_id: f"assertions/{_slug_id(asrt_id)}.html" for asrt_id in assertion_ids}
+    authoring_apply_run_pages = {
+        request_id: f"authoring_apply_runs/{_slug_id(request_id)}.html"
+        for request_id in sorted({rid for rid in authoring_apply_run_ids if isinstance(rid, str) and rid})
+    }
+    authoring_apply_request_pages = {
+        request_id: authoring_apply_run_pages.get(
+            request_id,
+            f"authoring_apply_events.html#req-{_slug_id(request_id)}",
+        )
+        for request_id in sorted(authoring_apply_request_ids)
+    }
 
     run_to_decisions: dict[str, set[str]] = {run_id: set() for run_id in run_ids}
     decision_to_runs: dict[str, set[str]] = {decision_id: set() for decision_id in decision_ids}
@@ -505,17 +616,25 @@ def _build_ui_index_payload(
             "decisions": len(decision_ids),
             "assertions": len(assertion_ids),
             "failures": len(failures),
+            "authoring_apply_events": (
+                authoring_apply_summary.get("event_count", 0)
+                if isinstance(authoring_apply_summary, dict)
+                else 0
+            ),
         },
         "links": {
             "index": "index.html",
             "search": "search.html",
             "site_manifest": "site_manifest.json",
+            "authoring_apply_events": "authoring_apply_events.html",
             "indexes": [f"indexes/{name}" for name in index_pages],
         },
         "lookup": {
             "run_pages": run_pages,
             "decision_pages": decision_pages,
             "assertion_pages": assertion_pages,
+            "authoring_apply_request_pages": authoring_apply_request_pages,
+            "authoring_apply_run_pages": authoring_apply_run_pages,
             "run_to_decisions": {k: sorted(v) for k, v in sorted(run_to_decisions.items())},
             "run_to_assertions": {k: sorted(v) for k, v in sorted(run_to_assertions.items())},
             "decision_to_runs": {k: sorted(v) for k, v in sorted(decision_to_runs.items())},
@@ -524,6 +643,7 @@ def _build_ui_index_payload(
             "assertion_to_decisions": {k: sorted(v) for k, v in sorted(assertion_to_decisions.items())},
         },
         "runs": run_rows,
+        "authoring_apply_runs": authoring_apply_runs,
         "filters": {
             "event_kinds": [
                 {"event_kind": key, "count": event_kind_counts[key], "page": "indexes/event_kinds.html"}
@@ -542,8 +662,180 @@ def _build_ui_index_payload(
                 }
                 for pred_id in predicates
             ],
+            "authoring_apply_statuses": [
+                {
+                    "status": key,
+                    "count": authoring_apply_status_counts[key],
+                    "page": "authoring_apply_events.html",
+                }
+                for key in sorted(authoring_apply_status_counts)
+            ],
+            "authoring_apply_sections": [
+                {
+                    "section": key,
+                    "count": authoring_apply_section_counts[key],
+                    "page": "authoring_apply_events.html",
+                }
+                for key in sorted(authoring_apply_section_counts)
+            ],
+            "authoring_apply_request_ids": [
+                {
+                    "apply_request_id": request_id,
+                    "count": 1,
+                    "page": authoring_apply_request_pages[request_id],
+                }
+                for request_id in sorted(authoring_apply_request_ids)
+            ],
         },
+        "authoring_apply": _json_safe(authoring_apply_summary or {"event_count": 0, "status_counts": {}, "section_counts": {}}),
     }
+
+
+def _render_authoring_apply_events_page(
+    events: list[Any],
+    summary: dict[str, Any],
+) -> str:
+    rows: list[str] = []
+    for event in events:
+        raw = getattr(event, "raw", None)
+        if not isinstance(raw, dict):
+            continue
+        row_attrs = ""
+        req_id = raw.get("apply_request_id")
+        req_cell = escape(str(req_id))
+        if isinstance(req_id, str) and req_id:
+            row_attrs = f" id='req-{escape(_slug_id(req_id), quote=True)}'"
+            req_href = f"authoring_apply_runs/{_slug_id(req_id)}.html"
+            req_cell = f"<a href='{escape(req_href, quote=True)}'>{escape(req_id)}</a>"
+        rows.append(
+            f"<tr{row_attrs}>"
+            f"<td>{escape(str(raw.get('kind')))}</td>"
+            f"<td>{escape(str(raw.get('action_id')))}</td>"
+            f"<td>{escape(str(raw.get('section')))}</td>"
+            f"<td>{escape(str(raw.get('status')))}</td>"
+            f"<td>{req_cell}</td>"
+            "</tr>"
+        )
+    return _html_page(
+        title="Authoring Apply Events",
+        body=(
+            "<h1>Authoring Apply Events</h1>"
+            "<p><a href='index.html'>Back to runs</a></p>"
+            "<h2>Summary</h2>"
+            "<ul>"
+            f"<li>event_count={escape(str(summary.get('event_count', 0)))}</li>"
+            f"<li>status_counts={escape(json.dumps(summary.get('status_counts', {}), ensure_ascii=False, sort_keys=True))}</li>"
+            f"<li>section_counts={escape(json.dumps(summary.get('section_counts', {}), ensure_ascii=False, sort_keys=True))}</li>"
+            "</ul>"
+            "<h2>Events</h2>"
+            "<table><thead><tr><th>kind</th><th>action_id</th><th>section</th><th>status</th><th>apply_request_id</th></tr></thead>"
+            f"<tbody>{''.join(rows) if rows else '<tr><td colspan=5>None</td></tr>'}</tbody></table>"
+        ),
+    )
+
+
+def _render_authoring_apply_run_detail_page(payload: dict[str, Any]) -> str:
+    apply_request_id = str(payload.get("apply_request_id", ""))
+    run = payload.get("run") if isinstance(payload.get("run"), dict) else {}
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    stats = payload.get("stats") if isinstance(payload.get("stats"), dict) else {}
+    idempotency = payload.get("idempotency") if isinstance(payload.get("idempotency"), dict) else {}
+    transaction = payload.get("transaction") if isinstance(payload.get("transaction"), dict) else {}
+    classifications = payload.get("classifications") if isinstance(payload.get("classifications"), dict) else {}
+    action_stats = payload.get("action_stats") if isinstance(payload.get("action_stats"), dict) else {}
+    failure_summary = payload.get("failure_summary") if isinstance(payload.get("failure_summary"), dict) else {}
+    execution_path = payload.get("execution_path")
+    execution_path_label = payload.get("execution_path_label")
+    execution_path_counts = (
+        payload.get("execution_path_counts") if isinstance(payload.get("execution_path_counts"), dict) else {}
+    )
+    events_rows: list[str] = []
+    for row in payload.get("events", []):
+        if not isinstance(row, dict):
+            continue
+        reason_code = row.get("reason_code")
+        diagnostics = row.get("diagnostics") if isinstance(row.get("diagnostics"), list) else []
+        diagnostics_summary = row.get("diagnostics_summary") if isinstance(row.get("diagnostics_summary"), dict) else {}
+        diag_codes = diagnostics_summary.get("codes") if isinstance(diagnostics_summary.get("codes"), list) else []
+        diag_summary = ""
+        if diag_codes:
+            diag_summary = ",".join(str(code) for code in diag_codes if isinstance(code, str) and code)
+        elif diagnostics:
+            first = diagnostics[0]
+            if isinstance(first, dict) and first.get("code"):
+                diag_summary = str(first.get("code"))
+        events_rows.append(
+            "<tr>"
+            f"<td>{escape(str(row.get('kind')))}</td>"
+            f"<td>{escape(str(row.get('action_id')))}</td>"
+            f"<td>{escape(str(row.get('section')))}</td>"
+            f"<td>{escape(str(row.get('status')))}</td>"
+            f"<td>{escape(str(reason_code if reason_code is not None else ''))}</td>"
+            f"<td>{escape(diag_summary)}</td>"
+            "</tr>"
+        )
+    return _html_page(
+        title=f"Authoring Apply Run {apply_request_id}",
+        body=(
+            f"<h1>Authoring Apply Run {escape(apply_request_id)}</h1>"
+            "<p><a href='../index.html'>Back to runs</a> | "
+            "<a href='../authoring_apply_events.html'>All authoring apply events</a></p>"
+            "<h2>Run</h2>"
+            "<ul>"
+            f"<li>status={escape(str(run.get('status')))}</li>"
+            f"<li>ok={escape(str(run.get('ok')))}</li>"
+            f"<li>kind={escape(str(run.get('kind')))}</li>"
+            "</ul>"
+            "<h2>Idempotency</h2>"
+            "<ul>"
+            f"<li>apply_request_id={escape(str(idempotency.get('apply_request_id')))}</li>"
+            f"<li>plan_digest={escape(str(idempotency.get('plan_digest')))}</li>"
+            f"<li>replayed={escape(str(idempotency.get('replayed')))}</li>"
+            f"<li>conflict={escape(str(idempotency.get('conflict')))}</li>"
+            "</ul>"
+            "<h2>Transaction</h2>"
+            "<ul>"
+            f"<li>policy={escape(str(transaction.get('policy')))}</li>"
+            f"<li>rollback_attempted={escape(str(transaction.get('rollback_attempted')))}</li>"
+            f"<li>prevalidate_before_write={escape(str(transaction.get('prevalidate_before_write')))}</li>"
+            f"<li>prevalidate_status={escape(str(transaction.get('prevalidate_status')))}</li>"
+            f"<li>writes_started={escape(str(transaction.get('writes_started')))}</li>"
+            f"<li>failure_phase={escape(str(transaction.get('failure_phase')))}</li>"
+            f"<li>partial_apply={escape(str(transaction.get('partial_apply')))}</li>"
+            "</ul>"
+            "<h2>Classifications</h2>"
+            "<ul>"
+            f"<li>replayed={escape(str(classifications.get('replayed')))}</li>"
+            f"<li>conflict={escape(str(classifications.get('conflict')))}</li>"
+            f"<li>prevalidate_blocked={escape(str(classifications.get('prevalidate_blocked')))}</li>"
+            f"<li>runtime_blocked_after_write={escape(str(classifications.get('runtime_blocked_after_write')))}</li>"
+            f"<li>execution_path={escape(str(execution_path))}</li>"
+            f"<li>execution_path_label={escape(str(execution_path_label))}</li>"
+            "</ul>"
+            "<h2>Summary</h2>"
+            "<ul>"
+            f"<li>event_count={escape(str(summary.get('event_count', 0)))}</li>"
+            f"<li>status_counts={escape(json.dumps(summary.get('status_counts', {}), ensure_ascii=False, sort_keys=True))}</li>"
+            f"<li>section_counts={escape(json.dumps(summary.get('section_counts', {}), ensure_ascii=False, sort_keys=True))}</li>"
+            f"<li>stats.event_count={escape(str(stats.get('event_count', 0)))}</li>"
+            f"<li>stats.action_event_count={escape(str(stats.get('action_event_count', 0)))}</li>"
+            f"<li>stats.run_event_count={escape(str(stats.get('run_event_count', 0)))}</li>"
+            f"<li>action_stats.status_counts={escape(json.dumps(action_stats.get('status_counts', {}), ensure_ascii=False, sort_keys=True))}</li>"
+            f"<li>action_stats.reason_code_counts={escape(json.dumps(action_stats.get('reason_code_counts', {}), ensure_ascii=False, sort_keys=True))}</li>"
+            f"<li>action_stats.diagnostic_code_counts={escape(json.dumps(action_stats.get('diagnostic_code_counts', {}), ensure_ascii=False, sort_keys=True))}</li>"
+            f"<li>failure_summary.first_failure_action_id={escape(str(failure_summary.get('first_failure_action_id')))}</li>"
+            f"<li>failure_summary.first_failure_section={escape(str(failure_summary.get('first_failure_section')))}</li>"
+            f"<li>failure_summary.blocked_action_reason_codes={escape(json.dumps(failure_summary.get('blocked_action_reason_codes', []), ensure_ascii=False, sort_keys=True))}</li>"
+            f"<li>failure_summary.blocked_action_diagnostic_codes={escape(json.dumps(failure_summary.get('blocked_action_diagnostic_codes', []), ensure_ascii=False, sort_keys=True))}</li>"
+            f"<li>execution_path_counts={escape(json.dumps(execution_path_counts, ensure_ascii=False, sort_keys=True))}</li>"
+            "</ul>"
+            "<h2>Events</h2>"
+            "<table><thead><tr><th>kind</th><th>action_id</th><th>section</th><th>status</th><th>reason_code</th><th>diag0</th></tr></thead>"
+            f"<tbody>{''.join(events_rows) if events_rows else '<tr><td colspan=6>None</td></tr>'}</tbody></table>"
+            "<h2>Payload</h2>"
+            f"<pre>{escape(json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
+        ),
+    )
 
 
 def _render_search_page() -> str:
@@ -582,18 +874,21 @@ def _render_search_page() -> str:
     pred_id: "predicates",
     event_kind: "eventKinds",
     error_class: "errorClasses",
+    authoring_apply_request_id: "authoringApplyRequestIds",
+    authoring_apply_status: "authoringApplyStatuses",
+    authoring_apply_section: "authoringApplySections",
   };
 
   function render(index, q, typeFilter) {
     const needle = q.trim().toLowerCase();
     const selectedBucket = TYPE_MAP[typeFilter] || null;
     if (!needle) {
-      countsEl.textContent = "Type to search runs / decisions / assertions / predicates / event kinds / error classes";
+      countsEl.textContent = "Type to search runs / decisions / assertions / predicates / event kinds / error classes / authoring apply";
       resultsEl.innerHTML = "";
       return;
     }
 
-    const hits = { runs: [], decisions: [], assertions: [], predicates: [], eventKinds: [], errorClasses: [] };
+    const hits = { runs: [], decisions: [], assertions: [], predicates: [], eventKinds: [], errorClasses: [], authoringApplyRequestIds: [], authoringApplyStatuses: [], authoringApplySections: [] };
     for (const run of (index.runs || [])) {
       if (String(run.run_id || "").toLowerCase().includes(needle)) {
         hits.runs.push(run);
@@ -624,8 +919,23 @@ def _render_search_page() -> str:
         hits.errorClasses.push(row);
       }
     }
+    for (const row of (((index.filters || {}).authoring_apply_request_ids) || [])) {
+      if (String(row.apply_request_id || "").toLowerCase().includes(needle)) {
+        hits.authoringApplyRequestIds.push(row);
+      }
+    }
+    for (const row of (((index.filters || {}).authoring_apply_statuses) || [])) {
+      if (String(row.status || "").toLowerCase().includes(needle)) {
+        hits.authoringApplyStatuses.push(row);
+      }
+    }
+    for (const row of (((index.filters || {}).authoring_apply_sections) || [])) {
+      if (String(row.section || "").toLowerCase().includes(needle)) {
+        hits.authoringApplySections.push(row);
+      }
+    }
 
-    const visibleBuckets = selectedBucket ? [selectedBucket] : ["runs","decisions","assertions","predicates","eventKinds","errorClasses"];
+    const visibleBuckets = selectedBucket ? [selectedBucket] : ["runs","decisions","assertions","predicates","eventKinds","errorClasses","authoringApplyRequestIds","authoringApplyStatuses","authoringApplySections"];
     const total = visibleBuckets.reduce((n, key) => n + (hits[key] || []).length, 0);
     countsEl.textContent = `Results: ${total} (type=${typeFilter || "all"})`;
 
@@ -639,6 +949,9 @@ def _render_search_page() -> str:
     maybePush("predicates", "<h2>Predicates</h2><ul>" + (hits.predicates.map(r => rowLink(r.page, r.pred_id, `decisions=${r.decision_count} materializations=${r.materialization_count}`)).join("") || "<li>None</li>") + "</ul>");
     maybePush("eventKinds", "<h2>Event Kinds</h2><ul>" + (hits.eventKinds.map(r => rowLink(r.page, r.event_kind, `count=${r.count}`)).join("") || "<li>None</li>") + "</ul>");
     maybePush("errorClasses", "<h2>Error Classes</h2><ul>" + (hits.errorClasses.map(r => rowLink(r.page, r.error_class, `count=${r.count}`)).join("") || "<li>None</li>") + "</ul>");
+    maybePush("authoringApplyRequestIds", "<h2>Authoring Apply Request IDs</h2><ul>" + (hits.authoringApplyRequestIds.map(r => rowLink(r.page, r.apply_request_id, `count=${r.count}`)).join("") || "<li>None</li>") + "</ul>");
+    maybePush("authoringApplyStatuses", "<h2>Authoring Apply Statuses</h2><ul>" + (hits.authoringApplyStatuses.map(r => rowLink(r.page, r.status, `count=${r.count}`)).join("") || "<li>None</li>") + "</ul>");
+    maybePush("authoringApplySections", "<h2>Authoring Apply Sections</h2><ul>" + (hits.authoringApplySections.map(r => rowLink(r.page, r.section, `count=${r.count}`)).join("") || "<li>None</li>") + "</ul>");
     resultsEl.innerHTML = sections.join("");
   }
 
@@ -688,6 +1001,9 @@ def _render_search_page() -> str:
             "<option value='pred_id'>pred_id</option>"
             "<option value='event_kind'>event_kind</option>"
             "<option value='error_class'>error_class</option>"
+            "<option value='authoring_apply_request_id'>authoring_apply_request_id</option>"
+            "<option value='authoring_apply_status'>authoring_apply_status</option>"
+            "<option value='authoring_apply_section'>authoring_apply_section</option>"
             "</select></p>"
             "<p id='status'>Loading ui_index.json...</p>"
             "<p id='counts'></p>"
