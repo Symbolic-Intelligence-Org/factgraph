@@ -35,6 +35,12 @@ class Employment(Entity):
         is_record = True
 
 
+class Language(Entity):
+    source_system: str = Identity(default="ISO639")
+    code: str = Identity()
+    name: str = Field(cardinality="multi")
+
+
 class SDKSchemaV1Tests(unittest.TestCase):
     def test_entity_spec_collects_identity_fields_and_fields(self) -> None:
         spec = Person.sdk_entity_spec()
@@ -63,6 +69,11 @@ class SDKSchemaV1Tests(unittest.TestCase):
         self.assertTrue(spec["is_record"])
         self.assertTrue(spec["meta"]["is_record"])
         self.assertEqual(spec["identity_fields"][0]["default_factory"], "uuid4")
+
+    def test_identity_default_is_preserved_in_entity_spec(self) -> None:
+        spec = Language.sdk_entity_spec()
+        self.assertEqual(spec["identity_fields"][0]["name"], "source_system")
+        self.assertEqual(spec["identity_fields"][0]["default"], "ISO639")
 
     def test_entity_instances_can_hold_declared_values(self) -> None:
         person = Person(source_id="u1")

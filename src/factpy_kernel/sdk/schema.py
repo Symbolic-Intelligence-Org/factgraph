@@ -56,6 +56,8 @@ class Identity(_DeclaredMember):
             "name": self.sdk_attr_name,
             "type_domain": type_domain,
         }
+        if self.default is not None:
+            out["default"] = self.default
         if self.default_factory is not None:
             out["default_factory"] = self.default_factory
         return out

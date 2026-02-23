@@ -74,6 +74,8 @@ class SDKStore:
             tag = field["type_domain"]
             if name in identity_values:
                 raw_value = identity_values[name]
+            elif "default" in field:
+                raw_value = field["default"]
             elif field.get("default_factory") == "uuid4":
                 raw_value = _default_uuid4_for_tag(tag)
             else:

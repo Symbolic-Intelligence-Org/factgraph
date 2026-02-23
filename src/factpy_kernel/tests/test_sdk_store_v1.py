@@ -27,6 +27,12 @@ class Person(Entity):
     works_at: Company = Field(cardinality="multi", pred_id="person:works_at")
 
 
+class Language(Entity):
+    source_system: str = Identity(default="ISO639")
+    code: str = Identity()
+    name: str = Field(cardinality="multi", pred_id="language:name")
+
+
 class SDKStoreV1Tests(unittest.TestCase):
     def setUp(self) -> None:
         self.sdk = SDKStore.from_schema_classes([Person, Company])
@@ -84,6 +90,11 @@ class SDKStoreV1Tests(unittest.TestCase):
             run_manifest_path = self.sdk.run_package(pkg_dir, entrypoints=["person:country"], engine="noop")
             run_manifest = json.loads(run_manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(run_manifest["engine_mode"], "noop")
+
+    def test_ref_uses_identity_default_values(self) -> None:
+        sdk = SDKStore.from_schema_classes([Language])
+        ref = sdk.ref(Language, code="de")
+        self.assertIn("idref_v1:", ref)
 
 
 if __name__ == "__main__":
