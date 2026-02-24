@@ -27,7 +27,7 @@ class FacadeRulesV1ValidateTests(unittest.TestCase):
         self.assertEqual(len(resp["errors"]), 1)
         err = resp["errors"][0]
         self.assertEqual(err["kind"], "rule_ast_validate")
-        self.assertEqual(err["path"], "$.query_rule.where")
+        self.assertEqual(err["path"], "$.query_rule.where[0]")
         self.assertIn("message", err["details"])
 
     def test_profile_default_overrides_strict_true(self) -> None:

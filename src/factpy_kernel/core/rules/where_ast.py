@@ -119,7 +119,10 @@ def _parse_where_expr(raw: Any, *, path: str) -> WhereExpr:
             if not isinstance(branch, list) or not branch:
                 raise WhereASTError("OR branch must be non-empty list", path=branch_path)
             branches.append(_parse_and_expr(branch, path=branch_path))
-        return OrExpr(branches=branches)
+        return OrExpr(
+            branches=branches,
+            origin=Origin(source="raw_ir", path=path),
+        )
 
     return _parse_and_expr(raw, path=path)
 
@@ -130,7 +133,10 @@ def _parse_and_expr(raw: list[Any], *, path: str) -> AndExpr:
         atoms.append(_parse_atom(atom_ir, path=f"{path}[{idx}]"))
     if not atoms:
         raise WhereASTError("AND body must be non-empty", path=path)
-    return AndExpr(atoms=atoms)
+    return AndExpr(
+        atoms=atoms,
+        origin=Origin(source="raw_ir", path=path),
+    )
 
 
 def _parse_atom(raw: Any, *, path: str) -> Atom:
@@ -144,7 +150,11 @@ def _parse_atom(raw: Any, *, path: str) -> Atom:
         _, pred_id, terms = raw
         if not isinstance(terms, list):
             raise WhereASTError("pred atom terms must be list", path=path)
-        return PredAtom(pred_id=pred_id, terms=[_parse_term(t, path=f"{path}[2][]") for t in terms])
+        return PredAtom(
+            pred_id=pred_id,
+            terms=[_parse_term(t, path=f"{path}[2][{idx}]") for idx, t in enumerate(terms)],
+            origin=Origin(source="raw_ir", path=path),
+        )
 
     if tag == "ruleref":
         if len(raw) != 4:
@@ -160,7 +170,8 @@ def _parse_atom(raw: Any, *, path: str) -> Atom:
         return RuleRefAtom(
             rule_id=rule_id,
             version=version,
-            terms=[_parse_term(t, path=f"{path}[3][]") for t in terms],
+            terms=[_parse_term(t, path=f"{path}[3][{idx}]") for idx, t in enumerate(terms)],
+            origin=Origin(source="raw_ir", path=path),
         )
 
     if tag in _CMP_OPS:
@@ -171,6 +182,7 @@ def _parse_atom(raw: Any, *, path: str) -> Atom:
             op=tag,
             lhs=_parse_term(lhs, path=f"{path}[1]"),
             rhs=_parse_term(rhs, path=f"{path}[2]"),
+            origin=Origin(source="raw_ir", path=path),
         )
 
     if tag == "in":
@@ -188,23 +200,34 @@ def _parse_atom(raw: Any, *, path: str) -> Atom:
             if not isinstance(term, Const):
                 raise WhereASTError("in values must be constants", path=f"{path}[2][{idx}]")
             const_values.append(term)
-        return InAtom(var=var_term, values=const_values)
+        return InAtom(
+            var=var_term,
+            values=const_values,
+            origin=Origin(source="raw_ir", path=path),
+        )
 
     if tag in _BUILTIN_TAGS:
-        return BuiltinAtom(op=tag, args=[_parse_term(v, path=f"{path}[{i}]") for i, v in enumerate(raw[1:], start=1)])
+        return BuiltinAtom(
+            op=tag,
+            args=[_parse_term(v, path=f"{path}[{i}]") for i, v in enumerate(raw[1:], start=1)],
+            origin=Origin(source="raw_ir", path=path),
+        )
 
     if tag == "not":
         if len(raw) != 2:
             raise WhereASTError("not atom must be ('not', [body...])", path=path)
-        return NotAtom(body=_parse_where_expr(raw[1], path=f"{path}[1]"))
+        return NotAtom(
+            body=_parse_where_expr(raw[1], path=f"{path}[1]"),
+            origin=Origin(source="raw_ir", path=path),
+        )
 
     raise WhereASTError(f"unsupported atom tag: {tag}", path=path)
 
 
 def _parse_term(raw: Any, *, path: str) -> Term:
     if isinstance(raw, str) and raw.startswith("$") and len(raw) > 1:
-        return Var(name=raw)
-    return Const(value=raw)
+        return Var(name=raw, origin=Origin(source="raw_ir", path=path))
+    return Const(value=raw, origin=Origin(source="raw_ir", path=path))
 
 
 def _lower_atom(atom: Atom) -> tuple[Any, ...]:
@@ -229,4 +252,3 @@ def _lower_term(term: Term) -> Any:
     if isinstance(term, Const):
         return term.value
     raise WhereASTError(f"unsupported term node: {type(term).__name__}")
-

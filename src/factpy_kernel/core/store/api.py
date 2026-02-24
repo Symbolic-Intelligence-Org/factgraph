@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
@@ -17,13 +16,23 @@ from factpy_kernel.core.store import _accept as _store_accept
 from factpy_kernel.core.store import _evaluate as _store_evaluate
 from factpy_kernel.core.store import _queries as _store_queries
 from factpy_kernel.core.store.ledger import Ledger
+from factpy_kernel.core.store.types import (
+    EngineEvaluatorFn,
+    EvaluateMode,
+    HeadSpecIR,
+    HeadVarsIR,
+    IdPolicyIR,
+    MaterializeAs,
+    TemporalView,
+    WhereIR,
+)
 
 
-_ENGINE_EVALUATOR: Callable[..., list[CandidateSet]] | None = None
+_ENGINE_EVALUATOR: EngineEvaluatorFn | None = None
 
 
 def register_engine_evaluator(
-    evaluator: Callable[..., list[CandidateSet]] | None,
+    evaluator: EngineEvaluatorFn | None,
 ) -> None:
     """Register an engine evaluation adapter for Store.evaluate(mode='engine')."""
     global _ENGINE_EVALUATOR
@@ -31,24 +40,37 @@ def register_engine_evaluator(
 
 
 class Store:
-    def __init__(self, schema_ir: dict, ledger: Ledger | None = None) -> None:
+    def __init__(
+        self,
+        schema_ir: dict,
+        ledger: Ledger | None = None,
+        *,
+        engine_evaluator: EngineEvaluatorFn | None = None,
+    ) -> None:
         if not isinstance(schema_ir, dict):
             raise ValueError("schema_ir must be dict")
         self.schema_ir = ensure_schema_ir(schema_ir)
         self.ledger = ledger if ledger is not None else Ledger()
+        self._engine_evaluator = engine_evaluator
+
+    def set_engine_evaluator(
+        self,
+        evaluator: EngineEvaluatorFn | None,
+    ) -> None:
+        self._engine_evaluator = evaluator
 
     def evaluate(
         self,
         derivation_id: str,
         version: str,
         target_pred_id: str,
-        head_vars: list[Any],
-        where: list[Any],
-        mode: str = "python",
-        temporal_view: str = "record",
-        materialize_as: str | None = None,
-        head: dict[str, Any] | None = None,
-        id_policy: Any | None = None,
+        head_vars: HeadVarsIR,
+        where: WhereIR,
+        mode: EvaluateMode = "python",
+        temporal_view: TemporalView = "record",
+        materialize_as: MaterializeAs = None,
+        head: HeadSpecIR | None = None,
+        id_policy: IdPolicyIR | None = None,
     ) -> list[CandidateSet]:
         return _store_evaluate.evaluate_store(
             self,
@@ -70,21 +92,22 @@ class Store:
         derivation_id: str,
         version: str,
         target_pred_id: str,
-        head_vars: list[Any],
-        where: list[Any],
-        temporal_view: str = "record",
-        materialize_as: str | None = None,
-        head: dict[str, Any] | None = None,
-        id_policy: Any | None = None,
+        head_vars: HeadVarsIR,
+        where: WhereIR,
+        temporal_view: TemporalView = "record",
+        materialize_as: MaterializeAs = None,
+        head: HeadSpecIR | None = None,
+        id_policy: IdPolicyIR | None = None,
     ) -> list[CandidateSet]:
         """Internal/legacy entrypoint; prefer evaluate(mode='engine')."""
         if temporal_view not in {"record", "current"}:
             raise ValueError("temporal_view must be 'record' or 'current'")
-        if _ENGINE_EVALUATOR is None:
+        evaluator = self._engine_evaluator if self._engine_evaluator is not None else _ENGINE_EVALUATOR
+        if evaluator is None:
             raise WhereValidationError(
                 "engine evaluator not registered; import factpy_kernel.adapters.souffle first"
             )
-        return _ENGINE_EVALUATOR(
+        return evaluator(
             self,
             derivation_id=derivation_id,
             version=version,

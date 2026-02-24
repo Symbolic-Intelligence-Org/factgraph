@@ -19,7 +19,9 @@ class QueryRuleStrictProfilePresetV1Tests(unittest.TestCase):
         )
         with self.assertRaises(RuleASTValidationError) as ctx:
             validate_query_rule_ast(ast, mode="souffle", profile=PROFILE_SOUFFLE_STRICT)
-        self.assertEqual(getattr(ctx.exception, "path", None), "$.query_rule.where")
+        self.assertTrue(
+            (getattr(ctx.exception, "path", None) or "").startswith("$.query_rule.where")
+        )
 
     def test_default_profile_keeps_query_rule_ruleref_behavior(self) -> None:
         ast = parse_query_rule_ir_to_ast(
@@ -52,7 +54,9 @@ class QueryRuleStrictProfilePresetV1Tests(unittest.TestCase):
         )
         with self.assertRaises(RuleASTValidationError) as ctx:
             validate_query_rule_ast(ast, mode="souffle", profile=PROFILE_SOUFFLE_STRICT)
-        self.assertEqual(getattr(ctx.exception, "path", None), "$.query_rule.where")
+        self.assertTrue(
+            (getattr(ctx.exception, "path", None) or "").startswith("$.query_rule.where")
+        )
 
     def test_default_profile_keeps_query_rule_not_or_behavior(self) -> None:
         ast = parse_query_rule_ir_to_ast(

@@ -23,7 +23,9 @@ class QueryRuleRuleRefProfilePolicyV1Tests(unittest.TestCase):
                 mode="souffle",
                 profile=BackendProfile(capabilities={"ruleref_policy": "require_resolved"}),
             )
-        self.assertEqual(getattr(ctx.exception, "path", None), "$.query_rule.where")
+        self.assertTrue(
+            (getattr(ctx.exception, "path", None) or "").startswith("$.query_rule.where")
+        )
         self.assertIn("where validation failed", str(ctx.exception))
 
     def test_souffle_default_profile_still_allows_query_rule_ruleref(self) -> None:

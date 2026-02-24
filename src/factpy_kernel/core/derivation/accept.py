@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from typing import Any
 
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.evidence.write_protocol import WriteProtocolError, set_field
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.protocol.digests import sha256_hex, sha256_token
+from factpy_kernel.core.protocol.tup_v1 import canonical_bytes_tup_v1
 from factpy_kernel.core.store.ledger import Ledger
 
 
@@ -25,6 +27,32 @@ class AcceptResult:
     skipped_count: int
     written_assertions: list[dict[str, Any]]
     skipped_reason_counts: dict[str, int]
+    diagnostics: list[dict[str, Any]] = field(default_factory=list)
+    diagnostics_contract_version: int = 1
+
+
+_RECORD_STAGE_MARKER_PRED_ID = "__factpy_internal:record_stage"
+_RECORD_STAGE_BEGIN = "begin"
+_RECORD_STAGE_ROLES_WRITTEN = "roles_written"
+_RECORD_STAGE_COMMITTED = "committed"
+_RECORD_STAGE_ABORTED = "aborted"
+
+
+def _diag_item(
+    *,
+    code: str,
+    severity: str,
+    message: str,
+    path: str | None = None,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "code": code,
+        "severity": severity,
+        "path": path,
+        "message": message,
+        "data": {} if data is None else dict(data),
+    }
 
 
 def accept_candidate_set(
@@ -238,7 +266,128 @@ def _accept_record_candidate(
         cand_key_digest=cand_key_digest,
         key_tuple_digest=candidate_set.key_tuple_digest,
     )
-    if existing_written:
+    expected_record_digest = _compute_record_roles_digest(roles)
+    stage_state = _read_record_stage_state(
+        ledger=ledger,
+        record_e_ref=record_e_ref,
+        materialize_id=materialize_id,
+    )
+    progress_before = _record_materialization_progress(
+        ledger=ledger,
+        existing_written=existing_written,
+        expected_roles=roles,
+        record_exists_pred_id=record_exists_pred_id,
+    )
+
+    if stage_state["stage"] == _RECORD_STAGE_ABORTED:
+        return AcceptResult(
+            materialize_id=materialize_id,
+            run_id=candidate_set.run_id,
+            accepted_count=0,
+            skipped_count=1,
+            written_assertions=existing_written,
+            skipped_reason_counts={"aborted": 1},
+            diagnostics=[
+                _diag_item(
+                    code="ACCEPT_RECORD_ABORTED_STATE",
+                    severity="error",
+                    path="$.accept.record",
+                    message="record accept is aborted and cannot be retried",
+                    data={
+                        "stage_before": stage_state["stage"],
+                        "stage_after": stage_state["stage"],
+                        "expected_digest": expected_record_digest,
+                        "marker_digest": stage_state.get("aborted_digest"),
+                        "missing_roles_count": progress_before["missing_roles_count"],
+                        "extra_roles_count": progress_before["extra_roles_count"],
+                    },
+                )
+            ],
+        )
+
+    if stage_state["stage"] == _RECORD_STAGE_COMMITTED:
+        committed_digest = stage_state.get("committed_digest")
+        if committed_digest != expected_record_digest:
+            _write_record_stage_marker(
+                ledger=ledger,
+                record_e_ref=record_e_ref,
+                materialize_id=materialize_id,
+                stage=_RECORD_STAGE_ABORTED,
+                record_digest=expected_record_digest,
+                marker_meta=_record_stage_marker_meta(
+                    write_meta_base={},
+                    record_type=record_type,
+                    materialize_id=materialize_id,
+                    record_e_ref=record_e_ref,
+                    key_tuple_digest=candidate_set.key_tuple_digest,
+                    cand_key_digest=cand_key_digest,
+                    record_digest=expected_record_digest,
+                ),
+            )
+            return AcceptResult(
+                materialize_id=materialize_id,
+                run_id=candidate_set.run_id,
+                accepted_count=0,
+                skipped_count=1,
+                written_assertions=existing_written,
+                skipped_reason_counts={"conflict": 1},
+                diagnostics=[
+                    _diag_item(
+                        code="ACCEPT_RECORD_COMMITTED_DIGEST_CONFLICT",
+                        severity="error",
+                        path="$.accept.record",
+                        message="committed record digest conflicts with candidate digest",
+                        data={
+                            "stage_before": stage_state["stage"],
+                            "stage_after": _RECORD_STAGE_ABORTED,
+                            "expected_digest": expected_record_digest,
+                            "committed_digest": committed_digest,
+                        },
+                    )
+                ],
+            )
+        if not progress_before["is_complete"] or progress_before["actual_digest"] != expected_record_digest:
+            _write_record_stage_marker(
+                ledger=ledger,
+                record_e_ref=record_e_ref,
+                materialize_id=materialize_id,
+                stage=_RECORD_STAGE_ABORTED,
+                record_digest=expected_record_digest,
+                marker_meta=_record_stage_marker_meta(
+                    write_meta_base={},
+                    record_type=record_type,
+                    materialize_id=materialize_id,
+                    record_e_ref=record_e_ref,
+                    key_tuple_digest=candidate_set.key_tuple_digest,
+                    cand_key_digest=cand_key_digest,
+                    record_digest=expected_record_digest,
+                ),
+            )
+            return AcceptResult(
+                materialize_id=materialize_id,
+                run_id=candidate_set.run_id,
+                accepted_count=0,
+                skipped_count=1,
+                written_assertions=existing_written,
+                skipped_reason_counts={"conflict": 1},
+                diagnostics=[
+                    _diag_item(
+                        code="ACCEPT_RECORD_COMMITTED_STATE_INCOMPLETE",
+                        severity="error",
+                        path="$.accept.record",
+                        message="committed record materialization is incomplete or corrupted",
+                        data={
+                            "stage_before": stage_state["stage"],
+                            "stage_after": _RECORD_STAGE_ABORTED,
+                            "expected_digest": expected_record_digest,
+                            "actual_digest": progress_before["actual_digest"],
+                            "missing_roles_count": progress_before["missing_roles_count"],
+                            "extra_roles_count": progress_before["extra_roles_count"],
+                            "exists_missing": progress_before["exists_missing"],
+                        },
+                    )
+                ],
+            )
         _assert_duplicate_meta_compatible(ledger=ledger, written_assertions=existing_written, options=options)
         return AcceptResult(
             materialize_id=materialize_id,
@@ -265,6 +414,7 @@ def _accept_record_candidate(
         "record_type": record_type,
         "record_e_ref": record_e_ref,
         "record_id_policy": _record_id_policy_kind(id_policy),
+        "record_digest": expected_record_digest,
     }
     if isinstance(schema_digest_token, str) and schema_digest_token:
         write_meta["schema_digest"] = schema_digest_token
@@ -275,18 +425,60 @@ def _accept_record_candidate(
     if options.note is not None:
         write_meta["note"] = options.note
 
-    written: list[dict[str, str]] = []
-    exists_asrt = set_field(
+    marker_meta = _record_stage_marker_meta(
+        write_meta_base=write_meta,
+        record_type=record_type,
+        materialize_id=materialize_id,
+        record_e_ref=record_e_ref,
+        key_tuple_digest=candidate_set.key_tuple_digest,
+        cand_key_digest=cand_key_digest,
+        record_digest=expected_record_digest,
+    )
+    _write_record_stage_marker(
         ledger=ledger,
-        pred_id=record_exists_pred_id,
-        e_ref=record_e_ref,
-        rest_terms=[],
-        meta=write_meta,
+        record_e_ref=record_e_ref,
+        materialize_id=materialize_id,
+        stage=_RECORD_STAGE_BEGIN,
+        record_digest=expected_record_digest,
+        marker_meta=marker_meta,
     )
-    written.append(
-        {"asrt_id": exists_asrt, "pred_id": record_exists_pred_id, "key_tuple_digest": candidate_set.key_tuple_digest}
-    )
-    for role in roles:
+
+    if progress_before["extra_roles_count"] > 0:
+        _write_record_stage_marker(
+            ledger=ledger,
+            record_e_ref=record_e_ref,
+            materialize_id=materialize_id,
+            stage=_RECORD_STAGE_ABORTED,
+            record_digest=expected_record_digest,
+            marker_meta=marker_meta,
+        )
+        return AcceptResult(
+            materialize_id=materialize_id,
+            run_id=candidate_set.run_id,
+            accepted_count=0,
+            skipped_count=1,
+            written_assertions=existing_written,
+            skipped_reason_counts={"conflict": 1},
+            diagnostics=[
+                _diag_item(
+                    code="ACCEPT_RECORD_EXTRA_ROLES_CONFLICT",
+                    severity="error",
+                    path="$.accept.record",
+                    message="existing record roles conflict with candidate and cannot be recovered safely",
+                    data={
+                        "stage_before": stage_state["stage"],
+                        "stage_after": _RECORD_STAGE_ABORTED,
+                        "expected_digest": expected_record_digest,
+                        "actual_digest": progress_before["actual_digest"],
+                        "missing_roles_count": progress_before["missing_roles_count"],
+                        "extra_roles_count": progress_before["extra_roles_count"],
+                    },
+                )
+            ],
+        )
+
+    written: list[dict[str, str]] = list(existing_written)
+    for role in progress_before["missing_roles"]:
         asrt_id = set_field(
             ledger=ledger,
             pred_id=role["pred_id"],
@@ -297,15 +489,112 @@ def _accept_record_candidate(
         written.append(
             {"asrt_id": asrt_id, "pred_id": role["pred_id"], "key_tuple_digest": candidate_set.key_tuple_digest}
         )
-    written.sort(key=lambda row: (row["pred_id"], row["asrt_id"]))
+    _write_record_stage_marker(
+        ledger=ledger,
+        record_e_ref=record_e_ref,
+        materialize_id=materialize_id,
+        stage=_RECORD_STAGE_ROLES_WRITTEN,
+        record_digest=expected_record_digest,
+        marker_meta=marker_meta,
+    )
+    if progress_before["exists_missing"]:
+        exists_asrt = set_field(
+            ledger=ledger,
+            pred_id=record_exists_pred_id,
+            e_ref=record_e_ref,
+            rest_terms=[],
+            meta=write_meta,
+        )
+        written.append(
+            {
+                "asrt_id": exists_asrt,
+                "pred_id": record_exists_pred_id,
+                "key_tuple_digest": candidate_set.key_tuple_digest,
+            }
+        )
+
+    existing_written_after = _find_existing_written_assertions_record(
+        ledger=ledger,
+        materialize_id=materialize_id,
+        cand_key_digest=cand_key_digest,
+        key_tuple_digest=candidate_set.key_tuple_digest,
+    )
+    progress_after = _record_materialization_progress(
+        ledger=ledger,
+        existing_written=existing_written_after,
+        expected_roles=roles,
+        record_exists_pred_id=record_exists_pred_id,
+    )
+    if not progress_after["is_complete"] or progress_after["actual_digest"] != expected_record_digest:
+        _write_record_stage_marker(
+            ledger=ledger,
+            record_e_ref=record_e_ref,
+            materialize_id=materialize_id,
+            stage=_RECORD_STAGE_ABORTED,
+            record_digest=expected_record_digest,
+            marker_meta=marker_meta,
+        )
+        return AcceptResult(
+            materialize_id=materialize_id,
+            run_id=candidate_set.run_id,
+            accepted_count=0,
+            skipped_count=1,
+            written_assertions=existing_written_after,
+            skipped_reason_counts={"conflict": 1},
+            diagnostics=[
+                _diag_item(
+                    code="ACCEPT_RECORD_FINALIZE_CONFLICT",
+                    severity="error",
+                    path="$.accept.record",
+                    message="record materialization could not be finalized consistently",
+                    data={
+                        "stage_before": stage_state["stage"],
+                        "stage_after": _RECORD_STAGE_ABORTED,
+                        "expected_digest": expected_record_digest,
+                        "actual_digest": progress_after["actual_digest"],
+                        "missing_roles_count": progress_after["missing_roles_count"],
+                        "extra_roles_count": progress_after["extra_roles_count"],
+                        "exists_missing": progress_after["exists_missing"],
+                    },
+                )
+            ],
+        )
+    _write_record_stage_marker(
+        ledger=ledger,
+        record_e_ref=record_e_ref,
+        materialize_id=materialize_id,
+        stage=_RECORD_STAGE_COMMITTED,
+        record_digest=expected_record_digest,
+        marker_meta=marker_meta,
+    )
+    existing_written_after.sort(key=lambda row: (row["pred_id"], row["asrt_id"]))
+    diagnostics: list[dict[str, Any]] = []
+    if stage_state["stage"] in {_RECORD_STAGE_BEGIN, _RECORD_STAGE_ROLES_WRITTEN} or progress_before["exists_missing"] or progress_before["missing_roles_count"] > 0:
+        diagnostics.append(
+            _diag_item(
+                code="ACCEPT_RECORD_RECOVERED_PARTIAL",
+                severity="warning",
+                path="$.accept.record",
+                message="record accept recovered and finalized a partial materialization",
+                data={
+                    "stage_before": stage_state["stage"],
+                    "stage_after": _RECORD_STAGE_COMMITTED,
+                    "expected_digest": expected_record_digest,
+                    "missing_roles_count": progress_before["missing_roles_count"],
+                    "extra_roles_count": progress_before["extra_roles_count"],
+                    "exists_missing_before": progress_before["exists_missing"],
+                },
+            )
+        )
 
     return AcceptResult(
         materialize_id=materialize_id,
         run_id=candidate_set.run_id,
         accepted_count=1,
         skipped_count=0,
-        written_assertions=written,
+        written_assertions=existing_written_after,
         skipped_reason_counts={},
+        diagnostics=diagnostics,
     )
 
 
@@ -404,6 +693,207 @@ def _find_existing_written_assertions_record(
         )
     rows.sort(key=lambda row: (row["pred_id"], row["asrt_id"]))
     return rows
+
+
+def _record_stage_marker_meta(
+    *,
+    write_meta_base: dict[str, Any],
+    record_type: str,
+    materialize_id: str,
+    record_e_ref: str,
+    key_tuple_digest: str,
+    cand_key_digest: str,
+    record_digest: str,
+) -> dict[str, Any]:
+    meta: dict[str, Any] = {
+        "source": "derivation.accept.record_stage",
+        "materialize_kind": "record_stage",
+        "record_type": record_type,
+        "record_e_ref": record_e_ref,
+        "materialize_id": materialize_id,
+        "key_tuple_digest": key_tuple_digest,
+        "cand_key_digest": cand_key_digest,
+        "record_digest": record_digest,
+    }
+    for key in (
+        "source_loc",
+        "trace_id",
+        "derived_rule_id",
+        "derived_rule_version",
+        "run_id",
+        "schema_digest",
+        "policy_digest",
+        "approved_by",
+        "note",
+    ):
+        value = write_meta_base.get(key)
+        if value is None:
+            continue
+        meta[key] = value
+    return meta
+
+
+def _write_record_stage_marker(
+    *,
+    ledger: Ledger,
+    record_e_ref: str,
+    materialize_id: str,
+    stage: str,
+    record_digest: str,
+    marker_meta: dict[str, Any],
+) -> str:
+    if stage not in {
+        _RECORD_STAGE_BEGIN,
+        _RECORD_STAGE_ROLES_WRITTEN,
+        _RECORD_STAGE_COMMITTED,
+        _RECORD_STAGE_ABORTED,
+    }:
+        raise WriteProtocolError(f"unsupported record stage marker: {stage}")
+    return set_field(
+        ledger=ledger,
+        pred_id=_RECORD_STAGE_MARKER_PRED_ID,
+        e_ref=record_e_ref,
+        rest_terms=[
+            ("string", materialize_id),
+            ("string", stage),
+            ("string", record_digest),
+        ],
+        meta=marker_meta,
+    )
+
+
+def _parse_record_stage_marker_claim(claim: Any) -> tuple[str, str, str] | None:
+    if not hasattr(claim, "pred_id") or claim.pred_id != _RECORD_STAGE_MARKER_PRED_ID:
+        return None
+    rest_terms = getattr(claim, "rest_terms", None)
+    if not isinstance(rest_terms, list) or len(rest_terms) != 3:
+        return None
+    parts: list[str] = []
+    for term in rest_terms:
+        if not (isinstance(term, tuple) and len(term) == 2):
+            return None
+        tag, value = term
+        if tag != "string" or not isinstance(value, str) or not value:
+            return None
+        parts.append(value)
+    materialize_id, stage, record_digest = parts
+    if stage not in {
+        _RECORD_STAGE_BEGIN,
+        _RECORD_STAGE_ROLES_WRITTEN,
+        _RECORD_STAGE_COMMITTED,
+        _RECORD_STAGE_ABORTED,
+    }:
+        return None
+    return materialize_id, stage, record_digest
+
+
+def _read_record_stage_state(
+    *,
+    ledger: Ledger,
+    record_e_ref: str,
+    materialize_id: str,
+) -> dict[str, Any]:
+    stage_digests: dict[str, set[str]] = {
+        _RECORD_STAGE_BEGIN: set(),
+        _RECORD_STAGE_ROLES_WRITTEN: set(),
+        _RECORD_STAGE_COMMITTED: set(),
+        _RECORD_STAGE_ABORTED: set(),
+    }
+    for claim in ledger.find_claims(pred_id=_RECORD_STAGE_MARKER_PRED_ID, e_ref=record_e_ref):
+        if ledger.has_active_revocation(claim.asrt_id):
+            continue
+        parsed = _parse_record_stage_marker_claim(claim)
+        if parsed is None:
+            continue
+        marker_materialize_id, stage, record_digest = parsed
+        if marker_materialize_id != materialize_id:
+            continue
+        stage_digests[stage].add(record_digest)
+
+    state: dict[str, Any] = {
+        "stage": None,
+        "begin_digests": sorted(stage_digests[_RECORD_STAGE_BEGIN]),
+        "roles_written_digests": sorted(stage_digests[_RECORD_STAGE_ROLES_WRITTEN]),
+        "committed_digests": sorted(stage_digests[_RECORD_STAGE_COMMITTED]),
+        "aborted_digests": sorted(stage_digests[_RECORD_STAGE_ABORTED]),
+        "committed_digest": None,
+        "aborted_digest": None,
+    }
+    if stage_digests[_RECORD_STAGE_ABORTED]:
+        state["stage"] = _RECORD_STAGE_ABORTED
+        state["aborted_digest"] = sorted(stage_digests[_RECORD_STAGE_ABORTED])[0]
+        return state
+    if stage_digests[_RECORD_STAGE_COMMITTED]:
+        state["stage"] = _RECORD_STAGE_COMMITTED
+        state["committed_digest"] = sorted(stage_digests[_RECORD_STAGE_COMMITTED])[0]
+        return state
+    if stage_digests[_RECORD_STAGE_ROLES_WRITTEN]:
+        state["stage"] = _RECORD_STAGE_ROLES_WRITTEN
+        return state
+    if stage_digests[_RECORD_STAGE_BEGIN]:
+        state["stage"] = _RECORD_STAGE_BEGIN
+    return state
+
+
+def _record_role_entry_bytes(pred_id: str, rest_terms: list[tuple[str, Any]]) -> bytes:
+    return canonical_bytes_tup_v1([("string", pred_id), *rest_terms])
+
+
+def _record_roles_digest_from_entries(entries: list[bytes]) -> str:
+    sorted_entries = sorted(entries)
+    return sha256_token(canonical_bytes_tup_v1([("bytes", entry) for entry in sorted_entries]))
+
+
+def _compute_record_roles_digest(roles: list[dict[str, Any]]) -> str:
+    return _record_roles_digest_from_entries(
+        [_record_role_entry_bytes(role["pred_id"], role["rest_terms"]) for role in roles]
+    )
+
+
+def _record_materialization_progress(
+    *,
+    ledger: Ledger,
+    existing_written: list[dict[str, str]],
+    expected_roles: list[dict[str, Any]],
+    record_exists_pred_id: str,
+) -> dict[str, Any]:
+    expected_entries = [_record_role_entry_bytes(role["pred_id"], role["rest_terms"]) for role in expected_roles]
+    expected_counter = Counter(expected_entries)
+
+    actual_entries: list[bytes] = []
+    exists_missing = True
+    for row in existing_written:
+        claim = ledger.get_claim(row["asrt_id"])
+        if claim is None or ledger.has_active_revocation(row["asrt_id"]):
+            continue
+        if claim.pred_id == record_exists_pred_id:
+            if claim.rest_terms == []:
+                exists_missing = False
+            continue
+        actual_entries.append(_record_role_entry_bytes(claim.pred_id, claim.rest_terms))
+
+    actual_counter = Counter(actual_entries)
+    missing_counter = expected_counter - actual_counter
+    extra_counter = actual_counter - expected_counter
+
+    remaining_actual = Counter(actual_entries)
+    missing_roles: list[dict[str, Any]] = []
+    for role in expected_roles:
+        role_entry = _record_role_entry_bytes(role["pred_id"], role["rest_terms"])
+        if remaining_actual[role_entry] > 0:
+            remaining_actual[role_entry] -= 1
+            continue
+        missing_roles.append(role)
+
+    actual_digest = _record_roles_digest_from_entries(actual_entries)
+    return {
+        "is_complete": (sum(missing_counter.values()) == 0 and sum(extra_counter.values()) == 0 and not exists_missing),
+        "exists_missing": exists_missing,
+        "missing_roles": missing_roles,
+        "missing_roles_count": sum(missing_counter.values()),
+        "extra_roles_count": sum(extra_counter.values()),
+        "actual_digest": actual_digest,
+    }
 
 
 def _assert_duplicate_meta_compatible(

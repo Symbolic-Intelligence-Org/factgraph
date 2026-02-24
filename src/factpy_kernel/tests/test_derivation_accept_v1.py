@@ -1,17 +1,28 @@
 from __future__ import annotations
 
+import warnings
 import unittest
+from unittest.mock import patch
 
 from factpy_kernel.authoring import compile_authoring_derivation_v1
+import factpy_kernel.core.derivation.accept as derivation_accept_module
 from factpy_kernel.core.derivation.accept import AcceptOptions
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.evidence.write_protocol import set_field
 from factpy_kernel.core.evidence.write_protocol import WriteProtocolError
-from factpy_kernel.core.policy.policy_ir import build_policy_ir_v1, policy_digest as compute_policy_digest
+from factpy_kernel.core.policy.policy_ir import (
+    PolicyIRValidationError,
+    build_policy_ir_v1,
+    policy_digest as compute_policy_digest,
+)
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.protocol.digests import sha256_hex, sha256_token
-from factpy_kernel.core.schema.schema_ir import schema_digest as compute_schema_digest
+from factpy_kernel.core.schema.schema_ir import (
+    SchemaIRValidationError,
+    schema_digest as compute_schema_digest,
+)
 from factpy_kernel.core.store.api import Store
+from factpy_kernel.core.view.projector import project_view_facts
 
 
 class DerivationAcceptV1Tests(unittest.TestCase):
@@ -136,6 +147,7 @@ class DerivationAcceptV1Tests(unittest.TestCase):
         )
 
         self.assertEqual(result.accepted_count, 1)
+        self.assertEqual(result.diagnostics, [])
         self.assertEqual(len(result.written_assertions), 1)
 
         claims = self.store.ledger.find_claims(pred_id="person:country", e_ref=self.e_ref)
@@ -185,6 +197,117 @@ class DerivationAcceptV1Tests(unittest.TestCase):
         policy_ir = build_policy_ir_v1(self.schema_ir, policy_mode="edb")
         policy_ir["generated_at"] = 0
         self.assertEqual(policy_digest, compute_policy_digest(policy_ir))
+
+    def test_accept_warns_when_schema_digest_unavailable_but_still_writes(self) -> None:
+        candidate = self.store.evaluate_dummy(
+            derivation_id=self.derivation_id,
+            version=self.version,
+            target="person:country",
+            e_ref=self.e_ref,
+            rest_terms=[("string", "de")],
+            dims_terms=[],
+        )
+
+        with patch(
+            "factpy_kernel.core.store._accept.compute_schema_digest",
+            side_effect=SchemaIRValidationError("simulated schema digest failure"),
+        ):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = self.store.accept(
+                    derivation_id=self.derivation_id,
+                    version=self.version,
+                    candidate_set=candidate,
+                    options=AcceptOptions(),
+                )
+
+        self.assertEqual(result.accepted_count, 1)
+        self.assertTrue(
+            any("schema_digest unavailable" in str(item.message) for item in caught),
+            msg=[str(item.message) for item in caught],
+        )
+        self.assertEqual(len(result.diagnostics), 1)
+        self.assertEqual(result.diagnostics[0]["code"], "accept_meta_schema_digest_unavailable")
+        self.assertEqual(result.diagnostics[0]["severity"], "warning")
+        self.assertEqual(result.diagnostics[0]["path"], "$.accept.meta")
+        self.assertEqual(result.diagnostics[0]["data"]["error_type"], "SchemaIRValidationError")
+        self.assertIn("schema_digest unavailable", result.diagnostics[0]["message"])
+
+        claims = self.store.ledger.find_claims(pred_id="person:country", e_ref=self.e_ref)
+        self.assertEqual(len(claims), 1)
+        meta_keys = {row.key for row in self.store.ledger.find_meta(asrt_id=claims[0].asrt_id)}
+        self.assertNotIn("schema_digest", meta_keys)
+        self.assertIn("policy_digest", meta_keys)
+
+    def test_accept_warns_when_policy_digest_unavailable_but_still_writes(self) -> None:
+        candidate = self.store.evaluate_dummy(
+            derivation_id=self.derivation_id,
+            version=self.version,
+            target="person:country",
+            e_ref=self.e_ref,
+            rest_terms=[("string", "de")],
+            dims_terms=[],
+        )
+
+        with patch(
+            "factpy_kernel.core.store._accept.build_policy_ir_v1",
+            side_effect=PolicyIRValidationError("simulated policy digest failure"),
+        ):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = self.store.accept(
+                    derivation_id=self.derivation_id,
+                    version=self.version,
+                    candidate_set=candidate,
+                    options=AcceptOptions(),
+                )
+
+        self.assertEqual(result.accepted_count, 1)
+        self.assertTrue(any("policy_digest unavailable" in str(item.message) for item in caught))
+        self.assertEqual(len(result.diagnostics), 1)
+        self.assertEqual(result.diagnostics[0]["code"], "accept_meta_policy_digest_unavailable")
+        self.assertEqual(result.diagnostics[0]["data"]["error_type"], "PolicyIRValidationError")
+
+        claims = self.store.ledger.find_claims(pred_id="person:country", e_ref=self.e_ref)
+        self.assertEqual(len(claims), 1)
+        meta_keys = {row.key for row in self.store.ledger.find_meta(asrt_id=claims[0].asrt_id)}
+        self.assertIn("schema_digest", meta_keys)
+        self.assertNotIn("policy_digest", meta_keys)
+
+    def test_accept_warns_when_schema_and_policy_digest_unavailable(self) -> None:
+        candidate = self.store.evaluate_dummy(
+            derivation_id=self.derivation_id,
+            version=self.version,
+            target="person:country",
+            e_ref=self.e_ref,
+            rest_terms=[("string", "de")],
+            dims_terms=[],
+        )
+
+        with patch(
+            "factpy_kernel.core.store._accept.compute_schema_digest",
+            side_effect=SchemaIRValidationError("simulated schema digest failure"),
+        ):
+            with patch(
+                "factpy_kernel.core.store._accept.build_policy_ir_v1",
+                side_effect=PolicyIRValidationError("simulated policy digest failure"),
+            ):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    result = self.store.accept(
+                        derivation_id=self.derivation_id,
+                        version=self.version,
+                        candidate_set=candidate,
+                        options=AcceptOptions(),
+                    )
+
+        self.assertEqual(result.accepted_count, 1)
+        self.assertEqual(len(result.diagnostics), 2)
+        self.assertEqual(
+            {item["code"] for item in result.diagnostics},
+            {"accept_meta_schema_digest_unavailable", "accept_meta_policy_digest_unavailable"},
+        )
+        self.assertGreaterEqual(len(caught), 2)
 
     def test_repeat_accept_is_noop(self) -> None:
         candidate = self.store.evaluate_dummy(
@@ -413,6 +536,65 @@ class DerivationAcceptV1Tests(unittest.TestCase):
         self.assertEqual(first.materialize_id, second.materialize_id)
         self.assertEqual(len(self.store.ledger.find_claims(pred_id="Speaks:exists")), 1)
         self.assertEqual(len(self.store.ledger.find_claims(pred_id="speaks:person")), 1)
+
+    def test_record_partial_write_can_retry_and_complete_when_exists_write_failed(self) -> None:
+        candidate = CandidateSet(
+            derivation_id="derive_speaks",
+            derivation_version="v1",
+            run_id="run_record_partial_retry",
+            target="Speaks",
+            key_tuple_digest="sha256:" + ("8" * 64),
+            tup_digest=None,
+            payload={
+                "materialize_as": "record",
+                "record_type": "Speaks",
+                "record_exists_pred_id": "Speaks:exists",
+                "id_policy": "key_tuple_digest_v1",
+                "roles": [{"pred_id": "speaks:person", "rest_terms": [("entity_ref", self.e_ref)]}],
+            },
+            support_digest="sha256:" + ("0" * 64),
+            support_kind="none",
+            generated_at=8,
+            state="generated",
+        )
+
+        original_set_field = derivation_accept_module.set_field
+        fail_state = {"fail_exists_once": True}
+
+        def flaky_set_field(*args, **kwargs):
+            if kwargs.get("pred_id") == "Speaks:exists" and fail_state["fail_exists_once"]:
+                fail_state["fail_exists_once"] = False
+                raise WriteProtocolError("simulated exists write failure")
+            return original_set_field(*args, **kwargs)
+
+        with patch("factpy_kernel.core.derivation.accept.set_field", side_effect=flaky_set_field):
+            with self.assertRaises(WriteProtocolError):
+                self.store.accept(
+                    derivation_id="derive_speaks",
+                    version="v1",
+                    candidate_set=candidate,
+                    options=AcceptOptions(),
+                )
+
+        self.assertEqual(len(self.store.ledger.find_claims(pred_id="Speaks:exists")), 0)
+        self.assertEqual(len(self.store.ledger.find_claims(pred_id="speaks:person")), 1)
+        partial_view = project_view_facts(self.store.ledger, self.schema_ir, temporal_view="record")
+        self.assertEqual(partial_view["Speaks:exists"], [])
+        self.assertEqual(partial_view["speaks:person"], [])
+
+        retry = self.store.accept(
+            derivation_id="derive_speaks",
+            version="v1",
+            candidate_set=candidate,
+            options=AcceptOptions(),
+        )
+        self.assertEqual(retry.accepted_count, 1)
+        self.assertTrue(any(d["code"] == "ACCEPT_RECORD_RECOVERED_PARTIAL" for d in retry.diagnostics))
+        self.assertEqual(len(self.store.ledger.find_claims(pred_id="Speaks:exists")), 1)
+        self.assertEqual(len(self.store.ledger.find_claims(pred_id="speaks:person")), 1)
+        committed_view = project_view_facts(self.store.ledger, self.schema_ir, temporal_view="record")
+        self.assertEqual(len(committed_view["Speaks:exists"]), 1)
+        self.assertEqual(len(committed_view["speaks:person"]), 1)
 
     def test_repeat_accept_record_rejects_changed_note(self) -> None:
         candidate = CandidateSet(

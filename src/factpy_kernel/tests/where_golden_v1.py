@@ -223,6 +223,14 @@ _CASES: tuple[WhereGoldenCase, ...] = (
         error_kind=FAIL_DATAFLOW_EQ,
     ),
     WhereGoldenCase(
+        case_id="ok-ne-filter",
+        title="ne filter works in AST validator and python evaluator",
+        where_ir=[("pred", "x:v", ["$e", "$x"]), ("ne", "$x", 3)],
+        mode="python",
+        expect="ok",
+        targets=("ast", "eval"),
+    ),
+    WhereGoldenCase(
         case_id="ok-builtin-binds-output",
         title="builtin binds output z when inputs are bound",
         where_ir=[("pred", "x:v", ["$e", "$x"]), ("addc", "$y", "$x", 1), ("ge", "$y", 2)],

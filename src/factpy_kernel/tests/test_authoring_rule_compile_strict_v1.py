@@ -21,7 +21,7 @@ class AuthoringRuleCompileStrictV1Tests(unittest.TestCase):
                 compile_authoring_rule_v1(_authoring_rule_with_ruleref(), strict=True)
         err = ctx.exception
         self.assertEqual(getattr(err, "kind", None), "rule_ast_validate")
-        self.assertEqual(err.path, "$.query_rule.where")
+        self.assertTrue((err.path or "").startswith("$.query_rule.where"))
         self.assertIn("message", getattr(err, "details", {}))
 
     def test_profile_argument_overrides_strict_flag(self) -> None:

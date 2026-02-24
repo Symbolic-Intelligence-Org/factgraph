@@ -89,7 +89,9 @@ class QueryRuleSelectVarsAvailableV1Tests(unittest.TestCase):
         )
         with self.assertRaises(RuleASTValidationError) as ctx:
             validate_query_rule_ast(ast, mode="python")
-        self.assertEqual(getattr(ctx.exception, "path", None), "$.query_rule.where")
+        self.assertTrue(
+            (getattr(ctx.exception, "path", None) or "").startswith("$.query_rule.where")
+        )
         self.assertIn("where validation failed", str(ctx.exception))
 
 

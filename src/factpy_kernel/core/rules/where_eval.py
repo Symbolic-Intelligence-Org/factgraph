@@ -27,7 +27,11 @@ def evaluate_where(
     if ast_gate_on:
         try:
             ast = parse_where_ir_to_ast(where)
-            validate_where_ast(ast, mode="python")
+            validate_where_ast(
+                ast,
+                mode="python",
+                capabilities={"allow_ruleref": False},
+            )
         except (WhereASTError, WhereASTValidationError) as exc:
             raise _adapt_where_ast_error(exc) from exc
 
@@ -123,6 +127,11 @@ def _validate_atom(atom: Any) -> tuple[Any, ...]:
             raise WhereValidationError("in atom values must be list")
         return atom
 
+    if kind == "ne":
+        if len(atom) != 3:
+            raise WhereValidationError("ne atom must be ('ne', lhs, rhs)")
+        return atom
+
     if kind in {"gt", "ge", "lt", "le"}:
         if len(atom) != 3:
             raise WhereValidationError(f"{kind} atom must be ('{kind}', lhs, rhs)")
@@ -160,6 +169,8 @@ def _eval_body(
             envs = _eval_eq_atom(envs, atom, ast_gate_on=ast_gate_on)
         elif kind == "in":
             envs = _eval_in_atom(envs, atom, ast_gate_on=ast_gate_on)
+        elif kind == "ne":
+            envs = _eval_ne_atom(envs, atom, ast_gate_on=ast_gate_on)
         elif kind in {"gt", "ge", "lt", "le"}:
             envs = _eval_cmp_atom(envs, atom, ast_gate_on=ast_gate_on)
         elif kind in _ARITH_KINDS:
@@ -267,6 +278,38 @@ def _eval_in_atom(
     return out
 
 
+def _eval_ne_atom(
+    envs: list[dict[str, Any]],
+    atom: tuple[Any, ...],
+    *,
+    ast_gate_on: bool,
+) -> list[dict[str, Any]]:
+    _, lhs, rhs = atom
+    out: list[dict[str, Any]] = []
+
+    for env in envs:
+        lhs_known, lhs_value = _resolve(env, lhs)
+        rhs_known, rhs_value = _resolve(env, rhs)
+
+        if not lhs_known and _is_var(lhs):
+            if not ast_gate_on:
+                raise WhereValidationError(f"ne variable must be bound before filter: {lhs}")
+            continue
+        if not rhs_known and _is_var(rhs):
+            if not ast_gate_on:
+                raise WhereValidationError(f"ne variable must be bound before filter: {rhs}")
+            continue
+        if not lhs_known or not rhs_known:
+            if not ast_gate_on:
+                raise WhereValidationError("ne requires both sides to be resolvable")
+            continue
+
+        if lhs_value != rhs_value:
+            out.append(dict(env))
+
+    return out
+
+
 def _eval_cmp_atom(
     envs: list[dict[str, Any]],
     atom: tuple[Any, ...],
@@ -352,6 +395,8 @@ def _exists_not_body(
                 envs = _eval_eq_atom(envs, atom, ast_gate_on=ast_gate_on)
             elif kind == "in":
                 envs = _eval_in_atom(envs, atom, ast_gate_on=ast_gate_on)
+            elif kind == "ne":
+                envs = _eval_ne_atom(envs, atom, ast_gate_on=ast_gate_on)
             elif kind in {"gt", "ge", "lt", "le"}:
                 envs = _eval_cmp_atom(envs, atom, ast_gate_on=ast_gate_on)
             elif kind in _ARITH_KINDS:
@@ -566,7 +611,7 @@ def _vars_in_atoms(body: list[tuple[Any, ...]]) -> list[str]:
             _, var, _ = atom
             if _is_var(var):
                 found.add(var)
-        elif kind in {"gt", "ge", "lt", "le"}:
+        elif kind in {"gt", "ge", "lt", "le", "ne"}:
             _, lhs, rhs = atom
             if _is_var(lhs):
                 found.add(lhs)
@@ -591,7 +636,7 @@ def _normalize_not_body(not_body: Any) -> list[list[tuple[Any, ...]]]:
     if not isinstance(not_body, list) or not not_body:
         raise WhereValidationError("not body must be non-empty list")
 
-    allowed_not_kinds = {"pred", "eq", "in", "gt", "ge", "lt", "le", *_ARITH_KINDS}
+    allowed_not_kinds = {"pred", "eq", "in", "gt", "ge", "lt", "le", "ne", *_ARITH_KINDS}
 
     def validate_not_atom(not_atom: Any) -> tuple[Any, ...]:
         if not _is_atom(not_atom):

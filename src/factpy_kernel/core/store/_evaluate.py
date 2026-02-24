@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_where
 from factpy_kernel.core.store import _builders
+from factpy_kernel.core.store.types import (
+    EngineEvaluatorFn,
+    EvaluateMode,
+    HeadSpecIR,
+    HeadVarsIR,
+    IdPolicyIR,
+    MaterializeAs,
+    TemporalView,
+    WhereIR,
+)
 from factpy_kernel.core.view.projector import project_view_facts
 
 
@@ -15,14 +24,14 @@ def evaluate_store(
     derivation_id: str,
     version: str,
     target_pred_id: str,
-    head_vars: list[Any],
-    where: list[Any],
-    mode: str = "python",
-    temporal_view: str = "record",
-    materialize_as: str | None = None,
-    head: dict[str, Any] | None = None,
-    id_policy: Any | None = None,
-    engine_evaluate: Callable[..., list[CandidateSet]],
+    head_vars: HeadVarsIR,
+    where: WhereIR,
+    mode: EvaluateMode = "python",
+    temporal_view: TemporalView = "record",
+    materialize_as: MaterializeAs = None,
+    head: HeadSpecIR | None = None,
+    id_policy: IdPolicyIR | None = None,
+    engine_evaluate: EngineEvaluatorFn,
 ) -> list[CandidateSet]:
     if temporal_view not in {"record", "current"}:
         raise ValueError("temporal_view must be 'record' or 'current'")
@@ -104,9 +113,9 @@ def evaluate_store(
 
 def _evaluate_where_over_view(
     store: Any,
-    where: list[Any],
+    where: WhereIR,
     *,
-    temporal_view: str,
+    temporal_view: TemporalView,
 ) -> list[dict[str, Any]]:
     view_facts = project_view_facts(
         store.ledger,

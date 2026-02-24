@@ -44,6 +44,58 @@ class CoreStoreBoundaryV1Tests(unittest.TestCase):
         finally:
             register_engine_evaluator(prev)
 
+    def test_store_instance_engine_evaluator_override_isolated_from_global(self) -> None:
+        import factpy_kernel.core.store.api as store_api
+
+        prev = getattr(store_api, "_ENGINE_EVALUATOR")
+        calls: list[str] = []
+
+        def global_eval(store, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append("global")
+            return []
+
+        def local_eval(store, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append("local")
+            return []
+
+        try:
+            register_engine_evaluator(global_eval)
+            store_global = Store(schema_ir=_minimal_schema())
+            store_local = Store(schema_ir=_minimal_schema(), engine_evaluator=local_eval)
+
+            for store in (store_global, store_local):
+                result = store.evaluate_engine(
+                    derivation_id="drv",
+                    version="v1",
+                    target_pred_id="person:country",
+                    head_vars=["$E", "$C"],
+                    where=[("pred", "person:country", ["$E", "$C"])],
+                )
+                self.assertEqual(result, [])
+
+            self.assertEqual(calls, ["global", "local"])
+        finally:
+            register_engine_evaluator(prev)
+
+    def test_store_instance_can_set_engine_evaluator_after_init(self) -> None:
+        store = Store(schema_ir=_minimal_schema())
+        calls: list[str] = []
+
+        def local_eval(store_obj, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append("set")
+            return []
+
+        store.set_engine_evaluator(local_eval)
+        result = store.evaluate_engine(
+            derivation_id="drv",
+            version="v1",
+            target_pred_id="person:country",
+            head_vars=["$E", "$C"],
+            where=[("pred", "person:country", ["$E", "$C"])],
+        )
+        self.assertEqual(result, [])
+        self.assertEqual(calls, ["set"])
+
 
 def _minimal_schema() -> dict:
     return {
