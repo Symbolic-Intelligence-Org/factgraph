@@ -1,8 +1,8 @@
 # Core 开发进度与路线图（factpy_kernel）
 
 - 范围：`src/factpy_kernel/core`
-- 最后更新：2026-02-23
-- 当前状态基线：`338 unittest OK`
+- 最后更新：2026-02-24
+- 当前状态基线：`459 unittest OK`
 
 ## 1. 当前状态摘要（供快速判断）
 
@@ -13,7 +13,10 @@
 - `Store.__init__` 强制 `SchemaIR` 校验（错误前置）
 - `Ledger` 完成内存索引优化（claims/meta/claim_args/revokes）
 - `policy/view` 热点路径已接入 `Ledger.find_claim_args(...)`
-- 全量 `unittest` 通过（338 tests）
+- 全量 `unittest` 通过（459 tests）
+- record accept 语义闭环已收口（staging marker + role digest + projector 不可见性 gating + 结构化 diagnostics）
+- `record_staging` 共享判定模块已落地（`accept` / `projector` 共用冲突语义）
+- `project_view_facts_with_audit(...)` 已落地（默认 `project_view_facts(...)` 返回形状不变）
 
 ### 当前主要风险（简要）
 
@@ -89,8 +92,42 @@
 - 增加 `rebuild_indexes()` 支持直接私有列表修改后的索引重建
 
 **完成标准（已满足）**
-- 全量测试通过（338）
+- 全量测试通过（459）
 - 新增索引语义测试通过
+
+### M5. record accept 语义收口（完成，P0/P0.5）
+
+**目标**
+- 收口 record 物化的部分写入可见性、冲突隐性 nondeterminism 与可诊断性缺口
+
+**结果**
+- record accept 引入 staging marker 与 role-level digest
+- `accept` / `projector` 共用 `record_staging` 冲突判定（conflict 封闭）
+- `projector` 对未 committed / conflict / aborted record 整组隐藏
+- `projector` 增加 `roles_count_expected` 低成本完整性校验（count mismatch 隐藏）
+- `AcceptResult.diagnostics` 增强（冲突后果对子调用方可见）
+
+**完成标准（已满足）**
+- record partial write 重试恢复回归通过
+- committed+aborted / committed+inflight mismatch 冲突回归通过
+- 全量测试通过（459）
+
+### M6. projector 审计统计（完成，P1）
+
+**目标**
+- 在不改变默认 `project_view_facts(...)` 返回形状的前提下，为迁移/观测提供 record 可见性相关统计
+
+**结果**
+- 新增 `project_view_facts_with_audit(...) -> (facts, ProjectorAudit)`
+- 单次扫描、单份索引、双出口（默认路径与 audit 路径共享实现）
+- 审计统计覆盖：
+  - legacy record（按 record 组 / exists 单位）
+  - marker conflict（按 reason 聚合）
+  - committed hidden count mismatch
+
+**完成标准（已满足）**
+- 新增 `test_view_projector_audit_v1.py`
+- 默认 API 输出与历史行为一致（回归覆盖）
 
 ## 3. 当前架构决策（必须保持一致）
 
@@ -136,6 +173,19 @@
 **验收标准**
 - 导出相关测试通过
 - 在固定场景下导出耗时明显下降（给出对比）
+
+### P1. 观测与迁移策略：legacy record 可见性（audit/allow/deny）
+
+**动机**
+- 当前 legacy record（无 `record_digest`）默认兼容可见；需要先量化规模与异常分布，再决定是否收紧策略
+
+**建议动作**
+- 在 `projector` 审计统计基础上补充团队级观测（日志/导出/看板）
+- 先使用 `audit` 统计评估迁移成本，再考虑显式 `legacy_record_visibility` 策略参数
+
+**验收标准**
+- 能看到 legacy 数量、marker conflict 数量、count mismatch 隐藏数量的稳定统计
+- 不改变默认 `project_view_facts(...)` 行为
 
 ### P2. 为 `Ledger` 索引路径补更系统的语义测试
 
@@ -225,6 +275,8 @@ python tools/benchmarks/bench_core_ledger_paths.py --rows 3000 --rounds 3
 
 - `Store` 结构再次拆分/合并
 - `Ledger` 索引策略变更
+- record 可见性 gating / staging 冲突语义变更
+- projector 审计统计 contract 或统计口径变更
 - 测试基线数量/状态变化
 - benchmark 基线变化明显
 

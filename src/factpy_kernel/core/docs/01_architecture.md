@@ -1,7 +1,7 @@
 # Core 架构总览（factpy_kernel）
 
 - 适用范围：`src/factpy_kernel/core`
-- 最后更新：2026-02-23
+- 最后更新：2026-02-24
 - 代码基线：目录重构为 `core/adapters` 后；`Store` 已完成第一阶段拆分；`Ledger` 已完成内存索引优化
 - 目标读者：需要理解核心语义、定位代码、继续开发 `core` 的开发者
 
@@ -42,7 +42,8 @@ src/factpy_kernel/core/
 | `store.ledger` | append-only 内存账本 + 索引查询 | `append_*`, `find_*`, `rebuild_indexes` | 基础数据类 |
 | `evidence.write_protocol` | 写入/撤销/替换协议、幂等 ingest_key | `set_field`, `add_field`, `retract_by_asrt`, `replace_field` | `Ledger`, `protocol.*` |
 | `policy.active/chosen` | 活跃性判断、chosen 决策（确定性 tie-break） | `is_active`, `compute_chosen_for_predicate` | `Ledger`, `write_protocol` |
-| `view.projector` | 从账本投影业务视图事实（含 temporal current） | `project_view_facts` | `policy`, `Ledger` |
+| `view.projector` | 从账本投影业务视图事实（含 temporal current）与可选审计统计 | `project_view_facts`, `project_view_facts_with_audit` | `policy`, `Ledger`, `record_staging` |
+| `record_staging` | record staging marker 常量、解析与冲突判定（accept/projector 共用） | `read_record_stage_status`, `resolve_record_stage_status` | `Ledger` |
 | `rules.where_ast` | where 语义 AST（round-trip / 结构化语义中枢雏形） | `parse_where_ir_to_ast`, `lower_ast_to_where_ir` | 现有 where IR |
 | `rules.where_ast_validate` | where AST 结构/数据流校验（治理层，PR-2） | `validate_where_ast` | `rules.where_ast` |
 | `rules.where_eval` | where 子集 Python 解释执行 | `evaluate_where` | `view/projector` 产物 |
@@ -126,7 +127,7 @@ flowchart LR
 flowchart LR
   A["Ledger claims/meta/revokes"] --> B["policy.active"]
   B --> C["policy.chosen"]
-  C --> D["view.projector.project_view_facts"]
+ C --> D["view.projector.project_view_facts"]
   D --> E["view facts: pred -> tuples"]
 ```
 
@@ -135,6 +136,48 @@ flowchart LR
 - `functional`：按 `ingested_at` + `asrt_id` 决定 chosen
 - `multi`：所有 active 都可见
 - `temporal`：支持 `record/current` 两种视图语义（Python 路径）
+- record 物化可见性 gating（当前已落地）
+  - `staging status != committed`（含 `aborted/conflict`）时，整组 record 隐藏
+  - `committed` 且 `roles_count_expected` 存在但不匹配时，整组 record 隐藏
+  - legacy record（无 `record_digest`）默认兼容可见（迁移期策略）
+
+### 6.2.1 Record Staging 语义（accept / projector 共用）
+
+`core/record_staging.py` 定义 record 级 staging marker 协议与统一冲突判定，避免 `accept` 与 `projector` 对同一账本状态产生不同解释。
+
+- marker predicate：`__factpy_internal:record_stage`
+- stage 值：`begin | roles_written | committed | aborted`
+- 关键 marker meta：
+  - `materialize_id`
+  - `record_digest`（record 级 role digest）
+  - `roles_count_expected`（用于 projector 的低成本完整性校验）
+
+统一冲突判定（`resolve_record_stage_status(...)`）示例：
+
+- `multi_committed` -> conflict
+- `committed_and_aborted` -> conflict
+- `multi_aborted` -> conflict
+- `committed_and_inflight_mismatch` -> conflict
+- inflight 多 digest（且无 committed/aborted 冲突）-> warning（不影响 projector，因为 projector 只认 committed）
+
+### 6.2.2 Projector 审计统计（P1，已落地）
+
+新增并行 API（不改变默认 `project_view_facts(...)` 返回形状）：
+
+- `project_view_facts_with_audit(...) -> (facts, ProjectorAudit)`
+
+`ProjectorAudit`（`contract_version=1`）当前包含：
+
+- `legacy_record_total` / `legacy_record_by_pred`
+- `legacy_exists_without_roles_total` / `legacy_exists_without_roles_by_pred`
+- `marker_conflict_total` / `marker_conflict_by_reason`
+- `committed_hidden_count_mismatch_total` / `committed_hidden_count_mismatch_by_pred`
+
+统计口径说明（重要）：
+
+- 以 **record 组（按 record key / staging key）** 为计数单位，而不是按 claim 行计数
+- `legacy_record_*` 以 `exists` claim 为计数单位（无 `record_digest` 的 legacy record）
+- `committed_hidden_count_mismatch_*` 仅统计 “committed 且 `roles_count_expected` 存在但不匹配” 导致的隐藏
 
 ### 6.3 规则与候选链路（Python 路径）
 
@@ -172,8 +215,14 @@ flowchart LR
 flowchart LR
   A["Store.accept"] --> B["store._accept.accept_store_candidate"]
   B --> C["derivation.accept.accept_candidate_set"]
-  C --> D["write_protocol + Ledger"]
+ C --> D["write_protocol + Ledger"]
 ```
+
+补充（record accept，当前状态）：
+
+- record 物化采用 staging marker（`begin -> roles_written -> committed`）表达进度
+- 冲突路径可写 `aborted` marker 并通过 diagnostics 显式返回冲突后果
+- 与 `projector` 共用 `record_staging` 判定语义，保证“可写/可见/冲突”的一致解释
 
 ### 6.5 Engine 链路边界（core 与 adapter 的关系）
 
@@ -244,6 +293,7 @@ flowchart LR
 
 - `policy/chosen.py`
 - `view/projector.py`
+- `record_staging.py`
 - `schema/schema_ir.py`（校验）
 - `adapters/souffle/souffle_view_gen.py`（引擎视图生成）
 
@@ -272,6 +322,7 @@ flowchart LR
 - `src/factpy_kernel/tests/test_ledger_indexes_v1.py`
   - 检查 `Ledger` 索引查询语义与 `find_revoker` 首匹配语义
 - `src/factpy_kernel/tests/test_view_projector_v1.py`
+- `src/factpy_kernel/tests/test_view_projector_audit_v1.py`
 - `src/factpy_kernel/tests/test_write_protocol_v1.py`
 
 标准回归命令（FactPy kernel，避免误扫仓库根目录 `test.py`）：

@@ -1,9 +1,11 @@
 # Core Architecture Overview (factpy_kernel)
 
 - Scope: `src/factpy_kernel/core`
-- Last updated: 2026-02-23
-- Code baseline: after `core/adapters` split; `Store` phase-1 decomposition complete; `Ledger` in-memory indexing complete
+- Last updated: 2026-02-24
+- Code baseline: after `core/adapters` split; `Store` phase-1 decomposition complete; `Ledger` in-memory indexing complete; record staging shared resolver and projector audit API landed
 - Audience: developers who need to understand core semantics, navigate the codebase, and continue core development
+
+> Note: The Chinese docs (`*.md`) are currently the source of truth for the latest record staging / projector audit details; this English file has only been partially synchronized in this update.
 
 ## 1. Scope and Positioning
 

@@ -1,8 +1,8 @@
 # Core Development Progress and Roadmap (factpy_kernel)
 
 - Scope: `src/factpy_kernel/core`
-- Last updated: 2026-02-23
-- Current baseline: `338 unittest OK`
+- Last updated: 2026-02-24
+- Current baseline: `459 unittest OK`
 
 ## 1. Current Status Summary (Quick Read)
 
@@ -13,7 +13,9 @@
 - `Store.__init__` enforces `SchemaIR` validation (early failure)
 - `Ledger` now has in-memory indexes (claims/meta/claim_args/revokes)
 - policy/view hotspots now use `Ledger.find_claim_args(...)`
-- full `unittest` suite passes (`338 tests`)
+- full `unittest` suite passes (`459 tests`)
+- record accept semantic closure landed (staging marker + role digest + projector invisibility gating + structured diagnostics)
+- shared `record_staging` resolver and `project_view_facts_with_audit(...)` landed (default API shape unchanged)
 
 ### Current top risks (short list)
 

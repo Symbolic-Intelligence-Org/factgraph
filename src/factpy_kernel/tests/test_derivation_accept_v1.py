@@ -17,6 +17,7 @@ from factpy_kernel.core.policy.policy_ir import (
 )
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.protocol.digests import sha256_hex, sha256_token
+from factpy_kernel.core.record_staging import RECORD_STAGE_ABORTED, RECORD_STAGE_MARKER_PRED_ID
 from factpy_kernel.core.schema.schema_ir import (
     SchemaIRValidationError,
     schema_digest as compute_schema_digest,
@@ -629,6 +630,210 @@ class DerivationAcceptV1Tests(unittest.TestCase):
                 candidate_set=candidate,
                 options=AcceptOptions(note="changed"),
             )
+
+    def test_accept_record_rejects_when_aborted_marker_exists(self) -> None:
+        candidate = CandidateSet(
+            derivation_id="derive_speaks",
+            derivation_version="v1",
+            run_id="run_record_aborted_reject",
+            target="Speaks",
+            key_tuple_digest="sha256:" + ("4" * 64),
+            tup_digest=None,
+            payload={
+                "materialize_as": "record",
+                "record_type": "Speaks",
+                "record_exists_pred_id": "Speaks:exists",
+                "id_policy": "key_tuple_digest_v1",
+                "roles": [{"pred_id": "speaks:person", "rest_terms": [("entity_ref", self.e_ref)]}],
+            },
+            support_digest="sha256:" + ("0" * 64),
+            support_kind="none",
+            generated_at=4,
+            state="generated",
+        )
+        roles = derivation_accept_module._normalize_record_roles(candidate.payload["roles"])
+        record_e_ref = derivation_accept_module._derive_record_e_ref(
+            record_type="Speaks",
+            id_policy=candidate.payload["id_policy"],
+            candidate_set=candidate,
+            roles=roles,
+        )
+        materialize_id = derivation_accept_module._compute_materialize_id(candidate)
+        record_digest = derivation_accept_module._compute_record_roles_digest(roles)
+        set_field(
+            self.store.ledger,
+            pred_id=RECORD_STAGE_MARKER_PRED_ID,
+            e_ref=record_e_ref,
+            rest_terms=[
+                ("string", materialize_id),
+                ("string", RECORD_STAGE_ABORTED),
+                ("string", record_digest),
+            ],
+            meta={"source": "test", "roles_count_expected": len(roles)},
+        )
+        before_total_claims = len(self.store.ledger.find_claims())
+        result = self.store.accept(
+            derivation_id="derive_speaks",
+            version="v1",
+            candidate_set=candidate,
+            options=AcceptOptions(),
+        )
+        self.assertEqual(result.accepted_count, 0)
+        self.assertEqual(result.skipped_reason_counts, {"aborted": 1})
+        self.assertTrue(any(d["code"] == "RECORD_REJECT_ABORTED" for d in result.diagnostics))
+        self.assertEqual(len(self.store.ledger.find_claims()), before_total_claims)
+        view = project_view_facts(self.store.ledger, self.schema_ir, temporal_view="record")
+        self.assertEqual(view["Speaks:exists"], [])
+        self.assertEqual(view["speaks:person"], [])
+
+    def test_accept_record_committed_digest_conflict_writes_aborted_and_hides_record(self) -> None:
+        lang_ref = "idref_v1:Language:dddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        candidate_a = CandidateSet(
+            derivation_id="derive_speaks",
+            derivation_version="v1",
+            run_id="run_record_conflict",
+            target="Speaks",
+            key_tuple_digest="sha256:" + ("5" * 64),
+            tup_digest=None,
+            payload={
+                "materialize_as": "record",
+                "record_type": "Speaks",
+                "record_exists_pred_id": "Speaks:exists",
+                "id_policy": "key_tuple_digest_v1",
+                "roles": [{"pred_id": "speaks:person", "rest_terms": [("entity_ref", self.e_ref)]}],
+            },
+            support_digest="sha256:" + ("0" * 64),
+            support_kind="none",
+            generated_at=5,
+            state="generated",
+        )
+        candidate_b = CandidateSet(
+            derivation_id="derive_speaks",
+            derivation_version="v1",
+            run_id="run_record_conflict",
+            target="Speaks",
+            key_tuple_digest="sha256:" + ("5" * 64),
+            tup_digest=None,
+            payload={
+                "materialize_as": "record",
+                "record_type": "Speaks",
+                "record_exists_pred_id": "Speaks:exists",
+                "id_policy": "key_tuple_digest_v1",
+                "roles": [
+                    {"pred_id": "speaks:person", "rest_terms": [("entity_ref", self.e_ref)]},
+                    {"pred_id": "speaks:language", "rest_terms": [("entity_ref", lang_ref)]},
+                ],
+            },
+            support_digest="sha256:" + ("0" * 64),
+            support_kind="none",
+            generated_at=6,
+            state="generated",
+        )
+
+        first = self.store.accept(
+            derivation_id="derive_speaks",
+            version="v1",
+            candidate_set=candidate_a,
+            options=AcceptOptions(),
+        )
+        self.assertEqual(first.accepted_count, 1)
+        view_before = project_view_facts(self.store.ledger, self.schema_ir, temporal_view="record")
+        self.assertEqual(len(view_before["Speaks:exists"]), 1)
+        self.assertEqual(len(view_before["speaks:person"]), 1)
+        claims_before = {
+            "exists": len(self.store.ledger.find_claims(pred_id="Speaks:exists")),
+            "person": len(self.store.ledger.find_claims(pred_id="speaks:person")),
+            "language": len(self.store.ledger.find_claims(pred_id="speaks:language")),
+        }
+
+        second = self.store.accept(
+            derivation_id="derive_speaks",
+            version="v1",
+            candidate_set=candidate_b,
+            options=AcceptOptions(),
+        )
+        self.assertEqual(second.accepted_count, 0)
+        self.assertEqual(second.skipped_reason_counts, {"conflict": 1})
+        self.assertTrue(any(d["code"] == "RECORD_COMMITTED_DIGEST_CONFLICT" for d in second.diagnostics))
+        self.assertEqual(len(self.store.ledger.find_claims(pred_id="Speaks:exists")), claims_before["exists"])
+        self.assertEqual(len(self.store.ledger.find_claims(pred_id="speaks:person")), claims_before["person"])
+        self.assertEqual(len(self.store.ledger.find_claims(pred_id="speaks:language")), claims_before["language"])
+        self.assertTrue(
+            any(claim.pred_id == RECORD_STAGE_MARKER_PRED_ID for claim in self.store.ledger.find_claims()),
+        )
+        view_after = project_view_facts(self.store.ledger, self.schema_ir, temporal_view="record")
+        self.assertEqual(view_after["Speaks:exists"], [])
+        self.assertEqual(view_after["speaks:person"], [])
+        self.assertEqual(view_after["speaks:language"], [])
+
+    def test_committed_with_mismatched_inflight_marker_is_conflict_and_hidden(self) -> None:
+        candidate = CandidateSet(
+            derivation_id="derive_speaks",
+            derivation_version="v1",
+            run_id="run_record_inflight_conflict",
+            target="Speaks",
+            key_tuple_digest="sha256:" + ("6" * 64),
+            tup_digest=None,
+            payload={
+                "materialize_as": "record",
+                "record_type": "Speaks",
+                "record_exists_pred_id": "Speaks:exists",
+                "id_policy": "key_tuple_digest_v1",
+                "roles": [{"pred_id": "speaks:person", "rest_terms": [("entity_ref", self.e_ref)]}],
+            },
+            support_digest="sha256:" + ("0" * 64),
+            support_kind="none",
+            generated_at=7,
+            state="generated",
+        )
+        first = self.store.accept(
+            derivation_id="derive_speaks",
+            version="v1",
+            candidate_set=candidate,
+            options=AcceptOptions(),
+        )
+        self.assertEqual(first.accepted_count, 1)
+
+        roles = derivation_accept_module._normalize_record_roles(candidate.payload["roles"])
+        record_e_ref = derivation_accept_module._derive_record_e_ref(
+            record_type="Speaks",
+            id_policy=candidate.payload["id_policy"],
+            candidate_set=candidate,
+            roles=roles,
+        )
+        materialize_id = derivation_accept_module._compute_materialize_id(candidate)
+        mismatched_digest = "sha256:" + ("f" * 64)
+        before_claims = len(self.store.ledger.find_claims())
+        set_field(
+            self.store.ledger,
+            pred_id=RECORD_STAGE_MARKER_PRED_ID,
+            e_ref=record_e_ref,
+            rest_terms=[
+                ("string", materialize_id),
+                ("string", "begin"),
+                ("string", mismatched_digest),
+            ],
+            meta={"source": "test", "roles_count_expected": 1},
+        )
+        self.assertEqual(len(self.store.ledger.find_claims()), before_claims + 1)
+
+        view_after_marker = project_view_facts(self.store.ledger, self.schema_ir, temporal_view="record")
+        self.assertEqual(view_after_marker["Speaks:exists"], [])
+        self.assertEqual(view_after_marker["speaks:person"], [])
+
+        before_retry_claims = len(self.store.ledger.find_claims())
+        retry = self.store.accept(
+            derivation_id="derive_speaks",
+            version="v1",
+            candidate_set=candidate,
+            options=AcceptOptions(),
+        )
+        self.assertEqual(retry.accepted_count, 0)
+        self.assertEqual(retry.skipped_reason_counts, {"conflict": 1})
+        self.assertTrue(
+            any(d["code"] == "RECORD_MARKER_CONFLICT_COMMITTED_AND_INFLIGHT_MISMATCH" for d in retry.diagnostics)
+        )
+        self.assertEqual(len(self.store.ledger.find_claims()), before_retry_claims)
 
     def test_record_derivation_head_preview_and_accept_end_to_end(self) -> None:
         lang_ref = "idref_v1:Language:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"

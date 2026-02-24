@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
-from factpy_kernel.core.derivation.accept import (
-    _RECORD_STAGE_ABORTED,
-    _RECORD_STAGE_COMMITTED,
-    _RECORD_STAGE_MARKER_PRED_ID,
+from factpy_kernel.core.record_staging import (
+    RECORD_STAGE_COMMITTED,
+    RECORD_STAGE_MARKER_PRED_ID,
+    meta_int,
+    parse_record_stage_marker_claim,
+    resolve_record_stage_status,
 )
 from factpy_kernel.core.policy.active import is_active
 from factpy_kernel.core.policy.chosen import (
@@ -21,6 +24,23 @@ class ViewProjectionError(Exception):
     pass
 
 
+@dataclass
+class ProjectorAudit:
+    contract_version: int = 1
+    legacy_record_total: int = 0
+    legacy_record_by_pred: dict[str, int] = field(default_factory=dict)
+    legacy_exists_without_roles_total: int = 0
+    legacy_exists_without_roles_by_pred: dict[str, int] = field(default_factory=dict)
+    marker_conflict_total: int = 0
+    marker_conflict_by_reason: dict[str, int] = field(default_factory=dict)
+    committed_hidden_count_mismatch_total: int = 0
+    committed_hidden_count_mismatch_by_pred: dict[str, int] = field(default_factory=dict)
+
+
+def _inc_counter(mapping: dict[str, int], key: str) -> None:
+    mapping[key] = mapping.get(key, 0) + 1
+
+
 def _meta_str(ledger: Ledger, asrt_id: str, key: str) -> str | None:
     for row in ledger.find_meta(asrt_id=asrt_id, key=key):
         if isinstance(row.value, str):
@@ -28,45 +48,43 @@ def _meta_str(ledger: Ledger, asrt_id: str, key: str) -> str | None:
     return None
 
 
-def _parse_record_stage_marker(claim: Claim) -> tuple[str, str, str] | None:
-    if claim.pred_id != _RECORD_STAGE_MARKER_PRED_ID:
-        return None
-    if len(claim.rest_terms) != 3:
-        return None
-    vals: list[str] = []
-    for term in claim.rest_terms:
-        if not (isinstance(term, tuple) and len(term) == 2):
-            return None
-        tag, value = term
-        if tag != "string" or not isinstance(value, str) or not value:
-            return None
-        vals.append(value)
-    materialize_id, stage, record_digest = vals
-    return materialize_id, stage, record_digest
-
-
-def _build_record_commit_index(ledger: Ledger) -> dict[tuple[str, str], dict[str, Any]]:
+def _build_record_stage_index(ledger: Ledger) -> dict[tuple[str, str], dict[str, Any]]:
     by_key: dict[tuple[str, str], dict[str, Any]] = {}
-    for claim in ledger.find_claims(pred_id=_RECORD_STAGE_MARKER_PRED_ID):
+    for claim in ledger.find_claims(pred_id=RECORD_STAGE_MARKER_PRED_ID):
         if ledger.has_active_revocation(claim.asrt_id):
             continue
-        parsed = _parse_record_stage_marker(claim)
+        parsed = parse_record_stage_marker_claim(claim)
         if parsed is None:
             continue
         materialize_id, stage, record_digest = parsed
         key = (claim.e_ref, materialize_id)
-        entry = by_key.setdefault(key, {"committed_digests": set(), "aborted_digests": set()})
-        if stage == _RECORD_STAGE_COMMITTED:
-            entry["committed_digests"].add(record_digest)
-        elif stage == _RECORD_STAGE_ABORTED:
-            entry["aborted_digests"].add(record_digest)
+        entry = by_key.setdefault(
+            key,
+            {
+                "stage_digests": {},
+                "roles_count_expected_values": set(),
+            },
+        )
+        stage_digests = entry["stage_digests"]
+        if not isinstance(stage_digests, dict):
+            continue
+        stage_digests.setdefault(stage, set()).add(record_digest)
+        roles_count_expected = meta_int(ledger, claim.asrt_id, "roles_count_expected")
+        if isinstance(roles_count_expected, int) and roles_count_expected >= 0:
+            count_values = entry.get("roles_count_expected_values")
+            if isinstance(count_values, set):
+                count_values.add(roles_count_expected)
     return by_key
 
 
-def _build_visible_record_claim_ids(ledger: Ledger) -> set[str]:
-    commit_index = _build_record_commit_index(ledger)
+def _build_visible_record_claim_ids(
+    ledger: Ledger,
+    *,
+    audit: ProjectorAudit | None = None,
+) -> set[str]:
+    stage_index = _build_record_stage_index(ledger)
     groups: dict[tuple[str, str], list[Claim]] = {}
-    legacy_visible: set[str] = set()
+    legacy_groups: dict[tuple[str, str], list[Claim]] = {}
 
     for claim in ledger.find_claims():
         if ledger.has_active_revocation(claim.asrt_id):
@@ -79,70 +97,88 @@ def _build_visible_record_claim_ids(ledger: Ledger) -> set[str]:
         record_digest = _meta_str(ledger, claim.asrt_id, "record_digest")
         if not isinstance(record_digest, str) or not record_digest:
             # Backward-compatibility for pre-staging records.
-            legacy_visible.add(claim.asrt_id)
+            legacy_groups.setdefault((claim.e_ref, materialize_id), []).append(claim)
             continue
         groups.setdefault((claim.e_ref, materialize_id), []).append(claim)
 
-    visible: set[str] = set(legacy_visible)
+    visible: set[str] = set()
+    for claims in legacy_groups.values():
+        for claim in claims:
+            visible.add(claim.asrt_id)
+
+    if audit is not None:
+        for legacy_claims in legacy_groups.values():
+            exists_claims = [claim for claim in legacy_claims if claim.rest_terms == []]
+            if not exists_claims:
+                continue
+            exists_claim = sorted(exists_claims, key=lambda c: (c.pred_id, c.asrt_id))[0]
+            roles_count_actual = sum(1 for claim in legacy_claims if claim.rest_terms != [])
+            audit.legacy_record_total += 1
+            _inc_counter(audit.legacy_record_by_pred, exists_claim.pred_id)
+            if roles_count_actual == 0:
+                audit.legacy_exists_without_roles_total += 1
+                _inc_counter(audit.legacy_exists_without_roles_by_pred, exists_claim.pred_id)
+
+    stage_state_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for key, marker_entry in stage_index.items():
+        stage_digests = marker_entry.get("stage_digests")
+        roles_count_expected_values = marker_entry.get("roles_count_expected_values")
+        if not isinstance(stage_digests, dict):
+            continue
+        stage_state = resolve_record_stage_status(
+            stage_digests=stage_digests,
+            roles_count_expected_values=roles_count_expected_values if isinstance(roles_count_expected_values, set) else set(),
+            path="$.view.record_staging",
+        )
+        stage_state_by_key[key] = stage_state
+        if audit is not None and stage_state["status"] == "conflict":
+            audit.marker_conflict_total += 1
+            reason = stage_state.get("reason")
+            _inc_counter(audit.marker_conflict_by_reason, str(reason) if isinstance(reason, str) and reason else "unknown")
+
     for key, claims in groups.items():
-        marker = commit_index.get(key)
-        if not isinstance(marker, dict):
+        stage_state = stage_state_by_key.get(key)
+        if not isinstance(stage_state, dict):
             continue
-        if marker.get("aborted_digests"):
+        if stage_state["status"] != RECORD_STAGE_COMMITTED:
             continue
-        committed_digests = marker.get("committed_digests")
-        if not isinstance(committed_digests, set) or not committed_digests:
+        committed_digest = stage_state.get("digest")
+        if not isinstance(committed_digest, str) or not committed_digest:
             continue
-        committed_digest = sorted(str(d) for d in committed_digests)[0]
         # Require record exists row to be present before exposing any role rows.
         has_exists = False
+        exists_pred_id: str | None = None
+        roles_count_actual = 0
         for claim in claims:
             claim_digest = _meta_str(ledger, claim.asrt_id, "record_digest")
             if claim_digest != committed_digest:
                 continue
             if claim.rest_terms == []:
                 has_exists = True
-                break
+                if exists_pred_id is None:
+                    exists_pred_id = claim.pred_id
+                continue
+            roles_count_actual += 1
         if not has_exists:
             continue
+        if isinstance(stage_state.get("roles_count_expected"), int):
+            if roles_count_actual != stage_state["roles_count_expected"]:
+                if audit is not None and isinstance(exists_pred_id, str) and exists_pred_id:
+                    audit.committed_hidden_count_mismatch_total += 1
+                    _inc_counter(audit.committed_hidden_count_mismatch_by_pred, exists_pred_id)
+                continue
         for claim in claims:
             if _meta_str(ledger, claim.asrt_id, "record_digest") == committed_digest:
                 visible.add(claim.asrt_id)
     return visible
 
 
-def build_args_for_claim(ledger: Ledger, claim: Claim) -> tuple[Any, ...]:
-    if not isinstance(ledger, Ledger):
-        raise TypeError("ledger must be Ledger")
-    if not isinstance(claim, Claim):
-        raise TypeError("claim must be Claim")
-
-    rows = ledger.find_claim_args(asrt_id=claim.asrt_id)
-    if not rows:
-        if claim.rest_terms:
-            raise ViewProjectionError(f"missing claim_arg rows for asrt_id={claim.asrt_id}")
-        return (claim.e_ref,)
-
-    sorted_rows = sorted(rows, key=lambda row: row.idx)
-    if len(sorted_rows) != len(claim.rest_terms):
-        raise ViewProjectionError(
-            f"claim_arg count mismatch for asrt_id={claim.asrt_id}"
-        )
-
-    for expected_idx, row in enumerate(sorted_rows):
-        if row.idx != expected_idx:
-            raise ViewProjectionError(
-                f"claim_arg idx must be contiguous for asrt_id={claim.asrt_id}"
-            )
-
-    return (claim.e_ref, *[row.val_atom for row in sorted_rows])
-
-
-def project_view_facts(
+def _project_view_facts_impl(
     ledger: Ledger,
     schema_ir: dict,
     *,
     temporal_view: str = "record",
+    audit: ProjectorAudit | None = None,
 ) -> dict[str, list[tuple[Any, ...]]]:
     if not isinstance(ledger, Ledger):
         raise TypeError("ledger must be Ledger")
@@ -156,7 +192,7 @@ def project_view_facts(
         raise ViewProjectionError("schema_ir.predicates must be list")
 
     output: dict[str, list[tuple[Any, ...]]] = {}
-    visible_record_claim_ids = _build_visible_record_claim_ids(ledger)
+    visible_record_claim_ids = _build_visible_record_claim_ids(ledger, audit=audit)
 
     for schema_pred in predicates:
         if not isinstance(schema_pred, dict):
@@ -213,3 +249,50 @@ def project_view_facts(
         output[pred_id] = sorted(facts, key=lambda fact: tuple(str(part) for part in fact))
 
     return output
+
+
+def build_args_for_claim(ledger: Ledger, claim: Claim) -> tuple[Any, ...]:
+    if not isinstance(ledger, Ledger):
+        raise TypeError("ledger must be Ledger")
+    if not isinstance(claim, Claim):
+        raise TypeError("claim must be Claim")
+
+    rows = ledger.find_claim_args(asrt_id=claim.asrt_id)
+    if not rows:
+        if claim.rest_terms:
+            raise ViewProjectionError(f"missing claim_arg rows for asrt_id={claim.asrt_id}")
+        return (claim.e_ref,)
+
+    sorted_rows = sorted(rows, key=lambda row: row.idx)
+    if len(sorted_rows) != len(claim.rest_terms):
+        raise ViewProjectionError(
+            f"claim_arg count mismatch for asrt_id={claim.asrt_id}"
+        )
+
+    for expected_idx, row in enumerate(sorted_rows):
+        if row.idx != expected_idx:
+            raise ViewProjectionError(
+                f"claim_arg idx must be contiguous for asrt_id={claim.asrt_id}"
+            )
+
+    return (claim.e_ref, *[row.val_atom for row in sorted_rows])
+
+
+def project_view_facts(
+    ledger: Ledger,
+    schema_ir: dict,
+    *,
+    temporal_view: str = "record",
+) -> dict[str, list[tuple[Any, ...]]]:
+    return _project_view_facts_impl(ledger, schema_ir, temporal_view=temporal_view, audit=None)
+
+
+def project_view_facts_with_audit(
+    ledger: Ledger,
+    schema_ir: dict,
+    *,
+    temporal_view: str = "record",
+) -> tuple[dict[str, list[tuple[Any, ...]]], ProjectorAudit]:
+    audit = ProjectorAudit()
+    facts = _project_view_facts_impl(ledger, schema_ir, temporal_view=temporal_view, audit=audit)
+    return facts, audit
