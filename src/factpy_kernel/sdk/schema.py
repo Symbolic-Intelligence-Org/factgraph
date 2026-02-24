@@ -114,6 +114,13 @@ class Field(_DeclaredMember):
             out["dims"] = _normalize_dims_for_authoring(self.dims)
         return out
 
+    def __get__(self, instance: Any, owner: type | None = None) -> Any:
+        if instance is None:
+            return self
+        if self.sdk_attr_name in instance.__dict__:
+            return instance.__dict__[self.sdk_attr_name]
+        return _UnsetFieldValue(instance=instance, field=self)
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         if args:
             raise SDKSchemaError("Field head call does not support positional arguments")
@@ -187,6 +194,48 @@ class Entity(metaclass=EntityMeta):
         if not isinstance(spec, dict):
             raise SDKSchemaError(f"class '{cls.__name__}' is not a compiled Entity declaration")
         return spec
+
+
+class _UnsetFieldValue:
+    """Sentinel for an unset `Field` value on a plain `Entity` instance.
+
+    This preserves a more helpful error when users accidentally call batch-only
+    methods (`.set/.add/.retract`) on regular in-memory entity objects.
+    """
+
+    def __init__(self, *, instance: Any, field: Field) -> None:
+        self._instance = instance
+        self._field = field
+
+    def __repr__(self) -> str:
+        return "None"
+
+    __str__ = __repr__
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __eq__(self, other: Any) -> bool:
+        return other is None
+
+    def _raise_batch_only(self, method: str) -> None:
+        owner = type(self._instance).__name__
+        field_name = self._field.sdk_attr_name
+        raise SDKSchemaError(
+            f"'{owner}.{field_name}' is an unset Field value on a plain Entity instance; "
+            f"'{method}(...)' is only available on sdk.batch() managed handles from tx.entity(...). "
+            f"Use normal assignment (`obj.{field_name} = value`) for in-memory objects, "
+            f"or create the object via tx.entity({owner}, ...) and then call '{field_name}.{method}(...)'."
+        )
+
+    def set(self, *args: Any, **kwargs: Any) -> None:
+        self._raise_batch_only("set")
+
+    def add(self, *args: Any, **kwargs: Any) -> None:
+        self._raise_batch_only("add")
+
+    def retract(self, *args: Any, **kwargs: Any) -> None:
+        self._raise_batch_only("retract")
 
 
 def _extract_meta(meta_cls: Any) -> dict[str, Any]:

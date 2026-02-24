@@ -83,6 +83,18 @@ class SDKSchemaV1Tests(unittest.TestCase):
         with self.assertRaises(SDKSchemaError):
             Person(unknown="x")
 
+    def test_unset_field_batch_methods_raise_helpful_error(self) -> None:
+        person = Person(source_id="u1")
+        self.assertFalse(person.country)
+        self.assertEqual(repr(person.country), "None")
+        with self.assertRaises(SDKSchemaError) as ctx:
+            person.country.set("de")
+        msg = str(ctx.exception)
+        self.assertIn("plain Entity instance", msg)
+        self.assertIn("sdk.batch()", msg)
+        self.assertIn("tx.entity(...)", msg)
+        self.assertIn("obj.country = value", msg)
+
     def test_missing_identity_is_rejected(self) -> None:
         with self.assertRaises(SDKSchemaError):
             class NoIdentity(Entity):

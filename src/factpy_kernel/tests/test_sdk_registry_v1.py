@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from factpy_kernel.sdk import Derivation, Entity, Field, Identity, Rule, SDKRegistry, SDKRegistryError, vars
+from factpy_kernel.sdk import Derivation, Entity, Field, Identity, Pred, Rule, SDKRegistry, SDKRegistryError, vars
 
 
 class Person(Entity):
@@ -119,6 +119,28 @@ class SDKRegistryV1Tests(unittest.TestCase):
             derivation_res = sdk_registry.register_derivation(derivation)
             self.assertEqual(rule_res["status"], "applied")
             self.assertEqual(derivation_res["status"], "applied")
+
+    def test_register_derivation_head_only_uses_registry_schema_ir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sdk_registry = SDKRegistry(tmpdir)
+            sdk_registry.apply_schema_classes([Person])
+            with vars("e", "c") as (e, c):
+                derivation = Derivation(
+                    id="drv.country_copy_head_only",
+                    version="1.0.0",
+                    head=Person.country_copy(person=e, country_copy=c),
+                    materialize_as="fact",
+                    where=[Pred("person:country", e, c)],
+                    mode="python",
+                    temporal_view="record",
+                )
+
+            derivation_res = sdk_registry.register_derivation(derivation)
+            self.assertEqual(derivation_res["status"], "applied")
+            latest_drv = sdk_registry.get_latest_derivation_spec("drv.country_copy_head_only")
+            self.assertIsNotNone(latest_drv)
+            self.assertEqual(latest_drv["target_pred_id"], "person:country_copy")
+            self.assertEqual(latest_drv["head_vars"], ["$e", "$c"])
 
 
 if __name__ == "__main__":

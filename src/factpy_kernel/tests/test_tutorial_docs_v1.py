@@ -122,9 +122,35 @@ class TutorialDocsV1Tests(unittest.TestCase):
         self.assertIn("故障上报模板（建议复制）", text)
         self.assertIn("[Onboarding Issue]", text)
 
+    def test_full_sdk_tutorial_15_matches_current_sdk_surface(self) -> None:
+        text = (_source_tutorials_root() / "15-SDK-快速开始（Python 直接定义）.md").read_text(encoding="utf-8")
+
+        self.assertIn("from factpy_kernel.adapters.souffle.package import ExportOptions", text)
+        self.assertNotIn("from factpy_kernel.export.package import ExportOptions", text)
+        self.assertNotIn("Rule / Derivation 的 runtime builder 还未实装", text)
+
+        for keyword in [
+            "Pred(",
+            "Not([",
+            "SDKRegistry.apply_schema_classes(...)",
+            "SDKDSLError",
+            "SDKRegistryError",
+            "SDKSchemaError",
+            "SDKStoreError",
+        ]:
+            self.assertIn(keyword, text)
+
 
 def _tutorials_root() -> Path:
-    return Path(__file__).resolve().parents[3] / "docs" / "tutorials"
+    return _repo_root() / "docs" / "tutorials"
+
+
+def _source_tutorials_root() -> Path:
+    return _repo_root() / "tutorials"
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
 
 
 def _tutorial_docs() -> list[Path]:

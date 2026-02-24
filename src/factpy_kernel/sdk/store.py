@@ -61,6 +61,11 @@ class SDKStore:
     def schema_ir(self) -> dict[str, Any]:
         return self._schema_ir
 
+    def batch(self, *, meta: dict[str, Any] | None = None):
+        from .batch import SDKBatchTx
+
+        return SDKBatchTx(self, meta=meta)
+
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
         spec = self._entity_spec_by_class.get(entity_cls)
         if spec is None:

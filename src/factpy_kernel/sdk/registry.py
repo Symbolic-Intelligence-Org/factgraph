@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -118,8 +119,39 @@ class SDKRegistry:
         try:
             compiled = compile_authoring_derivation_v1(payload, schema_ir=schema_ir)
         except Exception as exc:
-            raise SDKRegistryError(str(exc)) from exc
+            if schema_ir is None:
+                fallback_schema_ir = self._read_registry_schema_ir()
+                if fallback_schema_ir is not None:
+                    try:
+                        compiled = compile_authoring_derivation_v1(payload, schema_ir=fallback_schema_ir)
+                    except Exception as retry_exc:
+                        raise SDKRegistryError(str(retry_exc)) from retry_exc
+                else:
+                    raise SDKRegistryError(str(exc)) from exc
+            else:
+                raise SDKRegistryError(str(exc)) from exc
         return self.register_derivation_spec(compiled)
+
+    def _read_registry_schema_ir(self) -> dict[str, Any] | None:
+        try:
+            schema_entry = self._registry.get_schema_entry()
+        except AuthoringRegistryFSError as exc:
+            raise SDKRegistryError(str(exc)) from exc
+        if not isinstance(schema_entry, dict):
+            return None
+        rel_path = schema_entry.get("path")
+        if not isinstance(rel_path, str) or not rel_path:
+            return None
+        abs_path = self.root_dir / rel_path
+        if not abs_path.exists():
+            return None
+        try:
+            data = json.loads(abs_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SDKRegistryError(f"failed to read registry schema_ir: {exc}") from exc
+        if not isinstance(data, dict):
+            raise SDKRegistryError("registry schema_ir file must contain JSON object")
+        return data
 
     def get_schema_entry(self) -> dict[str, Any] | None:
         try:

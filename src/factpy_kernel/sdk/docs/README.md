@@ -11,9 +11,15 @@ Guiding principle:
 Quick summary:
 
 - Schema declarations: `Entity`, `Identity`, `Field`
-- Rule/Derivation object DSL: `Rule`, `Derivation`, `RuleRef`, `vars(...)`
+- Rule/Derivation object DSL: `Rule`, `Derivation`, `RuleRef`, `Pred`, `Not`, `vars(...)`
 - Store facade: `SDKStore.run(rule)`, `SDKStore.evaluate(derivation)`, `SDKStore.accept(cands, meta_overrides=...)`
-- Registry facade: `SDKRegistry.register_rule(rule)`, `SDKRegistry.register_derivation(derivation)`
+- Registry facade: `SDKRegistry.apply_schema_classes(...)`, `SDKRegistry.register_rule(rule)`, `SDKRegistry.register_derivation(derivation)`
+- Public exceptions: `SDKSchemaError`, `SDKStoreError`, `SDKRegistryError`, `SDKDSLError`
+
+Naming note:
+
+- `apply_schema_classes(...)` is an instance method on `SDKRegistry`.
+- There is no top-level `factpy_kernel.sdk.apply_schema_classes` function export in v1.
 
 Important v1 note (`vars()` runtime limitation):
 

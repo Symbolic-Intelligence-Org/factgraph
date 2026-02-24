@@ -1,0 +1,1 @@
+{"active":{"model":"revokes_only"},"chosen":{"required_meta":["ingested_at"],"strategy":"latest_by_ingested_at_then_min_assertion_id"},"generated_at":0,"policy_ir_version":"policy_ir_v1","policy_mode":"edb","protocol_version":{"export_v1":"export_v1","idref_v1":"idref_v1","policy_v1":"policy_v1","tup_v1":"tup_v1"}}
