@@ -165,6 +165,10 @@ flowchart LR
 新增并行 API（不改变默认 `project_view_facts(...)` 返回形状）：
 
 - `project_view_facts_with_audit(...) -> (facts, ProjectorAudit)`
+- `project_view_facts(..., legacy_record_visibility="allow"|"audit"|"deny")`
+  - 默认 `allow`：保持历史兼容（legacy record 可见）
+  - `audit`：与 `allow` 行为一致，仅用于显式表达“观测模式”（不改变事实集合）
+  - `deny`：仅隐藏 **legacy record 组**（无 `record_digest` 的 record），不影响非 record materialize
 
 `ProjectorAudit`（`contract_version=1`）当前包含：
 

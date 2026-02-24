@@ -141,12 +141,27 @@ def _prepare_request(dto: dict) -> tuple[dict[str, Any], dict[str, Any], Backend
     effective_profile, profile_effective_name = _resolve_profile(dto.get("profile"), strict)
 
     rule = dto.get("rule")
+    if isinstance(rule, str):
+        raise _facade_error(
+            "string rule DSL is not supported in facade v1; send structured rule object",
+            kind="string_dsl_unsupported",
+            path="$.rule",
+            details={"strategy": "object_rule_only", "input_kind": "string"},
+        )
     if not isinstance(rule, dict):
         raise _facade_error("rule must be object", kind="shape", path="$.rule")
 
     payload = dict(rule)
     if payload.get("version") is None:
         payload["version"] = "v1"
+    raw_where = payload.get("where")
+    if isinstance(raw_where, str):
+        raise _facade_error(
+            "string where DSL is not supported in facade v1; send structured where IR",
+            kind="string_dsl_unsupported",
+            path="$.rule.where",
+            details={"strategy": "structured_where_ir_only", "input_kind": "string"},
+        )
     if "where" in payload:
         payload["where"] = _json_where_to_ir(payload["where"])
 

@@ -5,8 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import factpy_kernel.tests._warnings as test_warnings
 from factpy_kernel.adapters.souffle.package import ExportOptions
 from factpy_kernel.sdk import Derivation, Entity, Field, Identity, Rule, RuleRef, SDKStore, SDKStoreError, vars
+
+
+def setUpModule() -> None:
+    test_warnings.install_test_warning_filters()
 
 
 class Company(Entity):

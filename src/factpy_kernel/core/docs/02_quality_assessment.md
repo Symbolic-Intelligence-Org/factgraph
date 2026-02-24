@@ -3,7 +3,7 @@
 - 评估范围：`src/factpy_kernel/core`
 - 最后更新：2026-02-24
 - 评估基线：目录重构完成、`Store` 拆分阶段 1 完成、`Ledger` 索引优化完成、record accept staging 语义收口、projector audit API 已落地
-- 验证状态：`python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'` -> `459 tests OK`
+- 验证状态：`python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'` -> `465 tests OK`
 
 ## 1. 评估方法与评分维度
 
@@ -27,7 +27,7 @@
 | 语义完整性 | 8.5 | 协议/Schema/写入/policy/view/rules/derivation/mapping 闭环完整 |
 | 代码可维护性 | 8.5 | `Store` 已拆为 `api/_evaluate/_accept/_builders/_queries`，显著改善 |
 | 正确性与防御式校验 | 9.2 | `SchemaIR` / 写协议 / where 校验较严格；record staging 冲突判定与可见性 gating 已收口 |
-| 可测试性与回归保障 | 9.2 | 全量 `unittest` 459 通过；新增 record accept 冲突/恢复与 projector audit 回归 |
+| 可测试性与回归保障 | 9.2 | 全量 `unittest` 465 通过；新增 record accept 冲突/恢复与 projector audit 回归 |
 | 可扩展性 | 7.5 | 协议与模块分层良好，但 where Python/adapter 双实现仍需长期同步 |
 | 性能（当前实现） | 6.8 | `Ledger` 已有索引优化，但仍为内存实现，部分导出路径仍有全量扫描 |
 | **综合（主观加权）** | **8.6** | record accept 语义闭环、可见性与诊断一致性显著增强 |
@@ -217,7 +217,7 @@
 - 新增 `test_ledger_indexes_v1.py`：Ledger 索引语义回归
 - 新增/增强 `test_derivation_accept_v1.py`：record partial recovery / conflict 封闭 / staging 可见性
 - 新增 `test_view_projector_audit_v1.py`：projector audit 统计口径与默认 API 不变性
-- 全量 `unittest`：`459 tests OK`
+- 全量 `unittest`：`465 tests OK`
 
 ## 5. 当前主要技术债（按优先级）
 
@@ -248,17 +248,17 @@
 ### P2：projector 审计统计的团队级观测链路尚未收口
 
 - **影响**：`ProjectorAudit` 能返回统计，但线上/批处理侧尚未统一消费或沉淀成看板/日志规范
-- **建议**：先建立 audit 统计的消费入口（日志或定期导出），再决定是否引入 `legacy_record_visibility` 策略参数
+- **建议**：先建立 audit 统计的消费入口（日志或定期导出），再基于指标趋势决定何时从 `legacy_record_visibility=allow` 迁移到 `audit/deny`
 - **验收标准**：可稳定观察 legacy/conflict/count-mismatch 指标趋势
 
-### P3：`evaluate_dummy` 历史兼容入口仍存在
+### P3：`evaluate_dummy` 历史兼容入口仍存在（测试噪音已收敛）
 
-- **影响**：API 表面略显杂糅；测试会输出 deprecation warning
+- **影响**：API 表面略显杂糅；运行时仍会触发 deprecation warning（测试侧已做 `evaluate_dummy` 精确过滤，CI 输出更整洁）
 - **建议**：在明确迁移窗口后移除，并更新测试与调用方
 
 ## 6. 测试与质量证据（当前）
 
-- 全量测试：`459 tests OK`
+- 全量测试：`465 tests OK`
 - 边界护栏：`test_core_store_boundary_v1.py`
 - 索引语义护栏：`test_ledger_indexes_v1.py`
 - record accept 语义护栏：`test_derivation_accept_v1.py`

@@ -80,6 +80,7 @@ def _build_record_stage_index(ledger: Ledger) -> dict[tuple[str, str], dict[str,
 def _build_visible_record_claim_ids(
     ledger: Ledger,
     *,
+    legacy_record_visibility: str = "allow",
     audit: ProjectorAudit | None = None,
 ) -> set[str]:
     stage_index = _build_record_stage_index(ledger)
@@ -102,9 +103,10 @@ def _build_visible_record_claim_ids(
         groups.setdefault((claim.e_ref, materialize_id), []).append(claim)
 
     visible: set[str] = set()
-    for claims in legacy_groups.values():
-        for claim in claims:
-            visible.add(claim.asrt_id)
+    if legacy_record_visibility in {"allow", "audit"}:
+        for claims in legacy_groups.values():
+            for claim in claims:
+                visible.add(claim.asrt_id)
 
     if audit is not None:
         for legacy_claims in legacy_groups.values():
@@ -178,6 +180,7 @@ def _project_view_facts_impl(
     schema_ir: dict,
     *,
     temporal_view: str = "record",
+    legacy_record_visibility: str = "allow",
     audit: ProjectorAudit | None = None,
 ) -> dict[str, list[tuple[Any, ...]]]:
     if not isinstance(ledger, Ledger):
@@ -186,13 +189,19 @@ def _project_view_facts_impl(
         raise ViewProjectionError("schema_ir must be dict")
     if temporal_view not in {"record", "current"}:
         raise ViewProjectionError("temporal_view must be 'record' or 'current'")
+    if legacy_record_visibility not in {"allow", "audit", "deny"}:
+        raise ViewProjectionError("legacy_record_visibility must be 'allow', 'audit', or 'deny'")
 
     predicates = schema_ir.get("predicates")
     if not isinstance(predicates, list):
         raise ViewProjectionError("schema_ir.predicates must be list")
 
     output: dict[str, list[tuple[Any, ...]]] = {}
-    visible_record_claim_ids = _build_visible_record_claim_ids(ledger, audit=audit)
+    visible_record_claim_ids = _build_visible_record_claim_ids(
+        ledger,
+        legacy_record_visibility=legacy_record_visibility,
+        audit=audit,
+    )
 
     for schema_pred in predicates:
         if not isinstance(schema_pred, dict):
@@ -283,8 +292,15 @@ def project_view_facts(
     schema_ir: dict,
     *,
     temporal_view: str = "record",
+    legacy_record_visibility: str = "allow",
 ) -> dict[str, list[tuple[Any, ...]]]:
-    return _project_view_facts_impl(ledger, schema_ir, temporal_view=temporal_view, audit=None)
+    return _project_view_facts_impl(
+        ledger,
+        schema_ir,
+        temporal_view=temporal_view,
+        legacy_record_visibility=legacy_record_visibility,
+        audit=None,
+    )
 
 
 def project_view_facts_with_audit(
@@ -292,7 +308,14 @@ def project_view_facts_with_audit(
     schema_ir: dict,
     *,
     temporal_view: str = "record",
+    legacy_record_visibility: str = "allow",
 ) -> tuple[dict[str, list[tuple[Any, ...]]], ProjectorAudit]:
     audit = ProjectorAudit()
-    facts = _project_view_facts_impl(ledger, schema_ir, temporal_view=temporal_view, audit=audit)
+    facts = _project_view_facts_impl(
+        ledger,
+        schema_ir,
+        temporal_view=temporal_view,
+        legacy_record_visibility=legacy_record_visibility,
+        audit=audit,
+    )
     return facts, audit

@@ -97,7 +97,9 @@ class ViewProjectorAuditV1Tests(unittest.TestCase):
         facts_audit, audit = project_view_facts_with_audit(self.store.ledger, self.schema_ir)
 
         self.assertEqual(facts_audit, facts_default)
+        self.assertEqual(audit.contract_version, 1)
         self.assertEqual(audit, ProjectorAudit())
+        self._assert_audit_invariants(audit)
 
     def test_audit_counts_legacy_records_by_exists_unit_and_exists_without_roles(self) -> None:
         record_e_ref = "idref_v1:Speaks:legacy-1"
@@ -134,6 +136,63 @@ class ViewProjectorAuditV1Tests(unittest.TestCase):
         self.assertEqual(audit.legacy_exists_without_roles_total, 1)
         self.assertEqual(audit.legacy_exists_without_roles_by_pred, {"Speaks:exists": 1})
         self.assertEqual(len(facts["Speaks:exists"]), 1)
+        self._assert_audit_invariants(audit)
+
+    def test_legacy_record_visibility_allow_and_audit_match_but_deny_hides_legacy_records(self) -> None:
+        record_e_ref = "idref_v1:Speaks:legacy-visibility"
+        legacy_meta = {
+            "source": "seed",
+            "materialize_kind": "record",
+            "materialize_id": "mat-legacy-visibility",
+            "key_tuple_digest": "sha256:" + ("7" * 64),
+            "cand_key_digest": "sha256:" + ("8" * 64),
+            "record_type": "Speaks",
+            "record_e_ref": record_e_ref,
+            "record_id_policy": "key_tuple_digest_v1",
+        }
+        set_field(
+            self.store.ledger,
+            pred_id="Speaks:exists",
+            e_ref=record_e_ref,
+            rest_terms=[],
+            meta=legacy_meta,
+        )
+        set_field(
+            self.store.ledger,
+            pred_id="speaks:person",
+            e_ref=record_e_ref,
+            rest_terms=[("entity_ref", self.person_ref)],
+            meta=legacy_meta,
+        )
+
+        facts_allow, audit_allow = project_view_facts_with_audit(
+            self.store.ledger,
+            self.schema_ir,
+            legacy_record_visibility="allow",
+        )
+        facts_audit, audit_mode = project_view_facts_with_audit(
+            self.store.ledger,
+            self.schema_ir,
+            legacy_record_visibility="audit",
+        )
+        facts_deny, audit_deny = project_view_facts_with_audit(
+            self.store.ledger,
+            self.schema_ir,
+            legacy_record_visibility="deny",
+        )
+
+        self.assertEqual(facts_allow, facts_audit)
+        self.assertEqual(len(facts_allow["Speaks:exists"]), 1)
+        self.assertEqual(len(facts_allow["speaks:person"]), 1)
+        self.assertEqual(facts_deny["Speaks:exists"], [])
+        self.assertEqual(facts_deny["speaks:person"], [])
+        # `audit` mode is visibility-compatible with `allow`; it only affects observability.
+        self.assertEqual(audit_allow.legacy_record_total, 1)
+        self.assertEqual(audit_mode.legacy_record_total, 1)
+        self.assertEqual(audit_deny.legacy_record_total, 1)
+        self._assert_audit_invariants(audit_allow)
+        self._assert_audit_invariants(audit_mode)
+        self._assert_audit_invariants(audit_deny)
 
     def test_audit_counts_marker_conflict_by_reason(self) -> None:
         candidate = self._record_candidate(
@@ -169,6 +228,7 @@ class ViewProjectorAuditV1Tests(unittest.TestCase):
         self.assertEqual(facts["speaks:person"], [])
         self.assertEqual(audit.marker_conflict_total, 1)
         self.assertEqual(audit.marker_conflict_by_reason.get("committed_and_inflight_mismatch"), 1)
+        self._assert_audit_invariants(audit)
 
     def test_audit_counts_committed_hidden_count_mismatch(self) -> None:
         candidate = self._record_candidate(
@@ -196,6 +256,7 @@ class ViewProjectorAuditV1Tests(unittest.TestCase):
         self.assertEqual(facts["speaks:person"], [])
         self.assertEqual(audit.committed_hidden_count_mismatch_total, 1)
         self.assertEqual(audit.committed_hidden_count_mismatch_by_pred, {"Speaks:exists": 1})
+        self._assert_audit_invariants(audit)
 
     def _record_candidate(self, *, run_id: str, key_suffix: str, include_language: bool) -> CandidateSet:
         roles = [{"pred_id": "speaks:person", "rest_terms": [("entity_ref", self.person_ref)]}]
@@ -241,6 +302,15 @@ class ViewProjectorAuditV1Tests(unittest.TestCase):
                     value=new_value,
                 )
         self.store.ledger.rebuild_indexes()
+
+    def _assert_audit_invariants(self, audit: ProjectorAudit) -> None:
+        self.assertEqual(audit.contract_version, 1)
+        self.assertEqual(audit.legacy_record_total, sum(audit.legacy_record_by_pred.values()))
+        self.assertEqual(audit.marker_conflict_total, sum(audit.marker_conflict_by_reason.values()))
+        self.assertEqual(
+            audit.committed_hidden_count_mismatch_total,
+            sum(audit.committed_hidden_count_mismatch_by_pred.values()),
+        )
 
 
 if __name__ == "__main__":

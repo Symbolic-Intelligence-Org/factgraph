@@ -122,6 +122,10 @@ class SDKStore:
         temporal_view: str = "record",
         registry: RuleRegistry | None = None,
     ) -> list[tuple[Any, ...]]:
+        if isinstance(rule, str):
+            raise SDKStoreError(
+                "string rule DSL is not supported in SDK v1; use Rule object, RuleSpec, or structured rule dict"
+            )
         compiled = self._compile_rule_input(rule)
         rule_spec = RuleSpec(
             rule_id=compiled["rule_id"],
@@ -136,6 +140,10 @@ class SDKStore:
         return run_rule(self._store, rule_spec, active_registry, temporal_view=temporal_view)
 
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
+        if args and isinstance(args[0], str):
+            raise SDKStoreError(
+                "string derivation DSL is not supported in SDK v1; use Derivation object or structured derivation dict"
+            )
         if args and hasattr(args[0], "to_authoring_payload"):
             derivation = args[0]
             compiled = self._compile_derivation_input(derivation)

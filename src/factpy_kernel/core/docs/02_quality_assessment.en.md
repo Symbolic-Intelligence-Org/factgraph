@@ -3,7 +3,7 @@
 - Scope: `src/factpy_kernel/core`
 - Last updated: 2026-02-24
 - Assessment baseline: directory refactor complete, `Store` phase-1 decomposition complete, `Ledger` indexing optimization complete, record accept staging semantics closed, projector audit API landed
-- Validation status: `python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'` -> `459 tests OK`
+- Validation status: `python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'` -> `465 tests OK`
 
 ## 1. Assessment Method and Scoring Dimensions
 
@@ -210,7 +210,7 @@ Scoring dimensions (0-10 each):
 ### 4.3 Tests and Guardrails
 - Added `test_core_store_boundary_v1.py` (core boundary / engine registration behavior)
 - Added `test_ledger_indexes_v1.py` (Ledger index semantics)
-- Full `unittest` suite passes: `459 tests OK`
+- Full `unittest` suite passes: `465 tests OK`
 
 ## 5. Current Technical Debt (Prioritized)
 
@@ -245,7 +245,7 @@ Scoring dimensions (0-10 each):
 
 ## 6. Testing and Quality Evidence (Current)
 
-- Full test suite: `459 tests OK`
+- Full test suite: `465 tests OK`
 - Boundary guardrail: `test_core_store_boundary_v1.py`
 - Index semantics guardrail: `test_ledger_indexes_v1.py`
 - Benchmark script: `tools/benchmarks/bench_core_ledger_paths.py`

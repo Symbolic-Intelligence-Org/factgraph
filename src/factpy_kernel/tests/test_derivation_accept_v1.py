@@ -4,6 +4,7 @@ import warnings
 import unittest
 from unittest.mock import patch
 
+import factpy_kernel.tests._warnings as test_warnings
 from factpy_kernel.authoring import compile_authoring_derivation_v1
 import factpy_kernel.core.derivation.accept as derivation_accept_module
 from factpy_kernel.core.derivation.accept import AcceptOptions
@@ -24,6 +25,10 @@ from factpy_kernel.core.schema.schema_ir import (
 )
 from factpy_kernel.core.store.api import Store
 from factpy_kernel.core.view.projector import project_view_facts
+
+
+def setUpModule() -> None:
+    test_warnings.install_test_warning_filters()
 
 
 class DerivationAcceptV1Tests(unittest.TestCase):

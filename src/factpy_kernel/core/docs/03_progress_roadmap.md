@@ -2,7 +2,7 @@
 
 - 范围：`src/factpy_kernel/core`
 - 最后更新：2026-02-24
-- 当前状态基线：`459 unittest OK`
+- 当前状态基线：`465 unittest OK`
 
 ## 1. 当前状态摘要（供快速判断）
 
@@ -13,10 +13,15 @@
 - `Store.__init__` 强制 `SchemaIR` 校验（错误前置）
 - `Ledger` 完成内存索引优化（claims/meta/claim_args/revokes）
 - `policy/view` 热点路径已接入 `Ledger.find_claim_args(...)`
-- 全量 `unittest` 通过（459 tests）
+- 全量 `unittest` 通过（465 tests）
 - record accept 语义闭环已收口（staging marker + role digest + projector 不可见性 gating + 结构化 diagnostics）
 - `record_staging` 共享判定模块已落地（`accept` / `projector` 共用冲突语义）
 - `project_view_facts_with_audit(...)` 已落地（默认 `project_view_facts(...)` 返回形状不变）
+- `project_view_facts(..., legacy_record_visibility="allow"|"audit"|"deny")` 已落地（默认 `allow`；`audit` 不改变事实集合）
+- 测试侧已对 `evaluate_dummy` 做精确 `DeprecationWarning` 过滤（降低 CI 噪音）
+- 新增 compat import 禁新增测试（`test_no_new_compat_imports_v1.py`），禁止新代码回退到旧路径 import
+- 服务层现状核验文档已补（`04_service_layer.md`，确认已有 `FastAPI app_v1` 且当前为 rules-only HTTP 薄层）
+- `Public Contract v1` 文档 + 回归测试已补（`04_public_contract_v1.md` / `test_public_contract_v1.py`）
 
 ### 当前主要风险（简要）
 
@@ -92,7 +97,7 @@
 - 增加 `rebuild_indexes()` 支持直接私有列表修改后的索引重建
 
 **完成标准（已满足）**
-- 全量测试通过（459）
+- 全量测试通过（460）
 - 新增索引语义测试通过
 
 ### M5. record accept 语义收口（完成，P0/P0.5）
@@ -110,7 +115,7 @@
 **完成标准（已满足）**
 - record partial write 重试恢复回归通过
 - committed+aborted / committed+inflight mismatch 冲突回归通过
-- 全量测试通过（459）
+- 全量测试通过（460）
 
 ### M6. projector 审计统计（完成，P1）
 
@@ -120,6 +125,7 @@
 **结果**
 - 新增 `project_view_facts_with_audit(...) -> (facts, ProjectorAudit)`
 - 单次扫描、单份索引、双出口（默认路径与 audit 路径共享实现）
+- 新增 `legacy_record_visibility="allow"|"audit"|"deny"`（默认 `allow`；`audit` 与 `allow` 结果集一致，仅强化观测；`deny` 仅隐藏 legacy record 组）
 - 审计统计覆盖：
   - legacy record（按 record 组 / exists 单位）
   - marker conflict（按 reason 聚合）
@@ -128,6 +134,7 @@
 **完成标准（已满足）**
 - 新增 `test_view_projector_audit_v1.py`
 - 默认 API 输出与历史行为一致（回归覆盖）
+- `legacy_record_visibility=allow/audit` 结果一致，`deny` 仅影响 legacy record 可见性（回归覆盖）
 
 ## 3. 当前架构决策（必须保持一致）
 
@@ -181,11 +188,11 @@
 
 **建议动作**
 - 在 `projector` 审计统计基础上补充团队级观测（日志/导出/看板）
-- 先使用 `audit` 统计评估迁移成本，再考虑显式 `legacy_record_visibility` 策略参数
+- 先使用 `audit` 统计评估迁移成本，再决定何时从默认 `legacy_record_visibility=allow` 收紧到 `audit/deny`
 
 **验收标准**
 - 能看到 legacy 数量、marker conflict 数量、count mismatch 隐藏数量的稳定统计
-- 不改变默认 `project_view_facts(...)` 行为
+- 不改变默认 `project_view_facts(...)` 行为（`legacy_record_visibility` 默认仍为 `allow`）
 
 ### P2. 为 `Ledger` 索引路径补更系统的语义测试
 
@@ -212,6 +219,20 @@
 **验收标准**
 - 无 deprecation warning
 - 全量测试通过
+
+### P2. compat shim 清理治理（先禁新增，再分批移除）
+
+**动机**
+- 在实际移除 shim 前，先阻止新代码继续引入旧路径 import，避免技术债回流
+
+**建议动作**
+- 维持 `test_no_new_compat_imports_v1.py` 作为 CI 护栏（禁 `factpy_kernel.(schema|store|...)` 旧路径）
+- 如需兼容覆盖测试，使用显式 allowlist，不放松全局规则
+- 按 `docs/factpy_kernel_compat_shim_cleanup.md` 分批推进 shim 移除
+
+**验收标准**
+- 故意引入一条旧路径 import 会触发测试失败
+- 新代码统一使用 `factpy_kernel.core.*` / `factpy_kernel.adapters.*`
 
 ### P3. 探索存储后端抽象（中期）
 
