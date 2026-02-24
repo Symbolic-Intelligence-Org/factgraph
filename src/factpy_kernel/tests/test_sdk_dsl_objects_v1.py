@@ -61,6 +61,24 @@ class SDKDSLObjectsV1Tests(unittest.TestCase):
         self.assertEqual(payload["head"]["kwargs"]["person"], "$p")
         self.assertEqual(payload["head"]["kwargs"]["value"], "$c")
 
+    def test_rule_to_authoring_payload_lowers_linear_arithmetic_to_builtin_atoms(self) -> None:
+        with vars("p", "by", "age") as (p, by, age):
+            rule = Rule(
+                id="q_adults",
+                version="1.0.0",
+                select=[p, age],
+                where=[
+                    ("pred", "person:birth_year", ["$p", "$by"]),
+                    age == (2026 - by),
+                    age >= 18,
+                ],
+            )
+        payload = rule.to_authoring_payload()
+        self.assertEqual(payload["where"][0], ("pred", "person:birth_year", ["$p", "$by"]))
+        self.assertEqual(payload["where"][1], ("sub", "$_arith1", 2026, "$by"))
+        self.assertEqual(payload["where"][2], ("eq", "$age", "$_arith1"))
+        self.assertEqual(payload["where"][3], ("ge", "$age", 18))
+
     def test_noarg_vars_exposes_factory_mode_error_for_unpack(self) -> None:
         with self.assertRaises(SDKDSLError):
             with vars() as pair:
@@ -80,4 +98,3 @@ class SDKDSLObjectsV1Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

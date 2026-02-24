@@ -33,6 +33,11 @@ class Language(Entity):
     name: str = Field(cardinality="multi", pred_id="language:name")
 
 
+class PersonAge(Entity):
+    source_id: str = Identity()
+    birth_year: int = Field(cardinality="functional", pred_id="person:birth_year")
+
+
 class SDKStoreV1Tests(unittest.TestCase):
     def setUp(self) -> None:
         self.sdk = SDKStore.from_schema_classes([Person, Company])
@@ -168,6 +173,37 @@ class SDKStoreV1Tests(unittest.TestCase):
             )
         rows = self.sdk.run(top)
         self.assertEqual(rows, [(self.p_ref,)])
+
+    def test_run_supports_linear_arithmetic_builtins_from_sdk_dsl(self) -> None:
+        sdk = SDKStore.from_schema_classes([PersonAge])
+        p1 = sdk.ref(PersonAge, source_id="u1")
+        p2 = sdk.ref(PersonAge, source_id="u2")
+        sdk.set(
+            PersonAge.birth_year,
+            p1,
+            2000,
+            meta={"source": "sdk", "source_loc": "test", "trace_id": "t9"},
+        )
+        sdk.set(
+            PersonAge.birth_year,
+            p2,
+            2012,
+            meta={"source": "sdk", "source_loc": "test", "trace_id": "t10"},
+        )
+
+        with vars("p", "by", "age") as (p, by, age):
+            rule = Rule(
+                id="q_adults",
+                version="1.0.0",
+                select=[p, age],
+                where=[
+                    ("pred", "person:birth_year", ["$p", "$by"]),
+                    age == (2026 - by),
+                    age >= 18,
+                ],
+            )
+        rows = sdk.run(rule)
+        self.assertEqual(rows, [(p1, 26)])
 
 
 if __name__ == "__main__":

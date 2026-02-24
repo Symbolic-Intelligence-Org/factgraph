@@ -82,6 +82,15 @@ class LogicVar:
     def __rsub__(self, other: Any) -> BinaryExpr:
         return BinaryExpr("sub", other, self)
 
+    def __mul__(self, other: Any) -> BinaryExpr:
+        return BinaryExpr("mul", self, other)
+
+    def __rmul__(self, other: Any) -> BinaryExpr:
+        return BinaryExpr("mul", other, self)
+
+    def __neg__(self) -> BinaryExpr:
+        return BinaryExpr("neg", self, None)
+
 
 @dataclass(frozen=True)
 class AttrRef:
@@ -134,6 +143,27 @@ class BinaryExpr:
 
     def __le__(self, other: Any) -> CompareExpr:
         return CompareExpr("le", self, other)
+
+    def __add__(self, other: Any) -> BinaryExpr:
+        return BinaryExpr("add", self, other)
+
+    def __sub__(self, other: Any) -> BinaryExpr:
+        return BinaryExpr("sub", self, other)
+
+    def __mul__(self, other: Any) -> BinaryExpr:
+        return BinaryExpr("mul", self, other)
+
+    def __radd__(self, other: Any) -> BinaryExpr:
+        return BinaryExpr("add", other, self)
+
+    def __rsub__(self, other: Any) -> BinaryExpr:
+        return BinaryExpr("sub", other, self)
+
+    def __rmul__(self, other: Any) -> BinaryExpr:
+        return BinaryExpr("mul", other, self)
+
+    def __neg__(self) -> BinaryExpr:
+        return BinaryExpr("neg", self, None)
 
 
 @dataclass(frozen=True)
@@ -252,12 +282,13 @@ def lower_where_branch(body: list[Any]) -> list[Any]:
         raise SDKDSLError("where body must be non-empty list")
     bindings: dict[LogicVar, str] = {}
     lowered: list[Any] = []
+    temp_seq = count(1)
     for atom in body:
-        lowered.extend(lower_where_atom(atom, bindings))
+        lowered.extend(lower_where_atom(atom, bindings, temp_seq=temp_seq))
     return lowered
 
 
-def lower_where_atom(atom: Any, bindings: dict[LogicVar, str]) -> list[Any]:
+def lower_where_atom(atom: Any, bindings: dict[LogicVar, str], *, temp_seq: Any) -> list[Any]:
     if isinstance(atom, ExistsAtom):
         bindings.setdefault(atom.var, atom.entity_type)
         return [("pred", f"{atom.entity_type}:exists", [atom.var.token])]
@@ -268,13 +299,13 @@ def lower_where_atom(atom: Any, bindings: dict[LogicVar, str]) -> list[Any]:
     if isinstance(atom, NotExpr):
         return [("not", lower_where_branch(atom.body))]
     if isinstance(atom, CompareExpr):
-        return _lower_compare(atom, bindings)
+        return _lower_compare(atom, bindings, temp_seq=temp_seq)
     if isinstance(atom, tuple):
         return [atom]
     raise SDKDSLError(f"unsupported where atom: {type(atom).__name__}")
 
 
-def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str]) -> list[Any]:
+def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str], *, temp_seq: Any) -> list[Any]:
     if isinstance(expr.left, AttrRef) and isinstance(expr.right, AttrRef):
         # Blueprint shorthand can express this, but runtime SDK lowering avoids implicit temp vars in v1.
         raise SDKDSLError(
@@ -295,15 +326,58 @@ def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str]) -> list[Any
         pred_id = f"{record_type.lower()}:{attr.field_name}"
         return [("pred", pred_id, [attr.record_var.token, lower_term(other, in_where=True)])]
 
-    left = lower_term(expr.left, in_where=True)
-    right = lower_term(expr.right, in_where=True)
+    pre_left, left = _lower_expr_term(expr.left, temp_seq=temp_seq)
+    pre_right, right = _lower_expr_term(expr.right, temp_seq=temp_seq)
+    out = [*pre_left, *pre_right]
     if expr.op == "ne":
-        return [("not", [("eq", left, right)])]
+        out.append(("not", [("eq", left, right)]))
+        return out
     if expr.op == "eq":
-        return [("eq", left, right)]
+        out.append(("eq", left, right))
+        return out
     if expr.op in {"gt", "ge", "lt", "le"}:
-        return [(expr.op, left, right)]
+        out.append((expr.op, left, right))
+        return out
     raise SDKDSLError(f"unsupported compare op: {expr.op}")
+
+
+def _lower_expr_term(value: Any, *, temp_seq: Any) -> tuple[list[Any], Any]:
+    if isinstance(value, BinaryExpr):
+        return _lower_binary_expr(value, temp_seq=temp_seq)
+    return ([], lower_term(value, in_where=True))
+
+
+def _lower_binary_expr(expr: BinaryExpr, *, temp_seq: Any) -> tuple[list[Any], str]:
+    if expr.op == "neg":
+        pre_x, x_term = _lower_expr_term(expr.left, temp_seq=temp_seq)
+        tmp = f"$_arith{next(temp_seq)}"
+        return [*pre_x, ("neg", tmp, x_term)], tmp
+
+    pre_l, l_term = _lower_expr_term(expr.left, temp_seq=temp_seq)
+    pre_r, r_term = _lower_expr_term(expr.right, temp_seq=temp_seq)
+    tmp = f"$_arith{next(temp_seq)}"
+
+    if expr.op == "add":
+        if _is_numeric_literal(l_term):
+            return [*pre_l, *pre_r, ("addc", tmp, r_term, l_term)], tmp
+        if _is_numeric_literal(r_term):
+            return [*pre_l, *pre_r, ("addc", tmp, l_term, r_term)], tmp
+        return [*pre_l, *pre_r, ("add", tmp, l_term, r_term)], tmp
+    if expr.op == "sub":
+        if _is_numeric_literal(r_term):
+            return [*pre_l, *pre_r, ("addc", tmp, l_term, -int(r_term))], tmp
+        return [*pre_l, *pre_r, ("sub", tmp, l_term, r_term)], tmp
+    if expr.op == "mul":
+        if _is_numeric_literal(l_term):
+            return [*pre_l, *pre_r, ("mulc", tmp, r_term, l_term)], tmp
+        if _is_numeric_literal(r_term):
+            return [*pre_l, *pre_r, ("mulc", tmp, l_term, r_term)], tmp
+        raise SDKDSLError("non-linear multiplication (x * y) is not supported in SDK object DSL v1")
+    raise SDKDSLError(f"unsupported arithmetic expression op: {expr.op}")
+
+
+def _is_numeric_literal(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def lower_term(value: Any, *, in_where: bool) -> Any:

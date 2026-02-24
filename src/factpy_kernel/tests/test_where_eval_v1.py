@@ -133,6 +133,41 @@ class WhereEvalV1Tests(unittest.TestCase):
         self.assertEqual(digests_1, digests_2)
         self.assertGreater(len(digests_1), 0)
 
+    def test_arithmetic_builtins_bind_and_filter(self) -> None:
+        view_facts = {
+            "person:birth_year": [
+                (self.e1, 2000),
+                (self.e2, 2012),
+            ]
+        }
+        where = [
+            ("pred", "person:birth_year", ["$E", "$by"]),
+            ("sub", "$age", 2026, "$by"),
+            ("ge", "$age", 18),
+        ]
+        bindings = evaluate_where(view_facts, where)
+        self.assertEqual(len(bindings), 1)
+        self.assertEqual(bindings[0]["$E"], self.e1)
+        self.assertEqual(bindings[0]["$age"], 26)
+
+    def test_arithmetic_builtins_support_addc_mulc_neg(self) -> None:
+        bindings = evaluate_where(
+            {"x:v": [("e1", 3)]},
+            [
+                ("pred", "x:v", ["$E", "$x"]),
+                ("mulc", "$y", "$x", 2),
+                ("addc", "$z", "$y", 1),
+                ("neg", "$n", "$z"),
+                ("eq", "$n", -7),
+            ],
+        )
+        self.assertEqual(len(bindings), 1)
+        self.assertEqual(bindings[0]["$n"], -7)
+
+    def test_arithmetic_input_must_be_bound(self) -> None:
+        with self.assertRaises(WhereValidationError):
+            evaluate_where({"x:v": [("e1", 3)]}, [("add", "$z", "$x", 1)])
+
 
 if __name__ == "__main__":
     unittest.main()

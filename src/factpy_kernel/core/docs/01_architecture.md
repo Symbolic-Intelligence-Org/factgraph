@@ -43,6 +43,8 @@ src/factpy_kernel/core/
 | `evidence.write_protocol` | 写入/撤销/替换协议、幂等 ingest_key | `set_field`, `add_field`, `retract_by_asrt`, `replace_field` | `Ledger`, `protocol.*` |
 | `policy.active/chosen` | 活跃性判断、chosen 决策（确定性 tie-break） | `is_active`, `compute_chosen_for_predicate` | `Ledger`, `write_protocol` |
 | `view.projector` | 从账本投影业务视图事实（含 temporal current） | `project_view_facts` | `policy`, `Ledger` |
+| `rules.where_ast` | where 语义 AST（round-trip / 结构化语义中枢雏形） | `parse_where_ir_to_ast`, `lower_ast_to_where_ir` | 现有 where IR |
+| `rules.where_ast_validate` | where AST 结构/数据流校验（治理层，PR-2） | `validate_where_ast` | `rules.where_ast` |
 | `rules.where_eval` | where 子集 Python 解释执行 | `evaluate_where` | `view/projector` 产物 |
 | `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef 执行与循环防护 | `run_rule` | `where_eval`, `Store` |
 | `derivation.candidates` | 候选集合与 key digest | `CandidateSet`, `make_candidate` | `protocol` |
@@ -143,6 +145,26 @@ flowchart LR
   C --> D["store._builders.*_candidates_from_bindings"]
   D --> E["CandidateSet list"]
 ```
+
+补充（当前状态）：
+
+- `where` 语义 AST（`rules.where_ast` / `rules.where_ast_validate`）已作为增量治理层落地
+- 当前已在 `where_eval` 与 `adapters.souffle.where_compile` 入口接入 `parse->validate(AST)` 前置校验 gate
+- 执行/编译逻辑仍继续使用原 where IR（tuple/list），因此对外行为保持兼容
+- 环境变量 `FACTPY_WHERE_AST_VALIDATE` 用于控制 AST 前置校验 gate（默认开启）
+  - `0 / false / False / off / OFF` 关闭 gate，回退到旧路径独立兜底校验（兼容/回归用）
+  - 日常开发与 CI 默认保持开启（gate on）
+- 已开始去重阶段：低风险的重复结构检查，以及部分纯 arity/type shape 检查（不涉及绑定/数据流）已从旧路径删除；语义/数据流校验仍保留在旧路径与 AST validator 双层保障中
+
+补充（profile / strict，当前状态）：
+
+- `BackendProfile` 是显式能力矩阵载体；`PROFILE_DEFAULT` 等价当前行为（不收紧）
+- opt-in 收紧仅在 `mode="souffle"` 且显式传入非默认 profile 时生效
+  - `ruleref_policy=require_resolved|forbid`（默认 `allow`）
+  - `not_body_policy=forbid_or|forbid`（默认 `allow`）
+- authoring compile 入口 `compile_authoring_rule_v1(profile=..., strict=...)` 支持显式 profile
+  - `strict=True` 等价 `profile=PROFILE_SOUFFLE_STRICT`
+  - 当前 `PROFILE_SOUFFLE_STRICT` 预设组合：`ruleref_policy=require_resolved` + `not_body_policy=forbid_or`
 
 ### 6.4 物化链路（accept）
 
@@ -252,11 +274,22 @@ flowchart LR
 - `src/factpy_kernel/tests/test_view_projector_v1.py`
 - `src/factpy_kernel/tests/test_write_protocol_v1.py`
 
-全量回归命令：
+标准回归命令（FactPy kernel，避免误扫仓库根目录 `test.py`）：
 
 ```bash
 python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'
 ```
+
+兼容兜底路径回归（where AST gate off）：
+
+```bash
+FACTPY_WHERE_AST_VALIDATE=0 python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'
+```
+
+CI 建议：
+
+- 显式使用 `-p 'test_*.py'`
+- 至少跑两步：gate on（默认）与 gate off（兼容兜底）
 
 性能基准脚本（核心路径）：
 

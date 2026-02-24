@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from typing import Any
 
 from factpy_kernel.adapters.souffle.pred_norm import normalize_pred_id
+from factpy_kernel.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
+from factpy_kernel.core.rules.where_ast_validate import (
+    WhereASTValidationError,
+    validate_where_ast,
+)
 from factpy_kernel.core.rules.where_eval import WhereValidationError
+
+_ARITH_KINDS = {"add", "sub", "neg", "addc", "mulc"}
 
 
 def compile_where_to_query_dl(
@@ -15,12 +23,19 @@ def compile_where_to_query_dl(
     query_rel: str,
     temporal_view: str = "record",
 ) -> str:
+    ast_gate_on = _where_ast_gate_enabled()
     if not isinstance(schema_ir, dict):
         raise WhereValidationError("schema_ir must be dict")
     if not isinstance(query_rel, str) or not query_rel:
         raise WhereValidationError("query_rel must be non-empty string")
     if temporal_view not in {"record", "current"}:
         raise WhereValidationError("temporal_view must be 'record' or 'current'")
+    if ast_gate_on:
+        try:
+            ast = parse_where_ir_to_ast(where)
+            validate_where_ast(ast, mode="souffle")
+        except (WhereASTError, WhereASTValidationError) as exc:
+            raise _adapt_where_ast_error(exc) from exc
 
     pred_type_domains = _schema_pred_type_domains(schema_ir)
     pred_arities = {pred_id: len(arg_types) for pred_id, arg_types in pred_type_domains.items()}
@@ -56,6 +71,7 @@ def compile_where_to_query_dl(
                     not_rel_defs=not_rel_defs,
                     temporal_view=temporal_view,
                     temporal_pred_ids=temporal_pred_ids,
+                    ast_gate_on=ast_gate_on,
                 )
             )
         missing_vars = [var for var in variables if var not in bound_vars]
@@ -97,6 +113,58 @@ def compile_where_to_query_dl(
         ]
     )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _where_ast_gate_enabled() -> bool:
+    raw = os.environ.get("FACTPY_WHERE_AST_VALIDATE", "1")
+    return raw not in {"0", "false", "False", "off", "OFF"}
+
+
+def _adapt_where_ast_error(exc: Exception) -> WhereValidationError:
+    adapted = WhereValidationError(str(exc))
+    origin_path = getattr(exc, "path", None) or "$.where"
+    setattr(adapted, "kind", "where_ast_validate")
+    setattr(adapted, "path", origin_path)
+    setattr(
+        adapted,
+        "details",
+        {
+            "ast_error_code": type(exc).__name__,
+            "message": str(exc),
+            "origin_source": None,
+            "origin_path": getattr(exc, "path", None),
+            "op": None,
+            "tag": None,
+        },
+    )
+    return adapted
+
+
+def _runtime_invariant_error(message: str, *, op: str | None = None) -> WhereValidationError:
+    err = WhereValidationError(message)
+    setattr(err, "kind", "where_compile_runtime")
+    setattr(err, "path", "$.where")
+    setattr(
+        err,
+        "details",
+        {
+            "message": message,
+            "origin_source": "where_compile",
+            "origin_path": "$.where",
+            "op": op,
+            "tag": "validator_miss",
+        },
+    )
+    return err
+
+
+def _raise_dataflow_or_runtime(*, ast_gate_on: bool, message: str, op: str) -> None:
+    if ast_gate_on:
+        raise _runtime_invariant_error(
+            f"where compile invariant violated after AST validation: {message}",
+            op=op,
+        )
+    raise WhereValidationError(message)
 
 
 def extract_where_variables(where: list[Any]) -> list[str]:
@@ -141,6 +209,7 @@ def _compile_atom(
     not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]],
     temporal_view: str,
     temporal_pred_ids: set[str],
+    ast_gate_on: bool,
 ) -> str:
     kind = atom[0]
 
@@ -174,7 +243,11 @@ def _compile_atom(
             lhs_bound = lhs in bound_vars
             rhs_bound = rhs in bound_vars
             if not lhs_bound and not rhs_bound:
-                raise WhereValidationError("eq requires at least one bound/constant side")
+                _raise_dataflow_or_runtime(
+                    ast_gate_on=ast_gate_on,
+                    message="eq requires at least one bound/constant side",
+                    op="eq",
+                )
             if lhs_bound and not rhs_bound:
                 bound_vars.add(rhs)
             if rhs_bound and not lhs_bound:
@@ -193,7 +266,11 @@ def _compile_atom(
     if kind == "in":
         _, var, values = atom
         if var not in bound_vars:
-            raise WhereValidationError(f"in variable must be bound before filter: {var}")
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message=f"in variable must be bound before filter: {var}",
+                op="in",
+            )
 
         canonical_values = _canonicalize_in_values(values)
         rel_name = _in_rel_name(canonical_values)
@@ -211,9 +288,17 @@ def _compile_atom(
         rhs_is_var = _is_var(rhs)
 
         if lhs_is_var and lhs not in bound_vars:
-            raise WhereValidationError(f"{kind} variable must be bound before filter: {lhs}")
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message=f"{kind} variable must be bound before filter: {lhs}",
+                op=kind,
+            )
         if rhs_is_var and rhs not in bound_vars:
-            raise WhereValidationError(f"{kind} variable must be bound before filter: {rhs}")
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message=f"{kind} variable must be bound before filter: {rhs}",
+                op=kind,
+            )
 
         if lhs_is_var:
             _assert_cmp_var_allowed(lhs, var_type_domains, kind)
@@ -225,6 +310,14 @@ def _compile_atom(
         op = _cmp_operator(kind)
         return f"{lhs_expr} {op} {rhs_expr}"
 
+    if kind in _ARITH_KINDS:
+        return _compile_arith_atom(
+            atom=atom,
+            var_symbols=var_symbols,
+            bound_vars=bound_vars,
+            ast_gate_on=ast_gate_on,
+        )
+
     if kind == "not":
         _, not_body = atom
 
@@ -234,7 +327,11 @@ def _compile_atom(
             for not_atom in branch:
                 vars_in_not_body.update(_vars_in_atom(not_atom, include_not_body_vars=True))
         if not any(var in bound_vars for var in vars_in_not_body):
-            raise WhereValidationError("not body must reference at least one outer bound variable")
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message="not body must reference at least one outer bound variable",
+                op="not",
+            )
 
         key_vars = tuple(var for var in query_variables if var in vars_in_not_body)
         rel_name = _not_rel_name(not_body)
@@ -256,6 +353,7 @@ def _compile_atom(
                         in_rel_values=in_rel_values,
                         temporal_view=temporal_view,
                         temporal_pred_ids=temporal_pred_ids,
+                        ast_gate_on=ast_gate_on,
                     )
                 )
             missing_key_vars = [var for var in key_vars if var not in branch_vars]
@@ -333,8 +431,6 @@ def _normalize_where_subset(where: Any) -> list[list[tuple[Any, ...]]]:
 
     if all(_is_atom(item) for item in where):
         body = [_validate_atom_subset(item) for item in where]
-        if not body:
-            raise WhereValidationError("where body must not be empty")
         return [body]
 
     if all(isinstance(item, list) for item in where):
@@ -359,13 +455,8 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
         if len(atom) != 3:
             raise WhereValidationError("pred atom must be ('pred', pred_id, [terms...])")
         _, pred_id, terms = atom
-        if not isinstance(pred_id, str) or not pred_id:
-            raise WhereValidationError("pred_id must be non-empty string")
-        if not isinstance(terms, list) or not terms:
-            raise WhereValidationError("pred terms must be non-empty list")
-        for term in terms:
-            if not _is_var(term) and not _is_literal(term):
-                raise WhereValidationError("pred terms must be variables or literals")
+        if not isinstance(terms, list):
+            raise WhereValidationError("pred terms must be list")
         return atom
 
     if kind == "eq":
@@ -376,9 +467,6 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
         rhs_is_var = _is_var(rhs)
         if not lhs_is_var and not rhs_is_var:
             raise WhereValidationError("eq must be var=literal or var=var")
-        for side in (lhs, rhs):
-            if not _is_var(side) and not _is_literal(side):
-                raise WhereValidationError("eq sides must be variables or literals")
         return atom
 
     if kind == "in":
@@ -387,11 +475,8 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
         _, var, values = atom
         if not _is_var(var):
             raise WhereValidationError("in atom first argument must be variable")
-        if not isinstance(values, list) or not values:
-            raise WhereValidationError("in values must be non-empty list")
-        for value in values:
-            if not _is_literal(value):
-                raise WhereValidationError("in values must be literals")
+        if not isinstance(values, list):
+            raise WhereValidationError("in values must be list")
         return atom
 
     if kind in {"gt", "ge", "lt", "le"}:
@@ -400,19 +485,56 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
         _, lhs, rhs = atom
         if not _is_var(lhs) and not _is_var(rhs):
             raise WhereValidationError(f"{kind} requires at least one variable side")
-        for side in (lhs, rhs):
-            if not _is_var(side) and not _is_literal(side):
-                raise WhereValidationError(f"{kind} sides must be variables or literals")
         return atom
+
+    if kind in _ARITH_KINDS:
+        return _validate_arith_atom_subset(atom)
 
     if kind == "not":
         if len(atom) != 2:
             raise WhereValidationError("not atom must be ('not', [pred_atoms...])")
         _, not_body = atom
-        _normalize_not_body_subset(not_body)
+        if not isinstance(not_body, list):
+            raise WhereValidationError("not atom must be ('not', [pred_atoms...])")
         return atom
 
     raise WhereValidationError(f"unsupported atom kind: {kind}")
+
+
+def _validate_arith_atom_subset(atom: tuple[Any, ...]) -> tuple[Any, ...]:
+    kind = atom[0]
+    if kind in {"add", "sub"}:
+        if len(atom) != 4:
+            raise WhereValidationError(f"{kind} atom must be ('{kind}', z, x, y)")
+        _, z, x, y = atom
+        if not _is_var(z):
+            raise WhereValidationError(f"{kind} output must be variable")
+        for side in (x, y):
+            if not _is_var(side) and not _is_literal(side):
+                raise WhereValidationError(f"{kind} inputs must be variables or literals")
+        return atom
+    if kind == "neg":
+        if len(atom) != 3:
+            raise WhereValidationError("neg atom must be ('neg', z, x)")
+        _, z, x = atom
+        if not _is_var(z):
+            raise WhereValidationError("neg output must be variable")
+        if not _is_var(x) and not _is_literal(x):
+            raise WhereValidationError("neg input must be variable or literal")
+        return atom
+    if kind in {"addc", "mulc"}:
+        if len(atom) != 4:
+            raise WhereValidationError(f"{kind} atom must be ('{kind}', z, x, c)")
+        _, z, x, c = atom
+        if not _is_var(z):
+            raise WhereValidationError(f"{kind} output must be variable")
+        if not _is_var(x) and not _is_literal(x):
+            raise WhereValidationError(f"{kind} x input must be variable or literal")
+        if _is_var(c) or not _is_literal(c):
+            raise WhereValidationError(f"{kind} constant operand must be literal")
+        _literal_to_cmp_int_text(c, kind)
+        return atom
+    raise WhereValidationError(f"unsupported arithmetic atom kind: {kind}")
 
 
 def _canonicalize_in_values(values: list[Any]) -> tuple[str, ...]:
@@ -426,20 +548,18 @@ def _normalize_not_body_subset(not_body: Any) -> list[list[tuple[Any, ...]]]:
     if not isinstance(not_body, list) or not not_body:
         raise WhereValidationError("not body must be non-empty list")
 
-    allowed_not_kinds = {"pred", "eq", "in", "gt", "ge", "lt", "le"}
+    allowed_not_kinds = {"pred", "eq", "in", "gt", "ge", "lt", "le", *_ARITH_KINDS}
 
     def validate_not_atom(not_atom: Any) -> tuple[Any, ...]:
         if not _is_atom(not_atom):
             raise WhereValidationError("not body atoms must be valid atoms")
         not_kind = not_atom[0]
         if not_kind not in allowed_not_kinds:
-            raise WhereValidationError("not body supports pred/eq/in/cmp atoms only")
+            raise WhereValidationError("not body supports pred/eq/in/cmp/arithmetic atoms only")
         return _validate_atom_subset(not_atom)
 
     if all(_is_atom(item) for item in not_body):
         body = [validate_not_atom(item) for item in not_body]
-        if not body:
-            raise WhereValidationError("not body must not be empty")
         return [body]
 
     if all(isinstance(item, list) for item in not_body):
@@ -494,11 +614,20 @@ def _infer_var_type_domains(
     for atom in body:
         if atom[0] == "pred":
             add_from_pred_atom(atom)
+        elif atom[0] in _ARITH_KINDS:
+            for term in atom[1:]:
+                if _is_var(term):
+                    out.setdefault(term, set()).add("int")
         elif atom[0] == "not":
             _, not_body = atom
-            for not_atom in not_body:
-                if not_atom[0] == "pred":
-                    add_from_pred_atom(not_atom)
+            for branch in _normalize_not_body_subset(not_body):
+                for not_atom in branch:
+                    if not_atom[0] == "pred":
+                        add_from_pred_atom(not_atom)
+                    elif not_atom[0] in _ARITH_KINDS:
+                        for term in not_atom[1:]:
+                            if _is_var(term):
+                                out.setdefault(term, set()).add("int")
     return out
 
 
@@ -559,6 +688,7 @@ def _compile_not_body_atom(
     in_rel_values: dict[str, tuple[str, ...]],
     temporal_view: str,
     temporal_pred_ids: set[str],
+    ast_gate_on: bool,
 ) -> str:
     kind = atom[0]
     if kind == "pred":
@@ -591,7 +721,11 @@ def _compile_not_body_atom(
             lhs_bound = lhs in local_bound_vars
             rhs_bound = rhs in local_bound_vars
             if not lhs_bound and not rhs_bound:
-                raise WhereValidationError("eq requires at least one bound/constant side")
+                _raise_dataflow_or_runtime(
+                    ast_gate_on=ast_gate_on,
+                    message="eq requires at least one bound/constant side",
+                    op="eq",
+                )
             if lhs_bound and not rhs_bound:
                 local_bound_vars.add(rhs)
             if rhs_bound and not lhs_bound:
@@ -610,7 +744,11 @@ def _compile_not_body_atom(
     if kind == "in":
         _, var, values = atom
         if var not in local_bound_vars:
-            raise WhereValidationError(f"in variable must be bound before filter: {var}")
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message=f"in variable must be bound before filter: {var}",
+                op="in",
+            )
         canonical_values = _canonicalize_in_values(values)
         rel_name = _in_rel_name(canonical_values)
         existing = in_rel_values.get(rel_name)
@@ -625,9 +763,17 @@ def _compile_not_body_atom(
         lhs_is_var = _is_var(lhs)
         rhs_is_var = _is_var(rhs)
         if lhs_is_var and lhs not in local_bound_vars:
-            raise WhereValidationError(f"{kind} variable must be bound before filter: {lhs}")
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message=f"{kind} variable must be bound before filter: {lhs}",
+                op=kind,
+            )
         if rhs_is_var and rhs not in local_bound_vars:
-            raise WhereValidationError(f"{kind} variable must be bound before filter: {rhs}")
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message=f"{kind} variable must be bound before filter: {rhs}",
+                op=kind,
+            )
         if lhs_is_var:
             _assert_cmp_var_allowed(lhs, var_type_domains, kind)
         if rhs_is_var:
@@ -637,7 +783,61 @@ def _compile_not_body_atom(
         op = _cmp_operator(kind)
         return f"{lhs_expr} {op} {rhs_expr}"
 
+    if kind in _ARITH_KINDS:
+        return _compile_arith_atom(
+            atom=atom,
+            var_symbols=var_symbols,
+            bound_vars=local_bound_vars,
+            ast_gate_on=ast_gate_on,
+        )
+
     raise WhereValidationError(f"unsupported atom kind in not body: {kind}")
+
+
+def _compile_arith_atom(
+    *,
+    atom: tuple[Any, ...],
+    var_symbols: dict[str, str],
+    bound_vars: set[str],
+    ast_gate_on: bool,
+) -> str:
+    kind = atom[0]
+
+    def _require_bound(var: str) -> None:
+        if var not in bound_vars:
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message=f"{kind} input variable must be bound before use: {var}",
+                op=kind,
+            )
+
+    def _arith_input(term: Any) -> str:
+        if _is_var(term):
+            _require_bound(term)
+            return f"to_number({_symbol_for_var(var_symbols, term)})"
+        return _literal_to_cmp_int_text(term, kind)
+
+    if kind == "add":
+        _, z, x, y = atom
+        expr = f"({_arith_input(x)} + {_arith_input(y)})"
+    elif kind == "sub":
+        _, z, x, y = atom
+        expr = f"({_arith_input(x)} - {_arith_input(y)})"
+    elif kind == "neg":
+        _, z, x = atom
+        expr = f"(-{_arith_input(x)})"
+    elif kind == "addc":
+        _, z, x, c = atom
+        expr = f"({_arith_input(x)} + {_literal_to_cmp_int_text(c, kind)})"
+    elif kind == "mulc":
+        _, z, x, c = atom
+        expr = f"({_arith_input(x)} * {_literal_to_cmp_int_text(c, kind)})"
+    else:
+        raise WhereValidationError(f"unsupported arithmetic atom kind: {kind}")
+
+    z_sym = _symbol_for_var(var_symbols, z)
+    bound_vars.add(z)
+    return f"{z_sym} = to_string({expr})"
 
 
 def _literal_to_text(value: Any) -> str:
@@ -697,6 +897,10 @@ def _vars_in_atom(atom: tuple[Any, ...], *, include_not_body_vars: bool) -> list
             found.add(lhs)
         if _is_var(rhs):
             found.add(rhs)
+    elif kind in _ARITH_KINDS:
+        for term in atom[1:]:
+            if _is_var(term):
+                found.add(term)
     elif kind == "not":
         if include_not_body_vars:
             _, body = atom

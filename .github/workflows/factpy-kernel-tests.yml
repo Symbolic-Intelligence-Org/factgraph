@@ -1,0 +1,46 @@
+name: factpy-kernel-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Test (where AST gate on)
+        run: python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'
+
+      - name: Test (where AST gate off compatibility)
+        run: FACTPY_WHERE_AST_VALIDATE=0 python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'
+
+      - name: Test (strict profile smoke)
+        run: |
+          python -m unittest -q \
+            src.factpy_kernel.tests.test_authoring_rule_compile_strict_v1 \
+            src.factpy_kernel.tests.test_where_strict_profile_preset_v1 \
+            src.factpy_kernel.tests.test_query_rule_strict_profile_preset_v1
+
+      - name: Install service extra
+        run: pip install -e ".[service]"
+
+      - name: Test (service routes)
+        run: python -m unittest -q src.factpy_kernel.tests.test_service_v1_routes

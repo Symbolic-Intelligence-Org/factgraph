@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
+from factpy_kernel.core.rules.backend_profile import BackendProfile, PROFILE_SOUFFLE_STRICT
+from factpy_kernel.core.rules.rule_ast import RuleASTError, parse_query_rule_ir_to_ast
+from factpy_kernel.core.rules.rule_ast_validate import (
+    RuleASTValidationError,
+    validate_query_rule_ast,
+)
 from factpy_kernel.authoring.where_schema_lowering import (
     WhereSchemaLoweringError,
     lower_blueprint_where_sugar_with_schema_v1,
@@ -21,6 +28,8 @@ def compile_authoring_rule_v1(
     authoring_rule: dict[str, Any],
     *,
     schema_ir: dict[str, Any] | None = None,
+    profile: BackendProfile | None = None,
+    strict: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(authoring_rule, dict):
         raise _compile_error("authoring_rule must be object", path="$")
@@ -45,6 +54,13 @@ def compile_authoring_rule_v1(
     }
     if expose:
         payload["expose"] = True
+    if _rule_ast_gate_enabled():
+        effective_profile = profile if profile is not None else (PROFILE_SOUFFLE_STRICT if strict else None)
+        try:
+            ast = parse_query_rule_ir_to_ast(payload)
+            validate_query_rule_ast(ast, mode="souffle", profile=effective_profile)
+        except (RuleASTError, RuleASTValidationError) as exc:
+            raise _adapt_rule_ast_error(exc) from exc
     return payload
 
 
@@ -108,3 +124,25 @@ def _compile_expose(authoring_rule: dict[str, Any]) -> bool:
 
 def _compile_error(message: str, *, path: str) -> AuthoringRuleCompileError:
     return AuthoringRuleCompileError(message, path=path)
+
+
+def _rule_ast_gate_enabled() -> bool:
+    raw = os.environ.get("FACTPY_RULE_AST_VALIDATE", "1")
+    return raw not in {"0", "false", "False", "off", "OFF"}
+
+
+def _adapt_rule_ast_error(exc: Exception) -> AuthoringRuleCompileError:
+    origin_path = getattr(exc, "path", None) or "$.query_rule"
+    err = AuthoringRuleCompileError(str(exc), path=origin_path)
+    setattr(err, "kind", "rule_ast_validate")
+    setattr(
+        err,
+        "details",
+        {
+            "ast_error_code": type(exc).__name__,
+            "message": str(exc),
+            "origin_source": "authoring.rule_compile",
+            "origin_path": getattr(exc, "path", None),
+        },
+    )
+    return err
