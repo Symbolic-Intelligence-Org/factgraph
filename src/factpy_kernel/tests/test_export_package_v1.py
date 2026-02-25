@@ -108,6 +108,35 @@ class ExportPackageV1Tests(unittest.TestCase):
                 data_2["digests"]["edb_digest"],
             )
 
+    def test_export_supports_unary_exists_predicate_views(self) -> None:
+        schema_ir = {
+            **self.schema_ir,
+            "predicates": [
+                *self.schema_ir["predicates"],
+                {
+                    "pred_id": "Person:exists",
+                    "arg_specs": [
+                        {"name": "E", "type_domain": "entity_ref"},
+                    ],
+                    "group_key_indexes": [0],
+                    "cardinality": "functional",
+                },
+            ],
+            "projection": {
+                **self.schema_ir["projection"],
+                "predicates": [*self.schema_ir["projection"]["predicates"], "Person:exists"],
+            },
+        }
+        store = Store(schema_ir=schema_ir)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "pkg"
+            export_package(store, out_dir, ExportOptions())
+
+            view_dl = (out_dir / "rules" / "view.dl").read_text(encoding="utf-8")
+            self.assertIn(".decl p_Person_exists(E:symbol)", view_dl)
+            self.assertIn(".output p_Person_exists", view_dl)
+
     def test_runner_outputs_and_outputs_digest_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp) / "pkg"

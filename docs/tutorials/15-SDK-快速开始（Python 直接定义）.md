@@ -4,6 +4,7 @@
 
 完整内容请看源码教程文件：
 - `tutorials/15-SDK-快速开始（Python 直接定义）.md`
+  - 本轮已补充 `materialize_as="record"` / `head=RecordType(...)` 常见报错排查（`record exists predicate not found ...`、record role kwargs 约束、registry schema fallback 提示）
 
 如果你要使用新的 `sdk.batch` staging 语法，请继续看：
 - `16-SDK-Batch-staging（sdk.batch）.md`

@@ -1,1 +1,0 @@
-{"expose":true,"rule_id":"rule.country_rows","select_vars":["$e","$c"],"version":"1.0.0","where":[["pred","person:country",["$e","$c"]],["not",[["pred","person:blacklist",["$e","x"]]]]]}

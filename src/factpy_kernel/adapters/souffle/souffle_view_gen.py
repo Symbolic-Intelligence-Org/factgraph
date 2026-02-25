@@ -46,9 +46,9 @@ def generate_view_dl(schema_ir: dict, *, include_active_rule: bool = True) -> st
             raise NotImplementedError(
                 f"souffle view generator supports only functional/multi/temporal predicates: {pred_id}"
             )
-        if not isinstance(arg_specs, list) or len(arg_specs) < 2:
+        if not isinstance(arg_specs, list) or len(arg_specs) < 1:
             raise NotImplementedError(
-                f"souffle view generator requires arg_specs length>=2 (E+rest): {pred_id}"
+                f"souffle view generator requires arg_specs length>=1 (E required): {pred_id}"
             )
 
         arg_count = len(arg_specs)

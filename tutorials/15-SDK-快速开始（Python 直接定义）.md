@@ -268,6 +268,84 @@ sdk_registry.register_derivation(drv)
 
 - 上面的 `sdk_registry.apply_schema_classes([Person, Company], ...)` 已把 schema 写入 registry；当前实现里 `register_derivation(drv)` 会在未显式传 `schema_ir` 时自动读取 registry 中的 `schema_ir` 来完成 `head=...` 的 schema-aware lowering（推导 `target_pred_id + head_vars`）。
 - 如果 registry 里还没有 schema，请先 `apply_schema_classes(...)` / `upsert_schema_ir(...)`，或改为显式传 `target=...` + `head_vars=[...]`。
+- 排查提示（record head 常见误解）：
+  - `SDKRegistry.register_derivation(...)` 会先尝试一次“无 schema 编译”，因此 traceback 第一条常见错误可能是 `materialize_as='record' requires id_policy ...`；若随后 fallback 到 registry schema 又报 `record exists predicate not found for X`，通常表示 registry 中保存的 schema 仍是旧版本（尚未包含 `X:exists`）。
+  - 遇到这种情况，请先重新 `apply_schema_classes(...)` 更新 registry schema，或在 `register_derivation(..., schema_ir=...)` 中显式传入当前 schema。
+
+显式传 `schema_ir`（推荐用于排障/Notebook 迭代）：
+
+```python
+from factpy_kernel.sdk import compile_schema_from_classes
+
+schema_ir = compile_schema_from_classes([Person, Company])  # 用当前类定义现编译
+
+sdk_registry.register_rule(rule)  # rule 一般不需要 schema-aware lowering
+sdk_registry.register_derivation(drv, schema_ir=schema_ir)
+```
+
+如果你已经有 `SDKStore`，也可以直接复用 store 内的 schema：
+
+```python
+sdk_registry.register_derivation(drv, schema_ir=sdk.store.schema_ir)
+```
+
+### `materialize_as="record"` 常见坑（重要）
+
+1. `head=RecordType(...)` 的关键字参数必须是 **record role 字段名**
+
+- 不是 identity 字段名（如 `uid` / `source_id`）
+- 也不存在隐式 `person=<owner>` 参数，除非该 record 真的定义了 `person` 字段
+
+例如：若 `Person` 被标记为 record，且只有一个字段 `native_language`，则合法写法是：
+
+```python
+with vars("n") as (n,):
+    drv = Derivation(
+        id="drv.person_lang_record",
+        version="1.0.0",
+        head=Person(native_language=n),  # 只有 role 字段 native_language
+        materialize_as="record",
+        where=[n == "de"],
+        mode="python",
+        temporal_view="record",
+    )
+```
+
+如果写成 `Person(person=e, native_language=n)`，会报类似：
+- `head kwargs includes unknown record roles: person`
+
+2. `where` 必须绑定 `head` 中出现的变量
+
+- 例如 `head=Speaks(person=p, language=l)` 时，`where` 必须能导出/绑定 `p`、`l`
+- 仅写 `l == "de"` 而不绑定 `p`，后续编译/执行会失败
+
+3. 建模建议：如果你要表达 `(person, language)` 这种 reified 关系，优先定义单独 record 类型
+
+```python
+class Speaks(Entity):
+    uid: str = Identity(default_factory="uuid4")
+    person: Person = Field(cardinality="functional")
+    language: Language = Field(cardinality="functional")
+    class Meta:
+        is_record = True
+```
+
+然后使用：
+
+```python
+with vars("p", "l") as (p, l):
+    drv = Derivation(
+        id="drv.speaks_from_rule",
+        version="1.0.0",
+        head=Speaks(person=p, language=l),
+        materialize_as="record",
+        where=[
+            # 这里用 Pred(...) / RuleRef(...) 绑定 p, l
+        ],
+        mode="python",
+        temporal_view="record",
+    )
+```
 
 也支持直接传 authoring payload dict（兼容/高级用法）：
 
