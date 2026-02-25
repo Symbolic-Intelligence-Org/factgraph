@@ -66,6 +66,34 @@ class SDKStore:
 
         return SDKBatchTx(self, meta=meta)
 
+    def get(self, entity_cls: type[Entity], **identity_kwargs: Any):
+        from .facade import sdk_get
+
+        return sdk_get(self, entity_cls, **identity_kwargs)
+
+    def find(
+        self,
+        entity_cls: type[Entity],
+        *,
+        temporal_view: str = "record",
+        limit: int | None = None,
+        **filter_kwargs: Any,
+    ):
+        from .facade import sdk_find
+
+        return sdk_find(
+            self,
+            entity_cls,
+            temporal_view=temporal_view,
+            limit=limit,
+            **filter_kwargs,
+        )
+
+    def edit(self, entity_cls: type[Entity], **identity_kwargs: Any):
+        from .facade import sdk_edit
+
+        return sdk_edit(self, entity_cls, **identity_kwargs)
+
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
         spec = self._entity_spec_by_class.get(entity_cls)
         if spec is None:

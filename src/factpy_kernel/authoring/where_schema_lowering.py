@@ -18,7 +18,7 @@ def lower_blueprint_where_sugar_with_schema_v1(
     if schema_ir is None:
         return where
     meta = _build_record_meta(schema_ir)
-    if not meta["record_types"]:
+    if not meta["entity_types"] and not meta["predicate_ids"]:
         return where
     return _rewrite_where(where, meta=meta, path=path)
 
@@ -26,13 +26,18 @@ def lower_blueprint_where_sugar_with_schema_v1(
 def _build_record_meta(schema_ir: dict[str, Any]) -> dict[str, Any]:
     entities = schema_ir.get("entities", [])
     predicates = schema_ir.get("predicates", [])
+    entity_types: set[str] = set()
     record_types: set[str] = set()
     if isinstance(entities, list):
         for entity in entities:
-            if isinstance(entity, dict) and entity.get("is_record") is True:
-                entity_type = entity.get("entity_type")
-                if isinstance(entity_type, str) and entity_type:
-                    record_types.add(entity_type)
+            if not isinstance(entity, dict):
+                continue
+            entity_type = entity.get("entity_type")
+            if not isinstance(entity_type, str) or not entity_type:
+                continue
+            entity_types.add(entity_type)
+            if entity.get("is_record") is True:
+                record_types.add(entity_type)
 
     exists_pred_by_type: dict[str, str] = {}
     role_pred_by_type_field: dict[str, dict[str, str]] = {}
@@ -63,6 +68,7 @@ def _build_record_meta(schema_ir: dict[str, Any]) -> dict[str, Any]:
             type_by_role_pred[pred_id] = (owner_type, py_field_name)
 
     return {
+        "entity_types": entity_types,
         "record_types": record_types,
         "exists_pred_by_type": exists_pred_by_type,
         "role_pred_by_type_field": role_pred_by_type_field,
@@ -119,6 +125,7 @@ def _rewrite_atom(
         return atom
 
     canonical_pred_ids: set[str] = meta["predicate_ids"]
+    entity_types: set[str] = meta["entity_types"]
     type_by_exists_pred: dict[str, str] = meta["type_by_exists_pred"]
     type_by_role_pred: dict[str, tuple[str, str]] = meta["type_by_role_pred"]
     exists_pred_by_type: dict[str, str] = meta["exists_pred_by_type"]
@@ -140,6 +147,13 @@ def _rewrite_atom(
         if canonical_exists is not None:
             record_var_types[_var_name(terms[0])] = record_type
             return ("pred", canonical_exists, terms)
+        if pred_id in canonical_pred_ids:
+            return atom
+        if record_type in entity_types and record_type not in meta["record_types"]:
+            raise WhereSchemaLoweringError(
+                f"record exists sugar requires record entity (set Meta.is_record = True): {record_type}",
+                path=path,
+            )
         if pred_id not in canonical_pred_ids and record_type in meta["record_types"]:
             raise WhereSchemaLoweringError(
                 f"record exists predicate not found in schema for {record_type}",
@@ -174,4 +188,3 @@ def _is_var(term: Any) -> bool:
 
 def _var_name(term: str) -> str:
     return term[1:]
-

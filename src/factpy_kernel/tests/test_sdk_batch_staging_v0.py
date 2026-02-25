@@ -6,8 +6,9 @@ import unittest
 from typing import Any
 
 import factpy_kernel.tests._warnings as test_warnings
-from factpy_kernel.sdk import Entity, Field, Identity, SDKStore, SDKStoreError
-from factpy_kernel.sdk.batch import AddOp, RefOp, RetractOp, SetOp, WireBatchPlan
+from factpy_kernel.core.view.projector import project_view_facts
+from factpy_kernel.sdk import Entity, Field, Identity, Rule, SDKStore, SDKStoreError, vars
+from factpy_kernel.sdk.batch import AddOp, RecordExistsOp, RefOp, RetractOp, SetOp, WireBatchPlan
 
 
 def setUpModule() -> None:
@@ -29,6 +30,15 @@ class Person(Entity):
         fact_key=["lang"],
     )
     works_at: Company = Field(cardinality="multi", pred_id="person:works_at")
+
+
+class Employment(Entity):
+    uid: str = Identity(default_factory="uuid4")
+    person: Person = Field(cardinality="functional")
+    company: Company = Field(cardinality="functional")
+
+    class Meta:
+        is_record = True
 
 
 class SDKBatchStagingV0Tests(unittest.TestCase):
@@ -173,6 +183,50 @@ class SDKBatchStagingV0Tests(unittest.TestCase):
         wire_a = self._build_retract_wire_json(sdk_a, assertion_id=asrt_works, person_source_id="u4")
         wire_b = self._build_retract_wire_json(sdk_b, assertion_id=asrt_works, person_source_id="u4")
         self.assertEqual(wire_a.encode("utf-8"), wire_b.encode("utf-8"))
+
+    def test_record_handles_emit_exists_ops_and_enable_record_query_sugar(self) -> None:
+        sdk_commit = SDKStore.from_schema_classes([Person, Company, Employment])
+        sdk_wire = SDKStore.from_schema_classes([Person, Company, Employment])
+
+        with sdk_commit.batch(meta={"trace_id": "rec-1", "source": "etl"}) as tx:
+            alice = tx.entity(Person, source_id="u8")
+            google = tx.entity(Company, source_id="c8")
+            job = tx.entity(Employment, uid="job_u8_c8")
+            job.person.set(alice)
+            job.company.set(google)
+
+            plan = tx.preview(commit_meta={"commit_scope": "record"})
+            record_exists_ops = [op for op in plan.ops if isinstance(op, RecordExistsOp)]
+            self.assertEqual(len(record_exists_ops), 1)
+            self.assertEqual(record_exists_ops[0].entity_type, "Employment")
+            self.assertEqual(record_exists_ops[0].pred_id, "Employment:exists")
+
+            wire = WireBatchPlan.from_json(plan.to_json(sdk_commit))
+            wire_res = wire.apply(sdk_wire)
+            commit_res = tx.commit(commit_meta={"commit_scope": "record"})
+
+        self.assertEqual(_claim_signatures(sdk_commit.ledger), _claim_signatures(sdk_wire.ledger))
+        self.assertEqual(_user_meta_by_claim_signature(sdk_commit.ledger), _user_meta_by_claim_signature(sdk_wire.ledger))
+        self.assertEqual(len(commit_res.apply_result.assertion_ids), len(wire_res.assertion_ids))
+
+        facts = project_view_facts(sdk_commit.ledger, sdk_commit.schema_ir)
+        self.assertEqual(len(facts["Employment:exists"]), 1)
+        self.assertEqual(len(facts["employment:person"]), 1)
+        self.assertEqual(len(facts["employment:company"]), 1)
+
+        with vars("job", "p", "c") as (job_var, p, c):
+            rule = Rule(
+                id="q_employment",
+                version="1.0.0",
+                select=[p, c],
+                where=[
+                    Employment(job_var),
+                    job_var.person == p,
+                    job_var.company == c,
+                ],
+            )
+        rows = sdk_commit.run(rule)
+        self.assertEqual(len(rows), 1)
 
     def test_retract_dedup_last_meta_wins(self) -> None:
         seed_sdk = SDKStore.from_schema_classes([Person, Company])

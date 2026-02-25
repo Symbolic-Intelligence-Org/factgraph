@@ -182,6 +182,196 @@ language.name.add("German")
 - `SDKRegistryError`：`SDKRegistry` apply / registry IO / 注册包装错误
 - `SDKDSLError`：对象式 `Rule / Derivation / Pred / Not / vars` DSL 构造或 lowering 错误
 
+### 可选：读取 / 编辑 Facade（`sdk.get / sdk.find / sdk.edit`）
+
+除底层 `ref/set/add/retract` 和 `sdk.batch` 外，当前 SDK 还提供一层更适合 notebook / 调试 / 轻量人工修正的读写 facade：
+
+- `sdk.get(...)`：按 identity 读取单个只读快照（`EntitySnapshot | None`）
+- `sdk.find(...)`：按字段过滤当前视图（返回快照列表）
+- `sdk.edit(...)`：按 identity 打开编辑会话（context manager；无异常自动 commit）
+
+```python
+from factpy_kernel.sdk import (
+    CardinalityError,
+    EntityNotFoundError,
+    FrozenSnapshotError,
+)
+
+# 读取单个实体（按 identity）
+alice = sdk.get(Person, source_id="u-001")
+if alice is None:
+    raise RuntimeError("person not found")
+
+print(alice.ref)          # canonical EntityRef token
+print(alice.country)      # functional -> 单值（当前视图）
+print(alice.works_at)     # multi -> tuple（当前 active 值）
+
+# 断言级信息（含 asrt_id / meta / active/history）
+for asrt in alice.assertions.country.history:
+    print(asrt.asrt_id, asrt.value, asrt.is_active, asrt.meta.source)
+
+# multi 字段用 .active / .history；functional 字段可用 .chosen
+for asrt in alice.assertions.works_at.active:
+    print("works_at:", asrt.value)
+
+# 查询（按当前视图过滤；AND 语义）
+rows = sdk.find(Person, country="de")
+rows = sdk.find(Person, works_at=c_ref)     # multi 字段：按“包含该值”匹配
+rows = sdk.find(Person, source_id="u-001")  # identity 全量过滤也支持
+
+# 编辑（显式进入写会话；无异常自动 commit）
+try:
+    with sdk.edit(Person, source_id="u-001") as user:
+        user.country.set("fr", meta={"source": "manual_fix"})
+        user.works_at.add(c_ref, meta={"source": "manual_fix"})
+        plan = user.preview()  # 可选：先看 staged ops
+        print("staged ops:", len(plan.ops))
+except EntityNotFoundError:
+    print("entity not found")
+```
+
+record（reified relation）也用同一个 `edit(...)` 入口，identity 由 schema 决定：
+
+```python
+with sdk.edit(LivesIn, uid="li_u001") as rec:
+    rec.country.set("idref_v1:Country:...")  # 或传 sdk.ref(...) 结果
+```
+
+### `EntitySnapshot` 怎么看 / 怎么用（重要）
+
+`sdk.get(...)` / `sdk.find(...)` 返回的是 `EntitySnapshot`（只读快照），不是普通 `Entity(...)` 实例，也不是 ORM 对象。
+
+在 notebook 里你通常这样用：
+
+```python
+rows = sdk.find(Person, country="de")
+print(rows)       # 会显示可读 repr（entity_type/ref/字段预览）
+
+alice = rows[0]
+print(alice)      # EntitySnapshot(...)
+print(alice.ref)  # canonical EntityRef
+```
+
+#### 1) 读当前值：直接访问字段
+
+- `functional` 字段 -> 单值（或 `None`）
+- `multi` 字段 -> `tuple[...]`（当前 active 值）
+- `entity-ref` 字段 -> 返回 `ref` 字符串（如 `idref_v1:...`）
+
+```python
+print(alice.country)     # "de"
+print(alice.works_at)    # ("idref_v1:Company:...", ...)
+```
+
+#### 2) 看断言级细节：`snapshot.assertions.<field>`
+
+如果你需要 `asrt_id`、`meta`、历史版本（含已撤销），使用 `assertions` 命名空间：
+
+```python
+# functional 字段：可看 chosen / active / history
+print(alice.assertions.country.chosen)   # 当前 chosen 断言（AssertionRecord | None）
+print(alice.assertions.country.active)   # 当前 active 断言元组
+print(alice.assertions.country.history)  # 全部历史（含 revoked）
+
+# multi 字段：用 active / history（没有 chosen）
+print(alice.assertions.works_at.active)
+print(alice.assertions.works_at.history)
+```
+
+`AssertionRecord` 常用字段：
+
+- `asrt_id`
+- `value`
+- `dims`
+- `is_active` / `is_revoked`
+- `meta`（如 `meta.source / meta.trace_id / meta.ingested_at / meta.raw`）
+
+示例：
+
+```python
+for asrt in alice.assertions.country.history:
+    print(
+        asrt.asrt_id,
+        asrt.value,
+        asrt.is_active,
+        asrt.meta.source,
+        asrt.meta.trace_id,
+    )
+```
+
+#### 3) 快照是只读；修改请用 `sdk.edit(...)`
+
+```python
+# 错误：快照不可写
+# alice.country = "fr"
+
+with sdk.edit(Person, source_id="u-001") as user:
+    user.country.set("fr")
+```
+
+#### 4) 常见误解（尤其 notebook）
+
+- `sdk.ledger.find_claims(...)` 返回的是历史账本（含后续可能被 revoke 的 claim）
+- `EntitySnapshot` 的字段值来自当前视图（`project_view_facts`），更接近你在规则里看到的结果
+- 所以“账本里还在”与“快照里看不到”并不矛盾（通常是被 revoke / 未 chosen）
+
+### 读写对象对照表（避免混淆）
+
+同样看起来像 “对象”，在 SDK 里其实有 4 种常见类型，语义完全不同：
+
+| 对象类型 | 典型来源 | 主要用途 | 字段读取 | 字段写入 | 备注 |
+|---|---|---|---|---|---|
+| `EntitySnapshot`（只读快照） | `sdk.get(...)` / `sdk.find(...)` | 看当前视图值、看断言历史 | `snap.field` / `snap.assertions.field...` | ❌ 不可写 | notebook 调试最常用 |
+| `EntityEditor`（编辑会话） | `with sdk.edit(...) as obj:` | 显式修改已存在实体 | `obj.identity_field`（可读） | `obj.field.set/add/retract` | 无异常自动 commit |
+| batch handle（托管对象） | `tx.entity(...)` | 构造对象图、批量写入、preview/wire | `obj.identity_field`（可读） | `obj.field.set/add/retract` | 用于 `sdk.batch(...)` |
+| DSL 符号变量 | `with vars(...) as (...)` | `Rule/Derivation` 查询表达式 | `li.country == c`（DSL） | ❌ 不写入 | 不是 store 中实体 |
+
+最常见的误用是把它们混起来：
+
+```python
+# 1) Snapshot 不是可编辑对象（错误）
+alice = sdk.get(Person, source_id="u-001")
+# alice.country.set("fr")   # ❌
+
+# 2) 普通修改请用 edit（正确）
+with sdk.edit(Person, source_id="u-001") as user:
+    user.country.set("fr")
+
+# 3) batch handle 用于“构造 + 预览 + 批量提交”（正确）
+with sdk.batch() as tx:
+    user = tx.entity(Person, source_id="u-001")
+    user.country.set("fr")
+    plan = tx.preview()
+    tx.commit()
+
+# 4) vars(...) 是查询符号，不是实体实例（正确用法）
+from factpy_kernel.sdk import vars
+with vars("u", "c") as (u, c):
+    expr = (u == c)  # 只是 DSL 表达式示意
+```
+
+说明（v1 语义）：
+
+- `Snapshot` 是只读对象；`alice.country = "fr"` 会抛 `FrozenSnapshotError`
+- `Editor` 的字段基数规则仍是严格的：
+  - `functional -> .set(...)`
+  - `multi -> .add(...)`
+  - 调错会抛 `CardinalityError`
+- `sdk.edit(...)` 不会隐式创建实体；找不到会抛 `EntityNotFoundError`
+- `sdk.find(...)` 过滤基于当前投影视图（而不是原始 ledger 历史）
+- `sdk.find(...)` 暂不支持对带 `dims` 的字段做过滤（会显式报错）
+
+实践建议：
+
+- 新建对象/对象图导入：优先 `sdk.batch(...)`
+- 精确底层写入：`sdk.ref/set/add/retract`
+- Notebook 检视 / 轻量修正：`sdk.get/find/edit`
+
+一个实现边界（重要）：
+
+- `sdk.get(...)` 因为调用者提供了 identity，所以快照通常可直接访问 identity 字段（如 `alice.source_id`）
+- `sdk.find(...)` 返回的通用快照总是保证 `.ref` 可用；但某些实体的 identity（例如 `uid`）不一定能从 `ref` 反解，因此不承诺所有 `find` 结果都能访问 `.uid`
+
 ---
 
 ## 4) 导出推理包并运行（SDK passthrough）
@@ -413,7 +603,7 @@ print(sdk_registry.get_latest_derivation_spec("drv.country_copy"))
   - `Entity / Field / Identity` runtime 声明
   - `Rule / Derivation / RuleRef / vars / Pred / Not` 对象式 DSL
   - schema compile / preflight bridge
-  - `SDKStore`（ref / set / add / retract / evaluate / accept / export / run）
+  - `SDKStore`（ref / set / add / retract / get / find / edit / evaluate / accept / export / run）
   - `SDKRegistry`（`apply_schema_classes(...)`、registry 只读、注册 rule/derivation SDK 对象或 payload）
 - ❌ 还没有
   - `factpy_kernel.sdk` 顶层 `apply_schema_classes(...)` 便捷函数（请使用 `SDKRegistry.apply_schema_classes(...)`）

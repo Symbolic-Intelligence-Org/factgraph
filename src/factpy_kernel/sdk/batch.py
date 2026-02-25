@@ -5,6 +5,7 @@ import math
 from dataclasses import dataclass, field as dc_field
 from typing import Any, TYPE_CHECKING, Literal
 
+from factpy_kernel.core.evidence.write_protocol import set_field
 from factpy_kernel.core.protocol.digests import sha256_token
 
 from .errors import SDKStoreError
@@ -63,7 +64,16 @@ class RetractOp:
     path: str = ""
 
 
-BatchOp = RefOp | SetOp | AddOp | RetractOp
+@dataclass(frozen=True)
+class RecordExistsOp:
+    handle_id: int
+    entity_type: str
+    pred_id: str
+    meta: dict[str, Any] = dc_field(default_factory=dict)
+    path: str = ""
+
+
+BatchOp = RefOp | SetOp | AddOp | RetractOp | RecordExistsOp
 
 
 @dataclass(frozen=True)
@@ -133,6 +143,18 @@ class BatchPlan:
                     )
                 )
                 continue
+            if isinstance(op, RecordExistsOp):
+                wire_ops.append(
+                    WireRecordExistsOp(
+                        kind="record_exists",
+                        handle_id=op.handle_id,
+                        entity_type=op.entity_type,
+                        pred_id=op.pred_id,
+                        meta=_normalize_json_object(op.meta, path=f"{op.path}.meta", allow_nested=True),
+                        path=op.path,
+                    )
+                )
+                continue
             raise SDKStoreError(f"unsupported batch op in export: {type(op).__name__}")
         return WireBatchPlan(
             wire_version="sdk_batch_plan_v0",
@@ -171,6 +193,17 @@ class BatchPlan:
                     raise SDKStoreError(f"{op.path}: retract failed: {exc}") from exc
                 if isinstance(revoker_id, str):
                     assertion_ids.append(revoker_id)
+                continue
+            if isinstance(op, RecordExistsOp):
+                e_ref = refs_by_handle_id.get(op.handle_id)
+                if e_ref is None:
+                    raise SDKStoreError(f"plan invalid: missing RefOp before record exists op at {op.path}")
+                meta = dict(op.meta) if op.meta else None
+                try:
+                    asrt_id = set_field(sdk.ledger, op.pred_id, e_ref, [], meta)
+                except Exception as exc:
+                    raise SDKStoreError(f"{op.path}: record exists write failed: {exc}") from exc
+                assertion_ids.append(asrt_id)
                 continue
             raise SDKStoreError(f"unsupported batch op: {type(op).__name__}")
         return BatchApplyResult(refs_by_handle_id=refs_by_handle_id, assertion_ids=assertion_ids)
@@ -244,7 +277,27 @@ class WireRetractOp:
         }
 
 
-WireBatchOp = WireRefOp | WireWriteOp | WireRetractOp
+@dataclass(frozen=True)
+class WireRecordExistsOp:
+    kind: Literal["record_exists"]
+    handle_id: int
+    entity_type: str
+    pred_id: str
+    meta: dict[str, Any]
+    path: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "handle_id": self.handle_id,
+            "entity_type": self.entity_type,
+            "pred_id": self.pred_id,
+            "meta": dict(self.meta),
+            "path": self.path,
+        }
+
+
+WireBatchOp = WireRefOp | WireWriteOp | WireRetractOp | WireRecordExistsOp
 
 
 @dataclass(frozen=True)
@@ -298,6 +351,8 @@ class WireBatchPlan:
                 ops.append(_parse_wire_write_op(raw, path=f"$.ops[{idx}]"))
             elif kind == "retract":
                 ops.append(_parse_wire_retract_op(raw, path=f"$.ops[{idx}]"))
+            elif kind == "record_exists":
+                ops.append(_parse_wire_record_exists_op(raw, path=f"$.ops[{idx}]"))
             else:
                 raise SDKStoreError(f"wire ops[{idx}] unknown kind: {kind!r}")
         return cls(wire_version=wire_version, schema_digest=schema_digest, ops=ops)
@@ -311,6 +366,7 @@ class WireBatchPlan:
 
         entity_cls_by_type = _sdk_entity_cls_by_type(sdk)
         pred_index = _sdk_pred_field_index(sdk)
+        record_exists_pred_index = _sdk_record_exists_pred_index(sdk)
         refs_by_handle_id: dict[int, str] = {}
         entity_type_by_handle_id: dict[int, str] = {}
         assertion_ids: list[str] = []
@@ -362,6 +418,26 @@ class WireBatchPlan:
                     raise SDKStoreError(f"{op.path}: retract failed: {exc}") from exc
                 if isinstance(revoker_id, str):
                     assertion_ids.append(revoker_id)
+                continue
+
+            if isinstance(op, WireRecordExistsOp):
+                e_ref = refs_by_handle_id.get(op.handle_id)
+                if e_ref is None:
+                    raise SDKStoreError(f"{op.path}: missing preceding ref op for handle_id={op.handle_id}")
+                handle_entity_type = entity_type_by_handle_id.get(op.handle_id)
+                if handle_entity_type != op.entity_type:
+                    raise SDKStoreError(
+                        f"{op.path}: entity_type mismatch for handle_id={op.handle_id}: {op.entity_type} != {handle_entity_type}"
+                    )
+                _validate_wire_record_exists_binding(
+                    record_exists_pred_index=record_exists_pred_index,
+                    op=op,
+                )
+                try:
+                    asrt_id = set_field(sdk.ledger, op.pred_id, e_ref, [], (dict(op.meta) if op.meta else None))
+                except Exception as exc:
+                    raise SDKStoreError(f"{op.path}: record exists write failed: {exc}") from exc
+                assertion_ids.append(asrt_id)
                 continue
 
             raise SDKStoreError(f"unsupported wire batch op: {type(op).__name__}")
@@ -463,6 +539,30 @@ def _parse_wire_retract_op(raw: dict[str, Any], *, path: str) -> WireRetractOp:
         pred_id=pred_id,
         field_name=field_name,
         assertion_id=assertion_id,
+        meta=_normalize_json_object(meta, path=f"{path}.meta", allow_nested=True),
+        path=raw_path,
+    )
+
+
+def _parse_wire_record_exists_op(raw: dict[str, Any], *, path: str) -> WireRecordExistsOp:
+    handle_id = raw.get("handle_id")
+    entity_type = raw.get("entity_type")
+    pred_id = raw.get("pred_id")
+    meta = raw.get("meta")
+    raw_path = raw.get("path", "")
+    if isinstance(handle_id, bool) or not isinstance(handle_id, int) or handle_id <= 0:
+        raise SDKStoreError(f"{path}.handle_id must be positive int")
+    if not isinstance(entity_type, str) or not entity_type:
+        raise SDKStoreError(f"{path}.entity_type must be non-empty string")
+    if not isinstance(pred_id, str) or not pred_id:
+        raise SDKStoreError(f"{path}.pred_id must be non-empty string")
+    if not isinstance(raw_path, str):
+        raise SDKStoreError(f"{path}.path must be string")
+    return WireRecordExistsOp(
+        kind="record_exists",
+        handle_id=handle_id,
+        entity_type=entity_type,
+        pred_id=pred_id,
         meta=_normalize_json_object(meta, path=f"{path}.meta", allow_nested=True),
         path=raw_path,
     )
@@ -633,6 +733,23 @@ def _sdk_pred_field_index(sdk: "SDKStore") -> dict[str, dict[str, Any]]:
     return out
 
 
+def _sdk_record_exists_pred_index(sdk: "SDKStore") -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for pred in sdk.schema_ir.get("predicates", []):
+        if not isinstance(pred, dict):
+            continue
+        pred_id = pred.get("pred_id")
+        owner_type = pred.get("owner_type")
+        if not isinstance(pred_id, str) or not pred_id:
+            continue
+        if not isinstance(owner_type, str) or not owner_type:
+            continue
+        if pred.get("is_record_exists") is not True:
+            continue
+        out[pred_id] = {"owner_type": owner_type, "pred": pred}
+    return out
+
+
 def _resolve_wire_field_for_write_op(*, sdk: "SDKStore", pred_index: dict[str, dict[str, Any]], op: WireWriteOp) -> Field:
     row = pred_index.get(op.pred_id)
     if row is None:
@@ -674,6 +791,21 @@ def _validate_wire_retract_binding(*, sdk: "SDKStore", pred_index: dict[str, dic
     if not isinstance(field_name, str) or field_name != op.field_name:
         raise SDKStoreError(
             f"{op.path}: retract pred_id/field_name mismatch: pred_id={op.pred_id} schema_field={field_name!r} wire_field={op.field_name!r}"
+        )
+
+
+def _validate_wire_record_exists_binding(
+    *,
+    record_exists_pred_index: dict[str, dict[str, Any]],
+    op: WireRecordExistsOp,
+) -> None:
+    row = record_exists_pred_index.get(op.pred_id)
+    if row is None:
+        raise SDKStoreError(f"{op.path}: record exists pred_id not found in sdk schema: {op.pred_id}")
+    owner_type = row.get("owner_type")
+    if not isinstance(owner_type, str) or owner_type != op.entity_type:
+        raise SDKStoreError(
+            f"{op.path}: record exists pred_id/entity_type mismatch: pred_id={op.pred_id} owner_type={owner_type!r} wire_entity_type={op.entity_type!r}"
         )
 
 
@@ -1037,6 +1169,18 @@ class SDKBatchTx:
                             path=op.path,
                         )
                     )
+        if self._handle_requires_record_exists_op(handle):
+            pred_id = self._record_exists_pred_id_for_entity_type(handle.entity_cls.__name__, path=handle.path)
+            effective_meta = _merge_meta(self._batch_meta, handle.entity_meta, commit_meta)
+            out.append(
+                RecordExistsOp(
+                    handle_id=handle.handle_id,
+                    entity_type=handle.entity_cls.__name__,
+                    pred_id=pred_id,
+                    meta=effective_meta,
+                    path=f"{handle.path}.__exists__",
+                )
+            )
         # Retract ops are always emitted after write ops for the same entity to avoid coupling
         # with staging-time set/add merge rules.
         for op in sorted(retract_ops, key=lambda row: row.op_index):
@@ -1057,6 +1201,25 @@ class SDKBatchTx:
                 )
             )
         return out
+
+    def _handle_requires_record_exists_op(self, handle: ManagedEntityHandle) -> bool:
+        spec = self._sdk._entity_spec_by_class.get(handle.entity_cls)
+        if not isinstance(spec, dict) or spec.get("is_record") is not True:
+            return False
+        return any(op.kind in {"set", "add"} for op in handle._staged_ops)
+
+    def _record_exists_pred_id_for_entity_type(self, entity_type: str, *, path: str) -> str:
+        for pred in self._sdk.schema_ir.get("predicates", []):
+            if not isinstance(pred, dict):
+                continue
+            if pred.get("owner_type") != entity_type:
+                continue
+            if pred.get("is_record_exists") is not True:
+                continue
+            pred_id = pred.get("pred_id")
+            if isinstance(pred_id, str) and pred_id:
+                return pred_id
+        raise SDKStoreError(f"{path}: record exists predicate not found in schema for {entity_type}")
 
     def _plan_value(self, value: Any, *, path: str) -> tuple[_ValueKind, Any]:
         if isinstance(value, ManagedEntityHandle):

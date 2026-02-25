@@ -12,6 +12,7 @@
 - `sdk.batch` 适合“先搭对象图，再一次性落盘”的心智模型。
 - `sdk.batch` 不是 ORM：不会引入另一套持久化语义；`preview()` / wire plan 是它的核心能力。
 - 低层写入语义仍以 `sdk.ref / sdk.set / sdk.add / sdk.retract` 为准。
+- 读取/轻量编辑场景可使用 `sdk.get / sdk.find / sdk.edit`（只读快照 + 显式编辑会话）；创建对象图仍建议 `sdk.batch`。
 
 ## 2. 最小例子：构造对象图 -> preview -> commit
 
@@ -170,6 +171,7 @@ with sdk.batch(meta={"trace_id": "t2"}) as tx:
 ## 6. 什么时候用 batch，什么时候用 core
 
 - 用 `sdk.ref/set/add/retract`：需要精确控制、底层工具/adapter、生成器输出、或要直接操作 assertion log
+- 用 `sdk.get/find/edit`：notebook 调试、只读检视、轻量人工修正（按 identity 显式编辑）
 - 用 `sdk.batch`：ETL/导入、人工录入、测试构造、demo/notebook；需要共享 meta、可预览计划、可导出回放
 
 ## 7. 保证与边界（速记）

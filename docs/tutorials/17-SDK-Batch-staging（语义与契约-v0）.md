@@ -16,10 +16,15 @@
 非目标（v1）：
 
 - ORM identity map / lazy loading（跨 tx）
-- 自动从 store 读取并回填对象实例
+- 自动从 store 读取并回填普通 `Entity(...)` 可变对象实例（ORM 风格 hydration）
 - ACID 事务承诺（跨进程/跨存储）
 - 替代 Core Contract
 - 推理/规则层语义增强
+
+补充说明（避免误解）：
+
+- 当前 SDK 已提供显式读写 facade：`sdk.get / sdk.find / sdk.edit`
+- 其读取结果是只读快照（`Snapshot`），不是可变 ORM 实例；写入通过显式 `edit(...)` 会话或 `sdk.batch(...)`
 
 ## 1. API（最小闭环）
 
@@ -276,6 +281,6 @@ Record/Relation identity 优先级（v0 约定）：
    - 必须保留可预览、可导出、可回放、等价测试约束
 3. 增强错误信息与教学提示
    - 对 `tx.save(plain_entity)` 报错给出“请改用 tx.entity(...) 或未来对象图入口”的明确建议
-4. 补充 SDKStore 检视能力（只读 facade）
-   - 例如 `get_assertion/find_assertions/inspect_entity`
+4. 在 `get/find/edit` 之上补充更细粒度检视辅助（可选）
+   - 例如 `get_assertion/find_assertions/inspect_entity/inspect_record`
    - 用于 notebook/ETL 调试闭环，但不引入第二套读取语义

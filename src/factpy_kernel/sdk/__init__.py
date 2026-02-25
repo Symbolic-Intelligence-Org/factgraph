@@ -5,7 +5,15 @@ from .compile import (
     compile_schema_from_classes,
     schema_preflight_from_classes,
 )
-from .errors import SDKRegistryError, SDKSchemaError, SDKStoreError
+from .errors import (
+    CardinalityError,
+    EditorClosedError,
+    EntityNotFoundError,
+    FrozenSnapshotError,
+    SDKRegistryError,
+    SDKSchemaError,
+    SDKStoreError,
+)
 from .registry import SDKRegistry
 from .schema import Entity, Field, Identity
 from .store import SDKStore
@@ -15,6 +23,10 @@ __all__ = [
     "SDKSchemaError",
     "SDKStoreError",
     "SDKRegistryError",
+    "EntityNotFoundError",
+    "FrozenSnapshotError",
+    "CardinalityError",
+    "EditorClosedError",
     "SDKDSLError",
     "Entity",
     "Field",
