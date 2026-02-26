@@ -43,10 +43,12 @@ with sdk.batch(meta={"trace_id": "demo"}) as tx:
 - `sdk.get(EntityType, **identity)`：按 identity 取单个只读快照（不存在返回 `None`）
 - `sdk.find(EntityType, **filters)`：按当前视图过滤（`multi` 字段按“包含值”匹配）
 - `sdk.edit(EntityType, **identity)`：context manager 编辑；无异常自动 commit
+- 边界：`sdk.edit(...)` 需要完整 identity；若只有 `snapshot.ref + asrt_id`（拿不到 record 的 `uid` 等 identity），改用 `sdk.ingest(...)` 的 `retract + set/add`
 
 ```python
 alice = sdk.get(Person, source_id="u-001")
 print(alice.ref, alice.country)
+print(alice.identity_available, alice.identity)
 print(alice.assertions.country.chosen)
 
 rows = sdk.find(Person, country="de")
@@ -63,6 +65,8 @@ with sdk.edit(Person, source_id="u-001") as user:
 - `snapshot.<field>`：当前视图值（用于“像读对象一样看结果”）
 - `snapshot.assertions.<field>.active/history/chosen`：断言级信息（`chosen` 仅适用于无 dims 的 functional 字段）
 - `snapshot` 是只读；要修改用 `sdk.edit(...)`
+- `.ref` 一定可用；`sdk.find(...)` 返回的 snapshot 不保证总能恢复 identity 字段（如某些 record 的 `.uid`）
+- `snapshot.identity_available=True` 时，可尝试 `sdk.edit(Type, **snapshot.identity)`；否则优先走 `sdk.ingest(...)`
 
 对象类型速记（避免混淆）：
 

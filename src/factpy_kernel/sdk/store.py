@@ -94,6 +94,22 @@ class SDKStore:
 
         return sdk_edit(self, entity_cls, **identity_kwargs)
 
+    def ingest(
+        self,
+        data: Any,
+        *,
+        meta: dict[str, Any] | None = None,
+        allow_sensitive_meta: bool = False,
+    ):
+        from .ingest import sdk_ingest
+
+        return sdk_ingest(self, data, meta=meta, allow_sensitive_meta=allow_sensitive_meta)
+
+    def validate_provenance(self, obj: Any, *, standard: str = "derivation_v1"):
+        from .ingest import sdk_validate_provenance
+
+        return sdk_validate_provenance(self, obj, standard=standard)
+
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
         spec = self._entity_spec_by_class.get(entity_cls)
         if spec is None:

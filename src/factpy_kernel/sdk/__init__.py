@@ -18,6 +18,7 @@ from .registry import SDKRegistry
 from .schema import Entity, Field, Identity
 from .store import SDKStore
 from .dsl import Derivation, Not, Pred, Rule, RuleRef, SDKDSLError, vars
+from .ingest import IngestResult, ValidationReport
 
 __all__ = [
     "SDKSchemaError",
@@ -27,6 +28,8 @@ __all__ = [
     "FrozenSnapshotError",
     "CardinalityError",
     "EditorClosedError",
+    "IngestResult",
+    "ValidationReport",
     "SDKDSLError",
     "Entity",
     "Field",

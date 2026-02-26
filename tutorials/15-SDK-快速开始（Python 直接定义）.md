@@ -237,6 +237,14 @@ with sdk.edit(LivesIn, uid="li_u001") as rec:
     rec.country.set("idref_v1:Country:...")  # 或传 sdk.ref(...) 结果
 ```
 
+边界提示（重要）：
+
+- `sdk.edit(...)` 要求你能提供完整 identity（如 `uid` / `source_id`）
+- 如果你手里只有 `snapshot.ref` 和 `snapshot.assertions.<field>.<chosen|active>[...].asrt_id`，
+  但拿不到 record 的 identity（例如某些 `sdk.find(LivesIn, ...)` 结果在 v1 不保证暴露 `.uid`），
+  就不能走 `sdk.edit(...)`
+- 这时应使用 `sdk.ingest(...)`（常见是 `retract + set` / `retract + add`）
+
 ### `EntitySnapshot` 怎么看 / 怎么用（重要）
 
 `sdk.get(...)` / `sdk.find(...)` 返回的是 `EntitySnapshot`（只读快照），不是普通 `Entity(...)` 实例，也不是 ORM 对象。
@@ -250,6 +258,8 @@ print(rows)       # 会显示可读 repr（entity_type/ref/字段预览）
 alice = rows[0]
 print(alice)      # EntitySnapshot(...)
 print(alice.ref)  # canonical EntityRef
+print(alice.identity_available)  # 是否携带可直接用于 sdk.edit(...) 的 identity kwargs
+print(alice.identity)            # 已知 identity kwargs（可用于 sdk.edit(Type, **snap.identity)）
 ```
 
 #### 1) 读当前值：直接访问字段
@@ -257,6 +267,9 @@ print(alice.ref)  # canonical EntityRef
 - `functional` 字段 -> 单值（或 `None`）
 - `multi` 字段 -> `tuple[...]`（当前 active 值）
 - `entity-ref` 字段 -> 返回 `ref` 字符串（如 `idref_v1:...`）
+- `.ref`（实体引用）在 `sdk.get(...)` / `sdk.find(...)` 结果上始终可用
+- identity 字段（如 `uid`）在 `sdk.find(...)` 结果上不保证总能恢复；需要稳定 identity 时优先用 `sdk.get(...)`
+- `snapshot.identity_available=True` 时，可安全尝试 `sdk.edit(Type, **snapshot.identity)`；否则应优先考虑 `sdk.ingest(...)`
 
 ```python
 print(alice.country)     # "de"

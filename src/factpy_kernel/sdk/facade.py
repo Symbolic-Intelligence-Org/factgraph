@@ -156,12 +156,19 @@ class EntitySnapshot:
         field_values: dict[str, Any],
         field_assertions: dict[str, FieldAssertions],
         identity_values: dict[str, Any] | None = None,
+        identity_available: bool = False,
     ) -> None:
         object.__setattr__(self, "ref", ref)
         object.__setattr__(self, "entity_type", entity_type)
         object.__setattr__(self, "_field_values", dict(field_values))
         object.__setattr__(self, "_identity_values", dict(identity_values or {}))
+        object.__setattr__(self, "identity_available", bool(identity_available))
         object.__setattr__(self, "assertions", AssertionNamespace(field_assertions))
+
+    @property
+    def identity(self) -> dict[str, Any]:
+        """Known identity kwargs usable for sdk.edit(...), when identity_available=True."""
+        return dict(object.__getattribute__(self, "_identity_values"))
 
     def __getattr__(self, name: str) -> Any:
         field_values = object.__getattribute__(self, "_field_values")
@@ -567,6 +574,7 @@ def _build_snapshot(
         field_values=field_values,
         field_assertions=field_assertions,
         identity_values=identity_values,
+        identity_available=(known_identity_values is not None),
     )
 
 

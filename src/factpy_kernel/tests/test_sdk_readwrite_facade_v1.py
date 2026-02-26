@@ -173,6 +173,67 @@ class SDKReadWriteFacadeV1Tests(unittest.TestCase):
         with self.assertRaises(EntityNotFoundError):
             sdk.edit(Person, source_id="missing")
 
+    def test_get_snapshot_identity_round_trips_to_edit(self) -> None:
+        sdk, _ = self._seed()
+
+        alice = sdk.get(Person, source_id="u1")
+        self.assertIsNotNone(alice)
+        assert alice is not None
+        self.assertEqual(alice.source_id, "u1")
+        self.assertTrue(alice.identity_available)
+        self.assertEqual(alice.identity, {"source_id": "u1"})
+
+        # get(...) guarantees identity inputs are known, so opening an editor from them is stable.
+        user_editor = sdk.edit(Person, **alice.identity)
+        user_editor.rollback()
+
+        lives = sdk.get(LivesIn, uid="li_u1_de")
+        self.assertIsNotNone(lives)
+        assert lives is not None
+        self.assertEqual(lives.uid, "li_u1_de")
+        self.assertTrue(lives.identity_available)
+        self.assertEqual(lives.identity, {"uid": "li_u1_de"})
+
+        rec_editor = sdk.edit(LivesIn, **lives.identity)
+        rec_editor.rollback()
+
+    def test_find_record_snapshot_can_retract_via_ingest_with_ref_and_asrt_id(self) -> None:
+        sdk, refs = self._seed()
+
+        rows = sdk.find(LivesIn, person=refs["alice"])
+        self.assertEqual(len(rows), 1)
+        rec = rows[0]
+        self.assertIsInstance(rec.identity_available, bool)
+        if rec.identity_available:
+            probe = sdk.edit(LivesIn, **rec.identity)
+            probe.rollback()
+
+        chosen_country = rec.assertions.country.chosen
+        self.assertIsNotNone(chosen_country)
+        assert chosen_country is not None
+        self.assertEqual(rec.country, refs["de"])
+
+        # Behavior contract: even if find(...) snapshots do not expose recoverable record identity,
+        # callers can still mutate via ingest using ref + assertion_id.
+        result = sdk.ingest(
+            [
+                {
+                    "kind": "retract",
+                    "asrt_id": chosen_country.asrt_id,
+                    "meta": {"source": "test", "trace_id": "find-snapshot-retract"},
+                }
+            ]
+        )
+        self.assertEqual(result.diagnostics, [])
+        self.assertEqual(result.skipped_count, 0)
+        self.assertEqual(result.duplicate_count, 0)
+        self.assertEqual(len(result.written_assertion_ids), 1)
+
+        rows_after = sdk.find(LivesIn, person=refs["alice"])
+        self.assertEqual(len(rows_after), 1)
+        self.assertIsNone(rows_after[0].assertions.country.chosen)
+        self.assertIsNone(rows_after[0].country)
+
 
 if __name__ == "__main__":
     unittest.main()
