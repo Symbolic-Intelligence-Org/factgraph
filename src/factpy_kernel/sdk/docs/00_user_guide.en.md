@@ -646,6 +646,7 @@ print(res["apply_execute"]["idempotency"]["replayed"])
 Current Behavior:
 - `apply_schema_classes(...)` compiles Entity classes into authoring schema, then calls `apply_authoring_bundle(...)`.
 - Reusing the same `apply_request_id` triggers idempotent replay (`idempotency.replayed=True`).
+- Nested fields such as `res["apply_execute"]["..."]` are current-behavior details and may evolve with authoring internals; for business success checks, prefer top-level `res["ok"]`.
 
 ### 11.3 Register Rule / Derivation
 
@@ -682,6 +683,7 @@ reg.register_derivation(drv)
 Current Behavior:
 - `register_rule(...)` / `register_derivation(...)` accept SDK objects or authoring payload dict.
 - `register_derivation(...)` has a fallback: when `schema_ir` is not explicitly passed and first compile fails, it tries loading schema_ir from the registry and retries once.
+- For head-only derivations, prefer calling `apply_schema_classes(...)` before registration, or pass `schema_ir=...` explicitly, to avoid relying on fallback retry behavior.
 
 ### 11.4 Read and List APIs
 
@@ -707,7 +709,7 @@ print(reg.show_apply_run("req-001"))
 
 Current Behavior:
 - `show_apply_run(...)` returns `None` if not found.
-- `list_apply_runs()` returns apply execute run records (SDK method name is normalized for user-facing readability).
+- `list_apply_runs()` returns apply execute run records (`list[dict]`).
 
 ### 11.6 Error Boundary
 
@@ -742,19 +744,20 @@ res = sdk.accept_compiled(...)
 
 Current Behavior:
 - These APIs pass through to underlying `store` methods. Use them when you already have compiled inputs and want to skip SDK object compile.
+- Typical use case: you already have compiled specs produced by external flows (for example CLI/registry pipelines) and want direct execution.
 
 ### 12.3 Package Export and Run: `export_package / run_package`
 
 ```python
-from factpy_kernel.adapters.souffle.package import ExportOptions
-
-sdk.export_package("./pkg", ExportOptions())
+# options is adapter-specific (currently often Souffle ExportOptions)
+options = ...
+sdk.export_package("./pkg", options)
 sdk.run_package("./pkg", entrypoints=["__query__"], engine="souffle")
 ```
 
-Stable Contract:
-- `export_package(...)` wraps Souffle package export.
-- `run_package(...)` executes exported package via runner with explicit `entrypoints`.
+Current Behavior:
+- This capability depends on adapter implementation (currently mainly the Souffle adapter); exact `options` type/details can evolve with adapter changes.
+- If your goal is standard SDK read/write/derivation flow, you can ignore this advanced layer.
 
 ### 12.4 Debug Properties: `sdk.store / sdk.ledger / sdk.schema_ir`
 

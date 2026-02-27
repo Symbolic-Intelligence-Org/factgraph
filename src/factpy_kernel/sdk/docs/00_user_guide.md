@@ -946,6 +946,7 @@ print(res["apply_execute"]["idempotency"]["replayed"])
 说明（当前行为）：
 - `apply_schema_classes(...)` 先把 `Entity` 类编译为 authoring schema，再走 `apply_authoring_bundle(...)`。
 - 同一个 `apply_request_id` 重放时会走幂等 replay，`idempotency.replayed=True`。
+- `res["apply_execute"]["..."]` 这类细节字段属于当前行为，后续可能随 authoring 层演进而调整；业务侧建议优先使用顶层 `res["ok"]` 作为成功判断。
 
 ### 11.3 注册 rule / derivation
 
@@ -982,6 +983,7 @@ reg.register_derivation(drv)
 说明（当前行为）：
 - `register_rule(...)` / `register_derivation(...)` 接受 SDK 对象或 authoring payload dict。
 - `register_derivation(...)` 在未显式传 `schema_ir` 且首轮 compile 失败时，会尝试读取 registry 中已落盘的 schema_ir 重试一次（便于 head-only derivation 注册）。
+- 对 head-only derivation，建议先 `apply_schema_classes(...)` 后再注册；或在注册时显式传 `schema_ir=...`，避免“首轮失败后 fallback 重试”带来的理解成本。
 
 ### 11.4 读取与列举
 
@@ -1007,7 +1009,7 @@ print(reg.show_apply_run("req-001"))
 
 说明（当前行为）：
 - `show_apply_run(...)` 不存在时返回 `None`。
-- `list_apply_runs()` 返回的是 apply execute run 记录列表（SDK 方法名做了语义收敛）。
+- `list_apply_runs()` 返回 apply execute run 记录列表（`list[dict]`）。
 
 ### 11.6 错误边界
 
@@ -1042,19 +1044,20 @@ res = sdk.accept_compiled(...)
 
 说明（当前行为）：
 - 这两个 API 是到底层 `store` 的直通入口，适合你已经持有编译后参数并希望跳过 SDK 对象 compile 的场景。
+- 常见场景：你拿到了外部流程（如 CLI/registry 发布流水）产出的 compiled 规格，想直接执行而不是再走一次 DSL compile。
 
 ### 12.3 包导出与执行：`export_package / run_package`
 
 ```python
-from factpy_kernel.adapters.souffle.package import ExportOptions
-
-sdk.export_package("./pkg", ExportOptions())
+# options 是 adapter-specific（当前常见为 Souffle 的 ExportOptions）
+options = ...
+sdk.export_package("./pkg", options)
 sdk.run_package("./pkg", entrypoints=["__query__"], engine="souffle")
 ```
 
-说明（稳定合约）：
-- `export_package(...)` 是对 Souffle adapter 打包能力的封装。
-- `run_package(...)` 通过 runner 执行导出包；入口点由 `entrypoints` 指定。
+说明（当前行为）：
+- 该能力依赖适配器实现（当前主要是 Souffle 适配器）；`options` 的具体类型和细节随适配器演进。
+- 如果你的目标是常规 SDK 读写/推导链路，可先忽略这一层高级接口。
 
 ### 12.4 调试属性：`sdk.store / sdk.ledger / sdk.schema_ir`
 
