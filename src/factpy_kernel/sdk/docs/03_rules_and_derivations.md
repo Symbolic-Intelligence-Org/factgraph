@@ -95,6 +95,7 @@ RuleRef(...)(p, c)
 - `RuleRef` 目标规则必须是 `expose=True`，否则运行时会报 `RuleCompileError`。
 - `sdk.run(..., registry=None)` 时，SDK 会自动注册 `RuleRef(RuleObj)` 依赖（含递归对象依赖）。
 - 显式传 `registry` 时，SDK 不做自动补依赖，由调用方保证 registry 完整。
+- 自动注册只解决“依赖是否已注册”，不会绕过 `expose=True` 约束；`expose=False` 的被引用规则仍会在运行时报错。
 
 ---
 

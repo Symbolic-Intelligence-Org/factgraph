@@ -648,7 +648,7 @@ Current Behavior:
 - Reusing the same `apply_request_id` triggers idempotent replay (`idempotency.replayed=True`).
 - Nested fields such as `res["apply_execute"]["..."]` are current-behavior details and may evolve with authoring internals; for business success checks, prefer top-level `res["ok"]`.
 
-### 11.3 Register Rule / Derivation
+### 11.3 Register / Apply Entry Points (object, spec, bundle)
 
 You can register compiled specs directly, or pass SDK objects and let SDK compile first:
 
@@ -680,8 +680,28 @@ with vars("e", "c") as (e, c):
 reg.register_derivation(drv)
 ```
 
+You can also register already-compiled specs directly (skip SDK DSL compile):
+
+```python
+reg.register_rule_spec(compiled_rule_spec_dict)
+reg.register_derivation_spec(compiled_derivation_spec_dict)
+```
+
+The lower-level unified entrypoint is `apply_authoring_bundle(...)`:
+
+```python
+res = reg.apply_authoring_bundle(
+    authoring_schema=authoring_schema_dict,
+    rule_request={"rule_spec_payload": compiled_rule_spec_dict},
+    derivation_request={"derivation_id": "...", "version": "...", "target_pred_id": "...", "head_vars": [...], "where": [...]},
+    apply_request_id="req-002",
+)
+```
+
 Current Behavior:
 - `register_rule(...)` / `register_derivation(...)` accept SDK objects or authoring payload dict.
+- `register_rule_spec(...)` / `register_derivation_spec(...)` are for flows where you already have compiled spec dicts.
+- `apply_authoring_bundle(...)` is the lower-level entrypoint used by `apply_schema_classes(...)`, suitable for applying schema/rule/derivation changes together.
 - `register_derivation(...)` has a fallback: when `schema_ir` is not explicitly passed and first compile fails, it tries loading schema_ir from the registry and retries once.
 - For head-only derivations, prefer calling `apply_schema_classes(...)` before registration, or pass `schema_ir=...` explicitly, to avoid relying on fallback retry behavior.
 
@@ -693,11 +713,16 @@ print(reg.list_derivation_ids())
 print(reg.list_rule_versions("rule.country_rows"))
 print(reg.get_latest_rule_spec("rule.country_rows"))
 print(reg.read_rule_spec("rule.country_rows", "1.0.0"))
+
+print(reg.list_derivation_versions("drv.country_copy"))
+print(reg.get_latest_derivation_spec("drv.country_copy"))
+print(reg.read_derivation_spec("drv.country_copy", "1.0.0"))
 ```
 
 Stable Contract:
 - `list_*` APIs return ordered lists.
 - `get_latest_*` / `read_*` return `None` when the target is missing.
+- Rule and derivation read/list method names are symmetric (`*_rule_*` vs `*_derivation_*`).
 
 ### 11.5 Apply-Run Queries
 
@@ -770,3 +795,30 @@ print(sdk.schema_ir)
 Stable Contract:
 - These are intended for debugging, auditing, and advanced integrations.
 - `sdk.schema_ir` is the compiled schema actually used by the current store.
+
+### 12.5 Audit Queries: `explain_fact / conflicts`
+
+These APIs are useful when debugging functional conflicts and chosen resolution.
+
+```python
+audit = sdk.explain_fact("person:country", person_ref)      # optional value-atom filter
+audit_de = sdk.explain_fact("person:country", person_ref, "de")
+conf = sdk.conflicts("person:country", person_ref)
+```
+
+`explain_fact(...)` returns (Current Behavior):
+- `pred_id`
+- `e_ref`
+- `active_claims`: `list[dict]`, each item has `asrt_id`, `args`, `meta`
+- `chosen_asrt_id`
+
+`conflicts(...)` returns (Current Behavior):
+- `pred_id`
+- `e_ref`
+- `active_asrt_ids`
+- `chosen_asrt_id`
+
+Parameter contract (Stable Contract):
+- `pred_id`: predicate id (for example `"person:country"`).
+- `e_ref`: canonical `idref_v1` token (for example from `snapshot.ref` or `sdk.ref(...)`).
+- `explain_fact(..., *val_atoms)` filters `active_claims` by exact value-atom match.

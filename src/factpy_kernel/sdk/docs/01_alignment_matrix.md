@@ -12,8 +12,10 @@
 | 批处理 staging（`sdk.batch()`） | 已实现 | `preview/commit`、依赖闭包、wire plan 导出/回放 |
 | 读取与编辑 facade（`get/find/edit`） | 已实现 | 快照 + 断言级 API + 编辑会话 |
 | ingest / provenance 验证 | 已实现 | `sdk.ingest(...)`、`sdk.validate_provenance(...)` |
+| 审计查询（`explain_fact/conflicts`） | 已实现 | 冲突组与 chosen 诊断摘要 |
 | Rule / Derivation 对象 DSL | 已实现 | `Rule/RuleRef/Derivation/Pred/Not/vars` |
 | Registry 封装（`SDKRegistry`） | 已实现 | schema/rule/derivation apply 与查询 |
+| Registry 高级入口（`apply_authoring_bundle` / `register_*_spec` / `upsert_schema_ir`） | 已实现 | 面向 authoring 集成与编译后 spec 流程 |
 
 ## 2. 关键边界（v1）
 
@@ -26,6 +28,9 @@
 | `FieldAssertions.chosen` | 仅适用于无 dims 的 functional 字段 |
 | `edit` 行为 | 仅编辑已存在实体，不自动创建；不存在抛 `EntityNotFoundError` |
 | `accept` 选项 | SDK facade 仅支持 `approved_by`/`note`/`dry_run`（含 `meta_overrides` 同名键） |
+| `explain_fact(*val_atoms)` | `*val_atoms` 走值原子精确匹配过滤，返回 active_claims + chosen_asrt_id |
+| `conflicts(pred_id, e_ref)` | 仅返回该冲突组 active_asrt_ids 与 chosen_asrt_id（按活跃断言计算） |
+| `RuleRef` 与 `expose` | 自动注册依赖不绕过 `expose=True` 约束；被引用规则未 expose 仍报错 |
 
 ## 3. 易混淆点（已按代码确认）
 
@@ -44,4 +49,3 @@
 | `sdk.save(plain_entity)` / `snapshot.to_entity()` | 延期 |
 | ingest 正式类型（TypedDict/dataclass） | 延期 |
 | `find` 的 dims-aware 过滤 | 延期 |
-

@@ -948,7 +948,7 @@ print(res["apply_execute"]["idempotency"]["replayed"])
 - 同一个 `apply_request_id` 重放时会走幂等 replay，`idempotency.replayed=True`。
 - `res["apply_execute"]["..."]` 这类细节字段属于当前行为，后续可能随 authoring 层演进而调整；业务侧建议优先使用顶层 `res["ok"]` 作为成功判断。
 
-### 11.3 注册 rule / derivation
+### 11.3 注册 / apply 入口（对象、spec、bundle）
 
 既可注册“已编译 spec”，也可直接传 SDK 对象（内部会先 compile）：
 
@@ -980,8 +980,28 @@ with vars("e", "c") as (e, c):
 reg.register_derivation(drv)
 ```
 
+也可以直接注册“已编译 spec”（跳过 SDK DSL compile）：
+
+```python
+reg.register_rule_spec(compiled_rule_spec_dict)
+reg.register_derivation_spec(compiled_derivation_spec_dict)
+```
+
+更底层的统一入口是 `apply_authoring_bundle(...)`：
+
+```python
+res = reg.apply_authoring_bundle(
+    authoring_schema=authoring_schema_dict,
+    rule_request={"rule_spec_payload": compiled_rule_spec_dict},
+    derivation_request={"derivation_id": "...", "version": "...", "target_pred_id": "...", "head_vars": [...], "where": [...]},
+    apply_request_id="req-002",
+)
+```
+
 说明（当前行为）：
 - `register_rule(...)` / `register_derivation(...)` 接受 SDK 对象或 authoring payload dict。
+- `register_rule_spec(...)` / `register_derivation_spec(...)` 适合“你已经拿到编译后 spec dict”的场景。
+- `apply_authoring_bundle(...)` 是 `apply_schema_classes(...)` 的底层总入口，适合一次性组合 schema/rule/derivation 变更。
 - `register_derivation(...)` 在未显式传 `schema_ir` 且首轮 compile 失败时，会尝试读取 registry 中已落盘的 schema_ir 重试一次（便于 head-only derivation 注册）。
 - 对 head-only derivation，建议先 `apply_schema_classes(...)` 后再注册；或在注册时显式传 `schema_ir=...`，避免“首轮失败后 fallback 重试”带来的理解成本。
 
@@ -993,11 +1013,16 @@ print(reg.list_derivation_ids())
 print(reg.list_rule_versions("rule.country_rows"))
 print(reg.get_latest_rule_spec("rule.country_rows"))
 print(reg.read_rule_spec("rule.country_rows", "1.0.0"))
+
+print(reg.list_derivation_versions("drv.country_copy"))
+print(reg.get_latest_derivation_spec("drv.country_copy"))
+print(reg.read_derivation_spec("drv.country_copy", "1.0.0"))
 ```
 
 说明（稳定合约）：
 - `list_*` 系列返回有序列表。
 - `get_latest_*` / `read_*` 在目标不存在时返回 `None`。
+- rule 与 derivation 的读取命名是对称的：`*_rule_*` 对应 `*_derivation_*`。
 
 ### 11.5 发布流水查询（apply runs）
 
@@ -1070,3 +1095,30 @@ print(sdk.schema_ir)
 说明（稳定合约）：
 - 这些属性用于调试、审计和高级集成。
 - `sdk.schema_ir` 是当前 store 实际使用的编译 schema。
+
+### 12.5 审计查询：`explain_fact / conflicts`
+
+这两个 API 适合排查 functional 冲突和 chosen 来源。
+
+```python
+audit = sdk.explain_fact("person:country", person_ref)      # 可选再追加值原子过滤
+audit_de = sdk.explain_fact("person:country", person_ref, "de")
+conf = sdk.conflicts("person:country", person_ref)
+```
+
+`explain_fact(...)` 返回（当前行为）：
+- `pred_id`
+- `e_ref`
+- `active_claims`：`list[dict]`，每项包含 `asrt_id`、`args`、`meta`
+- `chosen_asrt_id`
+
+`conflicts(...)` 返回（当前行为）：
+- `pred_id`
+- `e_ref`
+- `active_asrt_ids`
+- `chosen_asrt_id`
+
+参数约束（稳定合约）：
+- `pred_id` 传谓词 ID（如 `"person:country"`）。
+- `e_ref` 传 canonical `idref_v1` token（如 `snapshot.ref` 或 `sdk.ref(...)`）。
+- `explain_fact(..., *val_atoms)` 会按“值原子精确匹配”过滤 `active_claims`。

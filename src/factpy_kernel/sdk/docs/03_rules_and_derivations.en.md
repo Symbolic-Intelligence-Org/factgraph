@@ -95,6 +95,7 @@ Rules:
 - RuleRef target must be `expose=True`, otherwise runtime `RuleCompileError`.
 - With `sdk.run(..., registry=None)`, SDK auto-registers `RuleRef(RuleObj)` dependencies (including recursive object deps).
 - If `registry` is explicitly provided, SDK does not auto-fill dependencies.
+- Auto-registration only solves dependency presence in registry; it does not bypass the `expose=True` constraint.
 
 ---
 

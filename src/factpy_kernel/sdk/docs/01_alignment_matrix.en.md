@@ -12,8 +12,10 @@ Scope: `src/factpy_kernel/sdk`
 | Batch staging (`sdk.batch`) | Implemented | Preview/commit, dependency closure, wire plan export/replay |
 | Read/write facade (`get/find/edit`) | Implemented | Snapshot + assertion view + editor |
 | Ingest / provenance tooling | Implemented | `sdk.ingest`, `sdk.validate_provenance` |
+| Audit queries (`explain_fact/conflicts`) | Implemented | Conflict-group and chosen diagnostics summary |
 | Rule/Derivation object DSL | Implemented | `Rule/RuleRef/Derivation/Pred/Not/vars` |
 | Registry facade (`SDKRegistry`) | Implemented | Apply/register/read/list surface |
+| Registry advanced entrypoints (`apply_authoring_bundle` / `register_*_spec` / `upsert_schema_ir`) | Implemented | Authoring integration and compiled-spec workflows |
 
 ## 2. v1 Boundaries
 
@@ -26,6 +28,9 @@ Scope: `src/factpy_kernel/sdk`
 | `FieldAssertions.chosen` | Only for non-dim functional fields |
 | `edit` behavior | Edit existing only; no implicit create |
 | `accept` options | SDK facade only allows `approved_by`, `note`, `dry_run` |
+| `explain_fact(*val_atoms)` | `*val_atoms` apply exact value-atom filtering; returns active_claims + chosen_asrt_id |
+| `conflicts(pred_id, e_ref)` | Returns active_asrt_ids and chosen_asrt_id for the active conflict group |
+| `RuleRef` and `expose` | Dependency auto-registration does not bypass `expose=True`; non-exposed RuleRef targets still fail |
 
 ## 3. Easy-to-Miss Behaviors
 
@@ -44,4 +49,3 @@ Scope: `src/factpy_kernel/sdk`
 | `sdk.save(plain_entity)` / `snapshot.to_entity()` | Deferred |
 | Formal typed ingest item schema (TypedDict/dataclass) | Deferred |
 | Dims-aware filtering in `find` | Deferred |
-
