@@ -742,6 +742,30 @@ Stable Contract:
 - Filesystem and authoring apply errors are wrapped as `SDKRegistryError`.
 - `register_rule/register_derivation` raise `SDKRegistryError` when input is neither SDK object nor dict.
 
+### 11.7 Manifest / Schema Metadata Methods
+
+These three methods are commonly confused with "full schema content", so treat them together:
+
+```python
+manifest = reg.read_manifest()
+entry = reg.get_schema_entry()
+res = reg.upsert_schema_ir(compiled_schema_ir)
+```
+
+`read_manifest()` (Current Behavior):
+- Returns manifest as `dict` (with `schema/rules/derivations` index metadata).
+- If manifest file does not exist yet, returns a default empty manifest shape (no error).
+
+`upsert_schema_ir(schema_ir)` (Stable Contract):
+- Writes a compiled `schema_ir` directly into registry (bypasses `apply_schema_classes` flow).
+- Returns write result `dict` (typical keys: `kind/status/path/schema_digest`).
+- Invalid `schema_ir` raises `SDKRegistryError` (wrapped from lower-layer validation).
+
+`get_schema_entry()` (Stable Contract):
+- Returns schema entry metadata from manifest (`dict | None`).
+- Typical field is `path` (relative path inside registry). This is location metadata, not the schema_ir payload itself.
+- Returns `None` when registry has no schema entry yet.
+
 ---
 
 ## 12. API Surface Additions (Advanced)

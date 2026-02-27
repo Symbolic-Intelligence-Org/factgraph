@@ -50,7 +50,7 @@
 | `01_alignment_matrix` | 已对齐 | 关键边界与延期项一致 |
 | `02_readwrite_and_ingest` | 已对齐 | 英文为压缩版参考 |
 | `03_rules_and_derivations` | 已对齐 | 英文已覆盖关键限制与运行路径 |
-| `04_api_surface` | 已对齐 | 导出面与方法索引一致 |
+| `04_api_surface` | 已对齐 | 导出面与方法索引一致，含 SDKRegistry 易误用方法括注 |
 
 ---
 

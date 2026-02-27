@@ -1042,6 +1042,30 @@ print(reg.show_apply_run("req-001"))
 - 文件系统/authoring apply 层异常会统一包装为 `SDKRegistryError`。
 - `register_rule/register_derivation` 输入既不是 SDK 对象也不是 dict 时，抛 `SDKRegistryError`。
 
+### 11.7 Manifest / Schema 元数据方法
+
+这三个方法容易和“真正 schema 内容”混淆，建议一起看：
+
+```python
+manifest = reg.read_manifest()
+entry = reg.get_schema_entry()
+res = reg.upsert_schema_ir(compiled_schema_ir)
+```
+
+`read_manifest()`（当前行为）：
+- 返回 registry manifest 的 `dict`（含 `schema/rules/derivations` 索引信息）。
+- 如果 manifest 文件尚不存在，会返回默认空结构（不是报错）。
+
+`upsert_schema_ir(schema_ir)`（稳定合约）：
+- 直接把一个已编译 `schema_ir` 写入 registry（绕过 `apply_schema_classes` 流程）。
+- 返回写入结果 `dict`（典型字段：`kind/status/path/schema_digest`）。
+- 传入非法 `schema_ir` 会抛 `SDKRegistryError`（来自底层校验包装）。
+
+`get_schema_entry()`（稳定合约）：
+- 返回 manifest 里的 schema entry 元数据（`dict | None`）。
+- 常见字段是 `path`（registry 内相对路径），它描述“schema_ir 存放位置”，不是 schema_ir 内容本身。
+- 若当前 registry 还没有 schema entry，返回 `None`。
+
 ---
 
 ## 12. API Surface 补充（高级）

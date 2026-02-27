@@ -84,6 +84,11 @@ Quick index of `from factpy_kernel.sdk import ...` and major public APIs.
 - `read_rule_spec(...)`
 - `read_derivation_spec(...)`
 
+Notes (easy-to-misuse methods):
+- `read_manifest()`: reads registry manifest index; if manifest file does not exist yet, returns default empty shape.
+- `upsert_schema_ir(...)`: writes compiled `schema_ir` directly (bypasses `apply_schema_classes` path).
+- `get_schema_entry()`: returns schema entry metadata (for example `path`), not the schema_ir payload itself.
+
 ## 4. Common Facade Return Objects
 
 - `EntitySnapshot`
