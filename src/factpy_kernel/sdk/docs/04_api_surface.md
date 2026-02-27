@@ -129,3 +129,17 @@
   - `from_json(...)`
   - `apply(sdk, strict_schema=True)`
 
+## 6. `Derivation.materialize_as` 用法速查（`fact` vs `record`）
+
+| 模式 | 写入目标 | `head` 常见写法 | 典型场景 | 关键约束 |
+|---|---|---|---|---|
+| `fact` | 业务谓词断言（例如 `user:speaks(user, language)`） | `User.speaks(user=u, language=l)`（Field head） | 将推导结果写回既有业务字段 | schema 必须有目标谓词（未定义 `User.speaks` 时不能写 `user:speaks`） |
+| `record` | reified record（`Record:exists` + 角色谓词） | `Speaks(user=u, language=l)`（Entity head） | 需要关系节点可挂属性/追踪 | 建议显式 `id_policy`；部分 schema-aware 场景可自动推导 |
+
+补充边界：
+- `head=User(...)` 属于 Entity head，不是业务谓词 head；与 `materialize_as="fact"` 组合通常会走“record 投影”路径。
+- 对业务 fact 物化，优先使用 Field head（`SomeEntity.some_field(...)`）或显式 `target + head_vars`。
+- `sdk.evaluate(...)` 返回 `list[CandidateSet]`；`sdk.accept(...)` 一次接收一个 `CandidateSet`。
+
+延伸阅读：
+- `src/factpy_kernel/sdk/docs/03_rules_and_derivations.md`（Derivation DSL 与 head 规则）

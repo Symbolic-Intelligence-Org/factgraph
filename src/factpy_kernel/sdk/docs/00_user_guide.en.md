@@ -17,6 +17,8 @@
 8. [Provenance Validation](#8-provenance-validation)
 9. [Which Write API Should I Use?](#9-which-write-api-should-i-use)
 10. [Error Handling Quick Reference](#10-error-handling-quick-reference)
+11. [Registry Publish and Read: `SDKRegistry`](#11-registry-publish-and-read-sdkregistry)
+12. [API Surface Additions (Advanced)](#12-api-surface-additions-advanced)
 
 ---
 
@@ -608,3 +610,160 @@ Recommended order:
 2. `warnings`
 3. `written_assertion_ids / skipped_count / duplicate_count`
 
+---
+
+## 11. Registry Publish and Read: `SDKRegistry`
+
+`SDKRegistry` is the SDK wrapper around the authoring registry for schema/rule/derivation registration, publish runs, and version reads.
+
+### 11.1 Initialize
+
+```python
+from factpy_kernel.sdk import SDKRegistry
+
+reg = SDKRegistry(root_dir="./registry")
+print(reg.root_dir)
+```
+
+Stable Contract:
+- Constructor is one-of: `SDKRegistry(root_dir=...)` or `SDKRegistry(registry=...)`.
+- If both `root_dir` and `registry` are provided, they must point to the same path, otherwise `SDKRegistryError`.
+
+### 11.2 Apply Schema: `apply_schema_classes(...)`
+
+```python
+res = reg.apply_schema_classes(
+    [Person],
+    apply_request_id="req-001",
+    transaction_policy="best_effort_no_rollback_v1",
+)
+
+print(res["ok"])
+print(res["apply_execute"]["status"])
+print(res["apply_execute"]["idempotency"]["replayed"])
+```
+
+Current Behavior:
+- `apply_schema_classes(...)` compiles Entity classes into authoring schema, then calls `apply_authoring_bundle(...)`.
+- Reusing the same `apply_request_id` triggers idempotent replay (`idempotency.replayed=True`).
+
+### 11.3 Register Rule / Derivation
+
+You can register compiled specs directly, or pass SDK objects and let SDK compile first:
+
+```python
+from factpy_kernel.sdk import Rule, Derivation, Pred, vars
+
+with vars("e", "c") as (e, c):
+    rule = Rule(
+        id="rule.country_rows",
+        version="1.0.0",
+        select=[e, c],
+        where=[Pred("person:country", e, c)],
+        expose=True,
+    )
+
+reg.register_rule(rule)
+```
+
+```python
+with vars("e", "c") as (e, c):
+    drv = Derivation(
+        id="drv.country_copy",
+        version="1.0.0",
+        head=Person.country_copy(person=e, country_copy=c),
+        materialize_as="fact",
+        where=[Pred("person:country", e, c)],
+    )
+
+reg.register_derivation(drv)
+```
+
+Current Behavior:
+- `register_rule(...)` / `register_derivation(...)` accept SDK objects or authoring payload dict.
+- `register_derivation(...)` has a fallback: when `schema_ir` is not explicitly passed and first compile fails, it tries loading schema_ir from the registry and retries once.
+
+### 11.4 Read and List APIs
+
+```python
+print(reg.list_rule_ids())
+print(reg.list_derivation_ids())
+print(reg.list_rule_versions("rule.country_rows"))
+print(reg.get_latest_rule_spec("rule.country_rows"))
+print(reg.read_rule_spec("rule.country_rows", "1.0.0"))
+```
+
+Stable Contract:
+- `list_*` APIs return ordered lists.
+- `get_latest_*` / `read_*` return `None` when the target is missing.
+
+### 11.5 Apply-Run Queries
+
+```python
+print(reg.list_apply_run_ids())
+print(reg.list_apply_runs())
+print(reg.show_apply_run("req-001"))
+```
+
+Current Behavior:
+- `show_apply_run(...)` returns `None` if not found.
+- `list_apply_runs()` returns apply execute run records (SDK method name is normalized for user-facing readability).
+
+### 11.6 Error Boundary
+
+Stable Contract:
+- Filesystem and authoring apply errors are wrapped as `SDKRegistryError`.
+- `register_rule/register_derivation` raise `SDKRegistryError` when input is neither SDK object nor dict.
+
+---
+
+## 12. API Surface Additions (Advanced)
+
+This section covers methods listed in `04_api_surface.md` that are not fully expanded in sections 1-10.
+
+### 12.1 Low-Level Writes: `ref / set / add / retract`
+
+```python
+alice_ref = sdk.ref(User, source_system="APP", source_id="u-001")
+sdk.set(User.country, alice_ref, de_ref)
+sdk.add(User.name, alice_ref, "Alice")
+sdk.retract("asrt_xxx")
+```
+
+Stable Contract:
+- This is the thinnest write path (direct ledger writes), without batch preview/wire features.
+
+### 12.2 Compiled Pass-Through: `evaluate_compiled / accept_compiled`
+
+```python
+cands = sdk.evaluate_compiled(...)
+res = sdk.accept_compiled(...)
+```
+
+Current Behavior:
+- These APIs pass through to underlying `store` methods. Use them when you already have compiled inputs and want to skip SDK object compile.
+
+### 12.3 Package Export and Run: `export_package / run_package`
+
+```python
+from factpy_kernel.adapters.souffle.package import ExportOptions
+
+sdk.export_package("./pkg", ExportOptions())
+sdk.run_package("./pkg", entrypoints=["__query__"], engine="souffle")
+```
+
+Stable Contract:
+- `export_package(...)` wraps Souffle package export.
+- `run_package(...)` executes exported package via runner with explicit `entrypoints`.
+
+### 12.4 Debug Properties: `sdk.store / sdk.ledger / sdk.schema_ir`
+
+```python
+print(sdk.store)
+print(sdk.ledger)
+print(sdk.schema_ir)
+```
+
+Stable Contract:
+- These are intended for debugging, auditing, and advanced integrations.
+- `sdk.schema_ir` is the compiled schema actually used by the current store.

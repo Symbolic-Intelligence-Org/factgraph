@@ -2,7 +2,7 @@
 
 > 当前实现基线：commit `7252468`  
 > 本文面向 SDK 使用者，按“声明 schema -> 写入 -> 读取 -> 推导”的实际流程组织。  
-> 当前文件已收录第 1-10 章。
+> 当前文件已收录第 1-12 章。
 
 ---
 
@@ -18,6 +18,8 @@
 8. [Provenance 校验](#8-provenance-校验)
 9. [选哪个写入入口？](#9-选哪个写入入口)
 10. [错误处理速查](#10-错误处理速查)
+11. [Registry 发布与读取：`SDKRegistry`](#11-registry-发布与读取sdkregistry)
+12. [API Surface 补充（高级）](#12-api-surface-补充高级)
 
 ---
 
@@ -907,3 +909,161 @@ if any(d["severity"] == "error" for d in res.diagnostics):
 1. 先看 `diagnostics`（结构错误、路径定位最快）  
 2. 再看 `warnings`（语义敏感 key）  
 3. 最后看 `written_assertion_ids / skipped_count / duplicate_count`
+
+---
+
+## 11. Registry 发布与读取：`SDKRegistry`
+
+`SDKRegistry` 是 authoring registry 的 SDK 封装，负责 schema/rule/derivation 的注册、发布流水、以及版本读取。
+
+### 11.1 初始化
+
+```python
+from factpy_kernel.sdk import SDKRegistry
+
+reg = SDKRegistry(root_dir="./registry")
+print(reg.root_dir)
+```
+
+说明（稳定合约）：
+- 构造方式二选一：`SDKRegistry(root_dir=...)` 或 `SDKRegistry(registry=...)`。
+- 若同时传 `root_dir` 和 `registry`，两者路径必须一致，否则抛 `SDKRegistryError`。
+
+### 11.2 应用 schema：`apply_schema_classes(...)`
+
+```python
+res = reg.apply_schema_classes(
+    [Person],
+    apply_request_id="req-001",
+    transaction_policy="best_effort_no_rollback_v1",
+)
+
+print(res["ok"])
+print(res["apply_execute"]["status"])
+print(res["apply_execute"]["idempotency"]["replayed"])
+```
+
+说明（当前行为）：
+- `apply_schema_classes(...)` 先把 `Entity` 类编译为 authoring schema，再走 `apply_authoring_bundle(...)`。
+- 同一个 `apply_request_id` 重放时会走幂等 replay，`idempotency.replayed=True`。
+
+### 11.3 注册 rule / derivation
+
+既可注册“已编译 spec”，也可直接传 SDK 对象（内部会先 compile）：
+
+```python
+from factpy_kernel.sdk import Rule, Derivation, Pred, vars
+
+with vars("e", "c") as (e, c):
+    rule = Rule(
+        id="rule.country_rows",
+        version="1.0.0",
+        select=[e, c],
+        where=[Pred("person:country", e, c)],
+        expose=True,
+    )
+
+reg.register_rule(rule)
+```
+
+```python
+with vars("e", "c") as (e, c):
+    drv = Derivation(
+        id="drv.country_copy",
+        version="1.0.0",
+        head=Person.country_copy(person=e, country_copy=c),
+        materialize_as="fact",
+        where=[Pred("person:country", e, c)],
+    )
+
+reg.register_derivation(drv)
+```
+
+说明（当前行为）：
+- `register_rule(...)` / `register_derivation(...)` 接受 SDK 对象或 authoring payload dict。
+- `register_derivation(...)` 在未显式传 `schema_ir` 且首轮 compile 失败时，会尝试读取 registry 中已落盘的 schema_ir 重试一次（便于 head-only derivation 注册）。
+
+### 11.4 读取与列举
+
+```python
+print(reg.list_rule_ids())
+print(reg.list_derivation_ids())
+print(reg.list_rule_versions("rule.country_rows"))
+print(reg.get_latest_rule_spec("rule.country_rows"))
+print(reg.read_rule_spec("rule.country_rows", "1.0.0"))
+```
+
+说明（稳定合约）：
+- `list_*` 系列返回有序列表。
+- `get_latest_*` / `read_*` 在目标不存在时返回 `None`。
+
+### 11.5 发布流水查询（apply runs）
+
+```python
+print(reg.list_apply_run_ids())
+print(reg.list_apply_runs())
+print(reg.show_apply_run("req-001"))
+```
+
+说明（当前行为）：
+- `show_apply_run(...)` 不存在时返回 `None`。
+- `list_apply_runs()` 返回的是 apply execute run 记录列表（SDK 方法名做了语义收敛）。
+
+### 11.6 错误边界
+
+说明（稳定合约）：
+- 文件系统/authoring apply 层异常会统一包装为 `SDKRegistryError`。
+- `register_rule/register_derivation` 输入既不是 SDK 对象也不是 dict 时，抛 `SDKRegistryError`。
+
+---
+
+## 12. API Surface 补充（高级）
+
+本节补充第 1-10 章未展开、但在 `04_api_surface.md` 中已公开的方法。
+
+### 12.1 低层直写：`ref / set / add / retract`
+
+```python
+alice_ref = sdk.ref(User, source_system="APP", source_id="u-001")
+sdk.set(User.country, alice_ref, de_ref)
+sdk.add(User.name, alice_ref, "Alice")
+sdk.retract("asrt_xxx")
+```
+
+说明（稳定合约）：
+- 这是“最少封装”的写入路径，直接落 ledger，不提供 batch 的 preview/wire 能力。
+
+### 12.2 编译后直通：`evaluate_compiled / accept_compiled`
+
+```python
+cands = sdk.evaluate_compiled(...)
+res = sdk.accept_compiled(...)
+```
+
+说明（当前行为）：
+- 这两个 API 是到底层 `store` 的直通入口，适合你已经持有编译后参数并希望跳过 SDK 对象 compile 的场景。
+
+### 12.3 包导出与执行：`export_package / run_package`
+
+```python
+from factpy_kernel.adapters.souffle.package import ExportOptions
+
+sdk.export_package("./pkg", ExportOptions())
+sdk.run_package("./pkg", entrypoints=["__query__"], engine="souffle")
+```
+
+说明（稳定合约）：
+- `export_package(...)` 是对 Souffle adapter 打包能力的封装。
+- `run_package(...)` 通过 runner 执行导出包；入口点由 `entrypoints` 指定。
+
+### 12.4 调试属性：`sdk.store / sdk.ledger / sdk.schema_ir`
+
+```python
+print(sdk.store)
+print(sdk.ledger)
+print(sdk.schema_ir)
+```
+
+说明（稳定合约）：
+- 这些属性用于调试、审计和高级集成。
+- `sdk.schema_ir` 是当前 store 实际使用的编译 schema。
