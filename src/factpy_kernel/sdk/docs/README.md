@@ -1,30 +1,37 @@
-# SDK Authoring API (v1)
+# FactPy SDK 文档（实现对齐，v1）
 
-This folder documents the user-facing SDK style for schema/rule/derivation authoring.
+本目录是 `src/factpy_kernel/sdk` 的代码对齐文档，默认以当前实现行为为准（不是设计草案）。
 
-Guiding principle:
+## 中文文档
 
-- Prefer normal Python objects and operators for common flows (`Rule`, `Derivation`, `vars`, comparisons)
-- Keep dict/spec payload APIs available for advanced workflows and tooling compatibility
-- Reuse authoring/core compile paths so runtime semantics stay consistent
+- `src/factpy_kernel/sdk/docs/00_user_guide.md`
+  - 面向用户的主指南（建议先读这个）。
+- `src/factpy_kernel/sdk/docs/01_alignment_matrix.md`
+  - 能力矩阵、当前边界、延期项。
+- `src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md`
+  - 读写与 ingest 专项参考。
+- `src/factpy_kernel/sdk/docs/03_rules_and_derivations.md`
+  - Rule/Derivation DSL 专项参考。
+- `src/factpy_kernel/sdk/docs/04_api_surface.md`
+  - 顶层导出与 API surface 索引。
+- `src/factpy_kernel/sdk/docs/05_cn_en_consistency_checklist.md`
+  - 中英文档一致性检查表与同步规则。
 
-Quick summary:
+## English Docs
 
-- Schema declarations: `Entity`, `Identity`, `Field`
-- Rule/Derivation object DSL: `Rule`, `Derivation`, `RuleRef`, `Pred`, `Not`, `vars(...)`
-- Store facade: `SDKStore.run(rule)`, `SDKStore.evaluate(derivation)`, `SDKStore.accept(cands, meta_overrides=...)`
-- Registry facade: `SDKRegistry.apply_schema_classes(...)`, `SDKRegistry.register_rule(rule)`, `SDKRegistry.register_derivation(derivation)`
-- Public exceptions: `SDKSchemaError`, `SDKStoreError`, `SDKRegistryError`, `SDKDSLError`
+- `src/factpy_kernel/sdk/docs/00_user_guide.en.md`
+  - Main end-user guide (recommended first read).
+- `src/factpy_kernel/sdk/docs/01_alignment_matrix.en.md`
+  - Capability matrix, boundaries, deferred items.
+- `src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.en.md`
+  - Read/write and ingest reference.
+- `src/factpy_kernel/sdk/docs/03_rules_and_derivations.en.md`
+  - Rule/Derivation DSL reference.
+- `src/factpy_kernel/sdk/docs/04_api_surface.en.md`
+  - Public export and API surface index.
 
-Naming note:
+## 使用约定
 
-- `apply_schema_classes(...)` is an instance method on `SDKRegistry`.
-- There is no top-level `factpy_kernel.sdk.apply_schema_classes` function export in v1.
-
-Important v1 note (`vars()` runtime limitation):
-
-- Runtime SDK object DSL cannot infer variable names from `with vars() as (p, c):` without AST parsing.
-- Use `with vars("p", "c") as (p, c):` (recommended), or `with vars() as V: p, c = V("p", "c")`.
-- The string-based Authoring DSL parser still supports `with vars() as (...)` because it parses source AST.
-
-See `/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/rules_and_derivations.md` for examples and support limits.
+- 本目录文档以 SDK v1 当前行为为准；行为变更应与文档同 PR 更新。
+- 文档中的 “限制/未实现” 仅描述当前实现状态，不等同长期设计承诺。
+- 如需追踪公开导出面，请以 `factpy_kernel/sdk/__init__.py` 的 `__all__` 为准。

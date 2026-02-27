@@ -89,13 +89,11 @@ class TutorialDocsV1Tests(unittest.TestCase):
 
         sdk_tutorial = (_tutorials_root() / "15-SDK-快速开始（Python 直接定义）.md").read_text(encoding="utf-8")
         for keyword in [
-            "class Person(Entity)",
-            "SDKStore",
-            "SDKRegistry",
-            "compile_schema_from_classes",
-            "schema_preflight_from_classes",
-            "build_authoring_schema_from_classes",
-            "apply_schema_classes",
+            "SDK 详细用法已迁移到代码同目录文档",
+            "src/factpy_kernel/sdk/docs/README.md",
+            "src/factpy_kernel/sdk/docs/01_alignment_matrix.md",
+            "src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md",
+            "src/factpy_kernel/sdk/docs/03_rules_and_derivations.md",
         ]:
             self.assertIn(keyword, sdk_tutorial)
 
@@ -125,18 +123,14 @@ class TutorialDocsV1Tests(unittest.TestCase):
     def test_full_sdk_tutorial_15_matches_current_sdk_surface(self) -> None:
         text = (_source_tutorials_root() / "15-SDK-快速开始（Python 直接定义）.md").read_text(encoding="utf-8")
 
-        self.assertIn("from factpy_kernel.adapters.souffle.package import ExportOptions", text)
-        self.assertNotIn("from factpy_kernel.export.package import ExportOptions", text)
-        self.assertNotIn("Rule / Derivation 的 runtime builder 还未实装", text)
+        self.assertIn("本教程已收口为索引页", text)
+        self.assertIn("SDK 详细用法已迁移到代码同目录文档", text)
+        self.assertIn("src/factpy_kernel/sdk/docs/README.md", text)
 
         for keyword in [
-            "Pred(",
-            "Not([",
-            "SDKRegistry.apply_schema_classes(...)",
-            "SDKDSLError",
-            "SDKRegistryError",
-            "SDKSchemaError",
-            "SDKStoreError",
+            "src/factpy_kernel/sdk/docs/01_alignment_matrix.md",
+            "src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md",
+            "src/factpy_kernel/sdk/docs/03_rules_and_derivations.md",
         ]:
             self.assertIn(keyword, text)
 
