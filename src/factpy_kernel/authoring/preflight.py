@@ -48,7 +48,7 @@ from factpy_kernel.core.schema.schema_ir import (
     ensure_schema_ir,
     schema_digest,
 )
-from factpy_kernel.core.store.api import Store
+from factpy_kernel.core.store.runtime import Store
 
 
 class AuthoringPreflightError(Exception):

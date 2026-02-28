@@ -4,7 +4,7 @@ from typing import Any
 
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_where
-from factpy_kernel.core.store import _builders
+from factpy_kernel.core.store import builders
 from factpy_kernel.core.store.types import (
     EngineEvaluatorFn,
     EvaluateMode,
@@ -52,7 +52,7 @@ def evaluate_store(
         if mode != "python":
             raise ValueError("mode must be 'python' or 'engine'")
 
-        record_spec = _builders.record_materialize_spec_from_head(
+        record_spec = builders.record_materialize_spec_from_head(
             store,
             record_type=target_pred_id,
             head=head,
@@ -61,7 +61,7 @@ def evaluate_store(
         bindings = _evaluate_where_over_view(store, where, temporal_view=temporal_view)
         if not bindings:
             return []
-        return _builders.record_candidates_from_bindings(
+        return builders.record_candidates_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -84,7 +84,7 @@ def evaluate_store(
     if mode != "python":
         raise ValueError("mode must be 'python' or 'engine'")
 
-    schema_pred = _builders.find_schema_pred(store, target_pred_id)
+    schema_pred = builders.find_schema_pred(store, target_pred_id)
     if schema_pred is None:
         raise WhereValidationError(f"target predicate not found: {target_pred_id}")
 
@@ -99,7 +99,7 @@ def evaluate_store(
     if not bindings:
         return []
 
-    return _builders.candidates_from_bindings(
+    return builders.candidates_from_bindings(
         store,
         derivation_id=derivation_id,
         version=version,

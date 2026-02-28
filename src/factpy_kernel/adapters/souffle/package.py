@@ -22,7 +22,7 @@ from factpy_kernel.adapters.souffle.where_compile import (
     query_rel_for_where,
 )
 from factpy_kernel.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
-from factpy_kernel.core.store.api import Store
+from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.adapters.souffle.souffle_view_gen import generate_view_dl
 
 

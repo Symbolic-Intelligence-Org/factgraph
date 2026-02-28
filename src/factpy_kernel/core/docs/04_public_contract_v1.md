@@ -1,8 +1,8 @@
 # Public Contract v1（对外稳定约定）
 
-- 范围：`core/facade/service/sdk` 的 v1 外部行为约定（中文优先）
+- 范围：`core/service/sdk` 的 v1 外部行为约定（中文优先）
 - 状态：`v1`（当前用于约束 SDK/API thin-slice）
-- 最后更新：2026-02-24
+- 最后更新：2026-02-28
 
 本文档的目标是把“对外 contract”从口头共识变成**可测试事实**。实现与回归测试应同时维护。
 
@@ -14,13 +14,13 @@
 - v1 对外入口以 **对象 DSL / 结构化 IR（dict/list/tuple）** 为主
 - 原因：避免字符串 parser 能力不一致把已收口的 core 语义风险重新引入接口层
 
-### 1.2 facade / HTTP（rules v1）
+### 1.2 service / HTTP（rules v1）
 
 适用入口：
 
-- `factpy_kernel.facade.rules_v1.validate_rule(...)`
-- `factpy_kernel.facade.rules_v1.compile_rule_preview(...)`
-- `src/factpy_kernel/service/app_v1.py` 的 `/v1/rules/*` 路由（透传 facade）
+- `factpy_kernel.service.rules_v1.validate_rule(...)`
+- `factpy_kernel.service.rules_v1.compile_rule_preview(...)`
+- `src/factpy_kernel/service/app_v1.py` 的 `/v1/rules/*` 路由（透传 `service.rules_v1`）
 
 若检测到字符串 DSL，返回错误 envelope（`ok=false`）并使用稳定 `kind`：
 

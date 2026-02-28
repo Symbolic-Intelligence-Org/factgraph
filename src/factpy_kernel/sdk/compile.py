@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from factpy_kernel.authoring.preflight import schema_preflight_authoring
-from factpy_kernel.authoring.schema_compile import compile_authoring_schema_v1
+from factpy_kernel.authoring.schemas import compile_authoring_schema_v1, schema_preflight_authoring
 
 from .errors import SDKSchemaError
 from .schema import Entity
@@ -36,4 +35,3 @@ def schema_preflight_from_classes(
 ) -> dict[str, Any]:
     payload = build_authoring_schema_from_classes(classes)
     return schema_preflight_authoring(payload, generated_at=generated_at)
-

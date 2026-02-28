@@ -1,6 +1,6 @@
 # FactPy Kernel Service (v1)
 
-最小 HTTP 服务层（FastAPI），用于把 `factpy_kernel.facade.rules_v1` 暴露给前端/产品团队使用。
+最小 HTTP 服务层（FastAPI），用于把 `factpy_kernel.service.rules_v1` 和 runtime/registry service facade 暴露给前端/产品团队使用。
 
 ## 安装
 
@@ -27,6 +27,25 @@ uvicorn factpy_kernel.service.app_v1:app --host 0.0.0.0 --port 8000
 - `POST /v1/rules/validate`
 - `POST /v1/rules/compile-preview`
 - `GET /v1/profiles`
+- `POST /v1/runtime/sessions/open`
+- `GET /v1/runtime/sessions/{session_id}`
+- `DELETE /v1/runtime/sessions/{session_id}`
+- `POST /v1/runtime/sessions/{session_id}/writes/set`
+- `POST /v1/runtime/sessions/{session_id}/writes/add`
+- `POST /v1/runtime/sessions/{session_id}/writes/retract`
+- `GET /v1/runtime/sessions/{session_id}/claims`
+- `POST /v1/runtime/sessions/{session_id}/rules/run`
+- `POST /v1/runtime/sessions/{session_id}/packages/export`
+- `POST /v1/registry/manifest`
+- `POST /v1/registry/schema/read`
+- `POST /v1/registry/assets/list`
+- `POST /v1/registry/rules/read`
+- `POST /v1/registry/derivations/read`
+
+说明：
+
+- 当前 service 已是前端可用的第一批 BFF 接口，不再是 rules-only 薄层
+- derivation evaluate/accept、explain/conflicts/audit summary 仍待补齐
 
 ## 响应约定
 

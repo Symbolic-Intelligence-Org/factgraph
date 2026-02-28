@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy_kernel.facade.rules_v1 import list_profiles
+from factpy_kernel.service.rules_v1 import list_profiles
 
 
 class FacadeRulesV1ProfilesTests(unittest.TestCase):

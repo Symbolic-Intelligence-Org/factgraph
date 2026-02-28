@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_where
-from factpy_kernel.core.store.api import Store
+from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.view.projector import project_view_facts
 
 

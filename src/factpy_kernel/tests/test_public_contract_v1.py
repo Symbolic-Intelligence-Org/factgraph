@@ -8,7 +8,7 @@ import factpy_kernel.tests._warnings as test_warnings
 from factpy_kernel.core.derivation.accept import AcceptOptions
 from factpy_kernel.core.schema.schema_ir import SchemaIRValidationError
 from factpy_kernel.core.view.projector import project_view_facts_with_audit
-from factpy_kernel.facade.rules_v1 import validate_rule
+from factpy_kernel.service.rules_v1 import validate_rule
 from factpy_kernel.sdk import Entity, Field, Identity, SDKStore, SDKStoreError
 
 

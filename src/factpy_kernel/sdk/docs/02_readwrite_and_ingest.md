@@ -21,6 +21,20 @@ sdk = SDKStore.from_schema_classes([User, Country, LivesIn])
 - `sdk.ledger`
 - `sdk.schema_ir`
 
+如需文件持久化，推荐直接使用：
+
+```python
+sdk = SDKStore.from_schema_classes(
+    [User, Country, LivesIn],
+    ledger_path="./data/ledger.db",
+)
+```
+
+说明：
+- `ledger_path` 会恢复同一个 Ledger 文件中的历史数据。
+- 首次创建时会写入 `schema_digest`；后续恢复会做 digest 校验。
+- 若你需要自己构造 `Ledger(...)`，仍可走 `ledger=...` 高级入口；但不要和 `ledger_path` 同时传。
+
 ## 3. 低层写入：`ref / set / add / retract`
 
 ### 3.1 `sdk.ref(...)`
@@ -213,4 +227,3 @@ report = sdk.validate_provenance(obj, standard="derivation_v1")
 - `ValidationReport.warnings`
 - `ValidationReport.errors`
 - `ValidationReport.diagnostics_contract_version`
-

@@ -15,7 +15,7 @@ def __getattr__(name: str) -> Any:
 
         return Ledger
     if name in {"Store", "register_engine_evaluator"}:
-        from factpy_kernel.core.store.api import Store, register_engine_evaluator
+        from factpy_kernel.core.store.runtime import Store, register_engine_evaluator
 
         return {"Store": Store, "register_engine_evaluator": register_engine_evaluator}[name]
     raise AttributeError(name)

@@ -28,7 +28,7 @@ from factpy_kernel.authoring.workflow import (
     AuthoringWorkflowError,
     build_authoring_publish_workflow_dry_run_bundle_dto,
 )
-from factpy_kernel.core.store.api import Store
+from factpy_kernel.core.store.runtime import Store
 
 
 class AuthoringDSLBridgeError(Exception):

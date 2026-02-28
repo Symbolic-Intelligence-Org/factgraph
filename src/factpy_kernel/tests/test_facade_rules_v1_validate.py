@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from factpy_kernel.facade.rules_v1 import validate_rule
+from factpy_kernel.service.rules_v1 import validate_rule
 
 
 class FacadeRulesV1ValidateTests(unittest.TestCase):

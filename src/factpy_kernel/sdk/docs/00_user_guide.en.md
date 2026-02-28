@@ -45,8 +45,20 @@ from factpy_kernel.sdk import Entity, Field, Identity, SDKStore
 sdk = SDKStore.from_schema_classes([User, Country, Language, LivesIn])
 ```
 
+For file persistence, pass `ledger_path` directly:
+
+```python
+sdk = SDKStore.from_schema_classes(
+    [User, Country, Language, LivesIn],
+    ledger_path="./data/ledger.db",
+)
+```
+
 Stable Contract:
 - `SDKStore.from_schema_classes(...)` compiles schema first, then builds `Store`.
+- `ledger_path=...` opens or creates a file-backed Ledger and writes `schema_digest` on first use.
+- Re-opening the same `ledger_path` validates the current schema digest; mismatch raises `SDKStoreError`.
+- `ledger` and `ledger_path` are mutually exclusive.
 - `classes` must be a non-empty list of `Entity` subclasses, otherwise `SDKStoreError`.
 
 ### 1.2 Schema Preflight (CI / import time)

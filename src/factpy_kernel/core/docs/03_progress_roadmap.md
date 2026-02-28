@@ -1,42 +1,40 @@
 # Core 开发进度与路线图（factpy_kernel）
 
 - 范围：`src/factpy_kernel/core`
-- 最后更新：2026-02-24
-- 当前状态基线：`465 unittest OK`
+- 最后更新：2026-02-28
+- 当前状态基线：`509 unittest OK`
 
 ## 1. 当前状态摘要（供快速判断）
 
 ### 已完成的关键工程治理
 
 - `core` 与 `adapters` 已分层，`core` 不再静态依赖 `adapters`
-- `Store` 完成第一阶段拆分（`api/_evaluate/_accept/_builders/_queries`）
+- `Store` 公共入口已收口为 `runtime/evaluation/queries/builders`，`api.py` 仅保留兼容 shim
 - `Store.__init__` 强制 `SchemaIR` 校验（错误前置）
-- `Ledger` 完成内存索引优化（claims/meta/claim_args/revokes）
-- `policy/view` 热点路径已接入 `Ledger.find_claim_args(...)`
-- 全量 `unittest` 通过（465 tests）
+- `Ledger` 已完成 SQLite write-through cache 持久化，支持 `ledger_path` 恢复与 `schema_digest` 绑定
+- `policy/view` 热点路径继续走 `Ledger` 内存索引，3k/10k benchmark 已回到原始基线量级
+- 全量 `unittest` 通过（509 tests）
 - record accept 语义闭环已收口（staging marker + role digest + projector 不可见性 gating + 结构化 diagnostics）
 - `record_staging` 共享判定模块已落地（`accept` / `projector` 共用冲突语义）
 - `project_view_facts_with_audit(...)` 已落地（默认 `project_view_facts(...)` 返回形状不变）
 - `project_view_facts(..., legacy_record_visibility="allow"|"audit"|"deny")` 已落地（默认 `allow`；`audit` 不改变事实集合）
-- 测试侧已对 `evaluate_dummy` 做精确 `DeprecationWarning` 过滤（降低 CI 噪音）
-- 新增 compat import 禁新增测试（`test_no_new_compat_imports_v1.py`），禁止新代码回退到旧路径 import
-- 服务层现状核验文档已补（`04_service_layer.md`，确认已有 `FastAPI app_v1` 且当前为 rules-only HTTP 薄层）
+- 服务层现状核验文档已补（`04_service_layer.md`），当前已有前端/BFF 第一批接口，不再是 rules-only 薄层
 - `Public Contract v1` 文档 + 回归测试已补（`04_public_contract_v1.md` / `test_public_contract_v1.py`）
 
 ### 当前主要风险（简要）
 
-1. `Ledger` 仍为纯内存实现（容量/持久化限制）
-2. adapter 导出路径仍有部分全量扫描，可能成为下一性能热点
-3. 性能基准尚未形成团队/CI 的回归门槛
+1. adapter 导出路径仍有部分全量扫描，可能成为下一性能热点
+2. 性能 benchmark 尚未形成团队/CI 的回归门槛
+3. 文件型 `Ledger` 当前采用单进程 write-through cache 模型，多进程共享不是当前保证范围
 
 ### 当前性能基准（参考）
 
 基准脚本：`tools/benchmarks/bench_core_ledger_paths.py`
 
 - 规模：`rows=3000`, `claims=12000`, `meta_rows=48000`
-- `compute_chosen_for_predicate(country)`: `~11ms`
-- `project_view_facts(record)`: `~47ms`
-- `resolve_mapping_predicate(er:canon_of)`: `~23ms`
+- `compute_chosen_for_predicate(country)`: `~12ms`
+- `project_view_facts(record)`: `~74ms`
+- `resolve_mapping_predicate(er:canon_of)`: `~28ms`
 
 ## 2. 已完成里程碑（按主题）
 
@@ -69,36 +67,39 @@
 - engine 模式未注册时报错明确
 - 导入 adapter 后 engine 调用恢复可用
 
-### M3. `Store` 模块拆分（阶段 1，完成）
+### M3. `Store` 公共入口收口（完成）
 
 **目标**
-- 降低 `Store` 单文件复杂度，保持外部 API 不变
+- 降低 `Store` 对外认知成本，保留兼容导入
 
 **结果**
-- `store/_evaluate.py`：评估主流程
-- `store/_accept.py`：接受与 digest 逻辑
-- `store/_builders.py`：候选构建/record spec/type coercion
-- `store/_queries.py`：explain/conflicts/mapping
-- `store/api.py` 收敛为门面 + 注册点 + 少量兼容入口
+- 新增 `store/runtime.py`
+- 新增 `store/evaluation.py`
+- 新增 `store/queries.py`
+- 新增 `store/builders.py`
+- `store/api.py` 降级为兼容 shim
 
 **完成标准（已满足）**
 - 全量测试通过
-- adapter 不再依赖 `Store` 私有方法名
+- 新代码优先从 `runtime/evaluation/queries/builders` 进入
+- 旧导入路径仍可用
 
-### M4. `Ledger` 内存索引优化（完成）
+### M4. `Ledger` SQLite 持久化与 write-through cache（完成）
 
 **目标**
-- 降低 `find_claims/find_meta/has_active_revocation` 等热点查询开销
+- 为 `Ledger` 提供可恢复的本地持久化，同时保住原有热路径性能
 
 **结果**
-- 新增 claims/meta/claim_args/revokes 索引
-- 新增 `find_claim_args(...)`
-- `policy/view` 热点调用改走索引
-- 增加 `rebuild_indexes()` 支持直接私有列表修改后的索引重建
+- SQLite 表成为持久化真相（`claims / claim_args / meta_rows / revokes / ingest_keys / ledger_meta`）
+- 内存 dict/set/list 作为读缓存，由启动加载和提交后写透维护
+- 新增 `append_assertion(...)` / `append_revocation(...)`
+- 新增 `get_ledger_meta(...)` / `set_ledger_meta(...)`
+- `_force_replace_meta_rows(...)` 作为测试专用后门取代 `_meta_rows + rebuild_indexes()`
 
 **完成标准（已满足）**
-- 全量测试通过（460）
-- 新增索引语义测试通过
+- 全量测试通过
+- `SDKStore.from_schema_classes(..., ledger_path=...)` 可恢复运行时数据
+- benchmark 恢复到原始基线量级
 
 ### M5. record accept 语义收口（完成，P0/P0.5）
 
@@ -115,7 +116,7 @@
 **完成标准（已满足）**
 - record partial write 重试恢复回归通过
 - committed+aborted / committed+inflight mismatch 冲突回归通过
-- 全量测试通过（460）
+- 全量测试通过
 
 ### M6. projector 审计统计（完成，P1）
 
@@ -142,14 +143,15 @@
 - 通过注册机制注入 engine evaluator
 - 原因：保证 `core` 可独立测试/评审/演进
 
-### D2. `Ledger` 列表是真相，索引是缓存
-- 索引只在 `append_*` 时维护
-- `rebuild_indexes()` 用于测试/调试纠偏
-- 原因：避免双真相问题
+### D2. SQLite 表是真相，内存索引是缓存
+- `Ledger` 的持久化真相是 SQLite 表
+- 内存索引只在启动加载与提交成功后维护
+- `rebuild_indexes()` 仅为兼容 no-op，不再承担修复职责
+- 测试需要改 meta 时，应使用 `_force_replace_meta_rows(...)`
 
 ### D3. `Store` 对外 API 稳定优先于内部结构纯度
 - 外部调用方继续使用 `Store`
-- 内部能力通过 `_*.py` 演进
+- 新代码优先从 `runtime/evaluation/queries/builders` 进入
 - 原因：持续重构时降低连锁修改成本
 
 ## 4. 下一步开发/优化目标（按优先级）
@@ -157,7 +159,7 @@
 ### P1. 建立性能回归基线（短期）
 
 **动机**
-- 目前已完成多轮结构和索引优化，但没有固定回归门槛
+- benchmark 已存在，但还没有形成团队/CI 的固定门槛
 
 **建议动作**
 - 固定 benchmark 场景（如 `3k`、`10k` 两档）
@@ -194,58 +196,44 @@
 - 能看到 legacy 数量、marker conflict 数量、count mismatch 隐藏数量的稳定统计
 - 不改变默认 `project_view_facts(...)` 行为（`legacy_record_visibility` 默认仍为 `allow`）
 
-### P2. 为 `Ledger` 索引路径补更系统的语义测试
+### P2. 为 `Ledger` 新写入路径补更系统的语义测试
 
 **动机**
-- 目前已有基础覆盖，但组合过滤和顺序语义仍值得扩大样本
+- 当前已覆盖索引查询和幂等主路径，但 `append_assertion/append_revocation` 的边界语义仍值得继续扩大样本
 
 **建议动作**
-- 增加 `find_meta` 多组合过滤顺序测试
-- 增加 `find_claim_args` 与 property 回退语义一致性测试
-- 增加 `rebuild_indexes()` 对 claims/revokes 的恢复测试
+- 增加 `AppendResult.written`、撤销后重写、`ingest_key` lazy backfill 的组合场景测试
+- 增加 `_force_replace_meta_rows(...)` 与 `meta_rows` property 的一致性测试
+- 增加文件型 `Ledger(path=...)` 的恢复测试样本
 
 **验收标准**
-- 测试能覆盖未来索引改动的常见回归类型
+- 测试能覆盖未来持久化与缓存实现的常见回归类型
 
-### P2. 逐步清理历史兼容入口（如 `evaluate_dummy`）
+### P2. 逐步清理历史兼容入口（如 `evaluate_dummy` / `store.api` 旧导入）
 
 **动机**
-- 减少 API 面与测试 warning
+- 减少 API 面与兼容成本
 
 **建议动作**
 - 先定位真实调用方
 - 更新测试/调用方后删除
 
 **验收标准**
-- 无 deprecation warning
+- 无遗留 compat import 依赖
 - 全量测试通过
 
-### P2. compat shim 清理治理（先禁新增，再分批移除）
+### P3. 探索更进一步的存储/并发抽象（中期）
 
 **动机**
-- 在实际移除 shim 前，先阻止新代码继续引入旧路径 import，避免技术债回流
-
-**建议动作**
-- 维持 `test_no_new_compat_imports_v1.py` 作为 CI 护栏（禁 `factpy_kernel.(schema|store|...)` 旧路径）
-- 如需兼容覆盖测试，使用显式 allowlist，不放松全局规则
-- 按 `docs/factpy_kernel_compat_shim_cleanup.md` 分批推进 shim 移除
-
-**验收标准**
-- 故意引入一条旧路径 import 会触发测试失败
-- 新代码统一使用 `factpy_kernel.core.*` / `factpy_kernel.adapters.*`
-
-### P3. 探索存储后端抽象（中期）
-
-**动机**
-- 当前 `Ledger` 内存实现难以覆盖更大规模或持久化场景
+- 当前文件型 `Ledger` 假设单进程 write-through cache，多进程共享和更大规模演进仍缺抽象
 
 **建议动作（前置设计阶段）**
 - 抽象 `Ledger` 所需最小查询接口集合
-- 保持 append-only 与 query 语义一致
+- 明确单进程缓存模型与未来刷新/失效策略边界
 
 **验收标准**
 - 有设计文档/接口草案
-- 不急于实现持久化后端
+- 不急于引入多进程一致性机制
 
 ## 5. 短期执行计划（建议 1~2 周）
 
@@ -258,13 +246,13 @@
 - 任务：给 `adapters/souffle/package.py` 核心路径加临时计时或使用 profiler
 - 验证：提交前移除临时代码或转为受控 debug 开关
 
-### S3. 索引测试补强
-- 任务：扩充 `test_ledger_indexes_v1.py`
+### S3. 持久化路径语义测试补强
+- 任务：扩充 `test_ledger_indexes_v1.py` 与 `test_write_protocol_v1.py`
 - 验证：全量 `unittest` 通过
 
 ## 6. 中期规划（建议 1~2 月）
 
-- 评估 `Ledger` 抽象接口，为持久化/快照后端做准备（设计优先）
+- 评估 `Ledger` 抽象接口，为更丰富的存储/并发模型做准备（设计优先）
 - 形成性能回归门槛（CI 或团队固定流程）
 - 继续清理 `Store` 历史兼容入口，降低门面复杂度
 - 在新增语义能力时建立更严格的 core vs adapter parity 策略
@@ -272,9 +260,9 @@
 ## 7. 非目标（当前阶段明确不做）
 
 - 不修改协议版本（`idref_v1` / `tup_v1` / `export_v1`）
-- 不重写 `Ledger` 为数据库后端（本阶段只做内存优化）
 - 不大幅改动 `Store` 对外方法签名
 - 不把 adapter 逻辑重新拉回 `core`
+- 不在当前阶段实现多进程共享 `Ledger` 缓存一致性
 
 ## 8. 开发与验收清单（建议每次改 core 后执行）
 
@@ -288,6 +276,7 @@ python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'
 
 ```bash
 python tools/benchmarks/bench_core_ledger_paths.py --rows 3000 --rounds 3
+python tools/benchmarks/bench_core_ledger_paths.py --rows 10000 --rounds 3
 ```
 
 ### 文档更新规则
@@ -295,7 +284,7 @@ python tools/benchmarks/bench_core_ledger_paths.py --rows 3000 --rounds 3
 发生以下情况时，至少更新本文件与 `02_quality_assessment.md`：
 
 - `Store` 结构再次拆分/合并
-- `Ledger` 索引策略变更
+- `Ledger` 持久化策略或缓存策略变更
 - record 可见性 gating / staging 冲突语义变更
 - projector 审计统计 contract 或统计口径变更
 - 测试基线数量/状态变化
@@ -303,13 +292,13 @@ python tools/benchmarks/bench_core_ledger_paths.py --rows 3000 --rounds 3
 
 ## 9. 风险与回滚策略（针对当前改造）
 
-- 如果 `Ledger` 索引导致行为异常：
-  - 优先通过 `test_ledger_indexes_v1.py` 复现
-  - 检查是否存在直接修改私有列表未调用 `rebuild_indexes()`
-  - 必要时回退到线性扫描实现（保留 API 不变，回滚成本低）
-- 如果 `Store` 重构导致行为异常：
+- 如果 `Ledger` 持久化/缓存路径导致行为异常：
+  - 优先通过 `test_ledger_indexes_v1.py`、`test_write_protocol_v1.py` 复现
+  - 检查是否绕过原子写入入口或测试后门 `_force_replace_meta_rows(...)`
+  - 必要时回退到更保守的读路径实现（保留 API 不变，回滚成本可控）
+- 如果 `Store` 收口导致行为异常：
   - 先确认 `Store` 门面签名是否被改变
-  - 再检查 `_evaluate/_accept/_builders/_queries` 是否引入语义漂移
+  - 再检查 `runtime/evaluation/queries/builders` 是否引入语义漂移
 
 ---
 

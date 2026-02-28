@@ -135,9 +135,8 @@ class AuthoringDiagnosticCodesV1Tests(unittest.TestCase):
         self.assertIsNone(re.search(r'phase\\s*=\\s*["\\\']', text))
 
     def test_docs_examples_and_fixtures_codes_align_with_registry(self) -> None:
-        root = Path(__file__).resolve().parents[3]
-        contract_doc = (root / "docs" / "Authoring 层契约.md").read_text(encoding="utf-8")
-        fixtures_doc = (root / "docs" / "Authoring 层契约 fixtures.md").read_text(encoding="utf-8")
+        contract_doc = (_docs_root() / "Authoring 层契约.md").read_text(encoding="utf-8")
+        fixtures_doc = (_docs_root() / "Authoring 层契约 fixtures.md").read_text(encoding="utf-8")
 
         contract_codes = self._extract_backtick_items_after_header(
             contract_doc, "现有 warning/code 示例（已实装）："
@@ -155,16 +154,14 @@ class AuthoringDiagnosticCodesV1Tests(unittest.TestCase):
         self.assertIn("diagnostics_contract", fixtures_doc)
 
     def test_docs_canonical_code_list_matches_registry(self) -> None:
-        root = Path(__file__).resolve().parents[3]
-        contract_doc = (root / "docs" / "Authoring 层契约.md").read_text(encoding="utf-8")
+        contract_doc = (_docs_root() / "Authoring 层契约.md").read_text(encoding="utf-8")
         doc_codes = self._extract_backtick_items_after_header(
             contract_doc, "Canonical diagnostics `code` 列表（v1，已实装）："
         )
         self.assertEqual(doc_codes, AUTHORING_DIAGNOSTIC_CODES_V1_SET)
 
     def test_docs_canonical_phase_list_matches_registry(self) -> None:
-        root = Path(__file__).resolve().parents[3]
-        contract_doc = (root / "docs" / "Authoring 层契约.md").read_text(encoding="utf-8")
+        contract_doc = (_docs_root() / "Authoring 层契约.md").read_text(encoding="utf-8")
         doc_phases = self._extract_backtick_items_after_header(
             contract_doc, "Canonical diagnostics `phase` 列表（v1，已实装）："
         )
@@ -179,8 +176,7 @@ class AuthoringDiagnosticCodesV1Tests(unittest.TestCase):
         self.assertEqual(meta["phases"], list(AUTHORING_DIAGNOSTIC_PHASES_V1))
 
     def test_docs_canonical_diagnostics_contract_snippet_matches_helper(self) -> None:
-        root = Path(__file__).resolve().parents[3]
-        contract_doc = (root / "docs" / "Authoring 层契约.md").read_text(encoding="utf-8")
+        contract_doc = (_docs_root() / "Authoring 层契约.md").read_text(encoding="utf-8")
         snippet = self._extract_json_code_block_after_header(
             contract_doc,
             "Canonical `diagnostics_contract` 片段（嵌入 `authoring_ui_dto_v1` / `authoring_session_dto_v1` 顶层，v1，已实装）：",
@@ -188,9 +184,8 @@ class AuthoringDiagnosticCodesV1Tests(unittest.TestCase):
         self.assertEqual(snippet, {"diagnostics_contract": build_diagnostics_contract_meta_v1()})
 
     def test_docs_reserved_v2_codes_are_not_in_canonical_registry(self) -> None:
-        root = Path(__file__).resolve().parents[3]
-        contract_doc = (root / "docs" / "Authoring 层契约.md").read_text(encoding="utf-8")
-        fixtures_doc = (root / "docs" / "Authoring 层契约 fixtures.md").read_text(encoding="utf-8")
+        contract_doc = (_docs_root() / "Authoring 层契约.md").read_text(encoding="utf-8")
+        fixtures_doc = (_docs_root() / "Authoring 层契约 fixtures.md").read_text(encoding="utf-8")
         reserved_codes = {
             "apply_v2_prevalidate_blocked_actions_present",
             "apply_v2_partial_apply_forbidden",
@@ -230,6 +225,10 @@ class AuthoringDiagnosticCodesV1Tests(unittest.TestCase):
         match = re.search(r"```json\s*\n(.*?)\n```", tail, flags=re.S)
         self.assertIsNotNone(match, f"missing json code block after: {header}")
         return json.loads(match.group(1))
+
+
+def _docs_root() -> Path:
+    return Path(__file__).resolve().parents[3] / "docs" / "blueprint"
 
 
 if __name__ == "__main__":

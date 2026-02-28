@@ -1,8 +1,8 @@
 # Core 架构总览（factpy_kernel）
 
 - 适用范围：`src/factpy_kernel/core`
-- 最后更新：2026-02-24
-- 代码基线：目录重构为 `core/adapters` 后；`Store` 已完成第一阶段拆分；`Ledger` 已完成内存索引优化
+- 最后更新：2026-02-28
+- 代码基线：`Store` 已收口到 `runtime/evaluation/queries/builders` 公共模块；`Ledger` 已完成 SQLite write-through cache 持久化
 - 目标读者：需要理解核心语义、定位代码、继续开发 `core` 的开发者
 
 ## 1. 文档边界与定位
@@ -23,7 +23,7 @@ src/factpy_kernel/core/
   __init__.py              # core 公共 API 门面（稳定入口）
   protocol/                # typed tuple / idref / digest 协议
   schema/                  # SchemaIR 校验、规范化、digest
-  store/                   # Ledger + Store facade + store 私有实现模块
+  store/                   # Ledger + Store runtime + evaluation/query/builders 入口
   evidence/                # append-only 写协议（set/add/retract/replace）
   policy/                  # active/chosen/policy_ir
   view/                    # Python 侧业务视图投影
@@ -39,7 +39,7 @@ src/factpy_kernel/core/
 | `protocol.tup_v1` | 规范化 typed tuple 编码、claim_arg 还原 | `canonical_bytes_tup_v1`, `claim_args_from_rest_terms` | 无（基础协议） |
 | `protocol.idref_v1` | 实体引用（idref）稳定编码 | `encode_idref_v1` | `protocol.digests` |
 | `schema.schema_ir` | SchemaIR 校验、canonicalize、digest | `ensure_schema_ir`, `schema_digest` | `protocol.digests` |
-| `store.ledger` | append-only 内存账本 + 索引查询 | `append_*`, `find_*`, `rebuild_indexes` | 基础数据类 |
+| `store.ledger` | append-only SQLite 账本 + 内存读缓存 | `append_assertion`, `append_revocation`, `find_*` | 基础数据类 |
 | `evidence.write_protocol` | 写入/撤销/替换协议、幂等 ingest_key | `set_field`, `add_field`, `retract_by_asrt`, `replace_field` | `Ledger`, `protocol.*` |
 | `policy.active/chosen` | 活跃性判断、chosen 决策（确定性 tie-break） | `is_active`, `compute_chosen_for_predicate` | `Ledger`, `write_protocol` |
 | `view.projector` | 从账本投影业务视图事实（含 temporal current）与可选审计统计 | `project_view_facts`, `project_view_facts_with_audit` | `policy`, `Ledger`, `record_staging` |
@@ -51,11 +51,12 @@ src/factpy_kernel/core/
 | `derivation.candidates` | 候选集合与 key digest | `CandidateSet`, `make_candidate` | `protocol` |
 | `derivation.accept` | 候选接受并物化写入 ledger | `accept_candidate_set` | `Ledger`, `write_protocol` |
 | `mapping.canon` | mapping 谓词冲突解析与 tie-break | `resolve_mapping_predicate` | `Ledger`, `policy` |
-| `store.api` | `Store` 门面 + engine evaluator 注册点 | `Store`, `register_engine_evaluator` | `store._*` |
-| `store._evaluate` | `Store.evaluate` 主流程（Python/engine 调度） | `evaluate_store` | `view`, `where_eval`, `store._builders` |
+| `store.runtime` | `Store` 运行时门面 + engine evaluator 注册点 | `Store`, `register_engine_evaluator` | `store.evaluation`, `store.queries`, `store._accept` |
+| `store.api` | `store.runtime` 的兼容 shim | `Store`, `register_engine_evaluator` | `store.runtime` |
+| `store.evaluation` | `Store.evaluate` 主流程公共入口 | `evaluate_store` | `view`, `where_eval`, `store.builders` |
 | `store._accept` | `Store.accept` 主流程 | `accept_store_candidate` | `policy_ir`, `derivation.accept` |
-| `store._builders` | 候选构建、record 物化 spec、值 coercion | 多个 helper | `protocol`, `derivation` |
-| `store._queries` | explain/conflicts/resolve_mapping | `explain_fact`, `conflicts`, `resolve_mapping` | `policy`, `mapping` |
+| `store.builders` | 候选构建、record 物化 spec、值 coercion 公共入口 | 多个 helper | `protocol`, `derivation` |
+| `store.queries` | explain/conflicts/resolve_mapping 公共入口 | `explain_fact`, `conflicts`, `resolve_mapping` | `policy`, `mapping` |
 
 ## 4. 核心数据模型（语义基础）
 
@@ -76,10 +77,17 @@ src/factpy_kernel/core/
 - **撤销显式化**：通过 `Revokes` 表示失效，而不是修改原 `Claim`
 - **元数据伴随事实**：`ingested_at`, `run_id`, `materialize_id` 等通过 `MetaRow` 关联 `asrt_id`
 - **可审计**：保留历史与撤销路径，便于解释和重放
+- **持久化真相**：SQLite 表是真相，内存索引是读缓存
 
 ## 5. Ledger 当前索引结构（性能相关）
 
-`Ledger` 在保留原始 append-only 列表的同时，维护若干内存索引（派生缓存，不是事实源）：
+`Ledger` 当前采用 **SQLite write-through cache**：
+
+- SQLite 表是持久化真相（`claims / claim_args / meta_rows / revokes / ingest_keys / ledger_meta`）
+- 内存索引是读缓存，由启动加载和提交后写透维护
+- `Ledger(path=":memory:")` 仍可作为默认内存模式
+
+内存索引结构包括：
 
 - `claims` 索引
   - `_claim_by_asrt_id`
@@ -100,8 +108,9 @@ src/factpy_kernel/core/
 
 注意：
 
-- 索引在 `append_*` 时同步维护
-- 若测试或调试代码直接修改 `ledger._meta_rows` / `ledger._claims` 等私有列表，必须调用 `ledger.rebuild_indexes()` 重新同步索引
+- SQLite 提交成功后才更新内存索引，避免双边状态漂移
+- `rebuild_indexes()` 现在是兼容 no-op，不再承担修复职责
+- 测试若需要强制改 meta，应使用 `ledger._force_replace_meta_rows(...)`
 
 ## 6. 核心运行链路（开发时最常看）
 
@@ -109,17 +118,16 @@ src/factpy_kernel/core/
 
 ```mermaid
 flowchart LR
-  A["write_protocol.set_field/add_field"] --> B["Ledger.append_claim"]
-  B --> C["Ledger.append_claim_args"]
-  C --> D["Ledger.append_meta"]
-  E["write_protocol.retract_by_asrt"] --> F["Ledger.append_revokes"]
-  F --> D
+  A["write_protocol.set_field/add_field"] --> B["Ledger.append_assertion"]
+  B --> C["SQLite transaction + index write-through"]
+  D["write_protocol.retract_by_asrt"] --> E["Ledger.append_revocation"]
+  E --> C
 ```
 
 关键点：
 
 - `write_protocol` 负责输入校验、幂等 ingest_key、撤销与替换语义
-- `Ledger` 负责存储与索引维护，不负责业务 policy 决策
+- `Ledger` 负责事务边界、持久化与索引维护，不负责业务 policy 决策
 
 ### 6.2 视图链路（policy + projector）
 
@@ -189,7 +197,7 @@ flowchart LR
 flowchart LR
   A["Store.evaluate(mode='python')"] --> B["view.projector"]
   B --> C["rules.where_eval.evaluate_where"]
-  C --> D["store._builders.*_candidates_from_bindings"]
+  C --> D["store.builders.*_candidates_from_bindings"]
   D --> E["CandidateSet list"]
 ```
 
@@ -232,7 +240,7 @@ flowchart LR
 
 `core` 不静态依赖 `adapters`。`Store.evaluate(mode='engine')` 的执行通过注册机制注入：
 
-- `core` 侧：`register_engine_evaluator(...)`（`store/api.py`）
+- `core` 侧：`register_engine_evaluator(...)`（`store/runtime.py`，`store/api.py` 仅兼容转发）
 - `adapter` 侧：`adapters/souffle/__init__.py` import 时自动注册 `evaluate_store_engine`
 
 这保证：
@@ -242,26 +250,34 @@ flowchart LR
 
 ## 7. Store 结构（当前拆分状态）
 
-`Store` 已从“超大单文件”拆为门面 + 私有实现模块：
+`Store` 已从“超大单文件”收口为 **公共入口 + 兼容 shim + 少量私有实现**：
 
-- `store/api.py`
+- `store/runtime.py`
   - `Store` 门面
   - `register_engine_evaluator`
   - 少量保留兼容入口（`evaluate_dummy`）
+- `store/evaluation.py`
+  - `Store.evaluate(...)` 主流程公共入口
+- `store/queries.py`
+  - `explain_fact/conflicts/resolve_mapping/meta_subset` 公共入口
+- `store/builders.py`
+  - `CandidateSet` 构建、record materialize spec、type coercion 公共入口
+- `store/api.py`
+  - `store.runtime` 的兼容 shim（旧导入路径保留）
 - `store/_evaluate.py`
-  - `Store.evaluate(...)` 主流程（Python 分支、mode 分发、record/fact 分支）
+  - `store.evaluation` 背后的兼容实现模块
 - `store/_accept.py`
   - `Store.accept(...)` 逻辑（digest 准备 + 委托）
 - `store/_builders.py`
-  - `CandidateSet` 构建、record materialize spec、type coercion 等
+  - `store.builders` 背后的兼容实现模块
 - `store/_queries.py`
-  - `explain_fact/conflicts/resolve_mapping/meta_subset`
+  - `store.queries` 背后的兼容实现模块
 
 维护原则：
 
 - 对外 API 保持在 `Store`
-- 复杂实现下沉到 `store/_*.py`
-- 私有 helper 可演进，但 `Store` 方法签名尽量稳定
+- 新代码优先从 `runtime/evaluation/queries/builders` 进入
+- 旧 `api.py` / `_*.py` 保留兼容，但不再建议作为新增依赖入口
 
 ## 8. core 的关键不变量（必须理解）
 
@@ -277,8 +293,9 @@ flowchart LR
    - tie-break 使用 `ingested_at` + `asrt_id` 字典序
 5. `core` 不静态 import `adapters`
    - engine 行为通过注册机制接入
-6. `Ledger` 索引是派生缓存
-   - 索引错误可通过 `rebuild_indexes()` 修复，不应成为唯一真相
+6. `Ledger` 的 SQLite 表是真相，内存索引是缓存
+   - 不应绕过写入入口直接改 SQLite 与缓存
+   - 测试专用修复入口是 `_force_replace_meta_rows(...)`，不是 `rebuild_indexes()`
 
 ## 9. 开发者扩展指南（常见改动路径）
 
@@ -287,7 +304,7 @@ flowchart LR
 至少检查这些位置：
 
 - `protocol/tup_v1.py`（编码/校验）
-- `store/_builders.py`（`coerce_value_for_tag`）
+- `store/builders.py`（`coerce_value_for_tag`）
 - `adapters/souffle`（导出/编译表示，如果 engine 路径需要）
 - 对应测试（Python evaluate、view/export parity）
 
@@ -311,11 +328,12 @@ flowchart LR
 
 优先放置规则：
 
-- 查询/诊断类：`store/_queries.py`
-- 候选/构建类：`store/_builders.py`
-- 评估主流程：`store/_evaluate.py`
+- 查询/诊断类：`store/queries.py`
+- 候选/构建类：`store/builders.py`
+- 评估主流程：`store/evaluation.py`
 - 接收/落库主流程：`store/_accept.py`
-- `api.py` 只保留门面方法和注册点
+- `runtime.py` 保留门面方法和注册点
+- `api.py` 仅保留兼容转发
 
 ## 10. 调试与测试入口（建议）
 
@@ -354,6 +372,6 @@ python tools/benchmarks/bench_core_ledger_paths.py --rows 3000 --rounds 3
 
 ## 11. 已知注意事项（避免踩坑）
 
-- 测试中若直接改 `ledger._meta_rows` 等私有列表，需手动 `ledger.rebuild_indexes()`；否则索引与底层列表不一致
+- 测试中若需要强制替换 meta，使用 `ledger._force_replace_meta_rows(...)`；不要依赖 `rebuild_indexes()`
 - `Store.evaluate(mode='engine')` 在未导入 adapter 前会报“engine evaluator not registered”
 - `core` 的正确性优先于性能；所有索引优化必须保持 append-only 与查询语义不变

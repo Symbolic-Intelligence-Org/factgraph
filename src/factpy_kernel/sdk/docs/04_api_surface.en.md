@@ -40,7 +40,7 @@ Quick index of `from factpy_kernel.sdk import ...` and major public APIs.
 
 ## 2. `SDKStore` Main Methods
 
-- `from_schema_classes(...)`
+- `from_schema_classes(..., ledger=None, ledger_path=None)`
 - `batch(...)`
 - `get(...)`
 - `find(...)`
@@ -60,6 +60,10 @@ Quick index of `from factpy_kernel.sdk import ...` and major public APIs.
 - `conflicts(...)`
 - `export_package(...)`
 - `run_package(...)`
+
+Notes:
+- `from_schema_classes(..., ledger_path="...")` is the recommended file-backed restore path.
+- First creation writes `schema_digest`; later restores validate schema compatibility.
 
 ## 3. `SDKRegistry` Main Methods
 

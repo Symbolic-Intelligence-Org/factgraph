@@ -251,7 +251,7 @@ class AuditDTOV1Tests(unittest.TestCase):
         self.assertEqual(detail["failure_summary"]["blocked_action_diagnostic_codes"], ["apply_blocked_action"])
 
     def test_fixtures_doc_authoring_apply_run_detail_snippet_shape(self) -> None:
-        fixtures_doc = Path(__file__).resolve().parents[3] / "docs" / "Authoring 层契约 fixtures.md"
+        fixtures_doc = Path(__file__).resolve().parents[3] / "docs" / "blueprint" / "Authoring 层契约 fixtures.md"
         text = fixtures_doc.read_text(encoding="utf-8")
         snippet = _extract_json_code_block_after_header(
             text,

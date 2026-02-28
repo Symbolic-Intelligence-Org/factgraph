@@ -13,6 +13,26 @@ Scope: `store.py`, `facade.py`, `batch.py`, `ingest.py`
 
 ## 2. Low-Level Writes
 
+Typical store construction:
+
+```python
+sdk = SDKStore.from_schema_classes([User, Country, LivesIn])
+```
+
+For file-backed persistence, prefer:
+
+```python
+sdk = SDKStore.from_schema_classes(
+    [User, Country, LivesIn],
+    ledger_path="./data/ledger.db",
+)
+```
+
+Notes:
+- `ledger_path` restores the same Ledger file across process restarts.
+- First use writes `schema_digest`; later restores validate it.
+- You can still pass `ledger=...` for advanced construction, but not together with `ledger_path`.
+
 - `sdk.ref(...)`: builds canonical `idref_v1` from identity (supports defaults and `uuid4` factory path).
 - `sdk.set(...)`, `sdk.add(...)`: type/dims validation is enforced; cardinality is not strongly enforced at this layer.
 - `sdk.retract(...)`: append-only revoke by `asrt_id`.
@@ -104,4 +124,3 @@ Meta behavior:
 - standard: `derivation_v1`
 - output: `ValidationReport`
 - validation-only; no ledger writes
-

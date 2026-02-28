@@ -6,12 +6,12 @@ from factpy_kernel.core.mapping.canon import MappingResolution, resolve_mapping_
 from factpy_kernel.core.policy.active import is_active
 from factpy_kernel.core.policy.chosen import compute_chosen_for_predicate
 from factpy_kernel.core.rules.where_eval import WhereValidationError
-from factpy_kernel.core.store import _builders
+from factpy_kernel.core.store import builders
 from factpy_kernel.core.view.projector import build_args_for_claim
 
 
 def explain_fact(store: Any, pred_id: str, e_ref: str, *val_atoms: Any) -> dict[str, Any]:
-    schema_pred = _builders.find_schema_pred(store, pred_id)
+    schema_pred = builders.find_schema_pred(store, pred_id)
 
     active_claims = [
         claim
@@ -49,7 +49,7 @@ def explain_fact(store: Any, pred_id: str, e_ref: str, *val_atoms: Any) -> dict[
 
 
 def conflicts(store: Any, pred_id: str, e_ref: str) -> dict[str, Any]:
-    schema_pred = _builders.find_schema_pred(store, pred_id)
+    schema_pred = builders.find_schema_pred(store, pred_id)
     active_claims = [
         claim
         for claim in store.ledger.find_claims(pred_id=pred_id, e_ref=e_ref)
@@ -76,7 +76,7 @@ def conflicts(store: Any, pred_id: str, e_ref: str) -> dict[str, Any]:
 def resolve_mapping(store: Any, pred_id: str, *, policy_mode: str = "edb") -> MappingResolution:
     if policy_mode not in {"edb", "idb"}:
         raise ValueError("policy_mode must be 'edb' or 'idb'")
-    schema_pred = _builders.find_schema_pred(store, pred_id)
+    schema_pred = builders.find_schema_pred(store, pred_id)
     if schema_pred is None:
         raise WhereValidationError(f"target predicate not found: {pred_id}")
 

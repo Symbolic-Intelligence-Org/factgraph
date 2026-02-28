@@ -26,7 +26,7 @@ class RulesBlueprintDocsV1Tests(unittest.TestCase):
 
 
 def _rules_doc() -> Path:
-    return Path(__file__).resolve().parents[3] / "docs" / "规则.md"
+    return Path(__file__).resolve().parents[3] / "docs" / "blueprint" / "规则.md"
 
 
 if __name__ == "__main__":

@@ -45,7 +45,7 @@
 
 ## 2. `SDKStore` 公开方法（核心）
 
-- `from_schema_classes(...)`
+- `from_schema_classes(..., ledger=None, ledger_path=None)`
 - `batch(...)`
 - `get(...)`
 - `find(...)`
@@ -65,6 +65,10 @@
 - `conflicts(...)`
 - `export_package(...)`
 - `run_package(...)`
+
+补充：
+- `from_schema_classes(..., ledger_path="...")` 是当前推荐的 file-backed 恢复入口。
+- 首次创建 ledger 文件时会写入 `schema_digest`；后续恢复会做一致性校验。
 
 ## 3. `SDKRegistry` 公开方法
 

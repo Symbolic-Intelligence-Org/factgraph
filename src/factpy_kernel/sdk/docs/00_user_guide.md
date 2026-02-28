@@ -49,8 +49,20 @@ from factpy_kernel.sdk import Entity, Field, Identity, SDKStore
 sdk = SDKStore.from_schema_classes([User, Country, Language, LivesIn])
 ```
 
+如需文件持久化，直接传 `ledger_path`：
+
+```python
+sdk = SDKStore.from_schema_classes(
+    [User, Country, Language, LivesIn],
+    ledger_path="./data/ledger.db",
+)
+```
+
 说明（稳定合约）：
 - `SDKStore.from_schema_classes(...)` 会先编译 schema，再构造底层 `Store`。
+- `ledger_path=...` 会打开或创建 file-backed Ledger，并在首次使用时写入 `schema_digest`。
+- 使用同一 `ledger_path` 恢复时，会校验当前 schema 的 `schema_digest`；不一致会抛 `SDKStoreError`。
+- `ledger` 与 `ledger_path` 互斥；两者不能同时传入。
 - `classes` 必须是非空 `list[Entity 子类]`，否则抛 `SDKStoreError`。
 
 ### 1.2 Schema 预检（CI / import 阶段）

@@ -11,7 +11,7 @@ from factpy_kernel.core.evidence.write_protocol import (
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
 from factpy_kernel.core.schema.schema_ir import ensure_schema_ir, schema_digest
-from factpy_kernel.core.store.api import Store
+from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Ledger
 
 __all__ = [

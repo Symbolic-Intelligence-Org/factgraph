@@ -666,7 +666,7 @@ def _authoring_schema_alt() -> dict:
 
 
 def _docs_root() -> Path:
-    return Path(__file__).resolve().parents[3] / "docs"
+    return Path(__file__).resolve().parents[3] / "docs" / "blueprint"
 
 
 def _rule_request() -> dict:

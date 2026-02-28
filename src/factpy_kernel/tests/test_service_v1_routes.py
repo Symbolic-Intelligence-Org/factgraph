@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy_kernel.facade.rules_v1 import compile_rule_preview, list_profiles, validate_rule
+from factpy_kernel.service.rules_v1 import compile_rule_preview, list_profiles, validate_rule
 
 try:
     from fastapi.testclient import TestClient

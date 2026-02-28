@@ -14,6 +14,17 @@
 
 ## 1. 范围与非目标（v1）
 
+### 1.0 Python 模块入口（当前实现）
+
+为减少外部调用方直接耦合到底层叶子文件，当前 `factpy_kernel.authoring` 推荐按 4 个高层模块进入：
+
+- `factpy_kernel.authoring.schemas`：schema parse / compile / preflight
+- `factpy_kernel.authoring.rules`：rule parse / compile / preflight
+- `factpy_kernel.authoring.derivations`：derivation parse / compile / preview
+- `factpy_kernel.authoring.registry_workflow`：registry backend、session、publish/workflow/apply、DSL bridge
+
+旧的 `schema_compile.py` / `rule_compile.py` / `preflight.py` / `dsl_bridge.py` / `workflow.py` 等叶子模块仍保留兼容，但不再建议作为新的跨层依赖入口。
+
 ### 1.1 本文件覆盖
 
 - Authoring 概念项（Entity / Identity / Field / Rule 意图）的 canonical 映射

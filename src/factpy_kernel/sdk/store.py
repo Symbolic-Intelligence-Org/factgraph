@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from factpy_kernel.authoring.derivation_compile import compile_authoring_derivation_v1
-from factpy_kernel.authoring.rule_compile import compile_authoring_rule_v1
+from factpy_kernel.authoring.derivations import compile_authoring_derivation_v1
+from factpy_kernel.authoring.rules import compile_authoring_rule_v1
 from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptResult
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
@@ -14,7 +14,7 @@ from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
 from factpy_kernel.adapters.souffle.runner import run_package
-from factpy_kernel.core.store.api import Store
+from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Ledger
 
 from .compile import compile_schema_from_classes

@@ -11,7 +11,7 @@ from factpy_kernel.authoring.preflight import (
     schema_preflight,
     schema_preflight_authoring,
 )
-from factpy_kernel.core.store.api import Store
+from factpy_kernel.core.store.runtime import Store
 
 
 class AuthoringDTOError(Exception):

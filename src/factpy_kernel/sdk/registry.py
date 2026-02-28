@@ -10,8 +10,8 @@ from factpy_kernel.authoring import (
     FileAuthoringRegistry,
     build_authoring_publish_workflow_apply_bundle_dto,
 )
-from factpy_kernel.authoring.derivation_compile import compile_authoring_derivation_v1
-from factpy_kernel.authoring.rule_compile import compile_authoring_rule_v1
+from factpy_kernel.authoring.derivations import compile_authoring_derivation_v1
+from factpy_kernel.authoring.rules import compile_authoring_rule_v1
 
 from .compile import build_authoring_schema_from_classes
 from .errors import SDKRegistryError

@@ -712,7 +712,7 @@ with vars() as (p, c, l, li, hl):
 
 ### F5-J DSL bridge（DSL source → session/workflow dry-run DTO，最小切片）
 
-`authoring.dsl_bridge` 提供“从 DSL 字符串直接到 dry-run DTO”的便捷入口（复用 parser + compile + preflight + workflow）：
+`authoring.registry_workflow` 提供“从 DSL 字符串直接到 dry-run DTO”的便捷入口（内部复用 parser + compile + preflight + workflow；旧 `authoring.dsl_bridge` 入口仍兼容）：
 
 - `build_authoring_session_from_dsl_inputs_dto(...)`
 - `build_authoring_publish_workflow_from_dsl_inputs_dry_run_bundle_dto(...)`

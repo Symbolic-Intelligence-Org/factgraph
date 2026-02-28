@@ -123,7 +123,7 @@ class TutorialDocsV1Tests(unittest.TestCase):
     def test_full_sdk_tutorial_15_matches_current_sdk_surface(self) -> None:
         text = (_source_tutorials_root() / "15-SDK-快速开始（Python 直接定义）.md").read_text(encoding="utf-8")
 
-        self.assertIn("本教程已收口为索引页", text)
+        self.assertIn("本页为索引占位", text)
         self.assertIn("SDK 详细用法已迁移到代码同目录文档", text)
         self.assertIn("src/factpy_kernel/sdk/docs/README.md", text)
 
@@ -140,7 +140,7 @@ def _tutorials_root() -> Path:
 
 
 def _source_tutorials_root() -> Path:
-    return _repo_root() / "tutorials"
+    return _repo_root() / "docs" / "tutorials"
 
 
 def _repo_root() -> Path:

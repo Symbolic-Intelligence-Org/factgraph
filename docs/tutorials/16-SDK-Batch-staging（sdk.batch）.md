@@ -190,21 +190,20 @@ with sdk.batch(meta={"trace_id": "t2"}) as tx:
 
 截至 2026-02，Core Ledger 已支持 SQLite 持久化；`sdk.batch()` 最终仍会写入同一个 Core Ledger。
 
-如果你当前需要文件持久化，可以显式传入 file-backed Ledger：
+如果你当前需要文件持久化，推荐直接使用 `ledger_path`：
 
 ```python
-from factpy_kernel.core.store.ledger import Ledger
 from factpy_kernel.sdk import SDKStore
 
 sdk = SDKStore.from_schema_classes(
     [Person, Company],
-    ledger=Ledger(path="./data/ledger.db"),
+    ledger_path="./data/ledger.db",
 )
 ```
 
 说明：
 
-- `Ledger(path=...)` 已可用，重启后可恢复 ledger 数据。
-- `SDKStore` 的“恢复工厂方法”目前尚未实现；也就是说，SDK 层还没有正式的
-  `from_path(...)` / `from_ledger_path(...)` 风格入口来同时恢复 ledger 并校验 schema digest。
-- 在该工厂方法落地前，推荐把 schema 定义与 `ledger_path` 放在同一个应用初始化位置，显式构造 `SDKStore`。
+- `ledger_path=...` 会恢复同一个 ledger 文件中的历史数据。
+- 首次创建时会写入 `schema_digest`；后续恢复时会校验当前 schema 是否一致。
+- schema 不一致会快速失败，避免把错误 schema 写进已有 ledger 文件。
+- 如需高级控制，仍可显式传 `ledger=Ledger(path=...)`；但不要和 `ledger_path` 同时传。

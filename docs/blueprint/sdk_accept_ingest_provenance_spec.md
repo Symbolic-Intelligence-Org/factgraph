@@ -1,7 +1,7 @@
 # FactPy SDK 写入入口分层规范（`accept` / `ingest` / `provenance`）
 
-版本：draft-v1  
-状态：设计规范（未实现）  
+版本：v1  
+状态：已实现（本文保留分层规范口径）  
 范围：`SDKStore` 用户友好写入入口与 provenance 校验职责分层，不替代现有 Core Contract / derivation accept 实现
 
 ---
@@ -32,7 +32,7 @@
 当前 `SDKStore.accept(...)` 主要是 `CandidateSet` 的 SDK 包装入口，最终走 derivation accept 路径（推导候选物化），而不是通用“写入任意数据”的入口。
 
 - `src/factpy_kernel/sdk/store.py`
-- `src/factpy_kernel/core/store/api.py`
+- `src/factpy_kernel/core/store/runtime.py`（兼容入口仍保留在 `core/store/api.py`）
 - `src/factpy_kernel/core/derivation/accept.py`
 
 当前 derivation accept 会写入一组带强语义的 meta（如 `derived_rule_id / run_id / support_digest / materialize_id / key_tuple_digest`），并返回 `AcceptResult`（携带 derivation/materialization 语义字段）。

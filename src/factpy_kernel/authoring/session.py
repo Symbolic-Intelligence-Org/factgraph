@@ -13,7 +13,7 @@ from factpy_kernel.authoring.dto import (
     build_schema_preflight_from_authoring_dto,
 )
 from factpy_kernel.authoring.schema_compile import AuthoringSchemaCompileError, compile_authoring_schema_v1
-from factpy_kernel.core.store.api import Store
+from factpy_kernel.core.store.runtime import Store
 
 
 class AuthoringSessionError(Exception):

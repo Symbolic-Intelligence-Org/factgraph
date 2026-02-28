@@ -9,7 +9,7 @@ from factpy_kernel.adapters.souffle.tsv_v1 import tsv_cell_v1_decode
 from factpy_kernel.adapters.souffle.where_compile import extract_where_variables, query_rel_for_where
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.rules.where_eval import WhereValidationError
-from factpy_kernel.core.store import _builders as _store_builders
+from factpy_kernel.core.store import builders as store_builders
 
 
 def evaluate_store_engine(
@@ -32,7 +32,7 @@ def evaluate_store_engine(
     from factpy_kernel.adapters.souffle.runner import run_package
 
     if materialize_as == "record":
-        record_spec = _store_builders.record_materialize_spec_from_head(
+        record_spec = store_builders.record_materialize_spec_from_head(
             store,
             record_type=target_pred_id,
             head=head,
@@ -64,7 +64,7 @@ def evaluate_store_engine(
 
         if not bindings:
             return []
-        return _store_builders.record_candidates_from_bindings(
+        return store_builders.record_candidates_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
@@ -72,7 +72,7 @@ def evaluate_store_engine(
             bindings=bindings,
         )
 
-    schema_pred = _store_builders.find_schema_pred(store, target_pred_id)
+    schema_pred = store_builders.find_schema_pred(store, target_pred_id)
     if schema_pred is None:
         raise WhereValidationError(f"target predicate not found: {target_pred_id}")
 
@@ -110,7 +110,7 @@ def evaluate_store_engine(
     if not bindings:
         return []
 
-    return _store_builders.candidates_from_bindings(
+    return store_builders.candidates_from_bindings(
         store,
         derivation_id=derivation_id,
         version=version,

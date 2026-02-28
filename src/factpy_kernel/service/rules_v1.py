@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
-from factpy_kernel.authoring.rule_compile import AuthoringRuleCompileError, compile_authoring_rule_v1
+from factpy_kernel.authoring.rules import AuthoringRuleCompileError, compile_authoring_rule_v1
 from factpy_kernel.core.rules.backend_profile import (
     BackendProfile,
     PROFILE_DEFAULT,
@@ -11,6 +10,8 @@ from factpy_kernel.core.rules.backend_profile import (
 )
 from factpy_kernel.core.rules.rule_ast import RuleASTError, parse_query_rule_ir_to_ast
 from factpy_kernel.core.rules.rule_ast_validate import RuleASTValidationError, validate_query_rule_ast
+
+from ._common import error_response, exception_to_error, facade_error, ok_response
 
 _SUPPORTED_API_VERSION = "v1"
 _SUPPORTED_MODES = {"souffle"}
@@ -37,27 +38,16 @@ _ATOM_TAGS = {
 }
 
 
-@dataclass
-class _FacadeError(Exception):
-    message: str
-    kind: str
-    path: str
-    details: dict[str, Any]
-
-    def __str__(self) -> str:
-        return self.message
-
-
 def validate_rule(dto: dict) -> dict:
     try:
         payload, meta, effective_profile, _strict_for_compile = _prepare_request(dto)
         ast = parse_query_rule_ir_to_ast(payload)
         validate_query_rule_ast(ast, mode=meta["mode"], profile=effective_profile)
-        return _ok(meta)
+        return ok_response(meta=meta)
     except Exception as exc:
-        err = _exception_to_error(exc)
+        err = _service_exception_to_error(exc)
         meta = _error_meta_from_dto(dto, fallback_profile=err["details"].get("profile_effective"))
-        return _err([err], meta)
+        return error_response([err], meta=meta)
 
 
 def compile_rule_preview(dto: dict) -> dict:
@@ -82,11 +72,11 @@ def compile_rule_preview(dto: dict) -> dict:
             profile=effective_profile,
             strict=strict_for_compile,
         )
-        return _ok(meta, preview={"compiled_payload": _to_jsonable(compiled_payload)})
+        return ok_response(meta=meta, preview={"compiled_payload": _to_jsonable(compiled_payload)})
     except Exception as exc:
-        err = _exception_to_error(exc)
+        err = _service_exception_to_error(exc)
         meta = _error_meta_from_dto(dto, fallback_profile=err["details"].get("profile_effective"))
-        return _err([err], meta)
+        return error_response([err], meta=meta)
 
 
 def list_profiles() -> dict:
@@ -112,11 +102,11 @@ def list_profiles() -> dict:
 
 def _prepare_request(dto: dict) -> tuple[dict[str, Any], dict[str, Any], BackendProfile | None, bool]:
     if not isinstance(dto, dict):
-        raise _facade_error("dto must be object", kind="shape", path="$")
+        raise facade_error("dto must be object", kind="shape", path="$")
 
     api_version = dto.get("api_version", _SUPPORTED_API_VERSION)
     if api_version != _SUPPORTED_API_VERSION:
-        raise _facade_error(
+        raise facade_error(
             f"unsupported api_version: {api_version}",
             kind="shape",
             path="$.api_version",
@@ -125,10 +115,10 @@ def _prepare_request(dto: dict) -> tuple[dict[str, Any], dict[str, Any], Backend
 
     mode = dto.get("mode", "souffle")
     if not isinstance(mode, str):
-        raise _facade_error("mode must be string", kind="shape", path="$.mode")
+        raise facade_error("mode must be string", kind="shape", path="$.mode")
     if mode not in _SUPPORTED_MODES:
-        raise _facade_error(
-            f"unsupported mode in facade v1: {mode}",
+        raise facade_error(
+            f"unsupported mode in service v1: {mode}",
             kind="shape",
             path="$.mode",
             details={"mode": mode},
@@ -136,28 +126,28 @@ def _prepare_request(dto: dict) -> tuple[dict[str, Any], dict[str, Any], Backend
 
     strict = dto.get("strict", False)
     if not isinstance(strict, bool):
-        raise _facade_error("strict must be bool", kind="shape", path="$.strict")
+        raise facade_error("strict must be bool", kind="shape", path="$.strict")
 
     effective_profile, profile_effective_name = _resolve_profile(dto.get("profile"), strict)
 
     rule = dto.get("rule")
     if isinstance(rule, str):
-        raise _facade_error(
-            "string rule DSL is not supported in facade v1; send structured rule object",
+        raise facade_error(
+            "string rule DSL is not supported in service v1; send structured rule object",
             kind="string_dsl_unsupported",
             path="$.rule",
             details={"strategy": "object_rule_only", "input_kind": "string"},
         )
     if not isinstance(rule, dict):
-        raise _facade_error("rule must be object", kind="shape", path="$.rule")
+        raise facade_error("rule must be object", kind="shape", path="$.rule")
 
     payload = dict(rule)
     if payload.get("version") is None:
         payload["version"] = "v1"
     raw_where = payload.get("where")
     if isinstance(raw_where, str):
-        raise _facade_error(
-            "string where DSL is not supported in facade v1; send structured where IR",
+        raise facade_error(
+            "string where DSL is not supported in service v1; send structured where IR",
             kind="string_dsl_unsupported",
             path="$.rule.where",
             details={"strategy": "structured_where_ir_only", "input_kind": "string"},
@@ -185,13 +175,13 @@ def _json_where_to_ir(where_json: Any) -> Any:
 def _resolve_profile(profile_obj: Any, strict: bool) -> tuple[BackendProfile | None, str]:
     if profile_obj is not None:
         if not isinstance(profile_obj, dict):
-            raise _facade_error("profile must be object or null", kind="shape", path="$.profile")
+            raise facade_error("profile must be object or null", kind="shape", path="$.profile")
         name = profile_obj.get("name")
         if not isinstance(name, str) or not name:
-            raise _facade_error("profile.name must be non-empty string", kind="shape", path="$.profile.name")
+            raise facade_error("profile.name must be non-empty string", kind="shape", path="$.profile.name")
         profile = _KNOWN_PROFILES.get(name)
         if profile is None:
-            raise _facade_error(
+            raise facade_error(
                 f"unknown profile name: {name}",
                 kind="profile_unknown",
                 path="$.profile.name",
@@ -203,49 +193,14 @@ def _resolve_profile(profile_obj: Any, strict: bool) -> tuple[BackendProfile | N
     return None, PROFILE_DEFAULT.name
 
 
-def _exception_to_error(exc: Exception) -> dict:
-    kind = getattr(exc, "kind", None)
-    path = getattr(exc, "path", None)
-    details = getattr(exc, "details", None)
-
-    if isinstance(exc, (RuleASTError, RuleASTValidationError)) and not kind:
-        kind = "rule_ast_validate"
-    elif isinstance(exc, AuthoringRuleCompileError) and not kind:
-        kind = "authoring_rule_compile"
-
-    if not isinstance(kind, str) or not kind:
-        kind = "runtime"
-    if not isinstance(path, str) or not path:
-        path = "$"
-    if not isinstance(details, dict):
-        details = {"message": str(exc)}
-    else:
-        details = dict(details)
-        details.setdefault("message", str(exc))
-
-    return {
-        "kind": kind,
-        "path": path,
-        "details": details,
-    }
-
-
-def _ok(meta: dict[str, Any], **payload: Any) -> dict:
-    out = {
-        "ok": True,
-        "errors": [],
-        "meta": meta,
-    }
-    out.update(payload)
-    return out
-
-
-def _err(errors: list[dict], meta: dict[str, Any]) -> dict:
-    return {
-        "ok": False,
-        "errors": errors,
-        "meta": meta,
-    }
+def _service_exception_to_error(exc: Exception) -> dict[str, Any]:
+    err = exception_to_error(exc)
+    if err["kind"] == "runtime":
+        if isinstance(exc, (RuleASTError, RuleASTValidationError)):
+            err["kind"] = "rule_ast_validate"
+        elif isinstance(exc, AuthoringRuleCompileError):
+            err["kind"] = "authoring_rule_compile"
+    return err
 
 
 def _error_meta_from_dto(dto: Any, *, fallback_profile: Any = None) -> dict[str, Any]:
@@ -265,19 +220,6 @@ def _error_meta_from_dto(dto: Any, *, fallback_profile: Any = None) -> dict[str,
             else:
                 profile_effective = PROFILE_DEFAULT.name
     return {"profile_effective": profile_effective, "mode": mode}
-
-
-def _facade_error(
-    message: str,
-    *,
-    kind: str,
-    path: str,
-    details: dict[str, Any] | None = None,
-) -> _FacadeError:
-    payload = {"message": message}
-    if details:
-        payload.update(details)
-    return _FacadeError(message=message, kind=kind, path=path, details=payload)
 
 
 def _to_jsonable(value: Any) -> Any:
