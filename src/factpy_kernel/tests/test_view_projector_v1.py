@@ -90,12 +90,11 @@ class ViewProjectorV1Tests(unittest.TestCase):
             [("string", "de")],
             {"source": "test", "source_loc": "row-1"},
         )
-        self.ledger._meta_rows = [
+        self.ledger._force_replace_meta_rows([
             row
-            for row in self.ledger._meta_rows
+            for row in self.ledger.meta_rows
             if not (row.asrt_id == asrt_id and row.key == "ingested_at")
-        ]
-        self.ledger.rebuild_indexes()
+        ])
 
         with self.assertRaises(PolicyNonDeterminismError):
             compute_chosen_for_predicate(self.ledger, self.schema_pred)
@@ -103,7 +102,7 @@ class ViewProjectorV1Tests(unittest.TestCase):
     def _set_ingested_at(self, asrt_id: str, epoch_nanos: int) -> None:
         replaced = False
         updated: list[MetaRow] = []
-        for row in self.ledger._meta_rows:
+        for row in self.ledger.meta_rows:
             if row.asrt_id == asrt_id and row.key == "ingested_at":
                 updated.append(
                     MetaRow(
@@ -118,7 +117,6 @@ class ViewProjectorV1Tests(unittest.TestCase):
                 updated.append(row)
         if not replaced:
             raise AssertionError(f"missing ingested_at row for asrt_id={asrt_id}")
-        self.ledger._meta_rows = updated
-        self.ledger.rebuild_indexes()
+        self.ledger._force_replace_meta_rows(updated)
 if __name__ == "__main__":
     unittest.main()

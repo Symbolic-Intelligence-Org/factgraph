@@ -120,7 +120,7 @@ class PolicyModeIDBV1Tests(unittest.TestCase):
     def _set_ingested_at(self, store: Store, asrt_id: str, epoch_nanos: int) -> None:
         replaced = False
         updated: list[MetaRow] = []
-        for row in store.ledger._meta_rows:
+        for row in store.ledger.meta_rows:
             if row.asrt_id == asrt_id and row.key == "ingested_at":
                 updated.append(
                     MetaRow(
@@ -135,8 +135,7 @@ class PolicyModeIDBV1Tests(unittest.TestCase):
                 updated.append(row)
         if not replaced:
             raise AssertionError(f"missing ingested_at for asrt_id={asrt_id}")
-        store.ledger._meta_rows = updated
-        store.ledger.rebuild_indexes()
+        store.ledger._force_replace_meta_rows(updated)
     @staticmethod
     def _read_lines(path: Path) -> list[str]:
         return [line for line in path.read_text(encoding="utf-8").splitlines() if line]

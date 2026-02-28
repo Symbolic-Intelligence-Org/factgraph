@@ -293,15 +293,16 @@ class ViewProjectorAuditV1Tests(unittest.TestCase):
             tag, value = first_term
             if tag == "string" and value == materialize_id:
                 stage_asrt_ids.add(claim.asrt_id)
-        for idx, row in enumerate(self.store.ledger._meta_rows):
+        updated = list(self.store.ledger.meta_rows)
+        for idx, row in enumerate(updated):
             if row.asrt_id in stage_asrt_ids and row.key == "roles_count_expected":
-                self.store.ledger._meta_rows[idx] = row.__class__(
+                updated[idx] = row.__class__(
                     asrt_id=row.asrt_id,
                     key=row.key,
                     kind="num",
                     value=new_value,
                 )
-        self.store.ledger.rebuild_indexes()
+        self.store.ledger._force_replace_meta_rows(updated)
 
     def _assert_audit_invariants(self, audit: ProjectorAudit) -> None:
         self.assertEqual(audit.contract_version, 1)
