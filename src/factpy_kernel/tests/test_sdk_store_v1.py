@@ -7,7 +7,7 @@ from pathlib import Path
 
 import factpy_kernel.tests._warnings as test_warnings
 from factpy_kernel.adapters.souffle.package import ExportOptions
-from factpy_kernel.sdk import Derivation, Entity, Field, Identity, Rule, RuleRef, SDKStore, SDKStoreError, vars
+from factpy_kernel.sdk import Derivation, Entity, Field, Identity, Not, Pred, Rule, RuleRef, SDKStore, SDKStoreError, vars
 
 
 def setUpModule() -> None:
@@ -22,6 +22,7 @@ class Company(Entity):
 class Person(Entity):
     source_id: str = Identity()
     country: str = Field(cardinality="functional", pred_id="person:country")
+    blacklist: str = Field(cardinality="multi", pred_id="person:blacklist")
     name_by_lang: str = Field(
         cardinality="functional",
         dims=[("lang", "string")],
@@ -43,9 +44,18 @@ class PersonAge(Entity):
     birth_year: int = Field(cardinality="functional", pred_id="person:birth_year")
 
 
+class LivesIn(Entity):
+    uid: str = Identity()
+    person: Person = Field(cardinality="functional")
+    country: str = Field(cardinality="functional")
+
+    class Meta:
+        is_record = True
+
+
 class SDKStoreV1Tests(unittest.TestCase):
     def setUp(self) -> None:
-        self.sdk = SDKStore.from_schema_classes([Person, Company])
+        self.sdk = SDKStore.from_schema_classes([Person, Company, LivesIn])
         self.p_ref = self.sdk.ref(Person, source_id="u1")
         self.c_ref = self.sdk.ref(Company, source_id="c1")
 
@@ -178,6 +188,37 @@ class SDKStoreV1Tests(unittest.TestCase):
             )
         rows = self.sdk.run(top)
         self.assertEqual(rows, [(self.p_ref,)])
+
+    def test_run_supports_record_path_sugar_and_not_pred(self) -> None:
+        p2_ref = self.sdk.ref(Person, source_id="u2")
+        self.sdk.add(Person.blacklist, p2_ref, "x", meta={"source": "sdk", "source_loc": "test", "trace_id": "t8b"})
+
+        with self.sdk.batch(meta={"source": "sdk", "trace_id": "t8c"}) as tx:
+            p1 = tx.entity(Person, source_id="u1")
+            p2 = tx.entity(Person, source_id="u2")
+            li1 = tx.entity(LivesIn, uid="li_u1_de")
+            li1.person.set(p1)
+            li1.country.set("de")
+            li2 = tx.entity(LivesIn, uid="li_u2_fr")
+            li2.person.set(p2)
+            li2.country.set("fr")
+            tx.commit()
+
+        with vars("li", "p", "c") as (li, p, c):
+            top = Rule(
+                id="q_country_rows_filtered",
+                version="1.0.0",
+                select=[p, c],
+                where=[
+                    LivesIn(li),
+                    li.person == p,
+                    li.country == c,
+                    Not([Pred("person:blacklist", p, "x")]),
+                ],
+            )
+
+        rows = self.sdk.run(top)
+        self.assertEqual(rows, [(self.p_ref, "de")])
 
     def test_run_supports_linear_arithmetic_builtins_from_sdk_dsl(self) -> None:
         sdk = SDKStore.from_schema_classes([PersonAge])

@@ -337,8 +337,8 @@ with vars("li", "u", "c") as (li, u, c):
         expose=True,
         where=[
             LivesIn(li),
-            LivesIn.user(li=li, value=u),
-            LivesIn.country(li=li, value=c),
+            li.user == u,
+            li.country == c,
         ],
     )
 
@@ -348,7 +348,7 @@ with vars("u", "c") as (u, c):
         version="1.0.0",
         select=[u, c],
         where=[
-            RuleRef(exposed_livesin, u, c),
+            RuleRef(exposed_livesin)(u, c),
         ],
     )
 
