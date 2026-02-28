@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from factpy_kernel.core.protocol.digests import sha256_token
 from factpy_kernel.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
-from factpy_kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow, Revokes
+from factpy_kernel.core.store.ledger import Claim, ClaimArg, Idempotency, Ledger, MetaRow, Revokes
 
 
 class WriteProtocolError(Exception):
@@ -40,24 +40,23 @@ def set_field(
     normalized_meta = _normalize_meta(meta)
     ingest_key = _compute_ingest_key(pred_id, e_ref, rest_terms, normalized_meta)
 
-    existing_asrt_id = _find_active_claim_by_ingest_key(ledger, ingest_key)
-    if existing_asrt_id is not None:
-        return existing_asrt_id
-
     asrt_id = new_assertion_id()
-    ledger.append_claim(Claim(asrt_id=asrt_id, pred_id=pred_id, e_ref=e_ref, rest_terms=list(rest_terms)))
-
-    claim_arg_rows = claim_args_from_rest_terms(rest_terms)
-    ledger.append_claim_args(
-        [
-            ClaimArg(asrt_id=asrt_id, idx=idx, val_atom=val_atom, tag=tag)
-            for idx, val_atom, tag in claim_arg_rows
-        ]
-    )
-
     ingested_at = now_epoch_nanos()
-    ledger.append_meta(_meta_rows_for_claim(asrt_id, normalized_meta, ingest_key, ingested_at))
-    return asrt_id
+    claim = Claim(asrt_id=asrt_id, pred_id=pred_id, e_ref=e_ref, rest_terms=list(rest_terms))
+    claim_arg_rows = claim_args_from_rest_terms(rest_terms)
+    args = [
+        ClaimArg(asrt_id=asrt_id, idx=idx, val_atom=val_atom, tag=tag)
+        for idx, val_atom, tag in claim_arg_rows
+    ]
+    meta_rows = _meta_rows_for_claim(asrt_id, normalized_meta, ingest_key, ingested_at)
+    result = ledger.append_assertion(
+        claim=claim,
+        claim_args=args,
+        meta_rows=meta_rows,
+        idempotency=Idempotency(ingest_key=ingest_key, on_conflict="skip"),
+        asrt_id=asrt_id,
+    )
+    return result.asrt_id
 
 
 def add_field(
@@ -88,10 +87,6 @@ def retract_by_asrt(
 
     normalized_meta = _normalize_meta(meta)
     revoker_asrt_id = new_assertion_id()
-    ledger.append_revokes(
-        Revokes(revoker_asrt_id=revoker_asrt_id, revoked_asrt_id=revoked_asrt_id)
-    )
-
     ingested_at = now_epoch_nanos()
     meta_rows = [
         MetaRow(asrt_id=revoker_asrt_id, key="ingested_at", kind="time", value=ingested_at),
@@ -103,7 +98,12 @@ def retract_by_asrt(
         ),
     ]
     meta_rows.extend(_user_meta_rows(revoker_asrt_id, normalized_meta))
-    ledger.append_meta(meta_rows)
+    ledger.append_revocation(
+        revokes=Revokes(revoker_asrt_id=revoker_asrt_id, revoked_asrt_id=revoked_asrt_id),
+        meta_rows=meta_rows,
+        idempotency=None,
+        revoker_asrt_id=revoker_asrt_id,
+    )
     return revoker_asrt_id
 
 

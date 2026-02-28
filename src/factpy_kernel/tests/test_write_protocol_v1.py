@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import unittest
 
-from factpy_kernel.core.evidence.write_protocol import WriteProtocolError, retract_by_asrt, set_field
-from factpy_kernel.core.store.ledger import Ledger
+from factpy_kernel.core.evidence.write_protocol import (
+    WriteProtocolError,
+    _compute_ingest_key,
+    _meta_rows_for_claim,
+    retract_by_asrt,
+    set_field,
+)
+from factpy_kernel.core.protocol.tup_v1 import claim_args_from_rest_terms
+from factpy_kernel.core.store.ledger import Claim, ClaimArg, Ledger
 
 
 class WriteProtocolV1Tests(unittest.TestCase):
@@ -77,6 +84,66 @@ class WriteProtocolV1Tests(unittest.TestCase):
         self.assertEqual(asrt_2, asrt_1)
         self.assertEqual(claim_count_1, 1)
         self.assertEqual(claim_count_2, 1)
+
+    def test_ingest_key_duplicate_after_revocation_writes_new_assertion(self) -> None:
+        meta = {"source": "test", "source_loc": "row-1", "trace_id": "t-1"}
+        asrt_1 = set_field(
+            self.ledger,
+            self.pred_id,
+            self.e_ref,
+            [("string", "de")],
+            meta,
+        )
+        retract_by_asrt(self.ledger, asrt_1, {"source": "review"})
+
+        asrt_2 = set_field(
+            self.ledger,
+            self.pred_id,
+            self.e_ref,
+            [("string", "de")],
+            meta,
+        )
+
+        self.assertNotEqual(asrt_2, asrt_1)
+        self.assertTrue(self.ledger.has_active_revocation(asrt_1))
+        self.assertFalse(self.ledger.has_active_revocation(asrt_2))
+        self.assertEqual(len(self.ledger.find_claims(pred_id=self.pred_id, e_ref=self.e_ref)), 2)
+
+    def test_legacy_ingest_key_meta_is_backfilled_into_ingest_keys(self) -> None:
+        meta = {"source": "test", "source_loc": "row-1", "trace_id": "legacy"}
+        rest_terms = [("string", "de")]
+        ingest_key = _compute_ingest_key(self.pred_id, self.e_ref, rest_terms, meta)
+        asrt_id = "legacy-asrt"
+        self.ledger.append_claim(Claim(asrt_id, self.pred_id, self.e_ref, list(rest_terms)))
+        self.ledger.append_claim_args(
+            [
+                ClaimArg(asrt_id=asrt_id, idx=idx, val_atom=val_atom, tag=tag)
+                for idx, val_atom, tag in claim_args_from_rest_terms(rest_terms)
+            ]
+        )
+        self.ledger.append_meta(_meta_rows_for_claim(asrt_id, meta, ingest_key, 1))
+
+        row_before = self.ledger._conn.execute(
+            "SELECT asrt_id FROM ingest_keys WHERE ingest_key = ?",
+            (ingest_key,),
+        ).fetchone()
+        self.assertIsNone(row_before)
+
+        deduped = set_field(
+            self.ledger,
+            self.pred_id,
+            self.e_ref,
+            list(rest_terms),
+            meta,
+        )
+
+        self.assertEqual(deduped, asrt_id)
+        row_after = self.ledger._conn.execute(
+            "SELECT asrt_id FROM ingest_keys WHERE ingest_key = ?",
+            (ingest_key,),
+        ).fetchone()
+        self.assertIsNotNone(row_after)
+        self.assertEqual(row_after["asrt_id"], asrt_id)
 
     def test_ingested_at_written_as_meta_time_epoch_nanos(self) -> None:
         asrt_id = set_field(
