@@ -7,6 +7,7 @@ from pathlib import Path
 
 import factpy_kernel.tests._warnings as test_warnings
 from factpy_kernel.adapters.souffle.package import ExportOptions
+from factpy_kernel.core.store.ledger import Ledger
 from factpy_kernel.sdk import Derivation, Entity, Field, Identity, Not, Pred, Rule, RuleRef, SDKStore, SDKStoreError, vars
 
 
@@ -115,6 +116,33 @@ class SDKStoreV1Tests(unittest.TestCase):
         sdk = SDKStore.from_schema_classes([Language])
         ref = sdk.ref(Language, code="de")
         self.assertIn("idref_v1:", ref)
+
+    def test_from_schema_classes_with_ledger_path_persists_schema_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger_path = str(Path(tmp) / "ledger.db")
+            sdk_1 = SDKStore.from_schema_classes([Person, Company], ledger_path=ledger_path)
+            stored_digest = sdk_1.ledger.get_ledger_meta("schema_digest")
+            self.assertIsInstance(stored_digest, str)
+            self.assertTrue(stored_digest.startswith("sha256:"))
+
+            sdk_2 = SDKStore.from_schema_classes([Person, Company], ledger_path=ledger_path)
+            self.assertEqual(sdk_2.ledger.get_ledger_meta("schema_digest"), stored_digest)
+
+    def test_from_schema_classes_with_ledger_path_rejects_schema_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger_path = str(Path(tmp) / "ledger.db")
+            SDKStore.from_schema_classes([Person, Company], ledger_path=ledger_path)
+
+            with self.assertRaises(SDKStoreError) as ctx:
+                SDKStore.from_schema_classes([Person], ledger_path=ledger_path)
+            self.assertIn("schema mismatch", str(ctx.exception))
+
+    def test_from_schema_classes_rejects_ledger_and_ledger_path_together(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger_path = str(Path(tmp) / "ledger.db")
+            with self.assertRaises(SDKStoreError) as ctx:
+                SDKStore.from_schema_classes([Person], ledger=Ledger(), ledger_path=ledger_path)
+            self.assertIn("provide either ledger or ledger_path", str(ctx.exception))
 
     def test_run_accept_facades_align_with_blueprint_style(self) -> None:
         self.sdk.set(Person.country, self.p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t6"})

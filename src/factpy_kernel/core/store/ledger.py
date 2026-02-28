@@ -391,6 +391,11 @@ class Ledger:
         return AppendResult(asrt_id=effective_revoker_id, written=True)
 
     def append_claim(self, claim: Claim) -> None:
+        """
+        .. deprecated::
+            请使用 append_assertion(...)。此方法在兼容期保留，
+            后续清理阶段将降级为私有或删除。
+        """
         _validate_claim_input(claim, require_asrt_id=True)
         normalized_terms = [_normalize_term(term) for term in claim.rest_terms]
         actual_claim = Claim(
@@ -404,6 +409,11 @@ class Ledger:
         self._idx_add_claim(actual_claim)
 
     def append_claim_args(self, rows: list[ClaimArg]) -> None:
+        """
+        .. deprecated::
+            请使用 append_assertion(...)。此方法在兼容期保留，
+            后续清理阶段将降级为私有或删除。
+        """
         _validate_claim_args_rows(rows)
         for row in rows:
             if not self._is_known_asrt_id(row.asrt_id):
@@ -420,6 +430,11 @@ class Ledger:
         self._idx_add_claim_args(actual_rows)
 
     def append_meta(self, rows: list[MetaRow]) -> None:
+        """
+        .. deprecated::
+            请使用 append_assertion(...) 或 append_revocation(...)。
+            此方法在兼容期保留，后续清理阶段将降级为私有或删除。
+        """
         _validate_meta_rows(rows)
         for row in rows:
             if not self._is_known_asrt_id(row.asrt_id):
@@ -436,6 +451,11 @@ class Ledger:
         self._idx_add_meta(actual_rows)
 
     def append_revokes(self, row: Revokes) -> None:
+        """
+        .. deprecated::
+            请使用 append_revocation(...)。此方法在兼容期保留，
+            后续清理阶段将降级为私有或删除。
+        """
         _validate_revokes_row(row)
         actual_row = Revokes(
             revoker_asrt_id=row.revoker_asrt_id,
@@ -533,6 +553,21 @@ class Ledger:
     def close(self) -> None:
         with suppress(Exception):
             self._conn.close()
+
+    def get_ledger_meta(self, key: str) -> str | None:
+        """Return the stored ledger_meta value for key, or None when absent."""
+        row = self._conn.execute(
+            "SELECT value FROM ledger_meta WHERE key = ?",
+            (key,),
+        ).fetchone()
+        return str(row["value"]) if row is not None else None
+
+    def set_ledger_meta(self, key: str, value: str) -> None:
+        """Insert a ledger_meta value when key is absent; existing values are preserved."""
+        self._conn.execute(
+            "INSERT OR IGNORE INTO ledger_meta (key, value) VALUES (?, ?)",
+            (key, value),
+        )
 
     def _force_replace_meta_rows(self, rows: list[MetaRow]) -> None:
         _validate_meta_rows(rows)

@@ -9,6 +9,7 @@ from factpy_kernel.authoring.rule_compile import compile_authoring_rule_v1
 from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptResult
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
+from factpy_kernel.core.schema.schema_ir import schema_digest
 from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
@@ -45,8 +46,28 @@ class SDKStore:
         classes: list[type[Entity]],
         *,
         ledger: Ledger | None = None,
+        ledger_path: str | None = None,
     ) -> "SDKStore":
+        if ledger is not None and ledger_path is not None:
+            raise SDKStoreError("provide either ledger or ledger_path, not both")
+
         schema_ir = compile_schema_from_classes(classes)
+        digest = schema_digest(schema_ir)
+
+        if ledger_path is not None:
+            ledger = Ledger(path=ledger_path)
+
+        if ledger is not None:
+            stored_digest = ledger.get_ledger_meta("schema_digest")
+            if stored_digest is None:
+                ledger.set_ledger_meta("schema_digest", digest)
+            elif stored_digest != digest:
+                raise SDKStoreError(
+                    f"schema mismatch: ledger file was written with schema_digest={stored_digest!r}, "
+                    f"but current schema has digest={digest!r}. "
+                    "Use the same Entity classes that were used when this ledger was created."
+                )
+
         return cls(classes, store=Store(schema_ir=schema_ir, ledger=ledger))
 
     @property
