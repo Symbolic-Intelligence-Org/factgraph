@@ -15,11 +15,17 @@ from factpy_kernel.service.registry_v1 import (
 )
 from factpy_kernel.service.rules_v1 import compile_rule_preview, list_profiles, validate_rule
 from factpy_kernel.service.runtime_v1 import (
+    accept_runtime_derivation,
     close_runtime_session,
+    evaluate_runtime_derivation,
+    explain_runtime_fact,
     export_runtime_package,
     get_runtime_session,
+    list_runtime_conflicts,
     list_runtime_claims,
     open_runtime_session,
+    project_runtime_view_facts,
+    resolve_runtime_mapping,
     retract_runtime_fact,
     run_runtime_rule,
     write_runtime_fact,
@@ -94,9 +100,39 @@ def get_runtime_claims_route(
     )
 
 
+@app.post("/v1/runtime/sessions/{session_id}/queries/explain-fact")
+def post_runtime_explain_fact(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return explain_runtime_fact(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/queries/conflicts")
+def post_runtime_conflicts(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return list_runtime_conflicts(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/queries/resolve-mapping")
+def post_runtime_resolve_mapping(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return resolve_runtime_mapping(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/queries/view-facts")
+def post_runtime_view_facts(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return project_runtime_view_facts(session_id, payload)
+
+
 @app.post("/v1/runtime/sessions/{session_id}/rules/run")
 def post_runtime_run_rule(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return run_runtime_rule(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/derivations/evaluate")
+def post_runtime_evaluate_derivation(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return evaluate_runtime_derivation(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/derivations/accept")
+def post_runtime_accept_derivation(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return accept_runtime_derivation(session_id, payload)
 
 
 @app.post("/v1/runtime/sessions/{session_id}/packages/export")
