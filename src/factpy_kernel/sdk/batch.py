@@ -1204,7 +1204,7 @@ class SDKBatchTx:
 
     def _handle_requires_record_exists_op(self, handle: ManagedEntityHandle) -> bool:
         spec = self._sdk._entity_spec_by_class.get(handle.entity_cls)
-        if not isinstance(spec, dict) or spec.get("is_record") is not True:
+        if not isinstance(spec, dict):
             return False
         return any(op.kind in {"set", "add"} for op in handle._staged_ops)
 

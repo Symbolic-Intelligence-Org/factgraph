@@ -36,8 +36,7 @@ def _build_record_meta(schema_ir: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(entity_type, str) or not entity_type:
                 continue
             entity_types.add(entity_type)
-            if entity.get("is_record") is True:
-                record_types.add(entity_type)
+            record_types.add(entity_type)
 
     exists_pred_by_type: dict[str, str] = {}
     role_pred_by_type_field: dict[str, dict[str, str]] = {}
@@ -125,7 +124,6 @@ def _rewrite_atom(
         return atom
 
     canonical_pred_ids: set[str] = meta["predicate_ids"]
-    entity_types: set[str] = meta["entity_types"]
     type_by_exists_pred: dict[str, str] = meta["type_by_exists_pred"]
     type_by_role_pred: dict[str, tuple[str, str]] = meta["type_by_role_pred"]
     exists_pred_by_type: dict[str, str] = meta["exists_pred_by_type"]
@@ -149,11 +147,6 @@ def _rewrite_atom(
             return ("pred", canonical_exists, terms)
         if pred_id in canonical_pred_ids:
             return atom
-        if record_type in entity_types and record_type not in meta["record_types"]:
-            raise WhereSchemaLoweringError(
-                f"record exists sugar requires record entity (set Meta.is_record = True): {record_type}",
-                path=path,
-            )
         if pred_id not in canonical_pred_ids and record_type in meta["record_types"]:
             raise WhereSchemaLoweringError(
                 f"record exists predicate not found in schema for {record_type}",

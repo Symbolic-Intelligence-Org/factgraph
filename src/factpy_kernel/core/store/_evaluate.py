@@ -36,7 +36,11 @@ def evaluate_store(
     if temporal_view not in {"record", "current"}:
         raise ValueError("temporal_view must be 'record' or 'current'")
 
-    if materialize_as == "record":
+    effective_materialize_as = materialize_as
+    if effective_materialize_as is None and isinstance(head, dict):
+        effective_materialize_as = "record" if head.get("callee_kind") == "entity_type" else "fact"
+
+    if effective_materialize_as == "record":
         if mode == "engine":
             return engine_evaluate(
                 derivation_id=derivation_id,
@@ -45,7 +49,7 @@ def evaluate_store(
                 head_vars=head_vars,
                 where=where,
                 temporal_view=temporal_view,
-                materialize_as=materialize_as,
+                materialize_as=effective_materialize_as,
                 head=head,
                 id_policy=id_policy,
             )
@@ -77,7 +81,7 @@ def evaluate_store(
             head_vars=head_vars,
             where=where,
             temporal_view=temporal_view,
-            materialize_as=materialize_as,
+            materialize_as=effective_materialize_as,
             head=head,
             id_policy=id_policy,
         )

@@ -176,7 +176,6 @@ class EntityMeta(type):
                 for _, member, annotation in fields
             ],
             **({"meta": meta_dict} if meta_dict else {}),
-            **({"is_record": True} if meta_dict.get("is_record") is True else {}),
         }
         return cls
 

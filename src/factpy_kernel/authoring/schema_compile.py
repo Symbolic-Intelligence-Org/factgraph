@@ -91,25 +91,23 @@ def _compile_entity(entity_raw: Any, entity_index: int) -> tuple[dict[str, Any],
         "entity_type": entity_type,
         "identity_fields": identity_fields,
     }
-    if entity_raw.get("is_record") is True:
-        entity_out["is_record"] = True
 
     owner_prefix = _owner_prefix(entity_type)
     predicates: list[dict[str, Any]] = []
 
-    if entity_raw.get("is_record") is True:
-        predicates.append(
-            {
-                "pred_id": f"{entity_type}:exists",
-                "owner_type": entity_type,
-                "arity": 1,
-                "arg_specs": [{"name": owner_prefix, "type_domain": "entity_ref"}],
-                "cardinality": "functional",
-                "dims": [],
-                "group_key_indexes": [0],
-                "is_record_exists": True,
-            }
-        )
+    predicates.append(
+        {
+            "pred_id": f"{entity_type}:exists",
+            "owner_type": entity_type,
+            "arity": 1,
+            "arg_specs": [{"name": owner_prefix, "type_domain": "entity_ref"}],
+            "cardinality": "functional",
+            "dims": [],
+            "group_key_indexes": [0],
+            "is_record_exists": True,
+            "is_entity_exists": True,
+        }
+    )
 
     for field_index, field_raw in enumerate(fields_raw):
         predicates.append(

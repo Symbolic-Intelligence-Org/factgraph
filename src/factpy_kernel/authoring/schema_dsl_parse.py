@@ -102,8 +102,6 @@ def _parse_entity_class(*, node: ast.ClassDef, entity_index: int) -> dict[str, A
         )
     if meta:
         entity["meta"] = meta
-        if meta.get("is_record") is True:
-            entity["is_record"] = True
     return entity
 
 

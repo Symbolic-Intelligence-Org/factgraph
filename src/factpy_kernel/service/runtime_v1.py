@@ -716,6 +716,9 @@ def _candidate_from_dict(value: Any, *, path: str) -> CandidateSet:
         support_kind=_require_non_empty_str(value.get("support_kind"), path=f"{path}.support_kind"),
         generated_at=generated_at,
         state=_require_non_empty_str(value.get("state"), path=f"{path}.state"),
+        candidate_id=_optional_str_or_none(value.get("candidate_id"), path=f"{path}.candidate_id") or "",
+        candidate_key=_optional_str_or_none(value.get("candidate_key"), path=f"{path}.candidate_key") or "",
+        candidate_kind=_optional_str_or_none(value.get("candidate_kind"), path=f"{path}.candidate_kind") or "fact",
     )
 
 
@@ -723,6 +726,54 @@ def _candidate_payload_from_dict(value: Any, *, path: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise facade_error("payload must be object", kind="shape", path=path)
     payload = dict(value)
+    if isinstance(payload.get("terms"), list):
+        payload["terms"] = _normalize_candidate_terms(payload.get("terms"), path=f"{path}.terms")
+        pred_id = payload.get("pred_id")
+        if pred_id is not None:
+            payload["pred_id"] = _require_non_empty_str(pred_id, path=f"{path}.pred_id")
+        return payload
+    if isinstance(payload.get("entity_type"), str) and isinstance(payload.get("identity_fields"), list):
+        payload["entity_type"] = _require_non_empty_str(payload.get("entity_type"), path=f"{path}.entity_type")
+        payload["identity_fields"] = [
+            _require_non_empty_str(item, path=f"{path}.identity_fields[]")
+            for item in payload.get("identity_fields", [])
+        ]
+        resolved_identity = payload.get("resolved_identity")
+        if resolved_identity is None:
+            resolved_identity = {}
+        if not isinstance(resolved_identity, dict):
+            raise facade_error("resolved_identity must be object", kind="shape", path=f"{path}.resolved_identity")
+        payload["resolved_identity"] = dict(resolved_identity)
+        missing_identity_fields = payload.get("missing_identity_fields")
+        if missing_identity_fields is None:
+            missing_identity_fields = []
+        if not isinstance(missing_identity_fields, list):
+            raise facade_error(
+                "missing_identity_fields must be list",
+                kind="shape",
+                path=f"{path}.missing_identity_fields",
+            )
+        payload["missing_identity_fields"] = [
+            _require_non_empty_str(item, path=f"{path}.missing_identity_fields[]")
+            for item in missing_identity_fields
+        ]
+        if "identity_types" in payload:
+            identity_types = payload.get("identity_types")
+            if not isinstance(identity_types, dict):
+                raise facade_error("identity_types must be object", kind="shape", path=f"{path}.identity_types")
+            payload["identity_types"] = {
+                _require_non_empty_str(k, path=f"{path}.identity_types.key"): _require_non_empty_str(
+                    v,
+                    path=f"{path}.identity_types[{k}]",
+                )
+                for k, v in identity_types.items()
+            }
+        if "proposed_entity_ref" in payload and payload.get("proposed_entity_ref") is not None:
+            payload["proposed_entity_ref"] = _require_non_empty_str(
+                payload.get("proposed_entity_ref"),
+                path=f"{path}.proposed_entity_ref",
+            )
+        return payload
     if payload.get("materialize_as") == "record":
         payload["record_type"] = _require_non_empty_str(payload.get("record_type"), path=f"{path}.record_type")
         payload["record_exists_pred_id"] = _require_non_empty_str(
@@ -759,7 +810,7 @@ def _accept_options_from_dto(value: Any, *, path: str) -> AcceptOptions:
         return AcceptOptions()
     if not isinstance(value, dict):
         raise facade_error("options must be object", kind="shape", path=path)
-    unknown = sorted(set(value.keys()) - {"approved_by", "note", "dry_run"})
+    unknown = sorted(set(value.keys()) - {"approved_by", "note", "dry_run", "identity_override"})
     if unknown:
         raise facade_error(
             f"unknown accept options: {', '.join(unknown)}",
@@ -771,7 +822,13 @@ def _accept_options_from_dto(value: Any, *, path: str) -> AcceptOptions:
     dry_run = value.get("dry_run", False)
     if not isinstance(dry_run, bool):
         raise facade_error("dry_run must be bool", kind="shape", path=f"{path}.dry_run")
-    return AcceptOptions(approved_by=approved_by, note=note, dry_run=dry_run)
+    identity_override = _optional_dict(value.get("identity_override"), path=f"{path}.identity_override")
+    return AcceptOptions(
+        approved_by=approved_by,
+        note=note,
+        dry_run=dry_run,
+        identity_override=identity_override,
+    )
 
 
 def _accept_result_to_dict(result: AcceptResult) -> dict[str, Any]:
@@ -784,6 +841,7 @@ def _accept_result_to_dict(result: AcceptResult) -> dict[str, Any]:
         "skipped_reason_counts": dict(result.skipped_reason_counts),
         "diagnostics_contract_version": result.diagnostics_contract_version,
         "diagnostics": _to_jsonable(result.diagnostics),
+        "entity_ref": result.entity_ref,
     }
 
 
@@ -975,6 +1033,39 @@ def _normalize_rest_terms(value: Any, *, path: str) -> list[tuple[str, Any]]:
         if not isinstance(tag, str) or not tag:
             raise facade_error("rest_terms tag must be non-empty string", kind="shape", path=f"{item_path}[0]")
         out.append((tag, _normalize_tagged_value(tag, item[1], path=f"{item_path}[1]")))
+    return out
+
+
+def _normalize_candidate_terms(value: Any, *, path: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise facade_error("terms must be list", kind="shape", path=path)
+    out: list[dict[str, Any]] = []
+    for idx, item in enumerate(value):
+        item_path = f"{path}[{idx}]"
+        if not isinstance(item, dict):
+            raise facade_error("term must be object", kind="shape", path=item_path)
+        kind = item.get("kind")
+        if kind == "entity_ref":
+            out.append(
+                {
+                    "kind": "entity_ref",
+                    "value": _require_non_empty_str(item.get("value"), path=f"{item_path}.value"),
+                }
+            )
+            continue
+        if kind == "candidate_ref":
+            out.append(
+                {
+                    "kind": "candidate_ref",
+                    "candidate_key": _require_non_empty_str(item.get("candidate_key"), path=f"{item_path}.candidate_key"),
+                }
+            )
+            continue
+        if kind == "literal":
+            tag = _require_non_empty_str(item.get("tag"), path=f"{item_path}.tag")
+            out.append({"kind": "literal", "tag": tag, "value": _normalize_tagged_value(tag, item.get("value"), path=f"{item_path}.value")})
+            continue
+        raise facade_error("unsupported term kind", kind="shape", path=f"{item_path}.kind")
     return out
 
 

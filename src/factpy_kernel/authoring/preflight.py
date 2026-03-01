@@ -364,9 +364,16 @@ def derivation_dry_run_preview(
         payload = cand.payload if isinstance(cand.payload, dict) else {}
         preview_candidates.append(
             {
+                "candidate_id": cand.candidate_id,
+                "candidate_key": cand.candidate_key,
+                "candidate_kind": cand.candidate_kind,
                 "target": cand.target,
                 "e_ref": payload.get("e_ref"),
                 "rest_terms": payload.get("rest_terms"),
+                "terms": payload.get("terms"),
+                "entity_type": payload.get("entity_type"),
+                "resolved_identity": payload.get("resolved_identity"),
+                "missing_identity_fields": payload.get("missing_identity_fields"),
                 "materialize_as": payload.get("materialize_as"),
                 "record_type": payload.get("record_type"),
                 "roles": payload.get("roles"),

@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 from factpy_kernel.authoring.derivations import compile_authoring_derivation_v1
 from factpy_kernel.authoring.rules import compile_authoring_rule_v1
-from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptResult
+from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
 from factpy_kernel.core.schema.schema_ir import schema_digest
@@ -268,6 +268,19 @@ class SDKStore:
     def accept_compiled(self, *args: Any, **kwargs: Any) -> AcceptResult:
         return self._store.accept(*args, **kwargs)
 
+    def accept_many(
+        self,
+        requests: list[AcceptRequest | CandidateSet | dict[str, Any]],
+        *,
+        mode: str = "atomic",
+        idempotent_duplicate_ok: bool = True,
+    ) -> list[dict[str, Any]]:
+        return self._store.accept_many(
+            requests,
+            mode=mode,
+            idempotent_duplicate_ok=idempotent_duplicate_ok,
+        )
+
     def explain_fact(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return self._store.explain_fact(*args, **kwargs)
 
@@ -365,7 +378,7 @@ class SDKStore:
             raise SDKStoreError("meta_overrides must be dict when provided")
 
         # Blueprints commonly use meta_overrides={"approved_by": ...}; also support keyword sugar.
-        for key in ("approved_by", "note", "dry_run"):
+        for key in ("approved_by", "note", "dry_run", "identity_override"):
             if key in kwargs:
                 if key in meta_overrides:
                     raise SDKStoreError(f"duplicate accept option: {key} provided in meta_overrides and keyword")
@@ -374,10 +387,18 @@ class SDKStore:
         approved_by = meta_overrides.pop("approved_by", None)
         note = meta_overrides.pop("note", None)
         dry_run = meta_overrides.pop("dry_run", False)
+        identity_override = meta_overrides.pop("identity_override", None)
+        if identity_override is not None and not isinstance(identity_override, dict):
+            raise SDKStoreError("identity_override must be dict when provided")
         if meta_overrides:
             unknown = ", ".join(sorted(meta_overrides.keys()))
             raise SDKStoreError(f"unsupported meta_overrides keys for accept(): {unknown}")
-        return AcceptOptions(approved_by=approved_by, note=note, dry_run=bool(dry_run))
+        return AcceptOptions(
+            approved_by=approved_by,
+            note=note,
+            dry_run=bool(dry_run),
+            identity_override=dict(identity_override) if isinstance(identity_override, dict) else None,
+        )
 
     def _index_schema(self) -> None:
         pred_index: dict[tuple[str, str], dict[str, Any]] = {}

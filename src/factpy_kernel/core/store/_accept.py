@@ -4,7 +4,13 @@ import warnings
 from dataclasses import replace
 from typing import Any
 
-from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptResult, accept_candidate_set
+from factpy_kernel.core.derivation.accept import (
+    AcceptOptions,
+    AcceptRequest,
+    AcceptResult,
+    accept_candidate_set,
+    accept_many_candidate_sets,
+)
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.policy.policy_ir import (
     PolicyIRValidationError,
@@ -43,7 +49,53 @@ def accept_store_candidate(
         raise ValueError("derivation_id mismatch")
     if candidate_set.derivation_version != version:
         raise ValueError("derivation_version mismatch")
+    schema_digest_token, policy_digest_token, diagnostics = _compute_accept_meta_digests(store)
+    result = accept_candidate_set(
+        ledger=store.ledger,
+        candidate_set=candidate_set,
+        options=options,
+        derived_rule_id=derivation_id,
+        derived_rule_version=version,
+        schema_digest_token=schema_digest_token,
+        policy_digest_token=policy_digest_token,
+        schema_ir=store.schema_ir,
+    )
+    if not diagnostics:
+        return result
+    return replace(result, diagnostics=diagnostics)
 
+def accept_store_candidates_many(
+    store: Any,
+    *,
+    requests: list[AcceptRequest | CandidateSet | dict[str, Any]],
+    mode: str = "atomic",
+    idempotent_duplicate_ok: bool = True,
+) -> list[dict[str, Any]]:
+    schema_digest_token, policy_digest_token, diagnostics = _compute_accept_meta_digests(store)
+    rows = accept_many_candidate_sets(
+        ledger=store.ledger,
+        requests=requests,
+        mode=mode,
+        idempotent_duplicate_ok=idempotent_duplicate_ok,
+        schema_digest_token=schema_digest_token,
+        policy_digest_token=policy_digest_token,
+        schema_ir=store.schema_ir,
+    )
+    if not diagnostics:
+        return rows
+    for row in rows:
+        if row.get("error") is None:
+            continue
+        err = row["error"]
+        if not isinstance(err, dict):
+            continue
+        err.setdefault("diagnostics", list(diagnostics))
+    return rows
+
+
+def _compute_accept_meta_digests(
+    store: Any,
+) -> tuple[str | None, str | None, list[dict[str, Any]]]:
     schema_digest_token: str | None = None
     policy_digest_token: str | None = None
     diagnostics: list[dict[str, Any]] = []
@@ -89,15 +141,4 @@ def accept_store_candidate(
             )
         )
 
-    result = accept_candidate_set(
-        ledger=store.ledger,
-        candidate_set=candidate_set,
-        options=options,
-        derived_rule_id=derivation_id,
-        derived_rule_version=version,
-        schema_digest_token=schema_digest_token,
-        policy_digest_token=policy_digest_token,
-    )
-    if not diagnostics:
-        return result
-    return replace(result, diagnostics=diagnostics)
+    return schema_digest_token, policy_digest_token, diagnostics

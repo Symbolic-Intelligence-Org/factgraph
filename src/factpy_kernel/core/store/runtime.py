@@ -4,7 +4,7 @@ import warnings
 from typing import Any
 from uuid import uuid4
 
-from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptResult
+from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
 from factpy_kernel.core.derivation.candidates import CandidateSet, make_candidate
 from factpy_kernel.core.evidence.write_protocol import now_epoch_nanos
 from factpy_kernel.core.mapping.canon import MappingResolution
@@ -171,6 +171,20 @@ class Store:
             version=version,
             candidate_set=candidate_set,
             options=options,
+        )
+
+    def accept_many(
+        self,
+        requests: list[AcceptRequest | CandidateSet | dict[str, Any]],
+        *,
+        mode: str = "atomic",
+        idempotent_duplicate_ok: bool = True,
+    ) -> list[dict[str, Any]]:
+        return _store_accept.accept_store_candidates_many(
+            self,
+            requests=requests,
+            mode=mode,
+            idempotent_duplicate_ok=idempotent_duplicate_ok,
         )
 
     def explain_fact(self, pred_id: str, e_ref: str, *val_atoms: Any) -> dict[str, Any]:

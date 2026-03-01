@@ -27,11 +27,14 @@ def evaluate_store_engine(
 ) -> list[CandidateSet]:
     if temporal_view not in {"record", "current"}:
         raise ValueError("temporal_view must be 'record' or 'current'")
+    effective_materialize_as = materialize_as
+    if effective_materialize_as is None and isinstance(head, dict):
+        effective_materialize_as = "record" if head.get("callee_kind") == "entity_type" else "fact"
 
     from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
     from factpy_kernel.adapters.souffle.runner import run_package
 
-    if materialize_as == "record":
+    if effective_materialize_as == "record":
         record_spec = store_builders.record_materialize_spec_from_head(
             store,
             record_type=target_pred_id,

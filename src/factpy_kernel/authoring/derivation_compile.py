@@ -35,13 +35,17 @@ def compile_authoring_derivation_v1(
     if not isinstance(version, str) or not version:
         raise _compile_error("version must be non-empty string", path="$.version")
 
-    materialize_as = _compile_materialize_as(authoring_derivation)
     head = _compile_head(authoring_derivation)
-    if head is not None and materialize_as is None:
-        raise _compile_error(
-            "head-based derivation requires materialize_as ('fact' or 'record')",
-            path="$.materialize_as",
-        )
+    materialize_as = _compile_materialize_as(authoring_derivation)
+    if materialize_as is None and isinstance(head, dict):
+        materialize_as = "record" if head.get("callee_kind") == "entity_type" else "fact"
+    if materialize_as is not None and isinstance(head, dict):
+        callee_kind = head.get("callee_kind")
+        if callee_kind == "pred_ref" and materialize_as != "fact":
+            raise _compile_error(
+                "predicate head must materialize as 'fact'",
+                path="$.materialize_as",
+            )
 
     explicit_target_pred_id = authoring_derivation.get("target_pred_id", authoring_derivation.get("target"))
     id_policy = _compile_id_policy(authoring_derivation)
@@ -52,11 +56,6 @@ def compile_authoring_derivation_v1(
             raise _compile_error(
                 "materialize_as='record' requires EntityType head (e.g. Speaks(...))",
                 path="$.head.callee_kind",
-            )
-        if id_policy is None and schema_ir is None:
-            raise _compile_error(
-                "materialize_as='record' requires id_policy (or schema-aware compile context to auto-derive it)",
-                path="$.id_policy",
             )
     lowered_target_pred_id: str | None = None
     lowered_head_vars: list[Any] | None = None
@@ -443,8 +442,8 @@ def _resolve_record_projection_with_schema(*, schema_ir: dict[str, Any], record_
         (e for e in entities if isinstance(e, dict) and e.get("entity_type") == record_type),
         None,
     )
-    if not isinstance(record_entity, dict) or record_entity.get("is_record") is not True:
-        raise _compile_error(f"record entity not found or not marked is_record: {record_type}", path="$.head")
+    if not isinstance(record_entity, dict):
+        raise _compile_error(f"record entity not found in schema: {record_type}", path="$.head")
 
     projection_pred_id = record_entity.get("projection_pred_id")
     if not isinstance(projection_pred_id, str) or not projection_pred_id:

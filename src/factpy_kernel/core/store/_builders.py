@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from factpy_kernel.core.derivation.candidates import CandidateSet, compute_key_tuple_digest, make_candidate
 from factpy_kernel.core.evidence.write_protocol import now_epoch_nanos
+from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.protocol.digests import sha256_token
 from factpy_kernel.core.protocol.tup_v1 import CANONICAL_TAGS, canonical_bytes_tup_v1
 from factpy_kernel.core.rules.where_eval import WhereValidationError
@@ -59,6 +60,9 @@ def candidates_from_bindings(
             target=target_pred_id,
             key_terms=key_terms,
             payload={
+                "pred_id": target_pred_id,
+                "terms": [_term_from_tag_value(tag, value) for tag, value in tagged_args],
+                # Backward-compat fields (v1 callers may still inspect these).
                 "e_ref": e_ref,
                 "rest_terms": rest_terms,
             },
@@ -67,6 +71,7 @@ def candidates_from_bindings(
             generated_at=now_epoch_nanos(),
             tup_digest=tup_digest,
             state="generated",
+            candidate_kind="fact",
         )
         candidates.append(candidate)
 
@@ -120,7 +125,22 @@ def record_candidates_from_bindings(
 
         key_terms = [("string", record_type), *tagged_role_terms]
         key_tuple_digest = compute_key_tuple_digest(key_terms)
-        candidate = CandidateSet(
+
+        identity_fields, resolved_identity, missing_identity_fields = _derive_entity_identity_from_roles(
+            record_type=record_type,
+            key_tuple_digest=key_tuple_digest,
+            id_policy=id_policy,
+            roles=role_payloads,
+            schema_identity_fields=record_spec.get("entity_identity_fields"),
+        )
+        proposed_entity_ref: str | None = None
+        if not missing_identity_fields:
+            proposed_entity_ref = encode_idref_v1(
+                record_type,
+                [(name, tag, resolved_identity[name]) for name, tag in identity_fields if name in resolved_identity],
+            )
+
+        entity_candidate = CandidateSet(
             derivation_id=derivation_id,
             derivation_version=version,
             run_id=run_id,
@@ -128,8 +148,13 @@ def record_candidates_from_bindings(
             key_tuple_digest=key_tuple_digest,
             tup_digest=None,
             payload={
-                "materialize_as": "record",
-                "record_type": record_type,
+                "entity_type": record_type,
+                "identity_fields": [name for name, _ in identity_fields],
+                "identity_types": {name: tag for name, tag in identity_fields},
+                "resolved_identity": resolved_identity,
+                "missing_identity_fields": missing_identity_fields,
+                "proposed_entity_ref": proposed_entity_ref,
+                # Backward-compat metadata for transition.
                 "record_exists_pred_id": record_exists_pred_id,
                 "id_policy": id_policy,
                 "roles": role_payloads,
@@ -138,25 +163,44 @@ def record_candidates_from_bindings(
             support_kind="none",
             generated_at=now_epoch_nanos(),
             state="generated",
+            candidate_kind="entity",
         )
-        candidates.append(candidate)
+        candidates.append(entity_candidate)
+
+        for role in role_payloads:
+            role_terms = role["rest_terms"]
+            value_tag, value_atom = role_terms[0]
+            fact_terms = [
+                {"kind": "candidate_ref", "candidate_key": entity_candidate.candidate_key},
+                _term_from_tag_value(value_tag, value_atom),
+            ]
+            fact_key_terms = [("string", role["pred_id"]), ("string", entity_candidate.candidate_key)]
+            fact_tup_digest = sha256_token(canonical_bytes_tup_v1(role_terms))
+            role_candidate = make_candidate(
+                derivation_id=derivation_id,
+                derivation_version=version,
+                run_id=run_id,
+                target=role["pred_id"],
+                key_terms=fact_key_terms,
+                payload={
+                    "pred_id": role["pred_id"],
+                    "terms": fact_terms,
+                },
+                support_digest=f"sha256:{'0' * 64}",
+                support_kind="none",
+                generated_at=now_epoch_nanos(),
+                tup_digest=fact_tup_digest,
+                state="generated",
+                candidate_kind="fact",
+            )
+            candidates.append(role_candidate)
 
     unique: dict[tuple[Any, ...], CandidateSet] = {}
     for candidate in candidates:
-        roles = candidate.payload.get("roles", [])
-        role_key = []
-        for role in roles:
-            rest_terms = role.get("rest_terms", [])
-            role_key.append(
-                (
-                    role.get("pred_id"),
-                    tuple((tag, hashable_value(value)) for tag, value in rest_terms),
-                )
-            )
-        key = (candidate.key_tuple_digest, tuple(role_key))
+        key = (candidate.candidate_kind, candidate.candidate_key)
         if key not in unique:
             unique[key] = candidate
-    return sorted(unique.values(), key=lambda cand: cand.key_tuple_digest)
+    return sorted(unique.values(), key=lambda cand: (cand.candidate_kind, cand.candidate_key))
 
 
 def find_schema_pred(store: Any, pred_id: str) -> dict[str, Any] | None:
@@ -186,8 +230,6 @@ def record_materialize_spec_from_head(
         raise WhereValidationError("record derivation head must be EntityType(...)")
     if head.get("entity_type") != record_type:
         raise WhereValidationError("record derivation head entity_type must equal target")
-    if id_policy is None:
-        raise WhereValidationError("record derivation requires id_policy")
     kwargs = head.get("kwargs")
     if not isinstance(kwargs, dict) or not kwargs:
         raise WhereValidationError("record derivation head.kwargs must be non-empty object")
@@ -200,8 +242,8 @@ def record_materialize_spec_from_head(
         if isinstance(entity, dict) and entity.get("entity_type") == record_type:
             record_entity = entity
             break
-    if not isinstance(record_entity, dict) or record_entity.get("is_record") is not True:
-        raise WhereValidationError(f"record entity not found or not marked is_record: {record_type}")
+    if not isinstance(record_entity, dict):
+        raise WhereValidationError(f"record entity not found in schema: {record_type}")
 
     predicates = store.schema_ir.get("predicates", [])
     if not isinstance(predicates, list):
@@ -253,6 +295,7 @@ def record_materialize_spec_from_head(
         "roles": role_defs,
         "head_vars": head_vars,
         "id_policy": id_policy,
+        "entity_identity_fields": record_entity.get("identity_fields"),
     }
 
 
@@ -273,6 +316,125 @@ def read_group_key_indexes(schema_pred: dict, arg_count: int) -> list[int]:
         out.append(idx)
         last = idx
     return out
+
+
+def _term_from_tag_value(tag: str, value: Any) -> dict[str, Any]:
+    if tag == "entity_ref":
+        if not isinstance(value, str) or not value:
+            raise WhereValidationError("entity_ref value must be non-empty string")
+        return {"kind": "entity_ref", "value": value}
+    return {"kind": "literal", "tag": tag, "value": value}
+
+
+def _derive_entity_identity_from_roles(
+    *,
+    record_type: str,
+    key_tuple_digest: str,
+    id_policy: Any,
+    roles: list[dict[str, Any]],
+    schema_identity_fields: list[dict[str, Any]] | None = None,
+) -> tuple[list[tuple[str, str]], dict[str, Any], list[str]]:
+    if isinstance(id_policy, str):
+        kind = id_policy
+    elif isinstance(id_policy, dict):
+        kind = id_policy.get("kind")
+    else:
+        kind = None
+
+    if kind == "identity_fields_v1" and isinstance(id_policy, dict):
+        fields = id_policy.get("fields")
+        if not isinstance(fields, list) or not fields:
+            raise WhereValidationError("id_policy.identity_fields_v1 requires non-empty fields")
+        role_map: dict[str, tuple[str, Any]] = {}
+        for role in roles:
+            field_name = role.get("field_name")
+            rest_terms = role.get("rest_terms")
+            if not isinstance(field_name, str) or not isinstance(rest_terms, list) or len(rest_terms) != 1:
+                continue
+            tag, val = rest_terms[0]
+            role_map[field_name] = (str(tag), val)
+        identity_fields: list[tuple[str, str]] = []
+        resolved_identity: dict[str, Any] = {}
+        missing_identity_fields: list[str] = []
+        for idx, item in enumerate(fields):
+            if not isinstance(item, dict):
+                raise WhereValidationError(f"id_policy.fields[{idx}] must be object")
+            name = item.get("name")
+            role_name = item.get("role", item.get("from_role"))
+            type_domain = item.get("type_domain")
+            if not isinstance(name, str) or not name:
+                raise WhereValidationError(f"id_policy.fields[{idx}].name must be non-empty string")
+            if not isinstance(role_name, str) or not role_name:
+                raise WhereValidationError(f"id_policy.fields[{idx}].role must be non-empty string")
+            if not isinstance(type_domain, str) or type_domain not in CANONICAL_TAGS:
+                raise WhereValidationError(f"id_policy.fields[{idx}].type_domain must be canonical tag")
+            identity_fields.append((name, type_domain))
+            role_term = role_map.get(role_name)
+            if role_term is None:
+                missing_identity_fields.append(name)
+                continue
+            actual_tag, value = role_term
+            if actual_tag != type_domain:
+                raise WhereValidationError(
+                    f"id_policy.fields[{idx}].type_domain mismatches role tag: expected {type_domain}, got {actual_tag}"
+                )
+            resolved_identity[name] = value
+        return identity_fields, resolved_identity, missing_identity_fields
+
+    role_map: dict[str, tuple[str, Any]] = {}
+    for role in roles:
+        field_name = role.get("field_name")
+        rest_terms = role.get("rest_terms")
+        if not isinstance(field_name, str) or not isinstance(rest_terms, list) or len(rest_terms) != 1:
+            continue
+        tag, val = rest_terms[0]
+        role_map[field_name] = (str(tag), val)
+
+    if isinstance(schema_identity_fields, list) and schema_identity_fields:
+        identity_fields: list[tuple[str, str]] = []
+        resolved_identity: dict[str, Any] = {}
+        missing_identity_fields: list[str] = []
+        for idx, field in enumerate(schema_identity_fields):
+            if not isinstance(field, dict):
+                raise WhereValidationError(f"identity_fields[{idx}] must be object")
+            name = field.get("name")
+            type_domain = field.get("type_domain")
+            if not isinstance(name, str) or not name:
+                raise WhereValidationError(f"identity_fields[{idx}].name must be non-empty string")
+            if not isinstance(type_domain, str) or type_domain not in CANONICAL_TAGS:
+                raise WhereValidationError(f"identity_fields[{idx}].type_domain must be canonical tag")
+            identity_fields.append((name, type_domain))
+
+            if name in role_map:
+                actual_tag, value = role_map[name]
+                if actual_tag != type_domain:
+                    raise WhereValidationError(
+                        f"identity field {name} type mismatches role tag: expected {type_domain}, got {actual_tag}"
+                    )
+                resolved_identity[name] = value
+                continue
+
+            if "default" in field:
+                resolved_identity[name] = coerce_value_for_tag(type_domain, field.get("default"))
+                continue
+
+            if field.get("default_factory") == "uuid4":
+                # Non-deterministic factory is never auto-filled in derivation evaluation.
+                missing_identity_fields.append(name)
+                continue
+
+            missing_identity_fields.append(name)
+        return identity_fields, resolved_identity, missing_identity_fields
+
+    # Fallback deterministic identity: key tuple digest.
+    identity_fields = [("key_tuple_digest", "string")]
+    resolved_identity = {"key_tuple_digest": key_tuple_digest}
+    missing_identity_fields: list[str] = []
+    if kind not in {None, "key_tuple_digest_v1"}:
+        # Keep transition strictness: unknown policy kinds are unsupported here.
+        raise WhereValidationError(f"unsupported id_policy kind for entity candidate: {kind}")
+    _ = record_type  # reserved for future per-entity defaults
+    return identity_fields, resolved_identity, missing_identity_fields
 
 
 def build_tagged_args(
