@@ -62,7 +62,7 @@ Authoring 中的实体声明（类、表单、YAML 节点等）编译为 SchemaI
 - `entity_type`
 - `identity_fields`（有序）
 - 可选 metadata（owner/security/docstring 等）
-- 若存在 reified relation / materialize_as 配置，则生成对应 projection 信息（见 `/规范.md` 的 reify 与 projection 章节）
+- 若存在 reified relation 配置，则生成对应 projection 信息（见 `/规范.md` 的 reify 与 projection 章节）
 
 硬约束：
 
@@ -225,21 +225,17 @@ Authoring 层可表达规则/推导意图，但 canonical 执行契约仍由 `Ru
 - Derivation 的当前最小 Authoring 执行入口（已实装）为 `target_pred_id/target` + `head_vars`（`select` 仅兼容别名）
 - `head_vars` 必须按目标谓词 `target_pred_id` 的 `arg_specs` **位置顺序**逐位对应；`arg0` 为实体槽位，必须绑定一个可解码为 `entity_ref` 的值（变量名不要求固定为 `"$E"`）
 - `target_pred_id` 指向 GNF 业务谓词目标（fact target），不是实体字段平铺结构
-- 蓝图中的用户友好 `head=...` + `materialize_as`（见 `/Users/zhenzhili/symbolic_agent/docs/规则.md` §5.2）已在 v1 形成**最小可执行子集**：
-  - `head=Person.field(...) + materialize_as="fact"`：已支持（schema-aware lowering → `target_pred_id + head_vars`）
-  - `head=RecordType(...) + materialize_as="record"`：已支持（record candidate → `accept(record)` 写 `<T>:exists` + role facts）
-  - `id_policy`：已支持 `key_tuple_digest_v1` 与 `identity_fields_v1`（有序字段 + 类型标签，来源于 record roles）；**v1 在有 `SchemaIR` 的 compile/preflight 路径中可自动推导 `identity_fields_v1`，普通用户可不显式填写**
+- 蓝图中的用户友好 `head=...` 已在 v2 成为主路径：
+  - `head=Person.field(...)`：fact candidate 路径（schema-aware lowering → `target_pred_id + head_vars`）
+  - `head=EntityType(...)`：entity candidate 路径（拆分为 `entity + dependent facts`）
+  - `materialize_as` / `id_policy` 已从用户语法移除
 - 仍未完全对齐蓝图的部分（后续补齐）：
-  - `head=RecordType(...) + materialize_as="fact"` 的 projection predicate 路径目前已支持最小子集（SchemaIR entity 上的 `projection_pred_id / projection_arg_order`）；更完整 keyed-head/projection 模型仍待补齐
   - keyed head 的更完整执行模型（当前内部仍会 lowering 为 position-based `head_vars`）
-  - `id_policy` 的更丰富来源/表达能力（当前 `identity_fields_v1` 为 role-sourced 子集）
 
 推荐实践（v1 当前阶段）：
 
-- 新示例默认使用 `head + materialize_as`，把 `target + head_vars/select` 视为兼容输入。
+- 新示例默认使用 `head`；把 `target + head_vars/select` 视为兼容输入。
 - 若需要排查 canonical payload/执行映射，再显式查看 lowering 后的 `target_pred_id + head_vars`。
-- `identity_fields_v1` 当前仅支持 **record role-sourced** 字段（`role + type_domain`）；不支持更丰富来源（如常量/表达式/跨对象路径）。
-- 对普通用户：优先省略 `id_policy`，让 compile/preflight 在有 `SchemaIR` 时自动生成；显式 `id_policy` 视为高级覆盖项（需要与 `head`/schema 一致）。
 
 ---
 

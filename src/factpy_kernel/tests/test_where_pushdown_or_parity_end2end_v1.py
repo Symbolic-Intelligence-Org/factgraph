@@ -42,6 +42,19 @@ class WherePushdownOrParityEnd2EndV1Tests(unittest.TestCase):
             "generated_at": "2026-01-01T00:00:00Z",
         }
 
+    @staticmethod
+    def _payload_sig(cand) -> tuple[str, tuple[tuple[str, object], ...]]:
+        terms = cand.payload["terms"]
+        return (
+            terms[0]["value"],
+            tuple(
+                (term["tag"], term["value"])
+                if term["kind"] == "literal"
+                else ("entity_ref", term["value"])
+                for term in terms[1:]
+            ),
+        )
+
     def _seed_store(self) -> Store:
         store = Store(schema_ir=self.schema_ir)
         set_field(
@@ -92,12 +105,8 @@ class WherePushdownOrParityEnd2EndV1Tests(unittest.TestCase):
             mode="engine",
         )
 
-        py_payload = {
-            (cand.payload["e_ref"], tuple(cand.payload["rest_terms"])) for cand in py
-        }
-        en_payload = {
-            (cand.payload["e_ref"], tuple(cand.payload["rest_terms"])) for cand in en
-        }
+        py_payload = {self._payload_sig(cand) for cand in py}
+        en_payload = {self._payload_sig(cand) for cand in en}
 
         self.assertEqual(py_payload, expected)
         self.assertEqual(en_payload, expected)

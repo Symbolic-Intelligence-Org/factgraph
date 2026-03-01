@@ -44,6 +44,19 @@ class EvaluateModeParityV1Tests(unittest.TestCase):
             "generated_at": "2026-01-01T00:00:00Z",
         }
 
+    @staticmethod
+    def _payload_sig(cand) -> tuple[str, tuple[tuple[str, object], ...]]:
+        terms = cand.payload["terms"]
+        return (
+            terms[0]["value"],
+            tuple(
+                (term["tag"], term["value"])
+                if term["kind"] == "literal"
+                else ("entity_ref", term["value"])
+                for term in terms[1:]
+            ),
+        )
+
     def test_evaluate_bad_mode_raises(self) -> None:
         store = Store(schema_ir=self.schema_ir)
         with self.assertRaises(ValueError):
@@ -95,12 +108,8 @@ class EvaluateModeParityV1Tests(unittest.TestCase):
             mode="engine",
         )
 
-        py_payload_set = {
-            (cand.payload["e_ref"], tuple(cand.payload["rest_terms"])) for cand in py
-        }
-        en_payload_set = {
-            (cand.payload["e_ref"], tuple(cand.payload["rest_terms"])) for cand in en
-        }
+        py_payload_set = {self._payload_sig(cand) for cand in py}
+        en_payload_set = {self._payload_sig(cand) for cand in en}
 
         self.assertEqual(py_payload_set, en_payload_set)
         self.assertEqual(
@@ -250,12 +259,8 @@ class EvaluateModeParityV1Tests(unittest.TestCase):
             mode="engine",
         )
 
-        py_payload_set = {
-            (cand.payload["e_ref"], tuple(cand.payload["rest_terms"])) for cand in py
-        }
-        en_payload_set = {
-            (cand.payload["e_ref"], tuple(cand.payload["rest_terms"])) for cand in en
-        }
+        py_payload_set = {self._payload_sig(cand) for cand in py}
+        en_payload_set = {self._payload_sig(cand) for cand in en}
         self.assertEqual(
             py_payload_set,
             {("idref_v1:Person:parity-r5", (("int", 5),))},

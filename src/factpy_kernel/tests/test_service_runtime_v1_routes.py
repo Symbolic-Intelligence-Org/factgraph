@@ -257,7 +257,6 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
                         "where": [["pred", "person:country", ["$E", "$C"]]],
                         "mode": "python",
                         "temporal_view": "record",
-                        "materialize_as": "fact",
                     }
                 },
             )
@@ -269,14 +268,18 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
             self.assertEqual(evaluate_body["meta"]["candidate_count"], 1)
             self.assertEqual(evaluate_body["meta"]["returned_count"], 1)
             self.assertFalse(evaluate_body["meta"]["truncated"])
-            self.assertNotIn("materialize_as", evaluate_body["meta"])
             self.assertEqual(evaluate_body["evaluation"]["derivation_id"], "drv.country_copy")
             self.assertEqual(evaluate_body["evaluation"]["version"], "1.0.0")
             self.assertEqual(evaluate_body["evaluation"]["target_pred_id"], "person:country_copy")
 
             candidate = evaluate_body["evaluation"]["candidates"][0]
-            self.assertEqual(candidate["payload"]["e_ref"], self.person_ref)
-            self.assertEqual(candidate["payload"]["rest_terms"], [["string", "de"]])
+            self.assertEqual(
+                candidate["payload"]["terms"],
+                [
+                    {"kind": "entity_ref", "value": self.person_ref},
+                    {"kind": "literal", "tag": "string", "value": "de"},
+                ],
+            )
 
             accept_resp = self.client.post(
                 f"/v1/runtime/sessions/{session_id}/derivations/accept",
@@ -342,7 +345,6 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
             self.assertEqual(evaluate_resp.status_code, 200)
             candidate = evaluate_resp.json()["evaluation"]["candidates"][0]
             del candidate["payload"]["terms"]
-            del candidate["payload"]["rest_terms"]
 
             accept_resp = self.client.post(
                 f"/v1/runtime/sessions/{session_id}/derivations/accept",
@@ -352,7 +354,7 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
             accept_body = accept_resp.json()
             self.assertFalse(accept_body["ok"])
             self.assertEqual(accept_body["errors"][0]["kind"], "shape")
-            self.assertEqual(accept_body["errors"][0]["path"], "$.candidate.payload.rest_terms")
+            self.assertEqual(accept_body["errors"][0]["path"], "$.candidate.payload")
 
     def test_derivation_accept_marks_aborted_result_as_terminal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -401,10 +403,10 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
                     skipped_reason_counts={"aborted": 1},
                     diagnostics=[
                         {
-                            "code": "RECORD_REJECT_ABORTED",
+                            "code": "CANDIDATE_ACCEPT_ABORTED",
                             "severity": "error",
-                            "path": "$.accept.record",
-                            "message": "record accept is aborted and cannot be retried",
+                            "path": "$.accept.candidate",
+                            "message": "candidate accept is aborted and cannot be retried",
                             "data": {},
                         }
                     ],
@@ -1004,7 +1006,6 @@ def _build_registry(
                 "target": "person:country",
                 "head_vars": ["$E", "$V"],
                 "where": [("pred", pred_id, ["$E", "$V"])],
-                "materialize_as": "fact",
                 "mode": "python",
                 "temporal_view": "record",
             }

@@ -15,9 +15,6 @@ class LivesIn(Entity):
     person: Person = Field(cardinality="functional")
     country: str = Field(cardinality="functional")
 
-    class Meta:
-        is_record = True
-
 
 class SDKDSLObjectsV1Tests(unittest.TestCase):
     def test_rule_to_authoring_payload_supports_pythonic_where_and_ruleref(self) -> None:
@@ -51,7 +48,6 @@ class SDKDSLObjectsV1Tests(unittest.TestCase):
                 version="1.0.0",
                 head=Person.country(person=p, value=c),
                 where=[("pred", "person:country", ["$p", "$c"])],
-                materialize_as="fact",
             )
         payload = drv.to_authoring_payload()
         self.assertEqual(payload["head"]["kind"], "head_call")

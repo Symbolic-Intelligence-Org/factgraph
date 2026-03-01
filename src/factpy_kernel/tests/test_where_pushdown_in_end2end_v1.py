@@ -42,6 +42,19 @@ class WherePushdownInEnd2EndV1Tests(unittest.TestCase):
             "generated_at": "2026-01-01T00:00:00Z",
         }
 
+    @staticmethod
+    def _payload_sig(cand) -> tuple[str, tuple[tuple[str, object], ...]]:
+        terms = cand.payload["terms"]
+        return (
+            terms[0]["value"],
+            tuple(
+                (term["tag"], term["value"])
+                if term["kind"] == "literal"
+                else ("entity_ref", term["value"])
+                for term in terms[1:]
+            ),
+        )
+
     def test_where_pushdown_in_single_value(self) -> None:
         if find_souffle_binary() is None:
             self.skipTest("souffle binary not found")
@@ -75,7 +88,7 @@ class WherePushdownInEnd2EndV1Tests(unittest.TestCase):
         )
 
         self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0].payload["rest_terms"], [("string", "de")])
+        self.assertEqual(self._payload_sig(candidates[0]), ("idref_v1:Person:in-e1", (("string", "de"),)))
 
     def test_where_pushdown_in_multi_values(self) -> None:
         if find_souffle_binary() is None:
@@ -111,7 +124,7 @@ class WherePushdownInEnd2EndV1Tests(unittest.TestCase):
 
         self.assertEqual(
             {
-                (cand.payload["e_ref"], tuple(cand.payload["rest_terms"]))
+                self._payload_sig(cand)
                 for cand in candidates
             },
             {

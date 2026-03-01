@@ -10,6 +10,6 @@
 --safe
 apply_run_ids
 
-head + materialize_as
+head（auto inferred kind）
 target + head_vars
 arg_specs

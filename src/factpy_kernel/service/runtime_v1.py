@@ -393,9 +393,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             where=list(compiled["where"]),
             mode=compiled["mode"],
             temporal_view=compiled["temporal_view"],
-            materialize_as=compiled.get("materialize_as"),
             head=compiled.get("head"),
-            id_policy=compiled.get("id_policy"),
         )
         returned_candidates = candidates if limit is None else candidates[:limit]
         return ok_response(
@@ -684,6 +682,9 @@ def _jsonable_row(row: tuple[Any, ...]) -> list[Any]:
 
 def _candidate_to_dict(candidate: CandidateSet) -> dict[str, Any]:
     return {
+        "candidate_id": candidate.candidate_id,
+        "candidate_key": candidate.candidate_key,
+        "candidate_kind": candidate.candidate_kind,
         "derivation_id": candidate.derivation_id,
         "derivation_version": candidate.derivation_version,
         "run_id": candidate.run_id,
@@ -718,7 +719,7 @@ def _candidate_from_dict(value: Any, *, path: str) -> CandidateSet:
         state=_require_non_empty_str(value.get("state"), path=f"{path}.state"),
         candidate_id=_optional_str_or_none(value.get("candidate_id"), path=f"{path}.candidate_id") or "",
         candidate_key=_optional_str_or_none(value.get("candidate_key"), path=f"{path}.candidate_key") or "",
-        candidate_kind=_optional_str_or_none(value.get("candidate_kind"), path=f"{path}.candidate_kind") or "fact",
+        candidate_kind=_require_non_empty_str(value.get("candidate_kind"), path=f"{path}.candidate_kind"),
     )
 
 
@@ -774,35 +775,11 @@ def _candidate_payload_from_dict(value: Any, *, path: str) -> dict[str, Any]:
                 path=f"{path}.proposed_entity_ref",
             )
         return payload
-    if payload.get("materialize_as") == "record":
-        payload["record_type"] = _require_non_empty_str(payload.get("record_type"), path=f"{path}.record_type")
-        payload["record_exists_pred_id"] = _require_non_empty_str(
-            payload.get("record_exists_pred_id"),
-            path=f"{path}.record_exists_pred_id",
-        )
-        if "id_policy" not in payload:
-            raise facade_error("id_policy is required for record candidate", kind="shape", path=f"{path}.id_policy")
-        roles = payload.get("roles")
-        if not isinstance(roles, list) or not roles:
-            raise facade_error("roles must be non-empty list", kind="shape", path=f"{path}.roles")
-        normalized_roles: list[dict[str, Any]] = []
-        for idx, role in enumerate(roles):
-            role_path = f"{path}.roles[{idx}]"
-            if not isinstance(role, dict):
-                raise facade_error("role must be object", kind="shape", path=role_path)
-            normalized_role = dict(role)
-            normalized_role["pred_id"] = _require_non_empty_str(role.get("pred_id"), path=f"{role_path}.pred_id")
-            if "field_name" in role:
-                normalized_role["field_name"] = _require_non_empty_str(role.get("field_name"), path=f"{role_path}.field_name")
-            if "type_domain" in role:
-                normalized_role["type_domain"] = _require_non_empty_str(role.get("type_domain"), path=f"{role_path}.type_domain")
-            normalized_role["rest_terms"] = _normalize_rest_terms(role.get("rest_terms"), path=f"{role_path}.rest_terms")
-            normalized_roles.append(normalized_role)
-        payload["roles"] = normalized_roles
-        return payload
-    payload["e_ref"] = _require_non_empty_str(payload.get("e_ref"), path=f"{path}.e_ref")
-    payload["rest_terms"] = _normalize_rest_terms(payload.get("rest_terms"), path=f"{path}.rest_terms")
-    return payload
+    raise facade_error(
+        "payload must be v2 fact payload (pred_id+terms) or v2 entity payload",
+        kind="shape",
+        path=path,
+    )
 
 
 def _accept_options_from_dto(value: Any, *, path: str) -> AcceptOptions:

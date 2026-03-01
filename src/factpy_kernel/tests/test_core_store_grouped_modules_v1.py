@@ -36,14 +36,17 @@ class CoreStoreGroupedModulesV1Tests(unittest.TestCase):
             where=[("pred", "person:country", ["$E", "$C"])],
             mode="python",
             temporal_view="record",
-            materialize_as=None,
             head=None,
-            id_policy=None,
             engine_evaluate=store.evaluate_engine,
         )
         self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0].payload["e_ref"], e_ref)
-        self.assertEqual(candidates[0].payload["rest_terms"], [("string", "de")])
+        self.assertEqual(
+            candidates[0].payload["terms"],
+            [
+                {"kind": "entity_ref", "value": e_ref},
+                {"kind": "literal", "tag": "string", "value": "de"},
+            ],
+        )
 
         detail = explain_fact(store, "person:country", e_ref, "de")
         self.assertEqual(detail["pred_id"], "person:country")

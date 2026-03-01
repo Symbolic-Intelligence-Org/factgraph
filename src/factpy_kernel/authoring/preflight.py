@@ -297,9 +297,7 @@ def derivation_dry_run_preview(
     where: list[Any],
     mode: str = "python",
     temporal_view: str = "record",
-    materialize_as: str | None = None,
     head: dict[str, Any] | None = None,
-    id_policy: Any | None = None,
 ) -> dict[str, Any]:
     if not isinstance(store, Store):
         raise AuthoringPreflightError("store must be Store")
@@ -337,9 +335,7 @@ def derivation_dry_run_preview(
             where=where,
             mode=mode,
             temporal_view=temporal_view,
-            materialize_as=materialize_as,
             head=head,
-            id_policy=id_policy,
         )
     except (WhereValidationError, ValueError) as exc:
         diagnostics = [
@@ -368,15 +364,10 @@ def derivation_dry_run_preview(
                 "candidate_key": cand.candidate_key,
                 "candidate_kind": cand.candidate_kind,
                 "target": cand.target,
-                "e_ref": payload.get("e_ref"),
-                "rest_terms": payload.get("rest_terms"),
                 "terms": payload.get("terms"),
                 "entity_type": payload.get("entity_type"),
                 "resolved_identity": payload.get("resolved_identity"),
                 "missing_identity_fields": payload.get("missing_identity_fields"),
-                "materialize_as": payload.get("materialize_as"),
-                "record_type": payload.get("record_type"),
-                "roles": payload.get("roles"),
                 "key_tuple_digest": cand.key_tuple_digest,
                 "tup_digest": cand.tup_digest,
                 "run_id": cand.run_id,
@@ -444,9 +435,7 @@ def derivation_dry_run_preview_authoring(
         where=compiled["where"],
         mode=compiled["mode"],
         temporal_view=compiled["temporal_view"],
-        materialize_as=compiled.get("materialize_as"),
         head=compiled.get("head"),
-        id_policy=compiled.get("id_policy"),
     )
 
 

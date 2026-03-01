@@ -104,13 +104,11 @@ class Derivation:
     version: str
     where: list[Any]
     head: HeadCall | None = None
-    materialize_as: str | None = None
     target: str | None = None
     head_vars: list[Any] | None = None
     mode: str | None = None
     temporal_view: str | None = None
     status: str | None = None
-    id_policy: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id:
@@ -121,8 +119,6 @@ class Derivation:
             raise SDKDSLError("Derivation.where must be non-empty list")
         if self.head is not None and not isinstance(self.head, HeadCall):
             raise SDKDSLError("Derivation.head must be a DSL head call")
-        if self.materialize_as is not None and self.materialize_as not in {"fact", "record"}:
-            raise SDKDSLError("Derivation.materialize_as must be 'fact' or 'record'")
 
     def to_authoring_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -132,8 +128,6 @@ class Derivation:
         }
         if self.head is not None:
             payload["head"] = self.head.to_authoring_head()
-        if self.materialize_as is not None:
-            payload["materialize_as"] = self.materialize_as
         if self.target is not None:
             payload["target"] = self.target
         if self.head_vars is not None:
@@ -144,8 +138,6 @@ class Derivation:
             payload["temporal_view"] = self.temporal_view
         if self.status is not None:
             payload["status"] = self.status
-        if self.id_policy is not None:
-            payload["id_policy"] = dict(self.id_policy)
         return payload
 
 

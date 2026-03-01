@@ -106,11 +106,11 @@ class TutorialDocsV1Tests(unittest.TestCase):
         ]:
             text = (_tutorials_root() / filename).read_text(encoding="utf-8")
             self.assertIn('head=Person.country(person=E, country=country)', text, msg=filename)
-            self.assertIn('materialize_as="fact"', text, msg=filename)
+            self.assertNotIn("materialize_as", text, msg=filename)
             self.assertIn("arg_specs", text, msg=filename)
 
         cli_ref = (_tutorials_root() / "09-CLI-命令速查.md").read_text(encoding="utf-8")
-        self.assertIn("head + materialize_as", cli_ref)
+        self.assertIn("head（auto inferred kind）", cli_ref)
         self.assertIn("target + head_vars", cli_ref)
         self.assertIn("arg_specs", cli_ref)
 

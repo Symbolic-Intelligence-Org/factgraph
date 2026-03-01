@@ -1,41 +1,28 @@
 from __future__ import annotations
 
 import unittest
-import warnings
 
 from factpy_kernel.authoring import compile_authoring_derivation_v1
-from factpy_kernel.core.derivation.accept import (
-    AcceptOptions,
-    LegacyAcceptFallbackWarning,
-)
-from factpy_kernel.core.derivation.candidates import make_candidate
+from factpy_kernel.core.derivation.accept import AcceptOptions
+from factpy_kernel.core.derivation.candidates import CandidateSet, make_candidate
 from factpy_kernel.core.evidence.write_protocol import WriteProtocolError, now_epoch_nanos, set_field
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
-from factpy_kernel.core.store.api import Store
+from factpy_kernel.core.store.runtime import Store
 
 
 class DerivationAcceptV2Tests(unittest.TestCase):
     def setUp(self) -> None:
         self.schema_ir = {
-            "schema_ir_version": "schema_ir_v1",
+            "schema_ir_version": "v1",
             "entities": [
-                {
-                    "entity_type": "Person",
-                    "identity_fields": [{"name": "source_id", "type_domain": "string"}],
-                },
+                {"entity_type": "Person", "identity_fields": [{"name": "source_id", "type_domain": "string"}]},
+                {"entity_type": "Language", "identity_fields": [{"name": "code", "type_domain": "string"}]},
                 {
                     "entity_type": "Speaks",
                     "identity_fields": [
                         {"name": "person", "type_domain": "entity_ref"},
                         {"name": "language", "type_domain": "entity_ref"},
                     ],
-                    "is_record": True,
-                    "projection_pred_id": "person:speaks",
-                    "projection_arg_order": ["person", "language"],
-                },
-                {
-                    "entity_type": "Language",
-                    "identity_fields": [{"name": "code", "type_domain": "string"}],
                 },
                 {
                     "entity_type": "User",
@@ -48,28 +35,20 @@ class DerivationAcceptV2Tests(unittest.TestCase):
             "predicates": [
                 {
                     "pred_id": "person:country",
+                    "owner_type": "Person",
+                    "py_field_name": "country",
                     "arg_specs": [
-                        {"name": "E", "type_domain": "entity_ref"},
+                        {"name": "person", "type_domain": "entity_ref"},
                         {"name": "country", "type_domain": "string"},
                     ],
                     "group_key_indexes": [0],
                     "cardinality": "functional",
                 },
                 {
-                    "pred_id": "person:speaks",
-                    "arg_specs": [
-                        {"name": "person", "type_domain": "entity_ref"},
-                        {"name": "language", "type_domain": "entity_ref"},
-                    ],
-                    "group_key_indexes": [0, 1],
-                    "cardinality": "multi",
-                },
-                {
                     "pred_id": "Speaks:exists",
                     "owner_type": "Speaks",
-                    "is_record_exists": True,
                     "is_entity_exists": True,
-                    "arg_specs": [{"name": "S", "type_domain": "entity_ref"}],
+                    "arg_specs": [{"name": "speaks", "type_domain": "entity_ref"}],
                     "group_key_indexes": [0],
                     "cardinality": "functional",
                 },
@@ -78,7 +57,7 @@ class DerivationAcceptV2Tests(unittest.TestCase):
                     "owner_type": "Speaks",
                     "py_field_name": "person",
                     "arg_specs": [
-                        {"name": "S", "type_domain": "entity_ref"},
+                        {"name": "speaks", "type_domain": "entity_ref"},
                         {"name": "person", "type_domain": "entity_ref"},
                     ],
                     "group_key_indexes": [0],
@@ -89,7 +68,7 @@ class DerivationAcceptV2Tests(unittest.TestCase):
                     "owner_type": "Speaks",
                     "py_field_name": "language",
                     "arg_specs": [
-                        {"name": "S", "type_domain": "entity_ref"},
+                        {"name": "speaks", "type_domain": "entity_ref"},
                         {"name": "language", "type_domain": "entity_ref"},
                     ],
                     "group_key_indexes": [0],
@@ -98,9 +77,8 @@ class DerivationAcceptV2Tests(unittest.TestCase):
                 {
                     "pred_id": "User:exists",
                     "owner_type": "User",
-                    "is_record_exists": True,
                     "is_entity_exists": True,
-                    "arg_specs": [{"name": "U", "type_domain": "entity_ref"}],
+                    "arg_specs": [{"name": "user", "type_domain": "entity_ref"}],
                     "group_key_indexes": [0],
                     "cardinality": "functional",
                 },
@@ -109,7 +87,7 @@ class DerivationAcceptV2Tests(unittest.TestCase):
                     "owner_type": "User",
                     "py_field_name": "name",
                     "arg_specs": [
-                        {"name": "U", "type_domain": "entity_ref"},
+                        {"name": "user", "type_domain": "entity_ref"},
                         {"name": "name", "type_domain": "string"},
                     ],
                     "group_key_indexes": [0],
@@ -121,8 +99,8 @@ class DerivationAcceptV2Tests(unittest.TestCase):
             "generated_at": "2026-01-01T00:00:00Z",
         }
         self.store = Store(schema_ir=self.schema_ir)
-        self.person_ref = "idref_v1:Person:irk4tcjz3wzyl4ja6245k5duzqd3vn5dypm4rr5s7glkdulef4ha"
-        self.lang_ref = "idref_v1:Language:llllllllllllllllllllllllllllllllllllllllllllllllllll"
+        self.person_ref = encode_idref_v1("Person", [("source_id", "string", "u1")])
+        self.lang_ref = encode_idref_v1("Language", [("code", "string", "de")])
 
     def test_evaluate_entity_head_emits_entity_and_fact_candidates(self) -> None:
         set_field(
@@ -142,11 +120,7 @@ class DerivationAcceptV2Tests(unittest.TestCase):
                     "entity_type": "Speaks",
                     "kwargs": {"person": "$E", "language": self.lang_ref},
                 },
-                "materialize_as": "record",
-                "where": [
-                    ("pred", "person:country", ["$E", "$C"]),
-                    ("eq", "$C", "de"),
-                ],
+                "where": [("pred", "person:country", ["$E", "de"])],
             },
             schema_ir=self.schema_ir,
         )
@@ -156,9 +130,7 @@ class DerivationAcceptV2Tests(unittest.TestCase):
             target_pred_id=compiled["target_pred_id"],
             head_vars=compiled["head_vars"],
             where=compiled["where"],
-            materialize_as=compiled["materialize_as"],
             head=compiled["head"],
-            id_policy=compiled.get("id_policy"),
             mode="python",
         )
         self.assertEqual(len(candidates), 3)
@@ -168,8 +140,6 @@ class DerivationAcceptV2Tests(unittest.TestCase):
         self.assertEqual(len(fact_candidates), 2)
         entity = entity_candidates[0]
         self.assertEqual(entity.target, "Speaks")
-        self.assertIn("resolved_identity", entity.payload)
-        self.assertIn("missing_identity_fields", entity.payload)
         for fact in fact_candidates:
             self.assertEqual(fact.payload["terms"][0]["kind"], "candidate_ref")
             self.assertEqual(fact.payload["terms"][0]["candidate_key"], entity.candidate_key)
@@ -192,7 +162,6 @@ class DerivationAcceptV2Tests(unittest.TestCase):
                     "entity_type": "Speaks",
                     "kwargs": {"person": "$E", "language": self.lang_ref},
                 },
-                "materialize_as": "record",
                 "where": [("pred", "person:country", ["$E", "de"])],
             },
             schema_ir=self.schema_ir,
@@ -203,9 +172,7 @@ class DerivationAcceptV2Tests(unittest.TestCase):
             target_pred_id=compiled["target_pred_id"],
             head_vars=compiled["head_vars"],
             where=compiled["where"],
-            materialize_as=compiled["materialize_as"],
             head=compiled["head"],
-            id_policy=compiled.get("id_policy"),
             mode="python",
         )
         rows = self.store.accept_many(candidates, mode="atomic")
@@ -333,82 +300,25 @@ class DerivationAcceptV2Tests(unittest.TestCase):
                 options=AcceptOptions(identity_override={"unknown": "x"}),
             )
 
-    def test_record_head_fact_projection_path_is_still_fact_candidate(self) -> None:
-        set_field(
-            self.store.ledger,
-            pred_id="person:country",
-            e_ref=self.person_ref,
-            rest_terms=[("string", "de")],
-            meta={"source": "seed"},
-        )
-        compiled = compile_authoring_derivation_v1(
-            {
-                "derivation_id": "derive_speaks_fact_projection",
-                "version": "v1",
-                "head": {
-                    "kind": "head_call",
-                    "callee_kind": "entity_type",
-                    "entity_type": "Speaks",
-                    "kwargs": {"person": "$p", "language": "$l"},
-                },
-                "materialize_as": "fact",
-                "where": [
-                    ("pred", "person:country", ["$p", "$c"]),
-                    ("eq", "$c", "de"),
-                    ("eq", "$l", self.lang_ref),
-                ],
-            },
-            schema_ir=self.schema_ir,
-        )
-        self.assertEqual(compiled["target_pred_id"], "person:speaks")
-        candidates = self.store.evaluate(
-            derivation_id=compiled["derivation_id"],
-            version=compiled["version"],
-            target_pred_id=compiled["target_pred_id"],
-            head_vars=compiled["head_vars"],
-            where=compiled["where"],
-            materialize_as=compiled["materialize_as"],
-            head=compiled["head"],
-            mode="python",
-        )
-        self.assertEqual(len(candidates), 1)
-        cand = candidates[0]
-        self.assertEqual(cand.candidate_kind, "fact")
-        self.assertIn("terms", cand.payload)
-        self.assertEqual(cand.payload["pred_id"], "person:speaks")
-
-    def test_legacy_record_payload_emits_warning(self) -> None:
-        legacy_candidate = make_candidate(
-            derivation_id="legacy_d",
-            derivation_version="v1",
-            run_id="legacy_run",
-            target="Speaks",
-            key_terms=[("string", "Speaks"), ("string", "legacy")],
-            payload={
-                "materialize_as": "record",
-                "record_type": "Speaks",
-                "record_exists_pred_id": "Speaks:exists",
-                "id_policy": "key_tuple_digest_v1",
-                "roles": [
-                    {"pred_id": "speaks:person", "rest_terms": [("entity_ref", self.person_ref)]},
-                    {"pred_id": "speaks:language", "rest_terms": [("entity_ref", self.lang_ref)]},
-                ],
-            },
-            support_digest="sha256:" + ("0" * 64),
-            support_kind="none",
-            generated_at=now_epoch_nanos(),
-            candidate_kind="entity",
-        )
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            result = self.store.accept(
+    def test_legacy_fact_payload_is_rejected_at_candidate_construction(self) -> None:
+        with self.assertRaises(ValueError):
+            CandidateSet(
                 derivation_id="legacy_d",
-                version="v1",
-                candidate_set=legacy_candidate,
-                options=AcceptOptions(),
+                derivation_version="v1",
+                run_id="legacy_run",
+                target="person:country",
+                key_tuple_digest="sha256:" + ("0" * 64),
+                tup_digest=None,
+                payload={
+                    "e_ref": self.person_ref,
+                    "rest_terms": [("string", "de")],
+                },
+                support_digest="sha256:" + ("0" * 64),
+                support_kind="none",
+                generated_at=now_epoch_nanos(),
+                state="generated",
+                candidate_kind="fact",
             )
-        self.assertEqual(result.accepted_count, 1)
-        self.assertTrue(any(isinstance(row.message, LegacyAcceptFallbackWarning) for row in caught))
 
 
 if __name__ == "__main__":

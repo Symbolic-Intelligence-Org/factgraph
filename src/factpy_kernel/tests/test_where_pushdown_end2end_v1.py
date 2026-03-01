@@ -104,6 +104,18 @@ class WherePushdownEnd2EndV1Tests(unittest.TestCase):
             "generated_at": "2026-01-01T00:00:00Z",
         }
 
+    @staticmethod
+    def _payload_sig(candidate) -> tuple[str, list[tuple[str, object]]]:
+        terms = candidate.payload["terms"]
+        e_ref = terms[0]["value"]
+        rest_terms: list[tuple[str, object]] = []
+        for term in terms[1:]:
+            if term["kind"] == "literal":
+                rest_terms.append((term["tag"], term["value"]))
+            else:
+                rest_terms.append(("entity_ref", term["value"]))
+        return e_ref, rest_terms
+
     def test_where_pushdown_produces_candidates(self) -> None:
         if find_souffle_binary() is None:
             self.skipTest("souffle binary not found")
@@ -131,8 +143,7 @@ class WherePushdownEnd2EndV1Tests(unittest.TestCase):
 
         self.assertTrue(candidates)
         candidate = candidates[0]
-        self.assertEqual(candidate.payload["e_ref"], e_ref)
-        self.assertEqual(candidate.payload["rest_terms"], [("string", "de")])
+        self.assertEqual(self._payload_sig(candidate), (e_ref, [("string", "de")]))
         self.assertTrue(candidate.key_tuple_digest.startswith("sha256:"))
 
     def test_where_pushdown_int_roundtrip(self) -> None:
@@ -162,8 +173,7 @@ class WherePushdownEnd2EndV1Tests(unittest.TestCase):
 
         self.assertTrue(candidates)
         candidate = candidates[0]
-        self.assertEqual(candidate.payload["e_ref"], e_ref)
-        self.assertEqual(candidate.payload["rest_terms"], [("int", 3)])
+        self.assertEqual(self._payload_sig(candidate), (e_ref, [("int", 3)]))
         self.assertTrue(candidate.key_tuple_digest.startswith("sha256:"))
 
     def test_where_pushdown_bool_roundtrip(self) -> None:
@@ -193,8 +203,7 @@ class WherePushdownEnd2EndV1Tests(unittest.TestCase):
 
         self.assertTrue(candidates)
         candidate = candidates[0]
-        self.assertEqual(candidate.payload["e_ref"], e_ref)
-        self.assertEqual(candidate.payload["rest_terms"], [("bool", True)])
+        self.assertEqual(self._payload_sig(candidate), (e_ref, [("bool", True)]))
         self.assertTrue(candidate.key_tuple_digest.startswith("sha256:"))
 
     def test_where_pushdown_time_roundtrip(self) -> None:
@@ -225,8 +234,7 @@ class WherePushdownEnd2EndV1Tests(unittest.TestCase):
 
         self.assertTrue(candidates)
         candidate = candidates[0]
-        self.assertEqual(candidate.payload["e_ref"], e_ref)
-        self.assertEqual(candidate.payload["rest_terms"], [("time", ts)])
+        self.assertEqual(self._payload_sig(candidate), (e_ref, [("time", ts)]))
         self.assertTrue(candidate.key_tuple_digest.startswith("sha256:"))
 
     def test_where_pushdown_bytes_roundtrip(self) -> None:
@@ -257,8 +265,7 @@ class WherePushdownEnd2EndV1Tests(unittest.TestCase):
 
         self.assertTrue(candidates)
         candidate = candidates[0]
-        self.assertEqual(candidate.payload["e_ref"], e_ref)
-        self.assertEqual(candidate.payload["rest_terms"], [("bytes", blob)])
+        self.assertEqual(self._payload_sig(candidate), (e_ref, [("bytes", blob)]))
         self.assertTrue(candidate.key_tuple_digest.startswith("sha256:"))
 
     def test_where_pushdown_uuid_roundtrip(self) -> None:
@@ -289,8 +296,7 @@ class WherePushdownEnd2EndV1Tests(unittest.TestCase):
 
         self.assertTrue(candidates)
         candidate = candidates[0]
-        self.assertEqual(candidate.payload["e_ref"], e_ref)
-        self.assertEqual(candidate.payload["rest_terms"], [("uuid", uid)])
+        self.assertEqual(self._payload_sig(candidate), (e_ref, [("uuid", uid)]))
         self.assertTrue(candidate.key_tuple_digest.startswith("sha256:"))
 
     def test_where_pushdown_float64_roundtrip(self) -> None:
@@ -321,8 +327,7 @@ class WherePushdownEnd2EndV1Tests(unittest.TestCase):
 
         self.assertTrue(candidates)
         candidate = candidates[0]
-        self.assertEqual(candidate.payload["e_ref"], e_ref)
-        self.assertEqual(candidate.payload["rest_terms"], [("float64", score_bits)])
+        self.assertEqual(self._payload_sig(candidate), (e_ref, [("float64", score_bits)]))
         self.assertTrue(candidate.key_tuple_digest.startswith("sha256:"))
 
 

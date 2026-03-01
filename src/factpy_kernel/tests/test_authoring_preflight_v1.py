@@ -212,7 +212,13 @@ class AuthoringPreflightV1Tests(unittest.TestCase):
         self.assertTrue(ok_payload["ok"])
         self.assertEqual(ok_payload["kind"], "derivation_dry_run")
         self.assertEqual(ok_payload["summary"]["candidate_count"], 1)
-        self.assertEqual(ok_payload["summary"]["preview_candidates"][0]["rest_terms"], [("string", "fr")])
+        self.assertEqual(
+            ok_payload["summary"]["preview_candidates"][0]["terms"],
+            [
+                {"kind": "entity_ref", "value": "idref_v1:Person:authoring-2"},
+                {"kind": "literal", "tag": "string", "value": "fr"},
+            ],
+        )
         self.assertEqual(ok_payload["diagnostics"], [])
         self.assertEqual(ok_payload["warnings"], [])
 
@@ -263,7 +269,6 @@ class AuthoringPreflightV1Tests(unittest.TestCase):
                     "field": "country",
                     "kwargs": {"person": "E", "country": "C"},
                 },
-                "materialize_as": "fact",
                 "body": [("pred", "person:country", ["$E", "$C"])],
             },
         )
@@ -291,7 +296,6 @@ class AuthoringPreflightV1Tests(unittest.TestCase):
                         "language": "idref_v1:Language:cccccccccccccccccccccccccccccccccccccccccccccccccccc",
                     },
                 },
-                "materialize_as": "record",
                 "body": [("pred", "person:country", ["$E", "$C"])],
             },
         )
@@ -302,8 +306,8 @@ class AuthoringPreflightV1Tests(unittest.TestCase):
         entity_preview = next(item for item in previews if item["candidate_kind"] == "entity")
         self.assertEqual(entity_preview["target"], "Speaks")
         self.assertEqual(entity_preview["entity_type"], "Speaks")
-        self.assertEqual(entity_preview["missing_identity_fields"], [])
-        self.assertEqual(set(entity_preview["resolved_identity"].keys()), {"person", "language"})
+        self.assertEqual(entity_preview["missing_identity_fields"], ["uid"])
+        self.assertEqual(entity_preview["resolved_identity"], {})
 
         fact_previews = [item for item in previews if item["candidate_kind"] == "fact"]
         self.assertEqual({item["target"] for item in fact_previews}, {"speaks:person", "speaks:language"})
@@ -508,7 +512,6 @@ def _schema_with_record_speaks() -> dict:
         {
             "entity_type": "Speaks",
             "identity_fields": [{"name": "uid", "type_domain": "string"}],
-            "is_record": True,
         }
     )
     schema["predicates"].extend(
@@ -516,7 +519,7 @@ def _schema_with_record_speaks() -> dict:
             {
                 "pred_id": "Speaks:exists",
                 "owner_type": "Speaks",
-                "is_record_exists": True,
+                "is_entity_exists": True,
                 "arg_specs": [{"name": "speaks", "type_domain": "entity_ref"}],
                 "group_key_indexes": [0],
                 "cardinality": "functional",

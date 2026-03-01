@@ -122,8 +122,6 @@ Fields:
 - `mode`
 - `temporal_view`
 - `status`
-- `materialize_as` (compatibility field, usually optional)
-- `id_policy` (compatibility field, only used by legacy `record` path)
 
 Method:
 - `drv.to_authoring_payload()`
@@ -142,11 +140,11 @@ Notes:
 
 ---
 
-## 6. `head` and `materialize_as` (v2)
+## 6. `head` decides candidate kind (v2)
 
 ### 6.1 Default inference (recommended)
 
-When `materialize_as` is omitted, compiler behavior is inferred from head shape:
+Compiler behavior is inferred from head shape:
 
 | Head shape | Default path | Evaluate output |
 |---|---|---|
@@ -156,45 +154,18 @@ When `materialize_as` is omitted, compiler behavior is inferred from head shape:
 Compatibility:
 - without `head`, `target + head_vars` still works as fact-only legacy path.
 
-### 6.2 Current role of `materialize_as`
+### 6.2 Migration cheat-sheet (old -> v2)
 
-- explicit `materialize_as="fact" | "record"` is still accepted for compatibility.
-- new code should prefer omitting it and rely on head inference.
-- `materialize_as="record"` is a legacy spelling for the entity path in current runtime behavior.
-
----
-
-## 7. `id_policy` (compatibility only)
-
-`id_policy` is mainly relevant for legacy `materialize_as="record"` inputs; it is generally unnecessary on the v2 default path.
-
-Supported in v1:
-- `key_tuple_digest_v1`
-- `identity_fields_v1`
-
-### 7.1 `key_tuple_digest_v1`
-
-Minimal policy; derives record identity from candidate key digest.
-
-### 7.2 `identity_fields_v1`
-
-Explicitly builds identity from selected role fields; typically better for production stability.
-
-```python
-id_policy={
-  "kind": "identity_fields_v1",
-  "fields": [
-    {"name": "person", "role": "person", "type_domain": "entity_ref"},
-    {"name": "language", "role": "language", "type_domain": "entity_ref"},
-  ],
-}
-```
-
-In schema-aware compile path, legacy record derivations can still auto-derive default `identity_fields_v1` when omitted.
+| Old style | New style | Notes |
+|---|---|---|
+| `materialize_as="fact"` | `head=Entity.field(...)` | candidate_kind is inferred as fact |
+| `materialize_as="record"` | `head=EntityType(...)` | candidate_kind is inferred as entity (plus dependent facts) |
+| `id_policy=...` | removed | identity is resolved in entity candidates; missing fields are provided via `identity_override` on accept |
+| fact payload `e_ref/rest_terms` | fact payload `terms` | `terms[0]` is always subject (arg0) |
 
 ---
 
-## 8. `sdk.evaluate(...)` output: `CandidateSet`
+## 7. `sdk.evaluate(...)` output: `CandidateSet`
 
 Return type: `list[CandidateSet]`
 
@@ -226,14 +197,23 @@ Payload shapes:
 - fact candidate (v2):
   - `{"pred_id": ..., "terms": [{"kind": "entity_ref" | "candidate_ref" | "literal", ...}, ...]}`
   - `terms[0]` is always the subject slot (arg0).
-- compatibility inputs may still contain `e_ref/rest_terms` or legacy record payloads; new code should prefer v2 payloads.
 
 Note:
 - for entity-head derivations, evaluate commonly returns a small graph: one entity candidate plus N dependent fact candidates linked via `candidate_ref`.
 
+### 7.1 Recommended way to read fact payload
+
+```python
+fact = next(c for c in cands if c.candidate_kind == "fact")
+subject = fact.payload["terms"][0]
+value_terms = fact.payload["terms"][1:]
+```
+
+Do not read fact payload as `payload["e_ref"]` / `payload["rest_terms"]`.
+
 ---
 
-## 9. `sdk.accept(...)`: result shape and idempotency
+## 8. `sdk.accept(...)`: result shape and idempotency
 
 Main path:
 
@@ -323,3 +303,47 @@ In SDK path, object DSL is lowered and then schema-aware compiled:
 
 So in standard `SDKStore.run/evaluate` flow, record sugar usually follows schema custom `pred_id` correctly.  
 If you lower/compile outside schema-aware context, prefer explicit `Pred(...)`.
+
+---
+
+## 12. Minimal end-to-end examples
+
+### 12.1 fact path: evaluate -> accept
+
+```python
+with vars("p", "c") as (p, c):
+    drv = Derivation(
+        id="drv.country_copy",
+        version="1.0.0",
+        head=Person.country_copy(person=p, country_copy=c),
+        where=[Pred("person:country", p, c)],
+    )
+
+cands = sdk.evaluate(drv, mode="python")
+fact = next(c for c in cands if c.candidate_kind == "fact")
+res = sdk.accept(fact, approved_by="alice")
+```
+
+### 12.2 entity path: accept dependency graph
+
+```python
+with vars("u", "l") as (u, l):
+    drv = Derivation(
+        id="drv.speaks",
+        version="1.0.0",
+        head=Speaks(user=u, language=l),
+        where=[Pred("person:country", u, "de"), Pred("user:lang_pref", u, l)],
+    )
+
+cands = sdk.evaluate(drv, mode="python")
+rows = sdk.accept_many(cands, mode="atomic")
+```
+
+### 12.3 incomplete identity
+
+```python
+entity = next(c for c in cands if c.candidate_kind == "entity")
+sdk.accept(entity, identity_override={"source_id": "u-001"})
+```
+
+Without `identity_override`, accept returns `IDENTITY_INCOMPLETE` (or equivalent validation failure).

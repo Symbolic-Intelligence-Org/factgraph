@@ -217,7 +217,15 @@ class WherePushdownNotMultiPredParityEnd2EndV1Tests(unittest.TestCase):
     @staticmethod
     def _payload_set(candidates) -> set[tuple[str, tuple[tuple[str, object], ...]]]:
         return {
-            (cand.payload["e_ref"], tuple(cand.payload["rest_terms"]))
+            (
+                cand.payload["terms"][0]["value"],
+                tuple(
+                    (term["tag"], term["value"])
+                    if term["kind"] == "literal"
+                    else ("entity_ref", term["value"])
+                    for term in cand.payload["terms"][1:]
+                ),
+            )
             for cand in candidates
         }
 

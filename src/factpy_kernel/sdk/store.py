@@ -225,9 +225,7 @@ class SDKStore:
                 where=list(compiled["where"]),
                 mode=kwargs.pop("mode", compiled.get("mode", "python")),
                 temporal_view=kwargs.pop("temporal_view", compiled.get("temporal_view", "record")),
-                materialize_as=compiled.get("materialize_as"),
                 head=compiled.get("head"),
-                id_policy=compiled.get("id_policy"),
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
             compiled = self._compile_derivation_input(args[0])
@@ -239,9 +237,7 @@ class SDKStore:
                 where=list(compiled["where"]),
                 mode=kwargs.pop("mode", compiled.get("mode", "python")),
                 temporal_view=kwargs.pop("temporal_view", compiled.get("temporal_view", "record")),
-                materialize_as=compiled.get("materialize_as"),
                 head=compiled.get("head"),
-                id_policy=compiled.get("id_policy"),
             )
         return self._store.evaluate(*args, **kwargs)
 

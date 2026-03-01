@@ -494,10 +494,9 @@ Stable Contract:
 - Supported accept override keys: `approved_by`, `note`, `dry_run`.
 
 Current Behavior:
-- Recommended path is to omit `materialize_as` and let head shape decide candidate path.
+- Head shape decides candidate path.
 - `CandidateSet` includes `candidate_id`, `candidate_key`, and `candidate_kind`.
 - For dependency graphs, prefer `sdk.accept_many(..., mode="atomic")`.
-- `materialize_as/id_policy` remain available as compatibility inputs.
 
 ### 7.4 Current DSL Limits
 
@@ -684,7 +683,6 @@ with vars("e", "c") as (e, c):
         id="drv.country_copy",
         version="1.0.0",
         head=Person.country_copy(person=e, country_copy=c),
-        materialize_as="fact",
         where=[Pred("person:country", e, c)],
     )
 

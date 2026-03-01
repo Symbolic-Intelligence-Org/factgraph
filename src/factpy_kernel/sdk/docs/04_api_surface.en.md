@@ -120,14 +120,9 @@ Notes (easy-to-misuse methods):
 |---|---|---|
 | `EntityType(...)` | entity path | one entity candidate + dependent fact candidates |
 | `EntityType.field(...)` | fact path | fact candidates |
-| no `head` (`target + head_vars`) | compatibility fact-only path | fact candidates |
+| no `head` (`target + head_vars`) | fact-only compatibility path | fact candidates |
 
-### 6.2 Current role of `materialize_as` / `id_policy`
-
-- `materialize_as="fact|record"` is still accepted, but new code should usually omit it and rely on head inference.
-- `id_policy` is mainly a compatibility field for legacy `record` inputs; v2 default path generally does not require explicit user-provided `id_policy`.
-
-### 6.3 `CandidateSet` and accept APIs
+### 6.2 `CandidateSet` and accept APIs
 
 - `sdk.evaluate(...)` returns `list[CandidateSet]` with key v2 fields:
   - `candidate_id` (per-run handle)
@@ -138,3 +133,45 @@ Notes (easy-to-misuse methods):
 
 See also:
 - `src/factpy_kernel/sdk/docs/03_rules_and_derivations.en.md` (Derivation DSL and head rules)
+
+## 7. Common call templates (v2)
+
+### 7.1 fact derivation
+
+```python
+with vars("p", "c") as (p, c):
+    drv = Derivation(
+        id="drv.country_copy",
+        version="1.0.0",
+        head=Person.country_copy(person=p, country_copy=c),
+        where=[Pred("person:country", p, c)],
+    )
+
+cands = sdk.evaluate(drv, mode="python")
+fact = next(c for c in cands if c.candidate_kind == "fact")
+sdk.accept(fact, approved_by="alice")
+```
+
+### 7.2 entity derivation (dependency graph)
+
+```python
+with vars("u", "l") as (u, l):
+    drv = Derivation(
+        id="drv.speaks",
+        version="1.0.0",
+        head=Speaks(user=u, language=l),
+        where=[Pred("person:country", u, "de"), Pred("user:lang_pref", u, l)],
+    )
+
+cands = sdk.evaluate(drv, mode="python")
+rows = sdk.accept_many(cands, mode="atomic")
+```
+
+### 7.3 incomplete identity
+
+```python
+entity = next(c for c in cands if c.candidate_kind == "entity")
+sdk.accept(entity, identity_override={"source_id": "u-001"})
+```
+
+Do not use `materialize_as` / `id_policy`.

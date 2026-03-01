@@ -10,8 +10,6 @@ from factpy_kernel.core.store.types import (
     EvaluateMode,
     HeadSpecIR,
     HeadVarsIR,
-    IdPolicyIR,
-    MaterializeAs,
     TemporalView,
     WhereIR,
 )
@@ -28,19 +26,13 @@ def evaluate_store(
     where: WhereIR,
     mode: EvaluateMode = "python",
     temporal_view: TemporalView = "record",
-    materialize_as: MaterializeAs = None,
     head: HeadSpecIR | None = None,
-    id_policy: IdPolicyIR | None = None,
     engine_evaluate: EngineEvaluatorFn,
 ) -> list[CandidateSet]:
     if temporal_view not in {"record", "current"}:
         raise ValueError("temporal_view must be 'record' or 'current'")
 
-    effective_materialize_as = materialize_as
-    if effective_materialize_as is None and isinstance(head, dict):
-        effective_materialize_as = "record" if head.get("callee_kind") == "entity_type" else "fact"
-
-    if effective_materialize_as == "record":
+    if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         if mode == "engine":
             return engine_evaluate(
                 derivation_id=derivation_id,
@@ -49,27 +41,24 @@ def evaluate_store(
                 head_vars=head_vars,
                 where=where,
                 temporal_view=temporal_view,
-                materialize_as=effective_materialize_as,
                 head=head,
-                id_policy=id_policy,
             )
         if mode != "python":
             raise ValueError("mode must be 'python' or 'engine'")
 
-        record_spec = builders.record_materialize_spec_from_head(
+        entity_spec = builders.entity_materialize_spec_from_head(
             store,
-            record_type=target_pred_id,
+            entity_type=target_pred_id,
             head=head,
-            id_policy=id_policy,
         )
         bindings = _evaluate_where_over_view(store, where, temporal_view=temporal_view)
         if not bindings:
             return []
-        return builders.record_candidates_from_bindings(
+        return builders.entity_candidates_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
-            record_spec=record_spec,
+            entity_spec=entity_spec,
             bindings=bindings,
         )
 
@@ -81,9 +70,7 @@ def evaluate_store(
             head_vars=head_vars,
             where=where,
             temporal_view=temporal_view,
-            materialize_as=effective_materialize_as,
             head=head,
-            id_policy=id_policy,
         )
     if mode != "python":
         raise ValueError("mode must be 'python' or 'engine'")

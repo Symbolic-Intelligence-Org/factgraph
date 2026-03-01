@@ -1,17 +1,15 @@
 # Candidate Protocol v2 (Current Implementation Spec)
 
-状态：实现中（核心链路可用）  
+状态：已实现（严格 v2）  
 范围：`authoring` / `core.derivation` / `core.store` / `sdk`
 
 ## 1. 目标与边界
 
-本规范定义 Derivation -> CandidateSet -> Accept -> Ledger 的 v2 协议语义，并说明当前代码中的兼容策略：
+本规范定义 Derivation -> CandidateSet -> Accept -> Ledger 的 v2 协议语义：
 
 - 新语义：`CandidateSet` 显式区分 `candidate_kind`（`fact` / `entity`）
 - 新语义：`entity candidate` 与 `fact candidate` 分离，字段写入不再打包在 entity payload 内
 - 新语义：`candidate_ref` 支持依赖图与批量 accept 拓扑执行
-- 兼容语义：旧 `materialize_as=record` payload 仍可接受
-- 兼容语义：用户 DSL 仍可显式传 `materialize_as`（但 head 缺省推断已启用）
 
 ## 2. 关键硬规则
 
@@ -84,10 +82,10 @@
 
 ## 4. Derivation 编译与 Evaluate
 
-### 4.1 head 推断 materialization
+### 4.1 head 推断 candidate kind
 
-- `head.callee_kind == entity_type` 且未显式 `materialize_as` -> 自动走 entity/record 路径
-- `head.callee_kind == pred_ref` 且未显式 `materialize_as` -> 自动走 fact 路径
+- `head.callee_kind == entity_type` -> entity 路径
+- `head.callee_kind == pred_ref` -> fact 路径
 - 无 head -> 仍按 fact 路径（no-head 兼容）
 
 ### 4.2 candidate_key 计算约束
@@ -98,7 +96,7 @@
 
 ### 4.3 schema 编译规则
 
-- 编译阶段对所有 Entity 自动生成 `<T>:exists` predicate（`is_record_exists=true`, `is_entity_exists=true`）
+- 编译阶段对所有 Entity 自动生成 `<T>:exists` predicate（`is_entity_exists=true`）
 
 ## 5. Accept 协议
 
@@ -156,14 +154,10 @@ entity accept 额外包含：
 - `entity_ref`
 - `identity_override_digest`（有 override 时）
 
-## 7. v1 兼容策略
+## 7. 严格输入约束
 
-当前保留以下兼容能力：
+当前实现不再接受 legacy payload：
 
-1. 旧 fact payload（`e_ref + rest_terms`）仍可 accept
-2. 旧 record payload（`materialize_as=record`）仍可 accept
-3. `materialize_as` 用户字段仍可用（推荐逐步迁移到 head 推断）
-
-## 8. 待收敛项
-
-当前代码与测试已对齐到 v2 语义。仍保留的兼容面仅限第 7 节所列 legacy fallback；新测试与新实现均优先覆盖 v2 路径。
+1. fact candidate 必须使用 `pred_id + terms`
+2. entity candidate 必须使用 v2 identity payload
+3. 用户 DSL 不再接受 `materialize_as` 与 `id_policy`

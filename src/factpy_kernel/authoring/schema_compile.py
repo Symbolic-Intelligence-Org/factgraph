@@ -104,7 +104,6 @@ def _compile_entity(entity_raw: Any, entity_index: int) -> tuple[dict[str, Any],
             "cardinality": "functional",
             "dims": [],
             "group_key_indexes": [0],
-            "is_record_exists": True,
             "is_entity_exists": True,
         }
     )

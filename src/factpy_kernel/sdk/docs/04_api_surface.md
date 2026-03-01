@@ -147,14 +147,9 @@
 |---|---|---|
 | `EntityType(...)` | entity 路径 | 1 个 entity candidate + 依赖 fact candidates |
 | `EntityType.field(...)` | fact 路径 | fact candidates |
-| 无 `head`（`target + head_vars`） | 兼容 fact-only 路径 | fact candidates |
+| 无 `head`（`target + head_vars`） | fact-only 路径（兼容） | fact candidates |
 
-### 6.2 `materialize_as` / `id_policy` 当前定位
-
-- `materialize_as` 仍接受 `fact|record`，但建议新代码省略，交给 `head` 自动推断。
-- `id_policy` 主要是 legacy `record` 输入的兼容项，v2 主路径通常不需要用户显式提供。
-
-### 6.3 `CandidateSet` 与 accept
+### 6.2 `CandidateSet` 与 accept
 
 - `sdk.evaluate(...)` 返回 `list[CandidateSet]`，关键字段包括：
   - `candidate_id`（per-run 句柄）
@@ -164,3 +159,45 @@
 
 延伸阅读：
 - `src/factpy_kernel/sdk/docs/03_rules_and_derivations.md`（Derivation DSL 与 head 规则）
+
+## 7. 常用调用模板（v2）
+
+### 7.1 fact derivation
+
+```python
+with vars("p", "c") as (p, c):
+    drv = Derivation(
+        id="drv.country_copy",
+        version="1.0.0",
+        head=Person.country_copy(person=p, country_copy=c),
+        where=[Pred("person:country", p, c)],
+    )
+
+cands = sdk.evaluate(drv, mode="python")
+fact = next(c for c in cands if c.candidate_kind == "fact")
+sdk.accept(fact, approved_by="alice")
+```
+
+### 7.2 entity derivation（有依赖关系）
+
+```python
+with vars("u", "l") as (u, l):
+    drv = Derivation(
+        id="drv.speaks",
+        version="1.0.0",
+        head=Speaks(user=u, language=l),
+        where=[Pred("person:country", u, "de"), Pred("user:lang_pref", u, l)],
+    )
+
+cands = sdk.evaluate(drv, mode="python")
+rows = sdk.accept_many(cands, mode="atomic")
+```
+
+### 7.3 identity 不完整时
+
+```python
+entity = next(c for c in cands if c.candidate_kind == "entity")
+sdk.accept(entity, identity_override={"source_id": "u-001"})
+```
+
+不再使用 `materialize_as` / `id_policy`。

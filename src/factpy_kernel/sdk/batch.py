@@ -744,7 +744,7 @@ def _sdk_record_exists_pred_index(sdk: "SDKStore") -> dict[str, dict[str, Any]]:
             continue
         if not isinstance(owner_type, str) or not owner_type:
             continue
-        if pred.get("is_record_exists") is not True:
+        if pred.get("is_entity_exists") is not True:
             continue
         out[pred_id] = {"owner_type": owner_type, "pred": pred}
     return out
@@ -1214,7 +1214,7 @@ class SDKBatchTx:
                 continue
             if pred.get("owner_type") != entity_type:
                 continue
-            if pred.get("is_record_exists") is not True:
+            if pred.get("is_entity_exists") is not True:
                 continue
             pred_id = pred.get("pred_id")
             if isinstance(pred_id, str) and pred_id:

@@ -61,6 +61,19 @@ class WherePushdownCmpEnd2EndV1Tests(unittest.TestCase):
             "generated_at": "2026-01-01T00:00:00Z",
         }
 
+    @staticmethod
+    def _payload_sig(cand) -> tuple[str, tuple[tuple[str, object], ...]]:
+        terms = cand.payload["terms"]
+        return (
+            terms[0]["value"],
+            tuple(
+                (term["tag"], term["value"])
+                if term["kind"] == "literal"
+                else ("entity_ref", term["value"])
+                for term in terms[1:]
+            ),
+        )
+
     def test_gt_rank_filter(self) -> None:
         if find_souffle_binary() is None:
             self.skipTest("souffle binary not found")
@@ -102,7 +115,7 @@ class WherePushdownCmpEnd2EndV1Tests(unittest.TestCase):
 
         self.assertEqual(
             {
-                (cand.payload["e_ref"], tuple(cand.payload["rest_terms"]))
+                self._payload_sig(cand)
                 for cand in candidates
             },
             {
@@ -152,7 +165,7 @@ class WherePushdownCmpEnd2EndV1Tests(unittest.TestCase):
 
         self.assertEqual(
             {
-                (cand.payload["e_ref"], tuple(cand.payload["rest_terms"]))
+                self._payload_sig(cand)
                 for cand in candidates
             },
             {

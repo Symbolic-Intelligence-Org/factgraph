@@ -1,6 +1,6 @@
 # Candidate Protocol v2
 
-Status: implemented (with explicit legacy fallback paths)
+Status: implemented (strict v2, legacy fallback removed)
 Scope: `authoring` / `core.derivation` / `core.store` / `sdk` / `service`
 
 ## 1. Chain
@@ -19,8 +19,8 @@ candidate identity/provenance explicit.
    - `candidate_key` (`candk_v2:`): cross-run stable key
    - `candidate_kind`: `fact` or `entity`
 2. `candidate_key` is content-addressed and excludes `run_id`.
-3. `head` shape drives default materialization when not explicitly set:
-   - `EntityType(...)` -> entity/record path
+3. `head` shape drives candidate kind:
+   - `EntityType(...)` -> entity path
    - `Entity.field(...)` -> fact path
 4. Fact payload uses `terms`; `terms[0]` is the subject slot (arg0).
 5. Entity candidate only handles identity + `<T>:exists` materialization.
@@ -154,21 +154,15 @@ Entity accept also writes:
 - `entity_ref`
 - `identity_override_digest` (when override is used)
 
-## 7. Compatibility and Deprecation
+## 7. Strictness and Migration
 
-Still supported (explicit compatibility path):
+No legacy candidate payloads are accepted:
 
-- legacy fact payload (`e_ref + rest_terms`)
-- legacy record payload (`materialize_as=record`, roles/id_policy shape)
+- fact candidates must use `pred_id + terms`
+- entity candidates must use the v2 identity payload
 
-Behavior:
+Authoring/user syntax:
 
-- compatibility paths emit `LegacyAcceptFallbackWarning`
-- v2 paths are selected first when `candidate_kind/terms` or v2 entity payload is present
-
-Migration direction:
-
-- produce v2 candidates from builders/evaluate
-- avoid constructing legacy payloads directly in tests/callers
-- keep no-head derivations as fact-only compatibility path
-
+- `materialize_as` is removed from user-facing derivation DSL
+- `id_policy` is removed from user-facing derivation DSL
+- no-head derivations (`target_pred_id + head_vars`) remain fact-only compatibility path

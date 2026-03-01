@@ -68,7 +68,7 @@ Derivation(
         self.assertEqual(payload["body"][0][2], ("gt", "$R", 3))
         self.assertEqual(payload["body"][1][1], ("eq", "$R", 9))
 
-    def test_parse_derivation_dsl_head_materialize_as_shape(self) -> None:
+    def test_parse_derivation_dsl_head_shape(self) -> None:
         payload = parse_authoring_derivation_dsl_v1(
             """
 Derivation(
@@ -76,12 +76,10 @@ Derivation(
   target="person:speaks",
   head_vars=["$E", "$L"],
   head=Person.speaks(person=p, language=l),
-  body=[Pred("person:speaks", "$E", "$L")],
-  materialize_as="fact"
+  body=[Pred("person:speaks", "$E", "$L")]
 )
 """
         )
-        self.assertEqual(payload["materialize_as"], "fact")
         self.assertEqual(payload["head"]["kind"], "head_call")
         self.assertEqual(payload["head"]["callee_kind"], "pred_ref")
         self.assertEqual(payload["head"]["entity_type"], "Person")
@@ -95,8 +93,6 @@ Derivation(
 with vars() as (p, c, l, li, hl):
     SpeaksDerive = Derivation(
         head=Speaks(person=p, language=l),
-        materialize_as="record",
-        id_policy={"kind": "key_tuple_digest_v1"},
         where=[
             LivesIn(li),
             HasLanguage(hl),
@@ -238,7 +234,7 @@ Derivation(
         )
         self.assertEqual(json_shape["head"]["entity_type"], "Person")
         self.assertEqual(json_shape["head"]["field"], "country")
-        self.assertEqual(json_shape["materialize_as"], "fact")
+        self.assertNotIn("materialize_as", json_shape)
         sugar_source = self._extract_code_block_after_header(
             text,
             "### F5-I derivation DSL parser（语法层 → Authoring derivation payload，最小切片）",
@@ -265,8 +261,8 @@ Derivation(
             which=3,
         )
         record_payload = parse_authoring_derivation_dsl_v1(record_source)
-        self.assertEqual(record_payload["materialize_as"], "record")
         self.assertEqual(record_payload["head"]["callee_kind"], "entity_type")
+        self.assertNotIn("materialize_as", record_payload)
         self.assertNotIn("id_policy", record_payload)
         record_shape = json.loads(
             self._extract_code_block_after_header(
@@ -276,7 +272,7 @@ Derivation(
                 which=3,
             )
         )
-        self.assertEqual(record_shape["materialize_as"], "record")
+        self.assertNotIn("materialize_as", record_shape)
         self.assertNotIn("id_policy", record_shape)
 
     def _extract_code_block_after_header(self, text: str, header: str, lang: str, *, which: int) -> str:

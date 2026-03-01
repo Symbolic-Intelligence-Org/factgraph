@@ -26,17 +26,8 @@ class CandidateSet:
     candidate_kind: str = "fact"
 
     def __post_init__(self) -> None:
-        inferred_kind = self.candidate_kind
-        if inferred_kind == "fact" and isinstance(self.payload, dict):
-            if self.payload.get("materialize_as") == "record":
-                inferred_kind = "entity"
-            elif isinstance(self.payload.get("record_type"), str):
-                inferred_kind = "entity"
-            elif isinstance(self.payload.get("entity_type"), str) and not isinstance(self.payload.get("pred_id"), str):
-                inferred_kind = "entity"
-        if inferred_kind not in {"fact", "entity"}:
+        if self.candidate_kind not in {"fact", "entity"}:
             raise ValueError("candidate_kind must be 'fact' or 'entity'")
-        object.__setattr__(self, "candidate_kind", inferred_kind)
         if not isinstance(self.payload, dict):
             raise ValueError("payload must be object")
         if not isinstance(self.target, str) or not self.target:
@@ -130,24 +121,13 @@ def canonical_candidate_content(*, candidate_kind: str, target: str, payload: di
             pred_id = target
         terms = payload.get("terms")
         if not isinstance(terms, list):
-            # Backward compatibility: v1 fact payload shape.
-            e_ref = payload.get("e_ref")
-            rest_terms = payload.get("rest_terms")
-            if isinstance(e_ref, str) and isinstance(rest_terms, list):
-                terms = [{"kind": "entity_ref", "value": e_ref}] + [
-                    {"kind": "literal", "tag": str(tag), "value": _to_jsonable(value)}
-                    for tag, value in rest_terms
-                ]
-            else:
-                terms = []
+            raise ValueError("fact candidate payload.terms must be list")
         normalized_terms = [_normalize_term_for_content(term) for term in terms]
         return _stable_json_bytes({"pred_id": pred_id, "terms": normalized_terms})
 
     entity_type = payload.get("entity_type")
     if not isinstance(entity_type, str) or not entity_type:
-        # Backward compatibility: v1 entity(record) payload shape.
-        fallback = payload.get("record_type")
-        entity_type = fallback if isinstance(fallback, str) and fallback else target
+        raise ValueError("entity candidate payload.entity_type must be non-empty string")
     identity_fields = payload.get("identity_fields")
     if not isinstance(identity_fields, list):
         identity_fields = []

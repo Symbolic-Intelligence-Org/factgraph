@@ -21,34 +21,28 @@ def evaluate_store_engine(
     head_vars: list[Any],
     where: list[Any],
     temporal_view: str = "record",
-    materialize_as: str | None = None,
     head: dict[str, Any] | None = None,
-    id_policy: Any | None = None,
 ) -> list[CandidateSet]:
     if temporal_view not in {"record", "current"}:
         raise ValueError("temporal_view must be 'record' or 'current'")
-    effective_materialize_as = materialize_as
-    if effective_materialize_as is None and isinstance(head, dict):
-        effective_materialize_as = "record" if head.get("callee_kind") == "entity_type" else "fact"
 
     from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
     from factpy_kernel.adapters.souffle.runner import run_package
 
-    if effective_materialize_as == "record":
-        record_spec = store_builders.record_materialize_spec_from_head(
+    if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
+        entity_spec = store_builders.entity_materialize_spec_from_head(
             store,
-            record_type=target_pred_id,
+            entity_type=target_pred_id,
             head=head,
-            id_policy=id_policy,
         )
         where_variables = extract_where_variables(where)
         missing_vars = [
             value
-            for value in record_spec["head_vars"]
+            for value in entity_spec["head_vars"]
             if isinstance(value, str) and value.startswith("$") and value not in where_variables
         ]
         if missing_vars:
-            raise WhereValidationError(f"head record vars reference unbound where variables: {missing_vars}")
+            raise WhereValidationError(f"head entity vars reference unbound where variables: {missing_vars}")
 
         query_rel = query_rel_for_where(where)
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -67,11 +61,11 @@ def evaluate_store_engine(
 
         if not bindings:
             return []
-        return store_builders.record_candidates_from_bindings(
+        return store_builders.entity_candidates_from_bindings(
             store,
             derivation_id=derivation_id,
             version=version,
-            record_spec=record_spec,
+            entity_spec=entity_spec,
             bindings=bindings,
         )
 

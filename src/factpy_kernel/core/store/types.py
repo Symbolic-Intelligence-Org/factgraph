@@ -8,8 +8,6 @@ from factpy_kernel.core.derivation.candidates import CandidateSet
 HeadVarsIR: TypeAlias = list[object]
 WhereIR: TypeAlias = list[object]
 HeadSpecIR: TypeAlias = dict[str, object]
-IdPolicyIR: TypeAlias = object
 EvaluateMode: TypeAlias = Literal["python", "engine"]
 TemporalView: TypeAlias = Literal["record", "current"]
-MaterializeAs: TypeAlias = Literal["fact", "record"] | None
 EngineEvaluatorFn: TypeAlias = Callable[..., list[CandidateSet]]

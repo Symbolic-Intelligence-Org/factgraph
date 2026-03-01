@@ -118,7 +118,7 @@ uvicorn factpy_kernel.service.app_v1:app --host 0.0.0.0 --port 8000
 - `view-facts.temporal_view` 的外部契约使用 `record | active`；service 会把 `active` 归一到 core 的 `current` 视图语义
 - `view-facts.meta` 额外返回 `pred_count` 和 `total_tuple_count`，便于客户端快速判断结果规模
 - `POST /v1/runtime/sessions/{session_id}/derivations/evaluate` 返回完整 candidate 对象，供后续 `accept` 原样 round-trip
-- `POST /v1/runtime/sessions/{session_id}/derivations/accept` 要求客户端原样回传 `evaluate` 返回的 candidate；不要裁剪 `payload` 字段，尤其是 record candidate 的 `roles / record_exists_pred_id / id_policy`
+- `POST /v1/runtime/sessions/{session_id}/derivations/accept` 要求客户端原样回传 `evaluate` 返回的 candidate；不要裁剪 `payload` 字段，尤其是 fact candidate 的 `terms` 与 entity candidate 的 identity 字段
 - 当 `accept.meta.terminal=true` 时，表示结果已进入终止态；当前 v1 至少包括 `skipped_reason_counts.aborted > 0` 的情况，客户端不应自动重试
 
 ## 响应约定

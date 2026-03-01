@@ -85,13 +85,13 @@ def _schema_for_where_record_sugar() -> dict:
         "schema_ir_version": "v1",
         "entities": [
             {"entity_type": "Person", "identity_fields": [{"name": "source_id", "type_domain": "string"}]},
-            {"entity_type": "LivesIn", "identity_fields": [{"name": "uid", "type_domain": "string"}], "is_record": True},
+            {"entity_type": "LivesIn", "identity_fields": [{"name": "uid", "type_domain": "string"}]},
         ],
         "predicates": [
             {
                 "pred_id": "li_record:exists",
                 "owner_type": "LivesIn",
-                "is_record_exists": True,
+                "is_entity_exists": True,
                 "arg_specs": [{"name": "lives_in", "type_domain": "entity_ref"}],
                 "group_key_indexes": [0],
                 "cardinality": "functional",

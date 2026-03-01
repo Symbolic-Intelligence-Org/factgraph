@@ -53,7 +53,7 @@ def _build_record_meta(schema_ir: dict[str, Any]) -> dict[str, Any]:
                 continue
             if not isinstance(owner_type, str) or not owner_type:
                 continue
-            if pred.get("is_record_exists") is True:
+            if pred.get("is_entity_exists") is True:
                 record_types.add(owner_type)
                 exists_pred_by_type[owner_type] = pred_id
                 type_by_exists_pred[pred_id] = owner_type

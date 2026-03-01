@@ -1,5 +1,7 @@
 # Authoring 层契约 fixtures（Golden Fixtures v1）
 
+> 注：本文件保留大量历史 fixture。Derivation 的当前执行语法以 v2 为准：`head` 自动判定 candidate kind，用户侧不再使用 `materialize_as/id_policy`。请优先参考 [docs/blueprint/candidate_protocol_v2.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/candidate_protocol_v2.md) 与 [src/factpy_kernel/sdk/docs/03_rules_and_derivations.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/03_rules_and_derivations.md)。
+
 目的：为 `/Users/zhenzhili/symbolic_agent/docs/Authoring 层契约.md` 提供 **语义映射回归样例**。本文件只锁定：
 
 - Authoring 概念输入（伪代码/伪 DSL）
@@ -570,12 +572,11 @@ with vars() as (li, p, c):
 - 不执行用户代码（AST 子集）
 - 不支持位置参数 / `**kwargs`
 
-最小示例（DSL 输入，推荐写法：`head + materialize_as="fact"`）：
+最小示例（DSL 输入，推荐写法：`head` 自动判定 candidate kind）：
 
 ```python
 country_derivation = Derivation(
     head=Person.country(person=E, country=country),
-    materialize_as="fact",
     body=[("pred", "person:country", ["$E", "$country"])],
     mode="python",
     temporal_view="record"
@@ -594,7 +595,6 @@ country_derivation = Derivation(
     "field": "country",
     "kwargs": {"person": "$E", "country": "$country"}
   },
-  "materialize_as": "fact",
   "body": [["pred", "person:country", ["$E", "$country"]]],
   "mode": "python",
   "temporal_view": "record"
@@ -606,7 +606,7 @@ country_derivation = Derivation(
 - `head_vars`（`select` 为兼容别名）按目标谓词 `target` 的 `arg_specs` 位置顺序映射。
 - `arg0` 必须对应实体槽位（可绑定任意变量名，只要值能解码为 `entity_ref`）；这不是“实体字段平铺 select”。
 - compile 阶段会把上述 `head=Person.country(...)` lowering 为 canonical `target_pred_id + head_vars`；parser fixture 这里展示的是**语法层 payload**，因此仍保留 `head`。
-- 蓝图中的 `head=...` + `materialize_as` Derivation 语法见 `/Users/zhenzhili/symbolic_agent/docs/规则.md` §5.2，当前 parser fixture 仅覆盖其 fact-target 最小子集。
+- Derivation 当前语法为 `head` 自动判定候选类型：`Entity.field(...) -> fact`，`EntityType(...) -> entity`。
 
 语法糖示例（DSL 输入）：
 
@@ -636,18 +636,17 @@ Derivation(
 }
 ```
 
-record head 示例（DSL 输入，默认路径：省略 `id_policy`，由 compile/preflight 在有 `SchemaIR` 时自动推导）：
+entity head 示例（DSL 输入）：
 
 ```python
 Derivation(
     head=Speaks(person=p, language=l),
-    materialize_as="record",
     where=[Pred("person:country", "$E", "de"), Eq("$E", "$p")],
     mode="python"
 )
 ```
 
-record head 示例（输出 payload 形状）：
+entity head 示例（输出 payload 形状）：
 
 ```json
 {
@@ -657,7 +656,6 @@ record head 示例（输出 payload 形状）：
     "entity_type": "Speaks",
     "kwargs": {"person": "$p", "language": "$l"}
   },
-  "materialize_as": "record",
   "where": [["pred", "person:country", ["$E", "de"]], ["eq", "$E", "$p"]],
   "mode": "python"
 }
@@ -669,7 +667,6 @@ record head 示例（输出 payload 形状）：
 with vars() as (p, c, l, li, hl):
     Derivation(
         head=Speaks(person=p, language=l),
-        materialize_as="record",
         where=[
             LivesIn(li),
             HasLanguage(hl),
@@ -691,7 +688,6 @@ with vars() as (p, c, l, li, hl):
     "entity_type": "Speaks",
     "kwargs": {"person": "$p", "language": "$l"}
   },
-  "materialize_as": "record",
   "where": [
     ["pred", "LivesIn:exists", ["$li"]],
     ["pred", "HasLanguage:exists", ["$hl"]],
@@ -707,8 +703,7 @@ with vars() as (p, c, l, li, hl):
 
 - compile/preflight 在有 `SchemaIR` 时会把上述 sugar 原子映射到真实 record exists/role `pred_id`
 - 若 `SchemaIR` 中不存在对应 record exists/role 谓词，compile 将报错（而不是继续按命名约定执行）
-- 默认路径建议省略 `id_policy`（compile/preflight 在有 `SchemaIR` 时自动推导 `identity_fields_v1`）
-- `id_policy={...}` 仍作为 expert override 保留；`key_tuple_digest_v1` 是兼容写法，`identity_fields_v1` 是更接近蓝图的 v1 子集
+- 用户侧不再使用 `materialize_as` / `id_policy`，统一由 `head` 结构决定候选类型与后续实体化路径。
 
 ### F5-J DSL bridge（DSL source → session/workflow dry-run DTO，最小切片）
 

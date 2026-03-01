@@ -160,7 +160,7 @@ class LivesIn(Entity):
 ```
 
 说明（稳定合约）：
-- 编译后 schema 会为所有 `Entity` 生成 `<T>:exists` predicate（`is_record_exists` + `is_entity_exists`）。
+- 编译后 schema 会为所有 `Entity` 生成 `<T>:exists` predicate（`is_entity_exists`）。
 - batch 写入实体字段时，会在计划中自动补 `<T>:exists` 写入 op，避免“有字段断言但实体不可见”。
 
 ### 2.5 常用注解类型映射
@@ -720,10 +720,9 @@ head 写法（稳定合约）：
 - head 需要是 DSL head call；传普通实体对象会在 `Derivation(...)` 构造时报 `SDKDSLError`。
 
 v2 行为（当前推荐）：
-- 省略 `materialize_as`，由 `head` 自动推断路径（Entity head -> entity candidate；Field head -> fact candidate）。
+- 由 `head` 自动推断路径（Entity head -> entity candidate；Field head -> fact candidate）。
 - `sdk.evaluate(...)` 的 `CandidateSet` 包含 `candidate_id/candidate_key/candidate_kind`。
 - 存在依赖图时，优先使用 `sdk.accept_many(..., mode="atomic")`。
-- `materialize_as/id_policy` 仍保留兼容，但不建议新代码依赖。
 
 ### 7.4 `accept(...)` 参数边界
 
@@ -981,7 +980,6 @@ with vars("e", "c") as (e, c):
         id="drv.country_copy",
         version="1.0.0",
         head=Person.country_copy(person=e, country_copy=c),
-        materialize_as="fact",
         where=[Pred("person:country", e, c)],
     )
 

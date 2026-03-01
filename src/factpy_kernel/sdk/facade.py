@@ -462,7 +462,7 @@ def _identity_spec_by_name(spec: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _record_exists_pred_id_for_entity(sdk: "SDKStore", entity_cls: type[Any]) -> str | None:
+def _entity_exists_pred_id_for_entity(sdk: "SDKStore", entity_cls: type[Any]) -> str | None:
     entity_type = sdk._entity_spec_by_class[entity_cls].get("entity_type")
     if not isinstance(entity_type, str):
         return None
@@ -471,7 +471,7 @@ def _record_exists_pred_id_for_entity(sdk: "SDKStore", entity_cls: type[Any]) ->
             continue
         if pred.get("owner_type") != entity_type:
             continue
-        if pred.get("is_record_exists") is not True:
+        if pred.get("is_entity_exists") is not True:
             continue
         pred_id = pred.get("pred_id")
         if isinstance(pred_id, str) and pred_id:
@@ -498,7 +498,7 @@ def _entity_field_rows(sdk: "SDKStore", entity_cls: type[Any]) -> list[tuple[str
 
 
 def _entity_visible_in_view(sdk: "SDKStore", entity_cls: type[Any], *, e_ref: str, view_facts: dict[str, list[tuple[Any, ...]]]) -> bool:
-    exists_pred = _record_exists_pred_id_for_entity(sdk, entity_cls)
+    exists_pred = _entity_exists_pred_id_for_entity(sdk, entity_cls)
     if isinstance(exists_pred, str):
         for row in view_facts.get(exists_pred, []):
             if row and row[0] == e_ref:
@@ -515,7 +515,7 @@ def _entity_visible_in_view(sdk: "SDKStore", entity_cls: type[Any], *, e_ref: st
 
 def _candidate_entity_refs(sdk: "SDKStore", entity_cls: type[Any], *, view_facts: dict[str, list[tuple[Any, ...]]]) -> set[str]:
     out: set[str] = set()
-    exists_pred = _record_exists_pred_id_for_entity(sdk, entity_cls)
+    exists_pred = _entity_exists_pred_id_for_entity(sdk, entity_cls)
     if isinstance(exists_pred, str):
         for row in view_facts.get(exists_pred, []):
             if row and isinstance(row[0], str):

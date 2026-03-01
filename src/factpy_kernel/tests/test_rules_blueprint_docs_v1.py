@@ -5,24 +5,16 @@ from pathlib import Path
 
 
 class RulesBlueprintDocsV1Tests(unittest.TestCase):
-    def test_derivation_head_materialize_status_section_exists(self) -> None:
+    def test_derivation_doc_has_v2_redirect_notice(self) -> None:
         text = _rules_doc().read_text(encoding="utf-8")
-        self.assertIn("#### 5.2.4 当前实现对齐状态（v1）", text)
-        for phrase in [
-            'head=Person.field(...), materialize_as="fact"',
-            'head=RecordType(...), materialize_as="record"',
-            'head=RecordType(...), materialize_as="fact"',
-            "lowering 为 position-based `head_vars`",
-        ]:
-            self.assertIn(phrase, text)
+        self.assertIn("Derivation 的当前可执行语法以 v2 为准", text)
+        self.assertIn("用户侧不再使用 `materialize_as/id_policy`", text)
+        self.assertIn("candidate_protocol_v2.md", text)
 
-    def test_derivation_record_id_policy_v1_subset_is_documented(self) -> None:
+    def test_derivation_doc_mentions_head_inference_rule(self) -> None:
         text = _rules_doc().read_text(encoding="utf-8")
-        self.assertIn('id_policy={"kind":"key_tuple_digest_v1"}', text)
-        self.assertIn('"kind": "identity_fields_v1"', text)
-        self.assertIn("role-sourced", text)
-        self.assertIn("projection_pred_id", text)
-        self.assertIn("projection_arg_order", text)
+        self.assertIn("head", text)
+        self.assertIn("candidate kind", text)
 
 
 def _rules_doc() -> Path:

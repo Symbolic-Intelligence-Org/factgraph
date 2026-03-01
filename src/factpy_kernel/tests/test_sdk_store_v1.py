@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import factpy_kernel.tests._warnings as test_warnings
 from factpy_kernel.adapters.souffle.package import ExportOptions
@@ -49,9 +50,6 @@ class LivesIn(Entity):
     uid: str = Identity()
     person: Person = Field(cardinality="functional")
     country: str = Field(cardinality="functional")
-
-    class Meta:
-        is_record = True
 
 
 class SDKStoreV1Tests(unittest.TestCase):
@@ -120,12 +118,14 @@ class SDKStoreV1Tests(unittest.TestCase):
     def test_from_schema_classes_with_ledger_path_persists_schema_digest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             ledger_path = str(Path(tmp) / "ledger.db")
-            sdk_1 = SDKStore.from_schema_classes([Person, Company], ledger_path=ledger_path)
+            with patch("factpy_kernel.authoring.schema_compile._utc_now_iso_z", return_value="2026-01-01T00:00:00Z"):
+                sdk_1 = SDKStore.from_schema_classes([Person, Company], ledger_path=ledger_path)
             stored_digest = sdk_1.ledger.get_ledger_meta("schema_digest")
             self.assertIsInstance(stored_digest, str)
             self.assertTrue(stored_digest.startswith("sha256:"))
 
-            sdk_2 = SDKStore.from_schema_classes([Person, Company], ledger_path=ledger_path)
+            with patch("factpy_kernel.authoring.schema_compile._utc_now_iso_z", return_value="2026-01-01T00:00:00Z"):
+                sdk_2 = SDKStore.from_schema_classes([Person, Company], ledger_path=ledger_path)
             self.assertEqual(sdk_2.ledger.get_ledger_meta("schema_digest"), stored_digest)
 
     def test_from_schema_classes_with_ledger_path_rejects_schema_mismatch(self) -> None:
@@ -185,7 +185,6 @@ class SDKStoreV1Tests(unittest.TestCase):
                 target="person:country",
                 head_vars=[p, c],
                 where=[("pred", "person:country", ["$p", "$c"])],
-                materialize_as="fact",
             )
         rows = self.sdk.run(rule)
         self.assertEqual(rows, [(self.p_ref, "de")])

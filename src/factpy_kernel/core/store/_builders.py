@@ -62,9 +62,6 @@ def candidates_from_bindings(
             payload={
                 "pred_id": target_pred_id,
                 "terms": [_term_from_tag_value(tag, value) for tag, value in tagged_args],
-                # Backward-compat fields (v1 callers may still inspect these).
-                "e_ref": e_ref,
-                "rest_terms": rest_terms,
             },
             support_digest=f"sha256:{'0' * 64}",
             support_kind="none",
@@ -75,35 +72,26 @@ def candidates_from_bindings(
         )
         candidates.append(candidate)
 
-    unique: dict[tuple[Any, ...], CandidateSet] = {}
+    unique: dict[str, CandidateSet] = {}
     for candidate in candidates:
-        payload = candidate.payload
-        rest_terms = payload.get("rest_terms", [])
-        key = (
-            candidate.key_tuple_digest,
-            payload.get("e_ref"),
-            tuple((tag, hashable_value(value)) for tag, value in rest_terms),
-        )
-        if key not in unique:
-            unique[key] = candidate
+        if candidate.candidate_key not in unique:
+            unique[candidate.candidate_key] = candidate
 
-    return sorted(unique.values(), key=lambda cand: (cand.key_tuple_digest, cand.tup_digest or ""))
+    return sorted(unique.values(), key=lambda cand: cand.candidate_key)
 
 
-def record_candidates_from_bindings(
+def entity_candidates_from_bindings(
     store: Any,
     *,
     derivation_id: str,
     version: str,
-    record_spec: dict[str, Any],
+    entity_spec: dict[str, Any],
     bindings: list[dict[str, Any]],
 ) -> list[CandidateSet]:
     run_id = uuid4().hex
-    record_type = record_spec["record_type"]
-    role_defs = record_spec["roles"]
-    record_exists_pred_id = record_spec["record_exists_pred_id"]
-    id_policy = record_spec["id_policy"]
-    head_values = record_spec["head_vars"]
+    entity_type = entity_spec["entity_type"]
+    role_defs = entity_spec["roles"]
+    head_values = entity_spec["head_vars"]
 
     candidates: list[CandidateSet] = []
     for binding in bindings:
@@ -123,20 +111,19 @@ def record_candidates_from_bindings(
                 }
             )
 
-        key_terms = [("string", record_type), *tagged_role_terms]
+        key_terms = [("string", entity_type), *tagged_role_terms]
         key_tuple_digest = compute_key_tuple_digest(key_terms)
 
         identity_fields, resolved_identity, missing_identity_fields = _derive_entity_identity_from_roles(
-            record_type=record_type,
+            entity_type=entity_type,
             key_tuple_digest=key_tuple_digest,
-            id_policy=id_policy,
             roles=role_payloads,
-            schema_identity_fields=record_spec.get("entity_identity_fields"),
+            schema_identity_fields=entity_spec.get("entity_identity_fields"),
         )
         proposed_entity_ref: str | None = None
         if not missing_identity_fields:
             proposed_entity_ref = encode_idref_v1(
-                record_type,
+                entity_type,
                 [(name, tag, resolved_identity[name]) for name, tag in identity_fields if name in resolved_identity],
             )
 
@@ -144,20 +131,16 @@ def record_candidates_from_bindings(
             derivation_id=derivation_id,
             derivation_version=version,
             run_id=run_id,
-            target=record_type,
+            target=entity_type,
             key_tuple_digest=key_tuple_digest,
             tup_digest=None,
             payload={
-                "entity_type": record_type,
+                "entity_type": entity_type,
                 "identity_fields": [name for name, _ in identity_fields],
                 "identity_types": {name: tag for name, tag in identity_fields},
                 "resolved_identity": resolved_identity,
                 "missing_identity_fields": missing_identity_fields,
                 "proposed_entity_ref": proposed_entity_ref,
-                # Backward-compat metadata for transition.
-                "record_exists_pred_id": record_exists_pred_id,
-                "id_policy": id_policy,
-                "roles": role_payloads,
             },
             support_digest=f"sha256:{'0' * 64}",
             support_kind="none",
@@ -215,87 +198,80 @@ def find_schema_pred(store: Any, pred_id: str) -> dict[str, Any] | None:
     return None
 
 
-def record_materialize_spec_from_head(
+def entity_materialize_spec_from_head(
     store: Any,
     *,
-    record_type: str,
+    entity_type: str,
     head: dict[str, Any] | None,
-    id_policy: Any | None,
 ) -> dict[str, Any]:
-    if not isinstance(record_type, str) or not record_type:
-        raise WhereValidationError("record target must be non-empty entity type string")
+    if not isinstance(entity_type, str) or not entity_type:
+        raise WhereValidationError("entity target must be non-empty entity type string")
     if not isinstance(head, dict):
-        raise WhereValidationError("record derivation requires head object")
+        raise WhereValidationError("entity derivation requires head object")
     if head.get("kind") != "head_call" or head.get("callee_kind") != "entity_type":
-        raise WhereValidationError("record derivation head must be EntityType(...)")
-    if head.get("entity_type") != record_type:
-        raise WhereValidationError("record derivation head entity_type must equal target")
+        raise WhereValidationError("entity derivation head must be EntityType(...)")
+    if head.get("entity_type") != entity_type:
+        raise WhereValidationError("entity derivation head entity_type must equal target")
     kwargs = head.get("kwargs")
     if not isinstance(kwargs, dict) or not kwargs:
-        raise WhereValidationError("record derivation head.kwargs must be non-empty object")
+        raise WhereValidationError("entity derivation head.kwargs must be non-empty object")
 
     entities = store.schema_ir.get("entities", [])
     if not isinstance(entities, list):
         raise WhereValidationError("schema_ir.entities must be list")
-    record_entity = None
+    schema_entity = None
     for entity in entities:
-        if isinstance(entity, dict) and entity.get("entity_type") == record_type:
-            record_entity = entity
+        if isinstance(entity, dict) and entity.get("entity_type") == entity_type:
+            schema_entity = entity
             break
-    if not isinstance(record_entity, dict):
-        raise WhereValidationError(f"record entity not found in schema: {record_type}")
+    if not isinstance(schema_entity, dict):
+        raise WhereValidationError(f"entity not found in schema: {entity_type}")
 
     predicates = store.schema_ir.get("predicates", [])
     if not isinstance(predicates, list):
         raise WhereValidationError("schema_ir.predicates must be list")
-    record_exists_pred_id: str | None = None
     role_defs: list[dict[str, Any]] = []
     for pred in predicates:
         if not isinstance(pred, dict):
             continue
-        if pred.get("owner_type") != record_type:
+        if pred.get("owner_type") != entity_type:
             continue
         pred_id = pred.get("pred_id")
         if not isinstance(pred_id, str) or not pred_id:
             continue
-        if pred.get("is_record_exists") is True:
-            record_exists_pred_id = pred_id
+        if pred.get("is_entity_exists") is True:
             continue
         arg_specs = pred.get("arg_specs")
         if not isinstance(arg_specs, list) or len(arg_specs) != 2:
-            raise WhereValidationError(f"record role predicate must be arity 2: {pred_id}")
+            raise WhereValidationError(f"entity field predicate must be arity 2: {pred_id}")
         if not isinstance(arg_specs[0], dict) or arg_specs[0].get("type_domain") != "entity_ref":
-            raise WhereValidationError(f"record role predicate arg0 must be entity_ref: {pred_id}")
+            raise WhereValidationError(f"entity field predicate arg0 must be entity_ref: {pred_id}")
         if not isinstance(arg_specs[1], dict):
-            raise WhereValidationError(f"record role predicate arg1 spec invalid: {pred_id}")
+            raise WhereValidationError(f"entity field predicate arg1 spec invalid: {pred_id}")
         tag = arg_specs[1].get("type_domain")
         if tag not in CANONICAL_TAGS:
-            raise WhereValidationError(f"record role predicate arg1 type_domain invalid: {pred_id}")
+            raise WhereValidationError(f"entity field predicate arg1 type_domain invalid: {pred_id}")
         field_name = pred.get("py_field_name")
         if not isinstance(field_name, str) or not field_name:
             field_name = pred_id.split(":", 1)[1] if ":" in pred_id else pred_id
         role_defs.append({"field_name": field_name, "pred_id": pred_id, "type_domain": tag})
-    if not isinstance(record_exists_pred_id, str) or not record_exists_pred_id:
-        raise WhereValidationError(f"record exists predicate not found for: {record_type}")
     if not role_defs:
-        raise WhereValidationError(f"record role predicates not found for: {record_type}")
+        raise WhereValidationError(f"entity field predicates not found for: {entity_type}")
 
     role_names = [role["field_name"] for role in role_defs]
     missing = [name for name in role_names if name not in kwargs]
     if missing:
-        raise WhereValidationError(f"record head missing role kwargs: {missing}")
+        raise WhereValidationError(f"entity head missing field kwargs: {missing}")
     extra = sorted([key for key in kwargs.keys() if key not in set(role_names)])
     if extra:
-        raise WhereValidationError(f"record head contains unknown role kwargs: {extra}")
+        raise WhereValidationError(f"entity head contains unknown field kwargs: {extra}")
 
     head_vars = [kwargs[name] for name in role_names]
     return {
-        "record_type": record_type,
-        "record_exists_pred_id": record_exists_pred_id,
+        "entity_type": entity_type,
         "roles": role_defs,
         "head_vars": head_vars,
-        "id_policy": id_policy,
-        "entity_identity_fields": record_entity.get("identity_fields"),
+        "entity_identity_fields": schema_entity.get("identity_fields"),
     }
 
 
@@ -328,59 +304,11 @@ def _term_from_tag_value(tag: str, value: Any) -> dict[str, Any]:
 
 def _derive_entity_identity_from_roles(
     *,
-    record_type: str,
+    entity_type: str,
     key_tuple_digest: str,
-    id_policy: Any,
     roles: list[dict[str, Any]],
     schema_identity_fields: list[dict[str, Any]] | None = None,
 ) -> tuple[list[tuple[str, str]], dict[str, Any], list[str]]:
-    if isinstance(id_policy, str):
-        kind = id_policy
-    elif isinstance(id_policy, dict):
-        kind = id_policy.get("kind")
-    else:
-        kind = None
-
-    if kind == "identity_fields_v1" and isinstance(id_policy, dict):
-        fields = id_policy.get("fields")
-        if not isinstance(fields, list) or not fields:
-            raise WhereValidationError("id_policy.identity_fields_v1 requires non-empty fields")
-        role_map: dict[str, tuple[str, Any]] = {}
-        for role in roles:
-            field_name = role.get("field_name")
-            rest_terms = role.get("rest_terms")
-            if not isinstance(field_name, str) or not isinstance(rest_terms, list) or len(rest_terms) != 1:
-                continue
-            tag, val = rest_terms[0]
-            role_map[field_name] = (str(tag), val)
-        identity_fields: list[tuple[str, str]] = []
-        resolved_identity: dict[str, Any] = {}
-        missing_identity_fields: list[str] = []
-        for idx, item in enumerate(fields):
-            if not isinstance(item, dict):
-                raise WhereValidationError(f"id_policy.fields[{idx}] must be object")
-            name = item.get("name")
-            role_name = item.get("role", item.get("from_role"))
-            type_domain = item.get("type_domain")
-            if not isinstance(name, str) or not name:
-                raise WhereValidationError(f"id_policy.fields[{idx}].name must be non-empty string")
-            if not isinstance(role_name, str) or not role_name:
-                raise WhereValidationError(f"id_policy.fields[{idx}].role must be non-empty string")
-            if not isinstance(type_domain, str) or type_domain not in CANONICAL_TAGS:
-                raise WhereValidationError(f"id_policy.fields[{idx}].type_domain must be canonical tag")
-            identity_fields.append((name, type_domain))
-            role_term = role_map.get(role_name)
-            if role_term is None:
-                missing_identity_fields.append(name)
-                continue
-            actual_tag, value = role_term
-            if actual_tag != type_domain:
-                raise WhereValidationError(
-                    f"id_policy.fields[{idx}].type_domain mismatches role tag: expected {type_domain}, got {actual_tag}"
-                )
-            resolved_identity[name] = value
-        return identity_fields, resolved_identity, missing_identity_fields
-
     role_map: dict[str, tuple[str, Any]] = {}
     for role in roles:
         field_name = role.get("field_name")
@@ -430,10 +358,7 @@ def _derive_entity_identity_from_roles(
     identity_fields = [("key_tuple_digest", "string")]
     resolved_identity = {"key_tuple_digest": key_tuple_digest}
     missing_identity_fields: list[str] = []
-    if kind not in {None, "key_tuple_digest_v1"}:
-        # Keep transition strictness: unknown policy kinds are unsupported here.
-        raise WhereValidationError(f"unsupported id_policy kind for entity candidate: {kind}")
-    _ = record_type  # reserved for future per-entity defaults
+    _ = entity_type  # reserved for future per-entity defaults
     return identity_fields, resolved_identity, missing_identity_fields
 
 

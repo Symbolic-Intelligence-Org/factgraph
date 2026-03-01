@@ -122,8 +122,6 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
 - `mode`
 - `temporal_view`
 - `status`
-- `materialize_as`（兼容字段，通常可省略）
-- `id_policy`（兼容字段，仅 legacy `record` 路径使用）
 
 方法：
 - `drv.to_authoring_payload()`
@@ -142,11 +140,11 @@ Field head 约束：
 
 ---
 
-## 6. `head` 与 `materialize_as`（v2）
+## 6. `head` 判定 candidate kind（v2）
 
 ### 6.1 默认判定规则（推荐路径）
 
-在未显式填写 `materialize_as` 时，编译器按 `head` 结构自动判定：
+编译器按 `head` 结构自动判定：
 
 | `head` 结构 | 默认路径 | evaluate 输出 |
 |---|---|---|
@@ -156,45 +154,18 @@ Field head 约束：
 兼容写法：
 - 无 `head` 时，仍可用 `target + head_vars` 走 fact-only 路径（兼容 no-head）。
 
-### 6.2 `materialize_as` 的当前定位
+### 6.2 从旧写法迁移到 v2（速查）
 
-- `materialize_as` 仍可显式填写 `fact` / `record`，用于兼容旧调用。
-- 新代码建议省略，让 `head` 自动推断。
-- `materialize_as="record"` 在当前实现中等价走 entity 路径（旧术语兼容，不建议新增依赖）。
-
----
-
-## 7. `id_policy`（兼容项）
-
-`id_policy` 仅对 legacy `materialize_as="record"` 输入仍有意义；v2 主路径（head 自动推断 + entity candidate）通常不需要用户显式设置。
-
-v1 支持：
-- `key_tuple_digest_v1`
-- `identity_fields_v1`
-
-### 7.1 `key_tuple_digest_v1`
-
-最简策略，基于候选 key 摘要派生 record identity。适合快速落地。
-
-### 7.2 `identity_fields_v1`
-
-显式指定由哪些 role 字段组成 record identity，语义更稳定，适合生产。
-
-```python
-id_policy={
-  "kind": "identity_fields_v1",
-  "fields": [
-    {"name": "person", "role": "person", "type_domain": "entity_ref"},
-    {"name": "language", "role": "language", "type_domain": "entity_ref"},
-  ],
-}
-```
-
-schema-aware 编译路径下，legacy record derivation 在省略 `id_policy` 时可自动推导默认 `identity_fields_v1`。
+| 旧写法 | 新写法 | 说明 |
+|---|---|---|
+| `materialize_as="fact"` | `head=Entity.field(...)` | candidate_kind 自动推断为 fact |
+| `materialize_as="record"` | `head=EntityType(...)` | candidate_kind 自动推断为 entity（并生成依赖 fact） |
+| `id_policy=...` | 移除 | identity 在 entity candidate 中解析；缺失字段由 accept 时 `identity_override` 补齐 |
+| fact payload: `e_ref/rest_terms` | fact payload: `terms` | `terms[0]` 固定是 subject（arg0） |
 
 ---
 
-## 8. `sdk.evaluate(...)` 返回的 `CandidateSet`
+## 7. `sdk.evaluate(...)` 返回的 `CandidateSet`
 
 返回：`list[CandidateSet]`
 
@@ -226,14 +197,23 @@ schema-aware 编译路径下，legacy record derivation 在省略 `id_policy` �
 - fact 候选（v2）：
   - `{"pred_id": ..., "terms": [{"kind": "entity_ref" | "candidate_ref" | "literal", ...}, ...]}`
   - `terms[0]` 固定是 subject 槽位（arg0）。
-- 兼容输入下，可能仍出现 `e_ref/rest_terms` 或 legacy record payload；新代码应优先使用 v2 形态。
 
 补充：
 - 对 Entity head derivation，evaluate 常见会返回一个小图：`1` 个 entity candidate + `N` 个依赖 fact candidates（通过 `candidate_ref` 关联）。
 
+### 7.1 读取 fact candidate 的推荐方式
+
+```python
+fact = next(c for c in cands if c.candidate_kind == "fact")
+subject = fact.payload["terms"][0]                 # {"kind":"entity_ref"| "candidate_ref", ...}
+value_terms = fact.payload["terms"][1:]            # literal / entity_ref / candidate_ref
+```
+
+不要再按 `payload["e_ref"]` / `payload["rest_terms"]` 读取。
+
 ---
 
-## 9. `sdk.accept(...)`：结果结构与幂等语义
+## 8. `sdk.accept(...)`：结果结构与幂等语义
 
 主路径：
 
@@ -323,3 +303,47 @@ SDK 路径下，对象 DSL 会先 lower，再经过 schema-aware compile：
 
 因此在 `SDKStore.run/evaluate` 常见路径中，record sugar 通常可以跟随 schema 自定义 `pred_id` 正确工作。  
 在 schema 外独立 lower/compile 场景，建议优先使用 `Pred(...)` 显式谓词写法。
+
+---
+
+## 12. 最小闭环示例（推荐照抄）
+
+### 12.1 fact 路径：evaluate -> accept
+
+```python
+with vars("p", "c") as (p, c):
+    drv = Derivation(
+        id="drv.country_copy",
+        version="1.0.0",
+        head=Person.country_copy(person=p, country_copy=c),
+        where=[Pred("person:country", p, c)],
+    )
+
+cands = sdk.evaluate(drv, mode="python")
+fact = next(c for c in cands if c.candidate_kind == "fact")
+res = sdk.accept(fact, approved_by="alice")
+```
+
+### 12.2 entity 路径：先接受实体，再接受依赖 fact（推荐 `accept_many`）
+
+```python
+with vars("u", "l") as (u, l):
+    drv = Derivation(
+        id="drv.speaks",
+        version="1.0.0",
+        head=Speaks(user=u, language=l),
+        where=[Pred("person:country", u, "de"), Pred("user:lang_pref", u, l)],
+    )
+
+cands = sdk.evaluate(drv, mode="python")
+rows = sdk.accept_many(cands, mode="atomic")
+```
+
+### 12.3 identity 不完整时补齐
+
+```python
+entity = next(c for c in cands if c.candidate_kind == "entity")
+res = sdk.accept(entity, identity_override={"source_id": "u-001"})
+```
+
+若不传 `identity_override`，会得到 `IDENTITY_INCOMPLETE`（或等价 validation 错误）。

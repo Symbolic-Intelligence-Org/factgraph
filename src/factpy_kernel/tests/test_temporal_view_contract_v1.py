@@ -50,6 +50,19 @@ class TemporalViewContractV1Tests(unittest.TestCase):
             "generated_at": "2026-01-01T00:00:00Z",
         }
 
+    @staticmethod
+    def _payload_sig(cand) -> tuple[str, tuple[tuple[str, object], ...]]:
+        terms = cand.payload["terms"]
+        return (
+            terms[0]["value"],
+            tuple(
+                (term["tag"], term["value"])
+                if term["kind"] == "literal"
+                else ("entity_ref", term["value"])
+                for term in terms[1:]
+            ),
+        )
+
     def test_evaluate_record_temporal_view_supported(self) -> None:
         store = Store(schema_ir=self.schema_ir)
         e_ref = "idref_v1:Person:temporal-contract-e1"
@@ -72,8 +85,7 @@ class TemporalViewContractV1Tests(unittest.TestCase):
         )
 
         self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0].payload["e_ref"], e_ref)
-        self.assertEqual(candidates[0].payload["rest_terms"], [("string", "2024"), ("string", "100")])
+        self.assertEqual(self._payload_sig(candidates[0]), (e_ref, (("string", "2024"), ("string", "100"))))
 
     def test_evaluate_python_temporal_current_supported(self) -> None:
         store = Store(schema_ir=self.schema_ir)
@@ -105,8 +117,7 @@ class TemporalViewContractV1Tests(unittest.TestCase):
             temporal_view="current",
         )
         self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0].payload["e_ref"], e_ref)
-        self.assertEqual(candidates[0].payload["rest_terms"], [("string", "2024"), ("string", "200")])
+        self.assertEqual(self._payload_sig(candidates[0]), (e_ref, (("string", "2024"), ("string", "200"))))
 
     def test_evaluate_temporal_current_python_engine_parity(self) -> None:
         if find_souffle_binary() is None:
@@ -150,8 +161,8 @@ class TemporalViewContractV1Tests(unittest.TestCase):
             temporal_view="current",
         )
         self.assertEqual(
-            {(c.payload["e_ref"], tuple(c.payload["rest_terms"])) for c in py},
-            {(c.payload["e_ref"], tuple(c.payload["rest_terms"])) for c in en},
+            {self._payload_sig(c) for c in py},
+            {self._payload_sig(c) for c in en},
         )
 
     def test_evaluate_engine_temporal_current_supported(self) -> None:
@@ -188,8 +199,7 @@ class TemporalViewContractV1Tests(unittest.TestCase):
             temporal_view="current",
         )
         self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0].payload["e_ref"], e_ref)
-        self.assertEqual(candidates[0].payload["rest_terms"], [("string", "2024"), ("string", "200")])
+        self.assertEqual(self._payload_sig(candidates[0]), (e_ref, (("string", "2024"), ("string", "200"))))
 
     def test_export_outputs_map_keeps_temporal_current_channel(self) -> None:
         store = Store(schema_ir=self.schema_ir)

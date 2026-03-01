@@ -23,8 +23,6 @@ from factpy_kernel.core.store.types import (
     EvaluateMode,
     HeadSpecIR,
     HeadVarsIR,
-    IdPolicyIR,
-    MaterializeAs,
     TemporalView,
     WhereIR,
 )
@@ -70,9 +68,7 @@ class Store:
         where: WhereIR,
         mode: EvaluateMode = "python",
         temporal_view: TemporalView = "record",
-        materialize_as: MaterializeAs = None,
         head: HeadSpecIR | None = None,
-        id_policy: IdPolicyIR | None = None,
     ) -> list[CandidateSet]:
         return evaluate_store(
             self,
@@ -83,9 +79,7 @@ class Store:
             where=where,
             mode=mode,
             temporal_view=temporal_view,
-            materialize_as=materialize_as,
             head=head,
-            id_policy=id_policy,
             engine_evaluate=self.evaluate_engine,
         )
 
@@ -97,11 +91,9 @@ class Store:
         head_vars: HeadVarsIR,
         where: WhereIR,
         temporal_view: TemporalView = "record",
-        materialize_as: MaterializeAs = None,
         head: HeadSpecIR | None = None,
-        id_policy: IdPolicyIR | None = None,
     ) -> list[CandidateSet]:
-        """Internal/legacy entrypoint; prefer evaluate(mode='engine')."""
+        """Internal engine adapter entrypoint; prefer evaluate(mode='engine')."""
         if temporal_view not in {"record", "current"}:
             raise ValueError("temporal_view must be 'record' or 'current'")
         evaluator = self._engine_evaluator if self._engine_evaluator is not None else _ENGINE_EVALUATOR
@@ -117,9 +109,7 @@ class Store:
             head_vars=head_vars,
             where=where,
             temporal_view=temporal_view,
-            materialize_as=materialize_as,
             head=head,
-            id_policy=id_policy,
         )
 
     def evaluate_dummy(
@@ -140,8 +130,9 @@ class Store:
         run_id = uuid4().hex
         key_terms = [("string", target), ("entity_ref", e_ref), *dims_terms]
         payload = {
-            "e_ref": e_ref,
-            "rest_terms": list(rest_terms),
+            "pred_id": target,
+            "terms": [{"kind": "entity_ref", "value": e_ref}]
+            + [{"kind": "literal", "tag": tag, "value": value} for tag, value in rest_terms],
         }
         tup_digest = sha256_token(canonical_bytes_tup_v1(rest_terms))
         return make_candidate(
@@ -156,6 +147,7 @@ class Store:
             generated_at=now_epoch_nanos(),
             tup_digest=tup_digest,
             state="generated",
+            candidate_kind="fact",
         )
 
     def accept(
