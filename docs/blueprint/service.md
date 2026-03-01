@@ -24,6 +24,52 @@ pip install -e ".[service]"
 uvicorn factpy_kernel.service.app_v1:app --host 0.0.0.0 --port 8000
 ```
 
+## 边界
+
+`service v1` 的角色是 HTTP/BFF 层，不是领域语义层。
+
+它负责：
+
+- 对外 HTTP/JSON API 与路由暴露
+- request DTO 校验、JSON 归一化、协议兼容别名处理
+- runtime session 生命周期编排
+- 统一 envelope：`HTTP 200` + `ok/errors/meta`
+- runtime query / derivation / package export 的远程访问壳
+- registry 只读访问
+
+它不负责：
+
+- core 规则/accept/store/view/mapping 的领域语义本身
+- authoring / registry 写入 workflow
+- SDK 对象式本地 API
+- audit summary 之类尚未收敛的更高层聚合查询
+
+## 依赖与存储
+
+依赖分层（按当前实现）：
+
+- route 层：`app_v1` 只依赖 service facade，不直接依赖 `core` / `authoring`
+- rules facade：依赖 `authoring.rules` 与 `core.rules.*`
+- runtime facade：依赖 `authoring.*`、`core.*`，并在 package export 场景直接依赖 `adapters.souffle.package`
+- registry facade：依赖 `authoring.FileAuthoringRegistry` 与 registry 文件系统读取
+
+存储整合：
+
+- runtime session 底层使用 `core.store.ledger.Ledger`
+- 未提供 `ledger_path` 时使用内存 ledger
+- 提供 `ledger_path` 时使用 file-backed SQLite ledger，并在打开时绑定 `schema_digest`
+- registry 读取走文件系统目录（`root_dir`），不是数据库
+- 当前 service 不直接接入外部业务数据库、ORM 或连接池
+
+## API 分组
+
+建议从四组理解 service API：
+
+- rules facade：`/v1/rules/*` + `/v1/profiles`
+- runtime session：`/v1/runtime/sessions/open`、`/{session_id}`、`/writes/*`、`/claims`
+- runtime queries：`/rules/run`、`/derivations/*`、`/queries/*`、`/packages/export`
+- registry read-only：`/v1/registry/*`
+
 ## API（v1）
 
 详细 DTO 文档：
