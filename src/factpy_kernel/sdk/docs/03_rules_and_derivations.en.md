@@ -111,27 +111,26 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
             HasLanguage(hl), hl.country == c, hl.language == l,
         ],
         head=Speaks(user=u, language=l),
-        materialize_as="record",
     )
 ```
 
 Fields:
 - `id`, `version`, `where` (required)
 - `head`
-- `materialize_as`
 - `target`
 - `head_vars`
 - `mode`
 - `temporal_view`
 - `status`
-- `id_policy`
+- `materialize_as` (compatibility field, usually optional)
+- `id_policy` (compatibility field, only used by legacy `record` path)
 
 Method:
 - `drv.to_authoring_payload()`
 
 Head forms:
-- fact head (common): `Entity.field(...)`
-- record head (common): `RecordType(...)`
+- fact head: `Entity.field(...)`
+- entity head: `EntityType(...)`
 
 Field head constraints:
 - kwargs only
@@ -143,49 +142,31 @@ Notes:
 
 ---
 
-## 6. `materialize_as` semantics (core)
+## 6. `head` and `materialize_as` (v2)
 
-`materialize_as` controls what `accept` writes:
+### 6.1 Default inference (recommended)
 
-| Value | Write behavior |
-|---|---|
-| `"fact"` | writes target business predicate assertion (no new entity creation) |
-| `"record"` | materializes reified record: `<RecordType>:exists` + role facts |
+When `materialize_as` is omitted, compiler behavior is inferred from head shape:
 
-### 6.1 `materialize_as="record"`
+| Head shape | Default path | Evaluate output |
+|---|---|---|
+| `EntityType(...)` | entity path | one entity candidate + dependent fact candidates |
+| `EntityType.field(...)` | fact path | fact candidates |
 
-Hard constraints:
-- requires `head`
-- `head` must be entity head (`RecordType(...)`)
-- in schema-aware compile path, head kwargs must match record role field names
+Compatibility:
+- without `head`, `target + head_vars` still works as fact-only legacy path.
 
-Example:
+### 6.2 Current role of `materialize_as`
 
-```python
-head = Speaks(user=u, language=l)
-```
-
-`uid=` and other identity fields are not role kwargs and will fail in compile/runtime checks.
-
-### 6.2 `materialize_as="fact"`
-
-Most common form is a field head:
-
-```python
-head = Person.country(person=p, value=c)
-```
-
-But this is not the only path. Current implementation also supports:
-- direct `target + head_vars`
-- entity-type head rewritten to projection fact in schema-aware compile (requires projection metadata in schema)
-
-So describe field head as "common/recommended", not an exclusive hard requirement.
+- explicit `materialize_as="fact" | "record"` is still accepted for compatibility.
+- new code should prefer omitting it and rely on head inference.
+- `materialize_as="record"` is a legacy spelling for the entity path in current runtime behavior.
 
 ---
 
-## 7. `id_policy` (record materialization identity policy)
+## 7. `id_policy` (compatibility only)
 
-`id_policy` is meaningful only for `materialize_as="record"`. It decides record e_ref derivation and idempotency behavior.
+`id_policy` is mainly relevant for legacy `materialize_as="record"` inputs; it is generally unnecessary on the v2 default path.
 
 Supported in v1:
 - `key_tuple_digest_v1`
@@ -209,7 +190,7 @@ id_policy={
 }
 ```
 
-In schema-aware compile path, record derivations can auto-derive a default `identity_fields_v1` when omitted. Explicit declaration is still recommended for production.
+In schema-aware compile path, legacy record derivations can still auto-derive default `identity_fields_v1` when omitted.
 
 ---
 
@@ -218,6 +199,9 @@ In schema-aware compile path, record derivations can auto-derive a default `iden
 Return type: `list[CandidateSet]`
 
 Key fields:
+- `candidate_id` (per-run handle)
+- `candidate_key` (cross-run stable key)
+- `candidate_kind` (`"fact"` / `"entity"`)
 - `derivation_id`
 - `derivation_version`
 - `run_id`
@@ -232,13 +216,20 @@ Key fields:
 
 Interpretation:
 - `run_id`: evaluate run identifier
-- `target`: usually predicate id for fact path, record type for record path
+- `target`: usually `pred_id` for fact candidates, `entity_type` for entity candidates
 - `key_tuple_digest`: candidate idempotency key digest
 - `support_*`: support/evidence digest metadata used by accept meta and provenance checks
 
 Payload shapes:
-- fact candidate: `{"e_ref": ..., "rest_terms": ...}`
-- record candidate: `{"materialize_as": "record", "record_type": ..., "record_exists_pred_id": ..., "id_policy": ..., "roles": ...}`
+- entity candidate (v2):
+  - `{"entity_type": ..., "identity_fields": [...], "resolved_identity": {...}, "missing_identity_fields": [...], "proposed_entity_ref": ...}`
+- fact candidate (v2):
+  - `{"pred_id": ..., "terms": [{"kind": "entity_ref" | "candidate_ref" | "literal", ...}, ...]}`
+  - `terms[0]` is always the subject slot (arg0).
+- compatibility inputs may still contain `e_ref/rest_terms` or legacy record payloads; new code should prefer v2 payloads.
+
+Note:
+- for entity-head derivations, evaluate commonly returns a small graph: one entity candidate plus N dependent fact candidates linked via `candidate_ref`.
 
 ---
 
@@ -248,6 +239,12 @@ Main path:
 
 ```python
 res = sdk.accept(candidate_set, approved_by="alice")
+```
+
+Batch path (recommended for dependency graphs):
+
+```python
+rows = sdk.accept_many(cands, mode="atomic")
 ```
 
 Facade sugar:
@@ -266,6 +263,7 @@ Facade sugar:
 - `skipped_reason_counts`
 - `diagnostics`
 - `diagnostics_contract_version`
+- `entity_ref` (present when an entity candidate is accepted)
 
 ### 9.2 Idempotency behavior
 
@@ -279,13 +277,16 @@ Repeated accept of the same candidate becomes no-op:
 
 `dry_run=True` does not write ledger and returns a "would write" preview in `written_assertions`.
 
-### 9.4 conflict / aborted
+### 9.4 `accept_many(...)` states
 
-Record materialization may return:
-- `skipped_reason_counts={"conflict": 1}` or `{"aborted": 1}`
-- plus `diagnostics`
+Per-candidate states include:
+- `ACCEPTED`
+- `DUPLICATE`
+- `BLOCKED_DEPENDENCY`
+- `FAILED_VALIDATION`
+- `FAILED_RUNTIME`
 
-`aborted` is terminal for that materialization path and should not be auto-retried blindly.
+Default mode is `atomic`; `best_effort` is optional.
 
 ---
 

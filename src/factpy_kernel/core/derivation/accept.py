@@ -121,6 +121,9 @@ def accept_candidate_set(
                 policy_digest_token=policy_digest_token,
                 schema_ir=schema_ir,
             )
+        # TODO(remove in vX): Drop this legacy entity(record) payload fallback once
+        # all external callers stop sending v1 record payload shapes and CI asserts
+        # no LegacyAcceptFallbackWarning is emitted.
         # v1 compatibility path.
         warnings.warn(
             "accept() fallback to legacy record payload path; migrate candidate payload to v2 entity shape",
@@ -152,6 +155,9 @@ def accept_candidate_set(
         )
     materialize_kind = payload.get("materialize_as", "fact")
     if materialize_kind == "record":
+        # TODO(remove in vX): Remove materialize_as='record' fallback after all
+        # callers migrate to v2 candidate_kind/terms payloads and fallback-warning
+        # telemetry remains zero in CI/runtime checks.
         # Legacy payload compatibility.
         warnings.warn(
             "accept() fallback to legacy materialize_as='record' payload; migrate to v2 candidate_kind/terms",

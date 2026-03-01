@@ -111,27 +111,26 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
             HasLanguage(hl), hl.country == c, hl.language == l,
         ],
         head=Speaks(user=u, language=l),
-        materialize_as="record",
     )
 ```
 
 字段：
 - `id`、`version`、`where`（必需）
 - `head`
-- `materialize_as`
 - `target`
 - `head_vars`
 - `mode`
 - `temporal_view`
 - `status`
-- `id_policy`
+- `materialize_as`（兼容字段，通常可省略）
+- `id_policy`（兼容字段，仅 legacy `record` 路径使用）
 
 方法：
 - `drv.to_authoring_payload()`
 
 `head` 写法：
-- Field head（常见于 fact）：`Entity.field(...)`
-- Entity head（常见于 record）：`RecordType(...)`
+- Field head（fact 路径）：`Entity.field(...)`
+- Entity head（entity 路径）：`EntityType(...)`
 
 Field head 约束：
 - 不支持位置参数，仅支持 kwargs。
@@ -143,49 +142,31 @@ Field head 约束：
 
 ---
 
-## 6. `materialize_as` 语义（核心）
+## 6. `head` 与 `materialize_as`（v2）
 
-`materialize_as` 决定 `accept` 时写入形态：
+### 6.1 默认判定规则（推荐路径）
 
-| 取值 | 写入语义 |
-|---|---|
-| `"fact"` | 写入目标业务谓词断言（不创建新实体） |
-| `"record"` | 物化 reified record：写 `<RecordType>:exists` + role facts |
+在未显式填写 `materialize_as` 时，编译器按 `head` 结构自动判定：
 
-### 6.1 `materialize_as="record"`
+| `head` 结构 | 默认路径 | evaluate 输出 |
+|---|---|---|
+| `EntityType(...)` | entity 路径 | 1 个 entity candidate + 若干依赖 fact candidates |
+| `EntityType.field(...)` | fact 路径 | fact candidates |
 
-硬约束：
-- 需要 `head`
-- `head` 必须是 Entity head（`RecordType(...)`）
-- 在 schema-aware 编译路径中，`head` kwargs 必须匹配 record role 字段名
+兼容写法：
+- 无 `head` 时，仍可用 `target + head_vars` 走 fact-only 路径（兼容 no-head）。
 
-例如：
+### 6.2 `materialize_as` 的当前定位
 
-```python
-head = Speaks(user=u, language=l)  # kwargs 是 role 字段名
-```
-
-`uid=` 这类 identity 字段不属于 role kwargs，会在编译/运行时报错。
-
-### 6.2 `materialize_as="fact"`
-
-常见写法是 Field head：
-
-```python
-head = Person.country(person=p, value=c)
-```
-
-但这不是唯一形态。当前实现还支持兼容路径：
-- 直接给 `target + head_vars`
-- schema-aware 条件下，Entity head 可被重写到 record projection fact（要求 schema 中有 projection 定义）
-
-因此文档里应将 Field head描述为“常见/推荐形态”，而不是“唯一硬约束”。
+- `materialize_as` 仍可显式填写 `fact` / `record`，用于兼容旧调用。
+- 新代码建议省略，让 `head` 自动推断。
+- `materialize_as="record"` 在当前实现中等价走 entity 路径（旧术语兼容，不建议新增依赖）。
 
 ---
 
-## 7. `id_policy`（record 物化幂等键）
+## 7. `id_policy`（兼容项）
 
-`id_policy` 仅在 `materialize_as="record"` 时生效，用于确定 record 的 e_ref（从而控制幂等与去重）。
+`id_policy` 仅对 legacy `materialize_as="record"` 输入仍有意义；v2 主路径（head 自动推断 + entity candidate）通常不需要用户显式设置。
 
 v1 支持：
 - `key_tuple_digest_v1`
@@ -209,7 +190,7 @@ id_policy={
 }
 ```
 
-schema-aware 编译路径下，record derivation 在省略 `id_policy` 时可自动推导默认 `identity_fields_v1`；生产仍建议显式声明。
+schema-aware 编译路径下，legacy record derivation 在省略 `id_policy` 时可自动推导默认 `identity_fields_v1`。
 
 ---
 
@@ -218,6 +199,9 @@ schema-aware 编译路径下，record derivation 在省略 `id_policy` 时可自
 返回：`list[CandidateSet]`
 
 `CandidateSet` 核心字段：
+- `candidate_id`（per-run 句柄）
+- `candidate_key`（跨 run 稳定键）
+- `candidate_kind`（`"fact"` / `"entity"`）
 - `derivation_id`
 - `derivation_version`
 - `run_id`
@@ -232,13 +216,20 @@ schema-aware 编译路径下，record derivation 在省略 `id_policy` 时可自
 
 说明：
 - `run_id`：同一轮 evaluate 的运行标识。
-- `target`：fact 路径下通常是目标 `pred_id`；record 路径下是 `record_type`。
+- `target`：fact candidate 下通常是 `pred_id`；entity candidate 下是 `entity_type`。
 - `key_tuple_digest`：候选幂等键摘要。
 - `support_*`：支撑证据摘要信息（`accept` meta 与 provenance 校验会使用）。
 
 `payload` 形态：
-- fact 候选：`{"e_ref": ..., "rest_terms": ...}`
-- record 候选：`{"materialize_as": "record", "record_type": ..., "record_exists_pred_id": ..., "id_policy": ..., "roles": ...}`
+- entity 候选（v2）：
+  - `{"entity_type": ..., "identity_fields": [...], "resolved_identity": {...}, "missing_identity_fields": [...], "proposed_entity_ref": ...}`
+- fact 候选（v2）：
+  - `{"pred_id": ..., "terms": [{"kind": "entity_ref" | "candidate_ref" | "literal", ...}, ...]}`
+  - `terms[0]` 固定是 subject 槽位（arg0）。
+- 兼容输入下，可能仍出现 `e_ref/rest_terms` 或 legacy record payload；新代码应优先使用 v2 形态。
+
+补充：
+- 对 Entity head derivation，evaluate 常见会返回一个小图：`1` 个 entity candidate + `N` 个依赖 fact candidates（通过 `candidate_ref` 关联）。
 
 ---
 
@@ -248,6 +239,12 @@ schema-aware 编译路径下，record derivation 在省略 `id_policy` 时可自
 
 ```python
 res = sdk.accept(candidate_set, approved_by="alice")
+```
+
+批量路径（有依赖关系时推荐）：
+
+```python
+rows = sdk.accept_many(cands_list, mode="atomic")
 ```
 
 SDK facade 的 sugar：
@@ -266,6 +263,7 @@ SDK facade 的 sugar：
 - `skipped_reason_counts`
 - `diagnostics`
 - `diagnostics_contract_version`
+- `entity_ref`（entity candidate 成功时返回）
 
 ### 9.2 幂等行为
 
@@ -279,13 +277,16 @@ SDK facade 的 sugar：
 
 `dry_run=True` 不写 ledger，仅返回将写入的 `written_assertions` 预览。
 
-### 9.4 conflict / aborted
+### 9.4 `accept_many(...)` 状态
 
-record 物化在冲突或中断恢复场景可能返回：
-- `skipped_reason_counts={"conflict": 1}` 或 `{"aborted": 1}`
-- 并携带 `diagnostics`
+`accept_many` 返回逐候选状态，核心包括：
+- `ACCEPTED`
+- `DUPLICATE`
+- `BLOCKED_DEPENDENCY`
+- `FAILED_VALIDATION`
+- `FAILED_RUNTIME`
 
-其中 `aborted` 语义是“当前物化流程已终止，不能按同一路径自动重试”。
+默认 `mode="atomic"`；可选 `mode="best_effort"`。
 
 ---
 

@@ -149,13 +149,10 @@ class User(Entity):
 
 ### 2.4 Reified Record（关系节点）
 
-用 `Meta.is_record = True` 声明 record 类型：
+关系实体/事件实体仍然基于 `Entity`，不需要显式 `is_record` 开关：
 
 ```python
 class LivesIn(Entity):
-    class Meta:
-        is_record = True
-
     uid: str = Identity(default_factory="uuid4")
     user: User = Field(cardinality="functional", pred_id="livesin:user")
     country: Country = Field(cardinality="functional", pred_id="livesin:country")
@@ -163,8 +160,8 @@ class LivesIn(Entity):
 ```
 
 说明（稳定合约）：
-- 编译后 schema 会包含 `LivesIn:exists` record-exists predicate。
-- batch 写入 record 字段时，会在计划中自动补 record-exists 写入 op（避免“有角色断言但 record 不可见”）。
+- 编译后 schema 会为所有 `Entity` 生成 `<T>:exists` predicate（`is_record_exists` + `is_entity_exists`）。
+- batch 写入实体字段时，会在计划中自动补 `<T>:exists` 写入 op，避免“有字段断言但实体不可见”。
 
 ### 2.5 常用注解类型映射
 
@@ -709,25 +706,24 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
             HasLanguage(hl), hl.country == c, hl.language == l,
         ],
         head=Speaks(user=u, language=l),
-        materialize_as="record",
     )
 
 cands_list = sdk.evaluate(speaks_drv)   # list[CandidateSet]
-cands = cands_list[0]
-
-res = sdk.accept(cands, approved_by="pipeline")
-print(res.materialize_id, res.accepted_count, res.skipped_count)
+rows = sdk.accept_many(cands_list, mode="atomic")
+print(rows)
 ```
 
 head 写法（稳定合约）：
 - fact 目标常见：`SomeEntity.some_field(...)`（Field head）
-- record 目标常见：`RecordType(role1=..., role2=...)`（Entity head）
+- entity 目标常见：`EntityType(role1=..., role2=...)`（Entity head）
 - `Field` head 只支持 kwargs，不支持位置参数。
 - head 需要是 DSL head call；传普通实体对象会在 `Derivation(...)` 构造时报 `SDKDSLError`。
 
-id_policy（当前行为）：
-- `materialize_as="record"` 且通过 `sdk.evaluate(...)`（带 schema context）时，可在部分场景自动推导 `id_policy`。
-- 为减少跨版本歧义，生产场景仍建议显式提供 `id_policy`。
+v2 行为（当前推荐）：
+- 省略 `materialize_as`，由 `head` 自动推断路径（Entity head -> entity candidate；Field head -> fact candidate）。
+- `sdk.evaluate(...)` 的 `CandidateSet` 包含 `candidate_id/candidate_key/candidate_kind`。
+- 存在依赖图时，优先使用 `sdk.accept_many(..., mode="atomic")`。
+- `materialize_as/id_policy` 仍保留兼容，但不建议新代码依赖。
 
 ### 7.4 `accept(...)` 参数边界
 
@@ -755,7 +751,7 @@ res = sdk.accept(candidate_set, meta_overrides={"approved_by": "alice", "note": 
 | `Not(...)` 体 | 需非空；默认校验下要求与外层绑定关系安全 |
 
 补充（当前行为）：
-- SDK 对象 DSL 会先 lower，再进入带 schema 的 authoring compile；record 路径 sugar 通常会被 schema-aware rewrite 到实际 predicate（含自定义 `pred_id`）。
+- SDK 对象 DSL 会先 lower，再进入带 schema 的 authoring compile；exists/path sugar 会被 schema-aware rewrite 到实际 predicate（含自定义 `pred_id`）。
 
 ---
 

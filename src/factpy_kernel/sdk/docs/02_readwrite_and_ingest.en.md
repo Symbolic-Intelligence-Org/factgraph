@@ -52,6 +52,7 @@ Cardinality on managed field handles:
 Dependency closure:
 - default `include_deps=True`
 - `include_deps=False` fails at preview/commit if dependencies are missing.
+- when managed entity fields are written, batch planning auto-emits `<T>:exists` ops.
 
 ## 4. `sdk.get/find/edit`
 

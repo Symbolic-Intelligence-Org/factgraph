@@ -139,9 +139,6 @@ Stable Contract:
 
 ```python
 class LivesIn(Entity):
-    class Meta:
-        is_record = True
-
     uid: str = Identity(default_factory="uuid4")
     user: User = Field(cardinality="functional", pred_id="livesin:user")
     country: Country = Field(cardinality="functional", pred_id="livesin:country")
@@ -149,8 +146,8 @@ class LivesIn(Entity):
 ```
 
 Stable Contract:
-- Schema compile adds `LivesIn:exists` predicate.
-- Batch writes on records auto-emit record-exists op when needed.
+- Schema compile adds `<T>:exists` predicates for all entities.
+- Batch writes on entity handles auto-emit `<T>:exists` ops when needed.
 
 ### 2.5 Common Annotation Mapping
 
@@ -475,7 +472,7 @@ Stable Contract:
 - String DSL is not supported (`sdk.run("...")`).
 
 Current Behavior:
-- SDK object DSL is lowered and then schema-aware compiled; record path sugar is generally rewritten against schema predicates (including custom `pred_id`).
+- SDK object DSL is lowered and then schema-aware compiled; exists/path sugar is generally rewritten against schema predicates (including custom `pred_id`).
 
 ### 7.3 Derivations
 
@@ -486,11 +483,10 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
         version="1.0.0",
         where=[LivesIn(li), li.user == u, li.country == c, HasLanguage(hl), hl.country == c, hl.language == l],
         head=Speaks(user=u, language=l),
-        materialize_as="record",
     )
 
 cands = sdk.evaluate(drv)
-res = sdk.accept(cands[0], approved_by="pipeline")
+rows = sdk.accept_many(cands, mode="atomic")
 ```
 
 Stable Contract:
@@ -498,7 +494,10 @@ Stable Contract:
 - Supported accept override keys: `approved_by`, `note`, `dry_run`.
 
 Current Behavior:
-- In schema-aware evaluate path, record derivations may auto-derive `id_policy`; explicit `id_policy` is still recommended for production stability.
+- Recommended path is to omit `materialize_as` and let head shape decide candidate path.
+- `CandidateSet` includes `candidate_id`, `candidate_key`, and `candidate_kind`.
+- For dependency graphs, prefer `sdk.accept_many(..., mode="atomic")`.
+- `materialize_as/id_policy` remain available as compatibility inputs.
 
 ### 7.4 Current DSL Limits
 

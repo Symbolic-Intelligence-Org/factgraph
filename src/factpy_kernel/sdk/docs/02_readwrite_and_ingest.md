@@ -95,7 +95,7 @@ with sdk.batch(meta={"trace_id": "seed"}) as tx:
 - `WireBatchPlan.apply(sdk, strict_schema=True)`
 
 说明：
-- 对 `is_record=True` 且发生写入的 handle，会自动补 `record_exists` 写入 op。
+- 对发生字段写入的 entity handle，会自动补 `<T>:exists` 写入 op。
 - wire plan 导出不接受直接写 raw `idref_v1` 作为 value；实体关联值应通过 handle 建依赖。
 
 ## 5. 读取与编辑：`get / find / edit`

@@ -55,6 +55,7 @@ Quick index of `from factpy_kernel.sdk import ...` and major public APIs.
 - `evaluate(...)`
 - `evaluate_compiled(...)`
 - `accept(...)`
+- `accept_many(...)`
 - `accept_compiled(...)`
 - `explain_fact(...)`
 - `conflicts(...)`
@@ -111,17 +112,29 @@ Notes (easy-to-misuse methods):
 - `WireBatchPlan`
   - `to_dict()`, `to_json()`, `from_dict(...)`, `from_json(...)`, `apply(sdk, strict_schema=True)`
 
-## 6. `Derivation.materialize_as` Quick Guide (`fact` vs `record`)
+## 6. Derivation Quick Guide (v2)
 
-| Mode | Write Target | Typical `head` Form | Typical Use Case | Key Constraint |
-|---|---|---|---|---|
-| `fact` | Business predicate assertion (for example `user:speaks(user, language)`) | `User.speaks(user=u, language=l)` (Field head) | Write derived results back to an existing business field | Target predicate must exist in schema (if `User.speaks` is not defined, you cannot write `user:speaks`) |
-| `record` | Reified record (`Record:exists` + role predicates) | `Speaks(user=u, language=l)` (Entity head) | Need a relation node that can carry extra attributes/audit metadata | Explicit `id_policy` is recommended; some schema-aware paths can auto-derive it |
+### 6.1 Default path is inferred from `head`
 
-Boundary notes:
-- `head=User(...)` is an Entity head, not a business predicate head; with `materialize_as="fact"` it usually enters the record-projection path.
-- For business fact materialization, prefer a Field head (`SomeEntity.some_field(...)`) or explicit `target + head_vars`.
-- `sdk.evaluate(...)` returns `list[CandidateSet]`; `sdk.accept(...)` takes one `CandidateSet` per call.
+| Head shape | Default behavior | Evaluate output |
+|---|---|---|
+| `EntityType(...)` | entity path | one entity candidate + dependent fact candidates |
+| `EntityType.field(...)` | fact path | fact candidates |
+| no `head` (`target + head_vars`) | compatibility fact-only path | fact candidates |
+
+### 6.2 Current role of `materialize_as` / `id_policy`
+
+- `materialize_as="fact|record"` is still accepted, but new code should usually omit it and rely on head inference.
+- `id_policy` is mainly a compatibility field for legacy `record` inputs; v2 default path generally does not require explicit user-provided `id_policy`.
+
+### 6.3 `CandidateSet` and accept APIs
+
+- `sdk.evaluate(...)` returns `list[CandidateSet]` with key v2 fields:
+  - `candidate_id` (per-run handle)
+  - `candidate_key` (cross-run stable key)
+  - `candidate_kind` (`fact` / `entity`)
+- `sdk.accept(...)` accepts one candidate.
+- For dependency graphs, prefer `sdk.accept_many(..., mode="atomic")`.
 
 See also:
 - `src/factpy_kernel/sdk/docs/03_rules_and_derivations.en.md` (Derivation DSL and head rules)

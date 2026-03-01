@@ -6,7 +6,7 @@ Scope: `src/factpy_kernel/sdk`
 
 | Capability | Status | Notes |
 |---|---|---|
-| Schema declarations (`Entity/Identity/Field`) | Implemented | Includes `Meta.is_record`, dims, fact_key |
+| Schema declarations (`Entity/Identity/Field`) | Implemented | Supports dims/fact_key; `Meta.is_record` remains metadata only (not a behavior switch) |
 | Schema compile/preflight helpers | Implemented | `build_authoring_schema_from_classes`, `compile_schema_from_classes`, `schema_preflight_from_classes` |
 | Low-level write (`ref/set/add/retract`) | Implemented | Immediate ledger writes |
 | Batch staging (`sdk.batch`) | Implemented | Preview/commit, dependency closure, wire plan export/replay |

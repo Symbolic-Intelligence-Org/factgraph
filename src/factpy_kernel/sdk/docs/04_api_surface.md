@@ -60,6 +60,7 @@
 - `evaluate(...)`
 - `evaluate_compiled(...)`
 - `accept(...)`
+- `accept_many(...)`
 - `accept_compiled(...)`
 - `explain_fact(...)`
 - `conflicts(...)`
@@ -138,17 +139,28 @@
   - `from_json(...)`
   - `apply(sdk, strict_schema=True)`
 
-## 6. `Derivation.materialize_as` 用法速查（`fact` vs `record`）
+## 6. Derivation 速查（v2）
 
-| 模式 | 写入目标 | `head` 常见写法 | 典型场景 | 关键约束 |
-|---|---|---|---|---|
-| `fact` | 业务谓词断言（例如 `user:speaks(user, language)`） | `User.speaks(user=u, language=l)`（Field head） | 将推导结果写回既有业务字段 | schema 必须有目标谓词（未定义 `User.speaks` 时不能写 `user:speaks`） |
-| `record` | reified record（`Record:exists` + 角色谓词） | `Speaks(user=u, language=l)`（Entity head） | 需要关系节点可挂属性/追踪 | 建议显式 `id_policy`；部分 schema-aware 场景可自动推导 |
+### 6.1 `head` 决定默认路径
 
-补充边界：
-- `head=User(...)` 属于 Entity head，不是业务谓词 head；与 `materialize_as="fact"` 组合通常会走“record 投影”路径。
-- 对业务 fact 物化，优先使用 Field head（`SomeEntity.some_field(...)`）或显式 `target + head_vars`。
-- `sdk.evaluate(...)` 返回 `list[CandidateSet]`；`sdk.accept(...)` 一次接收一个 `CandidateSet`。
+| `head` 形态 | 默认行为 | evaluate 输出 |
+|---|---|---|
+| `EntityType(...)` | entity 路径 | 1 个 entity candidate + 依赖 fact candidates |
+| `EntityType.field(...)` | fact 路径 | fact candidates |
+| 无 `head`（`target + head_vars`） | 兼容 fact-only 路径 | fact candidates |
+
+### 6.2 `materialize_as` / `id_policy` 当前定位
+
+- `materialize_as` 仍接受 `fact|record`，但建议新代码省略，交给 `head` 自动推断。
+- `id_policy` 主要是 legacy `record` 输入的兼容项，v2 主路径通常不需要用户显式提供。
+
+### 6.3 `CandidateSet` 与 accept
+
+- `sdk.evaluate(...)` 返回 `list[CandidateSet]`，关键字段包括：
+  - `candidate_id`（per-run 句柄）
+  - `candidate_key`（跨 run 稳定键）
+  - `candidate_kind`（`fact` / `entity`）
+- `sdk.accept(...)` 一次接收一个候选；有依赖图时优先使用 `sdk.accept_many(..., mode=\"atomic\")`。
 
 延伸阅读：
 - `src/factpy_kernel/sdk/docs/03_rules_and_derivations.md`（Derivation DSL 与 head 规则）

@@ -6,7 +6,7 @@
 
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
-| Schema 声明（`Entity/Identity/Field`） | 已实现 | 支持 `Meta.is_record`、`dims`、`fact_key` |
+| Schema 声明（`Entity/Identity/Field`） | 已实现 | 支持 `dims`、`fact_key`；`Meta.is_record` 仅作为元数据保留（不再是行为开关） |
 | Schema 编译/预检辅助 | 已实现 | `build_authoring_schema_from_classes`、`compile_schema_from_classes`、`schema_preflight_from_classes` |
 | Store 低层写入（`ref/set/add/retract`） | 已实现 | 立即写 ledger |
 | 批处理 staging（`sdk.batch()`） | 已实现 | `preview/commit`、依赖闭包、wire plan 导出/回放 |
