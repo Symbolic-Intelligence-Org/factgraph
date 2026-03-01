@@ -191,7 +191,7 @@ class SDKStoreV1Tests(unittest.TestCase):
         self.assertEqual(rows, [(self.p_ref, "de")])
         cands = self.sdk.evaluate(drv)
         self.assertEqual(len(cands), 1)
-        res = self.sdk.accept(cands[0], approved_by="bob")
+        res = self.sdk.accept(cands[0])
         self.assertEqual(res.run_id, cands[0].run_id)
 
     def test_run_supports_rule_ref_with_rule_object_dependencies(self) -> None:

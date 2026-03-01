@@ -296,12 +296,23 @@ class AuthoringPreflightV1Tests(unittest.TestCase):
             },
         )
         self.assertTrue(record_payload["ok"])
-        self.assertEqual(record_payload["summary"]["candidate_count"], 1)
-        preview = record_payload["summary"]["preview_candidates"][0]
-        self.assertEqual(preview["materialize_as"], "record")
-        self.assertEqual(preview["record_type"], "Speaks")
-        self.assertNotIn("id_policy", preview)
-        self.assertEqual(len(preview["roles"]), 2)
+        self.assertEqual(record_payload["summary"]["candidate_count"], 3)
+        previews = record_payload["summary"]["preview_candidates"]
+        self.assertEqual(len(previews), 3)
+        entity_preview = next(item for item in previews if item["candidate_kind"] == "entity")
+        self.assertEqual(entity_preview["target"], "Speaks")
+        self.assertEqual(entity_preview["entity_type"], "Speaks")
+        self.assertEqual(entity_preview["missing_identity_fields"], [])
+        self.assertEqual(set(entity_preview["resolved_identity"].keys()), {"person", "language"})
+
+        fact_previews = [item for item in previews if item["candidate_kind"] == "fact"]
+        self.assertEqual({item["target"] for item in fact_previews}, {"speaks:person", "speaks:language"})
+        for item in fact_previews:
+            terms = item["terms"]
+            self.assertIsInstance(terms, list)
+            self.assertGreaterEqual(len(terms), 2)
+            self.assertEqual(terms[0]["kind"], "candidate_ref")
+            self.assertEqual(terms[0]["candidate_key"], entity_preview["candidate_key"])
 
         bad_payload = derivation_dry_run_preview_authoring(
             store=store,

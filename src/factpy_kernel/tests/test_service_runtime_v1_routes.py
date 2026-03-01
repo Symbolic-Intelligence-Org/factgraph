@@ -341,6 +341,7 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
             )
             self.assertEqual(evaluate_resp.status_code, 200)
             candidate = evaluate_resp.json()["evaluation"]["candidates"][0]
+            del candidate["payload"]["terms"]
             del candidate["payload"]["rest_terms"]
 
             accept_resp = self.client.post(
@@ -654,7 +655,7 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
                 {
                     "temporal_view": "record",
                     "legacy_record_visibility": "allow",
-                    "pred_count": 3,
+                    "pred_count": 4,
                     "total_tuple_count": 2,
                 },
             )
@@ -693,7 +694,7 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
             self.assertTrue(view_body["ok"])
             self.assertEqual(view_body["meta"]["temporal_view"], "active")
             self.assertEqual(view_body["meta"]["legacy_record_visibility"], "allow")
-            self.assertEqual(view_body["meta"]["pred_count"], 3)
+            self.assertEqual(view_body["meta"]["pred_count"], 4)
             self.assertEqual(view_body["meta"]["total_tuple_count"], 1)
             self.assertEqual(view_body["view"]["facts"]["person:country"], [[self.person_ref, "de"]])
             self.assertEqual(

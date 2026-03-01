@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import unittest
 
-from factpy_kernel.core.derivation.accept import AcceptOptions
-from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.evidence.write_protocol import set_field
 from factpy_kernel.core.record_staging import RECORD_STAGE_MARKER_PRED_ID
 from factpy_kernel.core.store.api import Store
@@ -195,20 +193,11 @@ class ViewProjectorAuditV1Tests(unittest.TestCase):
         self._assert_audit_invariants(audit_deny)
 
     def test_audit_counts_marker_conflict_by_reason(self) -> None:
-        candidate = self._record_candidate(
-            run_id="run_audit_conflict",
-            key_suffix="3",
+        record_e_ref, materialize_id, record_digest = self._write_legacy_record_claims_and_committed_marker(
+            suffix="3",
             include_language=False,
         )
-        first = self.store.accept(
-            derivation_id="derive_speaks",
-            version="v1",
-            candidate_set=candidate,
-            options=AcceptOptions(),
-        )
-        self.assertEqual(first.accepted_count, 1)
-        record_e_ref = self.store.ledger.find_claims(pred_id="Speaks:exists")[0].e_ref
-        materialize_id = first.materialize_id
+        self.assertTrue(record_digest.startswith("sha256:"))
 
         set_field(
             self.store.ledger,
@@ -231,24 +220,11 @@ class ViewProjectorAuditV1Tests(unittest.TestCase):
         self._assert_audit_invariants(audit)
 
     def test_audit_counts_committed_hidden_count_mismatch(self) -> None:
-        candidate = self._record_candidate(
-            run_id="run_audit_count_mismatch",
-            key_suffix="4",
+        record_e_ref, materialize_id, _ = self._write_legacy_record_claims_and_committed_marker(
+            suffix="4",
             include_language=False,
         )
-        first = self.store.accept(
-            derivation_id="derive_speaks",
-            version="v1",
-            candidate_set=candidate,
-            options=AcceptOptions(),
-        )
-        self.assertEqual(first.accepted_count, 1)
-
-        self._rewrite_stage_roles_count_expected(
-            e_ref=self.store.ledger.find_claims(pred_id="Speaks:exists")[0].e_ref,
-            materialize_id=first.materialize_id,
-            new_value=2,
-        )
+        self._rewrite_stage_roles_count_expected(e_ref=record_e_ref, materialize_id=materialize_id, new_value=2)
 
         facts, audit = project_view_facts_with_audit(self.store.ledger, self.schema_ir)
 
@@ -258,29 +234,70 @@ class ViewProjectorAuditV1Tests(unittest.TestCase):
         self.assertEqual(audit.committed_hidden_count_mismatch_by_pred, {"Speaks:exists": 1})
         self._assert_audit_invariants(audit)
 
-    def _record_candidate(self, *, run_id: str, key_suffix: str, include_language: bool) -> CandidateSet:
-        roles = [{"pred_id": "speaks:person", "rest_terms": [("entity_ref", self.person_ref)]}]
-        if include_language:
-            roles.append({"pred_id": "speaks:language", "rest_terms": [("entity_ref", self.lang_ref)]})
-        return CandidateSet(
-            derivation_id="derive_speaks",
-            derivation_version="v1",
-            run_id=run_id,
-            target="Speaks",
-            key_tuple_digest="sha256:" + (key_suffix * 64),
-            tup_digest=None,
-            payload={
-                "materialize_as": "record",
-                "record_type": "Speaks",
-                "record_exists_pred_id": "Speaks:exists",
-                "id_policy": "key_tuple_digest_v1",
-                "roles": roles,
-            },
-            support_digest="sha256:" + ("0" * 64),
-            support_kind="none",
-            generated_at=1,
-            state="generated",
+    def _write_legacy_record_claims_and_committed_marker(
+        self,
+        *,
+        suffix: str,
+        include_language: bool,
+    ) -> tuple[str, str, str]:
+        record_e_ref = f"idref_v1:Speaks:legacy-seeded-{suffix}"
+        materialize_id = f"mat-legacy-seeded-{suffix}"
+        record_digest = "sha256:" + (suffix * 64)
+        legacy_meta = {
+            "source": "seed",
+            "materialize_kind": "record",
+            "materialize_id": materialize_id,
+            "key_tuple_digest": "sha256:" + (suffix * 64),
+            "cand_key_digest": "sha256:" + ("9" * 64),
+            "record_type": "Speaks",
+            "record_e_ref": record_e_ref,
+            "record_id_policy": "key_tuple_digest_v1",
+            "record_digest": record_digest,
+        }
+        set_field(
+            self.store.ledger,
+            pred_id="speaks:person",
+            e_ref=record_e_ref,
+            rest_terms=[("entity_ref", self.person_ref)],
+            meta=legacy_meta,
         )
+        if include_language:
+            set_field(
+                self.store.ledger,
+                pred_id="speaks:language",
+                e_ref=record_e_ref,
+                rest_terms=[("entity_ref", self.lang_ref)],
+                meta=legacy_meta,
+            )
+        set_field(
+            self.store.ledger,
+            pred_id="Speaks:exists",
+            e_ref=record_e_ref,
+            rest_terms=[],
+            meta=legacy_meta,
+        )
+        set_field(
+            self.store.ledger,
+            pred_id=RECORD_STAGE_MARKER_PRED_ID,
+            e_ref=record_e_ref,
+            rest_terms=[
+                ("string", materialize_id),
+                ("string", "committed"),
+                ("string", record_digest),
+            ],
+            meta={
+                "source": "seed",
+                "roles_count_expected": 1 if not include_language else 2,
+                "materialize_kind": "record_stage",
+                "record_type": "Speaks",
+                "record_e_ref": record_e_ref,
+                "materialize_id": materialize_id,
+                "key_tuple_digest": legacy_meta["key_tuple_digest"],
+                "cand_key_digest": legacy_meta["cand_key_digest"],
+                "record_digest": record_digest,
+            },
+        )
+        return record_e_ref, materialize_id, record_digest
 
     def _rewrite_stage_roles_count_expected(self, *, e_ref: str, materialize_id: str, new_value: int) -> None:
         stage_asrt_ids: set[str] = set()

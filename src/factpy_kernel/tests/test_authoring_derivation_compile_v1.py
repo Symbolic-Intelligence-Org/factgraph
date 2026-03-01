@@ -84,23 +84,24 @@ class AuthoringDerivationCompileV1Tests(unittest.TestCase):
         self.assertEqual(payload["head"]["kwargs"]["person"], "$p")
         self.assertEqual(payload["head"]["kwargs"]["language"], "$l")
 
-    def test_reject_head_without_materialize_as(self) -> None:
-        with self.assertRaises(AuthoringDerivationCompileError) as ctx:
-            compile_authoring_derivation_v1(
-                {
-                    "derivation_id": "drv.country",
-                    "head": {
-                        "kind": "head_call",
-                        "callee_kind": "pred_ref",
-                        "entity_type": "Person",
-                        "field": "country",
-                        "kwargs": {"person": "$E", "country": "$country"},
-                    },
-                    "where": [("pred", "person:country", ["$E", "$country"])],
+    def test_compile_head_without_materialize_as_infers_fact(self) -> None:
+        payload = compile_authoring_derivation_v1(
+            {
+                "derivation_id": "drv.country",
+                "head": {
+                    "kind": "head_call",
+                    "callee_kind": "pred_ref",
+                    "entity_type": "Person",
+                    "field": "country",
+                    "kwargs": {"person": "$E", "country": "$country"},
                 },
-                schema_ir=_schema_for_head_lowering(),
-            )
-        self.assertEqual(ctx.exception.path, "$.materialize_as")
+                "where": [("pred", "person:country", ["$E", "$country"])],
+            },
+            schema_ir=_schema_for_head_lowering(),
+        )
+        self.assertEqual(payload["materialize_as"], "fact")
+        self.assertEqual(payload["target_pred_id"], "person:country")
+        self.assertEqual(payload["head_vars"], ["$E", "$country"])
 
     def test_compile_record_head_with_schema_lowers_target_and_head_vars(self) -> None:
         payload = compile_authoring_derivation_v1(
@@ -201,22 +202,25 @@ class AuthoringDerivationCompileV1Tests(unittest.TestCase):
             ],
         )
 
-    def test_reject_record_materialize_without_id_policy_without_schema(self) -> None:
-        with self.assertRaises(AuthoringDerivationCompileError) as ctx:
-            compile_authoring_derivation_v1(
-                {
-                    "derivation_id": "drv.speaks_rec",
-                    "head": {
-                        "kind": "head_call",
-                        "callee_kind": "entity_type",
-                        "entity_type": "Speaks",
-                        "kwargs": {"person": "$p", "language": "$l"},
-                    },
-                    "materialize_as": "record",
-                    "where": [("pred", "person:country", ["$p", "de"])],
-                }
-            )
-        self.assertEqual(ctx.exception.path, "$.id_policy")
+    def test_compile_record_materialize_without_id_policy_without_schema(self) -> None:
+        payload = compile_authoring_derivation_v1(
+            {
+                "derivation_id": "drv.speaks_rec",
+                "target_pred_id": "Speaks",
+                "head_vars": ["$p", "$l"],
+                "head": {
+                    "kind": "head_call",
+                    "callee_kind": "entity_type",
+                    "entity_type": "Speaks",
+                    "kwargs": {"person": "$p", "language": "$l"},
+                },
+                "materialize_as": "record",
+                "where": [("pred", "person:country", ["$p", "de"])],
+            }
+        )
+        self.assertEqual(payload["materialize_as"], "record")
+        self.assertEqual(payload["target_pred_id"], "Speaks")
+        self.assertNotIn("id_policy", payload)
 
     def test_reject_head_only_without_target_in_v1(self) -> None:
         with self.assertRaises(AuthoringDerivationCompileError) as ctx:

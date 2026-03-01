@@ -66,7 +66,7 @@ class SDKSchemaV1Tests(unittest.TestCase):
 
     def test_record_meta_flag_is_promoted(self) -> None:
         spec = Employment.sdk_entity_spec()
-        self.assertTrue(spec["is_record"])
+        self.assertNotIn("is_record", spec)
         self.assertTrue(spec["meta"]["is_record"])
         self.assertEqual(spec["identity_fields"][0]["default_factory"], "uuid4")
 

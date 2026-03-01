@@ -63,12 +63,8 @@ class AuthoringRuleCompileV1Tests(unittest.TestCase):
         self.assertEqual(payload["where"][1], ("pred", "li_record:who", ["$li", "$p"]))
         self.assertEqual(payload["where"][2], ("pred", "li_record:nation", ["$li", "$c"]))
 
-    def test_schema_aware_where_lowering_rejects_exists_sugar_for_non_record_entity(self) -> None:
+    def test_schema_aware_where_lowering_rejects_exists_sugar_when_schema_missing_exists_pred(self) -> None:
         schema = _schema_for_where_record_sugar()
-        for entity in schema["entities"]:
-            if entity.get("entity_type") == "LivesIn":
-                entity.pop("is_record", None)
-                break
         schema["predicates"] = [pred for pred in schema["predicates"] if pred.get("owner_type") != "LivesIn"]
 
         with self.assertRaises(AuthoringRuleCompileError) as ctx:
@@ -81,7 +77,7 @@ class AuthoringRuleCompileV1Tests(unittest.TestCase):
                 schema_ir=schema,
             )
         self.assertEqual(ctx.exception.path, "$.where[0]")
-        self.assertIn("record exists sugar requires record entity", str(ctx.exception))
+        self.assertIn("record exists predicate not found in schema for LivesIn", str(ctx.exception))
 
 
 def _schema_for_where_record_sugar() -> dict:

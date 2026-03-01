@@ -71,7 +71,8 @@ class Employment(Entity):
 """
         )
         entity = payload["entities"][0]
-        self.assertTrue(entity["is_record"])
+        self.assertNotIn("is_record", entity)
+        self.assertTrue(entity["meta"]["is_record"])
         self.assertEqual(entity["meta"]["owner"], "HR")
         self.assertEqual(entity["identity_fields"][0]["default_factory"], "uuid4")
         self.assertEqual(entity["fields"][0]["type_domain"], "entity_ref")
