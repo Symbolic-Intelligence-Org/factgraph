@@ -20,17 +20,17 @@ def evaluate_store_engine(
     target_pred_id: str,
     head_vars: list[Any],
     where: list[Any],
-    temporal_view: str = "record",
+    temporal_view: str = "active",
     head: dict[str, Any] | None = None,
 ) -> list[CandidateSet]:
-    if temporal_view not in {"record", "current"}:
-        raise ValueError("temporal_view must be 'record' or 'current'")
+    if temporal_view not in {"active", "current"}:
+        raise ValueError("temporal_view must be 'active' or 'current'")
 
     from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
     from factpy_kernel.adapters.souffle.runner import run_package
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
-        entity_spec = store_builders.entity_materialize_spec_from_head(
+        entity_spec = store_builders.entity_spec_from_head(
             store,
             entity_type=target_pred_id,
             head=head,

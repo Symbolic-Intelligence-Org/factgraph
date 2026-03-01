@@ -19,7 +19,7 @@ class AuditPackageData:
     run_manifest: dict[str, Any] | None
     run_ledger: list[dict[str, Any]]
     candidate_ledger: list[dict[str, Any]]
-    materialize_ledger: list[dict[str, Any]]
+    accept_write_ledger: list[dict[str, Any]]
     decision_log: list[dict[str, Any]]
     accept_failed: list[dict[str, Any]]
     mapping_resolution: dict[str, Any] | None
@@ -50,7 +50,7 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
         run_manifest=run_manifest,
         run_ledger=_read_jsonl(_required_rel_path(root, audit_files, "run_ledger")),
         candidate_ledger=_read_jsonl(_required_rel_path(root, audit_files, "candidate_ledger")),
-        materialize_ledger=_read_jsonl(_required_rel_path(root, audit_files, "materialize_ledger")),
+        accept_write_ledger=_read_jsonl(_required_rel_path(root, audit_files, "accept_write_ledger")),
         decision_log=_read_jsonl(_required_rel_path(root, audit_files, "decision_log")),
         accept_failed=_read_jsonl(_required_rel_path(root, audit_files, "accept_failed")),
         mapping_resolution=mapping_resolution,
@@ -68,7 +68,7 @@ def _read_manifest_audit_files(manifest: dict[str, Any]) -> dict[str, str]:
     required = {
         "run_ledger",
         "candidate_ledger",
-        "materialize_ledger",
+        "accept_write_ledger",
         "accept_failed",
         "mapping_resolution",
         "decision_log",

@@ -96,7 +96,7 @@ class SDKStore:
         self,
         entity_cls: type[Entity],
         *,
-        temporal_view: str = "record",
+        temporal_view: str = "active",
         limit: int | None = None,
         **filter_kwargs: Any,
     ):
@@ -189,7 +189,7 @@ class SDKStore:
         self,
         rule: Any,
         *,
-        temporal_view: str = "record",
+        temporal_view: str = "active",
         registry: RuleRegistry | None = None,
     ) -> list[tuple[Any, ...]]:
         if isinstance(rule, str):
@@ -224,7 +224,7 @@ class SDKStore:
                 head_vars=list(compiled["head_vars"]),
                 where=list(compiled["where"]),
                 mode=kwargs.pop("mode", compiled.get("mode", "python")),
-                temporal_view=kwargs.pop("temporal_view", compiled.get("temporal_view", "record")),
+                temporal_view=kwargs.pop("temporal_view", compiled.get("temporal_view", "active")),
                 head=compiled.get("head"),
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
@@ -236,7 +236,7 @@ class SDKStore:
                 head_vars=list(compiled["head_vars"]),
                 where=list(compiled["where"]),
                 mode=kwargs.pop("mode", compiled.get("mode", "python")),
-                temporal_view=kwargs.pop("temporal_view", compiled.get("temporal_view", "record")),
+                temporal_view=kwargs.pop("temporal_view", compiled.get("temporal_view", "active")),
                 head=compiled.get("head"),
             )
         return self._store.evaluate(*args, **kwargs)

@@ -56,7 +56,6 @@ def ensure_schema_ir(schema_ir: dict) -> dict:
     _validate_entities(schema_ir["entities"])
     _validate_predicates(schema_ir["predicates"])
     _validate_projection(schema_ir["projection"])
-    _validate_record_exists_constraint(schema_ir["entities"], schema_ir["predicates"])
     return schema_ir
 
 
@@ -213,39 +212,6 @@ def _validate_projection(projection: Any) -> None:
             raise SchemaIRValidationError(f"projection missing key: {key}")
         if not isinstance(projection[key], list):
             raise SchemaIRValidationError(f"projection.{key} must be list")
-
-
-def _is_record_entity(entity: dict) -> bool:
-    return bool(
-        entity.get("is_record") is True
-        or entity.get("record") is True
-        or entity.get("reified") is True
-        or entity.get("entity_kind") == "record"
-        or entity.get("kind") == "record"
-    )
-
-
-def _validate_record_exists_constraint(
-    entities: list[dict], predicates: list[dict]
-) -> None:
-    pred_ids = {
-        pred.get("pred_id")
-        for pred in predicates
-        if isinstance(pred, dict) and isinstance(pred.get("pred_id"), str)
-    }
-    for entity in entities:
-        if not isinstance(entity, dict):
-            continue
-        if not _is_record_entity(entity):
-            continue
-        entity_type = entity.get("entity_type")
-        if not isinstance(entity_type, str) or not entity_type:
-            continue
-        exists_pred = f"{entity_type}:exists"
-        if exists_pred not in pred_ids:
-            raise SchemaIRValidationError(
-                f"record entity {entity_type} requires predicate {exists_pred}"
-            )
 
 
 def _reject_floats(value: Any, path: str) -> None:

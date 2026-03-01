@@ -67,7 +67,7 @@ class Store:
         head_vars: HeadVarsIR,
         where: WhereIR,
         mode: EvaluateMode = "python",
-        temporal_view: TemporalView = "record",
+        temporal_view: TemporalView = "active",
         head: HeadSpecIR | None = None,
     ) -> list[CandidateSet]:
         return evaluate_store(
@@ -90,12 +90,12 @@ class Store:
         target_pred_id: str,
         head_vars: HeadVarsIR,
         where: WhereIR,
-        temporal_view: TemporalView = "record",
+        temporal_view: TemporalView = "active",
         head: HeadSpecIR | None = None,
     ) -> list[CandidateSet]:
         """Internal engine adapter entrypoint; prefer evaluate(mode='engine')."""
-        if temporal_view not in {"record", "current"}:
-            raise ValueError("temporal_view must be 'record' or 'current'")
+        if temporal_view not in {"active", "current"}:
+            raise ValueError("temporal_view must be 'active' or 'current'")
         evaluator = self._engine_evaluator if self._engine_evaluator is not None else _ENGINE_EVALUATOR
         if evaluator is None:
             raise WhereValidationError(

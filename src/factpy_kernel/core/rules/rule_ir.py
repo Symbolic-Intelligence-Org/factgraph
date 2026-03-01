@@ -58,7 +58,7 @@ def run_rule(
     rule_spec: RuleSpec,
     registry: RuleRegistry,
     *,
-    temporal_view: str = "record",
+    temporal_view: str = "active",
 ) -> list[tuple[Any, ...]]:
     if not isinstance(store, Store):
         raise RuleCompileError("store must be Store")
@@ -66,8 +66,8 @@ def run_rule(
         raise RuleCompileError("rule_spec must be RuleSpec")
     if not isinstance(registry, RuleRegistry):
         raise RuleCompileError("registry must be RuleRegistry")
-    if temporal_view not in {"record", "current"}:
-        raise RuleCompileError("temporal_view must be 'record' or 'current'")
+    if temporal_view not in {"active", "current"}:
+        raise RuleCompileError("temporal_view must be 'active' or 'current'")
 
     base_view_facts = project_view_facts(store.ledger, store.schema_ir, temporal_view=temporal_view)
     memo_rows: dict[tuple[str, str], list[tuple[Any, ...]]] = {}

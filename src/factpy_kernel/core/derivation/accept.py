@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from factpy_kernel.core.derivation.candidates import CandidateSet, extract_candidate_refs
@@ -13,8 +13,7 @@ from factpy_kernel.core.evidence.write_protocol import (
     set_field,
 )
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
-from factpy_kernel.core.protocol.digests import sha256_hex, sha256_token
-from factpy_kernel.core.protocol.tup_v1 import canonical_bytes_tup_v1
+from factpy_kernel.core.protocol.digests import sha256_token
 from factpy_kernel.core.store.ledger import Ledger
 
 
@@ -28,7 +27,6 @@ class AcceptOptions:
 
 @dataclass(frozen=True)
 class AcceptResult:
-    materialize_id: str
     run_id: str
     accepted_count: int
     skipped_count: int
@@ -37,6 +35,8 @@ class AcceptResult:
     diagnostics: list[dict[str, Any]] = field(default_factory=list)
     diagnostics_contract_version: int = 1
     entity_ref: str | None = None
+    candidate_id: str | None = None
+    candidate_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -100,32 +100,46 @@ def accept_candidate_set(
             raise WriteProtocolError(
                 "ENTITY_PAYLOAD_INVALID: entity candidate payload must contain entity_type/identity_fields/resolved_identity/missing_identity_fields"
             )
-        return _accept_entity_candidate_v2(
-            ledger=ledger,
-            candidate_set=candidate_set,
-            payload=payload,
-            options=options,
-            derived_rule_id=derived_rule_id,
-            derived_rule_version=derived_rule_version,
-            schema_digest_token=schema_digest_token,
-            policy_digest_token=policy_digest_token,
-            schema_ir=schema_ir,
+        return _attach_candidate_identity(
+            _accept_entity_candidate_v2(
+                ledger=ledger,
+                candidate_set=candidate_set,
+                payload=payload,
+                options=options,
+                derived_rule_id=derived_rule_id,
+                derived_rule_version=derived_rule_version,
+                schema_digest_token=schema_digest_token,
+                policy_digest_token=policy_digest_token,
+                schema_ir=schema_ir,
+            ),
+            candidate_set,
         )
     if candidate_set.candidate_kind == "fact":
         if not isinstance(payload.get("terms"), list):
             raise WriteProtocolError("FACT_PAYLOAD_INVALID: fact candidate payload.terms must be list")
-        return _accept_fact_candidate_v2(
-            ledger=ledger,
-            candidate_set=candidate_set,
-            payload=payload,
-            options=options,
-            derived_rule_id=derived_rule_id,
-            derived_rule_version=derived_rule_version,
-            schema_digest_token=schema_digest_token,
-            policy_digest_token=policy_digest_token,
-            resolved_candidate_refs=resolved_candidate_refs,
+        return _attach_candidate_identity(
+            _accept_fact_candidate_v2(
+                ledger=ledger,
+                candidate_set=candidate_set,
+                payload=payload,
+                options=options,
+                derived_rule_id=derived_rule_id,
+                derived_rule_version=derived_rule_version,
+                schema_digest_token=schema_digest_token,
+                policy_digest_token=policy_digest_token,
+                resolved_candidate_refs=resolved_candidate_refs,
+            ),
+            candidate_set,
         )
     raise WriteProtocolError("candidate_kind must be 'fact' or 'entity'")
+
+
+def _attach_candidate_identity(result: AcceptResult, candidate_set: CandidateSet) -> AcceptResult:
+    return replace(
+        result,
+        candidate_id=candidate_set.candidate_id,
+        candidate_key=candidate_set.candidate_key,
+    )
 
 
 def accept_many_candidate_sets(
@@ -486,10 +500,8 @@ def _accept_fact_claim(
     schema_digest_token: str | None,
     policy_digest_token: str | None,
 ) -> AcceptResult:
-    computed_materialize_id = _compute_materialize_id(candidate_set)
     if options.dry_run:
         return AcceptResult(
-            materialize_id=computed_materialize_id,
             run_id=candidate_set.run_id,
             accepted_count=1,
             skipped_count=0,
@@ -518,7 +530,6 @@ def _accept_fact_claim(
             fallback=e_ref,
         )
         return AcceptResult(
-            materialize_id=computed_materialize_id,
             run_id=candidate_set.run_id,
             accepted_count=0,
             skipped_count=1,
@@ -535,10 +546,8 @@ def _accept_fact_claim(
         derived_rule_version=derived_rule_version,
         schema_digest_token=schema_digest_token,
         policy_digest_token=policy_digest_token,
-        materialize_id=computed_materialize_id,
         cand_key_digest=cand_key_digest,
     )
-    write_meta["materialize_kind"] = "fact"
     write_meta["subject_e_ref"] = e_ref
 
     asrt_id = set_field(
@@ -549,7 +558,6 @@ def _accept_fact_claim(
         meta=write_meta,
     )
     return AcceptResult(
-        materialize_id=computed_materialize_id,
         run_id=candidate_set.run_id,
         accepted_count=1,
         skipped_count=0,
@@ -644,10 +652,8 @@ def _accept_entity_candidate_v2(
     entity_ref = encode_idref_v1(entity_type, identity_tuples)
     exists_pred_id = _entity_exists_pred_id(schema_ir=schema_ir, entity_type=entity_type)
 
-    computed_materialize_id = _compute_materialize_id(candidate_set)
     if options.dry_run:
         return AcceptResult(
-            materialize_id=computed_materialize_id,
             run_id=candidate_set.run_id,
             accepted_count=1,
             skipped_count=0,
@@ -672,7 +678,6 @@ def _accept_entity_candidate_v2(
     if existing_written:
         _assert_duplicate_meta_compatible(ledger=ledger, written_assertions=existing_written, options=options)
         return AcceptResult(
-            materialize_id=computed_materialize_id,
             run_id=candidate_set.run_id,
             accepted_count=0,
             skipped_count=1,
@@ -689,10 +694,8 @@ def _accept_entity_candidate_v2(
         derived_rule_version=derived_rule_version,
         schema_digest_token=schema_digest_token,
         policy_digest_token=policy_digest_token,
-        materialize_id=computed_materialize_id,
         cand_key_digest=cand_key_digest,
     )
-    write_meta["materialize_kind"] = "entity"
     write_meta["entity_type"] = entity_type
     write_meta["entity_ref"] = entity_ref
     if override:
@@ -706,7 +709,6 @@ def _accept_entity_candidate_v2(
         meta=write_meta,
     )
     return AcceptResult(
-        materialize_id=computed_materialize_id,
         run_id=candidate_set.run_id,
         accepted_count=1,
         skipped_count=0,
@@ -730,7 +732,6 @@ def _build_base_write_meta(
     derived_rule_version: str,
     schema_digest_token: str | None,
     policy_digest_token: str | None,
-    materialize_id: str,
     cand_key_digest: str,
 ) -> dict[str, Any]:
     accepted_at = now_epoch_nanos()
@@ -743,7 +744,6 @@ def _build_base_write_meta(
         "derivation_id": candidate_set.derivation_id,
         "derivation_version": candidate_set.derivation_version,
         "run_id": candidate_set.run_id,
-        "materialize_id": materialize_id,
         "key_tuple_digest": candidate_set.key_tuple_digest,
         "cand_key_digest": cand_key_digest,
         "support_digest": candidate_set.support_digest,
@@ -884,8 +884,7 @@ def _resolve_candidate_key_to_entity_ref(
         if claim is None:
             continue
         candidate_kind = _meta_value(ledger, row.asrt_id, "candidate_kind")
-        materialize_kind = _meta_value(ledger, row.asrt_id, "materialize_kind")
-        if candidate_kind != "entity" and materialize_kind != "entity":
+        if candidate_kind != "entity":
             continue
         entity_ref = _meta_value(ledger, row.asrt_id, "entity_ref")
         if isinstance(entity_ref, str) and entity_ref:
@@ -1008,19 +1007,6 @@ def _digest_json(value: Any) -> str:
     except Exception as exc:  # pragma: no cover - defensive fallback
         raise WriteProtocolError(f"IDENTITY_OVERRIDE_INVALID: identity_override must be JSON-serializable: {exc}") from exc
     return sha256_token(payload)
-
-
-def _compute_materialize_id(candidate_set: CandidateSet) -> str:
-    parts = [
-        b"factpy\x00mat_v1\x00",
-        candidate_set.run_id.encode("utf-8"),
-        b"\x00",
-        candidate_set.derivation_id.encode("utf-8"),
-        b"\x00",
-        candidate_set.derivation_version.encode("utf-8"),
-        b"\x00",
-    ]
-    return f"mat_v1:{sha256_hex(b''.join(parts))}"
 
 
 def _compute_cand_key_digest(target: str, key_tuple_digest: str) -> str:

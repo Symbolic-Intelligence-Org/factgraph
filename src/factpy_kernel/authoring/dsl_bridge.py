@@ -42,8 +42,8 @@ def build_authoring_session_from_dsl_inputs_dto(
     rule_dsl: str | None = None,
     derivation_dsl: str | None = None,
     rule_registry_payloads: list[dict[str, Any]] | None = None,
-    rule_temporal_view: str = "record",
-    derivation_temporal_view: str = "record",
+    rule_temporal_view: str = "active",
+    derivation_temporal_view: str = "active",
     derivation_mode: str | None = None,
 ) -> dict[str, Any]:
     try:
@@ -88,8 +88,8 @@ def build_authoring_publish_workflow_from_dsl_inputs_dry_run_bundle_dto(
     rule_dsl: str | None = None,
     derivation_dsl: str | None = None,
     rule_registry_payloads: list[dict[str, Any]] | None = None,
-    rule_temporal_view: str = "record",
-    derivation_temporal_view: str = "record",
+    rule_temporal_view: str = "active",
+    derivation_temporal_view: str = "active",
     derivation_mode: str | None = None,
 ) -> dict[str, Any]:
     try:
@@ -115,8 +115,8 @@ def build_authoring_session_from_dsl_inputs_safe_dto(
     rule_dsl: str | None = None,
     derivation_dsl: str | None = None,
     rule_registry_payloads: list[dict[str, Any]] | None = None,
-    rule_temporal_view: str = "record",
-    derivation_temporal_view: str = "record",
+    rule_temporal_view: str = "active",
+    derivation_temporal_view: str = "active",
     derivation_mode: str | None = None,
 ) -> dict[str, Any]:
     parsed_schema: dict[str, Any] | None = None
@@ -240,8 +240,8 @@ def build_authoring_publish_workflow_from_dsl_inputs_dry_run_bundle_safe_dto(
     rule_dsl: str | None = None,
     derivation_dsl: str | None = None,
     rule_registry_payloads: list[dict[str, Any]] | None = None,
-    rule_temporal_view: str = "record",
-    derivation_temporal_view: str = "record",
+    rule_temporal_view: str = "active",
+    derivation_temporal_view: str = "active",
     derivation_mode: str | None = None,
 ) -> dict[str, Any]:
     session = build_authoring_session_from_dsl_inputs_safe_dto(

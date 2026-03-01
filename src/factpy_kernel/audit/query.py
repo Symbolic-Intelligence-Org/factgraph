@@ -32,18 +32,18 @@ class AuditQuery:
                 return dict(row)
         return None
 
-    def list_materializations(
+    def list_accept_writes(
         self,
         *,
         run_id: str | None = None,
-        materialize_id: str | None = None,
+        candidate_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        rows = [dict(row) for row in self.package.materialize_ledger]
+        rows = [dict(row) for row in self.package.accept_write_ledger]
         if run_id is not None:
             rows = [row for row in rows if row.get("run_id") == run_id]
-        if materialize_id is not None:
-            rows = [row for row in rows if row.get("materialize_id") == materialize_id]
-        return sorted(rows, key=lambda row: (str(row.get("materialize_id", "")), str(row.get("asrt_id", ""))))
+        if candidate_id is not None:
+            rows = [row for row in rows if row.get("candidate_id") == candidate_id]
+        return sorted(rows, key=lambda row: (str(row.get("candidate_id", "")), str(row.get("asrt_id", ""))))
 
     def list_candidates(
         self,
@@ -104,10 +104,10 @@ class AuditQuery:
             raise AuditQueryError(f"run not found: {run_id}")
 
         decisions = self.list_decisions(run_id=run_id)
-        materializations = self.list_materializations(run_id=run_id)
+        accept_writes = self.list_accept_writes(run_id=run_id)
         candidates = self.list_candidates(run_id=run_id)
         failures = self.list_failures(run_id=run_id)
-        materialize_ids = {row.get("materialize_id") for row in materializations if isinstance(row.get("materialize_id"), str)}
+        candidate_ids = {row.get("candidate_id") for row in accept_writes if isinstance(row.get("candidate_id"), str)}
         decision_index = {
             row["decision_id"]: row
             for row in decisions
@@ -117,11 +117,11 @@ class AuditQuery:
         return {
             "run": run,
             "decisions": decisions,
-            "materializations": materializations,
+            "accept_writes": accept_writes,
             "candidates": candidates,
             "failures": failures,
             "decision_index": decision_index,
-            "materialize_ids": sorted(materialize_ids),
+            "candidate_ids": sorted(candidate_ids),
         }
 
     def get_mapping_resolution(self, *, pred_id: str | None = None) -> dict[str, Any] | list[dict[str, Any]] | None:

@@ -276,9 +276,9 @@ def _where_record_exists_call(node: ast.Call, *, path: str, record_var_types: di
         raise _helper_err("unsupported DSL helper call", path=path, detail_code="helper_callable", helper=None)
     record_type = node.func.id
     if node.keywords:
-        raise _err("record constructor where syntax does not support keyword arguments", path=f"{path}.keywords")
+        raise _err("entity constructor where syntax does not support keyword arguments", path=f"{path}.keywords")
     if len(node.args) != 1 or not isinstance(node.args[0], ast.Name):
-        raise _err("record constructor where syntax requires exactly one variable argument", path=f"{path}.args")
+        raise _err("entity constructor where syntax requires exactly one variable argument", path=f"{path}.args")
     rec_var = node.args[0].id
     record_var_types[rec_var] = record_type
     return ("pred", f"{record_type}:exists", [f"${rec_var}"])
@@ -309,13 +309,13 @@ def _where_compare(node: ast.Compare, *, path: str, record_var_types: dict[str, 
     if not isinstance(op, ast.Eq):
         raise _err("where path comparison syntax currently supports only ==", path=path)
     if left_attr is not None and right_attr is not None:
-        raise _err("comparison between two record attributes is not supported in v1 where sugar", path=path)
+        raise _err("comparison between two entity attributes is not supported in v1 where sugar", path=path)
     attr_side = left_attr if left_attr is not None else right_attr
     assert attr_side is not None
     var_name, field_name = attr_side
     record_type = record_var_types.get(var_name)
     if record_type is None:
-        raise _err("record variable used in path comparison before constructor binding", path=path)
+        raise _err("entity variable used in path comparison before constructor binding", path=path)
     other_node = node.comparators[0] if left_attr is not None else node.left
     other = _where_term(other_node, path=f"{path}.right" if left_attr is not None else f"{path}.left")
     return ("pred", f"{record_type.lower()}:{field_name}", [f"${var_name}", other])

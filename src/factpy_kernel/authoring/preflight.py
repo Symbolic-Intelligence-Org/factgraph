@@ -144,12 +144,12 @@ def rule_preflight(
     store: Store,
     rule_spec_payload: dict[str, Any],
     registry_payloads: list[dict[str, Any]] | None = None,
-    temporal_view: str = "record",
+    temporal_view: str = "active",
 ) -> dict[str, Any]:
     if not isinstance(store, Store):
         raise AuthoringPreflightError("store must be Store")
-    if temporal_view not in {"record", "current"}:
-        raise AuthoringPreflightError("temporal_view must be 'record' or 'current'")
+    if temporal_view not in {"active", "current"}:
+        raise AuthoringPreflightError("temporal_view must be 'active' or 'current'")
 
     registry = RuleRegistry()
     diagnostics: list[dict[str, Any]] = []
@@ -258,7 +258,7 @@ def rule_preflight_authoring(
     store: Store,
     authoring_rule_payload: dict[str, Any],
     registry_payloads: list[dict[str, Any]] | None = None,
-    temporal_view: str = "record",
+    temporal_view: str = "active",
 ) -> dict[str, Any]:
     try:
         rule_spec_payload = compile_authoring_rule_v1(authoring_rule_payload, schema_ir=store.schema_ir)
@@ -296,15 +296,15 @@ def derivation_dry_run_preview(
     head_vars: list[Any],
     where: list[Any],
     mode: str = "python",
-    temporal_view: str = "record",
+    temporal_view: str = "active",
     head: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not isinstance(store, Store):
         raise AuthoringPreflightError("store must be Store")
     if mode not in {"python", "engine"}:
         raise AuthoringPreflightError("mode must be 'python' or 'engine'")
-    if temporal_view not in {"record", "current"}:
-        raise AuthoringPreflightError("temporal_view must be 'record' or 'current'")
+    if temporal_view not in {"active", "current"}:
+        raise AuthoringPreflightError("temporal_view must be 'active' or 'current'")
 
     warnings: list[dict[str, Any]] = []
     if mode == "engine" and _find_souffle_binary_safe() is None:

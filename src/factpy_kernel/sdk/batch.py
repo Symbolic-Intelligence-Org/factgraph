@@ -197,12 +197,12 @@ class BatchPlan:
             if isinstance(op, RecordExistsOp):
                 e_ref = refs_by_handle_id.get(op.handle_id)
                 if e_ref is None:
-                    raise SDKStoreError(f"plan invalid: missing RefOp before record exists op at {op.path}")
+                    raise SDKStoreError(f"plan invalid: missing RefOp before entity exists op at {op.path}")
                 meta = dict(op.meta) if op.meta else None
                 try:
                     asrt_id = set_field(sdk.ledger, op.pred_id, e_ref, [], meta)
                 except Exception as exc:
-                    raise SDKStoreError(f"{op.path}: record exists write failed: {exc}") from exc
+                    raise SDKStoreError(f"{op.path}: entity exists write failed: {exc}") from exc
                 assertion_ids.append(asrt_id)
                 continue
             raise SDKStoreError(f"unsupported batch op: {type(op).__name__}")
@@ -436,7 +436,7 @@ class WireBatchPlan:
                 try:
                     asrt_id = set_field(sdk.ledger, op.pred_id, e_ref, [], (dict(op.meta) if op.meta else None))
                 except Exception as exc:
-                    raise SDKStoreError(f"{op.path}: record exists write failed: {exc}") from exc
+                    raise SDKStoreError(f"{op.path}: entity exists write failed: {exc}") from exc
                 assertion_ids.append(asrt_id)
                 continue
 
@@ -801,11 +801,11 @@ def _validate_wire_record_exists_binding(
 ) -> None:
     row = record_exists_pred_index.get(op.pred_id)
     if row is None:
-        raise SDKStoreError(f"{op.path}: record exists pred_id not found in sdk schema: {op.pred_id}")
+        raise SDKStoreError(f"{op.path}: entity exists pred_id not found in sdk schema: {op.pred_id}")
     owner_type = row.get("owner_type")
     if not isinstance(owner_type, str) or owner_type != op.entity_type:
         raise SDKStoreError(
-            f"{op.path}: record exists pred_id/entity_type mismatch: pred_id={op.pred_id} owner_type={owner_type!r} wire_entity_type={op.entity_type!r}"
+            f"{op.path}: entity exists pred_id/entity_type mismatch: pred_id={op.pred_id} owner_type={owner_type!r} wire_entity_type={op.entity_type!r}"
         )
 
 
@@ -1219,7 +1219,7 @@ class SDKBatchTx:
             pred_id = pred.get("pred_id")
             if isinstance(pred_id, str) and pred_id:
                 return pred_id
-        raise SDKStoreError(f"{path}: record exists predicate not found in schema for {entity_type}")
+        raise SDKStoreError(f"{path}: entity exists predicate not found in schema for {entity_type}")
 
     def _plan_value(self, value: Any, *, path: str) -> tuple[_ValueKind, Any]:
         if isinstance(value, ManagedEntityHandle):

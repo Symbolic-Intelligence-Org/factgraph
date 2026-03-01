@@ -448,9 +448,9 @@ def _compile_mode(payload: dict[str, Any]) -> str:
 
 
 def _compile_temporal_view(payload: dict[str, Any]) -> str:
-    temporal_view = payload.get("temporal_view", "record")
-    if temporal_view not in {"record", "current"}:
-        raise _compile_error("temporal_view must be 'record' or 'current'", path="$.temporal_view")
+    temporal_view = payload.get("temporal_view", "active")
+    if temporal_view not in {"active", "current"}:
+        raise _compile_error("temporal_view must be 'active' or 'current'", path="$.temporal_view")
     return str(temporal_view)
 
 

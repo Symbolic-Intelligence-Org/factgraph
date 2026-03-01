@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .store import SDKStore
 
 
-_TemporalView = Literal["record", "current"]
+_TemporalView = Literal["active", "current"]
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,9 @@ class AssertionMeta:
     note: str | None
     derived_rule_id: str | None
     derived_rule_version: str | None
-    materialize_id: str | None
+    candidate_id: str | None
+    candidate_key: str | None
+    candidate_kind: str | None
     raw: dict[str, Any]
 
     @classmethod
@@ -46,7 +48,9 @@ class AssertionMeta:
         trace_id = raw.get("trace_id") if isinstance(raw.get("trace_id"), str) else None
         approved_by = raw.get("approved_by") if isinstance(raw.get("approved_by"), str) else None
         note = raw.get("note") if isinstance(raw.get("note"), str) else None
-        materialize_id = raw.get("materialize_id") if isinstance(raw.get("materialize_id"), str) else None
+        candidate_id = raw.get("candidate_id") if isinstance(raw.get("candidate_id"), str) else None
+        candidate_key = raw.get("candidate_key") if isinstance(raw.get("candidate_key"), str) else None
+        candidate_kind = raw.get("candidate_kind") if isinstance(raw.get("candidate_kind"), str) else None
         derived_rule_id = None
         for key in ("derived_rule_id", "derivation_id"):
             if isinstance(raw.get(key), str):
@@ -73,7 +77,9 @@ class AssertionMeta:
             note=note,
             derived_rule_id=derived_rule_id,
             derived_rule_version=derived_rule_version,
-            materialize_id=materialize_id,
+            candidate_id=candidate_id,
+            candidate_key=candidate_key,
+            candidate_kind=candidate_kind,
             raw=dict(raw),
         )
 
@@ -327,14 +333,14 @@ def sdk_get(sdk: "SDKStore", entity_cls: type[Any], **identity_kwargs: Any) -> E
     spec = sdk._entity_spec_by_class[entity_cls]
     _validate_identity_kwargs_for_get(spec, entity_cls, identity_kwargs)
     e_ref = sdk.ref(entity_cls, **dict(identity_kwargs))
-    view_facts = project_view_facts(sdk.ledger, sdk.schema_ir, temporal_view="record")
+    view_facts = project_view_facts(sdk.ledger, sdk.schema_ir, temporal_view="active")
     if not _entity_visible_in_view(sdk, entity_cls, e_ref=e_ref, view_facts=view_facts):
         return None
     return _build_snapshot(
         sdk,
         entity_cls,
         e_ref=e_ref,
-        temporal_view="record",
+        temporal_view="active",
         view_facts=view_facts,
         known_identity_values=identity_kwargs,
     )
@@ -344,13 +350,13 @@ def sdk_find(
     sdk: "SDKStore",
     entity_cls: type[Any],
     *,
-    temporal_view: _TemporalView = "record",
+    temporal_view: _TemporalView = "active",
     limit: int | None = None,
     **filter_kwargs: Any,
 ) -> list[EntitySnapshot]:
     _validate_entity_cls(sdk, entity_cls)
-    if temporal_view not in {"record", "current"}:
-        raise SDKStoreError("temporal_view must be 'record' or 'current'")
+    if temporal_view not in {"active", "current"}:
+        raise SDKStoreError("temporal_view must be 'active' or 'current'")
     if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 0):
         raise SDKStoreError("limit must be non-negative int when provided")
     if limit == 0:

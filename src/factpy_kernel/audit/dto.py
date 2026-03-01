@@ -30,7 +30,7 @@ def build_run_detail_dto(query: AuditQuery, run_id: str) -> dict[str, Any]:
 
     run = dict(bundle["run"])
     decisions = [dict(row) for row in bundle["decisions"]]
-    materializations = [dict(row) for row in bundle["materializations"]]
+    accept_writes = [dict(row) for row in bundle["accept_writes"]]
     candidates = [dict(row) for row in bundle["candidates"]]
     failures = [dict(row) for row in bundle["failures"]]
     timeline = _build_timeline(decisions, failures)
@@ -41,16 +41,16 @@ def build_run_detail_dto(query: AuditQuery, run_id: str) -> dict[str, Any]:
         "run_id": run_id,
         "run": run,
         "stats": {
-            "materialization_count": len(materializations),
+            "accept_write_count": len(accept_writes),
             "candidate_count": len(candidates),
             "decision_count": len(decisions),
             "failure_count": len(failures),
             "has_failures": bool(run.get("has_failures")),
         },
         "decision_ids": [row.get("decision_id") for row in decisions if isinstance(row.get("decision_id"), str)],
-        "materialize_ids": [row.get("materialize_id") for row in materializations if isinstance(row.get("materialize_id"), str)],
+        "candidate_ids": [row.get("candidate_id") for row in accept_writes if isinstance(row.get("candidate_id"), str)],
         "decisions": decisions,
-        "materializations": materializations,
+        "accept_writes": accept_writes,
         "candidates": candidates,
         "failures": failures,
         "timeline": timeline,
@@ -69,17 +69,17 @@ def build_decision_detail_dto(query: AuditQuery, decision_id: str) -> dict[str, 
         raise AuditDTOError(f"decision not found: {decision_id}")
 
     failures = [row for row in query.list_failures() if row.get("decision_id") == decision_id]
-    materialize_ids = _sorted_strings(decision.get("materialize_ids"))
+    candidate_ids = _sorted_strings(decision.get("candidate_ids"))
     run_ids = _sorted_strings(decision.get("run_ids"))
-    if isinstance(decision.get("materialize_id"), str):
-        materialize_ids = sorted({*materialize_ids, decision["materialize_id"]})
+    if isinstance(decision.get("candidate_id"), str):
+        candidate_ids = sorted({*candidate_ids, decision["candidate_id"]})
     if isinstance(decision.get("run_id"), str):
         run_ids = sorted({*run_ids, decision["run_id"]})
 
-    materializations: list[dict[str, Any]] = []
-    for materialize_id in materialize_ids:
-        materializations.extend(query.list_materializations(materialize_id=materialize_id))
-    materializations = _dedupe_rows(materializations, keys=("materialize_id", "asrt_id"))
+    accept_writes: list[dict[str, Any]] = []
+    for candidate_id in candidate_ids:
+        accept_writes.extend(query.list_accept_writes(candidate_id=candidate_id))
+    accept_writes = _dedupe_rows(accept_writes, keys=("candidate_id", "asrt_id"))
 
     candidates = _dedupe_rows(
         [row for row in query.list_candidates() if row.get("decision_id") == decision_id],
@@ -94,12 +94,12 @@ def build_decision_detail_dto(query: AuditQuery, decision_id: str) -> dict[str, 
         "decision_id": decision_id,
         "decision": dict(decision),
         "runs": runs,
-        "materializations": materializations,
+        "accept_writes": accept_writes,
         "candidates": candidates,
         "failures": [dict(row) for row in failures],
         "related": {
             "run_ids": run_ids,
-            "materialize_ids": materialize_ids,
+            "candidate_ids": candidate_ids,
         },
     }
 
@@ -259,7 +259,7 @@ def _run_summary_item(row: dict[str, Any]) -> dict[str, Any]:
         "has_failures": bool(row.get("has_failures")),
         "event_ts_min": row.get("event_ts_min"),
         "event_ts_max": row.get("event_ts_max"),
-        "materialize_ids": _sorted_strings(row.get("materialize_ids")),
+        "candidate_ids": _sorted_strings(row.get("candidate_ids")),
         "pred_ids": _sorted_strings(row.get("pred_ids")),
     }
 

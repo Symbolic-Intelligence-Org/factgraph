@@ -296,17 +296,12 @@ def project_runtime_view_facts(session_id: str, dto: dict[str, Any]) -> dict[str
             dto.get("temporal_view"),
             path="$.temporal_view",
         )
-        legacy_record_visibility = _resolve_legacy_record_visibility(
-            dto.get("legacy_record_visibility"),
-            path="$.legacy_record_visibility",
-        )
         include_audit = _resolve_include_audit(dto.get("include_audit"), path="$.include_audit")
         if include_audit:
             facts, audit = project_view_facts_with_audit(
                 session.store.ledger,
                 session.store.schema_ir,
                 temporal_view=temporal_view_core,
-                legacy_record_visibility=legacy_record_visibility,
             )
             view = {
                 "facts": _to_jsonable(facts),
@@ -317,13 +312,11 @@ def project_runtime_view_facts(session_id: str, dto: dict[str, Any]) -> dict[str
                 session.store.ledger,
                 session.store.schema_ir,
                 temporal_view=temporal_view_core,
-                legacy_record_visibility=legacy_record_visibility,
             )
             view = {"facts": _to_jsonable(facts)}
         return ok_response(
             meta={
                 "temporal_view": temporal_view_public,
-                "legacy_record_visibility": legacy_record_visibility,
                 "pred_count": len(facts),
                 "total_tuple_count": sum(len(rows) for rows in facts.values()),
             },
@@ -345,10 +338,10 @@ def run_runtime_rule(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
         normalized_rule = dict(raw_rule)
         if "where" in normalized_rule:
             normalized_rule["where"] = _json_where_to_ir(normalized_rule["where"])
-        temporal_view = dto.get("temporal_view", "record")
-        if temporal_view not in {"record", "current"}:
+        temporal_view = dto.get("temporal_view", "active")
+        if temporal_view not in {"active", "current"}:
             raise facade_error(
-                "temporal_view must be 'record' or 'current'",
+                "temporal_view must be 'active' or 'current'",
                 kind="shape",
                 path="$.temporal_view",
             )
@@ -810,7 +803,8 @@ def _accept_options_from_dto(value: Any, *, path: str) -> AcceptOptions:
 
 def _accept_result_to_dict(result: AcceptResult) -> dict[str, Any]:
     return {
-        "materialize_id": result.materialize_id,
+        "candidate_id": result.candidate_id,
+        "candidate_key": result.candidate_key,
         "run_id": result.run_id,
         "accepted_count": result.accepted_count,
         "skipped_count": result.skipped_count,
@@ -896,28 +890,14 @@ def _mapping_conflict_to_error(exc: MappingConflictError) -> dict[str, Any]:
 
 def _resolve_view_temporal_view(value: Any, *, path: str) -> tuple[str, str]:
     if value is None:
-        return "record", "record"
-    if value == "record":
-        return "record", "record"
+        return "active", "active"
     if value in {"active", "current"}:
-        return "current", "active"
+        return str(value), str(value)
     raise facade_error(
-        "temporal_view must be 'record' or 'active'",
+        "temporal_view must be 'active' or 'current'",
         kind="shape",
         path=path,
     )
-
-
-def _resolve_legacy_record_visibility(value: Any, *, path: str) -> str:
-    if value is None:
-        return "allow"
-    if value not in {"allow", "audit", "deny"}:
-        raise facade_error(
-            "legacy_record_visibility must be 'allow', 'audit', or 'deny'",
-            kind="shape",
-            path=path,
-        )
-    return value
 
 
 def _resolve_include_audit(value: Any, *, path: str) -> bool:

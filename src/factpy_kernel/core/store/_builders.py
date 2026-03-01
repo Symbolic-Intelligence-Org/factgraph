@@ -198,7 +198,7 @@ def find_schema_pred(store: Any, pred_id: str) -> dict[str, Any] | None:
     return None
 
 
-def entity_materialize_spec_from_head(
+def entity_spec_from_head(
     store: Any,
     *,
     entity_type: str,

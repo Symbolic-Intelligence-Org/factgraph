@@ -21,15 +21,15 @@ def compile_where_to_query_dl(
     schema_ir: dict,
     where: list[Any],
     query_rel: str,
-    temporal_view: str = "record",
+    temporal_view: str = "active",
 ) -> str:
     ast_gate_on = _where_ast_gate_enabled()
     if not isinstance(schema_ir, dict):
         raise WhereValidationError("schema_ir must be dict")
     if not isinstance(query_rel, str) or not query_rel:
         raise WhereValidationError("query_rel must be non-empty string")
-    if temporal_view not in {"record", "current"}:
-        raise WhereValidationError("temporal_view must be 'record' or 'current'")
+    if temporal_view not in {"active", "current"}:
+        raise WhereValidationError("temporal_view must be 'active' or 'current'")
     if ast_gate_on:
         try:
             ast = parse_where_ir_to_ast(where)

@@ -317,11 +317,11 @@ def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str], *, temp_seq
         if not isinstance(attr, AttrRef):
             raise SDKDSLError("internal attr compare lowering error")
         if expr.op != "eq":
-            raise SDKDSLError("record attribute comparison sugar currently supports only '==' in SDK object DSL v1")
+            raise SDKDSLError("entity attribute comparison sugar currently supports only '==' in SDK object DSL v1")
         record_type = bindings.get(attr.record_var)
         if record_type is None:
             raise SDKDSLError(
-                f"record variable {attr.record_var.token} used in path comparison before {attr.record_var.token} is bound"
+                f"entity variable {attr.record_var.token} used in path comparison before {attr.record_var.token} is bound"
             )
         pred_id = f"{record_type.lower()}:{attr.field_name}"
         return [("pred", pred_id, [attr.record_var.token, lower_term(other, in_where=True)])]

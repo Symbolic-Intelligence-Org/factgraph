@@ -37,7 +37,7 @@ def build_rule_preflight_dto(
     store: Store,
     rule_spec_payload: dict[str, Any],
     registry_payloads: list[dict[str, Any]] | None = None,
-    temporal_view: str = "record",
+    temporal_view: str = "active",
 ) -> dict[str, Any]:
     payload = rule_preflight(
         store=store,
@@ -53,7 +53,7 @@ def build_rule_preflight_from_authoring_dto(
     store: Store,
     authoring_rule_payload: dict[str, Any],
     registry_payloads: list[dict[str, Any]] | None = None,
-    temporal_view: str = "record",
+    temporal_view: str = "active",
 ) -> dict[str, Any]:
     payload = rule_preflight_authoring(
         store=store,
@@ -73,7 +73,7 @@ def build_derivation_preview_dto(
     head_vars: list[Any],
     where: list[Any],
     mode: str = "python",
-    temporal_view: str = "record",
+    temporal_view: str = "active",
 ) -> dict[str, Any]:
     payload = derivation_dry_run_preview(
         store=store,

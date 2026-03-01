@@ -129,7 +129,7 @@ def _rewrite_atom(
     exists_pred_by_type: dict[str, str] = meta["exists_pred_by_type"]
     role_pred_by_type_field: dict[str, dict[str, str]] = meta["role_pred_by_type_field"]
 
-    # Already canonical predicates may still carry useful record-var bindings.
+    # Already canonical predicates may still carry useful entity-var bindings.
     if pred_id in type_by_exists_pred and terms and _is_var(terms[0]):
         record_var_types[_var_name(terms[0])] = type_by_exists_pred[pred_id]
         return atom
@@ -149,7 +149,7 @@ def _rewrite_atom(
             return atom
         if pred_id not in canonical_pred_ids and record_type in meta["record_types"]:
             raise WhereSchemaLoweringError(
-                f"record exists predicate not found in schema for {record_type}",
+                f"entity exists predicate not found in schema for {record_type}",
                 path=path,
             )
         return atom
@@ -165,7 +165,7 @@ def _rewrite_atom(
                 return ("pred", canonical_role, terms)
             if pred_id not in canonical_pred_ids:
                 raise WhereSchemaLoweringError(
-                    f"record role predicate not found in schema for {record_type}.{field_name}",
+                    f"entity field predicate not found in schema for {record_type}.{field_name}",
                     path=path,
                 )
     return atom

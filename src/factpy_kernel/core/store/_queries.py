@@ -100,7 +100,7 @@ def resolve_mapping(store: Any, pred_id: str, *, policy_mode: str = "edb") -> Ma
 
 
 def meta_subset(store: Any, asrt_id: str) -> dict[str, Any]:
-    wanted = {"ingested_at", "source", "run_id", "materialize_id", "cand_key_digest"}
+    wanted = {"ingested_at", "source", "run_id", "candidate_id", "candidate_key", "cand_key_digest"}
     out: dict[str, Any] = {}
     for row in store.ledger.find_meta(asrt_id=asrt_id):
         if row.key in wanted and row.key not in out:

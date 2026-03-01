@@ -224,21 +224,21 @@ def _render_run_detail_page(
             f"<td>{escape(str(row.get('decision_id')))}</td>"
             "</tr>"
         )
-    materialization_rows = []
+    accept_write_rows = []
     assertion_summary_blocks = []
     rendered_assertions: set[str] = set()
-    for row in payload.get("materializations", []):
+    for row in payload.get("accept_writes", []):
         if not isinstance(row, dict):
             continue
         asrt_id = row.get("asrt_id")
-        materialize_id = row.get("materialize_id")
+        candidate_id = row.get("candidate_id")
         asrt_cell = escape(str(asrt_id))
         if isinstance(asrt_id, str) and asrt_id:
             asrt_href = f"../assertions/{_slug_id(asrt_id)}.html"
             asrt_cell = f"<a href='{escape(asrt_href, quote=True)}'>{escape(asrt_id)}</a>"
-        materialization_rows.append(
+        accept_write_rows.append(
             "<tr>"
-            f"<td>{escape(str(materialize_id))}</td>"
+            f"<td>{escape(str(candidate_id))}</td>"
             f"<td>{asrt_cell}</td>"
             f"<td>{escape(str(row.get('pred_id')))}</td>"
             f"<td>{escape(str(row.get('ingested_at')))}</td>"
@@ -256,16 +256,16 @@ def _render_run_detail_page(
             "<p><a href='../index.html'>Back to runs</a></p>"
             "<h2>Stats</h2>"
             "<ul>"
-            f"<li>materializations={escape(str(stats.get('materialization_count', 0)))}</li>"
+            f"<li>accept_writes={escape(str(stats.get('accept_write_count', 0)))}</li>"
             f"<li>candidates={escape(str(stats.get('candidate_count', 0)))}</li>"
             f"<li>decisions={escape(str(stats.get('decision_count', 0)))}</li>"
             f"<li>failures={escape(str(stats.get('failure_count', 0)))}</li>"
             "</ul>"
             "<h2>Decisions</h2>"
             f"<ul>{''.join(decision_links) if decision_links else '<li>None</li>'}</ul>"
-            "<h2>Materializations</h2>"
-            "<table><thead><tr><th>Materialize</th><th>Assertion</th><th>Pred</th><th>Ts</th></tr></thead>"
-            f"<tbody>{''.join(materialization_rows) if materialization_rows else '<tr><td colspan=4>None</td></tr>'}</tbody></table>"
+            "<h2>Accept Writes</h2>"
+            "<table><thead><tr><th>Candidate</th><th>Assertion</th><th>Pred</th><th>Ts</th></tr></thead>"
+            f"<tbody>{''.join(accept_write_rows) if accept_write_rows else '<tr><td colspan=4>None</td></tr>'}</tbody></table>"
             "<h2>Assertion Summaries</h2>"
             f"{''.join(assertion_summary_blocks) if assertion_summary_blocks else '<p>None</p>'}"
             "<h2>Timeline</h2>"
@@ -284,9 +284,9 @@ def _render_decision_detail_page(
     decision_id = str(payload.get("decision_id", ""))
     related = payload.get("related") if isinstance(payload.get("related"), dict) else {}
     runs = _sorted_unique_strings(related.get("run_ids"))
-    mats = _sorted_unique_strings(related.get("materialize_ids"))
+    mats = _sorted_unique_strings(related.get("candidate_ids"))
     asrt_ids = _sorted_unique_strings(
-        [row.get("asrt_id") for row in payload.get("materializations", []) if isinstance(row, dict)]
+        [row.get("asrt_id") for row in payload.get("accept_writes", []) if isinstance(row, dict)]
         + [row.get("asrt_id") for row in payload.get("candidates", []) if isinstance(row, dict)]
         + ([decision.get("asrt_id")] if isinstance(decision.get("asrt_id"), str) else [])
         + (
@@ -317,7 +317,7 @@ def _render_decision_detail_page(
             "</ul>"
             "<h2>Related</h2>"
             f"<p>runs={escape(','.join(runs)) or '-'}</p>"
-            f"<p>materialize_ids={escape(','.join(mats)) or '-'}</p>"
+            f"<p>candidate_ids={escape(','.join(mats)) or '-'}</p>"
             f"<p>assertions={escape(str(len(asrt_ids)))}</p>"
             f"<p>candidates={escape(str(len(payload.get('candidates', []))))}</p>"
             f"<p>failures={escape(str(len(payload.get('failures', []))))}</p>"
@@ -398,7 +398,7 @@ def _render_assertion_detail_page(payload: dict[str, Any]) -> str:
 def _render_filter_index_pages(query: AuditQuery) -> dict[str, str]:
     decisions = query.list_decisions()
     failures = query.list_failures()
-    materializations = query.list_materializations()
+    accept_writes = query.list_accept_writes()
 
     by_event_kind: dict[str, list[dict[str, Any]]] = {}
     for row in decisions:
@@ -413,20 +413,20 @@ def _render_filter_index_pages(query: AuditQuery) -> dict[str, str]:
         by_error_class.setdefault(key_text, []).append(row)
 
     by_pred_id_decisions: dict[str, list[dict[str, Any]]] = {}
-    by_pred_id_materializations: dict[str, list[dict[str, Any]]] = {}
+    by_pred_id_accept_writes: dict[str, list[dict[str, Any]]] = {}
     for row in decisions:
         pred_id = row.get("pred_id")
         if isinstance(pred_id, str) and pred_id:
             by_pred_id_decisions.setdefault(pred_id, []).append(row)
-    for row in materializations:
+    for row in accept_writes:
         pred_id = row.get("pred_id")
         if isinstance(pred_id, str) and pred_id:
-            by_pred_id_materializations.setdefault(pred_id, []).append(row)
+            by_pred_id_accept_writes.setdefault(pred_id, []).append(row)
 
     return {
         "event_kinds.html": _render_event_kind_index_page(by_event_kind),
         "error_classes.html": _render_error_class_index_page(by_error_class),
-        "predicates.html": _render_predicate_index_page(by_pred_id_decisions, by_pred_id_materializations),
+        "predicates.html": _render_predicate_index_page(by_pred_id_decisions, by_pred_id_accept_writes),
     }
 
 
@@ -443,7 +443,7 @@ def _build_ui_index_payload(
 ) -> dict[str, Any]:
     decisions = query.list_decisions()
     failures = query.list_failures()
-    materializations = query.list_materializations()
+    accept_writes = query.list_accept_writes()
     candidates = query.list_candidates()
 
     event_kind_counts: dict[str, int] = {}
@@ -459,15 +459,15 @@ def _build_ui_index_payload(
             error_class_counts[key] = error_class_counts.get(key, 0) + 1
 
     predicate_decision_counts: dict[str, int] = {}
-    predicate_materialize_counts: dict[str, int] = {}
+    predicate_accept_write_counts: dict[str, int] = {}
     for row in decisions:
         pred_id = row.get("pred_id")
         if isinstance(pred_id, str) and pred_id:
             predicate_decision_counts[pred_id] = predicate_decision_counts.get(pred_id, 0) + 1
-    for row in materializations:
+    for row in accept_writes:
         pred_id = row.get("pred_id")
         if isinstance(pred_id, str) and pred_id:
-            predicate_materialize_counts[pred_id] = predicate_materialize_counts.get(pred_id, 0) + 1
+            predicate_accept_write_counts[pred_id] = predicate_accept_write_counts.get(pred_id, 0) + 1
 
     authoring_apply_events = load_authoring_apply_events(query.package.package_dir)
     authoring_apply_runs: list[dict[str, Any]] = []
@@ -557,7 +557,7 @@ def _build_ui_index_payload(
         if isinstance(decision_id, str) and decision_id:
             candidates_by_decision.setdefault(decision_id, []).append(row)
 
-    for row in materializations:
+    for row in accept_writes:
         asrt_id = row.get("asrt_id")
         run_id = row.get("run_id")
         if isinstance(asrt_id, str) and asrt_id and isinstance(run_id, str) and run_id:
@@ -608,7 +608,7 @@ def _build_ui_index_payload(
                 if linked_asrt_id in assertion_to_runs:
                     assertion_to_runs[linked_asrt_id].add(linked_run_id)
 
-    predicates = sorted(set(predicate_decision_counts.keys()) | set(predicate_materialize_counts.keys()))
+    predicates = sorted(set(predicate_decision_counts.keys()) | set(predicate_accept_write_counts.keys()))
     return {
         "audit_ui_index_version": "audit_ui_index_v1",
         "counts": {
@@ -657,7 +657,7 @@ def _build_ui_index_payload(
                 {
                     "pred_id": pred_id,
                     "decision_count": predicate_decision_counts.get(pred_id, 0),
-                    "materialization_count": predicate_materialize_counts.get(pred_id, 0),
+                    "accept_write_count": predicate_accept_write_counts.get(pred_id, 0),
                     "page": "indexes/predicates.html",
                 }
                 for pred_id in predicates
@@ -946,7 +946,7 @@ def _render_search_page() -> str:
     maybePush("runs", "<h2>Runs</h2><ul>" + (hits.runs.map(r => rowLink(r.path, r.run_id, `claims=${r.claim_count} decisions=${r.decision_count} errors=${r.error_count}`)).join("") || "<li>None</li>") + "</ul>");
     maybePush("decisions", "<h2>Decisions</h2><ul>" + (hits.decisions.map(r => rowLink(r.path, r.decision_id, "")).join("") || "<li>None</li>") + "</ul>");
     maybePush("assertions", "<h2>Assertions</h2><ul>" + (hits.assertions.map(r => rowLink(r.path, r.asrt_id, "")).join("") || "<li>None</li>") + "</ul>");
-    maybePush("predicates", "<h2>Predicates</h2><ul>" + (hits.predicates.map(r => rowLink(r.page, r.pred_id, `decisions=${r.decision_count} materializations=${r.materialization_count}`)).join("") || "<li>None</li>") + "</ul>");
+    maybePush("predicates", "<h2>Predicates</h2><ul>" + (hits.predicates.map(r => rowLink(r.page, r.pred_id, `decisions=${r.decision_count} accept_writes=${r.accept_write_count}`)).join("") || "<li>None</li>") + "</ul>");
     maybePush("eventKinds", "<h2>Event Kinds</h2><ul>" + (hits.eventKinds.map(r => rowLink(r.page, r.event_kind, `count=${r.count}`)).join("") || "<li>None</li>") + "</ul>");
     maybePush("errorClasses", "<h2>Error Classes</h2><ul>" + (hits.errorClasses.map(r => rowLink(r.page, r.error_class, `count=${r.count}`)).join("") || "<li>None</li>") + "</ul>");
     maybePush("authoringApplyRequestIds", "<h2>Authoring Apply Request IDs</h2><ul>" + (hits.authoringApplyRequestIds.map(r => rowLink(r.page, r.apply_request_id, `count=${r.count}`)).join("") || "<li>None</li>") + "</ul>");
@@ -1088,15 +1088,15 @@ def _render_error_class_index_page(groups: dict[str, list[dict[str, Any]]]) -> s
 
 def _render_predicate_index_page(
     decision_groups: dict[str, list[dict[str, Any]]],
-    materialization_groups: dict[str, list[dict[str, Any]]],
+    accept_write_groups: dict[str, list[dict[str, Any]]],
 ) -> str:
-    pred_ids = sorted(set(decision_groups.keys()) | set(materialization_groups.keys()))
+    pred_ids = sorted(set(decision_groups.keys()) | set(accept_write_groups.keys()))
     blocks: list[str] = []
     for pred_id in pred_ids:
         decisions = sorted(decision_groups.get(pred_id, []), key=lambda r: str(r.get("decision_id", "")))
-        materializations = sorted(
-            materialization_groups.get(pred_id, []),
-            key=lambda r: (str(r.get("materialize_id", "")), str(r.get("asrt_id", ""))),
+        accept_writes = sorted(
+            accept_write_groups.get(pred_id, []),
+            key=lambda r: (str(r.get("candidate_id", "")), str(r.get("asrt_id", ""))),
         )
         search_href = _search_href(pred_id, "pred_id", prefix="..")
         decision_items = []
@@ -1111,26 +1111,26 @@ def _render_predicate_index_page(
                 f"{decision_link} [{escape(str(row.get('event_kind')))}]"
                 "</li>"
             )
-        materialization_items = []
-        for row in materializations:
+        accept_write_items = []
+        for row in accept_writes:
             asrt_id = row.get("asrt_id")
             asrt_link = escape(str(asrt_id))
             if isinstance(asrt_id, str) and asrt_id:
                 href = f"../assertions/{_slug_id(asrt_id)}.html"
                 asrt_link = f"<a href='{escape(href, quote=True)}'>{escape(asrt_id)}</a>"
-            materialization_items.append(
+            accept_write_items.append(
                 "<li>"
-                f"{escape(str(row.get('materialize_id')))} → {asrt_link}"
+                f"{escape(str(row.get('candidate_id')))} → {asrt_link}"
                 "</li>"
             )
         blocks.append(
             f"<h3>{escape(pred_id)}</h3>"
             f"<p><a href='{escape(search_href, quote=True)}'>Open in search</a></p>"
-            f"<p>decisions={len(decisions)} | materializations={len(materializations)}</p>"
+            f"<p>decisions={len(decisions)} | accept_writes={len(accept_writes)}</p>"
             "<h4>Decisions</h4>"
             f"<ul>{''.join(decision_items) if decision_items else '<li>None</li>'}</ul>"
-            "<h4>Materializations</h4>"
-            f"<ul>{''.join(materialization_items) if materialization_items else '<li>None</li>'}</ul>"
+            "<h4>Accept Writes</h4>"
+            f"<ul>{''.join(accept_write_items) if accept_write_items else '<li>None</li>'}</ul>"
         )
     return _html_page(
         title="Predicate Index",

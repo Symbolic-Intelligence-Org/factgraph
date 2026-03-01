@@ -110,9 +110,9 @@ def export_package(
             query_rel = query_rel_for_where(where)
         if not isinstance(query_rel, str) or not query_rel:
             raise ValueError("query.query_rel must be non-empty string")
-        temporal_view = query.get("temporal_view", "record")
-        if temporal_view not in {"record", "current"}:
-            raise ValueError("query.temporal_view must be 'record' or 'current'")
+        temporal_view = query.get("temporal_view", "active")
+        if temporal_view not in {"active", "current"}:
+            raise ValueError("query.temporal_view must be 'active' or 'current'")
         idb_text = compile_where_to_query_dl(
             schema_ir=store.schema_ir,
             where=where,
@@ -125,19 +125,19 @@ def export_package(
 
     audit_files: dict[str, str] = {}
     if options.package_kind == "audit":
-        run_ledger_rows, candidate_ledger_rows, materialize_ledger_rows = _build_audit_ledgers(store)
+        run_ledger_rows, candidate_ledger_rows, accept_write_ledger_rows = _build_audit_ledgers(store)
         run_ledger_path = audit_dir / "run_ledger.jsonl"
         candidate_ledger_path = audit_dir / "candidate_ledger.jsonl"
-        materialize_ledger_path = audit_dir / "materialize_ledger.jsonl"
+        accept_write_ledger_path = audit_dir / "accept_write_ledger.jsonl"
         accept_failed_path = audit_dir / "accept_failed.jsonl"
         decision_log_path = audit_dir / "decision_log.jsonl"
 
         _write_jsonl(candidate_ledger_path, candidate_ledger_rows)
-        _write_jsonl(materialize_ledger_path, materialize_ledger_rows)
+        _write_jsonl(accept_write_ledger_path, accept_write_ledger_rows)
 
         audit_files["run_ledger"] = "audit/run_ledger.jsonl"
         audit_files["candidate_ledger"] = "audit/candidate_ledger.jsonl"
-        audit_files["materialize_ledger"] = "audit/materialize_ledger.jsonl"
+        audit_files["accept_write_ledger"] = "audit/accept_write_ledger.jsonl"
         audit_files["accept_failed"] = "audit/accept_failed.jsonl"
 
         mapping_audit = _build_mapping_audit_payload(store, options.policy_mode)
@@ -151,7 +151,7 @@ def export_package(
         _write_jsonl(accept_failed_path, accept_failed_rows)
         decision_rows = _build_decision_log_rows(
             store=store,
-            materialize_rows=materialize_ledger_rows,
+            accept_write_rows=accept_write_ledger_rows,
             mapping_audit=mapping_audit,
         )
         _write_jsonl(decision_log_path, decision_rows)
@@ -457,18 +457,18 @@ def _build_audit_ledgers(
     store: Store,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     run_rows = _build_run_ledger_rows(store)
-    materialize_rows = _build_materialize_ledger_rows(store)
-    candidate_rows = _build_candidate_ledger_rows(materialize_rows)
-    return run_rows, candidate_rows, materialize_rows
+    accept_write_rows = _build_accept_write_ledger_rows(store)
+    candidate_rows = _build_candidate_ledger_rows(accept_write_rows)
+    return run_rows, candidate_rows, accept_write_rows
 
 
-def _build_candidate_ledger_rows(materialize_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _build_candidate_ledger_rows(accept_write_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for row in materialize_rows:
+    for row in accept_write_rows:
         key_tuple_digest = row.get("key_tuple_digest")
         cand_key_digest = row.get("cand_key_digest")
         asrt_id = row.get("asrt_id")
-        materialize_id = row.get("materialize_id")
+        candidate_id = row.get("candidate_id")
         ingested_at = row.get("ingested_at")
         if not isinstance(key_tuple_digest, str) or not key_tuple_digest:
             continue
@@ -476,18 +476,17 @@ def _build_candidate_ledger_rows(materialize_rows: list[dict[str, Any]]) -> list
             continue
         if not isinstance(asrt_id, str) or not asrt_id:
             continue
-        if not isinstance(materialize_id, str) or not materialize_id:
+        if not isinstance(candidate_id, str) or not candidate_id:
             continue
-        decision_id = _accept_write_decision_id(materialize_id, asrt_id)
+        decision_id = _accept_write_decision_id(candidate_id, asrt_id)
 
         rows.append(
             {
-                "candidate_id": f"{cand_key_digest}:{asrt_id}",
                 "state": "accepted",
                 "asrt_id": asrt_id,
                 "pred_id": row.get("pred_id"),
                 "run_id": row.get("run_id"),
-                "materialize_id": materialize_id,
+                "candidate_id": candidate_id,
                 "key_tuple_digest": key_tuple_digest,
                 "cand_key_digest": cand_key_digest,
                 "support_digest": row.get("support_digest"),
@@ -528,7 +527,7 @@ def _build_accept_failed_rows(store: Store, mapping_audit: dict[str, Any]) -> li
                     if not isinstance(conflict, dict):
                         continue
                     candidate_asrt_ids = conflict.get("candidate_asrt_ids")
-                    run_ids, materialize_ids = _collect_run_materialize_ids(
+                    run_ids, candidate_ids = _collect_run_candidate_ids(
                         store,
                         candidate_asrt_ids,
                     )
@@ -549,7 +548,7 @@ def _build_accept_failed_rows(store: Store, mapping_audit: dict[str, Any]) -> li
                             "key_tuple": conflict.get("key_tuple"),
                             "candidate_asrt_ids": candidate_asrt_ids,
                             "run_ids": run_ids,
-                            "materialize_ids": materialize_ids,
+                            "candidate_ids": candidate_ids,
                             "event_ts": event_ts,
                         }
                     )
@@ -565,7 +564,7 @@ def _build_accept_failed_rows(store: Store, mapping_audit: dict[str, Any]) -> li
                     "policy_mode": policy_mode,
                     "message": pred_row.get("error"),
                     "run_ids": [],
-                    "materialize_ids": [],
+                    "candidate_ids": [],
                     "event_ts": None,
                 }
             )
@@ -584,15 +583,15 @@ def _build_accept_failed_rows(store: Store, mapping_audit: dict[str, Any]) -> li
 def _build_decision_log_rows(
     *,
     store: Store,
-    materialize_rows: list[dict[str, Any]],
+    accept_write_rows: list[dict[str, Any]],
     mapping_audit: dict[str, Any],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
 
-    for row in materialize_rows:
-        materialize_id = row.get("materialize_id")
+    for row in accept_write_rows:
+        candidate_id = row.get("candidate_id")
         asrt_id = row.get("asrt_id")
-        decision_id = _accept_write_decision_id(materialize_id, asrt_id)
+        decision_id = _accept_write_decision_id(candidate_id, asrt_id)
         if decision_id is None:
             continue
         ingested_at = row.get("ingested_at")
@@ -601,7 +600,7 @@ def _build_decision_log_rows(
                 "decision_id": decision_id,
                 "event_source": "accept",
                 "event_kind": "accept_write",
-                "materialize_id": materialize_id,
+                "candidate_id": candidate_id,
                 "asrt_id": asrt_id,
                 "pred_id": row.get("pred_id"),
                 "run_id": row.get("run_id"),
@@ -612,7 +611,7 @@ def _build_decision_log_rows(
                 "support_digest": row.get("support_digest"),
                 "support_kind": row.get("support_kind"),
                 "run_ids": [row.get("run_id")] if isinstance(row.get("run_id"), str) and row.get("run_id") else [],
-                "materialize_ids": [materialize_id] if isinstance(materialize_id, str) and materialize_id else [],
+                "candidate_ids": [candidate_id] if isinstance(candidate_id, str) and candidate_id else [],
                 "event_ts": ingested_at if isinstance(ingested_at, int) and not isinstance(ingested_at, bool) else None,
             }
         )
@@ -635,7 +634,7 @@ def _build_decision_log_rows(
                         if not isinstance(decision, dict):
                             continue
                         candidate_asrt_ids = decision.get("candidate_asrt_ids")
-                        run_ids, materialize_ids = _collect_run_materialize_ids(
+                        run_ids, candidate_ids = _collect_run_candidate_ids(
                             store,
                             candidate_asrt_ids,
                         )
@@ -658,7 +657,7 @@ def _build_decision_log_rows(
                                 "reason": decision.get("reason"),
                                 "candidate_asrt_ids": candidate_asrt_ids,
                                 "run_ids": run_ids,
-                                "materialize_ids": materialize_ids,
+                                "candidate_ids": candidate_ids,
                                 "event_ts": event_ts,
                             }
                         )
@@ -669,7 +668,7 @@ def _build_decision_log_rows(
                         if not isinstance(conflict, dict):
                             continue
                         candidate_asrt_ids = conflict.get("candidate_asrt_ids")
-                        run_ids, materialize_ids = _collect_run_materialize_ids(
+                        run_ids, candidate_ids = _collect_run_candidate_ids(
                             store,
                             candidate_asrt_ids,
                         )
@@ -691,7 +690,7 @@ def _build_decision_log_rows(
                                 "candidate_asrt_ids": candidate_asrt_ids,
                                 "error": pred_row.get("error"),
                                 "run_ids": run_ids,
-                                "materialize_ids": materialize_ids,
+                                "candidate_ids": candidate_ids,
                                 "event_ts": event_ts,
                             }
                         )
@@ -707,7 +706,7 @@ def _build_decision_log_rows(
                         "status": status,
                         "error": pred_row.get("error"),
                         "run_ids": [],
-                        "materialize_ids": [],
+                        "candidate_ids": [],
                         "event_ts": None,
                     }
                 )
@@ -734,15 +733,15 @@ def _build_run_ledger_rows(store: Store) -> list[dict[str, Any]]:
             entry = {
                 "run_id": run_id,
                 "claim_count": 0,
-                "materialize_ids": set(),
+                "candidate_ids": set(),
                 "pred_ids": set(),
             }
             run_map[run_id] = entry
         entry["claim_count"] += 1
         entry["pred_ids"].add(claim.pred_id)
-        materialize_id = _meta_str(store, claim.asrt_id, "materialize_id")
-        if materialize_id:
-            entry["materialize_ids"].add(materialize_id)
+        candidate_id = _meta_str(store, claim.asrt_id, "candidate_id")
+        if candidate_id:
+            entry["candidate_ids"].add(candidate_id)
 
     out: list[dict[str, Any]] = []
     for run_id in sorted(run_map):
@@ -751,7 +750,7 @@ def _build_run_ledger_rows(store: Store) -> list[dict[str, Any]]:
             {
                 "run_id": run_id,
                 "claim_count": row["claim_count"],
-                "materialize_ids": sorted(row["materialize_ids"]),
+                "candidate_ids": sorted(row["candidate_ids"]),
                 "pred_ids": sorted(row["pred_ids"]),
             }
         )
@@ -918,14 +917,14 @@ def _attach_decision_ids_to_run_ledger(
     return out
 
 
-def _build_materialize_ledger_rows(store: Store) -> list[dict[str, Any]]:
+def _build_accept_write_ledger_rows(store: Store) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for claim in sorted(store.ledger.claims, key=lambda row: row.asrt_id):
-        materialize_id = _meta_str(store, claim.asrt_id, "materialize_id")
-        if materialize_id is None:
+        candidate_id = _meta_str(store, claim.asrt_id, "candidate_id")
+        if candidate_id is None:
             continue
         row: dict[str, Any] = {
-            "materialize_id": materialize_id,
+            "candidate_id": candidate_id,
             "asrt_id": claim.asrt_id,
             "pred_id": claim.pred_id,
             "e_ref": claim.e_ref,
@@ -941,7 +940,7 @@ def _build_materialize_ledger_rows(store: Store) -> list[dict[str, Any]]:
             "ingested_at": _meta_time(store, claim.asrt_id, "ingested_at"),
         }
         rows.append(row)
-    return sorted(rows, key=lambda row: (str(row["materialize_id"]), str(row["asrt_id"])))
+    return sorted(rows, key=lambda row: (str(row["candidate_id"]), str(row["asrt_id"])))
 
 
 def _meta_str(store: Store, asrt_id: str, key: str) -> str | None:
@@ -958,30 +957,30 @@ def _meta_time(store: Store, asrt_id: str, key: str) -> int | None:
     return None
 
 
-def _accept_write_decision_id(materialize_id: Any, asrt_id: Any) -> str | None:
-    if not isinstance(materialize_id, str) or not materialize_id:
+def _accept_write_decision_id(candidate_id: Any, asrt_id: Any) -> str | None:
+    if not isinstance(candidate_id, str) or not candidate_id:
         return None
     if not isinstance(asrt_id, str) or not asrt_id:
         return None
-    return f"accept_write:{materialize_id}:{asrt_id}"
+    return f"accept_write:{candidate_id}:{asrt_id}"
 
 
-def _collect_run_materialize_ids(store: Store, candidate_asrt_ids: Any) -> tuple[list[str], list[str]]:
+def _collect_run_candidate_ids(store: Store, candidate_asrt_ids: Any) -> tuple[list[str], list[str]]:
     if not isinstance(candidate_asrt_ids, list):
         return [], []
 
     run_ids: set[str] = set()
-    materialize_ids: set[str] = set()
+    candidate_ids: set[str] = set()
     for asrt_id in candidate_asrt_ids:
         if not isinstance(asrt_id, str) or not asrt_id:
             continue
         run_id = _meta_str(store, asrt_id, "run_id")
-        materialize_id = _meta_str(store, asrt_id, "materialize_id")
+        candidate_id = _meta_str(store, asrt_id, "candidate_id")
         if run_id:
             run_ids.add(run_id)
-        if materialize_id:
-            materialize_ids.add(materialize_id)
-    return sorted(run_ids), sorted(materialize_ids)
+        if candidate_id:
+            candidate_ids.add(candidate_id)
+    return sorted(run_ids), sorted(candidate_ids)
 
 
 def _collect_event_ts(store: Store, candidate_asrt_ids: Any) -> int | None:

@@ -109,13 +109,13 @@ def _build_rule_section(store: Store, request: dict[str, Any]) -> dict[str, Any]
                 store=store,
                 authoring_rule_payload=request["authoring_rule_payload"],
                 registry_payloads=request.get("registry_payloads"),
-                temporal_view=str(request.get("temporal_view", "record")),
+                temporal_view=str(request.get("temporal_view", "active")),
             )
         return build_rule_preflight_dto(
             store=store,
             rule_spec_payload=request["rule_spec_payload"],
             registry_payloads=request.get("registry_payloads"),
-            temporal_view=str(request.get("temporal_view", "record")),
+            temporal_view=str(request.get("temporal_view", "active")),
         )
     except KeyError as exc:
         raise AuthoringSessionError(f"rule_request missing key: {exc.args[0]}") from exc
@@ -138,7 +138,7 @@ def _build_derivation_section(store: Store, request: dict[str, Any]) -> dict[str
             head_vars=request["head_vars"],
             where=request["where"],
             mode=str(request.get("mode", "python")),
-            temporal_view=str(request.get("temporal_view", "record")),
+            temporal_view=str(request.get("temporal_view", "active")),
         )
     except KeyError as exc:
         raise AuthoringSessionError(f"derivation_request missing key: {exc.args[0]}") from exc

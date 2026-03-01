@@ -77,7 +77,7 @@ def generate_view_dl(schema_ir: dict, *, include_active_rule: bool = True) -> st
             continue
 
         if cardinality == "temporal":
-            # temporal record view: output all active rows (same as multi)
+            # temporal active view: output all active rows (same as multi)
             output_body_parts = [
                 f'claim(A,"{pred_id}",E,_)',
                 "active(A)",

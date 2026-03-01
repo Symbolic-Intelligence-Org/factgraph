@@ -25,12 +25,12 @@ def evaluate_store(
     head_vars: HeadVarsIR,
     where: WhereIR,
     mode: EvaluateMode = "python",
-    temporal_view: TemporalView = "record",
+    temporal_view: TemporalView = "active",
     head: HeadSpecIR | None = None,
     engine_evaluate: EngineEvaluatorFn,
 ) -> list[CandidateSet]:
-    if temporal_view not in {"record", "current"}:
-        raise ValueError("temporal_view must be 'record' or 'current'")
+    if temporal_view not in {"active", "current"}:
+        raise ValueError("temporal_view must be 'active' or 'current'")
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         if mode == "engine":
@@ -46,7 +46,7 @@ def evaluate_store(
         if mode != "python":
             raise ValueError("mode must be 'python' or 'engine'")
 
-        entity_spec = builders.entity_materialize_spec_from_head(
+        entity_spec = builders.entity_spec_from_head(
             store,
             entity_type=target_pred_id,
             head=head,
