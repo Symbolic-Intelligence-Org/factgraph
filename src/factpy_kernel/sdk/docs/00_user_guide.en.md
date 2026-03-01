@@ -288,7 +288,7 @@ Filter Semantics (Stable Contract):
 - `entity_ref`: exact canonical-ref match (`ref` or `EntitySnapshot` accepted)
 
 Stable Contract:
-- `temporal_view` is `record` or `current`.
+- `temporal_view` is `active` or `current`.
 - `limit` must be non-negative int.
 - Unknown filters -> `SDKSchemaError`.
 
@@ -562,7 +562,7 @@ Stable Contract:
 | Build graph + preview + replay | `sdk.batch()` |
 | Modify one known entity (full identity) | `sdk.edit(...)` |
 | External write items / only `ref + asrt_id` | `sdk.ingest(...)` |
-| Derivation candidate materialization | `sdk.evaluate(...) + sdk.accept(...)` |
+| Derivation candidate accept flow | `sdk.evaluate(...) + sdk.accept(...)` |
 | Minimal low-level direct write | `sdk.set/add/retract` |
 
 ### 9.2 Minimal Decision Tree

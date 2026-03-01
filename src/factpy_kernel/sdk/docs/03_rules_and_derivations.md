@@ -58,7 +58,7 @@ rows = sdk.run(rule)
 ## 3. `where` 支持语法
 
 支持：
-- record exists sugar：`LivesIn(li)`
+- entity exists sugar：`LivesIn(li)`
 - path equality sugar：`li.person == p`
 - 谓词：`Pred("person:country", p, c)`
 - rule 引用：`RuleRef(...)(...)`
@@ -159,7 +159,7 @@ Field head 约束：
 | 旧写法 | 新写法 | 说明 |
 |---|---|---|
 | `materialize_as="fact"` | `head=Entity.field(...)` | candidate_kind 自动推断为 fact |
-| `materialize_as="record"` | `head=EntityType(...)` | candidate_kind 自动推断为 entity（并生成依赖 fact） |
+| `legacy entity 路径` | `head=EntityType(...)` | candidate_kind 自动推断为 entity（并生成依赖 fact） |
 | `id_policy=...` | 移除 | identity 在 entity candidate 中解析；缺失字段由 accept 时 `identity_override` 补齐 |
 | fact payload: `e_ref/rest_terms` | fact payload: `terms` | `terms[0]` 固定是 subject（arg0） |
 
@@ -235,8 +235,10 @@ SDK facade 的 sugar：
 
 ### 9.1 `AcceptResult` 字段
 
-- `materialize_id`
+- `candidate_id`
+- `candidate_key`
 - `run_id`
+- `candidate_kind`（可选，返回时与候选一致）
 - `accepted_count`
 - `skipped_count`
 - `written_assertions`
@@ -275,19 +277,19 @@ SDK facade 的 sugar：
 ### 10.1 `sdk.run(...)`
 
 ```python
-rows = sdk.run(rule, temporal_view="record")
+rows = sdk.run(rule, temporal_view="active")
 ```
 
-- `temporal_view`：`"record"` | `"current"`
+- `temporal_view`：`"active"` | `"current"`
 
 ### 10.2 `sdk.evaluate(...)`
 
 ```python
-cands = sdk.evaluate(drv, mode="python", temporal_view="record")
+cands = sdk.evaluate(drv, mode="python", temporal_view="active")
 ```
 
 - `mode`：`"python"` | `"engine"`
-- `temporal_view`：`"record"` | `"current"`
+- `temporal_view`：`"active"` | `"current"`
 
 说明：
 - `mode="python"` 为默认实现路径。
@@ -301,7 +303,7 @@ SDK 路径下，对象 DSL 会先 lower，再经过 schema-aware compile：
 - `LivesIn(li)` 等 exists sugar 会映射到 schema 中实际 exists predicate
 - `li.user == p` 等路径 sugar 在有 schema_ir 时会重写到对应角色谓词
 
-因此在 `SDKStore.run/evaluate` 常见路径中，record sugar 通常可以跟随 schema 自定义 `pred_id` 正确工作。  
+因此在 `SDKStore.run/evaluate` 常见路径中，entity sugar 通常可以跟随 schema 自定义 `pred_id` 正确工作。  
 在 schema 外独立 lower/compile 场景，建议优先使用 `Pred(...)` 显式谓词写法。
 
 ---

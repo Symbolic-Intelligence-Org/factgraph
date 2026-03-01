@@ -116,7 +116,7 @@ snap = sdk.get(User, source_system="APP", source_id="u1")
 rows = sdk.find(User, country="de", temporal_view="current", limit=10)
 ```
 
-- `temporal_view`: `"record"` 或 `"current"`。
+- `temporal_view`: `"active"` 或 `"current"`。
 - field 过滤是 AND 语义。
 - functional 字段按“相等”匹配。
 - multi/temporal 字段按“包含”匹配（expected 在 tuple 中）。

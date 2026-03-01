@@ -62,7 +62,7 @@ Dependency closure:
 - snapshot from `get` has `identity_available=True`
 
 ### `sdk.find(...)`
-- supports `"record"` / `"current"` temporal view
+- supports `"active"` / `"current"` temporal view
 - supports `limit`
 - unknown filters raise `SDKSchemaError`
 - if identity filters are used, all identity fields are required

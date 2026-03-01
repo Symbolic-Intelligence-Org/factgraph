@@ -384,7 +384,7 @@ rows = sdk.find(User, temporal_view="current", limit=20)
 | `entity_ref` | 按 canonical ref 精确匹配 |
 
 参数边界（稳定合约）：
-- `temporal_view` 仅支持 `"record"` / `"current"`。
+- `temporal_view` 仅支持 `"active"` / `"current"`。
 - `limit` 需为非负整数（`limit=0` 返回空列表）。
 - 传未知过滤字段会抛 `SDKSchemaError`。
 
@@ -482,7 +482,7 @@ with sdk.edit(LivesIn, uid="li-uuid-001") as rec:
 ```
 
 说明（稳定合约）：
-- record 与普通 entity 的 edit 语义一致，区别只在 identity 字段集合。
+- 实体与普通 entity 的 edit 语义一致，区别只在 identity 字段集合。
 
 ### 5.3 显式 `preview / commit / rollback`（高级用法）
 
@@ -588,7 +588,7 @@ print(result.diagnostics)
 | 层级 | 代表 key（示例） | 行为 |
 |------|------------------|------|
 | hard reserved | `ingested_at`, `ingest_key`, `revoked_asrt_id` | 不能由用户写入 |
-| sensitive semantic | `derived_rule_id`, `derived_rule_version`, `run_id`, `support_kind`, `support_digest`, `schema_digest`, `policy_digest`, `materialize_id`, `meta_origin` 等 | 默认 warning，不阻塞写入 |
+| sensitive semantic | `derived_rule_id`, `derived_rule_version`, `run_id`, `support_kind`, `support_digest`, `schema_digest`, `policy_digest`, `candidate_id`, `candidate_key`, `meta_origin` 等 | 默认 warning，不阻塞写入 |
 | convention | `source`, `source_loc`, `trace_id`, `confidence`, `approved_by`, `note` | 正常写入 |
 | free | 业务自定义 key | 正常写入（需满足底层 meta 类型约束） |
 
@@ -609,7 +609,7 @@ print(result.diagnostics)
 collect-and-stop（稳定合约）：
 - 只要 `diagnostics` 中存在任一 `severity="error"`，整批不写入（`written_assertion_ids` 为空）。
 
-### 6.5 典型场景：record 搬家
+### 6.5 典型场景：实体迁移
 
 ```python
 records = sdk.find(LivesIn, user=alice.ref)
@@ -662,7 +662,7 @@ with vars("p", "c", "l", "li", "hl") as (p, c, l, li, hl):
         version="1.0.0",
         select=[p, l],
         where=[
-            LivesIn(li),      # 先绑定 record 变量
+            LivesIn(li),      # 先绑定 实体变量
             li.user == p,     # 再写路径比较（两步）
             li.country == c,
 
@@ -833,7 +833,7 @@ print(report.warnings)
 | 场景 | 推荐入口 | 核心理由 |
 |------|---------|---------|
 | 构造一组有引用关系的对象，并希望先预览再提交 | `sdk.batch()` | 有 handle 依赖闭包 + `preview()` + wire plan |
-| 已知完整 identity，只改一个实体/record 的少量字段 | `sdk.edit(...)` | 语义最直接，自动 commit/rollback |
+| 已知完整 identity，只改一个实体 的少量字段 | `sdk.edit(...)` | 语义最直接，自动 commit/rollback |
 | 外部系统推送 item 列表，或只有 `ref + asrt_id` | `sdk.ingest(...)` | 不依赖 identity 查找，支持 per-item diagnostics |
 | 推导候选的审阅与物化 | `sdk.evaluate(...) + sdk.accept(...)` | 明确区分“候选生成”与“写入落地” |
 | 直接做单条低层写入 | `sdk.set/add/retract` | 最少封装，立即写 ledger |
@@ -895,7 +895,7 @@ print(report.warnings)
 | `EditorClosedError` | `commit/rollback` 后继续使用 editor | 重新打开一个 `sdk.edit(...)` 会话 |
 | `SDKSchemaError` | `get` 传了非 identity 字段；`find` 过滤字段非法；`find` identity 不完整 | 对照 schema 修正查询参数 |
 | `SDKStoreError` | 低层写入类型不匹配（如 entity_ref 不是 canonical ref）；`sdk.run/evaluate` 传字符串 DSL；`accept` 传未知参数 | 检查参数类型和接口边界 |
-| `SDKDSLError` | `with vars() as (p,c)`；链式 record 写法等对象 DSL 构造错误 | 改用支持语法（两步写法、named vars） |
+| `SDKDSLError` | `with vars() as (p,c)`；链式实体写法等对象 DSL 构造错误 | 改用支持语法（两步写法、named vars） |
 | `RuleCompileError`（或上层包装错误） | `RuleRef` 目标规则未 `expose=True`、where 语义不安全 | 修正规则语义/依赖规则声明 |
 | `IngestResult.diagnostics` 含 `severity="error"` | item 结构非法、item meta 非法、unknown retract asrt_id | 逐条按 `path` 修复；有 error 时整批不会写入 |
 

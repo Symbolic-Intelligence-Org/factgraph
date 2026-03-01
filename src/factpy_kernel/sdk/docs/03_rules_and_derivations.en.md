@@ -58,7 +58,7 @@ Methods:
 ## 3. `where` syntax support
 
 Supported:
-- record exists sugar: `LivesIn(li)`
+- entity exists sugar: `LivesIn(li)`
 - path equality sugar: `li.person == p`
 - predicate atom: `Pred("person:country", p, c)`
 - rule reference: `RuleRef(...)(...)`
@@ -159,7 +159,7 @@ Compatibility:
 | Old style | New style | Notes |
 |---|---|---|
 | `materialize_as="fact"` | `head=Entity.field(...)` | candidate_kind is inferred as fact |
-| `materialize_as="record"` | `head=EntityType(...)` | candidate_kind is inferred as entity (plus dependent facts) |
+| `legacy entity path` | `head=EntityType(...)` | candidate_kind is inferred as entity (plus dependent facts) |
 | `id_policy=...` | removed | identity is resolved in entity candidates; missing fields are provided via `identity_override` on accept |
 | fact payload `e_ref/rest_terms` | fact payload `terms` | `terms[0]` is always subject (arg0) |
 
@@ -235,8 +235,10 @@ Facade sugar:
 
 ### 9.1 `AcceptResult` fields
 
-- `materialize_id`
+- `candidate_id`
+- `candidate_key`
 - `run_id`
+- `candidate_kind` (optional; mirrors the accepted candidate kind)
 - `accepted_count`
 - `skipped_count`
 - `written_assertions`
@@ -275,19 +277,19 @@ Default mode is `atomic`; `best_effort` is optional.
 ### 10.1 `sdk.run(...)`
 
 ```python
-rows = sdk.run(rule, temporal_view="record")
+rows = sdk.run(rule, temporal_view="active")
 ```
 
-- `temporal_view`: `"record"` | `"current"`
+- `temporal_view`: `"active"` | `"current"`
 
 ### 10.2 `sdk.evaluate(...)`
 
 ```python
-cands = sdk.evaluate(drv, mode="python", temporal_view="record")
+cands = sdk.evaluate(drv, mode="python", temporal_view="active")
 ```
 
 - `mode`: `"python"` | `"engine"`
-- `temporal_view`: `"record"` | `"current"`
+- `temporal_view`: `"active"` | `"current"`
 
 Notes:
 - default mode is `"python"`.
@@ -301,7 +303,7 @@ In SDK path, object DSL is lowered and then schema-aware compiled:
 - exists sugar (for example `LivesIn(li)`) is rewritten to actual exists predicate in schema
 - path sugar (for example `li.user == p`) is rewritten to canonical role predicates when schema_ir is available
 
-So in standard `SDKStore.run/evaluate` flow, record sugar usually follows schema custom `pred_id` correctly.  
+So in standard `SDKStore.run/evaluate` flow, entity sugar usually follows schema custom `pred_id` correctly.  
 If you lower/compile outside schema-aware context, prefer explicit `Pred(...)`.
 
 ---
