@@ -129,7 +129,7 @@ class SDKRegistryV1Tests(unittest.TestCase):
                     head=Person.country_copy(person=e, country_copy=c),
                     where=[Pred("person:country", e, c)],
                     mode="python",
-                    temporal_view="record",
+                    temporal_view="active",
                 )
 
             derivation_res = sdk_registry.register_derivation(derivation)

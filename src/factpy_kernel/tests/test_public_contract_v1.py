@@ -66,13 +66,10 @@ class PublicContractV1Tests(unittest.TestCase):
     def test_projector_audit_contract_version_and_invariants(self) -> None:
         facts, audit = project_view_facts_with_audit(self.sdk.ledger, self.sdk.schema_ir)
         self.assertIn("person:country", facts)
-        self.assertEqual(audit.contract_version, 1)
-        self.assertEqual(audit.legacy_record_total, sum(audit.legacy_record_by_pred.values()))
-        self.assertEqual(audit.marker_conflict_total, sum(audit.marker_conflict_by_reason.values()))
-        self.assertEqual(
-            audit.committed_hidden_count_mismatch_total,
-            sum(audit.committed_hidden_count_mismatch_by_pred.values()),
-        )
+        self.assertEqual(audit.contract_version, 2)
+        self.assertGreaterEqual(audit.predicate_count, 1)
+        self.assertGreaterEqual(audit.active_claim_count, audit.selected_claim_count)
+        self.assertEqual(audit.selected_claim_count, sum(audit.selected_by_pred.values()))
 
     def test_facade_rule_string_dsl_is_rejected_with_stable_kind(self) -> None:
         body = validate_rule(

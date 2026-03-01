@@ -256,7 +256,7 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
                         "head_vars": ["$E", "$C"],
                         "where": [["pred", "person:country", ["$E", "$C"]]],
                         "mode": "python",
-                        "temporal_view": "record",
+                        "temporal_view": "active",
                     }
                 },
             )
@@ -264,7 +264,7 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
             evaluate_body = evaluate_resp.json()
             self.assertTrue(evaluate_body["ok"])
             self.assertEqual(evaluate_body["meta"]["mode"], "python")
-            self.assertEqual(evaluate_body["meta"]["temporal_view"], "record")
+            self.assertEqual(evaluate_body["meta"]["temporal_view"], "active")
             self.assertEqual(evaluate_body["meta"]["candidate_count"], 1)
             self.assertEqual(evaluate_body["meta"]["returned_count"], 1)
             self.assertFalse(evaluate_body["meta"]["truncated"])
@@ -395,12 +395,13 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
             with patch(
                 "factpy_kernel.core.store.runtime.Store.accept",
                 return_value=AcceptResult(
-                    materialize_id="mat_v1:aborted",
                     run_id="run-aborted",
                     accepted_count=0,
                     skipped_count=1,
                     written_assertions=[],
                     skipped_reason_counts={"aborted": 1},
+                    candidate_id="cand_v2:aborted",
+                    candidate_key="candk_v2:aborted",
                     diagnostics=[
                         {
                             "code": "CANDIDATE_ACCEPT_ABORTED",
@@ -647,7 +648,7 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
 
             view_resp = self.client.post(
                 f"/v1/runtime/sessions/{session_id}/queries/view-facts",
-                json={"temporal_view": "record", "legacy_record_visibility": "allow"},
+                json={"temporal_view": "active"},
             )
             self.assertEqual(view_resp.status_code, 200)
             view_body = view_resp.json()
@@ -655,8 +656,7 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
             self.assertEqual(
                 view_body["meta"],
                 {
-                    "temporal_view": "record",
-                    "legacy_record_visibility": "allow",
+                    "temporal_view": "active",
                     "pred_count": 4,
                     "total_tuple_count": 2,
                 },
@@ -695,26 +695,22 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
             view_body = view_resp.json()
             self.assertTrue(view_body["ok"])
             self.assertEqual(view_body["meta"]["temporal_view"], "active")
-            self.assertEqual(view_body["meta"]["legacy_record_visibility"], "allow")
             self.assertEqual(view_body["meta"]["pred_count"], 4)
             self.assertEqual(view_body["meta"]["total_tuple_count"], 1)
             self.assertEqual(view_body["view"]["facts"]["person:country"], [[self.person_ref, "de"]])
             self.assertEqual(
                 view_body["view"]["audit"],
                 {
-                    "contract_version": 1,
-                    "legacy_record_total": 0,
-                    "legacy_record_by_pred": {},
-                    "legacy_exists_without_roles_total": 0,
-                    "legacy_exists_without_roles_by_pred": {},
-                    "marker_conflict_total": 0,
-                    "marker_conflict_by_reason": {},
-                    "committed_hidden_count_mismatch_total": 0,
-                    "committed_hidden_count_mismatch_by_pred": {},
+                    "contract_version": 2,
+                    "predicate_count": 4,
+                    "active_claim_count": 1,
+                    "selected_claim_count": 1,
+                    "selected_by_pred": {"person:country": 1},
+                    "dropped_by_policy_count": 0,
                 },
             )
 
-    def test_runtime_query_view_facts_rejects_invalid_legacy_record_visibility(self) -> None:
+    def test_runtime_query_view_facts_rejects_invalid_temporal_view(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             ledger_path = str(Path(tmp) / "runtime" / "ledger.db")
             open_resp = self.client.post(
@@ -726,13 +722,13 @@ class ServiceRuntimeV1RoutesTests(unittest.TestCase):
 
             view_resp = self.client.post(
                 f"/v1/runtime/sessions/{session_id}/queries/view-facts",
-                json={"legacy_record_visibility": "visible"},
+                json={"temporal_view": "legacy"},
             )
             self.assertEqual(view_resp.status_code, 200)
             view_body = view_resp.json()
             self.assertFalse(view_body["ok"])
             self.assertEqual(view_body["errors"][0]["kind"], "shape")
-            self.assertEqual(view_body["errors"][0]["path"], "$.legacy_record_visibility")
+            self.assertEqual(view_body["errors"][0]["path"], "$.temporal_view")
 
     def test_registry_read_routes_do_not_trigger_registry_writes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1007,7 +1003,7 @@ def _build_registry(
                 "head_vars": ["$E", "$V"],
                 "where": [("pred", pred_id, ["$E", "$V"])],
                 "mode": "python",
-                "temporal_view": "record",
+                "temporal_view": "active",
             }
         )
     return registry

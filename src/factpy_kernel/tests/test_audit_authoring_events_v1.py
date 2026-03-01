@@ -115,7 +115,7 @@ def _derivation_request() -> dict:
         "head_vars": ["$E", "$C"],
         "where": [("pred", "person:country", ["$E", "$C"])],
         "mode": "python",
-        "temporal_view": "record",
+        "temporal_view": "active",
     }
 
 

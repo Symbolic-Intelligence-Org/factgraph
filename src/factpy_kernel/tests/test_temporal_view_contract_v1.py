@@ -81,7 +81,7 @@ class TemporalViewContractV1Tests(unittest.TestCase):
             head_vars=["$E", "$year", "$amount"],
             where=[("pred", self.pred_id, ["$E", "$year", "$amount"])],
             mode="python",
-            temporal_view="record",
+            temporal_view="active",
         )
 
         self.assertEqual(len(candidates), 1)

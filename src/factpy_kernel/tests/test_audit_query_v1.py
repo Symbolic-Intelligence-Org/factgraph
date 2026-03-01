@@ -28,7 +28,7 @@ class AuditQueryV1Tests(unittest.TestCase):
                 "derived_rule_id": "rule.accept",
                 "derived_rule_version": "v1",
                 "run_id": "run-auditq-1",
-                "materialize_id": "mat-auditq-1",
+                "candidate_id": "cand_v2:auditq_1",
                 "key_tuple_digest": "sha256:" + ("1" * 64),
                 "cand_key_digest": "sha256:" + ("2" * 64),
                 "support_digest": "sha256:" + ("3" * 64),
@@ -46,7 +46,7 @@ class AuditQueryV1Tests(unittest.TestCase):
         self.assertIsNone(data.run_manifest)
         self.assertEqual(len(data.run_ledger), 1)
         self.assertEqual(len(data.candidate_ledger), 1)
-        self.assertEqual(len(data.materialize_ledger), 1)
+        self.assertEqual(len(data.accept_write_ledger), 1)
         self.assertEqual(len(data.decision_log), 2)
         self.assertEqual(len(data.accept_failed), 0)
         self.assertIsInstance(data.mapping_resolution, dict)
@@ -64,7 +64,7 @@ class AuditQueryV1Tests(unittest.TestCase):
                 "source": "derivation.accept",
                 "source_loc": "rule:v1",
                 "run_id": "run-auditq-2",
-                "materialize_id": "mat-auditq-2",
+                "candidate_id": "cand_v2:auditq_2",
                 "derived_rule_id": "rule.accept",
                 "derived_rule_version": "v1",
                 "key_tuple_digest": "sha256:" + ("4" * 64),
@@ -86,7 +86,7 @@ class AuditQueryV1Tests(unittest.TestCase):
 
         bundle = query.get_run_bundle("run-auditq-2")
         self.assertEqual(bundle["run"]["run_id"], "run-auditq-2")
-        self.assertEqual(len(bundle["materializations"]), 1)
+        self.assertEqual(len(bundle["accept_writes"]), 1)
         self.assertEqual(len(bundle["candidates"]), 1)
         self.assertEqual(len(bundle["decisions"]), 2)
         self.assertEqual(len(bundle["failures"]), 0)

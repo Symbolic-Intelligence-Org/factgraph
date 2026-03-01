@@ -14,7 +14,7 @@ class AuthoringDerivationCompileV1Tests(unittest.TestCase):
                 "select": ["E", "country"],
                 "body": [("pred", "person:country", ["$E", "$country"])],
                 "mode": "python",
-                "temporal_view": "record",
+                "temporal_view": "active",
             }
         )
         self.assertEqual(payload["derivation_id"], "drv.country")

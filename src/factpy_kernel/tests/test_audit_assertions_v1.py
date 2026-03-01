@@ -18,7 +18,7 @@ class AuditAssertionsV1Tests(unittest.TestCase):
             pred_id="person:tag",
             e_ref="idref_v1:Person:audit-assertions-1",
             rest_terms=[("string", "vip")],
-            meta={"source": "seed", "run_id": "run-aa-1", "materialize_id": "mat-aa-1"},
+            meta={"source": "seed", "run_id": "run-aa-1", "candidate_id": "cand_v2:aa_1"},
         )
 
         with tempfile.TemporaryDirectory() as tmp:

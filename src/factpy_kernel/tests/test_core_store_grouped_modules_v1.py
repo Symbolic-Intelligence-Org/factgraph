@@ -35,7 +35,7 @@ class CoreStoreGroupedModulesV1Tests(unittest.TestCase):
             head_vars=["$E", "$C"],
             where=[("pred", "person:country", ["$E", "$C"])],
             mode="python",
-            temporal_view="record",
+            temporal_view="active",
             head=None,
             engine_evaluate=store.evaluate_engine,
         )

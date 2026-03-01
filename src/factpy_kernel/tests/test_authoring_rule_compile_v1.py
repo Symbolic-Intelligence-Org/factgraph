@@ -77,7 +77,7 @@ class AuthoringRuleCompileV1Tests(unittest.TestCase):
                 schema_ir=schema,
             )
         self.assertEqual(ctx.exception.path, "$.where[0]")
-        self.assertIn("record exists predicate not found in schema for LivesIn", str(ctx.exception))
+        self.assertIn("entity exists predicate not found in schema for LivesIn", str(ctx.exception))
 
 
 def _schema_for_where_record_sugar() -> dict:

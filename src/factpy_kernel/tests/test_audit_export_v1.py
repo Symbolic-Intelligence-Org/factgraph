@@ -27,7 +27,7 @@ class AuditExportV1Tests(unittest.TestCase):
                 "derived_rule_id": "rule.accept",
                 "derived_rule_version": "v1",
                 "run_id": "run-ledger-1",
-                "materialize_id": "mat-ledger-1",
+                "candidate_id": "cand_v2:ledger_1",
                 "key_tuple_digest": "sha256:" + ("1" * 64),
                 "cand_key_digest": "sha256:" + ("2" * 64),
                 "support_digest": "sha256:" + ("3" * 64),
@@ -48,7 +48,7 @@ class AuditExportV1Tests(unittest.TestCase):
             required_keys = {
                 "run_ledger",
                 "candidate_ledger",
-                "materialize_ledger",
+                "accept_write_ledger",
                 "accept_failed",
                 "mapping_resolution",
                 "decision_log",
@@ -57,10 +57,10 @@ class AuditExportV1Tests(unittest.TestCase):
 
             run_ledger_path = Path(tmp) / "pkg" / audit_files["run_ledger"]
             candidate_ledger_path = Path(tmp) / "pkg" / audit_files["candidate_ledger"]
-            materialize_ledger_path = Path(tmp) / "pkg" / audit_files["materialize_ledger"]
+            accept_write_ledger_path = Path(tmp) / "pkg" / audit_files["accept_write_ledger"]
             accept_failed_path = Path(tmp) / "pkg" / audit_files["accept_failed"]
             decision_log_path = Path(tmp) / "pkg" / audit_files["decision_log"]
-            for path in [run_ledger_path, candidate_ledger_path, materialize_ledger_path, accept_failed_path, decision_log_path]:
+            for path in [run_ledger_path, candidate_ledger_path, accept_write_ledger_path, accept_failed_path, decision_log_path]:
                 self.assertTrue(path.exists())
 
             run_rows = [
@@ -71,7 +71,7 @@ class AuditExportV1Tests(unittest.TestCase):
             self.assertEqual(len(run_rows), 1)
             self.assertEqual(run_rows[0]["run_id"], "run-ledger-1")
             self.assertEqual(run_rows[0]["claim_count"], 1)
-            self.assertEqual(run_rows[0]["materialize_ids"], ["mat-ledger-1"])
+            self.assertEqual(run_rows[0]["candidate_ids"], ["cand_v2:ledger_1"])
             self.assertEqual(run_rows[0]["pred_ids"], ["er:canon_of"])
             self.assertEqual(len(run_rows[0]["decision_ids"]), 2)
             self.assertEqual(run_rows[0]["decision_count"], 2)
@@ -100,16 +100,16 @@ class AuditExportV1Tests(unittest.TestCase):
             self.assertEqual(run_rows[0]["event_ts_min"], 123456789)
             self.assertEqual(run_rows[0]["event_ts_max"], 123456789)
 
-            materialize_rows = [
+            accept_write_rows = [
                 json.loads(line)
-                for line in materialize_ledger_path.read_text(encoding="utf-8").splitlines()
+                for line in accept_write_ledger_path.read_text(encoding="utf-8").splitlines()
                 if line.strip()
             ]
-            self.assertEqual(len(materialize_rows), 1)
-            self.assertEqual(materialize_rows[0]["asrt_id"], asrt_id)
-            self.assertEqual(materialize_rows[0]["materialize_id"], "mat-ledger-1")
-            self.assertEqual(materialize_rows[0]["run_id"], "run-ledger-1")
-            self.assertEqual(materialize_rows[0]["ingested_at"], 123456789)
+            self.assertEqual(len(accept_write_rows), 1)
+            self.assertEqual(accept_write_rows[0]["asrt_id"], asrt_id)
+            self.assertEqual(accept_write_rows[0]["candidate_id"], "cand_v2:ledger_1")
+            self.assertEqual(accept_write_rows[0]["run_id"], "run-ledger-1")
+            self.assertEqual(accept_write_rows[0]["ingested_at"], 123456789)
 
             decision_rows = [
                 json.loads(line)
@@ -124,7 +124,7 @@ class AuditExportV1Tests(unittest.TestCase):
             self.assertTrue(decision_rows[0]["decision_id"].startswith("accept_write:"))
             self.assertTrue(decision_rows[1]["decision_id"].startswith("mapping_decision:"))
             self.assertEqual(decision_rows[1]["run_ids"], ["run-ledger-1"])
-            self.assertEqual(decision_rows[1]["materialize_ids"], ["mat-ledger-1"])
+            self.assertEqual(decision_rows[1]["candidate_ids"], ["cand_v2:ledger_1"])
             self.assertEqual(decision_rows[0]["event_ts"], 123456789)
             self.assertEqual(decision_rows[1]["event_ts"], 123456789)
 
@@ -254,9 +254,9 @@ class AuditExportV1Tests(unittest.TestCase):
         self.assertEqual(decision_rows[0]["decision_id"], accept_failed_rows[0]["decision_id"])
         self.assertTrue(decision_rows[0]["decision_id"].startswith("mapping_conflict:"))
         self.assertEqual(decision_rows[0]["run_ids"], [])
-        self.assertEqual(decision_rows[0]["materialize_ids"], [])
+        self.assertEqual(decision_rows[0]["candidate_ids"], [])
         self.assertEqual(accept_failed_rows[0]["run_ids"], [])
-        self.assertEqual(accept_failed_rows[0]["materialize_ids"], [])
+        self.assertEqual(accept_failed_rows[0]["candidate_ids"], [])
         self.assertIsInstance(decision_rows[0]["event_ts"], int)
         self.assertEqual(accept_failed_rows[0]["event_ts"], decision_rows[0]["event_ts"])
 
@@ -360,9 +360,9 @@ class AuditExportV1Tests(unittest.TestCase):
         self.assertEqual([row["event_source"] for row in idb_decision_rows], ["mapping"])
         self.assertEqual(idb_accept_failed_rows[0]["decision_id"], idb_decision_rows[0]["decision_id"])
         self.assertEqual(idb_decision_rows[0]["run_ids"], [])
-        self.assertEqual(idb_decision_rows[0]["materialize_ids"], [])
+        self.assertEqual(idb_decision_rows[0]["candidate_ids"], [])
         self.assertEqual(idb_accept_failed_rows[0]["run_ids"], [])
-        self.assertEqual(idb_accept_failed_rows[0]["materialize_ids"], [])
+        self.assertEqual(idb_accept_failed_rows[0]["candidate_ids"], [])
         self.assertIsNone(idb_decision_rows[0]["event_ts"])
         self.assertIsNone(idb_accept_failed_rows[0]["event_ts"])
 

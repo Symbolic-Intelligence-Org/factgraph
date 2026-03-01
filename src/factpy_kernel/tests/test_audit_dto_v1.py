@@ -32,7 +32,7 @@ class AuditDTOV1Tests(unittest.TestCase):
             meta={
                 "source": "derivation.accept",
                 "run_id": "run-auditdto-1",
-                "materialize_id": "mat-auditdto-1",
+                "candidate_id": "cand_v2:auditdto_1",
                 "derived_rule_id": "rule.accept",
                 "derived_rule_version": "v1",
                 "key_tuple_digest": "sha256:" + ("1" * 64),
@@ -51,7 +51,7 @@ class AuditDTOV1Tests(unittest.TestCase):
         self.assertEqual(payload["runs"][0]["run_id"], "run-auditdto-1")
         self.assertEqual(payload["runs"][0]["claim_count"], 1)
         self.assertEqual(payload["runs"][0]["has_failures"], False)
-        self.assertEqual(payload["runs"][0]["materialize_ids"], ["mat-auditdto-1"])
+        self.assertEqual(payload["runs"][0]["candidate_ids"], ["cand_v2:auditdto_1"])
 
     def test_build_run_detail_dto_contains_timeline(self) -> None:
         store = Store(schema_ir=_mapping_schema(tie_break="latest_by_ingested_at_then_min_assertion_id"))
@@ -63,7 +63,7 @@ class AuditDTOV1Tests(unittest.TestCase):
             meta={
                 "source": "derivation.accept",
                 "run_id": "run-auditdto-2",
-                "materialize_id": "mat-auditdto-2",
+                "candidate_id": "cand_v2:auditdto_2",
                 "derived_rule_id": "rule.accept",
                 "derived_rule_version": "v1",
                 "key_tuple_digest": "sha256:" + ("4" * 64),
@@ -78,7 +78,7 @@ class AuditDTOV1Tests(unittest.TestCase):
         payload = build_run_detail_dto(query, "run-auditdto-2")
         self.assertEqual(payload["kind"], "run_detail")
         self.assertEqual(payload["run_id"], "run-auditdto-2")
-        self.assertEqual(payload["stats"]["materialization_count"], 1)
+        self.assertEqual(payload["stats"]["accept_write_count"], 1)
         self.assertEqual(payload["stats"]["candidate_count"], 1)
         self.assertEqual(payload["stats"]["decision_count"], 2)
         self.assertEqual(payload["stats"]["failure_count"], 0)
@@ -96,7 +96,7 @@ class AuditDTOV1Tests(unittest.TestCase):
             meta={
                 "source": "derivation.accept",
                 "run_id": "run-auditdto-3",
-                "materialize_id": "mat-auditdto-3",
+                "candidate_id": "cand_v2:auditdto_3",
                 "derived_rule_id": "rule.accept",
                 "derived_rule_version": "v1",
                 "key_tuple_digest": "sha256:" + ("7" * 64),
@@ -111,11 +111,11 @@ class AuditDTOV1Tests(unittest.TestCase):
         accept_payload = build_decision_detail_dto(accept_query, accept_decision)
         self.assertEqual(accept_payload["kind"], "decision_detail")
         self.assertEqual(accept_payload["decision"]["event_kind"], "accept_write")
-        self.assertEqual(len(accept_payload["materializations"]), 1)
+        self.assertEqual(len(accept_payload["accept_writes"]), 1)
         self.assertEqual(len(accept_payload["candidates"]), 1)
         self.assertEqual(len(accept_payload["failures"]), 0)
         self.assertEqual(accept_payload["related"]["run_ids"], ["run-auditdto-3"])
-        self.assertEqual(accept_payload["related"]["materialize_ids"], ["mat-auditdto-3"])
+        self.assertEqual(accept_payload["related"]["candidate_ids"], ["cand_v2:auditdto_3"])
 
         conflict_store = Store(schema_ir=_mapping_schema(tie_break=None))
         set_field(
@@ -136,7 +136,7 @@ class AuditDTOV1Tests(unittest.TestCase):
         failure_decision = conflict_query.list_decisions(event_kind="mapping_conflict")[0]["decision_id"]
         failure_payload = build_decision_detail_dto(conflict_query, failure_decision)
         self.assertEqual(failure_payload["decision"]["event_kind"], "mapping_conflict")
-        self.assertEqual(len(failure_payload["materializations"]), 0)
+        self.assertEqual(len(failure_payload["accept_writes"]), 0)
         self.assertEqual(len(failure_payload["candidates"]), 0)
         self.assertEqual(len(failure_payload["failures"]), 1)
         self.assertEqual(failure_payload["related"]["run_ids"], ["run-auditdto-4"])

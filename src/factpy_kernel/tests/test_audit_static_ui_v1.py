@@ -24,7 +24,7 @@ class AuditStaticUIV1Tests(unittest.TestCase):
             meta={
                 "source": "derivation.accept",
                 "run_id": "run-auditui-1",
-                "materialize_id": "mat-auditui-1",
+                "candidate_id": "cand_v2:auditui_1",
                 "derived_rule_id": "rule.accept",
                 "derived_rule_version": "v1",
                 "key_tuple_digest": "sha256:" + ("a" * 64),

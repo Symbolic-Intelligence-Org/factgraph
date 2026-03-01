@@ -21,7 +21,7 @@ country_derivation = Derivation(
     select=["E", "country"],
     body=[("pred","person:country",["$E","$country"])],
     mode="python",
-    temporal_view="record"
+    temporal_view="active"
 )
 """
         )
