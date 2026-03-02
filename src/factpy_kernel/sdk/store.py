@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
+import warnings
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -18,12 +20,25 @@ from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Ledger
 
 from .compile import compile_schema_from_classes
+from .error_codes import (
+    INVALID_ROW_FORMAT,
+    QUERY_INVALID_ROW_FORMAT,
+)
 from .errors import SDKSchemaError, SDKStoreError
+from .query_lower import QueryPlan, lower_query
+from .query_runtime import execute_query_plan
 from .schema import Entity, Field
 
 
 class SDKStore:
-    def __init__(self, classes: list[type[Entity]], *, store: Store | None = None, schema_ir: dict | None = None) -> None:
+    def __init__(
+        self,
+        classes: list[type[Entity]],
+        *,
+        store: Store | None = None,
+        schema_ir: dict | None = None,
+        default_row_format: str | None = None,
+    ) -> None:
         if not isinstance(classes, list) or not classes:
             raise SDKStoreError("classes must be non-empty list[Entity]")
         self._classes = list(classes)
@@ -35,9 +50,13 @@ class SDKStore:
             raise SDKStoreError("provide either store or schema_ir (or matching store.schema_ir)")
         self._store = store if store is not None else Store(schema_ir=schema_ir or compile_schema_from_classes(self._classes))
         self._schema_ir = self._store.schema_ir
+        self._schema_digest = schema_digest(self._schema_ir)
         self._field_pred_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._field_decl_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._entity_spec_by_class: dict[type[Entity], dict[str, Any]] = {}
+        self._default_row_format = default_row_format
+        # Read once at init time; do not re-read env on each run().
+        self._env_row_format = os.environ.get("FACTPY_ROW_FORMAT")
         self._index_schema()
 
     @classmethod
@@ -47,6 +66,7 @@ class SDKStore:
         *,
         ledger: Ledger | None = None,
         ledger_path: str | None = None,
+        default_row_format: str | None = None,
     ) -> "SDKStore":
         if ledger is not None and ledger_path is not None:
             raise SDKStoreError("provide either ledger or ledger_path, not both")
@@ -68,7 +88,11 @@ class SDKStore:
                     "Use the same Entity classes that were used when this ledger was created."
                 )
 
-        return cls(classes, store=Store(schema_ir=schema_ir, ledger=ledger))
+        return cls(
+            classes,
+            store=Store(schema_ir=schema_ir, ledger=ledger),
+            default_row_format=default_row_format,
+        )
 
     @property
     def store(self) -> Store:
@@ -187,11 +211,95 @@ class SDKStore:
 
     def run(
         self,
-        rule: Any,
+        obj: Any,
         *,
+        row_format: str | None = None,
         temporal_view: str = "active",
         registry: RuleRegistry | None = None,
-    ) -> list[tuple[Any, ...]]:
+    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
+        dispatch_key = self._run_dispatch_key(obj)
+        dispatch_map = {
+            "query": self._run_dispatch_query,
+            "derivation": self._run_dispatch_derivation,
+            "rule": self._run_dispatch_rule,
+        }
+        return dispatch_map[dispatch_key](
+            obj,
+            row_format=row_format,
+            temporal_view=temporal_view,
+            registry=registry,
+        )
+
+    def _run_dispatch_key(self, obj: Any) -> str:
+        detectors = (
+            ("query", _is_sdk_query_object),
+            ("derivation", _is_derivation_run_object),
+        )
+        for key, detector in detectors:
+            if detector(obj):
+                return key
+        return "rule"
+
+    def _run_dispatch_query(
+        self,
+        query: Any,
+        *,
+        row_format: str | None,
+        temporal_view: str,
+        registry: RuleRegistry | None,  # reserved for unified run() signature
+    ) -> list[dict[str, Any]]:
+        del registry
+        if row_format is not None:
+            raise SDKStoreError(
+                "row_format is not supported for Query; Query always returns dict",
+                code=QUERY_INVALID_ROW_FORMAT,
+                path="$.run.row_format",
+            )
+        return self._run_query(query, temporal_view=temporal_view)
+
+    def _run_dispatch_derivation(
+        self,
+        derivation: Any,
+        *,
+        row_format: str | None,
+        temporal_view: str,
+        registry: RuleRegistry | None,
+    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
+        del derivation, row_format, temporal_view, registry
+        raise SDKStoreError(
+            "Derivation is not supported by run(); use sdk.evaluate() instead",
+            code=QUERY_INVALID_ROW_FORMAT,
+            path="$.run.obj",
+        )
+
+    def _run_dispatch_rule(
+        self,
+        rule: Any,
+        *,
+        row_format: str | None,
+        temporal_view: str,
+        registry: RuleRegistry | None,
+    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
+        resolved_row_format = _resolve_row_format(
+            call_site=row_format,
+            store_default=self._default_row_format,
+            env_var=self._env_row_format,
+        )
+        return self._run_rule(
+            rule,
+            row_format=resolved_row_format,
+            temporal_view=temporal_view,
+            registry=registry,
+        )
+
+    def _run_rule(
+        self,
+        rule: Any,
+        *,
+        row_format: str,
+        temporal_view: str,
+        registry: RuleRegistry | None,
+    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
         if isinstance(rule, str):
             raise SDKStoreError(
                 "string rule DSL is not supported in SDK v1; use Rule object, RuleSpec, or structured rule dict"
@@ -207,7 +315,29 @@ class SDKStore:
         active_registry = registry if registry is not None else RuleRegistry()
         if registry is None:
             self._register_rule_dependencies(active_registry, rule)
-        return run_rule(self._store, rule_spec, active_registry, temporal_view=temporal_view)
+        rows = run_rule(self._store, rule_spec, active_registry, temporal_view=temporal_view)
+        return _format_rule_rows(rows, select_vars=list(rule_spec.select_vars), row_format=row_format)
+
+    def _run_query(self, query: Any, *, temporal_view: str) -> list[dict[str, Any]]:
+        plan = self._lower_query(query, temporal_view=temporal_view)
+        return execute_query_plan(self, plan)
+
+    def _lower_query(self, query: Any, *, temporal_view: str) -> QueryPlan:
+        try:
+            from .dsl import Query as SDKQuery
+        except Exception as exc:
+            raise SDKStoreError(f"Query DSL is unavailable: {exc}", path="$.run.obj") from exc
+
+        if not isinstance(query, SDKQuery):
+            raise SDKStoreError("query must be Query", path="$.run.obj")
+
+        return lower_query(
+            query,
+            temporal_view=temporal_view,
+            schema_ir=self._schema_ir,
+            schema_digest=self._schema_digest,
+            return_mode="dict",
+        )
 
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
         if args and isinstance(args[0], str):
@@ -216,30 +346,71 @@ class SDKStore:
             )
         if args and hasattr(args[0], "to_authoring_payload"):
             derivation = args[0]
-            compiled = self._compile_derivation_input(derivation)
-            return self._store.evaluate(
-                derivation_id=compiled["derivation_id"],
-                version=compiled["version"],
-                target_pred_id=compiled["target_pred_id"],
-                head_vars=list(compiled["head_vars"]),
-                where=list(compiled["where"]),
-                mode=kwargs.pop("mode", compiled.get("mode", "python")),
-                temporal_view=kwargs.pop("temporal_view", compiled.get("temporal_view", "active")),
-                head=compiled.get("head"),
+            compiled_plans = self._compile_derivation_input(derivation)
+            return self._evaluate_compiled_derivation_plans(
+                compiled_plans,
+                mode=kwargs.pop("mode", None),
+                temporal_view=kwargs.pop("temporal_view", None),
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
-            compiled = self._compile_derivation_input(args[0])
-            return self._store.evaluate(
-                derivation_id=compiled["derivation_id"],
-                version=compiled["version"],
-                target_pred_id=compiled["target_pred_id"],
-                head_vars=list(compiled["head_vars"]),
-                where=list(compiled["where"]),
-                mode=kwargs.pop("mode", compiled.get("mode", "python")),
-                temporal_view=kwargs.pop("temporal_view", compiled.get("temporal_view", "active")),
-                head=compiled.get("head"),
+            compiled_plans = self._compile_derivation_input(args[0])
+            return self._evaluate_compiled_derivation_plans(
+                compiled_plans,
+                mode=kwargs.pop("mode", None),
+                temporal_view=kwargs.pop("temporal_view", None),
             )
         return self._store.evaluate(*args, **kwargs)
+
+    def _evaluate_compiled_derivation_plans(
+        self,
+        compiled_plans: list[dict[str, Any]],
+        *,
+        mode: str | None,
+        temporal_view: str | None,
+    ) -> list[CandidateSet]:
+        if len(compiled_plans) == 1:
+            return self._evaluate_single_derivation_plan(
+                compiled_plans[0],
+                mode=mode,
+                temporal_view=temporal_view,
+            )
+
+        shared_run_id = self._derive_shared_run_id(compiled_plans[0]["derivation_id"])
+        merged: list[CandidateSet] = []
+        for plan in compiled_plans:
+            plan_candidates = self._evaluate_single_derivation_plan(
+                plan,
+                mode=mode,
+                temporal_view=temporal_view,
+            )
+            merged.extend(_with_candidate_run_id(plan_candidates, run_id=shared_run_id))
+        return merged
+
+    def _evaluate_single_derivation_plan(
+        self,
+        compiled: dict[str, Any],
+        *,
+        mode: str | None,
+        temporal_view: str | None,
+    ) -> list[CandidateSet]:
+        resolved_mode = mode if mode is not None else compiled.get("mode", "python")
+        resolved_temporal_view = temporal_view if temporal_view is not None else compiled.get("temporal_view", "active")
+        return self._store.evaluate(
+            derivation_id=compiled["derivation_id"],
+            version=compiled["version"],
+            target_pred_id=compiled["target_pred_id"],
+            head_vars=list(compiled["head_vars"]),
+            where=list(compiled["where"]),
+            mode=resolved_mode,
+            temporal_view=resolved_temporal_view,
+            head=compiled.get("head"),
+        )
+
+    @staticmethod
+    def _derive_shared_run_id(derivation_id: Any) -> str:
+        if isinstance(derivation_id, str) and derivation_id:
+            return f"{derivation_id}:{uuid4().hex[:8]}"
+        return f"derive:{uuid4().hex[:8]}"
 
     def evaluate_compiled(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
         return self._store.evaluate(*args, **kwargs)
@@ -341,15 +512,15 @@ class SDKStore:
         for dep in deps:
             add_dep(dep)
 
-    def _compile_derivation_input(self, derivation: Any) -> dict[str, Any]:
+    def _compile_derivation_input(self, derivation: Any) -> list[dict[str, Any]]:
         if isinstance(derivation, dict) and {
             "derivation_id",
             "version",
             "target_pred_id",
             "head_vars",
             "where",
-        }.issubset(set(derivation.keys())):
-            return dict(derivation)
+        }.issubset(set(derivation.keys())) and not isinstance(derivation.get("head"), list):
+            return [dict(derivation)]
         if hasattr(derivation, "to_authoring_payload"):
             payload = derivation.to_authoring_payload()
         elif isinstance(derivation, dict):
@@ -358,8 +529,12 @@ class SDKStore:
             raise SDKStoreError(
                 "derivation must be SDK Derivation object, compiled derivation dict, or authoring derivation payload dict"
             )
+        payloads = _expand_authoring_derivation_heads(payload)
         try:
-            return compile_authoring_derivation_v1(payload, schema_ir=self._schema_ir)
+            return [
+                compile_authoring_derivation_v1(single_payload, schema_ir=self._schema_ir)
+                for single_payload in payloads
+            ]
         except Exception as exc:
             raise SDKStoreError(f"invalid derivation input: {exc}") from exc
 
@@ -546,3 +721,156 @@ def _coerce_sdk_value_to_tag(tag: str, value: Any) -> Any:
             return value
         raise SDKStoreError("float64 field expects float or 0x<16hex> string")
     raise SDKStoreError(f"unsupported type_domain: {tag}")
+
+
+def _expand_authoring_derivation_heads(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    head = payload.get("head")
+    if not isinstance(head, list):
+        return [dict(payload)]
+    if not head:
+        raise SDKStoreError("derivation head list must be non-empty", path="$.head")
+
+    expanded: list[dict[str, Any]] = []
+    for idx, head_item in enumerate(head):
+        if not isinstance(head_item, dict):
+            raise SDKStoreError("derivation head list item must be object", path=f"$.head[{idx}]")
+        item_payload = dict(payload)
+        item_payload["head"] = dict(head_item)
+        expanded.append(item_payload)
+    return expanded
+
+
+def _with_candidate_run_id(candidates: list[CandidateSet], *, run_id: str) -> list[CandidateSet]:
+    rewritten: list[CandidateSet] = []
+    for candidate in candidates:
+        rewritten.append(
+            CandidateSet(
+                derivation_id=candidate.derivation_id,
+                derivation_version=candidate.derivation_version,
+                run_id=run_id,
+                target=candidate.target,
+                key_tuple_digest=candidate.key_tuple_digest,
+                tup_digest=candidate.tup_digest,
+                payload=dict(candidate.payload),
+                support_digest=candidate.support_digest,
+                support_kind=candidate.support_kind,
+                generated_at=candidate.generated_at,
+                state=candidate.state,
+                candidate_key=candidate.candidate_key,
+                candidate_kind=candidate.candidate_kind,
+            )
+        )
+    return rewritten
+
+
+def _resolve_row_format(*, call_site: Any, store_default: Any, env_var: Any) -> str:
+    for raw_value, path, source in (
+        (call_site, "$.run.row_format", "call_site"),
+        (store_default, "$.store.default_row_format", "store_default"),
+        (env_var, "env:FACTPY_ROW_FORMAT", "env_var"),
+    ):
+        normalized = _normalize_row_format_value(raw_value, path=path)
+        if normalized is not None:
+            _warn_deprecated_tuple_row_format_if_needed(normalized, source=source)
+            return normalized
+    return "dict"
+
+
+def _normalize_row_format_value(value: Any, *, path: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise SDKStoreError(
+            "row_format must be 'tuple' or 'dict'",
+            code=INVALID_ROW_FORMAT,
+            path=path,
+        )
+    normalized = value.strip().lower()
+    if normalized not in {"tuple", "dict"}:
+        raise SDKStoreError(
+            "row_format must be 'tuple' or 'dict'",
+            code=INVALID_ROW_FORMAT,
+            path=path,
+        )
+    return normalized
+
+
+def _warn_deprecated_tuple_row_format_if_needed(normalized: str, *, source: str) -> None:
+    if normalized != "tuple":
+        return
+    warnings.warn(
+        "row_format='tuple' is deprecated and will be removed in a future release "
+        f"(source={source}); use row_format='dict' or set FACTPY_ROW_FORMAT=dict.",
+        DeprecationWarning,
+        stacklevel=4,
+    )
+
+
+def _format_rule_rows(
+    rows: list[tuple[Any, ...]],
+    *,
+    select_vars: list[str],
+    row_format: str,
+) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
+    if row_format == "tuple":
+        return rows
+    if row_format != "dict":
+        raise SDKStoreError(
+            "row_format must be 'tuple' or 'dict'",
+            code=INVALID_ROW_FORMAT,
+            path="$.run.row_format",
+        )
+
+    columns: list[str] = []
+    seen: set[str] = set()
+    for idx, var in enumerate(select_vars):
+        if not isinstance(var, str) or not var:
+            raise SDKStoreError(
+                "rule select_vars must be non-empty strings for row_format='dict'",
+                code=INVALID_ROW_FORMAT,
+                path=f"$.rule.select_vars[{idx}]",
+            )
+        key = var[1:] if var.startswith("$") else var
+        if not key:
+            raise SDKStoreError(
+                "rule select_vars must not be empty for row_format='dict'",
+                code=INVALID_ROW_FORMAT,
+                path=f"$.rule.select_vars[{idx}]",
+            )
+        if key in seen:
+            raise SDKStoreError(
+                f"rule select_vars are not unique after alias normalization: {key}",
+                code=INVALID_ROW_FORMAT,
+                path=f"$.rule.select_vars[{idx}]",
+            )
+        seen.add(key)
+        columns.append(key)
+
+    out: list[dict[str, Any]] = []
+    for row_index, row in enumerate(rows):
+        if len(row) != len(columns):
+            raise SDKStoreError(
+                f"row arity mismatch at row {row_index}: expected {len(columns)}, got {len(row)}",
+                code=INVALID_ROW_FORMAT,
+                path="$.run.result",
+            )
+        out.append({col: row[col_index] for col_index, col in enumerate(columns)})
+    return out
+
+
+def _is_sdk_query_object(obj: Any) -> bool:
+    try:
+        from .dsl import Query
+    except Exception:
+        return False
+    return isinstance(obj, Query)
+
+
+def _is_derivation_run_object(obj: Any) -> bool:
+    if isinstance(obj, dict):
+        return any(key in obj for key in ("derivation_id", "target_pred_id", "head"))
+    try:
+        from .dsl import Derivation
+    except Exception:
+        return False
+    return isinstance(obj, Derivation)

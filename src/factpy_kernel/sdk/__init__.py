@@ -14,10 +14,19 @@ from .errors import (
     SDKSchemaError,
     SDKStoreError,
 )
+from .error_codes import (
+    INVALID_ROW_FORMAT,
+    QUERY_ALIAS_CONFLICT,
+    QUERY_INVALID_ROW_FORMAT,
+    QUERY_MISSING_REF,
+    QUERY_NOT_IMPLEMENTED,
+    QUERY_TYPE_MISMATCH,
+    QUERY_UNBOUND_VAR,
+)
 from .registry import SDKRegistry
 from .schema import Entity, Field, Identity
 from .store import SDKStore
-from .dsl import Derivation, Not, Pred, Rule, RuleRef, SDKDSLError, vars
+from .dsl import Derivation, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
 from .ingest import IngestResult, ValidationReport
 
 __all__ = [
@@ -28,6 +37,13 @@ __all__ = [
     "FrozenSnapshotError",
     "CardinalityError",
     "EditorClosedError",
+    "INVALID_ROW_FORMAT",
+    "QUERY_MISSING_REF",
+    "QUERY_TYPE_MISMATCH",
+    "QUERY_ALIAS_CONFLICT",
+    "QUERY_UNBOUND_VAR",
+    "QUERY_INVALID_ROW_FORMAT",
+    "QUERY_NOT_IMPLEMENTED",
     "IngestResult",
     "ValidationReport",
     "SDKDSLError",
@@ -37,6 +53,7 @@ __all__ = [
     "Rule",
     "RuleRef",
     "Derivation",
+    "Query",
     "Pred",
     "Not",
     "vars",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .errors import SDKDSLError
 from .expr import Not, Pred
-from .rule import Derivation, Rule, RuleRef
+from .rule import Derivation, Query, ReturnContractEntry, Rule, RuleRef
 from .vars import vars
 
 __all__ = [
@@ -11,7 +11,8 @@ __all__ = [
     "Rule",
     "RuleRef",
     "Derivation",
+    "Query",
+    "ReturnContractEntry",
     "Pred",
     "Not",
 ]
-

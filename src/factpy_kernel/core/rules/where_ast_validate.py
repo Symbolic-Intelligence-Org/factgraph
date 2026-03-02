@@ -57,15 +57,32 @@ def validate_where_ast(
     mode: Literal["python", "souffle"] = "python",
     capabilities: dict[str, Any] | None = None,
     profile: BackendProfile | None = None,
+    initial_bound_vars: set[str] | None = None,
 ) -> None:
     if mode not in _DEFAULT_MODES:
         raise WhereASTValidationError(f"unsupported validation mode: {mode}")
+    resolved_initial_bound_vars = _normalize_initial_bound_vars(initial_bound_vars)
     resolved_caps = capabilities
     if resolved_caps is None and profile is not None:
         resolved_caps = profile.to_capabilities()
     caps = _capabilities_for_mode(mode, resolved_caps)
     _validate_expr_shape(expr, caps, in_not_body=False)
-    _validate_expr_dataflow(expr, bound_outside=set(), caps=caps)
+    _validate_expr_dataflow(expr, bound_outside=resolved_initial_bound_vars, caps=caps)
+
+
+def _normalize_initial_bound_vars(initial_bound_vars: set[str] | None) -> set[str]:
+    if initial_bound_vars is None:
+        return set()
+    if not isinstance(initial_bound_vars, set):
+        raise WhereASTValidationError("initial_bound_vars must be set[str] when provided")
+    out: set[str] = set()
+    for value in initial_bound_vars:
+        if not isinstance(value, str):
+            raise WhereASTValidationError("initial_bound_vars must contain strings only")
+        if not value.startswith("$") or len(value) < 2:
+            raise WhereASTValidationError("initial_bound_vars entries must be '$' + identifier")
+        out.add(value)
+    return out
 
 
 def _capabilities_for_mode(mode: str, overrides: dict[str, Any] | None) -> dict[str, Any]:

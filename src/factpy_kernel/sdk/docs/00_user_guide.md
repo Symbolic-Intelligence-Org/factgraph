@@ -49,6 +49,15 @@ from factpy_kernel.sdk import Entity, Field, Identity, SDKStore
 sdk = SDKStore.from_schema_classes([User, Country, Language, LivesIn])
 ```
 
+如需默认把 Rule 查询结果返回为 dict 行，可在初始化时设置：
+
+```python
+sdk = SDKStore.from_schema_classes(
+    [User, Country, Language, LivesIn],
+    default_row_format="dict",
+)
+```
+
 如需文件持久化，直接传 `ledger_path`：
 
 ```python
@@ -64,6 +73,9 @@ sdk = SDKStore.from_schema_classes(
 - 使用同一 `ledger_path` 恢复时，会校验当前 schema 的 `schema_digest`；不一致会抛 `SDKStoreError`。
 - `ledger` 与 `ledger_path` 互斥；两者不能同时传入。
 - `classes` 必须是非空 `list[Entity 子类]`，否则抛 `SDKStoreError`。
+- `default_row_format` 仅作用于 `sdk.run(rule, ...)`，合法值为 `"tuple"` / `"dict"`，默认值是 `"dict"`。
+- 当解析后的 `row_format` 为 `"tuple"`（调用参数 / store 默认 / 环境变量任一路径）时，会触发 `DeprecationWarning`；迁移建议统一改为 `"dict"`。
+- `FACTPY_ROW_FORMAT` 会在 `SDKStore` 初始化时读取并缓存（非每次 `run()` 动态读取）。
 
 ### 1.2 Schema 预检（CI / import 阶段）
 
@@ -675,6 +687,13 @@ with vars("p", "c", "l", "li", "hl") as (p, c, l, li, hl):
 rows = sdk.run(speaks_rule)
 ```
 
+你也可以显式请求 dict 行格式：
+
+```python
+rows = sdk.run(speaks_rule, row_format="dict")
+# [{"p": "...", "l": "..."}, ...]
+```
+
 语法要点（稳定合约）：
 - `LivesIn(li).user == p` 这类链式写法不支持；请使用两步写法。
 - 支持 `Pred(...)`、`RuleRef(...)`、`Not([...])`、比较运算（`== != > >= < <=`）。
@@ -683,6 +702,12 @@ rows = sdk.run(speaks_rule)
 `RuleRef` 约束（稳定合约）：
 - 目标规则需要 `expose=True`，否则运行时报 `RuleCompileError`。
 - `RuleRef(base_rule_obj)` 支持对象依赖；在 `sdk.run(...)` 未显式传 `registry` 时，SDK 会自动注册对象依赖规则。
+
+`row_format`（稳定合约）：
+- 仅 Rule 路径支持 `row_format`。
+- 三层优先级：`run(..., row_format=...) > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`。
+- 解析结果为 `"tuple"` 时会发出 `DeprecationWarning`，提示后续版本移除；推荐显式使用 `row_format="dict"` 或设置 `FACTPY_ROW_FORMAT=dict`。
+- 非法值（如 `"list"`）报 `SDKStoreError(code="INVALID_ROW_FORMAT")`。
 
 线性算术（当前行为）：
 - 支持 `+/-/常数倍` 的比较 lowering（如 `age == (2026 - by)`、`x * 2`）。
@@ -716,12 +741,15 @@ print(rows)
 head 写法（稳定合约）：
 - fact 目标常见：`SomeEntity.some_field(...)`（Field head）
 - entity 目标常见：`EntityType(role1=..., role2=...)`（Entity head）
+- 多 head：`head=[H1, H2, ...]`（每个元素必须是合法 head call，空列表非法）
 - `Field` head 只支持 kwargs，不支持位置参数。
 - head 需要是 DSL head call；传普通实体对象会在 `Derivation(...)` 构造时报 `SDKDSLError`。
 
 v2 行为（当前推荐）：
 - 由 `head` 自动推断路径（Entity head -> entity candidate；Field head -> fact candidate）。
 - `sdk.evaluate(...)` 的 `CandidateSet` 包含 `candidate_id/candidate_key/candidate_kind`。
+- 多 head 在 SDK 层编译展开为多个单 head 计划，`evaluate` 返回值按 head 声明顺序展平。
+- 同一次多 head `evaluate` 的所有候选共享同一个 `run_id`（便于溯源与 `accept_many(mode="atomic")`）。
 - 存在依赖图时，优先使用 `sdk.accept_many(..., mode="atomic")`。
 
 ### 7.4 `accept(...)` 参数边界
@@ -744,6 +772,8 @@ res = sdk.accept(candidate_set, meta_overrides={"approved_by": "alice", "note": 
 | 限制 | 说明 |
 |------|------|
 | 字符串 DSL | `sdk.run("...")` / `sdk.evaluate("...")` 不支持 |
+| `sdk.run(Derivation(...))` | 不支持；应使用 `sdk.evaluate(...)` |
+| `sdk.run(Query(...))` | 已实现（lowering + 执行后处理） |
 | 链式路径比较 | `LivesIn(li).user == p` 不支持（请分两步） |
 | 属性对属性比较 sugar | `a.country == b.country` 不支持 |
 | 非线性算术 | `x * y` 不支持 |
@@ -751,6 +781,48 @@ res = sdk.accept(candidate_set, meta_overrides={"approved_by": "alice", "note": 
 
 补充（当前行为）：
 - SDK 对象 DSL 会先 lower，再进入带 schema 的 authoring compile；exists/path sugar 会被 schema-aware rewrite 到实际 predicate（含自定义 `pred_id`）。
+
+### 7.6 Query DSL（Step 5）
+
+当前 Query DSL 已实现“构造 + 静态校验 + lowering + 运行态执行后处理”。
+
+```python
+from factpy_kernel.sdk import Query, vars
+
+with vars("p", "name") as (p, name):
+    q = Query(
+        head=Person.name(person=p, value=name),
+        where=[p.country == "DE"],
+    )
+
+print(q.return_contract)
+```
+
+说明（稳定合约）：
+- 合法 head 形态：
+  - `Entity(var)`
+  - `[Entity(var1), Entity(var2), ...]`
+  - `Entity.field(...)`
+- Query 在构造期会执行：
+  - `head -> return_contract` 推导
+  - alias 冲突校验（冲突时报 `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`）
+  - where 变量绑定校验（未绑定时报 `SDKDSLError(code="QUERY_UNBOUND_VAR")`）
+- where 校验会把 head 变量集作为 `initial_bound_vars` 传入验证器。
+- Query lowering 会生成 `QueryPlan`：
+  - `query_id="__query__:<16hex>"`
+  - `rule_ast.rule_id=query_id`
+  - `rule_ast.version="runtime"`
+- `query_id` 的 digest 输入包含：`head_ir / where_ir / temporal_view / return_mode / on_missing / on_type_mismatch / schema_digest`。
+- field head 的 schema 约束在 lowering 阶段执行：拒绝 `multi` 或带 `dims` 的字段投影。
+
+说明（当前行为）：
+- `sdk.run(query, ...)` 会执行：`where_eval(bindings) -> 批量 hydrate -> 合约应用`，返回 `list[dict]`。
+- entity head 列会返回 `EntitySnapshot`；字段投影列返回标量值。
+- `on_missing` / `on_type_mismatch` 策略生效：
+  - `error`：抛 `SDKStoreError`（`QUERY_MISSING_REF` / `QUERY_TYPE_MISMATCH`）
+  - `skip`：丢弃该行
+  - `null`：该列置 `None`，行保留
+- `null` 路径下结果仍参与去重；`skip` 在去重前发生。
 
 ---
 
@@ -884,6 +956,20 @@ print(report.warnings)
 说明（稳定合约）：
 - `factpy_kernel.sdk` 顶层导出的 SDK 异常可直接 `except`。
 - `sdk.ingest(...)` 存在“抛异常”和“返回 diagnostics”两条错误通道（见第 6 章）。
+- `SDKError` 及其子类统一提供结构化字段：`code`、`path`（未设置时为 `None`）。
+
+最短示例：
+
+```python
+from factpy_kernel.sdk import SDKStoreError
+
+try:
+    sdk.run(rule, row_format="list")
+except SDKStoreError as e:
+    print(str(e))   # 人类可读消息
+    print(e.code)   # 机器可读错误码，例如 INVALID_ROW_FORMAT
+    print(e.path)   # 错误路径，例如 $.run.row_format
+```
 
 ### 10.1 常见错误速查表
 
@@ -895,6 +981,11 @@ print(report.warnings)
 | `EditorClosedError` | `commit/rollback` 后继续使用 editor | 重新打开一个 `sdk.edit(...)` 会话 |
 | `SDKSchemaError` | `get` 传了非 identity 字段；`find` 过滤字段非法；`find` identity 不完整 | 对照 schema 修正查询参数 |
 | `SDKStoreError` | 低层写入类型不匹配（如 entity_ref 不是 canonical ref）；`sdk.run/evaluate` 传字符串 DSL；`accept` 传未知参数 | 检查参数类型和接口边界 |
+| `SDKStoreError(code="INVALID_ROW_FORMAT")` | `row_format` 非法值（调用参数 / store 默认 / 环境变量） | 改为 `"dict"`（`"tuple"` 仍可用但已弃用） |
+| `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")` | Query 路径传入 `row_format`，或对 Derivation 调用 `sdk.run(...)` | Query 不传 `row_format`；Derivation 用 `sdk.evaluate(...)` |
+| `SDKStoreError(code="QUERY_NOT_IMPLEMENTED")` | 预留码（正常 Query 路径已不再触发） | 若出现，视为实现回退或未接入路径，需回归检查 |
+| `SDKDSLError(code="QUERY_ALIAS_CONFLICT")` | Query head 输出 alias 重复 | 调整 head 变量命名，确保输出键唯一 |
+| `SDKDSLError(code="QUERY_UNBOUND_VAR")` | Query where 中使用未绑定变量 | 在 head 或前序原子中绑定该变量 |
 | `SDKDSLError` | `with vars() as (p,c)`；链式实体写法等对象 DSL 构造错误 | 改用支持语法（两步写法、named vars） |
 | `RuleCompileError`（或上层包装错误） | `RuleRef` 目标规则未 `expose=True`、where 语义不安全 | 修正规则语义/依赖规则声明 |
 | `IngestResult.diagnostics` 含 `severity="error"` | item 结构非法、item meta 非法、unknown retract asrt_id | 逐条按 `path` 修复；有 error 时整批不会写入 |

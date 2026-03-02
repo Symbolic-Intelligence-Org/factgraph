@@ -144,6 +144,15 @@ class WhereASTValidateV1Tests(unittest.TestCase):
         ast = parse_where_ir_to_ast([("eq", "$x", 1), ("ge", "$x", 1)])
         validate_where_ast(ast)
 
+    def test_initial_bound_vars_allows_filter_without_prior_binder(self) -> None:
+        ast = parse_where_ir_to_ast([("in", "$x", [1, 2])])
+        validate_where_ast(ast, initial_bound_vars={"$x"})
+
+    def test_initial_bound_vars_invalid_shape_is_rejected(self) -> None:
+        ast = parse_where_ir_to_ast([("pred", "x:v", ["$x"])])
+        with self.assertRaises(WhereASTValidationError):
+            validate_where_ast(ast, initial_bound_vars={"x"})
+
 
 if __name__ == "__main__":
     unittest.main()

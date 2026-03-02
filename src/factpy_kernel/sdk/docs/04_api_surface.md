@@ -17,6 +17,7 @@
 - `Rule`
 - `RuleRef`
 - `Derivation`
+- `Query`
 - `Pred`
 - `Not`
 - `vars`
@@ -42,10 +43,17 @@
 - `FrozenSnapshotError`
 - `CardinalityError`
 - `EditorClosedError`
+- `INVALID_ROW_FORMAT`
+- `QUERY_MISSING_REF`
+- `QUERY_TYPE_MISMATCH`
+- `QUERY_ALIAS_CONFLICT`
+- `QUERY_UNBOUND_VAR`
+- `QUERY_INVALID_ROW_FORMAT`
+- `QUERY_NOT_IMPLEMENTED`
 
 ## 2. `SDKStore` 公开方法（核心）
 
-- `from_schema_classes(..., ledger=None, ledger_path=None)`
+- `from_schema_classes(..., ledger=None, ledger_path=None, default_row_format=None)`
 - `batch(...)`
 - `get(...)`
 - `find(...)`
@@ -70,6 +78,9 @@
 补充：
 - `from_schema_classes(..., ledger_path="...")` 是当前推荐的 file-backed 恢复入口。
 - 首次创建 ledger 文件时会写入 `schema_digest`；后续恢复会做一致性校验。
+- `default_row_format` 仅影响 `sdk.run(rule, ...)` 的默认返回形态（`tuple`/`dict`）；默认是 `dict`。
+- 解析后的 `row_format` 若为 `tuple` 会触发 `DeprecationWarning`（兼容期保留）。
+- 环境变量 `FACTPY_ROW_FORMAT` 会在 `SDKStore` 初始化时读取一次并缓存。
 
 ## 3. `SDKRegistry` 公开方法
 
@@ -147,6 +158,7 @@
 |---|---|---|
 | `EntityType(...)` | entity 路径 | 1 个 entity candidate + 依赖 fact candidates |
 | `EntityType.field(...)` | fact 路径 | fact candidates |
+| `head=[H1, H2, ...]` | 按 head 顺序展开多个单 head 计划 | `list[CandidateSet]`（按 head 顺序展平） |
 | 无 `head`（`target + head_vars`） | fact-only 路径（兼容） | fact candidates |
 
 ### 6.2 `CandidateSet` 与 accept
@@ -155,6 +167,7 @@
   - `candidate_id`（per-run 句柄）
   - `candidate_key`（跨 run 稳定键）
   - `candidate_kind`（`fact` / `entity`）
+- 多 head `evaluate` 下，所有候选共享同一个 `run_id`。
 - `sdk.accept(...)` 一次接收一个候选；有依赖图时优先使用 `sdk.accept_many(..., mode=\"atomic\")`。
 
 延伸阅读：
@@ -201,3 +214,49 @@ sdk.accept(entity, identity_override={"source_id": "u-001"})
 ```
 
 不再使用 `materialize_as` / `id_policy`。
+
+## 8. `sdk.run(...)` 分发与 `row_format`（v2）
+
+### 8.1 分发规则
+
+- `run(rule, ...)`：Rule 查询路径（当前已实现）
+- `run(derivation, ...)`：直接报错，提示改用 `sdk.evaluate(...)`
+- `run(query, ...)`：Query 运行路径已实现（lowering + where_eval + 批量 hydrate + contract apply）
+
+### 8.2 `row_format` 适用范围
+
+- 仅 Rule 路径支持 `row_format`
+- Query 路径固定返回 `list[dict]`，传 `row_format` 会报 `QUERY_INVALID_ROW_FORMAT`
+
+### 8.3 `row_format` 三层优先级
+
+`调用参数 > SDKStore.default_row_format > FACTPY_ROW_FORMAT > "dict"`
+
+合法值仅：`"tuple"` / `"dict"`。  
+解析结果为 `"tuple"` 时会发出 `DeprecationWarning`，提示后续版本移除。  
+非法值报 `SDKStoreError(code="INVALID_ROW_FORMAT")`。
+
+## 9. `Query` DSL（Step 5）
+
+### 9.1 构造形态（当前已实现）
+
+- `Query(head=Entity(var), where=[...])`
+- `Query(head=[Entity(var1), Entity(var2)], where=[...])`
+- `Query(head=Entity.field(...), where=[...])`
+
+### 9.2 静态校验（当前已实现）
+
+- `head` 非法形态在构造期抛 `SDKDSLError`
+- `head -> return_contract` 推导在构造期完成
+- alias 冲突抛 `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`
+- where 未绑定变量抛 `SDKDSLError(code="QUERY_UNBOUND_VAR")`
+- where 校验使用 `initial_bound_vars`（由 `head` 变量集传入）
+
+### 9.3 运行态状态（当前行为）
+
+- Query lowering 已实现为 `QueryPlan(query_id, rule_ast, return_contract, ...)`
+- `query_id` 规则：`__query__:<16hex>`，由 head/where/temporal_view/return_mode/on_missing/on_type_mismatch/schema_digest 的 canonical payload 生成
+- field head 在 lowering 阶段会做 schema 校验：拒绝 `multi` 或 `dims` 字段投影
+- Query 运行态执行链路：`where_eval(bindings) -> 批量 hydrate -> 合约应用`
+- `on_missing` / `on_type_mismatch` 支持：`error | skip | null`
+- `on_missing="error"` 报 `QUERY_MISSING_REF`；`on_type_mismatch="error"` 报 `QUERY_TYPE_MISMATCH`

@@ -269,18 +269,26 @@ def Pred(pred_id: str, *terms: Any) -> PredAtom:
     return PredAtom(pred_id=pred_id, terms=tuple(terms))
 
 
-def lower_where(where: list[Any]) -> list[Any]:
+def lower_where(
+    where: list[Any],
+    *,
+    initial_bindings: dict[LogicVar, str] | None = None,
+) -> list[Any]:
     if not isinstance(where, list) or not where:
         raise SDKDSLError("where must be non-empty list")
     if all(isinstance(item, list) for item in where):
-        return [lower_where_branch(branch) for branch in where]
-    return lower_where_branch(where)
+        return [lower_where_branch(branch, initial_bindings=initial_bindings) for branch in where]
+    return lower_where_branch(where, initial_bindings=initial_bindings)
 
 
-def lower_where_branch(body: list[Any]) -> list[Any]:
+def lower_where_branch(
+    body: list[Any],
+    *,
+    initial_bindings: dict[LogicVar, str] | None = None,
+) -> list[Any]:
     if not isinstance(body, list) or not body:
         raise SDKDSLError("where body must be non-empty list")
-    bindings: dict[LogicVar, str] = {}
+    bindings: dict[LogicVar, str] = dict(initial_bindings or {})
     lowered: list[Any] = []
     temp_seq = count(1)
     for atom in body:
@@ -297,7 +305,8 @@ def lower_where_atom(atom: Any, bindings: dict[LogicVar, str], *, temp_seq: Any)
     if isinstance(atom, RuleRefAtom):
         return [("ruleref", atom.rule_id, atom.version, [lower_term(x, in_where=True) for x in atom.terms])]
     if isinstance(atom, NotExpr):
-        return [("not", lower_where_branch(atom.body))]
+        # not body can correlate with already bound outer vars.
+        return [("not", lower_where_branch(atom.body, initial_bindings=bindings))]
     if isinstance(atom, CompareExpr):
         return _lower_compare(atom, bindings, temp_seq=temp_seq)
     if isinstance(atom, tuple):

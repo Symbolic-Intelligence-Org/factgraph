@@ -8,6 +8,7 @@ from factpy_kernel.sdk import Derivation, Entity, Field, Identity, Rule, RuleRef
 class Person(Entity):
     source_id: str = Identity()
     country: str = Field(cardinality="functional", pred_id="person:country")
+    rank: int = Field(cardinality="functional", pred_id="person:rank")
 
 
 class LivesIn(Entity):
@@ -56,6 +57,42 @@ class SDKDSLObjectsV1Tests(unittest.TestCase):
         self.assertEqual(payload["head"]["field"], "country")
         self.assertEqual(payload["head"]["kwargs"]["person"], "$p")
         self.assertEqual(payload["head"]["kwargs"]["value"], "$c")
+
+    def test_derivation_to_authoring_payload_supports_multi_head_list(self) -> None:
+        with vars("p", "c", "r") as (p, c, r):
+            drv = Derivation(
+                id="drv.country_and_rank_copy",
+                version="1.0.0",
+                head=[
+                    Person.country(person=p, value=c),
+                    Person.rank(person=p, value=r),
+                ],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        payload = drv.to_authoring_payload()
+        self.assertIsInstance(payload["head"], list)
+        self.assertEqual(len(payload["head"]), 2)
+        self.assertEqual(payload["head"][0]["field"], "country")
+        self.assertEqual(payload["head"][1]["field"], "rank")
+
+    def test_derivation_head_empty_list_is_rejected(self) -> None:
+        with self.assertRaises(SDKDSLError):
+            Derivation(
+                id="drv.invalid_empty_head",
+                version="1.0.0",
+                head=[],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+
+    def test_derivation_head_list_item_must_be_head_call(self) -> None:
+        with vars("p") as (p,):
+            with self.assertRaises(SDKDSLError):
+                Derivation(
+                    id="drv.invalid_head_item",
+                    version="1.0.0",
+                    head=[Person(p)],
+                    where=[("pred", "person:country", ["$p", "de"])],
+                )
 
     def test_rule_to_authoring_payload_lowers_linear_arithmetic_to_builtin_atoms(self) -> None:
         with vars("p", "by", "age") as (p, by, age):

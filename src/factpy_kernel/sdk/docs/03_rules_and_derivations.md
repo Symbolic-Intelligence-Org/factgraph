@@ -129,6 +129,7 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
 `head` 写法：
 - Field head（fact 路径）：`Entity.field(...)`
 - Entity head（entity 路径）：`EntityType(...)`
+- 多 head：`head=[H1, H2, ...]`（每个元素必须是 head call，空列表不允许）
 
 Field head 约束：
 - 不支持位置参数，仅支持 kwargs。
@@ -137,6 +138,7 @@ Field head 约束：
 补充：
 - `status` 可在 DSL 层携带到 authoring payload。
 - 当前 `sdk.run/evaluate` 编译路径不会对 `status` 做运行时语义判断或强校验。
+- 多 head 第一版在 SDK 层展开为多个单 head 计划；不改内核 evaluate/accept 协议。
 
 ---
 
@@ -190,6 +192,7 @@ Field head 约束：
 - `target`：fact candidate 下通常是 `pred_id`；entity candidate 下是 `entity_type`。
 - `key_tuple_digest`：候选幂等键摘要。
 - `support_*`：支撑证据摘要信息（`accept` meta 与 provenance 校验会使用）。
+- 多 head `evaluate`：结果按 head 声明顺序展平，且所有候选共享同一 `run_id`。
 
 `payload` 形态：
 - entity 候选（v2）：
@@ -278,9 +281,19 @@ SDK facade 的 sugar：
 
 ```python
 rows = sdk.run(rule, temporal_view="active")
+# 或
+rows = sdk.run(rule, temporal_view="active", row_format="dict")
 ```
 
 - `temporal_view`：`"active"` | `"current"`
+- `row_format`（Rule only）：`"tuple"` | `"dict"`
+
+补充（稳定合约）：
+- `row_format` 三层优先级：`run(..., row_format=...) > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`。
+- 解析结果为 `"tuple"` 时会触发 `DeprecationWarning`；迁移建议改为 `row_format="dict"` 或 `FACTPY_ROW_FORMAT=dict`。
+- 非法 `row_format` 报 `SDKStoreError(code="INVALID_ROW_FORMAT")`。
+- `sdk.run(Derivation(...))` 不支持，报错并提示使用 `sdk.evaluate(...)`。
+- `sdk.run(Query(...))` 已实现完整执行链路：lowering + where_eval + 批量 hydrate + contract apply。
 
 ### 10.2 `sdk.evaluate(...)`
 
@@ -294,6 +307,29 @@ cands = sdk.evaluate(drv, mode="python", temporal_view="active")
 说明：
 - `mode="python"` 为默认实现路径。
 - `mode="engine"` 依赖已注册 engine evaluator（Souffle 适配通常通过导入 `factpy_kernel.adapters.souffle` 完成注册）。
+
+### 10.3 Query DSL（Step 5）
+
+`Query` 已加入 DSL 层，支持构造与静态校验：
+
+```python
+from factpy_kernel.sdk import Query, vars
+
+with vars("p", "name") as (p, name):
+    q = Query(
+        head=Person.name(person=p, value=name),
+        where=[p.country == "DE"],
+    )
+```
+
+当前状态：
+- Query 构造期会完成 `return_contract` 推导与 alias 校验
+- where 校验已支持 `initial_bound_vars`
+- Query lowering 已实现：产物为 `QueryPlan(query_id, rule_ast, return_contract, ...)`
+- `query_id` 为 `__query__:<16hex>`，并会写入 `rule_ast.rule_id`（`version="runtime"`）
+- field head 在 lowering 阶段拒绝 `multi` 或 `dims` 字段投影
+- `sdk.run(query, ...)` 返回 `list[dict]`，实体列为 `EntitySnapshot`
+- `on_missing` / `on_type_mismatch` 支持 `error|skip|null`，对应 `QUERY_MISSING_REF` / `QUERY_TYPE_MISMATCH` 策略分支
 
 ---
 

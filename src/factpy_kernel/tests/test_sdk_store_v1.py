@@ -3,13 +3,28 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
 import factpy_kernel.tests._warnings as test_warnings
 from factpy_kernel.adapters.souffle.package import ExportOptions
 from factpy_kernel.core.store.ledger import Ledger
-from factpy_kernel.sdk import Derivation, Entity, Field, Identity, Not, Pred, Rule, RuleRef, SDKStore, SDKStoreError, vars
+from factpy_kernel.sdk import (
+    Derivation,
+    Entity,
+    Field,
+    Identity,
+    INVALID_ROW_FORMAT,
+    Not,
+    Pred,
+    QUERY_INVALID_ROW_FORMAT,
+    Rule,
+    RuleRef,
+    SDKStore,
+    SDKStoreError,
+    vars,
+)
 
 
 def setUpModule() -> None:
@@ -154,7 +169,7 @@ class SDKStoreV1Tests(unittest.TestCase):
                 "where": [("pred", "person:country", ["$p", "$c"])],
             }
         )
-        self.assertEqual(rows, [(self.p_ref, "de")])
+        self.assertEqual(rows, [{"p": self.p_ref, "c": "de"}])
 
         candidate = self.sdk.store.evaluate_dummy(
             derivation_id="drv.copy_country",
@@ -187,11 +202,210 @@ class SDKStoreV1Tests(unittest.TestCase):
                 where=[("pred", "person:country", ["$p", "$c"])],
             )
         rows = self.sdk.run(rule)
-        self.assertEqual(rows, [(self.p_ref, "de")])
+        self.assertEqual(rows, [{"p": self.p_ref, "c": "de"}])
         cands = self.sdk.evaluate(drv)
         self.assertEqual(len(cands), 1)
         res = self.sdk.accept(cands[0])
         self.assertEqual(res.run_id, cands[0].run_id)
+
+    def test_evaluate_multi_head_flattens_in_head_order_with_shared_run_id(self) -> None:
+        p2_ref = self.sdk.ref(Person, source_id="u2")
+        self.sdk.set(Person.country, self.p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7m1"})
+        self.sdk.set(Person.country, p2_ref, "fr", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7m2"})
+        with vars("p", "c") as (p, c):
+            drv = Derivation(
+                id="drv.multi_head_tag_blacklist",
+                version="1.0.0",
+                head=[
+                    Person.tag(person=p, tag=c),
+                    Person.blacklist(person=p, blacklist=c),
+                ],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+
+        cands = self.sdk.evaluate(drv)
+        self.assertEqual(len(cands), 4)
+        self.assertEqual([cand.target for cand in cands[:2]], ["person:tag", "person:tag"])
+        self.assertEqual([cand.target for cand in cands[2:]], ["person:blacklist", "person:blacklist"])
+
+        run_ids = {cand.run_id for cand in cands}
+        self.assertEqual(len(run_ids), 1)
+        run_id = next(iter(run_ids))
+        self.assertTrue(run_id.startswith("drv.multi_head_tag_blacklist:"))
+
+        rows = self.sdk.accept_many(cands, mode="atomic")
+        self.assertEqual({row["state"] for row in rows}, {"ACCEPTED"})
+        self.assertEqual(len(self.sdk.ledger.find_claims(pred_id="person:tag")), 2)
+        self.assertEqual(len(self.sdk.ledger.find_claims(pred_id="person:blacklist")), 2)
+
+    def test_run_row_format_default_returns_dict_without_warning(self) -> None:
+        self.sdk.set(Person.country, self.p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7a"})
+        with vars("p", "c") as (p, c):
+            rule = Rule(
+                id="q_country_default_tuple",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always", DeprecationWarning)
+            rows = self.sdk.run(rule)
+        self.assertEqual(rows, [{"p": self.p_ref, "c": "de"}])
+        self.assertEqual([w for w in rec if issubclass(w.category, DeprecationWarning)], [])
+
+    def test_run_row_format_tuple_explicit_emits_deprecation_warning(self) -> None:
+        self.sdk.set(Person.country, self.p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7a2"})
+        with vars("p", "c") as (p, c):
+            rule = Rule(
+                id="q_country_tuple_explicit",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always", DeprecationWarning)
+            rows = self.sdk.run(rule, row_format="tuple")
+        self.assertEqual(rows, [(self.p_ref, "de")])
+        dep_warnings = [w for w in rec if issubclass(w.category, DeprecationWarning)]
+        self.assertEqual(len(dep_warnings), 1)
+        self.assertIn("row_format='dict'", str(dep_warnings[0].message))
+        self.assertIn("FACTPY_ROW_FORMAT=dict", str(dep_warnings[0].message))
+
+    def test_run_row_format_dict_from_call_site_has_highest_priority(self) -> None:
+        with patch.dict("os.environ", {"FACTPY_ROW_FORMAT": "tuple"}):
+            sdk = SDKStore.from_schema_classes([Person, Company], default_row_format="tuple")
+        p_ref = sdk.ref(Person, source_id="u1")
+        sdk.set(Person.country, p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7b"})
+        with vars("p", "c") as (p, c):
+            rule = Rule(
+                id="q_country_dict_callsite",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always", DeprecationWarning)
+            rows = sdk.run(rule, row_format="dict")
+        self.assertEqual(rows, [{"p": p_ref, "c": "de"}])
+        self.assertEqual([w for w in rec if issubclass(w.category, DeprecationWarning)], [])
+
+    def test_run_row_format_store_default_overrides_env(self) -> None:
+        with patch.dict("os.environ", {"FACTPY_ROW_FORMAT": "tuple"}):
+            sdk = SDKStore.from_schema_classes([Person, Company], default_row_format="dict")
+        p_ref = sdk.ref(Person, source_id="u1")
+        sdk.set(Person.country, p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7c"})
+        with vars("p", "c") as (p, c):
+            rule = Rule(
+                id="q_country_dict_store",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always", DeprecationWarning)
+            rows = sdk.run(rule)
+        self.assertEqual(rows, [{"p": p_ref, "c": "de"}])
+        self.assertEqual([w for w in rec if issubclass(w.category, DeprecationWarning)], [])
+
+    def test_run_row_format_store_default_tuple_emits_deprecation_warning(self) -> None:
+        sdk = SDKStore.from_schema_classes([Person, Company], default_row_format="tuple")
+        p_ref = sdk.ref(Person, source_id="u1")
+        sdk.set(Person.country, p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7c2"})
+        with vars("p", "c") as (p, c):
+            rule = Rule(
+                id="q_country_store_tuple",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always", DeprecationWarning)
+            rows = sdk.run(rule)
+        self.assertEqual(rows, [(p_ref, "de")])
+        dep_warnings = [w for w in rec if issubclass(w.category, DeprecationWarning)]
+        self.assertEqual(len(dep_warnings), 1)
+        self.assertIn("source=store_default", str(dep_warnings[0].message))
+
+    def test_run_row_format_env_used_when_call_and_store_default_absent(self) -> None:
+        with patch.dict("os.environ", {"FACTPY_ROW_FORMAT": "dict"}):
+            sdk = SDKStore.from_schema_classes([Person, Company])
+        p_ref = sdk.ref(Person, source_id="u1")
+        sdk.set(Person.country, p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7d"})
+        with vars("p", "c") as (p, c):
+            rule = Rule(
+                id="q_country_dict_env",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always", DeprecationWarning)
+            rows = sdk.run(rule)
+        self.assertEqual(rows, [{"p": p_ref, "c": "de"}])
+        self.assertEqual([w for w in rec if issubclass(w.category, DeprecationWarning)], [])
+
+    def test_run_row_format_env_tuple_emits_deprecation_warning(self) -> None:
+        with patch.dict("os.environ", {"FACTPY_ROW_FORMAT": "tuple"}):
+            sdk = SDKStore.from_schema_classes([Person, Company])
+        p_ref = sdk.ref(Person, source_id="u1")
+        sdk.set(Person.country, p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7d2"})
+        with vars("p", "c") as (p, c):
+            rule = Rule(
+                id="q_country_tuple_env",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always", DeprecationWarning)
+            rows = sdk.run(rule)
+        self.assertEqual(rows, [(p_ref, "de")])
+        dep_warnings = [w for w in rec if issubclass(w.category, DeprecationWarning)]
+        self.assertEqual(len(dep_warnings), 1)
+        self.assertIn("source=env_var", str(dep_warnings[0].message))
+
+    def test_run_row_format_invalid_call_site_value_raises(self) -> None:
+        self.sdk.set(Person.country, self.p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7e"})
+        with vars("p", "c") as (p, c):
+            rule = Rule(
+                id="q_country_invalid_row_format",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        with self.assertRaises(SDKStoreError) as ctx:
+            self.sdk.run(rule, row_format="list")
+        self.assertEqual(ctx.exception.code, INVALID_ROW_FORMAT)
+
+    def test_run_row_format_invalid_env_value_raises(self) -> None:
+        with patch.dict("os.environ", {"FACTPY_ROW_FORMAT": "list"}):
+            sdk = SDKStore.from_schema_classes([Person, Company])
+        p_ref = sdk.ref(Person, source_id="u1")
+        sdk.set(Person.country, p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t7f"})
+        with vars("p", "c") as (p, c):
+            rule = Rule(
+                id="q_country_invalid_env_row_format",
+                version="1.0.0",
+                select=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.run(rule)
+        self.assertEqual(ctx.exception.code, INVALID_ROW_FORMAT)
+
+    def test_run_rejects_derivation_object_with_evaluate_hint(self) -> None:
+        with vars("p", "c") as (p, c):
+            drv = Derivation(
+                id="drv.country_copy_run_reject",
+                version="1.0.0",
+                target="person:country",
+                head_vars=[p, c],
+                where=[("pred", "person:country", ["$p", "$c"])],
+            )
+        with self.assertRaises(SDKStoreError) as ctx:
+            self.sdk.run(drv)
+        self.assertEqual(ctx.exception.code, QUERY_INVALID_ROW_FORMAT)
+        self.assertIn("use sdk.evaluate()", str(ctx.exception))
 
     def test_run_supports_rule_ref_with_rule_object_dependencies(self) -> None:
         self.sdk.set(Person.country, self.p_ref, "de", meta={"source": "sdk", "source_loc": "test", "trace_id": "t8"})
@@ -214,7 +428,7 @@ class SDKStoreV1Tests(unittest.TestCase):
                 ],
             )
         rows = self.sdk.run(top)
-        self.assertEqual(rows, [(self.p_ref,)])
+        self.assertEqual(rows, [{"p": self.p_ref}])
 
     def test_run_supports_record_path_sugar_and_not_pred(self) -> None:
         p2_ref = self.sdk.ref(Person, source_id="u2")
@@ -245,7 +459,7 @@ class SDKStoreV1Tests(unittest.TestCase):
             )
 
         rows = self.sdk.run(top)
-        self.assertEqual(rows, [(self.p_ref, "de")])
+        self.assertEqual(rows, [{"p": self.p_ref, "c": "de"}])
 
     def test_run_supports_linear_arithmetic_builtins_from_sdk_dsl(self) -> None:
         sdk = SDKStore.from_schema_classes([PersonAge])
@@ -276,7 +490,7 @@ class SDKStoreV1Tests(unittest.TestCase):
                 ],
             )
         rows = sdk.run(rule)
-        self.assertEqual(rows, [(p1, 26)])
+        self.assertEqual(rows, [{"p": p1, "age": 26}])
 
 
 if __name__ == "__main__":

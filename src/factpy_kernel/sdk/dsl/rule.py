@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from factpy_kernel.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
+from factpy_kernel.core.rules.where_ast_validate import WhereASTValidationError, validate_where_ast
+
+from ..error_codes import QUERY_ALIAS_CONFLICT, QUERY_UNBOUND_VAR
 from .errors import SDKDSLError
-from .expr import CompareExpr, HeadCall, NotExpr, RuleRefAtom, lower_where
+from .expr import CompareExpr, ExistsAtom, HeadCall, LogicVar, NotExpr, RuleRefAtom, lower_where
 
 
 @dataclass(frozen=True)
@@ -103,12 +107,13 @@ class Derivation:
     id: str
     version: str
     where: list[Any]
-    head: HeadCall | None = None
+    head: Any = None
     target: str | None = None
     head_vars: list[Any] | None = None
     mode: str | None = None
     temporal_view: str | None = None
     status: str | None = None
+    _heads: tuple[HeadCall, ...] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id:
@@ -117,8 +122,11 @@ class Derivation:
             raise SDKDSLError("Derivation.version must be non-empty string")
         if not isinstance(self.where, list) or not self.where:
             raise SDKDSLError("Derivation.where must be non-empty list")
-        if self.head is not None and not isinstance(self.head, HeadCall):
-            raise SDKDSLError("Derivation.head must be a DSL head call")
+        object.__setattr__(self, "_heads", _normalize_derivation_head_items(self.head))
+
+    @property
+    def heads(self) -> list[HeadCall]:
+        return list(self._heads)
 
     def to_authoring_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -126,8 +134,11 @@ class Derivation:
             "version": self.version,
             "where": lower_where(self.where),
         }
-        if self.head is not None:
-            payload["head"] = self.head.to_authoring_head()
+        if self._heads:
+            if len(self._heads) == 1:
+                payload["head"] = self._heads[0].to_authoring_head()
+            else:
+                payload["head"] = [item.to_authoring_head() for item in self._heads]
         if self.target is not None:
             payload["target"] = self.target
         if self.head_vars is not None:
@@ -141,7 +152,259 @@ class Derivation:
         return payload
 
 
+@dataclass(frozen=True)
+class ReturnContractEntry:
+    var: str
+    alias: str
+    entity_type: str | None
+    field_path: str | None
+
+
+@dataclass(frozen=True)
+class Query:
+    head: Any
+    where: list[Any]
+    on_missing: str = "error"
+    on_type_mismatch: str = "error"
+    _normalized_head: tuple[Any, ...] = field(init=False, repr=False)
+    _return_contract: tuple[ReturnContractEntry, ...] = field(init=False, repr=False)
+    _initial_bound_vars: frozenset[str] = field(init=False, repr=False)
+    _where_ir: list[Any] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.where, list) or not self.where:
+            raise SDKDSLError("Query.where must be non-empty list", path="$.where")
+        if self.on_missing not in {"error", "skip", "null"}:
+            raise SDKDSLError("Query.on_missing must be one of: error|skip|null", path="$.on_missing")
+        if self.on_type_mismatch not in {"error", "skip", "null"}:
+            raise SDKDSLError(
+                "Query.on_type_mismatch must be one of: error|skip|null",
+                path="$.on_type_mismatch",
+            )
+
+        normalized_head = _normalize_query_head_items(self.head)
+        return_contract = _head_to_return_contract(normalized_head)
+        _validate_query_alias_conflicts(return_contract)
+
+        initial_bound_vars = _collect_query_head_bound_vars(normalized_head)
+        initial_entity_bindings = _collect_query_head_entity_bindings(normalized_head)
+
+        try:
+            where_ir = lower_where(
+                self.where,
+                initial_bindings=initial_entity_bindings,
+            )
+            where_ast = parse_where_ir_to_ast(where_ir)
+            validate_where_ast(
+                where_ast,
+                mode="python",
+                initial_bound_vars=set(initial_bound_vars),
+            )
+        except (WhereASTError, WhereASTValidationError) as exc:
+            code = QUERY_UNBOUND_VAR if _is_query_unbound_error(exc) else None
+            path = getattr(exc, "path", None) or "$.where"
+            raise SDKDSLError(str(exc), code=code, path=path) from exc
+
+        object.__setattr__(self, "_normalized_head", normalized_head)
+        object.__setattr__(self, "_return_contract", return_contract)
+        object.__setattr__(self, "_initial_bound_vars", frozenset(initial_bound_vars))
+        object.__setattr__(self, "_where_ir", where_ir)
+
+    @property
+    def return_contract(self) -> list[ReturnContractEntry]:
+        return list(self._return_contract)
+
+    @property
+    def initial_bound_vars(self) -> set[str]:
+        return set(self._initial_bound_vars)
+
+    @property
+    def where_ir(self) -> list[Any]:
+        return list(self._where_ir)
+
+    def to_runtime_payload(self) -> dict[str, Any]:
+        return {
+            "head": [_query_head_item_to_payload(item) for item in self._normalized_head],
+            "where": list(self._where_ir),
+            "on_missing": self.on_missing,
+            "on_type_mismatch": self.on_type_mismatch,
+            "return_contract": [
+                {
+                    "var": entry.var,
+                    "alias": entry.alias,
+                    "entity_type": entry.entity_type,
+                    "field_path": entry.field_path,
+                }
+                for entry in self._return_contract
+            ],
+            "initial_bound_vars": sorted(self._initial_bound_vars),
+        }
+
+
 def _lower_select_item(item: Any) -> Any:
     if hasattr(item, "token") and isinstance(getattr(item, "token", None), str):
         return getattr(item, "token")
     return item
+
+
+def _normalize_derivation_head_items(head: Any) -> tuple[HeadCall, ...]:
+    if head is None:
+        return tuple()
+    if isinstance(head, list):
+        head_items = list(head)
+    else:
+        head_items = [head]
+    if not head_items:
+        raise SDKDSLError("Derivation.head must be non-empty when provided", path="$.head")
+
+    out: list[HeadCall] = []
+    for idx, item in enumerate(head_items):
+        path = f"$.head[{idx}]" if isinstance(head, list) else "$.head"
+        if not isinstance(item, HeadCall):
+            raise SDKDSLError("Derivation.head item must be a DSL head call", path=path)
+        if item.callee_kind not in {"pred_ref", "entity_type"}:
+            raise SDKDSLError("Derivation.head item must be Entity(...) or Entity.field(...)", path=path)
+        out.append(item)
+    return tuple(out)
+
+
+def _normalize_query_head_items(head: Any) -> tuple[Any, ...]:
+    if isinstance(head, list):
+        head_items = list(head)
+    else:
+        head_items = [head]
+    if not head_items:
+        raise SDKDSLError("Query.head must be non-empty", path="$.head")
+
+    out: list[Any] = []
+    for idx, item in enumerate(head_items):
+        path = f"$.head[{idx}]" if isinstance(head, list) else "$.head"
+        if isinstance(item, ExistsAtom):
+            out.append(item)
+            continue
+        if isinstance(item, HeadCall):
+            if item.callee_kind != "pred_ref":
+                raise SDKDSLError(
+                    "Query.head only supports Entity(var) or Entity.field(...) forms",
+                    path=path,
+                )
+            out.append(item)
+            continue
+        raise SDKDSLError(
+            "Query.head item must be Entity(var) or Entity.field(...)",
+            path=path,
+        )
+    return tuple(out)
+
+
+def _head_to_return_contract(head_items: tuple[Any, ...]) -> tuple[ReturnContractEntry, ...]:
+    out: list[ReturnContractEntry] = []
+    for idx, item in enumerate(head_items):
+        path = f"$.head[{idx}]"
+        if isinstance(item, ExistsAtom):
+            token = item.var.token
+            alias = _alias_from_var_token(token, path=path)
+            out.append(
+                ReturnContractEntry(
+                    var=token,
+                    alias=alias,
+                    entity_type=item.entity_type,
+                    field_path=None,
+                )
+            )
+            continue
+
+        token = _projection_var_token_from_field_head(item, path=path)
+        alias = _alias_from_var_token(token, path=path)
+        out.append(
+            ReturnContractEntry(
+                var=token,
+                alias=alias,
+                entity_type=None,
+                field_path=f"{item.entity_type}.{item.field}",
+            )
+        )
+    return tuple(out)
+
+
+def _projection_var_token_from_field_head(item: HeadCall, *, path: str) -> str:
+    if "value" in item.kwargs and isinstance(item.kwargs["value"], LogicVar):
+        return item.kwargs["value"].token
+
+    logic_vars = [value for value in item.kwargs.values() if isinstance(value, LogicVar)]
+    if not logic_vars:
+        raise SDKDSLError(
+            "Query field head must include at least one LogicVar argument",
+            path=path,
+        )
+    return logic_vars[-1].token
+
+
+def _alias_from_var_token(token: Any, *, path: str) -> str:
+    if not isinstance(token, str) or not token.startswith("$") or len(token) < 2:
+        raise SDKDSLError("Query var token must be '$' + identifier", path=path)
+    return token[1:]
+
+
+def _validate_query_alias_conflicts(return_contract: tuple[ReturnContractEntry, ...]) -> None:
+    seen: set[str] = set()
+    for entry in return_contract:
+        if entry.alias in seen:
+            raise SDKDSLError(
+                f"query head alias conflict: {entry.alias}",
+                code=QUERY_ALIAS_CONFLICT,
+                path="$.head",
+            )
+        seen.add(entry.alias)
+
+
+def _collect_query_head_bound_vars(head_items: tuple[Any, ...]) -> set[str]:
+    out: set[str] = set()
+    for item in head_items:
+        if isinstance(item, ExistsAtom):
+            out.add(item.var.token)
+            continue
+        for value in item.kwargs.values():
+            if isinstance(value, LogicVar):
+                out.add(value.token)
+    return out
+
+
+def _collect_query_head_entity_bindings(head_items: tuple[Any, ...]) -> dict[LogicVar, str]:
+    out: dict[LogicVar, str] = {}
+    for item in head_items:
+        if isinstance(item, ExistsAtom):
+            out[item.var] = item.entity_type
+            continue
+        for value in item.kwargs.values():
+            if isinstance(value, LogicVar):
+                out.setdefault(value, item.entity_type)
+    return out
+
+
+def _is_query_unbound_error(exc: Exception) -> bool:
+    msg = str(exc)
+    if "requires variables bound earlier in branch" in msg:
+        return True
+    if "variable must be bound before filter" in msg:
+        return True
+    if "requires both sides to be resolvable" in msg:
+        return True
+    if "requires at least one bound/constant side" in msg:
+        return True
+    if "used in path comparison before" in msg:
+        return True
+    return False
+
+
+def _query_head_item_to_payload(item: Any) -> dict[str, Any]:
+    if isinstance(item, ExistsAtom):
+        return {
+            "kind": "entity_head",
+            "entity_type": item.entity_type,
+            "var": item.var.token,
+        }
+    return {
+        "kind": "field_head",
+        "head_call": item.to_authoring_head(),
+    }
