@@ -139,6 +139,7 @@ Field head 约束：
 - `status` 可在 DSL 层携带到 authoring payload。
 - 当前 `sdk.run/evaluate` 编译路径不会对 `status` 做运行时语义判断或强校验。
 - 多 head 第一版在 SDK 层展开为多个单 head 计划；不改内核 evaluate/accept 协议。
+- 多 head 当前是运行时能力：`sdk.evaluate(...)` 支持；registry 的 `register_derivation(...)` 仍按单 head 处理。
 
 ---
 

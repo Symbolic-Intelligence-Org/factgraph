@@ -109,6 +109,7 @@
 - `read_manifest()`：读取 registry manifest 索引；manifest 不存在时返回默认空结构。
 - `upsert_schema_ir(...)`：直接写入已编译 `schema_ir`（跳过 `apply_schema_classes`）。
 - `get_schema_entry()`：只返回 schema entry 元数据（如 `path`），不是 schema_ir 内容本体。
+- Derivation 多 head（`head=[...]`）目前仅 `sdk.evaluate(...)` 运行时路径支持；`register_derivation(...)` 仍是单 head 注册语义。
 
 ## 4. Facade 返回对象（常用）
 

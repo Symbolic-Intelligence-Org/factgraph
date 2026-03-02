@@ -1099,6 +1099,8 @@ res = reg.apply_authoring_bundle(
 - `register_rule(...)` / `register_derivation(...)` 接受 SDK 对象或 authoring payload dict。
 - `register_rule_spec(...)` / `register_derivation_spec(...)` 适合“你已经拿到编译后 spec dict”的场景。
 - `apply_authoring_bundle(...)` 是 `apply_schema_classes(...)` 的底层总入口，适合一次性组合 schema/rule/derivation 变更。
+- Derivation 多 head（`head=[...]`）当前仅在运行时 `sdk.evaluate(...)` 路径支持；`SDKRegistry.register_derivation(...)` 仍按单 head compile/register 处理，不接受 list head。
+- 若需要发布多 head 逻辑到 registry，请先在调用侧展开为多个单 head derivation 再分别注册。
 - `register_derivation(...)` 在未显式传 `schema_ir` 且首轮 compile 失败时，会尝试读取 registry 中已落盘的 schema_ir 重试一次（便于 head-only derivation 注册）。
 - 对 head-only derivation，建议先 `apply_schema_classes(...)` 后再注册；或在注册时显式传 `schema_ir=...`，避免“首轮失败后 fallback 重试”带来的理解成本。
 
