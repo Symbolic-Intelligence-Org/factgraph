@@ -22,10 +22,36 @@ sdk = SDKStore.from_schema_classes(
 )
 ```
 
+Store-level default Rule row format:
+
+```python
+sdk = SDKStore.from_schema_classes(
+    [User, Country, Language, LivesIn],
+    default_row_format="dict",
+)
+```
+
 Stable Contract:
-- `classes` must be a non-empty `list[Entity subclass]`.
+- `classes` must be a non-empty `list[Entity subclass]`; `from_schema_classes(...)` / `schema_preflight_from_classes(...)` raise `SDKSchemaError`, while `SDKStore(...)` constructor-path checks raise `SDKStoreError`.
 - `ledger` and `ledger_path` are mutually exclusive.
 - First open writes `schema_digest`; reopen validates digest and raises `SDKStoreError` on mismatch.
+- `default_row_format` applies only to `sdk.run(rule, ...)`; allowed values are `"tuple"` / `"dict"` (default `"dict"`).
+- `FACTPY_ROW_FORMAT` is read at `SDKStore` initialization time and cached.
+- Resolving to `"tuple"` emits `DeprecationWarning`; prefer `"dict"`.
+
+### 1.2 Schema Preflight
+
+```python
+from factpy_kernel.sdk import schema_preflight_from_classes
+
+preflight = schema_preflight_from_classes([User, Country, LivesIn])
+print(preflight["ok"])
+print(preflight.get("warnings", []))
+print(preflight.get("summary", {}))
+```
+
+Stable Contract:
+- Returns a `dict` with keys including `ok`, `warnings`, `errors`, `diagnostics`, and `summary` (on success).
 
 ---
 
@@ -68,13 +94,17 @@ with sdk.batch(meta={"trace_id": "import-001", "source": "seed"}) as tx:
 
 Stable Contract:
 - Use `.set(...)` for `single`, `.add(...)` for `multi`.
-- `.retract(asrt_id=...)` retracts by assertion id.
+- In `sdk.batch()`, wrong `.set/.add` cardinality usage raises `SDKStoreError` (`sdk.edit()` path raises `CardinalityError`).
+- `.retract(assertion_id=...)` (or positional argument) retracts by assertion id.
 - `preview()` is read-only; `commit()` persists.
+- Batch meta merge precedence is `commit_meta > field_op_meta > entity_meta > batch_meta`.
+- `with sdk.batch() as tx:` does not auto-commit or auto-rollback; callers must commit explicitly.
+- Writes with incomplete identity fail immediately with `SDKStoreError`; bind/fill identity first.
 
 ### 3.2 Identity Is Immutable
 
 Stable Contract:
-- `sdk.edit(...).<identity>.set/add/retract` always raises (identity fields are immutable).
+- Identity fields are immutable in both batch/edit handles; `.set/.add/.retract` on identity fields always raise.
 
 ### 3.3 Low-level write APIs
 
@@ -130,6 +160,8 @@ Temporal filter boundaries:
 - Missing `version`: excluded from `.version(v)`.
 - `.at(t)` validates ISO 8601 for input `t` and assertion `valid_from/valid_to`; invalid format raises `SDKStoreError`.
 - `.version(v)` accepts `str|int` only (`bool` is invalid).
+- `single` is a read-side scalar view only; writes do not auto-prune older assertions.
+- `snapshot.assertions` covers only `Field` attributes, not `Identity` attributes.
 
 ---
 
@@ -144,7 +176,7 @@ with sdk.edit(User, user_id="u-001", locale="zh") as editor:
 Stable Contract:
 - Missing entity raises `EntityNotFoundError`.
 - Reusing a closed editor raises `EditorClosedError`.
-- Wrong cardinality operation raises `CardinalityError`.
+- Wrong cardinality operation in `sdk.edit(...)` raises `CardinalityError`.
 
 ---
 
@@ -197,6 +229,8 @@ rows = sdk.run(r, row_format="dict")
 
 Stable Contract:
 - `row_format` is supported only on the Rule path (`tuple|dict`).
+- `row_format` precedence is: call-site > `SDKStore(default_row_format=...)` > `FACTPY_ROW_FORMAT` > `"dict"`.
+- `row_format="tuple"` is deprecated and emits `DeprecationWarning`.
 - `RuleRef` targets must be `expose=True`.
 - `RuleRef` is not allowed inside `Not(...)` body (compile-time error).
 
@@ -217,6 +251,7 @@ rows = sdk.run(q)  # always list[dict]
 Stable Contract:
 - Query always returns dict rows; `row_format` is not supported.
 - Query head supports only `Entity(var)` and `Entity.field(...)`.
+- Passing `row_format` to Query raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
 
 ### 7.3 Derivation
 
@@ -239,6 +274,8 @@ Stable Contract:
 - `head` shape decides candidate kind (fact/entity).
 - Multi-head (`head=[H1, H2, ...]`) is supported; `evaluate` returns flattened candidates sharing one `run_id`.
 - `materialize_as` / `id_policy` are removed.
+- `sdk.run(derivation)` is rejected with `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`; use `sdk.evaluate(...)`.
+- `sdk.accept(CandidateSet, ...)` accepts exactly one positional argument and supports `approved_by`/`note`/`dry_run`/`identity_override` (also via `meta_overrides`).
 
 Current Boundary:
 - `sdk.evaluate(..., temporal_view=...)` is explicitly rejected.
@@ -266,7 +303,7 @@ sdk.conflicts(pred_id, e_ref)
 
 Notes:
 - Both operate on active assertions.
-- For `single` fields, `chosen_asrt_id` is returned to explain conflict resolution.
+- `chosen_asrt_id` is included in output (possibly `None`), to explain conflict resolution.
 
 ---
 

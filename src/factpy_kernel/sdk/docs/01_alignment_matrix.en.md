@@ -10,12 +10,12 @@ Scope: `src/factpy_kernel/sdk`
 | Schema declarations (`Entity/Identity/Field`) | Implemented | `Field.cardinality` supports only `single|multi`; `Identity(primary_key=...)` is active |
 | Schema compile/preflight helpers | Implemented | `build_authoring_schema_from_classes` / `compile_schema_from_classes` / `schema_preflight_from_classes` |
 | Low-level writes (`ref/set/add/retract`) | Implemented | Direct ledger writes with SDK-side type checks |
-| Batch staging (`sdk.batch()`) | Implemented | `preview/commit`, dependency closure, wire plan export/replay |
+| Batch staging (`sdk.batch()`) | Implemented | `preview/commit`, dependency closure, wire plan export/replay; context manager does not auto-commit/rollback |
 | Read/write facade (`get/find/edit`) | Implemented | Snapshot is read-only; editor allows field writes only |
 | Assertion read views | Implemented | `active` / `history` / `.at(t)` / `.version(v)` |
 | Ingest / provenance | Implemented | `sdk.ingest(...)`, `sdk.validate_provenance(...)` |
-| Audit queries (`explain_fact/conflicts`) | Implemented | Active-assertion diagnostics; `single` fields include `chosen_asrt_id` |
-| Rule DSL + `sdk.run(rule)` | Implemented | Object DSL supported; `row_format` applies only to Rule path |
+| Audit queries (`explain_fact/conflicts`) | Implemented | Active-assertion diagnostics; output includes `chosen_asrt_id` (possibly `None`) |
+| Rule DSL + `sdk.run(rule)` | Implemented | Object DSL supported; `row_format` applies only to Rule path (precedence: call-site > store default > env var > `"dict"`) |
 | Query DSL + `sdk.run(query)` | Implemented | Query always returns `list[dict]` |
 | Derivation + `sdk.evaluate/accept` | Implemented | `head` shape infers fact/entity candidate kind; multi-head evaluate is flattened |
 | Registry (`SDKRegistry`) | Implemented | Complete schema/rule/derivation register + read surface |
@@ -31,6 +31,10 @@ Scope: `src/factpy_kernel/sdk`
 | Assertion view surface | `.chosen` is removed; only `active/history/at/version` remain |
 | `sdk.run(...)` dispatch | Rule and Query supported; Derivation is rejected with guidance to use `evaluate()` |
 | `sdk.evaluate(...)` params | `temporal_view` is removed and fails explicitly |
+| Rule `row_format` detail | `"tuple"` still works but emits `DeprecationWarning`; prefer `"dict"` |
+| `SDKBatchTx` context | `with sdk.batch() as tx:` `__exit__` does not auto-commit or auto-rollback; explicit `commit()` is required |
+| Wire export restriction | `BatchPlan.export()/to_json()` forbids raw `idref_v1` token values; entity refs should be represented via same-tx handles |
+| `single` field semantics | `single` is a read-side scalar view; writes do not auto-prune older assertions |
 | Derivation `head` semantics | Primary-key fields in `head` are compile-time hard errors |
 | Cross-coordinate attr comparison | Only `==` on the same entity type and same `primary_key` field is allowed |
 | RuleRef constraints | Target must be `expose=True`; `RuleRef` is forbidden inside `Not(...)` body |

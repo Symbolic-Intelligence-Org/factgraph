@@ -42,6 +42,8 @@ rows = sdk.run(rule, row_format="dict")
 - `Rule.id/version` 必须是非空字符串。
 - `Rule.select/where` 必须是非空列表。
 - `sdk.run(rule, row_format=...)` 仅 Rule 路径支持 `row_format`。
+- `row_format` 优先级：调用参数 > `SDKStore(default_row_format=...)` > `FACTPY_ROW_FORMAT` > `"dict"`。
+- 当解析结果为 `"tuple"` 时会触发 `DeprecationWarning`（建议统一 `"dict"`）。
 
 ## 3. where 支持语法与限制
 
@@ -97,6 +99,7 @@ rows = sdk.run(q)  # list[dict]
 - 字段投影必须匹配 schema 中的 `single` 字段。
 - where 未绑定变量会在构造期报 `SDKDSLError(code="QUERY_UNBOUND_VAR")`。
 - `on_missing` / `on_type_mismatch` 仅支持 `error|skip|null`。
+- 对 Query 传 `row_format` 会抛 `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`。
 
 ## 6. Derivation DSL
 
@@ -121,6 +124,7 @@ res = sdk.accept(cands[0], approved_by="alice")
 - `head` 形态自动决定 candidate kind（fact/entity）。
 - 支持 `head=[H1, H2, ...]`；`evaluate` 返回展平后的 `list[CandidateSet]`，共享同一 `run_id`。
 - `sdk.run(derivation)` 不支持，必须走 `sdk.evaluate(...)`。
+- `sdk.run(derivation)` 报错码为 `QUERY_INVALID_ROW_FORMAT`（语义上提示改用 `evaluate()`）。
 
 ## 7. 编译期硬约束（v2）
 
@@ -181,6 +185,12 @@ accept sugar：
 - `note`
 - `dry_run`
 - `identity_override`（用于 entity candidate 缺失 identity 场景）
+- `meta_overrides`（可包含以上 sugar 键）
+
+参数边界：
+- `accept(CandidateSet, ...)` 只接受一个位置参数；多位置参数会抛 `SDKStoreError`。
+- `meta_overrides` 仅允许 `approved_by` / `note` / `dry_run` / `identity_override`；其余键会报错。
+- sugar 键同时出现在 `meta_overrides` 与顶层关键字参数时会报重复参数错误。
 
 重复 accept 同一 candidate 会走幂等 no-op（`duplicate`）。
 

@@ -42,6 +42,8 @@ Stable contract:
 - `Rule.id/version` must be non-empty strings.
 - `Rule.select/where` must be non-empty lists.
 - `row_format` is supported only on the Rule path.
+- `row_format` precedence is: call-site > `SDKStore(default_row_format=...)` > `FACTPY_ROW_FORMAT` > `"dict"`.
+- Resolving to `"tuple"` emits `DeprecationWarning` (prefer `"dict"`).
 
 ## 3. `where` Syntax and Limits
 
@@ -97,6 +99,7 @@ Stable contract:
 - Field projection must resolve to schema `single` fields.
 - Unbound variables in `where` fail at construction with `SDKDSLError(code="QUERY_UNBOUND_VAR")`.
 - `on_missing` / `on_type_mismatch` only allow `error|skip|null`.
+- Passing `row_format` for Query raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
 
 ## 6. Derivation DSL
 
@@ -121,6 +124,7 @@ Stable contract:
 - `head` shape infers candidate kind (fact/entity).
 - Multi-head (`head=[H1, H2, ...]`) is supported; `evaluate` returns flattened candidates sharing one `run_id`.
 - `sdk.run(derivation)` is not supported; use `sdk.evaluate(...)`.
+- `sdk.run(derivation)` fails with code `QUERY_INVALID_ROW_FORMAT` (error message directs callers to `evaluate()`).
 
 ## 7. Compile-Time Hard Constraints (v2)
 
@@ -181,6 +185,12 @@ Accept sugar keys:
 - `note`
 - `dry_run`
 - `identity_override` (for incomplete entity identity)
+- `meta_overrides` (can carry the same sugar keys)
+
+Parameter boundaries:
+- `accept(CandidateSet, ...)` accepts exactly one positional argument; extra positional arguments raise `SDKStoreError`.
+- `meta_overrides` only supports `approved_by` / `note` / `dry_run` / `identity_override`; unknown keys fail.
+- If the same sugar key is provided in both `meta_overrides` and top-level keyword args, SDK raises duplicate-option error.
 
 Repeated accept on the same candidate is idempotent no-op (`duplicate`).
 

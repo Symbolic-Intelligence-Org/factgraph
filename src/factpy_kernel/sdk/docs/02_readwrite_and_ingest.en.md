@@ -27,9 +27,12 @@ sdk = SDKStore.from_schema_classes(
 ```
 
 Stable contract:
-- `classes` must be a non-empty `list[Entity subclass]`.
+- `classes` must be a non-empty `list[Entity subclass]`; `from_schema_classes(...)` / `schema_preflight_from_classes(...)` raise `SDKSchemaError`, while `SDKStore(...)` constructor-path checks raise `SDKStoreError`.
 - `ledger` and `ledger_path` are mutually exclusive.
 - `ledger_path` writes `schema_digest` on first use and validates it on reopen.
+- `default_row_format` affects only `sdk.run(rule, ...)`; allowed values are `"tuple"` / `"dict"` (default `"dict"`).
+- `FACTPY_ROW_FORMAT` is read and cached at `SDKStore` initialization time (not re-read on every `run()` call).
+- Resolving to `"tuple"` emits `DeprecationWarning`; prefer `"dict"`.
 
 ## 3. Low-Level Writes (`ref/set/add/retract`)
 
@@ -74,11 +77,17 @@ with sdk.batch(meta={"trace_id": "seed"}) as tx:
     result = tx.commit()
 ```
 
+Additional semantics:
+- Batch meta merge precedence is `commit_meta > field_op_meta > entity_meta > batch_meta`.
+- `with sdk.batch() as tx:` context manager does not auto-commit or auto-rollback; you must call `commit()` explicitly.
+
 ### 4.2 Cardinality and identity constraints
 
-- `single` fields only allow `.set(...)`.
-- `multi` fields only allow `.add(...)`.
+- `single` fields only allow `.set(...)` (wrong op raises `SDKStoreError` in `sdk.batch()`, and `CardinalityError` in `sdk.edit()`).
+- `multi` fields only allow `.add(...)` (wrong op raises `SDKStoreError` in `sdk.batch()`, and `CardinalityError` in `sdk.edit()`).
+- Batch managed-handle retract is by assertion id: `.retract(assertion_id=...)` (positional argument is also supported); `sdk.edit()` `FieldEditor` uses `.retract(asrt_id=...)`.
 - Identity fields expose read-only guards; `set/add/retract` fail.
+- Incomplete identity causes immediate `SDKStoreError` on writes; bind missing identity first via `bind(...)`.
 
 ### 4.3 Wire plan
 
@@ -89,6 +98,7 @@ with sdk.batch(meta={"trace_id": "seed"}) as tx:
 `sdk_batch_plan_v1` notes:
 - Wire ops no longer carry `dims/fact_key`.
 - `cardinality` uses `single|multi`.
+- Wire export (`to_json`/`export`) rejects raw `idref_v1` token values; use same-tx handles for entity references.
 
 ## 5. Read and Edit (`get/find/edit`)
 
@@ -139,6 +149,7 @@ Stable contract:
 - `single` field: scalar or `None`
 - `multi` field: `tuple[...]`
 - Snapshot is immutable (`FrozenSnapshotError` on writes)
+- `single` is a read-side scalar view only; writes do not auto-prune older assertions.
 
 ### 6.2 `snapshot.assertions.<field>`
 
@@ -153,6 +164,7 @@ Boundaries:
 - Missing `version` is excluded from `.version(v)`.
 - `.at(t)` validates ISO 8601 for both input and assertion meta fields.
 - `.version(v)` accepts only `str|int` (`bool` is invalid).
+- `snapshot.assertions` covers only `Field` attributes, not `Identity` attributes.
 
 ## 7. Ingest (`sdk.ingest(...)`)
 

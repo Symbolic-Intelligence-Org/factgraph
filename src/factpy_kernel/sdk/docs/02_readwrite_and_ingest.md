@@ -27,9 +27,12 @@ sdk = SDKStore.from_schema_classes(
 ```
 
 稳定合约：
-- `classes` 必须是非空 `list[Entity 子类]`。
+- `classes` 必须是非空 `list[Entity 子类]`；`from_schema_classes(...)` / `schema_preflight_from_classes(...)` 路径抛 `SDKSchemaError`，`SDKStore(...)` 构造器路径抛 `SDKStoreError`。
 - `ledger` 与 `ledger_path` 互斥。
 - `ledger_path` 首次写入 `schema_digest`，后续恢复会做 digest 校验。
+- `default_row_format` 仅影响 `sdk.run(rule, ...)`；合法值为 `"tuple"` / `"dict"`（默认 `"dict"`）。
+- `FACTPY_ROW_FORMAT` 在 `SDKStore` 初始化时读取并缓存；不是每次 `run()` 动态读取。
+- 解析为 `"tuple"` 时会触发 `DeprecationWarning`，建议统一改为 `"dict"`。
 
 ## 3. 低层写入（`ref/set/add/retract`）
 
@@ -74,11 +77,17 @@ with sdk.batch(meta={"trace_id": "seed"}) as tx:
     result = tx.commit()
 ```
 
+补充语义：
+- batch meta 合并优先级：`commit_meta > field_op_meta > entity_meta > batch_meta`。
+- `with sdk.batch() as tx:` 的 context manager 不会自动 commit/rollback；需要显式调用 `commit()`。
+
 ### 4.2 cardinality 与 identity 约束
 
-- `single` 字段只能 `.set(...)`。
-- `multi` 字段只能 `.add(...)`。
+- `single` 字段只能 `.set(...)`（`sdk.batch()` 路径用错抛 `SDKStoreError`；`sdk.edit()` 路径用错抛 `CardinalityError`）。
+- `multi` 字段只能 `.add(...)`（`sdk.batch()` 路径用错抛 `SDKStoreError`；`sdk.edit()` 路径用错抛 `CardinalityError`）。
+- batch 托管句柄撤销按断言 ID：`.retract(assertion_id=...)`（也支持位置参数）；`sdk.edit()` 的 `FieldEditor` 形态是 `.retract(asrt_id=...)`。
 - identity 字段暴露只读 guard，`set/add/retract` 会报错。
+- identity 不完整时，写操作会立即报 `SDKStoreError`，需先 `bind(...)` 补齐。
 
 ### 4.3 Wire plan
 
@@ -89,6 +98,7 @@ with sdk.batch(meta={"trace_id": "seed"}) as tx:
 协议要点（`sdk_batch_plan_v1`）：
 - wire op 不再携带 `dims/fact_key`。
 - `cardinality` 使用 `single|multi`。
+- wire 导出（`to_json`/`export`）不接受 raw `idref_v1` 字符串值；实体引用应使用同 tx 句柄关系。
 
 ## 5. 读取与编辑（`get/find/edit`）
 
@@ -139,6 +149,7 @@ with sdk.edit(User, user_id="u1", locale="zh") as user:
 - `single` 字段：标量或 `None`
 - `multi` 字段：`tuple[...]`
 - 快照只读，赋值抛 `FrozenSnapshotError`
+- `single` 仅是读取侧单值视图；写入不会自动清理旧断言。
 
 ### 6.2 `snapshot.assertions.<field>`
 
@@ -153,6 +164,7 @@ with sdk.edit(User, user_id="u1", locale="zh") as user:
 - 缺失 `version` 的断言不会命中 `.version(v)`。
 - `.at(t)` 会校验 ISO 8601（输入和断言 meta 都校验）。
 - `.version(v)` 仅接受 `str|int`（`bool` 非法）。
+- `snapshot.assertions` 仅覆盖 `Field` 字段，不覆盖 `Identity` 字段。
 
 ## 7. Ingest（`sdk.ingest(...)`）
 

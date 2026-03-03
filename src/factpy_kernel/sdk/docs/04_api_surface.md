@@ -71,10 +71,15 @@
 - `run_package(...)`
 
 关键边界：
+- `from_schema_classes(...)` / `schema_preflight_from_classes(...)` 的 `classes` 校验错误抛 `SDKSchemaError`（`SDKStore(...)` 构造器路径对应为 `SDKStoreError`）。
 - `run(...)` 支持 Rule/Query，不支持 Derivation。
 - `evaluate(...)` 显式拒绝 `temporal_view`。
 - `run(rule)` 的 `row_format` 优先级：调用参数 > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`。
+- `FACTPY_ROW_FORMAT` 在 `SDKStore` 初始化时读取并缓存。
+- `row_format="tuple"` 仍可用但会触发 `DeprecationWarning`。
 - Query 固定返回 `list[dict]`，不接受 `row_format`。
+- 对 Query 传 `row_format`、或对 Derivation 调用 `run(...)`，都会抛 `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`。
+- `accept(CandidateSet, ...)` 只接受一个位置参数；支持 `approved_by`/`note`/`dry_run`/`identity_override`（也可通过 `meta_overrides` 传）。
 
 ## 3. `SDKRegistry` 公开方法
 
@@ -112,16 +117,20 @@
   - `preview()`、`commit(meta=...)`、`rollback()`
   - 属性：`ref`、`entity_type`
 - `FieldEditor`
-  - `set(...)`、`add(...)`、`retract(asrt_id=..., meta=...)`
+  - `set(...)`、`add(...)`、`retract(*, asrt_id=..., meta=...)`（关键字参数）
 
 ## 5. Batch 相关对象
 
 - `SDKBatchTx`
   - `entity(...)`、`preview(...)`、`commit(...)`、`save(...)`
+  - context manager `__exit__` 不自动 commit/rollback
 - `BatchPlan`
   - `ops`、`warnings`、`export(sdk)`、`to_json(sdk)`、`apply(sdk)`
 - `WireBatchPlan`
   - `to_dict()`、`to_json()`、`from_dict(...)`、`from_json(...)`、`apply(sdk, strict_schema=True)`
+
+补充：
+- batch 托管句柄的撤销方法是 `ManagedFieldHandle.retract(assertion_id, ...)`（参数名为 `assertion_id`，也支持位置参数）。
 
 ## 6. Query / Derivation 运行速查
 

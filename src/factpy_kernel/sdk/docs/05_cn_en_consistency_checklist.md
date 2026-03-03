@@ -24,11 +24,11 @@
 
 | 文档组 | 结论 | 说明 |
 | --- | --- | --- |
-| `00_user_guide(.en)` | 已对齐 | 已按 `single|multi`、`active/history/at/version`、Query/Derivation 现状更新 |
-| `01_alignment_matrix(.en)` | 已对齐 | 旧接口边界统一移除，硬约束与延期项一致 |
-| `02_readwrite_and_ingest(.en)` | 已对齐 | ingest 去重、meta 规则、读写边界一致 |
-| `03_rules_and_derivations(.en)` | 已对齐 | Rule/Query/Derivation 语义、编译期硬错误、`temporal_view` 拒绝一致 |
-| `04_api_surface(.en)` | 已对齐 | 顶层导出、错误码、方法索引一致 |
+| `00_user_guide(.en)` | 已对齐 | 主指南口径统一到 `00_user_guide.md`：row_format、时态读视图、Derivation 边界一致 |
+| `01_alignment_matrix(.en)` | 已对齐 | 增补 `row_format` 优先级/弃用、batch context manager、wire 导出约束 |
+| `02_readwrite_and_ingest(.en)` | 已对齐 | ingest 去重、meta 规则、batch/edit retract 参数形态与 context 语义一致 |
+| `03_rules_and_derivations(.en)` | 已对齐 | Rule/Query/Derivation 语义、`accept` 参数边界、`temporal_view` 拒绝一致 |
+| `04_api_surface(.en)` | 已对齐 | 顶层导出、错误码、方法签名与关键边界一致 |
 
 ## 3. 关键语义核对清单
 
@@ -48,9 +48,16 @@
 - Query：
   - Query 固定返回 `list[dict]`
   - field head 仅支持 `single` 字段
+  - Query 不接受 `row_format`（传入时报 `QUERY_INVALID_ROW_FORMAT`）
 - 协议与写入：
   - `sdk_batch_plan_v1` 无 `dims/fact_key`
+  - wire 导出不接受 raw `idref_v1` 字符串值
   - `ingest_key` 含 `valid_from/valid_to/version`
+  - batch handle 撤销参数名为 `assertion_id`；edit `FieldEditor` 为 `asrt_id`
+- 运行时行为：
+  - `row_format` 优先级：调用参数 > store 默认 > `FACTPY_ROW_FORMAT` > `"dict"`
+  - `row_format="tuple"` 触发 `DeprecationWarning`
+  - `SDKBatchTx` context manager 不自动 commit/rollback
 
 ## 4. 同步规则（持续维护）
 

@@ -71,10 +71,15 @@ This page tracks the public exports in `factpy_kernel/sdk/__init__.py` and the m
 - `run_package(...)`
 
 Key boundaries:
+- `from_schema_classes(...)` / `schema_preflight_from_classes(...)` class-validation failures raise `SDKSchemaError` (`SDKStore(...)` constructor-path checks raise `SDKStoreError`).
 - `run(...)` supports Rule/Query and rejects Derivation.
 - `evaluate(...)` explicitly rejects `temporal_view`.
 - Rule `row_format` precedence: call-site > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`.
+- `FACTPY_ROW_FORMAT` is read once at `SDKStore` initialization and cached.
+- `row_format="tuple"` still works but emits `DeprecationWarning`.
 - Query always returns `list[dict]` and does not accept `row_format`.
+- Passing `row_format` to Query, or calling `run(...)` with Derivation, raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
+- `accept(CandidateSet, ...)` accepts exactly one positional candidate; supported sugar keys are `approved_by`/`note`/`dry_run`/`identity_override` (also via `meta_overrides`).
 
 ## 3. `SDKRegistry` Public Methods
 
@@ -112,16 +117,20 @@ Notes:
   - `preview()`, `commit(meta=...)`, `rollback()`
   - attributes: `ref`, `entity_type`
 - `FieldEditor`
-  - `set(...)`, `add(...)`, `retract(asrt_id=..., meta=...)`
+  - `set(...)`, `add(...)`, `retract(*, asrt_id=..., meta=...)` (keyword-only)
 
 ## 5. Batch Objects
 
 - `SDKBatchTx`
   - `entity(...)`, `preview(...)`, `commit(...)`, `save(...)`
+  - context manager `__exit__` does not auto-commit or auto-rollback
 - `BatchPlan`
   - `ops`, `warnings`, `export(sdk)`, `to_json(sdk)`, `apply(sdk)`
 - `WireBatchPlan`
   - `to_dict()`, `to_json()`, `from_dict(...)`, `from_json(...)`, `apply(sdk, strict_schema=True)`
+
+Additional note:
+- Batch managed-handle retract method is `ManagedFieldHandle.retract(assertion_id, ...)` (parameter name is `assertion_id`; positional arg is also supported).
 
 ## 6. Query / Derivation Runtime Quick View
 
