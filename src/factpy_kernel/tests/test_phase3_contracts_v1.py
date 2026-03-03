@@ -11,9 +11,32 @@ from factpy_kernel.authoring.where_schema_lowering import (
     WhereSchemaLoweringError,
     lower_blueprint_where_sugar_with_schema_v1,
 )
+from factpy_kernel.core.rules.rule_ir import RuleCompileError
 from factpy_kernel.core.rules.where_eval import _plan_body_atoms
 from factpy_kernel.core.view.projector import project_view_facts
-from factpy_kernel.sdk import Entity, Field, Identity, SDKStore, SDKStoreError, compile_schema_from_classes
+from factpy_kernel.sdk import (
+    Derivation,
+    Entity,
+    Field,
+    Identity,
+    Not,
+    Pred,
+    Query,
+    Rule,
+    RuleRef,
+    SDKStore,
+    SDKStoreError,
+    compile_schema_from_classes,
+    vars as sdk_vars,
+)
+from factpy_kernel.service.runtime_v1 import (
+    close_runtime_session,
+    evaluate_runtime_derivation,
+    open_runtime_session,
+    project_runtime_view_facts,
+    reset_runtime_sessions_for_tests,
+    run_runtime_rule,
+)
 
 
 class User(Entity):
@@ -454,9 +477,195 @@ Derivation(
             snap.assertions.tag.version(True)
         self.assertIn("expects string|int version selector", str(ctx_bad_version.exception))
 
+    def test_rule_dsl_syntax_matrix_ruleref_not_or(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u") as (u,):
+            vip_rule = Rule(
+                id="q.vip",
+                version="1.0.0",
+                select=[u],
+                where=[Pred("user:tag", u, "vip")],
+                expose=True,
+            )
+            hidden_rule = Rule(
+                id="q.hidden",
+                version="1.0.0",
+                select=[u],
+                where=[Pred("user:tag", u, "vip")],
+                expose=False,
+            )
+            non_vip_rule = Rule(
+                id="q.non_vip",
+                version="1.0.0",
+                select=[u],
+                where=[
+                    User(u),
+                    Not([Pred("user:tag", u, "vip")]),
+                ],
+            )
+            vip_or_staff_rule = Rule(
+                id="q.vip_or_staff",
+                version="1.0.0",
+                select=[u],
+                where=[
+                    [Pred("user:tag", u, "vip")],
+                    [Pred("user:tag", u, "staff")],
+                ],
+            )
+            bad_ref_rule = Rule(
+                id="q.bad_ref",
+                version="1.0.0",
+                select=[u],
+                where=[RuleRef(hidden_rule)(u)],
+            )
+            bad_not_ruleref_rule = Rule(
+                id="q.bad_not_ruleref",
+                version="1.0.0",
+                select=[u],
+                where=[User(u), Not([RuleRef(vip_rule)(u)])],
+            )
+
+        vip_rows = sdk.run(vip_rule, row_format="dict")
+        self.assertEqual({row["u"] for row in vip_rows}, {refs["u1"]})
+
+        non_vip_rows = sdk.run(non_vip_rule, row_format="dict")
+        self.assertEqual({row["u"] for row in non_vip_rows}, {refs["u2"], refs["u3"]})
+
+        vip_or_staff_rows = sdk.run(vip_or_staff_rule, row_format="dict")
+        self.assertEqual({row["u"] for row in vip_or_staff_rows}, {refs["u1"], refs["u2"]})
+
+        with self.assertRaises(RuleCompileError) as ctx_bad_ref:
+            sdk.run(bad_ref_rule, row_format="dict")
+        self.assertIn("expose=True", str(ctx_bad_ref.exception))
+
+        with self.assertRaises(SDKStoreError) as ctx_bad_not_ruleref:
+            sdk.run(bad_not_ruleref_rule, row_format="dict")
+        self.assertIn("RuleRefAtom is not allowed in not body", str(ctx_bad_not_ruleref.exception))
+
+    def test_query_dsl_syntax_matrix_entity_and_field_head(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "loc", "nm") as (u, loc, nm):
+            query = Query(
+                head=[
+                    User(u),
+                    User.name(locale=loc, name=nm),
+                ],
+                where=[
+                    User(u),
+                    u.locale == loc,
+                    u.name == nm,
+                    loc == "zh",
+                ],
+            )
+
+        rows = sdk.run(query)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["nm"] for row in rows}, {"Alice", "Carol"})
+        self.assertEqual({row["u"].ref for row in rows}, {refs["u1"], refs["u3"]})
+        self.assertTrue(all(row["u"].entity_type == "User" for row in rows))
+
+    def test_derivation_multi_head_syntax_matrix_shared_run_id(self) -> None:
+        sdk = SDKStore([User])
+        _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "loc", "nm", "tg") as (u, loc, nm, tg):
+            drv = Derivation(
+                id="drv.multi_head",
+                version="1.0.0",
+                where=[
+                    User(u),
+                    u.locale == loc,
+                    u.name == nm,
+                    u.tag == tg,
+                ],
+                head=[
+                    User.name(locale=loc, name=nm),
+                    User.tag(locale=loc, tag=tg),
+                ],
+            )
+
+        cands = sdk.evaluate(drv, mode="python")
+        self.assertGreaterEqual(len(cands), 2)
+        self.assertEqual({cand.candidate_kind for cand in cands}, {"fact"})
+        self.assertEqual(len({cand.run_id for cand in cands}), 1)
+        self.assertEqual({cand.target for cand in cands}, {"user:name", "user:tag"})
+
+    def test_temporal_view_rejection_matrix_sdk_and_runtime(self) -> None:
+        sdk = SDKStore([User])
+        _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "nm") as (u, nm):
+            drv = Derivation(
+                id="drv.temporal.reject",
+                version="1.0.0",
+                where=[("pred", "user:name", [u.token, nm.token])],
+                head=User.name(locale="zh", name=nm),
+            )
+
+        with self.assertRaises(SDKStoreError) as ctx_sdk:
+            sdk.evaluate(drv, temporal_view="active")
+        self.assertIn("temporal_view is removed", str(ctx_sdk.exception))
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            view_resp = project_runtime_view_facts(session_id, {"temporal_view": "active"})
+            self.assertFalse(view_resp["ok"])
+            self.assertEqual(view_resp["errors"][0]["path"], "$.temporal_view")
+
+            rule_resp = run_runtime_rule(
+                session_id,
+                {
+                    "rule": {
+                        "rule_id": "r.temporal.reject",
+                        "version": "1.0.0",
+                        "select": ["$u"],
+                        "where": [["pred", "User:exists", ["$u"]]],
+                    },
+                    "temporal_view": "active",
+                },
+            )
+            self.assertFalse(rule_resp["ok"])
+            self.assertEqual(rule_resp["errors"][0]["path"], "$.temporal_view")
+
+            drv_resp = evaluate_runtime_derivation(session_id, {"temporal_view": "active"})
+            self.assertFalse(drv_resp["ok"])
+            self.assertEqual(drv_resp["errors"][0]["path"], "$.temporal_view")
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
 
 def _schema_ir() -> dict[str, object]:
     return compile_schema_from_classes([User])
+
+
+def _seed_users_for_syntax_matrix(sdk: SDKStore) -> dict[str, str]:
+    with sdk.batch() as tx:
+        u1 = tx.entity(User, user_id="u-syntax-1", locale="zh")
+        u1.name.set("Alice")
+        u1.tag.add("vip")
+
+        u2 = tx.entity(User, user_id="u-syntax-2", locale="en")
+        u2.name.set("Bob")
+        u2.tag.add("staff")
+
+        u3 = tx.entity(User, user_id="u-syntax-3", locale="zh")
+        u3.name.set("Carol")
+
+        tx.commit(objects=[u1, u2, u3])
+
+    return {
+        "u1": u1.e_ref,
+        "u2": u2.e_ref,
+        "u3": u3.e_ref,
+    }
 
 
 if __name__ == "__main__":
