@@ -23,7 +23,6 @@ from factpy_kernel.core.store.types import (
     EvaluateMode,
     HeadSpecIR,
     HeadVarsIR,
-    TemporalView,
     WhereIR,
 )
 
@@ -67,7 +66,6 @@ class Store:
         head_vars: HeadVarsIR,
         where: WhereIR,
         mode: EvaluateMode = "python",
-        temporal_view: TemporalView = "active",
         head: HeadSpecIR | None = None,
     ) -> list[CandidateSet]:
         return evaluate_store(
@@ -78,7 +76,6 @@ class Store:
             head_vars=head_vars,
             where=where,
             mode=mode,
-            temporal_view=temporal_view,
             head=head,
             engine_evaluate=self.evaluate_engine,
         )
@@ -90,12 +87,9 @@ class Store:
         target_pred_id: str,
         head_vars: HeadVarsIR,
         where: WhereIR,
-        temporal_view: TemporalView = "active",
         head: HeadSpecIR | None = None,
     ) -> list[CandidateSet]:
         """Internal engine adapter entrypoint; prefer evaluate(mode='engine')."""
-        if temporal_view not in {"active", "current"}:
-            raise ValueError("temporal_view must be 'active' or 'current'")
         evaluator = self._engine_evaluator if self._engine_evaluator is not None else _ENGINE_EVALUATOR
         if evaluator is None:
             raise WhereValidationError(
@@ -108,7 +102,6 @@ class Store:
             target_pred_id=target_pred_id,
             head_vars=head_vars,
             where=where,
-            temporal_view=temporal_view,
             head=head,
         )
 

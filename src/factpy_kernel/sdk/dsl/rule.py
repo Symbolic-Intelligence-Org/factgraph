@@ -111,7 +111,6 @@ class Derivation:
     target: str | None = None
     head_vars: list[Any] | None = None
     mode: str | None = None
-    temporal_view: str | None = None
     status: str | None = None
     _heads: tuple[HeadCall, ...] = field(init=False, repr=False)
 
@@ -145,8 +144,6 @@ class Derivation:
             payload["head_vars"] = [_lower_select_item(item) for item in self.head_vars]
         if self.mode is not None:
             payload["mode"] = self.mode
-        if self.temporal_view is not None:
-            payload["temporal_view"] = self.temporal_view
         if self.status is not None:
             payload["status"] = self.status
         return payload

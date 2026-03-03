@@ -42,8 +42,6 @@ def build_authoring_session_from_dsl_inputs_dto(
     rule_dsl: str | None = None,
     derivation_dsl: str | None = None,
     rule_registry_payloads: list[dict[str, Any]] | None = None,
-    rule_temporal_view: str = "active",
-    derivation_temporal_view: str = "active",
     derivation_mode: str | None = None,
 ) -> dict[str, Any]:
     try:
@@ -60,15 +58,12 @@ def build_authoring_session_from_dsl_inputs_dto(
         rule_request = {
             "authoring_rule_payload": authoring_rule_payload,
             "registry_payloads": rule_registry_payloads,
-            "temporal_view": rule_temporal_view,
         }
     derivation_request: dict[str, Any] | None = None
     if authoring_derivation_payload is not None:
         derivation_request = {"authoring_derivation_payload": authoring_derivation_payload}
         if derivation_mode is not None:
             derivation_request["mode"] = derivation_mode
-        if derivation_temporal_view is not None:
-            derivation_request["temporal_view"] = derivation_temporal_view
 
     try:
         return build_authoring_session_dto(
@@ -88,8 +83,6 @@ def build_authoring_publish_workflow_from_dsl_inputs_dry_run_bundle_dto(
     rule_dsl: str | None = None,
     derivation_dsl: str | None = None,
     rule_registry_payloads: list[dict[str, Any]] | None = None,
-    rule_temporal_view: str = "active",
-    derivation_temporal_view: str = "active",
     derivation_mode: str | None = None,
 ) -> dict[str, Any]:
     try:
@@ -99,8 +92,6 @@ def build_authoring_publish_workflow_from_dsl_inputs_dry_run_bundle_dto(
             rule_dsl=rule_dsl,
             derivation_dsl=derivation_dsl,
             rule_registry_payloads=rule_registry_payloads,
-            rule_temporal_view=rule_temporal_view,
-            derivation_temporal_view=derivation_temporal_view,
             derivation_mode=derivation_mode,
         )
         return build_authoring_publish_workflow_dry_run_bundle_dto(session)
@@ -115,8 +106,6 @@ def build_authoring_session_from_dsl_inputs_safe_dto(
     rule_dsl: str | None = None,
     derivation_dsl: str | None = None,
     rule_registry_payloads: list[dict[str, Any]] | None = None,
-    rule_temporal_view: str = "active",
-    derivation_temporal_view: str = "active",
     derivation_mode: str | None = None,
 ) -> dict[str, Any]:
     parsed_schema: dict[str, Any] | None = None
@@ -171,8 +160,6 @@ def build_authoring_session_from_dsl_inputs_safe_dto(
             rule_dsl=rule_dsl,
             derivation_dsl=derivation_dsl,
             rule_registry_payloads=rule_registry_payloads,
-            rule_temporal_view=rule_temporal_view,
-            derivation_temporal_view=derivation_temporal_view,
             derivation_mode=derivation_mode,
         )
 
@@ -192,7 +179,6 @@ def build_authoring_session_from_dsl_inputs_safe_dto(
                     {
                         "authoring_rule_payload": parsed_rule,
                         "registry_payloads": rule_registry_payloads,
-                        "temporal_view": rule_temporal_view,
                     }
                     if parsed_rule is not None and can_build_store
                     else None
@@ -201,7 +187,6 @@ def build_authoring_session_from_dsl_inputs_safe_dto(
                     {
                         "authoring_derivation_payload": parsed_derivation,
                         **({"mode": derivation_mode} if derivation_mode is not None else {}),
-                        **({"temporal_view": derivation_temporal_view} if derivation_temporal_view is not None else {}),
                     }
                     if parsed_derivation is not None and can_build_store
                     else None
@@ -240,8 +225,6 @@ def build_authoring_publish_workflow_from_dsl_inputs_dry_run_bundle_safe_dto(
     rule_dsl: str | None = None,
     derivation_dsl: str | None = None,
     rule_registry_payloads: list[dict[str, Any]] | None = None,
-    rule_temporal_view: str = "active",
-    derivation_temporal_view: str = "active",
     derivation_mode: str | None = None,
 ) -> dict[str, Any]:
     session = build_authoring_session_from_dsl_inputs_safe_dto(
@@ -250,8 +233,6 @@ def build_authoring_publish_workflow_from_dsl_inputs_dry_run_bundle_safe_dto(
         rule_dsl=rule_dsl,
         derivation_dsl=derivation_dsl,
         rule_registry_payloads=rule_registry_payloads,
-        rule_temporal_view=rule_temporal_view,
-        derivation_temporal_view=derivation_temporal_view,
         derivation_mode=derivation_mode,
     )
     try:

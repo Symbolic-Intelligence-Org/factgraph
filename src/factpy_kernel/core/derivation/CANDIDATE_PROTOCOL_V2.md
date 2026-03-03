@@ -166,3 +166,20 @@ Authoring/user syntax:
 - `materialize_as` is removed from user-facing derivation DSL
 - `id_policy` is removed from user-facing derivation DSL
 - no-head derivations (`target_pred_id + head_vars`) remain fact-only compatibility path
+- primary_key fields in `head` are compile-time hard errors
+- `temporal_view` entry points are removed and fail explicitly
+- cross-coordinate attribute compare is restricted to same-entity `primary_key` fields
+
+Schema/protocol breakings relevant to migration:
+
+- `Field.dims` removed
+- `Field.fact_key` removed
+- `Field.cardinality` enum changed from `functional|multi|temporal` to `single|multi`
+- `Identity(primary_key=...)` is required for cross-coordinate joins
+- `sdk_batch_plan_v1` wire payload no longer carries `dims` / `fact_key`
+- write idempotency (`ingest_key`) includes business-temporal meta (`valid_from`/`valid_to`/`version`) in addition to source/trace material
+
+For the full upgrade checklist, see:
+
+- `src/factpy_kernel/sdk/docs/03_rules_and_derivations.md` (section 6.3)
+- `src/factpy_kernel/sdk/docs/03_rules_and_derivations.en.md` (section 6.3)

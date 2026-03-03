@@ -561,7 +561,6 @@ def _build_section_payloads(
                     "head_vars",
                     "where",
                     "mode",
-                    "temporal_view",
                 )
                 if key in derivation_request
             }

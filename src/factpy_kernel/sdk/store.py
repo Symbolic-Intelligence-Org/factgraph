@@ -54,6 +54,7 @@ class SDKStore:
         self._field_pred_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._field_decl_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._entity_spec_by_class: dict[type[Entity], dict[str, Any]] = {}
+        self._identity_values_by_e_ref: dict[str, dict[str, Any]] = {}
         self._default_row_format = default_row_format
         # Read once at init time; do not re-read env on each run().
         self._env_row_format = os.environ.get("FACTPY_ROW_FORMAT")
@@ -120,7 +121,6 @@ class SDKStore:
         self,
         entity_cls: type[Entity],
         *,
-        temporal_view: str = "active",
         limit: int | None = None,
         **filter_kwargs: Any,
     ):
@@ -129,7 +129,6 @@ class SDKStore:
         return sdk_find(
             self,
             entity_cls,
-            temporal_view=temporal_view,
             limit=limit,
             **filter_kwargs,
         )
@@ -178,7 +177,9 @@ class SDKStore:
             else:
                 raise SDKStoreError(f"missing identity field: {entity_cls.__name__}.{name}")
             tuples.append((name, tag, _coerce_sdk_value_to_tag(tag, raw_value)))
-        return encode_idref_v1(spec["entity_type"], tuples)
+        e_ref = encode_idref_v1(spec["entity_type"], tuples)
+        self._identity_values_by_e_ref[e_ref] = {name: value for name, _, value in tuples}
+        return e_ref
 
     def set(
         self,
@@ -186,11 +187,13 @@ class SDKStore:
         e_ref: str,
         value: Any,
         *,
-        dims: dict[str, Any] | list[Any] | tuple[Any, ...] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> str:
         pred = self._schema_pred_for_field(field)
-        rest_terms = self._rest_terms_for_field(pred, dims=dims, value=value)
+        owner_type = pred.get("owner_type")
+        if isinstance(owner_type, str) and owner_type:
+            self._ensure_identity_predicates_for_ref(owner_type=owner_type, e_ref=e_ref)
+        rest_terms = self._rest_terms_for_field(pred, value=value)
         return set_field(self._store.ledger, pred["pred_id"], e_ref, rest_terms, meta)
 
     def add(
@@ -199,11 +202,13 @@ class SDKStore:
         e_ref: str,
         value: Any,
         *,
-        dims: dict[str, Any] | list[Any] | tuple[Any, ...] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> str:
         pred = self._schema_pred_for_field(field)
-        rest_terms = self._rest_terms_for_field(pred, dims=dims, value=value)
+        owner_type = pred.get("owner_type")
+        if isinstance(owner_type, str) and owner_type:
+            self._ensure_identity_predicates_for_ref(owner_type=owner_type, e_ref=e_ref)
+        rest_terms = self._rest_terms_for_field(pred, value=value)
         return add_field(self._store.ledger, pred["pred_id"], e_ref, rest_terms, meta)
 
     def retract(self, asrt_id: str, *, meta: dict[str, Any] | None = None) -> str | None:
@@ -214,7 +219,6 @@ class SDKStore:
         obj: Any,
         *,
         row_format: str | None = None,
-        temporal_view: str = "active",
         registry: RuleRegistry | None = None,
     ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
         dispatch_key = self._run_dispatch_key(obj)
@@ -226,7 +230,6 @@ class SDKStore:
         return dispatch_map[dispatch_key](
             obj,
             row_format=row_format,
-            temporal_view=temporal_view,
             registry=registry,
         )
 
@@ -245,7 +248,6 @@ class SDKStore:
         query: Any,
         *,
         row_format: str | None,
-        temporal_view: str,
         registry: RuleRegistry | None,  # reserved for unified run() signature
     ) -> list[dict[str, Any]]:
         del registry
@@ -255,17 +257,16 @@ class SDKStore:
                 code=QUERY_INVALID_ROW_FORMAT,
                 path="$.run.row_format",
             )
-        return self._run_query(query, temporal_view=temporal_view)
+        return self._run_query(query)
 
     def _run_dispatch_derivation(
         self,
         derivation: Any,
         *,
         row_format: str | None,
-        temporal_view: str,
         registry: RuleRegistry | None,
     ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
-        del derivation, row_format, temporal_view, registry
+        del derivation, row_format, registry
         raise SDKStoreError(
             "Derivation is not supported by run(); use sdk.evaluate() instead",
             code=QUERY_INVALID_ROW_FORMAT,
@@ -277,7 +278,6 @@ class SDKStore:
         rule: Any,
         *,
         row_format: str | None,
-        temporal_view: str,
         registry: RuleRegistry | None,
     ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
         resolved_row_format = _resolve_row_format(
@@ -288,7 +288,6 @@ class SDKStore:
         return self._run_rule(
             rule,
             row_format=resolved_row_format,
-            temporal_view=temporal_view,
             registry=registry,
         )
 
@@ -297,7 +296,6 @@ class SDKStore:
         rule: Any,
         *,
         row_format: str,
-        temporal_view: str,
         registry: RuleRegistry | None,
     ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
         if isinstance(rule, str):
@@ -315,14 +313,14 @@ class SDKStore:
         active_registry = registry if registry is not None else RuleRegistry()
         if registry is None:
             self._register_rule_dependencies(active_registry, rule)
-        rows = run_rule(self._store, rule_spec, active_registry, temporal_view=temporal_view)
+        rows = run_rule(self._store, rule_spec, active_registry)
         return _format_rule_rows(rows, select_vars=list(rule_spec.select_vars), row_format=row_format)
 
-    def _run_query(self, query: Any, *, temporal_view: str) -> list[dict[str, Any]]:
-        plan = self._lower_query(query, temporal_view=temporal_view)
+    def _run_query(self, query: Any) -> list[dict[str, Any]]:
+        plan = self._lower_query(query)
         return execute_query_plan(self, plan)
 
-    def _lower_query(self, query: Any, *, temporal_view: str) -> QueryPlan:
+    def _lower_query(self, query: Any) -> QueryPlan:
         try:
             from .dsl import Query as SDKQuery
         except Exception as exc:
@@ -333,13 +331,17 @@ class SDKStore:
 
         return lower_query(
             query,
-            temporal_view=temporal_view,
             schema_ir=self._schema_ir,
             schema_digest=self._schema_digest,
             return_mode="dict",
         )
 
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
+        if "temporal_view" in kwargs:
+            # TODO: temporal_view for evaluate() remains blocked.
+            # Snapshot read views (.at/.version) are already implemented in sdk.facade.
+            # Re-enable only after derivation/runtime temporal write semantics are defined.
+            raise SDKStoreError("temporal_view is removed from evaluate(); use active/history views on read APIs")
         if args and isinstance(args[0], str):
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Derivation object or structured derivation dict"
@@ -350,14 +352,12 @@ class SDKStore:
             return self._evaluate_compiled_derivation_plans(
                 compiled_plans,
                 mode=kwargs.pop("mode", None),
-                temporal_view=kwargs.pop("temporal_view", None),
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
             compiled_plans = self._compile_derivation_input(args[0])
             return self._evaluate_compiled_derivation_plans(
                 compiled_plans,
                 mode=kwargs.pop("mode", None),
-                temporal_view=kwargs.pop("temporal_view", None),
             )
         return self._store.evaluate(*args, **kwargs)
 
@@ -366,13 +366,11 @@ class SDKStore:
         compiled_plans: list[dict[str, Any]],
         *,
         mode: str | None,
-        temporal_view: str | None,
     ) -> list[CandidateSet]:
         if len(compiled_plans) == 1:
             return self._evaluate_single_derivation_plan(
                 compiled_plans[0],
                 mode=mode,
-                temporal_view=temporal_view,
             )
 
         shared_run_id = self._derive_shared_run_id(compiled_plans[0]["derivation_id"])
@@ -381,7 +379,6 @@ class SDKStore:
             plan_candidates = self._evaluate_single_derivation_plan(
                 plan,
                 mode=mode,
-                temporal_view=temporal_view,
             )
             merged.extend(_with_candidate_run_id(plan_candidates, run_id=shared_run_id))
         return merged
@@ -391,10 +388,8 @@ class SDKStore:
         compiled: dict[str, Any],
         *,
         mode: str | None,
-        temporal_view: str | None,
     ) -> list[CandidateSet]:
         resolved_mode = mode if mode is not None else compiled.get("mode", "python")
-        resolved_temporal_view = temporal_view if temporal_view is not None else compiled.get("temporal_view", "active")
         return self._store.evaluate(
             derivation_id=compiled["derivation_id"],
             version=compiled["version"],
@@ -402,7 +397,6 @@ class SDKStore:
             head_vars=list(compiled["head_vars"]),
             where=list(compiled["where"]),
             mode=resolved_mode,
-            temporal_view=resolved_temporal_view,
             head=compiled.get("head"),
         )
 
@@ -610,60 +604,52 @@ class SDKStore:
         self,
         schema_pred: dict[str, Any],
         *,
-        dims: dict[str, Any] | list[Any] | tuple[Any, ...] | None,
         value: Any,
     ) -> list[tuple[str, Any]]:
         arg_specs = schema_pred.get("arg_specs")
-        if not isinstance(arg_specs, list) or len(arg_specs) < 2:
+        if not isinstance(arg_specs, list) or len(arg_specs) != 2:
             raise SDKStoreError("schema predicate arg_specs invalid")
-
-        dim_names = schema_pred.get("dims") or []
-        if not isinstance(dim_names, list):
-            raise SDKStoreError("schema predicate dims invalid")
-
-        dim_specs = arg_specs[1:-1]
-        value_spec = arg_specs[-1]
-        if len(dim_names) != len(dim_specs):
-            raise SDKStoreError("schema predicate dims/arg_specs mismatch")
-
-        dim_values = self._normalize_dims_input(dim_names, dims)
-        rest_terms: list[tuple[str, Any]] = []
-        for dim_spec, dim_name in zip(dim_specs, dim_names):
-            tag = dim_spec.get("type_domain")
-            if not isinstance(tag, str):
-                raise SDKStoreError("dim type_domain missing")
-            rest_terms.append((tag, _coerce_sdk_value_to_tag(tag, dim_values[dim_name])))
-
-        value_tag = value_spec.get("type_domain")
+        value_tag = arg_specs[1].get("type_domain")
         if not isinstance(value_tag, str):
             raise SDKStoreError("value type_domain missing")
-        rest_terms.append((value_tag, _coerce_sdk_value_to_tag(value_tag, value)))
-        return rest_terms
+        return [(value_tag, _coerce_sdk_value_to_tag(value_tag, value))]
 
-    @staticmethod
-    def _normalize_dims_input(
-        dim_names: list[str],
-        dims: dict[str, Any] | list[Any] | tuple[Any, ...] | None,
-    ) -> dict[str, Any]:
-        if not dim_names:
-            if dims is not None:
-                raise SDKStoreError("dims not allowed for field without dims")
-            return {}
-        if dims is None:
-            raise SDKStoreError(f"dims required: {dim_names}")
-        if isinstance(dims, dict):
-            missing = [name for name in dim_names if name not in dims]
-            extra = [name for name in dims.keys() if name not in dim_names]
-            if missing:
-                raise SDKStoreError(f"missing dims: {missing}")
-            if extra:
-                raise SDKStoreError(f"unknown dims: {extra}")
-            return {name: dims[name] for name in dim_names}
-        if isinstance(dims, (list, tuple)):
-            if len(dims) != len(dim_names):
-                raise SDKStoreError(f"dims length mismatch: expected {len(dim_names)}")
-            return {name: value for name, value in zip(dim_names, dims)}
-        raise SDKStoreError("dims must be dict or list/tuple")
+    def _ensure_identity_predicates_for_ref(self, *, owner_type: str, e_ref: str) -> None:
+        identity_values = self._identity_values_by_e_ref.get(e_ref)
+        if not isinstance(identity_values, dict) or not identity_values:
+            return
+        for pred in self._schema_ir.get("predicates", []):
+            if not isinstance(pred, dict):
+                continue
+            if pred.get("owner_type") != owner_type:
+                continue
+            if pred.get("is_identity_field") is not True:
+                continue
+            pred_id = pred.get("pred_id")
+            field_name = pred.get("py_field_name")
+            arg_specs = pred.get("arg_specs")
+            if not isinstance(pred_id, str) or not pred_id:
+                continue
+            if not isinstance(field_name, str) or field_name not in identity_values:
+                continue
+            if not isinstance(arg_specs, list) or len(arg_specs) != 2:
+                raise SDKStoreError(f"identity predicate arg_specs invalid for {pred_id}")
+            value_spec = arg_specs[1] if isinstance(arg_specs[1], dict) else None
+            type_domain = value_spec.get("type_domain") if isinstance(value_spec, dict) else None
+            if not isinstance(type_domain, str) or not type_domain:
+                raise SDKStoreError(f"identity predicate value type_domain invalid for {pred_id}")
+            try:
+                set_field(
+                    self._store.ledger,
+                    pred_id,
+                    e_ref,
+                    [(type_domain, identity_values[field_name])],
+                    None,
+                )
+            except Exception as exc:
+                raise SDKStoreError(
+                    f"failed to materialize identity predicate for {owner_type}.{field_name}: {exc}"
+                ) from exc
 
 
 def _default_uuid4_for_tag(tag: str) -> str:

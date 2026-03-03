@@ -4,12 +4,13 @@ import json
 import math
 from dataclasses import dataclass, field as dc_field
 from typing import Any, TYPE_CHECKING, Literal
+from uuid import uuid4
 
 from factpy_kernel.core.evidence.write_protocol import set_field
 from factpy_kernel.core.protocol.digests import sha256_token
 
 from .errors import SDKStoreError
-from .schema import Entity, Field
+from .schema import Entity, Field, Identity
 
 if TYPE_CHECKING:
     from .store import SDKStore
@@ -35,7 +36,6 @@ class SetOp:
     field: Field = dc_field(repr=False, compare=False)
     value_kind: _ValueKind = "scalar"
     value: Any = None
-    dims: dict[str, Any] = dc_field(default_factory=dict)
     meta: dict[str, Any] = dc_field(default_factory=dict)
     path: str = ""
 
@@ -48,7 +48,6 @@ class AddOp:
     field: Field = dc_field(repr=False, compare=False)
     value_kind: _ValueKind = "scalar"
     value: Any = None
-    dims: dict[str, Any] = dc_field(default_factory=dict)
     meta: dict[str, Any] = dc_field(default_factory=dict)
     path: str = ""
 
@@ -123,7 +122,6 @@ class BatchPlan:
                         pred_id=pred_id,
                         field_name=op.field_name,
                         value=value,
-                        dims=_normalize_json_object(op.dims, path=f"{op.path}.dims", allow_nested=False),
                         meta=_normalize_json_object(op.meta, path=f"{op.path}.meta", allow_nested=True),
                         path=op.path,
                     )
@@ -157,7 +155,7 @@ class BatchPlan:
                 continue
             raise SDKStoreError(f"unsupported batch op in export: {type(op).__name__}")
         return WireBatchPlan(
-            wire_version="sdk_batch_plan_v0",
+            wire_version="sdk_batch_plan_v1",
             schema_digest=_sdk_wire_schema_digest(sdk),
             ops=wire_ops,
         )
@@ -168,21 +166,32 @@ class BatchPlan:
     def apply(self, sdk: "SDKStore") -> BatchApplyResult:
         refs_by_handle_id: dict[int, str] = {}
         assertion_ids: list[str] = []
+        identity_pred_index = _sdk_identity_pred_index(sdk)
         for op in self.ops:
             if isinstance(op, RefOp):
-                refs_by_handle_id[op.handle_id] = sdk.ref(op.entity_cls, **dict(op.identity_values))
+                identity_values = dict(op.identity_values)
+                e_ref = sdk.ref(op.entity_cls, **identity_values)
+                refs_by_handle_id[op.handle_id] = e_ref
+                _write_identity_predicates_for_ref(
+                    sdk=sdk,
+                    identity_pred_index=identity_pred_index,
+                    e_ref=e_ref,
+                    entity_type=op.entity_type,
+                    identity_values=identity_values,
+                    path=op.path,
+                    assertion_ids=assertion_ids,
+                )
                 continue
             if isinstance(op, (SetOp, AddOp)):
                 e_ref = refs_by_handle_id.get(op.handle_id)
                 if e_ref is None:
                     raise SDKStoreError(f"plan invalid: missing RefOp before field op at {op.path or op.field_name}")
                 value = _resolve_planned_value(op, refs_by_handle_id)
-                dims = dict(op.dims) if op.dims else None
                 meta = dict(op.meta) if op.meta else None
                 if isinstance(op, SetOp):
-                    asrt_id = sdk.set(op.field, e_ref, value, dims=dims, meta=meta)
+                    asrt_id = sdk.set(op.field, e_ref, value, meta=meta)
                 else:
-                    asrt_id = sdk.add(op.field, e_ref, value, dims=dims, meta=meta)
+                    asrt_id = sdk.add(op.field, e_ref, value, meta=meta)
                 assertion_ids.append(asrt_id)
                 continue
             if isinstance(op, RetractOp):
@@ -235,7 +244,6 @@ class WireWriteOp:
     pred_id: str
     field_name: str
     value: dict[str, Any]
-    dims: dict[str, Any]
     meta: dict[str, Any]
     path: str
 
@@ -247,7 +255,6 @@ class WireWriteOp:
             "pred_id": self.pred_id,
             "field_name": self.field_name,
             "value": dict(self.value),
-            "dims": dict(self.dims),
             "meta": dict(self.meta),
             "path": self.path,
         }
@@ -333,7 +340,7 @@ class WireBatchPlan:
         wire_version = payload.get("wire_version")
         schema_digest = payload.get("schema_digest")
         raw_ops = payload.get("ops")
-        if wire_version != "sdk_batch_plan_v0":
+        if wire_version != "sdk_batch_plan_v1":
             raise SDKStoreError(f"unsupported wire_version: {wire_version!r}")
         if not isinstance(schema_digest, str) or not schema_digest:
             raise SDKStoreError("wire batch plan schema_digest must be non-empty string")
@@ -367,6 +374,7 @@ class WireBatchPlan:
         entity_cls_by_type = _sdk_entity_cls_by_type(sdk)
         pred_index = _sdk_pred_field_index(sdk)
         record_exists_pred_index = _sdk_record_exists_pred_index(sdk)
+        identity_pred_index = _sdk_identity_pred_index(sdk)
         refs_by_handle_id: dict[int, str] = {}
         entity_type_by_handle_id: dict[int, str] = {}
         assertion_ids: list[str] = []
@@ -378,9 +386,19 @@ class WireBatchPlan:
                 entity_cls = entity_cls_by_type.get(op.entity_type)
                 if entity_cls is None:
                     raise SDKStoreError(f"{op.path}: unknown entity_type for sdk schema: {op.entity_type}")
-                e_ref = sdk.ref(entity_cls, **dict(op.identity))
+                identity_values = dict(op.identity)
+                e_ref = sdk.ref(entity_cls, **identity_values)
                 refs_by_handle_id[op.handle_id] = e_ref
                 entity_type_by_handle_id[op.handle_id] = op.entity_type
+                _write_identity_predicates_for_ref(
+                    sdk=sdk,
+                    identity_pred_index=identity_pred_index,
+                    e_ref=e_ref,
+                    entity_type=op.entity_type,
+                    identity_values=identity_values,
+                    path=op.path,
+                    assertion_ids=assertion_ids,
+                )
                 continue
 
             if isinstance(op, WireWriteOp):
@@ -394,12 +412,11 @@ class WireBatchPlan:
                     )
                 field_desc = _resolve_wire_field_for_write_op(sdk=sdk, pred_index=pred_index, op=op)
                 value = _resolve_wire_value_for_apply(op.value, sdk=sdk, path=f"{op.path}.value")
-                dims = dict(op.dims) if op.dims else None
                 meta = dict(op.meta) if op.meta else None
                 if op.kind == "set":
-                    asrt_id = sdk.set(field_desc, e_ref, value, dims=dims, meta=meta)
+                    asrt_id = sdk.set(field_desc, e_ref, value, meta=meta)
                 else:
-                    asrt_id = sdk.add(field_desc, e_ref, value, dims=dims, meta=meta)
+                    asrt_id = sdk.add(field_desc, e_ref, value, meta=meta)
                 assertion_ids.append(asrt_id)
                 continue
 
@@ -484,7 +501,6 @@ def _parse_wire_write_op(raw: dict[str, Any], *, path: str) -> WireWriteOp:
     pred_id = raw.get("pred_id")
     field_name = raw.get("field_name")
     value = raw.get("value")
-    dims = raw.get("dims")
     meta = raw.get("meta")
     raw_path = raw.get("path", "")
     if kind not in {"set", "add"}:
@@ -506,7 +522,6 @@ def _parse_wire_write_op(raw: dict[str, Any], *, path: str) -> WireWriteOp:
         pred_id=pred_id,
         field_name=field_name,
         value=_normalize_wire_value(value, path=f"{path}.value"),
-        dims=_normalize_json_object(dims, path=f"{path}.dims", allow_nested=False),
         meta=_normalize_json_object(meta, path=f"{path}.meta", allow_nested=True),
         path=raw_path,
     )
@@ -750,6 +765,72 @@ def _sdk_record_exists_pred_index(sdk: "SDKStore") -> dict[str, dict[str, Any]]:
     return out
 
 
+def _sdk_identity_pred_index(sdk: "SDKStore") -> dict[str, list[dict[str, Any]]]:
+    out: dict[str, list[dict[str, Any]]] = {}
+    for pred in sdk.schema_ir.get("predicates", []):
+        if not isinstance(pred, dict):
+            continue
+        if pred.get("is_identity_field") is not True:
+            continue
+        pred_id = pred.get("pred_id")
+        owner_type = pred.get("owner_type")
+        field_name = pred.get("py_field_name")
+        arg_specs = pred.get("arg_specs")
+        if not isinstance(pred_id, str) or not pred_id:
+            continue
+        if not isinstance(owner_type, str) or not owner_type:
+            continue
+        if not isinstance(field_name, str) or not field_name:
+            continue
+        if not isinstance(arg_specs, list) or len(arg_specs) != 2:
+            raise SDKStoreError(f"identity predicate arg_specs invalid for {pred_id}")
+        value_spec = arg_specs[1] if isinstance(arg_specs[1], dict) else None
+        type_domain = value_spec.get("type_domain") if isinstance(value_spec, dict) else None
+        if not isinstance(type_domain, str) or not type_domain:
+            raise SDKStoreError(f"identity predicate arg_specs[1].type_domain invalid for {pred_id}")
+        out.setdefault(owner_type, []).append(
+            {
+                "pred_id": pred_id,
+                "field_name": field_name,
+                "type_domain": type_domain,
+            }
+        )
+    for rows in out.values():
+        rows.sort(key=lambda row: str(row.get("field_name")))
+    return out
+
+
+def _write_identity_predicates_for_ref(
+    *,
+    sdk: "SDKStore",
+    identity_pred_index: dict[str, list[dict[str, Any]]],
+    e_ref: str,
+    entity_type: str,
+    identity_values: dict[str, Any],
+    path: str,
+    assertion_ids: list[str],
+) -> None:
+    preds = identity_pred_index.get(entity_type, [])
+    for row in preds:
+        field_name = row.get("field_name")
+        pred_id = row.get("pred_id")
+        type_domain = row.get("type_domain")
+        if not isinstance(field_name, str) or field_name not in identity_values:
+            continue
+        if not isinstance(pred_id, str) or not pred_id:
+            continue
+        if not isinstance(type_domain, str) or not type_domain:
+            continue
+        value = identity_values[field_name]
+        try:
+            asrt_id = set_field(sdk.ledger, pred_id, e_ref, [(type_domain, value)], None)
+        except Exception as exc:
+            raise SDKStoreError(
+                f"{path}: identity predicate write failed for {entity_type}.{field_name}: {exc}"
+            ) from exc
+        assertion_ids.append(asrt_id)
+
+
 def _resolve_wire_field_for_write_op(*, sdk: "SDKStore", pred_index: dict[str, dict[str, Any]], op: WireWriteOp) -> Field:
     row = pred_index.get(op.pred_id)
     if row is None:
@@ -838,20 +919,18 @@ def _sdk_wire_schema_digest(sdk: "SDKStore") -> str:
             if not isinstance(tag, str) or not tag:
                 raise SDKStoreError(f"schema predicate {pred_id} arg_specs[{idx}].type_domain invalid")
             norm_arg_specs.append({"name": name, "type_domain": tag})
-        dims = pred.get("dims") if isinstance(pred.get("dims"), list) else []
         rows.append(
             {
                 "pred_id": pred_id,
                 "entity_type": owner_type,
                 "field_name": field_name,
                 "cardinality": field_decl.get("cardinality"),
-                "dims": [d for d in dims if isinstance(d, str)],
                 "arg_specs": norm_arg_specs,
             }
         )
     rows_sorted = sorted(rows, key=lambda row: (str(row.get("entity_type")), str(row.get("field_name")), str(row.get("pred_id"))))
     payload = {
-        "wire_schema_digest_version": "sdk_batch_pred_table_v0",
+        "wire_schema_digest_version": "sdk_batch_pred_table_v1",
         "predicates": rows_sorted,
     }
     return sha256_token(_canonical_json_bytes(payload))
@@ -863,7 +942,6 @@ class _StagedFieldOp:
     field_name: str
     field: Field
     value: Any
-    dims: dict[str, Any]
     meta: dict[str, Any]
     op_index: int
     path: str
@@ -880,24 +958,22 @@ class ManagedFieldHandle:
         self,
         value: Any,
         *,
-        dims: dict[str, Any] | list[Any] | tuple[Any, ...] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> "ManagedEntityHandle":
-        if self._field.cardinality != "functional":
-            raise SDKStoreError(f"{self._owner.path}.{self._field_name}: multi field only supports add(...) in batch staging v0")
-        self._tx._stage_field_op(self._owner, "set", self._field_name, self._field, value, dims=dims, meta=meta)
+        if self._field.cardinality != "single":
+            raise SDKStoreError(f"{self._owner.path}.{self._field_name}: multi field only supports add(...) in batch staging v1")
+        self._tx._stage_field_op(self._owner, "set", self._field_name, self._field, value, meta=meta)
         return self._owner
 
     def add(
         self,
         value: Any,
         *,
-        dims: dict[str, Any] | list[Any] | tuple[Any, ...] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> "ManagedEntityHandle":
         if self._field.cardinality != "multi":
-            raise SDKStoreError(f"{self._owner.path}.{self._field_name}: functional field only supports set(...) in batch staging v0")
-        self._tx._stage_field_op(self._owner, "add", self._field_name, self._field, value, dims=dims, meta=meta)
+            raise SDKStoreError(f"{self._owner.path}.{self._field_name}: single field only supports set(...) in batch staging v1")
+        self._tx._stage_field_op(self._owner, "add", self._field_name, self._field, value, meta=meta)
         return self._owner
 
     def retract(
@@ -910,6 +986,40 @@ class ManagedFieldHandle:
         return self._owner
 
 
+class _IdentityWriteGuard:
+    def __init__(self, owner: "ManagedEntityHandle", field_name: str) -> None:
+        self._owner = owner
+        self._field_name = field_name
+
+    @property
+    def value(self) -> Any:
+        return self._owner.identity_values.get(self._field_name)
+
+    def __repr__(self) -> str:
+        return repr(self.value)
+
+    __str__ = __repr__
+
+    def __bool__(self) -> bool:
+        return bool(self.value)
+
+    def __eq__(self, other: Any) -> bool:  # type: ignore[override]
+        return self.value == other
+
+    def set(self, *args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        raise SDKStoreError(
+            f"{self._owner.path}.{self._field_name}: identity fields are immutable; "
+            "use handle.bind(...) before writes"
+        )
+
+    def add(self, *args: Any, **kwargs: Any) -> None:
+        self.set(*args, **kwargs)
+
+    def retract(self, *args: Any, **kwargs: Any) -> None:
+        self.set(*args, **kwargs)
+
+
 class ManagedEntityHandle:
     def __init__(
         self,
@@ -918,7 +1028,7 @@ class ManagedEntityHandle:
         handle_id: int,
         creation_index: int,
         entity_cls: type[Entity],
-        e_ref: str,
+        e_ref: str | None,
         identity_values: dict[str, Any],
         entity_meta: dict[str, Any],
     ) -> None:
@@ -943,6 +1053,10 @@ class ManagedEntityHandle:
                 order[py_name] = idx
         self._field_order = order
 
+    def bind(self, **identity_values: Any) -> "ManagedEntityHandle":
+        self._tx._bind_identity(self, identity_values)
+        return self
+
     def __getattr__(self, name: str) -> Any:
         descriptor = getattr(self.entity_cls, name, None)
         if isinstance(descriptor, Field):
@@ -951,6 +1065,8 @@ class ManagedEntityHandle:
                 fh = ManagedFieldHandle(self._tx, self, name, descriptor)
                 self._field_handles[name] = fh
             return fh
+        if isinstance(descriptor, Identity):
+            return _IdentityWriteGuard(self, name)
         if name in self.identity_values:
             return self.identity_values[name]
         raise AttributeError(name)
@@ -997,10 +1113,11 @@ class SDKBatchTx:
     ) -> ManagedEntityHandle:
         if not isinstance(entity_cls, type) or not issubclass(entity_cls, Entity):
             raise SDKStoreError("tx.entity(...) requires Entity subclass")
-        if "uid" in identity_values and ("source_id" in identity_values or "source_system" in identity_values):
-            raise SDKStoreError("tx.entity(...): source_* identity and uid are mutually exclusive in batch staging v0")
-        e_ref = self._sdk.ref(entity_cls, **identity_values)
-        existing = self._handles_by_e_ref.get(e_ref)
+        self._validate_identity_keys(entity_cls, identity_values, path="tx.entity(...)")
+        materialized_identity, missing = self._materialize_identity_values(entity_cls, identity_values)
+        e_ref = self._sdk.ref(entity_cls, **materialized_identity) if not missing else None
+
+        existing = self._handles_by_e_ref.get(e_ref) if isinstance(e_ref, str) else None
         if existing is not None:
             if meta:
                 existing.entity_meta = {**existing.entity_meta, **dict(meta)}
@@ -1011,11 +1128,12 @@ class SDKBatchTx:
             creation_index=len(self._creation_order) + 1,
             entity_cls=entity_cls,
             e_ref=e_ref,
-            identity_values=dict(identity_values),
+            identity_values=dict(materialized_identity),
             entity_meta=_copy_meta(meta),
         )
         self._next_handle_id += 1
-        self._handles_by_e_ref[e_ref] = handle
+        if isinstance(e_ref, str):
+            self._handles_by_e_ref[e_ref] = handle
         self._handles_by_id[handle.handle_id] = handle
         self._creation_order.append(handle)
         return handle
@@ -1041,6 +1159,9 @@ class SDKBatchTx:
         commit_meta_norm = _copy_meta(commit_meta)
         ops: list[BatchOp] = []
         for handle in ordered:
+            field_ops = self._compile_handle_field_ops(handle, commit_meta=commit_meta_norm)
+            if not field_ops:
+                continue
             ops.append(
                 RefOp(
                     handle_id=handle.handle_id,
@@ -1050,7 +1171,7 @@ class SDKBatchTx:
                     path=handle.path,
                 )
             )
-            ops.extend(self._compile_handle_field_ops(handle, commit_meta=commit_meta_norm))
+            ops.extend(field_ops)
         return BatchPlan(ops=ops, warnings=[])
 
     def commit(
@@ -1109,11 +1230,12 @@ class SDKBatchTx:
     def _compile_handle_field_ops(self, handle: ManagedEntityHandle, *, commit_meta: dict[str, Any]) -> list[BatchOp]:
         if not handle._staged_ops:
             return []
+        self._ensure_handle_resolved(handle, path=handle.path)
 
         set_latest: dict[str, _StagedFieldOp] = {}
         add_kept: list[_StagedFieldOp] = []
         retract_ops: list[_StagedFieldOp] = []
-        add_seen: set[tuple[str, str, tuple[tuple[str, Any], ...]]] = set()
+        add_seen: set[tuple[str, str]] = set()
         for op in handle._staged_ops:
             if op.kind == "retract":
                 retract_ops.append(op)
@@ -1122,8 +1244,7 @@ class SDKBatchTx:
                 set_latest[op.field_name] = op
                 continue
             value_key = self._value_dedup_key(op.value)
-            dims_key = tuple((k, op.dims[k]) for k in sorted(op.dims.keys()))
-            dedup_key = (op.field_name, value_key, dims_key)
+            dedup_key = (op.field_name, value_key)
             if dedup_key in add_seen:
                 continue
             add_seen.add(dedup_key)
@@ -1150,7 +1271,6 @@ class SDKBatchTx:
                             field=op.field,
                             value_kind=value_kind,
                             value=value_payload,
-                            dims=dict(op.dims),
                             meta=effective_meta,
                             path=op.path,
                         )
@@ -1164,7 +1284,6 @@ class SDKBatchTx:
                             field=op.field,
                             value_kind=value_kind,
                             value=value_payload,
-                            dims=dict(op.dims),
                             meta=effective_meta,
                             path=op.path,
                         )
@@ -1243,24 +1362,20 @@ class SDKBatchTx:
         field: Field,
         value: Any,
         *,
-        dims: dict[str, Any] | list[Any] | tuple[Any, ...] | None,
         meta: dict[str, Any] | None,
     ) -> None:
         schema_pred = self._sdk._schema_pred_for_field(field)
-        dim_names = schema_pred.get("dims") or []
-        if not isinstance(dim_names, list):
-            raise SDKStoreError(f"{owner.path}.{field_name}: schema predicate dims invalid")
-        dims_norm = self._sdk._normalize_dims_input(dim_names, dims)
+        self._ensure_handle_resolved(owner, path=f"{owner.path}.{field_name}")
 
         # Early validation for local type/cardinality mistakes when possible.
         value_for_validation = value
         if isinstance(value, ManagedEntityHandle):
+            self._ensure_handle_resolved(value, path=f"{owner.path}.{field_name}")
             value_for_validation = value.e_ref
         if isinstance(value_for_validation, Entity):
             raise SDKStoreError(f"{owner.path}.{field_name}: plain Entity instance is not supported; use tx.entity(...) handle or entity_ref")
-        dims_arg = dims_norm if dim_names else None
         try:
-            self._sdk._rest_terms_for_field(schema_pred, dims=dims_arg, value=value_for_validation)
+            self._sdk._rest_terms_for_field(schema_pred, value=value_for_validation)
         except Exception as exc:
             raise SDKStoreError(f"{owner.path}.{field_name}: {exc}") from exc
 
@@ -1269,10 +1384,9 @@ class SDKBatchTx:
             field_name=field_name,
             field=field,
             value=value,
-            dims=dict(dims_norm),
             meta=_copy_meta(meta),
             op_index=self._next_op_index,
-            path=self._field_path(owner, field_name, dims_norm),
+            path=self._field_path(owner, field_name),
         )
         self._next_op_index += 1
         owner._append_staged(op)
@@ -1286,6 +1400,7 @@ class SDKBatchTx:
         *,
         meta: dict[str, Any] | None,
     ) -> None:
+        self._ensure_handle_resolved(owner, path=f"{owner.path}.{field_name}.retract")
         if not isinstance(assertion_id, str) or not assertion_id:
             raise SDKStoreError(f"{owner.path}.{field_name}.retract: assertion_id must be non-empty string")
         meta_norm = _copy_meta(meta)
@@ -1307,7 +1422,6 @@ class SDKBatchTx:
             field_name=field_name,
             field=field,
             value=assertion_id,
-            dims={},
             meta=meta_norm,
             op_index=self._next_op_index,
             path=path,
@@ -1317,11 +1431,109 @@ class SDKBatchTx:
         owner._append_staged(op)
 
     @staticmethod
-    def _field_path(owner: ManagedEntityHandle, field_name: str, dims_norm: dict[str, Any]) -> str:
-        if not dims_norm:
-            return f"{owner.path}.{field_name}"
-        dims_body = ",".join(f"{k}={dims_norm[k]!r}" for k in dims_norm.keys())
-        return f"{owner.path}.{field_name}[{dims_body}]"
+    def _field_path(owner: ManagedEntityHandle, field_name: str) -> str:
+        return f"{owner.path}.{field_name}"
+
+    def _bind_identity(self, handle: ManagedEntityHandle, identity_values: dict[str, Any]) -> None:
+        if not isinstance(identity_values, dict) or not identity_values:
+            raise SDKStoreError(f"{handle.path}.bind(...): identity kwargs must be non-empty")
+        self._validate_identity_keys(handle.entity_cls, identity_values, path=f"{handle.path}.bind(...)")
+        for key, value in identity_values.items():
+            if key in handle.identity_values and handle.identity_values[key] != value:
+                raise SDKStoreError(
+                    f"{handle.path}.bind(...): identity field '{key}' is immutable once bound "
+                    f"({handle.identity_values[key]!r} != {value!r})"
+                )
+            handle.identity_values[key] = value
+        # Materialize defaults/default_factory values on bind to keep identity stable.
+        materialized, _ = self._materialize_identity_values(handle.entity_cls, handle.identity_values)
+        handle.identity_values = materialized
+        if handle.e_ref is not None:
+            expected_ref = self._sdk.ref(handle.entity_cls, **materialized)
+            if expected_ref != handle.e_ref:
+                raise SDKStoreError(
+                    f"{handle.path}.bind(...): bound identity no longer matches existing ref; "
+                    "identity is immutable after resolution"
+                )
+            return
+
+        _, missing = self._materialize_identity_values(handle.entity_cls, handle.identity_values)
+        if not missing:
+            self._ensure_handle_resolved(handle, path=f"{handle.path}.bind(...)")
+
+    def _identity_spec_rows(self, entity_cls: type[Entity]) -> list[dict[str, Any]]:
+        spec = self._sdk._entity_spec_by_class.get(entity_cls)
+        if not isinstance(spec, dict):
+            raise SDKStoreError(f"unknown Entity class: {entity_cls.__name__}")
+        rows = spec.get("identity_fields")
+        if not isinstance(rows, list):
+            raise SDKStoreError(f"invalid entity spec identity_fields for {entity_cls.__name__}")
+        out = [row for row in rows if isinstance(row, dict)]
+        if not out:
+            raise SDKStoreError(f"{entity_cls.__name__} must declare at least one identity field")
+        return out
+
+    def _validate_identity_keys(self, entity_cls: type[Entity], identity_values: dict[str, Any], *, path: str) -> None:
+        allowed = {str(row.get("name")) for row in self._identity_spec_rows(entity_cls) if isinstance(row.get("name"), str)}
+        unknown = sorted(set(identity_values.keys()) - allowed)
+        if unknown:
+            raise SDKStoreError(f"{path}: unknown identity fields for {entity_cls.__name__}: {unknown}")
+
+    def _materialize_identity_values(
+        self,
+        entity_cls: type[Entity],
+        identity_values: dict[str, Any],
+    ) -> tuple[dict[str, Any], list[str]]:
+        materialized = dict(identity_values)
+        missing: list[str] = []
+        for row in self._identity_spec_rows(entity_cls):
+            name = row.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            if name in materialized:
+                continue
+            if "default" in row:
+                materialized[name] = row["default"]
+                continue
+            if row.get("default_factory") == "uuid4":
+                type_domain = row.get("type_domain")
+                if not isinstance(type_domain, str) or not type_domain:
+                    raise SDKStoreError(f"{entity_cls.__name__}.{name}: type_domain required for default_factory='uuid4'")
+                materialized[name] = self._default_uuid4_for_tag(type_domain)
+                continue
+            missing.append(name)
+        return materialized, missing
+
+    def _ensure_handle_resolved(self, handle: ManagedEntityHandle, *, path: str) -> str:
+        if isinstance(handle.e_ref, str):
+            return handle.e_ref
+
+        materialized, missing = self._materialize_identity_values(handle.entity_cls, handle.identity_values)
+        handle.identity_values = materialized
+        if missing:
+            missing_sorted = sorted(missing)
+            raise SDKStoreError(
+                f"{path}: identity is incomplete for {handle.entity_cls.__name__}; missing: {missing_sorted}. "
+                "Bind missing identity via handle.bind(...)."
+            )
+        e_ref = self._sdk.ref(handle.entity_cls, **materialized)
+        existing = self._handles_by_e_ref.get(e_ref)
+        if existing is not None and existing is not handle:
+            raise SDKStoreError(
+                f"{path}: identity resolves to existing handle {existing.path}; "
+                "reuse that handle instead of rebinding a second instance"
+            )
+        handle.e_ref = e_ref
+        self._handles_by_e_ref[e_ref] = handle
+        return e_ref
+
+    @staticmethod
+    def _default_uuid4_for_tag(tag: str) -> str:
+        if tag == "uuid":
+            return str(uuid4()).lower()
+        if tag == "string":
+            return uuid4().hex
+        raise SDKStoreError(f"default_factory='uuid4' not supported for type_domain={tag}")
 
 
 def _copy_meta(meta: dict[str, Any] | None) -> dict[str, Any]:

@@ -150,18 +150,25 @@ def _build_identity_from_kwargs(
     kwargs: dict[str, Any],
     path: str,
 ) -> dict[str, Any]:
-    allowed = {"default_factory"}
+    allowed = {"default", "default_factory", "primary_key"}
     _reject_unknown_keys(kwargs, allowed, path=f"{path}.Identity")
     out = {
         "__kind__": "identity",
         "name": field_name,
         "type_domain": type_domain,
     }
+    if "default" in kwargs:
+        out["default"] = kwargs["default"]
     if "default_factory" in kwargs:
         value = kwargs["default_factory"]
         if not isinstance(value, str) or not value:
             raise _parse_error("Identity.default_factory must be non-empty string", path=f"{path}.Identity.default_factory")
         out["default_factory"] = value
+    if "primary_key" in kwargs:
+        primary_key = kwargs["primary_key"]
+        if not isinstance(primary_key, bool):
+            raise _parse_error("Identity.primary_key must be bool", path=f"{path}.Identity.primary_key")
+        out["primary_key"] = primary_key
     return out
 
 
@@ -173,32 +180,16 @@ def _build_field_from_kwargs(
     path: str,
     entity_name: str,
 ) -> dict[str, Any]:
-    allowed = {
-        "cardinality",
-        "name",
-        "pred_id",
-        "aliases",
-        "display_name",
-        "description",
-        "value_name",
-        "fact_key",
-        "dims",
-        "type_domain",
-    }
+    del entity_name
+    allowed = {"cardinality", "description"}
     _reject_unknown_keys(kwargs, allowed, path=f"{path}.Field")
 
     cardinality = kwargs.get("cardinality")
-    if cardinality not in {"functional", "multi", "temporal"}:
+    if cardinality not in {"single", "multi"}:
         raise _parse_error(
-            "Field.cardinality must be one of functional|multi|temporal",
+            "Field.cardinality must be one of single|multi",
             path=f"{path}.Field.cardinality",
         )
-
-    if "type_domain" in kwargs:
-        override = kwargs["type_domain"]
-        if not isinstance(override, str) or override not in CANONICAL_TAGS:
-            raise _parse_error("Field.type_domain must be canonical tag string", path=f"{path}.Field.type_domain")
-        type_domain = override
 
     out: dict[str, Any] = {
         "__kind__": "field",
@@ -207,73 +198,12 @@ def _build_field_from_kwargs(
         "cardinality": cardinality,
     }
 
-    if "name" in kwargs:
-        name_val = kwargs["name"]
-        if not isinstance(name_val, str) or not name_val:
-            raise _parse_error("Field.name must be non-empty string", path=f"{path}.Field.name")
-        out["name"] = name_val
-    if "pred_id" in kwargs:
-        pred_id = kwargs["pred_id"]
-        if not isinstance(pred_id, str) or not pred_id:
-            raise _parse_error("Field.pred_id must be non-empty string", path=f"{path}.Field.pred_id")
-        out["pred_id"] = pred_id
-    for key in ("display_name", "description", "value_name"):
-        if key in kwargs:
-            value = kwargs[key]
-            if not isinstance(value, str) or not value:
-                raise _parse_error(f"Field.{key} must be non-empty string", path=f"{path}.Field.{key}")
-            out[key] = value
-    if "aliases" in kwargs:
-        aliases = kwargs["aliases"]
-        if not isinstance(aliases, list) or any(not isinstance(x, str) or not x for x in aliases):
-            raise _parse_error("Field.aliases must be list[str]", path=f"{path}.Field.aliases")
-        out["aliases"] = aliases
-    if "fact_key" in kwargs:
-        fact_key = kwargs["fact_key"]
-        if not isinstance(fact_key, list) or any(not isinstance(x, str) or not x for x in fact_key):
-            raise _parse_error("Field.fact_key must be list[str]", path=f"{path}.Field.fact_key")
-        out["fact_key"] = fact_key
-    if "dims" in kwargs:
-        out["dims"] = _normalize_dims(kwargs["dims"], path=f"{path}.Field.dims")
-
-    _default_relation_field_name(entity_name=entity_name, field_name=field_name, out=out)
+    if "description" in kwargs:
+        value = kwargs["description"]
+        if not isinstance(value, str) or not value:
+            raise _parse_error("Field.description must be non-empty string", path=f"{path}.Field.description")
+        out["description"] = value
     return out
-
-
-def _default_relation_field_name(*, entity_name: str, field_name: str, out: dict[str, Any]) -> None:
-    if out.get("pred_id") or out.get("name"):
-        return
-    if out["type_domain"] == "entity_ref":
-        owner = entity_name[:1].lower() + entity_name[1:]
-        out["pred_id"] = f"{owner}:{field_name}"
-
-
-def _normalize_dims(value: Any, *, path: str) -> list[dict[str, str]]:
-    if not isinstance(value, list):
-        raise _parse_error("Field.dims must be list", path=path)
-    dims: list[dict[str, str]] = []
-    for idx, item in enumerate(value):
-        item_path = f"{path}[{idx}]"
-        if isinstance(item, dict):
-            name = item.get("name")
-            type_domain = item.get("type_domain")
-        elif isinstance(item, tuple) and len(item) == 2:
-            name, type_domain = item
-        elif isinstance(item, list) and len(item) == 2:
-            name, type_domain = item
-        else:
-            raise _parse_error("Field.dims entries must be {'name','type_domain'} or [name, type]", path=item_path)
-
-        if not isinstance(name, str) or not name:
-            raise _parse_error("Field.dims name must be non-empty string", path=f"{item_path}.name")
-        if isinstance(type_domain, str) and type_domain in CANONICAL_TAGS:
-            td = type_domain
-        elif isinstance(type_domain, str):
-            td = _python_name_to_type_domain(type_domain)
-        else:
-            raise _parse_error("Field.dims type must be string/canonical tag", path=f"{item_path}.type_domain")
-        dims.append({"name": name, "type_domain": td})
-    return dims
 
 
 def _call_name(func: ast.expr) -> str | None:

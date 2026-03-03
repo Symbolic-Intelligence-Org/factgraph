@@ -160,11 +160,18 @@ def _eval_body(
     *,
     ast_gate_on: bool,
 ) -> list[dict[str, Any]]:
+    planned_body = _plan_body_atoms(body, ast_gate_on=ast_gate_on)
+    pred_lookup_cache: dict[str, dict[tuple[int, ...], dict[tuple[Any, ...], list[tuple[Any, ...]]]]] = {}
     envs: list[dict[str, Any]] = [{}]
-    for atom in body:
+    for atom in planned_body:
         kind = atom[0]
         if kind == "pred":
-            envs = _eval_pred_atom(view_facts, envs, atom)
+            envs = _eval_pred_atom(
+                view_facts,
+                envs,
+                atom,
+                pred_lookup_cache=pred_lookup_cache,
+            )
         elif kind == "eq":
             envs = _eval_eq_atom(envs, atom, ast_gate_on=ast_gate_on)
         elif kind == "in":
@@ -188,20 +195,33 @@ def _eval_pred_atom(
     view_facts: dict[str, list[tuple[Any, ...]]],
     envs: list[dict[str, Any]],
     atom: tuple[Any, ...],
+    *,
+    pred_lookup_cache: dict[str, dict[tuple[int, ...], dict[tuple[Any, ...], list[tuple[Any, ...]]]]],
 ) -> list[dict[str, Any]]:
     _, pred_id, terms = atom
     if pred_id not in view_facts:
         raise WhereValidationError(f"unknown predicate in where: {pred_id}")
 
     facts = view_facts[pred_id]
+    expected_arity = len(terms)
+    for fact in facts:
+        if len(fact) != expected_arity:
+            raise WhereValidationError(
+                f"arity mismatch for predicate {pred_id}: expected {expected_arity}, got {len(fact)}"
+            )
     out: list[dict[str, Any]] = []
 
+    # NOTE: Current join optimization only guarantees that primary_key shared-variable
+    # joins produced by attr_eq lowering use lookup paths in python evaluator.
+    # Non-primary cross-coordinate equality is rejected at compile time upstream.
     for env in envs:
-        for fact in facts:
-            if len(fact) != len(terms):
-                raise WhereValidationError(
-                    f"arity mismatch for predicate {pred_id}: expected {len(terms)}, got {len(fact)}"
-                )
+        candidates = _pred_candidates_for_env(
+            facts=facts,
+            terms=terms,
+            env=env,
+            cache_for_pred=pred_lookup_cache.setdefault(pred_id, {}),
+        )
+        for fact in candidates:
             next_env = dict(env)
             ok = True
             for term, value in zip(terms, fact):
@@ -386,11 +406,18 @@ def _exists_not_body(
     ast_gate_on: bool,
 ) -> bool:
     for body in bodies:
+        planned_body = _plan_body_atoms(body, ast_gate_on=ast_gate_on)
+        pred_lookup_cache: dict[str, dict[tuple[int, ...], dict[tuple[Any, ...], list[tuple[Any, ...]]]]] = {}
         envs: list[dict[str, Any]] = [dict(env)]
-        for atom in body:
+        for atom in planned_body:
             kind = atom[0]
             if kind == "pred":
-                envs = _eval_pred_atom(view_facts, envs, atom)
+                envs = _eval_pred_atom(
+                    view_facts,
+                    envs,
+                    atom,
+                    pred_lookup_cache=pred_lookup_cache,
+                )
             elif kind == "eq":
                 envs = _eval_eq_atom(envs, atom, ast_gate_on=ast_gate_on)
             elif kind == "in":
@@ -572,6 +599,198 @@ def _bind_or_check_result(env: dict[str, Any], z: str, result: int, kind: str) -
     next_env = dict(env)
     next_env[z] = result
     return next_env
+
+
+def _plan_body_atoms(
+    body: list[tuple[Any, ...]],
+    *,
+    ast_gate_on: bool,
+) -> list[tuple[Any, ...]]:
+    if len(body) <= 1:
+        return list(body)
+    # Boundary for phase-3 execution optimization:
+    # only enable atom reordering when system primary-key temporaries are present.
+    # This keeps generic where evaluation semantics/order stable for non-pk bodies.
+    if not _body_has_system_pk_signal(body):
+        return list(body)
+    remaining = list(body)
+    planned: list[tuple[Any, ...]] = []
+    bound_vars: set[str] = set()
+
+    while remaining:
+        selected_idx: int | None = None
+        selected_score: tuple[int, int, int, int, int] | None = None
+        for idx, atom in enumerate(remaining):
+            if not _atom_ready_for_eval(atom, bound_vars=bound_vars, ast_gate_on=ast_gate_on):
+                continue
+            score = _atom_eval_score(atom, bound_vars=bound_vars)
+            if selected_score is None or score > selected_score:
+                selected_idx = idx
+                selected_score = score
+        if selected_idx is None:
+            selected_idx = 0
+        atom = remaining.pop(selected_idx)
+        planned.append(atom)
+        _update_bound_vars_for_plan(bound_vars, atom)
+    return planned
+
+
+def _atom_ready_for_eval(
+    atom: tuple[Any, ...],
+    *,
+    bound_vars: set[str],
+    ast_gate_on: bool,
+) -> bool:
+    kind = atom[0]
+    if kind == "pred":
+        return True
+    if kind == "eq":
+        _, lhs, rhs = atom
+        return (not ast_gate_on) or _term_known_for_plan(lhs, bound_vars) or _term_known_for_plan(rhs, bound_vars)
+    if kind == "in":
+        _, var, _ = atom
+        return (not ast_gate_on) or (var in bound_vars)
+    if kind in {"ne", "gt", "ge", "lt", "le"}:
+        _, lhs, rhs = atom
+        return (not ast_gate_on) or (
+            _term_known_for_plan(lhs, bound_vars) and _term_known_for_plan(rhs, bound_vars)
+        )
+    if kind in {"add", "sub"}:
+        _, _, x, y = atom
+        return (not ast_gate_on) or (
+            _term_known_for_plan(x, bound_vars) and _term_known_for_plan(y, bound_vars)
+        )
+    if kind == "neg":
+        _, _, x = atom
+        return (not ast_gate_on) or _term_known_for_plan(x, bound_vars)
+    if kind in {"addc", "mulc"}:
+        _, _, x, _ = atom
+        return (not ast_gate_on) or _term_known_for_plan(x, bound_vars)
+    if kind == "not":
+        _, not_body = atom
+        vars_in_not_body = _vars_in_not_bodies(_normalize_not_body(not_body))
+        return (not ast_gate_on) or any(var in bound_vars for var in vars_in_not_body)
+    return True
+
+
+def _atom_eval_score(
+    atom: tuple[Any, ...],
+    *,
+    bound_vars: set[str],
+) -> tuple[int, int, int, int, int]:
+    kind = atom[0]
+    if kind == "pred":
+        _, pred_id, terms = atom
+        known_terms = sum(1 for term in terms if _term_known_for_plan(term, bound_vars))
+        bound_var_terms = sum(1 for term in terms if _is_var(term) and term in bound_vars)
+        unbound_var_terms = sum(1 for term in terms if _is_var(term) and term not in bound_vars)
+        is_exists = isinstance(pred_id, str) and pred_id.endswith(":exists")
+        return (50, known_terms, bound_var_terms, -unbound_var_terms, 0 if not is_exists else -1)
+    if kind == "eq":
+        _, lhs, rhs = atom
+        can_bind = 0
+        if _is_var(lhs) and lhs not in bound_vars and _term_known_for_plan(rhs, bound_vars):
+            can_bind += 1
+        if _is_var(rhs) and rhs not in bound_vars and _term_known_for_plan(lhs, bound_vars):
+            can_bind += 1
+        known_terms = int(_term_known_for_plan(lhs, bound_vars)) + int(_term_known_for_plan(rhs, bound_vars))
+        return (40, can_bind, known_terms, 0, 0)
+    if kind in _ARITH_KINDS:
+        output = atom[1] if len(atom) >= 2 else None
+        can_bind_output = int(_is_var(output) and output not in bound_vars)
+        known_inputs = sum(1 for term in atom[2:] if _term_known_for_plan(term, bound_vars))
+        return (30, can_bind_output, known_inputs, 0, 0)
+    if kind in {"in", "ne", "gt", "ge", "lt", "le"}:
+        lhs = atom[1] if len(atom) >= 2 else None
+        rhs = atom[2] if len(atom) >= 3 else None
+        known_terms = int(_term_known_for_plan(lhs, bound_vars)) + int(_term_known_for_plan(rhs, bound_vars))
+        return (20, known_terms, 0, 0, 0)
+    if kind == "not":
+        vars_in_not_body = _vars_in_not_bodies(_normalize_not_body(atom[1]))
+        correlated = sum(1 for var in vars_in_not_body if var in bound_vars)
+        return (10, correlated, 0, 0, 0)
+    return (0, 0, 0, 0, 0)
+
+
+def _update_bound_vars_for_plan(bound_vars: set[str], atom: tuple[Any, ...]) -> None:
+    kind = atom[0]
+    if kind == "pred":
+        _, _, terms = atom
+        for term in terms:
+            if _is_var(term):
+                bound_vars.add(term)
+        return
+    if kind == "eq":
+        _, lhs, rhs = atom
+        lhs_known = _term_known_for_plan(lhs, bound_vars)
+        rhs_known = _term_known_for_plan(rhs, bound_vars)
+        if _is_var(lhs) and rhs_known:
+            bound_vars.add(lhs)
+        if _is_var(rhs) and lhs_known:
+            bound_vars.add(rhs)
+        return
+    if kind in {"add", "sub", "neg", "addc", "mulc"}:
+        output = atom[1]
+        if _is_var(output):
+            bound_vars.add(output)
+
+
+def _term_known_for_plan(term: Any, bound_vars: set[str]) -> bool:
+    if _is_var(term):
+        return term in bound_vars
+    return True
+
+
+def _body_has_system_pk_signal(body: list[tuple[Any, ...]]) -> bool:
+    for atom in body:
+        if not isinstance(atom, tuple) or len(atom) < 1:
+            continue
+        if atom[0] != "pred" or len(atom) != 3:
+            continue
+        terms = atom[2]
+        if not isinstance(terms, list):
+            continue
+        for term in terms:
+            if _is_system_pk_var(term):
+                return True
+    return False
+
+
+def _is_system_pk_var(term: Any) -> bool:
+    return isinstance(term, str) and term.startswith("$__pk_")
+
+
+def _pred_candidates_for_env(
+    *,
+    facts: list[tuple[Any, ...]],
+    terms: list[Any],
+    env: dict[str, Any],
+    cache_for_pred: dict[tuple[int, ...], dict[tuple[Any, ...], list[tuple[Any, ...]]]],
+) -> list[tuple[Any, ...]]:
+    positions: list[int] = []
+    key_values: list[Any] = []
+    for idx, term in enumerate(terms):
+        if _is_var(term):
+            if term not in env:
+                continue
+            positions.append(idx)
+            key_values.append(env[term])
+            continue
+        positions.append(idx)
+        key_values.append(term)
+
+    if not positions:
+        return facts
+
+    key_positions = tuple(positions)
+    index = cache_for_pred.get(key_positions)
+    if index is None:
+        index = {}
+        for fact in facts:
+            key = tuple(fact[pos] for pos in key_positions)
+            index.setdefault(key, []).append(fact)
+        cache_for_pred[key_positions] = index
+    return index.get(tuple(key_values), [])
 
 
 def _is_var(value: Any) -> bool:

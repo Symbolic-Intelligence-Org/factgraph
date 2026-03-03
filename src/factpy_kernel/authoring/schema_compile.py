@@ -86,6 +86,16 @@ def _compile_entity(entity_raw: Any, entity_index: int) -> tuple[dict[str, Any],
             f"entities[{entity_index}].fields must be list",
             path=f"$.entities[{entity_index}].fields",
         )
+    identity_names = {field["name"] for field in identity_fields}
+    for idx, field_raw in enumerate(fields_raw):
+        if not isinstance(field_raw, dict):
+            continue
+        py_name = field_raw.get("py_name")
+        if isinstance(py_name, str) and py_name in identity_names:
+            raise _compile_error(
+                f"entities[{entity_index}].fields[{idx}].py_name conflicts with identity field: {py_name}",
+                path=f"$.entities[{entity_index}].fields[{idx}].py_name",
+            )
 
     entity_out: dict[str, Any] = {
         "entity_type": entity_type,
@@ -101,12 +111,20 @@ def _compile_entity(entity_raw: Any, entity_index: int) -> tuple[dict[str, Any],
             "owner_type": entity_type,
             "arity": 1,
             "arg_specs": [{"name": owner_prefix, "type_domain": "entity_ref"}],
-            "cardinality": "functional",
-            "dims": [],
+            "cardinality": "single",
             "group_key_indexes": [0],
             "is_entity_exists": True,
         }
     )
+
+    for identity in identity_fields:
+        predicates.append(
+            _compile_identity_predicate(
+                identity_field=identity,
+                entity_type=entity_type,
+                owner_prefix=owner_prefix,
+            )
+        )
 
     for field_index, field_raw in enumerate(fields_raw):
         predicates.append(
@@ -120,6 +138,42 @@ def _compile_entity(entity_raw: Any, entity_index: int) -> tuple[dict[str, Any],
         )
 
     return entity_out, predicates
+
+
+def _compile_identity_predicate(
+    *,
+    identity_field: dict[str, Any],
+    entity_type: str,
+    owner_prefix: str,
+) -> dict[str, Any]:
+    field_name = identity_field.get("name")
+    type_domain = identity_field.get("type_domain")
+    if not isinstance(field_name, str) or not field_name:
+        raise _compile_error(
+            f"identity field name must be non-empty string for {entity_type}",
+            path="$.entities[].identity_fields[].name",
+        )
+    if type_domain not in CANONICAL_TAGS:
+        raise _compile_error(
+            f"identity field type_domain invalid for {entity_type}.{field_name}: {type_domain}",
+            path="$.entities[].identity_fields[].type_domain",
+        )
+    predicate: dict[str, Any] = {
+        "pred_id": f"{owner_prefix}:{field_name}",
+        "owner_type": entity_type,
+        "arity": 2,
+        "arg_specs": [
+            {"name": owner_prefix, "type_domain": "entity_ref"},
+            {"name": field_name, "type_domain": type_domain},
+        ],
+        "cardinality": "single",
+        "group_key_indexes": [0],
+        "py_field_name": field_name,
+        "is_identity_field": True,
+    }
+    if identity_field.get("primary_key") is True:
+        predicate["primary_key"] = True
+    return predicate
 
 
 def _compile_identity_field(field_raw: Any, entity_index: int, id_index: int) -> dict[str, Any]:
@@ -141,8 +195,12 @@ def _compile_identity_field(field_raw: Any, entity_index: int, id_index: int) ->
             path=f"$.entities[{entity_index}].identity_fields[{id_index}].type_domain",
         )
     out = {"name": name, "type_domain": type_domain}
+    if "default" in field_raw:
+        out["default"] = field_raw["default"]
     if "default_factory" in field_raw:
         out["default_factory"] = field_raw["default_factory"]
+    if field_raw.get("primary_key") is True:
+        out["primary_key"] = True
     return out
 
 
@@ -168,47 +226,11 @@ def _compile_field(
         )
 
     cardinality = field_raw.get("cardinality")
-    if cardinality not in {"functional", "multi", "temporal"}:
+    if cardinality not in {"single", "multi"}:
         raise _compile_error(
-            f"entities[{entity_index}].fields[{field_index}].cardinality must be one of functional|multi|temporal",
+            f"entities[{entity_index}].fields[{field_index}].cardinality must be one of single|multi",
             path=f"$.entities[{entity_index}].fields[{field_index}].cardinality",
         )
-
-    dims_raw = field_raw.get("dims", [])
-    if dims_raw is None:
-        dims_raw = []
-    if not isinstance(dims_raw, list):
-        raise _compile_error(
-            f"entities[{entity_index}].fields[{field_index}].dims must be list",
-            path=f"$.entities[{entity_index}].fields[{field_index}].dims",
-        )
-    dims: list[dict[str, Any]] = []
-    dim_names: list[str] = []
-    for dim_index, dim_raw in enumerate(dims_raw):
-        if not isinstance(dim_raw, dict):
-            raise _compile_error(
-                f"entities[{entity_index}].fields[{field_index}].dims[{dim_index}] must be object",
-                path=f"$.entities[{entity_index}].fields[{field_index}].dims[{dim_index}]",
-            )
-        dim_name = dim_raw.get("name")
-        dim_type = dim_raw.get("type_domain")
-        if not isinstance(dim_name, str) or not dim_name:
-            raise _compile_error(
-                f"entities[{entity_index}].fields[{field_index}].dims[{dim_index}].name must be non-empty string",
-                path=f"$.entities[{entity_index}].fields[{field_index}].dims[{dim_index}].name",
-            )
-        if dim_name in dim_names:
-            raise _compile_error(
-                f"entities[{entity_index}].fields[{field_index}].dims contains duplicate name: {dim_name}",
-                path=f"$.entities[{entity_index}].fields[{field_index}].dims",
-            )
-        if dim_type not in CANONICAL_TAGS:
-            raise _compile_error(
-                f"entities[{entity_index}].fields[{field_index}].dims[{dim_index}].type_domain invalid: {dim_type}",
-                path=f"$.entities[{entity_index}].fields[{field_index}].dims[{dim_index}].type_domain",
-            )
-        dims.append({"name": dim_name, "type_domain": dim_type})
-        dim_names.append(dim_name)
 
     value_type = field_raw.get("type_domain")
     if value_type not in CANONICAL_TAGS:
@@ -224,59 +246,17 @@ def _compile_field(
         field_index=field_index,
     )
 
-    fact_key_raw = field_raw.get("fact_key")
-    if fact_key_raw is None:
-        fact_key_names: list[str] = []
-    else:
-        if not isinstance(fact_key_raw, list):
-            raise _compile_error(
-                f"entities[{entity_index}].fields[{field_index}].fact_key must be list",
-                path=f"$.entities[{entity_index}].fields[{field_index}].fact_key",
-            )
-        fact_key_names = []
-        seen_fact_key: set[str] = set()
-        for key_idx, item in enumerate(fact_key_raw):
-            if not isinstance(item, str) or not item:
-                raise _compile_error(
-                    f"entities[{entity_index}].fields[{field_index}].fact_key[{key_idx}] must be non-empty string",
-                    path=f"$.entities[{entity_index}].fields[{field_index}].fact_key[{key_idx}]",
-                )
-            if item in seen_fact_key:
-                raise _compile_error(
-                    f"entities[{entity_index}].fields[{field_index}].fact_key duplicate dim: {item}",
-                    path=f"$.entities[{entity_index}].fields[{field_index}].fact_key[{key_idx}]",
-                )
-            if item not in dim_names:
-                raise _compile_error(
-                    f"entities[{entity_index}].fields[{field_index}].fact_key references unknown dim: {item}",
-                    path=f"$.entities[{entity_index}].fields[{field_index}].fact_key[{key_idx}]",
-                )
-            seen_fact_key.add(item)
-            fact_key_names.append(item)
-
-    value_name = field_raw.get("value_name")
-    if value_name is None:
-        value_name = py_name if not dims else "value"
+    value_name = py_name
     if not isinstance(value_name, str) or not value_name:
         raise _compile_error(
             f"entities[{entity_index}].fields[{field_index}].value_name must be non-empty string",
             path=f"$.entities[{entity_index}].fields[{field_index}].value_name",
         )
 
-    arg_specs = [{"name": owner_prefix, "type_domain": "entity_ref"}]
-    arg_specs.extend(dims)
-    arg_specs.append({"name": value_name, "type_domain": value_type})
-
-    group_key_indexes = [0]
-    for dim_pos, dim_name in enumerate(dim_names, start=1):
-        if dim_name in set(fact_key_names):
-            group_key_indexes.append(dim_pos)
-
-    if len(dims) == 0 and fact_key_names:
-        raise _compile_error(
-            f"entities[{entity_index}].fields[{field_index}].fact_key cannot be set when dims is empty",
-            path=f"$.entities[{entity_index}].fields[{field_index}].fact_key",
-        )
+    arg_specs = [
+        {"name": owner_prefix, "type_domain": "entity_ref"},
+        {"name": value_name, "type_domain": value_type},
+    ]
 
     predicate: dict[str, Any] = {
         "pred_id": pred_id,
@@ -284,35 +264,18 @@ def _compile_field(
         "arity": len(arg_specs),
         "arg_specs": arg_specs,
         "cardinality": cardinality,
-        "dims": list(dim_names),
-        "group_key_indexes": group_key_indexes,
+        "group_key_indexes": [0],
     }
 
-    aliases = field_raw.get("aliases")
-    if aliases is not None:
-        if not isinstance(aliases, list) or any(not isinstance(x, str) or not x for x in aliases):
-            raise _compile_error(
-                f"entities[{entity_index}].fields[{field_index}].aliases must be list[str]",
-                path=f"$.entities[{entity_index}].fields[{field_index}].aliases",
-            )
-        predicate["aliases"] = list(aliases)
-    else:
-        predicate["aliases"] = []
-
-    for key in ("display_name", "description"):
-        if key in field_raw:
-            value = field_raw.get(key)
-            if value is not None and not isinstance(value, str):
-                raise _compile_error(
-                    f"entities[{entity_index}].fields[{field_index}].{key} must be string",
-                    path=f"$.entities[{entity_index}].fields[{field_index}].{key}",
-                )
-            if isinstance(value, str):
-                predicate[key] = value
-
     predicate["py_field_name"] = py_name
-    if fact_key_names:
-        predicate["fact_key"] = fact_key_names
+    description = field_raw.get("description")
+    if description is not None:
+        if not isinstance(description, str) or not description:
+            raise _compile_error(
+                f"entities[{entity_index}].fields[{field_index}].description must be non-empty string",
+                path=f"$.entities[{entity_index}].fields[{field_index}].description",
+            )
+        predicate["description"] = description
     return predicate
 
 
@@ -323,25 +286,16 @@ def _compile_pred_id(
     entity_index: int,
     field_index: int,
 ) -> str:
-    pred_id = field_raw.get("pred_id")
-    if pred_id is not None:
-        if not isinstance(pred_id, str) or not pred_id:
-            raise _compile_error(
-                f"entities[{entity_index}].fields[{field_index}].pred_id must be non-empty string",
-                path=f"$.entities[{entity_index}].fields[{field_index}].pred_id",
-            )
-        return pred_id
-
-    local = field_raw.get("pred_name", field_raw.get("name", field_raw.get("py_name")))
+    local = field_raw.get("py_name")
     if not isinstance(local, str) or not local:
         raise _compile_error(
-            f"entities[{entity_index}].fields[{field_index}] must provide pred_id/pred_name/name/py_name",
+            f"entities[{entity_index}].fields[{field_index}] must provide py_name",
             path=f"$.entities[{entity_index}].fields[{field_index}]",
         )
     if not _IDENT_RE.fullmatch(local):
         raise _compile_error(
             f"entities[{entity_index}].fields[{field_index}] local predicate name must match {_IDENT_RE.pattern}: {local}",
-            path=f"$.entities[{entity_index}].fields[{field_index}].name",
+            path=f"$.entities[{entity_index}].fields[{field_index}].py_name",
         )
     return f"{owner_prefix}:{local}"
 

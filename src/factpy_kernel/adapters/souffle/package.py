@@ -110,14 +110,10 @@ def export_package(
             query_rel = query_rel_for_where(where)
         if not isinstance(query_rel, str) or not query_rel:
             raise ValueError("query.query_rel must be non-empty string")
-        temporal_view = query.get("temporal_view", "active")
-        if temporal_view not in {"active", "current"}:
-            raise ValueError("query.temporal_view must be 'active' or 'current'")
         idb_text = compile_where_to_query_dl(
             schema_ir=store.schema_ir,
             where=where,
             query_rel=query_rel,
-            temporal_view=temporal_view,
         )
         outputs_map["__query__"] = [query_rel]
 
@@ -360,11 +356,7 @@ def _outputs_map(store: Store) -> dict[str, list[str]]:
         if not isinstance(pred_id, str) or not pred_id:
             continue
         engine_pred = normalize_pred_id(pred_id)
-        cardinality = pred.get("cardinality")
-        if cardinality == "temporal":
-            out[pred_id] = [engine_pred, f"{engine_pred}__current"]
-        else:
-            out[pred_id] = [engine_pred]
+        out[pred_id] = [engine_pred]
     return out
 
 

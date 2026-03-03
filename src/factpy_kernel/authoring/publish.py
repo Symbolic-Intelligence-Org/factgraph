@@ -282,7 +282,6 @@ def _payload_summary_for_section(section_name: str, section: dict[str, Any]) -> 
         return _json_safe(
             {
                 "mode": section.get("mode"),
-                "temporal_view": section.get("temporal_view"),
                 "candidate_count": summary.get("candidate_count"),
                 "preview_limit": summary.get("preview_limit"),
                 "targets": summary.get("targets"),

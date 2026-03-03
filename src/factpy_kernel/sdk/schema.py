@@ -46,10 +46,17 @@ class _DeclaredMember:
 
 
 class Identity(_DeclaredMember):
-    def __init__(self, *, default: Any = None, default_factory: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        default: Any = None,
+        default_factory: str | None = None,
+        primary_key: bool = False,
+    ) -> None:
         super().__init__()
         self.default = default
         self.default_factory = default_factory
+        self.primary_key = bool(primary_key)
 
     def to_authoring(self, *, type_domain: str) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -60,6 +67,8 @@ class Identity(_DeclaredMember):
             out["default"] = self.default
         if self.default_factory is not None:
             out["default_factory"] = self.default_factory
+        if self.primary_key:
+            out["primary_key"] = True
         return out
 
 
@@ -68,50 +77,20 @@ class Field(_DeclaredMember):
         self,
         *,
         cardinality: str,
-        name: str | None = None,
-        pred_id: str | None = None,
-        aliases: list[str] | None = None,
-        display_name: str | None = None,
         description: str | None = None,
-        value_name: str | None = None,
-        fact_key: list[str] | None = None,
-        dims: list[Any] | None = None,
-        type_domain: str | None = None,
     ) -> None:
         super().__init__()
         self.cardinality = cardinality
-        self.name = name
-        self.pred_id = pred_id
-        self.aliases = aliases
-        self.display_name = display_name
         self.description = description
-        self.value_name = value_name
-        self.fact_key = fact_key
-        self.dims = dims
-        self.type_domain_override = type_domain
 
     def to_authoring(self, *, type_domain: str) -> dict[str, Any]:
         out: dict[str, Any] = {
             "py_name": self.sdk_attr_name,
-            "type_domain": self.type_domain_override or type_domain,
+            "type_domain": type_domain,
             "cardinality": self.cardinality,
         }
-        if self.name is not None:
-            out["name"] = self.name
-        if self.pred_id is not None:
-            out["pred_id"] = self.pred_id
-        if self.aliases is not None:
-            out["aliases"] = list(self.aliases)
-        if self.display_name is not None:
-            out["display_name"] = self.display_name
         if self.description is not None:
             out["description"] = self.description
-        if self.value_name is not None:
-            out["value_name"] = self.value_name
-        if self.fact_key is not None:
-            out["fact_key"] = list(self.fact_key)
-        if self.dims is not None:
-            out["dims"] = _normalize_dims_for_authoring(self.dims)
         return out
 
     def __get__(self, instance: Any, owner: type | None = None) -> Any:
@@ -298,23 +277,3 @@ def _annotation_to_type_domain_runtime(annotation: Any) -> str:
         if annotation.__name__ in {"datetime"}:
             return "time"
     return "entity_ref"
-
-
-def _normalize_dims_for_authoring(dims: list[Any]) -> list[dict[str, str]]:
-    out: list[dict[str, str]] = []
-    for item in dims:
-        if isinstance(item, dict):
-            name = item.get("name")
-            type_domain = item.get("type_domain")
-        elif isinstance(item, (tuple, list)) and len(item) == 2:
-            name, type_domain = item
-        else:
-            raise SDKSchemaError("Field.dims entries must be {'name','type_domain'} or (name, type)")
-        if not isinstance(name, str) or not name:
-            raise SDKSchemaError("Field.dims name must be non-empty string")
-        if not isinstance(type_domain, str) or not type_domain:
-            raise SDKSchemaError("Field.dims type_domain must be non-empty string")
-        if type_domain == "float":
-            type_domain = "float64"
-        out.append({"name": name, "type_domain": type_domain})
-    return out

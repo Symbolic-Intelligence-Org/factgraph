@@ -16,7 +16,6 @@ class QueryPlan:
     query_id: str
     rule_ast: QueryRuleAst
     return_contract: tuple[ReturnContractEntry, ...]
-    temporal_view: str
     on_missing: str
     on_type_mismatch: str
 
@@ -24,18 +23,12 @@ class QueryPlan:
 def lower_query(
     query: Query,
     *,
-    temporal_view: str,
     schema_ir: dict[str, Any],
     schema_digest: str,
     return_mode: str = "dict",
 ) -> QueryPlan:
     if not isinstance(query, Query):
         raise SDKStoreError("query must be Query", path="$.run.obj")
-    if temporal_view not in {"active", "current"}:
-        raise SDKStoreError(
-            "temporal_view must be 'active' or 'current'",
-            path="$.run.temporal_view",
-        )
     if return_mode != "dict":
         raise SDKStoreError("Query return_mode must be 'dict'", path="$.query.return_mode")
     if not isinstance(schema_ir, dict):
@@ -50,7 +43,6 @@ def lower_query(
     query_id = _build_query_id(
         return_contract=return_contract,
         where_ir=where_ir,
-        temporal_view=temporal_view,
         return_mode=return_mode,
         on_missing=query.on_missing,
         on_type_mismatch=query.on_type_mismatch,
@@ -74,7 +66,6 @@ def lower_query(
         query_id=query_id,
         rule_ast=rule_ast,
         return_contract=return_contract,
-        temporal_view=temporal_view,
         on_missing=query.on_missing,
         on_type_mismatch=query.on_type_mismatch,
     )
@@ -84,7 +75,6 @@ def _build_query_id(
     *,
     return_contract: tuple[ReturnContractEntry, ...],
     where_ir: list[Any],
-    temporal_view: str,
     return_mode: str,
     on_missing: str,
     on_type_mismatch: str,
@@ -93,7 +83,6 @@ def _build_query_id(
     canonical_payload = {
         "head_ir": _serialize_return_contract(return_contract),
         "where_ir": _to_jsonable(where_ir),
-        "temporal_view": temporal_view,
         "return_mode": return_mode,
         "on_missing": on_missing,
         "on_type_mismatch": on_type_mismatch,
@@ -135,15 +124,9 @@ def _validate_field_projection_contract(
                 path=f"$.head[{idx}]",
             )
         cardinality = pred.get("cardinality")
-        if cardinality != "functional":
+        if cardinality != "single":
             raise SDKStoreError(
-                "Query field head only supports functional fields",
-                path=f"$.head[{idx}]",
-            )
-        dims = pred.get("dims")
-        if isinstance(dims, list) and dims:
-            raise SDKStoreError(
-                "Query field head does not support fields with dims",
+                "Query field head only supports single fields",
                 path=f"$.head[{idx}]",
             )
 

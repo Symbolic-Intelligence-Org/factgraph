@@ -117,8 +117,8 @@ class Country(Entity):
     population: int = Field(cardinality="functional", pred_id="country:population")
 
 class User(Entity):
-    source_system: str = Identity()
     source_id: str = Identity()
+    version: str = Identity()
     name: str = Field(cardinality="multi", pred_id="user:name")
     # entity_ref 字段在写入层使用 canonical idref_v1 token（字符串）
     country: Country = Field(cardinality="functional", pred_id="user:country")
@@ -142,26 +142,28 @@ class User(Entity):
 
 ### 2.3 `Field(...)` 参数
 
-| 参数 | 必填 | 说明 |
-|------|------|------|
-| `cardinality` | ✅ | `functional` / `multi` / `temporal` |
-| `pred_id` | 推荐 | 显式谓词 ID |
-| `name` | - | 字段命名覆盖（authoring 层） |
-| `aliases` | - | 别名列表 |
-| `display_name` | - | 展示名 |
-| `description` | - | 描述文本 |
-| `value_name` | - | value 参数名 |
-| `fact_key` | - | 维度冲突组 key（需是 dims 子集） |
-| `dims` | - | 维度规格（如 `[("lang", "string")]` 或 `[{name,type_domain}]`） |
-| `type_domain` | - | 覆盖注解推导类型 |
+按当前代码实现，`Field(...)` 10 个参数可分三类：
 
-说明（稳定合约）：
+| 参数 | 状态 | 现在的实际作用 |
+|---|---|---|
+| `cardinality` | 强实装 | 决定 `functional/multi/temporal` 语义；影响 `.set/.add` 校验、`ingest` 预检、视图投影与查询匹配行为。 |
+| `pred_id` | 强实装 | 底层谓词主键；写入最终按它落 ledger。 |
+| `type_domain` | 强实装 | 决定值类型标签与 coercion 校验。 |
+| `dims` | 强实装 | 生成维度参数；写入时要求传 dims；读取时返回维度值结构。 |
+| `fact_key` | 强实装 | 编译成 `group_key_indexes`，影响冲突/chosen 分组键。 |
+| `name` | 间接实装（编译期） | 当未显式给 `pred_id` 时，用于生成谓词本地名；给了 `pred_id` 就基本被覆盖。 |
+| `value_name` | 间接实装（编译期） | 影响 `arg_specs` 最后一个参数名；在 derivation head 的 kwargs 名校验中会生效。 |
+| `aliases` | 目前偏预留/元数据 | 解析和编译会保留到 schema，但运行期读写查询无消费逻辑。 |
+| `display_name` | 目前偏预留/元数据 | 同上，仅随 schema 保留。 |
+| `description` | 目前偏预留/元数据 | 同上，仅随 schema 保留。 |
+
+稳定合约：
 - 若设置 `fact_key`，其成员必须来自该字段 `dims`，否则 schema compile 报错。
 - `dims` 为空时不能设置 `fact_key`。
 
 ### 2.4 Reified Record（关系节点）
 
-关系实体/事件实体仍然基于 `Entity`，不需要显式 `is_record` 开关：
+我们并不区分 “关系实体/事件实体”, 所有定义的实体都是基于 `Entity`，用户可以后续根据自己的用法来自行区分, 例如下面的 LivesIn 实体可以被当作关系节点, 连接多个事实节点(User和Country).
 
 ```python
 class LivesIn(Entity):
@@ -171,7 +173,7 @@ class LivesIn(Entity):
     since: int = Field(cardinality="functional", pred_id="livesin:since")
 ```
 
-说明（稳定合约）：
+稳定合约：
 - 编译后 schema 会为所有 `Entity` 生成 `<T>:exists` predicate（`is_entity_exists`）。
 - batch 写入实体字段时，会在计划中自动补 `<T>:exists` 写入 op，避免“有字段断言但实体不可见”。
 
@@ -422,6 +424,8 @@ snap.identity
 # assertions
 snap.assertions.name.active
 snap.assertions.name.history
+snap.assertions.name.at("2024-03-01")
+snap.assertions.name.version("v2")
 snap.assertions.country.chosen
 snap.field("name").active
 ```
@@ -434,6 +438,8 @@ snap.field("name").active
 断言视图（稳定合约）：
 - `.active`：当前未撤销断言
 - `.history`：完整历史（含 revoked）
+- `.at(t)`：在 active 集合上叠加时间过滤（`valid_from <= t` 且 `valid_to` 为空或 `valid_to > t`），`valid_from` 缺失不命中
+- `.version(v)`：在 active 集合上叠加版本过滤（`version == v`），`version` 缺失不命中
 - `.chosen`：仅适用于“无 dims 的 functional 字段”，否则抛 `CardinalityError`
 
 只读约束（稳定合约）：
@@ -606,7 +612,10 @@ print(result.diagnostics)
 
 补充（稳定合约）：
 - `allow_sensitive_meta=True` 只会关闭 sensitive warning，不会放宽 hard reserved 约束。
-- 影响 `ingest_key` 去重的 meta 物料主要是：`source`、`source_loc`、`trace_id`。
+- `ingest_key` 去重物料 = `claim + source + source_loc + trace_id + valid_from + valid_to + version`。
+- `trace_id` 是操作级幂等键，不是数据级唯一键；不同业务有效期版本应使用不同 `trace_id`。
+- `valid_from` / `valid_to` / `version` 当前已在读路径生效：可用于 `snapshot.assertions.<field>.at(t)` 与 `.version(v)`。
+- 当前边界：Rule/Derivation 推导侧尚未开放“时态写语义”（不能在 head 直接产出带 `valid_from/valid_to/version` 的时态断言）；`temporal_view` 在 derivation/runtime 入口仍会显式拒绝。
 
 ### 6.4 抛异常 vs diagnostics 的边界
 

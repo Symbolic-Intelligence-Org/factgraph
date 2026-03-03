@@ -10,7 +10,6 @@ from factpy_kernel.core.store.types import (
     EvaluateMode,
     HeadSpecIR,
     HeadVarsIR,
-    TemporalView,
     WhereIR,
 )
 from factpy_kernel.core.view.projector import project_view_facts
@@ -25,13 +24,9 @@ def evaluate_store(
     head_vars: HeadVarsIR,
     where: WhereIR,
     mode: EvaluateMode = "python",
-    temporal_view: TemporalView = "active",
     head: HeadSpecIR | None = None,
     engine_evaluate: EngineEvaluatorFn,
 ) -> list[CandidateSet]:
-    if temporal_view not in {"active", "current"}:
-        raise ValueError("temporal_view must be 'active' or 'current'")
-
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         if mode == "engine":
             return engine_evaluate(
@@ -40,7 +35,6 @@ def evaluate_store(
                 target_pred_id=target_pred_id,
                 head_vars=head_vars,
                 where=where,
-                temporal_view=temporal_view,
                 head=head,
             )
         if mode != "python":
@@ -51,7 +45,7 @@ def evaluate_store(
             entity_type=target_pred_id,
             head=head,
         )
-        bindings = _evaluate_where_over_view(store, where, temporal_view=temporal_view)
+        bindings = _evaluate_where_over_view(store, where)
         if not bindings:
             return []
         return builders.entity_candidates_from_bindings(
@@ -69,7 +63,6 @@ def evaluate_store(
             target_pred_id=target_pred_id,
             head_vars=head_vars,
             where=where,
-            temporal_view=temporal_view,
             head=head,
         )
     if mode != "python":
@@ -86,7 +79,7 @@ def evaluate_store(
     if not isinstance(head_vars, list) or len(head_vars) != len(arg_specs):
         raise WhereValidationError("head_vars length must match target arg_specs")
 
-    bindings = _evaluate_where_over_view(store, where, temporal_view=temporal_view)
+    bindings = _evaluate_where_over_view(store, where)
     if not bindings:
         return []
 
@@ -105,12 +98,9 @@ def evaluate_store(
 def _evaluate_where_over_view(
     store: Any,
     where: WhereIR,
-    *,
-    temporal_view: TemporalView,
 ) -> list[dict[str, Any]]:
     view_facts = project_view_facts(
         store.ledger,
         store.schema_ir,
-        temporal_view=temporal_view,
     )
     return evaluate_where(view_facts, where)

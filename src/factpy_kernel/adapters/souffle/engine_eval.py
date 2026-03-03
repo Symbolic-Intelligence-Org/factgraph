@@ -20,12 +20,8 @@ def evaluate_store_engine(
     target_pred_id: str,
     head_vars: list[Any],
     where: list[Any],
-    temporal_view: str = "active",
     head: dict[str, Any] | None = None,
 ) -> list[CandidateSet]:
-    if temporal_view not in {"active", "current"}:
-        raise ValueError("temporal_view must be 'active' or 'current'")
-
     from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
     from factpy_kernel.adapters.souffle.runner import run_package
 
@@ -52,7 +48,6 @@ def evaluate_store_engine(
                 out_dir=out_dir,
                 where=where,
                 where_variables=where_variables,
-                temporal_view=temporal_view,
                 query_rel=query_rel,
                 export_options=ExportOptions(),
                 run_package=run_package,
@@ -97,7 +92,6 @@ def evaluate_store_engine(
             out_dir=out_dir,
             where=where,
             where_variables=where_variables,
-            temporal_view=temporal_view,
             query_rel=query_rel,
             export_options=ExportOptions(),
             run_package=run_package,
@@ -125,7 +119,6 @@ def _run_query_and_read_bindings(
     out_dir: Path,
     where: list[Any],
     where_variables: list[str],
-    temporal_view: str,
     query_rel: str,
     export_options: Any,
     export_package: Any,
@@ -138,7 +131,6 @@ def _run_query_and_read_bindings(
         query={
             "where": where,
             "query_rel": query_rel,
-            "temporal_view": temporal_view,
         },
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

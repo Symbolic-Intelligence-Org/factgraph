@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import re
 import reprlib
-from typing import Any, TYPE_CHECKING, Literal
+from typing import Any, TYPE_CHECKING
 
 from factpy_kernel.core.policy.active import is_active
-from factpy_kernel.core.policy.chosen import PolicyNonDeterminismError, compute_chosen_for_predicate
 from factpy_kernel.core.view.projector import project_view_facts
 
 from .errors import (
@@ -22,9 +22,6 @@ if TYPE_CHECKING:
     from factpy_kernel.core.store.ledger import Claim
     from .batch import BatchCommitResult, BatchPlan
     from .store import SDKStore
-
-
-_TemporalView = Literal["active", "current"]
 
 
 @dataclass(frozen=True)
@@ -88,16 +85,9 @@ class AssertionMeta:
 class AssertionRecord:
     asrt_id: str
     value: Any
-    dims: dict[str, Any]
     is_active: bool
     is_revoked: bool
     meta: AssertionMeta
-
-
-@dataclass(frozen=True)
-class DimensionedValue:
-    value: Any
-    dims: dict[str, Any]
 
 
 class FieldAssertions:
@@ -106,29 +96,13 @@ class FieldAssertions:
         *,
         field_name: str,
         cardinality: str,
-        has_dims: bool,
-        chosen_record: AssertionRecord | None,
         active_records: tuple[AssertionRecord, ...],
         history_records: tuple[AssertionRecord, ...],
     ) -> None:
         self._field_name = field_name
         self._cardinality = cardinality
-        self._has_dims = has_dims
-        self._chosen_record = chosen_record
         self._active_records = active_records
         self._history_records = history_records
-
-    @property
-    def chosen(self) -> AssertionRecord | None:
-        if self._cardinality != "functional":
-            raise CardinalityError(
-                f"field '{self._field_name}' has cardinality={self._cardinality}; .chosen is only valid for functional"
-            )
-        if self._has_dims:
-            raise CardinalityError(
-                f"field '{self._field_name}' has dims; .chosen is undefined for dimmed functional field"
-            )
-        return self._chosen_record
 
     @property
     def active(self) -> tuple[AssertionRecord, ...]:
@@ -137,6 +111,32 @@ class FieldAssertions:
     @property
     def history(self) -> tuple[AssertionRecord, ...]:
         return self._history_records
+
+    def at(self, t: str) -> tuple[AssertionRecord, ...]:
+        at_time = _validate_iso8601_text(
+            t,
+            context=f"{self._field_name}.at(t)",
+        )
+        return tuple(
+            record
+            for record in self._active_records
+            if _is_assertion_visible_at(
+                record,
+                at_time=at_time,
+                field_name=self._field_name,
+            )
+        )
+
+    def version(self, v: str | int) -> tuple[AssertionRecord, ...]:
+        expected_version = _validate_version_selector(
+            v,
+            context=f"{self._field_name}.version(v)",
+        )
+        return tuple(
+            record
+            for record in self._active_records
+            if _read_assertion_version(record, field_name=self._field_name) == expected_version
+        )
 
 
 class AssertionNamespace:
@@ -220,27 +220,25 @@ class FieldEditor:
         self,
         value: Any,
         *,
-        dims: dict[str, Any] | list[Any] | tuple[Any, ...] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> "EntityEditor":
         self._editor._ensure_open()
         cardinality = self._cardinality()
-        if cardinality != "functional":
+        if cardinality != "single":
             raise CardinalityError(
-                f"field '{self._field_name}' has cardinality={cardinality}; .set is only valid for functional",
+                f"field '{self._field_name}' has cardinality={cardinality}; .set is only valid for single",
                 field_name=self._field_name,
                 actual_cardinality=cardinality,
                 operation="set",
             )
         handle = self._editor._handle
-        getattr(handle, self._field_name).set(value, dims=dims, meta=meta)
+        getattr(handle, self._field_name).set(value, meta=meta)
         return self._editor
 
     def add(
         self,
         value: Any,
         *,
-        dims: dict[str, Any] | list[Any] | tuple[Any, ...] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> "EntityEditor":
         self._editor._ensure_open()
@@ -253,7 +251,7 @@ class FieldEditor:
                 operation="add",
             )
         handle = self._editor._handle
-        getattr(handle, self._field_name).add(value, dims=dims, meta=meta)
+        getattr(handle, self._field_name).add(value, meta=meta)
         return self._editor
 
     def retract(
@@ -268,6 +266,40 @@ class FieldEditor:
         return self._editor
 
 
+class IdentityEditor:
+    def __init__(self, editor: "EntityEditor", field_name: str) -> None:
+        self._editor = editor
+        self._field_name = field_name
+
+    @property
+    def value(self) -> Any:
+        return self._editor._identity_values.get(self._field_name)
+
+    def __repr__(self) -> str:
+        return repr(self.value)
+
+    __str__ = __repr__
+
+    def __bool__(self) -> bool:
+        return bool(self.value)
+
+    def __eq__(self, other: Any) -> bool:  # type: ignore[override]
+        return self.value == other
+
+    def set(self, *args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        raise SDKStoreError(
+            f"identity field '{self._field_name}' is immutable in editor; "
+            "open a new editor with different identity instead"
+        )
+
+    def add(self, *args: Any, **kwargs: Any) -> None:
+        self.set(*args, **kwargs)
+
+    def retract(self, *args: Any, **kwargs: Any) -> None:
+        self.set(*args, **kwargs)
+
+
 class EntityEditor:
     def __init__(self, sdk: "SDKStore", entity_cls: type[Any], identity_values: dict[str, Any]) -> None:
         self._sdk = sdk
@@ -277,19 +309,26 @@ class EntityEditor:
         self._handle = self._tx.entity(entity_cls, **dict(identity_values))
         self._closed = False
         self._field_editors: dict[str, FieldEditor] = {}
+        self._identity_editors: dict[str, IdentityEditor] = {}
         object.__setattr__(self, "ref", self._handle.e_ref)
         object.__setattr__(self, "entity_type", entity_cls.__name__)
 
     def __getattr__(self, name: str) -> Any:
         self._ensure_open()
         descriptor = getattr(self._entity_cls, name, None)
-        from .schema import Field  # local import to avoid cycle at import-time
+        from .schema import Field, Identity  # local import to avoid cycle at import-time
 
         if isinstance(descriptor, Field):
             editor = self._field_editors.get(name)
             if editor is None:
                 editor = FieldEditor(self, name)
                 self._field_editors[name] = editor
+            return editor
+        if isinstance(descriptor, Identity):
+            editor = self._identity_editors.get(name)
+            if editor is None:
+                editor = IdentityEditor(self, name)
+                self._identity_editors[name] = editor
             return editor
         if name in self._identity_values:
             return self._identity_values[name]
@@ -333,14 +372,13 @@ def sdk_get(sdk: "SDKStore", entity_cls: type[Any], **identity_kwargs: Any) -> E
     spec = sdk._entity_spec_by_class[entity_cls]
     _validate_identity_kwargs_for_get(spec, entity_cls, identity_kwargs)
     e_ref = sdk.ref(entity_cls, **dict(identity_kwargs))
-    view_facts = project_view_facts(sdk.ledger, sdk.schema_ir, temporal_view="active")
+    view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
     if not _entity_visible_in_view(sdk, entity_cls, e_ref=e_ref, view_facts=view_facts):
         return None
     return _build_snapshot(
         sdk,
         entity_cls,
         e_ref=e_ref,
-        temporal_view="active",
         view_facts=view_facts,
         known_identity_values=identity_kwargs,
     )
@@ -350,13 +388,10 @@ def sdk_find(
     sdk: "SDKStore",
     entity_cls: type[Any],
     *,
-    temporal_view: _TemporalView = "active",
     limit: int | None = None,
     **filter_kwargs: Any,
 ) -> list[EntitySnapshot]:
     _validate_entity_cls(sdk, entity_cls)
-    if temporal_view not in {"active", "current"}:
-        raise SDKStoreError("temporal_view must be 'active' or 'current'")
     if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 0):
         raise SDKStoreError("limit must be non-negative int when provided")
     if limit == 0:
@@ -374,14 +409,6 @@ def sdk_find(
     value_filters = {k: v for k, v in filter_kwargs.items() if k in set(field_names)}
 
     field_rows = {name: (decl, pred) for name, decl, pred in _entity_field_rows(sdk, entity_cls)}
-    for key in value_filters:
-        row = field_rows.get(key)
-        if row is None:
-            continue
-        _, schema_pred = row
-        dims_names = schema_pred.get("dims")
-        if isinstance(dims_names, list) and any(isinstance(x, str) for x in dims_names):
-            raise SDKSchemaError(f"find() dims-field filtering is not supported yet: {entity_cls.__name__}.{key}")
 
     if identity_filters:
         if set(identity_filters.keys()) != set(identity_names):
@@ -390,14 +417,13 @@ def sdk_find(
                 f"find identity filters must include all identity fields for {entity_cls.__name__}; missing: {missing}"
             )
         e_ref = sdk.ref(entity_cls, **dict(identity_filters))
-        view_facts = project_view_facts(sdk.ledger, sdk.schema_ir, temporal_view=temporal_view)
+        view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
         if not _entity_visible_in_view(sdk, entity_cls, e_ref=e_ref, view_facts=view_facts):
             return []
         snapshot = _build_snapshot(
             sdk,
             entity_cls,
             e_ref=e_ref,
-            temporal_view=temporal_view,
             view_facts=view_facts,
             known_identity_values=identity_filters,
         )
@@ -405,11 +431,11 @@ def sdk_find(
             return [snapshot]
         return []
 
-    view_facts = project_view_facts(sdk.ledger, sdk.schema_ir, temporal_view=temporal_view)
+    view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
     e_refs = _candidate_entity_refs(sdk, entity_cls, view_facts=view_facts)
     out: list[EntitySnapshot] = []
     for e_ref in sorted(e_refs):
-        snap = _build_snapshot(sdk, entity_cls, e_ref=e_ref, temporal_view=temporal_view, view_facts=view_facts)
+        snap = _build_snapshot(sdk, entity_cls, e_ref=e_ref, view_facts=view_facts)
         if _snapshot_matches_filters(sdk, entity_cls, snap, value_filters):
             out.append(snap)
             if limit is not None and len(out) >= limit:
@@ -541,12 +567,11 @@ def _build_snapshot(
     entity_cls: type[Any],
     *,
     e_ref: str,
-    temporal_view: _TemporalView,
     view_facts: dict[str, list[tuple[Any, ...]]] | None = None,
     known_identity_values: dict[str, Any] | None = None,
 ) -> EntitySnapshot:
     if view_facts is None:
-        view_facts = project_view_facts(sdk.ledger, sdk.schema_ir, temporal_view=temporal_view)
+        view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
     spec = sdk._entity_spec_by_class[entity_cls]
     entity_type = spec.get("entity_type")
     if not isinstance(entity_type, str) or not entity_type:
@@ -558,19 +583,15 @@ def _build_snapshot(
         pred_id = schema_pred.get("pred_id")
         if not isinstance(pred_id, str) or not pred_id:
             continue
-        cardinality = str(field_decl.get("cardinality", schema_pred.get("cardinality", "functional")))
-        dims_names = schema_pred.get("dims")
-        if not isinstance(dims_names, list):
-            dims_names = []
+        cardinality = str(field_decl.get("cardinality", schema_pred.get("cardinality", "single")))
         rows = [row for row in view_facts.get(pred_id, []) if row and row[0] == e_ref]
-        field_values[field_name] = _current_value_from_rows(rows, cardinality=cardinality, dims_names=dims_names)
+        field_values[field_name] = _current_value_from_rows(rows, cardinality=cardinality)
         field_assertions[field_name] = _field_assertions_for_entity_field(
             sdk,
             e_ref=e_ref,
             field_name=field_name,
             schema_pred=schema_pred,
             cardinality=cardinality,
-            dims_names=dims_names,
         )
 
     identity_values = dict(known_identity_values or {})
@@ -584,23 +605,12 @@ def _build_snapshot(
     )
 
 
-def _current_value_from_rows(rows: list[tuple[Any, ...]], *, cardinality: str, dims_names: list[Any]) -> Any:
-    dim_names = [d for d in dims_names if isinstance(d, str)]
-    if not dim_names:
-        if cardinality == "functional":
-            if not rows:
-                return None
-            return rows[0][-1]
-        # multi/temporal return all visible rows in stable tuple
-        return tuple(row[-1] for row in rows)
-    dimmed = tuple(
-        DimensionedValue(
-            value=row[-1],
-            dims={name: row[idx + 1] for idx, name in enumerate(dim_names)},
-        )
-        for row in rows
-    )
-    return dimmed
+def _current_value_from_rows(rows: list[tuple[Any, ...]], *, cardinality: str) -> Any:
+    if cardinality == "single":
+        if not rows:
+            return None
+        return rows[0][-1]
+    return tuple(row[-1] for row in rows)
 
 
 def _field_assertions_for_entity_field(
@@ -610,7 +620,6 @@ def _field_assertions_for_entity_field(
     field_name: str,
     schema_pred: dict[str, Any],
     cardinality: str,
-    dims_names: list[str],
 ) -> FieldAssertions:
     pred_id = schema_pred.get("pred_id")
     if not isinstance(pred_id, str) or not pred_id:
@@ -623,25 +632,9 @@ def _field_assertions_for_entity_field(
     )
     active_records = tuple(rec for rec in history_records if rec.is_active)
 
-    chosen_record: AssertionRecord | None = None
-    if cardinality == "functional" and not dims_names:
-        try:
-            chosen_map = compute_chosen_for_predicate(sdk.ledger, schema_pred)
-            chosen_asrt = chosen_map.get((pred_id, e_ref))
-            if isinstance(chosen_asrt, str):
-                for rec in active_records:
-                    if rec.asrt_id == chosen_asrt:
-                        chosen_record = rec
-                        break
-        except PolicyNonDeterminismError:
-            # Surface active/history even if chosen policy cannot be resolved.
-            chosen_record = None
-
     return FieldAssertions(
         field_name=field_name,
         cardinality=cardinality,
-        has_dims=bool(dims_names),
-        chosen_record=chosen_record,
         active_records=active_records,
         history_records=history_records,
     )
@@ -658,32 +651,23 @@ def _claim_sort_key(sdk: "SDKStore", claim: "Claim") -> tuple[int, bytes]:
 
 
 def _assertion_record_from_claim(sdk: "SDKStore", claim: "Claim", *, schema_pred: dict[str, Any]) -> AssertionRecord:
-    dims, value = _decode_claim_rest_terms(schema_pred, claim.rest_terms)
+    value = _decode_claim_rest_terms(schema_pred, claim.rest_terms)
     raw_meta = _meta_raw_for_assertion(sdk, claim.asrt_id)
     active = is_active(sdk.ledger, claim.asrt_id)
     return AssertionRecord(
         asrt_id=claim.asrt_id,
         value=value,
-        dims=dims,
         is_active=active,
         is_revoked=not active,
         meta=AssertionMeta.from_raw(raw_meta),
     )
 
 
-def _decode_claim_rest_terms(schema_pred: dict[str, Any], rest_terms: list[tuple[str, Any]]) -> tuple[dict[str, Any], Any]:
-    dims_names = schema_pred.get("dims")
-    if not isinstance(dims_names, list):
-        dims_names = []
-    dim_names = [d for d in dims_names if isinstance(d, str)]
+def _decode_claim_rest_terms(schema_pred: dict[str, Any], rest_terms: list[tuple[str, Any]]) -> Any:
+    del schema_pred
     if not rest_terms:
-        return ({}, None)
-    if len(rest_terms) != len(dim_names) + 1:
-        # Best-effort fallback: treat everything but last as unnamed dims.
-        dims = {f"dim{idx}": term[1] for idx, term in enumerate(rest_terms[:-1])}
-        return (dims, rest_terms[-1][1])
-    dims = {name: rest_terms[idx][1] for idx, name in enumerate(dim_names)}
-    return (dims, rest_terms[-1][1])
+        return None
+    return rest_terms[-1][1]
 
 
 def _meta_raw_for_assertion(sdk: "SDKStore", asrt_id: str) -> dict[str, Any]:
@@ -691,6 +675,102 @@ def _meta_raw_for_assertion(sdk: "SDKStore", asrt_id: str) -> dict[str, Any]:
     for row in sdk.ledger.find_meta(asrt_id=asrt_id):
         out[row.key] = row.value
     return out
+
+
+_ISO_8601_PATTERN = re.compile(
+    r"^\d{4}(?:-\d{2}(?:-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+\-]\d{2}:\d{2})?)?)?)?$"
+)
+
+
+def _validate_iso8601_text(value: Any, *, context: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise SDKStoreError(f"{context} expects non-empty ISO 8601 string")
+    if not _is_valid_iso8601_text(value):
+        raise SDKStoreError(
+            f"{context} expects ISO 8601 string; got {value!r}"
+        )
+    return value
+
+
+def _is_valid_iso8601_text(value: str) -> bool:
+    if _ISO_8601_PATTERN.fullmatch(value) is None:
+        return False
+
+    if len(value) >= 7:
+        month = int(value[5:7])
+        if month < 1 or month > 12:
+            return False
+
+    if len(value) >= 10:
+        try:
+            datetime.fromisoformat(value[:10])
+        except ValueError:
+            return False
+
+    if "T" in value:
+        normalized = value.replace("Z", "+00:00")
+        try:
+            datetime.fromisoformat(normalized)
+        except ValueError:
+            return False
+    return True
+
+
+def _validate_version_selector(value: Any, *, context: str) -> str | int:
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise SDKStoreError(f"{context} expects string|int version selector")
+    return value
+
+
+def _is_assertion_visible_at(
+    record: AssertionRecord,
+    *,
+    at_time: str,
+    field_name: str,
+) -> bool:
+    valid_from = _read_assertion_time_meta(record, key="valid_from", field_name=field_name)
+    if valid_from is None:
+        return False
+    valid_to = _read_assertion_time_meta(record, key="valid_to", field_name=field_name)
+    return valid_from <= at_time and (valid_to is None or valid_to > at_time)
+
+
+def _read_assertion_time_meta(
+    record: AssertionRecord,
+    *,
+    key: str,
+    field_name: str,
+) -> str | None:
+    value = record.meta.raw.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise SDKStoreError(
+            f"{field_name}.at(t) encountered invalid meta.{key} for assertion {record.asrt_id!r}; "
+            "expected ISO 8601 string"
+        )
+    try:
+        return _validate_iso8601_text(
+            value,
+            context=f"{field_name}.at(t) meta.{key} for assertion {record.asrt_id!r}",
+        )
+    except SDKStoreError as exc:
+        raise SDKStoreError(
+            f"{field_name}.at(t) encountered invalid meta.{key} for assertion {record.asrt_id!r}; "
+            f"got {value!r}"
+        ) from exc
+
+
+def _read_assertion_version(record: AssertionRecord, *, field_name: str) -> str | int | None:
+    value = record.meta.raw.get("version")
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise SDKStoreError(
+            f"{field_name}.version(v) encountered invalid meta.version for assertion {record.asrt_id!r}; "
+            "expected string|int"
+        )
+    return value
 
 
 def _snapshot_matches_filters(
@@ -708,11 +788,11 @@ def _snapshot_matches_filters(
         field_decl, schema_pred = field_rows[key]
         expected = raw_expected.ref if isinstance(raw_expected, EntitySnapshot) else raw_expected
         current_value = getattr(snapshot, key)
-        cardinality = str(field_decl.get("cardinality", schema_pred.get("cardinality", "functional")))
-        if cardinality == "functional":
+        cardinality = str(field_decl.get("cardinality", schema_pred.get("cardinality", "single")))
+        if cardinality == "single":
             if current_value != expected:
                 return False
-        elif cardinality in {"multi", "temporal"}:
+        elif cardinality == "multi":
             if not isinstance(current_value, tuple):
                 return False
             if expected not in current_value:

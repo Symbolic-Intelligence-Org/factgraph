@@ -39,6 +39,8 @@ class LogicVar:
     def __post_init__(self) -> None:
         if self.label is not None and (not isinstance(self.label, str) or not self.label):
             raise SDKDSLError("LogicVar label must be non-empty string")
+        if isinstance(self.label, str) and self.label.startswith("__"):
+            raise SDKDSLError("LogicVar labels starting with '__' are reserved for system temporaries")
         token = self.token
         if token is None:
             base = self.label or f"v{next(_VAR_IDS)}"
@@ -46,6 +48,8 @@ class LogicVar:
             object.__setattr__(self, "token", token)
         if not isinstance(token, str) or not token.startswith("$") or len(token) < 2:
             raise SDKDSLError("LogicVar token must start with '$'")
+        if token[1:].startswith("__"):
+            raise SDKDSLError("LogicVar token suffix starting with '__' is reserved for system temporaries")
 
     def __getattr__(self, item: str) -> AttrRef:
         if item.startswith("_"):
@@ -316,10 +320,25 @@ def lower_where_atom(atom: Any, bindings: dict[LogicVar, str], *, temp_seq: Any)
 
 def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str], *, temp_seq: Any) -> list[Any]:
     if isinstance(expr.left, AttrRef) and isinstance(expr.right, AttrRef):
-        # Blueprint shorthand can express this, but runtime SDK lowering avoids implicit temp vars in v1.
-        raise SDKDSLError(
-            "attribute-to-attribute comparison is not supported in SDK object DSL v1; bind one side to a variable first"
-        )
+        if expr.op != "eq":
+            raise SDKDSLError("entity attribute comparison sugar currently supports only '==' in SDK object DSL v1")
+        left_record_type = bindings.get(expr.left.record_var)
+        right_record_type = bindings.get(expr.right.record_var)
+        if left_record_type is None:
+            raise SDKDSLError(
+                f"entity variable {expr.left.record_var.token} used in path comparison before {expr.left.record_var.token} is bound"
+            )
+        if right_record_type is None:
+            raise SDKDSLError(
+                f"entity variable {expr.right.record_var.token} used in path comparison before {expr.right.record_var.token} is bound"
+            )
+        return [
+            (
+                "attr_eq",
+                (expr.left.record_var.token, expr.left.field_name),
+                (expr.right.record_var.token, expr.right.field_name),
+            )
+        ]
     if isinstance(expr.left, AttrRef) or isinstance(expr.right, AttrRef):
         attr = expr.left if isinstance(expr.left, AttrRef) else expr.right
         other = expr.right if isinstance(expr.left, AttrRef) else expr.left

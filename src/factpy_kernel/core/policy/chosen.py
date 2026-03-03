@@ -36,13 +36,13 @@ def group_key_for_claim(
     args = _args_for_claim(claim, ledger)
     group_key_indexes = _read_group_key_indexes(schema_pred, arg_count=len(args))
 
-    dims: list[Any] = []
+    key_terms: list[Any] = []
     for idx in group_key_indexes:
         if idx == 0:
             continue
-        dims.append(args[idx])
+        key_terms.append(args[idx])
 
-    return (claim.pred_id, claim.e_ref, *dims)
+    return (claim.pred_id, claim.e_ref, *key_terms)
 
 
 def compute_chosen_for_predicate(ledger: Ledger, schema_pred: dict) -> dict[tuple, str]:
@@ -55,20 +55,22 @@ def compute_chosen_for_predicate(ledger: Ledger, schema_pred: dict) -> dict[tupl
     if not isinstance(pred_id, str) or not pred_id:
         raise PolicyNonDeterminismError("schema_pred.pred_id must be non-empty string")
 
-    cardinality = schema_pred.get("cardinality", "functional")
+    cardinality = schema_pred.get("cardinality", "single")
     claims = [
         claim
         for claim in ledger.find_claims(pred_id=pred_id)
         if is_active(ledger, claim.asrt_id)
     ]
 
-    if cardinality == "multi" or cardinality == "temporal":
+    if cardinality == "multi":
         chosen: dict[tuple, str] = {}
         for claim in claims:
             base_key = group_key_for_claim(schema_pred, claim, ledger=ledger)
-            # MVP hard constraint: multi/temporal paths treat every active assertion as chosen.
+            # Multi-value fields keep all active assertions as visible rows.
             chosen[(*base_key, claim.asrt_id)] = claim.asrt_id
         return chosen
+    if cardinality != "single":
+        raise PolicyNonDeterminismError(f"unsupported cardinality: {cardinality}")
 
     groups: dict[tuple, list[str]] = {}
     for claim in claims:

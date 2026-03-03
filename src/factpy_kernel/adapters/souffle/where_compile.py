@@ -21,15 +21,12 @@ def compile_where_to_query_dl(
     schema_ir: dict,
     where: list[Any],
     query_rel: str,
-    temporal_view: str = "active",
 ) -> str:
     ast_gate_on = _where_ast_gate_enabled()
     if not isinstance(schema_ir, dict):
         raise WhereValidationError("schema_ir must be dict")
     if not isinstance(query_rel, str) or not query_rel:
         raise WhereValidationError("query_rel must be non-empty string")
-    if temporal_view not in {"active", "current"}:
-        raise WhereValidationError("temporal_view must be 'active' or 'current'")
     if ast_gate_on:
         try:
             ast = parse_where_ir_to_ast(where)
@@ -39,7 +36,6 @@ def compile_where_to_query_dl(
 
     pred_type_domains = _schema_pred_type_domains(schema_ir)
     pred_arities = {pred_id: len(arg_types) for pred_id, arg_types in pred_type_domains.items()}
-    temporal_pred_ids = _temporal_pred_ids(schema_ir)
     bodies = _normalize_where_subset(where)
     variables = extract_where_variables(where)
     if not variables:
@@ -69,8 +65,6 @@ def compile_where_to_query_dl(
                     in_rel_values=in_rel_values,
                     query_variables=variables,
                     not_rel_defs=not_rel_defs,
-                    temporal_view=temporal_view,
-                    temporal_pred_ids=temporal_pred_ids,
                     ast_gate_on=ast_gate_on,
                 )
             )
@@ -207,8 +201,6 @@ def _compile_atom(
     in_rel_values: dict[str, tuple[str, ...]],
     query_variables: list[str],
     not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]],
-    temporal_view: str,
-    temporal_pred_ids: set[str],
     ast_gate_on: bool,
 ) -> str:
     kind = atom[0]
@@ -230,8 +222,6 @@ def _compile_atom(
             else:
                 args.append(_literal_to_symbol(term))
         rel_name = normalize_pred_id(pred_id)
-        if temporal_view == "current" and pred_id in temporal_pred_ids:
-            rel_name = f"{rel_name}__current"
         return f'{rel_name}({", ".join(args)})'
 
     if kind == "eq":
@@ -351,8 +341,6 @@ def _compile_atom(
                         local_bound_vars=local_bound_vars,
                         var_type_domains=var_type_domains,
                         in_rel_values=in_rel_values,
-                        temporal_view=temporal_view,
-                        temporal_pred_ids=temporal_pred_ids,
                         ast_gate_on=ast_gate_on,
                     )
                 )
@@ -405,23 +393,6 @@ def _schema_pred_type_domains(schema_ir: dict) -> dict[str, list[str]]:
                 )
             arg_types.append(type_domain)
         out[pred_id] = arg_types
-    return out
-
-
-def _temporal_pred_ids(schema_ir: dict) -> set[str]:
-    predicates = schema_ir.get("predicates")
-    if not isinstance(predicates, list):
-        raise WhereValidationError("schema_ir.predicates must be list")
-
-    out: set[str] = set()
-    for predicate in predicates:
-        if not isinstance(predicate, dict):
-            continue
-        pred_id = predicate.get("pred_id")
-        if not isinstance(pred_id, str) or not pred_id:
-            continue
-        if predicate.get("cardinality") == "temporal":
-            out.add(pred_id)
     return out
 
 
@@ -686,8 +657,6 @@ def _compile_not_body_atom(
     local_bound_vars: set[str],
     var_type_domains: dict[str, set[str]],
     in_rel_values: dict[str, tuple[str, ...]],
-    temporal_view: str,
-    temporal_pred_ids: set[str],
     ast_gate_on: bool,
 ) -> str:
     kind = atom[0]
@@ -708,8 +677,6 @@ def _compile_not_body_atom(
             else:
                 args.append(_literal_to_symbol(term))
         rel_name = normalize_pred_id(pred_id)
-        if temporal_view == "current" and pred_id in temporal_pred_ids:
-            rel_name = f"{rel_name}__current"
         return f'{rel_name}({", ".join(args)})'
 
     if kind == "eq":

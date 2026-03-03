@@ -47,8 +47,8 @@ CONVENTION_META_KEYS: frozenset[str] = frozenset(
 DEDUP_AFFECTING_META_KEYS: frozenset[str] = frozenset({"source", "source_loc", "trace_id"})
 
 # Normalized ingest item schema (v1 draft, dict-based; intentionally not frozen to TypedDict yet):
-# - {"kind": "set", "field": <sdk.Field>, "e_ref": str, "value": Any, "dims"?: dict|list|tuple, "meta"?: dict}
-# - {"kind": "add", "field": <sdk.Field>, "e_ref": str, "value": Any, "dims"?: dict|list|tuple, "meta"?: dict}
+# - {"kind": "set", "field": <sdk.Field>, "e_ref": str, "value": Any, "meta"?: dict}
+# - {"kind": "add", "field": <sdk.Field>, "e_ref": str, "value": Any, "meta"?: dict}
 # - {"kind": "retract", "asrt_id": str, "meta"?: dict}
 # Notes:
 # - top-level ingest(meta=...) is merged with item meta (item keys override)
@@ -79,7 +79,6 @@ class _PreparedIngestItem:
     field: Any | None = None
     e_ref: str | None = None
     value: Any = None
-    dims: Any = None
     asrt_id: str | None = None
     meta: dict[str, Any] | None = None
 
@@ -267,10 +266,9 @@ def _ingest_set_or_add_prepared(
     value = item.value
     if value is _MISSING:
         raise SDKStoreError(f"{path}.value is required for {kind}")
-    dims = item.dims
     if kind == "set":
-        return sdk.set(field, e_ref, value, dims=dims, meta=item.meta)
-    return sdk.add(field, e_ref, value, dims=dims, meta=item.meta)
+        return sdk.set(field, e_ref, value, meta=item.meta)
+    return sdk.add(field, e_ref, value, meta=item.meta)
 
 
 _MISSING = object()
@@ -379,10 +377,9 @@ def _prepare_single_ingest_item(
                 )
             )
 
-        dims = raw_item.get("dims")
         if schema_pred is not None and value is not _MISSING:
-            cardinality = schema_pred.get("cardinality", "functional")
-            if kind == "set" and cardinality != "functional":
+            cardinality = schema_pred.get("cardinality", "single")
+            if kind == "set" and cardinality != "single":
                 diagnostics.append(
                     _diag(
                         code="ingest_item_cardinality_mismatch",
@@ -402,7 +399,7 @@ def _prepare_single_ingest_item(
                 )
         if schema_pred is not None and value is not _MISSING:
             try:
-                sdk._rest_terms_for_field(schema_pred, dims=dims, value=value)
+                sdk._rest_terms_for_field(schema_pred, value=value)
             except Exception as exc:
                 diagnostics.append(
                     _diag(
@@ -421,7 +418,6 @@ def _prepare_single_ingest_item(
             field=field,
             e_ref=e_ref,
             value=value,
-            dims=dims,
             meta=effective_meta,
         )
 

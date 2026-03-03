@@ -292,16 +292,20 @@ def project_runtime_view_facts(session_id: str, dto: dict[str, Any]) -> dict[str
         session = _require_session(session_id)
         if not isinstance(dto, dict):
             raise facade_error("dto must be object", kind="shape", path="$")
-        temporal_view_core, temporal_view_public = _resolve_view_temporal_view(
-            dto.get("temporal_view"),
-            path="$.temporal_view",
-        )
+        if "temporal_view" in dto:
+            # TODO: Runtime temporal_view is still blocked for derivation/rule flows.
+            # Snapshot read views (.at/.version) are already implemented in sdk.facade.
+            # Re-enable this only when runtime temporal write semantics are defined.
+            raise facade_error(
+                "temporal_view is removed; runtime view now always uses active projection",
+                kind="shape",
+                path="$.temporal_view",
+            )
         include_audit = _resolve_include_audit(dto.get("include_audit"), path="$.include_audit")
         if include_audit:
             facts, audit = project_view_facts_with_audit(
                 session.store.ledger,
                 session.store.schema_ir,
-                temporal_view=temporal_view_core,
             )
             view = {
                 "facts": _to_jsonable(facts),
@@ -311,12 +315,10 @@ def project_runtime_view_facts(session_id: str, dto: dict[str, Any]) -> dict[str
             facts = project_view_facts(
                 session.store.ledger,
                 session.store.schema_ir,
-                temporal_view=temporal_view_core,
             )
             view = {"facts": _to_jsonable(facts)}
         return ok_response(
             meta={
-                "temporal_view": temporal_view_public,
                 "pred_count": len(facts),
                 "total_tuple_count": sum(len(rows) for rows in facts.values()),
             },
@@ -338,10 +340,12 @@ def run_runtime_rule(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
         normalized_rule = dict(raw_rule)
         if "where" in normalized_rule:
             normalized_rule["where"] = _json_where_to_ir(normalized_rule["where"])
-        temporal_view = dto.get("temporal_view", "active")
-        if temporal_view not in {"active", "current"}:
+        if "temporal_view" in dto:
+            # TODO: Runtime temporal_view is still blocked for derivation/rule flows.
+            # Snapshot read views (.at/.version) are already implemented in sdk.facade.
+            # Re-enable this only when runtime temporal write semantics are defined.
             raise facade_error(
-                "temporal_view must be 'active' or 'current'",
+                "temporal_view is removed from runtime rule execution",
                 kind="shape",
                 path="$.temporal_view",
             )
@@ -360,7 +364,6 @@ def run_runtime_rule(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
                 expose=bool(compiled.get("expose", False)),
             ),
             active_registry,
-            temporal_view=temporal_view,
         )
         return ok_response(
             result={
@@ -376,6 +379,15 @@ def run_runtime_rule(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
 def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
     try:
         session = _require_session(session_id)
+        if isinstance(dto, dict) and "temporal_view" in dto:
+            # TODO: Runtime temporal_view is still blocked for derivation/rule flows.
+            # Snapshot read views (.at/.version) are already implemented in sdk.facade.
+            # Re-enable this only when runtime temporal write semantics are defined.
+            raise facade_error(
+                "temporal_view is removed from runtime derivation evaluation",
+                kind="shape",
+                path="$.temporal_view",
+            )
         compiled = _compile_runtime_derivation(dto, schema_ir=session.store.schema_ir)
         limit = _optional_limit(dto.get("limit"), path="$.limit")
         candidates = session.store.evaluate(
@@ -385,14 +397,12 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             head_vars=list(compiled["head_vars"]),
             where=list(compiled["where"]),
             mode=compiled["mode"],
-            temporal_view=compiled["temporal_view"],
             head=compiled.get("head"),
         )
         returned_candidates = candidates if limit is None else candidates[:limit]
         return ok_response(
             meta={
                 "mode": compiled["mode"],
-                "temporal_view": compiled["temporal_view"],
                 "candidate_count": len(candidates),
                 "returned_count": len(returned_candidates),
                 "truncated": len(returned_candidates) != len(candidates),
@@ -886,18 +896,6 @@ def _mapping_conflict_to_error(exc: MappingConflictError) -> dict[str, Any]:
             "conflicts": _to_jsonable(exc.conflicts),
         },
     }
-
-
-def _resolve_view_temporal_view(value: Any, *, path: str) -> tuple[str, str]:
-    if value is None:
-        return "active", "active"
-    if value in {"active", "current"}:
-        return str(value), str(value)
-    raise facade_error(
-        "temporal_view must be 'active' or 'current'",
-        kind="shape",
-        path=path,
-    )
 
 
 def _resolve_include_audit(value: Any, *, path: str) -> bool:

@@ -167,27 +167,50 @@ def _compute_ingest_key(
     rest_terms: list[tuple[str, Any]],
     meta: dict[str, Any],
 ) -> str:
-    source_material = {
+    source_idempotency_material = {
         "source": meta.get("source"),
         "source_loc": meta.get("source_loc"),
         "trace_id": meta.get("trace_id"),
     }
-    for key, value in source_material.items():
+    for key, value in source_idempotency_material.items():
         if value is not None and not isinstance(value, str):
             raise WriteProtocolError(f"meta[{key}] must be string when provided")
 
+    temporal_idempotency_material = {
+        "valid_from": meta.get("valid_from"),
+        "valid_to": meta.get("valid_to"),
+        "version": meta.get("version"),
+    }
+    valid_from = temporal_idempotency_material["valid_from"]
+    valid_to = temporal_idempotency_material["valid_to"]
+    version = temporal_idempotency_material["version"]
+    if valid_from is not None and not isinstance(valid_from, str):
+        raise WriteProtocolError("meta[valid_from] must be string when provided")
+    if valid_to is not None and not isinstance(valid_to, str):
+        raise WriteProtocolError("meta[valid_to] must be string when provided")
+    if version is not None and (isinstance(version, bool) or not isinstance(version, (str, int))):
+        raise WriteProtocolError("meta[version] must be string or int when provided")
+
     source_material_bytes = json.dumps(
-        source_material,
+        source_idempotency_material,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    temporal_material_bytes = json.dumps(
+        temporal_idempotency_material,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
     ).encode("utf-8")
 
     ingest_terms = [
+        ("string", "ingest_key_v2"),
         ("string", pred_id),
         ("entity_ref", e_ref),
         *rest_terms,
         ("bytes", source_material_bytes),
+        ("bytes", temporal_material_bytes),
     ]
     ingest_bytes = canonical_bytes_tup_v1(ingest_terms)
     return sha256_token(ingest_bytes)

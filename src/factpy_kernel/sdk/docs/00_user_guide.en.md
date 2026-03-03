@@ -305,12 +305,16 @@ snap.identity_available
 snap.identity
 snap.assertions.name.active
 snap.assertions.name.history
+snap.assertions.name.at("2024-03-01")
+snap.assertions.name.version("v2")
 snap.assertions.country.chosen
 ```
 
 Stable Contract:
 - Snapshot is read-only (`FrozenSnapshotError` on assignment).
 - `.chosen` is valid only for non-dim functional fields.
+- `.at(t)` applies business-time filtering on active assertions (`valid_from <= t` and `valid_to` is empty or `valid_to > t`); missing `valid_from` does not match.
+- `.version(v)` applies version filtering on active assertions (`version == v`); missing `version` does not match.
 
 ### 4.4 `temporal_view` vs `assertions.history`
 
@@ -420,6 +424,10 @@ Stable Contract:
 
 Stable Contract:
 - `allow_sensitive_meta=True` suppresses sensitive warnings only.
+- `ingest_key` idempotency material = `claim + source + source_loc + trace_id + valid_from + valid_to + version`.
+- `trace_id` is an operation-level idempotency key, not a data-level uniqueness key; use different `trace_id` values for different effective-time versions.
+- `valid_from` / `valid_to` / `version` are already effective on the read path via `snapshot.assertions.<field>.at(t)` and `.version(v)`.
+- Current boundary: rule/derivation temporal write semantics are not open yet (you cannot emit temporal assertions with `valid_from/valid_to/version` directly from derivation head); `temporal_view` is still rejected at derivation/runtime entrypoints.
 
 ### 6.4 Exceptions vs Diagnostics
 

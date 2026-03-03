@@ -241,6 +241,8 @@ def entity_spec_from_head(
             continue
         if pred.get("is_entity_exists") is True:
             continue
+        if pred.get("is_identity_field") is True:
+            continue
         arg_specs = pred.get("arg_specs")
         if not isinstance(arg_specs, list) or len(arg_specs) != 2:
             raise WhereValidationError(f"entity field predicate must be arity 2: {pred_id}")

@@ -134,6 +134,8 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
 Field head 约束：
 - 不支持位置参数，仅支持 kwargs。
 - kwargs 至少要包含一个 DSL 值（如 `vars()` 变量）。
+- 当前边界：Rule/Derivation 的 head 还不能直接声明时态写语义（`valid_from/valid_to/version`）。
+- `temporal_view` 在 derivation/runtime 入口仍显式拒绝；当前可用替代方案是读路径的 `snapshot.assertions.<field>.at(t)` / `.version(v)`（见 `00_user_guide.md` 第 4.3 与 6.3 节）。
 
 补充：
 - `status` 可在 DSL 层携带到 authoring payload。
@@ -165,6 +167,32 @@ Field head 约束：
 | `legacy entity 路径` | `head=EntityType(...)` | candidate_kind 自动推断为 entity（并生成依赖 fact） |
 | `id_policy=...` | 移除 | identity 在 entity candidate 中解析；缺失字段由 accept 时 `identity_override` 补齐 |
 | fact payload: `e_ref/rest_terms` | fact payload: `terms` | `terms[0]` 固定是 subject（arg0） |
+
+### 6.3 v2 breaking 迁移清单（含 `sdk_batch_plan_v1`）
+
+Schema 层：
+- `Field.dims` 删除
+- `Field.fact_key` 删除
+- `Field.cardinality` 从 `functional|multi|temporal` 变为 `single|multi`
+- `Identity` 新增 `primary_key` 参数；无 `primary_key=True` 的实体在跨坐标联结场景编译期报错
+
+Rule / DSL 层：
+- `head` 里出现 primary_key 字段是编译期硬错误
+- `temporal_view` 入口移除并显式报错
+- 非 primary_key 字段参与跨坐标 `==` 比较是编译期硬错误
+- 跨实体类型比较是编译期硬错误
+
+协议层（`sdk_batch_plan_v1`）：
+- wire 协议删除 `dims`
+- wire 协议删除 `fact_key`
+- `cardinality` 枚举值使用 `single|multi`
+- `ingest_key` 去重物料扩展为：`claim + source/source_loc/trace_id + valid_from/valid_to/version`
+- 同 claim 且同 source/trace，但业务时态字段不同会产生不同断言（不再折叠）
+- `trace_id` 语义收敛为操作级幂等键；不同有效期版本应使用不同 `trace_id`
+
+测试层：
+- 旧接口测试（`functional` / `dims` / `pred_id` / `temporal` / `chosen`）已删除
+- 仅保留新契约测试（head primary_key 隐式语义、跨坐标 primary_key 联结、Identity 写入异常）
 
 ---
 

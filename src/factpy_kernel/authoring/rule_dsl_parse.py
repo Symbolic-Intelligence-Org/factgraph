@@ -239,6 +239,7 @@ def _where_dsl_call(node: ast.Call, *, path: str, record_var_types: dict[str, st
 
 def _where_term(node: ast.AST, *, path: str) -> Any:
     if isinstance(node, ast.Name):
+        _assert_user_var_name(node.id, path=path)
         return f"${node.id}"
     return _literal(node, path=path)
 
@@ -280,6 +281,7 @@ def _where_record_exists_call(node: ast.Call, *, path: str, record_var_types: di
     if len(node.args) != 1 or not isinstance(node.args[0], ast.Name):
         raise _err("entity constructor where syntax requires exactly one variable argument", path=f"{path}.args")
     rec_var = node.args[0].id
+    _assert_user_var_name(rec_var, path=f"{path}.args[0]")
     record_var_types[rec_var] = record_type
     return ("pred", f"{record_type}:exists", [f"${rec_var}"])
 
@@ -309,7 +311,13 @@ def _where_compare(node: ast.Compare, *, path: str, record_var_types: dict[str, 
     if not isinstance(op, ast.Eq):
         raise _err("where path comparison syntax currently supports only ==", path=path)
     if left_attr is not None and right_attr is not None:
-        raise _err("comparison between two entity attributes is not supported in v1 where sugar", path=path)
+        left_var_name, left_field = left_attr
+        right_var_name, right_field = right_attr
+        if left_var_name not in record_var_types or right_var_name not in record_var_types:
+            raise _err("entity variable used in path comparison before constructor binding", path=path)
+        _assert_user_var_name(left_var_name, path=f"{path}.left")
+        _assert_user_var_name(right_var_name, path=f"{path}.right")
+        return ("attr_eq", (f"${left_var_name}", left_field), (f"${right_var_name}", right_field))
     attr_side = left_attr if left_attr is not None else right_attr
     assert attr_side is not None
     var_name, field_name = attr_side
@@ -455,6 +463,11 @@ def _call_name(func: ast.expr) -> str | None:
     if isinstance(func, ast.Name):
         return func.id
     return None
+
+
+def _assert_user_var_name(name: str, *, path: str) -> None:
+    if name.startswith("__"):
+        raise _err("variables starting with '__' are reserved for system-generated temporaries", path=path)
 
 
 def _helper_err(

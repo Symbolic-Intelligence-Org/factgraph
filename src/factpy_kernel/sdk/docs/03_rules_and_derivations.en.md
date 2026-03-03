@@ -133,6 +133,8 @@ Head forms:
 Field head constraints:
 - kwargs only
 - at least one DSL value in kwargs
+- Current boundary: Rule/Derivation head does not yet support temporal write semantics (`valid_from/valid_to/version`).
+- `temporal_view` is still rejected at derivation/runtime entrypoints; use read-side `snapshot.assertions.<field>.at(t)` / `.version(v)` as the current workaround (see `00_user_guide.en.md`, sections 4.3 and 6.3).
 
 Notes:
 - `status` can be carried in DSL payload.
@@ -162,6 +164,32 @@ Compatibility:
 | `legacy entity path` | `head=EntityType(...)` | candidate_kind is inferred as entity (plus dependent facts) |
 | `id_policy=...` | removed | identity is resolved in entity candidates; missing fields are provided via `identity_override` on accept |
 | fact payload `e_ref/rest_terms` | fact payload `terms` | `terms[0]` is always subject (arg0) |
+
+### 6.3 v2 breaking migration list (including `sdk_batch_plan_v1`)
+
+Schema layer:
+- `Field.dims` removed
+- `Field.fact_key` removed
+- `Field.cardinality` changed from `functional|multi|temporal` to `single|multi`
+- `Identity(primary_key=...)` added; entities without `primary_key=True` fail compile in cross-coordinate join scenarios
+
+Rule / DSL layer:
+- primary_key fields in `head` are compile-time hard errors
+- `temporal_view` entry points are removed and fail explicitly
+- non-primary fields in cross-coordinate `==` comparisons are compile-time hard errors
+- cross-entity-type comparisons are compile-time hard errors
+
+Protocol layer (`sdk_batch_plan_v1`):
+- wire payload no longer contains `dims`
+- wire payload no longer contains `fact_key`
+- `cardinality` enum values now use `single|multi`
+- `ingest_key` idempotency material is extended to: `claim + source/source_loc/trace_id + valid_from/valid_to/version`
+- same claim with same source/trace but different business-temporal fields now writes distinct assertions
+- `trace_id` is narrowed to operation-level idempotency; use different `trace_id` for different effective-time versions
+
+Test layer:
+- legacy-interface tests (`functional` / `dims` / `pred_id` / `temporal` / `chosen`) are removed
+- only new contract tests remain (head primary_key implicit semantics, cross-coordinate primary_key join, Identity write rejection)
 
 ---
 

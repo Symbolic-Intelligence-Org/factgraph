@@ -16,9 +16,6 @@ from factpy_kernel.authoring.diagnostic_codes import (
     CODE_RULE_SPEC_ERROR,
     CODE_SCHEMA_VALIDATION_ERROR,
     CODE_SOUFFLE_BINARY_MISSING,
-    CODE_TEMPORAL_CURRENT_NO_PRED_REFS,
-    CODE_TEMPORAL_CURRENT_NO_TEMPORAL_SCHEMA_PREDICATES,
-    CODE_TEMPORAL_CURRENT_NO_TEMPORAL_WHERE_PREDICATES,
     PHASE_DERIVATION_AUTHORING_COMPILE,
     PHASE_DERIVATION_PREVIEW,
     PHASE_DERIVATION_PREVIEW_ENV,
@@ -144,12 +141,9 @@ def rule_preflight(
     store: Store,
     rule_spec_payload: dict[str, Any],
     registry_payloads: list[dict[str, Any]] | None = None,
-    temporal_view: str = "active",
 ) -> dict[str, Any]:
     if not isinstance(store, Store):
         raise AuthoringPreflightError("store must be Store")
-    if temporal_view not in {"active", "current"}:
-        raise AuthoringPreflightError("temporal_view must be 'active' or 'current'")
 
     registry = RuleRegistry()
     diagnostics: list[dict[str, Any]] = []
@@ -189,18 +183,8 @@ def rule_preflight(
             "errors": [error_diag, *diagnostics],
         }
 
-    if temporal_view == "current":
-        maybe_warning = _temporal_current_no_effect_warning(
-            schema_ir=store.schema_ir,
-            where=rule_spec.where,
-            phase=PHASE_RULE_PREFLIGHT,
-            path="$.rule_spec_payload.where",
-        )
-        if maybe_warning is not None:
-            warnings.append(maybe_warning)
-
     try:
-        rows = run_rule(store, rule_spec, registry, temporal_view=temporal_view)
+        rows = run_rule(store, rule_spec, registry)
     except (RuleCompileError, WhereValidationError) as exc:
         error_diag = _diag(
             phase=PHASE_RULE_COMPILE,
@@ -258,7 +242,6 @@ def rule_preflight_authoring(
     store: Store,
     authoring_rule_payload: dict[str, Any],
     registry_payloads: list[dict[str, Any]] | None = None,
-    temporal_view: str = "active",
 ) -> dict[str, Any]:
     try:
         rule_spec_payload = compile_authoring_rule_v1(authoring_rule_payload, schema_ir=store.schema_ir)
@@ -283,7 +266,6 @@ def rule_preflight_authoring(
         store=store,
         rule_spec_payload=rule_spec_payload,
         registry_payloads=registry_payloads,
-        temporal_view=temporal_view,
     )
 
 
@@ -296,15 +278,12 @@ def derivation_dry_run_preview(
     head_vars: list[Any],
     where: list[Any],
     mode: str = "python",
-    temporal_view: str = "active",
     head: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not isinstance(store, Store):
         raise AuthoringPreflightError("store must be Store")
     if mode not in {"python", "engine"}:
         raise AuthoringPreflightError("mode must be 'python' or 'engine'")
-    if temporal_view not in {"active", "current"}:
-        raise AuthoringPreflightError("temporal_view must be 'active' or 'current'")
 
     warnings: list[dict[str, Any]] = []
     if mode == "engine" and _find_souffle_binary_safe() is None:
@@ -316,16 +295,6 @@ def derivation_dry_run_preview(
                 path="$.mode",
             )
         )
-    if temporal_view == "current":
-        maybe_warning = _temporal_current_no_effect_warning(
-            schema_ir=store.schema_ir,
-            where=where,
-            phase=PHASE_DERIVATION_PREVIEW,
-            path="$.where",
-        )
-        if maybe_warning is not None:
-            warnings.append(maybe_warning)
-
     try:
         candidates = store.evaluate(
             derivation_id=derivation_id,
@@ -334,7 +303,6 @@ def derivation_dry_run_preview(
             head_vars=head_vars,
             where=where,
             mode=mode,
-            temporal_view=temporal_view,
             head=head,
         )
     except (WhereValidationError, ValueError) as exc:
@@ -389,7 +357,6 @@ def derivation_dry_run_preview(
         "kind": "derivation_dry_run",
         "ok": True,
         "mode": mode,
-        "temporal_view": temporal_view,
         "summary": {
             "candidate_count": len(candidates),
             "preview_limit": 20,
@@ -434,7 +401,6 @@ def derivation_dry_run_preview_authoring(
         head_vars=compiled["head_vars"],
         where=compiled["where"],
         mode=compiled["mode"],
-        temporal_view=compiled["temporal_view"],
         head=compiled.get("head"),
     )
 
@@ -481,64 +447,3 @@ def _find_souffle_binary_safe() -> Any:
     except Exception:
         return None
 
-
-def _temporal_current_no_effect_warning(
-    *,
-    schema_ir: dict[str, Any],
-    where: Any,
-    phase: str,
-    path: str,
-) -> dict[str, Any] | None:
-    pred_ids = _collect_pred_ids_from_where(where)
-    if not pred_ids:
-        return _warn(
-            phase=phase,
-            code=CODE_TEMPORAL_CURRENT_NO_PRED_REFS,
-            message="temporal_view='current' is set but where references no predicates; current view selection has no effect",
-            path=path,
-        )
-
-    temporal_pred_ids = {
-        pred.get("pred_id")
-        for pred in schema_ir.get("predicates", [])
-        if isinstance(pred, dict)
-        and pred.get("cardinality") == "temporal"
-        and isinstance(pred.get("pred_id"), str)
-    }
-    if not temporal_pred_ids:
-        return _warn(
-            phase=phase,
-            code=CODE_TEMPORAL_CURRENT_NO_TEMPORAL_SCHEMA_PREDICATES,
-            message="temporal_view='current' is set but schema has no temporal predicates; current view selection has no effect",
-            path=path,
-        )
-
-    if pred_ids.isdisjoint(temporal_pred_ids):
-        return _warn(
-            phase=phase,
-            code=CODE_TEMPORAL_CURRENT_NO_TEMPORAL_WHERE_PREDICATES,
-            message="temporal_view='current' is set but where references no temporal predicates; current view selection has no effect",
-            path=path,
-        )
-    return None
-
-
-def _collect_pred_ids_from_where(where: Any) -> set[str]:
-    out: set[str] = set()
-
-    def walk(node: Any) -> None:
-        if isinstance(node, tuple) and node:
-            kind = node[0]
-            if kind == "pred" and len(node) >= 2 and isinstance(node[1], str):
-                out.add(node[1])
-                return
-            if kind == "not" and len(node) == 2:
-                walk(node[1])
-                return
-            return
-        if isinstance(node, list):
-            for item in node:
-                walk(item)
-
-    walk(where)
-    return out

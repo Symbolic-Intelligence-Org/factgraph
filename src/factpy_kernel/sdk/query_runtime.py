@@ -10,7 +10,7 @@ from factpy_kernel.core.view.projector import project_view_facts
 from .dsl import ReturnContractEntry
 from .error_codes import QUERY_MISSING_REF, QUERY_TYPE_MISMATCH
 from .errors import SDKStoreError
-from .facade import DimensionedValue, EntitySnapshot, FieldAssertions
+from .facade import EntitySnapshot, FieldAssertions
 from .query_lower import QueryPlan
 
 if TYPE_CHECKING:
@@ -22,11 +22,10 @@ class _EntityFieldSpec:
     field_name: str
     pred_id: str
     cardinality: str
-    dims_names: tuple[str, ...]
 
 
 def execute_query_plan(sdk: "SDKStore", plan: QueryPlan) -> list[dict[str, Any]]:
-    view_facts = project_view_facts(sdk.ledger, sdk.schema_ir, temporal_view=plan.temporal_view)
+    view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
     where_ir = lower_query_rule_ast_to_ir(plan.rule_ast)["where"]
     try:
         bindings = evaluate_where(view_facts, where_ir)
@@ -38,7 +37,6 @@ def execute_query_plan(sdk: "SDKStore", plan: QueryPlan) -> list[dict[str, Any]]
     hydrate_map = _batch_hydrate(
         sdk,
         buckets,
-        temporal_view=plan.temporal_view,
         view_facts=view_facts,
     )
     return _apply_contract(
@@ -70,10 +68,8 @@ def _batch_hydrate(
     sdk: "SDKStore",
     buckets: dict[str, set[str]],
     *,
-    temporal_view: str,
     view_facts: dict[str, list[tuple[Any, ...]]],
 ) -> dict[tuple[str, str], EntitySnapshot | None]:
-    del temporal_view
     out: dict[tuple[str, str], EntitySnapshot | None] = {}
     entity_cls_by_type = _entity_class_by_type(sdk)
 
@@ -123,13 +119,10 @@ def _batch_hydrate(
                 field_values[spec.field_name] = _current_value_from_rows(
                     rows_sorted,
                     cardinality=spec.cardinality,
-                    dims_names=list(spec.dims_names),
                 )
                 field_assertions[spec.field_name] = FieldAssertions(
                     field_name=spec.field_name,
                     cardinality=spec.cardinality,
-                    has_dims=bool(spec.dims_names),
-                    chosen_record=None,
                     active_records=tuple(),
                     history_records=tuple(),
                 )
@@ -228,12 +221,6 @@ def _row_dedup_key(row: dict[str, Any]) -> tuple[Any, ...]:
 def _to_hashable(value: Any) -> Any:
     if isinstance(value, EntitySnapshot):
         return ("entity_snapshot", value.entity_type, value.ref)
-    if isinstance(value, DimensionedValue):
-        return (
-            "dimensioned",
-            _to_hashable(value.value),
-            tuple((key, _to_hashable(dim_value)) for key, dim_value in sorted(value.dims.items())),
-        )
     if isinstance(value, tuple):
         return tuple(_to_hashable(item) for item in value)
     if isinstance(value, list):
@@ -313,33 +300,19 @@ def _entity_field_specs_for_type(sdk: "SDKStore", entity_type: str) -> tuple[str
         field_name = pred.get("py_field_name")
         if not isinstance(field_name, str) or not field_name:
             continue
-        dims = pred.get("dims")
-        if not isinstance(dims, list):
-            dims = []
-        dims_names = tuple(dim for dim in dims if isinstance(dim, str))
         field_specs[field_name] = _EntityFieldSpec(
             field_name=field_name,
             pred_id=pred_id,
-            cardinality=str(pred.get("cardinality", "functional")),
-            dims_names=dims_names,
+            cardinality=str(pred.get("cardinality", "single")),
         )
 
     ordered = [field_specs[name] for name in sorted(field_specs)]
     return exists_pred_id, ordered
 
 
-def _current_value_from_rows(rows: list[tuple[Any, ...]], *, cardinality: str, dims_names: list[str]) -> Any:
-    if not dims_names:
-        if cardinality == "functional":
-            if not rows:
-                return None
-            return rows[0][-1]
-        return tuple(row[-1] for row in rows)
-
-    return tuple(
-        DimensionedValue(
-            value=row[-1],
-            dims={name: row[idx + 1] for idx, name in enumerate(dims_names)},
-        )
-        for row in rows
-    )
+def _current_value_from_rows(rows: list[tuple[Any, ...]], *, cardinality: str) -> Any:
+    if cardinality == "single":
+        if not rows:
+            return None
+        return rows[0][-1]
+    return tuple(row[-1] for row in rows)

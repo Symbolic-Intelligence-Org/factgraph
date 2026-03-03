@@ -37,13 +37,11 @@ def build_rule_preflight_dto(
     store: Store,
     rule_spec_payload: dict[str, Any],
     registry_payloads: list[dict[str, Any]] | None = None,
-    temporal_view: str = "active",
 ) -> dict[str, Any]:
     payload = rule_preflight(
         store=store,
         rule_spec_payload=rule_spec_payload,
         registry_payloads=registry_payloads,
-        temporal_view=temporal_view,
     )
     return _wrap_preflight_payload("rule_preflight", payload)
 
@@ -53,13 +51,11 @@ def build_rule_preflight_from_authoring_dto(
     store: Store,
     authoring_rule_payload: dict[str, Any],
     registry_payloads: list[dict[str, Any]] | None = None,
-    temporal_view: str = "active",
 ) -> dict[str, Any]:
     payload = rule_preflight_authoring(
         store=store,
         authoring_rule_payload=authoring_rule_payload,
         registry_payloads=registry_payloads,
-        temporal_view=temporal_view,
     )
     return _wrap_preflight_payload("rule_preflight", payload)
 
@@ -73,7 +69,6 @@ def build_derivation_preview_dto(
     head_vars: list[Any],
     where: list[Any],
     mode: str = "python",
-    temporal_view: str = "active",
 ) -> dict[str, Any]:
     payload = derivation_dry_run_preview(
         store=store,
@@ -83,7 +78,6 @@ def build_derivation_preview_dto(
         head_vars=head_vars,
         where=where,
         mode=mode,
-        temporal_view=temporal_view,
     )
     return _wrap_preflight_payload("derivation_preview", payload)
 
@@ -129,7 +123,7 @@ def _wrap_preflight_payload(dto_kind: str, payload: dict[str, Any]) -> dict[str,
     if isinstance(payload.get("summary"), dict):
         dto["summary"] = _json_safe_copy(payload["summary"])
 
-    for key in ("schema_digest", "rule", "mode", "temporal_view"):
+    for key in ("schema_digest", "rule", "mode"):
         if key in payload:
             dto[key] = _json_safe_copy(payload[key])
 

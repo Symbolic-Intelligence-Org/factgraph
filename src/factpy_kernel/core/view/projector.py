@@ -6,9 +6,7 @@ from typing import Any
 from factpy_kernel.core.policy.active import is_active
 from factpy_kernel.core.policy.chosen import (
     PolicyNonDeterminismError,
-    choose_one,
     compute_chosen_for_predicate,
-    group_key_for_claim,
 )
 from factpy_kernel.core.store.ledger import Claim, Ledger
 
@@ -31,16 +29,12 @@ def _project_view_facts_impl(
     ledger: Ledger,
     schema_ir: dict,
     *,
-    temporal_view: str = "active",
     audit: ProjectorAudit | None = None,
 ) -> dict[str, list[tuple[Any, ...]]]:
     if not isinstance(ledger, Ledger):
         raise TypeError("ledger must be Ledger")
     if not isinstance(schema_ir, dict):
         raise ViewProjectionError("schema_ir must be dict")
-    if temporal_view not in {"active", "current"}:
-        raise ViewProjectionError("temporal_view must be 'active' or 'current'")
-
     predicates = schema_ir.get("predicates")
     if not isinstance(predicates, list):
         raise ViewProjectionError("schema_ir.predicates must be list")
@@ -56,7 +50,7 @@ def _project_view_facts_impl(
         if not isinstance(pred_id, str) or not pred_id:
             raise ViewProjectionError("predicate pred_id must be non-empty string")
 
-        cardinality = schema_pred.get("cardinality", "functional")
+        cardinality = schema_pred.get("cardinality", "single")
         active_claims = [
             claim
             for claim in ledger.find_claims(pred_id=pred_id)
@@ -66,7 +60,7 @@ def _project_view_facts_impl(
             audit.active_claim_count += len(active_claims)
 
         selected_claims: list[Claim]
-        if cardinality == "functional":
+        if cardinality == "single":
             try:
                 chosen_map = compute_chosen_for_predicate(ledger, schema_pred)
             except PolicyNonDeterminismError as exc:
@@ -79,24 +73,6 @@ def _project_view_facts_impl(
                 audit.dropped_by_policy_count += max(0, len(active_claims) - len(selected_claims))
         elif cardinality == "multi":
             selected_claims = active_claims
-        elif cardinality == "temporal":
-            if temporal_view == "active":
-                selected_claims = active_claims
-            else:
-                try:
-                    groups: dict[tuple[Any, ...], list[Claim]] = {}
-                    for claim in active_claims:
-                        group_key = group_key_for_claim(schema_pred, claim, ledger=ledger)
-                        groups.setdefault(group_key, []).append(claim)
-                    selected_claims = []
-                    for claims in groups.values():
-                        chosen_asrt_id = choose_one(ledger, [claim.asrt_id for claim in claims])
-                        for claim in claims:
-                            if claim.asrt_id == chosen_asrt_id:
-                                selected_claims.append(claim)
-                                break
-                except PolicyNonDeterminismError as exc:
-                    raise ViewProjectionError(str(exc)) from exc
         else:
             raise ViewProjectionError(f"unsupported cardinality: {cardinality}")
         if audit is not None:
@@ -140,13 +116,10 @@ def build_args_for_claim(ledger: Ledger, claim: Claim) -> tuple[Any, ...]:
 def project_view_facts(
     ledger: Ledger,
     schema_ir: dict,
-    *,
-    temporal_view: str = "active",
 ) -> dict[str, list[tuple[Any, ...]]]:
     return _project_view_facts_impl(
         ledger,
         schema_ir,
-        temporal_view=temporal_view,
         audit=None,
     )
 
@@ -154,14 +127,11 @@ def project_view_facts(
 def project_view_facts_with_audit(
     ledger: Ledger,
     schema_ir: dict,
-    *,
-    temporal_view: str = "active",
 ) -> tuple[dict[str, list[tuple[Any, ...]]], ProjectorAudit]:
     audit = ProjectorAudit()
     facts = _project_view_facts_impl(
         ledger,
         schema_ir,
-        temporal_view=temporal_view,
         audit=audit,
     )
     return facts, audit

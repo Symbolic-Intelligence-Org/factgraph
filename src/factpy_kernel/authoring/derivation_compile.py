@@ -33,6 +33,16 @@ def compile_authoring_derivation_v1(
     version = authoring_derivation.get("version", "v1")
     if not isinstance(version, str) or not version:
         raise _compile_error("version must be non-empty string", path="$.version")
+    if "temporal_view" in authoring_derivation:
+        # TODO: Support derivation-side temporal materialization semantics.
+        # Snapshot read views already support .at(t) / .version(v) in sdk.facade.
+        # This guard only blocks derivation/runtime temporal_view until rule-head
+        # temporal write semantics (valid_from/valid_to/version) are specified.
+        raise _compile_error(
+            "temporal_view is removed; derivation evaluation uses active projection only",
+            path="$.temporal_view",
+        )
+    where = _compile_where(authoring_derivation, schema_ir=schema_ir)
 
     head = _compile_head(authoring_derivation)
     if "materialize_as" in authoring_derivation:
@@ -59,9 +69,17 @@ def compile_authoring_derivation_v1(
         )
     ):
         if head.get("callee_kind") == "pred_ref":
-            lowered_target_pred_id, lowered_head_vars = _lower_fact_head_with_schema(head=head, schema_ir=schema_ir)
+            lowered_target_pred_id, lowered_head_vars = _lower_fact_head_with_schema(
+                head=head,
+                schema_ir=schema_ir,
+                where=where,
+            )
         elif head.get("callee_kind") == "entity_type":
-            lowered_target_pred_id, lowered_head_vars = _lower_entity_head_with_schema(head=head, schema_ir=schema_ir)
+            lowered_target_pred_id, lowered_head_vars = _lower_entity_head_with_schema(
+                head=head,
+                schema_ir=schema_ir,
+                where=where,
+            )
 
     target_pred_id = explicit_target_pred_id if isinstance(explicit_target_pred_id, str) and explicit_target_pred_id else lowered_target_pred_id
     if not isinstance(target_pred_id, str) or not target_pred_id:
@@ -88,9 +106,7 @@ def compile_authoring_derivation_v1(
         head_vars = lowered_head_vars
     else:
         head_vars = _compile_head_vars(authoring_derivation)
-    where = _compile_where(authoring_derivation, schema_ir=schema_ir)
     mode = _compile_mode(authoring_derivation)
-    temporal_view = _compile_temporal_view(authoring_derivation)
 
     synthesized_head: dict[str, Any] | None = None
     if head is None and schema_ir is not None:
@@ -110,14 +126,18 @@ def compile_authoring_derivation_v1(
         "head_vars": head_vars,
         "where": where,
         "mode": mode,
-        "temporal_view": temporal_view,
     }
     if canonical_head is not None:
         out["head"] = canonical_head
     return out
 
 
-def _lower_fact_head_with_schema(*, head: dict[str, Any], schema_ir: dict[str, Any]) -> tuple[str, list[Any]]:
+def _lower_fact_head_with_schema(
+    *,
+    head: dict[str, Any],
+    schema_ir: dict[str, Any],
+    where: list[Any],
+) -> tuple[str, list[Any]]:
     if head.get("kind") != "head_call":
         raise _compile_error("head.kind must be 'head_call'", path="$.head.kind")
     if head.get("callee_kind") != "pred_ref":
@@ -152,23 +172,71 @@ def _lower_fact_head_with_schema(*, head: dict[str, Any], schema_ir: dict[str, A
             raise _compile_error("matched predicate arg_specs.name must be non-empty string", path=f"$.head.arg_specs[{idx}].name")
         arg_names.append(arg_name)
 
-    missing = [name for name in arg_names if name not in kwargs]
-    if missing:
+    if len(arg_names) != 2:
         raise _compile_error(
-            f"head kwargs missing predicate args: {', '.join(missing)}",
+            f"matched predicate {pred_id} must have arity 2 for field head lowering",
+            path="$.head",
+        )
+
+    primary_keys, non_primary_identity = _identity_field_names(schema_ir=schema_ir, entity_type=entity_type)
+    forbidden_primary = sorted([name for name in kwargs.keys() if name in set(primary_keys)])
+    if forbidden_primary:
+        raise _compile_error(
+            "head must not include primary_key identity fields; they are implicit from where entity binding: "
+            + ", ".join(forbidden_primary),
             path="$.head.kwargs",
         )
-    extra = sorted([key for key in kwargs.keys() if key not in set(arg_names)])
+
+    missing_non_primary = [name for name in non_primary_identity if name not in kwargs]
+    if missing_non_primary:
+        raise _compile_error(
+            "head kwargs missing non-primary identity fields: " + ", ".join(missing_non_primary),
+            path="$.head.kwargs",
+        )
+
+    value_keys = [field, "value", arg_names[1]]
+    present_value_keys = [key for key in value_keys if key in kwargs]
+    if not present_value_keys:
+        raise _compile_error(
+            f"head kwargs missing field value; provide '{field}=...' (or 'value=...')",
+            path="$.head.kwargs",
+        )
+    chosen_value_key = present_value_keys[0]
+    if len(set(present_value_keys)) > 1:
+        first_value = kwargs[present_value_keys[0]]
+        for key in present_value_keys[1:]:
+            if kwargs[key] != first_value:
+                raise _compile_error(
+                    f"head value is ambiguous across keys: {', '.join(sorted(set(present_value_keys)))}",
+                    path="$.head.kwargs",
+                )
+    allowed = set(non_primary_identity) | set(value_keys)
+    extra = sorted([key for key in kwargs.keys() if key not in allowed])
     if extra:
         raise _compile_error(
-            f"head kwargs includes unknown predicate args: {', '.join(extra)}",
+            f"head kwargs includes unknown args: {', '.join(extra)}",
             path="$.head.kwargs",
         )
-    head_vars = [kwargs[name] for name in arg_names]
+
+    entity_var = _infer_unique_entity_binding_var(
+        schema_ir=schema_ir,
+        where=where,
+        entity_type=entity_type,
+        required_field_terms={
+            **{name: kwargs[name] for name in non_primary_identity},
+            field: kwargs[chosen_value_key],
+        },
+    )
+    head_vars = [entity_var, kwargs[chosen_value_key]]
     return pred_id, head_vars
 
 
-def _lower_entity_head_with_schema(*, head: dict[str, Any], schema_ir: dict[str, Any]) -> tuple[str, list[Any]]:
+def _lower_entity_head_with_schema(
+    *,
+    head: dict[str, Any],
+    schema_ir: dict[str, Any],
+    where: list[Any],
+) -> tuple[str, list[Any]]:
     if head.get("kind") != "head_call":
         raise _compile_error("head.kind must be 'head_call'", path="$.head.kind")
     if head.get("callee_kind") != "entity_type":
@@ -182,6 +250,21 @@ def _lower_entity_head_with_schema(*, head: dict[str, Any], schema_ir: dict[str,
         raise _compile_error("head.entity_type must be non-empty string", path="$.head.entity_type")
     if not isinstance(kwargs, dict) or not kwargs:
         raise _compile_error("head.kwargs must be non-empty object", path="$.head.kwargs")
+
+    primary_keys, _ = _identity_field_names(schema_ir=schema_ir, entity_type=entity_type)
+    forbidden_primary = sorted([name for name in kwargs.keys() if name in set(primary_keys)])
+    if forbidden_primary:
+        raise _compile_error(
+            "head must not include primary_key identity fields; they are implicit from where entity binding: "
+            + ", ".join(forbidden_primary),
+            path="$.head.kwargs",
+        )
+    _infer_unique_entity_binding_var(
+        schema_ir=schema_ir,
+        where=where,
+        entity_type=entity_type,
+        required_field_terms=dict(kwargs),
+    )
 
     role_specs = _find_entity_field_specs(schema_ir=schema_ir, entity_type=entity_type)
     role_names = [role["field_name"] for role in role_specs]
@@ -256,6 +339,8 @@ def _find_entity_field_specs(*, schema_ir: dict[str, Any], entity_type: str) -> 
             continue
         if pred.get("is_entity_exists") is True:
             exists_found = True
+            continue
+        if pred.get("is_identity_field") is True:
             continue
         pred_id = pred.get("pred_id")
         arg_specs = pred.get("arg_specs")
@@ -447,11 +532,168 @@ def _compile_mode(payload: dict[str, Any]) -> str:
     return str(mode)
 
 
-def _compile_temporal_view(payload: dict[str, Any]) -> str:
-    temporal_view = payload.get("temporal_view", "active")
-    if temporal_view not in {"active", "current"}:
-        raise _compile_error("temporal_view must be 'active' or 'current'", path="$.temporal_view")
-    return str(temporal_view)
+def _identity_field_names(*, schema_ir: dict[str, Any], entity_type: str) -> tuple[list[str], list[str]]:
+    entities = schema_ir.get("entities", [])
+    if not isinstance(entities, list):
+        raise _compile_error("schema_ir.entities must be list for head compile", path="$.head")
+    entity = next(
+        (
+            row
+            for row in entities
+            if isinstance(row, dict) and row.get("entity_type") == entity_type
+        ),
+        None,
+    )
+    if not isinstance(entity, dict):
+        raise _compile_error(f"entity type not found in schema: {entity_type}", path="$.head.entity_type")
+    identity_fields = entity.get("identity_fields")
+    if not isinstance(identity_fields, list) or not identity_fields:
+        raise _compile_error(f"entity identity_fields missing for {entity_type}", path="$.head.entity_type")
+    primary: list[str] = []
+    non_primary: list[str] = []
+    for idx, row in enumerate(identity_fields):
+        if not isinstance(row, dict):
+            raise _compile_error("identity field entry must be object", path=f"$.head.identity_fields[{idx}]")
+        name = row.get("name")
+        if not isinstance(name, str) or not name:
+            raise _compile_error("identity field name must be non-empty string", path=f"$.head.identity_fields[{idx}].name")
+        if row.get("primary_key") is True:
+            primary.append(name)
+        else:
+            non_primary.append(name)
+    return primary, non_primary
+
+
+def _infer_unique_entity_binding_var(
+    *,
+    schema_ir: dict[str, Any],
+    where: list[Any],
+    entity_type: str,
+    required_field_terms: dict[str, Any] | None = None,
+) -> str:
+    predicates = schema_ir.get("predicates", [])
+    if not isinstance(predicates, list):
+        raise _compile_error("schema_ir.predicates must be list for head compile", path="$.where")
+    owner_by_pred: dict[str, str] = {}
+    for pred in predicates:
+        if not isinstance(pred, dict):
+            continue
+        pred_id = pred.get("pred_id")
+        owner_type = pred.get("owner_type")
+        if isinstance(pred_id, str) and pred_id and isinstance(owner_type, str) and owner_type:
+            owner_by_pred[pred_id] = owner_type
+
+    seen_vars: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+            return
+        if not isinstance(node, tuple) or not node:
+            return
+        if node[0] == "not" and len(node) == 2:
+            walk(node[1])
+            return
+        if node[0] != "pred" or len(node) != 3:
+            return
+        pred_id, terms = node[1], node[2]
+        if not isinstance(pred_id, str) or not isinstance(terms, list) or not terms:
+            return
+        if owner_by_pred.get(pred_id) != entity_type:
+            return
+        first = terms[0]
+        if isinstance(first, str) and first.startswith("$") and len(first) > 1:
+            seen_vars.add(first)
+
+    walk(where)
+    if not seen_vars:
+        raise _compile_error(
+            f"where must bind one {entity_type} entity variable for head primary_key implicit carry",
+            path="$.where",
+        )
+    if len(seen_vars) > 1 and isinstance(required_field_terms, dict) and required_field_terms:
+        disambiguated = _disambiguate_entity_binding_with_head_terms(
+            schema_ir=schema_ir,
+            where=where,
+            entity_type=entity_type,
+            candidate_vars=seen_vars,
+            required_field_terms=required_field_terms,
+        )
+        if isinstance(disambiguated, str):
+            return disambiguated
+    if len(seen_vars) > 1:
+        raise _compile_error(
+            f"where binds multiple {entity_type} entity variables (ambiguous): {', '.join(sorted(seen_vars))}",
+            path="$.where",
+        )
+    return next(iter(seen_vars))
+
+
+def _disambiguate_entity_binding_with_head_terms(
+    *,
+    schema_ir: dict[str, Any],
+    where: list[Any],
+    entity_type: str,
+    candidate_vars: set[str],
+    required_field_terms: dict[str, Any],
+) -> str | None:
+    predicates = schema_ir.get("predicates", [])
+    if not isinstance(predicates, list):
+        return None
+    pred_by_field: dict[str, str] = {}
+    for pred in predicates:
+        if not isinstance(pred, dict):
+            continue
+        if pred.get("owner_type") != entity_type:
+            continue
+        field_name = pred.get("py_field_name")
+        pred_id = pred.get("pred_id")
+        if isinstance(field_name, str) and field_name and isinstance(pred_id, str) and pred_id:
+            pred_by_field[field_name] = pred_id
+
+    field_requirements: list[tuple[str, Any]] = []
+    for field_name, term in required_field_terms.items():
+        pred_id = pred_by_field.get(field_name)
+        if isinstance(pred_id, str) and pred_id:
+            field_requirements.append((pred_id, term))
+    if not field_requirements:
+        return None
+
+    requirement_matches: list[set[str]] = []
+    for expected_pred_id, expected_term in field_requirements:
+        requirement_vars: set[str] = set()
+
+        def walk_requirement(node: Any) -> None:
+            if isinstance(node, list):
+                for item in node:
+                    walk_requirement(item)
+                return
+            if not isinstance(node, tuple) or len(node) != 3 or node[0] != "pred":
+                return
+            pred_id, terms = node[1], node[2]
+            if pred_id != expected_pred_id:
+                return
+            if not isinstance(terms, list) or len(terms) < 2:
+                return
+            first = terms[0]
+            if not (isinstance(first, str) and first in candidate_vars):
+                return
+            if terms[1] == expected_term:
+                requirement_vars.add(first)
+
+        walk_requirement(where)
+        if requirement_vars:
+            requirement_matches.append(requirement_vars)
+
+    if not requirement_matches:
+        return None
+    intersection = set(candidate_vars)
+    for row in requirement_matches:
+        intersection &= row
+    if len(intersection) == 1:
+        return next(iter(intersection))
+    return None
 
 
 def _compile_error(message: str, *, path: str) -> AuthoringDerivationCompileError:
