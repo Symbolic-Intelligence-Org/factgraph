@@ -1,27 +1,23 @@
-# SDK 读写与 Ingest 参考（v1）
+# SDK 读写与 Ingest 参考（当前实现）
 
-范围：`src/factpy_kernel/sdk/store.py`、`facade.py`、`batch.py`、`ingest.py`
+范围：`store.py`、`facade.py`、`batch.py`、`ingest.py`
 
-## 1. 选哪个写入入口
+## 1. 写入口选择
 
 | 场景 | 推荐 API | 说明 |
 | --- | --- | --- |
-| 构造对象图、预览计划、序列化回放 | `sdk.batch()` | 支持 `preview()`、wire plan |
-| 已知完整 identity，改一个已存在实体 | `sdk.edit(...)` | 语义最明确 |
-| 外部脚本批量写入，或只有 `ref + asrt_id` | `sdk.ingest(...)` | item 级诊断，适配导入流程 |
-| 想直接落 ledger | `sdk.ref/set/add/retract` | 低层 API，灵活但约束少 |
+| 构造对象图、预览计划、导出回放 | `sdk.batch()` | 支持 `preview()`、`commit()`、`WireBatchPlan` |
+| 已知完整 identity，编辑已存在实体 | `sdk.edit(...)` | 语义最明确，自动 commit/rollback |
+| 外部批量导入（item 级诊断） | `sdk.ingest(...)` | 适合脚本导入，支持 collect-and-stop |
+| 最低层直接写断言 | `sdk.ref/set/add/retract` | 灵活但抽象最低 |
 
-## 2. SDKStore 构建与基础属性
+## 2. SDKStore 构建
 
 ```python
 sdk = SDKStore.from_schema_classes([User, Country, LivesIn])
 ```
 
-- `sdk.store`
-- `sdk.ledger`
-- `sdk.schema_ir`
-
-如需文件持久化，推荐直接使用：
+文件持久化：
 
 ```python
 sdk = SDKStore.from_schema_classes(
@@ -30,29 +26,30 @@ sdk = SDKStore.from_schema_classes(
 )
 ```
 
-说明：
-- `ledger_path` 会恢复同一个 Ledger 文件中的历史数据。
-- 首次创建时会写入 `schema_digest`；后续恢复会做 digest 校验。
-- 若你需要自己构造 `Ledger(...)`，仍可走 `ledger=...` 高级入口；但不要和 `ledger_path` 同时传。
+稳定合约：
+- `classes` 必须是非空 `list[Entity 子类]`。
+- `ledger` 与 `ledger_path` 互斥。
+- `ledger_path` 首次写入 `schema_digest`，后续恢复会做 digest 校验。
 
-## 3. 低层写入：`ref / set / add / retract`
+## 3. 低层写入（`ref/set/add/retract`）
 
 ### 3.1 `sdk.ref(...)`
 
-- 按 identity 生成 `idref_v1`。
+- 按 identity 生成 canonical `idref_v1`。
 - 支持 `Identity.default` 与 `default_factory="uuid4"`。
-- 传入未知 identity 字段或缺少必填 identity 会抛 `SDKStoreError`。
+- identity 缺失或有未知字段会抛 `SDKStoreError`。
 
 ### 3.2 `sdk.set(...)` / `sdk.add(...)`
 
 ```python
-sdk.set(User.country, user_ref, "de")
-sdk.add(User.aliases, user_ref, "Alice")
+sdk.set(User.age, user_ref, 31, meta={"source": "hr"})
+sdk.add(User.name, user_ref, "Alicia", meta={"source": "hr"})
 ```
 
-- 支持 `dims`（dict 或 list/tuple）与 `meta`。
-- 类型、dims 形状由 schema 校验（通过 `_rest_terms_for_field` 路径）。
-- 注意：这两个低层方法本身不做字段 cardinality 强约束。
+稳定合约：
+- 值类型按 schema `type_domain` 校验。
+- 写入前会确保 identity predicate 物化。
+- 低层 `set/add` 不做强 cardinality 约束；cardinality 约束主要由 batch/edit/ingest facade 提供。
 
 ### 3.3 `sdk.retract(...)`
 
@@ -61,138 +58,128 @@ sdk.retract(asrt_id, meta={"trace_id": "fix-1"})
 ```
 
 - append-only revoke，不删除原 claim。
-- 返回 revoker assertion id（或 `None`）。
+- 返回 revoker assertion id（若 no-op 可能返回 `None`）。
 
-## 4. 批处理：`sdk.batch()`
+## 4. 批处理（`sdk.batch()`）
 
-### 4.1 常用流程
+### 4.1 常见流程
 
 ```python
 with sdk.batch(meta={"trace_id": "seed"}) as tx:
-    alice = tx.entity(User, source_system="APP", source_id="u1")
-    de = tx.entity(Country, source_system="ISO3166", source_id="DE")
-
-    alice.country.set(de)       # handle 依赖
+    alice = tx.entity(User, user_id="u1", locale="zh")
     alice.name.add("Alice")
+    alice.age.set(30)
 
     plan = tx.preview()
     result = tx.commit()
 ```
 
-### 4.2 cardinality 约束（batch handle）
+### 4.2 cardinality 与 identity 约束
 
-- functional 字段：`.set(...)`
-- multi 字段：`.add(...)`
-- `.retract(assertion_id=...)` 按断言撤销
-- 错误调用抛 `SDKStoreError`
+- `single` 字段只能 `.set(...)`。
+- `multi` 字段只能 `.add(...)`。
+- identity 字段暴露只读 guard，`set/add/retract` 会报错。
 
-### 4.3 preview / wire plan
+### 4.3 Wire plan
 
-- `plan.ops`
 - `plan.export(sdk) -> WireBatchPlan`
-- `plan.to_json(sdk)`
-- `plan.apply(sdk)`
+- `WireBatchPlan.to_json()/from_json(...)`
 - `WireBatchPlan.apply(sdk, strict_schema=True)`
 
-说明：
-- 对发生字段写入的 entity handle，会自动补 `<T>:exists` 写入 op。
-- wire plan 导出不接受直接写 raw `idref_v1` 作为 value；实体关联值应通过 handle 建依赖。
+协议要点（`sdk_batch_plan_v1`）：
+- wire op 不再携带 `dims/fact_key`。
+- `cardinality` 使用 `single|multi`。
 
-## 5. 读取与编辑：`get / find / edit`
+## 5. 读取与编辑（`get/find/edit`）
 
 ### 5.1 `sdk.get(...)`
 
 ```python
-snap = sdk.get(User, source_system="APP", source_id="u1")
+snap = sdk.get(User, user_id="u1", locale="zh")
 ```
 
-- 仅接受 identity kwargs。
-- 不存在返回 `None`。
-- 返回快照时 `identity_available=True`，且 `identity` 可直接用于 `sdk.edit(...)`。
+- 只接受 identity kwargs。
+- 返回 `EntitySnapshot | None`。
+- `get` 返回的快照 `identity_available=True`。
 
 ### 5.2 `sdk.find(...)`
 
 ```python
-rows = sdk.find(User, country="de", temporal_view="current", limit=10)
+rows = sdk.find(User, age=30, limit=20)
 ```
 
-- `temporal_view`: `"active"` 或 `"current"`。
-- field 过滤是 AND 语义。
-- functional 字段按“相等”匹配。
-- multi/temporal 字段按“包含”匹配（expected 在 tuple 中）。
-- entity-ref 字段过滤可传 `ref` 或 `EntitySnapshot`（自动取 `.ref`）。
+稳定合约：
+- `limit` 必须是非负整数。
+- 过滤字段必须属于该实体的 identity 或普通字段。
+- identity 过滤一旦使用，必须提供该实体全部 identity 字段。
+- 不支持 `temporal_view` 参数。
 
-当前限制：
-- dims 字段过滤暂不支持（抛 `SDKSchemaError`）。
-- 若传 identity 过滤，必须提供该实体完整 identity。
-
-identity 回填行为：
-- `find` 无 identity filter 路径：`identity_available=False`。
-- `find` 有完整 identity filter 路径：`identity_available=True`。
+匹配语义：
+- `single`：相等匹配。
+- `multi`：包含匹配（`expected in tuple_value`）。
+- 实体引用字段可传 `ref` 或 `EntitySnapshot`（自动取 `.ref`）。
 
 ### 5.3 `sdk.edit(...)`
 
 ```python
-with sdk.edit(User, source_system="APP", source_id="u1") as user:
-    user.country.set("de")
+with sdk.edit(User, user_id="u1", locale="zh") as user:
+    user.age.set(31)
     user.name.add("Alicia")
 ```
 
+稳定合约：
 - 目标不存在抛 `EntityNotFoundError`。
-- context manager：无异常自动 commit；有异常自动 rollback（不吞异常）。
-- `commit()`/`rollback()` 后 editor 关闭，再操作抛 `EditorClosedError`。
+- 正常退出自动 commit；异常退出自动 rollback。
+- editor 关闭后复用抛 `EditorClosedError`。
 
 ## 6. `EntitySnapshot` 与断言视图
 
-### 6.1 基础属性
+### 6.1 快照值
 
-- `snapshot.ref`
-- `snapshot.entity_type`
-- `snapshot.identity_available`
-- `snapshot.identity`
-- `snapshot.<field>`
-- `snapshot.assertions.<field>`
+- `single` 字段：标量或 `None`
+- `multi` 字段：`tuple[...]`
+- 快照只读，赋值抛 `FrozenSnapshotError`
 
-快照只读，赋值抛 `FrozenSnapshotError`。
+### 6.2 `snapshot.assertions.<field>`
 
-### 6.2 当前值形态
+- `.active`：当前未撤销断言
+- `.history`：完整历史（含已撤销）
+- `.at(t)`：active 集合上按业务时间过滤  
+  `valid_from <= t` 且（`valid_to` 缺失或 `valid_to > t`）
+- `.version(v)`：active 集合上按 `version == v` 过滤
 
-- functional：单值或 `None`
-- multi/temporal：`tuple[...]`
-- dimmed 字段：`tuple[DimensionedValue, ...]`
+边界：
+- 缺失 `valid_from` 的断言不会命中 `.at(t)`。
+- 缺失 `version` 的断言不会命中 `.version(v)`。
+- `.at(t)` 会校验 ISO 8601（输入和断言 meta 都校验）。
+- `.version(v)` 仅接受 `str|int`（`bool` 非法）。
 
-### 6.3 断言级字段
+## 7. Ingest（`sdk.ingest(...)`）
 
-- `snapshot.assertions.<field>.active`
-- `snapshot.assertions.<field>.history`
-- `snapshot.assertions.<field>.chosen`
-  - 仅无 dims 的 functional 字段可用，否则抛 `CardinalityError`
-
-## 7. Ingest：`sdk.ingest(...)`
-
-### 7.1 当前支持 item 形态（dict）
+### 7.1 item 形态（dict）
 
 ```python
-{"kind": "set", "field": User.country, "e_ref": user_ref, "value": "de", "dims": {...}, "meta": {...}}
-{"kind": "add", "field": User.name, "e_ref": user_ref, "value": "Alicia", "meta": {...}}
-{"kind": "retract", "asrt_id": "....", "meta": {...}}
+{"kind": "set", "field": User.age, "e_ref": user_ref, "value": 31, "meta": {...}}
+{"kind": "add", "field": User.name, "e_ref": user_ref, "value": "Alias", "meta": {...}}
+{"kind": "retract", "asrt_id": "...", "meta": {...}}
 ```
 
-### 7.2 校验与写入语义
+### 7.2 诊断语义
 
-- SDK 先做整批预检，收集 `items[i].*` 诊断。
-- 若存在任一 `severity="error"`，整批不写（collect-and-stop）。
+- SDK 先预检全量 item，诊断路径使用 `items[i].*`。
+- 任一 `severity="error"` => 整批不写（collect-and-stop）。
 - warning 不阻塞写入。
 
-### 7.3 meta 规则
+### 7.3 meta 语义
 
-- 顶层 `meta` 与 item `meta` 合并（item 覆盖顶层）。
-- hard reserved keys：`ingested_at`、`ingest_key`、`revoked_asrt_id`。
-- 顶层或 item `meta` 命中 hard reserved key 会报错（顶层直接抛，item 进入 diagnostics error）。
-- 默认 `allow_sensitive_meta=False` 时，语义敏感键（如 `derived_rule_id`、`run_id`）给 warning。
+- 顶层 `meta` 与 item `meta` 合并，item 同名键覆盖顶层。
+- hard reserved：`ingested_at` / `ingest_key` / `revoked_asrt_id`（用户不可写）。
+- 去重相关（`ingest_key`）物料包含：
+  `claim + source + source_loc + trace_id + valid_from + valid_to + version`
 
-### 7.4 `IngestResult`
+### 7.4 返回结构
 
+`IngestResult`：
 - `written_assertion_ids`
 - `skipped_count`
 - `duplicate_count`
@@ -200,27 +187,22 @@ with sdk.edit(User, source_system="APP", source_id="u1") as user:
 - `diagnostics`
 - `diagnostics_contract_version`
 
-## 8. Provenance 验证：`sdk.validate_provenance(...)`
+## 8. Provenance 校验（`sdk.validate_provenance`）
 
 ```python
 report = sdk.validate_provenance(obj, standard="derivation_v1")
 ```
 
-支持输入：
+输入支持：
 - `CandidateSet`
 - `dict`（当前按扁平键读取）
 
-必填键（`derivation_v1`）：
+`derivation_v1` 必填键：
 - `derived_rule_id`
 - `derived_rule_version`
 - `run_id`
 - `support_kind`
 - `support_digest`（`sha256:<hex>`）
-
-可选键：
-- `schema_digest`
-- `policy_digest`
-  - 格式异常给 warning，不直接报 error。
 
 返回：
 - `ValidationReport.ok`

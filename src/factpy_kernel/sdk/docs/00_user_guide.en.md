@@ -1,51 +1,19 @@
-# FactPy SDK User Guide
+# FactPy SDK User Guide (Current Code Baseline)
 
-> Implementation baseline: commit `7252468`  
-> This guide follows the real SDK behavior in `src/factpy_kernel/sdk` and is organized as: schema -> write -> read -> derivation.
-
----
-
-## Table of Contents
-
-1. [Setup and Initialization](#1-setup-and-initialization)
-2. [Schema Definition](#2-schema-definition)
-3. [Writing Data with `sdk.batch`](#3-writing-data-with-sdkbatch)
-4. [Reading Data with `sdk.get` / `sdk.find`](#4-reading-data-with-sdkget--sdkfind)
-5. [Editing Data with `sdk.edit`](#5-editing-data-with-sdkedit)
-6. [External Import with `sdk.ingest`](#6-external-import-with-sdkingest)
-7. [Rules and Derivations](#7-rules-and-derivations)
-8. [Provenance Validation](#8-provenance-validation)
-9. [Which Write API Should I Use?](#9-which-write-api-should-i-use)
-10. [Error Handling Quick Reference](#10-error-handling-quick-reference)
-11. [Registry Publish and Read: `SDKRegistry`](#11-registry-publish-and-read-sdkregistry)
-12. [API Surface Additions (Advanced)](#12-api-surface-additions-advanced)
+> Baseline: current implementation in `src/factpy_kernel/sdk`.  
+> This guide documents only implemented behavior; unsupported areas are marked as explicit boundaries.
 
 ---
 
-## Status Labels Used in This Guide
-
-| Label | Meaning |
-|------|------|
-| **Stable Contract** | Externally committed behavior; safe for strict tests |
-| **Current Behavior** | True in current implementation, may be optimized later |
-| **Planned** | Not implemented yet; direction is known |
-
-Terminology:
-- `canonical ref` = canonical `idref_v1` token (string).
-
----
-
-## 1. Setup and Initialization
-
-### 1.1 Initialize Store
+## 1. Initialization
 
 ```python
-from factpy_kernel.sdk import Entity, Field, Identity, SDKStore
+from factpy_kernel.sdk import SDKStore
 
 sdk = SDKStore.from_schema_classes([User, Country, Language, LivesIn])
 ```
 
-For file persistence, pass `ledger_path` directly:
+File-backed ledger:
 
 ```python
 sdk = SDKStore.from_schema_classes(
@@ -55,811 +23,270 @@ sdk = SDKStore.from_schema_classes(
 ```
 
 Stable Contract:
-- `SDKStore.from_schema_classes(...)` compiles schema first, then builds `Store`.
-- `ledger_path=...` opens or creates a file-backed Ledger and writes `schema_digest` on first use.
-- Re-opening the same `ledger_path` validates the current schema digest; mismatch raises `SDKStoreError`.
+- `classes` must be a non-empty `list[Entity subclass]`.
 - `ledger` and `ledger_path` are mutually exclusive.
-- `classes` must be a non-empty list of `Entity` subclasses, otherwise `SDKStoreError`.
-
-### 1.2 Schema Preflight (CI / import time)
-
-```python
-from factpy_kernel.sdk import schema_preflight_from_classes
-
-preflight = schema_preflight_from_classes([User, Country, LivesIn])
-
-print(preflight["ok"])
-print(preflight.get("warnings", []))
-print(preflight.get("summary", {}))
-```
-
-Stable Contract:
-- Returns a `dict` DTO (not an object).
-- Core keys include `ok`, `warnings`, `errors`, `diagnostics`, and `summary` (on success).
-- `schema_preflight_from_classes(...)` is independent from `SDKStore.from_schema_classes(...)`.
+- First open writes `schema_digest`; reopen validates digest and raises `SDKStoreError` on mismatch.
 
 ---
 
 ## 2. Schema Definition
 
-### 2.1 Basic Declaration
-
 ```python
-from factpy_kernel.sdk import Entity, Field, Identity
-
-class Country(Entity):
-    source_system: str = Identity()
-    source_id: str = Identity()
-    name: str = Field(cardinality="functional", pred_id="country:name")
-    population: int = Field(cardinality="functional", pred_id="country:population")
+from factpy_kernel.sdk import Entity, Identity, Field
 
 class User(Entity):
-    source_system: str = Identity()
-    source_id: str = Identity()
-    name: str = Field(cardinality="multi", pred_id="user:name")
-    country: Country = Field(cardinality="functional", pred_id="user:country")
-    age: int = Field(cardinality="functional", pred_id="user:age")
+    user_id: str = Identity(primary_key=True)
+    locale: str = Identity()
+    name: str = Field(cardinality="multi")
+    age: int = Field(cardinality="single")
 ```
 
 Stable Contract:
-- Every `Entity` subclass must declare at least one `Identity`, otherwise `SDKSchemaError` at class definition time.
-- Valid cardinalities are `functional`, `multi`, and `temporal` (enforced during schema compile).
+- Every `Entity` must declare at least one `Identity`.
+- `Field.cardinality` only supports `single | multi`.
+- Public `Field` parameters are only `cardinality` and `description`.
+- `Identity` supports `default`, `default_factory`, and `primary_key`.
 
-### 2.2 `Identity(...)` Parameters
-
-| Parameter | Meaning |
-|------|------|
-| `default=...` | Fixed default value |
-| `default_factory="uuid4"` | Auto-generate identity when omitted |
-
-Current Behavior:
-- Both `sdk.ref(...)` and `tx.entity(...)` use the same identity resolution path.
-- SDK v1 has explicit support for `uuid4` default factory behavior in `ref` path.
-
-### 2.3 `Field(...)` Parameters
-
-| Parameter | Required | Meaning |
-|------|------|------|
-| `cardinality` | ✅ | `functional` / `multi` / `temporal` |
-| `pred_id` | Recommended | Explicit predicate id |
-| `name` | - | Name override |
-| `aliases` | - | Alias list |
-| `display_name` | - | Display name |
-| `description` | - | Description text |
-| `value_name` | - | Value argument name |
-| `fact_key` | - | Conflict-key dims subset |
-| `dims` | - | Dimension specs |
-| `type_domain` | - | Override inferred type domain |
-
-Stable Contract:
-- If `fact_key` is set, all entries must be dims of that field.
-- `fact_key` is invalid when `dims` is empty.
-
-### 2.4 Reified Records
-
-```python
-class LivesIn(Entity):
-    uid: str = Identity(default_factory="uuid4")
-    user: User = Field(cardinality="functional", pred_id="livesin:user")
-    country: Country = Field(cardinality="functional", pred_id="livesin:country")
-    since: int = Field(cardinality="functional", pred_id="livesin:since")
-```
-
-Stable Contract:
-- Schema compile adds `<T>:exists` predicates for all entities.
-- Batch writes on entity handles auto-emit `<T>:exists` ops when needed.
-
-### 2.5 Common Annotation Mapping
-
-| Python Type | type_domain |
-|------|------|
-| `str` | `string` |
-| `int` | `int` |
-| `bool` | `bool` |
-| `float` | `float64` |
-| `bytes` | `bytes` |
-| `datetime` | `time` |
-| `UUID` | `uuid` |
-| other `Entity` subclass | `entity_ref` |
-
-Current Behavior:
-- String annotations are supported (`"str"`, `"datetime"`, `"uuid"`, `"entity_ref"`, etc.).
-- Unknown annotations fall back to `entity_ref`.
-
-### 2.6 Plain Object vs Managed Handle
-
-```python
-# Plain in-memory object (no store binding)
-alice = User(source_id="u-001")
-alice.name = "Alice"  # normal assignment
-
-# Managed by sdk.batch()
-with sdk.batch(meta={"trace_id": "t1"}) as tx:
-    alice_h = tx.entity(User, source_id="u-001")
-    alice_h.name.add("Alice")  # managed API
-    tx.commit()
-```
-
-Stable Contract:
-- `.set/.add/.retract` are managed-handle capabilities (batch/edit), not plain object capabilities.
+Current Boundary:
+- `dims` / `fact_key` / `pred_id` / `functional` / `temporal` semantics are removed.
 
 ---
 
-## 3. Writing Data with `sdk.batch`
+## 3. Writing Data (`sdk.batch` / `sdk.set` / `sdk.add` / `sdk.retract`)
 
-### 3.1 Basic Flow
+### 3.1 `sdk.batch(...)`
 
 ```python
-with sdk.batch(meta={"trace_id": "import-001", "source": "HR"}) as tx:
-    de = tx.entity(Country, source_system="ISO3166", source_id="DE")
-    de.name.set("Germany")
-    de.population.set(83_000_000)
-
-    alice = tx.entity(User, source_system="APP", source_id="u-001")
-    alice.name.add("Alice")
-    alice.country.set(de)
+with sdk.batch(meta={"trace_id": "import-001", "source": "seed"}) as tx:
+    u = tx.entity(User, user_id="u-001", locale="zh")
+    u.name.add("Alice")
+    u.age.set(30)
 
     plan = tx.preview()
     res = tx.commit()
 ```
 
 Stable Contract:
-- `preview()` is read-only and repeatable.
-- `SDKBatchTx` context manager does not auto-commit.
+- Use `.set(...)` for `single`, `.add(...)` for `multi`.
+- `.retract(asrt_id=...)` retracts by assertion id.
+- `preview()` is read-only; `commit()` persists.
 
-### 3.2 Cardinality Rules on Batch Handles
-
-| Field Cardinality | Allowed | Forbidden |
-|------|------|------|
-| `functional` | `.set(value)` | `.add(value)` |
-| `multi` | `.add(value)` | `.set(value)` |
-| any | `.retract(assertion_id=...)` | retract-by-value |
+### 3.2 Identity Is Immutable
 
 Stable Contract:
-- `entity_ref` fields accept managed handle or canonical ref token, not business strings.
+- `sdk.edit(...).<identity>.set/add/retract` always raises (identity fields are immutable).
 
-### 3.3 Retract
+### 3.3 Low-level write APIs
 
 ```python
-with sdk.batch(meta={"trace_id": "fix-001"}) as tx:
-    alice = tx.entity(User, source_system="APP", source_id="u-001")
-    alice.name.retract(assertion_id="asrt_old_xxx")
-    tx.commit()
+sdk.set(User.age, e_ref, 31, meta={"source": "hr"})
+sdk.add(User.name, e_ref, "Alicia", meta={"source": "hr"})
+sdk.retract(asrt_id, meta={"source": "hr"})
 ```
-
-Stable Contract:
-- Retract is by `assertion_id` only.
-
-### 3.4 Wire Plan
-
-```python
-with sdk.batch(meta={"trace_id": "t1"}) as tx:
-    alice = tx.entity(User, source_id="u-001")
-    alice.name.add("Alice")
-    wire_json = tx.preview().to_json(sdk)
-
-from factpy_kernel.sdk.batch import WireBatchPlan
-WireBatchPlan.from_json(wire_json).apply(sdk, strict_schema=True)
-```
-
-Current Behavior:
-- `strict_schema=True` validates schema digest.
-- Raw entity-ref token values in staged field ops can commit, but are rejected by wire export; use handle references for replayable wire plans.
-
-### 3.5 Meta Merge Priority
-
-`commit_meta > field_op_meta > entity_meta > batch_meta`
-
-### 3.6 Dependency Closure (`include_deps`)
-
-Stable Contract:
-- `include_deps=True` (default) includes referenced handles automatically.
-- With `include_deps=False`, missing dependencies fail at `preview()`/`commit()`.
 
 ---
 
-## 4. Reading Data with `sdk.get` / `sdk.find`
+## 4. Reading Data (`sdk.get` / `sdk.find` / `EntitySnapshot`)
 
 ### 4.1 `sdk.get(...)`
 
 ```python
-alice = sdk.get(User, source_system="APP", source_id="u-001")
+snap = sdk.get(User, user_id="u-001", locale="zh")
 ```
 
 Stable Contract:
-- Identity kwargs only; non-identity args -> `SDKSchemaError`.
+- `get` accepts identity kwargs only.
 - Returns `EntitySnapshot | None`.
-- Snapshot from `get` has `identity_available=True`.
-
-Current Behavior:
-- Identity fields using `default_factory="uuid4"` must still be explicitly provided to `get(...)`.
 
 ### 4.2 `sdk.find(...)`
 
 ```python
-rows = sdk.find(User, age=30)
-rows = sdk.find(User, name="Alice")
-rows = sdk.find(User, temporal_view="current", limit=20)
+rows = sdk.find(User, age=30, limit=20)
 ```
 
-Filter Semantics (Stable Contract):
-- `functional`: exact match
-- `multi` / `temporal`: containment match in current tuple
-- `entity_ref`: exact canonical-ref match (`ref` or `EntitySnapshot` accepted)
-
 Stable Contract:
-- `temporal_view` is `active` or `current`.
-- `limit` must be non-negative int.
-- Unknown filters -> `SDKSchemaError`.
+- `limit` must be a non-negative integer.
+- If identity filters are used, all identity fields are required.
+- `temporal_view` is not supported.
 
-Current Behavior:
-- Dims filtering is not supported.
-- If identity filters are used, all identity fields must be present.
-
-### 4.3 `EntitySnapshot` API
+### 4.3 `EntitySnapshot` and assertion views
 
 ```python
-snap = sdk.get(User, source_system="APP", source_id="u-001")
-snap.ref
-snap.identity_available
-snap.identity
 snap.assertions.name.active
 snap.assertions.name.history
 snap.assertions.name.at("2024-03-01")
 snap.assertions.name.version("v2")
-snap.assertions.country.chosen
 ```
 
 Stable Contract:
-- Snapshot is read-only (`FrozenSnapshotError` on assignment).
-- `.chosen` is valid only for non-dim functional fields.
-- `.at(t)` applies business-time filtering on active assertions (`valid_from <= t` and `valid_to` is empty or `valid_to > t`); missing `valid_from` does not match.
-- `.version(v)` applies version filtering on active assertions (`version == v`); missing `version` does not match.
+- `active`: currently non-revoked assertions.
+- `history`: full ledger history (including revoked assertions).
+- `at(t)`: business-time filter on active assertions:
+  `valid_from <= t` and (`valid_to` is missing or `valid_to > t`).
+- `version(v)`: `version == v` filter on active assertions.
 
-### 4.4 `temporal_view` vs `assertions.history`
-
-Stable Contract:
-- `temporal_view` changes current visible values and entity visibility.
-- `assertions.<field>.history` comes from ledger history and is not affected by `temporal_view`.
-
-### 4.5 `identity_available` in `find` Results
-
-Current Behavior:
-- `find` without identity filters usually yields `identity_available=False`.
-- `find` with full identity filters yields `identity_available=True`.
+Temporal filter boundaries:
+- Missing `valid_from`: excluded from `.at(t)`.
+- Missing `version`: excluded from `.version(v)`.
+- `.at(t)` validates ISO 8601 for input `t` and assertion `valid_from/valid_to`; invalid format raises `SDKStoreError`.
+- `.version(v)` accepts `str|int` only (`bool` is invalid).
 
 ---
 
-## 5. Editing Data with `sdk.edit`
-
-### 5.1 Basic Context-Manager Usage
+## 5. Editing Data (`sdk.edit`)
 
 ```python
-with sdk.edit(User, source_system="APP", source_id="u-001") as user:
-    user.name.add("Alicia")
-    user.name.retract(asrt_id="asrt_old_name_xxx")
-    user.country.set(fr_ref)
-    user.age.set(31)
-```
-
-Stable Contract:
-- Normal exit -> auto commit.
-- Exception exit -> auto rollback; exception is not swallowed.
-- Missing entity -> `EntityNotFoundError`.
-
-### 5.2 Edit Records
-
-```python
-with sdk.edit(LivesIn, uid="li-uuid-001") as rec:
-    rec.country.set(fr_ref)
-    rec.since.set(2024)
-```
-
-### 5.3 Manual `preview/commit/rollback`
-
-```python
-editor = sdk.edit(User, source_system="APP", source_id="u-001")
-editor.__enter__()
-try:
+with sdk.edit(User, user_id="u-001", locale="zh") as editor:
     editor.name.add("Alicia")
-    plan = editor.preview()
-    editor.commit(meta={"trace_id": "manual-fix"})
-except Exception:
-    editor.rollback()
-    raise
+    editor.age.set(31)
 ```
 
 Stable Contract:
-- Editor is closed after `commit()`/`rollback()`; further operations raise `EditorClosedError`.
-
-### 5.4 `FieldEditor` Rules
-
-| Field Cardinality | Allowed | Wrong Call |
-|------|------|------|
-| `functional` | `.set(...)` | `.add(...)` -> `CardinalityError` |
-| `multi` | `.add(...)` | `.set(...)` -> `CardinalityError` |
-| any | `.retract(asrt_id=...)` | missing `asrt_id` |
-
-### 5.5 Not Found
-
-Stable Contract:
-- `sdk.edit(...)` never creates new entities; use `sdk.batch()` for creation.
+- Missing entity raises `EntityNotFoundError`.
+- Reusing a closed editor raises `EditorClosedError`.
+- Wrong cardinality operation raises `CardinalityError`.
 
 ---
 
-## 6. External Import with `sdk.ingest`
-
-### 6.1 Basic Usage
+## 6. External Import (`sdk.ingest`)
 
 ```python
-result = sdk.ingest(
+res = sdk.ingest(
     [
-        {"kind": "add", "field": User.name, "e_ref": alice_ref, "value": "Alicia"},
-        {"kind": "set", "field": User.country, "e_ref": alice_ref, "value": fr_ref},
-        {"kind": "retract", "asrt_id": "asrt_old_name_xxx"},
+        {"kind": "add", "field": User.name, "e_ref": user_ref, "value": "Alias"},
+        {"kind": "set", "field": User.age, "e_ref": user_ref, "value": 31},
+        {"kind": "retract", "asrt_id": old_asrt_id},
     ],
-    meta={"source": "CSV_IMPORT", "trace_id": "import-2026-01"},
+    meta={"source": "hr", "trace_id": "hr-001"},
 )
 ```
 
-### 6.2 Item Shapes
-
-| `kind` | Required | Optional |
-|------|------|------|
-| `set` | `field`, `e_ref`, `value` | `dims`, `meta` |
-| `add` | `field`, `e_ref`, `value` | `dims`, `meta` |
-| `retract` | `asrt_id` | `meta` |
-
 Stable Contract:
-- `data` must be `list`/`tuple`.
-- `field` must be SDK `Field` descriptor.
-- `e_ref` must be canonical ref token.
-- Ingest prechecks cardinality (`set` for functional, `add` for multi).
+- `kind=set` is for `single`; `kind=add` is for `multi`.
+- Top-level `meta` and item-level `meta` merge with item-level override.
+- Any diagnostic error triggers collect-and-stop (no writes for the whole batch).
 
-### 6.3 Meta Key Tiers
-
-- Hard reserved: `ingested_at`, `ingest_key`, `revoked_asrt_id` (user must not write)
-- Sensitive semantic keys: warning by default
-- Convention/free keys: allowed (subject to meta value constraints)
-
-Stable Contract:
-- `allow_sensitive_meta=True` suppresses sensitive warnings only.
-- `ingest_key` idempotency material = `claim + source + source_loc + trace_id + valid_from + valid_to + version`.
-- `trace_id` is an operation-level idempotency key, not a data-level uniqueness key; use different `trace_id` values for different effective-time versions.
-- `valid_from` / `valid_to` / `version` are already effective on the read path via `snapshot.assertions.<field>.at(t)` and `.version(v)`.
-- Current boundary: rule/derivation temporal write semantics are not open yet (you cannot emit temporal assertions with `valid_from/valid_to/version` directly from derivation head); `temporal_view` is still rejected at derivation/runtime entrypoints.
-
-### 6.4 Exceptions vs Diagnostics
-
-| Case | Behavior |
-|------|------|
-| Invalid top-level `meta` | raises `SDKStoreError` |
-| Invalid item structure/meta/unknown retract target | `result.diagnostics` with `severity="error"` |
-| Sensitive key (without allow) | `result.warnings` |
-
-Stable Contract:
-- Any `diagnostics` error triggers collect-and-stop (whole batch not written).
-
-### 6.5 Typical Fallback: Record Relocation
-
-When `find` does not provide identity, use `ingest(retract + set/add)` with `ref + asrt_id`.
+Meta highlights:
+- Hard-reserved keys: `ingested_at`, `ingest_key`, `revoked_asrt_id` (user write forbidden).
+- Business-temporal keys: `valid_from`, `valid_to`, `version`.
+- `ingest_key` idempotency material:
+  `claim + source + source_loc + trace_id + valid_from + valid_to + version`.
 
 ---
 
-## 7. Rules and Derivations
+## 7. Rule / Query / Derivation
 
-### 7.1 `vars(...)`
-
-```python
-with vars("p", "c") as (p, c):
-    ...
-
-with vars() as V:
-    p, c = V("p", "c")
-```
-
-Stable Contract:
-- `with vars() as (p, c)` is not supported.
-
-### 7.2 Rules
+### 7.1 Rule
 
 ```python
-with vars("li", "p", "c") as (li, p, c):
-    rule = Rule(
-        id="q_country",
+from factpy_kernel.sdk import Rule, Pred, Not, vars
+
+with vars("u") as (u,):
+    r = Rule(
+        id="q.vip",
         version="1.0.0",
-        select=[p, c],
-        where=[LivesIn(li), li.user == p, li.country == c],
-    )
-rows = sdk.run(rule)
-```
-
-Stable Contract:
-- Chain syntax like `LivesIn(li).user == p` is not supported.
-- `RuleRef` target must be `expose=True`.
-- String DSL is not supported (`sdk.run("...")`).
-
-Current Behavior:
-- SDK object DSL is lowered and then schema-aware compiled; exists/path sugar is generally rewritten against schema predicates (including custom `pred_id`).
-
-### 7.3 Derivations
-
-```python
-with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
-    drv = Derivation(
-        id="drv.speaks",
-        version="1.0.0",
-        where=[LivesIn(li), li.user == u, li.country == c, HasLanguage(hl), hl.country == c, hl.language == l],
-        head=Speaks(user=u, language=l),
+        select=[u],
+        where=[
+            Pred("user:tag", u, "vip"),
+            Not([Pred("user:tag", u, "blocked")]),
+        ],
     )
 
-cands = sdk.evaluate(drv)
-rows = sdk.accept_many(cands, mode="atomic")
+rows = sdk.run(r, row_format="dict")
 ```
 
 Stable Contract:
-- `sdk.accept(CandidateSet, ...)` accepts exactly one positional candidate set.
-- Supported accept override keys: `approved_by`, `note`, `dry_run`.
+- `row_format` is supported only on the Rule path (`tuple|dict`).
+- `RuleRef` targets must be `expose=True`.
+- `RuleRef` is not allowed inside `Not(...)` body (compile-time error).
 
-Current Behavior:
-- Head shape decides candidate path.
-- `CandidateSet` includes `candidate_id`, `candidate_key`, and `candidate_kind`.
-- For dependency graphs, prefer `sdk.accept_many(..., mode="atomic")`.
-
-### 7.4 Current DSL Limits
-
-- No string DSL (`run/evaluate`).
-- No chained path expression.
-- No attr-vs-attr sugar (`a.x == b.x`).
-- No non-linear multiplication (`x * y`).
-- `Not(...)` body must be non-empty and safe under rule validation.
-
----
-
-## 8. Provenance Validation
-
-`sdk.validate_provenance(...)` is validation-only: no writes, no automatic blocking.
-
-### 8.1 Usage
+### 7.2 Query
 
 ```python
-report = sdk.validate_provenance(candidate_set, standard="derivation_v1")
-```
+from factpy_kernel.sdk import Query, vars
 
-Also supports dict input (flat-key form).
-
-Stable Contract:
-- Supported input: `CandidateSet` or `dict`.
-- Supported standard: `derivation_v1` only.
-- Returns `ValidationReport`.
-
-### 8.2 Required Keys (`derivation_v1`)
-
-- `derived_rule_id`
-- `derived_rule_version`
-- `run_id`
-- `support_kind`
-- `support_digest` (`sha256:<64hex>`)
-
-### 8.3 Optional Digest Keys
-
-- `schema_digest`
-- `policy_digest`
-
-Current Behavior:
-- Malformed optional digests emit warnings, not errors.
-
-### 8.4 Dict Shape Note
-
-Current Behavior:
-- Dict validation reads flat keys; it does not auto-unwrap `{"provenance": {...}}`.
-
-### 8.5 Relationship with Writes
-
-Stable Contract:
-- Caller decides whether to gate `accept/ingest` using this report.
-
----
-
-## 9. Which Write API Should I Use?
-
-### 9.1 Quick Matrix
-
-| Scenario | Recommended API |
-|------|------|
-| Build graph + preview + replay | `sdk.batch()` |
-| Modify one known entity (full identity) | `sdk.edit(...)` |
-| External write items / only `ref + asrt_id` | `sdk.ingest(...)` |
-| Derivation candidate accept flow | `sdk.evaluate(...) + sdk.accept(...)` |
-| Minimal low-level direct write | `sdk.set/add/retract` |
-
-### 9.2 Minimal Decision Tree
-
-```text
-Need previewable write plan?
-  ├─ Yes -> sdk.batch()
-  └─ No
-      ├─ Full identity + one entity edit?
-      │    ├─ Yes -> sdk.edit(...)
-      │    └─ No
-      │         ├─ Derivation candidate flow?
-      │         │    ├─ Yes -> evaluate + accept
-      │         │    └─ No -> sdk.ingest(...)
-```
-
----
-
-## 10. Error Handling Quick Reference
-
-### 10.0 Error Layers
-
-| Layer | Typical Errors |
-|------|------|
-| SDK facade | `SDKSchemaError`, `SDKStoreError` |
-| Read/write objects | `EntityNotFoundError`, `FrozenSnapshotError`, `CardinalityError`, `EditorClosedError` |
-| DSL construction | `SDKDSLError` |
-| Core compile/execute | e.g., `RuleCompileError` |
-| Ingest diagnostics channel | `result.diagnostics` |
-
-### 10.1 Common Errors
-
-| Error / Symptom | Typical Cause | Fix |
-|------|------|------|
-| `EntityNotFoundError` | editing missing entity | verify identity or create with batch |
-| `FrozenSnapshotError` | assignment on snapshot/assertions | use edit/ingest path |
-| `CardinalityError` | wrong set/add usage in edit | follow field cardinality |
-| `EditorClosedError` | using editor after close | open a new edit session |
-| `SDKSchemaError` | invalid get/find field usage | align with schema identity/fields |
-| `SDKStoreError` | type mismatch, unsupported API shape, unknown accept kw | fix input contract |
-| `SDKDSLError` | unsupported DSL construction | use supported DSL patterns |
-| `RuleCompileError` (or wrapped) | semantic rule constraints | fix rule/ref exposure and where semantics |
-| `diagnostics` has `severity="error"` | item-level ingest validation failed | fix by `path`; batch was not written |
-
-### 10.2 Minimal Ingest Triage
-
-```python
-res = sdk.ingest(items, meta=meta)
-for d in res.diagnostics:
-    print(d["severity"], d["code"], d["path"], d["message"])
-```
-
-Recommended order:
-1. `diagnostics`
-2. `warnings`
-3. `written_assertion_ids / skipped_count / duplicate_count`
-
----
-
-## 11. Registry Publish and Read: `SDKRegistry`
-
-`SDKRegistry` is the SDK wrapper around the authoring registry for schema/rule/derivation registration, publish runs, and version reads.
-
-### 11.1 Initialize
-
-```python
-from factpy_kernel.sdk import SDKRegistry
-
-reg = SDKRegistry(root_dir="./registry")
-print(reg.root_dir)
-```
-
-Stable Contract:
-- Constructor is one-of: `SDKRegistry(root_dir=...)` or `SDKRegistry(registry=...)`.
-- If both `root_dir` and `registry` are provided, they must point to the same path, otherwise `SDKRegistryError`.
-
-### 11.2 Apply Schema: `apply_schema_classes(...)`
-
-```python
-res = reg.apply_schema_classes(
-    [Person],
-    apply_request_id="req-001",
-    transaction_policy="best_effort_no_rollback_v1",
-)
-
-print(res["ok"])
-print(res["apply_execute"]["status"])
-print(res["apply_execute"]["idempotency"]["replayed"])
-```
-
-Current Behavior:
-- `apply_schema_classes(...)` compiles Entity classes into authoring schema, then calls `apply_authoring_bundle(...)`.
-- Reusing the same `apply_request_id` triggers idempotent replay (`idempotency.replayed=True`).
-- Nested fields such as `res["apply_execute"]["..."]` are current-behavior details and may evolve with authoring internals; for business success checks, prefer top-level `res["ok"]`.
-
-### 11.3 Register / Apply Entry Points (object, spec, bundle)
-
-You can register compiled specs directly, or pass SDK objects and let SDK compile first:
-
-```python
-from factpy_kernel.sdk import Rule, Derivation, Pred, vars
-
-with vars("e", "c") as (e, c):
-    rule = Rule(
-        id="rule.country_rows",
-        version="1.0.0",
-        select=[e, c],
-        where=[Pred("person:country", e, c)],
-        expose=True,
+with vars("u", "loc", "nm") as (u, loc, nm):
+    q = Query(
+        head=[User(u), User.name(locale=loc, name=nm)],
+        where=[User(u), u.locale == loc, u.name == nm],
     )
 
-reg.register_rule(rule)
+rows = sdk.run(q)  # always list[dict]
 ```
 
+Stable Contract:
+- Query always returns dict rows; `row_format` is not supported.
+- Query head supports only `Entity(var)` and `Entity.field(...)`.
+
+### 7.3 Derivation
+
 ```python
-with vars("e", "c") as (e, c):
-    drv = Derivation(
-        id="drv.country_copy",
+from factpy_kernel.sdk import Derivation, vars
+
+with vars("u", "loc", "nm") as (u, loc, nm):
+    d = Derivation(
+        id="drv.copy_name",
         version="1.0.0",
-        head=Person.country_copy(person=e, country_copy=c),
-        where=[Pred("person:country", e, c)],
+        where=[User(u), u.locale == loc, u.name == nm],
+        head=User.name(locale=loc, name=nm),
     )
 
-reg.register_derivation(drv)
-```
-
-You can also register already-compiled specs directly (skip SDK DSL compile):
-
-```python
-reg.register_rule_spec(compiled_rule_spec_dict)
-reg.register_derivation_spec(compiled_derivation_spec_dict)
-```
-
-The lower-level unified entrypoint is `apply_authoring_bundle(...)`:
-
-```python
-res = reg.apply_authoring_bundle(
-    authoring_schema=authoring_schema_dict,
-    rule_request={"rule_spec_payload": compiled_rule_spec_dict},
-    derivation_request={"derivation_id": "...", "version": "...", "target_pred_id": "...", "head_vars": [...], "where": [...]},
-    apply_request_id="req-002",
-)
-```
-
-Current Behavior:
-- `register_rule(...)` / `register_derivation(...)` accept SDK objects or authoring payload dict.
-- `register_rule_spec(...)` / `register_derivation_spec(...)` are for flows where you already have compiled spec dicts.
-- `apply_authoring_bundle(...)` is the lower-level entrypoint used by `apply_schema_classes(...)`, suitable for applying schema/rule/derivation changes together.
-- `register_derivation(...)` has a fallback: when `schema_ir` is not explicitly passed and first compile fails, it tries loading schema_ir from the registry and retries once.
-- For head-only derivations, prefer calling `apply_schema_classes(...)` before registration, or pass `schema_ir=...` explicitly, to avoid relying on fallback retry behavior.
-
-### 11.4 Read and List APIs
-
-```python
-print(reg.list_rule_ids())
-print(reg.list_derivation_ids())
-print(reg.list_rule_versions("rule.country_rows"))
-print(reg.get_latest_rule_spec("rule.country_rows"))
-print(reg.read_rule_spec("rule.country_rows", "1.0.0"))
-
-print(reg.list_derivation_versions("drv.country_copy"))
-print(reg.get_latest_derivation_spec("drv.country_copy"))
-print(reg.read_derivation_spec("drv.country_copy", "1.0.0"))
+cands = sdk.evaluate(d, mode="python")
+res = sdk.accept(cands[0], approved_by="alice")
 ```
 
 Stable Contract:
-- `list_*` APIs return ordered lists.
-- `get_latest_*` / `read_*` return `None` when the target is missing.
-- Rule and derivation read/list method names are symmetric (`*_rule_*` vs `*_derivation_*`).
+- `head` shape decides candidate kind (fact/entity).
+- Multi-head (`head=[H1, H2, ...]`) is supported; `evaluate` returns flattened candidates sharing one `run_id`.
+- `materialize_as` / `id_policy` are removed.
 
-### 11.5 Apply-Run Queries
-
-```python
-print(reg.list_apply_run_ids())
-print(reg.list_apply_runs())
-print(reg.show_apply_run("req-001"))
-```
-
-Current Behavior:
-- `show_apply_run(...)` returns `None` if not found.
-- `list_apply_runs()` returns apply execute run records (`list[dict]`).
-
-### 11.6 Error Boundary
-
-Stable Contract:
-- Filesystem and authoring apply errors are wrapped as `SDKRegistryError`.
-- `register_rule/register_derivation` raise `SDKRegistryError` when input is neither SDK object nor dict.
-
-### 11.7 Manifest / Schema Metadata Methods
-
-These three methods are commonly confused with "full schema content", so treat them together:
-
-```python
-manifest = reg.read_manifest()
-entry = reg.get_schema_entry()
-res = reg.upsert_schema_ir(compiled_schema_ir)
-```
-
-`read_manifest()` (Current Behavior):
-- Returns manifest as `dict` (with `schema/rules/derivations` index metadata).
-- If manifest file does not exist yet, returns a default empty manifest shape (no error).
-
-`upsert_schema_ir(schema_ir)` (Stable Contract):
-- Writes a compiled `schema_ir` directly into registry (bypasses `apply_schema_classes` flow).
-- Returns write result `dict` (typical keys: `kind/status/path/schema_digest`).
-- Invalid `schema_ir` raises `SDKRegistryError` (wrapped from lower-layer validation).
-
-`get_schema_entry()` (Stable Contract):
-- Returns schema entry metadata from manifest (`dict | None`).
-- Typical field is `path` (relative path inside registry). This is location metadata, not the schema_ir payload itself.
-- Returns `None` when registry has no schema entry yet.
+Current Boundary:
+- `sdk.evaluate(..., temporal_view=...)` is explicitly rejected.
+- Derivation/runtime temporal write semantics (emitting assertions with `valid_from/valid_to/version` directly from head) are not open yet.
 
 ---
 
-## 12. API Surface Additions (Advanced)
+## 8. Temporal Semantics Status
 
-This section covers methods listed in `04_api_surface.md` that are not fully expanded in sections 1-10.
+Implemented:
+- Write path persists `valid_from/valid_to/version`, and they are part of idempotency.
+- Read path supports `snapshot.assertions.<field>.at(t)` and `.version(v)`.
 
-### 12.1 Low-Level Writes: `ref / set / add / retract`
+Not implemented:
+- Temporal write semantics in Rule/Derivation head.
 
-```python
-alice_ref = sdk.ref(User, source_system="APP", source_id="u-001")
-sdk.set(User.country, alice_ref, de_ref)
-sdk.add(User.name, alice_ref, "Alice")
-sdk.retract("asrt_xxx")
-```
+---
 
-Stable Contract:
-- This is the thinnest write path (direct ledger writes), without batch preview/wire features.
-
-### 12.2 Compiled Pass-Through: `evaluate_compiled / accept_compiled`
+## 9. Audit & Debugging
 
 ```python
-cands = sdk.evaluate_compiled(...)
-res = sdk.accept_compiled(...)
+sdk.explain_fact(pred_id, e_ref, *val_atoms)
+sdk.conflicts(pred_id, e_ref)
 ```
 
-Current Behavior:
-- These APIs pass through to underlying `store` methods. Use them when you already have compiled inputs and want to skip SDK object compile.
-- Typical use case: you already have compiled specs produced by external flows (for example CLI/registry pipelines) and want direct execution.
+Notes:
+- Both operate on active assertions.
+- For `single` fields, `chosen_asrt_id` is returned to explain conflict resolution.
 
-### 12.3 Package Export and Run: `export_package / run_package`
+---
 
-```python
-# options is adapter-specific (currently often Souffle ExportOptions)
-options = ...
-sdk.export_package("./pkg", options)
-sdk.run_package("./pkg", entrypoints=["__query__"], engine="souffle")
-```
+## 10. Registry (`SDKRegistry`)
 
-Current Behavior:
-- This capability depends on adapter implementation (currently mainly the Souffle adapter); exact `options` type/details can evolve with adapter changes.
-- If your goal is standard SDK read/write/derivation flow, you can ignore this advanced layer.
+Common APIs:
+- `apply_schema_classes(...)`
+- `register_rule(...)` / `register_derivation(...)`
+- `list_rule_ids()` / `list_derivation_ids()`
+- `get_latest_rule_spec(...)` / `get_latest_derivation_spec(...)`
 
-### 12.4 Debug Properties: `sdk.store / sdk.ledger / sdk.schema_ir`
+Current Boundary:
+- Registry manages authoring assets; runtime execution remains on `SDKStore`.
+- For multi-head derivations, expand into multiple single-head registrations when publishing.
 
-```python
-print(sdk.store)
-print(sdk.ledger)
-print(sdk.schema_ir)
-```
+---
 
-Stable Contract:
-- These are intended for debugging, auditing, and advanced integrations.
-- `sdk.schema_ir` is the compiled schema actually used by the current store.
+## 11. v2 Migration Quick Notes
 
-### 12.5 Audit Queries: `explain_fact / conflicts`
-
-These APIs are useful when debugging functional conflicts and chosen resolution.
-
-```python
-audit = sdk.explain_fact("person:country", person_ref)      # optional value-atom filter
-audit_de = sdk.explain_fact("person:country", person_ref, "de")
-conf = sdk.conflicts("person:country", person_ref)
-```
-
-`explain_fact(...)` returns (Current Behavior):
-- `pred_id`
-- `e_ref`
-- `active_claims`: `list[dict]`, each item has `asrt_id`, `args`, `meta`
-- `chosen_asrt_id`
-
-`conflicts(...)` returns (Current Behavior):
-- `pred_id`
-- `e_ref`
-- `active_asrt_ids`
-- `chosen_asrt_id`
-
-Parameter contract (Stable Contract):
-- `pred_id`: predicate id (for example `"person:country"`).
-- `e_ref`: canonical `idref_v1` token (for example from `snapshot.ref` or `sdk.ref(...)`).
-- `explain_fact(..., *val_atoms)` filters `active_claims` by exact value-atom match.
+- `Field.cardinality`: `functional|temporal` -> `single`.
+- Removed: `dims` / `fact_key` / `chosen`.
+- `temporal_view` removed from evaluate/runtime entrypoints (explicit error).
+- Cross-coordinate joins only allow primary_key equality; invalid forms fail at compile time.

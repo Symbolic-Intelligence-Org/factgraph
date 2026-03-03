@@ -1,8 +1,6 @@
-# SDK Rules / Derivations Object DSL (v1)
+# SDK Rule / Query / Derivation DSL (Current Implementation)
 
 Scope: `src/factpy_kernel/sdk/dsl` + `SDKStore.run/evaluate/accept`
-
----
 
 ## 1. `vars(...)`
 
@@ -19,64 +17,52 @@ with vars() as V:
 ```
 
 Unsupported:
-- `with vars() as (p, c)`
-
----
+- `with vars() as (p, c)` (SDK raises `SDKDSLError` due Python runtime limits)
 
 ## 2. Rule DSL
 
 ```python
-with vars("li", "p", "c") as (li, p, c):
+with vars("li", "u", "c") as (li, u, c):
     rule = Rule(
-        id="q_country_rows",
+        id="q_user_country",
         version="1.0.0",
-        select=[p, c],
+        select=[u, c],
         where=[
             LivesIn(li),
-            li.person == p,
+            li.user == u,
             li.country == c,
-            RuleRef("q_other", version="1.0.0")(p, c),
-            Not([Pred("person:blacklist", p, "x")]),
         ],
         expose=True,
     )
-rows = sdk.run(rule)
+
+rows = sdk.run(rule, row_format="dict")
 ```
 
-`Rule(...)` constraints:
-- `id` / `version` must be non-empty strings
-- `select` / `where` must be non-empty lists
+Stable contract:
+- `Rule.id/version` must be non-empty strings.
+- `Rule.select/where` must be non-empty lists.
+- `row_format` is supported only on the Rule path.
 
-Methods:
-- `rule.to_authoring_payload()`
-- `rule.dependency_rules()`
-  - Returns direct `RuleRef(RuleObj)` dependencies visible in this rule's `where`.
-  - Not a full transitive closure in one call.
-
----
-
-## 3. `where` syntax support
+## 3. `where` Syntax and Limits
 
 Supported:
-- entity exists sugar: `LivesIn(li)`
-- path equality sugar: `li.person == p`
-- predicate atom: `Pred("person:country", p, c)`
+- entity-exists sugar: `LivesIn(li)`
+- path equality sugar: `li.user == u`, `li.country == c`
+- attr-vs-attr comparison: `u1.user_id == u2.user_id`
+- explicit predicate atom: `Pred("user:tag", u, "vip")`
 - rule reference: `RuleRef(...)(...)`
 - negation: `Not([...])`
 - comparisons: `== != > >= < <=`
 - OR branches: `where=[[...], [...]]`
-- linear arithmetic: `age == (2026 - by)`, `x * 2`, `2 * x`
+- linear arithmetic inside comparisons (for example `age == (2026 - by)`, `x * 2`)
 
 Limits:
-- path sugar supports only `==`
-- no attr-vs-attr sugar: `a.country == b.country`
-- no non-linear multiplication: `x * y`
-- no string DSL
-- no chained form: `LivesIn(li).person == p`
+- path sugar supports only `==`.
+- attr-vs-attr comparisons support only `==`, and require schema-aware compilation.
+- non-linear multiplication (`x * y`) is unsupported.
+- string DSL is unsupported (`sdk.run("...")`, `sdk.evaluate("...")`).
 
----
-
-## 4. `RuleRef`, `expose=True`, and dependency registration
+## 4. RuleRef and Dependency Registration
 
 Construction:
 
@@ -85,295 +71,159 @@ RuleRef("q_x", version="1.0.0")
 RuleRef(existing_rule_obj)
 ```
 
-Call:
-
-```python
-RuleRef(...)(p, c)
-```
-
 Rules:
 - RuleRef target must be `expose=True`, otherwise runtime `RuleCompileError`.
-- With `sdk.run(..., registry=None)`, SDK auto-registers `RuleRef(RuleObj)` dependencies (including recursive object deps).
+- `RuleRef` is forbidden inside `Not(...)` body (compile-time error).
+- `sdk.run(..., registry=None)` auto-registers `RuleRef(RuleObj)` dependencies.
 - If `registry` is explicitly provided, SDK does not auto-fill dependencies.
-- Auto-registration only solves dependency presence in registry; it does not bypass the `expose=True` constraint.
 
----
-
-## 5. Derivation DSL
+## 5. Query DSL
 
 ```python
-with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
-    drv = Derivation(
-        id="drv.speaks",
-        version="1.0.0",
-        where=[
-            LivesIn(li), li.user == u, li.country == c,
-            HasLanguage(hl), hl.country == c, hl.language == l,
-        ],
-        head=Speaks(user=u, language=l),
+with vars("u", "loc", "nm") as (u, loc, nm):
+    q = Query(
+        head=[User(u), User.name(locale=loc, name=nm)],
+        where=[User(u), u.locale == loc, u.name == nm],
+        on_missing="error",
+        on_type_mismatch="error",
     )
+
+rows = sdk.run(q)  # list[dict]
+```
+
+Stable contract:
+- Query head only supports `Entity(var)` and `Entity.field(...)`.
+- Query always returns `list[dict]`; `row_format` is not supported.
+- Field projection must resolve to schema `single` fields.
+- Unbound variables in `where` fail at construction with `SDKDSLError(code="QUERY_UNBOUND_VAR")`.
+- `on_missing` / `on_type_mismatch` only allow `error|skip|null`.
+
+## 6. Derivation DSL
+
+```python
+with vars("u", "loc", "nm") as (u, loc, nm):
+    d = Derivation(
+        id="drv.copy_name",
+        version="1.0.0",
+        where=[User(u), u.locale == loc, u.name == nm],
+        head=User.name(locale=loc, name=nm),
+    )
+
+cands = sdk.evaluate(d, mode="python")
+res = sdk.accept(cands[0], approved_by="alice")
 ```
 
 Fields:
-- `id`, `version`, `where` (required)
-- `head`
-- `target`
-- `head_vars`
-- `mode`
-- `temporal_view`
-- `status`
+- required: `id`, `version`, `where`
+- optional: `head`, `target`, `head_vars`, `mode`, `status`
 
-Method:
-- `drv.to_authoring_payload()`
+Stable contract:
+- `head` shape infers candidate kind (fact/entity).
+- Multi-head (`head=[H1, H2, ...]`) is supported; `evaluate` returns flattened candidates sharing one `run_id`.
+- `sdk.run(derivation)` is not supported; use `sdk.evaluate(...)`.
 
-Head forms:
-- fact head: `Entity.field(...)`
-- entity head: `EntityType(...)`
+## 7. Compile-Time Hard Constraints (v2)
 
-Field head constraints:
-- kwargs only
-- at least one DSL value in kwargs
-- Current boundary: Rule/Derivation head does not yet support temporal write semantics (`valid_from/valid_to/version`).
-- `temporal_view` is still rejected at derivation/runtime entrypoints; use read-side `snapshot.assertions.<field>.at(t)` / `.version(v)` as the current workaround (see `00_user_guide.en.md`, sections 4.3 and 6.3).
+### 7.1 `head` and primary key
 
-Notes:
-- `status` can be carried in DSL payload.
-- Current `sdk.run/evaluate` compile path does not enforce runtime semantics for `status`.
+- Any primary-key field in `head` -> compile error.
+- Missing entity binding in `where` for implicit primary-key carry -> compile error.
+- Multiple same-type bindings in `where` that cannot be disambiguated -> compile error.
 
----
+### 7.2 Cross-coordinate attr comparison
 
-## 6. `head` decides candidate kind (v2)
+`u1.user_id == u2.user_id` is legal only when:
+- both sides are the same entity type
+- both sides use the same field
+- that field is declared as `primary_key`
 
-### 6.1 Default inference (recommended)
+Otherwise, compilation fails (no implicit guessing).
 
-Compiler behavior is inferred from head shape:
+### 7.3 Lowering shape
 
-| Head shape | Default path | Evaluate output |
-|---|---|---|
-| `EntityType(...)` | entity path | one entity candidate + dependent fact candidates |
-| `EntityType.field(...)` | fact path | fact candidates |
-
-Compatibility:
-- without `head`, `target + head_vars` still works as fact-only legacy path.
-
-### 6.2 Migration cheat-sheet (old -> v2)
-
-| Old style | New style | Notes |
-|---|---|---|
-| `materialize_as="fact"` | `head=Entity.field(...)` | candidate_kind is inferred as fact |
-| `legacy entity path` | `head=EntityType(...)` | candidate_kind is inferred as entity (plus dependent facts) |
-| `id_policy=...` | removed | identity is resolved in entity candidates; missing fields are provided via `identity_override` on accept |
-| fact payload `e_ref/rest_terms` | fact payload `terms` | `terms[0]` is always subject (arg0) |
-
-### 6.3 v2 breaking migration list (including `sdk_batch_plan_v1`)
-
-Schema layer:
-- `Field.dims` removed
-- `Field.fact_key` removed
-- `Field.cardinality` changed from `functional|multi|temporal` to `single|multi`
-- `Identity(primary_key=...)` added; entities without `primary_key=True` fail compile in cross-coordinate join scenarios
-
-Rule / DSL layer:
-- primary_key fields in `head` are compile-time hard errors
-- `temporal_view` entry points are removed and fail explicitly
-- non-primary fields in cross-coordinate `==` comparisons are compile-time hard errors
-- cross-entity-type comparisons are compile-time hard errors
-
-Protocol layer (`sdk_batch_plan_v1`):
-- wire payload no longer contains `dims`
-- wire payload no longer contains `fact_key`
-- `cardinality` enum values now use `single|multi`
-- `ingest_key` idempotency material is extended to: `claim + source/source_loc/trace_id + valid_from/valid_to/version`
-- same claim with same source/trace but different business-temporal fields now writes distinct assertions
-- `trace_id` is narrowed to operation-level idempotency; use different `trace_id` for different effective-time versions
-
-Test layer:
-- legacy-interface tests (`functional` / `dims` / `pred_id` / `temporal` / `chosen`) are removed
-- only new contract tests remain (head primary_key implicit semantics, cross-coordinate primary_key join, Identity write rejection)
-
----
-
-## 7. `sdk.evaluate(...)` output: `CandidateSet`
-
-Return type: `list[CandidateSet]`
-
-Key fields:
-- `candidate_id` (per-run handle)
-- `candidate_key` (cross-run stable key)
-- `candidate_kind` (`"fact"` / `"entity"`)
-- `derivation_id`
-- `derivation_version`
-- `run_id`
-- `target`
-- `key_tuple_digest`
-- `tup_digest`
-- `payload`
-- `support_digest`
-- `support_kind`
-- `generated_at`
-- `state`
-
-Interpretation:
-- `run_id`: evaluate run identifier
-- `target`: usually `pred_id` for fact candidates, `entity_type` for entity candidates
-- `key_tuple_digest`: candidate idempotency key digest
-- `support_*`: support/evidence digest metadata used by accept meta and provenance checks
-
-Payload shapes:
-- entity candidate (v2):
-  - `{"entity_type": ..., "identity_fields": [...], "resolved_identity": {...}, "missing_identity_fields": [...], "proposed_entity_ref": ...}`
-- fact candidate (v2):
-  - `{"pred_id": ..., "terms": [{"kind": "entity_ref" | "candidate_ref" | "literal", ...}, ...]}`
-  - `terms[0]` is always the subject slot (arg0).
-
-Note:
-- for entity-head derivations, evaluate commonly returns a small graph: one entity candidate plus N dependent fact candidates linked via `candidate_ref`.
-
-### 7.1 Recommended way to read fact payload
+Valid cross-coordinate primary-key comparison is lowered to shared system vars (`$__pk_N`):
 
 ```python
-fact = next(c for c in cands if c.candidate_kind == "fact")
-subject = fact.payload["terms"][0]
-value_terms = fact.payload["terms"][1:]
+("pred", "user:user_id", ["$u1", "$__pk_0"])
+("pred", "user:user_id", ["$u2", "$__pk_0"])
 ```
 
-Do not read fact payload as `payload["e_ref"]` / `payload["rest_terms"]`.
+System-prefixed temporary names are reserved.
 
----
+## 8. `evaluate/accept` Runtime Semantics
 
-## 8. `sdk.accept(...)`: result shape and idempotency
-
-Main path:
+### 8.1 `sdk.evaluate(...)`
 
 ```python
-res = sdk.accept(candidate_set, approved_by="alice")
+cands = sdk.evaluate(drv, mode="python")
 ```
 
-Batch path (recommended for dependency graphs):
+- `mode`: `python` (default) or `engine`.
+- `engine` requires a registered runtime adapter (for example Souffle).
+
+### 8.2 `CandidateSet` key fields
+
+- `candidate_id`: per-run handle
+- `candidate_key`: cross-run stable key
+- `candidate_kind`: `fact` / `entity`
+- `payload`:
+  - fact: `{"pred_id": ..., "terms": [...]}`
+  - entity: `{"entity_type": ..., "resolved_identity": ..., ...}`
+
+### 8.3 `sdk.accept(...)`
 
 ```python
-rows = sdk.accept_many(cands, mode="atomic")
+sdk.accept(candidate, approved_by="alice", note="ok", dry_run=False)
 ```
 
-Facade sugar:
-- `approved_by=...`
-- `note=...`
-- `dry_run=True`
-- `meta_overrides={...}` (same keys only)
+Accept sugar keys:
+- `approved_by`
+- `note`
+- `dry_run`
+- `identity_override` (for incomplete entity identity)
 
-### 9.1 `AcceptResult` fields
+Repeated accept on the same candidate is idempotent no-op (`duplicate`).
 
-- `candidate_id`
-- `candidate_key`
-- `run_id`
-- `candidate_kind` (optional; mirrors the accepted candidate kind)
-- `accepted_count`
-- `skipped_count`
-- `written_assertions`
-- `skipped_reason_counts`
-- `diagnostics`
-- `diagnostics_contract_version`
-- `entity_ref` (present when an entity candidate is accepted)
+## 9. Temporal Boundary (Current Status)
 
-### 9.2 Idempotency behavior
+Implemented:
+- Read-side temporal filtering via `snapshot.assertions.<field>.at(t)` and `.version(v)`.
 
-Repeated accept of the same candidate becomes no-op:
-- no extra writes
-- `accepted_count=0`
-- `skipped_count=1`
-- `skipped_reason_counts={"duplicate": 1}`
+Not open yet:
+- derivation/runtime `temporal_view` parameter.
+- temporal write semantics in Rule/Derivation head.
 
-### 9.3 `dry_run`
+Explicit behavior:
+- Authoring derivation payload with `temporal_view` fails compile.
+- `sdk.evaluate(..., temporal_view=...)` raises `SDKStoreError`.
 
-`dry_run=True` does not write ledger and returns a "would write" preview in `written_assertions`.
+## 10. Minimal End-to-End Examples
 
-### 9.4 `accept_many(...)` states
-
-Per-candidate states include:
-- `ACCEPTED`
-- `DUPLICATE`
-- `BLOCKED_DEPENDENCY`
-- `FAILED_VALIDATION`
-- `FAILED_RUNTIME`
-
-Default mode is `atomic`; `best_effort` is optional.
-
----
-
-## 10. `mode` / `temporal_view`
-
-### 10.1 `sdk.run(...)`
+### 10.1 Fact candidate
 
 ```python
-rows = sdk.run(rule, temporal_view="active")
-```
-
-- `temporal_view`: `"active"` | `"current"`
-
-### 10.2 `sdk.evaluate(...)`
-
-```python
-cands = sdk.evaluate(drv, mode="python", temporal_view="active")
-```
-
-- `mode`: `"python"` | `"engine"`
-- `temporal_view`: `"active"` | `"current"`
-
-Notes:
-- default mode is `"python"`.
-- `"engine"` requires a registered engine evaluator (Souffle adapter is typically registered by importing `factpy_kernel.adapters.souffle`).
-
----
-
-## 11. Schema-aware note (sugar and custom predicate ids)
-
-In SDK path, object DSL is lowered and then schema-aware compiled:
-- exists sugar (for example `LivesIn(li)`) is rewritten to actual exists predicate in schema
-- path sugar (for example `li.user == p`) is rewritten to canonical role predicates when schema_ir is available
-
-So in standard `SDKStore.run/evaluate` flow, entity sugar usually follows schema custom `pred_id` correctly.  
-If you lower/compile outside schema-aware context, prefer explicit `Pred(...)`.
-
----
-
-## 12. Minimal end-to-end examples
-
-### 12.1 fact path: evaluate -> accept
-
-```python
-with vars("p", "c") as (p, c):
+with vars("u", "loc", "nm") as (u, loc, nm):
     drv = Derivation(
-        id="drv.country_copy",
+        id="drv.alias",
         version="1.0.0",
-        head=Person.country_copy(person=p, country_copy=c),
-        where=[Pred("person:country", p, c)],
+        where=[User(u), u.locale == loc, u.name == nm],
+        head=User.name(locale=loc, name=nm),
     )
 
-cands = sdk.evaluate(drv, mode="python")
-fact = next(c for c in cands if c.candidate_kind == "fact")
-res = sdk.accept(fact, approved_by="alice")
+fact = next(c for c in sdk.evaluate(drv) if c.candidate_kind == "fact")
+sdk.accept(fact, approved_by="alice")
 ```
 
-### 12.2 entity path: accept dependency graph
+### 10.2 Entity candidate + dependent facts
 
 ```python
-with vars("u", "l") as (u, l):
+with vars("u", "lang") as (u, lang):
     drv = Derivation(
         id="drv.speaks",
         version="1.0.0",
-        head=Speaks(user=u, language=l),
-        where=[Pred("person:country", u, "de"), Pred("user:lang_pref", u, l)],
+        where=[User(u), Pred("user:lang_pref", u, lang)],
+        head=Speaks(user=u, language=lang),
     )
 
-cands = sdk.evaluate(drv, mode="python")
-rows = sdk.accept_many(cands, mode="atomic")
+rows = sdk.accept_many(sdk.evaluate(drv), mode="atomic")
 ```
-
-### 12.3 incomplete identity
-
-```python
-entity = next(c for c in cands if c.candidate_kind == "entity")
-sdk.accept(entity, identity_override={"source_id": "u-001"})
-```
-
-Without `identity_override`, accept returns `IDENTITY_INCOMPLETE` (or equivalent validation failure).

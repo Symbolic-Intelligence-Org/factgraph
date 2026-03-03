@@ -1,46 +1,54 @@
-# SDK API Surface Index (v1)
+# SDK API Surface Index (Current Implementation)
 
-Quick index of `from factpy_kernel.sdk import ...` and major public APIs.
+This page tracks the public exports in `factpy_kernel/sdk/__init__.py` and the main class APIs.
 
-## 1. Top-Level Exports
+## 1. Top-Level Exports (`from factpy_kernel.sdk import ...`)
 
-### Schema / Store / Registry
+### 1.1 Schema / Store / Registry
+
 - `Entity`
 - `Field`
 - `Identity`
 - `SDKStore`
 - `SDKRegistry`
 
-### DSL
+### 1.2 DSL
+
 - `Rule`
 - `RuleRef`
 - `Derivation`
+- `Query`
 - `Pred`
 - `Not`
 - `vars`
 - `SDKDSLError`
 
-### Schema Helpers
+### 1.3 Schema compile helpers
+
 - `build_authoring_schema_from_classes`
 - `compile_schema_from_classes`
 - `schema_preflight_from_classes`
 
-### Ingest / Provenance
+### 1.4 Ingest / Provenance
+
 - `IngestResult`
 - `ValidationReport`
 
-### Errors
-- `SDKSchemaError`
-- `SDKStoreError`
-- `SDKRegistryError`
-- `EntityNotFoundError`
-- `FrozenSnapshotError`
-- `CardinalityError`
-- `EditorClosedError`
+### 1.5 Errors and error codes
 
-## 2. `SDKStore` Main Methods
+- Error classes: `SDKSchemaError`, `SDKStoreError`, `SDKRegistryError`, `EntityNotFoundError`, `FrozenSnapshotError`, `CardinalityError`, `EditorClosedError`
+- Exported codes:
+  - `INVALID_ROW_FORMAT`
+  - `QUERY_MISSING_REF`
+  - `QUERY_TYPE_MISMATCH`
+  - `QUERY_ALIAS_CONFLICT`
+  - `QUERY_UNBOUND_VAR`
+  - `QUERY_INVALID_ROW_FORMAT`
+  - `QUERY_NOT_IMPLEMENTED`
 
-- `from_schema_classes(..., ledger=None, ledger_path=None)`
+## 2. `SDKStore` Public Methods
+
+- `from_schema_classes(..., ledger=None, ledger_path=None, default_row_format=None)`
 - `batch(...)`
 - `get(...)`
 - `find(...)`
@@ -62,11 +70,13 @@ Quick index of `from factpy_kernel.sdk import ...` and major public APIs.
 - `export_package(...)`
 - `run_package(...)`
 
-Notes:
-- `from_schema_classes(..., ledger_path="...")` is the recommended file-backed restore path.
-- First creation writes `schema_digest`; later restores validate schema compatibility.
+Key boundaries:
+- `run(...)` supports Rule/Query and rejects Derivation.
+- `evaluate(...)` explicitly rejects `temporal_view`.
+- Rule `row_format` precedence: call-site > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`.
+- Query always returns `list[dict]` and does not accept `row_format`.
 
-## 3. `SDKRegistry` Main Methods
+## 3. `SDKRegistry` Public Methods
 
 - `apply_schema_classes(...)`
 - `apply_authoring_bundle(...)`
@@ -89,17 +99,18 @@ Notes:
 - `read_rule_spec(...)`
 - `read_derivation_spec(...)`
 
-Notes (easy-to-misuse methods):
-- `read_manifest()`: reads registry manifest index; if manifest file does not exist yet, returns default empty shape.
-- `upsert_schema_ir(...)`: writes compiled `schema_ir` directly (bypasses `apply_schema_classes` path).
-- `get_schema_entry()`: returns schema entry metadata (for example `path`), not the schema_ir payload itself.
+Notes:
+- `register_derivation(...)` is currently single-head-oriented.
+- For multi-head publishing, expand into multiple single-head derivations first.
 
 ## 4. Common Facade Return Objects
 
 - `EntitySnapshot`
-  - `ref`, `entity_type`, `identity_available`, `identity`, `assertions`, `field(name)`
+  - attributes: `ref`, `entity_type`, `identity_available`, `identity`, `assertions`
+  - method: `field(name)`
 - `EntityEditor`
-  - `preview()`, `commit(meta=...)`, `rollback()`, `ref`, `entity_type`
+  - `preview()`, `commit(meta=...)`, `rollback()`
+  - attributes: `ref`, `entity_type`
 - `FieldEditor`
   - `set(...)`, `add(...)`, `retract(asrt_id=..., meta=...)`
 
@@ -112,66 +123,17 @@ Notes (easy-to-misuse methods):
 - `WireBatchPlan`
   - `to_dict()`, `to_json()`, `from_dict(...)`, `from_json(...)`, `apply(sdk, strict_schema=True)`
 
-## 6. Derivation Quick Guide (v2)
+## 6. Query / Derivation Runtime Quick View
 
-### 6.1 Default path is inferred from `head`
+### 6.1 Query
 
-| Head shape | Default behavior | Evaluate output |
-|---|---|---|
-| `EntityType(...)` | entity path | one entity candidate + dependent fact candidates |
-| `EntityType.field(...)` | fact path | fact candidates |
-| no `head` (`target + head_vars`) | fact-only compatibility path | fact candidates |
+- `sdk.run(Query(...)) -> list[dict]`
+- `on_missing` / `on_type_mismatch`: `error|skip|null`
+- Query field head supports only schema `single` fields
 
-### 6.2 `CandidateSet` and accept APIs
+### 6.2 Derivation
 
-- `sdk.evaluate(...)` returns `list[CandidateSet]` with key v2 fields:
-  - `candidate_id` (per-run handle)
-  - `candidate_key` (cross-run stable key)
-  - `candidate_kind` (`fact` / `entity`)
-- `sdk.accept(...)` accepts one candidate.
-- For dependency graphs, prefer `sdk.accept_many(..., mode="atomic")`.
-
-See also:
-- `src/factpy_kernel/sdk/docs/03_rules_and_derivations.en.md` (Derivation DSL and head rules)
-
-## 7. Common call templates (v2)
-
-### 7.1 fact derivation
-
-```python
-with vars("p", "c") as (p, c):
-    drv = Derivation(
-        id="drv.country_copy",
-        version="1.0.0",
-        head=Person.country_copy(person=p, country_copy=c),
-        where=[Pred("person:country", p, c)],
-    )
-
-cands = sdk.evaluate(drv, mode="python")
-fact = next(c for c in cands if c.candidate_kind == "fact")
-sdk.accept(fact, approved_by="alice")
-```
-
-### 7.2 entity derivation (dependency graph)
-
-```python
-with vars("u", "l") as (u, l):
-    drv = Derivation(
-        id="drv.speaks",
-        version="1.0.0",
-        head=Speaks(user=u, language=l),
-        where=[Pred("person:country", u, "de"), Pred("user:lang_pref", u, l)],
-    )
-
-cands = sdk.evaluate(drv, mode="python")
-rows = sdk.accept_many(cands, mode="atomic")
-```
-
-### 7.3 incomplete identity
-
-```python
-entity = next(c for c in cands if c.candidate_kind == "entity")
-sdk.accept(entity, identity_override={"source_id": "u-001"})
-```
-
-Do not use `materialize_as` / `id_policy`.
+- `sdk.evaluate(Derivation(...), mode="python|engine") -> list[CandidateSet]`
+- `head` shape determines candidate kind
+- `head=[...]` is supported in evaluate (flattened output)
+- `sdk.accept(...)` / `sdk.accept_many(...)` handle writes and idempotency
