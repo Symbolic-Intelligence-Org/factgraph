@@ -220,7 +220,7 @@ class SDKStore:
         *,
         row_format: str | None = None,
         registry: RuleRegistry | None = None,
-    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
+    ) -> list[Any]:
         dispatch_key = self._run_dispatch_key(obj)
         dispatch_map = {
             "query": self._run_dispatch_query,
@@ -249,15 +249,10 @@ class SDKStore:
         *,
         row_format: str | None,
         registry: RuleRegistry | None,  # reserved for unified run() signature
-    ) -> list[dict[str, Any]]:
+    ) -> list[Any]:
         del registry
-        if row_format is not None:
-            raise SDKStoreError(
-                "row_format is not supported for Query; Query always returns dict",
-                code=QUERY_INVALID_ROW_FORMAT,
-                path="$.run.row_format",
-            )
-        return self._run_query(query)
+        resolved_row_format = _resolve_query_row_format(row_format)
+        return self._run_query(query, row_format=resolved_row_format)
 
     def _run_dispatch_derivation(
         self,
@@ -316,11 +311,11 @@ class SDKStore:
         rows = run_rule(self._store, rule_spec, active_registry)
         return _format_rule_rows(rows, select_vars=list(rule_spec.select_vars), row_format=row_format)
 
-    def _run_query(self, query: Any) -> list[dict[str, Any]]:
-        plan = self._lower_query(query)
+    def _run_query(self, query: Any, *, row_format: str = "dict") -> list[Any]:
+        plan = self._lower_query(query, return_mode=row_format)
         return execute_query_plan(self, plan)
 
-    def _lower_query(self, query: Any) -> QueryPlan:
+    def _lower_query(self, query: Any, *, return_mode: str = "dict") -> QueryPlan:
         try:
             from .dsl import Query as SDKQuery
         except Exception as exc:
@@ -333,7 +328,7 @@ class SDKStore:
             query,
             schema_ir=self._schema_ir,
             schema_digest=self._schema_digest,
-            return_mode="dict",
+            return_mode=return_mode,
         )
 
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
@@ -760,6 +755,25 @@ def _resolve_row_format(*, call_site: Any, store_default: Any, env_var: Any) -> 
             _warn_deprecated_tuple_row_format_if_needed(normalized, source=source)
             return normalized
     return "dict"
+
+
+def _resolve_query_row_format(value: Any) -> str:
+    if value is None:
+        return "dict"
+    if not isinstance(value, str):
+        raise SDKStoreError(
+            "Query row_format must be 'dict' or 'instance'",
+            code=QUERY_INVALID_ROW_FORMAT,
+            path="$.run.row_format",
+        )
+    normalized = value.strip().lower()
+    if normalized not in {"dict", "instance"}:
+        raise SDKStoreError(
+            "Query row_format must be 'dict' or 'instance'",
+            code=QUERY_INVALID_ROW_FORMAT,
+            path="$.run.row_format",
+        )
+    return normalized
 
 
 def _normalize_row_format_value(value: Any, *, path: str) -> str | None:

@@ -77,8 +77,8 @@ Key boundaries:
 - Rule `row_format` precedence: call-site > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`.
 - `FACTPY_ROW_FORMAT` is read once at `SDKStore` initialization and cached.
 - `row_format="tuple"` still works but emits `DeprecationWarning`.
-- Query always returns `list[dict]` and does not accept `row_format`.
-- Passing `row_format` to Query, or calling `run(...)` with Derivation, raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
+- Query defaults to `list[dict]`; it also supports `row_format="instance"` (only for single `Entity(var)` head).
+- Invalid Query `row_format`, incompatible head shape for `instance`, or calling `run(...)` with Derivation raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
 - `accept(CandidateSet, ...)` accepts exactly one positional candidate; supported sugar keys are `approved_by`/`note`/`dry_run`/`identity_override` (also via `meta_overrides`).
 
 ## 3. `SDKRegistry` Public Methods
@@ -136,7 +136,7 @@ Additional note:
 
 ### 6.1 Query
 
-- `sdk.run(Query(...)) -> list[dict]`
+- `sdk.run(Query(...)) -> list[dict]` (default) or `list[EntitySnapshot|None]` (`row_format="instance"` with single `Entity(var)` head)
 - `on_missing` / `on_type_mismatch`: `error|skip|null`
 - Query field head supports only schema `single` fields
 

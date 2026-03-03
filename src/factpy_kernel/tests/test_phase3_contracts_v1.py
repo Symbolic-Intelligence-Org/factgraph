@@ -568,6 +568,43 @@ Derivation(
         self.assertEqual({row["u"].ref for row in rows}, {refs["u1"], refs["u3"]})
         self.assertTrue(all(row["u"].entity_type == "User" for row in rows))
 
+    def test_query_row_format_instance_returns_snapshots(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "loc") as (u, loc):
+            query = Query(
+                head=User(u),
+                where=[
+                    User(u),
+                    u.locale == loc,
+                    loc == "zh",
+                ],
+            )
+
+        rows = sdk.run(query, row_format="instance")
+        self.assertEqual({row.ref for row in rows}, {refs["u1"], refs["u3"]})
+        self.assertTrue(all(row.entity_type == "User" for row in rows))
+
+    def test_query_row_format_instance_requires_single_entity_head(self) -> None:
+        sdk = SDKStore([User])
+        _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "loc", "nm") as (u, loc, nm):
+            query = Query(
+                head=[User(u), User.name(locale=loc, name=nm)],
+                where=[
+                    User(u),
+                    u.locale == loc,
+                    u.name == nm,
+                ],
+            )
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.run(query, row_format="instance")
+        self.assertEqual(ctx.exception.code, "QUERY_INVALID_ROW_FORMAT")
+        self.assertIn("requires exactly one Entity(var)", str(ctx.exception))
+
     def test_derivation_multi_head_syntax_matrix_shared_run_id(self) -> None:
         sdk = SDKStore([User])
         _seed_users_for_syntax_matrix(sdk)

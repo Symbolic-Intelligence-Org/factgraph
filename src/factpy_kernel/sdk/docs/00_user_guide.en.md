@@ -245,13 +245,14 @@ with vars("u", "loc", "nm") as (u, loc, nm):
         where=[User(u), u.locale == loc, u.name == nm],
     )
 
-rows = sdk.run(q)  # always list[dict]
+rows = sdk.run(q)  # default: list[dict]
 ```
 
 Stable Contract:
-- Query always returns dict rows; `row_format` is not supported.
+- Query supports `row_format="dict"|"instance"`; default is `"dict"`.
+- `row_format="instance"` is allowed only when head is exactly one `Entity(var)` item; return type is `list[EntitySnapshot|None]`.
+- Invalid Query `row_format`, or using `instance` mode with incompatible head shape, raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
 - Query head supports only `Entity(var)` and `Entity.field(...)`.
-- Passing `row_format` to Query raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
 
 ### 7.3 Derivation
 

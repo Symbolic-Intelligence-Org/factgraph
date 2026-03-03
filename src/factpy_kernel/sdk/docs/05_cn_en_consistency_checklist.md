@@ -46,9 +46,10 @@
   - 跨坐标属性比较仅允许同实体同 primary_key 字段
   - `sdk.evaluate(..., temporal_view=...)` 显式报错
 - Query：
-  - Query 固定返回 `list[dict]`
+  - Query 默认返回 `list[dict]`
+  - Query 支持 `row_format="instance"`（仅单个 `Entity(var)` head）
   - field head 仅支持 `single` 字段
-  - Query 不接受 `row_format`（传入时报 `QUERY_INVALID_ROW_FORMAT`）
+  - 非法 Query `row_format` 或 instance/head 不匹配时报 `QUERY_INVALID_ROW_FORMAT`
 - 协议与写入：
   - `sdk_batch_plan_v1` 无 `dims/fact_key`
   - wire 导出不接受 raw `idref_v1` 字符串值

@@ -16,7 +16,7 @@ Scope: `src/factpy_kernel/sdk`
 | Ingest / provenance | Implemented | `sdk.ingest(...)`, `sdk.validate_provenance(...)` |
 | Audit queries (`explain_fact/conflicts`) | Implemented | Active-assertion diagnostics; output includes `chosen_asrt_id` (possibly `None`) |
 | Rule DSL + `sdk.run(rule)` | Implemented | Object DSL supported; `row_format` applies only to Rule path (precedence: call-site > store default > env var > `"dict"`) |
-| Query DSL + `sdk.run(query)` | Implemented | Query always returns `list[dict]` |
+| Query DSL + `sdk.run(query)` | Implemented | Default `list[dict]`; `row_format="instance"` returns instance rows for single `Entity(var)` head |
 | Derivation + `sdk.evaluate/accept` | Implemented | `head` shape infers fact/entity candidate kind; multi-head evaluate is flattened |
 | Registry (`SDKRegistry`) | Implemented | Complete schema/rule/derivation register + read surface |
 

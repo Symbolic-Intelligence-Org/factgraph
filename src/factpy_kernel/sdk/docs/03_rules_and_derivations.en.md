@@ -95,11 +95,12 @@ rows = sdk.run(q)  # list[dict]
 
 Stable contract:
 - Query head only supports `Entity(var)` and `Entity.field(...)`.
-- Query always returns `list[dict]`; `row_format` is not supported.
+- Query supports `row_format="dict"|"instance"`; default is `"dict"`.
+- `row_format="instance"` is allowed only for a single `Entity(var)` head and returns instance rows (`list[EntitySnapshot|None]`).
 - Field projection must resolve to schema `single` fields.
 - Unbound variables in `where` fail at construction with `SDKDSLError(code="QUERY_UNBOUND_VAR")`.
 - `on_missing` / `on_type_mismatch` only allow `error|skip|null`.
-- Passing `row_format` for Query raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
+- Invalid Query `row_format`, or incompatible head shape for `instance` mode, raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
 
 ## 6. Derivation DSL
 

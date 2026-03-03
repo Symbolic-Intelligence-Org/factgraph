@@ -8,7 +8,7 @@ from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_w
 from factpy_kernel.core.view.projector import project_view_facts
 
 from .dsl import ReturnContractEntry
-from .error_codes import QUERY_MISSING_REF, QUERY_TYPE_MISMATCH
+from .error_codes import QUERY_INVALID_ROW_FORMAT, QUERY_MISSING_REF, QUERY_TYPE_MISMATCH
 from .errors import SDKStoreError
 from .facade import EntitySnapshot, FieldAssertions
 from .query_lower import QueryPlan
@@ -24,7 +24,7 @@ class _EntityFieldSpec:
     cardinality: str
 
 
-def execute_query_plan(sdk: "SDKStore", plan: QueryPlan) -> list[dict[str, Any]]:
+def execute_query_plan(sdk: "SDKStore", plan: QueryPlan) -> list[Any]:
     view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
     where_ir = lower_query_rule_ast_to_ir(plan.rule_ast)["where"]
     try:
@@ -39,13 +39,22 @@ def execute_query_plan(sdk: "SDKStore", plan: QueryPlan) -> list[dict[str, Any]]
         buckets,
         view_facts=view_facts,
     )
-    return _apply_contract(
+    rows = _apply_contract(
         bindings,
         hydrate_map,
         plan.return_contract,
         on_missing=plan.on_missing,
         on_type_mismatch=plan.on_type_mismatch,
         query_id=plan.query_id,
+    )
+    if plan.return_mode == "dict":
+        return rows
+    if plan.return_mode == "instance":
+        return _rows_to_instances(rows, plan.return_contract)
+    raise SDKStoreError(
+        f"unsupported Query return_mode: {plan.return_mode!r}",
+        code=QUERY_INVALID_ROW_FORMAT,
+        path="$.query.return_mode",
     )
 
 
@@ -211,6 +220,35 @@ def _dedup_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         seen.add(key)
         out.append(row)
+    return out
+
+
+def _rows_to_instances(
+    rows: list[dict[str, Any]],
+    return_contract: tuple[ReturnContractEntry, ...],
+) -> list[Any]:
+    if len(return_contract) != 1:
+        raise SDKStoreError(
+            "Query return_mode='instance' requires exactly one Entity(var) item in head",
+            code=QUERY_INVALID_ROW_FORMAT,
+            path="$.query.return_contract",
+        )
+    entry = return_contract[0]
+    if entry.entity_type is None or entry.field_path is not None:
+        raise SDKStoreError(
+            "Query return_mode='instance' requires head=[Entity(var)]",
+            code=QUERY_INVALID_ROW_FORMAT,
+            path="$.query.return_contract[0]",
+        )
+    alias = entry.alias
+    out: list[Any] = []
+    for idx, row in enumerate(rows):
+        if alias not in row:
+            raise SDKStoreError(
+                f"query row missing required alias: {alias}",
+                path=f"$.run.result[{idx}]",
+            )
+        out.append(row[alias])
     return out
 
 

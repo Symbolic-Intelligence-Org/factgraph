@@ -8,6 +8,7 @@ from typing import Any
 from factpy_kernel.core.rules.rule_ast import QueryRuleAst, RuleASTError, parse_query_rule_ir_to_ast
 
 from .dsl import Query, ReturnContractEntry
+from .error_codes import QUERY_INVALID_ROW_FORMAT
 from .errors import SDKStoreError
 
 
@@ -16,6 +17,7 @@ class QueryPlan:
     query_id: str
     rule_ast: QueryRuleAst
     return_contract: tuple[ReturnContractEntry, ...]
+    return_mode: str
     on_missing: str
     on_type_mismatch: str
 
@@ -29,8 +31,12 @@ def lower_query(
 ) -> QueryPlan:
     if not isinstance(query, Query):
         raise SDKStoreError("query must be Query", path="$.run.obj")
-    if return_mode != "dict":
-        raise SDKStoreError("Query return_mode must be 'dict'", path="$.query.return_mode")
+    if return_mode not in {"dict", "instance"}:
+        raise SDKStoreError(
+            "Query return_mode must be 'dict' or 'instance'",
+            code=QUERY_INVALID_ROW_FORMAT,
+            path="$.query.return_mode",
+        )
     if not isinstance(schema_ir, dict):
         raise SDKStoreError("schema_ir must be dict", path="$.store.schema_ir")
     if not isinstance(schema_digest, str) or not schema_digest:
@@ -38,6 +44,8 @@ def lower_query(
 
     return_contract = tuple(query.return_contract)
     _validate_field_projection_contract(return_contract, schema_ir=schema_ir)
+    if return_mode == "instance":
+        _validate_instance_return_contract(return_contract)
     where_ir = query.where_ir
 
     query_id = _build_query_id(
@@ -66,6 +74,7 @@ def lower_query(
         query_id=query_id,
         rule_ast=rule_ast,
         return_contract=return_contract,
+        return_mode=return_mode,
         on_missing=query.on_missing,
         on_type_mismatch=query.on_type_mismatch,
     )
@@ -129,6 +138,24 @@ def _validate_field_projection_contract(
                 "Query field head only supports single fields",
                 path=f"$.head[{idx}]",
             )
+
+
+def _validate_instance_return_contract(
+    return_contract: tuple[ReturnContractEntry, ...],
+) -> None:
+    if len(return_contract) != 1:
+        raise SDKStoreError(
+            "Query return_mode='instance' requires exactly one Entity(var) item in head",
+            code=QUERY_INVALID_ROW_FORMAT,
+            path="$.head",
+        )
+    entry = return_contract[0]
+    if entry.entity_type is None or entry.field_path is not None:
+        raise SDKStoreError(
+            "Query return_mode='instance' requires head=[Entity(var)]",
+            code=QUERY_INVALID_ROW_FORMAT,
+            path="$.head[0]",
+        )
 
 
 def _index_predicates_by_owner_field(schema_ir: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:

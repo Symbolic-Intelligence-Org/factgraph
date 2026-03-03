@@ -95,11 +95,12 @@ rows = sdk.run(q)  # list[dict]
 
 稳定合约：
 - Query head 仅支持 `Entity(var)` 与 `Entity.field(...)`。
-- Query 返回固定为 `list[dict]`，不支持 `row_format`。
+- Query 支持 `row_format="dict"|"instance"`；默认 `"dict"`。
+- `row_format="instance"` 仅允许 head 为单个 `Entity(var)`，返回实例列表（`list[EntitySnapshot|None]`）。
 - 字段投影必须匹配 schema 中的 `single` 字段。
 - where 未绑定变量会在构造期报 `SDKDSLError(code="QUERY_UNBOUND_VAR")`。
 - `on_missing` / `on_type_mismatch` 仅支持 `error|skip|null`。
-- 对 Query 传 `row_format` 会抛 `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`。
+- Query 使用非法 `row_format`、或 instance 形态与 head 不匹配，会抛 `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`。
 
 ## 6. Derivation DSL
 

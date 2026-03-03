@@ -16,7 +16,7 @@
 | ingest / provenance | 已实现 | `sdk.ingest(...)`、`sdk.validate_provenance(...)` |
 | 审计查询（`explain_fact/conflicts`） | 已实现 | 返回 active 断言相关诊断，结果包含 `chosen_asrt_id`（可能为 `None`） |
 | Rule DSL + `sdk.run(rule)` | 已实现 | 支持对象 DSL；`row_format` 仅 Rule 路径可用（优先级：调用参数 > store 默认 > 环境变量 > `"dict"`） |
-| Query DSL + `sdk.run(query)` | 已实现 | Query 固定返回 `list[dict]` |
+| Query DSL + `sdk.run(query)` | 已实现 | 默认返回 `list[dict]`；`row_format="instance"` 在单个 `Entity(var)` head 时返回实例列表 |
 | Derivation + `sdk.evaluate/accept` | 已实现 | `head` 自动决定 fact/entity candidate kind；支持多 head evaluate 展平 |
 | Registry（`SDKRegistry`） | 已实现 | schema/rule/derivation 注册与读取接口完整 |
 

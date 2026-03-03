@@ -556,11 +556,13 @@ with vars("u", "l", "n") as (u, l, n):
         ],
     )
 
-rows = sdk.run(q)   # 始终返回 list[dict]
+rows = sdk.run(q)   # 默认返回 list[dict]
 ```
 
 **稳定合约**
-- Query 仅返回 dict 行；不支持 `row_format`。
+- Query 支持 `row_format="dict"|"instance"`；默认 `"dict"`。
+- `row_format="instance"` 仅在 head 为“单个 `Entity(var)`”时可用；返回 `list[EntitySnapshot|None]`。
+- Query head 形态不满足 instance 约束，或 Query 使用非法 `row_format`，都会抛 `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`。
 - 合法 head 形态：`Entity(var)`、`[Entity(var1), ...]`、`Entity.field(...)`。
 - Query 构造期执行 alias 冲突校验（抛 `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`）和 where 变量绑定校验（抛 `SDKDSLError(code="QUERY_UNBOUND_VAR")`）。
 - entity head 列返回 `EntitySnapshot`；field 投影列返回标量值。
@@ -747,7 +749,7 @@ print(report.warnings)
 | `SDKSchemaError` | `get` 传非 identity 字段；`find` 字段非法或 identity 不完整 | 对照 schema 修正参数 |
 | `SDKStoreError` | 写入类型不匹配；`accept` 传未知参数；`run/evaluate` 传字符串 DSL | 检查参数类型和接口边界 |
 | `SDKStoreError(code="INVALID_ROW_FORMAT")` | `row_format` 非法值 | 改为 `"dict"` |
-| `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")` | Query 路径传入 `row_format`，或对 Derivation 调用 `sdk.run(...)` | Query 不传 `row_format`；Derivation 用 `sdk.evaluate(...)` |
+| `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")` | Query 使用非法 `row_format`、`row_format="instance"` 但 head 不满足约束，或对 Derivation 调用 `sdk.run(...)` | Query 用 `"dict"`/`"instance"` 且满足 head 约束；Derivation 用 `sdk.evaluate(...)` |
 | `SDKDSLError(code="QUERY_ALIAS_CONFLICT")` | Query head 输出 alias 重复 | 调整 head 变量命名 |
 | `SDKDSLError(code="QUERY_UNBOUND_VAR")` | Query where 使用未绑定变量 | 在 head 或前序原子中绑定该变量 |
 | `SDKDSLError` | 链式实体写法；`with vars() as (u,)` 无参解包 | 改用支持语法（两步写法） |

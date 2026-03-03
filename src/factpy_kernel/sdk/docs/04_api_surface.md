@@ -77,8 +77,8 @@
 - `run(rule)` 的 `row_format` 优先级：调用参数 > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`。
 - `FACTPY_ROW_FORMAT` 在 `SDKStore` 初始化时读取并缓存。
 - `row_format="tuple"` 仍可用但会触发 `DeprecationWarning`。
-- Query 固定返回 `list[dict]`，不接受 `row_format`。
-- 对 Query 传 `row_format`、或对 Derivation 调用 `run(...)`，都会抛 `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`。
+- Query 默认返回 `list[dict]`；支持 `row_format="instance"`（仅 head 为单个 `Entity(var)`）。
+- Query 使用非法 `row_format`、instance 模式 head 不匹配、或对 Derivation 调用 `run(...)`，都会抛 `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`。
 - `accept(CandidateSet, ...)` 只接受一个位置参数；支持 `approved_by`/`note`/`dry_run`/`identity_override`（也可通过 `meta_overrides` 传）。
 
 ## 3. `SDKRegistry` 公开方法
@@ -136,7 +136,7 @@
 
 ### 6.1 Query
 
-- `sdk.run(Query(...)) -> list[dict]`
+- `sdk.run(Query(...)) -> list[dict]`（默认）或 `list[EntitySnapshot|None]`（`row_format="instance"` 且 head 仅单个 `Entity(var)`）
 - `on_missing` / `on_type_mismatch`: `error|skip|null`
 - Query field head 只支持 schema 的 `single` 字段
 
