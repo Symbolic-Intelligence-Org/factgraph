@@ -20,3 +20,4 @@ venv/
 .env
 /out/
 docs/
+/archive/

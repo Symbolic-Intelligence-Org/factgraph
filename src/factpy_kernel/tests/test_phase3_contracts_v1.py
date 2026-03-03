@@ -296,6 +296,11 @@ Derivation(
         self.assertEqual(planned, body)
 
     def test_cross_coordinate_join_engine_matches_python(self) -> None:
+        from factpy_kernel.adapters.souffle.runner import find_souffle_binary
+
+        if find_souffle_binary() is None:
+            self.skipTest("souffle binary is unavailable; skipping engine parity test")
+
         import factpy_kernel.adapters.souffle  # noqa: F401
 
         sdk = SDKStore([User])
