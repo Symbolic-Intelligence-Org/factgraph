@@ -18,7 +18,7 @@
 9. [错误处理速查](#9-错误处理速查)
 10. [Registry](#10-registry)
 11. [高级 API](#11-高级-api)
-12. [迁移速记（v2）](#12-迁移速记v2)
+12. [迁移速记（v2 → v3）](#12-迁移速记v2--v3)
 
 ---
 
@@ -385,6 +385,21 @@ meta 不是自由字典，字段按职责分四类：
 | convention | `source`、`source_loc`、`trace_id`、`confidence`、`approved_by`、`note` | 正常写入 |
 | free | 业务自定义 key | 正常写入 |
 
+**meta kind 体系**（v3 更新）
+
+meta 数值字段按 kind 分类存储，kind 名称在 v3 中重命名并扩展：
+
+| kind | 类型 | 说明 |
+|------|------|------|
+| `"str"` | `str` | 字符串 |
+| `"int"` | `int` | 整数（原 `"num"`，v3 已重命名） |
+| `"float"` | `float` | 浮点数（v3 新增，用于 `confidence` 等字段） |
+| `"bool"` | `bool` | 布尔值 |
+| `"time"` | `int` | epoch 纳秒时间戳 |
+| `"json"` | `Any` | JSON 可序列化对象 |
+
+`confidence` 字段的 kind 固定为 `"float"`，由写入协议自动推断，用户无需指定。
+
 **去重依据**：`claim + source + source_loc + trace_id + valid_from + valid_to + version`
 
 注意：`ingested_at` 是系统写入时间，不等同于 `valid_from`（业务有效时间）。用 `ingested_at` 代替 `valid_from` 做时间视图会导致语义错位。
@@ -429,6 +444,9 @@ rows = sdk.find(User, country=de.ref)   # ✅
 rows = sdk.find(User, country=de)       # ✅（内部取 .ref）
 
 rows = sdk.find(User, age=30, limit=20)
+
+from factpy_kernel.core.store.types import ViewSpec
+rows = sdk.find(User, lang="zh", view=ViewSpec(confidence_strategy="mean"))
 ```
 
 **稳定合约**
@@ -436,6 +454,9 @@ rows = sdk.find(User, age=30, limit=20)
 - 使用 Identity 过滤时必须提供该实体全部 Identity 字段。
 - 不支持 `temporal_view` 参数。
 - 传未知过滤字段抛 `SDKSchemaError`。
+
+**当前边界**
+- `view` 参数的 `confidence_strategy` 只影响返回结果中的 `confidence` 呈现值，不影响哪些断言被返回。
 
 **`find` 结果的 identity 可用性**（当前行为）
 
@@ -530,6 +551,9 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
 
 rows = sdk.run(speaks_rule, row_format="dict")
 # [{"u": "...", "l": "..."}, ...]
+
+rows = sdk.run(speaks_rule, view="default", row_format="dict")
+# view 影响 confidence 呈现值，不影响推理过程
 ```
 
 **稳定合约**
@@ -538,10 +562,36 @@ rows = sdk.run(speaks_rule, row_format="dict")
 - `row_format` 三层优先级：`run(..., row_format=...) > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`。
 - 非法 `row_format` 值抛 `SDKStoreError(code="INVALID_ROW_FORMAT")`。
 - `RuleRef` 目标规则需要 `expose=True`，否则报 `RuleCompileError`；不允许出现在 `Not(...)` 体内。
+- `view` 可传具名视图名或 `ViewSpec`，仅影响结果呈现，不改变 Rule 求值范围。
 
 **当前行为**：支持线性算术 `+/-/常数倍`（如 `age == (2026 - by)`）；不支持 `x * y` 非线性乘法。
 
-### 6.3 Query DSL
+### 6.3 Body：带置信度的 OR 分支
+
+概率推理场景下，OR 分支可用 `Body` 包装并附带分支置信度：
+
+```python
+from factpy_kernel.sdk.dsl.body import Body
+
+with vars("u", "lang") as (u, lang):
+    drv = Derivation(
+        id="drv.speaks",
+        version="1.0.0",
+        where=[
+            Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
+            Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
+        ],
+        head=Speaks(user=u, language=lang),
+    )
+```
+
+**稳定合约**
+- `Body.confidence` 值域：`(0, 1]`，`confidence=0` 编译期报错。
+- `Body.confidence=None` 合法（表示无置信度约束）。
+- 禁止在同一 `where` 里混用 `Body(...)` 与裸 list 分支；违反时编译失败。
+- 裸 list 写法保留，编译后 `body_confidences=None`，行为与之前一致。
+
+### 6.4 Query DSL
 
 Identity 和 Field 字段在 where 子句里访问语法完全一致：
 
@@ -568,13 +618,14 @@ rows = sdk.run(q)   # 默认返回 list[dict]
 - 合法 head 形态：`Entity(var)`、`[Entity(var1), ...]`、`Entity.field(...)`。
 - Query 构造期执行 alias 冲突校验（抛 `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`）和 where 变量绑定校验（抛 `SDKDSLError(code="QUERY_UNBOUND_VAR")`）。
 - entity head 列返回 `EntitySnapshot`；field 投影列返回标量值。
+- `Query.where` 不支持 `Body.confidence`；传入时编译报错。
 
 **当前行为**：`on_missing` / `on_type_mismatch` 策略：
 - `error`：抛 `SDKStoreError`（`QUERY_MISSING_REF` / `QUERY_TYPE_MISMATCH`）
 - `skip`：丢弃该行
 - `null`：该列置 `None`，行保留（仍参与去重）
 
-### 6.4 Derivation
+### 6.5 Derivation
 
 ```python
 from factpy_kernel.sdk import Derivation, vars
@@ -590,25 +641,35 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
         head=Speaks(user=u, language=l),
     )
 
-cands = sdk.evaluate(speaks_drv, mode="python")   # list[CandidateSet]
+cands = sdk.evaluate(speaks_drv, mode="native")   # list[CandidateSet]
 res = sdk.accept(cands[0], approved_by="alice")
 
 # 多候选集原子提交
 res = sdk.accept_many(cands, mode="atomic")
 ```
 
+**`mode` 合法值**（稳定合约，v3 更新）
+
+| mode | 说明 |
+|------|------|
+| `"native"` | Python 内置求值器（原 `"python"`，已重命名） |
+| `"souffle"` | Souffle 引擎（原 `"engine"`，已重命名） |
+| `"problog"` | ProbLog 概率推理引擎（v3 新增） |
+
+旧名 `"python"` / `"engine"` 传入时明确报错，并提示新名称。
+
 **稳定合约**
 - `sdk.evaluate(...)` 产出候选，不写 ledger；`sdk.accept(...)` 才写 ledger。
 - 支持 `head=[H1, H2, ...]` 多 head；`evaluate` 返回展平结果，共享同一个 `run_id`。
 - `sdk.accept(CandidateSet, ...)` 只接受一个位置参数；允许覆盖键：`approved_by`、`note`、`dry_run`、`identity_override`（也可通过 `meta_overrides` 传入）；未识别参数抛 `SDKStoreError`。
 - `sdk.run(Derivation(...))` 不支持；应使用 `sdk.evaluate(...)`。
+- `sdk.evaluate(..., view=...)` 不支持；传入时抛 `SDKStoreError`（推理路径始终基于完整 active 断言集）。
 - 存在依赖图时，优先使用 `sdk.accept_many(..., mode="atomic")` 保证原子性。
 
 **当前边界**
-- `sdk.evaluate(..., temporal_view=...)` 被显式拒绝。
 - Derivation head 的时态写语义（head 直接产出带 `valid_from`/`valid_to`/`version` 的断言）尚未开放。时态信息目前只能在写入路径（`sdk.batch`/`sdk.ingest`）通过 meta 携带。
 
-### 6.5 head 的 Identity 规则
+### 6.6 head 的 Identity 规则
 
 ```
 head 里出现的字段 = 所有非 primary Identity + 目标 Field 值
@@ -624,7 +685,7 @@ head=User.name(lang=l, name=n)   # user_id 不出现，lang 必须给出
 
 head 里出现 `primary_key` 字段是编译期硬错误。
 
-### 6.6 跨坐标联结
+### 6.7 跨坐标联结
 
 同一实体在不同坐标下的两个事实，在 Rule 里是两个不同的变量，通过 `primary_key` 显式联结：
 
@@ -645,7 +706,7 @@ with vars("u1", "u2", "n1", "n2") as (u1, u2, n1, n2):
 - 非 `primary_key` 字段的跨坐标等值比较是编译期硬错误，报错会提示应使用哪个 `primary_key` 字段。
 - 跨实体类型比较是编译期硬错误。
 
-### 6.7 Rule / Derivation 当前限制速查
+### 6.8 Rule / Derivation 当前限制速查
 
 | 限制 | 说明 |
 |------|------|
@@ -892,9 +953,103 @@ sdk.export_package("./pkg", options)
 sdk.run_package("./pkg", entrypoints=["__query__"], engine="souffle")
 ```
 
-依赖适配器实现，当前主要是 Souffle 适配器（当前行为）。
+导出包格式为 v2，`manifest.json` 包含 `"export_version": "v2"`，facts 目录结构：
 
-### 11.3 调试属性
+```text
+facts/
+  claim.facts
+  claim_arg.facts
+  meta_str.facts
+  meta_int.facts
+  meta_float.facts
+  meta_bool.facts
+  meta_time.facts
+  revokes.facts
+```
+
+**稳定合约**：v1 格式的包（含 `meta_num.facts`，无 `export_version`）喂给新 reader 时明确报错 `unsupported export_version`。
+
+### 11.3 可配置视图（`sdk.views`）
+
+视图定义了"用哪个视角读数据"，影响 `sdk.find()` 和 `sdk.run()` 的结果呈现：
+
+```python
+from factpy_kernel.core.store.types import ViewSpec
+
+sdk.views.create("conservative", ViewSpec(confidence_strategy="max"))
+sdk.views.create("hr_only", ViewSpec(
+    confidence_strategy="prefer_source",
+    prefer_source="HR系统",
+))
+sdk.views.update("conservative", ViewSpec(confidence_strategy="mean"))
+sdk.views.delete("hr_only")
+sdk.views.get("conservative")
+sdk.views.list()
+```
+
+**`ViewSpec` 参数**
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `active` | `bool` | `True` | 是否只看 active 断言 |
+| `confidence_strategy` | `str` | `"max"` | 置信度聚合策略 |
+| `prefer_source` | `str \| None` | `None` | 仅 `prefer_source` 策略时有效 |
+
+**置信度聚合策略**
+
+| 策略 | 语义 |
+|------|------|
+| `"max"` | 取最高置信度（默认） |
+| `"mean"` | 算术平均 |
+| `"median"` | 中位数 |
+| `"prefer_source"` | 优先取 `prefer_source` 来源，未命中降级为 `max` |
+
+**作用范围**：`confidence_strategy` 仅影响 `sdk.find()` / `sdk.run()` 结果呈现，不影响推理过程。`sdk.evaluate()` 不接受 `view` 参数。
+
+**内置视图**：`"default"`（`active=True, confidence_strategy="max"`），不可删除。
+
+**内联视图**（临时，不存储）：
+
+```python
+sdk.find(User, view=ViewSpec(confidence_strategy="mean"))
+sdk.run(rule, view="conservative", row_format="dict")
+sdk.run(rule, view=ViewSpec(confidence_strategy="max"), row_format="dict")
+```
+
+### 11.4 ProbLog 概率推理
+
+```python
+from factpy_kernel.sdk.dsl.body import Body
+import factpy_kernel.adapters.problog
+
+with vars("u", "lang") as (u, lang):
+    drv = Derivation(
+        id="drv.infer_speaks",
+        version="1.0.0",
+        where=[
+            Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
+            Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
+        ],
+        head=Speaks(user=u, language=lang),
+    )
+
+cands = sdk.evaluate(drv, mode="problog")
+res = sdk.accept(cands[0], approved_by="alice")
+```
+
+**`CandidateSet.confidence` 字段**（v3 新增）
+- 类型：`float | None`
+- ProbLog 路径下为边际概率值，native/souffle 路径下为 `None`
+- 序列化/反序列化全链路透传，跨进程不丢失
+
+**accept 语义**（v3 更新）
+- duplicate 判定为：claim 相同，且业务语义 meta（排除时间戳/run/candidate 标识字段后）相同
+- 同一事实来自不同 `confidence`、不同 `source` 的断言可并存，不会被误判为 duplicate
+
+**当前边界**
+- ProbLog CLI 不可用或超时时抛 `ProbLogEngineError`。
+
+### 11.5 调试属性
 
 ```python
 sdk.store        # 底层 Store 对象
@@ -902,11 +1057,11 @@ sdk.ledger       # 底层 Ledger 对象
 sdk.schema_ir    # 当前 store 实际使用的编译 schema
 ```
 
-### 11.4 审计查询
+### 11.6 审计查询
 
 ```python
 audit = sdk.explain_fact("user:age", alice_ref)
-conf  = sdk.conflicts("user:age", alice_ref)
+conf = sdk.conflicts("user:age", alice_ref)
 ```
 
 两者都基于当前 active 断言集合计算（**稳定合约**）。
@@ -927,27 +1082,60 @@ conf  = sdk.conflicts("user:age", alice_ref)
 
 ---
 
-## 12. 迁移速记（v2）
+## 12. 迁移速记（v2 → v3）
 
-**Schema 层**
-- `Field.cardinality`：`functional` / `temporal` → `single`
-- `Field.dims`、`Field.fact_key`、`Field.pred_id` 已删除
-- `Identity` 新增 `primary_key` 参数；无 `primary_key=True` 的 Entity 在 Rule 跨 Field 联结时编译报错
+### EvaluateMode 重命名
 
-**Rule / DSL 层**
-- `head` 里出现 `primary_key` 字段是编译期硬错误
-- `temporal_view` 参数从 evaluate/runtime 入口移除（显式报错）
-- 非 `primary_key` 字段参与跨坐标 `==` 比较是编译期硬错误
-- `.chosen` 视图已移除，统一使用 `.active`
+| 旧 | 新 | 传旧值时行为 |
+|----|----|----|
+| `"python"` | `"native"` | 明确报错，提示新名 |
+| `"engine"` | `"souffle"` | 明确报错，提示新名 |
+| —— | `"problog"` | v3 新增 |
 
-**协议层（`sdk_batch_plan_v1`）**
-- `dims`、`fact_key` 从 wire 协议删除
-- `cardinality` 枚举值变更（`functional` / `temporal` → `single`）
+### meta kind 重命名 + 新增
 
-**时态语义现状**
+| 旧 | 新 | 说明 |
+|----|----|----|
+| `"num"` | `"int"` | 整数，写入校验更新 |
+| —— | `"float"` | v3 新增，`confidence` 字段使用 |
 
-| 能力 | 状态 |
-|------|------|
-| 写入：`valid_from`/`valid_to`/`version` 持久化并进入去重 | ✅ 已实现 |
-| 读取：`snapshot.assertions.<field>.at(t)` / `.version(v)` | ✅ 已实现 |
-| Rule/Derivation head 产出时态断言 | ⬜ 规划中 |
+`Ledger.META_KINDS` 已从 `{"str","num","bool","time","json"}` 更新为 `{"str","int","float","bool","time","json"}`。写入 `kind="num"` 的代码需改为 `kind="int"`（系统会在写入校验时明确报错）。
+
+### export 包格式升级（v1 → v2）
+
+| v1 | v2 |
+|----|----|
+| `meta_num.facts` | `meta_int.facts` |
+| —— | `meta_float.facts`（新增） |
+| 无 `export_version` | `manifest.json` 含 `"export_version": "v2"` |
+
+v1 格式的包喂给 v2 reader 时明确报错 `unsupported export_version: 'v1'; expected 'v2'`。
+
+### accept 语义变更
+
+| 旧 | 新 |
+|----|----|
+| duplicate 判定只看 claim（`pred_id + e_ref + rest_terms`） | 还要比较业务语义 meta（排除时间戳/run 标识后） |
+| 同事实不同 confidence 会被误判为 duplicate | 自然并存，不再误判 |
+
+### Body DSL（新增）
+
+```python
+# v2 写法（仍支持）
+where=[[atom1, atom2], [atom3]]
+
+# v3 新写法（需要 confidence 时）
+from factpy_kernel.sdk.dsl.body import Body
+where=[
+    Body([atom1, atom2], confidence=0.9),
+    Body([atom3], confidence=0.6),
+]
+# 禁止混用两种写法
+```
+
+### Schema 层（v1 → v2，历史遗留）
+
+- `Field.cardinality`：`"functional"` / `"temporal"` → `"single"`
+- `Field.dims`、`Field.fact_key`、`Field.pred_id` 已移除
+- `Identity(primary_key=True)` 是跨坐标 join 的必要条件
+- `sdk_batch_plan_v1` wire payload 不再携带 `dims` / `fact_key`
