@@ -6,6 +6,7 @@
 !/README.md
 !/pyproject.toml
 !/.gitignore
+!/.gitmodules
 
 .DS_Store
 __pycache__/
