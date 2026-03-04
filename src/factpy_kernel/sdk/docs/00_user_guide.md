@@ -440,6 +440,11 @@ print(row_mean.confidence)  # 0.73
 
 **去重依据**：`claim + source + source_loc + trace_id + valid_from + valid_to + version`
 
+**边界说明（重要）**
+- `confidence` 不参与 ingest 幂等键。
+- 因此在同一 `trace_id`（accept 路径通常等于同一 `run_id`）下，若 claim 与其余去重字段相同，仅 `confidence` 不同不会形成新断言，而会被幂等折叠。
+- “同事实不同 `confidence` 并存”通常发生在不同推理批次（`run_id/trace_id` 不同）或不同来源字段（`source/source_loc` 不同）时。
+
 注意：`ingested_at` 是系统写入时间，不等同于 `valid_from`（业务有效时间）。用 `ingested_at` 代替 `valid_from` 做时间视图会导致语义错位。
 
 **`trace_id` 语义**：`trace_id` 参与幂等计算，但不是唯一决定因素；`valid_from` / `valid_to` / `version` 也参与去重。同一 `trace_id` 下，只要时态维度不同，仍会生成不同断言。
@@ -1229,6 +1234,7 @@ res = sdk.accept(cands[0], approved_by="alice")
 - ProbLog CLI 不可用或超时时抛 `ProbLogEngineError`。
 - 导出阶段结构不支持/参数不合法时抛 `ProbLogExportError`。
 - 结果解析失败时抛 `ProbLogImportError`。
+- 同一推理批次（同 `run_id/trace_id`）重复写入同一 claim 时，`confidence` 变化本身不会强制产生并存；是否并存仍受 ingest 幂等键约束。
 
 ### 11.5 调试属性
 

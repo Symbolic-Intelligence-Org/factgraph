@@ -56,12 +56,27 @@ rows = sdk.run(rule, row_format="dict")
 - 否定：`Not([...])`
 - 比较：`== != > >= < <=`
 - OR 体：`where=[[...], [...]]`
+- `Body` 分支：`where=[Body([...], confidence=0.9), Body([...], confidence=0.6)]`（Rule/Derivation）
 - 比较表达式中的线性算术（如 `age == (2026 - by)`、`x * 2`）
+
+`Body` 示例：
+
+```python
+from factpy_kernel.sdk import Body
+
+where = [
+    Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
+    Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
+]
+```
 
 限制：
 - 路径 sugar 仅支持 `==`。
 - 属性间比较只支持 `==`，且必须在 schema-aware 编译上下文。
 - 非线性乘法（`x * y`）不支持。
+- `where` 中不允许混用 `Body(...)` 与裸分支（如 `[Body([...]), [...]]`）。
+- `Body.confidence` 取值必须在 `(0,1]`；且只要任一分支设置 confidence，所有 `Body` 分支都必须设置。
+- Query 不支持 `Body.confidence`（`confidence!=None` 会报错）。
 - 字符串 DSL 不支持（`sdk.run("...")` / `sdk.evaluate("...")` 均不支持）。
 
 ## 4. RuleRef 与依赖注册
@@ -113,7 +128,7 @@ with vars("u", "loc", "nm") as (u, loc, nm):
         head=User.name(locale=loc, name=nm),
     )
 
-cands = sdk.evaluate(d, mode="python")
+cands = sdk.evaluate(d, mode="native")
 res = sdk.accept(cands[0], approved_by="alice")
 ```
 
@@ -124,6 +139,7 @@ res = sdk.accept(cands[0], approved_by="alice")
 稳定合约：
 - `head` 形态自动决定 candidate kind（fact/entity）。
 - 支持 `head=[H1, H2, ...]`；`evaluate` 返回展平后的 `list[CandidateSet]`，共享同一 `run_id`。
+- `Rule/Derivation.where` 都支持 `Body(...)`；Rule 路径仅展开 atoms，不消费 `confidence`。
 - `sdk.run(derivation)` 不支持，必须走 `sdk.evaluate(...)`。
 - `sdk.run(derivation)` 报错码为 `QUERY_INVALID_ROW_FORMAT`（语义上提示改用 `evaluate()`）。
 
@@ -160,17 +176,20 @@ res = sdk.accept(cands[0], approved_by="alice")
 ### 8.1 `sdk.evaluate(...)`
 
 ```python
-cands = sdk.evaluate(drv, mode="python")
+cands = sdk.evaluate(drv, mode="native")
 ```
 
-- `mode`：`python`（默认）或 `engine`。
-- `engine` 路径依赖已注册后端（如 Soufflé 适配器）。
+- `mode`：`native`（默认）/ `souffle` / `problog`。
+- 旧名 `python` / `engine` 会明确报错，并提示新名称。
+- `souffle` / `problog` 路径依赖已注册后端（例如 `import factpy_kernel.adapters.souffle`、`import factpy_kernel.adapters.problog`）。
+- `sdk.evaluate(..., view=...)` 不支持；推理始终基于完整 active 断言集。
 
 ### 8.2 `CandidateSet` 关键字段
 
 - `candidate_id`：本次 run 句柄
 - `candidate_key`：跨 run 稳定键
 - `candidate_kind`：`fact` / `entity`
+- `confidence`：`float | None`（`problog` 为概率值；`native/souffle` 为 `None`）
 - `payload`：
   - fact：`{"pred_id": ..., "terms": [...]}`
   - entity：`{"entity_type": ..., "resolved_identity": ..., ...}`
@@ -192,8 +211,9 @@ accept sugar：
 - `accept(CandidateSet, ...)` 只接受一个位置参数；多位置参数会抛 `SDKStoreError`。
 - `meta_overrides` 仅允许 `approved_by` / `note` / `dry_run` / `identity_override`；其余键会报错。
 - sugar 键同时出现在 `meta_overrides` 与顶层关键字参数时会报重复参数错误。
-
-重复 accept 同一 candidate 会走幂等 no-op（`duplicate`）。
+- 重复 accept 同一 candidate 会走幂等 no-op（`duplicate`）。
+- 同 claim 但业务语义 meta 不同（如 `confidence`、`source`）可并存，不会误判 duplicate。
+- 同一 `run_id` 批次通常不会出现“同 claim 不同 confidence”的候选；该并存场景主要发生在跨批次/跨来源写回。
 
 ## 9. 时态语义边界（当前状态）
 

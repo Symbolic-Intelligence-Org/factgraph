@@ -14,6 +14,7 @@ This page tracks the public exports in `factpy_kernel/sdk/__init__.py` and the m
 
 ### 1.2 DSL
 
+- `Body`
 - `Rule`
 - `RuleRef`
 - `Derivation`
@@ -73,7 +74,8 @@ This page tracks the public exports in `factpy_kernel/sdk/__init__.py` and the m
 Key boundaries:
 - `from_schema_classes(...)` / `schema_preflight_from_classes(...)` class-validation failures raise `SDKSchemaError` (`SDKStore(...)` constructor-path checks raise `SDKStoreError`).
 - `run(...)` supports Rule/Query and rejects Derivation.
-- `evaluate(...)` explicitly rejects `temporal_view`.
+- `run(rule, view=...)` supports named/inline views; Query path rejects `view` and `return_display_meta`.
+- `evaluate(...)` explicitly rejects `view` and `temporal_view`.
 - Rule `row_format` precedence: call-site > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`.
 - `FACTPY_ROW_FORMAT` is read once at `SDKStore` initialization and cached.
 - `row_format="tuple"` still works but emits `DeprecationWarning`.
@@ -142,7 +144,9 @@ Additional note:
 
 ### 6.2 Derivation
 
-- `sdk.evaluate(Derivation(...), mode="python|engine") -> list[CandidateSet]`
+- `sdk.evaluate(Derivation(...), mode="native|souffle|problog") -> list[CandidateSet]`
+- Passing legacy `python|engine` raises explicit rename errors
 - `head` shape determines candidate kind
 - `head=[...]` is supported in evaluate (flattened output)
+- `CandidateSet.confidence`: `float` for `problog`, `None` for `native/souffle`
 - `sdk.accept(...)` / `sdk.accept_many(...)` handle writes and idempotency

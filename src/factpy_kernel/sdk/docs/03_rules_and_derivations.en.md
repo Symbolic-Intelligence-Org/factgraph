@@ -56,12 +56,27 @@ Supported:
 - negation: `Not([...])`
 - comparisons: `== != > >= < <=`
 - OR branches: `where=[[...], [...]]`
+- `Body` branches: `where=[Body([...], confidence=0.9), Body([...], confidence=0.6)]` (Rule/Derivation)
 - linear arithmetic inside comparisons (for example `age == (2026 - by)`, `x * 2`)
+
+`Body` example:
+
+```python
+from factpy_kernel.sdk import Body
+
+where = [
+    Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
+    Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
+]
+```
 
 Limits:
 - path sugar supports only `==`.
 - attr-vs-attr comparisons support only `==`, and require schema-aware compilation.
 - non-linear multiplication (`x * y`) is unsupported.
+- `where` cannot mix `Body(...)` with bare branches (for example `[Body([...]), [...]]`).
+- `Body.confidence` must be in `(0,1]`; if any branch sets confidence, all `Body` branches must set it.
+- Query does not support `Body.confidence` (`confidence!=None` fails fast).
 - string DSL is unsupported (`sdk.run("...")`, `sdk.evaluate("...")`).
 
 ## 4. RuleRef and Dependency Registration
@@ -113,7 +128,7 @@ with vars("u", "loc", "nm") as (u, loc, nm):
         head=User.name(locale=loc, name=nm),
     )
 
-cands = sdk.evaluate(d, mode="python")
+cands = sdk.evaluate(d, mode="native")
 res = sdk.accept(cands[0], approved_by="alice")
 ```
 
@@ -124,6 +139,7 @@ Fields:
 Stable contract:
 - `head` shape infers candidate kind (fact/entity).
 - Multi-head (`head=[H1, H2, ...]`) is supported; `evaluate` returns flattened candidates sharing one `run_id`.
+- `Rule/Derivation.where` both support `Body(...)`; Rule path only unwraps atoms and ignores `confidence`.
 - `sdk.run(derivation)` is not supported; use `sdk.evaluate(...)`.
 - `sdk.run(derivation)` fails with code `QUERY_INVALID_ROW_FORMAT` (error message directs callers to `evaluate()`).
 
@@ -160,17 +176,20 @@ System-prefixed temporary names are reserved.
 ### 8.1 `sdk.evaluate(...)`
 
 ```python
-cands = sdk.evaluate(drv, mode="python")
+cands = sdk.evaluate(drv, mode="native")
 ```
 
-- `mode`: `python` (default) or `engine`.
-- `engine` requires a registered runtime adapter (for example Souffle).
+- `mode`: `native` (default) / `souffle` / `problog`.
+- Legacy names `python` / `engine` fail with explicit rename hints.
+- `souffle` / `problog` require registered adapters (for example `import factpy_kernel.adapters.souffle`, `import factpy_kernel.adapters.problog`).
+- `sdk.evaluate(..., view=...)` is not supported; inference always uses the full active assertion set.
 
 ### 8.2 `CandidateSet` key fields
 
 - `candidate_id`: per-run handle
 - `candidate_key`: cross-run stable key
 - `candidate_kind`: `fact` / `entity`
+- `confidence`: `float | None` (`problog` yields a probability; `native/souffle` return `None`)
 - `payload`:
   - fact: `{"pred_id": ..., "terms": [...]}`
   - entity: `{"entity_type": ..., "resolved_identity": ..., ...}`
@@ -192,8 +211,9 @@ Parameter boundaries:
 - `accept(CandidateSet, ...)` accepts exactly one positional argument; extra positional arguments raise `SDKStoreError`.
 - `meta_overrides` only supports `approved_by` / `note` / `dry_run` / `identity_override`; unknown keys fail.
 - If the same sugar key is provided in both `meta_overrides` and top-level keyword args, SDK raises duplicate-option error.
-
-Repeated accept on the same candidate is idempotent no-op (`duplicate`).
+- Repeated accept on the same candidate is idempotent no-op (`duplicate`).
+- Same claim with different business-semantic meta (for example `confidence`, `source`) is allowed to coexist.
+- Within one `run_id` batch, same-claim/different-confidence candidates are usually not expected; coexistence mainly appears across batches/sources.
 
 ## 9. Temporal Boundary (Current Status)
 

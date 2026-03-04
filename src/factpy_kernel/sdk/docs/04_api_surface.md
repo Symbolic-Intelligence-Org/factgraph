@@ -14,6 +14,7 @@
 
 ### 1.2 DSL
 
+- `Body`
 - `Rule`
 - `RuleRef`
 - `Derivation`
@@ -73,7 +74,8 @@
 关键边界：
 - `from_schema_classes(...)` / `schema_preflight_from_classes(...)` 的 `classes` 校验错误抛 `SDKSchemaError`（`SDKStore(...)` 构造器路径对应为 `SDKStoreError`）。
 - `run(...)` 支持 Rule/Query，不支持 Derivation。
-- `evaluate(...)` 显式拒绝 `temporal_view`。
+- `run(rule, view=...)` 支持具名/内联视图；Query 路径不支持 `view` 与 `return_display_meta`。
+- `evaluate(...)` 显式拒绝 `view` 与 `temporal_view`。
 - `run(rule)` 的 `row_format` 优先级：调用参数 > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`。
 - `FACTPY_ROW_FORMAT` 在 `SDKStore` 初始化时读取并缓存。
 - `row_format="tuple"` 仍可用但会触发 `DeprecationWarning`。
@@ -142,7 +144,9 @@
 
 ### 6.2 Derivation
 
-- `sdk.evaluate(Derivation(...), mode="python|engine") -> list[CandidateSet]`
+- `sdk.evaluate(Derivation(...), mode="native|souffle|problog") -> list[CandidateSet]`
+- 旧名 `python|engine` 传入会明确报错并提示新名称
 - `head` 形态决定 candidate kind
 - `head=[...]` 支持 evaluate 展平输出
+- `CandidateSet.confidence`：`problog` 为 `float`，`native/souffle` 为 `None`
 - `sdk.accept(...)` / `sdk.accept_many(...)` 负责写入与幂等
