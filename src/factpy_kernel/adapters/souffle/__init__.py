@@ -3,5 +3,5 @@
 from factpy_kernel.adapters.souffle.engine_eval import evaluate_store_engine
 from factpy_kernel.core.store.runtime import register_engine_evaluator
 
-# Register on import so existing Store.evaluate(mode="engine") call sites keep working.
-register_engine_evaluator(evaluate_store_engine)
+# Register on import for Store.evaluate(mode="souffle").
+register_engine_evaluator(evaluate_store_engine, "souffle")

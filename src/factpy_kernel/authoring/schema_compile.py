@@ -101,6 +101,14 @@ def _compile_entity(entity_raw: Any, entity_index: int) -> tuple[dict[str, Any],
         "entity_type": entity_type,
         "identity_fields": identity_fields,
     }
+    description = entity_raw.get("description")
+    if description is not None:
+        if not isinstance(description, str) or not description:
+            raise _compile_error(
+                f"entities[{entity_index}].description must be non-empty string",
+                path=f"$.entities[{entity_index}].description",
+            )
+        entity_out["description"] = description
 
     owner_prefix = _owner_prefix(entity_type)
     predicates: list[dict[str, Any]] = []

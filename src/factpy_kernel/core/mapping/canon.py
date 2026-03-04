@@ -268,12 +268,12 @@ def _optional_meta_str(ledger: Ledger, asrt_id: str, key: str) -> str | None:
 
 
 def _optional_confidence(ledger: Ledger, asrt_id: str) -> float | None:
-    rows = ledger.find_meta(asrt_id=asrt_id, key="confidence")
+    rows = ledger.find_meta(asrt_id=asrt_id, key="confidence", kind="float")
     if not rows:
         return None
-    row = rows[-1]
-    if row.kind == "num" and isinstance(row.value, int) and not isinstance(row.value, bool):
-        return float(row.value)
+    value = rows[-1].value
+    if isinstance(value, float):
+        return value
     return None
 
 

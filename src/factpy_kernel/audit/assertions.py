@@ -59,7 +59,8 @@ def load_assertion_index(package: AuditPackageData | str | Path) -> AuditAsserti
     claim_arg_rows = _read_tsv_rows(package_dir / facts["claim_arg"], expected_cols=4)
     meta_str_rows = _read_tsv_rows(package_dir / facts["meta_str"], expected_cols=3)
     meta_time_rows = _read_tsv_rows(package_dir / facts["meta_time"], expected_cols=3)
-    meta_num_rows = _read_tsv_rows(package_dir / facts["meta_num"], expected_cols=3)
+    meta_int_rows = _read_tsv_rows(package_dir / facts["meta_int"], expected_cols=3)
+    meta_float_rows = _read_tsv_rows(package_dir / facts["meta_float"], expected_cols=3)
     meta_bool_rows = _read_tsv_rows(package_dir / facts["meta_bool"], expected_cols=3)
     revokes_rows = _read_tsv_rows(package_dir / facts["revokes"], expected_cols=2)
 
@@ -89,7 +90,8 @@ def load_assertion_index(package: AuditPackageData | str | Path) -> AuditAsserti
     meta: dict[str, dict[str, list[dict[str, Any]]]] = {}
     _append_meta_rows(meta, meta_str_rows, kind="str", parser=_parse_meta_str)
     _append_meta_rows(meta, meta_time_rows, kind="time", parser=_parse_meta_time)
-    _append_meta_rows(meta, meta_num_rows, kind="num", parser=_parse_meta_num)
+    _append_meta_rows(meta, meta_int_rows, kind="int", parser=_parse_meta_int)
+    _append_meta_rows(meta, meta_float_rows, kind="float", parser=_parse_meta_float)
     _append_meta_rows(meta, meta_bool_rows, kind="bool", parser=_parse_meta_bool)
     for asrt_id in list(meta.keys()):
         for kind in list(meta[asrt_id].keys()):
@@ -137,8 +139,16 @@ def _parse_meta_time(raw: str) -> int:
     return _parse_int(raw, kind="time")
 
 
-def _parse_meta_num(raw: str) -> int:
-    return _parse_int(raw, kind="num")
+def _parse_meta_int(raw: str) -> int:
+    return _parse_int(raw, kind="int")
+
+
+def _parse_meta_float(raw: str) -> float:
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise AuditAssertionReadError(f"invalid float value: {raw!r}") from exc
+    return value
 
 
 def _parse_meta_bool(raw: str) -> bool:
@@ -173,13 +183,19 @@ def _read_manifest(package_dir: Path) -> dict[str, Any]:
 
 
 def _manifest_facts(manifest: dict[str, Any]) -> dict[str, str]:
+    export_version = manifest.get("export_version")
+    if not isinstance(export_version, str) or not export_version:
+        raise AuditAssertionReadError("manifest.export_version must be non-empty string")
+    if export_version != "v2":
+        raise AuditAssertionReadError(f"unsupported export_version: {export_version!r}; expected 'v2'")
+
     paths = manifest.get("paths")
     if not isinstance(paths, dict):
         raise AuditAssertionReadError("manifest.paths must be object")
     facts = paths.get("facts")
     if not isinstance(facts, dict):
         raise AuditAssertionReadError("manifest.paths.facts must be object")
-    required = {"claim", "claim_arg", "meta_str", "meta_time", "meta_num", "meta_bool", "revokes"}
+    required = {"claim", "claim_arg", "meta_str", "meta_time", "meta_int", "meta_float", "meta_bool", "revokes"}
     out: dict[str, str] = {}
     for key in required:
         value = facts.get(key)

@@ -19,6 +19,20 @@ class PolicyNonDeterminismError(WriteProtocolError):
 
 
 _SYSTEM_MANAGED_META_KEYS = {"ingested_at", "ingest_key", "revoked_asrt_id"}
+_KEY_KIND_MAP = {
+    "confidence": "float",
+}
+__all__ = [
+    "WriteProtocolError",
+    "PolicyNonDeterminismError",
+    "_SYSTEM_MANAGED_META_KEYS",
+    "new_assertion_id",
+    "now_epoch_nanos",
+    "set_field",
+    "add_field",
+    "retract_by_asrt",
+    "replace_field",
+]
 
 
 def new_assertion_id() -> str:
@@ -254,6 +268,14 @@ def _user_meta_rows(asrt_id: str, meta: dict[str, Any]) -> list[MetaRow]:
 
 
 def _infer_meta_kind(key: str, value: Any) -> str:
+    mapped_kind = _KEY_KIND_MAP.get(key)
+    inferred_kind = _infer_meta_kind_by_value(key, value)
+    if mapped_kind is not None and mapped_kind != inferred_kind:
+        raise WriteProtocolError(f"meta[{key}] must be {mapped_kind}")
+    return mapped_kind or inferred_kind
+
+
+def _infer_meta_kind_by_value(key: str, value: Any) -> str:
     if key == "ingested_at":
         if isinstance(value, bool) or not isinstance(value, int):
             raise WriteProtocolError("ingested_at must be epoch-nanos int")
@@ -262,8 +284,10 @@ def _infer_meta_kind(key: str, value: Any) -> str:
         return "bool"
     if isinstance(value, str):
         return "str"
+    if isinstance(value, float):
+        return "float"
     if isinstance(value, int):
-        return "num"
+        return "int"
     raise WriteProtocolError(f"unsupported meta type for {key}: {type(value).__name__}")
 
 

@@ -21,6 +21,7 @@ class CandidateSet:
     support_kind: str
     generated_at: int
     state: str
+    confidence: float | None = None
     candidate_id: str = ""
     candidate_key: str = ""
     candidate_kind: str = "fact"
@@ -40,6 +41,9 @@ class CandidateSet:
             raise ValueError("run_id must be non-empty string")
         if not isinstance(self.key_tuple_digest, str) or not self.key_tuple_digest.startswith("sha256:"):
             raise ValueError("key_tuple_digest must be sha256 token")
+        if self.confidence is not None:
+            if isinstance(self.confidence, bool) or not isinstance(self.confidence, float):
+                raise ValueError("confidence must be float or None")
         key = self.candidate_key or compute_candidate_key_v2(
             derivation_id=self.derivation_id,
             derivation_version=self.derivation_version,
@@ -230,6 +234,7 @@ def make_candidate(
     state: str = "generated",
     tup_digest: str | None = None,
     candidate_kind: str = "fact",
+    confidence: float | None = None,
 ) -> CandidateSet:
     if not isinstance(derivation_id, str) or not derivation_id:
         raise ValueError("derivation_id must be non-empty string")
@@ -271,6 +276,7 @@ def make_candidate(
         support_kind=support_kind,
         generated_at=generated_at,
         state=state,
+        confidence=confidence,
         candidate_kind=candidate_kind,
         candidate_key=candidate_key,
         candidate_id=candidate_id,

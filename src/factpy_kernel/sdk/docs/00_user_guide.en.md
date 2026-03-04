@@ -97,6 +97,8 @@ class User(Entity):
 
 **Stable contract**: every `Entity` must have at least one `Identity`, otherwise class definition raises `SDKSchemaError`.
 
+**Current behavior**: an `Entity` class docstring is automatically emitted as entity-level `description` (`schema_ir.entities[*].description`) for docs/LLM-facing context.
+
 ### 2.2 Identity Parameters
 
 | Parameter                 | Meaning                                                                                                  |

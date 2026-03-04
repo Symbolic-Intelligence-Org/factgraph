@@ -96,6 +96,8 @@ class User(Entity):
 
 **稳定合约**：每个 `Entity` 至少需要一个 `Identity`，否则类定义时报 `SDKSchemaError`。
 
+**当前行为**：`Entity` 类 docstring 会自动写入 schema 的实体级 `description`（`schema_ir.entities[*].description`），用于文档/LLM 描述。
+
 ### 2.2 Identity 参数
 
 | 参数 | 含义 |

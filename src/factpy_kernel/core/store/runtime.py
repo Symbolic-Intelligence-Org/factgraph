@@ -27,15 +27,30 @@ from factpy_kernel.core.store.types import (
 )
 
 
+_ENGINE_REGISTRY: dict[str, EngineEvaluatorFn] = {}
+# Compatibility alias for legacy callers probing runtime._ENGINE_EVALUATOR.
 _ENGINE_EVALUATOR: EngineEvaluatorFn | None = None
 
 
 def register_engine_evaluator(
     evaluator: EngineEvaluatorFn | None,
+    name: str,
 ) -> None:
-    """Register an engine evaluation adapter for Store.evaluate(mode='engine')."""
+    """Register (or clear) an engine evaluation adapter for Store.evaluate()."""
+    if not isinstance(name, str) or not name:
+        raise ValueError("name must be non-empty string")
+    if evaluator is None:
+        _ENGINE_REGISTRY.pop(name, None)
+    else:
+        _ENGINE_REGISTRY[name] = evaluator
     global _ENGINE_EVALUATOR
-    _ENGINE_EVALUATOR = evaluator
+    _ENGINE_EVALUATOR = _ENGINE_REGISTRY.get("souffle")
+
+
+def get_engine_evaluator(name: str) -> EngineEvaluatorFn | None:
+    if not isinstance(name, str) or not name:
+        raise ValueError("name must be non-empty string")
+    return _ENGINE_REGISTRY.get(name)
 
 
 class Store:
@@ -50,13 +65,18 @@ class Store:
             raise ValueError("schema_ir must be dict")
         self.schema_ir = ensure_schema_ir(schema_ir)
         self.ledger = ledger if ledger is not None else Ledger()
-        self._engine_evaluator = engine_evaluator
+        self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
+        if engine_evaluator is not None:
+            self._engine_overrides["souffle"] = engine_evaluator
 
     def set_engine_evaluator(
         self,
         evaluator: EngineEvaluatorFn | None,
     ) -> None:
-        self._engine_evaluator = evaluator
+        if evaluator is None:
+            self._engine_overrides.pop("souffle", None)
+        else:
+            self._engine_overrides["souffle"] = evaluator
 
     def evaluate(
         self,
@@ -65,7 +85,7 @@ class Store:
         target_pred_id: str,
         head_vars: HeadVarsIR,
         where: WhereIR,
-        mode: EvaluateMode = "python",
+        mode: EvaluateMode = "native",
         head: HeadSpecIR | None = None,
     ) -> list[CandidateSet]:
         return evaluate_store(
@@ -87,23 +107,31 @@ class Store:
         target_pred_id: str,
         head_vars: HeadVarsIR,
         where: WhereIR,
+        mode: str = "souffle",
         head: HeadSpecIR | None = None,
+        body_confidences: list[float] | None = None,
     ) -> list[CandidateSet]:
-        """Internal engine adapter entrypoint; prefer evaluate(mode='engine')."""
-        evaluator = self._engine_evaluator if self._engine_evaluator is not None else _ENGINE_EVALUATOR
+        """Internal adapter entrypoint; prefer evaluate(mode='souffle'|'problog')."""
+        if not isinstance(mode, str) or not mode:
+            raise WhereValidationError("mode must be non-empty string")
+        evaluator = self._engine_overrides.get(mode)
+        if evaluator is None:
+            evaluator = get_engine_evaluator(mode)
         if evaluator is None:
             raise WhereValidationError(
-                "engine evaluator not registered; import factpy_kernel.adapters.souffle first"
+                f"{mode} evaluator not registered; import factpy_kernel.adapters.{mode} first"
             )
-        return evaluator(
-            self,
-            derivation_id=derivation_id,
-            version=version,
-            target_pred_id=target_pred_id,
-            head_vars=head_vars,
-            where=where,
-            head=head,
-        )
+        call_kwargs: dict[str, Any] = {
+            "derivation_id": derivation_id,
+            "version": version,
+            "target_pred_id": target_pred_id,
+            "head_vars": head_vars,
+            "where": where,
+            "head": head,
+        }
+        if mode == "problog":
+            call_kwargs["body_confidences"] = body_confidences
+        return evaluator(self, **call_kwargs)
 
     def evaluate_dummy(
         self,
@@ -182,4 +210,4 @@ class Store:
         return store_resolve_mapping(self, pred_id, policy_mode=policy_mode)
 
 
-__all__ = ["Store", "register_engine_evaluator"]
+__all__ = ["Store", "register_engine_evaluator", "get_engine_evaluator"]

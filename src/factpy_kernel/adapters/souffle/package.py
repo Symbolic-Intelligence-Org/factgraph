@@ -160,13 +160,23 @@ def export_package(
         audit_files["mapping_resolution"] = "audit/mapping_resolution.json"
         audit_files["decision_log"] = "audit/decision_log.jsonl"
 
-    claim_rows, claim_arg_rows, meta_str_rows, meta_time_rows, meta_num_rows, meta_bool_rows, revokes_rows = _build_fact_rows(store)
+    (
+        claim_rows,
+        claim_arg_rows,
+        meta_str_rows,
+        meta_time_rows,
+        meta_int_rows,
+        meta_float_rows,
+        meta_bool_rows,
+        revokes_rows,
+    ) = _build_fact_rows(store)
 
     claim_path = facts_dir / "claim.facts"
     claim_arg_path = facts_dir / "claim_arg.facts"
     meta_str_path = facts_dir / "meta_str.facts"
     meta_time_path = facts_dir / "meta_time.facts"
-    meta_num_path = facts_dir / "meta_num.facts"
+    meta_int_path = facts_dir / "meta_int.facts"
+    meta_float_path = facts_dir / "meta_float.facts"
     meta_bool_path = facts_dir / "meta_bool.facts"
     revokes_path = facts_dir / "revokes.facts"
 
@@ -174,7 +184,8 @@ def export_package(
     write_tsv(claim_arg_path, claim_arg_rows)
     write_tsv(meta_str_path, meta_str_rows)
     write_tsv(meta_time_path, meta_time_rows)
-    write_tsv(meta_num_path, meta_num_rows)
+    write_tsv(meta_int_path, meta_int_rows)
+    write_tsv(meta_float_path, meta_float_rows)
     write_tsv(meta_bool_path, meta_bool_rows)
     write_tsv(revokes_path, revokes_rows)
 
@@ -186,13 +197,15 @@ def export_package(
         claim_arg_path,
         meta_str_path,
         meta_time_path,
-        meta_num_path,
+        meta_int_path,
+        meta_float_path,
         meta_bool_path,
         revokes_path,
     ]
     rules_files = [rules_dir / "idb.dl", rules_dir / "view.dl"]
 
     manifest = {
+        "export_version": "v2",
         "package_kind": options.package_kind,
         "protocol_version": _protocol_version(store.schema_ir),
         "generated_at": time.time_ns(),
@@ -214,7 +227,8 @@ def export_package(
                 "claim_arg": "facts/claim_arg.facts",
                 "meta_str": "facts/meta_str.facts",
                 "meta_time": "facts/meta_time.facts",
-                "meta_num": "facts/meta_num.facts",
+                "meta_int": "facts/meta_int.facts",
+                "meta_float": "facts/meta_float.facts",
                 "meta_bool": "facts/meta_bool.facts",
                 "revokes": "facts/revokes.facts",
             },
@@ -250,6 +264,7 @@ def _build_fact_rows(
     list[list[str]],
     list[list[str]],
     list[list[str]],
+    list[list[str]],
 ]:
     claim_rows: list[list[str]] = []
     for claim in store.ledger.claims:
@@ -269,9 +284,13 @@ def _build_fact_rows(
         [row.asrt_id, row.key, _atom_to_str(row.value)]
         for row in store.ledger.find_meta(kind="time")
     ]
-    meta_num_rows = [
+    meta_int_rows = [
         [row.asrt_id, row.key, _atom_to_str(row.value)]
-        for row in store.ledger.find_meta(kind="num")
+        for row in store.ledger.find_meta(kind="int")
+    ]
+    meta_float_rows = [
+        [row.asrt_id, row.key, _float_to_meta_str(row.value)]
+        for row in store.ledger.find_meta(kind="float")
     ]
     meta_bool_rows = [
         [row.asrt_id, row.key, _atom_to_str(row.value)]
@@ -286,7 +305,8 @@ def _build_fact_rows(
         sorted(claim_arg_rows),
         sorted(meta_str_rows),
         sorted(meta_time_rows),
-        sorted(meta_num_rows),
+        sorted(meta_int_rows),
+        sorted(meta_float_rows),
         sorted(meta_bool_rows),
         sorted(revokes_rows),
     )
@@ -300,6 +320,12 @@ def _atom_to_str(value: Any) -> str:
     if isinstance(value, int):
         return str(value)
     raise TypeError(f"cannot encode non-atomic TSV value: {type(value).__name__}")
+
+
+def _float_to_meta_str(value: Any) -> str:
+    if isinstance(value, bool) or not isinstance(value, float):
+        raise TypeError(f"cannot encode non-float meta value: {type(value).__name__}")
+    return repr(value)
 
 
 def _digest_for_paths(paths: list[Path], root: Path) -> str:

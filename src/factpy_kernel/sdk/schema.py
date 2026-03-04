@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import inspect
 from typing import Any
 from uuid import UUID
 
@@ -144,6 +145,7 @@ class EntityMeta(type):
             raise SDKSchemaError(f"Entity '{name}' must declare at least one Identity field")
 
         meta_dict = _extract_meta(getattr(cls, "Meta", None))
+        description = _extract_entity_description(cls)
         cls.__sdk_entity_spec__ = {
             "entity_type": name,
             "identity_fields": [
@@ -154,6 +156,7 @@ class EntityMeta(type):
                 member.to_authoring(type_domain=_annotation_to_type_domain_runtime(annotation))
                 for _, member, annotation in fields
             ],
+            **({"description": description} if description else {}),
             **({"meta": meta_dict} if meta_dict else {}),
         }
         return cls
@@ -227,6 +230,14 @@ def _extract_meta(meta_cls: Any) -> dict[str, Any]:
             continue
         out[key] = value
     return out
+
+
+def _extract_entity_description(entity_cls: type) -> str | None:
+    raw_doc = entity_cls.__dict__.get("__doc__")
+    if not isinstance(raw_doc, str):
+        return None
+    out = inspect.cleandoc(raw_doc).strip()
+    return out or None
 
 
 def _is_sdk_dsl_value(value: Any) -> bool:

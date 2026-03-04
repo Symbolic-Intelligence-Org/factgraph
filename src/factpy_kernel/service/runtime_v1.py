@@ -25,7 +25,12 @@ from factpy_kernel.core.schema.schema_ir import schema_digest
 from factpy_kernel.core.store import builders
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
-from factpy_kernel.core.view.projector import project_view_facts, project_view_facts_with_audit
+from factpy_kernel.core.store.types import ViewSpec
+from factpy_kernel.core.view.projector import (
+    project_display_facts,
+    project_view_facts,
+    project_view_facts_with_audit,
+)
 
 from ._common import error_response, exception_to_error, facade_error, ok_response
 from ._registry_io import load_registry_schema_ir
@@ -57,6 +62,7 @@ class RuntimeSession:
     registry_root: str | None
     schema_digest: str
     opened_at_ns: int
+    views: dict[str, ViewSpec]
 
 
 class _RuntimeSessionManager:
@@ -71,6 +77,7 @@ class _RuntimeSessionManager:
         ledger_path: str | None,
         registry_root: str | None,
         digest: str,
+        views: dict[str, ViewSpec],
     ) -> RuntimeSession:
         session = RuntimeSession(
             session_id=f"rt_{uuid4().hex}",
@@ -79,6 +86,7 @@ class _RuntimeSessionManager:
             registry_root=registry_root,
             schema_digest=digest,
             opened_at_ns=time_ns(),
+            views=views,
         )
         with self._lock:
             self._sessions[session.session_id] = session
@@ -129,6 +137,7 @@ def open_runtime_session(dto: dict[str, Any]) -> dict[str, Any]:
             ledger_path=ledger_path,
             registry_root=registry_root,
             digest=digest,
+            views={"default": ViewSpec()},
         )
         return ok_response(session=_session_to_dict(session))
     except Exception as exc:
@@ -302,30 +311,120 @@ def project_runtime_view_facts(session_id: str, dto: dict[str, Any]) -> dict[str
                 path="$.temporal_view",
             )
         include_audit = _resolve_include_audit(dto.get("include_audit"), path="$.include_audit")
+        view_spec = _resolve_runtime_view_spec(session, dto)
         if include_audit:
-            facts, audit = project_view_facts_with_audit(
+            projected_facts, audit = project_view_facts_with_audit(
                 session.store.ledger,
                 session.store.schema_ir,
             )
+            display_facts = project_display_facts(
+                session.store.ledger,
+                view_spec,
+            )
             view = {
-                "facts": _to_jsonable(facts),
+                "facts": _to_jsonable(display_facts),
+                "view_spec": _view_spec_to_dict(view_spec),
                 "audit": asdict(audit),
             }
         else:
-            facts = project_view_facts(
+            projected_facts = project_view_facts(
                 session.store.ledger,
                 session.store.schema_ir,
             )
-            view = {"facts": _to_jsonable(facts)}
+            display_facts = project_display_facts(
+                session.store.ledger,
+                view_spec,
+            )
+            view = {
+                "facts": _to_jsonable(display_facts),
+                "view_spec": _view_spec_to_dict(view_spec),
+            }
         return ok_response(
             meta={
-                "pred_count": len(facts),
-                "total_tuple_count": sum(len(rows) for rows in facts.values()),
+                "pred_count": len(projected_facts),
+                "total_tuple_count": sum(len(rows) for rows in projected_facts.values()),
             },
             view=view,
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_view_facts")
+        return error_response([err])
+
+
+def create_runtime_view(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        name = _require_non_empty_str(dto.get("name"), path="$.name")
+        if name in session.views:
+            raise facade_error("view already exists", kind="shape", path="$.name", details={"name": name})
+        view_spec = _parse_view_spec(dto.get("view"), path="$.view")
+        session.views[name] = view_spec
+        return ok_response(view={"name": name, "spec": _view_spec_to_dict(view_spec)})
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="view_create")
+        return error_response([err])
+
+
+def update_runtime_view(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        name = _require_non_empty_str(dto.get("name"), path="$.name")
+        if name not in session.views:
+            raise facade_error("view not found", kind="shape", path="$.name", details={"name": name})
+        view_spec = _parse_view_spec(dto.get("view"), path="$.view")
+        session.views[name] = view_spec
+        return ok_response(view={"name": name, "spec": _view_spec_to_dict(view_spec)})
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="view_update")
+        return error_response([err])
+
+
+def delete_runtime_view(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        name = _require_non_empty_str(dto.get("name"), path="$.name")
+        if name == "default":
+            raise facade_error("cannot delete built-in view: default", kind="shape", path="$.name")
+        if name not in session.views:
+            raise facade_error("view not found", kind="shape", path="$.name", details={"name": name})
+        session.views.pop(name, None)
+        return ok_response(deleted={"name": name})
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="view_delete")
+        return error_response([err])
+
+
+def get_runtime_view(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        name = _require_non_empty_str(dto.get("name"), path="$.name")
+        if name not in session.views:
+            raise facade_error("view not found", kind="shape", path="$.name", details={"name": name})
+        return ok_response(view={"name": name, "spec": _view_spec_to_dict(session.views[name])})
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="view_get")
+        return error_response([err])
+
+
+def list_runtime_views(session_id: str) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        return ok_response(
+            views={
+                name: _view_spec_to_dict(spec)
+                for name, spec in sorted(session.views.items(), key=lambda item: item[0])
+            }
+        )
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="view_list")
         return error_response([err])
 
 
@@ -699,6 +798,7 @@ def _candidate_to_dict(candidate: CandidateSet) -> dict[str, Any]:
         "support_kind": candidate.support_kind,
         "generated_at": candidate.generated_at,
         "state": candidate.state,
+        "confidence": candidate.confidence,
     }
 
 
@@ -720,10 +820,19 @@ def _candidate_from_dict(value: Any, *, path: str) -> CandidateSet:
         support_kind=_require_non_empty_str(value.get("support_kind"), path=f"{path}.support_kind"),
         generated_at=generated_at,
         state=_require_non_empty_str(value.get("state"), path=f"{path}.state"),
+        confidence=_optional_candidate_confidence(value.get("confidence"), path=f"{path}.confidence"),
         candidate_id=_optional_str_or_none(value.get("candidate_id"), path=f"{path}.candidate_id") or "",
         candidate_key=_optional_str_or_none(value.get("candidate_key"), path=f"{path}.candidate_key") or "",
         candidate_kind=_require_non_empty_str(value.get("candidate_kind"), path=f"{path}.candidate_kind"),
     )
+
+
+def _optional_candidate_confidence(value: Any, *, path: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, float):
+        raise facade_error("confidence must be float or null", kind="shape", path=path)
+    return value
 
 
 def _candidate_payload_from_dict(value: Any, *, path: str) -> dict[str, Any]:
@@ -895,6 +1004,63 @@ def _mapping_conflict_to_error(exc: MappingConflictError) -> dict[str, Any]:
             "message": str(exc),
             "conflicts": _to_jsonable(exc.conflicts),
         },
+    }
+
+
+def _resolve_runtime_view_spec(session: RuntimeSession, dto: dict[str, Any]) -> ViewSpec:
+    has_view_name = "view_name" in dto
+    has_view_object = "view" in dto
+    if has_view_name and has_view_object:
+        raise facade_error(
+            "provide either view_name or view, not both",
+            kind="shape",
+            path="$",
+        )
+    if has_view_name:
+        view_name = _require_non_empty_str(dto.get("view_name"), path="$.view_name")
+        spec = session.views.get(view_name)
+        if spec is None:
+            raise facade_error("view not found", kind="shape", path="$.view_name", details={"name": view_name})
+        return spec
+    if has_view_object:
+        return _parse_view_spec(dto.get("view"), path="$.view")
+    return session.views["default"]
+
+
+def _parse_view_spec(value: Any, *, path: str) -> ViewSpec:
+    if isinstance(value, ViewSpec):
+        return value
+    if not isinstance(value, dict):
+        raise facade_error("view must be object", kind="shape", path=path)
+
+    active_raw = value.get("active", True)
+    if not isinstance(active_raw, bool):
+        raise facade_error("view.active must be bool", kind="shape", path=f"{path}.active")
+
+    strategy_raw = value.get("confidence_strategy", "max")
+    if not isinstance(strategy_raw, str) or strategy_raw not in {"max", "mean", "median", "prefer_source"}:
+        raise facade_error(
+            "view.confidence_strategy must be one of: max, mean, median, prefer_source",
+            kind="shape",
+            path=f"{path}.confidence_strategy",
+        )
+
+    prefer_source_raw = value.get("prefer_source")
+    if prefer_source_raw is not None and (not isinstance(prefer_source_raw, str) or not prefer_source_raw):
+        raise facade_error("view.prefer_source must be non-empty string or null", kind="shape", path=f"{path}.prefer_source")
+
+    return ViewSpec(
+        active=active_raw,
+        confidence_strategy=strategy_raw,
+        prefer_source=prefer_source_raw,
+    )
+
+
+def _view_spec_to_dict(view_spec: ViewSpec) -> dict[str, Any]:
+    return {
+        "active": view_spec.active,
+        "confidence_strategy": view_spec.confidence_strategy,
+        "prefer_source": view_spec.prefer_source,
     }
 
 

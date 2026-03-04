@@ -8,7 +8,9 @@ from factpy_kernel.core.policy.chosen import (
     PolicyNonDeterminismError,
     compute_chosen_for_predicate,
 )
+from factpy_kernel.core.store.types import ViewSpec
 from factpy_kernel.core.store.ledger import Claim, Ledger
+from factpy_kernel.core.view.confidence import aggregate_confidence
 
 
 class ViewProjectionError(Exception):
@@ -135,3 +137,48 @@ def project_view_facts_with_audit(
         audit=audit,
     )
     return facts, audit
+
+
+def project_display_facts(
+    ledger: Ledger,
+    view_spec: ViewSpec,
+) -> dict[str, list[dict[str, Any]]]:
+    if not isinstance(ledger, Ledger):
+        raise TypeError("ledger must be Ledger")
+    if not isinstance(view_spec, ViewSpec):
+        raise TypeError("view_spec must be ViewSpec")
+
+    grouped: dict[tuple[str, tuple[Any, ...]], list[dict[str, Any]]] = {}
+    for claim in ledger.claims:
+        if view_spec.active and not is_active(ledger, claim.asrt_id):
+            continue
+
+        fact = build_args_for_claim(ledger, claim)
+        meta_rows = ledger.find_meta(asrt_id=claim.asrt_id)
+        meta_raw: dict[str, Any] = {row.key: row.value for row in meta_rows}
+        grouped.setdefault((claim.pred_id, fact), []).append(
+            {
+                "asrt_id": claim.asrt_id,
+                "source": meta_raw.get("source"),
+                "confidence": meta_raw.get("confidence"),
+            }
+        )
+
+    output: dict[str, list[dict[str, Any]]] = {}
+    for (pred_id, fact), rows in grouped.items():
+        confidence = aggregate_confidence(
+            rows,
+            strategy=view_spec.confidence_strategy,
+            prefer_source=view_spec.prefer_source,
+        )
+        output.setdefault(pred_id, []).append(
+            {
+                "fact": fact,
+                "confidence": confidence,
+                "count": len(rows),
+            }
+        )
+
+    for pred_id in output:
+        output[pred_id].sort(key=lambda item: tuple(str(part) for part in item["fact"]))
+    return output

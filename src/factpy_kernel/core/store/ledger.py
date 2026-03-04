@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Iterator, Literal
 
 
-META_KINDS = {"str", "num", "bool", "time", "json"}
+META_KINDS = {"str", "int", "float", "bool", "time", "json"}
 _JSON_BYTES_KEY = "__factpy_bytes_b64__"
 
 

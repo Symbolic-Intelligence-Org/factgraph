@@ -15,11 +15,16 @@ from factpy_kernel.core.schema.schema_ir import schema_digest
 from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
+from factpy_kernel.core.store._evaluate import evaluate_store
 from factpy_kernel.adapters.souffle.runner import run_package
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Ledger
+from factpy_kernel.core.store.types import ViewSpec
+from factpy_kernel.core.view.confidence import aggregate_confidence
+from factpy_kernel.core.view.projector import project_display_facts
 
 from .compile import compile_schema_from_classes
+from .dsl.body import Body
 from .error_codes import (
     INVALID_ROW_FORMAT,
     QUERY_INVALID_ROW_FORMAT,
@@ -28,6 +33,46 @@ from .errors import SDKSchemaError, SDKStoreError
 from .query_lower import QueryPlan, lower_query
 from .query_runtime import execute_query_plan
 from .schema import Entity, Field
+
+
+class _SDKViewsManager:
+    def __init__(self) -> None:
+        self._views: dict[str, ViewSpec] = {"default": ViewSpec()}
+
+    def create(self, name: str, view_spec: ViewSpec) -> ViewSpec:
+        normalized = _normalize_view_name(name)
+        if normalized in self._views:
+            raise SDKStoreError(f"view already exists: {normalized}")
+        if not isinstance(view_spec, ViewSpec):
+            raise SDKStoreError("view_spec must be ViewSpec")
+        self._views[normalized] = view_spec
+        return view_spec
+
+    def update(self, name: str, view_spec: ViewSpec) -> ViewSpec:
+        normalized = _normalize_view_name(name)
+        if normalized not in self._views:
+            raise SDKStoreError(f"view not found: {normalized}")
+        if not isinstance(view_spec, ViewSpec):
+            raise SDKStoreError("view_spec must be ViewSpec")
+        self._views[normalized] = view_spec
+        return view_spec
+
+    def delete(self, name: str) -> None:
+        normalized = _normalize_view_name(name)
+        if normalized == "default":
+            raise SDKStoreError("cannot delete built-in view: default")
+        if normalized not in self._views:
+            raise SDKStoreError(f"view not found: {normalized}")
+        self._views.pop(normalized, None)
+
+    def get(self, name: str) -> ViewSpec:
+        normalized = _normalize_view_name(name)
+        if normalized not in self._views:
+            raise SDKStoreError(f"view not found: {normalized}")
+        return self._views[normalized]
+
+    def list(self) -> dict[str, ViewSpec]:
+        return {name: spec for name, spec in self._views.items()}
 
 
 class SDKStore:
@@ -55,6 +100,7 @@ class SDKStore:
         self._field_decl_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._entity_spec_by_class: dict[type[Entity], dict[str, Any]] = {}
         self._identity_values_by_e_ref: dict[str, dict[str, Any]] = {}
+        self._views_manager = _SDKViewsManager()
         self._default_row_format = default_row_format
         # Read once at init time; do not re-read env on each run().
         self._env_row_format = os.environ.get("FACTPY_ROW_FORMAT")
@@ -107,6 +153,10 @@ class SDKStore:
     def schema_ir(self) -> dict[str, Any]:
         return self._schema_ir
 
+    @property
+    def views(self) -> _SDKViewsManager:
+        return self._views_manager
+
     def batch(self, *, meta: dict[str, Any] | None = None):
         from .batch import SDKBatchTx
 
@@ -121,17 +171,34 @@ class SDKStore:
         self,
         entity_cls: type[Entity],
         *,
+        view: ViewSpec | str | None = None,
         limit: int | None = None,
         **filter_kwargs: Any,
     ):
         from .facade import sdk_find
 
-        return sdk_find(
+        rows = sdk_find(
             self,
             entity_cls,
             limit=limit,
             **filter_kwargs,
         )
+        resolved_view = self._resolve_view_spec(view)
+        if resolved_view is None:
+            return rows
+
+        confidence_by_ref = _build_entity_confidence_by_ref(
+            self,
+            entity_cls=entity_cls,
+            view_spec=resolved_view,
+        )
+        for row in rows:
+            ref = getattr(row, "ref", None)
+            if isinstance(ref, str):
+                object.__setattr__(row, "confidence", confidence_by_ref.get(ref))
+            else:
+                object.__setattr__(row, "confidence", None)
+        return rows
 
     def edit(self, entity_cls: type[Entity], **identity_kwargs: Any):
         from .facade import sdk_edit
@@ -331,7 +398,18 @@ class SDKStore:
             return_mode=return_mode,
         )
 
+    def _resolve_view_spec(self, view: ViewSpec | str | None) -> ViewSpec | None:
+        if view is None:
+            return None
+        if isinstance(view, ViewSpec):
+            return view
+        if isinstance(view, str):
+            return self._views_manager.get(view)
+        raise SDKStoreError("view must be ViewSpec, view name string, or None")
+
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
+        if "view" in kwargs:
+            raise SDKStoreError("view is not supported in evaluate(); derivation evaluation always uses active projection")
         if "temporal_view" in kwargs:
             # TODO: temporal_view for evaluate() remains blocked.
             # Snapshot read views (.at/.version) are already implemented in sdk.facade.
@@ -385,7 +463,12 @@ class SDKStore:
         mode: str | None,
     ) -> list[CandidateSet]:
         resolved_mode = mode if mode is not None else compiled.get("mode", "python")
-        return self._store.evaluate(
+        body_confidences = _coerce_body_confidences(
+            compiled.get("body_confidences"),
+            path="$.body_confidences",
+        )
+        return evaluate_store(
+            self._store,
             derivation_id=compiled["derivation_id"],
             version=compiled["version"],
             target_pred_id=compiled["target_pred_id"],
@@ -393,6 +476,8 @@ class SDKStore:
             where=list(compiled["where"]),
             mode=resolved_mode,
             head=compiled.get("head"),
+            body_confidences=body_confidences,
+            engine_evaluate=self._store.evaluate_engine,
         )
 
     @staticmethod
@@ -509,21 +594,38 @@ class SDKStore:
             "head_vars",
             "where",
         }.issubset(set(derivation.keys())) and not isinstance(derivation.get("head"), list):
-            return [dict(derivation)]
+            compiled = dict(derivation)
+            body_confidences = _coerce_body_confidences(
+                compiled.get("body_confidences"),
+                path="$.body_confidences",
+            )
+            if body_confidences is not None:
+                _validate_body_confidences_arity(where=compiled.get("where"), body_confidences=body_confidences)
+                compiled["body_confidences"] = body_confidences
+            return [compiled]
         if hasattr(derivation, "to_authoring_payload"):
-            payload = derivation.to_authoring_payload()
+            payload, body_confidences = _authoring_derivation_payload_from_sdk_object(derivation)
         elif isinstance(derivation, dict):
             payload = dict(derivation)
+            payload, body_confidences = _normalize_authoring_derivation_payload(payload)
         else:
             raise SDKStoreError(
                 "derivation must be SDK Derivation object, compiled derivation dict, or authoring derivation payload dict"
             )
         payloads = _expand_authoring_derivation_heads(payload)
         try:
-            return [
-                compile_authoring_derivation_v1(single_payload, schema_ir=self._schema_ir)
-                for single_payload in payloads
-            ]
+            compiled_payloads: list[dict[str, Any]] = []
+            for single_payload in payloads:
+                compiled = compile_authoring_derivation_v1(single_payload, schema_ir=self._schema_ir)
+                selected_confidences = _coerce_body_confidences(
+                    single_payload.get("body_confidences", body_confidences),
+                    path="$.body_confidences",
+                )
+                if selected_confidences is not None:
+                    _validate_body_confidences_arity(where=compiled.get("where"), body_confidences=selected_confidences)
+                    compiled["body_confidences"] = selected_confidences
+                compiled_payloads.append(compiled)
+            return compiled_payloads
         except Exception as exc:
             raise SDKStoreError(f"invalid derivation input: {exc}") from exc
 
@@ -647,6 +749,64 @@ class SDKStore:
                 ) from exc
 
 
+def _normalize_view_name(name: Any) -> str:
+    if not isinstance(name, str) or not name.strip():
+        raise SDKStoreError("view name must be non-empty string")
+    return name.strip()
+
+
+def _build_entity_confidence_by_ref(
+    sdk: SDKStore,
+    *,
+    entity_cls: type[Entity],
+    view_spec: ViewSpec,
+) -> dict[str, float | None]:
+    spec = sdk._entity_spec_by_class.get(entity_cls)
+    if not isinstance(spec, dict):
+        return {}
+    entity_type = spec.get("entity_type")
+    if not isinstance(entity_type, str) or not entity_type:
+        return {}
+
+    pred_ids: set[str] = set()
+    for pred in sdk.schema_ir.get("predicates", []):
+        if not isinstance(pred, dict):
+            continue
+        if pred.get("owner_type") != entity_type:
+            continue
+        pred_id = pred.get("pred_id")
+        if isinstance(pred_id, str) and pred_id:
+            pred_ids.add(pred_id)
+
+    display_facts = project_display_facts(sdk.ledger, view_spec)
+    rows_by_ref: dict[str, list[dict[str, Any]]] = {}
+    for pred_id in pred_ids:
+        for item in display_facts.get(pred_id, []):
+            if not isinstance(item, dict):
+                continue
+            fact = item.get("fact")
+            if not isinstance(fact, tuple) or not fact:
+                continue
+            e_ref = fact[0]
+            if not isinstance(e_ref, str):
+                continue
+            rows_by_ref.setdefault(e_ref, []).append(
+                {
+                    "confidence": item.get("confidence"),
+                    "source": None,
+                }
+            )
+
+    return {
+        e_ref: aggregate_confidence(
+            rows,
+            strategy=view_spec.confidence_strategy,
+            prefer_source=view_spec.prefer_source,
+        )
+        for e_ref, rows in rows_by_ref.items()
+    }
+
+
 def _default_uuid4_for_tag(tag: str) -> str:
     if tag == "uuid":
         return str(uuid4()).lower()
@@ -721,6 +881,222 @@ def _expand_authoring_derivation_heads(payload: dict[str, Any]) -> list[dict[str
     return expanded
 
 
+def _authoring_derivation_payload_from_sdk_object(
+    derivation: Any,
+) -> tuple[dict[str, Any], list[float] | None]:
+    where_value = getattr(derivation, "where", None)
+    normalized_where, extracted_confidences, used_body_wrapper = _normalize_where_body_wrappers(
+        where_value,
+        path="$.where",
+    )
+    if not used_body_wrapper:
+        payload = derivation.to_authoring_payload()
+        return _normalize_authoring_derivation_payload(payload)
+
+    payload = _build_authoring_derivation_payload_with_where(
+        derivation=derivation,
+        normalized_where=normalized_where,
+        body_confidences=extracted_confidences,
+    )
+    normalized_payload, normalized_confidences = _normalize_authoring_derivation_payload(payload)
+    selected_confidences = normalized_confidences if normalized_confidences is not None else extracted_confidences
+    return normalized_payload, selected_confidences
+
+
+def _normalize_authoring_derivation_payload(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], list[float] | None]:
+    normalized = dict(payload)
+    explicit_confidences = _coerce_body_confidences(
+        normalized.get("body_confidences"),
+        path="$.body_confidences",
+    )
+
+    where_confidences: list[float] | None = None
+    body_confidences: list[float] | None = None
+    for field_name, field_path in (("where", "$.where"), ("body", "$.body")):
+        if field_name not in normalized:
+            continue
+        field_value, extracted, used_body_wrapper = _normalize_where_body_wrappers(
+            normalized[field_name],
+            path=field_path,
+        )
+        if used_body_wrapper:
+            normalized[field_name] = field_value
+        if field_name == "where":
+            where_confidences = extracted
+        else:
+            body_confidences = extracted
+
+    selected_confidences = _merge_body_confidences(
+        explicit_confidences=explicit_confidences,
+        where_confidences=where_confidences,
+        body_confidences=body_confidences,
+    )
+    if selected_confidences is None:
+        normalized.pop("body_confidences", None)
+    else:
+        normalized["body_confidences"] = list(selected_confidences)
+    return normalized, selected_confidences
+
+
+def _build_authoring_derivation_payload_with_where(
+    *,
+    derivation: Any,
+    normalized_where: Any,
+    body_confidences: list[float] | None,
+) -> dict[str, Any]:
+    from .dsl.expr import lower_where
+
+    derivation_id = getattr(derivation, "id", None)
+    if not isinstance(derivation_id, str) or not derivation_id:
+        raise SDKStoreError("derivation.id must be non-empty string", path="$.derivation_id")
+    version = getattr(derivation, "version", None)
+    if not isinstance(version, str) or not version:
+        raise SDKStoreError("derivation.version must be non-empty string", path="$.version")
+
+    payload: dict[str, Any] = {
+        "derivation_id": derivation_id,
+        "version": version,
+        "where": lower_where(normalized_where),
+    }
+
+    heads = getattr(derivation, "heads", None)
+    if isinstance(heads, list) and heads:
+        payload["head"] = heads[0].to_authoring_head() if len(heads) == 1 else [head.to_authoring_head() for head in heads]
+
+    target = getattr(derivation, "target", None)
+    if target is not None:
+        payload["target"] = target
+
+    head_vars = getattr(derivation, "head_vars", None)
+    if head_vars is not None:
+        if not isinstance(head_vars, list):
+            raise SDKStoreError("derivation.head_vars must be list when provided", path="$.head_vars")
+        payload["head_vars"] = [_lower_derivation_head_var(item) for item in head_vars]
+
+    mode = getattr(derivation, "mode", None)
+    if mode is not None:
+        payload["mode"] = mode
+
+    status = getattr(derivation, "status", None)
+    if status is not None:
+        payload["status"] = status
+
+    if body_confidences is not None:
+        payload["body_confidences"] = list(body_confidences)
+    return payload
+
+
+def _lower_derivation_head_var(value: Any) -> Any:
+    token = getattr(value, "token", None)
+    if isinstance(token, str):
+        return token
+    return value
+
+
+def _normalize_where_body_wrappers(
+    raw_where: Any,
+    *,
+    path: str,
+) -> tuple[Any, list[float] | None, bool]:
+    if not isinstance(raw_where, list) or not raw_where:
+        return raw_where, None, False
+
+    has_body_wrapper = any(isinstance(item, Body) for item in raw_where)
+    if not has_body_wrapper:
+        return raw_where, None, False
+    if not all(isinstance(item, Body) for item in raw_where):
+        raise SDKStoreError("where/body cannot mix Body(...) with bare branches", path=path)
+
+    branches: list[list[Any]] = []
+    confidence_values: list[float | None] = []
+    for idx, branch in enumerate(raw_where):
+        atoms = list(branch.atoms)
+        if not atoms:
+            raise SDKStoreError("Body.atoms must be non-empty list", path=f"{path}[{idx}]")
+        branches.append(atoms)
+        confidence_values.append(branch.confidence)
+
+    selected_confidences = _coerce_body_confidences_from_wrappers(
+        confidence_values,
+        path=path,
+    )
+    return branches, selected_confidences, True
+
+
+def _coerce_body_confidences_from_wrappers(
+    values: list[float | None],
+    *,
+    path: str,
+) -> list[float] | None:
+    if not values:
+        return None
+    if all(value is None for value in values):
+        return None
+    if any(value is None for value in values):
+        raise SDKStoreError(
+            "Body(...) confidence must be set on every branch when any branch sets confidence",
+            path=path,
+        )
+    out: list[float] = []
+    for idx, value in enumerate(values):
+        assert value is not None
+        normalized = float(value)
+        if normalized <= 0.0 or normalized > 1.0:
+            raise SDKStoreError("Body.confidence must be within (0,1]", path=f"{path}[{idx}].confidence")
+        out.append(normalized)
+    return out
+
+
+def _merge_body_confidences(
+    *,
+    explicit_confidences: list[float] | None,
+    where_confidences: list[float] | None,
+    body_confidences: list[float] | None,
+) -> list[float] | None:
+    candidates = [
+        values
+        for values in (explicit_confidences, where_confidences, body_confidences)
+        if values is not None
+    ]
+    if not candidates:
+        return None
+    first = candidates[0]
+    for candidate in candidates[1:]:
+        if candidate != first:
+            raise SDKStoreError("body_confidences conflict between where/body/body_confidences", path="$.body_confidences")
+    return list(first)
+
+
+def _coerce_body_confidences(raw_value: Any, *, path: str) -> list[float] | None:
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, list) or not raw_value:
+        raise SDKStoreError("body_confidences must be non-empty list[float] when provided", path=path)
+
+    out: list[float] = []
+    for idx, value in enumerate(raw_value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise SDKStoreError("body_confidences entries must be float in (0,1]", path=f"{path}[{idx}]")
+        normalized = float(value)
+        if normalized <= 0.0 or normalized > 1.0:
+            raise SDKStoreError("body_confidences entries must be within (0,1]", path=f"{path}[{idx}]")
+        out.append(normalized)
+    return out
+
+
+def _validate_body_confidences_arity(*, where: Any, body_confidences: list[float]) -> None:
+    branch_count = 1
+    if isinstance(where, list) and where and all(isinstance(item, list) for item in where):
+        branch_count = len(where)
+    if len(body_confidences) != branch_count:
+        raise SDKStoreError(
+            "body_confidences length must match where branch count",
+            path="$.body_confidences",
+        )
+
+
 def _with_candidate_run_id(candidates: list[CandidateSet], *, run_id: str) -> list[CandidateSet]:
     rewritten: list[CandidateSet] = []
     for candidate in candidates:
@@ -737,6 +1113,7 @@ def _with_candidate_run_id(candidates: list[CandidateSet], *, run_id: str) -> li
                 support_kind=candidate.support_kind,
                 generated_at=candidate.generated_at,
                 state=candidate.state,
+                confidence=candidate.confidence,
                 candidate_key=candidate.candidate_key,
                 candidate_kind=candidate.candidate_kind,
             )

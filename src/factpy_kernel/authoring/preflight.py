@@ -277,21 +277,25 @@ def derivation_dry_run_preview(
     target_pred_id: str,
     head_vars: list[Any],
     where: list[Any],
-    mode: str = "python",
+    mode: str = "native",
     head: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not isinstance(store, Store):
         raise AuthoringPreflightError("store must be Store")
-    if mode not in {"python", "engine"}:
-        raise AuthoringPreflightError("mode must be 'python' or 'engine'")
+    if mode == "python":
+        raise AuthoringPreflightError("mode='python' is removed; use mode='native'")
+    if mode == "engine":
+        raise AuthoringPreflightError("mode='engine' is removed; use mode='souffle'")
+    if mode not in {"native", "souffle", "problog"}:
+        raise AuthoringPreflightError("mode must be one of: native, souffle, problog")
 
     warnings: list[dict[str, Any]] = []
-    if mode == "engine" and _find_souffle_binary_safe() is None:
+    if mode == "souffle" and _find_souffle_binary_safe() is None:
         warnings.append(
             _warn(
                 phase=PHASE_DERIVATION_PREVIEW_ENV,
                 code=CODE_SOUFFLE_BINARY_MISSING,
-                message="Soufflé binary not found; engine preview may fail because noop fallback is rejected",
+                message="Soufflé binary not found; souffle preview may fail because noop fallback is rejected",
                 path="$.mode",
             )
         )
@@ -446,4 +450,3 @@ def _find_souffle_binary_safe() -> Any:
         return find_souffle_binary()
     except Exception:
         return None
-

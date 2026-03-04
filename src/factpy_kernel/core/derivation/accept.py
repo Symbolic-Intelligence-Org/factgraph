@@ -7,6 +7,7 @@ from typing import Any
 
 from factpy_kernel.core.derivation.candidates import CandidateSet, extract_candidate_refs
 from factpy_kernel.core.evidence.write_protocol import (
+    _SYSTEM_MANAGED_META_KEYS,
     WriteProtocolError,
     now_epoch_nanos,
     retract_by_asrt,
@@ -15,6 +16,18 @@ from factpy_kernel.core.evidence.write_protocol import (
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.protocol.digests import sha256_token
 from factpy_kernel.core.store.ledger import Ledger
+
+_META_PRIMARY_KEYS = {
+    "run_id",
+    "ingested_at",
+    "accepted_at",
+    "trace_id",
+    "candidate_id",
+    "candidate_key",
+    "cand_key_digest",
+    "key_tuple_digest",
+    "materialize_id",
+}
 
 
 @dataclass(frozen=True)
@@ -515,12 +528,25 @@ def _accept_fact_claim(
             skipped_reason_counts={},
         )
 
+    cand_key_digest = _compute_cand_key_digest(candidate_set.target, candidate_set.key_tuple_digest)
+    write_meta = _build_base_write_meta(
+        candidate_set=candidate_set,
+        options=options,
+        derived_rule_id=derived_rule_id,
+        derived_rule_version=derived_rule_version,
+        schema_digest_token=schema_digest_token,
+        policy_digest_token=policy_digest_token,
+        cand_key_digest=cand_key_digest,
+    )
+    write_meta["subject_e_ref"] = e_ref
+
     existing_written = _find_existing_claim_assertions_v2(
         ledger=ledger,
         pred_id=pred_id,
         e_ref=e_ref,
         rest_terms=rest_terms,
         key_tuple_digest=candidate_set.key_tuple_digest,
+        business_meta=_filter_business_meta(write_meta),
     )
     if existing_written:
         _assert_duplicate_meta_compatible(ledger=ledger, written_assertions=existing_written, options=options)
@@ -537,18 +563,6 @@ def _accept_fact_claim(
             skipped_reason_counts={"duplicate": 1},
             entity_ref=entity_ref if candidate_set.candidate_kind == "entity" else None,
         )
-
-    cand_key_digest = _compute_cand_key_digest(candidate_set.target, candidate_set.key_tuple_digest)
-    write_meta = _build_base_write_meta(
-        candidate_set=candidate_set,
-        options=options,
-        derived_rule_id=derived_rule_id,
-        derived_rule_version=derived_rule_version,
-        schema_digest_token=schema_digest_token,
-        policy_digest_token=policy_digest_token,
-        cand_key_digest=cand_key_digest,
-    )
-    write_meta["subject_e_ref"] = e_ref
 
     asrt_id = set_field(
         ledger=ledger,
@@ -668,24 +682,6 @@ def _accept_entity_candidate_v2(
             entity_ref=entity_ref,
         )
 
-    existing_written = _find_existing_claim_assertions_v2(
-        ledger=ledger,
-        pred_id=exists_pred_id,
-        e_ref=entity_ref,
-        rest_terms=[],
-        key_tuple_digest=candidate_set.key_tuple_digest,
-    )
-    if existing_written:
-        _assert_duplicate_meta_compatible(ledger=ledger, written_assertions=existing_written, options=options)
-        return AcceptResult(
-            run_id=candidate_set.run_id,
-            accepted_count=0,
-            skipped_count=1,
-            written_assertions=existing_written,
-            skipped_reason_counts={"duplicate": 1},
-            entity_ref=entity_ref,
-        )
-
     cand_key_digest = _compute_cand_key_digest(candidate_set.target, candidate_set.key_tuple_digest)
     write_meta = _build_base_write_meta(
         candidate_set=candidate_set,
@@ -700,6 +696,25 @@ def _accept_entity_candidate_v2(
     write_meta["entity_ref"] = entity_ref
     if override:
         write_meta["identity_override_digest"] = _digest_json(override)
+
+    existing_written = _find_existing_claim_assertions_v2(
+        ledger=ledger,
+        pred_id=exists_pred_id,
+        e_ref=entity_ref,
+        rest_terms=[],
+        key_tuple_digest=candidate_set.key_tuple_digest,
+        business_meta=_filter_business_meta(write_meta),
+    )
+    if existing_written:
+        _assert_duplicate_meta_compatible(ledger=ledger, written_assertions=existing_written, options=options)
+        return AcceptResult(
+            run_id=candidate_set.run_id,
+            accepted_count=0,
+            skipped_count=1,
+            written_assertions=existing_written,
+            skipped_reason_counts={"duplicate": 1},
+            entity_ref=entity_ref,
+        )
 
     asrt_id = set_field(
         ledger=ledger,
@@ -757,6 +772,8 @@ def _build_base_write_meta(
         write_meta["schema_digest"] = schema_digest_token
     if isinstance(policy_digest_token, str) and policy_digest_token:
         write_meta["policy_digest"] = policy_digest_token
+    if candidate_set.confidence is not None:
+        write_meta["confidence"] = candidate_set.confidence
     if options.approved_by is not None:
         write_meta["approved_by"] = options.approved_by
         write_meta["accepted_by"] = options.approved_by
@@ -907,12 +924,15 @@ def _find_existing_claim_assertions_v2(
     e_ref: str,
     rest_terms: list[tuple[str, Any]],
     key_tuple_digest: str,
+    business_meta: dict[str, Any],
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for claim in ledger.find_claims(pred_id=pred_id, e_ref=e_ref):
         if ledger.has_active_revocation(claim.asrt_id):
             continue
         if claim.rest_terms != rest_terms:
+            continue
+        if _business_meta_for_duplicate(ledger, claim.asrt_id) != business_meta:
             continue
         rows.append(
             {
@@ -923,6 +943,20 @@ def _find_existing_claim_assertions_v2(
         )
     rows.sort(key=lambda row: (row["pred_id"], row["asrt_id"]))
     return rows
+
+
+def _business_meta_for_duplicate(ledger: Ledger, asrt_id: str) -> dict[str, Any]:
+    meta = {row.key: row.value for row in ledger.find_meta(asrt_id=asrt_id)}
+    return _filter_business_meta(meta)
+
+
+def _filter_business_meta(meta: dict[str, Any]) -> dict[str, Any]:
+    exclude = _META_PRIMARY_KEYS | _SYSTEM_MANAGED_META_KEYS
+    return {
+        key: value
+        for key, value in meta.items()
+        if key not in exclude
+    }
 
 
 def _entity_ref_for_duplicate(

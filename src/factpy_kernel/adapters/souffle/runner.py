@@ -292,11 +292,13 @@ def _validate_package_layout(pkg_dir: Path, manifest: dict[str, Any]) -> None:
         _manifest_path(manifest, "paths", "facts", "claim_arg"),
         _manifest_path(manifest, "paths", "facts", "meta_str"),
         _manifest_path(manifest, "paths", "facts", "meta_time"),
+        _manifest_path(manifest, "paths", "facts", "meta_int"),
+        _manifest_path(manifest, "paths", "facts", "meta_float"),
         _manifest_path(manifest, "paths", "facts", "revokes"),
     ]
 
     optional_relpaths: list[str] = []
-    for key in ("meta_num", "meta_bool"):
+    for key in ("meta_bool",):
         try:
             optional_relpaths.append(_manifest_path(manifest, "paths", "facts", key))
         except FileNotFoundError:

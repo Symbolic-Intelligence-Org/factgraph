@@ -6,6 +6,7 @@ from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_where
 from factpy_kernel.core.store import builders
 from factpy_kernel.core.store.types import (
+    BodyConfidencesIR,
     EngineEvaluatorFn,
     EvaluateMode,
     HeadSpecIR,
@@ -23,22 +24,34 @@ def evaluate_store(
     target_pred_id: str,
     head_vars: HeadVarsIR,
     where: WhereIR,
-    mode: EvaluateMode = "python",
+    mode: EvaluateMode = "native",
     head: HeadSpecIR | None = None,
+    body_confidences: BodyConfidencesIR = None,
     engine_evaluate: EngineEvaluatorFn,
 ) -> list[CandidateSet]:
+    if mode == "python":
+        raise ValueError("mode='python' is removed; use mode='native'")
+    if mode == "engine":
+        raise ValueError("mode='engine' is removed; use mode='souffle'")
+    if mode not in {"native", "souffle", "problog"}:
+        raise ValueError("mode must be one of: native, souffle, problog")
+
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
-        if mode == "engine":
-            return engine_evaluate(
-                derivation_id=derivation_id,
-                version=version,
-                target_pred_id=target_pred_id,
-                head_vars=head_vars,
-                where=where,
-                head=head,
-            )
-        if mode != "python":
-            raise ValueError("mode must be 'python' or 'engine'")
+        if mode in {"souffle", "problog"}:
+            engine_kwargs = {
+                "mode": mode,
+                "derivation_id": derivation_id,
+                "version": version,
+                "target_pred_id": target_pred_id,
+                "head_vars": head_vars,
+                "where": where,
+                "head": head,
+            }
+            if mode == "problog":
+                engine_kwargs["body_confidences"] = body_confidences
+            return engine_evaluate(**engine_kwargs)
+        if mode != "native":
+            raise ValueError("mode must be one of: native, souffle, problog")
 
         entity_spec = builders.entity_spec_from_head(
             store,
@@ -56,17 +69,21 @@ def evaluate_store(
             bindings=bindings,
         )
 
-    if mode == "engine":
-        return engine_evaluate(
-            derivation_id=derivation_id,
-            version=version,
-            target_pred_id=target_pred_id,
-            head_vars=head_vars,
-            where=where,
-            head=head,
-        )
-    if mode != "python":
-        raise ValueError("mode must be 'python' or 'engine'")
+    if mode in {"souffle", "problog"}:
+        engine_kwargs = {
+            "mode": mode,
+            "derivation_id": derivation_id,
+            "version": version,
+            "target_pred_id": target_pred_id,
+            "head_vars": head_vars,
+            "where": where,
+            "head": head,
+        }
+        if mode == "problog":
+            engine_kwargs["body_confidences"] = body_confidences
+        return engine_evaluate(**engine_kwargs)
+    if mode != "native":
+        raise ValueError("mode must be one of: native, souffle, problog")
 
     schema_pred = builders.find_schema_pred(store, target_pred_id)
     if schema_pred is None:

@@ -73,6 +73,9 @@ def _parse_entity_class(*, node: ast.ClassDef, entity_index: int) -> dict[str, A
         "identity_fields": [],
         "fields": [],
     }
+    description = ast.get_docstring(node)
+    if isinstance(description, str) and description:
+        entity["description"] = description
     meta: dict[str, Any] = {}
 
     for body_index, item in enumerate(node.body):

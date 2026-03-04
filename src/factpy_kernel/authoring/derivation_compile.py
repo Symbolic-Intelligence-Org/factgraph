@@ -526,9 +526,13 @@ def _compile_where(payload: dict[str, Any], *, schema_ir: dict[str, Any] | None 
 
 
 def _compile_mode(payload: dict[str, Any]) -> str:
-    mode = payload.get("mode", "python")
-    if mode not in {"python", "engine"}:
-        raise _compile_error("mode must be 'python' or 'engine'", path="$.mode")
+    mode = payload.get("mode", "native")
+    if mode == "python":
+        raise _compile_error("mode='python' is removed; use mode='native'", path="$.mode")
+    if mode == "engine":
+        raise _compile_error("mode='engine' is removed; use mode='souffle'", path="$.mode")
+    if mode not in {"native", "souffle", "problog"}:
+        raise _compile_error("mode must be one of: native, souffle, problog", path="$.mode")
     return str(mode)
 
 

@@ -4,7 +4,9 @@ import unittest
 
 from factpy_kernel.authoring import (
     AuthoringDerivationCompileError,
+    compile_authoring_schema_v1,
     compile_authoring_derivation_v1,
+    parse_authoring_schema_dsl_v1,
     parse_authoring_derivation_dsl_v1,
 )
 from factpy_kernel.authoring.where_schema_lowering import (
@@ -47,6 +49,29 @@ class User(Entity):
 
 
 class Phase3ContractsV1Tests(unittest.TestCase):
+    def test_entity_docstring_is_emitted_as_entity_description(self) -> None:
+        class Account(Entity):
+            """Account record used by docs/LLM description."""
+
+            account_id: str = Identity(primary_key=True)
+
+        schema_ir = compile_schema_from_classes([Account])
+        entity = schema_ir["entities"][0]
+        self.assertEqual(entity.get("description"), "Account record used by docs/LLM description.")
+
+    def test_schema_dsl_entity_docstring_is_mapped_to_description(self) -> None:
+        parsed = parse_authoring_schema_dsl_v1(
+            """
+class Account(Entity):
+    \"\"\"Account record description from DSL.\"\"\"
+    account_id: str = Identity(primary_key=True)
+""".strip()
+        )
+        self.assertEqual(parsed["entities"][0].get("description"), "Account record description from DSL.")
+
+        schema_ir = compile_authoring_schema_v1(parsed)
+        self.assertEqual(schema_ir["entities"][0].get("description"), "Account record description from DSL.")
+
     def test_head_primary_key_implicit_and_strict_compile_errors(self) -> None:
         schema_ir = _schema_ir()
         payload = compile_authoring_derivation_v1(
@@ -332,8 +357,8 @@ Derivation(
 """.strip()
         )
         compiled = compile_authoring_derivation_v1(parsed, schema_ir=sdk.schema_ir)
-        python_candidates = sdk.evaluate(compiled, mode="python")
-        engine_candidates = sdk.evaluate(compiled, mode="engine")
+        python_candidates = sdk.evaluate(compiled, mode="native")
+        engine_candidates = sdk.evaluate(compiled, mode="souffle")
 
         python_rows = sorted(
             [(cand.target, cand.payload["terms"]) for cand in python_candidates],
@@ -364,7 +389,7 @@ Derivation(
         meta_rows = {(row.key, row.kind, row.value) for row in sdk.ledger.find_meta(asrt_id=asrt_id)}
         self.assertIn(("valid_from", "str", "2024-01-01"), meta_rows)
         self.assertIn(("valid_to", "str", "2024-12-31"), meta_rows)
-        self.assertIn(("version", "num", 3), meta_rows)
+        self.assertIn(("version", "int", 3), meta_rows)
 
     def test_idempotency_key_distinguishes_temporal_material(self) -> None:
         sdk = SDKStore([User])
@@ -630,7 +655,7 @@ Derivation(
                 ],
             )
 
-        cands = sdk.evaluate(drv, mode="python")
+        cands = sdk.evaluate(drv, mode="native")
         self.assertGreaterEqual(len(cands), 2)
         self.assertEqual({cand.candidate_kind for cand in cands}, {"fact"})
         self.assertEqual(len({cand.run_id for cand in cands}), 1)
