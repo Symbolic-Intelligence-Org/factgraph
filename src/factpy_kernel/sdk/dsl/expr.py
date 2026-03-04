@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from itertools import count
 from typing import Any
 
+from .body import Body
 from .errors import SDKDSLError
 
 
@@ -280,6 +281,7 @@ def lower_where(
 ) -> list[Any]:
     if not isinstance(where, list) or not where:
         raise SDKDSLError("where must be non-empty list")
+    where = _normalize_where_body_wrappers(where)
     if all(isinstance(item, list) for item in where):
         return [lower_where_branch(branch, initial_bindings=initial_bindings) for branch in where]
     return lower_where_branch(where, initial_bindings=initial_bindings)
@@ -301,6 +303,15 @@ def lower_where_branch(
 
 
 def lower_where_atom(atom: Any, bindings: dict[LogicVar, str], *, temp_seq: Any) -> list[Any]:
+    if isinstance(atom, Body):
+        return lower_where_branch(atom.atoms, initial_bindings=bindings)
+    if (
+        isinstance(atom, tuple)
+        and len(atom) == 3
+        and atom[0] == "__body__"
+        and isinstance(atom[1], list)
+    ):
+        return lower_where_branch(atom[1], initial_bindings=bindings)
     if isinstance(atom, ExistsAtom):
         bindings.setdefault(atom.var, atom.entity_type)
         return [("pred", f"{atom.entity_type}:exists", [atom.var.token])]
@@ -406,6 +417,15 @@ def _lower_binary_expr(expr: BinaryExpr, *, temp_seq: Any) -> tuple[list[Any], s
 
 def _is_numeric_literal(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _normalize_where_body_wrappers(where: list[Any]) -> list[Any]:
+    has_body = any(isinstance(item, Body) for item in where)
+    if not has_body:
+        return where
+    if not all(isinstance(item, Body) for item in where):
+        raise SDKDSLError("where/body cannot mix Body(...) with bare branches")
+    return [list(item.atoms) for item in where]
 
 
 def lower_term(value: Any, *, in_where: bool) -> Any:

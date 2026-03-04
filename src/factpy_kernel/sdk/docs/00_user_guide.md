@@ -400,6 +400,44 @@ meta 数值字段按 kind 分类存储，kind 名称在 v3 中重命名并扩展
 
 `confidence` 字段的 kind 固定为 `"float"`，由写入协议自动推断，用户无需指定。
 
+`kind` 对调用方不可见：写入协议会先按约定 key（`_KEY_KIND_MAP`）做强制映射，再对未知 key 按值类型推断。  
+约定 key 覆盖检查在模块加载时执行（`convention + sensitive` key 必须都在映射表中）。
+
+未知 key 的类型推断规则（约定 key 优先于此规则）：
+- `bool` → `"bool"`
+- `int` → `"int"`
+- `float` → `"float"`
+- `str` → `"str"`
+- 其他类型不支持，抛 `WriteProtocolError`
+
+**稳定合约（`confidence`）**
+- `meta["confidence"]` 必须是 `float` 且值域在 `(0, 1]`。
+- `int`（如 `1`）不会被自动提升为 `float`，会直接报错。
+
+### 4.1 常见写法示例（`confidence`）
+
+```python
+from factpy_kernel.core.store.types import ViewSpec
+
+alice_ref = sdk.ref(User, user_id="u-001", lang="zh")
+
+# ✅ 合法：float 且在 (0,1]
+sdk.set(User.age, alice_ref, 30, meta={"source": "hr", "confidence": 0.82})
+sdk.set(User.age, alice_ref, 30, meta={"source": "model_v2", "confidence": 0.64})
+
+# ❌ 非法：int 不会自动提升为 float
+sdk.set(User.age, alice_ref, 30, meta={"confidence": 1})      # WriteProtocolError
+
+# ❌ 非法：越界
+sdk.set(User.age, alice_ref, 30, meta={"confidence": 1.2})    # WriteProtocolError
+
+# 读取时按视图聚合
+row_max = sdk.find(User, user_id="u-001", lang="zh", view=ViewSpec(confidence_strategy="max"))[0]
+row_mean = sdk.find(User, user_id="u-001", lang="zh", view=ViewSpec(confidence_strategy="mean"))[0]
+print(row_max.confidence)   # 0.82
+print(row_mean.confidence)  # 0.73
+```
+
 **去重依据**：`claim + source + source_loc + trace_id + valid_from + valid_to + version`
 
 注意：`ingested_at` 是系统写入时间，不等同于 `valid_from`（业务有效时间）。用 `ingested_at` 代替 `valid_from` 做时间视图会导致语义错位。
@@ -553,7 +591,15 @@ rows = sdk.run(speaks_rule, row_format="dict")
 # [{"u": "...", "l": "..."}, ...]
 
 rows = sdk.run(speaks_rule, view="default", row_format="dict")
-# view 影响 confidence 呈现值，不影响推理过程
+# 默认返回 rows，不在行内注入 confidence 字段
+
+rows, display_meta = sdk.run(
+    speaks_rule,
+    view="default",
+    row_format="dict",
+    return_display_meta=True,
+)
+# display_meta 与 rows 等长：每项至少包含 confidence / confidence_strategy / source_breakdown
 ```
 
 **稳定合约**
@@ -563,6 +609,8 @@ rows = sdk.run(speaks_rule, view="default", row_format="dict")
 - 非法 `row_format` 值抛 `SDKStoreError(code="INVALID_ROW_FORMAT")`。
 - `RuleRef` 目标规则需要 `expose=True`，否则报 `RuleCompileError`；不允许出现在 `Not(...)` 体内。
 - `view` 可传具名视图名或 `ViewSpec`，仅影响结果呈现，不改变 Rule 求值范围。
+- `sdk.run(rule, view=...)` 默认只返回 `rows`，不在行内注入 `confidence`。
+- `return_display_meta=True` 时返回 `(rows, display_meta)`；且必须同时提供 `view`，否则抛 `SDKStoreError`。
 
 **当前行为**：支持线性算术 `+/-/常数倍`（如 `age == (2026 - by)`）；不支持 `x * y` 非线性乘法。
 
@@ -571,7 +619,7 @@ rows = sdk.run(speaks_rule, view="default", row_format="dict")
 概率推理场景下，OR 分支可用 `Body` 包装并附带分支置信度：
 
 ```python
-from factpy_kernel.sdk.dsl.body import Body
+from factpy_kernel.sdk import Body
 
 with vars("u", "lang") as (u, lang):
     drv = Derivation(
@@ -590,6 +638,51 @@ with vars("u", "lang") as (u, lang):
 - `Body.confidence=None` 合法（表示无置信度约束）。
 - 禁止在同一 `where` 里混用 `Body(...)` 与裸 list 分支；违反时编译失败。
 - 裸 list 写法保留，编译后 `body_confidences=None`，行为与之前一致。
+
+**支持范围**
+- Rule：支持 `Body(...)`，当前仅用于 where 归一化，`body_confidences` 不参与 Rule 运行时求值。
+- Derivation：支持 `Body(...)`，编译后提取 `body_confidences` sidecar，供 `mode="problog"` 消费。
+- Query：`Body.confidence` 不支持，构造期报错。
+
+`body_confidences` 透传链路：
+`SDK Derivation/authoring payload -> compile_authoring_derivation_v1 -> sdk.evaluate -> evaluate_store -> engine(problog)`。
+
+### 6.3.1 `Body` 的模式差异示例
+
+```python
+from factpy_kernel.sdk import Body, Derivation, Pred, vars
+
+with vars("u", "lang") as (u, lang):
+    drv = Derivation(
+        id="drv.lang",
+        version="1.0.0",
+        where=[
+            Body([Pred("user:lang_pref", u, lang)], confidence=0.9),
+            Body([Pred("user:lang_model", u, lang)], confidence=0.6),
+        ],
+        head=User.name(lang="zh", name=lang),
+    )
+
+# native：忽略 body_confidences（与裸 list 行为一致）
+cands_native = sdk.evaluate(drv, mode="native")
+print(cands_native[0].confidence)  # None
+
+# problog：消费 body_confidences，返回概率
+import factpy_kernel.adapters.problog
+cands_prob = sdk.evaluate(drv, mode="problog")
+print(cands_prob[0].confidence)    # float，例如 0.86
+```
+
+```python
+# ❌ 混用 Body 和裸 list（编译期报错）
+with vars("u") as (u,):
+    Rule(
+        id="r.bad",
+        version="1.0.0",
+        select=[u],
+        where=[Body([Pred("p", u)], confidence=0.9), [Pred("q", u)]],
+    )
+```
 
 ### 6.4 Query DSL
 
@@ -619,6 +712,8 @@ rows = sdk.run(q)   # 默认返回 list[dict]
 - Query 构造期执行 alias 冲突校验（抛 `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`）和 where 变量绑定校验（抛 `SDKDSLError(code="QUERY_UNBOUND_VAR")`）。
 - entity head 列返回 `EntitySnapshot`；field 投影列返回标量值。
 - `Query.where` 不支持 `Body.confidence`；传入时编译报错。
+- `sdk.run(query, view=...)` 不支持（抛 `SDKStoreError`）。
+- `sdk.run(query, return_display_meta=True)` 不支持（抛 `SDKStoreError`）。
 
 **当前行为**：`on_missing` / `on_type_mismatch` 策略：
 - `error`：抛 `SDKStoreError`（`QUERY_MISSING_REF` / `QUERY_TYPE_MISMATCH`）
@@ -658,6 +753,11 @@ res = sdk.accept_many(cands, mode="atomic")
 
 旧名 `"python"` / `"engine"` 传入时明确报错，并提示新名称。
 
+引擎采用名称注册表（非单例）：`register_engine_evaluator(name -> fn)`。  
+适配器模块导入时自动注册：
+- `import factpy_kernel.adapters.souffle` 注册 `"souffle"`
+- `import factpy_kernel.adapters.problog` 注册 `"problog"`
+
 **稳定合约**
 - `sdk.evaluate(...)` 产出候选，不写 ledger；`sdk.accept(...)` 才写 ledger。
 - 支持 `head=[H1, H2, ...]` 多 head；`evaluate` 返回展平结果，共享同一个 `run_id`。
@@ -665,6 +765,30 @@ res = sdk.accept_many(cands, mode="atomic")
 - `sdk.run(Derivation(...))` 不支持；应使用 `sdk.evaluate(...)`。
 - `sdk.evaluate(..., view=...)` 不支持；传入时抛 `SDKStoreError`（推理路径始终基于完整 active 断言集）。
 - 存在依赖图时，优先使用 `sdk.accept_many(..., mode="atomic")` 保证原子性。
+
+### 6.5.1 `accept` 幂等与并存示例
+
+```python
+from dataclasses import replace
+import factpy_kernel.adapters.problog
+
+cands = sdk.evaluate(speaks_drv, mode="problog")
+cand = cands[0]
+
+# 第一次写入
+r1 = sdk.accept(cand, approved_by="alice")
+print(r1.accepted_count, r1.skipped_count)  # 1, 0
+
+# 完全相同候选再次写入：幂等跳过
+r2 = sdk.accept(cand, approved_by="alice")
+print(r2.accepted_count, r2.skipped_count)  # 0, 1
+print(r2.skipped_reason_counts)             # {"duplicate": 1}
+
+# 同一 claim，不同 confidence：并存（不是 duplicate）
+cand_v2 = replace(cand, confidence=0.61)
+r3 = sdk.accept(cand_v2, approved_by="alice")
+print(r3.accepted_count, r3.skipped_count)  # 1, 0
+```
 
 **当前边界**
 - Derivation head 的时态写语义（head 直接产出带 `valid_from`/`valid_to`/`version` 的断言）尚未开放。时态信息目前只能在写入路径（`sdk.batch`/`sdk.ingest`）通过 meta 携带。
@@ -967,6 +1091,8 @@ facts/
   revokes.facts
 ```
 
+浮点 meta 采用可逆序列化：导出写 `repr(value)`，导入读 `float(raw)`；科学计数法是合法格式。
+
 **稳定合约**：v1 格式的包（含 `meta_num.facts`，无 `export_version`）喂给新 reader 时明确报错 `unsupported export_version`。
 
 ### 11.3 可配置视图（`sdk.views`）
@@ -987,6 +1113,8 @@ sdk.views.get("conservative")
 sdk.views.list()
 ```
 
+`sdk.views` 是进程内管理器（非持久化）；重启进程后会回到内置 `"default"` 视图。
+
 **`ViewSpec` 参数**
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -1006,6 +1134,40 @@ sdk.views.list()
 
 **作用范围**：`confidence_strategy` 仅影响 `sdk.find()` / `sdk.run()` 结果呈现，不影响推理过程。`sdk.evaluate()` 不接受 `view` 参数。
 
+**`sdk.run(..., view=...)` 输出契约**（稳定合约）
+- 默认：返回 `rows`（`list[dict]` 或 `list[tuple]`），不在行内注入 `confidence` 字段。
+- `return_display_meta=True`：返回 `(rows, display_meta)`。
+- `display_meta` 与 `rows` 等长，每项至少包含 `confidence`、`confidence_strategy`、`source_breakdown`。
+- `return_display_meta=True` 必须配合 `view` 使用，否则抛 `SDKStoreError`。
+
+### 11.3.1 端到端示例：`find` 与 `run` 如何拿到 confidence
+
+```python
+from factpy_kernel.core.store.types import ViewSpec
+
+# 1) 注册视图（均值策略）
+sdk.views.create("risk_mean", ViewSpec(confidence_strategy="mean"))
+
+# 2) find：直接在快照对象上拿聚合值
+users = sdk.find(User, lang="zh", view="risk_mean")
+print(users[0].confidence)  # 例如 0.73
+
+# 3) run：默认不注入 confidence
+rows = sdk.run(speaks_rule, view="risk_mean", row_format="dict")
+print(rows[0])  # {"u": "...", "l": "..."}
+
+# 4) run + return_display_meta：拿展示元信息
+rows, display_meta = sdk.run(
+    speaks_rule,
+    view="risk_mean",
+    row_format="dict",
+    return_display_meta=True,
+)
+print(display_meta[0]["confidence"])           # 例如 0.73
+print(display_meta[0]["confidence_strategy"])  # "mean"
+print(display_meta[0]["source_breakdown"])     # 按 source 的聚合拆分
+```
+
 **内置视图**：`"default"`（`active=True, confidence_strategy="max"`），不可删除。
 
 **内联视图**（临时，不存储）：
@@ -1014,12 +1176,29 @@ sdk.views.list()
 sdk.find(User, view=ViewSpec(confidence_strategy="mean"))
 sdk.run(rule, view="conservative", row_format="dict")
 sdk.run(rule, view=ViewSpec(confidence_strategy="max"), row_format="dict")
+
+rows, display_meta = sdk.run(
+    rule,
+    view="conservative",
+    row_format="dict",
+    return_display_meta=True,
+)
 ```
+
+service `runtime_v1` 的视图管理端点（当前实现）：
+
+| 方法 | 端点 |
+|------|------|
+| `POST` | `/v1/runtime/sessions/{session_id}/views/create` |
+| `POST` | `/v1/runtime/sessions/{session_id}/views/update` |
+| `POST` | `/v1/runtime/sessions/{session_id}/views/delete` |
+| `POST` | `/v1/runtime/sessions/{session_id}/views/get` |
+| `GET` | `/v1/runtime/sessions/{session_id}/views` |
 
 ### 11.4 ProbLog 概率推理
 
 ```python
-from factpy_kernel.sdk.dsl.body import Body
+from factpy_kernel.sdk import Body
 import factpy_kernel.adapters.problog
 
 with vars("u", "lang") as (u, lang):
@@ -1048,6 +1227,8 @@ res = sdk.accept(cands[0], approved_by="alice")
 
 **当前边界**
 - ProbLog CLI 不可用或超时时抛 `ProbLogEngineError`。
+- 导出阶段结构不支持/参数不合法时抛 `ProbLogExportError`。
+- 结果解析失败时抛 `ProbLogImportError`。
 
 ### 11.5 调试属性
 
@@ -1092,6 +1273,8 @@ conf = sdk.conflicts("user:age", alice_ref)
 | `"engine"` | `"souffle"` | 明确报错，提示新名 |
 | —— | `"problog"` | v3 新增 |
 
+默认值也同步更新为 `"native"`（包括 authoring DTO/session 和 SDK derivation evaluate 路径）。
+
 ### meta kind 重命名 + 新增
 
 | 旧 | 新 | 说明 |
@@ -1125,13 +1308,20 @@ v1 格式的包喂给 v2 reader 时明确报错 `unsupported export_version: 'v1
 where=[[atom1, atom2], [atom3]]
 
 # v3 新写法（需要 confidence 时）
-from factpy_kernel.sdk.dsl.body import Body
+from factpy_kernel.sdk import Body
 where=[
     Body([atom1, atom2], confidence=0.9),
     Body([atom3], confidence=0.6),
 ]
 # 禁止混用两种写法
 ```
+
+### `run(view)` 结果契约收紧
+
+| 旧认知 | v3 实际行为 |
+|----|----|
+| `sdk.run(rule, view=...)` 可能在行内带 `confidence` | 默认不注入行内字段，返回类型与 `row_format` 保持一致 |
+| —— | 需要聚合置信度时使用 `return_display_meta=True`，返回 `(rows, display_meta)` |
 
 ### Schema 层（v1 → v2，历史遗留）
 

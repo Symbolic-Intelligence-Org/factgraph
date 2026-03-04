@@ -4,6 +4,7 @@ import unittest
 
 from factpy_kernel.authoring import (
     AuthoringDerivationCompileError,
+    build_derivation_preview_dto,
     compile_authoring_schema_v1,
     compile_authoring_derivation_v1,
     parse_authoring_schema_dsl_v1,
@@ -15,8 +16,10 @@ from factpy_kernel.authoring.where_schema_lowering import (
 )
 from factpy_kernel.core.rules.rule_ir import RuleCompileError
 from factpy_kernel.core.rules.where_eval import _plan_body_atoms
+from factpy_kernel.core.evidence.write_protocol import WriteProtocolError
 from factpy_kernel.core.view.projector import project_view_facts
 from factpy_kernel.sdk import (
+    Body,
     Derivation,
     Entity,
     Field,
@@ -26,11 +29,13 @@ from factpy_kernel.sdk import (
     Query,
     Rule,
     RuleRef,
+    SDKDSLError,
     SDKStore,
     SDKStoreError,
     compile_schema_from_classes,
     vars as sdk_vars,
 )
+from factpy_kernel.sdk.ingest import CONVENTION_META_KEYS, SENSITIVE_SEMANTIC_META_KEYS
 from factpy_kernel.service.runtime_v1 import (
     close_runtime_session,
     evaluate_runtime_derivation,
@@ -634,6 +639,84 @@ Derivation(
             sdk.run(query, row_format="instance")
         self.assertEqual(ctx.exception.code, "QUERY_INVALID_ROW_FORMAT")
         self.assertIn("requires exactly one Entity(var)", str(ctx.exception))
+
+    def test_derivation_preview_dto_default_mode_is_native(self) -> None:
+        sdk = SDKStore([User])
+        _seed_users_for_syntax_matrix(sdk)
+        dto = build_derivation_preview_dto(
+            store=sdk.store,
+            derivation_id="drv.preview.default_mode",
+            version="1.0.0",
+            target_pred_id="user:name",
+            head_vars=["$u", "$name"],
+            where=[("pred", "user:name", ["$u", "$name"])],
+        )
+        self.assertEqual(dto["kind"], "derivation_preview")
+        self.assertTrue(dto["ok"])
+
+    def test_query_rejects_body_confidence(self) -> None:
+        sdk = SDKStore([User])
+        _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u") as (u,):
+            with self.assertRaises(SDKDSLError) as ctx:
+                Query(
+                    head=[User(u)],
+                    where=[Body([User(u)], confidence=0.9)],
+                )
+        self.assertIn("does not support Body.confidence", str(ctx.exception))
+
+    def test_run_view_return_display_meta_contract(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "nm") as (u, nm):
+            rule = Rule(
+                id="q.names",
+                version="1.0.0",
+                select=[u, nm],
+                where=[Body([Pred("user:name", u, nm)], confidence=0.9)],
+            )
+
+        rows = sdk.run(rule, row_format="dict", view="default")
+        self.assertTrue(rows)
+        self.assertNotIn("confidence", rows[0])
+        self.assertEqual({row["u"] for row in rows}, {refs["u1"], refs["u2"], refs["u3"]})
+
+        rows2, display_meta = sdk.run(
+            rule,
+            row_format="dict",
+            view="default",
+            return_display_meta=True,
+        )
+        self.assertEqual(rows2, rows)
+        self.assertEqual(len(rows2), len(display_meta))
+        self.assertIn("confidence", display_meta[0])
+        self.assertIn("confidence_strategy", display_meta[0])
+        self.assertIn("source_breakdown", display_meta[0])
+        self.assertEqual(display_meta[0]["confidence_strategy"], "max")
+
+        with self.assertRaises(SDKStoreError) as ctx_no_view:
+            sdk.run(rule, row_format="dict", return_display_meta=True)
+        self.assertIn("requires view", str(ctx_no_view.exception))
+
+    def test_confidence_meta_requires_float_in_range(self) -> None:
+        sdk = SDKStore([User])
+        ref = sdk.ref(User, user_id="u-conf", locale="zh")
+
+        with self.assertRaises(WriteProtocolError) as ctx_int:
+            sdk.set(User.name, ref, "Alice", meta={"confidence": 1})
+        self.assertIn("meta[confidence] must be float", str(ctx_int.exception))
+
+        with self.assertRaises(WriteProtocolError) as ctx_range:
+            sdk.set(User.name, ref, "Alice", meta={"confidence": 1.5})
+        self.assertIn("within (0,1]", str(ctx_range.exception))
+
+    def test_write_protocol_kind_map_covers_sensitive_and_convention_meta(self) -> None:
+        from factpy_kernel.core.evidence import write_protocol
+
+        required = set(CONVENTION_META_KEYS) | set(SENSITIVE_SEMANTIC_META_KEYS)
+        self.assertTrue(required.issubset(set(write_protocol._KEY_KIND_MAP.keys())))
 
     def test_derivation_multi_head_syntax_matrix_shared_run_id(self) -> None:
         sdk = SDKStore([User])

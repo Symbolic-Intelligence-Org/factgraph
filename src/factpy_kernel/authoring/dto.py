@@ -68,7 +68,7 @@ def build_derivation_preview_dto(
     target_pred_id: str,
     head_vars: list[Any],
     where: list[Any],
-    mode: str = "python",
+    mode: str = "native",
 ) -> dict[str, Any]:
     payload = derivation_dry_run_preview(
         store=store,

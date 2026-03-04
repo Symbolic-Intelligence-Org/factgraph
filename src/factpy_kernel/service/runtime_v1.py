@@ -497,6 +497,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             where=list(compiled["where"]),
             mode=compiled["mode"],
             head=compiled.get("head"),
+            body_confidences=compiled.get("body_confidences"),
         )
         returned_candidates = candidates if limit is None else candidates[:limit]
         return ok_response(

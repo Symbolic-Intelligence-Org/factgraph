@@ -19,9 +19,66 @@ class PolicyNonDeterminismError(WriteProtocolError):
 
 
 _SYSTEM_MANAGED_META_KEYS = {"ingested_at", "ingest_key", "revoked_asrt_id"}
-_KEY_KIND_MAP = {
-    "confidence": "float",
+_CONVENTION_META_KEYS = {
+    "source",
+    "source_loc",
+    "trace_id",
+    "confidence",
+    "approved_by",
+    "note",
 }
+_SENSITIVE_SEMANTIC_META_KEYS = {
+    "derived_rule_id",
+    "derived_rule_version",
+    "run_id",
+    "support_digest",
+    "support_kind",
+    "candidate_id",
+    "candidate_key",
+    "candidate_kind",
+    "key_tuple_digest",
+    "cand_key_digest",
+    "schema_digest",
+    "policy_digest",
+    "meta_origin",
+}
+_KEY_KIND_MAP = {
+    "ingested_at": "time",
+    "ingest_key": "str",
+    "revoked_asrt_id": "str",
+    "accepted_at": "time",
+    "source": "str",
+    "source_loc": "str",
+    "trace_id": "str",
+    "confidence": "float",
+    "approved_by": "str",
+    "accepted_by": "str",
+    "note": "str",
+    "derived_rule_id": "str",
+    "derived_rule_version": "str",
+    "derivation_id": "str",
+    "derivation_version": "str",
+    "run_id": "str",
+    "support_digest": "str",
+    "support_kind": "str",
+    "candidate_id": "str",
+    "candidate_key": "str",
+    "candidate_kind": "str",
+    "key_tuple_digest": "str",
+    "cand_key_digest": "str",
+    "schema_digest": "str",
+    "policy_digest": "str",
+    "meta_origin": "str",
+    "entity_type": "str",
+    "entity_ref": "str",
+    "identity_override_digest": "str",
+    "subject_e_ref": "str",
+    "materialize_id": "str",
+}
+_required_kind_keys = _CONVENTION_META_KEYS | _SENSITIVE_SEMANTIC_META_KEYS
+_missing_kind_map_keys = sorted(_required_kind_keys - set(_KEY_KIND_MAP.keys()))
+if _missing_kind_map_keys:
+    raise RuntimeError(f"_KEY_KIND_MAP is missing required keys: {', '.join(_missing_kind_map_keys)}")
 __all__ = [
     "WriteProtocolError",
     "PolicyNonDeterminismError",
@@ -269,10 +326,10 @@ def _user_meta_rows(asrt_id: str, meta: dict[str, Any]) -> list[MetaRow]:
 
 def _infer_meta_kind(key: str, value: Any) -> str:
     mapped_kind = _KEY_KIND_MAP.get(key)
-    inferred_kind = _infer_meta_kind_by_value(key, value)
-    if mapped_kind is not None and mapped_kind != inferred_kind:
-        raise WriteProtocolError(f"meta[{key}] must be {mapped_kind}")
-    return mapped_kind or inferred_kind
+    if mapped_kind is not None:
+        _validate_meta_value_for_kind(key, mapped_kind, value)
+        return mapped_kind
+    return _infer_meta_kind_by_value(key, value)
 
 
 def _infer_meta_kind_by_value(key: str, value: Any) -> str:
@@ -289,6 +346,39 @@ def _infer_meta_kind_by_value(key: str, value: Any) -> str:
     if isinstance(value, int):
         return "int"
     raise WriteProtocolError(f"unsupported meta type for {key}: {type(value).__name__}")
+
+
+def _validate_meta_value_for_kind(key: str, kind: str, value: Any) -> None:
+    if kind == "str":
+        if not isinstance(value, str):
+            raise WriteProtocolError(f"meta[{key}] must be str")
+        return
+    if kind == "int":
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise WriteProtocolError(f"meta[{key}] must be int")
+        return
+    if kind == "float":
+        if isinstance(value, bool) or not isinstance(value, float):
+            raise WriteProtocolError(f"meta[{key}] must be float")
+        if key == "confidence":
+            if value <= 0.0 or value > 1.0:
+                raise WriteProtocolError("meta[confidence] must be within (0,1]")
+        return
+    if kind == "bool":
+        if not isinstance(value, bool):
+            raise WriteProtocolError(f"meta[{key}] must be bool")
+        return
+    if kind == "time":
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise WriteProtocolError(f"meta[{key}] must be epoch-nanos int")
+        return
+    if kind == "json":
+        try:
+            json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        except Exception as exc:  # pragma: no cover - defensive
+            raise WriteProtocolError(f"meta[{key}] must be JSON-serializable") from exc
+        return
+    raise WriteProtocolError(f"unsupported mapped meta kind for {key}: {kind}")
 
 
 def _find_active_matching_claim(

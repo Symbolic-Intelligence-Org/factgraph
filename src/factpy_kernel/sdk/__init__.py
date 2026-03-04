@@ -26,7 +26,7 @@ from .error_codes import (
 from .registry import SDKRegistry
 from .schema import Entity, Field, Identity
 from .store import SDKStore
-from .dsl import Derivation, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
+from .dsl import Body, Derivation, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
 from .ingest import IngestResult, ValidationReport
 
 __all__ = [
@@ -47,6 +47,7 @@ __all__ = [
     "IngestResult",
     "ValidationReport",
     "SDKDSLError",
+    "Body",
     "Entity",
     "Field",
     "Identity",

@@ -17,10 +17,14 @@ from factpy_kernel.service.rules_v1 import compile_rule_preview, list_profiles, 
 from factpy_kernel.service.runtime_v1 import (
     accept_runtime_derivation,
     close_runtime_session,
+    create_runtime_view,
+    delete_runtime_view,
     evaluate_runtime_derivation,
     explain_runtime_fact,
     export_runtime_package,
+    get_runtime_view,
     get_runtime_session,
+    list_runtime_views,
     list_runtime_conflicts,
     list_runtime_claims,
     open_runtime_session,
@@ -28,6 +32,7 @@ from factpy_kernel.service.runtime_v1 import (
     resolve_runtime_mapping,
     retract_runtime_fact,
     run_runtime_rule,
+    update_runtime_view,
     write_runtime_fact,
 )
 
@@ -118,6 +123,31 @@ def post_runtime_resolve_mapping(session_id: str, payload: dict[str, Any] = Body
 @app.post("/v1/runtime/sessions/{session_id}/queries/view-facts")
 def post_runtime_view_facts(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return project_runtime_view_facts(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/views/create")
+def post_runtime_view_create(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return create_runtime_view(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/views/update")
+def post_runtime_view_update(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return update_runtime_view(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/views/delete")
+def post_runtime_view_delete(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return delete_runtime_view(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/views/get")
+def post_runtime_view_get(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return get_runtime_view(session_id, payload)
+
+
+@app.get("/v1/runtime/sessions/{session_id}/views")
+def get_runtime_view_list(session_id: str) -> dict[str, Any]:
+    return list_runtime_views(session_id)
 
 
 @app.post("/v1/runtime/sessions/{session_id}/rules/run")

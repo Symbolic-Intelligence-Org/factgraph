@@ -43,6 +43,7 @@ def compile_authoring_derivation_v1(
             path="$.temporal_view",
         )
     where = _compile_where(authoring_derivation, schema_ir=schema_ir)
+    body_confidences = _compile_body_confidences(authoring_derivation, where=where)
 
     head = _compile_head(authoring_derivation)
     if "materialize_as" in authoring_derivation:
@@ -129,6 +130,8 @@ def compile_authoring_derivation_v1(
     }
     if canonical_head is not None:
         out["head"] = canonical_head
+    if body_confidences is not None:
+        out["body_confidences"] = body_confidences
     return out
 
 
@@ -534,6 +537,34 @@ def _compile_mode(payload: dict[str, Any]) -> str:
     if mode not in {"native", "souffle", "problog"}:
         raise _compile_error("mode must be one of: native, souffle, problog", path="$.mode")
     return str(mode)
+
+
+def _compile_body_confidences(
+    payload: dict[str, Any],
+    *,
+    where: list[Any],
+) -> list[float] | None:
+    raw = payload.get("body_confidences")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not raw:
+        raise _compile_error("body_confidences must be non-empty list[float] when provided", path="$.body_confidences")
+
+    branch_count = 1
+    if isinstance(where, list) and where and all(isinstance(item, list) for item in where):
+        branch_count = len(where)
+    if len(raw) != branch_count:
+        raise _compile_error("body_confidences length must match where branch count", path="$.body_confidences")
+
+    out: list[float] = []
+    for idx, value in enumerate(raw):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise _compile_error("body_confidences entries must be float in (0,1]", path=f"$.body_confidences[{idx}]")
+        prob = float(value)
+        if prob <= 0.0 or prob > 1.0:
+            raise _compile_error("body_confidences entries must be within (0,1]", path=f"$.body_confidences[{idx}]")
+        out.append(prob)
+    return out
 
 
 def _identity_field_names(*, schema_ir: dict[str, Any], entity_type: str) -> tuple[list[str], list[str]]:

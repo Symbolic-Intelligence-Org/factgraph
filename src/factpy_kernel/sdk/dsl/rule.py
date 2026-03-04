@@ -7,6 +7,7 @@ from factpy_kernel.core.rules.where_ast import WhereASTError, parse_where_ir_to_
 from factpy_kernel.core.rules.where_ast_validate import WhereASTValidationError, validate_where_ast
 
 from ..error_codes import QUERY_ALIAS_CONFLICT, QUERY_UNBOUND_VAR
+from .body import Body
 from .errors import SDKDSLError
 from .expr import CompareExpr, ExistsAtom, HeadCall, LogicVar, NotExpr, RuleRefAtom, lower_where
 
@@ -61,11 +62,12 @@ class Rule:
             raise SDKDSLError("Rule.where must be non-empty list")
 
     def to_authoring_payload(self) -> dict[str, Any]:
+        normalized_where = _normalize_rule_where_for_payload(self.where)
         payload: dict[str, Any] = {
             "rule_id": self.id,
             "version": self.version,
             "select": [_lower_select_item(item) for item in self.select],
-            "where": lower_where(self.where),
+            "where": lower_where(normalized_where),
         }
         if self.expose:
             payload["expose"] = True
@@ -171,6 +173,7 @@ class Query:
     def __post_init__(self) -> None:
         if not isinstance(self.where, list) or not self.where:
             raise SDKDSLError("Query.where must be non-empty list", path="$.where")
+        _validate_query_where_body_confidence(self.where, path="$.where")
         if self.on_missing not in {"error", "skip", "null"}:
             raise SDKDSLError("Query.on_missing must be one of: error|skip|null", path="$.on_missing")
         if self.on_type_mismatch not in {"error", "skip", "null"}:
@@ -242,6 +245,41 @@ def _lower_select_item(item: Any) -> Any:
     if hasattr(item, "token") and isinstance(getattr(item, "token", None), str):
         return getattr(item, "token")
     return item
+
+
+def _normalize_rule_where_for_payload(where: list[Any]) -> list[Any]:
+    if not isinstance(where, list) or not where:
+        raise SDKDSLError("Rule.where must be non-empty list")
+    has_body = any(isinstance(item, Body) for item in where)
+    if not has_body:
+        return where
+    if not all(isinstance(item, Body) for item in where):
+        raise SDKDSLError("where/body cannot mix Body(...) with bare branches")
+    return [list(item.atoms) for item in where]
+
+
+def _validate_query_where_body_confidence(node: Any, *, path: str) -> None:
+    if isinstance(node, Body):
+        if node.confidence is not None:
+            raise SDKDSLError("Query.where does not support Body.confidence", path=f"{path}.confidence")
+        for idx, atom in enumerate(node.atoms):
+            _validate_query_where_body_confidence(atom, path=f"{path}.atoms[{idx}]")
+        return
+    if isinstance(node, list):
+        for idx, item in enumerate(node):
+            _validate_query_where_body_confidence(item, path=f"{path}[{idx}]")
+        return
+    if isinstance(node, tuple):
+        if (
+            len(node) == 3
+            and node[0] == "__body__"
+            and isinstance(node[1], list)
+        ):
+            confidence = node[2]
+            if confidence is not None:
+                raise SDKDSLError("Query.where does not support Body.confidence", path=f"{path}[2]")
+            for idx, atom in enumerate(node[1]):
+                _validate_query_where_body_confidence(atom, path=f"{path}[1][{idx}]")
 
 
 def _normalize_derivation_head_items(head: Any) -> tuple[HeadCall, ...]:

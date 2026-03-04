@@ -135,7 +135,7 @@ def _build_derivation_section(store: Store, request: dict[str, Any]) -> dict[str
             target_pred_id=str(request["target_pred_id"]),
             head_vars=request["head_vars"],
             where=request["where"],
-            mode=str(request.get("mode", "python")),
+            mode=str(request.get("mode", "native")),
         )
     except KeyError as exc:
         raise AuthoringSessionError(f"derivation_request missing key: {exc.args[0]}") from exc

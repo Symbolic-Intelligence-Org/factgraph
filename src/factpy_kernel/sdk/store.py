@@ -286,8 +286,13 @@ class SDKStore:
         obj: Any,
         *,
         row_format: str | None = None,
+        view: ViewSpec | str | None = None,
+        return_display_meta: bool = False,
         registry: RuleRegistry | None = None,
-    ) -> list[Any]:
+    ) -> list[Any] | tuple[list[Any], list[dict[str, Any]]]:
+        if not isinstance(return_display_meta, bool):
+            raise SDKStoreError("return_display_meta must be bool", path="$.run.return_display_meta")
+        resolved_view = self._resolve_view_spec(view)
         dispatch_key = self._run_dispatch_key(obj)
         dispatch_map = {
             "query": self._run_dispatch_query,
@@ -297,6 +302,8 @@ class SDKStore:
         return dispatch_map[dispatch_key](
             obj,
             row_format=row_format,
+            view_spec=resolved_view,
+            return_display_meta=return_display_meta,
             registry=registry,
         )
 
@@ -315,9 +322,15 @@ class SDKStore:
         query: Any,
         *,
         row_format: str | None,
+        view_spec: ViewSpec | None,
+        return_display_meta: bool,
         registry: RuleRegistry | None,  # reserved for unified run() signature
     ) -> list[Any]:
         del registry
+        if view_spec is not None:
+            raise SDKStoreError("view is not supported for Query in run(); use Rule with run(view=...)")
+        if return_display_meta:
+            raise SDKStoreError("return_display_meta is not supported for Query in run()", path="$.run.return_display_meta")
         resolved_row_format = _resolve_query_row_format(row_format)
         return self._run_query(query, row_format=resolved_row_format)
 
@@ -326,9 +339,11 @@ class SDKStore:
         derivation: Any,
         *,
         row_format: str | None,
+        view_spec: ViewSpec | None,
+        return_display_meta: bool,
         registry: RuleRegistry | None,
     ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
-        del derivation, row_format, registry
+        del derivation, row_format, view_spec, return_display_meta, registry
         raise SDKStoreError(
             "Derivation is not supported by run(); use sdk.evaluate() instead",
             code=QUERY_INVALID_ROW_FORMAT,
@@ -340,8 +355,10 @@ class SDKStore:
         rule: Any,
         *,
         row_format: str | None,
+        view_spec: ViewSpec | None,
+        return_display_meta: bool,
         registry: RuleRegistry | None,
-    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
+    ) -> list[tuple[Any, ...]] | list[dict[str, Any]] | tuple[list[Any], list[dict[str, Any]]]:
         resolved_row_format = _resolve_row_format(
             call_site=row_format,
             store_default=self._default_row_format,
@@ -350,6 +367,8 @@ class SDKStore:
         return self._run_rule(
             rule,
             row_format=resolved_row_format,
+            view_spec=view_spec,
+            return_display_meta=return_display_meta,
             registry=registry,
         )
 
@@ -358,8 +377,10 @@ class SDKStore:
         rule: Any,
         *,
         row_format: str,
+        view_spec: ViewSpec | None,
+        return_display_meta: bool,
         registry: RuleRegistry | None,
-    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
+    ) -> list[tuple[Any, ...]] | list[dict[str, Any]] | tuple[list[Any], list[dict[str, Any]]]:
         if isinstance(rule, str):
             raise SDKStoreError(
                 "string rule DSL is not supported in SDK v1; use Rule object, RuleSpec, or structured rule dict"
@@ -376,7 +397,18 @@ class SDKStore:
         if registry is None:
             self._register_rule_dependencies(active_registry, rule)
         rows = run_rule(self._store, rule_spec, active_registry)
-        return _format_rule_rows(rows, select_vars=list(rule_spec.select_vars), row_format=row_format)
+        formatted = _format_rule_rows(rows, select_vars=list(rule_spec.select_vars), row_format=row_format)
+        if not return_display_meta:
+            return formatted
+        if view_spec is None:
+            raise SDKStoreError("return_display_meta requires view to be provided", path="$.run.return_display_meta")
+        display_meta = _build_rule_display_meta(
+            formatted,
+            row_format=row_format,
+            view_spec=view_spec,
+            ledger=self.ledger,
+        )
+        return formatted, display_meta
 
     def _run_query(self, query: Any, *, row_format: str = "dict") -> list[Any]:
         plan = self._lower_query(query, return_mode=row_format)
@@ -462,7 +494,7 @@ class SDKStore:
         *,
         mode: str | None,
     ) -> list[CandidateSet]:
-        resolved_mode = mode if mode is not None else compiled.get("mode", "python")
+        resolved_mode = mode if mode is not None else compiled.get("mode", "native")
         body_confidences = _coerce_body_confidences(
             compiled.get("body_confidences"),
             path="$.body_confidences",
@@ -549,6 +581,15 @@ class SDKStore:
             payload = dict(rule)
         else:
             raise SDKStoreError("rule must be RuleSpec, SDK Rule object, or authoring rule payload dict")
+        for key in ("where", "body"):
+            if key not in payload:
+                continue
+            normalized_where, _, used_wrapper = _normalize_where_body_wrappers(
+                payload[key],
+                path=f"$.{key}",
+            )
+            if used_wrapper:
+                payload[key] = normalized_where
         try:
             return compile_authoring_rule_v1(payload, schema_ir=self._schema_ir)
         except Exception as exc:
@@ -805,6 +846,108 @@ def _build_entity_confidence_by_ref(
         )
         for e_ref, rows in rows_by_ref.items()
     }
+
+
+def _build_rule_display_meta(
+    rows: list[tuple[Any, ...]] | list[dict[str, Any]],
+    *,
+    row_format: str,
+    view_spec: ViewSpec,
+    ledger: Ledger,
+) -> list[dict[str, Any]]:
+    confidence_rows_by_ref = _collect_confidence_rows_by_e_ref(ledger, view_spec=view_spec)
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        refs = _extract_row_entity_refs(row, row_format=row_format)
+        confidence_rows: list[dict[str, Any]] = []
+        for ref in refs:
+            confidence_rows.extend(confidence_rows_by_ref.get(ref, []))
+        aggregated = aggregate_confidence(
+            confidence_rows,
+            strategy=view_spec.confidence_strategy,
+            prefer_source=view_spec.prefer_source,
+        )
+        out.append(
+            {
+                "confidence": aggregated,
+                "confidence_strategy": view_spec.confidence_strategy,
+                "source_breakdown": _build_source_breakdown(confidence_rows),
+            }
+        )
+    return out
+
+
+def _collect_confidence_rows_by_e_ref(
+    ledger: Ledger,
+    *,
+    view_spec: ViewSpec,
+) -> dict[str, list[dict[str, Any]]]:
+    rows_by_ref: dict[str, list[dict[str, Any]]] = {}
+    for claim in ledger.claims:
+        if view_spec.active and ledger.has_active_revocation(claim.asrt_id):
+            continue
+        meta_rows = ledger.find_meta(asrt_id=claim.asrt_id)
+        meta = {row.key: row.value for row in meta_rows}
+        rows_by_ref.setdefault(claim.e_ref, []).append(
+            {
+                "source": meta.get("source"),
+                "confidence": meta.get("confidence"),
+            }
+        )
+    return rows_by_ref
+
+
+def _extract_row_entity_refs(
+    row: tuple[Any, ...] | dict[str, Any],
+    *,
+    row_format: str,
+) -> set[str]:
+    values: list[Any]
+    if row_format == "dict":
+        if not isinstance(row, dict):
+            raise SDKStoreError("internal error: row_format='dict' produced non-dict row", path="$.run.result")
+        values = list(row.values())
+    elif row_format == "tuple":
+        if not isinstance(row, tuple):
+            raise SDKStoreError("internal error: row_format='tuple' produced non-tuple row", path="$.run.result")
+        values = list(row)
+    else:
+        raise SDKStoreError("row_format must be 'tuple' or 'dict'", code=INVALID_ROW_FORMAT, path="$.run.row_format")
+
+    return {
+        value
+        for value in values
+        if isinstance(value, str) and value.startswith("idref_v1:")
+    }
+
+
+def _build_source_breakdown(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str | None, list[float]] = {}
+    counts: dict[str | None, int] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        source_raw = row.get("source")
+        source = source_raw if isinstance(source_raw, str) and source_raw else None
+        counts[source] = counts.get(source, 0) + 1
+        confidence_raw = row.get("confidence")
+        if isinstance(confidence_raw, (int, float)) and not isinstance(confidence_raw, bool):
+            grouped.setdefault(source, []).append(float(confidence_raw))
+        else:
+            grouped.setdefault(source, [])
+
+    out: list[dict[str, Any]] = []
+    for source in sorted(counts.keys(), key=lambda item: "" if item is None else item):
+        confidence_values = grouped.get(source, [])
+        out.append(
+            {
+                "source": source,
+                "count": counts[source],
+                "max_confidence": max(confidence_values) if confidence_values else None,
+                "mean_confidence": (sum(confidence_values) / len(confidence_values)) if confidence_values else None,
+            }
+        )
+    return out
 
 
 def _default_uuid4_for_tag(tag: str) -> str:

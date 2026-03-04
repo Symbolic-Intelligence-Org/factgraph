@@ -19,6 +19,7 @@ from factpy_kernel.core.store.queries import conflicts as store_conflicts
 from factpy_kernel.core.store.queries import explain_fact as store_explain_fact
 from factpy_kernel.core.store.queries import resolve_mapping as store_resolve_mapping
 from factpy_kernel.core.store.types import (
+    BodyConfidencesIR,
     EngineEvaluatorFn,
     EvaluateMode,
     HeadSpecIR,
@@ -28,8 +29,6 @@ from factpy_kernel.core.store.types import (
 
 
 _ENGINE_REGISTRY: dict[str, EngineEvaluatorFn] = {}
-# Compatibility alias for legacy callers probing runtime._ENGINE_EVALUATOR.
-_ENGINE_EVALUATOR: EngineEvaluatorFn | None = None
 
 
 def register_engine_evaluator(
@@ -43,8 +42,6 @@ def register_engine_evaluator(
         _ENGINE_REGISTRY.pop(name, None)
     else:
         _ENGINE_REGISTRY[name] = evaluator
-    global _ENGINE_EVALUATOR
-    _ENGINE_EVALUATOR = _ENGINE_REGISTRY.get("souffle")
 
 
 def get_engine_evaluator(name: str) -> EngineEvaluatorFn | None:
@@ -87,6 +84,7 @@ class Store:
         where: WhereIR,
         mode: EvaluateMode = "native",
         head: HeadSpecIR | None = None,
+        body_confidences: BodyConfidencesIR = None,
     ) -> list[CandidateSet]:
         return evaluate_store(
             self,
@@ -97,6 +95,7 @@ class Store:
             where=where,
             mode=mode,
             head=head,
+            body_confidences=body_confidences,
             engine_evaluate=self.evaluate_engine,
         )
 
