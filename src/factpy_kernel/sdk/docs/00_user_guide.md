@@ -53,7 +53,7 @@ sdk = SDKStore.from_schema_classes(
 **稳定合约**
 - `classes` 必须是非空 `list[Entity 子类]`；`from_schema_classes(...)` / `schema_preflight_from_classes(...)` 路径抛 `SDKSchemaError`，`SDKStore(...)` 构造器路径抛 `SDKStoreError`。
 - `ledger` 与 `ledger_path` 互斥；两者不能同时传入。
-- `ledger_path` 首次写入时记录 `schema_digest`；重新打开时校验，不一致抛 `SDKStoreError`。
+- `ledger_path` 在打开/创建 ledger 时即记录 `schema_digest`；重新打开时校验，不一致抛 `SDKStoreError`。
 - `default_row_format` 仅作用于 `sdk.run(rule, ...)`，合法值为 `"tuple"` / `"dict"`，默认 `"dict"`。
 - 解析结果为 `"tuple"` 时会触发 `DeprecationWarning`；推荐统一改为 `"dict"`。
 - `FACTPY_ROW_FORMAT` 环境变量在 `SDKStore` 初始化时读取并缓存（非每次 `run()` 动态读取）。
@@ -351,6 +351,10 @@ sdk.retract("asrt_xxx", meta={"source": "hr"})
 ```
 
 最少封装，直接落 ledger，不提供 preview/wire 能力。
+
+**当前行为**
+- `sdk.set(...)` / `sdk.add(...)` 仅在 `e_ref` 的 identity 值已被当前 `SDKStore` 记录时，才会补写对应 identity predicate；任意外部 canonical `idref_v1` 不保证可自动回填。
+- `sdk.retract(...)` 返回 revoker assertion id；若目标断言已撤销，则返回已有 revoker id；若断言不存在则抛错。
 
 ---
 
@@ -970,7 +974,7 @@ from factpy_kernel.sdk import SDKRegistry
 reg = SDKRegistry(root_dir="./registry")
 ```
 
-**稳定合约**：构造方式二选一：`SDKRegistry(root_dir=...)` 或 `SDKRegistry(registry=...)`；同时传且路径不一致抛 `SDKRegistryError`。
+**稳定合约**：至少提供 `root_dir` 或 `registry` 之一；两者也可同时传入，但路径必须一致，否则抛 `SDKRegistryError`。
 
 ### 10.2 应用 Schema
 

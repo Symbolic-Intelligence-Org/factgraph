@@ -29,7 +29,7 @@ sdk = SDKStore.from_schema_classes(
 Stable contract:
 - `classes` must be a non-empty `list[Entity subclass]`; `from_schema_classes(...)` / `schema_preflight_from_classes(...)` raise `SDKSchemaError`, while `SDKStore(...)` constructor-path checks raise `SDKStoreError`.
 - `ledger` and `ledger_path` are mutually exclusive.
-- `ledger_path` writes `schema_digest` on first use and validates it on reopen.
+- `ledger_path` records `schema_digest` when the ledger is opened/created, and validates it on reopen.
 - `default_row_format` affects only `sdk.run(rule, ...)`; allowed values are `"tuple"` / `"dict"` (default `"dict"`).
 - `FACTPY_ROW_FORMAT` is read and cached at `SDKStore` initialization time (not re-read on every `run()` call).
 - Resolving to `"tuple"` emits `DeprecationWarning`; prefer `"dict"`.
@@ -51,7 +51,7 @@ sdk.add(User.name, user_ref, "Alicia", meta={"source": "hr"})
 
 Stable contract:
 - Value type is validated against schema `type_domain`.
-- Identity predicates are materialized before field writes.
+- If the current `SDKStore` already knows the identity values for `e_ref`, matching identity predicates are materialized before the field write; arbitrary external canonical `idref_v1` values are not enough to guarantee this backfill.
 - Low-level `set/add` do not strongly enforce cardinality; cardinality guards are mainly provided by batch/edit/ingest facades.
 
 ### 3.3 `sdk.retract(...)`
@@ -61,7 +61,7 @@ sdk.retract(asrt_id, meta={"trace_id": "fix-1"})
 ```
 
 - Append-only revoke (no physical delete of claim rows).
-- Returns revoker assertion id (`None` is possible for no-op paths).
+- Returns the revoker assertion id; re-retracting an already revoked assertion returns the existing revoker id, while unknown assertions raise.
 
 ## 4. Batch Writes (`sdk.batch()`)
 

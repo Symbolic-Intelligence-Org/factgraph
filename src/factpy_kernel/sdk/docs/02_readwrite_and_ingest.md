@@ -29,7 +29,7 @@ sdk = SDKStore.from_schema_classes(
 稳定合约：
 - `classes` 必须是非空 `list[Entity 子类]`；`from_schema_classes(...)` / `schema_preflight_from_classes(...)` 路径抛 `SDKSchemaError`，`SDKStore(...)` 构造器路径抛 `SDKStoreError`。
 - `ledger` 与 `ledger_path` 互斥。
-- `ledger_path` 首次写入 `schema_digest`，后续恢复会做 digest 校验。
+- `ledger_path` 在打开/创建 ledger 时即记录 `schema_digest`，后续恢复会做 digest 校验。
 - `default_row_format` 仅影响 `sdk.run(rule, ...)`；合法值为 `"tuple"` / `"dict"`（默认 `"dict"`）。
 - `FACTPY_ROW_FORMAT` 在 `SDKStore` 初始化时读取并缓存；不是每次 `run()` 动态读取。
 - 解析为 `"tuple"` 时会触发 `DeprecationWarning`，建议统一改为 `"dict"`。
@@ -51,7 +51,7 @@ sdk.add(User.name, user_ref, "Alicia", meta={"source": "hr"})
 
 稳定合约：
 - 值类型按 schema `type_domain` 校验。
-- 写入前会确保 identity predicate 物化。
+- 若 `e_ref` 对应的 identity 值已被当前 `SDKStore` 记录，写入前会补写对应 identity predicate；任意外部 canonical `idref_v1` 不保证可自动物化。
 - 低层 `set/add` 不做强 cardinality 约束；cardinality 约束主要由 batch/edit/ingest facade 提供。
 
 ### 3.3 `sdk.retract(...)`
@@ -61,7 +61,7 @@ sdk.retract(asrt_id, meta={"trace_id": "fix-1"})
 ```
 
 - append-only revoke，不删除原 claim。
-- 返回 revoker assertion id（若 no-op 可能返回 `None`）。
+- 返回 revoker assertion id；重复撤销已撤销断言时返回已有 revoker id，未知断言直接报错。
 
 ## 4. 批处理（`sdk.batch()`）
 

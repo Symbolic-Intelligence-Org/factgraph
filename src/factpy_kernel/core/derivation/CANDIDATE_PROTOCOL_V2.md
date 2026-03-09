@@ -23,6 +23,7 @@ candidate identity/provenance explicit.
    - `EntityType(...)` -> entity path
    - `Entity.field(...)` -> fact path
 4. Fact payload uses `terms`; `terms[0]` is the subject slot (arg0).
+   `pred_id` is normally explicit and falls back to `candidate_set.target` when omitted.
 5. Entity candidate only handles identity + `<T>:exists` materialization.
    Field writes are separate fact candidates.
 6. Provenance is stored in claim meta rows and is not encoded in `entity_ref`.
@@ -87,7 +88,7 @@ No standalone `dependencies` field is used.
 Canonical content:
 
 - entity: `entity_type + identity_fields + identity_types + resolved_identity + missing_identity_fields + proposed_entity_ref`
-- fact: `pred_id + normalized terms` (candidate refs use upstream `candidate_key`)
+- fact: `(pred_id or target fallback) + normalized terms` (candidate refs use upstream `candidate_key`)
 
 Computation order must follow dependency DAG:
 
@@ -103,10 +104,10 @@ Single accept:
 - entity candidate:
   - validate/merge identity (`resolved_identity` + `identity_override`)
   - require all identity fields before materialization
-  - write `<T>:exists` (+ entity registration if new)
+  - write `<T>:exists` materialization claim when absent (no separate entity registry row)
 - fact candidate:
   - resolve `terms` into `(subject_e_ref, rest_terms)`
-  - resolve `candidate_ref` from accepted-in-batch map or ledger trace map
+  - resolve `candidate_ref` from accepted-in-batch map or active ledger entity claims keyed by `candidate_key`
   - write fact claim
 
 `identity_override` constraints:
@@ -142,14 +143,23 @@ Returned per-candidate states:
 Every accepted claim writes derivation metadata including:
 
 - `source=derivation.accept`
+- `source_loc`, `trace_id`
+- `derived_rule_id`, `derived_rule_version`
 - `derivation_id`, `derivation_version`, `run_id`
+- `key_tuple_digest`, `cand_key_digest`
 - `candidate_id`, `candidate_key`, `candidate_kind`
 - `support_digest`, `support_kind`
-- `accepted_by`, `accepted_at`
+- `accepted_at`
+
+Conditionally included fields:
+
+- `schema_digest`, `policy_digest` when available from store metadata
+- `confidence` when the candidate carries it
+- `approved_by` / `accepted_by` only when `options.approved_by` is supplied
+- `note` only when `options.note` is supplied
 
 Entity accept also writes:
 
-- `materialize_kind=entity`
 - `entity_type`
 - `entity_ref`
 - `identity_override_digest` (when override is used)
@@ -158,7 +168,7 @@ Entity accept also writes:
 
 No legacy candidate payloads are accepted:
 
-- fact candidates must use `pred_id + terms`
+- fact candidates must use v2 `terms`; `pred_id` may be omitted and will default to `candidate_set.target`
 - entity candidates must use the v2 identity payload
 
 Authoring/user syntax:

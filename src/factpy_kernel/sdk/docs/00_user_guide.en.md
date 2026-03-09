@@ -54,7 +54,7 @@ sdk = SDKStore.from_schema_classes(
 
 * `classes` must be a non-empty `list[Entity subclass]`; `from_schema_classes(...)` / `schema_preflight_from_classes(...)` paths raise `SDKSchemaError`, while the `SDKStore(...)` constructor path raises `SDKStoreError`.
 * `ledger` and `ledger_path` are mutually exclusive; you cannot pass both.
-* On first write, `ledger_path` records `schema_digest`; on reopen, it is validated and a mismatch raises `SDKStoreError`.
+* `ledger_path` records `schema_digest` when the ledger is opened/created; on reopen, it is validated and a mismatch raises `SDKStoreError`.
 * `default_row_format` only affects `sdk.run(rule, ...)`; valid values are `"tuple"` / `"dict"`, default `"dict"`.
 * When parsing results as `"tuple"`, a `DeprecationWarning` will be triggered; it is recommended to switch uniformly to `"dict"`.
 * The `FACTPY_ROW_FORMAT` environment variable is read and cached when `SDKStore` initializes (not dynamically read on every `run()`).
@@ -355,6 +355,10 @@ sdk.retract("asrt_xxx", meta={"source": "hr"})
 ```
 
 Minimal wrapping; writes directly to the ledger; no preview/wire capability.
+
+**Current behavior**
+* `sdk.set(...)` / `sdk.add(...)` only backfill matching identity predicates when the current `SDKStore` already knows the identity values for that `e_ref`; arbitrary external canonical `idref_v1` values do not guarantee this.
+* `sdk.retract(...)` returns the revoker assertion id; if the target assertion is already revoked it returns the existing revoker id, and if the assertion does not exist it raises.
 
 ---
 
@@ -991,7 +995,7 @@ from factpy_kernel.sdk import SDKRegistry
 reg = SDKRegistry(root_dir="./registry")
 ```
 
-**Stable contract**: choose exactly one construction method: `SDKRegistry(root_dir=...)` or `SDKRegistry(registry=...)`; passing both with inconsistent paths raises `SDKRegistryError`.
+**Stable contract**: provide at least one of `root_dir` or `registry`; both may also be passed together, but their paths must match or `SDKRegistryError` is raised.
 
 ### 10.2 Apply Schema
 
