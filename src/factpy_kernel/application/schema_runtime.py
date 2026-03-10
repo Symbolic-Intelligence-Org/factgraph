@@ -247,6 +247,19 @@ def field_predicate(index: SchemaIndex, entity_type: str, field_name: str) -> Pr
     return info
 
 
+def entity_type_from_ref(e_ref: str) -> str | None:
+    if not isinstance(e_ref, str) or not e_ref.startswith("idref_v1:"):
+        return None
+    parts = e_ref.split(":", 2)
+    if len(parts) != 3:
+        return None
+    entity_type = parts[1]
+    digest = parts[2]
+    if not entity_type or not digest:
+        return None
+    return entity_type
+
+
 def field_value_type(index: SchemaIndex, entity_type: str, field_name: str) -> FieldTypeInfo:
     pred = field_predicate(index, entity_type, field_name)
     if pred.value_type_domain == "entity_ref":
@@ -494,6 +507,7 @@ __all__ = [
     "build_schema_index",
     "encode_entity_ref",
     "entity_info",
+    "entity_type_from_ref",
     "field_predicate",
     "field_value_type",
     "materialize_identity",
