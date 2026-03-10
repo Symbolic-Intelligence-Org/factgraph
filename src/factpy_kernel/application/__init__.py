@@ -6,6 +6,11 @@ from .entity_view import (
     hydrate_entities,
     hydrate_entity,
 )
+from .entity_write import (
+    EntityWriteError,
+    apply_write_plan,
+    plan_write_command,
+)
 from .schema_runtime import (
     EntityTypeInfo,
     FieldTypeInfo,
@@ -25,12 +30,14 @@ from .schema_runtime import (
 
 __all__ = [
     "EntityViewError",
+    "EntityWriteError",
     "EntityTypeInfo",
     "FieldTypeInfo",
     "IdentityFieldInfo",
     "PredicateInfo",
     "SchemaIndex",
     "SchemaResolutionError",
+    "apply_write_plan",
     "build_schema_index",
     "encode_entity_ref",
     "entity_info",
@@ -41,5 +48,6 @@ __all__ = [
     "hydrate_entities",
     "hydrate_entity",
     "materialize_identity",
+    "plan_write_command",
     "resolve_selector",
 ]
