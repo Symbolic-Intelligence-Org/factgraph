@@ -1,7 +1,7 @@
 # Core 开发进度与路线图
 
 - 范围：`src/factpy_kernel/core`
-- 最后更新：2026-03-06
+- 最后更新：2026-03-10
 - 基线：以当前源码行为为准（非历史版本）
 
 ## 1. 当前状态快照
@@ -16,6 +16,7 @@
 - `project_view_facts_with_audit` 使用 `ProjectorAudit(contract_version=2)`
 - `accept_many` 支持 `atomic` / `best_effort` 与候选依赖拓扑排序
 - where AST gate 已接入（`FACTPY_WHERE_AST_VALIDATE`）
+- 上层声明元数据已统一为 `version / description / tags`；core 明确保持非语义边界
 
 ## 2. 已完成里程碑
 

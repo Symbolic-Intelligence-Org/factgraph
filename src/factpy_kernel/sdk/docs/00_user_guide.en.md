@@ -1,30 +1,30 @@
 # FactPy SDK User Guide
 
-> This document describes implemented behavior; unimplemented capabilities are explicitly labeled as “current boundary”.
-> Behaviors in this document are tagged into three categories: **stable contract** (recommended to write strong-assert tests), **current behavior** (may evolve), **planned** (not implemented yet).
+> This document describes implemented behavior; unimplemented capabilities are explicitly marked as "current boundaries."
+> Behaviors in this document are classified using three labels: **stable contract** (recommended for strong assertion tests), **current behavior** (subject to evolution), and **planned** (not yet implemented).
 
 ---
 
 ## Table of Contents
 
-1. [Installation & Initialization](#1-installation--initialization)
+1. [Installation and Initialization](#1-installation-and-initialization)
 2. [Schema Definition](#2-schema-definition)
 3. [Writing Data](#3-writing-data)
-4. [meta Fields](#4-meta-fields)
+4. [The `meta` Field](#4-the-meta-field)
 5. [Reading Data](#5-reading-data)
 6. [Rule / Query / Derivation](#6-rule--query--derivation)
 7. [Provenance Validation](#7-provenance-validation)
-8. [Which Write Entry Should I Use?](#8-which-write-entry-should-i-use)
-9. [Error Handling Cheat Sheet](#9-error-handling-cheat-sheet)
+8. [Which Write Entry Point Should I Choose?](#8-which-write-entry-point-should-i-choose)
+9. [Quick Error Handling Reference](#9-quick-error-handling-reference)
 10. [Registry](#10-registry)
 11. [Advanced APIs](#11-advanced-apis)
 12. [Migration Notes (v2 → v3)](#12-migration-notes-v2--v3)
 
 ---
 
-## 1. Installation & Initialization
+## 1. Installation and Initialization
 
-### 1.1 Initialize a Store
+### 1.1 Initializing a Store
 
 ```python
 from factpy_kernel.sdk import SDKStore
@@ -32,7 +32,7 @@ from factpy_kernel.sdk import SDKStore
 sdk = SDKStore.from_schema_classes([User, Country, Language, LivesIn])
 ```
 
-When persistence is needed, specify `ledger_path`:
+If persistence is needed, specify `ledger_path`:
 
 ```python
 sdk = SDKStore.from_schema_classes(
@@ -41,7 +41,7 @@ sdk = SDKStore.from_schema_classes(
 )
 ```
 
-To make Rule query results return dict rows by default:
+If you want Rule query results to default to dict rows:
 
 ```python
 sdk = SDKStore.from_schema_classes(
@@ -52,16 +52,16 @@ sdk = SDKStore.from_schema_classes(
 
 **Stable contract**
 
-* `classes` must be a non-empty `list[Entity subclass]`; `from_schema_classes(...)` / `schema_preflight_from_classes(...)` paths raise `SDKSchemaError`, while the `SDKStore(...)` constructor path raises `SDKStoreError`.
-* `ledger` and `ledger_path` are mutually exclusive; you cannot pass both.
-* `ledger_path` records `schema_digest` when the ledger is opened/created; on reopen, it is validated and a mismatch raises `SDKStoreError`.
-* `default_row_format` only affects `sdk.run(rule, ...)`; valid values are `"tuple"` / `"dict"`, default `"dict"`.
-* When parsing results as `"tuple"`, a `DeprecationWarning` will be triggered; it is recommended to switch uniformly to `"dict"`.
-* The `FACTPY_ROW_FORMAT` environment variable is read and cached when `SDKStore` initializes (not dynamically read on every `run()`).
+* `classes` must be a non-empty `list[Entity subclass]`; the `from_schema_classes(...)` / `schema_preflight_from_classes(...)` path raises `SDKSchemaError`, while the `SDKStore(...)` constructor path raises `SDKStoreError`.
+* `ledger` and `ledger_path` are mutually exclusive; they cannot be provided at the same time.
+* `ledger_path` records `schema_digest` when opening/creating the ledger; it is validated on reopening, and a mismatch raises `SDKStoreError`.
+* `default_row_format` only affects `sdk.run(rule, ...)`; valid values are `"tuple"` / `"dict"`, with default `"dict"`.
+* When the parsed result is `"tuple"`, a `DeprecationWarning` is triggered; it is recommended to standardize on `"dict"`.
+* The `FACTPY_ROW_FORMAT` environment variable is read and cached during `SDKStore` initialization (not dynamically read on each `run()`).
 
 ### 1.2 Schema Preflight
 
-For scenarios that do not require a runtime store (CI validation, module import phase), you can run preflight only:
+In scenarios where a runtime store is not needed (CI validation, module import phase), you can perform preflight separately:
 
 ```python
 from factpy_kernel.sdk import schema_preflight_from_classes
@@ -73,7 +73,7 @@ print(preflight.get("warnings", []))
 print(preflight.get("summary", {}))   # entity_count / predicate_count / pred_ids
 ```
 
-**Stable contract**: returns a `dict` whose core keys include `ok`, `warnings`, `errors`, `diagnostics`, `summary` (on success).
+**Stable contract**: returns a `dict`; core keys include `ok`, `warnings`, `errors`, `diagnostics`, and `summary` (on success).
 
 ---
 
@@ -85,6 +85,13 @@ print(preflight.get("summary", {}))   # entity_count / predicate_count / pred_id
 from factpy_kernel.sdk import Entity, Identity, Field
 
 class User(Entity):
+    """When description is not explicitly set, the docstring is used as a fallback."""
+
+    class Meta:
+        version = "v1"
+        description = "User entity"
+        tags = ["user", "profile"]
+
     user_id: str = Identity(primary_key=True, default_factory="uuid4")
     lang: str = Identity()
 
@@ -93,39 +100,69 @@ class User(Entity):
     country: Country = Field(cardinality="single")
 ```
 
-`Identity` locates a fact; `Field` carries the value(s) of that fact. There is limited symmetry on the read side: snapshot **value access** (`snap.lang`, `snap.name`) works the same for both; however `snap.assertions.lang` is not available — the `assertions` namespace only covers `Field` fields, not `Identity` fields. The write side differs: calling `.set()` / `.add()` on an `Identity` field raises an exception.
+`Identity` locates a fact, while `Field` carries that fact’s value. On the read side, there is limited symmetry: snapshot **value access** (`snap.lang`, `snap.name`) is consistent for both; however, `snap.assertions.lang` is unavailable — the `assertions` namespace only covers `Field` fields, not `Identity` fields. On the write side, the distinction is explicit: calling `.set()` / `.add()` on an `Identity` field raises an exception.
 
-**Stable contract**: each `Entity` must have at least one `Identity`, otherwise class definition raises `SDKSchemaError`.
+**Stable contract**: every `Entity` must define at least one `Identity`, otherwise `SDKSchemaError` is raised at class definition time.
 
-**Current behavior**: an `Entity` class docstring is automatically written into the schema’s entity-level `description` (`schema_ir.entities[*].description`) for documentation/LLM descriptions.
+**Current behavior**
 
-### 2.2 `Identity` Parameters
+* `entity_type` is derived directly from the class name; no separate `schema_id` declaration is needed.
+* `Entity.Meta` currently supports only `version`, `description`, and `tags`; any other keys raise `SDKSchemaError` at declaration time.
+* Description resolution priority is `Meta.description > class docstring`; docstring is only used when no explicit `description` is provided.
+* `version`, `description`, and `tags` are included in authoring / schema compilation output, but do not participate in runtime evaluation semantics.
 
-| Parameter                 | Meaning                                                                                                          |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `primary_key=True`        | Marked as the join anchor; implicitly carried in cross-Field reasoning in Rules, and does not appear in the head |
-| `default`                 | Static default value                                                                                             |
-| `default_factory="uuid4"` | Auto-generate a UUID when missing                                                                                |
+### 2.2 Identity Parameters
 
-`primary_key=True` and `default_factory` are orthogonal — the former declares semantic responsibility and the latter declares a generation strategy; they can be used together or separately. For an Entity not marked with `primary_key=True`, if a Rule contains cross-Field joins, compilation fails.
+| Parameter                 | Meaning                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `primary_key=True`        | Marks a join anchor; implicitly carried across Fields during Rule inference, and does not appear in the head |
+| `default`                 | Static default value                                                                                         |
+| `default_factory="uuid4"` | Automatically generates a UUID when absent                                                                   |
 
-**Recommendation**: `Identity` fields should point to business attributes of the entity (e.g., `user_id`, `lang`), not data-management dimensions such as `source` or `version`. The latter belong to meta, not Identity. This is a design recommendation; the engine does not enforce it.
+`primary_key=True` and `default_factory` are orthogonal — the former declares semantic responsibility, the latter declares a generation strategy. They may be used together or separately. For an Entity without any `primary_key=True` field, if cross-Field joins appear in a Rule, compilation fails.
 
-### 2.3 `Field` Parameters
+**Recommendation**: `Identity` fields should point to business attributes of the entity (such as `user_id`, `lang`), rather than data management dimensions such as `source` or `version`. The latter belong in `meta`, not in `Identity`. This is a design recommendation only; the engine does not enforce it.
 
-| Parameter              | Meaning                                                                     |
-| ---------------------- | --------------------------------------------------------------------------- |
-| `cardinality="single"` | Single-value view: `snap.<field>` returns a scalar; write API uses `.set()` |
-| `cardinality="multi"`  | Multi-value; all values under the same coordinate are retained              |
-| `description`          | Documentation / LLM-facing description text                                 |
+### 2.2.1 Declaration Metadata
 
-**Current behavior note**: `single` does not automatically clear old assertions on write; `active/history` may still contain multiple non-retracted assertions, while `snap.<field>` returns the current single-value view.
+Declaration metadata for an `Entity` is uniformly provided via `Meta`:
+
+| Key           | Meaning                                       |
+| ------------- | --------------------------------------------- |
+| `version`     | Declaration version                           |
+| `description` | Entity description for documentation and LLMs |
+| `tags`        | Lightweight classification tags               |
+
+```python
+class EmploymentEvent(Entity):
+    """If Meta.description is absent, this will be used as the description."""
+
+    class Meta:
+        version = "v2"
+        description = "Employment event"
+        tags = ["employment", "event"]
+
+    event_id: str = Identity(primary_key=True)
+    company: str = Field(cardinality="single")
+```
+
+**Current boundary**: `Meta` is not an open dictionary; fields such as `owner`, `llm_hint`, or `schema_id` are currently unsupported.
+
+### 2.3 Field Parameters
+
+| Parameter              | Meaning                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| `cardinality="single"` | Single-valued view: reading `snap.<field>` returns a scalar; writing uses `.set()` |
+| `cardinality="multi"`  | Multi-valued; all values at the same coordinate are retained                       |
+| `description`          | Descriptive text for documentation and LLMs                                        |
+
+**Current behavior supplement**: `single` does not automatically clean up old assertions during writes; multiple unretracted assertions may still appear in `active/history`, while `snap.<field>` returns the current single-valued view.
 
 **Current boundary**: `dims` / `fact_key` / `pred_id` / `functional` / `temporal` have been removed.
 
 ### 2.4 Reified Record (Relationship Node)
 
-All entities are based on `Entity`; a relationship node is just a usage convention:
+All entities are based on `Entity`; relationship nodes are merely a usage convention:
 
 ```python
 class LivesIn(Entity):
@@ -135,7 +172,7 @@ class LivesIn(Entity):
     since: int = Field(cardinality="single")
 ```
 
-**Stable contract**: after compilation, the schema generates a `<T>:exists` predicate for every `Entity`; batch writes will automatically add a `<T>:exists` write op when writing fields.
+**Stable contract**: after compilation, the schema generates a `<T>:exists` predicate for every `Entity`; batch field writes automatically insert the corresponding `<T>:exists` write op.
 
 ### 2.5 Common Type Mapping
 
@@ -150,23 +187,23 @@ class LivesIn(Entity):
 | `UUID`                    | `uuid`       |
 | other `Entity` subclasses | `entity_ref` |
 
-**Current behavior**: string annotations are also supported (e.g., `"str"`, `"datetime"`, `"uuid"`, `"entity_ref"`); unrecognized annotations fall back to `entity_ref`.
+**Current behavior**: string annotations are also supported (such as `"str"`, `"datetime"`, `"uuid"`, `"entity_ref"`); unrecognized annotations fall back to `entity_ref`.
 
-### 2.6 In-memory Objects vs Managed Objects
+### 2.6 In-Memory Objects vs Managed Objects
 
 ```python
-# Plain in-memory object (not bound to a store)
+# Ordinary in-memory object (not bound to a store)
 alice = User(user_id="u-001")
-alice.name = "Alice"      # normal Python assignment
+alice.name = "Alice"      # ordinary Python assignment
 
-# sdk.batch managed object (supports .set/.add/.retract)
+# sdk.batch-managed object (supports .set/.add/.retract)
 with sdk.batch(meta={"trace_id": "t1"}) as tx:
     alice_h = tx.entity(User, user_id="u-001", lang="zh")
     alice_h.name.add("Alice")
     tx.commit()
 ```
 
-**Stable contract**: `.set` / `.add` / `.retract` are capabilities of batch/edit managed handles, not of plain in-memory objects.
+**Stable contract**: `.set` / `.add` / `.retract` are capabilities of batch/edit managed handles, not of ordinary in-memory objects.
 
 ---
 
@@ -174,58 +211,58 @@ with sdk.batch(meta={"trace_id": "t1"}) as tx:
 
 ### 3.1 `sdk.batch`
 
-The main entry for batch writes, suitable for ETL, sample data construction, and scenarios requiring preview / wire plans.
+Primary entry point for batch writes; suitable for ETL, sample data construction, and scenarios requiring preview / wire plan.
 
 ```python
 with sdk.batch(meta={"trace_id": "import-001", "source": "hr"}) as tx:
     de = tx.entity(Country, iso_code="DE")
     de.name.set("Germany")
 
-    # Provide all Identity at once
+    # Provide all Identity fields at once
     u = tx.entity(User, user_id="u-001", lang="zh")
     u.name.add("艾丽西亚")
     u.age.set(30)
-    u.country.set(de)   # can reference a handle within the same tx
+    u.country.set(de)   # can directly reference a handle within the same tx
 
-    # Or bind Identity step-by-step
+    # Or bind Identity step by step
     u2 = tx.entity(User, user_id="u-002")
     u2 = u2.bind(lang="en")
     u2.name.add("Alicia")
 
-    plan = tx.preview()   # read-only preview, not persisted
+    plan = tx.preview()   # read-only preview, does not persist
     res = tx.commit()     # actual write
 ```
 
-`batch`-level `meta` is inherited by all write ops; a single op can override with its own `meta`:
+The `meta` of `batch` is inherited by all write operations; individual operations may override it with their own `meta`:
 
 ```python
 with sdk.batch(meta={"source": "hr", "valid_from": "2024-01"}) as tx:
     u = tx.entity(User, user_id="u-001", lang="zh")
     u.name.add("艾丽西亚")                                  # inherits batch meta
-    u.name.add("Alice", meta={"valid_from": "2024-06"})    # per-op override
+    u.name.add("Alice", meta={"valid_from": "2024-06"})    # per-operation override
     tx.commit()
 ```
 
-**meta merge precedence** (higher overrides lower): `commit_meta > field_op_meta > entity_meta > batch_meta`
+**Meta merge precedence** (higher overrides lower): `commit_meta > field_op_meta > entity_meta > batch_meta`
 
 **Stable contract**
 
-* `single` fields use `.set()`; `multi` fields use `.add()`. Misuse raises `SDKStoreError` (batch handle path; `sdk.edit` path raises `CardinalityError`).
-* Batch handles retract via `.retract(assertion_id)`; edit `FieldEditor` retracts via `.retract(asrt_id=...)`. Neither supports retract-by-value.
-* If Identity is incomplete, `.set()` / `.add()` immediately raises `SDKStoreError` (error message lists missing fields; you can `bind(...)` first and then write).
-* Calling `.set()` / `.add()` on an Identity field immediately raises `SDKStoreError` — Identity is immutable once determined.
+* Use `.set()` for `single` fields and `.add()` for `multi` fields; misuse raises `SDKStoreError` (batch handle path), while the `sdk.edit` path raises `CardinalityError`.
+* Batch handles use `.retract(assertion_id)` for retraction; `FieldEditor` in edit uses `.retract(asrt_id=...)`; neither supports value-based retraction.
+* If Identity is incomplete, `.set()` / `.add()` immediately raises `SDKStoreError` (the error message lists missing fields; use `bind(...)` first to complete them).
+* Calling `.set()` / `.add()` on an Identity field immediately raises `SDKStoreError` — once determined, Identity is immutable.
 * `preview()` does not persist and may be called repeatedly; only `commit()` persists.
-* `SDKBatchTx` as a context manager does not auto-commit and does not auto-rollback (`__exit__` is a no-op); callers must explicitly call `commit()` and handle exceptions themselves.
+* The `SDKBatchTx` context manager itself does not auto-commit or auto-rollback (`__exit__` is a no-op); callers must explicitly call `commit()`, and exception handling is also the caller’s responsibility.
 
-**entity_ref fields** (stable contract): you may pass a “handle within the same tx” or a “canonical idref_v1 token”; you may not pass a plain business string (e.g., `"DE"`).
+**`entity_ref` fields** (stable contract): may accept a "same-tx handle" or a "canonical idref_v1 token"; ordinary business strings (such as `"DE"`) are not allowed.
 
-**Cardinality rules quick reference**
+**Field cardinality quick reference**
 
 | Field type | Allowed                                                           | Forbidden                                                           |
 | ---------- | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
 | `single`   | `.set(value)`                                                     | `.add(value)` → `SDKStoreError` (batch) / `CardinalityError` (edit) |
 | `multi`    | `.add(value)`                                                     | `.set(value)` → `SDKStoreError` (batch) / `CardinalityError` (edit) |
-| any        | `.retract(assertion_id)` (batch) / `.retract(asrt_id=...)` (edit) | retract-by-value (not supported)                                    |
+| any        | `.retract(assertion_id)` (batch) / `.retract(asrt_id=...)` (edit) | value-based retraction (unsupported)                                |
 
 ```python
 # batch handle path
@@ -243,7 +280,7 @@ with sdk.batch(meta={"trace_id": "t1"}) as tx:
     u.name.add("Alice")
     wire_json = tx.preview().to_json(sdk)
 
-# Replay across process/time
+# replay across process/time
 from factpy_kernel.sdk.batch import WireBatchPlan
 
 plan2 = WireBatchPlan.from_json(wire_json)
@@ -252,22 +289,22 @@ plan2.apply(sdk, strict_schema=True)
 
 **Current behavior**: `strict_schema=True` checks that the wire plan’s `schema_digest` matches the current SDK schema.
 
-**Current behavior note**: wire export (`to_json` / `export`) does not accept raw `idref_v1` string values as `entity_ref` writes; to create a replayable wire plan, express entity relationships using “handle references within the same tx” inside the batch.
+**Current behavior supplement**: wire export (`to_json` / `export`) does not accept raw `idref_v1` string values as `entity_ref` writes; to build replayable wire plans, use "same-tx handle references" in batch to express entity relationships.
 
 ### 3.3 Dependency Closure (`include_deps`)
 
-Default `include_deps=True`: committing an object automatically includes dependency objects it references. Missing dependencies are not silently skipped; an error is raised immediately (**stable contract**).
+By default, `include_deps=True`: committing an object automatically includes all dependency objects it references. Missing dependencies are not silently skipped; an error is raised directly (**stable contract**).
 
 ### 3.4 `sdk.edit`
 
-Suitable for “identity is fully known, modify only a few fields”:
+Suitable for scenarios where the full Identity is known and only a small number of fields need modification:
 
 ```python
 with sdk.edit(User, user_id="u-001", lang="zh") as editor:
     editor.name.add("Alicia")
     editor.age.set(31)
-    # normal exit: auto commit()
-    # exception inside with: auto rollback()
+    # normal exit from with: auto commit()
+    # exception inside with block: auto rollback()
 ```
 
 Explicit version control:
@@ -286,12 +323,12 @@ except Exception:
 
 **Stable contract**
 
-* If the entity does not exist, raises `EntityNotFoundError` (no implicit create; use `sdk.batch()` to create).
-* After `commit()` or `rollback()`, the editor is closed; calling any method raises `EditorClosedError`.
+* If the entity does not exist, raises `EntityNotFoundError` (no implicit creation; use `sdk.batch()` for creation).
+* After `commit()` or `rollback()`, the editor is closed; any further method call raises `EditorClosedError`.
 
 ### 3.5 `sdk.ingest`
 
-Suitable for external imports, or when you only have `ref + asrt_id` (cannot get full identity):
+Suitable for external imports or scenarios where only `ref + asrt_id` is available (without full Identity):
 
 ```python
 result = sdk.ingest(
@@ -320,14 +357,14 @@ print(result.diagnostics)
 
 **Stable contract**
 
-* Top-level `meta` is merged with item `meta`; item keys override top-level keys on conflict.
+* Top-level `meta` is merged with item `meta`, with item keys overriding top-level keys of the same name.
 * `kind=set` corresponds to `single` fields; `kind=add` corresponds to `multi` fields.
-* If any `diagnostics` entry has `severity="error"`, the whole batch is not written (collect-and-stop).
+* If any `diagnostics` entry has `severity="error"`, the entire batch is not written (collect-and-stop).
 * `allow_sensitive_meta=True` only suppresses sensitive warnings; it does not relax hard reserved constraints.
 
-### 3.5.1 Typical scenario: entity migration
+### 3.5.1 Typical Scenario: Entity Migration
 
-When you cannot obtain full identity via `find`, `ingest` is a workable fallback:
+When full Identity cannot be obtained via `find`, `ingest` serves as a fallback:
 
 ```python
 records = sdk.find(LivesIn, user=alice.ref)
@@ -345,7 +382,7 @@ sdk.ingest(
 )
 ```
 
-### 3.6 Low-level Write Entry
+### 3.6 Low-Level Write Entry Points
 
 ```python
 alice_ref = sdk.ref(User, user_id="u-001", lang="zh")
@@ -354,84 +391,85 @@ sdk.add(User.name, alice_ref, "Alicia", meta={"source": "hr"})
 sdk.retract("asrt_xxx", meta={"source": "hr"})
 ```
 
-Minimal wrapping; writes directly to the ledger; no preview/wire capability.
+Minimal wrapping, directly writes to the ledger, with no preview/wire support.
 
 **Current behavior**
-* `sdk.set(...)` / `sdk.add(...)` only backfill matching identity predicates when the current `SDKStore` already knows the identity values for that `e_ref`; arbitrary external canonical `idref_v1` values do not guarantee this.
-* `sdk.retract(...)` returns the revoker assertion id; if the target assertion is already revoked it returns the existing revoker id, and if the assertion does not exist it raises.
+
+* `sdk.set(...)` / `sdk.add(...)` only backfill the corresponding Identity predicate if the identity values of `e_ref` have already been recorded by the current `SDKStore`; arbitrary external canonical `idref_v1` values are not guaranteed to be auto-backfilled.
+* `sdk.retract(...)` returns the revoker assertion id; if the target assertion has already been revoked, it returns the existing revoker id; if the assertion does not exist, it raises an error.
 
 ---
 
-## 4. meta Fields
+## 4. The `meta` Field
 
-meta is not a free-form dict; fields fall into four responsibility categories:
+`meta` is not a free dictionary. Fields are grouped into four categories by responsibility:
 
-**System reserved (written by ingest flow; not user-writable)**
+**System-reserved (written by the ingest process, not user-writable)**
 
 `ingested_at`, `ingest_key`, `revoked_asrt_id`
 
-**Operation tracking (conventional fields; recommended)**
+**Operation tracing (conventional fields, recommended)**
 
 `source`, `source_loc`, `trace_id`, `confidence`, `approved_by`, `note`
 
-**Derivation chain (auto-written by accept flow)**
+**Derivation chain (automatically written by the accept process)**
 
 `derived_rule_id`, `derived_rule_version`, `run_id`, `support_digest`, `support_kind`, `candidate_id`, `candidate_key`, `accepted_at`, etc.
 
-**Business temporality (unlocks time views)**
+**Business temporal fields (used to unlock temporal views)**
 
 `valid_from`, `valid_to`, `version`
 
-Business temporality fields are user-writable; the view layer is aware of them but they are not mandatory. If unset, only `.active` / `.history` views exist; if set, `.at(t)` / `.version(v)` queries are enabled.
+Business temporal fields are user-writable, recognized by the view layer, but not enforced. If omitted, only `.active` / `.history` views are available; once provided, `.at(t)` / `.version(v)` queries are enabled.
 
-**meta key stratification** (stable contract)
+**Meta key stratification** (stable contract)
 
-| Level              | Representative keys                                                         | Behavior                                 |
-| ------------------ | --------------------------------------------------------------------------- | ---------------------------------------- |
-| hard reserved      | `ingested_at`, `ingest_key`, `revoked_asrt_id`                              | user not allowed to write                |
-| sensitive semantic | derivation-chain keys such as `derived_rule_id`, `run_id`, `support_digest` | warning by default; does not block write |
-| convention         | `source`, `source_loc`, `trace_id`, `confidence`, `approved_by`, `note`     | normal write                             |
-| free               | business-defined keys                                                       | normal write                             |
+| Level              | Representative fields                                                         | Behavior                                   |
+| ------------------ | ----------------------------------------------------------------------------- | ------------------------------------------ |
+| hard reserved      | `ingested_at`, `ingest_key`, `revoked_asrt_id`                                | user cannot write                          |
+| sensitive semantic | derivation-chain fields such as `derived_rule_id`, `run_id`, `support_digest` | warning by default, does not block writing |
+| convention         | `source`, `source_loc`, `trace_id`, `confidence`, `approved_by`, `note`       | normal write                               |
+| free               | business-defined custom keys                                                  | normal write                               |
 
-**meta kind system** (v3 update)
+**Meta kind system** (v3 update)
 
-Numeric meta fields are stored by kind; kind names were renamed and extended in v3:
+Meta numeric fields are stored by kind; kind names were renamed and extended in v3:
 
-| kind      | Type    | Notes                                           |
-| --------- | ------- | ----------------------------------------------- |
-| `"str"`   | `str`   | string                                          |
-| `"int"`   | `int`   | integer (formerly `"num"`, renamed in v3)       |
-| `"float"` | `float` | float (new in v3; for fields like `confidence`) |
-| `"bool"`  | `bool`  | boolean                                         |
-| `"time"`  | `int`   | epoch nanosecond timestamp                      |
-| `"json"`  | `Any`   | JSON-serializable object                        |
+| kind      | Type    | Description                                                      |
+| --------- | ------- | ---------------------------------------------------------------- |
+| `"str"`   | `str`   | string                                                           |
+| `"int"`   | `int`   | integer (formerly `"num"`, renamed in v3)                        |
+| `"float"` | `float` | floating point (new in v3, used for fields such as `confidence`) |
+| `"bool"`  | `bool`  | boolean                                                          |
+| `"time"`  | `int`   | epoch nanosecond timestamp                                       |
+| `"json"`  | `Any`   | JSON-serializable object                                         |
 
-The `confidence` field’s kind is fixed as `"float"` and inferred automatically by the write protocol; callers do not need to specify it.
+The kind of the `confidence` field is fixed to `"float"` and is inferred automatically by the write protocol; the user does not need to specify it.
 
-`kind` is not visible to callers: the write protocol first applies a forced mapping by conventional keys (`_KEY_KIND_MAP`), then infers unknown keys by value type.
-Conventional key coverage checks run at module load time (`convention + sensitive` keys must all appear in the mapping table).
+`kind` is not visible to the caller: the write protocol first performs forced mapping using conventional keys (`_KEY_KIND_MAP`), then infers unknown keys from value types.
+Coverage checks for conventional keys are performed at module load time (all `convention + sensitive` keys must exist in the mapping table).
 
-Type inference rules for unknown keys (conventional keys override these rules):
+Type inference rules for unknown keys (conventional keys take precedence over these rules):
 
 * `bool` → `"bool"`
 * `int` → `"int"`
 * `float` → `"float"`
 * `str` → `"str"`
-* other types are not supported and raise `WriteProtocolError`
+* other types are unsupported and raise `WriteProtocolError`
 
 **Stable contract (`confidence`)**
 
-* `meta["confidence"]` must be a `float` and within `(0, 1]`.
-* `int` (e.g., `1`) is not auto-promoted to `float`; it raises an error.
+* `meta["confidence"]` must be a `float` with value in `(0, 1]`.
+* `int` values (such as `1`) are not automatically promoted to `float`; they raise an error directly.
 
-### 4.1 Common Example (`confidence`)
+### 4.1 Common Examples (`confidence`)
 
 ```python
 from factpy_kernel.core.store.types import ViewSpec
 
 alice_ref = sdk.ref(User, user_id="u-001", lang="zh")
 
-# ✅ valid: float within (0,1]
+# ✅ valid: float and within (0,1]
 sdk.set(User.age, alice_ref, 30, meta={"source": "hr", "confidence": 0.82})
 sdk.set(User.age, alice_ref, 30, meta={"source": "model_v2", "confidence": 0.64})
 
@@ -441,7 +479,7 @@ sdk.set(User.age, alice_ref, 30, meta={"confidence": 1})      # WriteProtocolErr
 # ❌ invalid: out of range
 sdk.set(User.age, alice_ref, 30, meta={"confidence": 1.2})    # WriteProtocolError
 
-# aggregate confidence on read by view
+# aggregate by view during reading
 row_max = sdk.find(User, user_id="u-001", lang="zh", view=ViewSpec(confidence_strategy="max"))[0]
 row_mean = sdk.find(User, user_id="u-001", lang="zh", view=ViewSpec(confidence_strategy="mean"))[0]
 print(row_max.confidence)   # 0.82
@@ -450,15 +488,15 @@ print(row_mean.confidence)  # 0.73
 
 **Deduplication basis**: `claim + source + source_loc + trace_id + valid_from + valid_to + version`
 
-**Boundary notes (important)**
+**Boundary note (important)**
 
-* `confidence` does not participate in ingest idempotency keys.
-* Therefore, under the same `trace_id` (the accept path is usually the same `run_id`), if the claim and the other dedup fields are the same, differing `confidence` does not create a new assertion and will be folded by idempotency.
-* “Same fact with different `confidence` coexisting” typically happens across different inference batches (different `run_id/trace_id`) or different sources (different `source/source_loc`).
+* `confidence` does not participate in the ingest idempotency key.
+* Therefore, under the same `trace_id` (in the accept path this typically equals the same `run_id`), if the claim and all other deduplication fields are identical, differing only in `confidence`, no new assertion is created; it is folded by idempotency.
+* Coexistence of “same fact, different `confidence`” usually occurs across different reasoning batches (different `run_id/trace_id`) or different source fields (`source/source_loc`).
 
-Note: `ingested_at` is the system write time, not the business effective time `valid_from`. Using `ingested_at` as `valid_from` for time views causes semantic misalignment.
+Note: `ingested_at` is the system write time, not the same as `valid_from` (business effective time). Using `ingested_at` in place of `valid_from` for temporal views causes semantic misalignment.
 
-**`trace_id` semantics**: `trace_id` participates in idempotency computation, but is not the sole determinant; `valid_from` / `valid_to` / `version` also participate. Under the same `trace_id`, as long as the temporality dimensions differ, different assertions are still produced.
+**Semantics of `trace_id`**: `trace_id` participates in idempotency calculation, but is not the sole determining factor; `valid_from` / `valid_to` / `version` also participate in deduplication. Under the same `trace_id`, different temporal dimensions still produce different assertions.
 
 ---
 
@@ -470,19 +508,19 @@ Note: `ingested_at` is the system write time, not the business effective time `v
 snap = sdk.get(User, user_id="u-001", lang="zh")
 
 if snap is None:
-    print("not found")
+    print("Does not exist")
 else:
     print(snap.ref)                 # canonical idref_v1 token
     print(snap.entity_type)         # "User"
     print(snap.identity_available)  # True
-    print(snap.identity)            # identity kwargs usable for sdk.edit(...)
+    print(snap.identity)            # can be used as identity kwargs for sdk.edit(...)
 ```
 
 **Stable contract**
 
-* `get` accepts Identity parameters only; passing non-Identity fields raises `SDKSchemaError`.
+* `get` accepts only Identity parameters; passing non-Identity fields raises `SDKSchemaError`.
 * Returns `EntitySnapshot | None`.
-* Snapshots returned by `get` have `identity_available=True`.
+* Snapshots returned via `get` have `identity_available=True`.
 
 ### 5.2 `sdk.find`
 
@@ -507,13 +545,13 @@ rows = sdk.find(User, lang="zh", view=ViewSpec(confidence_strategy="mean"))
 **Stable contract**
 
 * `limit` must be a non-negative integer (`limit=0` returns an empty list).
-* When filtering by Identity you must provide all Identity fields of that entity.
-* `temporal_view` parameter is not supported.
-* Passing unknown filter fields raises `SDKSchemaError`.
+* When filtering by Identity, all Identity fields of that entity must be provided.
+* `temporal_view` is not supported.
+* Passing an unknown filter field raises `SDKSchemaError`.
 
 **Current boundary**
 
-* `view.confidence_strategy` only affects the displayed `confidence` value in results; it does not affect which assertions are returned.
+* The `confidence_strategy` in the `view` parameter only affects the displayed `confidence` value in the returned result, not which assertions are returned.
 
 **Identity availability in `find` results** (current behavior)
 
@@ -524,48 +562,48 @@ for rec in records:
         with sdk.edit(LivesIn, **rec.identity) as editor:
             ...
     else:
-        # use ingest: retract/set using rec.ref + asrt_id
+        # use ingest: retract/set via rec.ref + asrt_id
         ...
 ```
 
-* Without identity filters: snapshots are typically `identity_available=False`.
-* With a full identity filter: returned snapshots have `identity_available=True`.
+* Without an identity filter: snapshots usually have `identity_available=False`.
+* With a complete identity filter: returned snapshots have `identity_available=True`.
 
-### 5.3 `EntitySnapshot` Assertion Views
+### 5.3 Assertion Views on `EntitySnapshot`
 
 ```python
 snap = sdk.get(User, user_id="u-001", lang="zh")
 
-# current view values
+# current-view values
 snap.name      # multi -> tuple[...]
 snap.age       # single -> scalar or None
 snap.country   # single entity_ref -> idref_v1 token or None
 
 # assertion views
-snap.assertions.name.active           # current non-retracted assertions
-snap.assertions.name.history          # full history (including retracted)
-snap.assertions.name.at("2024-03-01") # business-temporal filter
+snap.assertions.name.active           # currently unretracted assertions
+snap.assertions.name.history          # complete history (including revoked)
+snap.assertions.name.at("2024-03-01") # business temporal filter
 snap.assertions.name.version("v2")    # version filter
-snap.field("name").active             # equivalent
+snap.field("name").active             # equivalent form
 ```
 
 **View semantics** (stable contract)
 
-| View          | Semantics                                                                    |
-| ------------- | ---------------------------------------------------------------------------- |
-| `.active`     | currently not retracted; maintained by store registry                        |
-| `.history`    | full history, including retracted                                            |
-| `.at(t)`      | on active set: `valid_from <= t` and (`valid_to` is empty or `valid_to > t`) |
-| `.version(v)` | on active set: `version == v`                                                |
+| View          | Semantics                                                                          |
+| ------------- | ---------------------------------------------------------------------------------- |
+| `.active`     | currently unretracted, maintained by the store registry mechanism                  |
+| `.history`    | complete history, including revoked assertions                                     |
+| `.at(t)`      | over the active set: `valid_from <= t` and (`valid_to` is empty or `valid_to > t`) |
+| `.version(v)` | over the active set: `version == v`                                                |
 
 **Temporal view boundaries**
 
 * Assertions missing `valid_from` do not match `.at(t)` and only appear in `.active`.
 * Assertions missing `version` do not match `.version(v)`.
-* `.at(t)` validates ISO 8601 format (both `t` and assertion `valid_from`/`valid_to`); invalid formats raise `SDKStoreError`.
+* `.at(t)` validates ISO 8601 format (both the `t` argument and the assertion’s `valid_from`/`valid_to` are validated); invalid format raises `SDKStoreError`.
 * `.version(v)` only accepts `str | int` (`bool` is invalid).
-* Temporal filtering is stacked on top of the active set; it does not draw from history.
-* `EntitySnapshot` and the `assertions` namespace are read-only; assignment raises `FrozenSnapshotError`.
+* Temporal filtering is applied on top of the active set, not drawn from history.
+* `EntitySnapshot` and the `assertions` namespace are both read-only; assignment raises `FrozenSnapshotError`.
 
 ---
 
@@ -576,16 +614,16 @@ snap.field("name").active             # equivalent
 ```python
 from factpy_kernel.sdk import vars
 
-# recommended
+# recommended form
 with vars("u", "l", "n") as (u, l, n):
     ...
 
-# factory style
+# factory form
 with vars() as V:
     u, l, n = V("u", "l", "n")
 ```
 
-**Stable contract**: `with vars() as (u, l)` (no-arg unpacking) is not supported and raises `SDKDSLError`.
+**Stable contract**: `with vars() as (u, l)` without-argument unpacking is not supported and raises `SDKDSLError`.
 
 ### 6.2 Rule: Immediate Query
 
@@ -596,10 +634,12 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
     speaks_rule = Rule(
         id="q_speaks",
         version="1.0.0",
+        description="Find languages a user may speak",
+        tags=["demo", "query"],
         select=[u, l],
         where=[
             LivesIn(li),
-            li.user == u,      # two-step style (chaining not supported)
+            li.user == u,      # two-step form (chained form unsupported)
             li.country == c,
             HasLanguage(hl),
             hl.country == c,
@@ -611,7 +651,7 @@ rows = sdk.run(speaks_rule, row_format="dict")
 # [{"u": "...", "l": "..."}, ...]
 
 rows = sdk.run(speaks_rule, view="default", row_format="dict")
-# by default returns rows; does not inject confidence into rows
+# by default returns rows, without injecting confidence into each row
 
 rows, display_meta = sdk.run(
     speaks_rule,
@@ -619,26 +659,26 @@ rows, display_meta = sdk.run(
     row_format="dict",
     return_display_meta=True,
 )
-# display_meta has the same length as rows; each item contains at least:
-# confidence / confidence_strategy / source_breakdown
+# display_meta has the same length as rows; each item contains at least confidence / confidence_strategy / source_breakdown
 ```
 
 **Stable contract**
 
-* Chained form `LivesIn(li).user == u` is not supported; use the two-step form.
+* Chained syntax such as `LivesIn(li).user == u` is unsupported; use the two-step form.
 * OR uses `where=[[...], [...]]` (OR-of-AND).
-* `row_format` precedence (high to low): `run(..., row_format=...) > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`.
+* `row_format` precedence has three levels: `run(..., row_format=...) > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`.
 * Invalid `row_format` raises `SDKStoreError(code="INVALID_ROW_FORMAT")`.
-* `RuleRef` target rules require `expose=True`, otherwise `RuleCompileError`; they are not allowed inside `Not(...)`.
-* `view` can be a named view or a `ViewSpec`; it only affects presentation, not evaluation scope.
-* `sdk.run(rule, view=...)` returns `rows` only by default; it does not inject `confidence` into row objects.
-* With `return_display_meta=True`, returns `(rows, display_meta)`; and you must also provide `view`, otherwise raises `SDKStoreError`.
+* `RuleRef` targets must have `expose=True`, otherwise `RuleCompileError` is raised; `RuleRef` is not allowed inside `Not(...)`.
+* `view` may be a named view or a `ViewSpec`, and only affects result presentation, not Rule evaluation scope.
+* `sdk.run(rule, view=...)` returns only `rows` by default, without injecting `confidence` into each row.
+* With `return_display_meta=True`, the return value is `(rows, display_meta)`; `view` must also be provided, otherwise `SDKStoreError` is raised.
+* `Rule` supports two declaration fields: `description` and `tags`; they are included in compiler output, but do not affect query semantics.
 
-**Current behavior**: supports linear arithmetic `+/-/constant-multiple` (e.g., `age == (2026 - by)`); does not support non-linear multiplication `x * y`.
+**Current behavior**: linear arithmetic `+/-/constant multiples` is supported (such as `age == (2026 - by)`); non-linear multiplication such as `x * y` is unsupported.
 
 ### 6.3 Body: OR Branches with Confidence
 
-In probabilistic reasoning, OR branches can be wrapped with `Body` and annotated with branch confidence:
+In probabilistic reasoning scenarios, OR branches may be wrapped with `Body` and assigned branch confidence:
 
 ```python
 from factpy_kernel.sdk import Body
@@ -657,21 +697,21 @@ with vars("u", "lang") as (u, lang):
 
 **Stable contract**
 
-* `Body.confidence` range: `(0, 1]`; `confidence=0` is a compile-time error.
-* `Body.confidence=None` is allowed (no confidence constraint).
-* Mixing `Body(...)` branches and bare list branches in the same `where` is forbidden; violation fails compilation.
-* Bare list form is retained; compiled `body_confidences=None` and behavior remains as before.
+* `Body.confidence` must be in `(0, 1]`; `confidence=0` causes a compile-time error.
+* `Body.confidence=None` is valid (meaning no confidence constraint).
+* Mixing `Body(...)` and raw list branches in the same `where` is forbidden; violation causes compilation failure.
+* Raw list form is retained; after compilation, `body_confidences=None`, and behavior remains as before.
 
 **Supported scope**
 
-* Rule: supports `Body(...)`; currently used only for `where` normalization; `body_confidences` does not participate in Rule runtime evaluation.
-* Derivation: supports `Body(...)`; compiled `body_confidences` is extracted as a sidecar for `mode="problog"`.
-* Query: `Body.confidence` is not supported; construction raises an error.
+* Rule: supports `Body(...)`, currently only for where normalization; `body_confidences` do not participate in Rule runtime evaluation.
+* Derivation: supports `Body(...)`; after compilation, `body_confidences` are extracted into a sidecar for `mode="problog"`.
+* Query: `Body.confidence` is unsupported and causes an error at construction time.
 
-`body_confidences` passthrough chain:
+`body_confidences` pass-through path:
 `SDK Derivation/authoring payload -> compile_authoring_derivation_v1 -> sdk.evaluate -> evaluate_store -> engine(problog)`.
 
-### 6.3.1 `Body` Mode Difference Example
+### 6.3.1 Example of `Body` Mode Differences
 
 ```python
 from factpy_kernel.sdk import Body, Derivation, Pred, vars
@@ -687,18 +727,18 @@ with vars("u", "lang") as (u, lang):
         head=User.name(lang="zh", name=lang),
     )
 
-# native: ignores body_confidences (same as bare list behavior)
+# native: ignores body_confidences (same behavior as raw lists)
 cands_native = sdk.evaluate(drv, mode="native")
 print(cands_native[0].confidence)  # None
 
 # problog: consumes body_confidences and returns probabilities
 import factpy_kernel.adapters.problog
 cands_prob = sdk.evaluate(drv, mode="problog")
-print(cands_prob[0].confidence)    # float, e.g., 0.86
+print(cands_prob[0].confidence)    # float, e.g. 0.86
 ```
 
 ```python
-# ❌ mixing Body and bare list (compile-time error)
+# ❌ mixing Body and raw list (compile-time error)
 with vars("u") as (u,):
     Rule(
         id="r.bad",
@@ -710,7 +750,7 @@ with vars("u") as (u,):
 
 ### 6.4 Query DSL
 
-Identity and Field fields have identical access syntax in the `where` clause:
+Identity and Field fields use exactly the same access syntax inside `where` clauses:
 
 ```python
 from factpy_kernel.sdk import Query, vars
@@ -725,26 +765,26 @@ with vars("u", "l", "n") as (u, l, n):
         ],
     )
 
-rows = sdk.run(q)   # default returns list[dict]
+rows = sdk.run(q)   # default return type is list[dict]
 ```
 
 **Stable contract**
 
-* Query supports `row_format="dict"|"instance"`; default `"dict"`.
-* `row_format="instance"` is only allowed when the head is a “single `Entity(var)`”; returns `list[EntitySnapshot|None]`.
-* If the Query head does not satisfy instance constraints, or Query uses an invalid `row_format`, raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
+* Query supports `row_format="dict"|"instance"`; default is `"dict"`.
+* `row_format="instance"` is only valid when the head is a single `Entity(var)`; it returns `list[EntitySnapshot|None]`.
+* If the Query head shape does not satisfy instance constraints, or if Query uses an invalid `row_format`, `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")` is raised.
 * Valid head forms: `Entity(var)`, `[Entity(var1), ...]`, `Entity.field(...)`.
-* Query construction performs alias conflict checks (raises `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`) and where-variable binding checks (raises `SDKDSLError(code="QUERY_UNBOUND_VAR")`).
+* Query performs alias conflict validation at construction time (raising `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`) and where-variable binding validation (raising `SDKDSLError(code="QUERY_UNBOUND_VAR")`).
 * Entity head columns return `EntitySnapshot`; field projection columns return scalar values.
-* `Query.where` does not support `Body.confidence`; passing it fails compilation.
-* `sdk.run(query, view=...)` is not supported (raises `SDKStoreError`).
-* `sdk.run(query, return_display_meta=True)` is not supported (raises `SDKStoreError`).
+* `Query.where` does not support `Body.confidence`; passing it causes a compile-time error.
+* `sdk.run(query, view=...)` is unsupported (raises `SDKStoreError`).
+* `sdk.run(query, return_display_meta=True)` is unsupported (raises `SDKStoreError`).
 
 **Current behavior**: `on_missing` / `on_type_mismatch` strategies:
 
-* `error`: raise `SDKStoreError` (`QUERY_MISSING_REF` / `QUERY_TYPE_MISMATCH`)
-* `skip`: drop the row
-* `null`: set that column to `None` and keep the row (still participates in dedup)
+* `error`: raises `SDKStoreError` (`QUERY_MISSING_REF` / `QUERY_TYPE_MISMATCH`)
+* `skip`: drops the row
+* `null`: sets that column to `None`, while keeping the row (it still participates in deduplication)
 
 ### 6.5 Derivation
 
@@ -755,6 +795,8 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
     speaks_drv = Derivation(
         id="drv.speaks",
         version="1.0.0",
+        description="Infer a user's language ability from residence and official language",
+        tags=["demo", "derivation"],
         where=[
             LivesIn(li), li.user == u, li.country == c,
             HasLanguage(hl), hl.country == c, hl.language == l,
@@ -765,7 +807,7 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
 cands = sdk.evaluate(speaks_drv, mode="native")   # list[CandidateSet]
 res = sdk.accept(cands[0], approved_by="alice")
 
-# atomic commit for multiple candidate sets
+# atomic submission of multiple candidate sets
 res = sdk.accept_many(cands, mode="atomic")
 ```
 
@@ -774,27 +816,28 @@ res = sdk.accept_many(cands, mode="atomic")
 | mode        | Description                                              |
 | ----------- | -------------------------------------------------------- |
 | `"native"`  | Python built-in evaluator (formerly `"python"`, renamed) |
-| `"souffle"` | Souffle engine (formerly `"engine"`, renamed)            |
-| `"problog"` | ProbLog probabilistic inference engine (new in v3)       |
+| `"souffle"` | Soufflé engine (formerly `"engine"`, renamed)            |
+| `"problog"` | ProbLog probabilistic reasoning engine (new in v3)       |
 
 Passing old names `"python"` / `"engine"` raises a clear error and suggests the new name.
 
-Engines use a name registry (non-singleton): `register_engine_evaluator(name -> fn)`.
-Adapters auto-register on import:
+The engine uses a name registry (not a singleton): `register_engine_evaluator(name -> fn)`.
+Adapters auto-register upon import:
 
 * `import factpy_kernel.adapters.souffle` registers `"souffle"`
 * `import factpy_kernel.adapters.problog` registers `"problog"`
 
 **Stable contract**
 
-* `sdk.evaluate(...)` produces candidates and does not write the ledger; `sdk.accept(...)` writes the ledger.
-* Supports multi-head `head=[H1, H2, ...]`; `evaluate` returns flattened results sharing the same `run_id`.
-* `sdk.accept(CandidateSet, ...)` accepts exactly one positional argument; allowed override keys: `approved_by`, `note`, `dry_run`, `identity_override` (also via `meta_overrides`); unknown args raise `SDKStoreError`.
-* `sdk.run(Derivation(...))` is not supported; use `sdk.evaluate(...)`.
-* `sdk.evaluate(..., view=...)` is not supported; passing it raises `SDKStoreError` (inference always uses the full active assertion set).
-* When a dependency graph exists, prefer `sdk.accept_many(..., mode="atomic")` for atomicity.
+* `sdk.evaluate(...)` produces candidates and does not write to the ledger; only `sdk.accept(...)` writes.
+* Multi-head `head=[H1, H2, ...]` is supported; `evaluate` returns flattened results sharing the same `run_id`.
+* `sdk.accept(CandidateSet, ...)` accepts exactly one positional argument; allowed override keys are `approved_by`, `note`, `dry_run`, `identity_override` (also accepted via `meta_overrides`); unrecognized parameters raise `SDKStoreError`.
+* `sdk.run(Derivation(...))` is unsupported; use `sdk.evaluate(...)`.
+* `sdk.evaluate(..., view=...)` is unsupported; passing it raises `SDKStoreError` (reasoning always operates over the full active assertion set).
+* If a dependency graph exists, `sdk.accept_many(..., mode="atomic")` should be preferred to guarantee atomicity.
+* `Derivation` supports two declaration fields, `description` and `tags`; they are included in compiler output, but do not affect candidate generation semantics.
 
-### 6.5.1 `accept` Idempotency and Coexistence Example
+### 6.5.1 Example of `accept` Idempotency and Coexistence
 
 ```python
 from dataclasses import replace
@@ -807,12 +850,12 @@ cand = cands[0]
 r1 = sdk.accept(cand, approved_by="alice")
 print(r1.accepted_count, r1.skipped_count)  # 1, 0
 
-# same candidate written again: idempotent skip
+# writing the exact same candidate again: idempotently skipped
 r2 = sdk.accept(cand, approved_by="alice")
 print(r2.accepted_count, r2.skipped_count)  # 0, 1
 print(r2.skipped_reason_counts)             # {"duplicate": 1}
 
-# same claim, different confidence: coexists (not duplicate)
+# same claim, different confidence: coexistence (not duplicate)
 cand_v2 = replace(cand, confidence=0.61)
 r3 = sdk.accept(cand_v2, approved_by="alice")
 print(r3.accepted_count, r3.skipped_count)  # 1, 0
@@ -820,27 +863,27 @@ print(r3.accepted_count, r3.skipped_count)  # 1, 0
 
 **Current boundary**
 
-* Temporal write semantics in Derivation heads (producing assertions with `valid_from`/`valid_to`/`version` directly from the head) are not open yet. Temporal information can currently only be carried via meta in write paths (`sdk.batch`/`sdk.ingest`).
+* Temporal write semantics in Derivation heads (heads directly producing assertions with `valid_from`/`valid_to`/`version`) are not yet exposed. Temporal information can currently only be carried via `meta` in write paths (`sdk.batch` / `sdk.ingest`).
 
-### 6.6 Identity Rule for `head`
+### 6.6 Identity Rules in the Head
 
+```text
+fields appearing in the head = all non-primary Identity fields + the target Field value
 ```
-Fields appearing in head = all non-primary Identity + target Field value
-```
 
-* **`primary_key` fields**: regardless of how many, they never appear in the head; they are implicitly carried by entity binding in `where`.
-* **non-primary Identity fields**: must be explicitly provided in the head, otherwise the write target is ambiguous.
+* **`primary_key` fields**: regardless of how many there are, they never appear in the head and are implicitly carried by entity bindings in the where clause.
+* **Non-primary Identity fields**: must be explicitly specified in the head, otherwise the write target is ambiguous.
 
 ```python
 # User has primary_key=user_id, non-primary Identity=lang
-head=User.name(lang=l, name=n)   # user_id does not appear; lang must be provided
+head=User.name(lang=l, name=n)   # user_id does not appear, lang must be given
 ```
 
-A `primary_key` field appearing in the head is a compile-time hard error.
+It is a compile-time hard error for a `primary_key` field to appear in the head.
 
-### 6.7 Cross-coordinate Join
+### 6.7 Cross-Coordinate Joins
 
-Two facts of the same entity under different coordinates are two different variables in a Rule; they are explicitly joined via the `primary_key`:
+Two facts of the same entity at different coordinates are represented as two different variables in a Rule, explicitly joined via `primary_key`:
 
 ```python
 with vars("u1", "u2", "n1", "n2") as (u1, u2, n1, n2):
@@ -856,27 +899,27 @@ with vars("u1", "u2", "n1", "n2") as (u1, u2, n1, n2):
 
 **Stable contract**
 
-* Cross-coordinate joins only allow `primary_key` fields to participate in `==` comparisons.
-* Cross-coordinate equality comparisons on non-`primary_key` fields are compile-time hard errors; the error message suggests which `primary_key` field to use.
+* Only `primary_key` fields may participate in `==` comparisons for cross-coordinate joins.
+* Equality comparisons across coordinates using non-`primary_key` fields are compile-time hard errors; the error message indicates which `primary_key` should be used instead.
 * Cross-entity-type comparisons are compile-time hard errors.
 
-### 6.8 Rule / Derivation Current Limitations Quick Reference
+### 6.8 Current Limitations of Rule / Derivation
 
-| Limitation                                   | Notes                                                    |
-| -------------------------------------------- | -------------------------------------------------------- |
-| String DSL                                   | `sdk.run("...")` / `sdk.evaluate("...")` not supported   |
-| `sdk.run(Derivation(...))`                   | not supported; use `sdk.evaluate(...)`                   |
-| Chained path comparisons                     | `LivesIn(li).user == p` not supported; use two-step      |
-| Cross-coordinate non-primary_key comparisons | compile-time hard error                                  |
-| Non-linear arithmetic                        | `x * y` not supported                                    |
-| `Not(...)` body                              | must be non-empty; has safety checks with outer bindings |
-| `RuleRef` inside `Not(...)`                  | compile-time error                                       |
+| Limitation                                   | Description                                                |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| String DSL                                   | `sdk.run("...")` / `sdk.evaluate("...")` unsupported       |
+| `sdk.run(Derivation(...))`                   | unsupported; use `sdk.evaluate(...)`                       |
+| Chained path comparisons                     | `LivesIn(li).user == p` unsupported; use two-step form     |
+| Cross-coordinate non-primary_key comparisons | compile-time hard error                                    |
+| Non-linear arithmetic                        | `x * y` unsupported                                        |
+| `Not(...)` body                              | must be non-empty; safety checks apply with outer bindings |
+| `RuleRef` inside `Not(...)`                  | compile-time error                                         |
 
 ---
 
 ## 7. Provenance Validation
 
-`sdk.validate_provenance(...)` is a pure validation entry; it does not write the ledger and does not automatically block ingest/accept.
+`sdk.validate_provenance(...)` is a pure validation entry point. It does not write to the ledger and does not automatically block ingest/accept.
 
 ```python
 report = sdk.validate_provenance(candidate_set, standard="derivation_v1")
@@ -903,77 +946,77 @@ print(report.warnings)
 | `support_kind`         | non-empty string |
 | `support_digest`       | `sha256:<64hex>` |
 
-Optional keys `schema_digest` / `policy_digest` with invalid formats are recorded in `warnings` (not in `errors`).
+Optional keys `schema_digest` / `policy_digest` with invalid formats are written to `warnings` (not `errors`).
 
 ---
 
-## 8. Which Write Entry Should I Use?
+## 8. Which Write Entry Point Should I Choose?
 
-| Scenario                                                       | Recommended entry                     |
-| -------------------------------------------------------------- | ------------------------------------- |
-| Construct objects with references; need preview before commit  | `sdk.batch()`                         |
-| Full identity known; modify a few fields                       | `sdk.edit(...)`                       |
-| External system pushes item list; or only have `ref + asrt_id` | `sdk.ingest(...)`                     |
-| Review and materialize derived candidates                      | `sdk.evaluate(...) + sdk.accept(...)` |
-| Single low-level write                                         | `sdk.set / sdk.add / sdk.retract`     |
+| Scenario                                                                | Recommended entry point               |
+| ----------------------------------------------------------------------- | ------------------------------------- |
+| Constructing objects with references, and previewing before commit      | `sdk.batch()`                         |
+| Full identity is known, and only a few fields need to be changed        | `sdk.edit(...)`                       |
+| External system pushes item lists, or only `ref + asrt_id` is available | `sdk.ingest(...)`                     |
+| Review and materialization of derived candidates                        | `sdk.evaluate(...) + sdk.accept(...)` |
+| Single low-level write                                                  | `sdk.set / sdk.add / sdk.retract`     |
 
 **Decision tree**
 
 ```text
-Do you need to preview the write plan (ops) first?
+Need to inspect the write plan (ops) first?
   ├─ Yes -> sdk.batch()
   └─ No
-      ├─ Do you have full identity and only modify one entity?
+      ├─ Have full identity and only changing one entity?
       │    ├─ Yes -> sdk.edit(...)
       │    └─ No
-      │         ├─ Is this writing derived candidates?
+      │         ├─ Is this a derived-candidate write?
       │         │    ├─ Yes -> sdk.evaluate(...) + sdk.accept(...)
       │         │    └─ No -> sdk.ingest(...)
 ```
 
-**Common mis-selections**
+**Common wrong choices**
 
-| Mis-selection                                                  | Correct approach                                                               |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `find(...)` cannot provide identity but you still want `edit`  | use `ingest(retract + set/add)`                                                |
-| Need cross-process replay of writes                            | export wire plan via `batch.preview().to_json(sdk)`                            |
-| Treat hard reserved meta as normal keys during external import | remove reserved keys; if needed, validate via `validate_provenance(...)` first |
+| Wrong choice                                                        | Correct approach                                                     |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `find(...)` does not return identity but still trying to use `edit` | switch to `ingest(retract + set/add)`                                |
+| Need cross-process replay of writes                                 | export a wire plan with `batch.preview().to_json(sdk)`               |
+| Treating hard-reserved meta as ordinary keys during external import | remove reserved keys; use `validate_provenance(...)` first if needed |
 
 ---
 
-## 9. Error Handling Cheat Sheet
+## 9. Quick Error Handling Reference
 
-### 9.0 Error Stratification
+### 9.0 Error Layers
 
-| Layer                          | Representative errors                                                                    | Typical trigger                                                     |
-| ------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| SDK facade layer               | `SDKSchemaError` / `SDKStoreError`                                                       | invalid input shapes, constraint violations, unsupported boundaries |
-| Entity read/write object layer | `EntityNotFoundError` / `FrozenSnapshotError` / `CardinalityError` / `EditorClosedError` | edit/get/snapshot/assertions                                        |
-| DSL construction layer         | `SDKDSLError`                                                                            | invalid vars/Rule/Derivation construction                           |
-| Core compile/execute layer     | `RuleCompileError`                                                                       | semantic constraints (e.g., RuleRef target not `expose=True`)       |
-| Ingest diagnostics layer       | `result.diagnostics` (non-exception)                                                     | item-level validation failure (collect-and-stop)                    |
+| Layer                            | Representative errors                                                                    | Typical triggers                                                  |
+| -------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| SDK facade layer                 | `SDKSchemaError` / `SDKStoreError`                                                       | invalid argument shape, unmet constraints, unsupported boundaries |
+| Entity read/write object layer   | `EntityNotFoundError` / `FrozenSnapshotError` / `CardinalityError` / `EditorClosedError` | edit/get/snapshot/assertions related                              |
+| DSL construction layer           | `SDKDSLError`                                                                            | invalid vars/Rule/Derivation object construction                  |
+| Core compilation/execution layer | `RuleCompileError`                                                                       | rule semantic constraints (e.g. RuleRef target not `expose=True`) |
+| ingest diagnostic layer          | `result.diagnostics` (non-exception)                                                     | item-level validation failure (collect-and-stop)                  |
 
-`SDKError` and subclasses provide structured fields: `code` (machine-readable error code), `path` (`None` if unset).
+`SDKError` and its subclasses all provide structured fields: `code` (machine-readable error code), and `path` (`None` if unset).
 
 ### 9.1 Common Errors Quick Reference
 
-| Error                                            | Common trigger                                                                                                  | Suggested handling                                                                                        |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `EntityNotFoundError`                            | `sdk.edit(...)` target missing                                                                                  | verify identity; create with `sdk.batch()`; use `err.entity_type` and `err.identity_kwargs` for debugging |
-| `FrozenSnapshotError`                            | assigning to `EntitySnapshot` or `assertions`                                                                   | use `sdk.edit(...)` / `sdk.ingest(...)` instead                                                           |
-| `CardinalityError`                               | edit path: using `.add` on `single` or `.set` on `multi` (batch path raises `SDKStoreError` for similar misuse) | choose the correct API by cardinality                                                                     |
-| `EditorClosedError`                              | using editor after `commit/rollback`                                                                            | reopen via `sdk.edit(...)`                                                                                |
-| `SDKSchemaError`                                 | `get` passed non-identity field; `find` field invalid or identity incomplete                                    | fix params against schema                                                                                 |
-| `SDKStoreError`                                  | type mismatch on write; unknown params to `accept`; passing string DSL to `run/evaluate`                        | check parameter types and interface boundaries                                                            |
-| `SDKStoreError(code="INVALID_ROW_FORMAT")`       | invalid `row_format`                                                                                            | use `"dict"`                                                                                              |
-| `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")` | Query invalid `row_format`; `row_format="instance"` but head invalid; or calling `sdk.run(...)` on Derivation   | Query use `"dict"`/`"instance"` with valid head; Derivation use `sdk.evaluate(...)`                       |
-| `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`       | Query head output aliases conflict                                                                              | rename head variables                                                                                     |
-| `SDKDSLError(code="QUERY_UNBOUND_VAR")`          | Query where uses unbound variables                                                                              | bind variable in head or earlier atoms                                                                    |
-| `SDKDSLError`                                    | chained entity syntax; `with vars() as (u,)` no-arg unpacking                                                   | switch to supported syntax (two-step form)                                                                |
-| `RuleCompileError`                               | RuleRef target not `expose=True`                                                                                | fix rule declaration                                                                                      |
-| `IngestResult.diagnostics` has `error`           | invalid item structure; unknown retract `asrt_id`                                                               | fix items by `path`; any error causes whole batch to not write                                            |
+| Error                                            | Common trigger                                                                                                                            | Suggested handling                                                                                                    |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `EntityNotFoundError`                            | target of `sdk.edit(...)` does not exist                                                                                                  | verify identity; use `sdk.batch()` to create new entities; `err.entity_type` and `err.identity_kwargs` can help debug |
+| `FrozenSnapshotError`                            | assigning to `EntitySnapshot` or `assertions`                                                                                             | use `sdk.edit(...)` / `sdk.ingest(...)` instead                                                                       |
+| `CardinalityError`                               | on `sdk.edit`: using `.add` on a `single` field, or `.set` on a `multi` field (same class of error raises `SDKStoreError` on `sdk.batch`) | choose the correct API based on field cardinality                                                                     |
+| `EditorClosedError`                              | continuing to use an editor after `commit/rollback`                                                                                       | reopen with `sdk.edit(...)`                                                                                           |
+| `SDKSchemaError`                                 | passing non-identity fields to `get`; invalid `find` field or incomplete identity                                                         | correct parameters according to schema                                                                                |
+| `SDKStoreError`                                  | write type mismatch; unknown parameters passed to `accept`; string DSL passed to `run/evaluate`                                           | check parameter types and API boundaries                                                                              |
+| `SDKStoreError(code="INVALID_ROW_FORMAT")`       | invalid `row_format` value                                                                                                                | change to `"dict"`                                                                                                    |
+| `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")` | Query uses invalid `row_format`, `row_format="instance"` but head does not satisfy constraints, or calling `sdk.run(...)` on a Derivation | Query should use `"dict"`/`"instance"` with valid head constraints; use `sdk.evaluate(...)` for Derivation            |
+| `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`       | duplicate output aliases in Query head                                                                                                    | adjust head variable naming                                                                                           |
+| `SDKDSLError(code="QUERY_UNBOUND_VAR")`          | unbound variable used in Query where                                                                                                      | bind the variable in the head or a preceding atom                                                                     |
+| `SDKDSLError`                                    | chained entity syntax; `with vars() as (u,)` unpacking without arguments                                                                  | use supported syntax (two-step form)                                                                                  |
+| `RuleCompileError`                               | RuleRef target not `expose=True`                                                                                                          | correct the rule declaration                                                                                          |
+| `IngestResult.diagnostics` contains `error`      | invalid item structure; unknown retract asrt_id                                                                                           | fix item-by-item according to `path`; any error prevents the whole batch from being written                           |
 
-### 9.2 Ingest Diagnostics Triage
+### 9.2 Diagnosing ingest
 
 ```python
 res = sdk.ingest(items, meta=meta)
@@ -981,7 +1024,7 @@ for d in res.diagnostics:
     print(d["severity"], d["code"], d["path"], d["message"])
 ```
 
-Triage order: first `diagnostics` (fastest structural localization) → then `warnings` (semantic sensitive keys) → finally `written_assertion_ids`.
+Suggested troubleshooting order: first inspect `diagnostics` (fastest way to locate structural errors) → then `warnings` (semantically sensitive keys) → finally `written_assertion_ids`.
 
 ---
 
@@ -995,9 +1038,9 @@ from factpy_kernel.sdk import SDKRegistry
 reg = SDKRegistry(root_dir="./registry")
 ```
 
-**Stable contract**: provide at least one of `root_dir` or `registry`; both may also be passed together, but their paths must match or `SDKRegistryError` is raised.
+**Stable contract**: at least one of `root_dir` or `registry` must be provided; both may be provided simultaneously, but the paths must be consistent, otherwise `SDKRegistryError` is raised.
 
-### 10.2 Apply Schema
+### 10.2 Applying a Schema
 
 ```python
 res = reg.apply_schema_classes(
@@ -1010,9 +1053,9 @@ print(res["ok"])
 print(res["apply_execute"]["idempotency"]["replayed"])
 ```
 
-Replaying the same `apply_request_id` uses idempotent replay (current behavior).
+Replaying the same `apply_request_id` takes the idempotent replay path (current behavior).
 
-### 10.3 Register Rule / Derivation
+### 10.3 Registering Rule / Derivation
 
 ```python
 with vars("u", "l") as (u, l):
@@ -1033,16 +1076,16 @@ with vars("u", "l", "n") as (u, l, n):
 reg.register_derivation(drv)
 ```
 
-You can also register precompiled specs directly (skipping DSL compile):
+You can also register already-compiled specs directly (skipping DSL compilation):
 
 ```python
 reg.register_rule_spec(compiled_rule_spec_dict)
 reg.register_derivation_spec(compiled_derivation_spec_dict)
 ```
 
-**Current behavior**: multi-head Derivation is supported only in the runtime `sdk.evaluate(...)` path; `register_derivation(...)` treats Derivations as single-head. If you need to publish multi-head logic, expand it into multiple single-head derivations and register each one.
+**Current behavior**: multi-head Derivation is supported only at runtime via `sdk.evaluate(...)`; `register_derivation(...)` processes it as single-head. If multi-head logic needs to be published, expand it into multiple single-head derivations before registration.
 
-### 10.4 Read and List
+### 10.4 Reading and Listing
 
 ```python
 reg.list_rule_ids()
@@ -1057,7 +1100,7 @@ reg.read_derivation_spec("drv.copy_lang", "1.0.0")
 
 **Stable contract**: `get_latest_*` / `read_*` return `None` if the target does not exist.
 
-### 10.5 Publish-run Queries
+### 10.5 Apply Pipeline Queries
 
 ```python
 reg.list_apply_run_ids()
@@ -1065,9 +1108,9 @@ reg.list_apply_runs()
 reg.show_apply_run("req-001")
 ```
 
-**Current behavior**: `show_apply_run(...)` returns `None` if missing; `list_apply_runs()` returns a list of apply-execute run records (`list[dict]`).
+**Current behavior**: `show_apply_run(...)` returns `None` if not found; `list_apply_runs()` returns a list of apply execute run records (`list[dict]`).
 
-### 10.6 Unified Low-level Entry: `apply_authoring_bundle`
+### 10.6 Unified Low-Level Entry Point: `apply_authoring_bundle`
 
 ```python
 res = reg.apply_authoring_bundle(
@@ -1077,28 +1120,28 @@ res = reg.apply_authoring_bundle(
 )
 ```
 
-**Current behavior**: `apply_authoring_bundle(...)` is the underlying unified entry for `apply_schema_classes(...)`, suitable for batching schema/rule/derivation changes together.
+**Current behavior**: `apply_authoring_bundle(...)` is the low-level master entry point behind `apply_schema_classes(...)`, suitable for composing schema/rule/derivation changes in one shot.
 
 ### 10.7 Schema Metadata
 
 ```python
 manifest = reg.read_manifest()          # registry manifest dict
 entry = reg.get_schema_entry()          # schema entry metadata (dict | None)
-res = reg.upsert_schema_ir(schema_ir)   # write compiled schema_ir directly
+res = reg.upsert_schema_ir(schema_ir)   # directly write compiled schema_ir
 ```
 
 ---
 
 ## 11. Advanced APIs
 
-### 11.1 Bypass After Compilation
+### 11.1 Direct Pass-Through After Compilation
 
 ```python
 cands = sdk.evaluate_compiled(...)
 res = sdk.accept_compiled(...)
 ```
 
-Suitable when you already hold compiled parameters and want to skip SDK object compilation (current behavior).
+Suitable for scenarios where compiled parameters are already available and SDK object compilation should be skipped (current behavior).
 
 ### 11.2 Package Export and Execution
 
@@ -1107,7 +1150,7 @@ sdk.export_package("./pkg", options)
 sdk.run_package("./pkg", entrypoints=["__query__"], engine="souffle")
 ```
 
-Export package format is v2; `manifest.json` contains `"export_version": "v2"`. Facts directory structure:
+The export package format is v2. `manifest.json` contains `"export_version": "v2"`, and the facts directory structure is:
 
 ```text
 facts/
@@ -1121,13 +1164,13 @@ facts/
   revokes.facts
 ```
 
-Float meta uses reversible serialization: export writes `repr(value)`, import reads `float(raw)`; scientific notation is a valid format.
+Floating-point meta uses reversible serialization: export writes `repr(value)`, import reads `float(raw)`; scientific notation is a valid format.
 
-**Stable contract**: feeding a v1 package (with `meta_num.facts` and without `export_version`) to the new reader raises an explicit `unsupported export_version` error.
+**Stable contract**: feeding a v1 package (containing `meta_num.facts` and lacking `export_version`) into the new reader raises a clear `unsupported export_version` error.
 
 ### 11.3 Configurable Views (`sdk.views`)
 
-Views define “which perspective to read data from” and affect presentation in `sdk.find()` and `sdk.run()`:
+Views define “which perspective to use when reading data” and affect result presentation in `sdk.find()` and `sdk.run()`:
 
 ```python
 from factpy_kernel.core.store.types import ViewSpec
@@ -1143,35 +1186,35 @@ sdk.views.get("conservative")
 sdk.views.list()
 ```
 
-`sdk.views` is an in-process manager (non-persistent); after process restart it returns to the built-in `"default"` view.
+`sdk.views` is an in-process manager (non-persistent); after restarting the process, it returns to the built-in `"default"` view.
 
 **`ViewSpec` parameters**
 
-| Parameter             | Type          | Default | Notes                                       |
-| --------------------- | ------------- | ------- | ------------------------------------------- |
-| `active`              | `bool`        | `True`  | whether to consider only active assertions  |
-| `confidence_strategy` | `str`         | `"max"` | confidence aggregation strategy             |
-| `prefer_source`       | `str \| None` | `None`  | only effective for `prefer_source` strategy |
+| Parameter             | Type          | Default | Description                                     |
+| --------------------- | ------------- | ------- | ----------------------------------------------- |
+| `active`              | `bool`        | `True`  | whether to look only at active assertions       |
+| `confidence_strategy` | `str`         | `"max"` | confidence aggregation strategy                 |
+| `prefer_source`       | `str \| None` | `None`  | only effective when strategy is `prefer_source` |
 
 **Confidence aggregation strategies**
 
-| Strategy          | Semantics                                             |
-| ----------------- | ----------------------------------------------------- |
-| `"max"`           | take the highest confidence (default)                 |
-| `"mean"`          | arithmetic mean                                       |
-| `"median"`        | median                                                |
-| `"prefer_source"` | prefer `prefer_source`; if no hit, fall back to `max` |
+| Strategy          | Semantics                                                              |
+| ----------------- | ---------------------------------------------------------------------- |
+| `"max"`           | take the highest confidence (default)                                  |
+| `"mean"`          | arithmetic mean                                                        |
+| `"median"`        | median                                                                 |
+| `"prefer_source"` | prefer values from `prefer_source`, falling back to `max` if not found |
 
-**Scope**: `confidence_strategy` only affects presentation in `sdk.find()` / `sdk.run()`, not inference. `sdk.evaluate()` does not accept `view`.
+**Scope of effect**: `confidence_strategy` only affects the presentation of `sdk.find()` / `sdk.run()` results, not the reasoning process. `sdk.evaluate()` does not accept a `view` parameter.
 
-**`sdk.run(..., view=...)` output contract** (stable contract)
+**Output contract for `sdk.run(..., view=...)`** (stable contract)
 
-* Default: returns `rows` (`list[dict]` or `list[tuple]`), without injecting `confidence` into row objects.
+* Default: returns `rows` (`list[dict]` or `list[tuple]`), without injecting a `confidence` field into each row.
 * With `return_display_meta=True`: returns `(rows, display_meta)`.
-* `display_meta` has the same length as `rows`; each item contains at least `confidence`, `confidence_strategy`, `source_breakdown`.
-* `return_display_meta=True` must be used with `view`, otherwise raises `SDKStoreError`.
+* `display_meta` has the same length as `rows`; each item contains at least `confidence`, `confidence_strategy`, and `source_breakdown`.
+* `return_display_meta=True` must be used together with `view`, otherwise `SDKStoreError` is raised.
 
-### 11.3.1 End-to-end Example: How `find` and `run` Obtain Confidence
+### 11.3.1 End-to-End Example: How `find` and `run` Obtain Confidence
 
 ```python
 from factpy_kernel.core.store.types import ViewSpec
@@ -1179,27 +1222,27 @@ from factpy_kernel.core.store.types import ViewSpec
 # 1) register a view (mean strategy)
 sdk.views.create("risk_mean", ViewSpec(confidence_strategy="mean"))
 
-# 2) find: get the aggregated value on snapshot objects
+# 2) find: read aggregated value directly from snapshot object
 users = sdk.find(User, lang="zh", view="risk_mean")
-print(users[0].confidence)  # e.g., 0.73
+print(users[0].confidence)  # e.g. 0.73
 
-# 3) run: does not inject confidence by default
+# 3) run: confidence is not injected by default
 rows = sdk.run(speaks_rule, view="risk_mean", row_format="dict")
 print(rows[0])  # {"u": "...", "l": "..."}
 
-# 4) run + return_display_meta: obtain display meta
+# 4) run + return_display_meta: obtain display metadata
 rows, display_meta = sdk.run(
     speaks_rule,
     view="risk_mean",
     row_format="dict",
     return_display_meta=True,
 )
-print(display_meta[0]["confidence"])           # e.g., 0.73
+print(display_meta[0]["confidence"])           # e.g. 0.73
 print(display_meta[0]["confidence_strategy"])  # "mean"
-print(display_meta[0]["source_breakdown"])     # aggregation by source
+print(display_meta[0]["source_breakdown"])     # source-wise aggregation breakdown
 ```
 
-**Built-in view**: `"default"` (`active=True, confidence_strategy="max"`), cannot be deleted.
+**Built-in view**: `"default"` (`active=True, confidence_strategy="max"`), and it cannot be deleted.
 
 **Inline views** (temporary, not stored):
 
@@ -1216,7 +1259,7 @@ rows, display_meta = sdk.run(
 )
 ```
 
-Service `runtime_v1` view-management endpoints (current implementation):
+View management endpoints in service `runtime_v1` (current implementation):
 
 | Method | Endpoint                                         |
 | ------ | ------------------------------------------------ |
@@ -1226,7 +1269,7 @@ Service `runtime_v1` view-management endpoints (current implementation):
 | `POST` | `/v1/runtime/sessions/{session_id}/views/get`    |
 | `GET`  | `/v1/runtime/sessions/{session_id}/views`        |
 
-### 11.4 ProbLog Probabilistic Inference
+### 11.4 ProbLog Probabilistic Reasoning
 
 ```python
 from factpy_kernel.sdk import Body
@@ -1250,22 +1293,22 @@ res = sdk.accept(cands[0], approved_by="alice")
 **`CandidateSet.confidence` field** (new in v3)
 
 * Type: `float | None`
-* ProbLog path: marginal probability; native/souffle path: `None`
-* Fully preserved through serialization/deserialization; not lost across processes
+* Under the ProbLog path, it is the marginal probability value; under native/souffle paths, it is `None`
+* Fully passed through serialization/deserialization, without loss across processes
 
-**accept semantics** (v3 update)
+**Accept semantics** (v3 update)
 
-* Duplicate is determined by: same claim, and same business-semantic meta (after excluding timestamp/run/candidate identifier fields)
-* Assertions for the same fact with different `confidence` or different `source` can coexist; they will not be misclassified as duplicates
+* Duplicate determination is: same claim, and same business-semantic meta (after excluding timestamp/run/candidate identifier fields)
+* Assertions for the same fact with different `confidence` or different `source` may coexist and are not misclassified as duplicates
 
-**Current boundary**
+**Current boundaries**
 
-* If ProbLog CLI is unavailable or times out: raises `ProbLogEngineError`.
-* If export-stage structure is unsupported or params invalid: raises `ProbLogExportError`.
-* If result parsing fails: raises `ProbLogImportError`.
-* Within the same inference batch (same `run_id/trace_id`), repeatedly writing the same claim does not force coexistence solely due to `confidence` changes; coexistence is still constrained by ingest idempotency keys.
+* If ProbLog CLI is unavailable or times out, `ProbLogEngineError` is raised.
+* If export-stage structure is unsupported or parameters are invalid, `ProbLogExportError` is raised.
+* If result parsing fails, `ProbLogImportError` is raised.
+* Within the same reasoning batch (same `run_id/trace_id`), repeated writes of the same claim are not forced into coexistence merely because `confidence` changes; coexistence is still governed by the ingest idempotency key.
 
-### 11.5 Debug Attributes
+### 11.5 Debugging Properties
 
 ```python
 sdk.store        # underlying Store object
@@ -1285,18 +1328,18 @@ Both are computed over the current active assertion set (**stable contract**).
 `explain_fact(pred_id, e_ref, *val_atoms)` returns (current behavior):
 
 * `pred_id`, `e_ref`
-* `active_claims`: `list[dict]`, each includes `asrt_id`, `args`, `meta`
+* `active_claims`: `list[dict]`, each item containing `asrt_id`, `args`, `meta`
 * `chosen_asrt_id`
 
-`*val_atoms` filters `active_claims` by “exact value-atom match”.
+The `*val_atoms` parameter filters `active_claims` by exact match on value atoms.
 
 `conflicts(pred_id, e_ref)` returns (current behavior):
 
-* `pred_id`
+* `pred_id`, `e_ref`
 * `active_asrt_ids`
 * `chosen_asrt_id`
 
-`pred_id` takes a predicate id (e.g., `"user:age"`); `e_ref` takes a canonical `idref_v1` token.
+Pass predicate IDs as `pred_id` (such as `"user:age"`), and canonical `idref_v1` tokens as `e_ref`.
 
 ---
 
@@ -1304,22 +1347,22 @@ Both are computed over the current active assertion set (**stable contract**).
 
 ### EvaluateMode Renaming
 
-| Old        | New         | Behavior when passing old value   |
-| ---------- | ----------- | --------------------------------- |
-| `"python"` | `"native"`  | explicit error; suggests new name |
-| `"engine"` | `"souffle"` | explicit error; suggests new name |
-| ——         | `"problog"` | new in v3                         |
+| Old        | New         | Behavior when old value is passed      |
+| ---------- | ----------- | -------------------------------------- |
+| `"python"` | `"native"`  | explicit error with new name suggested |
+| `"engine"` | `"souffle"` | explicit error with new name suggested |
+| ——         | `"problog"` | new in v3                              |
 
-Default values are also updated to `"native"` (including authoring DTO/session and SDK derivation evaluate paths).
+The default value is also updated to `"native"` (including authoring DTO/session and SDK derivation evaluate paths).
 
-### meta kind Renaming + Addition
+### Meta Kind Renaming + Addition
 
-| Old     | New       | Notes                             |
+| Old     | New       | Description                       |
 | ------- | --------- | --------------------------------- |
 | `"num"` | `"int"`   | integer; write validation updated |
 | ——      | `"float"` | new in v3; used by `confidence`   |
 
-`Ledger.META_KINDS` has been updated from `{"str","num","bool","time","json"}` to `{"str","int","float","bool","time","json"}`. Code writing `kind="num"` must change to `kind="int"` (write validation will raise a clear error).
+`Ledger.META_KINDS` has been updated from `{"str","num","bool","time","json"}` to `{"str","int","float","bool","time","json"}`. Code writing `kind="num"` must be changed to `kind="int"` (the system will raise a clear error during write validation).
 
 ### Export Package Format Upgrade (v1 → v2)
 
@@ -1327,24 +1370,24 @@ Default values are also updated to `"native"` (including authoring DTO/session a
 | ------------------- | ------------------------------------------------- |
 | `meta_num.facts`    | `meta_int.facts`                                  |
 | ——                  | `meta_float.facts` (new)                          |
-| no `export_version` | `manifest.json` includes `"export_version": "v2"` |
+| no `export_version` | `manifest.json` contains `"export_version": "v2"` |
 
-Feeding a v1 package to a v2 reader raises an explicit error: `unsupported export_version: 'v1'; expected 'v2'`.
+Feeding a v1 package into a v2 reader raises a clear error: `unsupported export_version: 'v1'; expected 'v2'`.
 
-### accept Semantics Change
+### Accept Semantics Change
 
-| Old                                                                   | New                                                                        |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| duplicate check only considers claim (`pred_id + e_ref + rest_terms`) | also compares business-semantic meta (excluding timestamp/run identifiers) |
-| same fact with different confidence was misclassified as duplicate    | naturally coexists; no longer misclassified                                |
+| Old                                                                    | New                                                                         |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| duplicate detection only checks claim (`pred_id + e_ref + rest_terms`) | also compares business-semantic meta (excluding timestamps/run identifiers) |
+| same fact with different confidence may be misclassified as duplicate  | naturally coexists, no longer misclassified                                 |
 
-### Body DSL (new)
+### Body DSL (New)
 
 ```python
-# v2 style (still supported)
+# v2 form (still supported)
 where=[[atom1, atom2], [atom3]]
 
-# v3 style (when confidence is needed)
+# new v3 form (when confidence is needed)
 from factpy_kernel.sdk import Body
 where=[
     Body([atom1, atom2], confidence=0.9),
@@ -1353,16 +1396,16 @@ where=[
 # mixing the two forms is forbidden
 ```
 
-### `run(view)` Result Contract Tightening
+### Tightened `run(view)` Result Contract
 
-| Old assumption                                               | v3 actual behavior                                                                                      |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `sdk.run(rule, view=...)` might include `confidence` in rows | by default it does not inject fields into row objects; return type remains consistent with `row_format` |
-| ——                                                           | to obtain aggregated confidence, use `return_display_meta=True`, which returns `(rows, display_meta)`   |
+| Old assumption                                                 | Actual v3 behavior                                                                                    |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `sdk.run(rule, view=...)` may include `confidence` inside rows | by default no in-row fields are injected, and the return type remains consistent with `row_format`    |
+| ——                                                             | to obtain aggregated confidence, use `return_display_meta=True`, which returns `(rows, display_meta)` |
 
-### Schema Layer (v1 → v2, historical)
+### Schema Layer (v1 → v2, historical legacy)
 
 * `Field.cardinality`: `"functional"` / `"temporal"` → `"single"`
-* `Field.dims`, `Field.fact_key`, `Field.pred_id` removed
+* `Field.dims`, `Field.fact_key`, and `Field.pred_id` have been removed
 * `Identity(primary_key=True)` is required for cross-coordinate joins
 * `sdk_batch_plan_v1` wire payload no longer carries `dims` / `fact_key`

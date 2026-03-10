@@ -84,6 +84,13 @@ print(preflight.get("summary", {}))   # entity_count / predicate_count / pred_id
 from factpy_kernel.sdk import Entity, Identity, Field
 
 class User(Entity):
+    """当未显式设置 description 时，docstring 会作为 fallback。"""
+
+    class Meta:
+        version = "v1"
+        description = "用户实体"
+        tags = ["user", "profile"]
+
     user_id: str = Identity(primary_key=True, default_factory="uuid4")
     lang: str = Identity()
 
@@ -96,7 +103,11 @@ class User(Entity):
 
 **稳定合约**：每个 `Entity` 至少需要一个 `Identity`，否则类定义时报 `SDKSchemaError`。
 
-**当前行为**：`Entity` 类 docstring 会自动写入 schema 的实体级 `description`（`schema_ir.entities[*].description`），用于文档/LLM 描述。
+**当前行为**
+- `entity_type` 直接由类名推导，不需要单独声明 `schema_id`。
+- `Entity.Meta` 目前只支持 `version`、`description`、`tags`；出现其他键会在声明期报 `SDKSchemaError`。
+- `description` 的解析优先级是 `Meta.description > 类 docstring`；只有没有显式 `description` 时才回退 docstring。
+- `version`、`description`、`tags` 会进入 authoring / schema 编译输出，但不参与运行时求值语义。
 
 ### 2.2 Identity 参数
 
@@ -109,6 +120,31 @@ class User(Entity):
 `primary_key=True` 与 `default_factory` 是正交的——前者声明语义职责，后者声明生成策略，可以同时使用也可以分开。没有标记 `primary_key=True` 的 Entity，若 Rule 里出现跨 Field 联结，编译期报错。
 
 **建议**：`Identity` 字段应指向实体的业务属性（如 `user_id`、`lang`），而非 `source`、`version` 等数据管理维度。后者属于 meta，不属于 Identity。这只是设计建议，引擎不强制。
+
+### 2.2.1 声明元数据
+
+`Entity` 的声明元数据统一通过 `Meta` 提供：
+
+| 键 | 含义 |
+|------|------|
+| `version` | 声明版本 |
+| `description` | 面向文档和 LLM 的实体说明 |
+| `tags` | 轻量分类标签 |
+
+```python
+class EmploymentEvent(Entity):
+    """如果 Meta.description 缺省，这里会被当作 description。"""
+
+    class Meta:
+        version = "v2"
+        description = "雇佣事件"
+        tags = ["employment", "event"]
+
+    event_id: str = Identity(primary_key=True)
+    company: str = Field(cardinality="single")
+```
+
+**当前边界**：`Meta` 不是开放字典；`owner`、`llm_hint`、`schema_id` 之类字段目前都不支持。
 
 ### 2.3 Field 参数
 
@@ -585,6 +621,8 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
     speaks_rule = Rule(
         id="q_speaks",
         version="1.0.0",
+        description="查找用户可能会说的语言",
+        tags=["demo", "query"],
         select=[u, l],
         where=[
             LivesIn(li),
@@ -620,6 +658,7 @@ rows, display_meta = sdk.run(
 - `view` 可传具名视图名或 `ViewSpec`，仅影响结果呈现，不改变 Rule 求值范围。
 - `sdk.run(rule, view=...)` 默认只返回 `rows`，不在行内注入 `confidence`。
 - `return_display_meta=True` 时返回 `(rows, display_meta)`；且必须同时提供 `view`，否则抛 `SDKStoreError`。
+- `Rule` 支持 `description`、`tags` 两个声明字段；它们会进入 compiler 输出，但不影响查询语义。
 
 **当前行为**：支持线性算术 `+/-/常数倍`（如 `age == (2026 - by)`）；不支持 `x * y` 非线性乘法。
 
@@ -738,6 +777,8 @@ with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
     speaks_drv = Derivation(
         id="drv.speaks",
         version="1.0.0",
+        description="根据居住地和官方语言推导用户语言能力",
+        tags=["demo", "derivation"],
         where=[
             LivesIn(li), li.user == u, li.country == c,
             HasLanguage(hl), hl.country == c, hl.language == l,
@@ -774,6 +815,7 @@ res = sdk.accept_many(cands, mode="atomic")
 - `sdk.run(Derivation(...))` 不支持；应使用 `sdk.evaluate(...)`。
 - `sdk.evaluate(..., view=...)` 不支持；传入时抛 `SDKStoreError`（推理路径始终基于完整 active 断言集）。
 - 存在依赖图时，优先使用 `sdk.accept_many(..., mode="atomic")` 保证原子性。
+- `Derivation` 支持 `description`、`tags` 两个声明字段；它们会进入 compiler 输出，但不影响候选生成语义。
 
 ### 6.5.1 `accept` 幂等与并存示例
 

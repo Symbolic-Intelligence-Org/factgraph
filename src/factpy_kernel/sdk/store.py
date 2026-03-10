@@ -1126,6 +1126,14 @@ def _build_authoring_derivation_payload_with_where(
     if status is not None:
         payload["status"] = status
 
+    description = getattr(derivation, "description", None)
+    if description is not None:
+        payload["description"] = description
+
+    tags = getattr(derivation, "tags", None)
+    if tags is not None:
+        payload["tags"] = list(tags) if isinstance(tags, list) else tags
+
     if body_confidences is not None:
         payload["body_confidences"] = list(body_confidences)
     return payload

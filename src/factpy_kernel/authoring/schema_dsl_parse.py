@@ -104,7 +104,7 @@ def _parse_entity_class(*, node: ast.ClassDef, entity_index: int) -> dict[str, A
             path=f"$.dsl.entities[{entity_index}].identity_fields",
         )
     if meta:
-        entity["meta"] = meta
+        _apply_entity_meta_fields(entity=entity, meta=meta, path=f"$.dsl.entities[{entity_index}].Meta")
     return entity
 
 
@@ -120,6 +120,34 @@ def _parse_meta_class(*, item: ast.ClassDef, path: str) -> dict[str, Any]:
             continue
         raise _parse_error("Meta only supports simple assignments", path=stmt_path)
     return meta
+
+
+def _apply_entity_meta_fields(*, entity: dict[str, Any], meta: dict[str, Any], path: str) -> None:
+    allowed = {"version", "description", "tags"}
+    _reject_unknown_keys(meta, allowed, path=path)
+
+    if "version" in meta:
+        version = meta["version"]
+        if not isinstance(version, str) or not version:
+            raise _parse_error("Meta.version must be non-empty string", path=f"{path}.version")
+        entity["version"] = version
+
+    if "description" in meta:
+        description = meta["description"]
+        if not isinstance(description, str) or not description:
+            raise _parse_error("Meta.description must be non-empty string", path=f"{path}.description")
+        entity["description"] = description
+
+    if "tags" in meta:
+        tags = meta["tags"]
+        if not isinstance(tags, list):
+            raise _parse_error("Meta.tags must be list[str]", path=f"{path}.tags")
+        normalized_tags: list[str] = []
+        for index, tag in enumerate(tags):
+            if not isinstance(tag, str) or not tag:
+                raise _parse_error("Meta.tags items must be non-empty string", path=f"{path}.tags[{index}]")
+            normalized_tags.append(tag)
+        entity["tags"] = normalized_tags
 
 
 def _parse_entity_member_annassign(*, item: ast.AnnAssign, path: str, entity_name: str) -> dict[str, Any]:

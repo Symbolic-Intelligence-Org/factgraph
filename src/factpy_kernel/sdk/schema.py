@@ -144,9 +144,11 @@ class EntityMeta(type):
         if not identity_fields:
             raise SDKSchemaError(f"Entity '{name}' must declare at least one Identity field")
 
-        meta_dict = _extract_meta(getattr(cls, "Meta", None))
-        description = _extract_entity_description(cls)
-        cls.__sdk_entity_spec__ = {
+        declaration_fields = _extract_entity_declaration_fields(getattr(cls, "Meta", None))
+        description = declaration_fields.pop("description", None)
+        if description is None:
+            description = _extract_entity_docstring(cls)
+        spec = {
             "entity_type": name,
             "identity_fields": [
                 member.to_authoring(type_domain=_annotation_to_type_domain_runtime(annotation))
@@ -156,9 +158,14 @@ class EntityMeta(type):
                 member.to_authoring(type_domain=_annotation_to_type_domain_runtime(annotation))
                 for _, member, annotation in fields
             ],
-            **({"description": description} if description else {}),
-            **({"meta": meta_dict} if meta_dict else {}),
         }
+        if "version" in declaration_fields:
+            spec["version"] = declaration_fields["version"]
+        if description is not None:
+            spec["description"] = description
+        if "tags" in declaration_fields:
+            spec["tags"] = declaration_fields["tags"]
+        cls.__sdk_entity_spec__ = spec
         return cls
 
 
@@ -219,20 +226,46 @@ class _UnsetFieldValue:
         self._raise_batch_only("retract")
 
 
-def _extract_meta(meta_cls: Any) -> dict[str, Any]:
+def _extract_entity_declaration_fields(meta_cls: Any) -> dict[str, Any]:
     if meta_cls is None:
         return {}
-    out: dict[str, Any] = {}
+    allowed = {"version", "description", "tags"}
+    raw: dict[str, Any] = {}
     for key, value in vars(meta_cls).items():
         if key.startswith("__"):
             continue
         if callable(value):
             continue
-        out[key] = value
+        if key not in allowed:
+            raise SDKSchemaError(
+                f"Entity.Meta only supports version, description, and tags; got unsupported key: {key}"
+            )
+        raw[key] = value
+    out: dict[str, Any] = {}
+    if "version" in raw:
+        version = raw["version"]
+        if not isinstance(version, str) or not version:
+            raise SDKSchemaError("Entity.Meta.version must be non-empty string")
+        out["version"] = version
+    if "description" in raw:
+        description = raw["description"]
+        if not isinstance(description, str) or not description:
+            raise SDKSchemaError("Entity.Meta.description must be non-empty string")
+        out["description"] = description
+    if "tags" in raw:
+        tags = raw["tags"]
+        if not isinstance(tags, list):
+            raise SDKSchemaError("Entity.Meta.tags must be list[str]")
+        normalized_tags: list[str] = []
+        for index, tag in enumerate(tags):
+            if not isinstance(tag, str) or not tag:
+                raise SDKSchemaError(f"Entity.Meta.tags[{index}] must be non-empty string")
+            normalized_tags.append(tag)
+        out["tags"] = normalized_tags
     return out
 
 
-def _extract_entity_description(entity_cls: type) -> str | None:
+def _extract_entity_docstring(entity_cls: type) -> str | None:
     raw_doc = entity_cls.__dict__.get("__doc__")
     if not isinstance(raw_doc, str):
         return None

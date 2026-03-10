@@ -41,26 +41,33 @@ def compile_authoring_rule_v1(
     version = authoring_rule.get("version", "v1")
     if not isinstance(version, str) or not version:
         raise _compile_error("version must be non-empty string", path="$.version")
+    description = _compile_optional_description(authoring_rule.get("description"), path="$.description")
+    tags = _compile_optional_tags(authoring_rule.get("tags"), path="$.tags")
 
     select_vars = _compile_select_vars(authoring_rule)
     where = _compile_where(authoring_rule, schema_ir=schema_ir)
     expose = _compile_expose(authoring_rule)
 
-    payload: dict[str, Any] = {
+    ast_payload: dict[str, Any] = {
         "rule_id": rule_id,
         "version": version,
         "select_vars": select_vars,
         "where": where,
     }
     if expose:
-        payload["expose"] = True
+        ast_payload["expose"] = True
     if _rule_ast_gate_enabled():
         effective_profile = profile if profile is not None else (PROFILE_SOUFFLE_STRICT if strict else None)
         try:
-            ast = parse_query_rule_ir_to_ast(payload)
+            ast = parse_query_rule_ir_to_ast(ast_payload)
             validate_query_rule_ast(ast, mode="souffle", profile=effective_profile)
         except (RuleASTError, RuleASTValidationError) as exc:
             raise _adapt_rule_ast_error(exc) from exc
+    payload = dict(ast_payload)
+    if description is not None:
+        payload["description"] = description
+    if tags is not None:
+        payload["tags"] = tags
     return payload
 
 
@@ -124,6 +131,27 @@ def _compile_expose(authoring_rule: dict[str, Any]) -> bool:
 
 def _compile_error(message: str, *, path: str) -> AuthoringRuleCompileError:
     return AuthoringRuleCompileError(message, path=path)
+
+
+def _compile_optional_description(value: Any, *, path: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise _compile_error("description must be non-empty string", path=path)
+    return value
+
+
+def _compile_optional_tags(value: Any, *, path: str) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise _compile_error("tags must be list[str]", path=path)
+    out: list[str] = []
+    for index, tag in enumerate(value):
+        if not isinstance(tag, str) or not tag:
+            raise _compile_error("tags items must be non-empty string", path=f"{path}[{index}]")
+        out.append(tag)
+    return out
 
 
 def _rule_ast_gate_enabled() -> bool:

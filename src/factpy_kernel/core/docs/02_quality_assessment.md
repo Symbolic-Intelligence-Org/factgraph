@@ -1,7 +1,7 @@
 # Core 质量评估（代码快照）
 
 - 评估范围：`src/factpy_kernel/core`
-- 最后更新：2026-03-06
+- 最后更新：2026-03-10
 - 评估基线：基于当前源码结构与公开入口（非历史版本）
 
 ## 1. 结论摘要
@@ -13,6 +13,7 @@
 - `evaluate` 模式约束明确（`native|souffle|problog`）
 - `accept_many` 提供批处理语义（`atomic` / `best_effort`）
 - `where` 具备 AST gate 与 validator 双层护栏
+- 与上层声明元数据边界清楚：`version / description / tags` 属于 authoring/sdk 资产层，不污染 core 执行语义
 
 ## 2. 维度评分（当前快照）
 

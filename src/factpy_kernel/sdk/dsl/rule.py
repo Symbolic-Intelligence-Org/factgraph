@@ -50,6 +50,8 @@ class Rule:
     where: list[Any]
     expose: bool = False
     status: str | None = None
+    description: str | None = None
+    tags: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id:
@@ -60,6 +62,8 @@ class Rule:
             raise SDKDSLError("Rule.select must be non-empty list")
         if not isinstance(self.where, list) or not self.where:
             raise SDKDSLError("Rule.where must be non-empty list")
+        _validate_optional_description(self.description, owner="Rule")
+        _validate_tags(self.tags, owner="Rule")
 
     def to_authoring_payload(self) -> dict[str, Any]:
         normalized_where = _normalize_rule_where_for_payload(self.where)
@@ -73,6 +77,10 @@ class Rule:
             payload["expose"] = True
         if self.status is not None:
             payload["status"] = self.status
+        if self.description is not None:
+            payload["description"] = self.description
+        if self.tags:
+            payload["tags"] = list(self.tags)
         return payload
 
     def dependency_rules(self) -> list[Rule]:
@@ -114,6 +122,8 @@ class Derivation:
     head_vars: list[Any] | None = None
     mode: str | None = None
     status: str | None = None
+    description: str | None = None
+    tags: list[str] = field(default_factory=list)
     _heads: tuple[HeadCall, ...] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -123,6 +133,8 @@ class Derivation:
             raise SDKDSLError("Derivation.version must be non-empty string")
         if not isinstance(self.where, list) or not self.where:
             raise SDKDSLError("Derivation.where must be non-empty list")
+        _validate_optional_description(self.description, owner="Derivation")
+        _validate_tags(self.tags, owner="Derivation")
         object.__setattr__(self, "_heads", _normalize_derivation_head_items(self.head))
 
     @property
@@ -148,6 +160,10 @@ class Derivation:
             payload["mode"] = self.mode
         if self.status is not None:
             payload["status"] = self.status
+        if self.description is not None:
+            payload["description"] = self.description
+        if self.tags:
+            payload["tags"] = list(self.tags)
         return payload
 
 
@@ -256,6 +272,21 @@ def _normalize_rule_where_for_payload(where: list[Any]) -> list[Any]:
     if not all(isinstance(item, Body) for item in where):
         raise SDKDSLError("where/body cannot mix Body(...) with bare branches")
     return [list(item.atoms) for item in where]
+
+
+def _validate_optional_description(value: str | None, *, owner: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, str) or not value:
+        raise SDKDSLError(f"{owner}.description must be non-empty string when provided")
+
+
+def _validate_tags(tags: Any, *, owner: str) -> None:
+    if not isinstance(tags, list):
+        raise SDKDSLError(f"{owner}.tags must be list[str]")
+    for index, tag in enumerate(tags):
+        if not isinstance(tag, str) or not tag:
+            raise SDKDSLError(f"{owner}.tags[{index}] must be non-empty string")
 
 
 def _validate_query_where_body_confidence(node: Any, *, path: str) -> None:

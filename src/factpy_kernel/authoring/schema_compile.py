@@ -101,14 +101,27 @@ def _compile_entity(entity_raw: Any, entity_index: int) -> tuple[dict[str, Any],
         "entity_type": entity_type,
         "identity_fields": identity_fields,
     }
-    description = entity_raw.get("description")
+    version = _compile_optional_version(
+        entity_raw.get("version"),
+        path=f"$.entities[{entity_index}].version",
+        label=f"entities[{entity_index}].version",
+    )
+    if version is not None:
+        entity_out["version"] = version
+    description = _compile_optional_description(
+        entity_raw.get("description"),
+        path=f"$.entities[{entity_index}].description",
+        label=f"entities[{entity_index}].description",
+    )
     if description is not None:
-        if not isinstance(description, str) or not description:
-            raise _compile_error(
-                f"entities[{entity_index}].description must be non-empty string",
-                path=f"$.entities[{entity_index}].description",
-            )
         entity_out["description"] = description
+    tags = _compile_optional_tags(
+        entity_raw.get("tags"),
+        path=f"$.entities[{entity_index}].tags",
+        label=f"entities[{entity_index}].tags",
+    )
+    if tags is not None:
+        entity_out["tags"] = tags
 
     owner_prefix = _owner_prefix(entity_type)
     predicates: list[dict[str, Any]] = []
@@ -328,3 +341,32 @@ def _utc_now_iso_z() -> str:
 
 def _compile_error(message: str, *, path: str) -> AuthoringSchemaCompileError:
     return AuthoringSchemaCompileError(message, path=path)
+
+
+def _compile_optional_version(value: Any, *, path: str, label: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise _compile_error(f"{label} must be non-empty string", path=path)
+    return value
+
+
+def _compile_optional_description(value: Any, *, path: str, label: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise _compile_error(f"{label} must be non-empty string", path=path)
+    return value
+
+
+def _compile_optional_tags(value: Any, *, path: str, label: str) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise _compile_error(f"{label} must be list[str]", path=path)
+    out: list[str] = []
+    for index, tag in enumerate(value):
+        if not isinstance(tag, str) or not tag:
+            raise _compile_error(f"{label}[{index}] must be non-empty string", path=f"{path}[{index}]")
+        out.append(tag)
+    return out

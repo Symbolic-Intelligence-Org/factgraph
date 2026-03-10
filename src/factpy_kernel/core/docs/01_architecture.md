@@ -1,7 +1,7 @@
 # Core 架构总览（factpy_kernel）
 
 - 适用范围：`src/factpy_kernel/core`
-- 最后更新：2026-03-06
+- 最后更新：2026-03-10
 - 代码基线：`Store.evaluate` 仅支持 `native|souffle|problog`；`Ledger` 为 SQLite write-through cache；`ProjectorAudit` 为 v2 结构
 - 目标读者：需要理解 core 语义边界、关键入口与扩展点的开发者
 
@@ -13,6 +13,12 @@
 - `src/factpy_kernel/sdk`（上层 Python API）
 - `src/factpy_kernel/authoring`（编译与工作流）
 - `src/factpy_kernel/service`（HTTP/BFF 路由与 DTO）
+
+补充边界：
+
+- `authoring/sdk` 侧当前统一声明元数据为 `version / description / tags`
+- 这些字段属于声明与管理信息，不属于 core 运行时语义
+- core 可以承载由上层编译带下来的说明性字段，但不会据此改变 `evaluate/chosen/accept` 行为
 
 ## 2. 当前目录结构（core）
 
@@ -132,6 +138,20 @@ flowchart LR
 - `dropped_by_policy_count`
 
 注意：当前 core 投影接口不再包含 `temporal_view` 与 `legacy_record_visibility` 参数。
+
+### 6.3 声明元数据边界
+
+对接 `authoring/sdk` 时，需要区分两类“meta”：
+
+- 断言写入元数据：走 `MetaRow`，参与事实写入与时态/审计链路
+- 声明元数据：如 `version / description / tags`，属于 schema/rule/derivation 资产说明
+
+当前口径下，后者不参与：
+
+- where 校验
+- chosen/policy 决策
+- candidate 生成
+- accept/accept_many 写入语义
 
 ## 7. 规则校验 gate（where AST）
 

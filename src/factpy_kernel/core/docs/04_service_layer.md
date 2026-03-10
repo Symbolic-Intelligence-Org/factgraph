@@ -1,7 +1,7 @@
 # Service 层现状核验（factpy_kernel）
 
 - 范围：`src/factpy_kernel/service`
-- 核验日期：2026-03-06
+- 核验日期：2026-03-10
 - 结论：仓库内已具备可直接对接前端的 `FastAPI` 服务层，覆盖 rules、runtime session、view 管理、derivation、registry 读取与 package export。
 
 ## 1. 入口与依赖
@@ -92,6 +92,7 @@ service 不负责：
 - 运行链路也不接受 `temporal_view`（显式 shape error）
 - `derivations/evaluate` 返回 candidate，供 `derivations/accept` 回传
 - `derivations/accept` 返回 `AcceptResult` 的序列化结果（含 `diagnostics_contract_version`）
+- `rules/compile-preview` 与 registry 读接口会保留已编译资产中的 `description / tags` 等声明元数据；service 不解释这些字段的运行语义
 
 ### 4.3 全局异常包络
 

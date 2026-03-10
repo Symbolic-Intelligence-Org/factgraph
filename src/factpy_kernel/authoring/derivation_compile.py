@@ -33,6 +33,8 @@ def compile_authoring_derivation_v1(
     version = authoring_derivation.get("version", "v1")
     if not isinstance(version, str) or not version:
         raise _compile_error("version must be non-empty string", path="$.version")
+    description = _compile_optional_description(authoring_derivation.get("description"), path="$.description")
+    tags = _compile_optional_tags(authoring_derivation.get("tags"), path="$.tags")
     if "temporal_view" in authoring_derivation:
         # TODO: Support derivation-side temporal materialization semantics.
         # Snapshot read views already support .at(t) / .version(v) in sdk.facade.
@@ -132,6 +134,10 @@ def compile_authoring_derivation_v1(
         out["head"] = canonical_head
     if body_confidences is not None:
         out["body_confidences"] = body_confidences
+    if description is not None:
+        out["description"] = description
+    if tags is not None:
+        out["tags"] = tags
     return out
 
 
@@ -733,3 +739,24 @@ def _disambiguate_entity_binding_with_head_terms(
 
 def _compile_error(message: str, *, path: str) -> AuthoringDerivationCompileError:
     return AuthoringDerivationCompileError(message, path=path)
+
+
+def _compile_optional_description(value: Any, *, path: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise _compile_error("description must be non-empty string", path=path)
+    return value
+
+
+def _compile_optional_tags(value: Any, *, path: str) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise _compile_error("tags must be list[str]", path=path)
+    out: list[str] = []
+    for index, tag in enumerate(value):
+        if not isinstance(tag, str) or not tag:
+            raise _compile_error("tags items must be non-empty string", path=f"{path}[{index}]")
+        out.append(tag)
+    return out
