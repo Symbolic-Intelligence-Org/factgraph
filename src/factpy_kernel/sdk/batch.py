@@ -6,6 +6,16 @@ from dataclasses import dataclass, field as dc_field
 from typing import Any, TYPE_CHECKING, Literal
 from uuid import uuid4
 
+from factpy_kernel.application import apply_write_plan, plan_write_command
+from factpy_kernel.application.protocol import (
+    EntityRef as AppEntityRef,
+    EntitySelector as AppEntitySelector,
+    EntityWriteCommand,
+    EntityWritePlan,
+    FieldMutation,
+    FieldPath,
+    PlannedOpDTO,
+)
 from factpy_kernel.core.evidence.write_protocol import set_field
 from factpy_kernel.core.protocol.digests import sha256_token
 
@@ -91,6 +101,8 @@ class BatchCommitResult:
 class BatchPlan:
     ops: list[BatchOp]
     warnings: list[str] = dc_field(default_factory=list)
+    _application_handle_order: tuple[int, ...] = dc_field(default_factory=tuple, repr=False, compare=False)
+    _application_plans_by_handle_id: dict[int, EntityWritePlan] = dc_field(default_factory=dict, repr=False, compare=False)
 
     # Wire plan is the commit-equivalent serialized representation of this in-memory BatchPlan.
     def export(self, sdk: "SDKStore") -> "WireBatchPlan":
@@ -164,6 +176,8 @@ class BatchPlan:
         return self.export(sdk).to_json()
 
     def apply(self, sdk: "SDKStore") -> BatchApplyResult:
+        if self._application_handle_order:
+            return _apply_application_batch_plan(self, sdk)
         refs_by_handle_id: dict[int, str] = {}
         assertion_ids: list[str] = []
         identity_pred_index = _sdk_identity_pred_index(sdk)
@@ -472,6 +486,35 @@ def _resolve_planned_value(op: SetOp | AddOp, refs_by_handle_id: dict[int, str])
             raise SDKStoreError(f"plan invalid: missing dependency RefOp for {op.path}")
         return e_ref
     return op.value
+
+
+def _apply_application_batch_plan(plan: BatchPlan, sdk: "SDKStore") -> BatchApplyResult:
+    refs_by_handle_id: dict[int, str] = {}
+    assertion_ids: list[str] = []
+    for handle_id in plan._application_handle_order:
+        app_plan = plan._application_plans_by_handle_id.get(handle_id)
+        if app_plan is None:
+            raise SDKStoreError(f"delegated batch plan missing application plan for handle_id={handle_id}")
+        result = apply_write_plan(
+            app_plan,
+            store=sdk.store,
+            index=sdk._application_schema_index,
+        )
+        if result.errors:
+            error = result.errors[0]
+            path = ".".join(error.path) if error.path else ""
+            prefix = f"{path}: " if path else ""
+            raise SDKStoreError(f"{prefix}{error.message}")
+        if app_plan.resolved_target is None:
+            raise SDKStoreError(f"delegated batch plan missing resolved target for handle_id={handle_id}")
+        e_ref = app_plan.resolved_target.encoded_ref
+        if not isinstance(e_ref, str) or not e_ref:
+            raise SDKStoreError(f"delegated batch plan missing encoded_ref for handle_id={handle_id}")
+        refs_by_handle_id[handle_id] = e_ref
+        for applied in result.applied:
+            if isinstance(applied.assertion_id, str):
+                assertion_ids.append(applied.assertion_id)
+    return BatchApplyResult(refs_by_handle_id=refs_by_handle_id, assertion_ids=assertion_ids)
 
 
 def _parse_wire_ref_op(raw: dict[str, Any], *, path: str) -> WireRefOp:
@@ -1157,9 +1200,20 @@ class SDKBatchTx:
         selected = self._resolve_selected_handles(objects)
         ordered = self._ordered_handles(selected, include_deps=include_deps)
         commit_meta_norm = _copy_meta(commit_meta)
+        delegated = self._preview_via_application(ordered, commit_meta=commit_meta_norm)
+        if delegated is not None:
+            return delegated
+        return self._preview_legacy(ordered, commit_meta=commit_meta_norm)
+
+    def _preview_legacy(
+        self,
+        ordered: list[ManagedEntityHandle],
+        *,
+        commit_meta: dict[str, Any],
+    ) -> BatchPlan:
         ops: list[BatchOp] = []
         for handle in ordered:
-            field_ops = self._compile_handle_field_ops(handle, commit_meta=commit_meta_norm)
+            field_ops = self._compile_handle_field_ops(handle, commit_meta=commit_meta)
             if not field_ops:
                 continue
             ops.append(
@@ -1173,6 +1227,69 @@ class SDKBatchTx:
             )
             ops.extend(field_ops)
         return BatchPlan(ops=ops, warnings=[])
+
+    def _preview_via_application(
+        self,
+        ordered: list[ManagedEntityHandle],
+        *,
+        commit_meta: dict[str, Any],
+    ) -> BatchPlan | None:
+        ops: list[BatchOp] = []
+        handle_order: list[int] = []
+        plans_by_handle_id: dict[int, EntityWritePlan] = {}
+        delegated_target_refs: set[str] = set()
+        field_ops_by_handle_id: dict[int, list[BatchOp]] = {}
+
+        for handle in ordered:
+            field_ops = self._compile_handle_field_ops(handle, commit_meta=commit_meta)
+            if not field_ops:
+                continue
+            field_ops_by_handle_id[handle.handle_id] = field_ops
+            command = self._application_write_command_for_handle(handle, field_ops=field_ops)
+            if command is None:
+                return None
+            plan = plan_write_command(
+                command,
+                store=self._sdk.store,
+                index=self._sdk._application_schema_index,
+            )
+            if not plan.can_apply or plan.resolved_target is None:
+                return None
+            target_ref = plan.resolved_target.encoded_ref or handle.e_ref
+            if not isinstance(target_ref, str) or not target_ref:
+                return None
+            delegated_target_refs.add(target_ref)
+            handle_order.append(handle.handle_id)
+            plans_by_handle_id[handle.handle_id] = plan
+            ops.append(
+                RefOp(
+                    handle_id=handle.handle_id,
+                    entity_type=handle.entity_cls.__name__,
+                    entity_cls=handle.entity_cls,
+                    identity_values=dict(plan.resolved_target.identity),
+                    path=handle.path,
+                )
+            )
+            ops.extend(field_ops)
+
+        if not handle_order:
+            return BatchPlan(ops=ops, warnings=[])
+
+        pruned_plans = {
+            handle_id: self._prune_application_plan(
+                handle=self._handles_by_id[handle_id],
+                plan=plan,
+                field_ops=field_ops_by_handle_id[handle_id],
+                delegated_target_refs=delegated_target_refs,
+            )
+            for handle_id, plan in plans_by_handle_id.items()
+        }
+        return BatchPlan(
+            ops=ops,
+            warnings=[],
+            _application_handle_order=tuple(handle_order),
+            _application_plans_by_handle_id=pruned_plans,
+        )
 
     def commit(
         self,
@@ -1320,6 +1437,175 @@ class SDKBatchTx:
                 )
             )
         return out
+
+    def _application_write_command_for_handle(
+        self,
+        handle: ManagedEntityHandle,
+        *,
+        field_ops: list[BatchOp],
+    ) -> EntityWriteCommand | None:
+        target = self._application_entity_ref_for_handle(handle)
+        if target is None:
+            return None
+        mutations: list[FieldMutation] = []
+        create_if_missing = False
+        for op in field_ops:
+            if isinstance(op, RecordExistsOp):
+                if self._application_meta(op.meta, path=f"{op.path}.meta") is None:
+                    return None
+                create_if_missing = True
+                continue
+            field_path = FieldPath(entity_type=handle.entity_cls.__name__, field_name=op.field_name)
+            meta = self._application_meta(op.meta, path=f"{op.path}.meta")
+            if meta is None:
+                return None
+            if isinstance(op, RetractOp):
+                mutations.append(
+                    FieldMutation(
+                        op="retract",
+                        field=field_path,
+                        assertion_id=op.assertion_id,
+                        meta=meta,
+                    )
+                )
+                continue
+            value = self._application_write_value_for_op(op)
+            if value is None:
+                return None
+            mutations.append(
+                FieldMutation(
+                    op="set" if isinstance(op, SetOp) else "add",
+                    field=field_path,
+                    value=value,
+                    meta=meta,
+                )
+            )
+        return EntityWriteCommand(
+            target=AppEntitySelector(
+                entity_type=target.entity_type,
+                identity=dict(target.identity),
+                encoded_ref=target.encoded_ref,
+            ),
+            mutations=tuple(mutations),
+            create_if_missing=create_if_missing,
+            include_dependencies=True,
+        )
+
+    def _application_write_value_for_op(self, op: SetOp | AddOp) -> Any | None:
+        if op.value_kind == "handle":
+            ref_handle_id = op.value
+            if not isinstance(ref_handle_id, int):
+                return None
+            ref_handle = self._handles_by_id.get(ref_handle_id)
+            if ref_handle is None:
+                return None
+            return self._application_entity_ref_for_handle(ref_handle)
+        if op.value_kind == "entity_ref":
+            return None
+
+        schema_pred = self._sdk._schema_pred_for_field(op.field)
+        try:
+            rest_terms = self._sdk._rest_terms_for_field(schema_pred, value=op.value)
+        except Exception:
+            return None
+        if len(rest_terms) != 1:
+            return None
+        tag, value = rest_terms[0]
+        if tag in {"entity_ref", "bytes"}:
+            return None
+        return value
+
+    def _application_entity_ref_for_handle(self, handle: ManagedEntityHandle) -> AppEntityRef | None:
+        e_ref = self._ensure_handle_resolved(handle, path=handle.path)
+        identity_values = self._sdk._identity_values_by_e_ref.get(e_ref)
+        if not isinstance(identity_values, dict) or not identity_values:
+            return None
+        try:
+            identity = _normalize_json_object(identity_values, path=f"{handle.path}.identity", allow_nested=False)
+        except SDKStoreError:
+            return None
+        if not identity:
+            return None
+        return AppEntityRef(
+            entity_type=handle.entity_cls.__name__,
+            identity=identity,
+            encoded_ref=e_ref,
+        )
+
+    def _application_meta(self, meta: dict[str, Any], *, path: str) -> dict[str, Any] | None:
+        try:
+            return _normalize_json_object(meta, path=path, allow_nested=True)
+        except SDKStoreError:
+            return None
+
+    def _prune_application_plan(
+        self,
+        *,
+        handle: ManagedEntityHandle,
+        plan: EntityWritePlan,
+        field_ops: list[BatchOp],
+        delegated_target_refs: set[str],
+    ) -> EntityWritePlan:
+        if plan.resolved_target is None:
+            return plan
+        target_ref = plan.resolved_target.encoded_ref or handle.e_ref
+        if not isinstance(target_ref, str) or not target_ref:
+            return plan
+
+        retained_ops: list[PlannedOpDTO] = []
+        for op in plan.planned_ops:
+            op_target_ref = op.target.encoded_ref
+            if op_target_ref is None:
+                continue
+            if op_target_ref != target_ref and op_target_ref in delegated_target_refs:
+                continue
+            if op_target_ref == target_ref:
+                if op.op == "record_exists":
+                    continue
+                if op.field is not None:
+                    pred = self._sdk._application_schema_index.field_predicates.get((op.field.entity_type, op.field.field_name))
+                    if pred is not None and pred.is_identity_field:
+                        continue
+            retained_ops.append(op)
+
+        info = self._sdk._application_schema_index.entities.get(plan.resolved_target.entity_type)
+        if info is None:
+            return plan
+
+        identity_ops: list[PlannedOpDTO] = []
+        for identity_field in info.identity_fields:
+            identity_ops.append(
+                PlannedOpDTO(
+                    op="set",
+                    target=plan.resolved_target,
+                    field=FieldPath(entity_type=plan.resolved_target.entity_type, field_name=identity_field.name),
+                    value=plan.resolved_target.identity[identity_field.name],
+                )
+            )
+
+        record_exists_op: PlannedOpDTO | None = None
+        for legacy_op in field_ops:
+            if isinstance(legacy_op, RecordExistsOp):
+                record_exists_op = PlannedOpDTO(
+                    op="record_exists",
+                    target=plan.resolved_target,
+                    meta=self._application_meta(legacy_op.meta, path=f"{legacy_op.path}.meta") or {},
+                )
+                break
+
+        planned_ops: list[PlannedOpDTO] = list(identity_ops)
+        if record_exists_op is not None:
+            planned_ops.append(record_exists_op)
+        planned_ops.extend(retained_ops)
+        return EntityWritePlan(
+            command=plan.command,
+            resolved_target=plan.resolved_target,
+            resolved_dependencies=plan.resolved_dependencies,
+            planned_ops=tuple(planned_ops),
+            can_apply=plan.can_apply,
+            errors=plan.errors,
+            warnings=plan.warnings,
+        )
 
     def _handle_requires_record_exists_op(self, handle: ManagedEntityHandle) -> bool:
         spec = self._sdk._entity_spec_by_class.get(handle.entity_cls)
