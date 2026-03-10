@@ -30,10 +30,12 @@
   - Rule/Derivation DSL reference.
 - `src/factpy_kernel/sdk/docs/04_api_surface.en.md`
   - Public export and API surface index.
+- `src/factpy_kernel/sdk/docs/06_realtime_execution_blueprint.en.md`
+  - Zero-syntax-change execution/runtime optimization blueprint for real-time use cases.
 
 ## 使用约定
 
 - 本目录文档以 SDK v1 当前行为为准；行为变更应与文档同 PR 更新。
-- 先更新 `00_user_guide.md`，再联动 `01~05` 及对应英文文档，避免语义漂移。
+- 先更新 `00_user_guide.md`，再联动 `01~06` 及对应英文文档，避免语义漂移。
 - 文档中的 “限制/未实现” 仅描述当前实现状态，不等同长期设计承诺。
 - 如需追踪公开导出面，请以 `factpy_kernel/sdk/__init__.py` 的 `__all__` 为准。
