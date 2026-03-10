@@ -6,6 +6,7 @@ import warnings
 from typing import Any
 from uuid import UUID, uuid4
 
+from factpy_kernel.application.schema_runtime import build_schema_index
 from factpy_kernel.authoring.derivations import compile_authoring_derivation_v1
 from factpy_kernel.authoring.rules import compile_authoring_rule_v1
 from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
@@ -96,6 +97,7 @@ class SDKStore:
         self._store = store if store is not None else Store(schema_ir=schema_ir or compile_schema_from_classes(self._classes))
         self._schema_ir = self._store.schema_ir
         self._schema_digest = schema_digest(self._schema_ir)
+        self._application_schema_index = build_schema_index(self._schema_ir)
         self._field_pred_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._field_decl_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._entity_spec_by_class: dict[type[Entity], dict[str, Any]] = {}

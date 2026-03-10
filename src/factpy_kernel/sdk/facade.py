@@ -6,6 +6,16 @@ import re
 import reprlib
 from typing import Any, TYPE_CHECKING
 
+from factpy_kernel.application import execute_read_request, hydrate_entity
+from factpy_kernel.application.protocol import (
+    AssertionRecordDTO,
+    EntityReadRequest,
+    EntityRef as AppEntityRef,
+    EntitySelector as AppEntitySelector,
+    EntitySnapshotDTO,
+    FieldAssertionsDTO,
+)
+from factpy_kernel.application.schema_runtime import encode_entity_ref as encode_app_entity_ref
 from factpy_kernel.core.policy.active import is_active
 from factpy_kernel.core.view.projector import project_view_facts
 
@@ -371,15 +381,34 @@ def sdk_get(sdk: "SDKStore", entity_cls: type[Any], **identity_kwargs: Any) -> E
     _validate_entity_cls(sdk, entity_cls)
     spec = sdk._entity_spec_by_class[entity_cls]
     _validate_identity_kwargs_for_get(spec, entity_cls, identity_kwargs)
-    e_ref = sdk.ref(entity_cls, **dict(identity_kwargs))
-    view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
-    if not _entity_visible_in_view(sdk, entity_cls, e_ref=e_ref, view_facts=view_facts):
+    identity_names = [field["name"] for field in spec.get("identity_fields", []) if isinstance(field, dict)]
+    request = EntityReadRequest(
+        mode="get",
+        entity_type=entity_cls.__name__,
+        selector=AppEntitySelector(
+            entity_type=entity_cls.__name__,
+            identity=dict(identity_kwargs),
+            allow_identity_defaults=any(name not in identity_kwargs for name in identity_names),
+        ),
+        include_assertions=True,
+        include_history=True,
+    )
+    response = execute_read_request(
+        request,
+        store=sdk.store,
+        index=sdk._application_schema_index,
+    )
+    if response.errors:
+        error = response.errors[0]
+        if error.code == "ENTITY_NOT_FOUND":
+            return None
+        raise _sdk_store_error_from_dto(error)
+    if not response.items:
         return None
-    return _build_snapshot(
-        sdk,
-        entity_cls,
-        e_ref=e_ref,
-        view_facts=view_facts,
+    return _dto_to_sdk_snapshot(
+        response.items[0],
+        sdk=sdk,
+        entity_cls=entity_cls,
         known_identity_values=identity_kwargs,
     )
 
@@ -408,34 +437,63 @@ def sdk_find(
     identity_filters = {k: v for k, v in filter_kwargs.items() if k in set(identity_names)}
     value_filters = {k: v for k, v in filter_kwargs.items() if k in set(field_names)}
 
-    field_rows = {name: (decl, pred) for name, decl, pred in _entity_field_rows(sdk, entity_cls)}
-
     if identity_filters:
         if set(identity_filters.keys()) != set(identity_names):
             missing = sorted(set(identity_names) - set(identity_filters.keys()))
             raise SDKSchemaError(
                 f"find identity filters must include all identity fields for {entity_cls.__name__}; missing: {missing}"
             )
-        e_ref = sdk.ref(entity_cls, **dict(identity_filters))
-        view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
-        if not _entity_visible_in_view(sdk, entity_cls, e_ref=e_ref, view_facts=view_facts):
+        response = execute_read_request(
+            EntityReadRequest(
+                mode="get",
+                entity_type=entity_cls.__name__,
+                selector=AppEntitySelector(
+                    entity_type=entity_cls.__name__,
+                    identity=dict(identity_filters),
+                    allow_identity_defaults=False,
+                ),
+                include_assertions=True,
+                include_history=True,
+            ),
+            store=sdk.store,
+            index=sdk._application_schema_index,
+        )
+        if response.errors:
+            error = response.errors[0]
+            if error.code == "ENTITY_NOT_FOUND":
+                return []
+            raise _sdk_store_error_from_dto(error)
+        if not response.items:
             return []
-        snapshot = _build_snapshot(
-            sdk,
-            entity_cls,
-            e_ref=e_ref,
-            view_facts=view_facts,
+        snapshot = _dto_to_sdk_snapshot(
+            response.items[0],
+            sdk=sdk,
+            entity_cls=entity_cls,
             known_identity_values=identity_filters,
         )
         if _snapshot_matches_filters(sdk, entity_cls, snapshot, value_filters):
             return [snapshot]
         return []
 
-    view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
-    e_refs = _candidate_entity_refs(sdk, entity_cls, view_facts=view_facts)
     out: list[EntitySnapshot] = []
-    for e_ref in sorted(e_refs):
-        snap = _build_snapshot(sdk, entity_cls, e_ref=e_ref, view_facts=view_facts)
+    response = execute_read_request(
+        EntityReadRequest(
+            mode="find",
+            entity_type=entity_cls.__name__,
+            include_assertions=True,
+            include_history=True,
+        ),
+        store=sdk.store,
+        index=sdk._application_schema_index,
+    )
+    if response.errors:
+        raise _sdk_store_error_from_dto(response.errors[0])
+    for dto in response.items:
+        snap = _dto_to_sdk_snapshot(
+            dto,
+            sdk=sdk,
+            entity_cls=entity_cls,
+        )
         if _snapshot_matches_filters(sdk, entity_cls, snap, value_filters):
             out.append(snap)
             if limit is not None and len(out) >= limit:
@@ -570,39 +628,105 @@ def _build_snapshot(
     view_facts: dict[str, list[tuple[Any, ...]]] | None = None,
     known_identity_values: dict[str, Any] | None = None,
 ) -> EntitySnapshot:
-    if view_facts is None:
-        view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
-    spec = sdk._entity_spec_by_class[entity_cls]
-    entity_type = spec.get("entity_type")
-    if not isinstance(entity_type, str) or not entity_type:
-        raise SDKStoreError(f"invalid entity spec for {entity_cls.__name__}")
-
-    field_values: dict[str, Any] = {}
-    field_assertions: dict[str, FieldAssertions] = {}
-    for field_name, field_decl, schema_pred in _entity_field_rows(sdk, entity_cls):
-        pred_id = schema_pred.get("pred_id")
-        if not isinstance(pred_id, str) or not pred_id:
-            continue
-        cardinality = str(field_decl.get("cardinality", schema_pred.get("cardinality", "single")))
-        rows = [row for row in view_facts.get(pred_id, []) if row and row[0] == e_ref]
-        field_values[field_name] = _current_value_from_rows(rows, cardinality=cardinality)
-        field_assertions[field_name] = _field_assertions_for_entity_field(
-            sdk,
-            e_ref=e_ref,
-            field_name=field_name,
-            schema_pred=schema_pred,
-            cardinality=cardinality,
+    del view_facts
+    try:
+        dto = hydrate_entity(
+            e_ref,
+            store=sdk.store,
+            index=sdk._application_schema_index,
+            include_assertions=True,
+            include_history=True,
         )
+    except Exception as exc:
+        raise SDKStoreError(f"failed to hydrate snapshot for {entity_cls.__name__}: {exc}") from exc
+    return _dto_to_sdk_snapshot(
+        dto,
+        sdk=sdk,
+        entity_cls=entity_cls,
+        known_identity_values=known_identity_values,
+    )
 
+
+def _dto_to_sdk_snapshot(
+    dto: EntitySnapshotDTO,
+    *,
+    sdk: "SDKStore",
+    entity_cls: type[Any],
+    known_identity_values: dict[str, Any] | None = None,
+) -> EntitySnapshot:
+    field_values = {
+        field_name: _dto_value_to_sdk_value(field_dto.value, sdk=sdk)
+        for field_name, field_dto in dto.fields.items()
+    }
+    field_assertions = {
+        field_name: _dto_assertions_to_sdk(
+            assertions_dto,
+            sdk=sdk,
+            entity_cls=entity_cls,
+        )
+        for field_name, assertions_dto in dto.assertions.items()
+    }
     identity_values = dict(known_identity_values or {})
+    identity_available = known_identity_values is not None
     return EntitySnapshot(
-        ref=e_ref,
-        entity_type=entity_type,
+        ref=_dto_ref_to_sdk_ref(dto.ref, sdk=sdk),
+        entity_type=dto.ref.entity_type,
         field_values=field_values,
         field_assertions=field_assertions,
         identity_values=identity_values,
-        identity_available=(known_identity_values is not None),
+        identity_available=identity_available,
     )
+
+
+def _dto_assertions_to_sdk(
+    dto: FieldAssertionsDTO,
+    *,
+    sdk: "SDKStore",
+    entity_cls: type[Any],
+) -> FieldAssertions:
+    cardinality = _sdk_field_cardinality(entity_cls, dto.field.field_name)
+    return FieldAssertions(
+        field_name=dto.field.field_name,
+        cardinality=cardinality,
+        active_records=tuple(_dto_assertion_record_to_sdk(record, sdk=sdk) for record in dto.active),
+        history_records=tuple(_dto_assertion_record_to_sdk(record, sdk=sdk) for record in dto.history),
+    )
+
+
+def _dto_assertion_record_to_sdk(dto: AssertionRecordDTO, *, sdk: "SDKStore") -> AssertionRecord:
+    return AssertionRecord(
+        asrt_id=dto.assertion_id,
+        value=_dto_value_to_sdk_value(dto.value, sdk=sdk),
+        is_active=dto.active,
+        is_revoked=not dto.active,
+        meta=AssertionMeta.from_raw(dict(dto.meta)),
+    )
+
+
+def _dto_value_to_sdk_value(value: Any, *, sdk: "SDKStore") -> Any:
+    if isinstance(value, tuple):
+        return tuple(_dto_value_to_sdk_value(item, sdk=sdk) for item in value)
+    if isinstance(value, AppEntityRef):
+        return _dto_ref_to_sdk_ref(value, sdk=sdk)
+    return value
+
+
+def _dto_ref_to_sdk_ref(ref: AppEntityRef, *, sdk: "SDKStore") -> str:
+    if isinstance(ref.encoded_ref, str) and ref.encoded_ref:
+        return ref.encoded_ref
+    return encode_app_entity_ref(ref, index=sdk._application_schema_index)
+
+
+def _sdk_field_cardinality(entity_cls: type[Any], field_name: str) -> str:
+    descriptor = getattr(entity_cls, field_name, None)
+    return str(getattr(descriptor, "cardinality", "single"))
+
+
+def _sdk_store_error_from_dto(error: Any) -> SDKStoreError:
+    path = None
+    if isinstance(getattr(error, "path", None), tuple) and error.path:
+        path = ".".join(error.path)
+    return SDKStoreError(str(error.message), code=getattr(error, "code", None), path=path)
 
 
 def _current_value_from_rows(rows: list[tuple[Any, ...]], *, cardinality: str) -> Any:
