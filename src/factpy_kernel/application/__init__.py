@@ -2,6 +2,7 @@
 
 from .schema_runtime import (
     EntityTypeInfo,
+    FieldTypeInfo,
     IdentityFieldInfo,
     PredicateInfo,
     SchemaIndex,
@@ -10,12 +11,14 @@ from .schema_runtime import (
     encode_entity_ref,
     entity_info,
     field_predicate,
+    field_value_type,
     materialize_identity,
     resolve_selector,
 )
 
 __all__ = [
     "EntityTypeInfo",
+    "FieldTypeInfo",
     "IdentityFieldInfo",
     "PredicateInfo",
     "SchemaIndex",
@@ -24,6 +27,7 @@ __all__ = [
     "encode_entity_ref",
     "entity_info",
     "field_predicate",
+    "field_value_type",
     "materialize_identity",
     "resolve_selector",
 ]

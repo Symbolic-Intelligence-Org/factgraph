@@ -6,6 +6,7 @@ from factpy_kernel.application import (
     SchemaResolutionError,
     build_schema_index,
     field_predicate,
+    field_value_type,
     resolve_selector,
 )
 from factpy_kernel.application.protocol import EntitySelector
@@ -42,6 +43,26 @@ class ApplicationSchemaRuntimeTests(unittest.TestCase):
         self.assertEqual(index.entities["User"].exists_predicate_id, "User:exists")
         self.assertEqual(field_predicate(index, "User", "lives_in").cardinality, "single")
         self.assertEqual(field_predicate(index, "User", "tag").cardinality, "multi")
+
+    def test_field_value_type_reports_scalar_multi(self) -> None:
+        index = _schema_index()
+
+        field_type = field_value_type(index, "User", "tag")
+
+        self.assertEqual(field_type.value_kind, "scalar")
+        self.assertEqual(field_type.cardinality, "multi")
+        self.assertEqual(field_type.scalar_domain, "string")
+        self.assertIsNone(field_type.ref_target_type)
+
+    def test_field_value_type_reports_entity_ref_single(self) -> None:
+        index = _schema_index()
+
+        field_type = field_value_type(index, "User", "lives_in")
+
+        self.assertEqual(field_type.value_kind, "entity_ref")
+        self.assertEqual(field_type.cardinality, "single")
+        self.assertIsNone(field_type.scalar_domain)
+        self.assertIsNone(field_type.ref_target_type)
 
     def test_resolve_selector_materializes_default_when_allowed(self) -> None:
         index = _schema_index()
@@ -96,6 +117,21 @@ class ApplicationSchemaRuntimeTests(unittest.TestCase):
             )
 
         self.assertEqual(ctx.exception.code, "ENTITY_TYPE_NOT_FOUND")
+
+    def test_resolve_selector_rejects_identity_type_mismatch(self) -> None:
+        index = _schema_index()
+
+        with self.assertRaises(SchemaResolutionError) as ctx:
+            resolve_selector(
+                EntitySelector(
+                    entity_type="User",
+                    identity={"name": 123, "locale": "en"},
+                    allow_identity_defaults=True,
+                ),
+                index=index,
+            )
+
+        self.assertEqual(ctx.exception.code, "IDENTITY_TYPE_MISMATCH")
 
     def test_resolve_selector_materializes_uuid4_default_factory(self) -> None:
         index = _schema_index()

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
@@ -29,6 +29,14 @@ class PredicateInfo:
     value_type_domain: str | None
     is_entity_exists: bool = False
     is_identity_field: bool = False
+
+
+@dataclass(frozen=True)
+class FieldTypeInfo:
+    value_kind: Literal["scalar", "entity_ref"]
+    cardinality: Literal["single", "multi"]
+    scalar_domain: str | None = None
+    ref_target_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -239,6 +247,21 @@ def field_predicate(index: SchemaIndex, entity_type: str, field_name: str) -> Pr
     return info
 
 
+def field_value_type(index: SchemaIndex, entity_type: str, field_name: str) -> FieldTypeInfo:
+    pred = field_predicate(index, entity_type, field_name)
+    if pred.value_type_domain == "entity_ref":
+        return FieldTypeInfo(
+            value_kind="entity_ref",
+            cardinality=pred.cardinality,
+            ref_target_type=None,
+        )
+    return FieldTypeInfo(
+        value_kind="scalar",
+        cardinality=pred.cardinality,
+        scalar_domain=pred.value_type_domain,
+    )
+
+
 def materialize_identity(
     entity_type: str,
     partial_identity: dict[str, Any],
@@ -411,6 +434,8 @@ def _normalize_identity_value(
             )
         return value
     if type_domain == "float64":
+        # The protocol is JSON-safe. Keep accepting the legacy hex-string form used by
+        # existing runtime/storage paths in addition to native JSON float values.
         if isinstance(value, bool) or not isinstance(value, (float, str)):
             raise SchemaResolutionError(
                 f"{entity_type}.{field_name} expects float64 identity value",
@@ -461,6 +486,7 @@ def _normalize_identity_value(
 
 __all__ = [
     "EntityTypeInfo",
+    "FieldTypeInfo",
     "IdentityFieldInfo",
     "PredicateInfo",
     "SchemaIndex",
@@ -469,6 +495,7 @@ __all__ = [
     "encode_entity_ref",
     "entity_info",
     "field_predicate",
+    "field_value_type",
     "materialize_identity",
     "resolve_selector",
 ]
