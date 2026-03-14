@@ -18,4 +18,7 @@
 - 14-生产化注意事项（registry并发-事务-v2）.md
 - 15-SDK-快速开始（Python 直接定义）.md
 - 16-SDK-Batch-staging（sdk.batch）.md
-- 17-SDK-Batch-staging（语义与契约-v0）.md
+
+历史归档：
+
+- `docs/history/design-evolution/sdk_batch_v0_contract.md`

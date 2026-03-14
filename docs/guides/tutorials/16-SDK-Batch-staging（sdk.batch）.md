@@ -1,209 +1,225 @@
 # 16) SDK Batch staging（`sdk.batch`）
 
-`SDKStore.batch()` 提供一个“staging + flush”的编译前端，适合导入脚本、ETL、测试数据构造、notebook/demo 等场景。
+本页是当前 `sdk.batch()` 的教程式入口，语义以当前实现为准。
 
-它不是第二套写入模型：所有写入最终都会展开为 Core Contract 的 `ref/set/add/retract` 调用，并保持可预览、可导出、可回放、可等价测试。
+权威参考仍在代码同目录文档：
 
-如需查看完整的 v0 语义约束、排序规则、wire plan 边界与 retract 强制约束，继续阅读
-`17-SDK-Batch-staging（语义与契约-v0）.md`。
+- `src/factpy_kernel/sdk/docs/00_user_guide.md`
+- `src/factpy_kernel/sdk/docs/01_alignment_matrix.md`
+- `src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md`
+- `src/factpy_kernel/sdk/docs/04_api_surface.md`
 
-## 1. 为什么需要 batch（不是 ORM）
+历史上的 v0 契约草案已归档到：
 
-- `sdk.batch` 适合“先搭对象图，再一次性落盘”的心智模型。
-- `sdk.batch` 不是 ORM：不会引入另一套持久化语义；`preview()` / wire plan 是它的核心能力。
-- 低层写入语义仍以 `sdk.ref / sdk.set / sdk.add / sdk.retract` 为准。
-- 读取/轻量编辑场景可使用 `sdk.get / sdk.find / sdk.edit`（只读快照 + 显式编辑会话）；创建对象图仍建议 `sdk.batch`。
+- `docs/history/design-evolution/sdk_batch_v0_contract.md`
 
-## 2. 最小例子：构造对象图 -> preview -> commit
+## 1. 什么时候用 `sdk.batch()`
+
+适合这些场景：
+
+- 一次构造多个相互引用的实体
+- 提交前先 `preview()` 看计划
+- 需要导出/回放 wire plan
+- ETL、测试数据构造、notebook demo
+
+不适合这些场景：
+
+- 只改一个已存在实体的少数字段
+  - 这时更适合 `sdk.edit(...)`
+- 需要最低层逐条控制写入
+  - 这时更适合 `sdk.ref/set/add/retract`
+
+当前边界：
+
+- `with sdk.batch() as tx:` 的 context manager 不会自动 `commit()`，也不会自动 `rollback()`
+- `single` 字段只能 `.set(...)`
+- `multi` 字段只能 `.add(...)`
+- 撤销只支持 `.retract(assertion_id=...)`
+- 旧的 `functional` / `dims` / `fact_key` 口径已经不适用
+
+## 2. 最小可运行示例
 
 ```python
 from factpy_kernel.sdk import Entity, Field, Identity, SDKStore
+
+
+class Country(Entity):
+    code: str = Identity(primary_key=True)
+    name: str = Field(cardinality="single")
+
+
+class User(Entity):
+    user_id: str = Identity(primary_key=True)
+    locale: str = Identity(default="zh")
+    name: str = Field(cardinality="single")
+    tag: str = Field(cardinality="multi")
+    lives_in: Country = Field(cardinality="single")
+
+
+sdk = SDKStore.from_schema_classes([Country, User])
+```
+
+这里的关键点只有两个：
+
+- `Field.cardinality` 只用 `single|multi`
+- 实体引用字段直接写 handle 或 canonical `idref_v1`，不再引入 `dims`
+
+## 3. 构造对象图 -> preview -> commit
+
+```python
+with sdk.batch(meta={"trace_id": "seed", "source": "demo"}) as tx:
+    country = tx.entity(Country, code="DE")
+    country.name.set("Germany")
+
+    user = tx.entity(User, user_id="u-1")
+    user.name.set("Alice")
+    user.tag.add("vip")
+    user.lives_in.set(country)   # 直接引用同 tx 内的 handle
+
+    plan = tx.preview(objects=[user])
+    result = tx.commit(objects=[user])
+```
+
+这段示例体现的是当前稳定语义：
+
+- `preview()` 只生成计划，不落盘
+- `commit()` 执行与 `preview()` 等价的写入序列
+- `objects=[user]` 默认会带上依赖闭包，所以 `country` 会一起进入计划
+
+写完后可以直接验证：
+
+```python
+snap = sdk.get(User, user_id="u-1", locale="zh")
+assert snap is not None
+assert snap.name == "Alice"
+assert snap.tag == ("vip",)
+assert snap.lives_in == country.e_ref
+```
+
+## 4. 普通内存对象 vs batch 托管对象
+
+普通 `Entity(...)` 是内存对象，不支持 `.set/.add/.retract`：
+
+```python
+user = User(user_id="u-plain")
+user.name = "Alice"   # 普通 Python 赋值
+```
+
+只有 `tx.entity(...)` 返回的托管对象才支持 batch 写 API：
+
+```python
+with sdk.batch(meta={"trace_id": "seed"}) as tx:
+    user = tx.entity(User, user_id="u-2")
+    user.name.set("Alice")
+    tx.commit()
+```
+
+如果你误把普通对象当成 handle 来调用 `.set(...)`，当前 SDK 会明确报错并提示应该使用普通赋值或 `tx.entity(...)`。
+
+## 5. identity、`bind(...)` 与字段约束
+
+identity 不完整时，batch 写入会直接报错；需要先补齐：
+
+```python
+with sdk.batch() as tx:
+    user = tx.entity(User, user_id="u-3")
+    user = user.bind(locale="en")
+    user.name.set("Alicia")
+    tx.commit()
+```
+
+当前约束：
+
+- identity 字段是只读 guard，不能 `.set/.add/.retract`
+- `single` 字段只能 `.set(...)`
+- `multi` 字段只能 `.add(...)`
+
+例子：
+
+```python
+with sdk.batch() as tx:
+    user = tx.entity(User, user_id="u-4")
+
+    user.name.set("Alice")   # single: OK
+    user.tag.add("vip")      # multi: OK
+
+    # user.name.add("Alice")   -> SDKStoreError
+    # user.tag.set("vip")      -> SDKStoreError
+```
+
+## 6. Wire plan：导出与回放
+
+如果你需要把 batch 计划存盘或跨进程回放，用 `WireBatchPlan`：
+
+```python
 from factpy_kernel.sdk.batch import WireBatchPlan
 
+with sdk.batch(meta={"trace_id": "seed"}) as tx:
+    country = tx.entity(Country, code="DE")
+    country.name.set("Germany")
 
-class Company(Entity):
-    source_system: str = Identity()
-    source_id: str = Identity()
-    sector: str = Field(cardinality="functional", pred_id="company:sector")
+    user = tx.entity(User, user_id="u-5")
+    user.lives_in.set(country)
 
+    wire_json = tx.preview(objects=[user]).to_json(sdk)
 
-class Person(Entity):
-    source_system: str = Identity()
-    source_id: str = Identity()
-    country: str = Field(cardinality="functional", pred_id="person:country")
-    works_at: Company = Field(cardinality="multi", pred_id="person:works_at")
-
-
-sdk = SDKStore.from_schema_classes([Person, Company])
-
-with sdk.batch(meta={"trace_id": "t1", "source": "demo"}) as tx:
-    alice = tx.entity(Person, source_system="HR", source_id="u1")
-    google = tx.entity(Company, source_system="HR", source_id="c1")
-
-    alice.country.set("de")
-    alice.works_at.add(google)
-
-    plan = tx.preview()            # 纯函数：不写入
-    wire_json = plan.to_json(sdk)  # 稳定 JSON（可存盘/可回放）
-
-    # 强制建议：至少看一眼 preview 摘要（避免 ORM 心智）
-    wire_obj = plan.export(sdk).to_dict()
-    print("ops:", len(wire_obj["ops"]))
-    for op in wire_obj["ops"][:3]:
-        print(op["kind"], op.get("path"), op.get("pred_id"))
-
-    res = tx.commit()              # 执行与 preview 等价的写入序列
+plan = WireBatchPlan.from_json(wire_json)
+plan.apply(sdk, strict_schema=True)
 ```
 
-建议在 demo/ETL 中始终保留 `preview()`：它是 batch 的“编译输出”，用于审计、调试与回放。
+当前行为要点：
 
-## 2.1 普通 `Entity` 实例 vs `tx.entity(...)` 托管对象（常见误用）
+- wire plan 协议版本是 `sdk_batch_plan_v1`
+- `strict_schema=True` 会校验 `schema_digest`
+- wire 导出不接受 raw `idref_v1` 字符串值作为 `entity_ref` 写入值
+- 想保持可回放，优先在同一 tx 里用 handle 表达实体关系
 
-普通 `Entity(...)` 是内存对象；字段操作用普通赋值，不支持 `.set/.add/.retract`。
+## 7. 撤销历史断言
 
-```python
-germany = Language(code="de", language_id="114514")
-alice = Person(source_id="u-001")
-
-alice.native_language = germany   # 正确：普通内存对象赋值
-```
-
-如果你要使用 `.set/.add/.retract`，必须在 `sdk.batch()` 里通过 `tx.entity(...)` 获取托管对象：
+batch 路径的撤销 API 是：
 
 ```python
-with sdk.batch(meta={"trace_id": "t3"}) as tx:
-    germany = tx.entity(Language, code="de", language_id="114514")
-    alice = tx.entity(Person, source_id="u-001")
-    alice.native_language.set(germany)  # 正确：batch handle
+with sdk.batch(meta={"trace_id": "fix-1"}) as tx:
+    user = tx.entity(User, user_id="u-1")
+    user.tag.retract(assertion_id="asrt_123")
     tx.commit()
 ```
 
-如果误写成 `Person(...).field.set(...)`，当前 SDK 会抛出带提示的 `SDKSchemaError`，明确说明应使用普通赋值或 `tx.entity(...)`。
+这里的边界是明确的：
 
-### `tx.save(...)` 的当前语义（v0）
+- 只能按 `assertion_id` 撤销
+- 不支持按值撤销
+- 同一 tx 内重复撤销同一 `assertion_id` 会被去重
 
-当前 `tx.save(...)` 是一个便捷入口，但它的语义是：
+如果你走 `sdk.edit(...)`，对应的接口是 `FieldEditor.retract(asrt_id=...)`，参数名不一样。
 
-- 只接受 `tx.entity(...)` 返回的托管对象（`ManagedEntityHandle`）
-- 等价于 `tx.commit(objects=[handle], include_deps=...)`
-- 会立即执行写入，不是“先登记到 tx、稍后统一 commit”
+## 8. `tx.save(...)` 的当前定位
 
-因此，下面这种写法在 v0 中**不支持**（`alice/language` 是普通 `Entity`）：
+`tx.save(handle, ...)` 仍然存在，但它只是便捷提交入口：
 
-```python
-with sdk.batch(meta={"trace_id": "t4"}) as tx:
-    alice = Person(source_id="u-001")       # plain Entity
-    language = Language(code="de", language_id="114514")
-    alice.native_language = language
+- 只接受 `tx.entity(...)` 返回的 handle
+- 语义上等价于 `tx.commit(objects=[handle], ...)`
+- 会立即执行写入，不是“登记后稍后统一提交”
 
-    tx.save(alice)   # 不支持：tx.save 只接受 tx.entity(...) handle
-```
+如果你在写教程、脚本或 notebook，默认还是优先用：
 
-如果你要走“预览计划 -> 统一提交”的流程，建议始终使用 `tx.entity(...)`，然后调用 `tx.preview()` / `tx.commit()`。
+- `tx.preview(...)`
+- `tx.commit(...)`
 
-## 2.2 字段基数与 `set/add`（严格模式）
+这样更符合 batch 的可审计和可回放心智。
 
-batch staging v0 对字段基数是严格的：
+## 9. 当前最重要的 4 条记忆点
 
-- `functional` 字段只能用 `.set(...)`
-- `multi` 字段只能用 `.add(...)`
+1. `sdk.batch()` 是当前实现的活跃能力，但语义已经是 `single|multi`，不是 `functional/multi`。
+2. `preview()` 和 `commit()` 是主流程；context manager 不会自动提交。
+3. batch handle 撤销按 `assertion_id`，不支持按值撤销。
+4. 权威口径优先看 `src/factpy_kernel/sdk/docs/`，不要再把 v0 设计稿当当前契约。
 
-例如，如果 `Language.name` 在 schema 中是 `multi`，下面会报错：
+## 10. 下一跳
 
-```python
-language = tx.entity(Language, code="de", language_id="114514")
-language.name.set("German")  # 错误：multi 字段不能 set
-```
+如果你接下来要继续查当前实现，建议按这个顺序：
 
-应改为：
-
-```python
-language.name.add("German")
-```
-
-这条规则是有意设计的，用来避免“多值字段 set 到底是覆盖还是追加”的语义歧义。
-
-## 3. Wire plan：导出与回放（可序列化契约）
-
-Wire plan 是 `commit` 的等价计划，可序列化、可跨进程回放。默认严格校验 schema digest，防止 schema 漂移导致误写。
-
-```python
-wire = tx.preview().to_json(sdk)
-
-plan2 = WireBatchPlan.from_json(wire)
-plan2.apply(sdk, strict_schema=True)  # 等价于 commit 的调用序列回放
-```
-
-注意：
-
-- wire 中引用值统一使用 `ref_identity`（`entity_type + identity`）形式
-- 不接受 raw `EntityRef` token 作为 wire value（避免两套引用语义）
-
-## 4. 依赖闭包（`include_deps`）
-
-默认 `include_deps=True`：当字段引用了其他 staging entity，`preview/commit` 会自动包含被引用对象的写入（按拓扑顺序展开）。
-
-如需高级模式，可关闭依赖闭包：
-
-```python
-plan = tx.preview(include_deps=False)
-# 若存在未满足依赖，将在 preview/commit 报错并带 path
-```
-
-## 5. Retract（v1）：仅支持显式 `assertion_id`
-
-v1 retract 只支持显式撤销某条历史断言，不支持按值撤销（避免引入查询与策略歧义）。
-
-```python
-with sdk.batch(meta={"trace_id": "t2"}) as tx:
-    alice = tx.entity(Person, source_system="HR", source_id="u1")
-    alice.works_at.retract(assertion_id="asrt_...")
-
-    tx.preview()
-    tx.commit()
-```
-
-说明：
-
-- 同一 tx 内重复 retract 同一 `assertion_id` 会去重
-- 后一次 meta 会覆盖前一次 meta
-
-## 6. 什么时候用 batch，什么时候用 core
-
-- 用 `sdk.ref/set/add/retract`：需要精确控制、底层工具/adapter、生成器输出、或要直接操作 assertion log
-- 用 `sdk.get/find/edit`：notebook 调试、只读检视、轻量人工修正（按 identity 显式编辑）
-- 用 `sdk.batch`：ETL/导入、人工录入、测试构造、demo/notebook；需要共享 meta、可预览计划、可导出回放
-
-## 7. 保证与边界（速记）
-
-- `preview()` 生成的是可审计、可导出的编译计划
-- `commit()` 必须执行与 `preview()` 等价的 Core 调用序列
-- wire plan 默认受 `schema_digest` 严格校验
-- `sdk.batch` 不承诺跨进程/跨存储 ACID
-
-更完整的契约口径（identity、meta merge、顺序确定性、wire/retract 规则）见
-`17-SDK-Batch-staging（语义与契约-v0）.md`。
-
-关于 `tx.save` 的当前限制（仅 handle、立即提交）与未来易用层方向，也见 `17` 中的“实现现状与下一步优化方向”。
-
-## 8. 当前持久化状态
-
-截至 2026-02，Core Ledger 已支持 SQLite 持久化；`sdk.batch()` 最终仍会写入同一个 Core Ledger。
-
-如果你当前需要文件持久化，推荐直接使用 `ledger_path`：
-
-```python
-from factpy_kernel.sdk import SDKStore
-
-sdk = SDKStore.from_schema_classes(
-    [Person, Company],
-    ledger_path="./data/ledger.db",
-)
-```
-
-说明：
-
-- `ledger_path=...` 会恢复同一个 ledger 文件中的历史数据。
-- 首次创建时会写入 `schema_digest`；后续恢复时会校验当前 schema 是否一致。
-- schema 不一致会快速失败，避免把错误 schema 写进已有 ledger 文件。
-- 如需高级控制，仍可显式传 `ledger=Ledger(path=...)`；但不要和 `ledger_path` 同时传。
+1. `src/factpy_kernel/sdk/docs/00_user_guide.md`
+2. `src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md`
+3. `src/factpy_kernel/sdk/docs/04_api_surface.md`
+4. `src/factpy_kernel/tests/test_sdk_batch_application_delegate.py`

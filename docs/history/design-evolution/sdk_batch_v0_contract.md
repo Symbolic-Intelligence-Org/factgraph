@@ -1,4 +1,15 @@
-# 17) SDK Batch staging（语义与契约 v0）
+---
+doc_type: history
+status: archived
+source_of_truth: historical
+implementation_state: legacy
+owner: sdk/batch
+last_verified: 2026-03-14
+---
+
+> Archived note: 本文保存 `sdk.batch` 的 v0 语义与契约草案。当前 batch 语义请以 `src/factpy_kernel/sdk/docs/00_user_guide.md`、`src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md` 和 [16-SDK-Batch-staging（sdk.batch）.md](/Users/zhenzhili/symbolic_agent/docs/guides/tutorials/16-SDK-Batch-staging%EF%BC%88sdk.batch%EF%BC%89.md) 为准。
+
+# SDK Batch Staging v0 Contract
 
 本篇是 `16-SDK-Batch-staging（sdk.batch）.md` 的补充材料，面向“语义边界/契约实现”而不是快速上手。
 如果你只需要最短路径示例，请先看 `16`；如果你需要确认保证项、排序、wire 计划、retract 边界，请看本篇。

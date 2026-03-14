@@ -7,7 +7,7 @@ Assess whether `docs/guides/tutorials/` can currently be trusted as runnable gui
 - kept as a safe pointer
 - rewritten against current code
 - treated as placeholder backlog
-- moved to history later if it only preserves older semantics
+- archived when it only preserves older semantics
 
 ## Current Verdict
 
@@ -18,18 +18,18 @@ The directory should not currently be treated as an authoritative guide set.
 Why:
 
 1. most files are skeletal placeholders rather than executable tutorials
-2. the only substantial SDK tutorials still contain retired semantics such as `functional` cardinality and `dims`
+2. only one SDK tutorial has now been rewritten against current semantics; the rest of the directory is still mostly backlog
 3. command-oriented files mention real CLI surface area, but they are too incomplete to serve as trustworthy runbooks
 
 ## Evidence
 
 ### 1. Placeholder density is high
 
-Out of the 17 numbered tutorial files:
+Out of the remaining 16 numbered tutorial files:
 
-- 15 files are 19 lines or fewer
+- 14 files are 19 lines or fewer
 - several are only 3 lines long
-- multiple files are just title + keyword stubs, not step-by-step procedures
+- most files outside `15` and `16` are still title + keyword stubs, not step-by-step procedures
 
 Representative examples:
 
@@ -44,19 +44,14 @@ Representative examples:
 - [08-团队内-Onboarding-清单.md](/Users/zhenzhili/symbolic_agent/docs/guides/tutorials/08-%E5%9B%A2%E9%98%9F%E5%86%85-Onboarding-%E6%B8%85%E5%8D%95.md)
   - repeats `成功标准（最小）` and then drops into stray fragments
 
-### 2. SDK tutorial content is materially stale
+### 2. SDK tutorial status is now split
 
-The two substantial files are:
+Current status:
 
 - [16-SDK-Batch-staging（sdk.batch）.md](/Users/zhenzhili/symbolic_agent/docs/guides/tutorials/16-SDK-Batch-staging%EF%BC%88sdk.batch%EF%BC%89.md)
-- [17-SDK-Batch-staging（语义与契约-v0）.md](/Users/zhenzhili/symbolic_agent/docs/guides/tutorials/17-SDK-Batch-staging%EF%BC%88%E8%AF%AD%E4%B9%89%E4%B8%8E%E5%A5%91%E7%BA%A6-v0%EF%BC%89.md)
-
-These are not safe as current guides because they still use older SDK semantics, for example:
-
-- `Field(cardinality="functional")`
-- `functional` vs `multi`
-- `dims={...}`
-- `SetOp/AddOp(..., dims, ...)`
+  - rewritten as the current tutorial-style batch introduction
+- [sdk_batch_v0_contract.md](/Users/zhenzhili/symbolic_agent/docs/history/design-evolution/sdk_batch_v0_contract.md)
+  - archived as historical v0 contract material
 
 Current SDK docs explicitly say:
 
@@ -73,7 +68,7 @@ Current SDK docs explicitly say:
 - [02_readwrite_and_ingest.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md)
 - [03_rules_and_derivations.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/03_rules_and_derivations.md)
 
-However, it immediately points readers onward to `16` and `17`, which are not yet safe.
+It is now safe as a redirect because it points readers to current SDK docs and the rewritten `16`.
 
 ### 4. CLI/tutorial command names partially match reality, but the guides are still incomplete
 
@@ -111,14 +106,17 @@ These should be treated as `guide backlog`, not runnable guides:
 ### Group B: Safe redirect
 
 - `15`
-  - keep as a pointer to current SDK docs, but stop routing readers into stale `16/17` until those are fixed
+  - points to current SDK docs and the rewritten batch tutorial
 
-### Group C: Rewrite required
+### Group C: Current guide
 
 - `16`
-  - rewrite against current SDK docs and code
-- `17`
-  - either rewrite as current batch contract, or move to `history/` if it is mainly preserving v0 design semantics
+  - current tutorial-style `sdk.batch()` introduction, aligned with active SDK docs and code
+
+### Group D: Archived history
+
+- `sdk_batch_v0_contract.md`
+  - preserved under `docs/history/design-evolution/` as v0 design history
 
 ## Recommended Next Pass
 
@@ -126,12 +124,11 @@ These should be treated as `guide backlog`, not runnable guides:
 
 - stop treating `docs/guides/tutorials/` as a trusted onboarding path
 - keep the warning note in [docs/guides/tutorials/README.md](/Users/zhenzhili/symbolic_agent/docs/guides/tutorials/README.md)
-- review `16` and `17` first because they are detailed enough to mislead readers
+- stop treating `01-14` as trusted onboarding material
 
 ### P1
 
-- decide whether `17` is a rewrite target or historical artifact
-- rewrite `16` using:
+- keep `16` aligned with:
   - [src/factpy_kernel/sdk/docs/00_user_guide.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/00_user_guide.md)
   - [src/factpy_kernel/sdk/docs/01_alignment_matrix.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/01_alignment_matrix.md)
   - [src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md)
@@ -144,7 +141,7 @@ These should be treated as `guide backlog`, not runnable guides:
 
 ## Conclusion
 
-`docs/guides/tutorials/` is currently a mixed backlog, not a verified tutorial suite.
+`docs/guides/tutorials/` is currently a mixed backlog with one repaired SDK tutorial, not a verified tutorial suite.
 
 The directory is useful as:
 
