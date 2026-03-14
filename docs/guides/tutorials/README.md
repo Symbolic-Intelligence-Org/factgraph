@@ -1,5 +1,7 @@
 # Tutorials
 
+> Warning: 该目录尚未完成内容级核验。当前多数文件是占位稿或草稿；在逐篇复核完成前，请优先以 `src/factpy_kernel/sdk/docs/`、`docs/reference/service/api/`、`src/factpy_kernel/authoring/cli.py` 和对应实现代码为准。
+
 - 01-环境与安装.md
 - 02-第一次-Authoring-Preflight（JSON 与 DSL）.md
 - 03-Apply-Execute-与-Registry.md
