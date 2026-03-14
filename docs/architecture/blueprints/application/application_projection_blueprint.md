@@ -23,9 +23,9 @@ last_verified: 2026-03-14
 
 相关补充文档见：
 
-- `docs/frontend_entity_ui_design.md`
-- `docs/application_protocol_spec.md`
-- `docs/blueprint/实时服务与物化层蓝图.md`
+- `docs/architecture/blueprints/frontend/frontend_entity_ui_design.md`
+- `docs/reference/application/application_protocol_spec.md`
+- `docs/plans/实时服务与物化层蓝图.md`
 - `src/factpy_kernel/application/docs/README.md`
 
 ## Scope
@@ -716,7 +716,7 @@ service 输出给前端的 DTO 建议至少包含：
 
 Phase 0 初版协议见：
 
-- `docs/application_protocol_spec.md`
+- `docs/reference/application/application_protocol_spec.md`
 
 ## Recommended Extraction Plan
 

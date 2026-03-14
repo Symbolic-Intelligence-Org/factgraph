@@ -12,4 +12,4 @@
 - 本目录文档以当前实现行为为准，不是独立设计草案。
 - 新增或调整 `application` 公共入口时，应同步更新本目录文档与对应测试。
 - `application` 是 `core` 之上的中性运行层，不等价于 SDK facade，也不等价于 service HTTP 层。
-- 架构背景与后续阶段规划以 [application_projection_blueprint.md](/Users/zhenzhili/symbolic_agent/docs/application_projection_blueprint.md) 为准。
+- 架构背景与后续阶段规划以 [application_projection_blueprint.md](/Users/zhenzhili/symbolic_agent/docs/architecture/blueprints/application/application_projection_blueprint.md) 为准。

@@ -83,9 +83,9 @@ uvicorn factpy_kernel.service.app_v1:app --host 0.0.0.0 --port 8000
 
 详细 DTO 文档：
 
-- `runtime-session`：[`docs/api/runtime-session.md`](../api/runtime-session.md)
-- `runtime-queries`：[`docs/api/runtime-queries.md`](../api/runtime-queries.md)
-- `rules-registry`：[`docs/api/rules-registry.md`](../api/rules-registry.md)
+- `runtime-session`：[`docs/reference/service/api/runtime-session.md`](./api/runtime-session.md)
+- `runtime-queries`：[`docs/reference/service/api/runtime-queries.md`](./api/runtime-queries.md)
+- `rules-registry`：[`docs/reference/service/api/rules-registry.md`](./api/rules-registry.md)
 
 - `POST /v1/rules/validate`
 - `POST /v1/rules/compile-preview`

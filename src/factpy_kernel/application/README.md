@@ -9,5 +9,5 @@
 
 相关架构与协议文档见：
 
-- [application_projection_blueprint.md](/Users/zhenzhili/symbolic_agent/docs/application_projection_blueprint.md)
-- [application_protocol_spec.md](/Users/zhenzhili/symbolic_agent/docs/application_protocol_spec.md)
+- [application_projection_blueprint.md](/Users/zhenzhili/symbolic_agent/docs/architecture/blueprints/application/application_projection_blueprint.md)
+- [application_protocol_spec.md](/Users/zhenzhili/symbolic_agent/docs/reference/application/application_protocol_spec.md)

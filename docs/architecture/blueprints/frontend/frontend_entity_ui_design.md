@@ -23,7 +23,7 @@ last_verified: 2026-03-14
 
 分层、SDK 边界、表示模式、绑定机制、application/projection 抽取计划，统一放在：
 
-- `docs/application_projection_blueprint.md`
+- `docs/architecture/blueprints/application/application_projection_blueprint.md`
 
 ## Decision
 

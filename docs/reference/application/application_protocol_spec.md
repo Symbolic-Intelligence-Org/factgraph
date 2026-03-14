@@ -29,8 +29,8 @@ last_verified: 2026-03-14
 
 这些内容分别见：
 
-- `docs/application_projection_blueprint.md`
-- `docs/frontend_entity_ui_design.md`
+- `docs/architecture/blueprints/application/application_projection_blueprint.md`
+- `docs/architecture/blueprints/frontend/frontend_entity_ui_design.md`
 
 ## Design Decisions
 

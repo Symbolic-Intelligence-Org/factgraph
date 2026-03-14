@@ -27,10 +27,10 @@ Cleanup checklist for removing an older generation of compatibility shims after 
 
 **Key Evidence**
 
-- The file is explicitly written as a staged removal checklist for a past migration wave: [factpy_kernel_compat_shim_cleanup.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/factpy_kernel_compat_shim_cleanup.md#L1).
-- It lists top-level compatibility packages such as `src/factpy_kernel/protocol/`, `schema/`, `store/`, `export/`, and `runner/`: [factpy_kernel_compat_shim_cleanup.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/factpy_kernel_compat_shim_cleanup.md#L9).
+- The file is explicitly written as a staged removal checklist for a past migration wave: [factpy_kernel_compat_shim_cleanup.md](/Users/zhenzhili/symbolic_agent/docs/history/migrations/factpy_kernel_compat_shim_cleanup.md#L1).
+- It lists top-level compatibility packages such as `src/factpy_kernel/protocol/`, `schema/`, `store/`, `export/`, and `runner/`: [factpy_kernel_compat_shim_cleanup.md](/Users/zhenzhili/symbolic_agent/docs/history/migrations/factpy_kernel_compat_shim_cleanup.md#L9).
 - Those listed top-level shim directories are no longer present in the current tree; the active code now lives under `src/factpy_kernel/core/*` and `src/factpy_kernel/adapters/*`.
-- It also lists `src/factpy_kernel/core/rules/where_compile.py` and `src/factpy_kernel/core/view/souffle_view_gen.py` as internal shims to delete: [factpy_kernel_compat_shim_cleanup.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/factpy_kernel_compat_shim_cleanup.md#L25), but those files are not present anymore.
+- It also lists `src/factpy_kernel/core/rules/where_compile.py` and `src/factpy_kernel/core/view/souffle_view_gen.py` as internal shims to delete: [factpy_kernel_compat_shim_cleanup.md](/Users/zhenzhili/symbolic_agent/docs/history/migrations/factpy_kernel_compat_shim_cleanup.md#L25), but those files are not present anymore.
 - Current codebase docs still mention smaller remaining compatibility surfaces such as `core.store.api`, `Store.evaluate_dummy`, and `store/_*.py`, which are a different and narrower cleanup scope than this document tracks: [02_quality_assessment.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/core/docs/02_quality_assessment.md#L93), [03_progress_roadmap.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/core/docs/03_progress_roadmap.md#L61), [api.py](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/core/store/api.py#L3).
 
 **Stale or Diverged Sections**
@@ -56,10 +56,10 @@ High-level design principles and compilation pipeline overview, from schema/rule
 
 **Key Evidence**
 
-- The opening sentence explicitly frames the file as a summary of previously practiced methods: [设计.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/设计.md#L1).
-- The document uses older schema vocabulary such as `fact_key` and `functional`-style replace semantics: [设计.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/设计.md#L19), [设计.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/设计.md#L59).
-- It points to outdated doc locations such as `/Users/zhenzhili/symbolic_agent/docs/Authoring 层契约.md` and `/Users/zhenzhili/symbolic_agent/docs/导出与运行.md`, while the actual files are under `docs/blueprint/`: [设计.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/设计.md#L24), [设计.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/设计.md#L88).
-- The file ends abruptly at `# 数据层次:` and appears unfinished: [设计.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/设计.md#L90).
+- The opening sentence explicitly frames the file as a summary of previously practiced methods: [设计.md](/Users/zhenzhili/symbolic_agent/docs/history/design-evolution/设计.md#L1).
+- The document uses older schema vocabulary such as `fact_key` and `functional`-style replace semantics: [设计.md](/Users/zhenzhili/symbolic_agent/docs/history/design-evolution/设计.md#L19), [设计.md](/Users/zhenzhili/symbolic_agent/docs/history/design-evolution/设计.md#L59).
+- It points to outdated doc locations such as `/Users/zhenzhili/symbolic_agent/docs/Authoring 层契约.md` and `/Users/zhenzhili/symbolic_agent/docs/导出与运行.md`; the current live docs now sit under `docs/architecture/specs/`: [设计.md](/Users/zhenzhili/symbolic_agent/docs/history/design-evolution/设计.md#L24), [设计.md](/Users/zhenzhili/symbolic_agent/docs/history/design-evolution/设计.md#L88).
+- The file ends abruptly at `# 数据层次:` and appears unfinished: [设计.md](/Users/zhenzhili/symbolic_agent/docs/history/design-evolution/设计.md#L90).
 
 **Stale or Diverged Sections**
 

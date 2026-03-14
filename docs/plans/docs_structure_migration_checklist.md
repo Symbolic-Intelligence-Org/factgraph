@@ -11,9 +11,12 @@ This checklist defines how the current `docs/` contents should be reclassified s
 - how-to guidance
 - historical context
 
-This phase does not move files yet.
+The primary structural moves landed on `2026-03-14`.
 
-It establishes the target role for each major area and identifies the highest-risk ambiguities.
+This file now serves as both:
+
+- the role-classification record used to justify those moves
+- the backlog record for deferred items that still remain in place
 
 ## Target Structure
 
@@ -120,37 +123,37 @@ Review record:
 
 - [sdk_old_review.md](./sdk_old_review.md)
 
-## Immediate Actions For The Next Pass
+## Migration Status
 
-### P0
+Completed on `2026-03-14`:
 
-- classify the three root-level application/frontend docs
-- mark `docs/Logs/` as historical in practice
-- split `docs/blueprint/` at least conceptually into `reference/spec/blueprint/history`
-- keep `docs/history/legacy/sdk/` as linked archive, not active reference
+- moved the three root-level application/frontend docs into `docs/reference/` and `docs/architecture/blueprints/`
+- moved `docs/api/` into `docs/reference/service/api/`
+- moved `docs/tutorials/` into `docs/guides/tutorials/`
+- moved `docs/Logs/` into `docs/history/logs/`
+- moved classified `docs/blueprint/` files into `docs/reference/`, `docs/architecture/specs/`, `docs/architecture/blueprints/`, and `docs/history/`
+- kept `docs/history/legacy/sdk/` as linked archive, not active reference
 
-### P1
+Remaining deferred items:
 
-- add status headers to high-impact docs
-- move `docs/api/` into the future `reference/` structure
-- move `docs/tutorials/` into the future `guides/` structure
-- review `docs/blueprint/设计.md`, `语法.md`, and `审计.md`
+- `docs/blueprint/语法.md`
+  - preserve in place until it is narrowed and rewritten for `docs/architecture/specs/rules/`
+- `docs/blueprint/审计.md`
+  - preserve in place until it is cleaned up for `docs/architecture/blueprints/audit/`
+- `docs/plans/` and `docs/guides/tutorials/`
+  - optional Phase 3 metadata labeling remains lower priority
 
-### P2
+## Default Rule After The First Structural Pass
 
-- rename or restructure remaining low-risk folders
-- add backlinks from plans to the final reference/spec docs once migrations land
+After the main migration:
 
-## Default Rule During Transition
-
-Before the structure is fully migrated, use this rule:
-
-- if a file lives in `docs/Logs/`, treat it as history
-- if a file lives in `docs/plans/`, treat it as unfinished plan
-- if a file lives in `docs/tutorials/`, treat it as guide material
-- if a file lives in `docs/api/`, treat it as current service contract
-- if a file lives in `docs/blueprint/`, do not trust the folder name alone; inspect whether the file is actually a spec, blueprint, reference, or history
-- if a file lives in `docs/history/legacy/sdk/`, treat it as archived history and follow its pointer to current SDK docs
+- if a file lives in `docs/reference/`, treat it as current reference
+- if a file lives in `docs/architecture/specs/`, treat it as long-lived semantic spec
+- if a file lives in `docs/architecture/blueprints/`, treat it as target-state design
+- if a file lives in `docs/guides/`, treat it as guide material
+- if a file lives in `docs/plans/`, treat it as unfinished plan or governance record
+- if a file lives in `docs/history/`, treat it as historical context
+- if a file still lives in `docs/blueprint/`, treat it as deferred draft material and inspect manually
 
 ## Archive Cross-Reference Rule
 

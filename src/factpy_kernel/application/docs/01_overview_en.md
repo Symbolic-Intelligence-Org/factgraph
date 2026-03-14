@@ -197,12 +197,12 @@ These tests cover:
 
 ## 9. Related Documents
 
-* [application_projection_blueprint.md](/Users/zhenzhili/symbolic_agent/docs/application_projection_blueprint.md)
+* [application_projection_blueprint.md](/Users/zhenzhili/symbolic_agent/docs/architecture/blueprints/application/application_projection_blueprint.md)
 
   * architecture blueprint, migration phases, subsequent planning
-* [application_protocol_spec.md](/Users/zhenzhili/symbolic_agent/docs/application_protocol_spec.md)
+* [application_protocol_spec.md](/Users/zhenzhili/symbolic_agent/docs/reference/application/application_protocol_spec.md)
 
   * application protocol DTO specification
-* [frontend_entity_ui_design.md](/Users/zhenzhili/symbolic_agent/docs/frontend_entity_ui_design.md)
+* [frontend_entity_ui_design.md](/Users/zhenzhili/symbolic_agent/docs/architecture/blueprints/frontend/frontend_entity_ui_design.md)
 
   * entity/rule UI and target expression for graph projection

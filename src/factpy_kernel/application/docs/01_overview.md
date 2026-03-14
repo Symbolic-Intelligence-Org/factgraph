@@ -188,9 +188,9 @@ PYTHONPATH=src python -m unittest \
 
 ## 9. 相关文档
 
-- [application_projection_blueprint.md](/Users/zhenzhili/symbolic_agent/docs/application_projection_blueprint.md)
+- [application_projection_blueprint.md](/Users/zhenzhili/symbolic_agent/docs/architecture/blueprints/application/application_projection_blueprint.md)
   - 架构蓝图、迁移阶段、后续规划
-- [application_protocol_spec.md](/Users/zhenzhili/symbolic_agent/docs/application_protocol_spec.md)
+- [application_protocol_spec.md](/Users/zhenzhili/symbolic_agent/docs/reference/application/application_protocol_spec.md)
   - application protocol DTO 规范
-- [frontend_entity_ui_design.md](/Users/zhenzhili/symbolic_agent/docs/frontend_entity_ui_design.md)
+- [frontend_entity_ui_design.md](/Users/zhenzhili/symbolic_agent/docs/architecture/blueprints/frontend/frontend_entity_ui_design.md)
   - 实体/规则 UI、graph projection 目标表达

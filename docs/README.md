@@ -125,28 +125,30 @@ When reviewing a document, classify it in this order:
 6. Is it mainly historical or superseded context?
    - put it in `history/`
 
-## Current High-Level Mapping
+## Current High-Level Layout
 
-Current directories already hint at several roles, but some are mixed:
+The primary structural migration has landed.
 
-- `docs/api/`
-  - should become `reference/service/api/`
-- `docs/tutorials/`
-  - should become `guides/tutorials/`
+- `docs/reference/`
+  - current reference docs, including `application/`, `core/`, `service/`, and `service/api/`
+- `docs/architecture/specs/`
+  - long-lived semantic specs for schema, core semantics, runtime, authoring, and SDK contracts
+- `docs/architecture/blueprints/`
+  - target-state application, frontend, core, and runtime design docs
 - `docs/plans/`
-  - should remain `plans/`
-- `docs/Logs/`
-  - should become `history/logs/`
+  - execution plans and governance records
+- `docs/guides/tutorials/`
+  - instructional and onboarding material
+- `docs/history/`
+  - logs, design evolution, migrations, and legacy snapshots
 - `docs/blueprint/`
-  - currently mixed: some files are specs, some are blueprints, some are history
-- `docs/history/legacy/sdk/`
-  - archived SDK snapshot; use only for historical comparison, not current behavior
+  - temporary holding area for deferred draft docs that still need cleanup before promotion
 
-Root-level documents should also be classified by role instead of being left in `docs/`:
+The root-level role-specific docs have already moved into their role-based homes:
 
-- `application_protocol_spec.md` -> `reference/application/`
-- `application_projection_blueprint.md` -> `architecture/blueprints/application/`
-- `frontend_entity_ui_design.md` -> `architecture/blueprints/frontend/`
+- `docs/reference/application/application_protocol_spec.md`
+- `docs/architecture/blueprints/application/application_projection_blueprint.md`
+- `docs/architecture/blueprints/frontend/frontend_entity_ui_design.md`
 
 ## Document Status Labels
 
@@ -188,15 +190,22 @@ Purpose:
 - current docs should remain discoverable
 - history should explain evolution instead of becoming a dead end
 
-## Phase 1 Focus
+## Structural Migration Status
 
-The first cleanup pass should not move everything at once.
+Completed on `2026-03-14`:
 
-Priority:
+1. archived legacy SDK docs under `docs/history/legacy/sdk/`
+2. moved classified root-level docs into `reference/` and `architecture/blueprints/`
+3. moved classified `docs/blueprint/` docs into `reference/`, `architecture/specs/`, `architecture/blueprints/`, and `history/`
+4. moved service API docs into `docs/reference/service/api/`
+5. moved tutorials into `docs/guides/tutorials/`
+6. moved design logs into `docs/history/logs/`
 
-1. classify root-level docs
-2. keep archived SDK legacy docs linked to the current SDK reference
-3. split `docs/blueprint/` into `reference/`, `architecture/specs/`, `architecture/blueprints/`, and `history/`
-4. add status headers to high-impact documents
+Still deferred:
 
-For the detailed mapping, see [docs/plans/docs_structure_migration_checklist.md](./plans/docs_structure_migration_checklist.md).
+- `docs/blueprint/语法.md`
+  - rewrite required before promotion to `docs/architecture/specs/rules/`
+- `docs/blueprint/审计.md`
+  - cleanup required before promotion to `docs/architecture/blueprints/audit/`
+
+For the detailed migration record, see [docs/plans/docs_structure_migration_checklist.md](./plans/docs_structure_migration_checklist.md).
