@@ -20,6 +20,30 @@ build/
 venv/
 .env
 /out/
-docs/
+docs/*
+!docs/application_protocol_spec.md
+!docs/application_projection_blueprint.md
+!docs/frontend_entity_ui_design.md
+!docs/blueprint/
+docs/blueprint/*
+!docs/blueprint/candidate_protocol_v2.md
+!docs/blueprint/service.md
+!docs/blueprint/规范.md
+!docs/blueprint/断言层 证据层.md
+!docs/blueprint/视图层.md
+!docs/blueprint/Authoring 层契约.md
+!docs/README.md
+!docs/plans/
+docs/plans/*
+!docs/plans/docs_structure_migration_checklist.md
+!docs/plans/sdk_old_review.md
+!docs/plans/blueprint_manual_review.md
+!docs/plans/status_header_rollout.md
+!docs/history/
+docs/history/*
+!docs/history/legacy/
+docs/history/legacy/*
+!docs/history/legacy/sdk/
+!docs/history/legacy/sdk/*
 /archive/
 /hnsm-frontend-master/

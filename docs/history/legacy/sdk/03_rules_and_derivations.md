@@ -1,3 +1,9 @@
+> Archived legacy snapshot.
+>
+> This file reflects an older SDK semantic layer and is not authoritative for current development.
+> Current authoritative source: [src/factpy_kernel/sdk/docs/03_rules_and_derivations.md](../../../../src/factpy_kernel/sdk/docs/03_rules_and_derivations.md)
+> Review rationale: [docs/plans/sdk_old_review.md](../../../plans/sdk_old_review.md)
+
 # SDK Rules / Derivations (v1)
 
 This file documents the runtime SDK object DSL (`factpy_kernel.sdk`).

@@ -1,3 +1,9 @@
+> Archived legacy snapshot.
+>
+> This folder documents an older SDK semantic model and is not authoritative for current development.
+> Current SDK reference: [src/factpy_kernel/sdk/docs/README.md](../../../../src/factpy_kernel/sdk/docs/README.md)
+> Review rationale: [docs/plans/sdk_old_review.md](../../../plans/sdk_old_review.md)
+
 # FactPy SDK Docs (v1)
 
 This folder is the code-aligned documentation for `src/factpy_kernel/sdk`.

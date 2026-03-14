@@ -1,3 +1,9 @@
+> Archived legacy snapshot.
+>
+> This file reflects an older SDK semantic layer and is not authoritative for current development.
+> Current authoritative source: [src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md](../../../../src/factpy_kernel/sdk/docs/02_readwrite_and_ingest.md)
+> Review rationale: [docs/plans/sdk_old_review.md](../../../plans/sdk_old_review.md)
+
 # SDK Read/Write + Ingest Reference (v1)
 
 This document describes the current behavior of read/write SDK APIs in `src/factpy_kernel/sdk`.

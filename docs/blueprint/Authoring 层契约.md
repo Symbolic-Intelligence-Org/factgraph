@@ -1,3 +1,14 @@
+---
+doc_type: spec
+status: partial
+source_of_truth: design
+implementation_state: partial
+owner: authoring
+last_verified: 2026-03-14
+---
+
+> Partial status: 本文定义 authoring 到 canonical IR 的目标契约，但部分 authoring/runtime 细节仍需结合当前实现文档复核。
+
 # Authoring 层契约（Authoring Contract v1）
 
 目标：在 **不绑定具体 DSL 语法**（Python/YAML/UI 表单均可）的前提下，锁定 Authoring 层概念与当前项目 canonical 契约（SchemaIR / Rule / Derivation / Export/Runner）的映射关系，避免后续 parser/UI 先行导致语义分叉。

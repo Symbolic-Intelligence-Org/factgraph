@@ -1,3 +1,12 @@
+---
+doc_type: reference
+status: authoritative
+source_of_truth: contract
+implementation_state: implemented
+owner: service
+last_verified: 2026-03-14
+---
+
 # FactPy Kernel Service (v1)
 
 最小 HTTP 服务层（FastAPI），用于把 `factpy_kernel.service.rules_v1` 和 runtime/registry service facade 暴露给前端/产品团队使用。

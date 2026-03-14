@@ -1,3 +1,12 @@
+---
+doc_type: reference
+status: authoritative
+source_of_truth: code
+implementation_state: implemented
+owner: core/derivation
+last_verified: 2026-03-14
+---
+
 # Candidate Protocol v2 (Current Implementation Spec)
 
 状态：已实现（严格 v2）  

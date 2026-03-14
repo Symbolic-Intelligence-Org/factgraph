@@ -1,3 +1,9 @@
+> Archived legacy snapshot.
+>
+> This file reflects an older SDK semantic layer and is not authoritative for current development.
+> Current authoritative source: [src/factpy_kernel/sdk/docs/01_alignment_matrix.md](../../../../src/factpy_kernel/sdk/docs/01_alignment_matrix.md)
+> Review rationale: [docs/plans/sdk_old_review.md](../../../plans/sdk_old_review.md)
+
 # SDK Alignment Matrix (Current Implementation)
 
 Scope: `src/factpy_kernel/sdk` runtime behavior.
