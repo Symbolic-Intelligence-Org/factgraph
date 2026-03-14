@@ -32,6 +32,15 @@ docs/blueprint/*
 !docs/blueprint/断言层 证据层.md
 !docs/blueprint/视图层.md
 !docs/blueprint/Authoring 层契约.md
+!docs/blueprint/导出与运行.md
+!docs/blueprint/Authoring 层契约 fixtures.md
+!docs/blueprint/sdk_accept_ingest_provenance_spec.md
+!docs/api/
+docs/api/*
+!docs/api/README.md
+!docs/api/runtime-session.md
+!docs/api/runtime-queries.md
+!docs/api/rules-registry.md
 !docs/README.md
 !docs/plans/
 docs/plans/*

@@ -21,6 +21,8 @@ Highest-visibility or highest-confusion docs.
 
 ### Phase 2: P1
 
+Status: completed on `2026-03-14`
+
 Current service contract docs and remaining important spec-adjacent files.
 
 ### Phase 3: P2

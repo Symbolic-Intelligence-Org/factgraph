@@ -1,3 +1,14 @@
+---
+doc_type: spec
+status: partial
+source_of_truth: design
+implementation_state: partial
+owner: authoring
+last_verified: 2026-03-14
+---
+
+> Partial status: 本文的 fixture 对 authoring 契约回归仍有参考价值，但其中包含历史语义样例，不应整体视为当前实现快照。
+
 # Authoring 层契约 fixtures（Golden Fixtures v1）
 
 > 注：本文件保留大量历史 fixture。Derivation 的当前执行语法以 v2 为准：`head` 自动判定 candidate kind，用户侧不再使用 `materialize_as/id_policy`。请优先参考 [docs/blueprint/candidate_protocol_v2.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/candidate_protocol_v2.md) 与 [src/factpy_kernel/sdk/docs/03_rules_and_derivations.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/03_rules_and_derivations.md)。

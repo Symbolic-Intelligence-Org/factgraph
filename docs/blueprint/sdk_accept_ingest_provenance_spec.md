@@ -1,3 +1,14 @@
+---
+doc_type: spec
+status: partial
+source_of_truth: design
+implementation_state: partial
+owner: sdk
+last_verified: 2026-03-14
+---
+
+> Partial status: 本文可作为 SDK 写入入口分层的规范性参考，但具体行为边界仍需结合当前 SDK 文档与代码实现核对。
+
 # FactPy SDK 写入入口分层规范（`accept` / `ingest` / `provenance`）
 
 版本：v1  
