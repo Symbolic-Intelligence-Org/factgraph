@@ -12,6 +12,8 @@
   - 项目的稳定设计哲学、系统边界和长期方向。
 - [blueprints/README.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/README.md)
   - 任务蓝图工作流、状态机、模板与标准归档 / reconstructed 归档规则。
+- [module_docs_convention.md](/Users/zhenzhili/symbolic_agent/docs/module_docs_convention.md)
+  - 模块文档最小结构要求、写作约定、触发更新的场景、起点模板。
 - [symir_blueprint_extraction.md](/Users/zhenzhili/symbolic_agent/docs/symir_blueprint_extraction.md)
   - 从历史 Symir 蓝图中提炼对当前 FactPy 仍然有价值的结论。
 - [blueprint_history/README.md](/Users/zhenzhili/symbolic_agent/docs/blueprint_history/README.md)
