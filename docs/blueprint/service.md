@@ -67,16 +67,16 @@ uvicorn factpy_kernel.service.app_v1:app --host 0.0.0.0 --port 8000
 
 - rules facade：`/v1/rules/*` + `/v1/profiles`
 - runtime session：`/v1/runtime/sessions/open`、`/{session_id}`、`/writes/*`、`/claims`
-- runtime queries：`/rules/run`、`/derivations/*`、`/queries/*`、`/packages/export`
+- runtime queries：`/rules/run`、`/derivations/*`、`/queries/*`、`/views/*`、`/packages/export`
 - registry read-only：`/v1/registry/*`
 
 ## API（v1）
 
 详细 DTO 文档：
 
-- `runtime-session`：[`docs/api/runtime-session.md`](../api/runtime-session.md)
-- `runtime-queries`：[`docs/api/runtime-queries.md`](../api/runtime-queries.md)
-- `rules-registry`：[`docs/api/rules-registry.md`](../api/rules-registry.md)
+- `runtime-session`：[`service/docs/02_runtime_sessions.md`](../../src/factpy_kernel/service/docs/02_runtime_sessions.md)
+- `runtime-queries`：[`service/docs/03_runtime_queries_views.md`](../../src/factpy_kernel/service/docs/03_runtime_queries_views.md)
+- `rules-registry`：[`service/docs/04_rules_registry.md`](../../src/factpy_kernel/service/docs/04_rules_registry.md)
 
 - `POST /v1/rules/validate`
 - `POST /v1/rules/compile-preview`
@@ -92,6 +92,11 @@ uvicorn factpy_kernel.service.app_v1:app --host 0.0.0.0 --port 8000
 - `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 - `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
+- `POST /v1/runtime/sessions/{session_id}/views/create`
+- `POST /v1/runtime/sessions/{session_id}/views/update`
+- `POST /v1/runtime/sessions/{session_id}/views/delete`
+- `POST /v1/runtime/sessions/{session_id}/views/get`
+- `GET /v1/runtime/sessions/{session_id}/views`
 - `POST /v1/runtime/sessions/{session_id}/rules/run`
 - `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
 - `POST /v1/runtime/sessions/{session_id}/derivations/accept`

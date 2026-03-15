@@ -3,8 +3,8 @@
 本目录是 `src/factpy_kernel/sdk` 的代码对齐文档，默认以当前实现行为为准（不是设计草案）。
 其中 `00_user_guide.md` 是语义基线；其余文档是专题切片，语义必须与 `00` 保持一致。
 
-历史快照见 [docs/history/legacy/sdk/README.md](/Users/zhenzhili/symbolic_agent/docs/history/legacy/sdk/README.md)。
-该目录仅用于设计演进回溯，不作为当前 SDK 行为依据。
+旧版英文快照原位于 `docs_old/sdk_old`，现已从工作树清理。
+如需回溯历史表述，请查看 git 历史；不要把旧快照当作当前 SDK 行为依据。
 
 ## 中文文档
 
@@ -33,9 +33,6 @@
   - Rule/Derivation DSL reference.
 - `src/factpy_kernel/sdk/docs/04_api_surface.en.md`
   - Public export and API surface index.
-- `src/factpy_kernel/sdk/docs/06_realtime_execution_blueprint.en.md`
-  - Zero-syntax-change execution/runtime optimization blueprint for real-time use cases.
-
 ## 使用约定
 
 - 本目录文档以 SDK v1 当前行为为准；行为变更应与文档同 PR 更新。

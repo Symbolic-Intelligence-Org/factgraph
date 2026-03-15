@@ -10,7 +10,7 @@
 - `POST /v1/runtime/sessions/{session_id}/writes/retract`
 - `GET /v1/runtime/sessions/{session_id}/claims`
 
-本文是 service v1 的 runtime session / write / claims DTO 契约说明。rule/derivation/query/registry 端点不在本文范围内。
+本文记录 service v1 的 runtime session / write / claims DTO 契约。rule、derivation、views、query、package、registry 端点不在本文范围内。
 
 ## 通用约定
 
@@ -18,7 +18,8 @@
 - 成功：`ok=true`，失败：`ok=false` 且 `errors[]` 非空。
 - `session_id` 一律走 path parameter。
 - `entity_ref`（如 `idref_v1:...`）直接按普通字符串透传，不额外包装。
-- `rest_terms` 统一使用类型化二元组的 JSON 形态：`[[type_domain, value], ...]`。
+- `rest_terms` 使用类型化二元组 JSON：`[[type_domain, value], ...]`。
+- 新 session 会自动初始化内建视图 `default`；视图管理端点见 `03_runtime_queries_views.md`。
 
 成功 envelope 示例：
 
@@ -56,28 +57,11 @@
 {
   "schema_ir": {
     "schema_ir_version": "v1",
-    "entities": [
-      {
-        "entity_type": "Person",
-        "identity_fields": [
-          {"name": "source_id", "type_domain": "string"}
-        ]
-      }
-    ],
-    "predicates": [
-      {
-        "pred_id": "person:country",
-        "arg_specs": [
-          {"name": "person", "type_domain": "entity_ref"},
-          {"name": "country", "type_domain": "string"}
-        ],
-        "group_key_indexes": [0],
-        "cardinality": "functional"
-      }
-    ],
+    "entities": [],
+    "predicates": [],
     "projection": {
       "entities": [],
-      "predicates": ["person:country"]
+      "predicates": []
     },
     "protocol_version": {
       "idref_v1": "idref_v1",
@@ -134,6 +118,10 @@
 
 - `shape`
 - `schema_mismatch`
+- `registry_schema_missing`
+- `registry_schema_manifest_entry_invalid`
+- `registry_schema_read_failed`
+- `registry_schema_invalid`
 - `runtime`
 
 ## 2. `GET /v1/runtime/sessions/{session_id}`
@@ -163,7 +151,7 @@
 
 说明：
 
-- `schema_digest` 在 session 生命周期内应保持稳定。
+- `schema_digest` 在 session 生命周期内保持稳定。
 - `counts` 是当前 ledger 快照计数，不是累计历史统计。
 
 错误 kinds：
@@ -188,7 +176,7 @@
 
 说明：
 
-- 关闭 session 会从 service 进程内 session manager 中移除该 session，并关闭对应 ledger 句柄。
+- 关闭 session 会从进程内 session manager 中移除该 session，并关闭对应 ledger 句柄。
 
 错误 kinds：
 
@@ -228,8 +216,7 @@
 说明：
 
 - `pred_id / e_ref / rest_terms` 必填。
-- `rest_terms` 走类型化格式 `[[type_domain, value], ...]`。
-- 当前 service v1 中，`writes/set` 走 ingest-key 写协议，重复写入相同事实会命中幂等键并返回既有 assertion。
+- `writes/set` 走单值字段写协议；相同 ingest-key 的重复写入会命中幂等键并返回既有 assertion。
 - 系统保留 meta（如 `ingested_at / ingest_key`）由底层写协议自动补齐，不要求客户端提供。
 
 错误 kinds：
@@ -244,9 +231,9 @@
 
 ```json
 {
-  "pred_id": "person:name",
+  "pred_id": "person:tag",
   "e_ref": "idref_v1:Person:source_id=u1",
-  "rest_terms": [["string", "Alice"]],
+  "rest_terms": [["string", "vip"]],
   "meta": {
     "source": "seed",
     "source_loc": "row-2"
@@ -270,10 +257,8 @@
 
 说明：
 
-- 当前实现里，`writes/add` 与 `writes/set` 复用同一底层写协议，因此也具有 ingest-key 幂等行为。
-- 也就是说，`add` 与 `set` 在 service v1 的差异主要是客户端语义意图，而不是重复写入时的冲突处理。
-- 当前实现通过 ingest-key 去重，相同内容的重复调用不会产生额外断言。若未来需要“无条件追加”语义，需要协议层变更。
-- 如果未来写协议收敛出更强的 `set/add` 语义分离，应以实现和回归测试更新本文。
+- `writes/add` 适用于多值事实追加。
+- 其余字段约定与 `writes/set` 一致。
 
 错误 kinds：
 
@@ -289,8 +274,7 @@
 {
   "asrt_id": "A2",
   "meta": {
-    "source": "seed",
-    "note": "cleanup"
+    "reason": "duplicate"
   }
 }
 ```
@@ -311,8 +295,8 @@
 
 说明：
 
-- `retract` 的目标是已有 assertion，因此请求参数是 `asrt_id`，不是 `pred_id + e_ref + rest_terms`。
-- 若目标 assertion 已经被撤销，底层写协议会幂等返回既有 revoker assertion。
+- `writes/retract` 只接受 `asrt_id`，按 assertion 撤销。
+- 返回的 `assertion_id` 是 revoker assertion id，不是被撤销的原 assertion id。
 
 错误 kinds：
 
@@ -371,9 +355,7 @@ Query 参数：
 - `rest_terms` 是类型化事实载荷，保留 tag：`[[type_domain, value], ...]`。
 - `claim_args` 是把 `rest_terms` 拆成 position-aware row 的读模型，只有 `include_args=true` 时返回。
 - `meta_rows` 只有 `include_meta=true` 时返回。
-- `claims.rest_terms` 与 `view-facts.view.facts` 的用途不同：
-  - `claims.rest_terms` 保留类型标签，适合调试写入协议和原始断言。
-  - `view-facts.view.facts` 返回投影后的扁平 tuple/list，适合前端直接消费视图结果。
+- `view-facts.view.facts` 返回投影后的扁平 tuple/list；`claims.rest_terms` 则保留原始类型标签，更适合调试写入协议和原始断言。
 
 错误 kinds：
 
@@ -382,5 +364,6 @@ Query 参数：
 
 ## 相关文档
 
-- [`runtime-queries.md`](./runtime-queries.md)
-- [`rules-registry.md`](./rules-registry.md)
+- `01_overview.md`
+- `03_runtime_queries_views.md`
+- `04_rules_registry.md`

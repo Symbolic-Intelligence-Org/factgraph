@@ -11,11 +11,11 @@
 - `POST /v1/registry/rules/read`
 - `POST /v1/registry/derivations/read`
 
-本文是 service v1 的 rules facade 与 registry 只读端点 DTO 契约说明。runtime session / writes / claims / queries 不在本文范围内。
+本文记录 service v1 的 rules facade 与 registry 只读接口 DTO 契约。runtime session / writes / query / views / packages 不在本文范围内。
 
 ## 通用约定
 
-- rules 端点与 registry 端点都返回 `HTTP 200` JSON envelope。
+- 所有端点都返回 `HTTP 200` JSON envelope。
 - 成功：`ok=true`，失败：`ok=false` 且 `errors[]` 非空。
 - rules 端点不依赖 runtime session。
 - registry 端点也不依赖 runtime session；它们直接访问 `root_dir` 指向的 registry 文件系统。
@@ -26,7 +26,8 @@
 ```json
 {
   "ok": true,
-  "errors": []
+  "errors": [],
+  "meta": {}
 }
 ```
 
@@ -88,11 +89,10 @@
 说明：
 
 - `validate` 只做 request 规范化、AST 校验和 profile 约束校验，不返回编译产物。
-- rules facade 使用的是 authoring/query rule 形态，字段名是 `select_vars`，不是 runtime `rules/run` 里的 `select`。
-- `strict=true` 且未显式提供 `profile` 时，`profile_effective` 会收敛为 `souffle_strict`。
-- 显式 `profile={"name":"default"}` 可以覆盖 `strict=true` 的默认 profile 选择。
 - string rule DSL 不被接受，客户端必须传结构化 rule object。
 - string `where` DSL 同样不被接受，客户端必须传结构化 where IR。
+- `strict=true` 且未显式提供 `profile` 时，`profile_effective` 会收敛为 `souffle_strict`。
+- 显式 `profile={"name":"default"}` 可覆盖 `strict=true` 的默认 profile 选择。
 
 错误 kinds：
 
@@ -145,8 +145,7 @@
 说明：
 
 - `compile-preview` 在通过 validate 阶段后，继续返回 authoring compile 产物。
-- 如果 validate 失败，响应中不会出现 `preview`。
-- 因为 compile-preview 复用 validate 的 request 规范化逻辑，所以 string DSL 的拒绝策略完全一致。
+- 因为 `compile-preview` 复用 validate 的 request 规范化逻辑，所以 string DSL 的拒绝策略完全一致。
 
 错误 kinds：
 
@@ -173,7 +172,7 @@
     },
     {
       "name": "souffle_strict",
-      "description": "Souffle strict validation: requires resolved ruleref and forbids not-body OR.",
+      "description": "Soufflé strict validation: requires resolved ruleref and forbids not-body OR.",
       "capabilities": {
         "ruleref_policy": "require_resolved",
         "not_body_policy": "forbid_or"
@@ -280,7 +279,7 @@
 
 说明：
 
-- schema/read 不经过 runtime session；它只根据 `root_dir` 读取 registry manifest 中登记的 schema 文件。
+- `schema/read` 不经过 runtime session；它只根据 `root_dir` 读取 registry manifest 中登记的 schema 文件。
 - 这也是 runtime session `open` 在传 `registry_root` 时复用的 schema 加载路径。
 
 错误 kinds：
@@ -408,8 +407,7 @@
     "target_pred_id": "person:country",
     "head_vars": ["$E", "$V"],
     "where": [["pred", "person:country", ["$E", "$V"]]],
-    "mode": "python",
-    "temporal_view": "record"
+    "mode": "python"
   }
 }
 ```
@@ -426,5 +424,6 @@
 
 ## 相关文档
 
-- [`runtime-session.md`](./runtime-session.md)
-- [`runtime-queries.md`](./runtime-queries.md)
+- `01_overview.md`
+- `02_runtime_sessions.md`
+- `03_runtime_queries_views.md`

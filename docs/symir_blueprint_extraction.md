@@ -35,7 +35,7 @@
 
 | 状态 | 源文档 |
 | --- | --- |
-| pending | `docs_old/symir_logs/0. 生成langda提示词.md` |
+| done | `docs_old/symir_logs/0. 生成langda提示词.md` |
 | done | `docs_old/symir_logs/1. Fact Rel.md` |
 | done | `docs_old/symir_logs/2. ArgSpec 语法糖.md` |
 | done | `docs_old/symir_logs/3. Fact Rel schema调整.md` |
@@ -63,6 +63,100 @@
 ---
 
 ## 提炼记录
+
+---
+
+### 文档：`docs_old/symir_logs/0. 生成langda提示词.md`
+
+#### 1. 原始关注点
+
+这篇文档本质上不是“蓝图说明”，而是一份面向 Codex/LLM 的实现提示词。它试图一次性规定一整套 rule 生成架构：`HeadSchema + Bodies`、`RefLiteral/ExprLiteral`、`FactSchema/FactView`、`DataProvider/CSVProvider`、`Library`、多后端 renderer，以及统一的概率默认策略。
+
+核心诉求包括：
+
+| 诉求 | 描述 |
+| --- | --- |
+| 规则输入必须结构化、可序列化、可测试 | 禁止 raw string expr，要求中性 AST/IR |
+| LLM 生成面与执行面分层 | 用 schema/view/filter 控制 LLM 可见谓词范围 |
+| 数据访问与规则生成解耦 | CSV 只是一个 provider，不能把 query/filter 逻辑写死在 CSV 解析中 |
+| backend 适配层清晰 | 预留 Prolog/ProbLog/Datalog/Cypher renderer 接口 |
+| 概率是系统核心能力 | fact/rule 缺失概率时必须按统一默认策略处理 |
+
+#### 2. 对当前 FactPy 仍然有效的思想
+
+**✓ 已被当前实现吸收的部分：**
+
+| 思想 | 当前实现状态 |
+| --- | --- |
+| 规则 authoring 必须走结构化对象/IR，而不是字符串拼接 | service/SDK v1 已明确拒绝 string rule DSL（`core/docs/04_public_contract_v1.md` L9-39；`service/rules_v1.py` L133-157） |
+| 表达式/条件必须是结构化 AST，而非 raw string | 当前 core `where_ast` 已有 `Var/Const/PredAtom/RuleRefAtom/CmpAtom/BuiltinAtom/NotAtom`（`core/rules/where_ast.py` L19-92） |
+| backend 特性不应散落在业务层 | 当前 builtins / ruleref / not-body 能力已通过 validator + backend profile 控制（`core/rules/where_ast_validate.py` L31-37, L54-70, L181-249） |
+| LLM/外部输入应先进入安全预检入口 | 当前最接近的是 `build_authoring_session_from_dsl_inputs_safe_dto()`（`authoring/dsl_bridge.py` L102-218） |
+
+**◐ 部分实现，仍可继续吸收：**
+
+| 思想 | 当前状态 | 差距 |
+| --- | --- | --- |
+| 多后端 renderer 应有清晰边界 | 当前已有 `native|souffle|problog` 路径；ProbLog 导出器也已独立成 adapter（`adapters/problog/problog_export.py` L19-79） | 但还没有统一的“library spec + renderer registry”抽象 |
+| Body 分支概率是合理需求 | `Body.confidence` 对象层已存在（`sdk/dsl/body.py` L9-27）；derivation 编译也支持 `body_confidences`（`authoring/derivation_compile.py` L47-48, L135-136, L548-573） | 但 `Rule` 路径会在 `_normalize_rule_where_for_payload()` 中丢弃 `Body.confidence`（`sdk/dsl/rule.py` L268-274），不存在统一 rule/fact 概率核心 |
+| 输入规范化应独立于核心写入层 | 仓库已经明确 `authoring_normalize.py` 是尚未落地能力（`application/docs/01_overview.md` L156-163） | 当前仍缺用户侧 CSV / LLM draft normalize helper |
+
+**✗ 不建议直接采纳的设计：**
+
+| 设计 | 不采纳原因 |
+| --- | --- |
+| 把旧文的 `FactSchema/FactView` 子体系直接搬回当前项目 | 当前主线已围绕 `schema_ir + SchemaIndex + ViewSpec` 建立；其中 `ViewSpec` 也不是“schema 子集视图” |
+| 把 `HeadSchema(var-only)` 作为当前 Rule/Derivation 的统一主形状 | 当前 FactPy 已稳定分成 `Rule(select, where)` 与 `Derivation(head, where)`；直接合并会冲击 v1 public contract |
+| 把“统一概率默认策略”提升为当前 rule/fact 核心语义 | 这与当前“evidence confidence + 局部 derivation/problog body_confidences”口径不一致，迁移风险高 |
+| 一次性引入 `DataProvider + Filter AST + Library + renderer interface + 概率 core` 全套新表层 | 范围过大，且会与现有 authoring/sdk/core/adapters 分层重叠 |
+
+#### 3. 与当前代码的对应位置
+
+**3.1 当前已经具备的结构化 rule/expr 基础**
+
+| 关注点 | 当前代码位置 | 说明 |
+| --- | --- | --- |
+| Query-style Rule | `sdk/dsl/rule.py: Rule` (L45-112) | 当前规则主形状是 `select + where` |
+| Head-producing Derivation | `sdk/dsl/rule.py: Derivation` (L115-167) | 当前 head 生成能力放在 derivation，而不是 Rule |
+| 结构化 where AST | `core/rules/where_ast.py` L19-92 | 当前已有可 JSON-safe 的中性 AST |
+| SDK 对象 DSL lowering | `sdk/dsl/expr.py` L277-447 | 运算符 sugar 最终下沉到 structured where IR |
+
+**3.2 当前与旧文不一致的硬边界**
+
+| 关注点 | 当前代码位置 | 说明 |
+| --- | --- | --- |
+| 当前 head 不是 var-only | `sdk/dsl/expr.py: lower_term()` (L431-446) | derivation head 当前允许 literal 值，不符合旧文 `HeadSchema(var-only)` 约束 |
+| Rule 与 Derivation 已分层 | `sdk/docs/03_rules_and_derivations.en.md` L22-46, L120+ | 旧文想统一为单一 rule schema；当前公开契约不是这样 |
+| Query 不支持 Body 概率 | `sdk/dsl/rule.py` L192-219, L292-313 | Query 路径显式拒绝 `Body.confidence` |
+
+**3.3 当前缺失的部分**
+
+| 关注点 | 当前代码位置 | 说明 |
+| --- | --- | --- |
+| LLM/CSV normalize helper | `application/docs/01_overview.md` L156-163 | `authoring_normalize.py` 尚未实现 |
+| 用户侧 DataProvider/CSVProvider 抽象 | 无直接对应 | 当前仓库没有用户导入层 provider 接口；唯一 CSV 解析只在 Souffle adapter 输出侧 |
+| first-class Library 机制 | 无直接对应 | 当前只有 builtin allowlist + backend profile，不是统一 `LibrarySpec` |
+
+#### 4. 可执行优化建议
+
+| 建议 | 实现位置 | 说明 |
+| --- | --- | --- |
+| 若未来继续做 LLM rule authoring，优先复用现有 safe DTO / structured object 路径 | `authoring/dsl_bridge.py` 外围 | 输入 contract 应落到“structured draft -> authoring payload”，不要新造一套并行 rule core |
+| 若要补输入归一化，新增窄范围 normalize helper | 未来 `application/authoring_normalize.py` | 只处理 CSV/LLM draft -> canonical authoring payload / ingest items |
+| 若确实需要 library 机制，优先作为 backend/export 层注册表引入 | `core/rules` + `adapters/*` | 不要把后端语法映射散落进 DSL 对象本身 |
+| 若后续讨论概率默认策略，单独开题 | `derivation` / `adapters/problog` / evidence confidence 相关模块 | 先明确“evidence confidence”和“rule branch probability”是否要统一，再决定是否扩面 |
+
+#### 5. 结论
+
+| 结论 | 说明 |
+| --- | --- |
+| **consider** | 这篇提示词最有价值的是三条原则：规则输入必须结构化、LLM/外部输入要先 normalize/preflight、backend 适配要隔离。但它提出的 `FactSchema/FactView/DataProvider/概率 core` 全套表层设计不应原样迁回当前主线 |
+
+**更适合当前项目的吸收路径：**
+
+1. 保留“structured object / JSON-safe IR / safe DTO”方向，继续复用现有 `Rule/Derivation + where_ast + dsl_bridge`。
+2. 若要承接 CSV/LLM 输入，优先补 `authoring_normalize.py` 一类外围 helper，而不是改 core 规则模型。
+3. 概率问题应拆开看：当前 evidence `confidence` 已是稳定 contract；rule branch probability 只在局部路径存在，不适合直接按旧文上升为系统核心默认策略。
 
 ---
 
@@ -1584,7 +1678,7 @@ class EmploymentEvent(Entity):
 | 关注点 | 当前代码位置 | 说明 |
 | --- | --- | --- |
 | `Entity.Meta` 白名单 | `sdk/schema.py: _extract_entity_declaration_fields()` (L229-265) | 仅支持 `version/description/tags`；传入 `merge_policy` 会报错 |
-| declaration → spec 编译 | `sdk/schema.py: EntityMeta.__new__()` (L147-167) | 只有上述三类声明元数据会进入 `sdk_entity_spec` |
+| declaration → spec 编译 | `sdk/schema.py: EntityMeta.__new__()` (L128-169) | 只有上述三类声明元数据会进入 `sdk_entity_spec` |
 | 架构口径 | `core/docs/01_architecture.md` §6.3 (L142-154) | 声明元数据不参与 where / candidate / accept 写入语义 |
 
 **3.4 当前缺口：没有旧文设想的 merge executor**
@@ -1855,7 +1949,7 @@ class EmploymentEvent(Entity):
 | 关注点 | 当前代码位置 | 说明 |
 | --- | --- | --- |
 | 当前 core term 模型 | `core/rules/where_ast.py` L19-31 | 只有 `Var/Const`，没有 compound/struct term |
-| 当前 builtin / not / ruleref 能力边界 | `core/rules/where_ast_validate.py` L31-37, L181-239 | 支持集是显式白名单，不包含结构化 `Unify/Struct` |
+| 当前 builtin / not / ruleref 能力边界 | `core/rules/where_ast_validate.py` L31-37, L181-249 | 支持集是显式白名单，不包含结构化 `Unify/Struct` |
 | 当前对象 DSL 的 where lowering | `sdk/dsl/expr.py` L277-447 | 也没有结构化项或统一展开 policy |
 
 #### 4. 可执行优化建议
@@ -1964,7 +2058,7 @@ class EmploymentEvent(Entity):
 | 关注点 | 当前代码位置 | 说明 |
 | --- | --- | --- |
 | core term AST | `core/rules/where_ast.py` L19-31 | `Var/Const` 只存名字和值，不存 datatype |
-| AST 形状/数据流校验 | `core/rules/where_ast_validate.py` L54-70, L132-239 | 校验 focus 在 shape、builtin、not/ruleref policy、dataflow |
+| AST 形状/数据流校验 | `core/rules/where_ast_validate.py` L54-70, L132-249 | 校验 focus 在 shape、builtin、not/ruleref policy、dataflow |
 | schema-aware sugar lowering | `authoring/where_schema_lowering.py` L12-28, L217-291 | 目前只做很窄的一层 schema-aware 检查 |
 | string DSL 拒绝 | `core/docs/04_public_contract_v1.md` L9-39；`service/rules_v1.py` L133-157 | 对外 contract 已经固定为 structured object |
 
@@ -1996,7 +2090,7 @@ class EmploymentEvent(Entity):
 
 | 思想 | 当前实现状态 |
 | --- | --- |
-| 关系/引用型 schema 的 authoring 应依赖“完整 schema 对象信息”，而不是裸字符串 ID | 当前 SDK schema 直接依赖 Python `Entity` 类和字段注解；编译时据此生成 `entity_ref` 字段与 predicates（`sdk/schema.py` L147-166） |
+| 关系/引用型 schema 的 authoring 应依赖"完整 schema 对象信息"，而不是裸字符串 ID | 当前 SDK schema 直接依赖 Python `Entity` 类和字段注解；编译时据此生成 `entity_ref` 字段与 predicates（`sdk/schema.py` L128-169） |
 | “先有实体定义，再有关系定义”是合理工程顺序 | 当前作者态 schema 仍是整份 `schema_ir` 资产统一编译，不支持脱离实体定义单独拼装关系类型 |
 
 **◐ 部分实现，仍可继续吸收：**
@@ -2015,9 +2109,9 @@ class EmploymentEvent(Entity):
 
 | 关注点 | 当前代码位置 | 说明 |
 | --- | --- | --- |
-| SDK schema 编译依赖类对象与注解 | `sdk/schema.py` L147-166 | `identity_fields/fields` 从类和注解编译而来，不接受裸 `schema_id` 拼装关系 |
-| 基于 classes 恢复 store | `sdk/store.py: from_schema_classes()` (L111-144) | 当前恢复入口是“已知 Entity classes + 可选 ledger_path” |
-| 基于 registry/schema_ir 恢复 runtime | `service/runtime_v1.py: open_runtime_session()` (L121-143) | 当前服务层可用 `schema_ir` / `registry_root` 恢复运行时，但这不是 SDK 类回构 |
+| SDK schema 编译依赖类对象与注解 | `sdk/schema.py` L128-169 | `identity_fields/fields` 从类和注解编译而来，不接受裸 `schema_id` 拼装关系 |
+| 基于 classes 恢复 store | `sdk/store.py: from_schema_classes()` (L111-144) | 当前恢复入口是"已知 Entity classes + 可选 ledger_path" |
+| 基于 registry/schema_ir 恢复 runtime | `service/runtime_v1.py: open_runtime_session()` (L121-144) | 当前服务层可用 `schema_ir` / `registry_root` 恢复运行时，但这不是 SDK 类回构 |
 
 #### 4. 可执行优化建议
 
@@ -2096,10 +2190,10 @@ class EmploymentEvent(Entity):
 
 | 思想 | 当前实现状态 |
 | --- | --- |
-| SQLite 作为真相源，内存索引作为读缓存 | `Ledger` 现在就是 SQLite write-through cache（`core/store/ledger.py` L210-243, L651-679） |
-| 写入必须通过原子入口 | `append_assertion()` / `append_revocation()` 已是标准入口（`ledger.py` L268-390），`write_protocol` 也已经切过去（前文 doc12 已覆盖） |
+| SQLite 作为真相源，内存索引作为读缓存 | `Ledger` 现在就是 SQLite write-through cache（`core/store/ledger.py` L218-243, L651-679） |
+| 写入必须通过原子入口 | `append_assertion()` / `append_revocation()` 已是标准入口（`ledger.py` L268-391），`write_protocol` 也已经切过去（前文 doc12 已覆盖） |
 | ingest_key 应有独立索引表并支持 lazy backfill | `ingest_keys` 表与 `_find_ingest_key()` / `_backfill_ingest_key()` 已实现（`ledger.py` L94-98, L684-713） |
-| `ledger_path` 恢复必须绑定 schema digest | SDK 和 service 都会在打开 ledger 时校验/写入 `schema_digest`（`sdk/store.py` L123-138；`service/runtime_v1.py` L604-623） |
+| `ledger_path` 恢复必须绑定 schema digest | SDK 和 service 都会在打开 ledger 时校验/写入 `schema_digest`（`sdk/store.py` L123-138；`service/runtime_v1.py` L612-623） |
 
 **◐ 仍需持续注意的边界：**
 
@@ -2114,10 +2208,10 @@ class EmploymentEvent(Entity):
 | SQLite DDL 与索引 | `core/store/ledger.py` L63-122 | `claims/claim_args/meta_rows/revokes/ingest_keys/ledger_meta` 全部在此定义 |
 | Ledger 初始化与 WAL 模式 | `ledger.py` L218-243 | 文件型 SQLite 使用 `WAL`；`:memory:` 仍保留 |
 | 原子 assertion 写入 | `ledger.py: append_assertion()` (L268-334) | 事务提交后再刷新内存索引 |
-| 原子 revocation 写入 | `ledger.py: append_revocation()` (L336-390) | 与 assertion 路径一致 |
+| 原子 revocation 写入 | `ledger.py: append_revocation()` (L336-391) | 与 assertion 路径一致 |
 | DB -> 内存索引回放 | `ledger.py: _load_from_db()` (L651-679) | 进程重启后可恢复 |
 | SDK 恢复工厂 | `sdk/store.py: from_schema_classes()` (L111-144) | `ledger_path` 与 `schema_digest` 绑定 |
-| service 恢复工厂 | `service/runtime_v1.py` L121-143, L604-623 | runtime session 打开/创建 file-backed ledger |
+| service 恢复工厂 | `service/runtime_v1.py` L121-144, L604-623 | runtime session 打开/创建 file-backed ledger |
 
 #### 4. 可执行优化建议
 
@@ -2277,3 +2371,8 @@ class EmploymentEvent(Entity):
 | `Canonical` | 当前无 `CanonicalMixin`；仍是普通 `Entity` 建模问题 |
 | `canon_of` | 当前最接近 `is_mapping=true` 且 `mapping_kind="single_valued"` 的 mapping predicate，由 `core/mapping/canon.py` 解析 |
 | `canon_policy` | 当前最接近 mapping predicate 的 `tie_break` + `Store.resolve_mapping(policy_mode=...)`；无顶层 `CanonPolicyConfig` |
+| `HeadSchema` | 无直接对应；当前更接近 `Derivation.head` 的 `HeadCall`，而 Query/Rule 仍保持 `select + where` |
+| `RefLiteral` | 当前更接近 `PredAtom` / `RuleRefAtom`；否定通过 `Not([...])` 包裹，而不是 `negated` 字段 |
+| `ExprLiteral` | 当前更接近 core `CmpAtom/BuiltinAtom/NotAtom` 与 SDK `CompareExpr/BinaryExpr` |
+| `DataProvider` / `CSVProvider`（规则输入侧） | 无直接对应；未来更适合落在 `application/authoring_normalize.py` 一类外围 normalize helper |
+| `Library`（backend-mapped spec 集合） | 无 first-class 当前对应；最接近 builtin allowlist + backend profile + adapters renderer |
