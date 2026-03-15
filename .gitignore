@@ -38,6 +38,9 @@ docs/plans/*
 !docs/plans/status_header_rollout.md
 !docs/plans/tutorials_reliability_review.md
 !docs/plans/tutorials_cli_registry_review.md
+!docs/plans/tutorials_audit_export_review.md
+!docs/plans/tutorials_troubleshooting_review.md
+!docs/plans/tutorials_onboarding_backlog_review.md
 !docs/plans/实时服务与物化层蓝图.md
 !docs/guides/
 !docs/guides/**
