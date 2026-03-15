@@ -1,3 +1,7 @@
+> 状态：已实现（Phase 0 范围）  
+> 类型：协议蓝图  
+> 说明：本文档保留为历史 application protocol Phase 0 协议草案；其 Phase 0 范围已有实现承接，但它不是当前实现真相的唯一来源。
+
 # Application Protocol Specification
 
 ## Goal

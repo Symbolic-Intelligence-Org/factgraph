@@ -1,6 +1,6 @@
 # Authoring 层契约 fixtures（Golden Fixtures v1）
 
-> 注：本文件保留大量历史 fixture。Derivation 的当前执行语法以 v2 为准：`head` 自动判定 candidate kind，用户侧不再使用 `materialize_as/id_policy`。请优先参考 [docs/blueprint/candidate_protocol_v2.md](/Users/zhenzhili/symbolic_agent/docs/blueprint/candidate_protocol_v2.md) 与 [src/factpy_kernel/sdk/docs/03_rules_and_derivations.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/03_rules_and_derivations.md)。
+> 注：本文件保留大量历史 fixture。Derivation 的当前执行语法以 v2 为准：`head` 自动判定 candidate kind，用户侧不再使用 `materialize_as/id_policy`。请优先参考 [docs/blueprint_history/candidate_protocol_v2.md](/Users/zhenzhili/symbolic_agent/docs/blueprint_history/candidate_protocol_v2.md) 与 [src/factpy_kernel/sdk/docs/03_rules_and_derivations.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/03_rules_and_derivations.md)。
 
 目的：为 `/Users/zhenzhili/symbolic_agent/docs/Authoring 层契约.md` 提供 **语义映射回归样例**。本文件只锁定：
 

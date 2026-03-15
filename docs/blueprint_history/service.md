@@ -1,3 +1,7 @@
+> 状态：已实现（service v1）  
+> 类型：服务蓝图  
+> 说明：本文档保留为历史 service v1 蓝图；相关能力已进入当前主线，但当前对外契约与实现细节仍以模块 docs 为准。
+
 # FactPy Kernel Service (v1)
 
 最小 HTTP 服务层（FastAPI），用于把 `factpy_kernel.service.rules_v1` 和 runtime/registry service facade 暴露给前端/产品团队使用。

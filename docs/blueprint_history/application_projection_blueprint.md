@@ -1,3 +1,7 @@
+> 状态：部分实现  
+> 类型：架构蓝图  
+> 说明：本文档保留为历史 application/projection 分层蓝图；其中 Phase 0-3 已有实现承接，但后续阶段仍未完成。
+
 # Application Projection Blueprint
 
 ## Goal
@@ -14,7 +18,7 @@
 
 - `docs/frontend_entity_ui_design.md`
 - `docs/application_protocol_spec.md`
-- `docs/blueprint/实时服务与物化层蓝图.md`
+- `docs/blueprint_history/实时服务与物化层蓝图.md`
 - `src/factpy_kernel/application/docs/README.md`
 
 ## Scope

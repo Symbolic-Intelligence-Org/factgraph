@@ -1,3 +1,7 @@
+> 状态：部分实现  
+> 类型：契约蓝图  
+> 说明：本文档保留为历史 Authoring 契约蓝图；其中一部分结论已进入当前主线，但当前实现真相仍以相关模块 docs 为准。
+
 # Authoring 层契约（Authoring Contract v1）
 
 目标：在 **不绑定具体 DSL 语法**（Python/YAML/UI 表单均可）的前提下，锁定 Authoring 层概念与当前项目 canonical 契约（SchemaIR / Rule / Derivation / Export/Runner）的映射关系，避免后续 parser/UI 先行导致语义分叉。
