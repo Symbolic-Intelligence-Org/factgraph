@@ -188,11 +188,11 @@ PYTHONPATH=src python -m unittest \
 
 ## 9. 相关文档
 
-- [blueprints/README.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/README.md)
+- [blueprints/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/README.md)
   - 任务蓝图工作流、状态机与归档规则
-- [application_projection_blueprint.md](/Users/zhenzhili/symbolic_agent/docs/blueprint_history/application_projection_blueprint.md)
+- [application_projection_blueprint.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/application_projection_blueprint.md)
   - application 中层的历史架构蓝图、迁移阶段与后续规划
-- [application_protocol_spec.md](/Users/zhenzhili/symbolic_agent/docs/blueprint_history/application_protocol_spec.md)
+- [application_protocol_spec.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/application_protocol_spec.md)
   - application protocol 的历史协议草案
-- [frontend_entity_ui_design.md](/Users/zhenzhili/symbolic_agent/docs/blueprint_history/frontend_entity_ui_design.md)
+- [frontend_entity_ui_design.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/frontend_entity_ui_design.md)
   - 实体/规则 UI 与 graph projection 的历史目标表达

@@ -8,11 +8,11 @@
   - `src/factpy_kernel/application/docs`
   - `src/factpy_kernel/`
 - Related Docs:
-  - [docs/architecture_principles.md](/Users/zhenzhili/symbolic_agent/docs/architecture_principles.md)
-  - [docs/blueprints/README.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/README.md)
-  - [docs/README.md](/Users/zhenzhili/symbolic_agent/docs/README.md)
+  - [docs/architecture_principles.md](/Users/zhenzhili/hnsm-backend/docs/architecture_principles.md)
+  - [docs/blueprints/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/README.md)
+  - [docs/README.md](/Users/zhenzhili/hnsm-backend/docs/README.md)
 - Audit Log:
-  - [2026-03-15_blueprint-workflow-foundation.audit.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/archive/2026-03-15_blueprint-workflow-foundation.audit.md)
+  - [2026-03-15_blueprint-workflow-foundation.audit.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/2026-03-15_blueprint-workflow-foundation.audit.md)
 
 ## 1. Problem
 

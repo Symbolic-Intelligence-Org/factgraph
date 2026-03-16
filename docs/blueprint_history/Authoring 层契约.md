@@ -8,11 +8,11 @@
 
 本文件是 **Authoring 输入层 → Canonical IR** 的规范；执行层权威语义仍以以下文档为准：
 
-- `/Users/zhenzhili/symbolic_agent/docs/规范.md`（SchemaIR、PredId、IdentityPolicy、group_key_indexes）
-- `/Users/zhenzhili/symbolic_agent/docs/断言层 证据层.md`（claim/claim_arg、写入协议、append-only）
-- `/Users/zhenzhili/symbolic_agent/docs/视图层.md`（active/chosen、functional/multi/temporal view）
-- `/Users/zhenzhili/symbolic_agent/docs/规则.md`（Rule/Derivation、CandidateSet、accept）
-- `/Users/zhenzhili/symbolic_agent/docs/导出与运行.md`（Exporter/Runner、outputs_map）
+- `/Users/zhenzhili/hnsm-backend/docs/规范.md`（SchemaIR、PredId、IdentityPolicy、group_key_indexes）
+- `/Users/zhenzhili/hnsm-backend/docs/断言层 证据层.md`（claim/claim_arg、写入协议、append-only）
+- `/Users/zhenzhili/hnsm-backend/docs/视图层.md`（active/chosen、functional/multi/temporal view）
+- `/Users/zhenzhili/hnsm-backend/docs/规则.md`（Rule/Derivation、CandidateSet、accept）
+- `/Users/zhenzhili/hnsm-backend/docs/导出与运行.md`（Exporter/Runner、outputs_map）
 
 ---
 
@@ -545,6 +545,6 @@ CLI 集成（v1，已实装）：
 
 本契约的示例与回归基线见：
 
-- `/Users/zhenzhili/symbolic_agent/docs/Authoring 层契约 fixtures.md`
+- `/Users/zhenzhili/hnsm-backend/docs/Authoring 层契约 fixtures.md`
 
 这些 fixtures 仅用于固定语义映射与诊断/DTO 契约；**不是** DSL 实现样例代码的权威格式。

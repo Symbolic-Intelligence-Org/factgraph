@@ -8,26 +8,26 @@
 
 ## 入口
 
-- [architecture_principles.md](/Users/zhenzhili/symbolic_agent/docs/architecture_principles.md)
+- [architecture_principles.md](/Users/zhenzhili/hnsm-backend/docs/architecture_principles.md)
   - 项目的稳定设计哲学、系统边界和长期方向。
-- [blueprints/README.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/README.md)
+- [blueprints/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/README.md)
   - 任务蓝图工作流、状态机、模板与标准归档 / reconstructed 归档规则。
-- [module_docs_convention.md](/Users/zhenzhili/symbolic_agent/docs/module_docs_convention.md)
+- [module_docs_convention.md](/Users/zhenzhili/hnsm-backend/docs/module_docs_convention.md)
   - 模块文档最小结构要求、写作约定、触发更新的场景、起点模板。
-- [blueprint_history/README.md](/Users/zhenzhili/symbolic_agent/docs/blueprint_history/README.md)
+- [blueprint_history/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/README.md)
   - 旧蓝图归档区的说明与使用边界。
 
 ## 当前实现文档
 
 以下模块目录中的 `docs/` 才是对应实现的当前真相：
 
-- [src/factpy_kernel/core/docs/01_architecture.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/core/docs/01_architecture.md)
-- [src/factpy_kernel/application/docs/README.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/application/docs/README.md)
-- [src/factpy_kernel/service/docs/README.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/service/docs/README.md)
-- [src/factpy_kernel/sdk/docs/README.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/README.md)
-- [src/factpy_kernel/authoring/docs/README.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/authoring/docs/README.md)
-- [src/factpy_kernel/adapters/docs/README.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/adapters/docs/README.md)
-- [src/factpy_kernel/audit/docs/README.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/audit/docs/README.md)
+- [src/factpy_kernel/core/docs/01_architecture.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/core/docs/01_architecture.md)
+- [src/factpy_kernel/application/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/application/docs/README.md)
+- [src/factpy_kernel/service/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/service/docs/README.md)
+- [src/factpy_kernel/sdk/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/sdk/docs/README.md)
+- [src/factpy_kernel/authoring/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/authoring/docs/README.md)
+- [src/factpy_kernel/adapters/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/adapters/docs/README.md)
+- [src/factpy_kernel/audit/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/audit/docs/README.md)
 
 ## 工作流摘要
 

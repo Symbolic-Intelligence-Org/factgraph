@@ -19,4 +19,4 @@
 
 reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显式标注 `Archive Mode: reconstructed`，不得伪造自己曾真实走过现代 active blueprint workflow。
 
-当前仓库中更早的历史蓝图仍保留在 [docs/blueprint_history/README.md](/Users/zhenzhili/symbolic_agent/docs/blueprint_history/README.md)。
+当前仓库中更早的历史蓝图仍保留在 [docs/blueprint_history/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/README.md)。

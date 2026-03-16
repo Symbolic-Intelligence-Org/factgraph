@@ -94,17 +94,17 @@
 3. 收口范围后把状态改为 `scoped`。
 4. 实现期间把关键决策和 scope 变化写入 audit。
 5. 代码完成后更新受影响模块的 `docs/`。
-6. 若新增持久文档入口，更新 [docs/README.md](/Users/zhenzhili/symbolic_agent/docs/README.md)。
+6. 若新增持久文档入口，更新 [docs/README.md](/Users/zhenzhili/hnsm-backend/docs/README.md)。
 7. 补齐 `Outcome / Deviations`，再归档到 `archive/`。
 
 ## 模板
 
-- [templates/task_blueprint.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/templates/task_blueprint.md)
-- [templates/task_blueprint.audit.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/templates/task_blueprint.audit.md)
-- [templates/legacy_reconstructed_archive.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/templates/legacy_reconstructed_archive.md)
-- [templates/legacy_reconstructed_archive.audit.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/templates/legacy_reconstructed_archive.audit.md)
+- [templates/task_blueprint.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/templates/task_blueprint.md)
+- [templates/task_blueprint.audit.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/templates/task_blueprint.audit.md)
+- [templates/legacy_reconstructed_archive.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/templates/legacy_reconstructed_archive.md)
+- [templates/legacy_reconstructed_archive.audit.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/templates/legacy_reconstructed_archive.audit.md)
 
 ## 旧档案区
 
-历史蓝图仍保存在 [docs/blueprint_history/README.md](/Users/zhenzhili/symbolic_agent/docs/blueprint_history/README.md) 所说明的位置。  
+历史蓝图仍保存在 [docs/blueprint_history/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/README.md) 所说明的位置。  
 它们可用于理解历史设计 rationale，但不能替代当前模块 docs，也不应用于开启新的活动任务。

@@ -1,6 +1,6 @@
 # Task Blueprint Audit: Blueprint Workflow Foundation
 
-- Blueprint: [2026-03-15_blueprint-workflow-foundation.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/archive/2026-03-15_blueprint-workflow-foundation.md)
+- Blueprint: [2026-03-15_blueprint-workflow-foundation.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/2026-03-15_blueprint-workflow-foundation.md)
 
 ## Event Log
 

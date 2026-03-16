@@ -1,8 +1,8 @@
 # Authoring 层契约 fixtures（Golden Fixtures v1）
 
-> 注：本文件保留大量历史 fixture。Derivation 的当前执行语法以 v2 为准：`head` 自动判定 candidate kind，用户侧不再使用 `materialize_as/id_policy`。请优先参考 [docs/blueprint_history/candidate_protocol_v2.md](/Users/zhenzhili/symbolic_agent/docs/blueprint_history/candidate_protocol_v2.md) 与 [src/factpy_kernel/sdk/docs/03_rules_and_derivations.md](/Users/zhenzhili/symbolic_agent/src/factpy_kernel/sdk/docs/03_rules_and_derivations.md)。
+> 注：本文件保留大量历史 fixture。Derivation 的当前执行语法以 v2 为准：`head` 自动判定 candidate kind，用户侧不再使用 `materialize_as/id_policy`。请优先参考 [docs/blueprint_history/candidate_protocol_v2.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/candidate_protocol_v2.md) 与 [src/factpy_kernel/sdk/docs/03_rules_and_derivations.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/sdk/docs/03_rules_and_derivations.md)。
 
-目的：为 `/Users/zhenzhili/symbolic_agent/docs/Authoring 层契约.md` 提供 **语义映射回归样例**。本文件只锁定：
+目的：为 `/Users/zhenzhili/hnsm-backend/docs/Authoring 层契约.md` 提供 **语义映射回归样例**。本文件只锁定：
 
 - Authoring 概念输入（伪代码/伪 DSL）
 - 期望 Canonical SchemaIR 片段（关键字段）
@@ -193,7 +193,7 @@ phone: str = Field(
 - `warnings[0].code == "empty_predicates"`
 - `authoring_ui_dto_v1.status == "warning"`（经 `build_schema_preflight_dto` 包装）
 - `authoring_ui_dto_v1.diagnostics_contract.diagnostics_contract_version == "authoring_diagnostics_contract_v1"`
-- `authoring_ui_dto_v1.diagnostics_contract.codes/phases` 与 canonical registry 一致（见 `/Users/zhenzhili/symbolic_agent/docs/Authoring 层契约.md` 第 7 节）
+- `authoring_ui_dto_v1.diagnostics_contract.codes/phases` 与 canonical registry 一致（见 `/Users/zhenzhili/hnsm-backend/docs/Authoring 层契约.md` 第 7 节）
 
 ### F5-B derivation preview（warning：preview truncation）
 
@@ -988,4 +988,4 @@ python -m factpy_kernel.authoring.cli registry-show --registry-dir ./registry --
 4. Identity 字段与 Field 角色重叠且未显式声明策略（建议 warning 或 error）
 5. `temporal_view="current"` 但 schema/where 不涉及 temporal 谓词（当前 preflight 已给 warning）
 
-这些反例暂不要求本轮实现 parser，只要求后续 diagnostics code 与 `/Users/zhenzhili/symbolic_agent/docs/Authoring 层契约.md` 第 7 节口径一致。
+这些反例暂不要求本轮实现 parser，只要求后续 diagnostics code 与 `/Users/zhenzhili/hnsm-backend/docs/Authoring 层契约.md` 第 7 节口径一致。

@@ -53,7 +53,7 @@ Exception:
 
 ## Reconstructed Archive Rules
 
-- Use [legacy_reconstructed_archive.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/templates/legacy_reconstructed_archive.md) and [legacy_reconstructed_archive.audit.md](/Users/zhenzhili/symbolic_agent/docs/blueprints/templates/legacy_reconstructed_archive.audit.md).
+- Use [legacy_reconstructed_archive.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/templates/legacy_reconstructed_archive.md) and [legacy_reconstructed_archive.audit.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/templates/legacy_reconstructed_archive.audit.md).
 - Required metadata fields:
   - `Archive Mode: reconstructed`
   - `Migration Date`
