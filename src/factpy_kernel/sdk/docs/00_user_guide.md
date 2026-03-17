@@ -1290,6 +1290,8 @@ sdk.ledger       # 底层 Ledger 对象
 sdk.schema_ir    # 当前 store 实际使用的编译 schema
 ```
 
+plain `Entity` 实例的 `repr(...)` 会按声明顺序预览 identity 与 field 值，未赋值 `Field` 显示为 `None`，例如 `User(user_id='u-1', name='Alice', age=None)`。
+
 ### 11.6 审计查询
 
 ```python

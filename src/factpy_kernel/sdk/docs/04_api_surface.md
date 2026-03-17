@@ -12,6 +12,9 @@
 - `SDKStore`
 - `SDKRegistry`
 
+补充：
+- plain `Entity` 实例实现了调试友好的 `__repr__()`；输出按声明顺序展示 identity 与 field 值，未赋值 `Field` 显示为 `None`。
+
 ### 1.2 DSL
 
 - `Body`

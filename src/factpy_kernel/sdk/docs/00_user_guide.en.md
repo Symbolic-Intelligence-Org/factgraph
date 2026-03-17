@@ -1316,6 +1316,8 @@ sdk.ledger       # underlying Ledger object
 sdk.schema_ir    # compiled schema actually used by the current store
 ```
 
+Plain `Entity` instances now expose a debugging-friendly `repr(...)` that previews declared identity and field values in declaration order; unset `Field` values render as `None`, for example `User(user_id='u-1', name='Alice', age=None)`.
+
 ### 11.6 Audit Queries
 
 ```python

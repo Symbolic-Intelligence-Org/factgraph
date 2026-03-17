@@ -65,6 +65,15 @@ class DeclarationMetadataV1Tests(unittest.TestCase):
         self.assertEqual(spec["version"], "v1")
         self.assertEqual(spec["tags"], ["billing"])
 
+    def test_plain_entity_repr_previews_declared_identity_and_fields(self) -> None:
+        class Account(Entity):
+            account_id: str = Identity(primary_key=True)
+            owner: str = Field(cardinality="single")
+            status: str = Field(cardinality="single")
+
+        account = Account(account_id="acct-1", owner="alice")
+        self.assertEqual(repr(account), "Account(account_id='acct-1', owner='alice', status=None)")
+
     def test_entity_meta_rejects_unknown_keys(self) -> None:
         with self.assertRaises(SDKSchemaError) as ctx:
             class InvalidEntity(Entity):

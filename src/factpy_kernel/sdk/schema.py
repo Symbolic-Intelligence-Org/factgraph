@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import inspect
+import reprlib
 from typing import Any
 from uuid import UUID
 
@@ -175,6 +176,29 @@ class Entity(metaclass=EntityMeta):
             if not hasattr(type(self), key):
                 raise SDKSchemaError(f"unknown entity attribute: {key}")
             setattr(self, key, value)
+
+    def __repr__(self) -> str:
+        cls = type(self)
+        spec = getattr(cls, "__sdk_entity_spec__", None)
+        ordered_names: list[str] = []
+        if isinstance(spec, dict):
+            ordered_names.extend(
+                row["name"]
+                for row in spec.get("identity_fields", ())
+                if isinstance(row, dict) and isinstance(row.get("name"), str)
+            )
+            ordered_names.extend(
+                row["py_name"]
+                for row in spec.get("fields", ())
+                if isinstance(row, dict) and isinstance(row.get("py_name"), str)
+            )
+        seen = set(ordered_names)
+        ordered_names.extend(sorted(name for name in self.__dict__.keys() if name not in seen))
+        items = [f"{name}={reprlib.repr(getattr(self, name))}" for name in ordered_names]
+        preview = ", ".join(items[:8])
+        if len(items) > 8:
+            preview += f", ... (+{len(items) - 8} fields)"
+        return f"{cls.__name__}({preview})"
 
     @classmethod
     def sdk_entity_spec(cls) -> dict[str, Any]:

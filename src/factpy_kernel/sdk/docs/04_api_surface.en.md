@@ -12,6 +12,9 @@ This page tracks the public exports in `factpy_kernel/sdk/__init__.py` and the m
 - `SDKStore`
 - `SDKRegistry`
 
+Additional note:
+- Plain `Entity` instances implement a debugging-friendly `__repr__()` that lists declared identity and field values in declaration order; unset `Field` values render as `None`.
+
 ### 1.2 DSL
 
 - `Body`
