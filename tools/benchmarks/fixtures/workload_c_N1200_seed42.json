@@ -1,0 +1,6609 @@
+{
+  "evidence_facts": [
+    {
+      "claim_id": "claim0105",
+      "confidence": 0.5443,
+      "object_id": "ent005",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent000"
+    },
+    {
+      "claim_id": "claim0074",
+      "confidence": 0.6597,
+      "object_id": "ent078",
+      "relation": "depends_on",
+      "source": "manual",
+      "subject_id": "ent001"
+    },
+    {
+      "claim_id": "claim0069",
+      "confidence": 0.8821,
+      "object_id": "ent002",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent001"
+    },
+    {
+      "claim_id": "claim0117",
+      "confidence": 0.8478,
+      "object_id": "ent042",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent001"
+    },
+    {
+      "claim_id": "claim0139",
+      "confidence": 0.9325,
+      "object_id": "ent008",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent002"
+    },
+    {
+      "claim_id": "claim0134",
+      "confidence": 0.728,
+      "object_id": "ent051",
+      "relation": "conflicts_with",
+      "source": "llm_extraction",
+      "subject_id": "ent003"
+    },
+    {
+      "claim_id": "claim0034",
+      "confidence": 0.5723,
+      "object_id": "ent097",
+      "relation": "monitors",
+      "source": "sensor",
+      "subject_id": "ent003"
+    },
+    {
+      "claim_id": "claim0116",
+      "confidence": 0.7752,
+      "object_id": "ent029",
+      "relation": "overrides",
+      "source": "manual",
+      "subject_id": "ent003"
+    },
+    {
+      "claim_id": "claim0081",
+      "confidence": 0.5212,
+      "object_id": "ent084",
+      "relation": "triggers",
+      "source": "llm_extraction",
+      "subject_id": "ent003"
+    },
+    {
+      "claim_id": "claim0199",
+      "confidence": 0.471,
+      "object_id": "ent064",
+      "relation": "depends_on",
+      "source": "manual",
+      "subject_id": "ent004"
+    },
+    {
+      "claim_id": "claim0180",
+      "confidence": 0.588,
+      "object_id": "ent037",
+      "relation": "reports_to",
+      "source": "sensor",
+      "subject_id": "ent004"
+    },
+    {
+      "claim_id": "claim0011",
+      "confidence": 0.4133,
+      "object_id": "ent090",
+      "relation": "is_component_of",
+      "source": "llm_extraction",
+      "subject_id": "ent005"
+    },
+    {
+      "claim_id": "claim0088",
+      "confidence": 0.6989,
+      "object_id": "ent007",
+      "relation": "supports",
+      "source": "manual",
+      "subject_id": "ent005"
+    },
+    {
+      "claim_id": "claim0003",
+      "confidence": 0.9704,
+      "object_id": "ent072",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent005"
+    },
+    {
+      "claim_id": "claim0141",
+      "confidence": 0.8848,
+      "object_id": "ent021",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent006"
+    },
+    {
+      "claim_id": "claim0162",
+      "confidence": 0.7461,
+      "object_id": "ent002",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent007"
+    },
+    {
+      "claim_id": "claim0049",
+      "confidence": 0.8138,
+      "object_id": "ent035",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent007"
+    },
+    {
+      "claim_id": "claim0103",
+      "confidence": 0.6169,
+      "object_id": "ent063",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent007"
+    },
+    {
+      "claim_id": "claim0195",
+      "confidence": 0.4506,
+      "object_id": "ent019",
+      "relation": "is_component_of",
+      "source": "llm_extraction",
+      "subject_id": "ent007"
+    },
+    {
+      "claim_id": "claim0181",
+      "confidence": 0.9239,
+      "object_id": "ent043",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent009"
+    },
+    {
+      "claim_id": "claim0087",
+      "confidence": 0.4081,
+      "object_id": "ent002",
+      "relation": "is_component_of",
+      "source": "sensor",
+      "subject_id": "ent009"
+    },
+    {
+      "claim_id": "claim0065",
+      "confidence": 0.4306,
+      "object_id": "ent047",
+      "relation": "depends_on",
+      "source": "manual",
+      "subject_id": "ent010"
+    },
+    {
+      "claim_id": "claim0090",
+      "confidence": 0.5637,
+      "object_id": "ent081",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent010"
+    },
+    {
+      "claim_id": "claim0024",
+      "confidence": 0.5848,
+      "object_id": "ent086",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent010"
+    },
+    {
+      "claim_id": "claim0122",
+      "confidence": 0.6982,
+      "object_id": "ent074",
+      "relation": "is_component_of",
+      "source": "manual",
+      "subject_id": "ent010"
+    },
+    {
+      "claim_id": "claim0091",
+      "confidence": 0.9748,
+      "object_id": "ent065",
+      "relation": "monitors",
+      "source": "sensor",
+      "subject_id": "ent010"
+    },
+    {
+      "claim_id": "claim0189",
+      "confidence": 0.5178,
+      "object_id": "ent037",
+      "relation": "conflicts_with",
+      "source": "sensor",
+      "subject_id": "ent011"
+    },
+    {
+      "claim_id": "claim0056",
+      "confidence": 0.7746,
+      "object_id": "ent093",
+      "relation": "conflicts_with",
+      "source": "manual",
+      "subject_id": "ent011"
+    },
+    {
+      "claim_id": "claim0071",
+      "confidence": 0.4609,
+      "object_id": "ent093",
+      "relation": "is_component_of",
+      "source": "llm_extraction",
+      "subject_id": "ent011"
+    },
+    {
+      "claim_id": "claim0159",
+      "confidence": 0.755,
+      "object_id": "ent007",
+      "relation": "monitors",
+      "source": "sensor",
+      "subject_id": "ent011"
+    },
+    {
+      "claim_id": "claim0008",
+      "confidence": 0.6055,
+      "object_id": "ent093",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent014"
+    },
+    {
+      "claim_id": "claim0022",
+      "confidence": 0.8989,
+      "object_id": "ent044",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent014"
+    },
+    {
+      "claim_id": "claim0095",
+      "confidence": 0.5825,
+      "object_id": "ent058",
+      "relation": "reports_to",
+      "source": "manual",
+      "subject_id": "ent014"
+    },
+    {
+      "claim_id": "claim0191",
+      "confidence": 0.6779,
+      "object_id": "ent039",
+      "relation": "supports",
+      "source": "manual",
+      "subject_id": "ent014"
+    },
+    {
+      "claim_id": "claim0130",
+      "confidence": 0.8765,
+      "object_id": "ent011",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent015"
+    },
+    {
+      "claim_id": "claim0136",
+      "confidence": 0.8899,
+      "object_id": "ent001",
+      "relation": "reports_to",
+      "source": "sensor",
+      "subject_id": "ent015"
+    },
+    {
+      "claim_id": "claim0068",
+      "confidence": 0.7065,
+      "object_id": "ent075",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent016"
+    },
+    {
+      "claim_id": "claim0140",
+      "confidence": 0.4723,
+      "object_id": "ent011",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent016"
+    },
+    {
+      "claim_id": "claim0169",
+      "confidence": 0.9598,
+      "object_id": "ent022",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent016"
+    },
+    {
+      "claim_id": "claim0137",
+      "confidence": 0.6196,
+      "object_id": "ent025",
+      "relation": "supports",
+      "source": "manual",
+      "subject_id": "ent016"
+    },
+    {
+      "claim_id": "claim0073",
+      "confidence": 0.4404,
+      "object_id": "ent082",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent017"
+    },
+    {
+      "claim_id": "claim0077",
+      "confidence": 0.7478,
+      "object_id": "ent096",
+      "relation": "is_component_of",
+      "source": "llm_extraction",
+      "subject_id": "ent017"
+    },
+    {
+      "claim_id": "claim0097",
+      "confidence": 0.4967,
+      "object_id": "ent089",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent017"
+    },
+    {
+      "claim_id": "claim0031",
+      "confidence": 0.9687,
+      "object_id": "ent024",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent017"
+    },
+    {
+      "claim_id": "claim0132",
+      "confidence": 0.9714,
+      "object_id": "ent011",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent018"
+    },
+    {
+      "claim_id": "claim0144",
+      "confidence": 0.7819,
+      "object_id": "ent004",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent019"
+    },
+    {
+      "claim_id": "claim0064",
+      "confidence": 0.7862,
+      "object_id": "ent035",
+      "relation": "is_component_of",
+      "source": "sensor",
+      "subject_id": "ent020"
+    },
+    {
+      "claim_id": "claim0173",
+      "confidence": 0.8848,
+      "object_id": "ent081",
+      "relation": "is_component_of",
+      "source": "manual",
+      "subject_id": "ent021"
+    },
+    {
+      "claim_id": "claim0184",
+      "confidence": 0.4927,
+      "object_id": "ent077",
+      "relation": "supports",
+      "source": "sensor",
+      "subject_id": "ent021"
+    },
+    {
+      "claim_id": "claim0155",
+      "confidence": 0.8757,
+      "object_id": "ent030",
+      "relation": "overrides",
+      "source": "manual",
+      "subject_id": "ent022"
+    },
+    {
+      "claim_id": "claim0110",
+      "confidence": 0.9629,
+      "object_id": "ent028",
+      "relation": "reports_to",
+      "source": "sensor",
+      "subject_id": "ent022"
+    },
+    {
+      "claim_id": "claim0168",
+      "confidence": 0.8331,
+      "object_id": "ent048",
+      "relation": "triggers",
+      "source": "sensor",
+      "subject_id": "ent022"
+    },
+    {
+      "claim_id": "claim0023",
+      "confidence": 0.942,
+      "object_id": "ent086",
+      "relation": "triggers",
+      "source": "llm_extraction",
+      "subject_id": "ent022"
+    },
+    {
+      "claim_id": "claim0019",
+      "confidence": 0.5163,
+      "object_id": "ent046",
+      "relation": "overrides",
+      "source": "sensor",
+      "subject_id": "ent023"
+    },
+    {
+      "claim_id": "claim0063",
+      "confidence": 0.9205,
+      "object_id": "ent088",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent025"
+    },
+    {
+      "claim_id": "claim0161",
+      "confidence": 0.823,
+      "object_id": "ent016",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent025"
+    },
+    {
+      "claim_id": "claim0175",
+      "confidence": 0.6068,
+      "object_id": "ent031",
+      "relation": "is_component_of",
+      "source": "sensor",
+      "subject_id": "ent026"
+    },
+    {
+      "claim_id": "claim0045",
+      "confidence": 0.714,
+      "object_id": "ent007",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent026"
+    },
+    {
+      "claim_id": "claim0190",
+      "confidence": 0.9765,
+      "object_id": "ent021",
+      "relation": "triggers",
+      "source": "llm_extraction",
+      "subject_id": "ent026"
+    },
+    {
+      "claim_id": "claim0075",
+      "confidence": 0.9427,
+      "object_id": "ent080",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent027"
+    },
+    {
+      "claim_id": "claim0058",
+      "confidence": 0.5905,
+      "object_id": "ent063",
+      "relation": "triggers",
+      "source": "sensor",
+      "subject_id": "ent027"
+    },
+    {
+      "claim_id": "claim0035",
+      "confidence": 0.4992,
+      "object_id": "ent068",
+      "relation": "triggers",
+      "source": "llm_extraction",
+      "subject_id": "ent028"
+    },
+    {
+      "claim_id": "claim0126",
+      "confidence": 0.4803,
+      "object_id": "ent009",
+      "relation": "monitors",
+      "source": "manual",
+      "subject_id": "ent029"
+    },
+    {
+      "claim_id": "claim0119",
+      "confidence": 0.9671,
+      "object_id": "ent053",
+      "relation": "conflicts_with",
+      "source": "sensor",
+      "subject_id": "ent030"
+    },
+    {
+      "claim_id": "claim0187",
+      "confidence": 0.6318,
+      "object_id": "ent012",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent030"
+    },
+    {
+      "claim_id": "claim0153",
+      "confidence": 0.8508,
+      "object_id": "ent034",
+      "relation": "reports_to",
+      "source": "sensor",
+      "subject_id": "ent030"
+    },
+    {
+      "claim_id": "claim0083",
+      "confidence": 0.4665,
+      "object_id": "ent063",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent030"
+    },
+    {
+      "claim_id": "claim0124",
+      "confidence": 0.902,
+      "object_id": "ent037",
+      "relation": "triggers",
+      "source": "llm_extraction",
+      "subject_id": "ent030"
+    },
+    {
+      "claim_id": "claim0135",
+      "confidence": 0.4601,
+      "object_id": "ent012",
+      "relation": "conflicts_with",
+      "source": "sensor",
+      "subject_id": "ent031"
+    },
+    {
+      "claim_id": "claim0013",
+      "confidence": 0.7256,
+      "object_id": "ent066",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent031"
+    },
+    {
+      "claim_id": "claim0050",
+      "confidence": 0.8888,
+      "object_id": "ent018",
+      "relation": "overrides",
+      "source": "manual",
+      "subject_id": "ent031"
+    },
+    {
+      "claim_id": "claim0147",
+      "confidence": 0.9837,
+      "object_id": "ent080",
+      "relation": "reports_to",
+      "source": "manual",
+      "subject_id": "ent031"
+    },
+    {
+      "claim_id": "claim0020",
+      "confidence": 0.7114,
+      "object_id": "ent085",
+      "relation": "conflicts_with",
+      "source": "manual",
+      "subject_id": "ent033"
+    },
+    {
+      "claim_id": "claim0192",
+      "confidence": 0.5091,
+      "object_id": "ent011",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent033"
+    },
+    {
+      "claim_id": "claim0052",
+      "confidence": 0.6214,
+      "object_id": "ent080",
+      "relation": "supports",
+      "source": "sensor",
+      "subject_id": "ent034"
+    },
+    {
+      "claim_id": "claim0151",
+      "confidence": 0.7124,
+      "object_id": "ent007",
+      "relation": "conflicts_with",
+      "source": "manual",
+      "subject_id": "ent035"
+    },
+    {
+      "claim_id": "claim0079",
+      "confidence": 0.5464,
+      "object_id": "ent082",
+      "relation": "is_component_of",
+      "source": "llm_extraction",
+      "subject_id": "ent035"
+    },
+    {
+      "claim_id": "claim0054",
+      "confidence": 0.6683,
+      "object_id": "ent088",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent035"
+    },
+    {
+      "claim_id": "claim0029",
+      "confidence": 0.5856,
+      "object_id": "ent017",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent036"
+    },
+    {
+      "claim_id": "claim0047",
+      "confidence": 0.9619,
+      "object_id": "ent073",
+      "relation": "triggers",
+      "source": "llm_extraction",
+      "subject_id": "ent037"
+    },
+    {
+      "claim_id": "claim0165",
+      "confidence": 0.9758,
+      "object_id": "ent041",
+      "relation": "depends_on",
+      "source": "manual",
+      "subject_id": "ent038"
+    },
+    {
+      "claim_id": "claim0113",
+      "confidence": 0.6737,
+      "object_id": "ent094",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent038"
+    },
+    {
+      "claim_id": "claim0072",
+      "confidence": 0.8563,
+      "object_id": "ent017",
+      "relation": "supports",
+      "source": "manual",
+      "subject_id": "ent038"
+    },
+    {
+      "claim_id": "claim0025",
+      "confidence": 0.6203,
+      "object_id": "ent014",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent039"
+    },
+    {
+      "claim_id": "claim0066",
+      "confidence": 0.6532,
+      "object_id": "ent092",
+      "relation": "monitors",
+      "source": "sensor",
+      "subject_id": "ent039"
+    },
+    {
+      "claim_id": "claim0150",
+      "confidence": 0.4173,
+      "object_id": "ent076",
+      "relation": "monitors",
+      "source": "manual",
+      "subject_id": "ent040"
+    },
+    {
+      "claim_id": "claim0021",
+      "confidence": 0.7607,
+      "object_id": "ent076",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent040"
+    },
+    {
+      "claim_id": "claim0055",
+      "confidence": 0.9127,
+      "object_id": "ent074",
+      "relation": "reports_to",
+      "source": "manual",
+      "subject_id": "ent041"
+    },
+    {
+      "claim_id": "claim0172",
+      "confidence": 0.5404,
+      "object_id": "ent095",
+      "relation": "is_component_of",
+      "source": "llm_extraction",
+      "subject_id": "ent042"
+    },
+    {
+      "claim_id": "claim0185",
+      "confidence": 0.6415,
+      "object_id": "ent026",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent042"
+    },
+    {
+      "claim_id": "claim0059",
+      "confidence": 0.734,
+      "object_id": "ent070",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent043"
+    },
+    {
+      "claim_id": "claim0060",
+      "confidence": 0.4271,
+      "object_id": "ent087",
+      "relation": "reports_to",
+      "source": "manual",
+      "subject_id": "ent043"
+    },
+    {
+      "claim_id": "claim0078",
+      "confidence": 0.8667,
+      "object_id": "ent054",
+      "relation": "overrides",
+      "source": "sensor",
+      "subject_id": "ent044"
+    },
+    {
+      "claim_id": "claim0178",
+      "confidence": 0.4598,
+      "object_id": "ent069",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent044"
+    },
+    {
+      "claim_id": "claim0148",
+      "confidence": 0.603,
+      "object_id": "ent061",
+      "relation": "conflicts_with",
+      "source": "llm_extraction",
+      "subject_id": "ent045"
+    },
+    {
+      "claim_id": "claim0143",
+      "confidence": 0.5622,
+      "object_id": "ent027",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent045"
+    },
+    {
+      "claim_id": "claim0156",
+      "confidence": 0.815,
+      "object_id": "ent075",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent045"
+    },
+    {
+      "claim_id": "claim0057",
+      "confidence": 0.5285,
+      "object_id": "ent008",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent045"
+    },
+    {
+      "claim_id": "claim0085",
+      "confidence": 0.6282,
+      "object_id": "ent040",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent046"
+    },
+    {
+      "claim_id": "claim0106",
+      "confidence": 0.5056,
+      "object_id": "ent049",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent046"
+    },
+    {
+      "claim_id": "claim0193",
+      "confidence": 0.4263,
+      "object_id": "ent023",
+      "relation": "conflicts_with",
+      "source": "llm_extraction",
+      "subject_id": "ent047"
+    },
+    {
+      "claim_id": "claim0027",
+      "confidence": 0.6871,
+      "object_id": "ent054",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent049"
+    },
+    {
+      "claim_id": "claim0017",
+      "confidence": 0.5214,
+      "object_id": "ent000",
+      "relation": "monitors",
+      "source": "manual",
+      "subject_id": "ent049"
+    },
+    {
+      "claim_id": "claim0146",
+      "confidence": 0.5177,
+      "object_id": "ent017",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent049"
+    },
+    {
+      "claim_id": "claim0016",
+      "confidence": 0.6652,
+      "object_id": "ent003",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent050"
+    },
+    {
+      "claim_id": "claim0123",
+      "confidence": 0.6566,
+      "object_id": "ent009",
+      "relation": "reports_to",
+      "source": "sensor",
+      "subject_id": "ent050"
+    },
+    {
+      "claim_id": "claim0170",
+      "confidence": 0.5074,
+      "object_id": "ent098",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent050"
+    },
+    {
+      "claim_id": "claim0145",
+      "confidence": 0.436,
+      "object_id": "ent070",
+      "relation": "conflicts_with",
+      "source": "sensor",
+      "subject_id": "ent052"
+    },
+    {
+      "claim_id": "claim0086",
+      "confidence": 0.85,
+      "object_id": "ent046",
+      "relation": "depends_on",
+      "source": "manual",
+      "subject_id": "ent053"
+    },
+    {
+      "claim_id": "claim0108",
+      "confidence": 0.56,
+      "object_id": "ent092",
+      "relation": "overrides",
+      "source": "sensor",
+      "subject_id": "ent053"
+    },
+    {
+      "claim_id": "claim0177",
+      "confidence": 0.6909,
+      "object_id": "ent021",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent053"
+    },
+    {
+      "claim_id": "claim0166",
+      "confidence": 0.783,
+      "object_id": "ent081",
+      "relation": "conflicts_with",
+      "source": "sensor",
+      "subject_id": "ent055"
+    },
+    {
+      "claim_id": "claim0004",
+      "confidence": 0.4582,
+      "object_id": "ent013",
+      "relation": "reports_to",
+      "source": "sensor",
+      "subject_id": "ent055"
+    },
+    {
+      "claim_id": "claim0010",
+      "confidence": 0.5882,
+      "object_id": "ent092",
+      "relation": "conflicts_with",
+      "source": "sensor",
+      "subject_id": "ent056"
+    },
+    {
+      "claim_id": "claim0042",
+      "confidence": 0.5238,
+      "object_id": "ent015",
+      "relation": "monitors",
+      "source": "manual",
+      "subject_id": "ent056"
+    },
+    {
+      "claim_id": "claim0062",
+      "confidence": 0.9852,
+      "object_id": "ent058",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent056"
+    },
+    {
+      "claim_id": "claim0041",
+      "confidence": 0.9087,
+      "object_id": "ent033",
+      "relation": "overrides",
+      "source": "sensor",
+      "subject_id": "ent057"
+    },
+    {
+      "claim_id": "claim0009",
+      "confidence": 0.6055,
+      "object_id": "ent026",
+      "relation": "conflicts_with",
+      "source": "sensor",
+      "subject_id": "ent058"
+    },
+    {
+      "claim_id": "claim0061",
+      "confidence": 0.9484,
+      "object_id": "ent002",
+      "relation": "is_component_of",
+      "source": "sensor",
+      "subject_id": "ent058"
+    },
+    {
+      "claim_id": "claim0112",
+      "confidence": 0.5184,
+      "object_id": "ent001",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent058"
+    },
+    {
+      "claim_id": "claim0006",
+      "confidence": 0.6035,
+      "object_id": "ent098",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent059"
+    },
+    {
+      "claim_id": "claim0194",
+      "confidence": 0.8939,
+      "object_id": "ent033",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent059"
+    },
+    {
+      "claim_id": "claim0128",
+      "confidence": 0.4712,
+      "object_id": "ent040",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent059"
+    },
+    {
+      "claim_id": "claim0111",
+      "confidence": 0.5931,
+      "object_id": "ent036",
+      "relation": "triggers",
+      "source": "llm_extraction",
+      "subject_id": "ent059"
+    },
+    {
+      "claim_id": "claim0198",
+      "confidence": 0.6329,
+      "object_id": "ent038",
+      "relation": "is_component_of",
+      "source": "manual",
+      "subject_id": "ent060"
+    },
+    {
+      "claim_id": "claim0183",
+      "confidence": 0.6545,
+      "object_id": "ent090",
+      "relation": "reports_to",
+      "source": "manual",
+      "subject_id": "ent061"
+    },
+    {
+      "claim_id": "claim0007",
+      "confidence": 0.6454,
+      "object_id": "ent013",
+      "relation": "triggers",
+      "source": "sensor",
+      "subject_id": "ent061"
+    },
+    {
+      "claim_id": "claim0188",
+      "confidence": 0.6129,
+      "object_id": "ent019",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent062"
+    },
+    {
+      "claim_id": "claim0114",
+      "confidence": 0.8322,
+      "object_id": "ent098",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent063"
+    },
+    {
+      "claim_id": "claim0142",
+      "confidence": 0.8031,
+      "object_id": "ent003",
+      "relation": "supports",
+      "source": "sensor",
+      "subject_id": "ent063"
+    },
+    {
+      "claim_id": "claim0158",
+      "confidence": 0.5036,
+      "object_id": "ent069",
+      "relation": "triggers",
+      "source": "sensor",
+      "subject_id": "ent063"
+    },
+    {
+      "claim_id": "claim0149",
+      "confidence": 0.5596,
+      "object_id": "ent041",
+      "relation": "supports",
+      "source": "sensor",
+      "subject_id": "ent064"
+    },
+    {
+      "claim_id": "claim0005",
+      "confidence": 0.663,
+      "object_id": "ent095",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent065"
+    },
+    {
+      "claim_id": "claim0082",
+      "confidence": 0.5744,
+      "object_id": "ent024",
+      "relation": "supports",
+      "source": "sensor",
+      "subject_id": "ent065"
+    },
+    {
+      "claim_id": "claim0026",
+      "confidence": 0.7519,
+      "object_id": "ent049",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent065"
+    },
+    {
+      "claim_id": "claim0133",
+      "confidence": 0.5535,
+      "object_id": "ent006",
+      "relation": "triggers",
+      "source": "sensor",
+      "subject_id": "ent065"
+    },
+    {
+      "claim_id": "claim0197",
+      "confidence": 0.7379,
+      "object_id": "ent053",
+      "relation": "conflicts_with",
+      "source": "sensor",
+      "subject_id": "ent066"
+    },
+    {
+      "claim_id": "claim0121",
+      "confidence": 0.6705,
+      "object_id": "ent052",
+      "relation": "overrides",
+      "source": "manual",
+      "subject_id": "ent066"
+    },
+    {
+      "claim_id": "claim0098",
+      "confidence": 0.4985,
+      "object_id": "ent067",
+      "relation": "triggers",
+      "source": "sensor",
+      "subject_id": "ent066"
+    },
+    {
+      "claim_id": "claim0160",
+      "confidence": 0.5957,
+      "object_id": "ent061",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent067"
+    },
+    {
+      "claim_id": "claim0101",
+      "confidence": 0.8203,
+      "object_id": "ent008",
+      "relation": "triggers",
+      "source": "llm_extraction",
+      "subject_id": "ent067"
+    },
+    {
+      "claim_id": "claim0046",
+      "confidence": 0.9776,
+      "object_id": "ent021",
+      "relation": "overrides",
+      "source": "sensor",
+      "subject_id": "ent068"
+    },
+    {
+      "claim_id": "claim0092",
+      "confidence": 0.746,
+      "object_id": "ent041",
+      "relation": "supports",
+      "source": "manual",
+      "subject_id": "ent068"
+    },
+    {
+      "claim_id": "claim0196",
+      "confidence": 0.7266,
+      "object_id": "ent052",
+      "relation": "monitors",
+      "source": "llm_extraction",
+      "subject_id": "ent069"
+    },
+    {
+      "claim_id": "claim0000",
+      "confidence": 0.814,
+      "object_id": "ent004",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent069"
+    },
+    {
+      "claim_id": "claim0038",
+      "confidence": 0.8484,
+      "object_id": "ent096",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent069"
+    },
+    {
+      "claim_id": "claim0039",
+      "confidence": 0.4604,
+      "object_id": "ent027",
+      "relation": "supports",
+      "source": "manual",
+      "subject_id": "ent069"
+    },
+    {
+      "claim_id": "claim0107",
+      "confidence": 0.5325,
+      "object_id": "ent091",
+      "relation": "supports",
+      "source": "sensor",
+      "subject_id": "ent070"
+    },
+    {
+      "claim_id": "claim0014",
+      "confidence": 0.5368,
+      "object_id": "ent054",
+      "relation": "conflicts_with",
+      "source": "llm_extraction",
+      "subject_id": "ent071"
+    },
+    {
+      "claim_id": "claim0036",
+      "confidence": 0.7243,
+      "object_id": "ent095",
+      "relation": "conflicts_with",
+      "source": "sensor",
+      "subject_id": "ent072"
+    },
+    {
+      "claim_id": "claim0157",
+      "confidence": 0.7322,
+      "object_id": "ent073",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent072"
+    },
+    {
+      "claim_id": "claim0109",
+      "confidence": 0.6962,
+      "object_id": "ent047",
+      "relation": "is_component_of",
+      "source": "sensor",
+      "subject_id": "ent073"
+    },
+    {
+      "claim_id": "claim0179",
+      "confidence": 0.496,
+      "object_id": "ent083",
+      "relation": "monitors",
+      "source": "sensor",
+      "subject_id": "ent073"
+    },
+    {
+      "claim_id": "claim0154",
+      "confidence": 0.9518,
+      "object_id": "ent049",
+      "relation": "overrides",
+      "source": "sensor",
+      "subject_id": "ent073"
+    },
+    {
+      "claim_id": "claim0037",
+      "confidence": 0.8573,
+      "object_id": "ent014",
+      "relation": "triggers",
+      "source": "llm_extraction",
+      "subject_id": "ent073"
+    },
+    {
+      "claim_id": "claim0127",
+      "confidence": 0.4623,
+      "object_id": "ent013",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent074"
+    },
+    {
+      "claim_id": "claim0152",
+      "confidence": 0.4591,
+      "object_id": "ent029",
+      "relation": "depends_on",
+      "source": "manual",
+      "subject_id": "ent074"
+    },
+    {
+      "claim_id": "claim0043",
+      "confidence": 0.908,
+      "object_id": "ent088",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent075"
+    },
+    {
+      "claim_id": "claim0001",
+      "confidence": 0.4645,
+      "object_id": "ent081",
+      "relation": "is_component_of",
+      "source": "sensor",
+      "subject_id": "ent076"
+    },
+    {
+      "claim_id": "claim0080",
+      "confidence": 0.8596,
+      "object_id": "ent092",
+      "relation": "triggers",
+      "source": "manual",
+      "subject_id": "ent076"
+    },
+    {
+      "claim_id": "claim0171",
+      "confidence": 0.9526,
+      "object_id": "ent028",
+      "relation": "is_component_of",
+      "source": "sensor",
+      "subject_id": "ent078"
+    },
+    {
+      "claim_id": "claim0030",
+      "confidence": 0.9616,
+      "object_id": "ent006",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent079"
+    },
+    {
+      "claim_id": "claim0102",
+      "confidence": 0.6686,
+      "object_id": "ent009",
+      "relation": "conflicts_with",
+      "source": "llm_extraction",
+      "subject_id": "ent080"
+    },
+    {
+      "claim_id": "claim0015",
+      "confidence": 0.7779,
+      "object_id": "ent023",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent080"
+    },
+    {
+      "claim_id": "claim0044",
+      "confidence": 0.7635,
+      "object_id": "ent054",
+      "relation": "depends_on",
+      "source": "sensor",
+      "subject_id": "ent080"
+    },
+    {
+      "claim_id": "claim0084",
+      "confidence": 0.7117,
+      "object_id": "ent076",
+      "relation": "is_component_of",
+      "source": "sensor",
+      "subject_id": "ent081"
+    },
+    {
+      "claim_id": "claim0053",
+      "confidence": 0.6377,
+      "object_id": "ent098",
+      "relation": "is_component_of",
+      "source": "manual",
+      "subject_id": "ent081"
+    },
+    {
+      "claim_id": "claim0174",
+      "confidence": 0.6635,
+      "object_id": "ent093",
+      "relation": "overrides",
+      "source": "sensor",
+      "subject_id": "ent081"
+    },
+    {
+      "claim_id": "claim0012",
+      "confidence": 0.9487,
+      "object_id": "ent013",
+      "relation": "depends_on",
+      "source": "manual",
+      "subject_id": "ent082"
+    },
+    {
+      "claim_id": "claim0138",
+      "confidence": 0.9413,
+      "object_id": "ent010",
+      "relation": "triggers",
+      "source": "sensor",
+      "subject_id": "ent082"
+    },
+    {
+      "claim_id": "claim0093",
+      "confidence": 0.583,
+      "object_id": "ent087",
+      "relation": "is_component_of",
+      "source": "llm_extraction",
+      "subject_id": "ent083"
+    },
+    {
+      "claim_id": "claim0032",
+      "confidence": 0.804,
+      "object_id": "ent063",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent083"
+    },
+    {
+      "claim_id": "claim0096",
+      "confidence": 0.4705,
+      "object_id": "ent094",
+      "relation": "depends_on",
+      "source": "manual",
+      "subject_id": "ent084"
+    },
+    {
+      "claim_id": "claim0002",
+      "confidence": 0.4981,
+      "object_id": "ent085",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent084"
+    },
+    {
+      "claim_id": "claim0051",
+      "confidence": 0.4839,
+      "object_id": "ent050",
+      "relation": "conflicts_with",
+      "source": "manual",
+      "subject_id": "ent086"
+    },
+    {
+      "claim_id": "claim0048",
+      "confidence": 0.968,
+      "object_id": "ent012",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent086"
+    },
+    {
+      "claim_id": "claim0076",
+      "confidence": 0.4511,
+      "object_id": "ent056",
+      "relation": "monitors",
+      "source": "sensor",
+      "subject_id": "ent087"
+    },
+    {
+      "claim_id": "claim0070",
+      "confidence": 0.4418,
+      "object_id": "ent016",
+      "relation": "conflicts_with",
+      "source": "llm_extraction",
+      "subject_id": "ent088"
+    },
+    {
+      "claim_id": "claim0028",
+      "confidence": 0.7274,
+      "object_id": "ent082",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent088"
+    },
+    {
+      "claim_id": "claim0125",
+      "confidence": 0.5877,
+      "object_id": "ent094",
+      "relation": "overrides",
+      "source": "sensor",
+      "subject_id": "ent089"
+    },
+    {
+      "claim_id": "claim0033",
+      "confidence": 0.4987,
+      "object_id": "ent056",
+      "relation": "conflicts_with",
+      "source": "llm_extraction",
+      "subject_id": "ent090"
+    },
+    {
+      "claim_id": "claim0018",
+      "confidence": 0.8717,
+      "object_id": "ent008",
+      "relation": "is_component_of",
+      "source": "llm_extraction",
+      "subject_id": "ent090"
+    },
+    {
+      "claim_id": "claim0167",
+      "confidence": 0.5317,
+      "object_id": "ent071",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent090"
+    },
+    {
+      "claim_id": "claim0067",
+      "confidence": 0.5259,
+      "object_id": "ent012",
+      "relation": "reports_to",
+      "source": "sensor",
+      "subject_id": "ent090"
+    },
+    {
+      "claim_id": "claim0131",
+      "confidence": 0.5269,
+      "object_id": "ent089",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent090"
+    },
+    {
+      "claim_id": "claim0164",
+      "confidence": 0.7457,
+      "object_id": "ent084",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent090"
+    },
+    {
+      "claim_id": "claim0120",
+      "confidence": 0.4259,
+      "object_id": "ent035",
+      "relation": "is_component_of",
+      "source": "sensor",
+      "subject_id": "ent091"
+    },
+    {
+      "claim_id": "claim0089",
+      "confidence": 0.6499,
+      "object_id": "ent064",
+      "relation": "supports",
+      "source": "llm_extraction",
+      "subject_id": "ent091"
+    },
+    {
+      "claim_id": "claim0176",
+      "confidence": 0.6277,
+      "object_id": "ent000",
+      "relation": "reports_to",
+      "source": "manual",
+      "subject_id": "ent092"
+    },
+    {
+      "claim_id": "claim0186",
+      "confidence": 0.7898,
+      "object_id": "ent093",
+      "relation": "triggers",
+      "source": "sensor",
+      "subject_id": "ent092"
+    },
+    {
+      "claim_id": "claim0182",
+      "confidence": 0.5994,
+      "object_id": "ent009",
+      "relation": "is_component_of",
+      "source": "llm_extraction",
+      "subject_id": "ent093"
+    },
+    {
+      "claim_id": "claim0094",
+      "confidence": 0.5442,
+      "object_id": "ent030",
+      "relation": "reports_to",
+      "source": "llm_extraction",
+      "subject_id": "ent093"
+    },
+    {
+      "claim_id": "claim0118",
+      "confidence": 0.4613,
+      "object_id": "ent093",
+      "relation": "triggers",
+      "source": "llm_extraction",
+      "subject_id": "ent094"
+    },
+    {
+      "claim_id": "claim0099",
+      "confidence": 0.8324,
+      "object_id": "ent099",
+      "relation": "triggers",
+      "source": "sensor",
+      "subject_id": "ent095"
+    },
+    {
+      "claim_id": "claim0040",
+      "confidence": 0.9161,
+      "object_id": "ent031",
+      "relation": "triggers",
+      "source": "sensor",
+      "subject_id": "ent096"
+    },
+    {
+      "claim_id": "claim0115",
+      "confidence": 0.4038,
+      "object_id": "ent031",
+      "relation": "depends_on",
+      "source": "llm_extraction",
+      "subject_id": "ent097"
+    },
+    {
+      "claim_id": "claim0129",
+      "confidence": 0.5819,
+      "object_id": "ent026",
+      "relation": "conflicts_with",
+      "source": "sensor",
+      "subject_id": "ent098"
+    },
+    {
+      "claim_id": "claim0104",
+      "confidence": 0.5348,
+      "object_id": "ent013",
+      "relation": "is_component_of",
+      "source": "llm_extraction",
+      "subject_id": "ent098"
+    },
+    {
+      "claim_id": "claim0100",
+      "confidence": 0.8762,
+      "object_id": "ent003",
+      "relation": "overrides",
+      "source": "sensor",
+      "subject_id": "ent098"
+    },
+    {
+      "claim_id": "claim0163",
+      "confidence": 0.9667,
+      "object_id": "ent014",
+      "relation": "overrides",
+      "source": "llm_extraction",
+      "subject_id": "ent099"
+    }
+  ],
+  "scale": "1x",
+  "seed": 42,
+  "struct_facts": [
+    {
+      "object_id": "ent039",
+      "relation": "conflicts_with",
+      "subject_id": "ent000"
+    },
+    {
+      "object_id": "ent052",
+      "relation": "conflicts_with",
+      "subject_id": "ent000"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "depends_on",
+      "subject_id": "ent000"
+    },
+    {
+      "object_id": "ent097",
+      "relation": "depends_on",
+      "subject_id": "ent000"
+    },
+    {
+      "object_id": "ent066",
+      "relation": "monitors",
+      "subject_id": "ent000"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "reports_to",
+      "subject_id": "ent000"
+    },
+    {
+      "object_id": "ent063",
+      "relation": "supports",
+      "subject_id": "ent000"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "supports",
+      "subject_id": "ent000"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "triggers",
+      "subject_id": "ent000"
+    },
+    {
+      "object_id": "ent049",
+      "relation": "triggers",
+      "subject_id": "ent000"
+    },
+    {
+      "object_id": "ent027",
+      "relation": "conflicts_with",
+      "subject_id": "ent001"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "conflicts_with",
+      "subject_id": "ent001"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "is_component_of",
+      "subject_id": "ent001"
+    },
+    {
+      "object_id": "ent094",
+      "relation": "overrides",
+      "subject_id": "ent001"
+    },
+    {
+      "object_id": "ent002",
+      "relation": "triggers",
+      "subject_id": "ent001"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "depends_on",
+      "subject_id": "ent002"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "overrides",
+      "subject_id": "ent002"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "reports_to",
+      "subject_id": "ent002"
+    },
+    {
+      "object_id": "ent011",
+      "relation": "supports",
+      "subject_id": "ent002"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "supports",
+      "subject_id": "ent002"
+    },
+    {
+      "object_id": "ent022",
+      "relation": "triggers",
+      "subject_id": "ent002"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "conflicts_with",
+      "subject_id": "ent003"
+    },
+    {
+      "object_id": "ent011",
+      "relation": "monitors",
+      "subject_id": "ent003"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "overrides",
+      "subject_id": "ent003"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "triggers",
+      "subject_id": "ent003"
+    },
+    {
+      "object_id": "ent023",
+      "relation": "triggers",
+      "subject_id": "ent003"
+    },
+    {
+      "object_id": "ent050",
+      "relation": "conflicts_with",
+      "subject_id": "ent004"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "is_component_of",
+      "subject_id": "ent004"
+    },
+    {
+      "object_id": "ent073",
+      "relation": "is_component_of",
+      "subject_id": "ent004"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "monitors",
+      "subject_id": "ent004"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "monitors",
+      "subject_id": "ent004"
+    },
+    {
+      "object_id": "ent007",
+      "relation": "overrides",
+      "subject_id": "ent004"
+    },
+    {
+      "object_id": "ent017",
+      "relation": "overrides",
+      "subject_id": "ent004"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "supports",
+      "subject_id": "ent004"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "supports",
+      "subject_id": "ent004"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "triggers",
+      "subject_id": "ent004"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "conflicts_with",
+      "subject_id": "ent005"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "conflicts_with",
+      "subject_id": "ent005"
+    },
+    {
+      "object_id": "ent093",
+      "relation": "conflicts_with",
+      "subject_id": "ent005"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "monitors",
+      "subject_id": "ent005"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "monitors",
+      "subject_id": "ent005"
+    },
+    {
+      "object_id": "ent054",
+      "relation": "overrides",
+      "subject_id": "ent005"
+    },
+    {
+      "object_id": "ent025",
+      "relation": "reports_to",
+      "subject_id": "ent005"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "reports_to",
+      "subject_id": "ent005"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "supports",
+      "subject_id": "ent005"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "conflicts_with",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "depends_on",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "monitors",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "monitors",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "reports_to",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent011",
+      "relation": "supports",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent012",
+      "relation": "supports",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "supports",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "supports",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent033",
+      "relation": "supports",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent034",
+      "relation": "supports",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "supports",
+      "subject_id": "ent006"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "depends_on",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "depends_on",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "is_component_of",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "monitors",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "overrides",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "overrides",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent081",
+      "relation": "reports_to",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent021",
+      "relation": "supports",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent026",
+      "relation": "supports",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent061",
+      "relation": "supports",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "supports",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent050",
+      "relation": "triggers",
+      "subject_id": "ent007"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "conflicts_with",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "conflicts_with",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent090",
+      "relation": "depends_on",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent097",
+      "relation": "depends_on",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent011",
+      "relation": "is_component_of",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "is_component_of",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent097",
+      "relation": "monitors",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "overrides",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "reports_to",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "reports_to",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent060",
+      "relation": "reports_to",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent021",
+      "relation": "supports",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent035",
+      "relation": "supports",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "triggers",
+      "subject_id": "ent008"
+    },
+    {
+      "object_id": "ent049",
+      "relation": "conflicts_with",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "conflicts_with",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent038",
+      "relation": "depends_on",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "depends_on",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent088",
+      "relation": "depends_on",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "is_component_of",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "is_component_of",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "is_component_of",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent024",
+      "relation": "monitors",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "monitors",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent075",
+      "relation": "monitors",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "overrides",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "overrides",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent050",
+      "relation": "reports_to",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent073",
+      "relation": "reports_to",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent090",
+      "relation": "reports_to",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "supports",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent085",
+      "relation": "supports",
+      "subject_id": "ent009"
+    },
+    {
+      "object_id": "ent093",
+      "relation": "conflicts_with",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent034",
+      "relation": "depends_on",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "depends_on",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "is_component_of",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "supports",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent047",
+      "relation": "supports",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "supports",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent093",
+      "relation": "supports",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent002",
+      "relation": "triggers",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "triggers",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "triggers",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "triggers",
+      "subject_id": "ent010"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "conflicts_with",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "is_component_of",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "is_component_of",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "is_component_of",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "is_component_of",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "monitors",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "monitors",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "monitors",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "overrides",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent029",
+      "relation": "reports_to",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "reports_to",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "supports",
+      "subject_id": "ent011"
+    },
+    {
+      "object_id": "ent092",
+      "relation": "conflicts_with",
+      "subject_id": "ent012"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "depends_on",
+      "subject_id": "ent012"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "is_component_of",
+      "subject_id": "ent012"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "is_component_of",
+      "subject_id": "ent012"
+    },
+    {
+      "object_id": "ent052",
+      "relation": "overrides",
+      "subject_id": "ent012"
+    },
+    {
+      "object_id": "ent091",
+      "relation": "overrides",
+      "subject_id": "ent012"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "reports_to",
+      "subject_id": "ent012"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "reports_to",
+      "subject_id": "ent012"
+    },
+    {
+      "object_id": "ent024",
+      "relation": "triggers",
+      "subject_id": "ent012"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "depends_on",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent003",
+      "relation": "is_component_of",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "is_component_of",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "monitors",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent073",
+      "relation": "monitors",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent086",
+      "relation": "monitors",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "overrides",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "overrides",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "reports_to",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "triggers",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "triggers",
+      "subject_id": "ent013"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "depends_on",
+      "subject_id": "ent014"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "is_component_of",
+      "subject_id": "ent014"
+    },
+    {
+      "object_id": "ent087",
+      "relation": "monitors",
+      "subject_id": "ent014"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "supports",
+      "subject_id": "ent014"
+    },
+    {
+      "object_id": "ent099",
+      "relation": "triggers",
+      "subject_id": "ent014"
+    },
+    {
+      "object_id": "ent034",
+      "relation": "conflicts_with",
+      "subject_id": "ent015"
+    },
+    {
+      "object_id": "ent025",
+      "relation": "depends_on",
+      "subject_id": "ent015"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "depends_on",
+      "subject_id": "ent015"
+    },
+    {
+      "object_id": "ent003",
+      "relation": "monitors",
+      "subject_id": "ent015"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "monitors",
+      "subject_id": "ent015"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "monitors",
+      "subject_id": "ent015"
+    },
+    {
+      "object_id": "ent047",
+      "relation": "supports",
+      "subject_id": "ent015"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "conflicts_with",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent099",
+      "relation": "depends_on",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "is_component_of",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "monitors",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "overrides",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent035",
+      "relation": "overrides",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "reports_to",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent079",
+      "relation": "reports_to",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent012",
+      "relation": "supports",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent080",
+      "relation": "triggers",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent085",
+      "relation": "triggers",
+      "subject_id": "ent016"
+    },
+    {
+      "object_id": "ent008",
+      "relation": "conflicts_with",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "conflicts_with",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent054",
+      "relation": "depends_on",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "depends_on",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "monitors",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "monitors",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "overrides",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "reports_to",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent034",
+      "relation": "triggers",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "triggers",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent081",
+      "relation": "triggers",
+      "subject_id": "ent017"
+    },
+    {
+      "object_id": "ent033",
+      "relation": "depends_on",
+      "subject_id": "ent018"
+    },
+    {
+      "object_id": "ent087",
+      "relation": "monitors",
+      "subject_id": "ent018"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "monitors",
+      "subject_id": "ent018"
+    },
+    {
+      "object_id": "ent009",
+      "relation": "reports_to",
+      "subject_id": "ent018"
+    },
+    {
+      "object_id": "ent017",
+      "relation": "reports_to",
+      "subject_id": "ent018"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "reports_to",
+      "subject_id": "ent018"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "triggers",
+      "subject_id": "ent018"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "conflicts_with",
+      "subject_id": "ent019"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "conflicts_with",
+      "subject_id": "ent019"
+    },
+    {
+      "object_id": "ent087",
+      "relation": "conflicts_with",
+      "subject_id": "ent019"
+    },
+    {
+      "object_id": "ent047",
+      "relation": "depends_on",
+      "subject_id": "ent019"
+    },
+    {
+      "object_id": "ent077",
+      "relation": "depends_on",
+      "subject_id": "ent019"
+    },
+    {
+      "object_id": "ent035",
+      "relation": "monitors",
+      "subject_id": "ent019"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "overrides",
+      "subject_id": "ent019"
+    },
+    {
+      "object_id": "ent009",
+      "relation": "triggers",
+      "subject_id": "ent019"
+    },
+    {
+      "object_id": "ent024",
+      "relation": "triggers",
+      "subject_id": "ent019"
+    },
+    {
+      "object_id": "ent023",
+      "relation": "depends_on",
+      "subject_id": "ent020"
+    },
+    {
+      "object_id": "ent025",
+      "relation": "depends_on",
+      "subject_id": "ent020"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "depends_on",
+      "subject_id": "ent020"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "overrides",
+      "subject_id": "ent020"
+    },
+    {
+      "object_id": "ent047",
+      "relation": "overrides",
+      "subject_id": "ent020"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "reports_to",
+      "subject_id": "ent020"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "supports",
+      "subject_id": "ent020"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "supports",
+      "subject_id": "ent020"
+    },
+    {
+      "object_id": "ent050",
+      "relation": "triggers",
+      "subject_id": "ent020"
+    },
+    {
+      "object_id": "ent017",
+      "relation": "conflicts_with",
+      "subject_id": "ent021"
+    },
+    {
+      "object_id": "ent032",
+      "relation": "conflicts_with",
+      "subject_id": "ent021"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "conflicts_with",
+      "subject_id": "ent021"
+    },
+    {
+      "object_id": "ent052",
+      "relation": "conflicts_with",
+      "subject_id": "ent021"
+    },
+    {
+      "object_id": "ent088",
+      "relation": "conflicts_with",
+      "subject_id": "ent021"
+    },
+    {
+      "object_id": "ent022",
+      "relation": "is_component_of",
+      "subject_id": "ent021"
+    },
+    {
+      "object_id": "ent020",
+      "relation": "overrides",
+      "subject_id": "ent021"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "overrides",
+      "subject_id": "ent021"
+    },
+    {
+      "object_id": "ent067",
+      "relation": "supports",
+      "subject_id": "ent021"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "triggers",
+      "subject_id": "ent021"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "conflicts_with",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "conflicts_with",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "depends_on",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "is_component_of",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "overrides",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "reports_to",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "reports_to",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "supports",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "supports",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent078",
+      "relation": "supports",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "triggers",
+      "subject_id": "ent022"
+    },
+    {
+      "object_id": "ent017",
+      "relation": "conflicts_with",
+      "subject_id": "ent023"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "conflicts_with",
+      "subject_id": "ent023"
+    },
+    {
+      "object_id": "ent008",
+      "relation": "is_component_of",
+      "subject_id": "ent023"
+    },
+    {
+      "object_id": "ent085",
+      "relation": "is_component_of",
+      "subject_id": "ent023"
+    },
+    {
+      "object_id": "ent069",
+      "relation": "reports_to",
+      "subject_id": "ent023"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "supports",
+      "subject_id": "ent023"
+    },
+    {
+      "object_id": "ent087",
+      "relation": "supports",
+      "subject_id": "ent023"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "triggers",
+      "subject_id": "ent023"
+    },
+    {
+      "object_id": "ent002",
+      "relation": "conflicts_with",
+      "subject_id": "ent024"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "conflicts_with",
+      "subject_id": "ent024"
+    },
+    {
+      "object_id": "ent027",
+      "relation": "conflicts_with",
+      "subject_id": "ent024"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "conflicts_with",
+      "subject_id": "ent024"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "depends_on",
+      "subject_id": "ent024"
+    },
+    {
+      "object_id": "ent097",
+      "relation": "depends_on",
+      "subject_id": "ent024"
+    },
+    {
+      "object_id": "ent012",
+      "relation": "is_component_of",
+      "subject_id": "ent024"
+    },
+    {
+      "object_id": "ent094",
+      "relation": "is_component_of",
+      "subject_id": "ent024"
+    },
+    {
+      "object_id": "ent079",
+      "relation": "triggers",
+      "subject_id": "ent024"
+    },
+    {
+      "object_id": "ent002",
+      "relation": "depends_on",
+      "subject_id": "ent025"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "depends_on",
+      "subject_id": "ent025"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "overrides",
+      "subject_id": "ent025"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "reports_to",
+      "subject_id": "ent025"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "triggers",
+      "subject_id": "ent025"
+    },
+    {
+      "object_id": "ent034",
+      "relation": "depends_on",
+      "subject_id": "ent026"
+    },
+    {
+      "object_id": "ent075",
+      "relation": "depends_on",
+      "subject_id": "ent026"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "is_component_of",
+      "subject_id": "ent026"
+    },
+    {
+      "object_id": "ent038",
+      "relation": "monitors",
+      "subject_id": "ent026"
+    },
+    {
+      "object_id": "ent085",
+      "relation": "triggers",
+      "subject_id": "ent026"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "conflicts_with",
+      "subject_id": "ent027"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "conflicts_with",
+      "subject_id": "ent027"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "conflicts_with",
+      "subject_id": "ent027"
+    },
+    {
+      "object_id": "ent069",
+      "relation": "depends_on",
+      "subject_id": "ent027"
+    },
+    {
+      "object_id": "ent069",
+      "relation": "monitors",
+      "subject_id": "ent027"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "overrides",
+      "subject_id": "ent027"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "overrides",
+      "subject_id": "ent027"
+    },
+    {
+      "object_id": "ent007",
+      "relation": "reports_to",
+      "subject_id": "ent027"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "supports",
+      "subject_id": "ent027"
+    },
+    {
+      "object_id": "ent045",
+      "relation": "triggers",
+      "subject_id": "ent027"
+    },
+    {
+      "object_id": "ent017",
+      "relation": "conflicts_with",
+      "subject_id": "ent028"
+    },
+    {
+      "object_id": "ent025",
+      "relation": "conflicts_with",
+      "subject_id": "ent028"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "depends_on",
+      "subject_id": "ent028"
+    },
+    {
+      "object_id": "ent017",
+      "relation": "is_component_of",
+      "subject_id": "ent028"
+    },
+    {
+      "object_id": "ent003",
+      "relation": "monitors",
+      "subject_id": "ent028"
+    },
+    {
+      "object_id": "ent003",
+      "relation": "overrides",
+      "subject_id": "ent028"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "overrides",
+      "subject_id": "ent028"
+    },
+    {
+      "object_id": "ent038",
+      "relation": "triggers",
+      "subject_id": "ent028"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "triggers",
+      "subject_id": "ent028"
+    },
+    {
+      "object_id": "ent027",
+      "relation": "conflicts_with",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent046",
+      "relation": "depends_on",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "is_component_of",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "monitors",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "monitors",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent004",
+      "relation": "overrides",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent009",
+      "relation": "overrides",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent093",
+      "relation": "overrides",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent008",
+      "relation": "reports_to",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "reports_to",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent012",
+      "relation": "supports",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent099",
+      "relation": "supports",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "triggers",
+      "subject_id": "ent029"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "conflicts_with",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "depends_on",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent020",
+      "relation": "depends_on",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent032",
+      "relation": "depends_on",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent038",
+      "relation": "depends_on",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent026",
+      "relation": "is_component_of",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent038",
+      "relation": "is_component_of",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent046",
+      "relation": "is_component_of",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "is_component_of",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent093",
+      "relation": "is_component_of",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent034",
+      "relation": "overrides",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent075",
+      "relation": "overrides",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent099",
+      "relation": "overrides",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent063",
+      "relation": "reports_to",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent033",
+      "relation": "supports",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent073",
+      "relation": "supports",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "triggers",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent080",
+      "relation": "triggers",
+      "subject_id": "ent030"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "depends_on",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "is_component_of",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent091",
+      "relation": "is_component_of",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent006",
+      "relation": "monitors",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "monitors",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "overrides",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "reports_to",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent094",
+      "relation": "reports_to",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "supports",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent060",
+      "relation": "supports",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent067",
+      "relation": "supports",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent087",
+      "relation": "supports",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent035",
+      "relation": "triggers",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "triggers",
+      "subject_id": "ent031"
+    },
+    {
+      "object_id": "ent006",
+      "relation": "conflicts_with",
+      "subject_id": "ent032"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "conflicts_with",
+      "subject_id": "ent032"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "conflicts_with",
+      "subject_id": "ent032"
+    },
+    {
+      "object_id": "ent097",
+      "relation": "conflicts_with",
+      "subject_id": "ent032"
+    },
+    {
+      "object_id": "ent025",
+      "relation": "depends_on",
+      "subject_id": "ent032"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "is_component_of",
+      "subject_id": "ent032"
+    },
+    {
+      "object_id": "ent061",
+      "relation": "is_component_of",
+      "subject_id": "ent032"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "reports_to",
+      "subject_id": "ent032"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "supports",
+      "subject_id": "ent032"
+    },
+    {
+      "object_id": "ent025",
+      "relation": "triggers",
+      "subject_id": "ent032"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "is_component_of",
+      "subject_id": "ent033"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "is_component_of",
+      "subject_id": "ent033"
+    },
+    {
+      "object_id": "ent049",
+      "relation": "monitors",
+      "subject_id": "ent033"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "monitors",
+      "subject_id": "ent033"
+    },
+    {
+      "object_id": "ent026",
+      "relation": "overrides",
+      "subject_id": "ent033"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "overrides",
+      "subject_id": "ent033"
+    },
+    {
+      "object_id": "ent093",
+      "relation": "overrides",
+      "subject_id": "ent033"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "supports",
+      "subject_id": "ent033"
+    },
+    {
+      "object_id": "ent099",
+      "relation": "triggers",
+      "subject_id": "ent033"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "conflicts_with",
+      "subject_id": "ent034"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "depends_on",
+      "subject_id": "ent034"
+    },
+    {
+      "object_id": "ent063",
+      "relation": "depends_on",
+      "subject_id": "ent034"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "is_component_of",
+      "subject_id": "ent034"
+    },
+    {
+      "object_id": "ent020",
+      "relation": "is_component_of",
+      "subject_id": "ent034"
+    },
+    {
+      "object_id": "ent024",
+      "relation": "is_component_of",
+      "subject_id": "ent034"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "monitors",
+      "subject_id": "ent034"
+    },
+    {
+      "object_id": "ent081",
+      "relation": "monitors",
+      "subject_id": "ent034"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "triggers",
+      "subject_id": "ent034"
+    },
+    {
+      "object_id": "ent085",
+      "relation": "conflicts_with",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "monitors",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "monitors",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "monitors",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent004",
+      "relation": "overrides",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "overrides",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "reports_to",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "reports_to",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent075",
+      "relation": "reports_to",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent081",
+      "relation": "reports_to",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent023",
+      "relation": "supports",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "supports",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "triggers",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent092",
+      "relation": "triggers",
+      "subject_id": "ent035"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "conflicts_with",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent086",
+      "relation": "conflicts_with",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "depends_on",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent032",
+      "relation": "depends_on",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent052",
+      "relation": "depends_on",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent060",
+      "relation": "depends_on",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent009",
+      "relation": "is_component_of",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent099",
+      "relation": "monitors",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "overrides",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent045",
+      "relation": "reports_to",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "reports_to",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "reports_to",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "supports",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent090",
+      "relation": "triggers",
+      "subject_id": "ent036"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "is_component_of",
+      "subject_id": "ent037"
+    },
+    {
+      "object_id": "ent004",
+      "relation": "monitors",
+      "subject_id": "ent037"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "monitors",
+      "subject_id": "ent037"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "monitors",
+      "subject_id": "ent037"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "overrides",
+      "subject_id": "ent037"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "supports",
+      "subject_id": "ent037"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "supports",
+      "subject_id": "ent037"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "triggers",
+      "subject_id": "ent037"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "depends_on",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent020",
+      "relation": "depends_on",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "is_component_of",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent063",
+      "relation": "is_component_of",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "monitors",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "monitors",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "monitors",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent000",
+      "relation": "supports",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent025",
+      "relation": "supports",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "supports",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "supports",
+      "subject_id": "ent038"
+    },
+    {
+      "object_id": "ent050",
+      "relation": "conflicts_with",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "conflicts_with",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent060",
+      "relation": "monitors",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent033",
+      "relation": "overrides",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent092",
+      "relation": "overrides",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "overrides",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "reports_to",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent046",
+      "relation": "reports_to",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "reports_to",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent020",
+      "relation": "supports",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "supports",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent073",
+      "relation": "supports",
+      "subject_id": "ent039"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "conflicts_with",
+      "subject_id": "ent040"
+    },
+    {
+      "object_id": "ent080",
+      "relation": "conflicts_with",
+      "subject_id": "ent040"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "depends_on",
+      "subject_id": "ent040"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "depends_on",
+      "subject_id": "ent040"
+    },
+    {
+      "object_id": "ent069",
+      "relation": "is_component_of",
+      "subject_id": "ent040"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "is_component_of",
+      "subject_id": "ent040"
+    },
+    {
+      "object_id": "ent054",
+      "relation": "overrides",
+      "subject_id": "ent040"
+    },
+    {
+      "object_id": "ent061",
+      "relation": "overrides",
+      "subject_id": "ent040"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "supports",
+      "subject_id": "ent040"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "triggers",
+      "subject_id": "ent040"
+    },
+    {
+      "object_id": "ent023",
+      "relation": "conflicts_with",
+      "subject_id": "ent041"
+    },
+    {
+      "object_id": "ent027",
+      "relation": "conflicts_with",
+      "subject_id": "ent041"
+    },
+    {
+      "object_id": "ent077",
+      "relation": "conflicts_with",
+      "subject_id": "ent041"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "is_component_of",
+      "subject_id": "ent041"
+    },
+    {
+      "object_id": "ent078",
+      "relation": "overrides",
+      "subject_id": "ent041"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "reports_to",
+      "subject_id": "ent041"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "supports",
+      "subject_id": "ent041"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "triggers",
+      "subject_id": "ent041"
+    },
+    {
+      "object_id": "ent020",
+      "relation": "conflicts_with",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "conflicts_with",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "depends_on",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "depends_on",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent099",
+      "relation": "depends_on",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "is_component_of",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent086",
+      "relation": "is_component_of",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent009",
+      "relation": "monitors",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "overrides",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent038",
+      "relation": "reports_to",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent029",
+      "relation": "supports",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent079",
+      "relation": "supports",
+      "subject_id": "ent042"
+    },
+    {
+      "object_id": "ent003",
+      "relation": "conflicts_with",
+      "subject_id": "ent043"
+    },
+    {
+      "object_id": "ent020",
+      "relation": "overrides",
+      "subject_id": "ent043"
+    },
+    {
+      "object_id": "ent023",
+      "relation": "reports_to",
+      "subject_id": "ent043"
+    },
+    {
+      "object_id": "ent044",
+      "relation": "reports_to",
+      "subject_id": "ent043"
+    },
+    {
+      "object_id": "ent035",
+      "relation": "triggers",
+      "subject_id": "ent043"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "triggers",
+      "subject_id": "ent043"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "is_component_of",
+      "subject_id": "ent044"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "is_component_of",
+      "subject_id": "ent044"
+    },
+    {
+      "object_id": "ent008",
+      "relation": "monitors",
+      "subject_id": "ent044"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "monitors",
+      "subject_id": "ent044"
+    },
+    {
+      "object_id": "ent093",
+      "relation": "overrides",
+      "subject_id": "ent044"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "reports_to",
+      "subject_id": "ent044"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "supports",
+      "subject_id": "ent044"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "supports",
+      "subject_id": "ent044"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "supports",
+      "subject_id": "ent044"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "conflicts_with",
+      "subject_id": "ent045"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "is_component_of",
+      "subject_id": "ent045"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "is_component_of",
+      "subject_id": "ent045"
+    },
+    {
+      "object_id": "ent026",
+      "relation": "monitors",
+      "subject_id": "ent045"
+    },
+    {
+      "object_id": "ent008",
+      "relation": "overrides",
+      "subject_id": "ent045"
+    },
+    {
+      "object_id": "ent034",
+      "relation": "supports",
+      "subject_id": "ent045"
+    },
+    {
+      "object_id": "ent085",
+      "relation": "supports",
+      "subject_id": "ent045"
+    },
+    {
+      "object_id": "ent044",
+      "relation": "triggers",
+      "subject_id": "ent045"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "depends_on",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "depends_on",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "is_component_of",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "is_component_of",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "monitors",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "monitors",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "overrides",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent049",
+      "relation": "reports_to",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent047",
+      "relation": "triggers",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "triggers",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent097",
+      "relation": "triggers",
+      "subject_id": "ent046"
+    },
+    {
+      "object_id": "ent007",
+      "relation": "conflicts_with",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "conflicts_with",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent086",
+      "relation": "conflicts_with",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "depends_on",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "depends_on",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "is_component_of",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent078",
+      "relation": "monitors",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "overrides",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "supports",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent066",
+      "relation": "triggers",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent086",
+      "relation": "triggers",
+      "subject_id": "ent047"
+    },
+    {
+      "object_id": "ent004",
+      "relation": "conflicts_with",
+      "subject_id": "ent048"
+    },
+    {
+      "object_id": "ent023",
+      "relation": "conflicts_with",
+      "subject_id": "ent048"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "conflicts_with",
+      "subject_id": "ent048"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "conflicts_with",
+      "subject_id": "ent048"
+    },
+    {
+      "object_id": "ent091",
+      "relation": "depends_on",
+      "subject_id": "ent048"
+    },
+    {
+      "object_id": "ent073",
+      "relation": "overrides",
+      "subject_id": "ent048"
+    },
+    {
+      "object_id": "ent035",
+      "relation": "supports",
+      "subject_id": "ent048"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "triggers",
+      "subject_id": "ent048"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "conflicts_with",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent024",
+      "relation": "depends_on",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "depends_on",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent088",
+      "relation": "depends_on",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "depends_on",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent073",
+      "relation": "monitors",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "overrides",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent052",
+      "relation": "overrides",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "overrides",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent060",
+      "relation": "reports_to",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "reports_to",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "supports",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "triggers",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "triggers",
+      "subject_id": "ent049"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "conflicts_with",
+      "subject_id": "ent050"
+    },
+    {
+      "object_id": "ent044",
+      "relation": "depends_on",
+      "subject_id": "ent050"
+    },
+    {
+      "object_id": "ent091",
+      "relation": "monitors",
+      "subject_id": "ent050"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "overrides",
+      "subject_id": "ent050"
+    },
+    {
+      "object_id": "ent032",
+      "relation": "reports_to",
+      "subject_id": "ent050"
+    },
+    {
+      "object_id": "ent075",
+      "relation": "reports_to",
+      "subject_id": "ent050"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "triggers",
+      "subject_id": "ent050"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "triggers",
+      "subject_id": "ent050"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "conflicts_with",
+      "subject_id": "ent051"
+    },
+    {
+      "object_id": "ent034",
+      "relation": "is_component_of",
+      "subject_id": "ent051"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "is_component_of",
+      "subject_id": "ent051"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "monitors",
+      "subject_id": "ent051"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "overrides",
+      "subject_id": "ent051"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "reports_to",
+      "subject_id": "ent051"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "triggers",
+      "subject_id": "ent051"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "conflicts_with",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "conflicts_with",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "conflicts_with",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent086",
+      "relation": "conflicts_with",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent003",
+      "relation": "depends_on",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent049",
+      "relation": "is_component_of",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent006",
+      "relation": "monitors",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent017",
+      "relation": "monitors",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent046",
+      "relation": "monitors",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent088",
+      "relation": "monitors",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "triggers",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent038",
+      "relation": "triggers",
+      "subject_id": "ent052"
+    },
+    {
+      "object_id": "ent061",
+      "relation": "conflicts_with",
+      "subject_id": "ent053"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "conflicts_with",
+      "subject_id": "ent053"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "depends_on",
+      "subject_id": "ent053"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "is_component_of",
+      "subject_id": "ent053"
+    },
+    {
+      "object_id": "ent034",
+      "relation": "monitors",
+      "subject_id": "ent053"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "monitors",
+      "subject_id": "ent053"
+    },
+    {
+      "object_id": "ent052",
+      "relation": "overrides",
+      "subject_id": "ent053"
+    },
+    {
+      "object_id": "ent006",
+      "relation": "supports",
+      "subject_id": "ent053"
+    },
+    {
+      "object_id": "ent085",
+      "relation": "supports",
+      "subject_id": "ent053"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "triggers",
+      "subject_id": "ent053"
+    },
+    {
+      "object_id": "ent052",
+      "relation": "conflicts_with",
+      "subject_id": "ent054"
+    },
+    {
+      "object_id": "ent087",
+      "relation": "is_component_of",
+      "subject_id": "ent054"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "monitors",
+      "subject_id": "ent054"
+    },
+    {
+      "object_id": "ent000",
+      "relation": "overrides",
+      "subject_id": "ent054"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "overrides",
+      "subject_id": "ent054"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "overrides",
+      "subject_id": "ent054"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "reports_to",
+      "subject_id": "ent054"
+    },
+    {
+      "object_id": "ent002",
+      "relation": "conflicts_with",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "depends_on",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent012",
+      "relation": "is_component_of",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent077",
+      "relation": "is_component_of",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent011",
+      "relation": "monitors",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "monitors",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "overrides",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent094",
+      "relation": "overrides",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "reports_to",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent062",
+      "relation": "reports_to",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent022",
+      "relation": "triggers",
+      "subject_id": "ent055"
+    },
+    {
+      "object_id": "ent008",
+      "relation": "conflicts_with",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "conflicts_with",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "conflicts_with",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent066",
+      "relation": "conflicts_with",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent067",
+      "relation": "depends_on",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "is_component_of",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "reports_to",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "supports",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent009",
+      "relation": "triggers",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent021",
+      "relation": "triggers",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent069",
+      "relation": "triggers",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent078",
+      "relation": "triggers",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent080",
+      "relation": "triggers",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "triggers",
+      "subject_id": "ent056"
+    },
+    {
+      "object_id": "ent002",
+      "relation": "is_component_of",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent047",
+      "relation": "is_component_of",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "monitors",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent073",
+      "relation": "monitors",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "overrides",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "overrides",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent044",
+      "relation": "reports_to",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "reports_to",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent078",
+      "relation": "reports_to",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent077",
+      "relation": "supports",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "triggers",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "triggers",
+      "subject_id": "ent057"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "depends_on",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "is_component_of",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "monitors",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "monitors",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "monitors",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent011",
+      "relation": "overrides",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent021",
+      "relation": "overrides",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent032",
+      "relation": "reports_to",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "reports_to",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "supports",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "supports",
+      "subject_id": "ent058"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "conflicts_with",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "conflicts_with",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "depends_on",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "depends_on",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "depends_on",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent026",
+      "relation": "overrides",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "overrides",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent085",
+      "relation": "overrides",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "reports_to",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "triggers",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "triggers",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "triggers",
+      "subject_id": "ent059"
+    },
+    {
+      "object_id": "ent061",
+      "relation": "conflicts_with",
+      "subject_id": "ent060"
+    },
+    {
+      "object_id": "ent066",
+      "relation": "conflicts_with",
+      "subject_id": "ent060"
+    },
+    {
+      "object_id": "ent002",
+      "relation": "overrides",
+      "subject_id": "ent060"
+    },
+    {
+      "object_id": "ent003",
+      "relation": "overrides",
+      "subject_id": "ent060"
+    },
+    {
+      "object_id": "ent033",
+      "relation": "overrides",
+      "subject_id": "ent060"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "overrides",
+      "subject_id": "ent060"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "overrides",
+      "subject_id": "ent060"
+    },
+    {
+      "object_id": "ent044",
+      "relation": "supports",
+      "subject_id": "ent060"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "depends_on",
+      "subject_id": "ent061"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "monitors",
+      "subject_id": "ent061"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "monitors",
+      "subject_id": "ent061"
+    },
+    {
+      "object_id": "ent000",
+      "relation": "overrides",
+      "subject_id": "ent061"
+    },
+    {
+      "object_id": "ent009",
+      "relation": "overrides",
+      "subject_id": "ent061"
+    },
+    {
+      "object_id": "ent026",
+      "relation": "overrides",
+      "subject_id": "ent061"
+    },
+    {
+      "object_id": "ent027",
+      "relation": "supports",
+      "subject_id": "ent061"
+    },
+    {
+      "object_id": "ent077",
+      "relation": "conflicts_with",
+      "subject_id": "ent062"
+    },
+    {
+      "object_id": "ent091",
+      "relation": "conflicts_with",
+      "subject_id": "ent062"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "monitors",
+      "subject_id": "ent062"
+    },
+    {
+      "object_id": "ent029",
+      "relation": "overrides",
+      "subject_id": "ent062"
+    },
+    {
+      "object_id": "ent078",
+      "relation": "supports",
+      "subject_id": "ent062"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "triggers",
+      "subject_id": "ent062"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "conflicts_with",
+      "subject_id": "ent063"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "conflicts_with",
+      "subject_id": "ent063"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "conflicts_with",
+      "subject_id": "ent063"
+    },
+    {
+      "object_id": "ent088",
+      "relation": "conflicts_with",
+      "subject_id": "ent063"
+    },
+    {
+      "object_id": "ent004",
+      "relation": "depends_on",
+      "subject_id": "ent063"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "depends_on",
+      "subject_id": "ent063"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "monitors",
+      "subject_id": "ent063"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "overrides",
+      "subject_id": "ent063"
+    },
+    {
+      "object_id": "ent080",
+      "relation": "triggers",
+      "subject_id": "ent063"
+    },
+    {
+      "object_id": "ent091",
+      "relation": "triggers",
+      "subject_id": "ent063"
+    },
+    {
+      "object_id": "ent033",
+      "relation": "depends_on",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent067",
+      "relation": "depends_on",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "depends_on",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent097",
+      "relation": "depends_on",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent007",
+      "relation": "is_component_of",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent047",
+      "relation": "monitors",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "monitors",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "overrides",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent075",
+      "relation": "overrides",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "overrides",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "reports_to",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "reports_to",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "supports",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "supports",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "triggers",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent062",
+      "relation": "triggers",
+      "subject_id": "ent064"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "conflicts_with",
+      "subject_id": "ent065"
+    },
+    {
+      "object_id": "ent063",
+      "relation": "conflicts_with",
+      "subject_id": "ent065"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "is_component_of",
+      "subject_id": "ent065"
+    },
+    {
+      "object_id": "ent075",
+      "relation": "is_component_of",
+      "subject_id": "ent065"
+    },
+    {
+      "object_id": "ent046",
+      "relation": "reports_to",
+      "subject_id": "ent065"
+    },
+    {
+      "object_id": "ent090",
+      "relation": "triggers",
+      "subject_id": "ent065"
+    },
+    {
+      "object_id": "ent046",
+      "relation": "conflicts_with",
+      "subject_id": "ent066"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "is_component_of",
+      "subject_id": "ent066"
+    },
+    {
+      "object_id": "ent049",
+      "relation": "is_component_of",
+      "subject_id": "ent066"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "triggers",
+      "subject_id": "ent066"
+    },
+    {
+      "object_id": "ent004",
+      "relation": "is_component_of",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "is_component_of",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent046",
+      "relation": "is_component_of",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "monitors",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "monitors",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "monitors",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "overrides",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "overrides",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent032",
+      "relation": "reports_to",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "reports_to",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent069",
+      "relation": "reports_to",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "supports",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "supports",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent046",
+      "relation": "supports",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent052",
+      "relation": "supports",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent077",
+      "relation": "supports",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "triggers",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent085",
+      "relation": "triggers",
+      "subject_id": "ent067"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "conflicts_with",
+      "subject_id": "ent068"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "monitors",
+      "subject_id": "ent068"
+    },
+    {
+      "object_id": "ent090",
+      "relation": "monitors",
+      "subject_id": "ent068"
+    },
+    {
+      "object_id": "ent092",
+      "relation": "monitors",
+      "subject_id": "ent068"
+    },
+    {
+      "object_id": "ent093",
+      "relation": "monitors",
+      "subject_id": "ent068"
+    },
+    {
+      "object_id": "ent054",
+      "relation": "overrides",
+      "subject_id": "ent068"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "reports_to",
+      "subject_id": "ent068"
+    },
+    {
+      "object_id": "ent094",
+      "relation": "reports_to",
+      "subject_id": "ent068"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "supports",
+      "subject_id": "ent068"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "depends_on",
+      "subject_id": "ent069"
+    },
+    {
+      "object_id": "ent004",
+      "relation": "is_component_of",
+      "subject_id": "ent069"
+    },
+    {
+      "object_id": "ent004",
+      "relation": "overrides",
+      "subject_id": "ent069"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "overrides",
+      "subject_id": "ent069"
+    },
+    {
+      "object_id": "ent027",
+      "relation": "reports_to",
+      "subject_id": "ent069"
+    },
+    {
+      "object_id": "ent099",
+      "relation": "reports_to",
+      "subject_id": "ent069"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "supports",
+      "subject_id": "ent069"
+    },
+    {
+      "object_id": "ent045",
+      "relation": "triggers",
+      "subject_id": "ent069"
+    },
+    {
+      "object_id": "ent060",
+      "relation": "triggers",
+      "subject_id": "ent069"
+    },
+    {
+      "object_id": "ent009",
+      "relation": "depends_on",
+      "subject_id": "ent070"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "depends_on",
+      "subject_id": "ent070"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "depends_on",
+      "subject_id": "ent070"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "monitors",
+      "subject_id": "ent070"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "overrides",
+      "subject_id": "ent070"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "supports",
+      "subject_id": "ent070"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "supports",
+      "subject_id": "ent070"
+    },
+    {
+      "object_id": "ent021",
+      "relation": "triggers",
+      "subject_id": "ent070"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "conflicts_with",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "is_component_of",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent046",
+      "relation": "is_component_of",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent047",
+      "relation": "is_component_of",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent001",
+      "relation": "monitors",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent063",
+      "relation": "reports_to",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent025",
+      "relation": "supports",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent086",
+      "relation": "supports",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent097",
+      "relation": "supports",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "triggers",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent092",
+      "relation": "triggers",
+      "subject_id": "ent071"
+    },
+    {
+      "object_id": "ent007",
+      "relation": "conflicts_with",
+      "subject_id": "ent072"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "conflicts_with",
+      "subject_id": "ent072"
+    },
+    {
+      "object_id": "ent087",
+      "relation": "depends_on",
+      "subject_id": "ent072"
+    },
+    {
+      "object_id": "ent077",
+      "relation": "is_component_of",
+      "subject_id": "ent072"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "monitors",
+      "subject_id": "ent072"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "overrides",
+      "subject_id": "ent072"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "reports_to",
+      "subject_id": "ent072"
+    },
+    {
+      "object_id": "ent012",
+      "relation": "reports_to",
+      "subject_id": "ent072"
+    },
+    {
+      "object_id": "ent079",
+      "relation": "reports_to",
+      "subject_id": "ent072"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "supports",
+      "subject_id": "ent072"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "depends_on",
+      "subject_id": "ent073"
+    },
+    {
+      "object_id": "ent009",
+      "relation": "depends_on",
+      "subject_id": "ent073"
+    },
+    {
+      "object_id": "ent066",
+      "relation": "depends_on",
+      "subject_id": "ent073"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "depends_on",
+      "subject_id": "ent073"
+    },
+    {
+      "object_id": "ent024",
+      "relation": "is_component_of",
+      "subject_id": "ent073"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "overrides",
+      "subject_id": "ent073"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "overrides",
+      "subject_id": "ent073"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "supports",
+      "subject_id": "ent073"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "triggers",
+      "subject_id": "ent073"
+    },
+    {
+      "object_id": "ent046",
+      "relation": "depends_on",
+      "subject_id": "ent074"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "depends_on",
+      "subject_id": "ent074"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "overrides",
+      "subject_id": "ent074"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "overrides",
+      "subject_id": "ent074"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "reports_to",
+      "subject_id": "ent074"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "supports",
+      "subject_id": "ent074"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "conflicts_with",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "conflicts_with",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent069",
+      "relation": "depends_on",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "depends_on",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "depends_on",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent027",
+      "relation": "monitors",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "monitors",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "overrides",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "reports_to",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent054",
+      "relation": "reports_to",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent038",
+      "relation": "supports",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent054",
+      "relation": "triggers",
+      "subject_id": "ent075"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "conflicts_with",
+      "subject_id": "ent076"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "depends_on",
+      "subject_id": "ent076"
+    },
+    {
+      "object_id": "ent078",
+      "relation": "monitors",
+      "subject_id": "ent076"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "overrides",
+      "subject_id": "ent076"
+    },
+    {
+      "object_id": "ent007",
+      "relation": "reports_to",
+      "subject_id": "ent076"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "reports_to",
+      "subject_id": "ent076"
+    },
+    {
+      "object_id": "ent000",
+      "relation": "triggers",
+      "subject_id": "ent076"
+    },
+    {
+      "object_id": "ent060",
+      "relation": "triggers",
+      "subject_id": "ent076"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "conflicts_with",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "conflicts_with",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent081",
+      "relation": "depends_on",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "is_component_of",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "is_component_of",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent045",
+      "relation": "monitors",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "monitors",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "overrides",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent032",
+      "relation": "reports_to",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "supports",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "supports",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "triggers",
+      "subject_id": "ent077"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "conflicts_with",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "conflicts_with",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent011",
+      "relation": "is_component_of",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "is_component_of",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "is_component_of",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent094",
+      "relation": "is_component_of",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "is_component_of",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "monitors",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "monitors",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent061",
+      "relation": "monitors",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "reports_to",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "reports_to",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "supports",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent005",
+      "relation": "triggers",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "triggers",
+      "subject_id": "ent078"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "depends_on",
+      "subject_id": "ent079"
+    },
+    {
+      "object_id": "ent087",
+      "relation": "is_component_of",
+      "subject_id": "ent079"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "overrides",
+      "subject_id": "ent079"
+    },
+    {
+      "object_id": "ent081",
+      "relation": "reports_to",
+      "subject_id": "ent079"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "supports",
+      "subject_id": "ent079"
+    },
+    {
+      "object_id": "ent088",
+      "relation": "supports",
+      "subject_id": "ent079"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "depends_on",
+      "subject_id": "ent080"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "monitors",
+      "subject_id": "ent080"
+    },
+    {
+      "object_id": "ent075",
+      "relation": "monitors",
+      "subject_id": "ent080"
+    },
+    {
+      "object_id": "ent079",
+      "relation": "overrides",
+      "subject_id": "ent080"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "overrides",
+      "subject_id": "ent080"
+    },
+    {
+      "object_id": "ent012",
+      "relation": "reports_to",
+      "subject_id": "ent080"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "reports_to",
+      "subject_id": "ent080"
+    },
+    {
+      "object_id": "ent086",
+      "relation": "supports",
+      "subject_id": "ent080"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "triggers",
+      "subject_id": "ent080"
+    },
+    {
+      "object_id": "ent034",
+      "relation": "conflicts_with",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent035",
+      "relation": "conflicts_with",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent079",
+      "relation": "conflicts_with",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "conflicts_with",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent033",
+      "relation": "depends_on",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "depends_on",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent062",
+      "relation": "is_component_of",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "monitors",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent049",
+      "relation": "overrides",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "reports_to",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent029",
+      "relation": "reports_to",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent024",
+      "relation": "triggers",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "triggers",
+      "subject_id": "ent081"
+    },
+    {
+      "object_id": "ent038",
+      "relation": "conflicts_with",
+      "subject_id": "ent082"
+    },
+    {
+      "object_id": "ent069",
+      "relation": "conflicts_with",
+      "subject_id": "ent082"
+    },
+    {
+      "object_id": "ent032",
+      "relation": "depends_on",
+      "subject_id": "ent082"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "depends_on",
+      "subject_id": "ent082"
+    },
+    {
+      "object_id": "ent081",
+      "relation": "reports_to",
+      "subject_id": "ent082"
+    },
+    {
+      "object_id": "ent085",
+      "relation": "supports",
+      "subject_id": "ent082"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "triggers",
+      "subject_id": "ent082"
+    },
+    {
+      "object_id": "ent019",
+      "relation": "is_component_of",
+      "subject_id": "ent083"
+    },
+    {
+      "object_id": "ent044",
+      "relation": "is_component_of",
+      "subject_id": "ent083"
+    },
+    {
+      "object_id": "ent052",
+      "relation": "is_component_of",
+      "subject_id": "ent083"
+    },
+    {
+      "object_id": "ent099",
+      "relation": "monitors",
+      "subject_id": "ent083"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "overrides",
+      "subject_id": "ent083"
+    },
+    {
+      "object_id": "ent026",
+      "relation": "supports",
+      "subject_id": "ent083"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "triggers",
+      "subject_id": "ent083"
+    },
+    {
+      "object_id": "ent069",
+      "relation": "conflicts_with",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "depends_on",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "depends_on",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "depends_on",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent066",
+      "relation": "monitors",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent055",
+      "relation": "overrides",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "overrides",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "reports_to",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent062",
+      "relation": "reports_to",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "triggers",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "triggers",
+      "subject_id": "ent084"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "conflicts_with",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "is_component_of",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent014",
+      "relation": "monitors",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent094",
+      "relation": "monitors",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent013",
+      "relation": "overrides",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent032",
+      "relation": "overrides",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "overrides",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "overrides",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent006",
+      "relation": "reports_to",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "supports",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "supports",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "triggers",
+      "subject_id": "ent085"
+    },
+    {
+      "object_id": "ent027",
+      "relation": "conflicts_with",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "depends_on",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "depends_on",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent094",
+      "relation": "is_component_of",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "monitors",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "overrides",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent069",
+      "relation": "overrides",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "reports_to",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "reports_to",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent077",
+      "relation": "reports_to",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "supports",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "supports",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent092",
+      "relation": "supports",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "triggers",
+      "subject_id": "ent086"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "depends_on",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent084",
+      "relation": "depends_on",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "depends_on",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent054",
+      "relation": "is_component_of",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "is_component_of",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent092",
+      "relation": "is_component_of",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "overrides",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent047",
+      "relation": "overrides",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "overrides",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "reports_to",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent035",
+      "relation": "reports_to",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "reports_to",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "reports_to",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent029",
+      "relation": "triggers",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent064",
+      "relation": "triggers",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "triggers",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent081",
+      "relation": "triggers",
+      "subject_id": "ent087"
+    },
+    {
+      "object_id": "ent032",
+      "relation": "conflicts_with",
+      "subject_id": "ent088"
+    },
+    {
+      "object_id": "ent060",
+      "relation": "conflicts_with",
+      "subject_id": "ent088"
+    },
+    {
+      "object_id": "ent076",
+      "relation": "conflicts_with",
+      "subject_id": "ent088"
+    },
+    {
+      "object_id": "ent007",
+      "relation": "depends_on",
+      "subject_id": "ent088"
+    },
+    {
+      "object_id": "ent092",
+      "relation": "is_component_of",
+      "subject_id": "ent088"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "reports_to",
+      "subject_id": "ent088"
+    },
+    {
+      "object_id": "ent038",
+      "relation": "supports",
+      "subject_id": "ent088"
+    },
+    {
+      "object_id": "ent015",
+      "relation": "triggers",
+      "subject_id": "ent088"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "triggers",
+      "subject_id": "ent088"
+    },
+    {
+      "object_id": "ent063",
+      "relation": "triggers",
+      "subject_id": "ent088"
+    },
+    {
+      "object_id": "ent093",
+      "relation": "conflicts_with",
+      "subject_id": "ent089"
+    },
+    {
+      "object_id": "ent061",
+      "relation": "depends_on",
+      "subject_id": "ent089"
+    },
+    {
+      "object_id": "ent021",
+      "relation": "is_component_of",
+      "subject_id": "ent089"
+    },
+    {
+      "object_id": "ent058",
+      "relation": "is_component_of",
+      "subject_id": "ent089"
+    },
+    {
+      "object_id": "ent087",
+      "relation": "is_component_of",
+      "subject_id": "ent089"
+    },
+    {
+      "object_id": "ent054",
+      "relation": "overrides",
+      "subject_id": "ent089"
+    },
+    {
+      "object_id": "ent008",
+      "relation": "reports_to",
+      "subject_id": "ent089"
+    },
+    {
+      "object_id": "ent030",
+      "relation": "supports",
+      "subject_id": "ent089"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "triggers",
+      "subject_id": "ent089"
+    },
+    {
+      "object_id": "ent097",
+      "relation": "triggers",
+      "subject_id": "ent089"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "conflicts_with",
+      "subject_id": "ent090"
+    },
+    {
+      "object_id": "ent026",
+      "relation": "conflicts_with",
+      "subject_id": "ent090"
+    },
+    {
+      "object_id": "ent027",
+      "relation": "is_component_of",
+      "subject_id": "ent090"
+    },
+    {
+      "object_id": "ent017",
+      "relation": "monitors",
+      "subject_id": "ent090"
+    },
+    {
+      "object_id": "ent057",
+      "relation": "monitors",
+      "subject_id": "ent090"
+    },
+    {
+      "object_id": "ent028",
+      "relation": "overrides",
+      "subject_id": "ent090"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "supports",
+      "subject_id": "ent090"
+    },
+    {
+      "object_id": "ent008",
+      "relation": "triggers",
+      "subject_id": "ent090"
+    },
+    {
+      "object_id": "ent020",
+      "relation": "triggers",
+      "subject_id": "ent090"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "triggers",
+      "subject_id": "ent090"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "conflicts_with",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "depends_on",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "is_component_of",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent060",
+      "relation": "is_component_of",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent066",
+      "relation": "is_component_of",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "monitors",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent010",
+      "relation": "overrides",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "overrides",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent039",
+      "relation": "supports",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent054",
+      "relation": "supports",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent089",
+      "relation": "supports",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "triggers",
+      "subject_id": "ent091"
+    },
+    {
+      "object_id": "ent006",
+      "relation": "conflicts_with",
+      "subject_id": "ent092"
+    },
+    {
+      "object_id": "ent021",
+      "relation": "conflicts_with",
+      "subject_id": "ent092"
+    },
+    {
+      "object_id": "ent073",
+      "relation": "conflicts_with",
+      "subject_id": "ent092"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "conflicts_with",
+      "subject_id": "ent092"
+    },
+    {
+      "object_id": "ent097",
+      "relation": "is_component_of",
+      "subject_id": "ent092"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "monitors",
+      "subject_id": "ent092"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "reports_to",
+      "subject_id": "ent092"
+    },
+    {
+      "object_id": "ent088",
+      "relation": "reports_to",
+      "subject_id": "ent092"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "supports",
+      "subject_id": "ent092"
+    },
+    {
+      "object_id": "ent006",
+      "relation": "triggers",
+      "subject_id": "ent092"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "depends_on",
+      "subject_id": "ent093"
+    },
+    {
+      "object_id": "ent006",
+      "relation": "is_component_of",
+      "subject_id": "ent093"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "monitors",
+      "subject_id": "ent093"
+    },
+    {
+      "object_id": "ent045",
+      "relation": "supports",
+      "subject_id": "ent093"
+    },
+    {
+      "object_id": "ent023",
+      "relation": "conflicts_with",
+      "subject_id": "ent094"
+    },
+    {
+      "object_id": "ent088",
+      "relation": "conflicts_with",
+      "subject_id": "ent094"
+    },
+    {
+      "object_id": "ent021",
+      "relation": "is_component_of",
+      "subject_id": "ent094"
+    },
+    {
+      "object_id": "ent035",
+      "relation": "monitors",
+      "subject_id": "ent094"
+    },
+    {
+      "object_id": "ent049",
+      "relation": "overrides",
+      "subject_id": "ent094"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "reports_to",
+      "subject_id": "ent094"
+    },
+    {
+      "object_id": "ent093",
+      "relation": "reports_to",
+      "subject_id": "ent094"
+    },
+    {
+      "object_id": "ent042",
+      "relation": "supports",
+      "subject_id": "ent094"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "supports",
+      "subject_id": "ent094"
+    },
+    {
+      "object_id": "ent060",
+      "relation": "conflicts_with",
+      "subject_id": "ent095"
+    },
+    {
+      "object_id": "ent096",
+      "relation": "conflicts_with",
+      "subject_id": "ent095"
+    },
+    {
+      "object_id": "ent053",
+      "relation": "depends_on",
+      "subject_id": "ent095"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "depends_on",
+      "subject_id": "ent095"
+    },
+    {
+      "object_id": "ent027",
+      "relation": "is_component_of",
+      "subject_id": "ent095"
+    },
+    {
+      "object_id": "ent061",
+      "relation": "monitors",
+      "subject_id": "ent095"
+    },
+    {
+      "object_id": "ent094",
+      "relation": "overrides",
+      "subject_id": "ent095"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "reports_to",
+      "subject_id": "ent095"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "supports",
+      "subject_id": "ent095"
+    },
+    {
+      "object_id": "ent095",
+      "relation": "conflicts_with",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent065",
+      "relation": "is_component_of",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent098",
+      "relation": "is_component_of",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent003",
+      "relation": "monitors",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent018",
+      "relation": "monitors",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent068",
+      "relation": "monitors",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "overrides",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent079",
+      "relation": "reports_to",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent056",
+      "relation": "supports",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent059",
+      "relation": "supports",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent091",
+      "relation": "supports",
+      "subject_id": "ent096"
+    },
+    {
+      "object_id": "ent090",
+      "relation": "conflicts_with",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent009",
+      "relation": "depends_on",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent031",
+      "relation": "is_component_of",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent043",
+      "relation": "is_component_of",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent026",
+      "relation": "monitors",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent035",
+      "relation": "monitors",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent040",
+      "relation": "monitors",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "overrides",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent073",
+      "relation": "supports",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent070",
+      "relation": "triggers",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent086",
+      "relation": "triggers",
+      "subject_id": "ent097"
+    },
+    {
+      "object_id": "ent047",
+      "relation": "depends_on",
+      "subject_id": "ent098"
+    },
+    {
+      "object_id": "ent037",
+      "relation": "is_component_of",
+      "subject_id": "ent098"
+    },
+    {
+      "object_id": "ent011",
+      "relation": "monitors",
+      "subject_id": "ent098"
+    },
+    {
+      "object_id": "ent074",
+      "relation": "overrides",
+      "subject_id": "ent098"
+    },
+    {
+      "object_id": "ent082",
+      "relation": "overrides",
+      "subject_id": "ent098"
+    },
+    {
+      "object_id": "ent051",
+      "relation": "reports_to",
+      "subject_id": "ent098"
+    },
+    {
+      "object_id": "ent016",
+      "relation": "supports",
+      "subject_id": "ent098"
+    },
+    {
+      "object_id": "ent017",
+      "relation": "supports",
+      "subject_id": "ent098"
+    },
+    {
+      "object_id": "ent017",
+      "relation": "triggers",
+      "subject_id": "ent098"
+    },
+    {
+      "object_id": "ent087",
+      "relation": "conflicts_with",
+      "subject_id": "ent099"
+    },
+    {
+      "object_id": "ent072",
+      "relation": "is_component_of",
+      "subject_id": "ent099"
+    },
+    {
+      "object_id": "ent054",
+      "relation": "monitors",
+      "subject_id": "ent099"
+    },
+    {
+      "object_id": "ent044",
+      "relation": "overrides",
+      "subject_id": "ent099"
+    },
+    {
+      "object_id": "ent041",
+      "relation": "reports_to",
+      "subject_id": "ent099"
+    },
+    {
+      "object_id": "ent083",
+      "relation": "reports_to",
+      "subject_id": "ent099"
+    },
+    {
+      "object_id": "ent036",
+      "relation": "supports",
+      "subject_id": "ent099"
+    },
+    {
+      "object_id": "ent048",
+      "relation": "supports",
+      "subject_id": "ent099"
+    },
+    {
+      "object_id": "ent066",
+      "relation": "supports",
+      "subject_id": "ent099"
+    },
+    {
+      "object_id": "ent071",
+      "relation": "supports",
+      "subject_id": "ent099"
+    },
+    {
+      "object_id": "ent020",
+      "relation": "triggers",
+      "subject_id": "ent099"
+    }
+  ],
+  "workload": "C"
+}

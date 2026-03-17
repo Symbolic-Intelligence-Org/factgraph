@@ -101,19 +101,30 @@
 
 ### 5.1 顶层设计立场
 
-本蓝图建议项目优先探索：
+**核心原则: 单引擎优先，复合执行是逃生通道而非默认路径。**
 
-- `统一语义内核 + 复合执行器`
+> 2026-03-16 讨论澄清：对于任意一次推理任务，默认假设是由单一引擎从头执行到底。只有当单一引擎在性能或语义能力上确实无法覆盖整个任务时，才引入 staged pipeline。构建跨引擎 pipeline 的代价是真实的（引擎间语义映射、跨引擎 provenance 链维护、调试复杂度），不应为了"架构优雅"而提前支付。
+
+在此原则下，本蓝图建议项目的架构**容许能力**（而非默认路径）是：
+
+- `统一语义内核 + 复合执行器`（当需要时可以组合多引擎）
 
 而不是：
 
-- `寻找一个覆盖所有能力的单一万能引擎`
+- `寻找一个覆盖所有能力的单一万能引擎`（不要求某个引擎解决所有问题）
 
-原因是：
+**为什么不排除复合执行的可能性**：
 
 - 时间、递归、概率、外部谓词、数值约束通常来自不同技术传统，强行塞进单引擎往往会牺牲可解释性、可维护性或性能。
-- 当前仓库已经天然更接近“统一 IR + 多引擎”形状，继续沿这个方向演化成本更低。
-- 复合执行更适合将“数值/轨道处理”和“符号/规则推理”分层，而不是让逻辑引擎承担全部时序计算。
+- 当前仓库已经天然更接近"统一 IR + 多引擎"形状，继续沿这个方向演化成本更低。
+- 复合执行更适合将"数值/轨道处理"和"符号/规则推理"分层，而不是让逻辑引擎承担全部时序计算。
+
+**但复合执行只在以下条件满足时才值得引入**：
+
+- **(a)** 确定性阶段涉及大规模递归闭包，概率引擎（如 ProbLog）在 certainty=1.0 的情况下仍存在不可接受的性能开销；或者
+- **(b)** 推理任务需要某种单一引擎根本不支持的语义（如显式时间区间状态传播），构成能力缺口而非仅仅性能问题。
+
+**在真正遇到上述瓶颈之前，更简单的替代方案是**：让单一引擎（如 ProbLog）从头跑到底，确定性部分标注 certainty=1.0。这在逻辑上完全正确，只是在大规模递归闭包场景下可能产生不必要的性能开销。对于中小规模规则集，这个开销可能完全不重要。
 
 ### 5.2 建议的讨论层次
 
@@ -194,14 +205,49 @@
 
 4. 复合执行是否允许 staged pipeline？
    - 例如：轨道/几何预处理 -> temporal/event facts -> datalog closure -> probabilistic ranking
+   - **讨论进展 (2026-03-16)**: 架构上允许，但不作为默认路径。单引擎从头执行到底是默认选择。Staged pipeline 只在单引擎遇到性能瓶颈（大规模递归 + 概率引擎开销）或语义能力缺口（如时间区间传播）时才值得引入。更简单的替代方案（ProbLog + certainty=1.0 跑全程）应先被排除后再考虑 staged 方案。
 
 5. `PyReason` 若接入，扮演什么角色？
    - drop-in runtime adapter
    - 专门 temporal engine
    - authoring-time or batch-time propagation service
    - 仅作为实验参考实现
+   - **讨论进展 (2026-03-16)**: 已有初步实验但未覆盖完整 annotation 功能。此问题在 `pyreason-integration-spike-blueprint` 完成之前无法可靠回答，当前状态为"待定"。
 
-### 5.4 建议的子蓝图拆分
+6. 可解释性/可视化应如何分层和排序？
+   - audit-log 风格（追溯链、合规证据）
+   - proof-tree 风格（推理链、置信度来源）
+   - graph-based 依赖可视化（拓扑展示、workshop 演示）
+   - **讨论进展 (2026-03-16)**: 长期目标为三者兼备。面向 ESA 近期接触，建议按 audit-log -> proof-tree -> graph-based 顺序推进，理由见 5.4 风险 3。
+
+### 5.4 开放风险与未解决前置依赖
+
+> 以下风险来自 2026-03-16 讨论，三个关键问题的回答暴露了当前规划中的具体缺口。
+
+1. **近期 ESA demo 目标尚无具体 ECSS 场景锚点**
+   - 先前讨论将"ECSS 合规性演示"列为近期优先方向（无需 PyReason，可利用现有 Datalog 递归 + audit/provenance + confidence 能力）。
+   - 但截至目前，尚未确定具体 ECSS 条款或验证场景（如 ESSB-ST-U-007 中的哪项碎片缓解要求，或 ECSS-M-ST-10 中的哪项评审检查点）。
+   - **风险等级**: 高。如果近期优先方向无法落地为可演示的具体场景，Implementation Plan step 2 实际处于阻塞状态，而非仅仅 pending。整个近期 vs. 中期优先级排序的基础尚未被验证。
+   - **建议下一步**: 针对 ECSS-M-ST-10（设计评审合规）和 ESSB-ST-U-007（碎片缓解）进行条款级别的初步调研，筛选出一到两个适合用"规则推理 + 追溯链"演示的候选条款。如果调研后仍无法找到合适的条款，需要重新评估近期方向是否应从 ECSS 合规转向其他 ESA 关注点。
+
+2. **PyReason 实验状态为"半生不熟"，annotation 语义尚未覆盖**
+   - 已有初步实验经验，但未涉及完整的 annotation 功能。
+   - 先前分析已识别 Souffle 输出（关系元组）与 PyReason 输入（标注图）之间的语义映射为 staged pipeline 的核心技术风险。annotation 语义恰好是该风险的关键部分。
+   - **硬性前置条件**: 在做出任何涉及 PyReason 架构角色的决策之前，必须完成一次聚焦的 spike，至少覆盖以下内容：
+     - PyReason 的 annotation 模型（节点/边标注的完整语义）
+     - annotation 与时间传播的交互方式
+     - 从 Souffle 关系元组到 PyReason 标注图的映射可行性评估
+   - 此 spike 对应子蓝图 `pyreason-integration-spike-blueprint`，应在该 spike 完成前将 PyReason 相关的架构决策标记为"待定"。
+
+3. **可解释性/可视化方向尚未排定优先级**
+   - 长期目标是三种方式（proof-tree、audit-log、graph-based）都实现，这作为愿景合理。
+   - 但面向 ESA 的近期交付需要排定先后顺序：
+     - **audit-log 风格** (建议优先): 与 ESA 关注的 traceability 和合规证据最对齐，且现有 audit 基础设施可复用，实现成本最低。
+     - **proof-tree 风格** (建议次优先): 与 ESA 关注的 explainability 和 certainty estimation 最对齐，直接展示推理链和置信度来源。
+     - **graph-based 依赖可视化** (建议第三): 对演示和 workshop 展示（如 FLoC 2026）视觉冲击力最强，但对合规验证的紧迫性较低。
+   - **风险**: 若三者同时推进而无优先级，容易分散有限资源，且可能在 ESA 首次接触时缺乏聚焦的演示故事。
+
+### 5.5 建议的子蓝图拆分
 
 - `temporal-semantics-blueprint`
   - 定义时间语义最小闭环，尤其是 observation/event/interval/state 与 runtime 的关系。
@@ -211,6 +257,12 @@
   - 若决定恢复 runtime 时态能力，定义 rule/derivation/service/sdk 的 contract。
 - `uncertainty-and-confidence-blueprint`
   - 统一 `confidence`、probabilistic evidence、LLM extraction confidence 的口径。
+- `runtime-traceability-explainability-blueprint`
+  - 单独比较 `audit-log`、`proof-tree`、`graph-based` 以及 annotation/provenance 承载方式的边界。
+  - 该子蓝图当前只用于收口讨论，不预设“support graph first”或“annotation first”为既定路线。
+- `souffle-backed-annotation-kernel-spike`
+  - 评估是否以 `Souffle` 作为结构推理底座，并在 `core` 叠加 annotation kernel，只实现概率/区间/时间的可靠子集。
+  - 该子蓝图默认采用三基线对照：`PyReason` 直跑、`ProbLog` 单引擎直跑、`Souffle + 最小 annotation prototype`。
 - `authoring-llm-governance-blueprint`
   - 限定 LLM 在规则提取、修订建议、发布审核中的角色。
 - `pyreason-integration-spike-blueprint`
@@ -243,7 +295,9 @@
 
 1. 建立本蓝图 draft，记录当前冲突点、目标和候选架构形状，不直接启动实现。
 2. 在后续讨论中补齐面向 satellite / ESA 场景的代表性推理用例，尤其是轨道、坐标、窗口、事件与状态传播。
+   - **当前状态 (2026-03-16)**: 此步骤处于阻塞状态。尚未确定具体 ECSS 条款作为近期演示锚点。下一步需对 ECSS-M-ST-10 和 ESSB-ST-U-007 进行条款级初步调研。
 3. 基于代表性用例，形成引擎能力矩阵，比较 `native / Souffle / ProbLog / PyReason` 的适配位置和不可替代能力。
+   - **前置依赖**: step 2 的 ECSS 场景确定 + `pyreason-integration-spike-blueprint` 的 spike 结果。在此之前，PyReason 在矩阵中的定位标记为"待定"。
 4. 明确“时间是否进入 kernel 语义”这一决策点；如果答案是是，再拆出 `temporal-semantics` 与 `temporal-runtime-contract` 子蓝图。
 5. 在时序语义边界清晰后，再讨论 LLM 规则提取、规则管理、置信度来源与治理模型。
 

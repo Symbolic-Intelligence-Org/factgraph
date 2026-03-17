@@ -1,0 +1,760 @@
+{
+  "aggregation": "max",
+  "query": "ranked_candidate",
+  "results": [
+    {
+      "confidence": 1.0,
+      "object": "ent009",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent000 -[depends_on]-> ent070",
+          "ent070 -[depends_on]-> ent009"
+        ]
+      },
+      "rank": 1,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent000"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent037",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent000 -[depends_on]-> ent070",
+          "ent070 -[depends_on]-> ent037"
+        ]
+      },
+      "rank": 2,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent000"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent057",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent000 -[depends_on]-> ent070",
+          "ent070 -[depends_on]-> ent057"
+        ]
+      },
+      "rank": 3,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent000"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent036",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent000 -[monitors]-> ent066",
+          "ent066 -[is_component_of]-> ent036"
+        ]
+      },
+      "rank": 4,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent000"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent049",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent000 -[monitors]-> ent066",
+          "ent066 -[is_component_of]-> ent049"
+        ]
+      },
+      "rank": 5,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent000"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent028",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent003 -[monitors]-> ent011",
+          "ent011 -[is_component_of]-> ent028"
+        ]
+      },
+      "rank": 6,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent003"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent048",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent003 -[monitors]-> ent011",
+          "ent011 -[is_component_of]-> ent048"
+        ]
+      },
+      "rank": 7,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent003"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent051",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent003 -[monitors]-> ent011",
+          "ent011 -[is_component_of]-> ent051"
+        ]
+      },
+      "rank": 8,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent003"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent055",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent003 -[monitors]-> ent011",
+          "ent011 -[is_component_of]-> ent055"
+        ]
+      },
+      "rank": 9,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent003"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent041",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent004 -[monitors]-> ent037",
+          "ent037 -[is_component_of]-> ent041"
+        ]
+      },
+      "rank": 10,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent004"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent065",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent004 -[monitors]-> ent096",
+          "ent096 -[is_component_of]-> ent065"
+        ]
+      },
+      "rank": 11,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent004"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent098",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent004 -[monitors]-> ent096",
+          "ent096 -[is_component_of]-> ent098"
+        ]
+      },
+      "rank": 12,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent004"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent077",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent005 -[monitors]-> ent072",
+          "ent072 -[is_component_of]-> ent077"
+        ]
+      },
+      "rank": 13,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent005"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent047",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent006 -[depends_on]-> ent019",
+          "ent019 -[depends_on]-> ent047"
+        ]
+      },
+      "rank": 14,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent006"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent077",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent006 -[depends_on]-> ent019",
+          "ent019 -[depends_on]-> ent077"
+        ]
+      },
+      "rank": 15,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent006"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent001",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent006 -[monitors]-> ent071",
+          "ent071 -[is_component_of]-> ent001"
+        ]
+      },
+      "rank": 16,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent006"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent041",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent006 -[monitors]-> ent042",
+          "ent042 -[is_component_of]-> ent041"
+        ]
+      },
+      "rank": 17,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent006"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent046",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent006 -[monitors]-> ent071",
+          "ent071 -[is_component_of]-> ent046"
+        ]
+      },
+      "rank": 18,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent006"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent047",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent006 -[monitors]-> ent071",
+          "ent071 -[is_component_of]-> ent047"
+        ]
+      },
+      "rank": 19,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent006"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent086",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent006 -[monitors]-> ent042",
+          "ent042 -[is_component_of]-> ent086"
+        ]
+      },
+      "rank": 20,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent006"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent013",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent007 -[depends_on]-> ent058",
+          "ent058 -[depends_on]-> ent013"
+        ]
+      },
+      "rank": 21,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent007"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent009",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent008 -[depends_on]-> ent097",
+          "ent097 -[depends_on]-> ent009"
+        ]
+      },
+      "rank": 22,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent008"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent031",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent008 -[monitors]-> ent097",
+          "ent097 -[is_component_of]-> ent031"
+        ]
+      },
+      "rank": 23,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent008"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent043",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent008 -[monitors]-> ent097",
+          "ent097 -[is_component_of]-> ent043"
+        ]
+      },
+      "rank": 24,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent008"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent001",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent009 -[depends_on]-> ent038",
+          "ent038 -[depends_on]-> ent001"
+        ]
+      },
+      "rank": 25,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent009"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent007",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent009 -[depends_on]-> ent088",
+          "ent088 -[depends_on]-> ent007"
+        ]
+      },
+      "rank": 26,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent009"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent020",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent009 -[depends_on]-> ent038",
+          "ent038 -[depends_on]-> ent020"
+        ]
+      },
+      "rank": 27,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent009"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent012",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent009 -[monitors]-> ent024",
+          "ent024 -[is_component_of]-> ent012"
+        ]
+      },
+      "rank": 28,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent009"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent094",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent009 -[monitors]-> ent024",
+          "ent024 -[is_component_of]-> ent094"
+        ]
+      },
+      "rank": 29,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent009"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent057",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent010 -[depends_on]-> ent034",
+          "ent034 -[depends_on]-> ent057"
+        ]
+      },
+      "rank": 30,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent010"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent063",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent010 -[depends_on]-> ent034",
+          "ent034 -[depends_on]-> ent063"
+        ]
+      },
+      "rank": 31,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent010"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent083",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent010 -[depends_on]-> ent055",
+          "ent055 -[depends_on]-> ent083"
+        ]
+      },
+      "rank": 32,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent010"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent027",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent011 -[monitors]-> ent095",
+          "ent095 -[is_component_of]-> ent027"
+        ]
+      },
+      "rank": 33,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent011"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent065",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent011 -[monitors]-> ent096",
+          "ent096 -[is_component_of]-> ent065"
+        ]
+      },
+      "rank": 34,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent011"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent098",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent011 -[monitors]-> ent096",
+          "ent096 -[is_component_of]-> ent098"
+        ]
+      },
+      "rank": 35,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent011"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent013",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent012 -[depends_on]-> ent030",
+          "ent030 -[depends_on]-> ent013"
+        ]
+      },
+      "rank": 36,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent012"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent020",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent012 -[depends_on]-> ent030",
+          "ent030 -[depends_on]-> ent020"
+        ]
+      },
+      "rank": 37,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent012"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent032",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent012 -[depends_on]-> ent030",
+          "ent030 -[depends_on]-> ent032"
+        ]
+      },
+      "rank": 38,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent012"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent038",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent012 -[depends_on]-> ent030",
+          "ent030 -[depends_on]-> ent038"
+        ]
+      },
+      "rank": 39,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent012"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent083",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent013 -[depends_on]-> ent055",
+          "ent055 -[depends_on]-> ent083"
+        ]
+      },
+      "rank": 40,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent013"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent018",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent013 -[monitors]-> ent031",
+          "ent031 -[is_component_of]-> ent018"
+        ]
+      },
+      "rank": 41,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent013"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent024",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent013 -[monitors]-> ent073",
+          "ent073 -[is_component_of]-> ent024"
+        ]
+      },
+      "rank": 42,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent013"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent091",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent013 -[monitors]-> ent031",
+          "ent031 -[is_component_of]-> ent091"
+        ]
+      },
+      "rank": 43,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent013"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent094",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent013 -[monitors]-> ent086",
+          "ent086 -[is_component_of]-> ent094"
+        ]
+      },
+      "rank": 44,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent013"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent047",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent014 -[depends_on]-> ent019",
+          "ent019 -[depends_on]-> ent047"
+        ]
+      },
+      "rank": 45,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent014"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent077",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent014 -[depends_on]-> ent019",
+          "ent019 -[depends_on]-> ent077"
+        ]
+      },
+      "rank": 46,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent014"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent054",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent014 -[monitors]-> ent087",
+          "ent087 -[is_component_of]-> ent054"
+        ]
+      },
+      "rank": 47,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent014"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent076",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent014 -[monitors]-> ent087",
+          "ent087 -[is_component_of]-> ent076"
+        ]
+      },
+      "rank": 48,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent014"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent092",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent014 -[monitors]-> ent087",
+          "ent087 -[is_component_of]-> ent092"
+        ]
+      },
+      "rank": 49,
+      "relation": "reachable_monitor",
+      "source_type": "derived",
+      "subject": "ent014"
+    },
+    {
+      "confidence": 1.0,
+      "object": "ent002",
+      "provenance": {
+        "direct_evidence": [],
+        "struct_support": [
+          "ent015 -[depends_on]-> ent025",
+          "ent025 -[depends_on]-> ent002"
+        ]
+      },
+      "rank": 50,
+      "relation": "indirect_dependency",
+      "source_type": "derived",
+      "subject": "ent015"
+    }
+  ],
+  "scale": "1x",
+  "seed": 42,
+  "top_k": 50,
+  "workload": "C"
+}

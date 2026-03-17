@@ -1,7 +1,7 @@
 # Souffle Adapter 总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/souffle`
-- 最后更新：2026-03-06
+- 最后更新：2026-03-17
 - 目标读者：需要理解 Souffle 导出、执行、查询编译链路的开发者
 
 ## 1. 模块职责
@@ -54,6 +54,12 @@
 - core 独立测试
 - 多引擎并存（当前已有 `souffle` 与 `problog`）
 - 引擎实现按 mode 解耦切换
+
+补充边界：
+
+- `Souffle` 仍然只承担结构执行器职责。
+- 当前 `src/factpy_kernel/core/annotation/` 中的 prototype annotation kernel 不属于 adapter 本身的一部分。
+- benchmark / prototype 阶段允许出现“`Souffle` 结构结果 + core 内部 annotation helper”这种组合，但这不改变正式 `Store.evaluate(mode="souffle")` 仍是单引擎 adapter 契约这一事实。
 
 ## 4. 典型工作流
 

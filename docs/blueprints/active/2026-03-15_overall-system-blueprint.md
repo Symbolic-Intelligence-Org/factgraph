@@ -125,6 +125,7 @@
 - `knowledge-ingestion-blueprint`：外部来源 -> normalized candidates / items
 - `semantic-integration-blueprint`：是否以及如何接入 RDF/OWL/SKOS/SHACL/PROV
 - `runtime-governance-blueprint`：evaluate / accept / audit / provenance 的跨层口径
+- `runtime-traceability-explainability-blueprint`：比较 runtime 中 `CandidateSet`、annotation、audit-log、proof-tree / support graph 等承载方式的边界与优先级；当前只作为讨论入口，不预设既定模型
 - `delivery-surface-blueprint`：application/service/sdk 的对外交付面
 
 ## 6. Boundaries And Invariants

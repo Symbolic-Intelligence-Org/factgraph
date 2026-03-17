@@ -1,7 +1,7 @@
 # Core 架构总览（factpy_kernel）
 
 - 适用范围：`src/factpy_kernel/core`
-- 最后更新：2026-03-10
+- 最后更新：2026-03-17
 - 代码基线：`Store.evaluate` 仅支持 `native|souffle|problog`；`Ledger` 为 SQLite write-through cache；`ProjectorAudit` 为 v2 结构
 - 目标读者：需要理解 core 语义边界、关键入口与扩展点的开发者
 
@@ -34,6 +34,7 @@ src/factpy_kernel/core/
   rules/                   # where AST/validator + evaluator + RuleRef 执行
   derivation/              # CandidateSet 生成/接受（含 batch accept_many）
   mapping/                 # mapping 冲突解析与决策
+  annotation/              # internal prototype annotation kernel（A/C workload slice）
 ```
 
 ## 3. 模块职责总览
@@ -53,6 +54,8 @@ src/factpy_kernel/core/
 | `derivation.candidates` | 候选结构与 digest/key 计算 | `CandidateSet`, `make_candidate` |
 | `derivation.accept` | candidate accept 与 batch accept_many | `accept_candidate_set`, `accept_many_candidate_sets` |
 | `mapping.canon` | mapping 冲突解析与 tie-break | `resolve_mapping_predicate` |
+| `annotation._min_max` | internal prototype 的 min-max 路径置信度传播 | `derive_min_max_path_confidence` |
+| `annotation._evidence` | internal prototype 的 Workload C 证据展开 / provenance 重建 / max 聚合 helper | `build_direct_evidence_candidates_proto`, `build_max_evidence_provenance`, `apply_max_evidence_aggregation` |
 | `store.runtime` | `Store` 门面、engine 注册点 | `Store`, `register_engine_evaluator` |
 | `store.evaluation` | `Store.evaluate` 公共入口 | `evaluate_store` |
 | `store.queries` | explain/conflicts/resolve_mapping 查询 | `explain_fact`, `conflicts`, `resolve_mapping` |
@@ -177,6 +180,17 @@ flowchart LR
 
 - `factpy_kernel.adapters.souffle` import 时注册 `souffle`
 - `factpy_kernel.adapters.problog` import 时注册 `problog`
+
+## 8.1 Annotation Prototype Boundary
+
+`src/factpy_kernel/core/annotation/` 当前是 internal / prototype 落点，不属于稳定 public contract。
+
+当前约束：
+
+- 第一轮只承接 benchmark 已验证的 `Workload A + C` annotation 能力
+- 不直接进入 `Store.evaluate(...)` 正式执行路径
+- 不扩张 `CandidateSet`、SDK、service 的稳定接口
+- `tools/benchmarks/workload_*_reference.py` 继续作为 oracle；`core/annotation/*` 作为独立 prototype 实现
 
 ## 9. 必须维持的不变量
 
