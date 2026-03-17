@@ -1,7 +1,7 @@
 # Core Architecture Overview (factpy_kernel)
 
 - Scope: `src/factpy_kernel/core`
-- Last updated: 2026-03-10
+- Last updated: 2026-03-17
 - Code baseline: `Store.evaluate` supports only `native|souffle|problog`; `Ledger` is a SQLite write-through cache; `ProjectorAudit` is v2
 - Audience: developers who need to understand core semantic boundaries, key entrypoints, and extension points
 
@@ -49,11 +49,12 @@ src/factpy_kernel/core/
 | `view.projector` | core fact projection and audit statistics | `project_view_facts`, `project_view_facts_with_audit`, `project_display_facts` |
 | `rules.where_ast*` | where AST parsing and validation | `parse_where_ir_to_ast`, `validate_where_ast` |
 | `rules.where_eval` | where interpreter for the native path | `evaluate_where` |
-| `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef execution | `run_rule` |
+| `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef execution | `run_rule`, `run_rule_with_trace` |
+| `rules._trace` | rule runtime trace carrier and serialization | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict` |
 | `derivation.candidates` | candidate structure and digest/key computation | `CandidateSet`, `make_candidate` |
 | `derivation.accept` | candidate accept and batch accept_many | `accept_candidate_set`, `accept_many_candidate_sets` |
 | `mapping.canon` | mapping conflict resolution and tie-break | `resolve_mapping_predicate` |
-| `store.runtime` | `Store` facade and engine registration | `Store`, `register_engine_evaluator` |
+| `store.runtime` | `Store` facade, engine registration, and default in-process / optional sidecar-backed explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest` |
 | `store.evaluation` | public `Store.evaluate` entrypoint | `evaluate_store` |
 | `store.queries` | explain/conflicts/resolve_mapping queries | `explain_fact`, `conflicts`, `resolve_mapping` |
 | `store.builders` | candidate building, head/entity parsing, value coercion | `candidates_from_bindings`, `entity_candidates_from_bindings` |
@@ -95,15 +96,49 @@ Current `Store.evaluate(...)` modes:
 - `souffle` / `problog`: delegate to registered engine evaluators
 - `python` / `engine`: removed; calls raise `ValueError`
 
+Native derivation now also records a lightweight backref after candidate construction:
+
+- `candidate_id -> support_digest`
+- only for candidates carrying `support_kind="native_binding_v1"`
+- `Store.get_candidate_support_digest(candidate_id)` can recover the digest within the current `Store` instance, after which callers may chain `Store.explain_support(...)` themselves
+- when `Store(..., artifact_sidecar=...)` is configured, the same `support_digest` can also be re-read from later `Store` instances that share the same sidecar root
+
 ```mermaid
 flowchart LR
   A["Store.evaluate(mode='native')"] --> B["view.projector.project_view_facts"]
   B --> C["rules.where_eval.evaluate_where"]
   C --> D["store.builders.*_from_bindings"]
   D --> E["CandidateSet list"]
+  E --> F["Store._candidate_support_index"]
 ```
 
-### 5.3 Accept Flow
+### 5.3 Rule Runtime Flow
+
+`run_rule(...)` and `Store.evaluate(...)` are separate execution paths:
+
+- `run_rule(...)`: keeps the legacy `list[tuple]` contract
+- `run_rule_with_trace(...)`: captures a `RuleTraceArtifact` without breaking old callers
+- `Store.explain_rule_trace(rule_run_id)`: by default dereferences the captured trace in-process; with `artifact_sidecar` configured it can also read back from later `Store` instances sharing the same sidecar root
+
+Current trace semantics:
+
+- both `original_where` and `rewritten_where` are retained
+- `RuleRef` relationships are captured per call site and explicitly marked with `memo_hit`
+- `RuleTraceArtifact` remains separate from derivation `SupportArtifact`
+
+```mermaid
+flowchart LR
+  A["run_rule_with_trace(...)"] --> B["view.projector.project_view_facts"]
+  A --> C["view.projector.project_view_facts_with_witness"]
+  B --> D["rules.rule_ir._run_rule_core"]
+  C --> D
+  D --> E["rules.rule_ir._evaluate_rule (recursive)"]
+  E --> F["RuleTraceArtifact"]
+  F --> G["Store._rule_trace_artifacts"]
+  G --> H["Store.explain_rule_trace(...)"]
+```
+
+### 5.4 Accept Flow
 
 ```mermaid
 flowchart LR
@@ -177,6 +212,14 @@ Current adapter-side behavior:
 
 - importing `factpy_kernel.adapters.souffle` registers `souffle`
 - importing `factpy_kernel.adapters.problog` registers `problog`
+
+Additional note:
+
+- `Store` now maintains two separate in-process explain registries:
+  - `_support_artifacts` for derivation-native support capture
+  - `_rule_trace_artifacts` for `run_rule_with_trace(...)`
+- they intentionally remain separate at the carrier layer for now.
+- when `artifact_sidecar` is configured, lookup misses rehydrate these registries from the sidecar into the current in-memory dicts; without it, the behavior remains purely in-process.
 
 ## 9. Invariants That Must Hold
 

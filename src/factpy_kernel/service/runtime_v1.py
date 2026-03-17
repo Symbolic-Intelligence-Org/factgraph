@@ -20,9 +20,10 @@ from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptResult
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
 from factpy_kernel.core.mapping.canon import MappingConflictError, MappingResolution
-from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
+from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule, run_rule_with_trace
 from factpy_kernel.core.schema.schema_ir import schema_digest
 from factpy_kernel.core.store import builders
+from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
 from factpy_kernel.core.store.types import ViewSpec
@@ -125,13 +126,15 @@ def open_runtime_session(dto: dict[str, Any]) -> dict[str, Any]:
         schema_ir, registry_root = _resolve_schema_ir(dto)
         digest = schema_digest(schema_ir)
         ledger_path = _optional_str(dto.get("ledger_path"), path="$.ledger_path")
+        artifact_store_root = _optional_str(dto.get("artifact_store_root"), path="$.artifact_store_root")
+        artifact_sidecar = FileArtifactSidecar(artifact_store_root) if artifact_store_root is not None else None
         ledger = _open_ledger(ledger_path)
         try:
             _bind_ledger_schema(ledger, digest)
         except Exception:
             ledger.close()
             raise
-        store = Store(schema_ir=schema_ir, ledger=ledger)
+        store = Store(schema_ir=schema_ir, ledger=ledger, artifact_sidecar=artifact_sidecar)
         session = _SESSIONS.open(
             store=store,
             ledger_path=ledger_path,
@@ -257,6 +260,50 @@ def explain_runtime_fact(session_id: str, dto: dict[str, Any]) -> dict[str, Any]
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_explain_fact")
+        return error_response([err])
+
+
+def explain_runtime_support(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        support_digest = _require_non_empty_str(dto.get("support_digest"), path="$.support_digest")
+        explain = session.store.explain_support(support_digest)
+        if explain is None:
+            raise _runtime_explain_not_found(
+                handle_kind="support_digest",
+                handle_value=support_digest,
+                path="$.support_digest",
+            )
+        return ok_response(
+            meta={"support_digest": support_digest},
+            explain=_to_jsonable(explain),
+        )
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_support")
+        return error_response([err])
+
+
+def explain_runtime_rule_trace(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        rule_run_id = _require_non_empty_str(dto.get("rule_run_id"), path="$.rule_run_id")
+        explain = session.store.explain_rule_trace(rule_run_id)
+        if explain is None:
+            raise _runtime_explain_not_found(
+                handle_kind="rule_run_id",
+                handle_value=rule_run_id,
+                path="$.rule_run_id",
+            )
+        return ok_response(
+            meta={"rule_run_id": rule_run_id},
+            explain=_to_jsonable(explain),
+        )
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_rule_trace")
         return error_response([err])
 
 
@@ -448,20 +495,37 @@ def run_runtime_rule(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
                 kind="shape",
                 path="$.temporal_view",
             )
+        capture_trace = dto.get("capture_trace", False)
+        if not isinstance(capture_trace, bool):
+            raise facade_error("capture_trace must be bool", kind="shape", path="$.capture_trace")
         compiled = compile_authoring_rule_v1(normalized_rule, schema_ir=session.store.schema_ir)
         active_registry = RuleRegistry()
         registry_root = _resolve_rule_registry_root(session, dto)
         if registry_root is not None:
             _load_registered_rules(active_registry, registry_root)
+        rule_spec = RuleSpec(
+            rule_id=compiled["rule_id"],
+            version=compiled["version"],
+            select_vars=list(compiled["select_vars"]),
+            where=list(compiled["where"]),
+            expose=bool(compiled.get("expose", False)),
+        )
+        if capture_trace:
+            traced = run_rule_with_trace(
+                session.store,
+                rule_spec,
+                active_registry,
+            )
+            result: dict[str, Any] = {
+                "rule_id": compiled["rule_id"],
+                "version": compiled["version"],
+                "rows": [_jsonable_row(row) for row in traced.rows],
+                "trace": {"rule_run_id": traced.rule_run_id},
+            }
+            return ok_response(result=result)
         rows = run_rule(
             session.store,
-            RuleSpec(
-                rule_id=compiled["rule_id"],
-                version=compiled["version"],
-                select_vars=list(compiled["select_vars"]),
-                where=list(compiled["where"]),
-                expose=bool(compiled.get("expose", False)),
-            ),
+            rule_spec,
             active_registry,
         )
         return ok_response(
@@ -689,6 +753,15 @@ def _runtime_exception_to_error(exc: Exception, *, default_kind: str) -> dict[st
         else:
             err["kind"] = default_kind
     return err
+
+
+def _runtime_explain_not_found(*, handle_kind: str, handle_value: str, path: str) -> Exception:
+    return facade_error(
+        f"runtime explain artifact not found for {handle_kind}: {handle_value}",
+        kind="runtime_explain_not_found",
+        path=path,
+        details={handle_kind: handle_value},
+    )
 
 
 def _session_to_dict(session: RuntimeSession) -> dict[str, Any]:

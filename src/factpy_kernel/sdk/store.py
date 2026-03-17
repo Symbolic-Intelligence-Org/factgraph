@@ -17,6 +17,7 @@ from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
 from factpy_kernel.core.store._evaluate import evaluate_store
+from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar
 from factpy_kernel.adapters.souffle.runner import run_package
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Ledger
@@ -83,6 +84,7 @@ class SDKStore:
         *,
         store: Store | None = None,
         schema_ir: dict | None = None,
+        artifact_store_root: str | None = None,
         default_row_format: str | None = None,
     ) -> None:
         if not isinstance(classes, list) or not classes:
@@ -94,7 +96,14 @@ class SDKStore:
 
         if store is not None and schema_ir is not None and store.schema_ir is not schema_ir:
             raise SDKStoreError("provide either store or schema_ir (or matching store.schema_ir)")
-        self._store = store if store is not None else Store(schema_ir=schema_ir or compile_schema_from_classes(self._classes))
+        if store is not None:
+            self._store = store
+        else:
+            _sidecar = FileArtifactSidecar(artifact_store_root) if artifact_store_root is not None else None
+            self._store = Store(
+                schema_ir=schema_ir or compile_schema_from_classes(self._classes),
+                artifact_sidecar=_sidecar,
+            )
         self._schema_ir = self._store.schema_ir
         self._schema_digest = schema_digest(self._schema_ir)
         self._application_schema_index = build_schema_index(self._schema_ir)
@@ -115,6 +124,7 @@ class SDKStore:
         *,
         ledger: Ledger | None = None,
         ledger_path: str | None = None,
+        artifact_store_root: str | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
         if ledger is not None and ledger_path is not None:
@@ -137,9 +147,10 @@ class SDKStore:
                     "Use the same Entity classes that were used when this ledger was created."
                 )
 
+        _sidecar = FileArtifactSidecar(artifact_store_root) if artifact_store_root is not None else None
         return cls(
             classes,
-            store=Store(schema_ir=schema_ir, ledger=ledger),
+            store=Store(schema_ir=schema_ir, ledger=ledger, artifact_sidecar=_sidecar),
             default_row_format=default_row_format,
         )
 

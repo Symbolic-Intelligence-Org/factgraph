@@ -26,10 +26,21 @@ sdk = SDKStore.from_schema_classes(
 )
 ```
 
+如需让 explain artifact 也能跨后续 `SDKStore` 实例读回，可同时指定：
+
+```python
+sdk = SDKStore.from_schema_classes(
+    [User, Country, LivesIn],
+    ledger_path="./data/ledger.db",
+    artifact_store_root="./data/artifacts",
+)
+```
+
 稳定合约：
 - `classes` 必须是非空 `list[Entity 子类]`；`from_schema_classes(...)` / `schema_preflight_from_classes(...)` 路径抛 `SDKSchemaError`，`SDKStore(...)` 构造器路径抛 `SDKStoreError`。
 - `ledger` 与 `ledger_path` 互斥。
 - `ledger_path` 在打开/创建 ledger 时即记录 `schema_digest`，后续恢复会做 digest 校验。
+- `artifact_store_root` 为可选 `str`；提供后会启用 sidecar-backed explain artifact readback，省略则保持默认的进程内 explain registry。
 - `default_row_format` 仅影响 `sdk.run(rule, ...)`；合法值为 `"tuple"` / `"dict"`（默认 `"dict"`）。
 - `FACTPY_ROW_FORMAT` 在 `SDKStore` 初始化时读取并缓存；不是每次 `run()` 动态读取。
 - 解析为 `"tuple"` 时会触发 `DeprecationWarning`，建议统一改为 `"dict"`。

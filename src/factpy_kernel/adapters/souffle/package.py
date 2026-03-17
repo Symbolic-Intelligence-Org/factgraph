@@ -21,7 +21,9 @@ from factpy_kernel.adapters.souffle.where_compile import (
     compile_where_to_query_dl,
     query_rel_for_where,
 )
+from factpy_kernel.core.rules._trace import rule_trace_artifact_to_dict
 from factpy_kernel.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
+from factpy_kernel.core.store._support import support_artifact_to_dict
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.adapters.souffle.souffle_view_gen import generate_view_dl
 
@@ -122,19 +124,27 @@ def export_package(
     audit_files: dict[str, str] = {}
     if options.package_kind == "audit":
         run_ledger_rows, candidate_ledger_rows, accept_write_ledger_rows = _build_audit_ledgers(store)
+        support_artifact_rows = _build_support_artifact_rows(store)
+        rule_trace_artifact_rows = _build_rule_trace_artifact_rows(store)
         run_ledger_path = audit_dir / "run_ledger.jsonl"
         candidate_ledger_path = audit_dir / "candidate_ledger.jsonl"
         accept_write_ledger_path = audit_dir / "accept_write_ledger.jsonl"
         accept_failed_path = audit_dir / "accept_failed.jsonl"
         decision_log_path = audit_dir / "decision_log.jsonl"
+        support_artifacts_path = audit_dir / "support_artifacts.jsonl"
+        rule_trace_artifacts_path = audit_dir / "rule_trace_artifacts.jsonl"
 
         _write_jsonl(candidate_ledger_path, candidate_ledger_rows)
         _write_jsonl(accept_write_ledger_path, accept_write_ledger_rows)
+        _write_jsonl(support_artifacts_path, support_artifact_rows)
+        _write_jsonl(rule_trace_artifacts_path, rule_trace_artifact_rows)
 
         audit_files["run_ledger"] = "audit/run_ledger.jsonl"
         audit_files["candidate_ledger"] = "audit/candidate_ledger.jsonl"
         audit_files["accept_write_ledger"] = "audit/accept_write_ledger.jsonl"
         audit_files["accept_failed"] = "audit/accept_failed.jsonl"
+        audit_files["support_artifacts"] = "audit/support_artifacts.jsonl"
+        audit_files["rule_trace_artifacts"] = "audit/rule_trace_artifacts.jsonl"
 
         mapping_audit = _build_mapping_audit_payload(store, options.policy_mode)
         mapping_audit_path = audit_dir / "mapping_resolution.json"
@@ -478,6 +488,25 @@ def _build_audit_ledgers(
     accept_write_rows = _build_accept_write_ledger_rows(store)
     candidate_rows = _build_candidate_ledger_rows(accept_write_rows)
     return run_rows, candidate_rows, accept_write_rows
+
+
+def _build_support_artifact_rows(store: Store) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for support_digest, artifact in store._support_artifacts.items():
+        rows.append(
+            {
+                "support_digest": support_digest,
+                **support_artifact_to_dict(artifact),
+            }
+        )
+    return sorted(rows, key=lambda row: str(row.get("support_digest")))
+
+
+def _build_rule_trace_artifact_rows(store: Store) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for _rule_run_id, artifact in store._rule_trace_artifacts.items():
+        rows.append(rule_trace_artifact_to_dict(artifact))
+    return sorted(rows, key=lambda row: str(row.get("rule_run_id")))
 
 
 def _build_candidate_ledger_rows(accept_write_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

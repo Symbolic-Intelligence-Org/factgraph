@@ -52,7 +52,7 @@
 
 ## 2. `SDKStore` 公开方法
 
-- `from_schema_classes(..., ledger=None, ledger_path=None, default_row_format=None)`
+- `from_schema_classes(..., ledger=None, ledger_path=None, artifact_store_root=None, default_row_format=None)`
 - `batch(...)`
 - `get(...)`
 - `find(...)`
@@ -76,6 +76,7 @@
 
 关键边界：
 - `from_schema_classes(...)` / `schema_preflight_from_classes(...)` 的 `classes` 校验错误抛 `SDKSchemaError`（`SDKStore(...)` 构造器路径对应为 `SDKStoreError`）。
+- `SDKStore.__init__(..., artifact_store_root=None)` 与 `from_schema_classes(..., artifact_store_root=None)` 都支持 sidecar-backed explain artifact readback；若已显式传入 `store=...`，构造器上的 `artifact_store_root` 会被忽略。
 - `run(...)` 支持 Rule/Query，不支持 Derivation。
 - `run(rule, view=...)` 支持具名/内联视图；Query 路径不支持 `view` 与 `return_display_meta`。
 - `evaluate(...)` 显式拒绝 `view` 与 `temporal_view`。

@@ -6,6 +6,8 @@
 
 - `docs/architecture_principles.md`
   - 稳定设计哲学、系统边界、长期方向。
+- `docs/references/`
+  - 外部比较、历史桥接和工作参考材料；可作为 blueprint 输入，但不承担当前实现真相。
 - `docs/blueprints/active/`
   - 正在推进的任务蓝图与审计记录。
 - `src/factpy_kernel/*/docs/`
@@ -92,10 +94,11 @@
 1. 在 `active/` 中创建 blueprint 和 audit。
 2. 用 `templates/` 中的模板起草。
 3. 收口范围后把状态改为 `scoped`。
-4. 实现期间把关键决策和 scope 变化写入 audit。
-5. 代码完成后更新受影响模块的 `docs/`。
-6. 若新增持久文档入口，更新 [docs/README.md](/Users/zhenzhili/hnsm-backend/docs/README.md)。
-7. 补齐 `Outcome / Deviations`，再归档到 `archive/`。
+4. 若任务依赖外部比较、历史桥接或工作参考材料，把这些输入放入 `docs/references/` 并在 blueprint 中明确引用。
+5. 实现期间把关键决策和 scope 变化写入 audit。
+6. 代码完成后更新受影响模块的 `docs/`。
+7. 若新增持久文档入口，更新 [docs/README.md](/Users/zhenzhili/hnsm-backend/docs/README.md)。
+8. 补齐 `Outcome / Deviations`，再归档到 `archive/`。
 
 ## 模板
 

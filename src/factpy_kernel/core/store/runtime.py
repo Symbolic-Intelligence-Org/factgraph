@@ -10,9 +10,14 @@ from factpy_kernel.core.evidence.write_protocol import now_epoch_nanos
 from factpy_kernel.core.mapping.canon import MappingResolution
 from factpy_kernel.core.protocol.digests import sha256_token
 from factpy_kernel.core.protocol.tup_v1 import canonical_bytes_tup_v1
+from factpy_kernel.core.rules._trace import RuleTraceArtifact
 from factpy_kernel.core.rules.where_eval import WhereValidationError
+from factpy_kernel.core.store._explain_rule_trace import render_rule_trace_artifact
 from factpy_kernel.core.schema.schema_ir import ensure_schema_ir
 from factpy_kernel.core.store import _accept as _store_accept
+from factpy_kernel.core.store._artifact_sidecar import ArtifactSidecar
+from factpy_kernel.core.store._explain_support import render_support_artifact
+from factpy_kernel.core.store._support import SupportArtifact
 from factpy_kernel.core.store.evaluation import evaluate_store
 from factpy_kernel.core.store.ledger import Ledger
 from factpy_kernel.core.store.queries import conflicts as store_conflicts
@@ -57,12 +62,17 @@ class Store:
         ledger: Ledger | None = None,
         *,
         engine_evaluator: EngineEvaluatorFn | None = None,
+        artifact_sidecar: ArtifactSidecar | None = None,
     ) -> None:
         if not isinstance(schema_ir, dict):
             raise ValueError("schema_ir must be dict")
         self.schema_ir = ensure_schema_ir(schema_ir)
         self.ledger = ledger if ledger is not None else Ledger()
         self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
+        self._artifact_sidecar = artifact_sidecar
+        self._support_artifacts: dict[str, SupportArtifact] = {}
+        self._candidate_support_index: dict[str, str] = {}
+        self._rule_trace_artifacts: dict[str, RuleTraceArtifact] = {}
         if engine_evaluator is not None:
             self._engine_overrides["souffle"] = engine_evaluator
 
@@ -74,6 +84,97 @@ class Store:
             self._engine_overrides.pop("souffle", None)
         else:
             self._engine_overrides["souffle"] = evaluator
+
+    def _remember_support_artifact(
+        self,
+        support_digest: str,
+        artifact: SupportArtifact,
+    ) -> None:
+        if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
+            raise ValueError("support_digest must be sha256 token")
+        if not isinstance(artifact, SupportArtifact):
+            raise ValueError("artifact must be SupportArtifact")
+        existing = self._support_artifacts.get(support_digest)
+        if existing is None:
+            if self._artifact_sidecar is not None:
+                self._artifact_sidecar.write_support(support_digest, artifact)
+            self._support_artifacts[support_digest] = artifact
+            return
+        if existing != artifact:
+            raise ValueError("support_digest collision for different SupportArtifact")
+
+    def _lookup_support_artifact(
+        self,
+        support_digest: str,
+    ) -> SupportArtifact | None:
+        if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
+            raise ValueError("support_digest must be sha256 token")
+        artifact = self._support_artifacts.get(support_digest)
+        if artifact is not None:
+            return artifact
+        if self._artifact_sidecar is None:
+            return None
+        artifact = self._artifact_sidecar.read_support(support_digest)
+        if artifact is None:
+            return None
+        self._support_artifacts[support_digest] = artifact
+        return artifact
+
+    def _remember_candidate_support(
+        self,
+        candidate_id: str,
+        support_digest: str,
+    ) -> None:
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise ValueError("candidate_id must be non-empty string")
+        if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
+            raise ValueError("support_digest must be sha256 token")
+        if candidate_id in self._candidate_support_index:
+            return
+        self._candidate_support_index[candidate_id] = support_digest
+
+    def _lookup_candidate_support(
+        self,
+        candidate_id: str,
+    ) -> str | None:
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise ValueError("candidate_id must be non-empty string")
+        return self._candidate_support_index.get(candidate_id)
+
+    def _remember_rule_trace_artifact(
+        self,
+        rule_run_id: str,
+        artifact: RuleTraceArtifact,
+    ) -> None:
+        if not isinstance(rule_run_id, str) or not rule_run_id:
+            raise ValueError("rule_run_id must be non-empty string")
+        if not isinstance(artifact, RuleTraceArtifact):
+            raise ValueError("artifact must be RuleTraceArtifact")
+        existing = self._rule_trace_artifacts.get(rule_run_id)
+        if existing is None:
+            if self._artifact_sidecar is not None:
+                self._artifact_sidecar.write_rule_trace(rule_run_id, artifact)
+            self._rule_trace_artifacts[rule_run_id] = artifact
+            return
+        if existing != artifact:
+            raise ValueError("rule_run_id collision for different RuleTraceArtifact")
+
+    def _lookup_rule_trace_artifact(
+        self,
+        rule_run_id: str,
+    ) -> RuleTraceArtifact | None:
+        if not isinstance(rule_run_id, str) or not rule_run_id:
+            raise ValueError("rule_run_id must be non-empty string")
+        artifact = self._rule_trace_artifacts.get(rule_run_id)
+        if artifact is not None:
+            return artifact
+        if self._artifact_sidecar is None:
+            return None
+        artifact = self._artifact_sidecar.read_rule_trace(rule_run_id)
+        if artifact is None:
+            return None
+        self._rule_trace_artifacts[rule_run_id] = artifact
+        return artifact
 
     def evaluate(
         self,
@@ -198,6 +299,21 @@ class Store:
             mode=mode,
             idempotent_duplicate_ok=idempotent_duplicate_ok,
         )
+
+    def explain_support(self, support_digest: str) -> dict[str, Any] | None:
+        artifact = self._lookup_support_artifact(support_digest)
+        if artifact is None:
+            return None
+        return render_support_artifact(artifact)
+
+    def get_candidate_support_digest(self, candidate_id: str) -> str | None:
+        return self._lookup_candidate_support(candidate_id)
+
+    def explain_rule_trace(self, rule_run_id: str) -> dict[str, Any] | None:
+        artifact = self._lookup_rule_trace_artifact(rule_run_id)
+        if artifact is None:
+            return None
+        return render_rule_trace_artifact(artifact)
 
     def explain_fact(self, pred_id: str, e_ref: str, *val_atoms: Any) -> dict[str, Any]:
         return store_explain_fact(self, pred_id, e_ref, *val_atoms)

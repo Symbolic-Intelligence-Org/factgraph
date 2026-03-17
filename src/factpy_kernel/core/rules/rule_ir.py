@@ -2,10 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
+from factpy_kernel.core.rules._trace import (
+    RuleRunResult,
+    RuleTraceArtifact,
+    RuleTraceCaptureContext,
+    RuleTraceInvocation,
+    RuleTraceNonFactStep,
+    RuleTracePredWitness,
+)
+from factpy_kernel.core.store._support import ProjectedFact, make_non_fact_step_key, make_pred_atom_key
 from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_where
 from factpy_kernel.core.store.runtime import Store
-from factpy_kernel.core.view.projector import project_view_facts
+from factpy_kernel.core.view.projector import project_view_facts, project_view_facts_with_witness
 
 
 class RuleCompileError(Exception):
@@ -67,13 +77,51 @@ def run_rule(
     base_view_facts = project_view_facts(store.ledger, store.schema_ir)
     memo_rows: dict[tuple[str, str], list[tuple[Any, ...]]] = {}
     stack: set[tuple[str, str]] = set()
-    return _evaluate_rule(
+    return _run_rule_core(
         rule_spec,
         registry,
         base_view_facts,
+        None,
         memo_rows,
         stack,
     )
+
+
+def run_rule_with_trace(
+    store: Store,
+    rule_spec: RuleSpec,
+    registry: RuleRegistry,
+) -> RuleRunResult:
+    if not isinstance(store, Store):
+        raise RuleCompileError("store must be Store")
+    if not isinstance(rule_spec, RuleSpec):
+        raise RuleCompileError("rule_spec must be RuleSpec")
+    if not isinstance(registry, RuleRegistry):
+        raise RuleCompileError("registry must be RuleRegistry")
+    base_view_facts = project_view_facts(store.ledger, store.schema_ir)
+    base_witness_facts = project_view_facts_with_witness(store.ledger, store.schema_ir)
+    memo_rows: dict[tuple[str, str], list[tuple[Any, ...]]] = {}
+    stack: set[tuple[str, str]] = set()
+    trace_ctx = RuleTraceCaptureContext(rule_run_id=uuid4().hex)
+    rows = _run_rule_core(
+        rule_spec,
+        registry,
+        base_view_facts,
+        base_witness_facts,
+        memo_rows,
+        stack,
+        trace_ctx=trace_ctx,
+    )
+    artifact = RuleTraceArtifact(
+        rule_run_id=trace_ctx.rule_run_id,
+        root_rule_id=rule_spec.rule_id,
+        root_version=rule_spec.version,
+        select_vars=tuple(rule_spec.select_vars),
+        invocations=tuple(trace_ctx.invocations),
+        root_rows=tuple(rows),
+    )
+    store._remember_rule_trace_artifact(trace_ctx.rule_run_id, artifact)
+    return RuleRunResult(rule_run_id=trace_ctx.rule_run_id, rows=rows)
 
 
 def internal_rule_pred_id(rule_id: str, version: str) -> str:
@@ -92,27 +140,66 @@ def _sanitize(text: str) -> str:
     return "".join(out)
 
 
+def _run_rule_core(
+    rule_spec: RuleSpec,
+    registry: RuleRegistry,
+    base_view_facts: dict[str, list[tuple[Any, ...]]],
+    base_witness_facts: dict[str, list[ProjectedFact]] | None,
+    memo_rows: dict[tuple[str, str], list[tuple[Any, ...]]],
+    stack: set[tuple[str, str]],
+    *,
+    trace_ctx: RuleTraceCaptureContext | None = None,
+) -> list[tuple[Any, ...]]:
+    return _evaluate_rule(
+        rule_spec,
+        registry,
+        base_view_facts,
+        base_witness_facts,
+        memo_rows,
+        stack,
+        trace_ctx=trace_ctx,
+        parent_invocation_id=None,
+    )
+
+
 def _evaluate_rule(
     rule_spec: RuleSpec,
     registry: RuleRegistry,
     base_view_facts: dict[str, list[tuple[Any, ...]]],
+    base_witness_facts: dict[str, list[ProjectedFact]] | None,
     memo_rows: dict[tuple[str, str], list[tuple[Any, ...]]],
     stack: set[tuple[str, str]],
+    *,
+    trace_ctx: RuleTraceCaptureContext | None = None,
+    parent_invocation_id: str | None = None,
 ) -> list[tuple[Any, ...]]:
     key = (rule_spec.rule_id, rule_spec.version)
     if key in memo_rows:
-        return memo_rows[key]
+        rows = memo_rows[key]
+        if trace_ctx is not None:
+            _append_rule_trace_memo_hit(
+                trace_ctx,
+                rule_spec=rule_spec,
+                key=key,
+                parent_invocation_id=parent_invocation_id,
+                rows=rows,
+            )
+        return rows
     if key in stack:
         raise RuleCompileError(f"RuleRef cycle detected at {rule_spec.rule_id}@{rule_spec.version}")
 
+    invocation_id = trace_ctx.next_invocation_id() if trace_ctx is not None else None
     stack.add(key)
     try:
         rewritten_where, ref_overlay = _rewrite_where_rule_refs(
             rule_spec.where,
             registry,
             base_view_facts,
+            base_witness_facts,
             memo_rows,
             stack,
+            trace_ctx=trace_ctx,
+            parent_invocation_id=invocation_id,
         )
         view_facts = dict(base_view_facts)
         for (dep_rule_id, dep_version), dep_rows in memo_rows.items():
@@ -130,6 +217,27 @@ def _evaluate_rule(
         rows = _rows_from_bindings(bindings, rule_spec.select_vars)
         if rule_spec.expose:
             memo_rows[key] = rows
+        if trace_ctx is not None and invocation_id is not None:
+            pred_witnesses, non_fact_steps = _build_rule_trace_witnesses(
+                original_where=rule_spec.where,
+                bindings=bindings,
+                base_witness_facts=base_witness_facts,
+            )
+            invocation = RuleTraceInvocation(
+                invocation_id=invocation_id,
+                parent_invocation_id=parent_invocation_id,
+                rule_id=rule_spec.rule_id,
+                version=rule_spec.version,
+                memo_hit=False,
+                memo_source_invocation_id=None,
+                original_where=_to_jsonable_where(rule_spec.where),
+                rewritten_where=_to_jsonable_where(rewritten_where),
+                bindings=tuple(_normalize_rule_binding(binding) for binding in bindings),
+                output_rows=tuple(rows),
+                pred_witnesses=pred_witnesses,
+                non_fact_steps=non_fact_steps,
+            )
+            trace_ctx.append_invocation(invocation, primary_key=key)
         return rows
     finally:
         stack.remove(key)
@@ -139,8 +247,12 @@ def _rewrite_where_rule_refs(
     where: list[Any],
     registry: RuleRegistry,
     base_view_facts: dict[str, list[tuple[Any, ...]]],
+    base_witness_facts: dict[str, list[ProjectedFact]] | None,
     memo_rows: dict[tuple[str, str], list[tuple[Any, ...]]],
     stack: set[tuple[str, str]],
+    *,
+    trace_ctx: RuleTraceCaptureContext | None = None,
+    parent_invocation_id: str | None = None,
 ) -> tuple[list[Any], dict[str, list[tuple[Any, ...]]]]:
     overlay: dict[str, list[tuple[Any, ...]]] = {}
 
@@ -166,7 +278,16 @@ def _rewrite_where_rule_refs(
             raise RuleCompileError(
                 f"RuleRef arity mismatch for {rule_id}@{version}: expected {len(ref_spec.select_vars)}, got {len(terms)}"
             )
-        rows = _evaluate_rule(ref_spec, registry, base_view_facts, memo_rows, stack)
+        rows = _evaluate_rule(
+            ref_spec,
+            registry,
+            base_view_facts,
+            base_witness_facts,
+            memo_rows,
+            stack,
+            trace_ctx=trace_ctx,
+            parent_invocation_id=parent_invocation_id,
+        )
         pred_id = internal_rule_pred_id(rule_id, version)
         overlay[pred_id] = rows
         return ("pred", pred_id, terms)
@@ -195,3 +316,174 @@ def _rows_from_bindings(bindings: list[dict[str, Any]], select_vars: list[str]) 
 
     dedup = sorted(set(rows), key=lambda row: tuple(str(cell) for cell in row))
     return dedup
+
+
+def _append_rule_trace_memo_hit(
+    trace_ctx: RuleTraceCaptureContext,
+    *,
+    rule_spec: RuleSpec,
+    key: tuple[str, str],
+    parent_invocation_id: str | None,
+    rows: list[tuple[Any, ...]],
+) -> None:
+    source_invocation_id = trace_ctx.primary_invocation_by_rule_key.get(key)
+    source_invocation = trace_ctx.invocation_by_id.get(source_invocation_id) if source_invocation_id is not None else None
+    invocation = RuleTraceInvocation(
+        invocation_id=trace_ctx.next_invocation_id(),
+        parent_invocation_id=parent_invocation_id,
+        rule_id=rule_spec.rule_id,
+        version=rule_spec.version,
+        memo_hit=True,
+        memo_source_invocation_id=source_invocation_id,
+        original_where=(
+            source_invocation.original_where if source_invocation is not None else _to_jsonable_where(rule_spec.where)
+        ),
+        rewritten_where=(
+            source_invocation.rewritten_where if source_invocation is not None else _to_jsonable_where(rule_spec.where)
+        ),
+        bindings=source_invocation.bindings if source_invocation is not None else (),
+        output_rows=tuple(rows),
+        pred_witnesses=source_invocation.pred_witnesses if source_invocation is not None else (),
+        non_fact_steps=source_invocation.non_fact_steps if source_invocation is not None else (),
+    )
+    trace_ctx.append_invocation(invocation)
+
+
+def _build_rule_trace_witnesses(
+    *,
+    original_where: list[Any],
+    bindings: list[dict[str, Any]],
+    base_witness_facts: dict[str, list[ProjectedFact]] | None,
+) -> tuple[tuple[RuleTracePredWitness, ...], tuple[RuleTraceNonFactStep, ...]]:
+    if base_witness_facts is None:
+        return (), ()
+    branches = _normalize_where_branches(original_where)
+    pred_witnesses: list[RuleTracePredWitness] = []
+    non_fact_steps: list[RuleTraceNonFactStep] = []
+    for binding_index, binding in enumerate(bindings):
+        for branch_index, branch in enumerate(branches):
+            for atom_index, atom in enumerate(branch):
+                if not isinstance(atom, tuple) or not atom:
+                    continue
+                tag = atom[0]
+                if tag == "pred":
+                    witness = _build_rule_trace_pred_witness(
+                        atom=atom,
+                        branch_index=branch_index,
+                        atom_index=atom_index,
+                        binding_index=binding_index,
+                        binding=binding,
+                        base_witness_facts=base_witness_facts,
+                    )
+                    if witness is not None:
+                        pred_witnesses.append(witness)
+                    continue
+                if tag == "ruleref":
+                    continue
+                step = _build_rule_trace_non_fact_step(
+                    atom=atom,
+                    branch_index=branch_index,
+                    atom_index=atom_index,
+                    binding_index=binding_index,
+                    binding=binding,
+                )
+                if step is not None:
+                    non_fact_steps.append(step)
+    return (
+        tuple(sorted(pred_witnesses, key=lambda item: (item.binding_index, item.pred_atom_key))),
+        tuple(sorted(non_fact_steps, key=lambda item: (item.binding_index, item.step_key))),
+    )
+
+
+def _build_rule_trace_pred_witness(
+    *,
+    atom: tuple[Any, ...],
+    branch_index: int,
+    atom_index: int,
+    binding_index: int,
+    binding: dict[str, Any],
+    base_witness_facts: dict[str, list[ProjectedFact]],
+) -> RuleTracePredWitness | None:
+    if len(atom) != 3:
+        return None
+    _, pred_id, terms = atom
+    if not isinstance(pred_id, str) or not pred_id:
+        return None
+    if not isinstance(terms, list):
+        return None
+    grounded_terms = [_resolve_binding_term(term, binding) for term in terms]
+    matches: list[str] = []
+    for projected in base_witness_facts.get(pred_id, []):
+        if list(projected.fact_tuple) == grounded_terms:
+            matches.append(projected.asrt_id)
+    return RuleTracePredWitness(
+        binding_index=binding_index,
+        pred_atom_key=make_pred_atom_key(branch_index, atom_index, pred_id),
+        asrt_ids=tuple(sorted(set(matches))),
+    )
+
+
+def _build_rule_trace_non_fact_step(
+    *,
+    atom: tuple[Any, ...],
+    branch_index: int,
+    atom_index: int,
+    binding_index: int,
+    binding: dict[str, Any],
+) -> RuleTraceNonFactStep | None:
+    if not atom:
+        return None
+    tag = atom[0]
+    if not isinstance(tag, str) or tag in {"pred", "ruleref"}:
+        return None
+    status = "no_match" if tag == "not" else "satisfied"
+    return RuleTraceNonFactStep(
+        binding_index=binding_index,
+        step_key=make_non_fact_step_key(branch_index, atom_index, tag),
+        kind=tag,
+        status=status,
+        details=tuple(
+            sorted(
+                [
+                    ("atom", _to_jsonable_where(atom)),
+                    ("binding", [[key, value] for key, value in _normalize_rule_binding(binding)]),
+                ],
+                key=lambda item: item[0],
+            )
+        ),
+    )
+
+
+def _normalize_where_branches(where: list[Any]) -> list[list[Any]]:
+    if all(isinstance(item, tuple) for item in where):
+        return [list(where)]
+    if all(isinstance(item, list) for item in where):
+        return [list(branch) for branch in where if isinstance(branch, list)]
+    return [list(where)]
+
+
+def _normalize_rule_binding(binding: dict[str, Any]) -> tuple[tuple[str, Any], ...]:
+    items: list[tuple[str, Any]] = []
+    for key, value in binding.items():
+        if not isinstance(key, str) or not key.startswith("$"):
+            raise RuleCompileError("binding keys must be '$'-prefixed variable names")
+        items.append((key, value))
+    return tuple(sorted(items, key=lambda item: item[0]))
+
+
+def _resolve_binding_term(term: Any, binding: dict[str, Any]) -> Any:
+    if isinstance(term, str) and term.startswith("$"):
+        return binding.get(term)
+    return term
+
+
+def _to_jsonable_where(value: Any) -> Any:
+    if isinstance(value, tuple):
+        return [_to_jsonable_where(item) for item in value]
+    if isinstance(value, list):
+        return [_to_jsonable_where(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _to_jsonable_where(item) for key, item in value.items()}
+    if isinstance(value, bytes):
+        return {"__bytes_hex__": value.hex()}
+    return value

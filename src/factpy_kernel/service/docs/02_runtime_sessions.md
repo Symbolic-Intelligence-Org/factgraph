@@ -70,7 +70,8 @@
     },
     "generated_at": "2026-01-01T00:00:00Z"
   },
-  "ledger_path": "/tmp/runtime/ledger.db"
+  "ledger_path": "/tmp/runtime/ledger.db",
+  "artifact_store_root": "/tmp/runtime/artifacts"
 }
 ```
 
@@ -79,7 +80,8 @@
 ```json
 {
   "registry_root": "/tmp/registry",
-  "ledger_path": "/tmp/runtime/ledger.db"
+  "ledger_path": "/tmp/runtime/ledger.db",
+  "artifact_store_root": "/tmp/runtime/artifacts"
 }
 ```
 
@@ -111,6 +113,8 @@
 - `schema_ir` 与 `registry_root` 二选一，不能同时提供。
 - 两者也不能同时缺失。
 - `ledger_path` 可省略；省略时使用进程内临时 ledger。
+- `artifact_store_root` 可省略；省略时 explain artifact 仍保持 session/process-local 语义。
+- 提供 `artifact_store_root` 时，service 会为该 session 构造 sidecar carrier；目录在第一次 artifact durable write 时按需创建。
 - 当 `ledger_path` 指向已有 ledger 时，service 会校验其中保存的 `schema_digest` 是否与本次 schema 一致。
 - 若同一 `ledger_path` 下 `schema_digest` 不一致，返回 `schema_mismatch`，不会打开 session。
 

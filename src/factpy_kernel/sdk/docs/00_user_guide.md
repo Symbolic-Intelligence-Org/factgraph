@@ -41,6 +41,16 @@ sdk = SDKStore.from_schema_classes(
 )
 ```
 
+如需把 explain artifact 也持久化到 sidecar root，以便后续 `SDKStore` 实例继续 `explain_support(...)` / `explain_rule_trace(...)`，可额外指定 `artifact_store_root`：
+
+```python
+sdk = SDKStore.from_schema_classes(
+    [User, Country, Language, LivesIn],
+    ledger_path="./data/ledger.db",
+    artifact_store_root="./data/artifacts",
+)
+```
+
 如需默认把 Rule 查询结果返回为 dict 行：
 
 ```python
@@ -54,6 +64,7 @@ sdk = SDKStore.from_schema_classes(
 - `classes` 必须是非空 `list[Entity 子类]`；`from_schema_classes(...)` / `schema_preflight_from_classes(...)` 路径抛 `SDKSchemaError`，`SDKStore(...)` 构造器路径抛 `SDKStoreError`。
 - `ledger` 与 `ledger_path` 互斥；两者不能同时传入。
 - `ledger_path` 在打开/创建 ledger 时即记录 `schema_digest`；重新打开时校验，不一致抛 `SDKStoreError`。
+- `artifact_store_root` 为可选 `str`；提供后会启用 sidecar-backed explain artifact 持久化读回，不提供则保持默认的进程内 explain registry 语义。
 - `default_row_format` 仅作用于 `sdk.run(rule, ...)`，合法值为 `"tuple"` / `"dict"`，默认 `"dict"`。
 - 解析结果为 `"tuple"` 时会触发 `DeprecationWarning`；推荐统一改为 `"dict"`。
 - `FACTPY_ROW_FORMAT` 环境变量在 `SDKStore` 初始化时读取并缓存（非每次 `run()` 动态读取）。

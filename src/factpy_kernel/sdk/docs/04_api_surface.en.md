@@ -52,7 +52,7 @@ Additional note:
 
 ## 2. `SDKStore` Public Methods
 
-- `from_schema_classes(..., ledger=None, ledger_path=None, default_row_format=None)`
+- `from_schema_classes(..., ledger=None, ledger_path=None, artifact_store_root=None, default_row_format=None)`
 - `batch(...)`
 - `get(...)`
 - `find(...)`
@@ -76,6 +76,7 @@ Additional note:
 
 Key boundaries:
 - `from_schema_classes(...)` / `schema_preflight_from_classes(...)` class-validation failures raise `SDKSchemaError` (`SDKStore(...)` constructor-path checks raise `SDKStoreError`).
+- `SDKStore.__init__(..., artifact_store_root=None)` and `from_schema_classes(..., artifact_store_root=None)` both support sidecar-backed explain artifact readback; if a fully constructed `store=...` is already supplied, the constructor-level `artifact_store_root` is ignored.
 - `run(...)` supports Rule/Query and rejects Derivation.
 - `run(rule, view=...)` supports named/inline views; Query path rejects `view` and `return_display_meta`.
 - `evaluate(...)` explicitly rejects `view` and `temporal_view`.

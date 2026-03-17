@@ -18,6 +18,7 @@ candidate identity/provenance explicit.
    - `candidate_id` (`cand_v2:`): per-run handle
    - `candidate_key` (`candk_v2:`): cross-run stable key
    - `candidate_kind`: `fact` or `entity`
+   - for native derivation candidates, `candidate_id` can now be used as an in-process backref handle to recover `support_digest` via `Store.get_candidate_support_digest(...)`
 2. `candidate_key` is content-addressed and excludes `run_id`.
 3. `head` shape drives candidate kind:
    - `EntityType(...)` -> entity path
@@ -41,11 +42,22 @@ Shared top-level fields:
   "derivation_id": "...",
   "derivation_version": "...",
   "run_id": "...",
+  "support_digest": "sha256:...",
+  "support_kind": "native_binding_v1|none",
   "generated_at": 0,
   "state": "generated",
   "payload": {}
 }
 ```
+
+Support fields:
+
+- `support_digest`
+  - content digest for the candidate's support/provenance carrier
+  - for native derivation candidates this is the digest of an evaluate-time captured internal support artifact
+- `support_kind`
+  - `native_binding_v1`: native derivation support captured from evaluate-time binding/witness summary
+  - `none`: no support artifact captured for this candidate path yet; compatibility/engine paths may still emit this value
 
 Entity payload:
 

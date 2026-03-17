@@ -69,7 +69,7 @@
 - 当前项目的模块 docs 是实现真相；本蓝图只能描述跨层形状与后续讨论入口。
 - 当前相关历史蓝图：
   - [docs/blueprint_history/application_projection_blueprint.md](../../blueprint_history/application_projection_blueprint.md)
-  - [docs/symir_blueprint_extraction.md](../../symir_blueprint_extraction.md)
+  - [docs/references/bridges/symir-blueprint-extraction.md](../../references/bridges/symir-blueprint-extraction.md)
   - [docs/blueprint_history/realtime_execution_blueprint.md](../../blueprint_history/realtime_execution_blueprint.md)
 
 ## 5. Proposed Shape

@@ -6,6 +6,8 @@
 - `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
 - `POST /v1/runtime/sessions/{session_id}/derivations/accept`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
+- `POST /v1/runtime/sessions/{session_id}/queries/explain-support`
+- `POST /v1/runtime/sessions/{session_id}/queries/explain-rule-trace`
 - `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 - `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
@@ -51,7 +53,8 @@
     "where": [["pred", "person:country", ["$e", "$c"]]],
     "expose": true
   },
-  "override_registry_root": "/tmp/registry"
+  "override_registry_root": "/tmp/registry",
+  "capture_trace": true
 }
 ```
 
@@ -67,7 +70,10 @@
     "version": "1.0.0",
     "rows": [
       ["idref_v1:Person:source_id=u1", "de"]
-    ]
+    ],
+    "trace": {
+      "rule_run_id": "rt_trace_123"
+    }
   }
 }
 ```
@@ -77,6 +83,10 @@
 - `rule` 必须是结构化对象；传 string 或其他非 object 值时返回 `shape` error。
 - `override_registry_root` 可选；未提供时默认复用 session 绑定的 `registry_root`。
 - 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供。
+- `capture_trace` 可选，默认 `false`；当为 `true` 时 service 会调用 traced sibling helper，并在 `result.trace.rule_run_id` 返回 trace handle。
+- 若 session 没有配置 `artifact_store_root`，该 handle 仍是 session-scoped。
+- 若 session 配置了共享的 `artifact_store_root`，后续 session 可继续用该 handle 做 explain readback。
+- `capture_trace=false` 时响应保持旧 shape，不返回 `trace`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。
 - 其他 rule 编译或执行失败会落入统一 `runtime` error。
 
@@ -86,7 +96,127 @@
 - `runtime_session_not_found`
 - `runtime`
 
-## 2. `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
+## 2. `POST /v1/runtime/sessions/{session_id}/queries/explain-support`
+
+请求：
+
+```json
+{
+  "support_digest": "sha256:6f3e4f9c2d1b8a7e6c5d4b3a291817161514131211100f0e0d0c0b0a09080706"
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "support_digest": "sha256:6f3e4f9c2d1b8a7e6c5d4b3a291817161514131211100f0e0d0c0b0a09080706"
+  },
+  "explain": {
+    "kind": "native_binding_v1",
+    "root_result_kind": "fact",
+    "binding": [
+      ["$E", "idref_v1:Person:source_id=u1"],
+      ["$C", "de"]
+    ],
+    "pred_witnesses": [
+      {
+        "pred_atom_key": "b0.a0:person:country",
+        "asrt_ids": ["A1"]
+      }
+    ],
+    "non_fact_steps": []
+  }
+}
+```
+
+说明：
+
+- 该 endpoint 内部直接调用 `Store.explain_support(...)`。
+- 默认情况下它仍是 session-scoped readback。
+- 若打开 session 时配置了 `artifact_store_root`，则可从共享 sidecar root 回读旧 `support_digest`。
+- 若当前 session 中不存在对应 artifact，返回 `runtime_explain_not_found`。
+- 未配置 `artifact_store_root` 时，这不是 durable lookup；session 清理后 handle 可能失效。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+
+## 3. `POST /v1/runtime/sessions/{session_id}/queries/explain-rule-trace`
+
+请求：
+
+```json
+{
+  "rule_run_id": "rt_trace_123"
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "rule_run_id": "rt_trace_123"
+  },
+  "explain": {
+    "rule_run_id": "rt_trace_123",
+    "root_rule": {
+      "rule_id": "q_country_rows",
+      "version": "1.0.0"
+    },
+    "select_vars": ["$e", "$c"],
+    "invocations": [
+      {
+        "invocation_id": "rt_trace_123:i1",
+        "parent_invocation_id": null,
+        "rule": {
+          "rule_id": "q_country_rows",
+          "version": "1.0.0"
+        },
+        "memo_hit": false,
+        "memo_source_invocation_id": null,
+        "original_where": [["pred", "person:country", ["$e", "$c"]]],
+        "rewritten_where": [["pred", "person:country", ["$e", "$c"]]],
+        "bindings": [[["$c", "de"], ["$e", "idref_v1:Person:source_id=u1"]]],
+        "output_rows": [["idref_v1:Person:source_id=u1", "de"]],
+        "pred_witnesses": [
+          {
+            "binding_index": 0,
+            "pred_atom_key": "b0.a0:person:country",
+            "asrt_ids": ["A1"]
+          }
+        ],
+        "non_fact_steps": []
+      }
+    ],
+    "root_rows": [["idref_v1:Person:source_id=u1", "de"]]
+  }
+}
+```
+
+说明：
+
+- 该 endpoint 内部直接调用 `Store.explain_rule_trace(...)`。
+- 默认情况下它仍是 session-scoped readback。
+- 若打开 session 时配置了 `artifact_store_root`，则可从共享 sidecar root 回读旧 `rule_run_id`。
+- `rule_run_id` 目前只会在 `/rules/run` 传 `capture_trace=true` 时返回。
+- 若当前 session 中不存在对应 artifact，返回 `runtime_explain_not_found`。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+
+## 4. `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
 
 请求：
 
@@ -98,7 +228,7 @@
     "target": "person:country_copy",
     "head_vars": ["$E", "$C"],
     "where": [["pred", "person:country", ["$E", "$C"]]],
-    "mode": "python"
+    "mode": "native"
   },
   "limit": 50
 }
@@ -111,7 +241,7 @@
   "ok": true,
   "errors": [],
   "meta": {
-    "mode": "python",
+    "mode": "native",
     "candidate_count": 1,
     "returned_count": 1,
     "truncated": false
@@ -138,8 +268,8 @@
             {"kind": "literal", "tag": "string", "value": "de"}
           ]
         },
-        "support_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-        "support_kind": "none",
+        "support_digest": "sha256:6f3e4f9c2d1b8a7e6c5d4b3a291817161514131211100f0e0d0c0b0a09080706",
+        "support_kind": "native_binding_v1",
         "generated_at": 1730000000000000000,
         "state": "generated",
         "confidence": null
@@ -152,6 +282,7 @@
 说明：
 
 - `evaluate` 返回完整 candidate 对象，供后续 `accept` 原样 round-trip。
+- native derivation evaluate 当前会填充 `support_kind="native_binding_v1"`；其他兼容路径仍可能返回 `support_kind="none"`。
 - `limit` 只影响返回条数，不改变底层总候选数；总量体现在 `meta.candidate_count`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。
 
@@ -163,7 +294,7 @@
 - `authoring_derivation_compile`
 - `derivation_evaluate`
 
-## 3. `POST /v1/runtime/sessions/{session_id}/derivations/accept`
+## 5. `POST /v1/runtime/sessions/{session_id}/derivations/accept`
 
 请求：
 
@@ -186,8 +317,8 @@
         {"kind": "literal", "tag": "string", "value": "de"}
       ]
     },
-    "support_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    "support_kind": "none",
+    "support_digest": "sha256:6f3e4f9c2d1b8a7e6c5d4b3a291817161514131211100f0e0d0c0b0a09080706",
+    "support_kind": "native_binding_v1",
     "generated_at": 1730000000000000000,
     "state": "generated",
     "confidence": null
@@ -244,7 +375,7 @@
 - `runtime_session_not_found`
 - `derivation_accept`
 
-## 4. `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
+## 6. `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
 
 请求：
 
@@ -293,7 +424,7 @@
 - `runtime_session_not_found`
 - `query_explain_fact`
 
-## 5. `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
+## 7. `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 
 请求：
 
@@ -329,7 +460,7 @@
 - `runtime_session_not_found`
 - `query_conflicts`
 
-## 6. `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
+## 8. `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 
 请求：
 
@@ -423,7 +554,7 @@
 - `mapping_conflict`
 - `query_resolve_mapping`
 
-## 7. `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
+## 9. `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
 
 请求（使用内联 view）：
 
@@ -487,7 +618,7 @@
 - `runtime_session_not_found`
 - `query_view_facts`
 
-## 8. `POST /v1/runtime/sessions/{session_id}/views/create`
+## 10. `POST /v1/runtime/sessions/{session_id}/views/create`
 
 请求：
 
@@ -532,7 +663,7 @@
 - `runtime_session_not_found`
 - `view_create`
 
-## 9. `POST /v1/runtime/sessions/{session_id}/views/update`
+## 11. `POST /v1/runtime/sessions/{session_id}/views/update`
 
 请求与成功响应结构同 `views/create`，但要求 `name` 已存在。
 
@@ -542,7 +673,7 @@
 - `runtime_session_not_found`
 - `view_update`
 
-## 10. `POST /v1/runtime/sessions/{session_id}/views/delete`
+## 12. `POST /v1/runtime/sessions/{session_id}/views/delete`
 
 请求：
 
@@ -575,7 +706,7 @@
 - `runtime_session_not_found`
 - `view_delete`
 
-## 11. `POST /v1/runtime/sessions/{session_id}/views/get`
+## 13. `POST /v1/runtime/sessions/{session_id}/views/get`
 
 请求：
 
@@ -609,7 +740,7 @@
 - `runtime_session_not_found`
 - `view_get`
 
-## 12. `GET /v1/runtime/sessions/{session_id}/views`
+## 14. `GET /v1/runtime/sessions/{session_id}/views`
 
 成功响应：
 
@@ -639,7 +770,7 @@
 - `runtime_session_not_found`
 - `view_list`
 
-## 13. `POST /v1/runtime/sessions/{session_id}/packages/export`
+## 15. `POST /v1/runtime/sessions/{session_id}/packages/export`
 
 请求：
 
@@ -672,6 +803,10 @@
 
 - `package_kind` 只接受 `inference` 或 `audit`。
 - `query` 为可选透传字段，由底层 exporter 解释。
+- 当 `package_kind="audit"` 时，当前 package 还会额外包含：
+  - `audit/support_artifacts.jsonl`
+  - `audit/rule_trace_artifacts.jsonl`
+  这两个文件分别导出 `SupportArtifact` 与 `RuleTraceArtifact` 的 flat JSONL rows，用于离线 audit / explain 消费。
 
 错误 kinds：
 

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 
+from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
 from factpy_kernel.authoring import (
     AuthoringDerivationCompileError,
     build_derivation_preview_dto,
@@ -14,8 +18,17 @@ from factpy_kernel.authoring.where_schema_lowering import (
     WhereSchemaLoweringError,
     lower_blueprint_where_sugar_with_schema_v1,
 )
-from factpy_kernel.core.rules.rule_ir import RuleCompileError
+from factpy_kernel.core.rules.rule_ir import (
+    RuleCompileError,
+    RuleRegistry,
+    RuleSpec,
+    run_rule_with_trace,
+)
+from factpy_kernel.core.rules._trace import rule_trace_artifact_from_dict, rule_trace_artifact_to_dict
 from factpy_kernel.core.rules.where_eval import _plan_body_atoms
+from factpy_kernel.core.store import Store
+from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar
+from factpy_kernel.core.store._support import support_artifact_from_dict, support_artifact_to_dict
 from factpy_kernel.core.evidence.write_protocol import WriteProtocolError
 from factpy_kernel.core.view.projector import project_view_facts
 from factpy_kernel.sdk import (
@@ -39,10 +52,13 @@ from factpy_kernel.sdk.ingest import CONVENTION_META_KEYS, SENSITIVE_SEMANTIC_ME
 from factpy_kernel.service.runtime_v1 import (
     close_runtime_session,
     evaluate_runtime_derivation,
+    explain_runtime_rule_trace,
+    explain_runtime_support,
     open_runtime_session,
     project_runtime_view_facts,
     reset_runtime_sessions_for_tests,
     run_runtime_rule,
+    write_runtime_fact,
 )
 
 
@@ -579,6 +595,69 @@ Derivation(
             sdk.run(bad_not_ruleref_rule, row_format="dict")
         self.assertIn("RuleRefAtom is not allowed in not body", str(ctx_bad_not_ruleref.exception))
 
+    def test_run_rule_with_trace_captures_readback_and_memo_hits(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "t1", "t2") as (u, t1, t2):
+            tagged_rule = Rule(
+                id="q.tagged",
+                version="1.0.0",
+                select=[u, t1],
+                where=[Pred("user:tag", u, t1)],
+                expose=True,
+            )
+            tagged_pair_rule = Rule(
+                id="q.tagged_pair",
+                version="1.0.0",
+                select=[u, t1, t2],
+                where=[RuleRef(tagged_rule)(u, t1), RuleRef(tagged_rule)(u, t2)],
+            )
+
+        compiled = sdk._compile_rule_input(tagged_pair_rule)
+        rule_spec = RuleSpec(
+            rule_id=compiled["rule_id"],
+            version=compiled["version"],
+            select_vars=list(compiled["select_vars"]),
+            where=list(compiled["where"]),
+            expose=bool(compiled.get("expose", False)),
+        )
+        registry = RuleRegistry()
+        sdk._register_rule_dependencies(registry, tagged_pair_rule)
+
+        result = run_rule_with_trace(sdk.store, rule_spec, registry)
+        self.assertTrue(result.rule_run_id)
+        self.assertEqual(
+            set(result.rows),
+            {
+                (refs["u1"], "vip", "vip"),
+                (refs["u2"], "staff", "staff"),
+            },
+        )
+
+        trace = sdk.store.explain_rule_trace(result.rule_run_id)
+        self.assertIsNotNone(trace)
+        assert trace is not None
+        self.assertEqual(trace["root_rule"], {"rule_id": "q.tagged_pair", "version": "1.0.0"})
+        self.assertEqual(trace["select_vars"], ["$u", "$t1", "$t2"])
+        self.assertEqual(sdk.store.explain_rule_trace("missing-rule-run"), None)
+
+        root_invocation = next(inv for inv in trace["invocations"] if inv["rule"]["rule_id"] == "q.tagged_pair")
+        self.assertEqual(root_invocation["parent_invocation_id"], None)
+        self.assertFalse(root_invocation["memo_hit"])
+        self.assertEqual(root_invocation["original_where"][0][0], "ruleref")
+        self.assertEqual(root_invocation["rewritten_where"][0][0], "pred")
+        self.assertTrue(root_invocation["rewritten_where"][0][1].startswith("__rule_ref__q_tagged__1_0_0"))
+
+        tagged_invocations = [inv for inv in trace["invocations"] if inv["rule"]["rule_id"] == "q.tagged"]
+        self.assertEqual(len(tagged_invocations), 2)
+        self.assertEqual(sorted(inv["memo_hit"] for inv in tagged_invocations), [False, True])
+
+        primary_invocation = next(inv for inv in tagged_invocations if inv["memo_hit"] is False)
+        memo_invocation = next(inv for inv in tagged_invocations if inv["memo_hit"] is True)
+        self.assertEqual(memo_invocation["memo_source_invocation_id"], primary_invocation["invocation_id"])
+        self.assertTrue(any(witness["asrt_ids"] for witness in primary_invocation["pred_witnesses"]))
+
     def test_query_dsl_syntax_matrix_entity_and_field_head(self) -> None:
         sdk = SDKStore([User])
         refs = _seed_users_for_syntax_matrix(sdk)
@@ -790,6 +869,709 @@ Derivation(
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
+
+    def test_runtime_service_explain_support_and_rule_trace(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            write_resp = write_runtime_fact(
+                session_id,
+                {
+                    "pred_id": "user:tag",
+                    "e_ref": refs["u1"],
+                    "rest_terms": [["string", "vip"]],
+                },
+                kind="add",
+            )
+            self.assertTrue(write_resp["ok"])
+
+            eval_resp = evaluate_runtime_derivation(
+                session_id,
+                {
+                    "derivation": {
+                        "derivation_id": "drv.tag_copy",
+                        "version": "1.0.0",
+                        "target": "user:tag",
+                        "head_vars": ["$u", "$tag"],
+                        "where": [["pred", "user:tag", ["$u", "$tag"]]],
+                        "mode": "native",
+                    }
+                },
+            )
+            self.assertTrue(eval_resp["ok"])
+            candidate = eval_resp["evaluation"]["candidates"][0]
+            self.assertEqual(candidate["support_kind"], "native_binding_v1")
+
+            explain_support_resp = explain_runtime_support(
+                session_id,
+                {"support_digest": candidate["support_digest"]},
+            )
+            self.assertTrue(explain_support_resp["ok"])
+            self.assertEqual(explain_support_resp["meta"]["support_digest"], candidate["support_digest"])
+            self.assertEqual(explain_support_resp["explain"]["kind"], "native_binding_v1")
+
+            missing_support_resp = explain_runtime_support(session_id, {"support_digest": "sha256:missing"})
+            self.assertFalse(missing_support_resp["ok"])
+            self.assertEqual(missing_support_resp["errors"][0]["kind"], "runtime_explain_not_found")
+            self.assertEqual(missing_support_resp["errors"][0]["path"], "$.support_digest")
+
+            rule_resp = run_runtime_rule(
+                session_id,
+                {
+                    "rule": {
+                        "rule_id": "q.runtime_tag_rows",
+                        "version": "1.0.0",
+                        "select": ["$u", "$tag"],
+                        "where": [["pred", "user:tag", ["$u", "$tag"]]],
+                    },
+                    "capture_trace": True,
+                },
+            )
+            self.assertTrue(rule_resp["ok"])
+            self.assertIn("trace", rule_resp["result"])
+            rule_run_id = rule_resp["result"]["trace"]["rule_run_id"]
+            self.assertTrue(rule_run_id)
+
+            explain_rule_resp = explain_runtime_rule_trace(session_id, {"rule_run_id": rule_run_id})
+            self.assertTrue(explain_rule_resp["ok"])
+            self.assertEqual(explain_rule_resp["meta"]["rule_run_id"], rule_run_id)
+            self.assertEqual(explain_rule_resp["explain"]["root_rule"]["rule_id"], "q.runtime_tag_rows")
+
+            missing_rule_trace_resp = explain_runtime_rule_trace(session_id, {"rule_run_id": "missing-rule-run"})
+            self.assertFalse(missing_rule_trace_resp["ok"])
+            self.assertEqual(missing_rule_trace_resp["errors"][0]["kind"], "runtime_explain_not_found")
+            self.assertEqual(missing_rule_trace_resp["errors"][0]["path"], "$.rule_run_id")
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_runtime_session_artifact_store_root_enables_cross_session_explain_readback(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with TemporaryDirectory() as tmp_dir:
+            reset_runtime_sessions_for_tests()
+            first_open = open_runtime_session({"schema_ir": sdk.schema_ir, "artifact_store_root": tmp_dir})
+            self.assertTrue(first_open["ok"])
+            first_session_id = first_open["session"]["session_id"]
+            self.assertNotIn("artifact_store_root", first_open["session"])
+            try:
+                write_resp = write_runtime_fact(
+                    first_session_id,
+                    {
+                        "pred_id": "user:tag",
+                        "e_ref": refs["u1"],
+                        "rest_terms": [["string", "vip"]],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+                eval_resp = evaluate_runtime_derivation(
+                    first_session_id,
+                    {
+                        "derivation": {
+                            "derivation_id": "drv.tag_copy",
+                            "version": "1.0.0",
+                            "target": "user:tag",
+                            "head_vars": ["$u", "$tag"],
+                            "where": [["pred", "user:tag", ["$u", "$tag"]]],
+                            "mode": "native",
+                        }
+                    },
+                )
+                self.assertTrue(eval_resp["ok"])
+                support_digest = eval_resp["evaluation"]["candidates"][0]["support_digest"]
+
+                rule_resp = run_runtime_rule(
+                    first_session_id,
+                    {
+                        "rule": {
+                            "rule_id": "q.runtime_sidecar_rows",
+                            "version": "1.0.0",
+                            "select": ["$u", "$tag"],
+                            "where": [["pred", "user:tag", ["$u", "$tag"]]],
+                        },
+                        "capture_trace": True,
+                    },
+                )
+                self.assertTrue(rule_resp["ok"])
+                rule_run_id = rule_resp["result"]["trace"]["rule_run_id"]
+            finally:
+                close_runtime_session(first_session_id)
+
+            second_open = open_runtime_session({"schema_ir": sdk.schema_ir, "artifact_store_root": tmp_dir})
+            self.assertTrue(second_open["ok"])
+            second_session_id = second_open["session"]["session_id"]
+            self.assertNotIn("artifact_store_root", second_open["session"])
+            try:
+                explain_support_resp = explain_runtime_support(
+                    second_session_id,
+                    {"support_digest": support_digest},
+                )
+                self.assertTrue(explain_support_resp["ok"])
+                self.assertEqual(explain_support_resp["meta"]["support_digest"], support_digest)
+
+                explain_rule_resp = explain_runtime_rule_trace(
+                    second_session_id,
+                    {"rule_run_id": rule_run_id},
+                )
+                self.assertTrue(explain_rule_resp["ok"])
+                self.assertEqual(explain_rule_resp["meta"]["rule_run_id"], rule_run_id)
+            finally:
+                close_runtime_session(second_session_id)
+                reset_runtime_sessions_for_tests()
+
+    def test_audit_package_exports_support_and_rule_trace_artifacts(self) -> None:
+        sdk = SDKStore([User])
+        _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "loc", "tag") as (u, loc, tag):
+            drv = Derivation(
+                id="drv.tag_copy",
+                version="1.0.0",
+                where=[
+                    User(u),
+                    u.locale == loc,
+                    u.tag == tag,
+                ],
+                head=User.tag(locale=loc, tag=tag),
+            )
+        candidates = sdk.evaluate(drv, mode="native")
+        self.assertTrue(candidates)
+        self.assertEqual(candidates[0].support_kind, "native_binding_v1")
+        support_digest = candidates[0].support_digest
+        self.assertIsNotNone(sdk.store.explain_support(support_digest))
+
+        with sdk_vars("u", "tag") as (u, tag):
+            rule = Rule(
+                id="q.audit_tag_rows",
+                version="1.0.0",
+                select=[u, tag],
+                where=[Pred("user:tag", u, tag)],
+                expose=True,
+            )
+
+        compiled = sdk._compile_rule_input(rule)
+        rule_spec = RuleSpec(
+            rule_id=compiled["rule_id"],
+            version=compiled["version"],
+            select_vars=list(compiled["select_vars"]),
+            where=list(compiled["where"]),
+            expose=bool(compiled.get("expose", False)),
+        )
+        registry = RuleRegistry()
+        sdk._register_rule_dependencies(registry, rule)
+        trace_result = run_rule_with_trace(sdk.store, rule_spec, registry)
+        self.assertIsNotNone(sdk.store.explain_rule_trace(trace_result.rule_run_id))
+
+        with TemporaryDirectory() as tmp_dir:
+            manifest_path = export_package(
+                sdk.store,
+                Path(tmp_dir),
+                ExportOptions(package_kind="audit"),
+            )
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            audit_files = manifest["paths"]["audit_files"]
+            self.assertEqual(audit_files["support_artifacts"], "audit/support_artifacts.jsonl")
+            self.assertEqual(audit_files["rule_trace_artifacts"], "audit/rule_trace_artifacts.jsonl")
+
+            support_rows = [
+                json.loads(line)
+                for line in (Path(tmp_dir) / audit_files["support_artifacts"]).read_text(encoding="utf-8").splitlines()
+                if line
+            ]
+            trace_rows = [
+                json.loads(line)
+                for line in (Path(tmp_dir) / audit_files["rule_trace_artifacts"]).read_text(encoding="utf-8").splitlines()
+                if line
+            ]
+
+            self.assertTrue(any(row["support_digest"] == support_digest for row in support_rows))
+            support_row = next(row for row in support_rows if row["support_digest"] == support_digest)
+            self.assertEqual(support_row["kind"], "native_binding_v1")
+            self.assertIn("binding", support_row)
+            self.assertIn("pred_witnesses", support_row)
+            self.assertNotIn("artifact", support_row)
+
+            self.assertTrue(any(row["rule_run_id"] == trace_result.rule_run_id for row in trace_rows))
+            trace_row = next(row for row in trace_rows if row["rule_run_id"] == trace_result.rule_run_id)
+            self.assertEqual(trace_row["root_rule"]["rule_id"], "q.audit_tag_rows")
+            self.assertIn("invocations", trace_row)
+            self.assertNotIn("artifact", trace_row)
+
+    def test_candidate_id_support_backref_native_only(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "loc", "tag") as (u, loc, tag):
+            drv = Derivation(
+                id="drv.tag_copy.backref",
+                version="1.0.0",
+                where=[
+                    User(u),
+                    u.locale == loc,
+                    u.tag == tag,
+                ],
+                head=User.tag(locale=loc, tag=tag),
+            )
+
+        candidates = sdk.evaluate(drv, mode="native")
+        self.assertTrue(candidates)
+        for candidate in candidates:
+            digest = sdk.store.get_candidate_support_digest(candidate.candidate_id)
+            self.assertEqual(digest, candidate.support_digest)
+            self.assertIsNotNone(sdk.store.explain_support(digest))
+
+        self.assertIsNone(sdk.store.get_candidate_support_digest("missing-candidate-id"))
+
+        compat_candidate = sdk.store.evaluate_dummy(
+            derivation_id="drv.compat",
+            version="1.0.0",
+            target="user:tag",
+            e_ref=refs["u1"],
+            rest_terms=[("string", "legacy")],
+            dims_terms=[],
+        )
+        self.assertEqual(compat_candidate.support_kind, "none")
+        self.assertIsNone(sdk.store.get_candidate_support_digest(compat_candidate.candidate_id))
+
+    def test_support_artifact_from_dict_round_trip_ignores_envelope_and_restores_bytes(self) -> None:
+        row = {
+            "support_digest": "sha256:" + ("ab" * 32),
+            "kind": "native_binding_v1",
+            "root_result_kind": "fact",
+            "binding": [
+                ["$blob", {"__bytes_hex__": "00ff"}],
+                ["$pair", [1, 2]],
+            ],
+            "pred_witnesses": [
+                {
+                    "pred_atom_key": "b0.a0:user:tag",
+                    "asrt_ids": ["A1"],
+                }
+            ],
+            "non_fact_steps": [
+                {
+                    "step_key": "b0.a1:eq",
+                    "kind": "eq",
+                    "status": "ok",
+                    "details": [["payload", {"__bytes_hex__": "6162"}]],
+                }
+            ],
+            "rule_refs": ["r.1"],
+            "unexpected": "ignored",
+        }
+
+        artifact = support_artifact_from_dict(row)
+
+        self.assertEqual(artifact.kind, "native_binding_v1")
+        self.assertEqual(artifact.root_result_kind, "fact")
+        self.assertEqual(artifact.binding_items, (("$blob", b"\x00\xff"), ("$pair", [1, 2])))
+        self.assertEqual(artifact.pred_witnesses[0].pred_atom_key, "b0.a0:user:tag")
+        self.assertEqual(artifact.non_fact_steps[0].details, (("payload", b"ab"),))
+        self.assertEqual(
+            support_artifact_to_dict(artifact),
+            {
+                "kind": "native_binding_v1",
+                "root_result_kind": "fact",
+                "binding": [
+                    ["$blob", {"__bytes_hex__": "00ff"}],
+                    ["$pair", [1, 2]],
+                ],
+                "pred_witnesses": [
+                    {
+                        "pred_atom_key": "b0.a0:user:tag",
+                        "asrt_ids": ["A1"],
+                    }
+                ],
+                "non_fact_steps": [
+                    {
+                        "step_key": "b0.a1:eq",
+                        "kind": "eq",
+                        "status": "ok",
+                        "details": [["payload", {"__bytes_hex__": "6162"}]],
+                    }
+                ],
+                "rule_refs": ["r.1"],
+            },
+        )
+
+    def test_rule_trace_artifact_from_dict_round_trip_keeps_where_payload_opaque(self) -> None:
+        row = {
+            "rule_run_id": "rr_1",
+            "root_rule": {"rule_id": "q.user", "version": "1.0.0"},
+            "select_vars": ["$u"],
+            "invocations": [
+                {
+                    "invocation_id": "rr_1:i1",
+                    "parent_invocation_id": None,
+                    "rule": {"rule_id": "q.user", "version": "1.0.0"},
+                    "memo_hit": False,
+                    "memo_source_invocation_id": None,
+                    "original_where": [["pred", "user:tag", [{"__bytes_hex__": "00ff"}]]],
+                    "rewritten_where": {"opaque": {"__bytes_hex__": "0a0b"}},
+                    "bindings": [
+                        [
+                            ["$blob", {"__bytes_hex__": "6162"}],
+                            ["$pair", [1, 2]],
+                        ]
+                    ],
+                    "output_rows": [[{"__bytes_hex__": "0102"}, [3, 4]]],
+                    "pred_witnesses": [
+                        {
+                            "binding_index": 0,
+                            "pred_atom_key": "b0.a0:user:tag",
+                            "asrt_ids": ["A1"],
+                        }
+                    ],
+                    "non_fact_steps": [
+                        {
+                            "binding_index": 0,
+                            "step_key": "b0.a1:eq",
+                            "kind": "eq",
+                            "status": "ok",
+                            "details": [["payload", {"__bytes_hex__": "ff"}]],
+                        }
+                    ],
+                }
+            ],
+            "root_rows": [[{"__bytes_hex__": "c0ff"}]],
+            "extra": "ignored",
+        }
+
+        artifact = rule_trace_artifact_from_dict(row)
+        invocation = artifact.invocations[0]
+
+        self.assertEqual(artifact.root_rule_id, "q.user")
+        self.assertEqual(artifact.root_version, "1.0.0")
+        self.assertEqual(invocation.original_where, [["pred", "user:tag", [{"__bytes_hex__": "00ff"}]]])
+        self.assertEqual(invocation.rewritten_where, {"opaque": {"__bytes_hex__": "0a0b"}})
+        self.assertEqual(invocation.bindings, ((("$blob", b"ab"), ("$pair", [1, 2])),))
+        self.assertEqual(invocation.output_rows, ((b"\x01\x02", [3, 4]),))
+        self.assertEqual(invocation.non_fact_steps[0].details, (("payload", b"\xff"),))
+        self.assertEqual(artifact.root_rows, ((b"\xc0\xff",),))
+        self.assertEqual(
+            rule_trace_artifact_to_dict(artifact),
+            {
+                "rule_run_id": "rr_1",
+                "root_rule": {"rule_id": "q.user", "version": "1.0.0"},
+                "select_vars": ["$u"],
+                "invocations": [
+                    {
+                        "invocation_id": "rr_1:i1",
+                        "parent_invocation_id": None,
+                        "rule": {"rule_id": "q.user", "version": "1.0.0"},
+                        "memo_hit": False,
+                        "memo_source_invocation_id": None,
+                        "original_where": [["pred", "user:tag", [{"__bytes_hex__": "00ff"}]]],
+                        "rewritten_where": {"opaque": {"__bytes_hex__": "0a0b"}},
+                        "bindings": [
+                            [
+                                ["$blob", {"__bytes_hex__": "6162"}],
+                                ["$pair", [1, 2]],
+                            ]
+                        ],
+                        "output_rows": [[{"__bytes_hex__": "0102"}, [3, 4]]],
+                        "pred_witnesses": [
+                            {
+                                "binding_index": 0,
+                                "pred_atom_key": "b0.a0:user:tag",
+                                "asrt_ids": ["A1"],
+                            }
+                        ],
+                        "non_fact_steps": [
+                            {
+                                "binding_index": 0,
+                                "step_key": "b0.a1:eq",
+                                "kind": "eq",
+                                "status": "ok",
+                                "details": [["payload", {"__bytes_hex__": "ff"}]],
+                            }
+                        ],
+                    }
+                ],
+                "root_rows": [[{"__bytes_hex__": "c0ff"}]],
+            },
+        )
+
+    def test_file_artifact_sidecar_support_read_write_and_collision(self) -> None:
+        artifact = support_artifact_from_dict(
+            {
+                "support_digest": "sha256:" + ("ab" * 32),
+                "kind": "native_binding_v1",
+                "root_result_kind": "fact",
+                "binding": [
+                    ["$blob", {"__bytes_hex__": "00ff"}],
+                    ["$pair", [1, 2]],
+                ],
+                "pred_witnesses": [
+                    {
+                        "pred_atom_key": "b0.a0:user:tag",
+                        "asrt_ids": ["A1"],
+                    }
+                ],
+                "non_fact_steps": [],
+                "rule_refs": [],
+            }
+        )
+        digest = "sha256:" + ("ab" * 32)
+
+        with TemporaryDirectory() as tmp_dir:
+            sidecar = FileArtifactSidecar(tmp_dir)
+
+            self.assertIsNone(sidecar.read_support(digest))
+
+            sidecar.write_support(digest, artifact)
+            self.assertEqual(sidecar.read_support(digest), artifact)
+
+            sidecar.write_support(digest, artifact)
+
+            with self.assertRaises(ValueError) as ctx:
+                sidecar.write_support(
+                    digest,
+                    support_artifact_from_dict(
+                        {
+                            "support_digest": digest,
+                            "kind": "native_binding_v1",
+                            "root_result_kind": "fact",
+                            "binding": [["$blob", {"__bytes_hex__": "ff"}]],
+                            "pred_witnesses": [
+                                {
+                                    "pred_atom_key": "b0.a0:user:tag",
+                                    "asrt_ids": ["A1"],
+                                }
+                            ],
+                            "non_fact_steps": [],
+                            "rule_refs": [],
+                        }
+                    ),
+                )
+            self.assertEqual(
+                str(ctx.exception),
+                f"support_digest collision for different SupportArtifact on disk: {digest}",
+            )
+
+    def test_file_artifact_sidecar_rule_trace_read_write_collision_and_path_guard(self) -> None:
+        artifact = rule_trace_artifact_from_dict(
+            {
+                "rule_run_id": "rr_1",
+                "root_rule": {"rule_id": "q.user", "version": "1.0.0"},
+                "select_vars": ["$u"],
+                "invocations": [
+                    {
+                        "invocation_id": "rr_1:i1",
+                        "parent_invocation_id": None,
+                        "rule": {"rule_id": "q.user", "version": "1.0.0"},
+                        "memo_hit": False,
+                        "memo_source_invocation_id": None,
+                        "original_where": [["pred", "user:tag", [{"__bytes_hex__": "00ff"}]]],
+                        "rewritten_where": {"opaque": {"__bytes_hex__": "0a0b"}},
+                        "bindings": [
+                            [
+                                ["$blob", {"__bytes_hex__": "6162"}],
+                                ["$pair", [1, 2]],
+                            ]
+                        ],
+                        "output_rows": [[{"__bytes_hex__": "0102"}, [3, 4]]],
+                        "pred_witnesses": [
+                            {
+                                "binding_index": 0,
+                                "pred_atom_key": "b0.a0:user:tag",
+                                "asrt_ids": ["A1"],
+                            }
+                        ],
+                        "non_fact_steps": [],
+                    }
+                ],
+                "root_rows": [[{"__bytes_hex__": "c0ff"}]],
+            }
+        )
+
+        with TemporaryDirectory() as tmp_dir:
+            sidecar = FileArtifactSidecar(tmp_dir)
+
+            self.assertIsNone(sidecar.read_rule_trace("missing"))
+
+            sidecar.write_rule_trace("rr_1", artifact)
+            self.assertEqual(sidecar.read_rule_trace("rr_1"), artifact)
+
+            sidecar.write_rule_trace("rr_1", artifact)
+
+            with self.assertRaises(ValueError) as ctx_collision:
+                sidecar.write_rule_trace(
+                    "rr_1",
+                    rule_trace_artifact_from_dict(
+                        {
+                            "rule_run_id": "rr_1",
+                            "root_rule": {"rule_id": "q.user.changed", "version": "1.0.0"},
+                            "select_vars": ["$u"],
+                            "invocations": [],
+                            "root_rows": [],
+                        }
+                    ),
+                )
+            self.assertEqual(
+                str(ctx_collision.exception),
+                "rule_run_id collision for different RuleTraceArtifact on disk: rr_1",
+            )
+
+            with self.assertRaises(ValueError) as ctx_path:
+                sidecar.read_rule_trace("bad/name")
+            self.assertEqual(str(ctx_path.exception), "rule_run_id must be filesystem-safe")
+
+            with self.assertRaises(ValueError) as ctx_backslash:
+                sidecar.read_rule_trace("bad\\name")
+            self.assertEqual(str(ctx_backslash.exception), "rule_run_id must be filesystem-safe")
+
+            with self.assertRaises(ValueError) as ctx_null:
+                sidecar.read_rule_trace("bad\x00name")
+            self.assertEqual(str(ctx_null.exception), "rule_run_id must be filesystem-safe")
+
+    def test_store_sidecar_cross_store_readback_and_rehydrate(self) -> None:
+        support_digest = "sha256:" + ("ab" * 32)
+        support_artifact = support_artifact_from_dict(
+            {
+                "support_digest": support_digest,
+                "kind": "native_binding_v1",
+                "root_result_kind": "fact",
+                "binding": [["$blob", {"__bytes_hex__": "00ff"}]],
+                "pred_witnesses": [
+                    {
+                        "pred_atom_key": "b0.a0:user:tag",
+                        "asrt_ids": ["A1"],
+                    }
+                ],
+                "non_fact_steps": [],
+                "rule_refs": [],
+            }
+        )
+        rule_trace_artifact = rule_trace_artifact_from_dict(
+            {
+                "rule_run_id": "rr_cross_store",
+                "root_rule": {"rule_id": "q.user", "version": "1.0.0"},
+                "select_vars": ["$u"],
+                "invocations": [],
+                "root_rows": [],
+            }
+        )
+
+        with TemporaryDirectory() as tmp_dir:
+            sidecar = FileArtifactSidecar(tmp_dir)
+            writer = Store(_schema_ir(), artifact_sidecar=sidecar)
+            reader = Store(_schema_ir(), artifact_sidecar=FileArtifactSidecar(tmp_dir))
+
+            writer._remember_support_artifact(support_digest, support_artifact)
+            writer._remember_rule_trace_artifact("rr_cross_store", rule_trace_artifact)
+
+            self.assertNotIn(support_digest, reader._support_artifacts)
+            self.assertNotIn("rr_cross_store", reader._rule_trace_artifacts)
+
+            self.assertEqual(reader._lookup_support_artifact(support_digest), support_artifact)
+            self.assertEqual(reader._lookup_rule_trace_artifact("rr_cross_store"), rule_trace_artifact)
+
+            self.assertEqual(reader._support_artifacts[support_digest], support_artifact)
+            self.assertEqual(reader._rule_trace_artifacts["rr_cross_store"], rule_trace_artifact)
+
+    def test_store_sidecar_rehydrate_does_not_rewrite_sidecar(self) -> None:
+        support_digest = "sha256:" + ("cd" * 32)
+        support_artifact = support_artifact_from_dict(
+            {
+                "support_digest": support_digest,
+                "kind": "native_binding_v1",
+                "root_result_kind": "fact",
+                "binding": [["$blob", {"__bytes_hex__": "00ff"}]],
+                "pred_witnesses": [
+                    {
+                        "pred_atom_key": "b0.a0:user:tag",
+                        "asrt_ids": ["A1"],
+                    }
+                ],
+                "non_fact_steps": [],
+                "rule_refs": [],
+            }
+        )
+
+        class SpySidecar:
+            def __init__(self, artifact: object) -> None:
+                self._artifact = artifact
+                self.write_support_calls = 0
+                self.read_support_calls = 0
+
+            def write_support(self, support_digest: str, artifact: object) -> None:
+                self.write_support_calls += 1
+
+            def write_rule_trace(self, rule_run_id: str, artifact: object) -> None:
+                raise AssertionError("unexpected write_rule_trace call")
+
+            def read_support(self, support_digest: str) -> object | None:
+                self.read_support_calls += 1
+                return self._artifact
+
+            def read_rule_trace(self, rule_run_id: str) -> object | None:
+                raise AssertionError("unexpected read_rule_trace call")
+
+        sidecar = SpySidecar(support_artifact)
+        store = Store(_schema_ir(), artifact_sidecar=sidecar)
+
+        self.assertEqual(store._lookup_support_artifact(support_digest), support_artifact)
+        self.assertEqual(sidecar.read_support_calls, 1)
+        self.assertEqual(sidecar.write_support_calls, 0)
+        self.assertEqual(store._support_artifacts[support_digest], support_artifact)
+
+    def test_store_sidecar_read_errors_propagate(self) -> None:
+        class BrokenSidecar:
+            def write_support(self, support_digest: str, artifact: object) -> None:
+                raise AssertionError("unexpected write_support call")
+
+            def write_rule_trace(self, rule_run_id: str, artifact: object) -> None:
+                raise AssertionError("unexpected write_rule_trace call")
+
+            def read_support(self, support_digest: str) -> object | None:
+                raise ValueError("corrupt support sidecar row")
+
+            def read_rule_trace(self, rule_run_id: str) -> object | None:
+                raise ValueError("corrupt rule trace sidecar row")
+
+        store = Store(_schema_ir(), artifact_sidecar=BrokenSidecar())
+
+        with self.assertRaises(ValueError) as ctx_support:
+            store._lookup_support_artifact("sha256:" + ("ef" * 32))
+        self.assertEqual(str(ctx_support.exception), "corrupt support sidecar row")
+
+        with self.assertRaises(ValueError) as ctx_trace:
+            store._lookup_rule_trace_artifact("rr_broken")
+        self.assertEqual(str(ctx_trace.exception), "corrupt rule trace sidecar row")
+
+    def test_sdk_artifact_store_root_enables_cross_instance_readback(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            writer = SDKStore([User], artifact_store_root=tmp_dir)
+            refs = _seed_users_for_syntax_matrix(writer)
+
+            with sdk_vars("u", "tag") as (u, tag):
+                drv = Derivation(
+                    id="drv.tag_copy.sdk_sidecar",
+                    version="1.0.0",
+                    where=[
+                        User(u),
+                        u.tag == tag,
+                    ],
+                    head=User.tag(locale="zh", tag=tag),
+                )
+
+            candidates = writer.evaluate(drv, mode="native")
+            self.assertTrue(candidates)
+            support_digest = candidates[0].support_digest
+
+            reader = SDKStore([User], artifact_store_root=tmp_dir)
+            self.assertIsNotNone(reader.store.explain_support(support_digest))
+
+            via_factory = SDKStore.from_schema_classes([User], artifact_store_root=tmp_dir)
+            self.assertIsNotNone(via_factory.store.explain_support(support_digest))
 
 
 def _schema_ir() -> dict[str, object]:

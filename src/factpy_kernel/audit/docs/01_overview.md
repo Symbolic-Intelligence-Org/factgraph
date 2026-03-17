@@ -83,3 +83,16 @@
 - audit 主要面向离线快照，不是实时审计接口
 - 没有直接把 live runtime store 映射成 audit query 的入口
 - 审计能力依赖导出的 package 是否完整包含所需 ledger / decision / authoring event 信息
+
+## 6. Audit Package Artifact Files
+
+当 package 以 `package_kind="audit"` 导出时，当前 package 除了 ledger / decision 相关文件外，也会附带 explain artifact dump：
+
+- `audit/support_artifacts.jsonl`
+  - 以 `support_digest` 为 key 的 flat JSONL rows
+  - payload 复用 `SupportArtifact` 的 JSON-friendly shape
+- `audit/rule_trace_artifacts.jsonl`
+  - 以 `rule_run_id` 为 key 的 flat JSONL rows
+  - payload 复用 `RuleTraceArtifact` 的 JSON-friendly shape
+
+这些文件当前是全量导出，不做引用子集裁剪；它们的职责是让离线 audit consumer 能读取 explain carrier，而不是提供 online durable readback。

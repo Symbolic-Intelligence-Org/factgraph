@@ -12,6 +12,7 @@ from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.protocol.digests import sha256_token
 from factpy_kernel.core.protocol.tup_v1 import CANONICAL_TAGS, canonical_bytes_tup_v1
 from factpy_kernel.core.rules.where_eval import WhereValidationError
+from factpy_kernel.core.store._support import BindingSupportCapture, normalize_binding_items
 
 _BYTES_B64URL_RE = re.compile(r"^[A-Za-z0-9_-]*$")
 
@@ -25,13 +26,16 @@ def candidates_from_bindings(
     arg_specs: list[dict[str, Any]],
     head_vars: list[Any],
     schema_pred: dict[str, Any],
-    bindings: list[dict[str, Any]],
+    rows: list[BindingSupportCapture] | None = None,
+    bindings: list[dict[str, Any]] | None = None,
 ) -> list[CandidateSet]:
     run_id = uuid4().hex
     group_key_indexes = read_group_key_indexes(schema_pred, len(arg_specs))
+    binding_rows = _coerce_binding_rows(rows=rows, bindings=bindings)
 
     candidates: list[CandidateSet] = []
-    for binding in bindings:
+    for row in binding_rows:
+        binding = row.binding_dict()
         tagged_args = build_tagged_args(arg_specs, head_vars, binding)
 
         e_tag, e_ref = tagged_args[0]
@@ -63,8 +67,8 @@ def candidates_from_bindings(
                 "pred_id": target_pred_id,
                 "terms": [_term_from_tag_value(tag, value) for tag, value in tagged_args],
             },
-            support_digest=f"sha256:{'0' * 64}",
-            support_kind="none",
+            support_digest=row.support_digest,
+            support_kind=row.support_kind,
             generated_at=now_epoch_nanos(),
             tup_digest=tup_digest,
             state="generated",
@@ -74,7 +78,8 @@ def candidates_from_bindings(
 
     unique: dict[str, CandidateSet] = {}
     for candidate in candidates:
-        if candidate.candidate_key not in unique:
+        existing = unique.get(candidate.candidate_key)
+        if existing is None or _support_is_better(candidate, existing):
             unique[candidate.candidate_key] = candidate
 
     return sorted(unique.values(), key=lambda cand: cand.candidate_key)
@@ -86,15 +91,18 @@ def entity_candidates_from_bindings(
     derivation_id: str,
     version: str,
     entity_spec: dict[str, Any],
-    bindings: list[dict[str, Any]],
+    rows: list[BindingSupportCapture] | None = None,
+    bindings: list[dict[str, Any]] | None = None,
 ) -> list[CandidateSet]:
     run_id = uuid4().hex
     entity_type = entity_spec["entity_type"]
     role_defs = entity_spec["roles"]
     head_values = entity_spec["head_vars"]
+    binding_rows = _coerce_binding_rows(rows=rows, bindings=bindings)
 
     candidates: list[CandidateSet] = []
-    for binding in bindings:
+    for row in binding_rows:
+        binding = row.binding_dict()
         tagged_role_terms: list[tuple[str, Any]] = []
         role_payloads: list[dict[str, Any]] = []
         for role_def, head_ref in zip(role_defs, head_values):
@@ -142,8 +150,8 @@ def entity_candidates_from_bindings(
                 "missing_identity_fields": missing_identity_fields,
                 "proposed_entity_ref": proposed_entity_ref,
             },
-            support_digest=f"sha256:{'0' * 64}",
-            support_kind="none",
+            support_digest=row.support_digest,
+            support_kind=row.support_kind,
             generated_at=now_epoch_nanos(),
             state="generated",
             candidate_kind="entity",
@@ -169,8 +177,8 @@ def entity_candidates_from_bindings(
                     "pred_id": role["pred_id"],
                     "terms": fact_terms,
                 },
-                support_digest=f"sha256:{'0' * 64}",
-                support_kind="none",
+                support_digest=row.support_digest,
+                support_kind=row.support_kind,
                 generated_at=now_epoch_nanos(),
                 tup_digest=fact_tup_digest,
                 state="generated",
@@ -181,9 +189,39 @@ def entity_candidates_from_bindings(
     unique: dict[tuple[Any, ...], CandidateSet] = {}
     for candidate in candidates:
         key = (candidate.candidate_kind, candidate.candidate_key)
-        if key not in unique:
+        existing = unique.get(key)
+        if existing is None or _support_is_better(candidate, existing):
             unique[key] = candidate
     return sorted(unique.values(), key=lambda cand: (cand.candidate_kind, cand.candidate_key))
+
+
+def _coerce_binding_rows(
+    *,
+    rows: list[BindingSupportCapture] | None,
+    bindings: list[dict[str, Any]] | None,
+) -> list[BindingSupportCapture]:
+    if rows is not None and bindings is not None:
+        raise ValueError("pass either rows or bindings, not both")
+    if rows is not None:
+        return list(rows)
+    if bindings is None:
+        raise ValueError("rows or bindings must be provided")
+    return [
+        BindingSupportCapture(
+            binding_items=normalize_binding_items(binding),
+            support_digest=f"sha256:{'0' * 64}",
+            support_kind="none",
+        )
+        for binding in bindings
+    ]
+
+
+def _support_is_better(candidate: CandidateSet, existing: CandidateSet) -> bool:
+    if candidate.support_digest < existing.support_digest:
+        return True
+    if candidate.support_digest == existing.support_digest:
+        return candidate.support_kind < existing.support_kind
+    return False
 
 
 def find_schema_pred(store: Any, pred_id: str) -> dict[str, Any] | None:

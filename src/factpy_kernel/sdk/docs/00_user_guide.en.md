@@ -41,6 +41,16 @@ sdk = SDKStore.from_schema_classes(
 )
 ```
 
+If you also want explain artifacts to survive across later `SDKStore` instances, add `artifact_store_root`:
+
+```python
+sdk = SDKStore.from_schema_classes(
+    [User, Country, Language, LivesIn],
+    ledger_path="./data/ledger.db",
+    artifact_store_root="./data/artifacts",
+)
+```
+
 If you want Rule query results to default to dict rows:
 
 ```python
@@ -55,6 +65,7 @@ sdk = SDKStore.from_schema_classes(
 * `classes` must be a non-empty `list[Entity subclass]`; the `from_schema_classes(...)` / `schema_preflight_from_classes(...)` path raises `SDKSchemaError`, while the `SDKStore(...)` constructor path raises `SDKStoreError`.
 * `ledger` and `ledger_path` are mutually exclusive; they cannot be provided at the same time.
 * `ledger_path` records `schema_digest` when opening/creating the ledger; it is validated on reopening, and a mismatch raises `SDKStoreError`.
+* `artifact_store_root` is an optional `str`; when provided it enables sidecar-backed explain artifact readback across later `SDKStore` instances, and when omitted the default in-process explain-registry behavior remains unchanged.
 * `default_row_format` only affects `sdk.run(rule, ...)`; valid values are `"tuple"` / `"dict"`, with default `"dict"`.
 * When the parsed result is `"tuple"`, a `DeprecationWarning` is triggered; it is recommended to standardize on `"dict"`.
 * The `FACTPY_ROW_FORMAT` environment variable is read and cached during `SDKStore` initialization (not dynamically read on each `run()`).

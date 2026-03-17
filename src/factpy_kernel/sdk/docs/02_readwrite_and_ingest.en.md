@@ -26,10 +26,21 @@ sdk = SDKStore.from_schema_classes(
 )
 ```
 
+To make explain artifacts readable across later `SDKStore` instances as well, you can also provide:
+
+```python
+sdk = SDKStore.from_schema_classes(
+    [User, Country, LivesIn],
+    ledger_path="./data/ledger.db",
+    artifact_store_root="./data/artifacts",
+)
+```
+
 Stable contract:
 - `classes` must be a non-empty `list[Entity subclass]`; `from_schema_classes(...)` / `schema_preflight_from_classes(...)` raise `SDKSchemaError`, while `SDKStore(...)` constructor-path checks raise `SDKStoreError`.
 - `ledger` and `ledger_path` are mutually exclusive.
 - `ledger_path` records `schema_digest` when the ledger is opened/created, and validates it on reopen.
+- `artifact_store_root` is an optional `str`; when provided it enables sidecar-backed explain artifact readback, while omitting it keeps the default in-process explain registry behavior.
 - `default_row_format` affects only `sdk.run(rule, ...)`; allowed values are `"tuple"` / `"dict"` (default `"dict"`).
 - `FACTPY_ROW_FORMAT` is read and cached at `SDKStore` initialization time (not re-read on every `run()` call).
 - Resolving to `"tuple"` emits `DeprecationWarning`; prefer `"dict"`.

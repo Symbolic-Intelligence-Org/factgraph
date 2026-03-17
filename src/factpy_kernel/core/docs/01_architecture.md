@@ -50,13 +50,14 @@ src/factpy_kernel/core/
 | `view.projector` | 核心事实投影与审计统计 | `project_view_facts`, `project_view_facts_with_audit`, `project_display_facts` |
 | `rules.where_ast*` | where AST 解析与校验 | `parse_where_ir_to_ast`, `validate_where_ast` |
 | `rules.where_eval` | where 解释执行（native 路径） | `evaluate_where` |
-| `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef 执行 | `run_rule` |
+| `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef 执行 | `run_rule`, `run_rule_with_trace` |
+| `rules._trace` | rule runtime trace carrier 与序列化 | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict` |
 | `derivation.candidates` | 候选结构与 digest/key 计算 | `CandidateSet`, `make_candidate` |
 | `derivation.accept` | candidate accept 与 batch accept_many | `accept_candidate_set`, `accept_many_candidate_sets` |
 | `mapping.canon` | mapping 冲突解析与 tie-break | `resolve_mapping_predicate` |
 | `annotation._min_max` | internal prototype 的 min-max 路径置信度传播 | `derive_min_max_path_confidence` |
 | `annotation._evidence` | internal prototype 的 Workload C 证据展开 / provenance 重建 / max 聚合 helper | `build_direct_evidence_candidates_proto`, `build_max_evidence_provenance`, `apply_max_evidence_aggregation` |
-| `store.runtime` | `Store` 门面、engine 注册点 | `Store`, `register_engine_evaluator` |
+| `store.runtime` | `Store` 门面、engine 注册点，以及默认 in-process / 可选 sidecar explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest` |
 | `store.evaluation` | `Store.evaluate` 公共入口 | `evaluate_store` |
 | `store.queries` | explain/conflicts/resolve_mapping 查询 | `explain_fact`, `conflicts`, `resolve_mapping` |
 | `store.builders` | 候选构建、head/entity 解析、值 coercion | `candidates_from_bindings`, `entity_candidates_from_bindings` |
@@ -98,15 +99,49 @@ flowchart LR
 - `souffle` / `problog`：委托已注册的 engine evaluator
 - `python` / `engine`：已移除，调用会抛 `ValueError`
 
+native derivation 现在还会在 evaluate 结束后登记一层轻量 backref：
+
+- `candidate_id -> support_digest`
+- 仅对 `support_kind="native_binding_v1"` 的 candidates 生效
+- `Store.get_candidate_support_digest(candidate_id)` 可在当前 `Store` 实例内回取该 digest，再由调用方自行串联 `Store.explain_support(...)`
+- 若 `Store(..., artifact_sidecar=...)` 已配置，同一 `support_digest` 也可在共享 sidecar root 的后续 `Store` 实例中被重新解引用
+
 ```mermaid
 flowchart LR
   A["Store.evaluate(mode='native')"] --> B["view.projector.project_view_facts"]
   B --> C["rules.where_eval.evaluate_where"]
   C --> D["store.builders.*_from_bindings"]
   D --> E["CandidateSet list"]
+  E --> F["Store._candidate_support_index"]
 ```
 
-### 5.3 Accept 链路
+### 5.3 Rule Runtime 链路
+
+`run_rule(...)` 与 `Store.evaluate(...)` 是分开的规则执行路径：
+
+- `run_rule(...)`：保持兼容，只返回 `list[tuple]`
+- `run_rule_with_trace(...)`：在不破坏旧调用面的前提下，同步捕获 `RuleTraceArtifact`
+- `Store.explain_rule_trace(rule_run_id)`：默认在当前进程内解引用 trace artifact；若已配置 `artifact_sidecar`，也可在共享 sidecar root 的后续 `Store` 实例中回读
+
+当前 trace 语义要点：
+
+- `original_where` 与 `rewritten_where` 同时保留
+- `RuleRef` 关系第一轮按 call-site invocation capture，并显式标记 `memo_hit`
+- `RuleTraceArtifact` 与 derivation `SupportArtifact` 保持分离
+
+```mermaid
+flowchart LR
+  A["run_rule_with_trace(...)"] --> B["view.projector.project_view_facts"]
+  A --> C["view.projector.project_view_facts_with_witness"]
+  B --> D["rules.rule_ir._run_rule_core"]
+  C --> D
+  D --> E["rules.rule_ir._evaluate_rule (recursive)"]
+  E --> F["RuleTraceArtifact"]
+  F --> G["Store._rule_trace_artifacts"]
+  G --> H["Store.explain_rule_trace(...)"]
+```
+
+### 5.4 Accept 链路
 
 ```mermaid
 flowchart LR
@@ -180,6 +215,14 @@ flowchart LR
 
 - `factpy_kernel.adapters.souffle` import 时注册 `souffle`
 - `factpy_kernel.adapters.problog` import 时注册 `problog`
+
+补充：
+
+- `Store` 当前维护两个分离的 in-process explain registry：
+  - `_support_artifacts`：derivation native support capture
+  - `_rule_trace_artifacts`：`run_rule_with_trace(...)` 产出的 rule runtime trace
+- 两者当前只在 readback 协议层并列存在，不共享底层 carrier。
+- 若 `Store` 配置了 `artifact_sidecar`，上述两个 registry 会在 lookup miss 时从 sidecar 读回并 rehydrate 到当前内存 dict；未配置时仍保持纯 in-process 语义。
 
 ## 8.1 Annotation Prototype Boundary
 
