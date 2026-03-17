@@ -9,6 +9,8 @@ from factpy_kernel.core.protocol.digests import sha256_token
 SupportRootResultKind: TypeAlias = Literal["fact", "entity"]
 BindingItems: TypeAlias = tuple[tuple[str, Any], ...]
 DetailItems: TypeAlias = tuple[tuple[str, Any], ...]
+ENGINE_NO_WITNESS_KIND = "engine_no_witness_v1"
+_DEGRADED_SUPPORT_KINDS = frozenset({"none", ENGINE_NO_WITNESS_KIND})
 
 
 @dataclass(frozen=True)
@@ -266,11 +268,13 @@ __all__ = [
     "BindingSupportCapture",
     "BindingItems",
     "DetailItems",
+    "ENGINE_NO_WITNESS_KIND",
     "NonFactStep",
     "PredWitness",
     "ProjectedFact",
     "SupportArtifact",
     "SupportRootResultKind",
+    "_DEGRADED_SUPPORT_KINDS",
     "binding_dict_from_items",
     "compute_support_digest",
     "make_non_fact_step_key",

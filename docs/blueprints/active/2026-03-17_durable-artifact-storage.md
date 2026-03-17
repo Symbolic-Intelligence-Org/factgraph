@@ -310,6 +310,9 @@ durable artifact 一旦落地，就会出现新的运维问题：
 3. `candidate-support-backref`
    - 在 durable artifact 语义稳定后，再讨论 `candidate_id -> support_digest`
    - 当前已拆为并完成子蓝图：[2026-03-17_candidate-id-support-backref.md](../archive/2026-03-17_candidate-id-support-backref.md)
+4. `sidecar-retention-gc`
+   - Retention metadata plane 和 `RuleTraceArtifact` age-only GC。
+   - 已实现并归档：[2026-03-17_sidecar-retention-gc.md](../archive/2026-03-17_sidecar-retention-gc.md)
 
 ## 10. Outcome / Deviations
 

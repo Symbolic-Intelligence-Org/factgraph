@@ -1,7 +1,7 @@
 # Souffle Adapter 总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/souffle`
-- 最后更新：2026-03-17
+- 最后更新：2026-03-18
 - 目标读者：需要理解 Souffle 导出、执行、查询编译链路的开发者
 
 ## 1. 模块职责
@@ -75,6 +75,14 @@
 
 注意：`engine_eval` 会强校验 `run_manifest.engine_mode == "souffle"`；如果 runner 因缺少二进制回退到 `noop`，会报错而不是静默成功。
 
+explainability 补充：
+
+- 当前 Souffle evaluate 只回读 binding rows，不输出可回映到 `asrt_id` 的 witness / provenance。
+- 因此由该适配器生成的 candidates 第一轮会显式标记：
+  - `support_kind="engine_no_witness_v1"`
+  - `support_digest="sha256:000...0"`（兼容占位符）
+- service `explain_ref(kind="candidate")` 对这类 candidate 返回 `ok=true` + `witness_status="degraded"`，表示 candidate 有效但当前无 witness artifact。
+
 ### 4.2 Package 导出
 
 `export_package(...)` 会产出（`export_version=v2`）：
@@ -112,3 +120,4 @@ Souffle 二进制查找顺序：
 - 依赖外部 Souffle CLI；缺失时 runner 会回退 `noop`
 - `engine_eval` 不接受 `noop` 结果作为有效求值
 - 当前适配目标是 query/derivation 执行，不是 Deontic 规范推理引擎
+- 当前不输出 native 级 witness；只保证显式 degraded explain，而不是静默 zero-digest 降级

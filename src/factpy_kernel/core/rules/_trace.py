@@ -73,6 +73,18 @@ class RuleTraceNonFactStep:
 
 
 @dataclass(frozen=True)
+class RuleTraceRuleRefLink:
+    ruleref_atom_key: str
+    child_invocation_id: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.ruleref_atom_key, str) or not self.ruleref_atom_key:
+            raise ValueError("ruleref_atom_key must be non-empty string")
+        if not isinstance(self.child_invocation_id, str) or not self.child_invocation_id:
+            raise ValueError("child_invocation_id must be non-empty string")
+
+
+@dataclass(frozen=True)
 class RuleTraceInvocation:
     invocation_id: str
     parent_invocation_id: str | None
@@ -86,6 +98,7 @@ class RuleTraceInvocation:
     output_rows: tuple[tuple[Any, ...], ...]
     pred_witnesses: tuple[RuleTracePredWitness, ...] = ()
     non_fact_steps: tuple[RuleTraceNonFactStep, ...] = ()
+    ruleref_links: tuple[RuleTraceRuleRefLink, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.invocation_id, str) or not self.invocation_id:
@@ -114,6 +127,10 @@ class RuleTraceInvocation:
             sorted(self.non_fact_steps, key=lambda item: (item.binding_index, item.step_key))
         ):
             raise ValueError("non_fact_steps must be sorted by binding_index and step_key")
+        if self.ruleref_links != tuple(
+            sorted(self.ruleref_links, key=lambda item: item.ruleref_atom_key)
+        ):
+            raise ValueError("ruleref_links must be sorted by ruleref_atom_key")
 
 
 @dataclass(frozen=True)
@@ -199,6 +216,16 @@ def _from_jsonable(value: Any) -> Any:
     return value
 
 
+_LEGACY_STATUS_MAP: dict[str, str] = {
+    "no_match": "negated",
+    "satisfied": "evaluated",
+}
+
+
+def _normalize_non_fact_status(status: str) -> str:
+    return _LEGACY_STATUS_MAP.get(status, status)
+
+
 def rule_trace_artifact_to_dict(artifact: RuleTraceArtifact) -> dict[str, Any]:
     if not isinstance(artifact, RuleTraceArtifact):
         raise ValueError("artifact must be RuleTraceArtifact")
@@ -237,6 +264,13 @@ def rule_trace_artifact_to_dict(artifact: RuleTraceArtifact) -> dict[str, Any]:
                         "details": [[key, _to_jsonable(value)] for key, value in step.details],
                     }
                     for step in invocation.non_fact_steps
+                ],
+                "ruleref_links": [
+                    {
+                        "ruleref_atom_key": link.ruleref_atom_key,
+                        "child_invocation_id": link.child_invocation_id,
+                    }
+                    for link in invocation.ruleref_links
                 ],
             }
             for invocation in artifact.invocations
@@ -300,10 +334,17 @@ def _rule_trace_invocation_from_dict(row: Mapping[str, Any]) -> RuleTraceInvocat
                 binding_index=item["binding_index"],
                 step_key=item["step_key"],
                 kind=item["kind"],
-                status=item["status"],
+                status=_normalize_non_fact_status(item["status"]),
                 details=tuple((key, _from_jsonable(value)) for key, value in item["details"]),
             )
             for item in row.get("non_fact_steps", ())
+        ),
+        ruleref_links=tuple(
+            RuleTraceRuleRefLink(
+                ruleref_atom_key=link["ruleref_atom_key"],
+                child_invocation_id=link["child_invocation_id"],
+            )
+            for link in row.get("ruleref_links", ())
         ),
     )
 
@@ -315,6 +356,7 @@ __all__ = [
     "RuleTraceInvocation",
     "RuleTraceNonFactStep",
     "RuleTracePredWitness",
+    "RuleTraceRuleRefLink",
     "rule_trace_artifact_bytes",
     "rule_trace_artifact_from_dict",
     "rule_trace_artifact_to_dict",

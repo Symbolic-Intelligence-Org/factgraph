@@ -17,7 +17,7 @@ from factpy_kernel.core.schema.schema_ir import ensure_schema_ir
 from factpy_kernel.core.store import _accept as _store_accept
 from factpy_kernel.core.store._artifact_sidecar import ArtifactSidecar
 from factpy_kernel.core.store._explain_support import render_support_artifact
-from factpy_kernel.core.store._support import SupportArtifact
+from factpy_kernel.core.store._support import ENGINE_NO_WITNESS_KIND, SupportArtifact
 from factpy_kernel.core.store.evaluation import evaluate_store
 from factpy_kernel.core.store.ledger import Ledger
 from factpy_kernel.core.store.queries import conflicts as store_conflicts
@@ -72,6 +72,7 @@ class Store:
         self._artifact_sidecar = artifact_sidecar
         self._support_artifacts: dict[str, SupportArtifact] = {}
         self._candidate_support_index: dict[str, str] = {}
+        self._candidate_support_kind_index: dict[str, str] = {}
         self._rule_trace_artifacts: dict[str, RuleTraceArtifact] = {}
         if engine_evaluator is not None:
             self._engine_overrides["souffle"] = engine_evaluator
@@ -124,14 +125,19 @@ class Store:
         self,
         candidate_id: str,
         support_digest: str,
+        support_kind: str,
     ) -> None:
         if not isinstance(candidate_id, str) or not candidate_id:
             raise ValueError("candidate_id must be non-empty string")
         if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
             raise ValueError("support_digest must be sha256 token")
+        if not isinstance(support_kind, str) or not support_kind:
+            raise ValueError("support_kind must be non-empty string")
         if candidate_id in self._candidate_support_index:
+            self._candidate_support_kind_index.setdefault(candidate_id, support_kind)
             return
         self._candidate_support_index[candidate_id] = support_digest
+        self._candidate_support_kind_index[candidate_id] = support_kind
 
     def _lookup_candidate_support(
         self,
@@ -140,6 +146,14 @@ class Store:
         if not isinstance(candidate_id, str) or not candidate_id:
             raise ValueError("candidate_id must be non-empty string")
         return self._candidate_support_index.get(candidate_id)
+
+    def _lookup_candidate_support_kind(
+        self,
+        candidate_id: str,
+    ) -> str | None:
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise ValueError("candidate_id must be non-empty string")
+        return self._candidate_support_kind_index.get(candidate_id)
 
     def _remember_rule_trace_artifact(
         self,
@@ -264,7 +278,7 @@ class Store:
             key_terms=key_terms,
             payload=payload,
             support_digest=f"sha256:{'0' * 64}",
-            support_kind="none",
+            support_kind=ENGINE_NO_WITNESS_KIND,
             generated_at=now_epoch_nanos(),
             tup_digest=tup_digest,
             state="generated",
@@ -308,6 +322,9 @@ class Store:
 
     def get_candidate_support_digest(self, candidate_id: str) -> str | None:
         return self._lookup_candidate_support(candidate_id)
+
+    def get_candidate_support_kind(self, candidate_id: str) -> str | None:
+        return self._lookup_candidate_support_kind(candidate_id)
 
     def explain_rule_trace(self, rule_run_id: str) -> dict[str, Any] | None:
         artifact = self._lookup_rule_trace_artifact(rule_run_id)

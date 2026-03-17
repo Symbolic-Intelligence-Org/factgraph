@@ -19,6 +19,11 @@
 | 2026-03-17 | draft | Reference-doc links refreshed | Updated the blueprint to explicitly cite `docs/references/README.md`, `docs/references/working/cross-domain-compliance-framing.md`, and `docs/references/external/rainbird-evidence-chain-compare.md`, and corrected the stale self-reference from `§5.8` to `§5.9`. |
 | 2026-03-17 | draft | Support-artifact framing refined | Corrected the proof-entry discussion to note that `evaluate_where` only returns value bindings, not assertion identities; reframed the long-term direction around a witness-capable projection layer plus a `SupportArtifact` carrier, and separated rule-run execution trace as its own follow-on concern. |
 | 2026-03-17 | draft | Support-artifact child blueprint linked | Added a short bridge note from the parent blueprint to `2026-03-17_support-artifact-native-capture.md`, clarifying that native support capture now has its own implementation-facing child blueprint while the parent remains a discussion blueprint. |
+| 2026-03-17 | draft | Explain-ref child blueprint linked | Added a short bridge note from the parent blueprint to `2026-03-17_explain-ref-service-unification.md` after the unified service-level explain contract landed and was archived as its own implementation slice. |
+| 2026-03-17 | draft | Rule-run schema child blueprint linked | Added a short bridge note from the parent blueprint to `2026-03-17_rule-run-trace-schema-contract.md` so the remaining `rule_run` work tracks the current code reality: schema/contract freeze, not first-time trace capture. |
+| 2026-03-17 | draft | Rule-run schema child blueprint archived | Updated the parent bridge note to point at the archived `2026-03-17_rule-run-trace-schema-contract.md` after the schema/contract slice landed. |
+| 2026-03-18 | draft | Engine witness child blueprint linked | Added a short bridge note from the parent blueprint to `2026-03-18_engine-witness-parity.md` so the remaining engine explainability work is tracked as explicit degradation semantics first, not premature true-witness parity. |
+| 2026-03-18 | draft | Engine witness child blueprint archived | Updated the parent bridge note to point at archived `2026-03-18_engine-witness-parity.md` after explicit degraded explain semantics landed for engine candidates. |
 
 ## Decision Notes
 
@@ -43,3 +48,6 @@
 - 2026-03-17: 当前 native `evaluate_where` 只能看到 value tuples，原因是 `project_view_facts` 已在投影阶段剥除了 `asrt_id`；因此长期方向不是“存现有 bindings 即可”，而是引入 witness-capable projection / evaluator，使 `pred_witnesses`、`non_fact_steps` 等 support 信息能在执行当时被捕获。
 - 2026-03-17: `run_rule` 路径的 explainability 问题不只是“缺一个 ID”，还包括 `memo_rows` 只保留 subrule result rows、不保留 bindings/witness；因此 rule-run trace 应作为独立子蓝图推进，不与 derivation 路径的 `SupportArtifact` 方案混合收口。
 - 2026-03-17: 当某个 implementation slice 已足够清晰时，母蓝图应保留 framing 角色，而把具体落地切到子蓝图；`SupportArtifact + witness-capable projection` 已按这一原则拆到独立 active blueprint。
+- 2026-03-17: `explain_ref` 的首轮 service contract 现已在独立子蓝图中落地；当前 parent blueprint 继续保留更高层的 carrying-model、delivery-shape 与后续 rule-run trace / engine witness framing。
+- 2026-03-17: `rule_run` 的下一切口不应再以“缺少 trace capture”为 framing；当前代码已具备 `RuleTraceArtifact` capture/readback，剩余问题更准确地是 schema semantics 与 service contract 收口。
+- 2026-03-18: engine witness parity 的第一轮不应直接承诺 `souffle/problog` 拥有 native 级 witness；当前更准确的剩余问题是 engine candidate 的显式降级语义、`support_kind` contract，以及 service explain surface 如何表达“无 witness”。

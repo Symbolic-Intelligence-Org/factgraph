@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from factpy_kernel.core.store._support import (
+    _DEGRADED_SUPPORT_KINDS,
     BindingSupportCapture,
     NonFactStep,
     PredWitness,
@@ -61,7 +62,9 @@ def evaluate_store(
             }
             if mode == "problog":
                 engine_kwargs["body_confidences"] = body_confidences
-            return engine_evaluate(**engine_kwargs)
+            candidates = engine_evaluate(**engine_kwargs)
+            _remember_candidate_support_backrefs(store, candidates)
+            return candidates
         if mode != "native":
             raise ValueError("mode must be one of: native, souffle, problog")
 
@@ -99,7 +102,9 @@ def evaluate_store(
         }
         if mode == "problog":
             engine_kwargs["body_confidences"] = body_confidences
-        return engine_evaluate(**engine_kwargs)
+        candidates = engine_evaluate(**engine_kwargs)
+        _remember_candidate_support_backrefs(store, candidates)
+        return candidates
     if mode != "native":
         raise ValueError("mode must be one of: native, souffle, problog")
 
@@ -193,17 +198,19 @@ def _remember_candidate_support_backrefs(
     if not candidates:
         return
 
-    # Only candidates backed by real native support should enter the backref index.
-    # Compatibility rows still using support_kind="none" should not produce explain handles.
     for candidate in candidates:
-        if candidate.support_kind != "native_binding_v1":
-            continue
+        support_kind = candidate.support_kind
         support_digest = candidate.support_digest
+        if support_kind in _DEGRADED_SUPPORT_KINDS:
+            store._remember_candidate_support(candidate.candidate_id, support_digest, support_kind)
+            continue
+        if support_kind != "native_binding_v1":
+            continue
         if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
             continue
         if support_digest == f"sha256:{'0' * 64}":
             continue
-        store._remember_candidate_support(candidate.candidate_id, support_digest)
+        store._remember_candidate_support(candidate.candidate_id, support_digest, support_kind)
 
 
 def _build_support_artifact_for_binding(

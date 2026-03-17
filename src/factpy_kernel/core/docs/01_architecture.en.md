@@ -54,7 +54,8 @@ src/factpy_kernel/core/
 | `derivation.candidates` | candidate structure and digest/key computation | `CandidateSet`, `make_candidate` |
 | `derivation.accept` | candidate accept and batch accept_many | `accept_candidate_set`, `accept_many_candidate_sets` |
 | `mapping.canon` | mapping conflict resolution and tie-break | `resolve_mapping_predicate` |
-| `store.runtime` | `Store` facade, engine registration, and default in-process / optional sidecar-backed explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest` |
+| `store._artifact_sidecar` | file-backed durable explain carrier, capture-time retention metadata, and rule-trace TTL GC maintenance | `FileArtifactSidecar`, `GCResult`, `FileArtifactSidecar.gc_rule_trace` |
+| `store.runtime` | `Store` facade, engine registration, and default in-process / optional sidecar-backed explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest`, `Store.get_candidate_support_kind` |
 | `store.evaluation` | public `Store.evaluate` entrypoint | `evaluate_store` |
 | `store.queries` | explain/conflicts/resolve_mapping queries | `explain_fact`, `conflicts`, `resolve_mapping` |
 | `store.builders` | candidate building, head/entity parsing, value coercion | `candidates_from_bindings`, `entity_candidates_from_bindings` |
@@ -96,12 +97,15 @@ Current `Store.evaluate(...)` modes:
 - `souffle` / `problog`: delegate to registered engine evaluators
 - `python` / `engine`: removed; calls raise `ValueError`
 
-Native derivation now also records a lightweight backref after candidate construction:
+Evaluate now also records a lightweight candidate explain backref after candidate construction:
 
-- `candidate_id -> support_digest`
-- only for candidates carrying `support_kind="native_binding_v1"`
-- `Store.get_candidate_support_digest(candidate_id)` can recover the digest within the current `Store` instance, after which callers may chain `Store.explain_support(...)` themselves
-- when `Store(..., artifact_sidecar=...)` is configured, the same `support_digest` can also be re-read from later `Store` instances that share the same sidecar root
+- `candidate_id -> (support_digest, support_kind)`
+- native candidates write `support_kind="native_binding_v1"` and can continue to `Store.explain_support(...)`
+- engine candidates now explicitly write `support_kind="engine_no_witness_v1"` plus the zero-digest placeholder:
+  - this is a no-witness degraded explain state, not an artifact-missing error
+  - service `explain_ref(kind="candidate")` returns `witness_status="degraded"` for this path
+- `Store.get_candidate_support_digest(candidate_id)` and `Store.get_candidate_support_kind(candidate_id)` both recover only this first hop inside the current `Store` instance
+- when `Store(..., artifact_sidecar=...)` is configured, only the native `support_digest -> SupportArtifact` second hop can be re-read from later `Store` instances sharing the same sidecar root
 
 ```mermaid
 flowchart LR
@@ -124,6 +128,9 @@ Current trace semantics:
 
 - both `original_where` and `rewritten_where` are retained
 - `RuleRef` relationships are captured per call site and explicitly marked with `memo_hit`
+- `ruleref_links` explicitly connect each `ruleref` atom in `where` to the child invocation that actually occurred; on memo hits the link points to the memo-hit invocation, and clients can then follow `memo_source_invocation_id` to the primary invocation
+- `non_fact_steps.status` now writes `negated` for `not` and `evaluated` for other non-`pred` steps
+- `original_where`, `rewritten_where`, and `non_fact_steps.details.atom` remain opaque payloads; the typed contract only promises their surrounding fields
 - `RuleTraceArtifact` remains separate from derivation `SupportArtifact`
 
 ```mermaid
@@ -218,8 +225,20 @@ Additional note:
 - `Store` now maintains two separate in-process explain registries:
   - `_support_artifacts` for derivation-native support capture
   - `_rule_trace_artifacts` for `run_rule_with_trace(...)`
+- `Store` also maintains a session-scoped candidate explain backref index:
+  - `_candidate_support_index`: `candidate_id -> support_digest`
+  - `_candidate_support_kind_index`: `candidate_id -> support_kind`
+  - this index does not go to sidecar; both native and engine degraded candidate explain rely on this first hop
 - they intentionally remain separate at the carrier layer for now.
 - when `artifact_sidecar` is configured, lookup misses rehydrate these registries from the sidecar into the current in-memory dicts; without it, the behavior remains purely in-process.
+- `FileArtifactSidecar` now writes sidecar-adjacent `.meta.json` files on first durable write:
+  - `support/sha256/<hex>.meta.json`
+  - `rule_trace/<rule_run_id>.meta.json`
+- the first metadata slice carries only `captured_at_ns` and does not change artifact payload canonical bytes.
+- the only maintenance surface in this slice is `FileArtifactSidecar.gc_rule_trace(ttl_ns, dry_run=False)`:
+  - it applies age-only TTL GC only to `RuleTraceArtifact`
+  - `SupportArtifact` remains write-and-retain
+  - payload orphans are reported and skipped, while metadata orphans may be cleaned up
 
 ## 9. Invariants That Must Hold
 

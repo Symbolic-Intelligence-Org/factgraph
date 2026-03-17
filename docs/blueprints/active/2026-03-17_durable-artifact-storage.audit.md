@@ -15,6 +15,7 @@
 | 2026-03-17 | implementing | Sidecar child carrier layer shipped | The child blueprint now has the file-backed carrier itself plus collision/path-safety tests; remaining work is limited to Store/runtime/SDK integration and docs. |
 | 2026-03-17 | implementing | Sidecar child Store layer shipped | The sidecar child blueprint now includes Store constructor injection, first-write durable persistence, lookup fallback, and cross-store readback tests; the remaining work is narrowed to runtime/SDK configuration surfaces and module-doc sync. |
 | 2026-03-17 | implemented | Sidecar child blueprint completed | The `artifact-sidecar-store` child blueprint is now fully implemented and archived after runtime/SDK surfaces, docs sync, and end-to-end readback tests were completed. |
+| 2026-03-17 | implemented | Retention/GC follow-up child completed | The follow-up `sidecar-retention-gc` child blueprint shipped sidecar-adjacent metadata, age-only `RuleTraceArtifact` GC, focused tests, and core-doc sync, and is now archived alongside the original durable-storage slices. |
 
 ## Decision Notes
 

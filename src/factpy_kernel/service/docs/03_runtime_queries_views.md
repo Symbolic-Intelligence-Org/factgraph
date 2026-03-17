@@ -8,6 +8,7 @@
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-support`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-rule-trace`
+- `POST /v1/runtime/sessions/{session_id}/queries/explain`
 - `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 - `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
@@ -136,10 +137,12 @@
 说明：
 
 - 该 endpoint 内部直接调用 `Store.explain_support(...)`。
+- 该 endpoint 继续作为 legacy compatibility wrapper 保留，供已直接持有 `support_digest` 的客户端使用。
 - 默认情况下它仍是 session-scoped readback。
 - 若打开 session 时配置了 `artifact_store_root`，则可从共享 sidecar root 回读旧 `support_digest`。
 - 若当前 session 中不存在对应 artifact，返回 `runtime_explain_not_found`。
 - 未配置 `artifact_store_root` 时，这不是 durable lookup；session 清理后 handle 可能失效。
+- 为兼容旧客户端，响应顶层不新增 `kind` 字段。
 
 错误 kinds：
 
@@ -194,7 +197,8 @@
             "asrt_ids": ["A1"]
           }
         ],
-        "non_fact_steps": []
+        "non_fact_steps": [],
+        "ruleref_links": []
       }
     ],
     "root_rows": [["idref_v1:Person:source_id=u1", "de"]]
@@ -205,10 +209,22 @@
 说明：
 
 - 该 endpoint 内部直接调用 `Store.explain_rule_trace(...)`。
+- 该 endpoint 继续作为 legacy compatibility wrapper 保留，供已直接持有 `rule_run_id` 的客户端使用。
 - 默认情况下它仍是 session-scoped readback。
 - 若打开 session 时配置了 `artifact_store_root`，则可从共享 sidecar root 回读旧 `rule_run_id`。
 - `rule_run_id` 目前只会在 `/rules/run` 传 `capture_trace=true` 时返回。
 - 若当前 session 中不存在对应 artifact，返回 `runtime_explain_not_found`。
+- 为兼容旧客户端，响应顶层不新增 `kind` 字段。
+- `rule_run` explain payload 的稳定 contract 第一轮包括：
+  - 顶层：`rule_run_id`、`root_rule`、`select_vars`、`root_rows`
+  - `invocations[]`：`invocation_id`、`parent_invocation_id`、`rule`、`memo_hit`、`memo_source_invocation_id`、`bindings`、`output_rows`
+  - `pred_witnesses[]`：`binding_index`、`pred_atom_key`、`asrt_ids`
+  - `ruleref_links[]`：`ruleref_atom_key`、`child_invocation_id`
+  - `non_fact_steps[]`：`binding_index`、`step_key`、`kind`、`status`
+- `non_fact_steps.details` 采用部分稳定边界：
+  - `details.binding` 属于稳定 contract
+  - `details.atom` 保持 opaque passthrough，不承诺 typed schema
+- `original_where` 与 `rewritten_where` 也保持 opaque passthrough；客户端只能假定它们是 JSON-native payload，不能假定内部结构在 service v1 中稳定。
 
 错误 kinds：
 
@@ -216,7 +232,112 @@
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
 
-## 4. `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
+## 4. `POST /v1/runtime/sessions/{session_id}/queries/explain`
+
+请求：
+
+```json
+{
+  "kind": "candidate",
+  "id": "cand_v2:abc123"
+}
+```
+
+支持的 `kind`：
+
+- `candidate`
+- `assertion`
+- `rule_run`
+
+成功响应（`candidate`）：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "candidate_id": "cand_v2:abc123"
+  },
+  "kind": "candidate",
+  "explain": {
+    "candidate_id": "cand_v2:abc123",
+    "support_digest": "sha256:6f3e4f9c2d1b8a7e6c5d4b3a291817161514131211100f0e0d0c0b0a09080706",
+    "support": {
+      "kind": "native_binding_v1"
+    }
+  }
+}
+```
+
+成功响应（`assertion`）：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "asrt_id": "A1"
+  },
+  "kind": "assertion",
+  "explain": {
+    "asrt_id": "A1",
+    "pred_id": "person:country",
+    "e_ref": "idref_v1:Person:source_id=u1",
+    "is_active": true
+  }
+}
+```
+
+成功响应（`rule_run`）：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "rule_run_id": "rt_trace_123"
+  },
+  "kind": "rule_run",
+  "explain": {
+    "rule_run_id": "rt_trace_123",
+    "root_rule": {
+      "rule_id": "q_country_rows",
+      "version": "1.0.0"
+    }
+  }
+}
+```
+
+说明：
+
+- 这是 service v1 的统一 `explain_ref` 入口，第一轮只接受 `{kind, id}`。
+- `kind` 是 load-bearing discriminator；service 不会仅凭 `id` 形状推断 handle 类型。
+- `candidate` 是 weak-durable convenience kind：
+  - 第一跳 `candidate_id -> (support_digest, support_kind)` 只存在于当前 session 的 `_candidate_support_index` / `_candidate_support_kind_index`
+  - 第一跳 miss 时直接返回 `runtime_explain_not_found`
+  - 第二跳 `support_digest -> SupportArtifact` 可受 sidecar durability 覆盖
+  - 若 `support_kind="engine_no_witness_v1"`（legacy `"none"` 读回也按同类处理），则该 candidate 表示 engine no-witness 降级路径：
+    - 响应仍为 `ok=true`
+    - `explain.support_kind="engine_no_witness_v1"`（或 legacy `"none"`）
+    - `explain.witness_status="degraded"`
+    - `explain.support` 会缺失；这不是 artifact miss 错误，而是结构上无 witness
+- `assertion` 返回 narrow single-`asrt_id` explain payload，不等价于 pair-level `explain-fact` 查询。
+- `rule_run` 直接桥接既有 `rule_run_id -> RuleTraceArtifact` explain 路径。
+- `kind="rule_run"` 的 `explain` payload 与 `explain-rule-trace` 使用同一底层 `RuleTraceArtifact` dict 形态：
+  - 稳定字段、部分稳定字段、opaque 边界与上一节保持一致
+  - 统一 endpoint 只是额外在顶层增加 `kind="rule_run"` discriminator
+- 统一成功响应总是包含顶层 `kind` 与 `explain`。
+- `kind` 缺失或值不在 `{candidate, assertion, rule_run}` 内时，返回 `HTTP 200` + `ok=false` + `errors[0].kind="shape"`。
+- `kind="fact"` 不受支持；`explain-fact` 仍是独立 endpoint。
+- 旧 `explain-support` / `explain-rule-trace` 继续保留，但其响应 shape 不会新增顶层 `kind`。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+
+## 5. `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
 
 请求：
 
@@ -282,7 +403,11 @@
 说明：
 
 - `evaluate` 返回完整 candidate 对象，供后续 `accept` 原样 round-trip。
-- native derivation evaluate 当前会填充 `support_kind="native_binding_v1"`；其他兼容路径仍可能返回 `support_kind="none"`。
+- native derivation evaluate 当前会填充 `support_kind="native_binding_v1"`。
+- engine evaluate（`souffle` / `problog`）第一轮显式返回 `support_kind="engine_no_witness_v1"`：
+  - 这表示 candidate 本身有效，但当前 engine path 不产出可解引用的 witness artifact
+  - 统一 `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`，而不是 `runtime_explain_not_found`
+- legacy `support_kind="none"` 只作为兼容读回值保留；新 writer 不再产生它。
 - `limit` 只影响返回条数，不改变底层总候选数；总量体现在 `meta.candidate_count`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。
 
@@ -294,7 +419,7 @@
 - `authoring_derivation_compile`
 - `derivation_evaluate`
 
-## 5. `POST /v1/runtime/sessions/{session_id}/derivations/accept`
+## 6. `POST /v1/runtime/sessions/{session_id}/derivations/accept`
 
 请求：
 
@@ -375,7 +500,7 @@
 - `runtime_session_not_found`
 - `derivation_accept`
 
-## 6. `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
+## 7. `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
 
 请求：
 
@@ -417,6 +542,7 @@
 说明：
 
 - `val_atoms` 可选；提供时按值过滤 `args[1:]`。
+- 该 endpoint 不属于统一 `explain_ref` kind 集合；它继续表示 `(pred_id, e_ref, optional val_atoms)` 的 predicate/entity 查询语义。
 
 错误 kinds：
 
@@ -424,7 +550,7 @@
 - `runtime_session_not_found`
 - `query_explain_fact`
 
-## 7. `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
+## 8. `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 
 请求：
 
@@ -460,7 +586,7 @@
 - `runtime_session_not_found`
 - `query_conflicts`
 
-## 8. `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
+## 9. `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 
 请求：
 
@@ -554,7 +680,7 @@
 - `mapping_conflict`
 - `query_resolve_mapping`
 
-## 9. `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
+## 10. `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
 
 请求（使用内联 view）：
 
@@ -618,7 +744,7 @@
 - `runtime_session_not_found`
 - `query_view_facts`
 
-## 10. `POST /v1/runtime/sessions/{session_id}/views/create`
+## 11. `POST /v1/runtime/sessions/{session_id}/views/create`
 
 请求：
 
@@ -663,7 +789,7 @@
 - `runtime_session_not_found`
 - `view_create`
 
-## 11. `POST /v1/runtime/sessions/{session_id}/views/update`
+## 12. `POST /v1/runtime/sessions/{session_id}/views/update`
 
 请求与成功响应结构同 `views/create`，但要求 `name` 已存在。
 
@@ -673,7 +799,7 @@
 - `runtime_session_not_found`
 - `view_update`
 
-## 12. `POST /v1/runtime/sessions/{session_id}/views/delete`
+## 13. `POST /v1/runtime/sessions/{session_id}/views/delete`
 
 请求：
 
@@ -706,7 +832,7 @@
 - `runtime_session_not_found`
 - `view_delete`
 
-## 13. `POST /v1/runtime/sessions/{session_id}/views/get`
+## 14. `POST /v1/runtime/sessions/{session_id}/views/get`
 
 请求：
 
@@ -740,7 +866,7 @@
 - `runtime_session_not_found`
 - `view_get`
 
-## 14. `GET /v1/runtime/sessions/{session_id}/views`
+## 15. `GET /v1/runtime/sessions/{session_id}/views`
 
 成功响应：
 
@@ -770,7 +896,7 @@
 - `runtime_session_not_found`
 - `view_list`
 
-## 15. `POST /v1/runtime/sessions/{session_id}/packages/export`
+## 16. `POST /v1/runtime/sessions/{session_id}/packages/export`
 
 请求：
 

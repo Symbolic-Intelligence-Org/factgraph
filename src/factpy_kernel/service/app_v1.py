@@ -20,6 +20,7 @@ from factpy_kernel.service.runtime_v1 import (
     create_runtime_view,
     delete_runtime_view,
     evaluate_runtime_derivation,
+    explain_runtime_ref,
     explain_runtime_fact,
     explain_runtime_rule_trace,
     explain_runtime_support,
@@ -110,6 +111,11 @@ def get_runtime_claims_route(
 @app.post("/v1/runtime/sessions/{session_id}/queries/explain-fact")
 def post_runtime_explain_fact(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return explain_runtime_fact(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/queries/explain")
+def post_runtime_explain_ref(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return explain_runtime_ref(session_id, payload)
 
 
 @app.post("/v1/runtime/sessions/{session_id}/queries/explain-support")

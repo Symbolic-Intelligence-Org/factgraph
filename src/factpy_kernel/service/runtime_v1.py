@@ -24,6 +24,7 @@ from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule, r
 from factpy_kernel.core.schema.schema_ir import schema_digest
 from factpy_kernel.core.store import builders
 from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar
+from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
 from factpy_kernel.core.store.types import ViewSpec
@@ -260,6 +261,29 @@ def explain_runtime_fact(session_id: str, dto: dict[str, Any]) -> dict[str, Any]
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_explain_fact")
+        return error_response([err])
+
+
+def explain_runtime_ref(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        kind = dto.get("kind")
+        if kind not in ("candidate", "assertion", "rule_run"):
+            raise facade_error(
+                f"unsupported explain_ref kind: {kind!r}",
+                kind="shape",
+                path="$.kind",
+            )
+        id_ = _require_non_empty_str(dto.get("id"), path="$.id")
+        if kind == "candidate":
+            return _explain_ref_candidate(session, id_)
+        if kind == "assertion":
+            return _explain_ref_assertion(session, id_)
+        return _explain_ref_rule_run(session, id_)
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_ref")
         return error_response([err])
 
 
@@ -761,6 +785,80 @@ def _runtime_explain_not_found(*, handle_kind: str, handle_value: str, path: str
         kind="runtime_explain_not_found",
         path=path,
         details={handle_kind: handle_value},
+    )
+
+
+def _explain_ref_candidate(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
+    support_digest = session.store.get_candidate_support_digest(candidate_id)
+    if support_digest is None:
+        raise _runtime_explain_not_found(
+            handle_kind="candidate_id",
+            handle_value=candidate_id,
+            path="$.id",
+        )
+    support_kind = session.store.get_candidate_support_kind(candidate_id)
+    if support_kind in _DEGRADED_SUPPORT_KINDS:
+        return ok_response(
+            meta={"candidate_id": candidate_id},
+            kind="candidate",
+            explain={
+                "candidate_id": candidate_id,
+                "support_digest": support_digest,
+                "support_kind": support_kind,
+                "witness_status": "degraded",
+            },
+        )
+    explain_detail = session.store.explain_support(support_digest)
+    explain: dict[str, Any] = {
+        "candidate_id": candidate_id,
+        "support_digest": support_digest,
+    }
+    if explain_detail is not None:
+        explain["support"] = _to_jsonable(explain_detail)
+    return ok_response(
+        meta={"candidate_id": candidate_id},
+        kind="candidate",
+        explain=explain,
+    )
+
+
+def _explain_ref_assertion(session: RuntimeSession, asrt_id: str) -> dict[str, Any]:
+    claim = session.store.ledger.get_claim(asrt_id)
+    if claim is None:
+        raise _runtime_explain_not_found(
+            handle_kind="asrt_id",
+            handle_value=asrt_id,
+            path="$.id",
+        )
+    is_active = not session.store.ledger.has_active_revocation(asrt_id)
+    revoker = session.store.ledger.find_revoker(asrt_id) if not is_active else None
+    explain: dict[str, Any] = {
+        "asrt_id": asrt_id,
+        "pred_id": claim.pred_id,
+        "e_ref": claim.e_ref,
+        "is_active": is_active,
+    }
+    if revoker is not None:
+        explain["revoker_asrt_id"] = revoker
+    return ok_response(
+        meta={"asrt_id": asrt_id},
+        kind="assertion",
+        explain=explain,
+    )
+
+
+def _explain_ref_rule_run(session: RuntimeSession, rule_run_id: str) -> dict[str, Any]:
+    explain = session.store.explain_rule_trace(rule_run_id)
+    if explain is None:
+        raise _runtime_explain_not_found(
+            handle_kind="rule_run_id",
+            handle_value=rule_run_id,
+            path="$.id",
+        )
+    return ok_response(
+        meta={"rule_run_id": rule_run_id},
+        kind="rule_run",
+        explain=_to_jsonable(explain),
     )
 
 

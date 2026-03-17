@@ -11,6 +11,7 @@ from factpy_kernel.core.rules._trace import (
     RuleTraceInvocation,
     RuleTraceNonFactStep,
     RuleTracePredWitness,
+    RuleTraceRuleRefLink,
 )
 from factpy_kernel.core.store._support import ProjectedFact, make_non_fact_step_key, make_pred_atom_key
 from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_where
@@ -191,7 +192,7 @@ def _evaluate_rule(
     invocation_id = trace_ctx.next_invocation_id() if trace_ctx is not None else None
     stack.add(key)
     try:
-        rewritten_where, ref_overlay = _rewrite_where_rule_refs(
+        rewritten_where, ref_overlay, ruleref_atom_map = _rewrite_where_rule_refs(
             rule_spec.where,
             registry,
             base_view_facts,
@@ -223,6 +224,18 @@ def _evaluate_rule(
                 bindings=bindings,
                 base_witness_facts=base_witness_facts,
             )
+            ruleref_links = tuple(
+                sorted(
+                    [
+                        RuleTraceRuleRefLink(
+                            ruleref_atom_key=make_non_fact_step_key(branch_index, atom_index, "ruleref"),
+                            child_invocation_id=child_invocation_id,
+                        )
+                        for (branch_index, atom_index), child_invocation_id in ruleref_atom_map.items()
+                    ],
+                    key=lambda link: link.ruleref_atom_key,
+                )
+            )
             invocation = RuleTraceInvocation(
                 invocation_id=invocation_id,
                 parent_invocation_id=parent_invocation_id,
@@ -236,6 +249,7 @@ def _evaluate_rule(
                 output_rows=tuple(rows),
                 pred_witnesses=pred_witnesses,
                 non_fact_steps=non_fact_steps,
+                ruleref_links=ruleref_links,
             )
             trace_ctx.append_invocation(invocation, primary_key=key)
         return rows
@@ -253,10 +267,11 @@ def _rewrite_where_rule_refs(
     *,
     trace_ctx: RuleTraceCaptureContext | None = None,
     parent_invocation_id: str | None = None,
-) -> tuple[list[Any], dict[str, list[tuple[Any, ...]]]]:
+) -> tuple[list[Any], dict[str, list[tuple[Any, ...]]], dict[tuple[int, int], str]]:
     overlay: dict[str, list[tuple[Any, ...]]] = {}
+    ruleref_atom_map: dict[tuple[int, int], str] = {}
 
-    def rewrite_atom(atom: Any) -> Any:
+    def rewrite_atom(atom: Any, *, branch_index: int, atom_index: int) -> Any:
         if not isinstance(atom, tuple) or not atom:
             return atom
         if atom[0] != "ruleref":
@@ -288,20 +303,30 @@ def _rewrite_where_rule_refs(
             trace_ctx=trace_ctx,
             parent_invocation_id=parent_invocation_id,
         )
+        # Explicit implementation constraint: capture the child invocation immediately
+        # after _evaluate_rule returns, while we still know this call-site triggered it.
+        if trace_ctx is not None:
+            ruleref_atom_map[(branch_index, atom_index)] = trace_ctx.invocations[-1].invocation_id
         pred_id = internal_rule_pred_id(rule_id, version)
         overlay[pred_id] = rows
         return ("pred", pred_id, terms)
 
     if all(isinstance(item, tuple) for item in where):
-        return [rewrite_atom(item) for item in where], overlay
+        rewritten: list[Any] = []
+        for atom_index, atom in enumerate(where):
+            rewritten.append(rewrite_atom(atom, branch_index=0, atom_index=atom_index))
+        return rewritten, overlay, ruleref_atom_map
     if all(isinstance(item, list) for item in where):
         out_branches: list[list[Any]] = []
-        for branch in where:
+        for branch_index, branch in enumerate(where):
             if not isinstance(branch, list):
                 raise RuleCompileError("invalid where branch")
-            out_branches.append([rewrite_atom(atom) for atom in branch])
-        return out_branches, overlay
-    return where, overlay
+            branch_out: list[Any] = []
+            for atom_index, atom in enumerate(branch):
+                branch_out.append(rewrite_atom(atom, branch_index=branch_index, atom_index=atom_index))
+            out_branches.append(branch_out)
+        return out_branches, overlay, ruleref_atom_map
+    return where, overlay, ruleref_atom_map
 
 
 def _rows_from_bindings(bindings: list[dict[str, Any]], select_vars: list[str]) -> list[tuple[Any, ...]]:
@@ -436,7 +461,7 @@ def _build_rule_trace_non_fact_step(
     tag = atom[0]
     if not isinstance(tag, str) or tag in {"pred", "ruleref"}:
         return None
-    status = "no_match" if tag == "not" else "satisfied"
+    status = "negated" if tag == "not" else "evaluated"
     return RuleTraceNonFactStep(
         binding_index=binding_index,
         step_key=make_non_fact_step_key(branch_index, atom_index, tag),

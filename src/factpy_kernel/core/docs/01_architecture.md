@@ -57,7 +57,8 @@ src/factpy_kernel/core/
 | `mapping.canon` | mapping 冲突解析与 tie-break | `resolve_mapping_predicate` |
 | `annotation._min_max` | internal prototype 的 min-max 路径置信度传播 | `derive_min_max_path_confidence` |
 | `annotation._evidence` | internal prototype 的 Workload C 证据展开 / provenance 重建 / max 聚合 helper | `build_direct_evidence_candidates_proto`, `build_max_evidence_provenance`, `apply_max_evidence_aggregation` |
-| `store.runtime` | `Store` 门面、engine 注册点，以及默认 in-process / 可选 sidecar explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest` |
+| `store._artifact_sidecar` | explain artifact 的 file-backed durable carrier、capture-time retention metadata、rule-trace TTL GC maintenance | `FileArtifactSidecar`, `GCResult`, `FileArtifactSidecar.gc_rule_trace` |
+| `store.runtime` | `Store` 门面、engine 注册点，以及默认 in-process / 可选 sidecar explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest`, `Store.get_candidate_support_kind` |
 | `store.evaluation` | `Store.evaluate` 公共入口 | `evaluate_store` |
 | `store.queries` | explain/conflicts/resolve_mapping 查询 | `explain_fact`, `conflicts`, `resolve_mapping` |
 | `store.builders` | 候选构建、head/entity 解析、值 coercion | `candidates_from_bindings`, `entity_candidates_from_bindings` |
@@ -99,12 +100,15 @@ flowchart LR
 - `souffle` / `problog`：委托已注册的 engine evaluator
 - `python` / `engine`：已移除，调用会抛 `ValueError`
 
-native derivation 现在还会在 evaluate 结束后登记一层轻量 backref：
+evaluate 结束后现在会登记一层轻量 candidate explain backref：
 
-- `candidate_id -> support_digest`
-- 仅对 `support_kind="native_binding_v1"` 的 candidates 生效
-- `Store.get_candidate_support_digest(candidate_id)` 可在当前 `Store` 实例内回取该 digest，再由调用方自行串联 `Store.explain_support(...)`
-- 若 `Store(..., artifact_sidecar=...)` 已配置，同一 `support_digest` 也可在共享 sidecar root 的后续 `Store` 实例中被重新解引用
+- `candidate_id -> (support_digest, support_kind)`
+- native candidates 写入 `support_kind="native_binding_v1"`，并可继续串联 `Store.explain_support(...)`
+- engine candidates 第一轮显式写入 `support_kind="engine_no_witness_v1"` + zero digest placeholder：
+  - 这不是 artifact miss，而是 no-witness 降级语义
+  - service `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`
+- `Store.get_candidate_support_digest(candidate_id)` 与 `Store.get_candidate_support_kind(candidate_id)` 都只在当前 `Store` 实例内回取第一跳
+- 若 `Store(..., artifact_sidecar=...)` 已配置，只有 native `support_digest -> SupportArtifact` 第二跳可在共享 sidecar root 的后续 `Store` 实例中被重新解引用
 
 ```mermaid
 flowchart LR
@@ -127,6 +131,9 @@ flowchart LR
 
 - `original_where` 与 `rewritten_where` 同时保留
 - `RuleRef` 关系第一轮按 call-site invocation capture，并显式标记 `memo_hit`
+- `ruleref_links` 显式把 `where` 中的 `ruleref` atom 连接到实际发生的 child invocation；命中 memo 时链接到 memo-hit invocation，再由 `memo_source_invocation_id` 跳到 primary invocation
+- `non_fact_steps.status` 第一轮统一写为 `negated`（`not`）或 `evaluated`（其余 non-`pred` steps）
+- `original_where`、`rewritten_where` 与 `non_fact_steps.details.atom` 继续保持 opaque payload；typed contract 只承诺其外围字段存在
 - `RuleTraceArtifact` 与 derivation `SupportArtifact` 保持分离
 
 ```mermaid
@@ -221,8 +228,20 @@ flowchart LR
 - `Store` 当前维护两个分离的 in-process explain registry：
   - `_support_artifacts`：derivation native support capture
   - `_rule_trace_artifacts`：`run_rule_with_trace(...)` 产出的 rule runtime trace
+- `Store` 还维护 candidate explain 的 session-scoped backref index：
+  - `_candidate_support_index`: `candidate_id -> support_digest`
+  - `_candidate_support_kind_index`: `candidate_id -> support_kind`
+  - 该索引不进 sidecar；engine degraded explain 与 native explain 都依赖这一跳
 - 两者当前只在 readback 协议层并列存在，不共享底层 carrier。
 - 若 `Store` 配置了 `artifact_sidecar`，上述两个 registry 会在 lookup miss 时从 sidecar 读回并 rehydrate 到当前内存 dict；未配置时仍保持纯 in-process 语义。
+- `FileArtifactSidecar` 当前在 payload `.json` 之外，还会为首次 durable write 写入 sidecar-adjacent `.meta.json`：
+  - `support/sha256/<hex>.meta.json`
+  - `rule_trace/<rule_run_id>.meta.json`
+- `.meta.json` 第一轮只承载 `captured_at_ns`，不改变 artifact payload canonical bytes。
+- 当前 only maintenance surface 是 `FileArtifactSidecar.gc_rule_trace(ttl_ns, dry_run=False)`：
+  - 只对 `RuleTraceArtifact` 做 age-only TTL GC
+  - `SupportArtifact` 继续保持 write-and-retain
+  - payload orphan 只记录并跳过，metadata orphan 可被清理
 
 ## 8.1 Annotation Prototype Boundary
 

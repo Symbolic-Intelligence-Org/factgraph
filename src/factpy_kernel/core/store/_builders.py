@@ -12,7 +12,11 @@ from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.protocol.digests import sha256_token
 from factpy_kernel.core.protocol.tup_v1 import CANONICAL_TAGS, canonical_bytes_tup_v1
 from factpy_kernel.core.rules.where_eval import WhereValidationError
-from factpy_kernel.core.store._support import BindingSupportCapture, normalize_binding_items
+from factpy_kernel.core.store._support import (
+    ENGINE_NO_WITNESS_KIND,
+    BindingSupportCapture,
+    normalize_binding_items,
+)
 
 _BYTES_B64URL_RE = re.compile(r"^[A-Za-z0-9_-]*$")
 
@@ -210,7 +214,7 @@ def _coerce_binding_rows(
         BindingSupportCapture(
             binding_items=normalize_binding_items(binding),
             support_digest=f"sha256:{'0' * 64}",
-            support_kind="none",
+            support_kind=ENGINE_NO_WITNESS_KIND,
         )
         for binding in bindings
     ]

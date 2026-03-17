@@ -287,19 +287,17 @@
 
    这样 `CandidateSet` 不需要新增 `proof_entry_id` 字段；它已有的 `candidate_id` 即为 `explain_ref(kind="candidate")` 的底层 handle。proof entry 的统一问题更多地落在 service contract，而不是 core candidate schema。
 
-   **5e. rule run 路径需要单独的 execution trace 机制**
+   **5e. rule run 路径现在已有 execution trace，剩余问题转向 schema / contract**
 
-   `run_rule` 返回的是纯元组列表（`list[tuple[Any, ...]]`），没有任何 identity 字段。即使对 RuleRef 展开路径，`_evaluate_rule` 内部维护的 `memo_rows` 也只存储子规则的**结果行**（`list[tuple]`），不存储子规则执行时的 bindings 或 witness 信息——这些中间层信息在 `run_rule` 返回后完全丢失。
+   这里的代码现实已经不同于更早期讨论阶段：`run_rule_with_trace(...)`、`RuleTraceArtifact`、memo-hit replay、`pred_witnesses`/`non_fact_steps` capture，以及 `rule_run_id` explain readback 都已经落地。
 
-   这意味着两层阻塞：
-   - 对没有 RuleRef 的简单规则：row-level 无 identity，无法从 row 追溯到 evaluate 当时的匹配 claims；
-   - 对有 RuleRef 的规则调用树：不仅顶层如此，每一层 subrule 的 bindings 都不保留，整棵调用树的执行记录均丢失。
+   这意味着当前 `rule_run` 的主要问题不再是“有没有 trace”，而是：
+   - trace schema 的哪些部分已经进入稳定 contract；
+   - `ruleref` call-site atom 与 child invocation 之间如何显式映射；
+   - `non_fact_steps.status` 的枚举语义是否已冻结；
+   - service 层 `rule_run` explain payload 的 typed subset 与 opaque boundary 如何文档化。
 
-   对于引用了其他规则的规则调用树，单个 row 的 explain 不能简单地以 row-level ID 作为入口——要真正支持解释，需要整棵规则调用树的执行记录。
-
-   长期正确的方向是让 `_evaluate_rule` 在执行时同时收集 **rule execution trace**（规则调用树 + 每层 bindings + 每层 pred_witnesses），`run_rule` 可返回 `(rows, trace)`，其中 trace 是可选启用的。`rule_run_id` 作为这次执行的 stable handle，随 service 结果返回并写入 `explain_ref`。
-
-   在 trace 机制完成之前，`rule_run` kind 的 `explain_ref` 是一个有名无实的占位符；改动点清晰（`run_rule` 签名 + `_evaluate_rule` 内部结构 + service 层返回结构），但属于跨层改动，需要单独子蓝图推进，不与 derivation 路径的 `SupportArtifact` 耦合。
+   因此，`rule_run` 的下一切口不应再用“从零补 execution trace”来 framing，而应以当前代码现实为准，继续收口 schema / contract gap。这个工作现已拆到并归档为子蓝图 [2026-03-17_rule-run-trace-schema-contract.md](../archive/2026-03-17_rule-run-trace-schema-contract.md)。
 
    **5f. 当前代码对 explain 的最主要阻塞点**
 
@@ -311,18 +309,18 @@
       - 需要 witness-capable projection 层（保留 `asrt_id`）+ `SupportArtifact` schema（`pred_witnesses` 等）；
       - 这是最根本的 gap：不解决，`candidate_id` 作为 proof entry 永远是空壳。
 
-   2. **`run_rule` 没有 execution trace，`memo_rows` 只存结果行**
-      - rule run 路径完全不可解释；中间层 bindings 和 witnesses 不保留；
-      - RuleRef 调用树的每一层均丢失，需要独立 rule-run trace 子蓝图。
+   2. **`rule_run` trace 的 schema / contract 仍未完全冻结**
+      - capture/readback 已存在，但 `ruleref` atom linkage、`non_fact_steps.status` 语义、以及 service payload contract 仍需单独子蓝图收口；
+      - 这也是为什么 `rule_run` 仍然值得保留独立后续切片。
 
    3. **`explain_fact` 入口是 `(pred_id, e_ref)` 而非 `asrt_id`**
       - `explain_fact(store, pred_id, e_ref)` 返回该 predicate 下该实体的所有 active claims；
       - 功能上可以工作，但 service 层的 `explain_ref(kind="assertion", id=asrt_id)` 需要以 `asrt_id` 为直接入口；
       - 当前路径需要在 service 层做一次包装，把 `asrt_id` 解析为 `(pred_id, e_ref)` 后再调用。
 
-   一句话总结：**长期正确方向不是"给每个结果挂一个新 ID"，而是"让现有结果 ID 能解引用到 evaluate 当时捕获的真实 SupportArtifact"；derivation 先走 `candidate_id + support_digest`，assertion 继续走 `asrt_id`，rule run 再单独建立 trace 机制。**
+   一句话总结：**长期正确方向不是"给每个结果挂一个新 ID"，而是"让现有结果 ID 能解引用到 evaluate 当时捕获的真实 artifact"；derivation 先走 `candidate_id + support_digest`，assertion 继续走 `asrt_id`，rule run 则在已存在 trace 的基础上继续收口 schema / contract。**
 
-   与此相关的第一份实现型切口，现已拆到子蓝图 [2026-03-17_support-artifact-native-capture.md](../archive/2026-03-17_support-artifact-native-capture.md)。本母蓝图保留总问题 framing，不在此处继续展开 native `SupportArtifact` 的实现细节；后续若进入 `run_rule trace`、service `explain_ref` 或 engine witness output，也更适合分别拆成后续子蓝图。
+   与此相关的第一份实现型切口，现已拆到子蓝图 [2026-03-17_support-artifact-native-capture.md](../archive/2026-03-17_support-artifact-native-capture.md)。service 层的统一 explain contract 也已作为独立子蓝图落地并归档到 [2026-03-17_explain-ref-service-unification.md](../archive/2026-03-17_explain-ref-service-unification.md)。针对 `rule_run`，schema / contract 收口工作也已作为独立子蓝图落地并归档到 [2026-03-17_rule-run-trace-schema-contract.md](../archive/2026-03-17_rule-run-trace-schema-contract.md)，用于按当前代码现实而不是更早期假设来冻结 trace payload 边界。针对 engine witness output，第一轮“显式 degraded explain 优先于真 witness parity”的子蓝图现已实现并归档到 [2026-03-18_engine-witness-parity.md](../archive/2026-03-18_engine-witness-parity.md)。本母蓝图保留总问题 framing，不在此处继续展开 native `SupportArtifact` 的实现细节；后续若进入更强的 engine witness output，也更适合继续拆成后续子蓝图。
 
 ### 5.5 Cross-domain Discussion Prompts
 

@@ -1,7 +1,7 @@
 # ProbLog Adapter 总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/problog`
-- 最后更新：2026-03-06
+- 最后更新：2026-03-18
 - 目标读者：需要理解 ProbLog 导出、执行、结果回读链路的开发者
 
 ## 1. 模块职责
@@ -53,6 +53,14 @@
 5. `parse_problog_output(...)` 解析结果并映射为 `CandidateSet`
 6. 将推导概率写入 `candidate.confidence`
 
+explainability 补充：
+
+- 当前 ProbLog adapter 只回读概率结果，不输出 derivation witness / proof tree。
+- 因此由该适配器生成的 candidates 第一轮会显式标记：
+  - `support_kind="engine_no_witness_v1"`
+  - `support_digest="sha256:000...0"`（兼容占位符）
+- service `explain_ref(kind="candidate")` 对这类 candidate 返回 `ok=true` + `witness_status="degraded"`，表示 candidate 有效，但当前没有可解引用的 witness artifact。
+
 ## 5. 导出口径（`problog_export.py`）
 
 - EDB 来源：ledger 当前 active claims
@@ -100,3 +108,4 @@ CLI 二进制：
 - 依赖外部 ProbLog CLI
 - `pred` 原子当前只支持 1/2 元参数映射
 - 主要服务 derivation query 执行，不覆盖 Deontic 规范执行
+- 当前不输出 derivation/proof witness；第一轮只保证显式 degraded explain 语义
