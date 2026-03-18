@@ -28,6 +28,7 @@ from factpy_kernel.audit import (
     load_audit_package,
     render_audit_static_site,
 )
+from factpy_kernel.audit.assertions import load_assertion_index
 from factpy_kernel.authoring import (
     AuthoringDerivationCompileError,
     build_derivation_preview_dto,
@@ -2069,6 +2070,292 @@ Derivation(
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
 
+    def test_aml_aggregation_materialization_walkthrough_preserves_helper_vs_rule_boundary(self) -> None:
+        schema_ir = _aml_aggregation_materialization_schema_ir()
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            refs = {
+                "account": encode_idref_v1("AMLAccount", [("account_id", "string", "ACCT-MATL-001")]),
+                "beneficiary": encode_idref_v1("AMLBeneficiary", [("beneficiary_id", "string", "BEN-MATL-001")]),
+                "device": encode_idref_v1("AMLDevice", [("device_id", "string", "DEV-MATL-001")]),
+                "tx1": encode_idref_v1("AMLTransaction", [("tx_id", "string", "TX-MATL-001")]),
+                "tx2": encode_idref_v1("AMLTransaction", [("tx_id", "string", "TX-MATL-002")]),
+                "tx3": encode_idref_v1("AMLTransaction", [("tx_id", "string", "TX-MATL-003")]),
+            }
+
+            assertion_ids: dict[str, str] = {}
+            for pred_id, e_ref, rest_terms in (
+                (
+                    AML_TRANSACTION_EVENT_PRED_ID,
+                    refs["account"],
+                    [("entity_ref", refs["tx1"]), ("entity_ref", refs["beneficiary"]), ("int", 9700)],
+                ),
+                (
+                    AML_TRANSACTION_EVENT_PRED_ID,
+                    refs["account"],
+                    [("entity_ref", refs["tx2"]), ("entity_ref", refs["beneficiary"]), ("int", 9800)],
+                ),
+                (
+                    AML_TRANSACTION_EVENT_PRED_ID,
+                    refs["account"],
+                    [("entity_ref", refs["tx3"]), ("entity_ref", refs["beneficiary"]), ("int", 9900)],
+                ),
+                (
+                    AML_TRANSACTION_TIMESTAMP_PRED_ID,
+                    refs["tx1"],
+                    [("time", 110)],
+                ),
+                (
+                    AML_TRANSACTION_TIMESTAMP_PRED_ID,
+                    refs["tx2"],
+                    [("time", 150)],
+                ),
+                (
+                    AML_TRANSACTION_TIMESTAMP_PRED_ID,
+                    refs["tx3"],
+                    [("time", 190)],
+                ),
+                (
+                    AML_BENEFICIARY_RISK_PRED_ID,
+                    refs["account"],
+                    [("entity_ref", refs["beneficiary"]), ("string", "high-risk-jurisdiction")],
+                ),
+                (
+                    AML_TRIGGER_EVALUATION_TIME_PRED_ID,
+                    refs["account"],
+                    [("time", 200)],
+                ),
+                (
+                    AML_WINDOWED_STRUCTURING_SIGNAL_PRED_ID,
+                    refs["account"],
+                    [("time", 100), ("time", 300), ("int", 3)],
+                ),
+                (
+                    AML_HIGH_RISK_OUTFLOW_SIGNAL_PRED_ID,
+                    refs["account"],
+                    [("entity_ref", refs["beneficiary"]), ("string", "high-risk-jurisdiction")],
+                ),
+                (
+                    AML_SHARED_DEVICE_SIGNAL_PRED_ID,
+                    refs["account"],
+                    [("entity_ref", refs["device"])],
+                ),
+                (
+                    AML_BO_MISMATCH_SIGNAL_PRED_ID,
+                    refs["account"],
+                    [("string", "beneficial_owner_mismatch")],
+                ),
+                (
+                    AML_TRIGGER_SCORE_PPM_PRED_ID,
+                    refs["account"],
+                    [("int", 910000)],
+                ),
+                (
+                    AML_TRIGGER_SCORE_THRESHOLD_PPM_PRED_ID,
+                    refs["account"],
+                    [("int", 900000)],
+                ),
+            ):
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": pred_id,
+                        "e_ref": e_ref,
+                        "rest_terms": [[tag, value] for tag, value in rest_terms],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+                assertion_ids.setdefault(f"{pred_id}:{len(assertion_ids)}", write_resp["write"]["assertion_id"])
+
+            rule_resp = run_runtime_rule(
+                session_id,
+                {
+                    "rule": {
+                        "rule_id": "q.aml_aggregation_materialization_walkthrough",
+                        "version": "1.0.0",
+                        "select": [
+                            "$account",
+                            "$beneficiary",
+                            "$jurisdiction",
+                            "$window_start_ts",
+                            "$window_end_ts",
+                            "$eval_ts",
+                            "$score_ppm",
+                        ],
+                        "where": [
+                            ["pred", AML_TRIGGER_EVALUATION_TIME_PRED_ID, ["$account", "$eval_ts"]],
+                            [
+                                "pred",
+                                AML_WINDOWED_STRUCTURING_SIGNAL_PRED_ID,
+                                ["$account", "$window_start_ts", "$window_end_ts", "$structuring_tx_count"],
+                            ],
+                            ["le", "$window_start_ts", "$eval_ts"],
+                            ["le", "$eval_ts", "$window_end_ts"],
+                            [
+                                "pred",
+                                AML_HIGH_RISK_OUTFLOW_SIGNAL_PRED_ID,
+                                ["$account", "$beneficiary", "$jurisdiction"],
+                            ],
+                            ["pred", AML_SHARED_DEVICE_SIGNAL_PRED_ID, ["$account", "$device"]],
+                            ["pred", AML_BO_MISMATCH_SIGNAL_PRED_ID, ["$account", "$mismatch_kind"]],
+                            ["pred", AML_TRIGGER_SCORE_PPM_PRED_ID, ["$account", "$score_ppm"]],
+                            [
+                                "pred",
+                                AML_TRIGGER_SCORE_THRESHOLD_PPM_PRED_ID,
+                                ["$account", "$score_threshold_ppm"],
+                            ],
+                            ["ge", "$score_ppm", "$score_threshold_ppm"],
+                        ],
+                    },
+                    "capture_trace": True,
+                },
+            )
+            self.assertTrue(rule_resp["ok"])
+            rule_run_id = rule_resp["result"]["trace"]["rule_run_id"]
+
+            raw_resp = explain_runtime_ref(session_id, {"kind": "rule_run", "id": rule_run_id})
+            summary_resp = explain_runtime_summary(session_id, {"kind": "rule_run", "id": rule_run_id})
+            narrative_resp = explain_runtime_narrative(session_id, {"kind": "rule_run", "id": rule_run_id})
+            nl_resp = explain_runtime_nl(session_id, {"kind": "rule_run", "id": rule_run_id})
+            self.assertTrue(raw_resp["ok"])
+            self.assertTrue(summary_resp["ok"])
+            self.assertTrue(narrative_resp["ok"])
+            self.assertTrue(nl_resp["ok"])
+
+            raw_explain = raw_resp["explain"]
+            summary = summary_resp["summary"]
+            narrative = narrative_resp["narrative"]
+            explain_nl = nl_resp["explain_nl"]
+
+            self.assertEqual(raw_explain["root_rule"]["rule_id"], "q.aml_aggregation_materialization_walkthrough")
+            self.assertEqual(len(raw_explain["root_rows"]), 1)
+            self.assertEqual(
+                raw_explain["root_rows"][0],
+                [
+                    refs["account"],
+                    refs["beneficiary"],
+                    "high-risk-jurisdiction",
+                    100,
+                    300,
+                    200,
+                    910000,
+                ],
+            )
+
+            invocation = next(
+                inv
+                for inv in raw_explain["invocations"]
+                if inv["rule"]["rule_id"] == "q.aml_aggregation_materialization_walkthrough"
+            )
+            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            self.assertEqual(
+                pred_atom_keys,
+                {
+                    "b0.a0:aml:trigger_evaluation_time",
+                    "b0.a1:aml:windowed_structuring_signal",
+                    "b0.a4:aml:high_risk_outflow_signal",
+                    "b0.a5:aml:shared_device_signal",
+                    "b0.a6:aml:bo_mismatch_signal",
+                    "b0.a7:aml:trigger_score_ppm",
+                    "b0.a8:aml:trigger_score_threshold_ppm",
+                },
+            )
+            self.assertFalse(any(key.endswith(":aml:transaction_event") for key in pred_atom_keys))
+            self.assertFalse(any(key.endswith(":aml:transaction_timestamp") for key in pred_atom_keys))
+            self.assertEqual(len(invocation["pred_witnesses"]), 7)
+            self.assertEqual(len(invocation["non_fact_steps"]), 3)
+
+            witness_groups = {row["pred_id"]: row for row in summary["predicate_witness_groups"]}
+            self.assertNotIn(AML_TRANSACTION_EVENT_PRED_ID, witness_groups)
+            self.assertNotIn(AML_TRANSACTION_TIMESTAMP_PRED_ID, witness_groups)
+            self.assertIn(AML_WINDOWED_STRUCTURING_SIGNAL_PRED_ID, witness_groups)
+            self.assertIn(AML_HIGH_RISK_OUTFLOW_SIGNAL_PRED_ID, witness_groups)
+
+            self.assertIn(
+                "Predicate aml:windowed_structuring_signal was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+            self.assertIn(
+                "Predicate aml:high_risk_outflow_signal was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+            self.assertNotIn(
+                "Predicate aml:transaction_event was witnessed by 3 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+
+            self.assertEqual(
+                explain_nl["headline"],
+                "Rule q.aml_aggregation_materialization_walkthrough@1.0.0 matched 1 root row(s) across 1 invocation(s).",
+            )
+            self.assertTrue(any("aml:windowed_structuring_signal" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertTrue(any("aml:high_risk_outflow_signal" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertFalse(any("aml:transaction_event" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertFalse(any("aggregated transactions during rule execution" in paragraph.lower() for paragraph in explain_nl["paragraphs"]))
+
+            with TemporaryDirectory() as package_dir:
+                session = _require_session(session_id)
+                export_package(session.store, Path(package_dir), ExportOptions(package_kind="audit"))
+                package = load_audit_package(package_dir)
+                query = AuditQuery(package)
+                assertion_index = load_assertion_index(package)
+
+                audit_summary = query.get_rule_trace_summary(rule_run_id)
+                audit_narrative = query.get_rule_trace_narrative(rule_run_id)
+                self.assertEqual(audit_summary, summary)
+                self.assertEqual(audit_narrative, narrative)
+
+                raw_tx_detail = assertion_index.get_assertion_detail(assertion_ids["aml:transaction_event:0"])
+                raw_ts_detail = assertion_index.get_assertion_detail(assertion_ids["aml:transaction_timestamp:3"])
+                raw_risk_detail = assertion_index.get_assertion_detail(assertion_ids["aml:beneficiary_risk:6"])
+                self.assertIsNotNone(raw_tx_detail)
+                self.assertIsNotNone(raw_ts_detail)
+                self.assertIsNotNone(raw_risk_detail)
+                assert raw_tx_detail is not None
+                assert raw_ts_detail is not None
+                assert raw_risk_detail is not None
+                self.assertEqual(raw_tx_detail["claim"]["pred_id"], AML_TRANSACTION_EVENT_PRED_ID)
+                self.assertEqual(raw_ts_detail["claim"]["pred_id"], AML_TRANSACTION_TIMESTAMP_PRED_ID)
+                self.assertEqual(raw_risk_detail["claim"]["pred_id"], AML_BENEFICIARY_RISK_PRED_ID)
+
+                with TemporaryDirectory() as out_dir:
+                    site_manifest = render_audit_static_site(package_dir, out_dir)
+                    self.assertEqual(site_manifest["rule_trace_count"], 1)
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    self.assertTrue(rule_trace_page.exists())
+                    html = rule_trace_page.read_text(encoding="utf-8")
+                    self.assertIn("q.aml_aggregation_materialization_walkthrough", html)
+                    self.assertIn(
+                        "Predicate aml:windowed_structuring_signal was witnessed by 1 assertion(s) across 1 invocation(s).",
+                        html,
+                    )
+                    self.assertIn(
+                        "Predicate aml:high_risk_outflow_signal was witnessed by 1 assertion(s) across 1 invocation(s).",
+                        html,
+                    )
+                    self.assertNotIn("Predicate aml:transaction_event was witnessed", html)
+                    self.assertIn(assertion_ids["aml:windowed_structuring_signal:8"], html)
+
+                    for key in (
+                        "aml:transaction_event:0",
+                        "aml:transaction_event:1",
+                        "aml:transaction_event:2",
+                        "aml:transaction_timestamp:3",
+                        "aml:transaction_timestamp:4",
+                        "aml:transaction_timestamp:5",
+                        "aml:beneficiary_risk:6",
+                    ):
+                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        self.assertTrue(assertion_page.exists())
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
     def test_runtime_explain_ref_candidate_degraded_for_engine_and_legacy_none(self) -> None:
         sdk = SDKStore([User])
         refs = _seed_users_for_syntax_matrix(sdk)
@@ -3948,6 +4235,7 @@ AML_TRANSACTION_EVENT_PRED_ID = "aml:transaction_event"
 AML_SHARED_DEVICE_SIGNAL_PRED_ID = "aml:shared_device_signal"
 AML_BO_MISMATCH_SIGNAL_PRED_ID = "aml:bo_mismatch_signal"
 AML_BENEFICIARY_RISK_PRED_ID = "aml:beneficiary_risk"
+AML_TRANSACTION_TIMESTAMP_PRED_ID = "aml:transaction_timestamp"
 AML_TRIGGER_EVALUATION_TIME_PRED_ID = "aml:trigger_evaluation_time"
 AML_WINDOWED_STRUCTURING_SIGNAL_PRED_ID = "aml:windowed_structuring_signal"
 AML_HIGH_RISK_OUTFLOW_SIGNAL_PRED_ID = "aml:high_risk_outflow_signal"
@@ -4078,6 +4366,34 @@ def _aml_trigger_walkthrough_schema_ir() -> dict[str, Any]:
             "arg_specs": [
                 {"name": "account_ref", "type_domain": "entity_ref"},
                 {"name": "trigger_score_threshold_ppm", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+    ]
+    existing = {pred.get("pred_id") for pred in predicates if isinstance(pred, dict)}
+    for predicate in aml_predicates:
+        pred_id = predicate["pred_id"]
+        if pred_id not in existing:
+            predicates.append(predicate)
+            existing.add(pred_id)
+        if pred_id not in projection_predicates:
+            projection_predicates.append(pred_id)
+    return schema_ir
+
+
+def _aml_aggregation_materialization_schema_ir() -> dict[str, Any]:
+    schema_ir = _aml_trigger_walkthrough_schema_ir()
+    predicates = schema_ir["predicates"]
+    projection_predicates = schema_ir["projection"]["predicates"]
+    aml_predicates = [
+        {
+            "pred_id": AML_TRANSACTION_TIMESTAMP_PRED_ID,
+            "owner_type": "aml_transaction",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "transaction_ref", "type_domain": "entity_ref"},
+                {"name": "transaction_ts", "type_domain": "time"},
             ],
             "cardinality": "multi",
             "group_key_indexes": [0, 1],
