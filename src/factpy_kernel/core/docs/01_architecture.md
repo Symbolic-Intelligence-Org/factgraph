@@ -53,6 +53,7 @@ src/factpy_kernel/core/
 | `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef 执行 | `run_rule`, `run_rule_with_trace` |
 | `rules._trace` | rule runtime trace carrier、序列化与 summary derivation | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict`, `summarize_rule_trace_artifact_dict` |
 | `rules._trace_narrative` | rule-run summary 上的 deterministic narrative rendering | `render_rule_run_narrative` |
+| `rules._trace_nl` | summary+narrative 上的 deterministic NL explain rendering | `render_rule_run_nl_explain` |
 | `derivation.candidates` | 候选结构与 digest/key 计算 | `CandidateSet`, `make_candidate` |
 | `derivation.accept` | candidate accept 与 batch accept_many | `accept_candidate_set`, `accept_many_candidate_sets` |
 | `mapping.canon` | mapping 冲突解析与 tie-break | `resolve_mapping_predicate` |
@@ -137,6 +138,7 @@ flowchart LR
 - `original_where`、`rewritten_where` 与 `non_fact_steps.details.atom` 继续保持 opaque payload；typed contract 只承诺其外围字段存在
 - `T1` temporal checks 不新增 trace carrier 字段：fact-backed temporal anchors 仍走 `pred_witnesses`，比较步骤的时间绑定值继续走 `non_fact_steps.details.binding`
 - `Scenario A` threshold-bearing uncertainty checks 同样不新增 trace carrier 字段：测量值/阈值 assertion 进入 `pred_witnesses`，比较绑定值继续走 `non_fact_steps.details.binding`
+- deterministic NL explain 位于 summary/narrative 之上，只消费这两层 structured DTO，不直接读取 raw trace payload
 - `RuleTraceArtifact` 与 derivation `SupportArtifact` 保持分离
 - `rule_run_summary` 之上的 deterministic narrative 由 `rules._trace_narrative` 统一拥有；presentation 层不应各自复制 narrative 模板
 

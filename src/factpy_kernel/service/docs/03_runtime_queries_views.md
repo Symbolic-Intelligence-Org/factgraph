@@ -11,6 +11,7 @@
 - `POST /v1/runtime/sessions/{session_id}/queries/explain`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-summary`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-narrative`
+- `POST /v1/runtime/sessions/{session_id}/queries/explain-nl`
 - `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 - `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
@@ -501,7 +502,64 @@
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
 
-## 7. `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
+## 7. `POST /v1/runtime/sessions/{session_id}/queries/explain-nl`
+
+请求：
+
+```json
+{
+  "kind": "rule_run",
+  "id": "rt_trace_123"
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "rule_run_id": "rt_trace_123"
+  },
+  "kind": "rule_run_nl_explain",
+  "explain_nl": {
+    "headline": "Rule q_country_rows@1.0.0 matched 1 root row(s) across 1 invocation(s).",
+    "paragraphs": [
+      "Rule q_country_rows@1.0.0 produced 1 root row(s) across 1 invocation(s). This run identified 1 unique witness assertion(s), 1 predicate witness group(s), and 0 non-fact check group(s). Witness assertions: 1 unique assertion(s). Predicate witness groups: 1. Non-fact check groups: 0.",
+      "Evidence summary: Predicate person:country was witnessed by 1 assertion(s) across 1 invocation(s).",
+      "Check summary: No non-fact check groups were captured.",
+      "Drill-down guidance: Open the linked assertion detail page(s) for 1 witness assertion(s) to inspect supporting facts. Continue below for invocation-level detail and the full raw trace payload."
+    ]
+  }
+}
+```
+
+说明：
+
+- 这是 service v1 的 deterministic prose endpoint，第一轮只接受 `{kind:\"rule_run\", id}`。
+- 它不是 raw / summary / narrative 的替代物，而是建立在这两层 structured DTO 之上的 runtime-first prose view。
+- 它内部调用链为：
+  - canonical raw explain
+  - `rule_run_summary`
+  - `rule_run_narrative`
+  - `render_rule_run_nl_explain(..., locale=\"en\")`
+- 第一轮 `rule_run_nl_explain` 只包含 2 个字段：
+  - `headline`
+  - `paragraphs`
+- `paragraphs` 是 deterministic prose composition：
+  - 会吸收 narrative 中的 overview、predicate evidence、non-fact checks 与 drill-down guidance
+  - 但不会继续暴露 narrative 的结构化 section 字段
+- 若 consumer 需要结构化 drill-down affordance，应继续使用 `explain-narrative`。
+- 第一轮不支持 `candidate` / `assertion` NL explain；`kind` 取其他值时返回 `shape` error。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+
+## 8. `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
 
 请求：
 
@@ -583,7 +641,7 @@
 - `authoring_derivation_compile`
 - `derivation_evaluate`
 
-## 8. `POST /v1/runtime/sessions/{session_id}/derivations/accept`
+## 9. `POST /v1/runtime/sessions/{session_id}/derivations/accept`
 
 请求：
 
@@ -664,7 +722,7 @@
 - `runtime_session_not_found`
 - `derivation_accept`
 
-## 9. `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
+## 10. `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
 
 请求：
 
@@ -714,7 +772,7 @@
 - `runtime_session_not_found`
 - `query_explain_fact`
 
-## 10. `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
+## 11. `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 
 请求：
 
@@ -750,7 +808,7 @@
 - `runtime_session_not_found`
 - `query_conflicts`
 
-## 11. `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
+## 12. `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 
 请求：
 
@@ -844,7 +902,7 @@
 - `mapping_conflict`
 - `query_resolve_mapping`
 
-## 12. `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
+## 13. `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
 
 请求（使用内联 view）：
 
@@ -908,7 +966,7 @@
 - `runtime_session_not_found`
 - `query_view_facts`
 
-## 13. `POST /v1/runtime/sessions/{session_id}/views/create`
+## 14. `POST /v1/runtime/sessions/{session_id}/views/create`
 
 请求：
 
@@ -953,7 +1011,7 @@
 - `runtime_session_not_found`
 - `view_create`
 
-## 14. `POST /v1/runtime/sessions/{session_id}/views/update`
+## 15. `POST /v1/runtime/sessions/{session_id}/views/update`
 
 请求与成功响应结构同 `views/create`，但要求 `name` 已存在。
 
@@ -963,7 +1021,7 @@
 - `runtime_session_not_found`
 - `view_update`
 
-## 15. `POST /v1/runtime/sessions/{session_id}/views/delete`
+## 16. `POST /v1/runtime/sessions/{session_id}/views/delete`
 
 请求：
 
@@ -996,7 +1054,7 @@
 - `runtime_session_not_found`
 - `view_delete`
 
-## 16. `POST /v1/runtime/sessions/{session_id}/views/get`
+## 17. `POST /v1/runtime/sessions/{session_id}/views/get`
 
 请求：
 
@@ -1030,7 +1088,7 @@
 - `runtime_session_not_found`
 - `view_get`
 
-## 17. `GET /v1/runtime/sessions/{session_id}/views`
+## 18. `GET /v1/runtime/sessions/{session_id}/views`
 
 成功响应：
 
@@ -1060,7 +1118,7 @@
 - `runtime_session_not_found`
 - `view_list`
 
-## 18. `POST /v1/runtime/sessions/{session_id}/packages/export`
+## 19. `POST /v1/runtime/sessions/{session_id}/packages/export`
 
 请求：
 

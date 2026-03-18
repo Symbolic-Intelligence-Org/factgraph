@@ -68,6 +68,7 @@ from factpy_kernel.core.rules._trace import (
     rule_trace_artifact_to_dict,
     summarize_rule_trace_artifact_dict,
 )
+from factpy_kernel.core.rules._trace_nl import render_rule_run_nl_explain
 from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
 from factpy_kernel.core.rules.where_eval import _plan_body_atoms
 from factpy_kernel.core.store import Store, register_engine_evaluator
@@ -109,6 +110,7 @@ from factpy_kernel.service.runtime_v1 import (
     _require_session,
     close_runtime_session,
     evaluate_runtime_derivation,
+    explain_runtime_nl,
     explain_runtime_narrative,
     explain_runtime_ref,
     explain_runtime_rule_trace,
@@ -1485,15 +1487,19 @@ Derivation(
             raw_resp = explain_runtime_ref(session_id, {"kind": "rule_run", "id": rule_run_id})
             runtime_summary_resp = explain_runtime_summary(session_id, {"kind": "rule_run", "id": rule_run_id})
             runtime_narrative_resp = explain_runtime_narrative(session_id, {"kind": "rule_run", "id": rule_run_id})
+            runtime_nl_resp = explain_runtime_nl(session_id, {"kind": "rule_run", "id": rule_run_id})
             self.assertTrue(raw_resp["ok"])
             self.assertTrue(runtime_summary_resp["ok"])
             self.assertTrue(runtime_narrative_resp["ok"])
+            self.assertTrue(runtime_nl_resp["ok"])
 
             raw_explain = raw_resp["explain"]
             runtime_summary = runtime_summary_resp["summary"]
             runtime_narrative = runtime_narrative_resp["narrative"]
+            runtime_nl = runtime_nl_resp["explain_nl"]
             self.assertEqual(runtime_summary, summarize_rule_trace_artifact_dict(raw_explain))
             self.assertEqual(runtime_narrative, render_rule_run_narrative(runtime_summary, locale="en"))
+            self.assertEqual(runtime_nl, render_rule_run_nl_explain(runtime_summary, runtime_narrative, locale="en"))
 
             with TemporaryDirectory() as package_dir:
                 session = _require_session(session_id)
@@ -1574,6 +1580,38 @@ Derivation(
                 "drilldown_lines": [
                     "Open the linked assertion detail page(s) for 2 witness assertion(s) to inspect supporting facts.",
                     "Continue below for invocation-level detail and the full raw trace payload.",
+                ],
+            },
+        )
+
+    def test_rule_run_nl_explain_is_deterministic_from_summary_and_narrative(self) -> None:
+        summary = {
+            "rule_run_id": "rt_123",
+            "root_rule": {"rule_id": "q.foo", "version": "1.0.0"},
+            "root_row_count": 1,
+            "invocation_count": 3,
+            "witness_assertion_ids": ["A1", "A2"],
+            "predicate_witness_groups": [
+                {"pred_id": "ecss:window_start", "asrt_ids": ["A1"], "invocation_ids": ["rt_123:i1"]},
+                {"pred_id": "ecss:obligation_timestamp", "asrt_ids": ["A2"], "invocation_ids": ["rt_123:i1", "rt_123:i2"]},
+            ],
+            "non_fact_step_groups": [
+                {"kind": "ge", "count": 1, "invocation_ids": ["rt_123:i1"]},
+                {"kind": "le", "count": 2, "invocation_ids": ["rt_123:i1", "rt_123:i2"]},
+            ],
+        }
+        narrative = render_rule_run_narrative(summary, locale="en")
+
+        explain_nl = render_rule_run_nl_explain(summary, narrative, locale="en")
+        self.assertEqual(
+            explain_nl,
+            {
+                "headline": "Rule q.foo@1.0.0 matched 1 root row(s) across 3 invocation(s).",
+                "paragraphs": [
+                    "Rule q.foo@1.0.0 produced 1 root row(s) across 3 invocation(s). This run identified 2 unique witness assertion(s), 2 predicate witness group(s), and 2 non-fact check group(s). Witness assertions: 2 unique assertion(s). Predicate witness groups: 2. Non-fact check groups: 2.",
+                    "Evidence summary: Predicate ecss:obligation_timestamp was witnessed by 1 assertion(s) across 2 invocation(s). Predicate ecss:window_start was witnessed by 1 assertion(s) across 1 invocation(s).",
+                    "Check summary: Check kind ge was evaluated 1 time(s) across 1 invocation(s). Check kind le was evaluated 2 time(s) across 2 invocation(s).",
+                    "Drill-down guidance: Open the linked assertion detail page(s) for 2 witness assertion(s) to inspect supporting facts. Continue below for invocation-level detail and the full raw trace payload.",
                 ],
             },
         )
@@ -1733,6 +1771,10 @@ Derivation(
                 "/v1/runtime/sessions/{session_id}/queries/explain-narrative",
                 {route.path for route in app.routes},
             )
+            self.assertIn(
+                "/v1/runtime/sessions/{session_id}/queries/explain-nl",
+                {route.path for route in app.routes},
+            )
 
             with TestClient(app) as client:
                 candidate_http = client.post(
@@ -1776,6 +1818,15 @@ Derivation(
                 self.assertTrue(narrative_http.json()["ok"])
                 self.assertEqual(narrative_http.json()["kind"], "rule_run_narrative")
                 self.assertIn("narrative", narrative_http.json())
+
+                nl_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-nl",
+                    json={"kind": "rule_run", "id": rule_run_id},
+                )
+                self.assertEqual(nl_http.status_code, 200)
+                self.assertTrue(nl_http.json()["ok"])
+                self.assertEqual(nl_http.json()["kind"], "rule_run_nl_explain")
+                self.assertIn("explain_nl", nl_http.json())
 
                 unsupported_kind_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain",
@@ -1824,6 +1875,22 @@ Derivation(
                 self.assertEqual(missing_narrative_kind_http.status_code, 200)
                 self.assertFalse(missing_narrative_kind_http.json()["ok"])
                 self.assertEqual(missing_narrative_kind_http.json()["errors"][0]["kind"], "shape")
+
+                unsupported_nl_kind_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-nl",
+                    json={"kind": "candidate", "id": candidate_id},
+                )
+                self.assertEqual(unsupported_nl_kind_http.status_code, 200)
+                self.assertFalse(unsupported_nl_kind_http.json()["ok"])
+                self.assertEqual(unsupported_nl_kind_http.json()["errors"][0]["kind"], "shape")
+
+                missing_nl_kind_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-nl",
+                    json={"id": rule_run_id},
+                )
+                self.assertEqual(missing_nl_kind_http.status_code, 200)
+                self.assertFalse(missing_nl_kind_http.json()["ok"])
+                self.assertEqual(missing_nl_kind_http.json()["errors"][0]["kind"], "shape")
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()

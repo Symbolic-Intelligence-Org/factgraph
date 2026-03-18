@@ -22,6 +22,7 @@ from factpy_kernel.service.runtime_v1 import (
     evaluate_runtime_derivation,
     explain_runtime_ref,
     explain_runtime_fact,
+    explain_runtime_nl,
     explain_runtime_narrative,
     explain_runtime_rule_trace,
     explain_runtime_summary,
@@ -128,6 +129,11 @@ def post_runtime_explain_summary(session_id: str, payload: dict[str, Any] = Body
 @app.post("/v1/runtime/sessions/{session_id}/queries/explain-narrative")
 def post_runtime_explain_narrative(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return explain_runtime_narrative(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/queries/explain-nl")
+def post_runtime_explain_nl(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return explain_runtime_nl(session_id, payload)
 
 
 @app.post("/v1/runtime/sessions/{session_id}/queries/explain-support")

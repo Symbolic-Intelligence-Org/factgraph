@@ -20,6 +20,7 @@ from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptResult
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
 from factpy_kernel.core.mapping.canon import MappingConflictError, MappingResolution
+from factpy_kernel.core.rules._trace_nl import render_rule_run_nl_explain
 from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
 from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule, run_rule_with_trace
 from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
@@ -325,14 +326,38 @@ def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str,
                 path="$.kind",
             )
         id_ = _require_non_empty_str(dto.get("id"), path="$.id")
-        summary = _get_rule_run_summary(session, id_)
         return ok_response(
             meta={"rule_run_id": id_},
             kind="rule_run_narrative",
-            narrative=render_rule_run_narrative(summary, locale="en"),
+            narrative=_get_rule_run_narrative(session, id_),
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_explain_narrative")
+        return error_response([err])
+
+
+def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        kind = dto.get("kind")
+        if kind != "rule_run":
+            raise facade_error(
+                f"unsupported explain_nl kind: {kind!r}",
+                kind="shape",
+                path="$.kind",
+            )
+        id_ = _require_non_empty_str(dto.get("id"), path="$.id")
+        summary = _get_rule_run_summary(session, id_)
+        narrative = _render_rule_run_narrative_from_summary(summary)
+        return ok_response(
+            meta={"rule_run_id": id_},
+            kind="rule_run_nl_explain",
+            explain_nl=render_rule_run_nl_explain(summary, narrative, locale="en"),
+        )
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_nl")
         return error_response([err])
 
 
@@ -921,6 +946,14 @@ def _get_rule_run_summary(session: RuntimeSession, rule_run_id: str) -> dict[str
             path="$.explain",
         )
     return summarize_rule_trace_artifact_dict(raw_explain)
+
+
+def _get_rule_run_narrative(session: RuntimeSession, rule_run_id: str) -> dict[str, Any]:
+    return _render_rule_run_narrative_from_summary(_get_rule_run_summary(session, rule_run_id))
+
+
+def _render_rule_run_narrative_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    return render_rule_run_narrative(summary, locale="en")
 
 
 def _session_to_dict(session: RuntimeSession) -> dict[str, Any]:
