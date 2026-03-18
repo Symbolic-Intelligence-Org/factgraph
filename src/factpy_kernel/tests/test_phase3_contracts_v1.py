@@ -2592,6 +2592,261 @@ Derivation(
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
 
+    def test_clinical_weak_signal_walkthrough_preserves_collective_significance_honesty(self) -> None:
+        schema_ir = _clinical_weak_signal_schema_ir()
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            patient_ref = encode_idref_v1("ClinicalPatient", [("patient_id", "string", "PT-001")])
+
+            assertion_ids: dict[str, str] = {}
+            for pred_id, rest_terms in (
+                (
+                    CLINICAL_MILD_FEVER_SIGNAL_PRED_ID,
+                    [("int", 381)],
+                ),
+                (
+                    CLINICAL_MILD_TACHYCARDIA_SIGNAL_PRED_ID,
+                    [("int", 108)],
+                ),
+                (
+                    CLINICAL_MILD_TACHYPNEA_SIGNAL_PRED_ID,
+                    [("int", 23)],
+                ),
+                (
+                    CLINICAL_MILD_HYPOTENSION_SIGNAL_PRED_ID,
+                    [("int", 67)],
+                ),
+                (
+                    CLINICAL_NORMAL_OXYGEN_SATURATION_PRED_ID,
+                    [("int", 97)],
+                ),
+                (
+                    CLINICAL_NORMAL_LACTATE_PRED_ID,
+                    [("int", 15)],
+                ),
+                (
+                    CLINICAL_ABNORMAL_INDICATOR_COUNT_PRED_ID,
+                    [("int", 4)],
+                ),
+                (
+                    CLINICAL_DETERIORATION_COUNT_THRESHOLD_PRED_ID,
+                    [("int", 4)],
+                ),
+            ):
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": pred_id,
+                        "e_ref": patient_ref,
+                        "rest_terms": [[tag, value] for tag, value in rest_terms],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+                assertion_ids.setdefault(f"{pred_id}:{len(assertion_ids)}", write_resp["write"]["assertion_id"])
+
+            rule_resp = run_runtime_rule(
+                session_id,
+                {
+                    "rule": {
+                        "rule_id": "q.clinical_weak_signal_walkthrough",
+                        "version": "1.0.0",
+                        "select": [
+                            "$patient",
+                            "$abnormal_indicator_count",
+                            "$deterioration_threshold",
+                        ],
+                        "where": [
+                            ["pred", CLINICAL_MILD_FEVER_SIGNAL_PRED_ID, ["$patient", "$temp_tenths_c"]],
+                            ["pred", CLINICAL_MILD_TACHYCARDIA_SIGNAL_PRED_ID, ["$patient", "$heart_rate_bpm"]],
+                            ["pred", CLINICAL_MILD_TACHYPNEA_SIGNAL_PRED_ID, ["$patient", "$resp_rate_bpm"]],
+                            ["pred", CLINICAL_MILD_HYPOTENSION_SIGNAL_PRED_ID, ["$patient", "$map_mmhg"]],
+                            [
+                                "pred",
+                                CLINICAL_ABNORMAL_INDICATOR_COUNT_PRED_ID,
+                                ["$patient", "$abnormal_indicator_count"],
+                            ],
+                            [
+                                "pred",
+                                CLINICAL_DETERIORATION_COUNT_THRESHOLD_PRED_ID,
+                                ["$patient", "$deterioration_threshold"],
+                            ],
+                            ["ge", "$abnormal_indicator_count", "$deterioration_threshold"],
+                        ],
+                    },
+                    "capture_trace": True,
+                },
+            )
+            self.assertTrue(rule_resp["ok"])
+            rule_run_id = rule_resp["result"]["trace"]["rule_run_id"]
+
+            raw_resp = explain_runtime_ref(session_id, {"kind": "rule_run", "id": rule_run_id})
+            summary_resp = explain_runtime_summary(session_id, {"kind": "rule_run", "id": rule_run_id})
+            narrative_resp = explain_runtime_narrative(session_id, {"kind": "rule_run", "id": rule_run_id})
+            nl_resp = explain_runtime_nl(session_id, {"kind": "rule_run", "id": rule_run_id})
+            self.assertTrue(raw_resp["ok"])
+            self.assertTrue(summary_resp["ok"])
+            self.assertTrue(narrative_resp["ok"])
+            self.assertTrue(nl_resp["ok"])
+
+            raw_explain = raw_resp["explain"]
+            summary = summary_resp["summary"]
+            narrative = narrative_resp["narrative"]
+            explain_nl = nl_resp["explain_nl"]
+
+            self.assertEqual(raw_explain["root_rule"]["rule_id"], "q.clinical_weak_signal_walkthrough")
+            self.assertEqual(raw_explain["root_rows"], [[patient_ref, 4, 4]])
+
+            invocation = next(
+                inv
+                for inv in raw_explain["invocations"]
+                if inv["rule"]["rule_id"] == "q.clinical_weak_signal_walkthrough"
+            )
+            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            self.assertEqual(
+                pred_atom_keys,
+                {
+                    "b0.a0:clinical:mild_fever_signal",
+                    "b0.a1:clinical:mild_tachycardia_signal",
+                    "b0.a2:clinical:mild_tachypnea_signal",
+                    "b0.a3:clinical:mild_hypotension_signal",
+                    "b0.a4:clinical:abnormal_indicator_count",
+                    "b0.a5:clinical:deterioration_count_threshold",
+                },
+            )
+            self.assertFalse(any(key.endswith(":clinical:normal_oxygen_saturation") for key in pred_atom_keys))
+            self.assertFalse(any(key.endswith(":clinical:normal_lactate") for key in pred_atom_keys))
+            self.assertEqual(len(invocation["pred_witnesses"]), 6)
+            self.assertEqual(len(invocation["non_fact_steps"]), 1)
+            self.assertEqual(invocation["non_fact_steps"][0]["kind"], "ge")
+
+            threshold_binding = dict(dict(invocation["non_fact_steps"][0]["details"])["binding"])
+            self.assertEqual(threshold_binding["$abnormal_indicator_count"], 4)
+            self.assertEqual(threshold_binding["$deterioration_threshold"], 4)
+
+            witness_groups = {row["pred_id"]: row for row in summary["predicate_witness_groups"]}
+            self.assertEqual(summary["root_row_count"], 1)
+            self.assertEqual(summary["invocation_count"], 1)
+            self.assertEqual(len(summary["witness_assertion_ids"]), 6)
+            self.assertEqual(
+                witness_groups[CLINICAL_MILD_FEVER_SIGNAL_PRED_ID]["asrt_ids"],
+                [assertion_ids["clinical:mild_fever_signal:0"]],
+            )
+            self.assertEqual(
+                witness_groups[CLINICAL_MILD_TACHYCARDIA_SIGNAL_PRED_ID]["asrt_ids"],
+                [assertion_ids["clinical:mild_tachycardia_signal:1"]],
+            )
+            self.assertEqual(
+                witness_groups[CLINICAL_ABNORMAL_INDICATOR_COUNT_PRED_ID]["asrt_ids"],
+                [assertion_ids["clinical:abnormal_indicator_count:6"]],
+            )
+            self.assertNotIn(CLINICAL_NORMAL_OXYGEN_SATURATION_PRED_ID, witness_groups)
+            self.assertNotIn(CLINICAL_NORMAL_LACTATE_PRED_ID, witness_groups)
+
+            self.assertIn(
+                "Predicate clinical:mild_fever_signal was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+            self.assertIn(
+                "Predicate clinical:mild_tachypnea_signal was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+            self.assertIn(
+                "Predicate clinical:abnormal_indicator_count was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+            self.assertNotIn(
+                "Predicate clinical:normal_oxygen_saturation was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+            self.assertIn(
+                "Check kind ge was evaluated 1 time(s) across 1 invocation(s).",
+                narrative["non_fact_check_lines"],
+            )
+
+            self.assertEqual(
+                explain_nl["headline"],
+                "Rule q.clinical_weak_signal_walkthrough@1.0.0 matched 1 root row(s) across 1 invocation(s).",
+            )
+            self.assertTrue(any("clinical:mild_fever_signal" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertTrue(any("clinical:mild_tachycardia_signal" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertTrue(any("clinical:mild_tachypnea_signal" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertTrue(any("clinical:mild_hypotension_signal" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertTrue(any("clinical:abnormal_indicator_count" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertTrue(
+                any("Check kind ge was evaluated 1 time(s) across 1 invocation(s)." in paragraph for paragraph in explain_nl["paragraphs"])
+            )
+            self.assertFalse(any("clinical:normal_oxygen_saturation" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertFalse(any("clinical:normal_lactate" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertFalse(any("probability" in paragraph.lower() for paragraph in explain_nl["paragraphs"]))
+            self.assertFalse(any("confidence" in paragraph.lower() for paragraph in explain_nl["paragraphs"]))
+            self.assertFalse(any("weight" in paragraph.lower() for paragraph in explain_nl["paragraphs"]))
+            self.assertFalse(any("severe" in paragraph.lower() for paragraph in explain_nl["paragraphs"]))
+
+            with TemporaryDirectory() as package_dir:
+                session = _require_session(session_id)
+                export_package(session.store, Path(package_dir), ExportOptions(package_kind="audit"))
+                package = load_audit_package(package_dir)
+                query = AuditQuery(package)
+                assertion_index = load_assertion_index(package)
+
+                audit_summary = query.get_rule_trace_summary(rule_run_id)
+                audit_narrative = query.get_rule_trace_narrative(rule_run_id)
+                self.assertEqual(audit_summary, summary)
+                self.assertEqual(audit_narrative, narrative)
+
+                mild_detail = assertion_index.get_assertion_detail(assertion_ids["clinical:mild_fever_signal:0"])
+                normal_o2_detail = assertion_index.get_assertion_detail(assertion_ids["clinical:normal_oxygen_saturation:4"])
+                normal_lactate_detail = assertion_index.get_assertion_detail(assertion_ids["clinical:normal_lactate:5"])
+                self.assertIsNotNone(mild_detail)
+                self.assertIsNotNone(normal_o2_detail)
+                self.assertIsNotNone(normal_lactate_detail)
+                assert mild_detail is not None
+                assert normal_o2_detail is not None
+                assert normal_lactate_detail is not None
+                self.assertEqual(mild_detail["claim"]["pred_id"], CLINICAL_MILD_FEVER_SIGNAL_PRED_ID)
+                self.assertEqual(normal_o2_detail["claim"]["pred_id"], CLINICAL_NORMAL_OXYGEN_SATURATION_PRED_ID)
+                self.assertEqual(normal_lactate_detail["claim"]["pred_id"], CLINICAL_NORMAL_LACTATE_PRED_ID)
+
+                with TemporaryDirectory() as out_dir:
+                    site_manifest = render_audit_static_site(package_dir, out_dir)
+                    self.assertEqual(site_manifest["rule_trace_count"], 1)
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    self.assertTrue(rule_trace_page.exists())
+                    html = rule_trace_page.read_text(encoding="utf-8")
+                    self.assertIn("q.clinical_weak_signal_walkthrough", html)
+                    self.assertIn(
+                        "Predicate clinical:mild_fever_signal was witnessed by 1 assertion(s) across 1 invocation(s).",
+                        html,
+                    )
+                    self.assertIn(
+                        "Predicate clinical:abnormal_indicator_count was witnessed by 1 assertion(s) across 1 invocation(s).",
+                        html,
+                    )
+                    self.assertNotIn("Predicate clinical:normal_oxygen_saturation was witnessed", html)
+                    self.assertIn(assertion_ids["clinical:mild_fever_signal:0"], html)
+                    self.assertIn(assertion_ids["clinical:deterioration_count_threshold:7"], html)
+
+                    for key in (
+                        "clinical:mild_fever_signal:0",
+                        "clinical:mild_tachycardia_signal:1",
+                        "clinical:mild_tachypnea_signal:2",
+                        "clinical:mild_hypotension_signal:3",
+                        "clinical:normal_oxygen_saturation:4",
+                        "clinical:normal_lactate:5",
+                        "clinical:abnormal_indicator_count:6",
+                        "clinical:deterioration_count_threshold:7",
+                    ):
+                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        self.assertTrue(assertion_page.exists())
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
     def test_runtime_explain_ref_candidate_degraded_for_engine_and_legacy_none(self) -> None:
         sdk = SDKStore([User])
         refs = _seed_users_for_syntax_matrix(sdk)
@@ -4484,6 +4739,14 @@ PROCESS_PRESSURE_SHUTDOWN_THRESHOLD_PRED_ID = "process:pressure_shutdown_thresho
 PROCESS_SHUTDOWN_ALARM_ACTIVE_PRED_ID = "process:shutdown_alarm_active"
 PROCESS_SHUTDOWN_INTERLOCK_ARMED_PRED_ID = "process:shutdown_interlock_armed"
 PROCESS_MANUAL_OVERRIDE_CLEARED_PRED_ID = "process:manual_override_cleared"
+CLINICAL_MILD_FEVER_SIGNAL_PRED_ID = "clinical:mild_fever_signal"
+CLINICAL_MILD_TACHYCARDIA_SIGNAL_PRED_ID = "clinical:mild_tachycardia_signal"
+CLINICAL_MILD_TACHYPNEA_SIGNAL_PRED_ID = "clinical:mild_tachypnea_signal"
+CLINICAL_MILD_HYPOTENSION_SIGNAL_PRED_ID = "clinical:mild_hypotension_signal"
+CLINICAL_NORMAL_OXYGEN_SATURATION_PRED_ID = "clinical:normal_oxygen_saturation"
+CLINICAL_NORMAL_LACTATE_PRED_ID = "clinical:normal_lactate"
+CLINICAL_ABNORMAL_INDICATOR_COUNT_PRED_ID = "clinical:abnormal_indicator_count"
+CLINICAL_DETERIORATION_COUNT_THRESHOLD_PRED_ID = "clinical:deterioration_count_threshold"
 
 
 def _aml_case_review_schema_ir() -> dict[str, Any]:
@@ -4735,6 +4998,111 @@ def _process_safety_shutdown_schema_ir() -> dict[str, Any]:
     ]
     existing = {pred.get("pred_id") for pred in predicates if isinstance(pred, dict)}
     for predicate in process_predicates:
+        pred_id = predicate["pred_id"]
+        if pred_id not in existing:
+            predicates.append(predicate)
+            existing.add(pred_id)
+        if pred_id not in projection_predicates:
+            projection_predicates.append(pred_id)
+    return schema_ir
+
+
+def _clinical_weak_signal_schema_ir() -> dict[str, Any]:
+    schema_ir = copy.deepcopy(_schema_ir())
+    predicates = schema_ir["predicates"]
+    projection_predicates = schema_ir["projection"]["predicates"]
+    clinical_predicates = [
+        {
+            "pred_id": CLINICAL_MILD_FEVER_SIGNAL_PRED_ID,
+            "owner_type": "clinical_patient",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "patient_ref", "type_domain": "entity_ref"},
+                {"name": "temp_tenths_c", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": CLINICAL_MILD_TACHYCARDIA_SIGNAL_PRED_ID,
+            "owner_type": "clinical_patient",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "patient_ref", "type_domain": "entity_ref"},
+                {"name": "heart_rate_bpm", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": CLINICAL_MILD_TACHYPNEA_SIGNAL_PRED_ID,
+            "owner_type": "clinical_patient",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "patient_ref", "type_domain": "entity_ref"},
+                {"name": "resp_rate_bpm", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": CLINICAL_MILD_HYPOTENSION_SIGNAL_PRED_ID,
+            "owner_type": "clinical_patient",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "patient_ref", "type_domain": "entity_ref"},
+                {"name": "map_mmhg", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": CLINICAL_NORMAL_OXYGEN_SATURATION_PRED_ID,
+            "owner_type": "clinical_patient",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "patient_ref", "type_domain": "entity_ref"},
+                {"name": "spo2_percent", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": CLINICAL_NORMAL_LACTATE_PRED_ID,
+            "owner_type": "clinical_patient",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "patient_ref", "type_domain": "entity_ref"},
+                {"name": "lactate_tenths_mmol_l", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": CLINICAL_ABNORMAL_INDICATOR_COUNT_PRED_ID,
+            "owner_type": "clinical_patient",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "patient_ref", "type_domain": "entity_ref"},
+                {"name": "abnormal_indicator_count", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": CLINICAL_DETERIORATION_COUNT_THRESHOLD_PRED_ID,
+            "owner_type": "clinical_patient",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "patient_ref", "type_domain": "entity_ref"},
+                {"name": "deterioration_threshold", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+    ]
+    existing = {pred.get("pred_id") for pred in predicates if isinstance(pred, dict)}
+    for predicate in clinical_predicates:
         pred_id = predicate["pred_id"]
         if pred_id not in existing:
             predicates.append(predicate)
