@@ -1,5 +1,26 @@
 from __future__ import annotations
 
+from .uncertainty import (
+    ECSS_COLLISION_PROBABILITY_PPM_PRED_ID,
+    ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID,
+    ECSS_DISPOSAL_SUCCESS_PROBABILITY_PPM_PRED_ID,
+    ECSS_DISPOSAL_SUCCESS_THRESHOLD_PPM_PRED_ID,
+    ECSS_UNCERTAINTY_PRED_IDS,
+    EcssUncertaintyError,
+    ecss_uncertainty_predicates,
+    extend_schema_ir_with_ecss_uncertainty_predicates,
+)
+from .temporal import (
+    ECSS_INTERVAL_END_PRED_ID,
+    ECSS_INTERVAL_START_PRED_ID,
+    ECSS_OBLIGATION_TIMESTAMP_PRED_ID,
+    ECSS_TEMPORAL_PRED_IDS,
+    ECSS_WINDOW_END_PRED_ID,
+    ECSS_WINDOW_START_PRED_ID,
+    EcssTemporalError,
+    ecss_temporal_predicates,
+    extend_schema_ir_with_ecss_temporal_predicates,
+)
 from .vcd import (
     ECSS_COMPLIANCE_STATUS_PRED_ID,
     ECSS_REQUIREMENT_PRED_ID,
@@ -19,7 +40,24 @@ __all__ = [
     "ECSS_REQUIREMENT_RID_PRED_ID",
     "ECSS_REVIEW_MILESTONE_PRED_ID",
     "ECSS_VCD_PRED_IDS",
+    "ECSS_OBLIGATION_TIMESTAMP_PRED_ID",
+    "ECSS_WINDOW_START_PRED_ID",
+    "ECSS_WINDOW_END_PRED_ID",
+    "ECSS_INTERVAL_START_PRED_ID",
+    "ECSS_INTERVAL_END_PRED_ID",
+    "ECSS_TEMPORAL_PRED_IDS",
+    "ECSS_COLLISION_PROBABILITY_PPM_PRED_ID",
+    "ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID",
+    "ECSS_DISPOSAL_SUCCESS_PROBABILITY_PPM_PRED_ID",
+    "ECSS_DISPOSAL_SUCCESS_THRESHOLD_PPM_PRED_ID",
+    "ECSS_UNCERTAINTY_PRED_IDS",
     "EcssVcdError",
+    "EcssTemporalError",
+    "EcssUncertaintyError",
     "ecss_vcd_predicates",
     "extend_schema_ir_with_ecss_vcd_predicates",
+    "ecss_temporal_predicates",
+    "extend_schema_ir_with_ecss_temporal_predicates",
+    "ecss_uncertainty_predicates",
+    "extend_schema_ir_with_ecss_uncertainty_predicates",
 ]

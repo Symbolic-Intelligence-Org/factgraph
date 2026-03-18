@@ -472,6 +472,7 @@ Type inference rules for unknown keys (conventional keys take precedence over th
 
 * `meta["confidence"]` must be a `float` with value in `(0, 1]`.
 * `int` values (such as `1`) are not automatically promoted to `float`; they raise an error directly.
+* `meta.confidence` belongs to the source/display lane and should not be reused as Scenario A requirement-threshold probability.
 
 ### 4.1 Common Examples (`confidence`)
 
@@ -718,6 +719,7 @@ with vars("u", "lang") as (u, lang):
 * Rule: supports `Body(...)`, currently only for where normalization; `body_confidences` do not participate in Rule runtime evaluation.
 * Derivation: supports `Body(...)`; after compilation, `body_confidences` are extracted into a sidecar for `mode="problog"`.
 * Query: `Body.confidence` is unsupported and causes an error at construction time.
+* `Body.confidence` belongs to the probabilistic reasoning lane and is not the same as requirement-threshold probability.
 
 `body_confidences` pass-through path:
 `SDK Derivation/authoring payload -> compile_authoring_derivation_v1 -> sdk.evaluate -> evaluate_store -> engine(problog)`.
@@ -1306,6 +1308,7 @@ res = sdk.accept(cands[0], approved_by="alice")
 * Type: `float | None`
 * Under the ProbLog path, it is the marginal probability value; under native/souffle paths, it is `None`
 * Fully passed through serialization/deserialization, without loss across processes
+* This field currently belongs to the probabilistic engine lane; Scenario A threshold checks should instead use fact-backed `ecss.uncertainty` predicates.
 
 **Accept semantics** (v3 update)
 

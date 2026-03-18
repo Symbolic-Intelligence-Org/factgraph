@@ -190,6 +190,7 @@ cands = sdk.evaluate(drv, mode="native")
 - `candidate_key`：跨 run 稳定键
 - `candidate_kind`：`fact` / `entity`
 - `confidence`：`float | None`（`problog` 为概率值；`native/souffle` 为 `None`）
+- 该字段当前属于 probabilistic engine lane，不应用作 Scenario A 的 requirement threshold probability；后者应通过 fact-backed uncertainty predicates + 现有比较语法表达。
 - `payload`：
   - fact：`{"pred_id": ..., "terms": [...]}`
   - entity：`{"entity_type": ..., "resolved_identity": ..., ...}`
@@ -219,9 +220,16 @@ accept sugar：
 
 已实现：
 - 读路径：`snapshot.assertions.<field>.at(t)` 与 `.version(v)`。
+- `T1` temporal checks 可通过显式 temporal predicates + 现有比较语法表达：
+  - deadline：时间 anchor predicate + `<=` / `<`
+  - window：时间 anchor predicate + `>=` / `<=`
+  - interval relation：helper rule + 现有比较语法
+- 这条路径要求 temporal predicate 参数使用 schema tag `"time"`（Python `int` / epoch 纳秒），不复用 `.at(t)` 的 ISO 8601 读侧口径。
+- 若 temporal anchor 需要 explain drill-down，应优先建模为 predicate assertion 或至少绑定到变量；这样它会进入 `pred_witnesses` 或 `non_fact_steps.details.binding`。
 
 未开放：
 - derivation/runtime 侧 `temporal_view` 参数。
+- dedicated temporal where atom / temporal builtin tag。
 - Rule/Derivation head 直接产出时态写语义。
 
 显式行为：

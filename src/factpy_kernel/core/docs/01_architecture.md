@@ -134,6 +134,8 @@ flowchart LR
 - `ruleref_links` 显式把 `where` 中的 `ruleref` atom 连接到实际发生的 child invocation；命中 memo 时链接到 memo-hit invocation，再由 `memo_source_invocation_id` 跳到 primary invocation
 - `non_fact_steps.status` 第一轮统一写为 `negated`（`not`）或 `evaluated`（其余 non-`pred` steps）
 - `original_where`、`rewritten_where` 与 `non_fact_steps.details.atom` 继续保持 opaque payload；typed contract 只承诺其外围字段存在
+- `T1` temporal checks 不新增 trace carrier 字段：fact-backed temporal anchors 仍走 `pred_witnesses`，比较步骤的时间绑定值继续走 `non_fact_steps.details.binding`
+- `Scenario A` threshold-bearing uncertainty checks 同样不新增 trace carrier 字段：测量值/阈值 assertion 进入 `pred_witnesses`，比较绑定值继续走 `non_fact_steps.details.binding`
 - `RuleTraceArtifact` 与 derivation `SupportArtifact` 保持分离
 
 ```mermaid

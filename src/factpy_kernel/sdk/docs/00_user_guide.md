@@ -464,6 +464,7 @@ meta 数值字段按 kind 分类存储，kind 名称在 v3 中重命名并扩展
 **稳定合约（`confidence`）**
 - `meta["confidence"]` 必须是 `float` 且值域在 `(0, 1]`。
 - `int`（如 `1`）不会被自动提升为 `float`，会直接报错。
+- `meta.confidence` 属于 source/display lane，不应用作 Scenario A 这类 requirement threshold probability。
 
 ### 4.1 常见写法示例（`confidence`）
 
@@ -702,6 +703,7 @@ with vars("u", "lang") as (u, lang):
 - Rule：支持 `Body(...)`，当前仅用于 where 归一化，`body_confidences` 不参与 Rule 运行时求值。
 - Derivation：支持 `Body(...)`，编译后提取 `body_confidences` sidecar，供 `mode="problog"` 消费。
 - Query：`Body.confidence` 不支持，构造期报错。
+- `Body.confidence` 属于 probabilistic reasoning lane，不等同于 requirement threshold probability。
 
 `body_confidences` 透传链路：
 `SDK Derivation/authoring payload -> compile_authoring_derivation_v1 -> sdk.evaluate -> evaluate_store -> engine(problog)`。
@@ -1282,6 +1284,7 @@ res = sdk.accept(cands[0], approved_by="alice")
 - 类型：`float | None`
 - ProbLog 路径下为边际概率值，native/souffle 路径下为 `None`
 - 序列化/反序列化全链路透传，跨进程不丢失
+- 该字段当前属于 probabilistic engine lane；Scenario A 的阈值判断应使用 fact-backed `ecss.uncertainty` predicates，而不是复用该字段。
 
 **accept 语义**（v3 更新）
 - duplicate 判定为：claim 相同，且业务语义 meta（排除时间戳/run/candidate 标识字段后）相同

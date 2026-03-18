@@ -224,6 +224,14 @@
 - `non_fact_steps.details` 采用部分稳定边界：
   - `details.binding` 属于稳定 contract
   - `details.atom` 保持 opaque passthrough，不承诺 typed schema
+- `T1` temporal checks 继续复用同一 explain contract：
+  - fact-backed temporal anchors 出现在 `pred_witnesses`
+  - 时间比较绑定值出现在 `details.binding`
+  - 不新增 temporal 专用字段
+- `Scenario A` 的 uncertainty threshold checks 也复用同一 explain contract：
+  - fact-backed measurement / threshold predicates 出现在 `pred_witnesses`
+  - 数值比较绑定值出现在 `details.binding`
+  - 不新增 uncertainty 专用字段
 - `original_where` 与 `rewritten_where` 也保持 opaque passthrough；客户端只能假定它们是 JSON-native payload，不能假定内部结构在 service v1 中稳定。
 
 错误 kinds：

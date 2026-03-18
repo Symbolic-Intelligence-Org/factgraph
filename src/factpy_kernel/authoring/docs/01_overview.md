@@ -223,7 +223,7 @@ root_dir/
 - `service`
   - service 层可把 authoring registry 暴露成前端可消费接口
 - `ecss`
-  - `factpy_kernel.ecss` 负责提供 shared domain preset（如 ECSS VCD predicates）
+  - `factpy_kernel.ecss` 负责提供 shared domain preset（如 ECSS VCD predicates、Scenario A 第一轮 temporal / uncertainty predicates）
   - authoring 可消费这些 preset 进入 schema/registry 工作流，但不拥有 preset 本身
 - `audit`
   - audit 读取的是导出的 package，不直接消费 authoring registry

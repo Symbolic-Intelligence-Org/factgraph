@@ -190,6 +190,7 @@ cands = sdk.evaluate(drv, mode="native")
 - `candidate_key`: cross-run stable key
 - `candidate_kind`: `fact` / `entity`
 - `confidence`: `float | None` (`problog` yields a probability; `native/souffle` return `None`)
+- This field currently belongs to the probabilistic engine lane and should not be reused as Scenario A requirement-threshold probability; that path should use fact-backed uncertainty predicates plus the existing comparison syntax.
 - `payload`:
   - fact: `{"pred_id": ..., "terms": [...]}`
   - entity: `{"entity_type": ..., "resolved_identity": ..., ...}`
@@ -219,9 +220,16 @@ Parameter boundaries:
 
 Implemented:
 - Read-side temporal filtering via `snapshot.assertions.<field>.at(t)` and `.version(v)`.
+- `T1` temporal checks can be expressed via explicit temporal predicates plus the existing comparison syntax:
+  - deadline: temporal anchor predicate + `<=` / `<`
+  - window membership: temporal anchor predicate + `>=` / `<=`
+  - interval relation: helper rule + existing comparisons
+- This path requires temporal predicate arguments to use schema tag `"time"` (Python `int`, epoch nanoseconds), not the ISO 8601 read-side convention used by `.at(t)`.
+- If a temporal anchor must support explain drill-down, model it as a predicate assertion or at least bind it to a variable so it surfaces through `pred_witnesses` or `non_fact_steps.details.binding`.
 
 Not open yet:
 - derivation/runtime `temporal_view` parameter.
+- dedicated temporal where atom / temporal builtin tag.
 - temporal write semantics in Rule/Derivation head.
 
 Explicit behavior:

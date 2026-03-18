@@ -131,6 +131,8 @@ Current trace semantics:
 - `ruleref_links` explicitly connect each `ruleref` atom in `where` to the child invocation that actually occurred; on memo hits the link points to the memo-hit invocation, and clients can then follow `memo_source_invocation_id` to the primary invocation
 - `non_fact_steps.status` now writes `negated` for `not` and `evaluated` for other non-`pred` steps
 - `original_where`, `rewritten_where`, and `non_fact_steps.details.atom` remain opaque payloads; the typed contract only promises their surrounding fields
+- `T1` temporal checks do not add new trace-carrier fields: fact-backed temporal anchors still surface through `pred_witnesses`, and scalar comparison bindings stay in `non_fact_steps.details.binding`
+- Scenario A threshold-bearing uncertainty checks follow the same rule: measurement/threshold assertions surface through `pred_witnesses`, and scalar comparison bindings stay in `non_fact_steps.details.binding`
 - `RuleTraceArtifact` remains separate from derivation `SupportArtifact`
 
 ```mermaid

@@ -34,7 +34,22 @@ from factpy_kernel.authoring.where_schema_lowering import (
     WhereSchemaLoweringError,
     lower_blueprint_where_sugar_with_schema_v1,
 )
-from factpy_kernel.ecss import EcssVcdError
+from factpy_kernel.ecss import (
+    ECSS_COLLISION_PROBABILITY_PPM_PRED_ID,
+    ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID,
+    ECSS_INTERVAL_END_PRED_ID,
+    ECSS_INTERVAL_START_PRED_ID,
+    ECSS_OBLIGATION_TIMESTAMP_PRED_ID,
+    ECSS_DISPOSAL_SUCCESS_PROBABILITY_PPM_PRED_ID,
+    ECSS_DISPOSAL_SUCCESS_THRESHOLD_PPM_PRED_ID,
+    ECSS_WINDOW_END_PRED_ID,
+    ECSS_WINDOW_START_PRED_ID,
+    EcssTemporalError,
+    EcssUncertaintyError,
+    EcssVcdError,
+    extend_schema_ir_with_ecss_uncertainty_predicates,
+    extend_schema_ir_with_ecss_temporal_predicates,
+)
 from factpy_kernel.core.rules.rule_ir import (
     RuleCompileError,
     RuleRegistry,
@@ -1587,6 +1602,306 @@ Derivation(
         with self.assertRaises(EcssVcdError):
             apply_ecss_vcd_schema(["not-a-schema"])  # type: ignore[arg-type]
 
+    def test_ecss_temporal_schema_helper_extends_schema_ir_idempotently(self) -> None:
+        base = _schema_ir()
+        extended = extend_schema_ir_with_ecss_temporal_predicates(base)
+        extended_again = extend_schema_ir_with_ecss_temporal_predicates(extended)
+
+        pred_ids = [pred["pred_id"] for pred in extended["predicates"]]
+        self.assertIn(ECSS_OBLIGATION_TIMESTAMP_PRED_ID, pred_ids)
+        self.assertIn(ECSS_WINDOW_START_PRED_ID, pred_ids)
+        self.assertIn(ECSS_WINDOW_END_PRED_ID, pred_ids)
+        self.assertIn(ECSS_INTERVAL_START_PRED_ID, pred_ids)
+        self.assertIn(ECSS_INTERVAL_END_PRED_ID, pred_ids)
+
+        self.assertEqual(pred_ids.count(ECSS_OBLIGATION_TIMESTAMP_PRED_ID), 1)
+        self.assertEqual(extended_again["predicates"], extended["predicates"])
+        self.assertEqual(
+            extended_again["projection"]["predicates"],
+            extended["projection"]["predicates"],
+        )
+
+    def test_shared_ecss_temporal_schema_helper_rejects_invalid_shape(self) -> None:
+        with self.assertRaises(EcssTemporalError):
+            extend_schema_ir_with_ecss_temporal_predicates(["not-a-schema"])  # type: ignore[arg-type]
+
+    def test_ecss_uncertainty_schema_helper_extends_schema_ir_idempotently(self) -> None:
+        base = _schema_ir()
+        extended = extend_schema_ir_with_ecss_uncertainty_predicates(base)
+        extended_again = extend_schema_ir_with_ecss_uncertainty_predicates(extended)
+
+        pred_ids = [pred["pred_id"] for pred in extended["predicates"]]
+        self.assertIn(ECSS_COLLISION_PROBABILITY_PPM_PRED_ID, pred_ids)
+        self.assertIn(ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID, pred_ids)
+        self.assertIn(ECSS_DISPOSAL_SUCCESS_PROBABILITY_PPM_PRED_ID, pred_ids)
+        self.assertIn(ECSS_DISPOSAL_SUCCESS_THRESHOLD_PPM_PRED_ID, pred_ids)
+
+        self.assertEqual(pred_ids.count(ECSS_COLLISION_PROBABILITY_PPM_PRED_ID), 1)
+        self.assertEqual(extended_again["predicates"], extended["predicates"])
+        self.assertEqual(
+            extended_again["projection"]["predicates"],
+            extended["projection"]["predicates"],
+        )
+
+    def test_shared_ecss_uncertainty_schema_helper_rejects_invalid_shape(self) -> None:
+        with self.assertRaises(EcssUncertaintyError):
+            extend_schema_ir_with_ecss_uncertainty_predicates(["not-a-schema"])  # type: ignore[arg-type]
+
+    def test_temporal_deadline_and_window_checks_reuse_cmp_trace_contract(self) -> None:
+        schema_ir = extend_schema_ir_with_ecss_temporal_predicates(_schema_ir())
+        sdk = SDKStore([User], schema_ir=schema_ir)
+
+        obligation_ref = encode_idref_v1("ECSSObligation", [("obligation_id", "string", "OB-001")])
+        with patch(
+            "factpy_kernel.core.evidence.write_protocol.now_epoch_nanos",
+            side_effect=[100, 110, 120],
+        ):
+            obligation_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_OBLIGATION_TIMESTAMP_PRED_ID,
+                obligation_ref,
+                [("time", 100)],
+            )
+            window_start_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_WINDOW_START_PRED_ID,
+                obligation_ref,
+                [("time", 80)],
+            )
+            window_end_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_WINDOW_END_PRED_ID,
+                obligation_ref,
+                [("time", 120)],
+            )
+
+        with sdk_vars("o", "event_ts", "start_ts", "cutoff_ts") as (o, event_ts, start_ts, cutoff_ts):
+            deadline_window_rule = Rule(
+                id="q.temporal_deadline_window_ok",
+                version="1.0.0",
+                select=[o],
+                where=[
+                    Pred(ECSS_OBLIGATION_TIMESTAMP_PRED_ID, o, event_ts),
+                    Pred(ECSS_WINDOW_START_PRED_ID, o, start_ts),
+                    Pred(ECSS_WINDOW_END_PRED_ID, o, cutoff_ts),
+                    start_ts <= event_ts,
+                    event_ts <= cutoff_ts,
+                ],
+            )
+
+        compiled = sdk._compile_rule_input(deadline_window_rule)
+        rule_spec = RuleSpec(
+            rule_id=compiled["rule_id"],
+            version=compiled["version"],
+            select_vars=list(compiled["select_vars"]),
+            where=list(compiled["where"]),
+            expose=bool(compiled.get("expose", False)),
+        )
+
+        trace_result = run_rule_with_trace(sdk.store, rule_spec, RuleRegistry())
+        self.assertEqual(trace_result.rows, [(obligation_ref,)])
+
+        trace = sdk.store.explain_rule_trace(trace_result.rule_run_id)
+        self.assertIsNotNone(trace)
+        assert trace is not None
+        invocation = next(inv for inv in trace["invocations"] if inv["rule"]["rule_id"] == "q.temporal_deadline_window_ok")
+
+        witness_map = {
+            witness["pred_atom_key"]: tuple(witness["asrt_ids"])
+            for witness in invocation["pred_witnesses"]
+        }
+        self.assertEqual(witness_map["b0.a0:ecss:obligation_timestamp"], (obligation_asrt_id,))
+        self.assertEqual(witness_map["b0.a1:ecss:window_start"], (window_start_asrt_id,))
+        self.assertEqual(witness_map["b0.a2:ecss:window_end"], (window_end_asrt_id,))
+
+        non_fact_by_key = {step["step_key"]: step for step in invocation["non_fact_steps"]}
+        self.assertEqual(non_fact_by_key["b0.a3:le"]["kind"], "le")
+        self.assertEqual(non_fact_by_key["b0.a4:le"]["kind"], "le")
+
+        step_details = dict(non_fact_by_key["b0.a4:le"]["details"])
+        binding_rows = dict(step_details["binding"])
+        self.assertEqual(binding_rows["$event_ts"], 100)
+        self.assertEqual(binding_rows["$cutoff_ts"], 120)
+
+    def test_temporal_interval_relation_can_be_expressed_via_helper_rule(self) -> None:
+        schema_ir = extend_schema_ir_with_ecss_temporal_predicates(_schema_ir())
+        sdk = SDKStore([User], schema_ir=schema_ir)
+
+        interval_outer = encode_idref_v1("ECSSInterval", [("interval_id", "string", "I-OUTER")])
+        interval_inner = encode_idref_v1("ECSSInterval", [("interval_id", "string", "I-INNER")])
+        interval_overlap = encode_idref_v1("ECSSInterval", [("interval_id", "string", "I-OVERLAP")])
+
+        with patch(
+            "factpy_kernel.core.evidence.write_protocol.now_epoch_nanos",
+            side_effect=[100, 110, 120, 130, 140, 150],
+        ):
+            set_field(sdk.store.ledger, ECSS_INTERVAL_START_PRED_ID, interval_outer, [("time", 0)])
+            set_field(sdk.store.ledger, ECSS_INTERVAL_END_PRED_ID, interval_outer, [("time", 20)])
+            set_field(sdk.store.ledger, ECSS_INTERVAL_START_PRED_ID, interval_inner, [("time", 5)])
+            set_field(sdk.store.ledger, ECSS_INTERVAL_END_PRED_ID, interval_inner, [("time", 10)])
+            set_field(sdk.store.ledger, ECSS_INTERVAL_START_PRED_ID, interval_overlap, [("time", 15)])
+            set_field(sdk.store.ledger, ECSS_INTERVAL_END_PRED_ID, interval_overlap, [("time", 25)])
+
+        with sdk_vars("outer", "inner", "outer_start", "outer_end", "inner_start", "inner_end") as (
+            outer,
+            inner,
+            outer_start,
+            outer_end,
+            inner_start,
+            inner_end,
+        ):
+            interval_contains = Rule(
+                id="q.interval_contains",
+                version="1.0.0",
+                select=[outer, inner],
+                where=[
+                    Pred(ECSS_INTERVAL_START_PRED_ID, outer, outer_start),
+                    Pred(ECSS_INTERVAL_END_PRED_ID, outer, outer_end),
+                    Pred(ECSS_INTERVAL_START_PRED_ID, inner, inner_start),
+                    Pred(ECSS_INTERVAL_END_PRED_ID, inner, inner_end),
+                    outer != inner,
+                    outer_start <= inner_start,
+                    inner_end <= outer_end,
+                ],
+                expose=True,
+            )
+            interval_contains_pairs = Rule(
+                id="q.interval_contains_pairs",
+                version="1.0.0",
+                select=[outer, inner],
+                where=[RuleRef(interval_contains)(outer, inner)],
+            )
+
+        registry = RuleRegistry()
+        sdk._register_rule_dependencies(registry, interval_contains_pairs)
+        compiled = sdk._compile_rule_input(interval_contains_pairs)
+        rule_spec = RuleSpec(
+            rule_id=compiled["rule_id"],
+            version=compiled["version"],
+            select_vars=list(compiled["select_vars"]),
+            where=list(compiled["where"]),
+            expose=bool(compiled.get("expose", False)),
+        )
+
+        trace_result = run_rule_with_trace(sdk.store, rule_spec, registry)
+        self.assertEqual(trace_result.rows, [(interval_outer, interval_inner)])
+
+        trace = sdk.store.explain_rule_trace(trace_result.rule_run_id)
+        self.assertIsNotNone(trace)
+        assert trace is not None
+        root_invocation = next(inv for inv in trace["invocations"] if inv["rule"]["rule_id"] == "q.interval_contains_pairs")
+        helper_invocation = next(inv for inv in trace["invocations"] if inv["rule"]["rule_id"] == "q.interval_contains")
+
+        self.assertEqual(len(root_invocation["ruleref_links"]), 1)
+        self.assertEqual(root_invocation["ruleref_links"][0]["child_invocation_id"], helper_invocation["invocation_id"])
+        helper_step_kinds = {step["kind"] for step in helper_invocation["non_fact_steps"]}
+        self.assertIn("not", helper_step_kinds)
+        self.assertIn("le", helper_step_kinds)
+        self.assertTrue(any(witness["asrt_ids"] for witness in helper_invocation["pred_witnesses"]))
+
+    def test_uncertainty_threshold_checks_reuse_cmp_trace_contract(self) -> None:
+        schema_ir = extend_schema_ir_with_ecss_uncertainty_predicates(_schema_ir())
+        sdk = SDKStore([User], schema_ir=schema_ir)
+
+        assessment_ref = encode_idref_v1("ECSSRiskAssessment", [("assessment_id", "string", "RA-001")])
+        with patch(
+            "factpy_kernel.core.evidence.write_protocol.now_epoch_nanos",
+            side_effect=[100, 110, 120, 130],
+        ):
+            collision_prob_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_COLLISION_PROBABILITY_PPM_PRED_ID,
+                assessment_ref,
+                [("int", 80)],
+            )
+            collision_threshold_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID,
+                assessment_ref,
+                [("int", 100)],
+            )
+            success_prob_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_DISPOSAL_SUCCESS_PROBABILITY_PPM_PRED_ID,
+                assessment_ref,
+                [("int", 920000)],
+            )
+            success_threshold_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_DISPOSAL_SUCCESS_THRESHOLD_PPM_PRED_ID,
+                assessment_ref,
+                [("int", 900000)],
+            )
+
+        with sdk_vars(
+            "assessment",
+            "pc_ppm",
+            "pc_threshold_ppm",
+            "success_ppm",
+            "success_threshold_ppm",
+        ) as (assessment, pc_ppm, pc_threshold_ppm, success_ppm, success_threshold_ppm):
+            uncertainty_rule = Rule(
+                id="q.uncertainty_threshold_ok",
+                version="1.0.0",
+                select=[assessment],
+                where=[
+                    Pred(ECSS_COLLISION_PROBABILITY_PPM_PRED_ID, assessment, pc_ppm),
+                    Pred(ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID, assessment, pc_threshold_ppm),
+                    Pred(ECSS_DISPOSAL_SUCCESS_PROBABILITY_PPM_PRED_ID, assessment, success_ppm),
+                    Pred(ECSS_DISPOSAL_SUCCESS_THRESHOLD_PPM_PRED_ID, assessment, success_threshold_ppm),
+                    pc_ppm <= pc_threshold_ppm,
+                    success_ppm >= success_threshold_ppm,
+                ],
+            )
+
+        compiled = sdk._compile_rule_input(uncertainty_rule)
+        rule_spec = RuleSpec(
+            rule_id=compiled["rule_id"],
+            version=compiled["version"],
+            select_vars=list(compiled["select_vars"]),
+            where=list(compiled["where"]),
+            expose=bool(compiled.get("expose", False)),
+        )
+
+        trace_result = run_rule_with_trace(sdk.store, rule_spec, RuleRegistry())
+        self.assertEqual(trace_result.rows, [(assessment_ref,)])
+
+        trace = sdk.store.explain_rule_trace(trace_result.rule_run_id)
+        self.assertIsNotNone(trace)
+        assert trace is not None
+        invocation = next(inv for inv in trace["invocations"] if inv["rule"]["rule_id"] == "q.uncertainty_threshold_ok")
+
+        witness_map = {
+            witness["pred_atom_key"]: tuple(witness["asrt_ids"])
+            for witness in invocation["pred_witnesses"]
+        }
+        self.assertEqual(witness_map["b0.a0:ecss:collision_probability_ppm"], (collision_prob_asrt_id,))
+        self.assertEqual(
+            witness_map["b0.a1:ecss:collision_probability_threshold_ppm"],
+            (collision_threshold_asrt_id,),
+        )
+        self.assertEqual(
+            witness_map["b0.a2:ecss:disposal_success_probability_ppm"],
+            (success_prob_asrt_id,),
+        )
+        self.assertEqual(
+            witness_map["b0.a3:ecss:disposal_success_threshold_ppm"],
+            (success_threshold_asrt_id,),
+        )
+
+        non_fact_by_key = {step["step_key"]: step for step in invocation["non_fact_steps"]}
+        self.assertEqual(non_fact_by_key["b0.a4:le"]["kind"], "le")
+        self.assertEqual(non_fact_by_key["b0.a5:ge"]["kind"], "ge")
+
+        le_details = dict(non_fact_by_key["b0.a4:le"]["details"])
+        le_binding = dict(le_details["binding"])
+        self.assertEqual(le_binding["$pc_ppm"], 80)
+        self.assertEqual(le_binding["$pc_threshold_ppm"], 100)
+
+        ge_details = dict(non_fact_by_key["b0.a5:ge"]["details"])
+        ge_binding = dict(ge_details["binding"])
+        self.assertEqual(ge_binding["$success_ppm"], 920000)
+        self.assertEqual(ge_binding["$success_threshold_ppm"], 900000)
     def test_audit_query_builds_ecss_compliance_matrix_from_package_facts(self) -> None:
         schema_ir = extend_schema_ir_with_ecss_vcd_predicates(_schema_ir())
         store = Store(schema_ir)
