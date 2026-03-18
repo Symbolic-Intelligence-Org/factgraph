@@ -104,6 +104,17 @@ def build_decision_detail_dto(query: AuditQuery, decision_id: str) -> dict[str, 
     }
 
 
+def build_candidate_evidence_tree_dto(query: AuditQuery, candidate_id: str) -> dict[str, Any]:
+    _ensure_query(query)
+    try:
+        tree = query.get_candidate_evidence_tree(candidate_id)
+    except AuditQueryError as exc:
+        raise AuditDTOError(str(exc)) from exc
+    if tree is None:
+        raise AuditDTOError(f"candidate not found: {candidate_id}")
+    return dict(tree)
+
+
 def build_compliance_matrix_dto(
     query: AuditQuery,
     *,

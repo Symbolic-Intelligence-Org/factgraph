@@ -30,6 +30,7 @@
 - `AuditQuery`
   - 结构化查询入口
   - 当前也提供 rule trace artifact 的离线查询
+  - 当前也提供 native candidate evidence tree 的离线查询
 - `extend_schema_ir_with_ecss_vcd_predicates(...)`
   - 为 `ECSS-M-ST-10` 风格 requirement/compliance facts 提供最小 predicate schema helper
   - 当前由 `factpy_kernel.ecss.vcd` 拥有，`audit` 侧仅保留兼容 re-export
@@ -63,6 +64,7 @@
    - `list_runs()`
    - `get_run_bundle(run_id)`
    - `list_candidates(...)`
+   - `get_candidate_evidence_tree(candidate_id)`
    - `list_decisions(...)`
    - `list_failures(...)`
    - `list_compliance_matrix(...)`
@@ -121,8 +123,22 @@
 - `AuditQuery.get_rule_trace_narrative(rule_run_id)`
 - `build_rule_trace_narrative_dto(...)`
 
+在此基础上，当前 audit 侧也已提供 machine-readable `candidate_evidence_tree` surface：
+
+- `AuditQuery.get_candidate_evidence_tree(candidate_id)`
+- `build_candidate_evidence_tree_dto(...)`
+
+若 package 中存在 native candidate support rows，当前静态站点也会额外生成：
+
+- `candidate_evidence.html`
+  - candidate evidence tree index
+- `candidate_evidence/{candidate_id}.html`
+  - 最小 nested tree page
+  - assertion leaves 继续下钻到既有 assertion detail 页面
+
 这组 summary 与 runtime `rule_run_summary` 保持同构，且只从现有 raw trace payload 派生。
 这组 narrative 与 runtime `rule_run_narrative` 保持同构，且只从既有 `rule_run_summary` 纯派生。
+这组 candidate tree 与 runtime `candidate_evidence_tree` 保持同构，且只从 `candidate_ledger + support_artifacts + assertion detail` 派生。
 
 ## 4. 与其他层的边界
 
@@ -145,7 +161,10 @@
 - 没有直接把 live runtime store 映射成 audit query 的入口
 - 审计能力依赖导出的 package 是否完整包含所需 ledger / decision / authoring event 信息
 - requirement/compliance matrix 当前是 offline-query-first 形态，不提供 live service endpoint
-- static UI 的 proof-entry 当前是 `rule_run_id` page，不是递归 evidence tree 或 candidate-level stable proof id
+- static UI 当前同时支持：
+  - `rule_run_id` proof-entry page
+  - native candidate evidence tree page
+- 但仍不支持 graph UI、salience breakdown 或更细 provenance contract
 - static UI 对 compliance matrix 的支持当前仍是单页总览，不包含 per-requirement detail page 或额外搜索 facet
 
 ## 6. Audit Package Artifact Files
@@ -169,4 +188,12 @@
 - query / dto 也可从同一份 summary surface 继续派生 `rule_run_narrative`
 - static site 可把 `rule_run_id` 渲染成可分享 proof-entry page，并通过 audit narrative DTO 在页面顶部附加 deterministic rule-run narrative
 
+当前 `audit.reader` / `AuditQuery` / static UI 也已统一消费 `support_artifacts.jsonl`：
+
+- reader 读取 JSONL rows（旧 package 若没有该文件则返回空集）
+- query 可按 `candidate_id -> support_digest` 离线重建 native candidate evidence tree
+- dto 可直接返回与 runtime 同构的 `candidate_evidence_tree`
+- static site 可把 `candidate_id` 渲染成最小 nested tree page，并继续下钻到既有 assertion detail 页面
+
 当前不会新增 `rule_trace_summary` 专用 artifact 文件；summary 是 read/query 层的纯派生面，不是新的 durable package contract。
+当前也不会新增 `candidate_evidence_tree` 专用 artifact 文件；candidate tree 同样是 read/query 层的纯派生面，不是新的 durable package contract。

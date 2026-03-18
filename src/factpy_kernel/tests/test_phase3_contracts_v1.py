@@ -19,6 +19,7 @@ from factpy_kernel.audit import (
     ECSS_REQUIREMENT_RID_PRED_ID,
     ECSS_REVIEW_MILESTONE_PRED_ID,
     ECSS_VERIFICATION_METHOD_PRED_ID,
+    build_candidate_evidence_tree_dto,
     build_rule_trace_narrative_dto,
     build_rule_trace_detail_dto,
     build_rule_trace_summary_dto,
@@ -111,6 +112,7 @@ from factpy_kernel.sdk.ingest import CONVENTION_META_KEYS, SENSITIVE_SEMANTIC_ME
 from factpy_kernel.service.app_v1 import app
 from factpy_kernel.service.runtime_v1 import (
     _require_session,
+    accept_runtime_derivation,
     close_runtime_session,
     evaluate_runtime_derivation,
     explain_runtime_nl,
@@ -119,6 +121,8 @@ from factpy_kernel.service.runtime_v1 import (
     explain_runtime_rule_trace,
     explain_runtime_summary,
     explain_runtime_support,
+    explain_runtime_tree,
+    export_runtime_package,
     open_runtime_session,
     project_runtime_view_facts,
     retract_runtime_fact,
@@ -1203,6 +1207,126 @@ Derivation(
             self.assertEqual(missing_candidate_resp["errors"][0]["path"], "$.id")
         finally:
             close_runtime_session(second_session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_native_candidate_evidence_tree_runtime_audit_and_static(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            write_resp = write_runtime_fact(
+                session_id,
+                {
+                    "pred_id": "user:tag",
+                    "e_ref": refs["u1"],
+                    "rest_terms": [["string", "vip"]],
+                },
+                kind="add",
+            )
+            self.assertTrue(write_resp["ok"])
+            asrt_id = write_resp["write"]["assertion_id"]
+
+            eval_resp = evaluate_runtime_derivation(
+                session_id,
+                {
+                    "derivation": {
+                        "derivation_id": "drv.tag_copy.evidence_tree",
+                        "version": "1.0.0",
+                        "target": "user:tag",
+                        "head_vars": ["$u", "$tag"],
+                        "where": [["pred", "user:tag", ["$u", "$tag"]]],
+                        "mode": "native",
+                    }
+                },
+            )
+            self.assertTrue(eval_resp["ok"])
+            candidate = eval_resp["evaluation"]["candidates"][0]
+            candidate_id = candidate["candidate_id"]
+
+            explain_candidate_resp = explain_runtime_ref(session_id, {"kind": "candidate", "id": candidate_id})
+            self.assertTrue(explain_candidate_resp["ok"])
+            self.assertNotIn("tree", explain_candidate_resp)
+
+            tree_resp = explain_runtime_tree(session_id, {"kind": "candidate", "id": candidate_id})
+            self.assertTrue(tree_resp["ok"])
+            self.assertEqual(tree_resp["kind"], "candidate_evidence_tree")
+            self.assertEqual(tree_resp["meta"]["candidate_id"], candidate_id)
+            tree = tree_resp["tree"]
+            self.assertEqual(tree["candidate_id"], candidate_id)
+            self.assertEqual(tree["support_digest"], candidate["support_digest"])
+            self.assertEqual(tree["support_kind"], "native_binding_v1")
+            self.assertEqual(tree["root"]["node_kind"], "candidate_result")
+
+            pred_nodes = [
+                row for row in tree["root"]["children"] if row.get("node_kind") == "predicate_witness_group"
+            ]
+            self.assertEqual(len(pred_nodes), 1)
+            self.assertEqual(pred_nodes[0]["pred_id"], "user:tag")
+            self.assertEqual(pred_nodes[0]["assertion_count"], 1)
+            leaf = pred_nodes[0]["children"][0]
+            self.assertEqual(
+                set(leaf.keys()),
+                {"node_id", "node_kind", "title", "asrt_id", "pred_id", "e_ref", "claim_args", "children"},
+            )
+            self.assertEqual(leaf["asrt_id"], asrt_id)
+            self.assertEqual(leaf["pred_id"], "user:tag")
+            self.assertEqual(leaf["e_ref"], refs["u1"])
+            self.assertNotIn("meta", leaf)
+            self.assertNotIn("revoked_by", leaf)
+            self.assertNotIn("revokes", leaf)
+            self.assertNotIn("is_revoked", leaf)
+
+            accept_resp = accept_runtime_derivation(
+                session_id,
+                {
+                    "candidate": candidate,
+                    "options": {
+                        "approved_by": "alice",
+                    },
+                },
+            )
+            self.assertTrue(accept_resp["ok"])
+            self.assertEqual(accept_resp["accept"]["candidate_id"], candidate_id)
+
+            with TemporaryDirectory() as tmp_dir:
+                package_dir = str(Path(tmp_dir) / "pkg")
+                export_resp = export_runtime_package(
+                    session_id,
+                    {
+                        "out_dir": package_dir,
+                        "package_kind": "audit",
+                    },
+                )
+                self.assertTrue(export_resp["ok"])
+
+                package = load_audit_package(package_dir)
+                self.assertTrue(package.support_artifacts)
+                query = AuditQuery(package)
+                audit_tree = query.get_candidate_evidence_tree(candidate_id)
+                self.assertEqual(audit_tree, tree)
+                dto_tree = build_candidate_evidence_tree_dto(query, candidate_id)
+                self.assertEqual(dto_tree, tree)
+
+                site_dir = str(Path(tmp_dir) / "site")
+                site_manifest = render_audit_static_site(package_dir, site_dir)
+                self.assertIn("candidate_evidence_index", site_manifest)
+                self.assertIn(
+                    f"candidate_evidence/{quote(candidate_id, safe='')}.html",
+                    site_manifest["candidate_evidence"],
+                )
+                page_path = Path(site_dir) / "candidate_evidence" / f"{quote(candidate_id, safe='')}.html"
+                self.assertTrue(page_path.exists())
+                html = page_path.read_text(encoding="utf-8")
+                self.assertIn(candidate_id, html)
+                self.assertIn(f"assertions/{quote(asrt_id, safe='')}.html", html)
+                self.assertNotIn("revoked_by", html)
+                self.assertNotIn("is_revoked", html)
+        finally:
+            close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
 
     def test_runtime_rule_run_explain_ref_is_canonical_and_locks_stable_shape(self) -> None:
@@ -5636,6 +5760,13 @@ Derivation(
             self.assertEqual(explain_engine_candidate["explain"]["witness_status"], "degraded")
             self.assertNotIn("support", explain_engine_candidate["explain"])
 
+            explain_engine_tree = explain_runtime_tree(
+                session_id,
+                {"kind": "candidate", "id": candidate["candidate_id"]},
+            )
+            self.assertFalse(explain_engine_tree["ok"])
+            self.assertEqual(explain_engine_tree["errors"][0]["kind"], "runtime_explain_not_supported")
+
             session.store._remember_candidate_support("cand-legacy-none", zero_digest, "none")
             explain_legacy_none = explain_runtime_ref(
                 session_id,
@@ -5646,6 +5777,13 @@ Derivation(
             self.assertEqual(explain_legacy_none["explain"]["witness_status"], "degraded")
             self.assertEqual(explain_legacy_none["explain"]["support_digest"], zero_digest)
             self.assertNotIn("support", explain_legacy_none["explain"])
+
+            explain_legacy_tree = explain_runtime_tree(
+                session_id,
+                {"kind": "candidate", "id": "cand-legacy-none"},
+            )
+            self.assertFalse(explain_legacy_tree["ok"])
+            self.assertEqual(explain_legacy_tree["errors"][0]["kind"], "runtime_explain_not_supported")
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
@@ -5708,6 +5846,10 @@ Derivation(
                 {route.path for route in app.routes},
             )
             self.assertIn(
+                "/v1/runtime/sessions/{session_id}/queries/explain-tree",
+                {route.path for route in app.routes},
+            )
+            self.assertIn(
                 "/v1/runtime/sessions/{session_id}/queries/explain-summary",
                 {route.path for route in app.routes},
             )
@@ -5728,6 +5870,15 @@ Derivation(
                 self.assertEqual(candidate_http.status_code, 200)
                 self.assertTrue(candidate_http.json()["ok"])
                 self.assertEqual(candidate_http.json()["kind"], "candidate")
+
+                candidate_tree_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-tree",
+                    json={"kind": "candidate", "id": candidate_id},
+                )
+                self.assertEqual(candidate_tree_http.status_code, 200)
+                self.assertTrue(candidate_tree_http.json()["ok"])
+                self.assertEqual(candidate_tree_http.json()["kind"], "candidate_evidence_tree")
+                self.assertIn("tree", candidate_tree_http.json())
 
                 assertion_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain",
@@ -5787,6 +5938,22 @@ Derivation(
                 self.assertEqual(missing_kind_http.status_code, 200)
                 self.assertFalse(missing_kind_http.json()["ok"])
                 self.assertEqual(missing_kind_http.json()["errors"][0]["kind"], "shape")
+
+                unsupported_tree_kind_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-tree",
+                    json={"kind": "rule_run", "id": rule_run_id},
+                )
+                self.assertEqual(unsupported_tree_kind_http.status_code, 200)
+                self.assertFalse(unsupported_tree_kind_http.json()["ok"])
+                self.assertEqual(unsupported_tree_kind_http.json()["errors"][0]["kind"], "shape")
+
+                missing_tree_kind_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-tree",
+                    json={"id": candidate_id},
+                )
+                self.assertEqual(missing_tree_kind_http.status_code, 200)
+                self.assertFalse(missing_tree_kind_http.json()["ok"])
+                self.assertEqual(missing_tree_kind_http.json()["errors"][0]["kind"], "shape")
 
                 unsupported_summary_kind_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain-summary",
@@ -6731,6 +6898,7 @@ Derivation(
             (root / "audit/mapping_resolution.json").write_text("{}", encoding="utf-8")
 
             package = load_audit_package(root)
+            self.assertEqual(package.support_artifacts, [])
             self.assertEqual(package.rule_trace_artifacts, [])
             self.assertEqual(AuditQuery(package).list_rule_traces(), [])
 

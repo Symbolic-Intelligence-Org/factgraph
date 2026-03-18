@@ -9,6 +9,7 @@
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-support`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-rule-trace`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain`
+- `POST /v1/runtime/sessions/{session_id}/queries/explain-tree`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-summary`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-narrative`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-nl`
@@ -359,6 +360,76 @@
 - `shape`
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
+
+## 4.1 `POST /v1/runtime/sessions/{session_id}/queries/explain-tree`
+
+请求：
+
+```json
+{
+  "kind": "candidate",
+  "id": "cand_v2:abc123"
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "candidate_id": "cand_v2:abc123"
+  },
+  "kind": "candidate_evidence_tree",
+  "tree": {
+    "kind": "candidate_evidence_tree",
+    "candidate_id": "cand_v2:abc123",
+    "support_digest": "sha256:6f3e4f9c2d1b8a7e6c5d4b3a291817161514131211100f0e0d0c0b0a09080706",
+    "support_kind": "native_binding_v1",
+    "root": {
+      "node_kind": "candidate_result",
+      "children": []
+    }
+  }
+}
+```
+
+说明：
+
+- 这是 candidate explain 的独立 tree surface，不会修改既有 `POST /queries/explain` 的 flat DTO。
+- 第一轮只接受 `{kind:"candidate", id}`。
+- 第一轮只支持 `support_kind="native_binding_v1"`：
+  - engine degraded candidate 继续走 flat `explain(kind="candidate")`
+  - `explain-tree` 对非 native candidate 返回 `runtime_explain_not_supported`
+- `tree` DTO 是 **recursive schema, shallow semantics**：
+  - root：`candidate_result`
+  - middle：`predicate_witness_group` / `non_fact_check`
+  - leaf：`assertion_fact`
+- `assertion_fact` leaf 只携带：
+  - `asrt_id`
+  - `pred_id`
+  - `e_ref`
+  - `claim_args`
+- `assertion_fact` leaf 不携带：
+  - `meta`
+  - `revoked_by`
+  - `revokes`
+  - `is_revoked`
+- 若 consumer 需要 revocation / meta / full assertion state，继续按 `asrt_id` 回跳：
+  - `POST /queries/explain` + `kind="assertion"`
+  - 或 audit assertion detail surface
+- 第一轮 `candidate_evidence_tree` 只表达 “why this candidate holds”：
+  - 不表达 non-witnessed alternatives
+  - 不表达 conflict-resolution
+  - 不表达 source-linkage graph
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+- `runtime_explain_not_supported`
 
 ## 5. `POST /v1/runtime/sessions/{session_id}/queries/explain-summary`
 

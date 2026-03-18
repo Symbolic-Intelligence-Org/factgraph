@@ -23,6 +23,7 @@ class AuditPackageData:
     decision_log: list[dict[str, Any]]
     accept_failed: list[dict[str, Any]]
     mapping_resolution: dict[str, Any] | None
+    support_artifacts: list[dict[str, Any]]
     rule_trace_artifacts: list[dict[str, Any]]
     authoring_apply_events: list[dict[str, Any]]
 
@@ -55,6 +56,7 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
         decision_log=_read_jsonl(_required_rel_path(root, audit_files, "decision_log")),
         accept_failed=_read_jsonl(_required_rel_path(root, audit_files, "accept_failed")),
         mapping_resolution=mapping_resolution,
+        support_artifacts=_read_optional_jsonl(root, audit_files, "support_artifacts"),
         rule_trace_artifacts=_read_optional_jsonl(root, audit_files, "rule_trace_artifacts"),
         authoring_apply_events=[dict(evt.raw) for evt in load_authoring_apply_events(root)],
     )

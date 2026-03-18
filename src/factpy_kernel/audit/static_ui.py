@@ -10,6 +10,7 @@ from .authoring_events import load_authoring_apply_events, summarize_authoring_a
 from .assertions import load_assertion_index
 from .dto import (
     build_authoring_apply_run_detail_dto,
+    build_candidate_evidence_tree_dto,
     build_decision_detail_dto,
     build_rule_trace_detail_dto,
     build_rule_trace_list_dto,
@@ -44,6 +45,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
     decisions_dir = root / "decisions"
     assertions_dir = root / "assertions"
     rule_traces_dir = root / "rule_traces"
+    candidate_evidence_dir = root / "candidate_evidence"
     authoring_apply_runs_dir = root / "authoring_apply_runs"
     indexes_dir = root / "indexes"
     root.mkdir(parents=True, exist_ok=True)
@@ -51,6 +53,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
     decisions_dir.mkdir(parents=True, exist_ok=True)
     assertions_dir.mkdir(parents=True, exist_ok=True)
     rule_traces_dir.mkdir(parents=True, exist_ok=True)
+    candidate_evidence_dir.mkdir(parents=True, exist_ok=True)
     authoring_apply_runs_dir.mkdir(parents=True, exist_ok=True)
     indexes_dir.mkdir(parents=True, exist_ok=True)
 
@@ -61,6 +64,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
     decision_ids: set[str] = set()
     assertion_ids = sorted(assertion_index.claims.keys())
     rule_trace_ids: list[str] = []
+    candidate_evidence_ids: list[str] = []
 
     for asrt_id in assertion_ids:
         detail = assertion_index.get_assertion_detail(asrt_id)
@@ -81,6 +85,18 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         narrative = narrative_dto.get("narrative") if isinstance(narrative_dto.get("narrative"), dict) else None
         page = _render_rule_trace_detail_page(detail, assertion_index=assertion_index, narrative=narrative)
         (rule_traces_dir / f"{_slug_id(rule_run_id)}.html").write_text(page, encoding="utf-8")
+
+    for candidate_id in sorted(
+        {
+            row.get("candidate_id")
+            for row in query.list_candidates()
+            if isinstance(row.get("candidate_id"), str) and row.get("candidate_id")
+        }
+    ):
+        candidate_tree = build_candidate_evidence_tree_dto(query, candidate_id)
+        page = _render_candidate_evidence_page(candidate_tree)
+        (candidate_evidence_dir / f"{_slug_id(candidate_id)}.html").write_text(page, encoding="utf-8")
+        candidate_evidence_ids.append(candidate_id)
 
     for run in run_list["runs"]:
         run_id = run.get("run_id")
@@ -122,6 +138,8 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
     (root / "authoring_apply_events.html").write_text(authoring_apply_page, encoding="utf-8")
     rule_trace_page = _render_rule_trace_index_page(rule_trace_list.get("rule_traces", []))
     (root / "rule_traces.html").write_text(rule_trace_page, encoding="utf-8")
+    candidate_evidence_page = _render_candidate_evidence_index_page(candidate_evidence_ids)
+    (root / "candidate_evidence.html").write_text(candidate_evidence_page, encoding="utf-8")
     compliance_matrix_page = _render_compliance_matrix_page(compliance_matrix_rows)
     (root / "compliance_matrix.html").write_text(compliance_matrix_page, encoding="utf-8")
 
@@ -144,6 +162,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         authoring_apply_run_ids=sorted(set(authoring_apply_run_ids)),
         index_pages=sorted(index_pages.keys()),
         authoring_apply_summary=authoring_apply_summary,
+        candidate_evidence_ids=sorted(set(candidate_evidence_ids)),
         compliance_matrix_rows=compliance_matrix_rows,
         rule_trace_rows=rule_trace_list.get("rule_traces", []),
     )
@@ -158,11 +177,16 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         "decision_count": len(decision_ids),
         "assertion_count": len(assertion_ids),
         "rule_trace_count": len(rule_trace_ids),
+        "candidate_evidence_count": len(candidate_evidence_ids),
         "authoring_apply_event_count": authoring_apply_summary.get("event_count", 0),
         "runs": [f"runs/{_slug_id(run_id)}.html" for run_id in sorted(set(run_ids))],
         "assertions": [f"assertions/{_slug_id(asrt_id)}.html" for asrt_id in assertion_ids],
         "rule_traces": [
             f"rule_traces/{_slug_id(rule_run_id)}.html" for rule_run_id in sorted(set(rule_trace_ids))
+        ],
+        "candidate_evidence": [
+            f"candidate_evidence/{_slug_id(candidate_id)}.html"
+            for candidate_id in sorted(set(candidate_evidence_ids))
         ],
         "authoring_apply_runs": [
             f"authoring_apply_runs/{_slug_id(apply_request_id)}.html"
@@ -174,6 +198,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         "ui_index": "ui_index.json",
         "authoring_apply_events": "authoring_apply_events.html",
         "rule_trace_index": "rule_traces.html",
+        "candidate_evidence_index": "candidate_evidence.html",
         "compliance_matrix": "compliance_matrix.html",
         "compliance_matrix_row_count": len(compliance_matrix_rows),
     }
@@ -190,6 +215,7 @@ def _render_index_page(
     index_pages: list[str],
     authoring_apply_summary: dict[str, Any] | None = None,
     rule_trace_count: int = 0,
+    candidate_evidence_count: int = 0,
     compliance_matrix_count: int = 0,
 ) -> str:
     rows = []
@@ -220,6 +246,7 @@ def _render_index_page(
             "<p><a href='search.html'>Search</a></p>"
             f"<p><a href='authoring_apply_events.html'>Authoring Apply Events</a> ({escape(str(apply_count))})</p>"
             f"<p><a href='rule_traces.html'>Rule Traces</a> ({escape(str(rule_trace_count))})</p>"
+            f"<p><a href='candidate_evidence.html'>Candidate Evidence Trees</a> ({escape(str(candidate_evidence_count))})</p>"
             f"<p><a href='compliance_matrix.html'>Compliance Matrix</a> ({escape(str(compliance_matrix_count))})</p>"
             "<h2>Indexes</h2>"
             f"<ul>{''.join(_index_page_links(index_pages)) if index_pages else '<li>None</li>'}</ul>"
@@ -575,6 +602,109 @@ def _render_rule_trace_index_page(rows: list[dict[str, Any]]) -> str:
     )
 
 
+def _render_candidate_evidence_index_page(candidate_ids: list[str]) -> str:
+    rows: list[str] = []
+    for candidate_id in candidate_ids:
+        href = f"candidate_evidence/{_slug_id(candidate_id)}.html"
+        rows.append(
+            "<tr>"
+            f"<td><a href='{escape(href, quote=True)}'>{escape(candidate_id)}</a></td>"
+            "</tr>"
+        )
+    return _html_page(
+        title="Candidate Evidence Trees",
+        body=(
+            "<h1>Candidate Evidence Trees</h1>"
+            "<p><a href='index.html'>Back to runs</a></p>"
+            f"<p>Rows: {escape(str(len(candidate_ids)))}</p>"
+            "<table>"
+            "<thead><tr><th>candidate_id</th></tr></thead>"
+            f"<tbody>{''.join(rows) if rows else '<tr><td>None</td></tr>'}</tbody>"
+            "</table>"
+        ),
+    )
+
+
+def _render_candidate_evidence_page(tree: dict[str, Any]) -> str:
+    candidate_id = str(tree.get("candidate_id", ""))
+    support_digest = str(tree.get("support_digest", ""))
+    support_kind = str(tree.get("support_kind", ""))
+    root = tree.get("root") if isinstance(tree.get("root"), dict) else {}
+    binding = root.get("binding") if isinstance(root.get("binding"), dict) else {}
+    rule_refs = [item for item in root.get("rule_refs", []) if isinstance(item, str) and item]
+    return _html_page(
+        title=f"Candidate Evidence {candidate_id}",
+        body=(
+            f"<h1>Candidate Evidence {escape(candidate_id)}</h1>"
+            "<p><a href='../index.html'>Back to runs</a> | "
+            "<a href='../candidate_evidence.html'>All candidate evidence trees</a></p>"
+            "<h2>Summary</h2>"
+            "<ul>"
+            f"<li>support_digest={escape(support_digest)}</li>"
+            f"<li>support_kind={escape(support_kind)}</li>"
+            f"<li>root_result_kind={escape(str(root.get('root_result_kind')))}</li>"
+            f"<li>rule_refs={escape(','.join(rule_refs)) or '-'}</li>"
+            "</ul>"
+            "<h2>Binding</h2>"
+            f"<pre>{escape(json.dumps(binding, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
+            "<h2>Tree</h2>"
+            f"{_render_candidate_evidence_node(root, assertion_href_prefix='../assertions')}"
+            "<h2>Payload</h2>"
+            f"<pre>{escape(json.dumps(tree, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
+        ),
+    )
+
+
+def _render_candidate_evidence_node(node: dict[str, Any], *, assertion_href_prefix: str) -> str:
+    node_kind = str(node.get("node_kind", ""))
+    title = str(node.get("title", node.get("node_id", "")))
+    items: list[str] = [
+        f"<li>node_kind={escape(node_kind)}</li>",
+    ]
+    if node_kind == "predicate_witness_group":
+        items.append(f"<li>pred_atom_key={escape(str(node.get('pred_atom_key')))}</li>")
+        items.append(f"<li>pred_id={escape(str(node.get('pred_id')))}</li>")
+        items.append(f"<li>assertion_count={escape(str(node.get('assertion_count')))}</li>")
+    elif node_kind == "non_fact_check":
+        items.append(f"<li>step_key={escape(str(node.get('step_key')))}</li>")
+        items.append(f"<li>check_kind={escape(str(node.get('check_kind')))}</li>")
+        items.append(f"<li>status={escape(str(node.get('status')))}</li>")
+        items.append(
+            "<li>details="
+            f"<pre>{escape(json.dumps(node.get('details'), ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
+            "</li>"
+        )
+    elif node_kind == "assertion_fact":
+        asrt_id = str(node.get("asrt_id", ""))
+        href = f"{assertion_href_prefix}/{_slug_id(asrt_id)}.html"
+        items.append(
+            "<li>assertion="
+            f"<a href='{escape(href, quote=True)}'>{escape(asrt_id)}</a>"
+            "</li>"
+        )
+        items.append(f"<li>pred_id={escape(str(node.get('pred_id')))}</li>")
+        items.append(f"<li>e_ref={escape(str(node.get('e_ref')))}</li>")
+        items.append(
+            "<li>claim_args="
+            f"<pre>{escape(json.dumps(node.get('claim_args'), ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
+            "</li>"
+        )
+
+    children = [child for child in node.get("children", []) if isinstance(child, dict)]
+    child_html = "".join(
+        f"<li>{_render_candidate_evidence_node(child, assertion_href_prefix=assertion_href_prefix)}</li>"
+        for child in children
+    )
+    return (
+        "<div style='border:1px solid #eee;padding:12px;margin:12px 0'>"
+        f"<h3>{escape(title)}</h3>"
+        f"<ul>{''.join(items)}</ul>"
+        "<h4>Children</h4>"
+        f"<ul>{child_html if child_html else '<li>None</li>'}</ul>"
+        "</div>"
+    )
+
+
 def _render_rule_trace_detail_page(
     payload: dict[str, Any],
     *,
@@ -778,6 +908,7 @@ def _build_ui_index_payload(
     decision_ids: list[str],
     assertion_ids: list[str],
     rule_trace_ids: list[str],
+    candidate_evidence_ids: list[str],
     authoring_apply_run_ids: list[str],
     index_pages: list[str],
     authoring_apply_summary: dict[str, Any] | None = None,
@@ -876,6 +1007,9 @@ def _build_ui_index_payload(
     decision_pages = {decision_id: f"decisions/{_slug_id(decision_id)}.html" for decision_id in decision_ids}
     assertion_pages = {asrt_id: f"assertions/{_slug_id(asrt_id)}.html" for asrt_id in assertion_ids}
     rule_trace_pages = {rule_run_id: f"rule_traces/{_slug_id(rule_run_id)}.html" for rule_run_id in rule_trace_ids}
+    candidate_evidence_pages = {
+        candidate_id: f"candidate_evidence/{_slug_id(candidate_id)}.html" for candidate_id in candidate_evidence_ids
+    }
     authoring_apply_run_pages = {
         request_id: f"authoring_apply_runs/{_slug_id(request_id)}.html"
         for request_id in sorted({rid for rid in authoring_apply_run_ids if isinstance(rid, str) and rid})
@@ -960,6 +1094,7 @@ def _build_ui_index_payload(
             "decisions": len(decision_ids),
             "assertions": len(assertion_ids),
             "rule_traces": len(rule_trace_ids),
+            "candidate_evidence": len(candidate_evidence_ids),
             "failures": len(failures),
             "compliance_matrix_rows": len(compliance_matrix_rows or []),
             "authoring_apply_events": (
@@ -974,6 +1109,7 @@ def _build_ui_index_payload(
             "site_manifest": "site_manifest.json",
             "authoring_apply_events": "authoring_apply_events.html",
             "rule_traces": "rule_traces.html",
+            "candidate_evidence": "candidate_evidence.html",
             "compliance_matrix": "compliance_matrix.html",
             "indexes": [f"indexes/{name}" for name in index_pages],
         },
@@ -982,6 +1118,7 @@ def _build_ui_index_payload(
             "decision_pages": decision_pages,
             "assertion_pages": assertion_pages,
             "rule_trace_pages": rule_trace_pages,
+            "candidate_evidence_pages": candidate_evidence_pages,
             "authoring_apply_request_pages": authoring_apply_request_pages,
             "authoring_apply_run_pages": authoring_apply_run_pages,
             "run_to_decisions": {k: sorted(v) for k, v in sorted(run_to_decisions.items())},
@@ -1055,6 +1192,10 @@ def _build_ui_index_payload(
         "rule_trace_index": {
             "page": "rule_traces.html",
             "count": len(rule_trace_rows or []),
+        },
+        "candidate_evidence_index": {
+            "page": "candidate_evidence.html",
+            "count": len(candidate_evidence_ids),
         },
         "compliance_matrix": {
             "page": "compliance_matrix.html",

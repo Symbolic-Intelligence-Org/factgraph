@@ -24,6 +24,7 @@
 | 2026-03-17 | draft | Rule-run schema child blueprint archived | Updated the parent bridge note to point at the archived `2026-03-17_rule-run-trace-schema-contract.md` after the schema/contract slice landed. |
 | 2026-03-18 | draft | Engine witness child blueprint linked | Added a short bridge note from the parent blueprint to `2026-03-18_engine-witness-parity.md` so the remaining engine explainability work is tracked as explicit degradation semantics first, not premature true-witness parity. |
 | 2026-03-18 | draft | Engine witness child blueprint archived | Updated the parent bridge note to point at archived `2026-03-18_engine-witness-parity.md` after explicit degraded explain semantics landed for engine candidates. |
+| 2026-03-18 | draft | Parent blueprint realigned to current baseline | Added an explicit current-position section noting that support capture, explain-ref handles, runtime `raw -> summary -> narrative -> NL`, and audit/static proof-entry are now implemented; clarified that evidence tree belongs to the parent blueprint's original `proof-tree / support-graph` next stage rather than a new mother plan. |
 
 ## Decision Notes
 
@@ -51,3 +52,4 @@
 - 2026-03-17: `explain_ref` 的首轮 service contract 现已在独立子蓝图中落地；当前 parent blueprint 继续保留更高层的 carrying-model、delivery-shape 与后续 rule-run trace / engine witness framing。
 - 2026-03-17: `rule_run` 的下一切口不应再以“缺少 trace capture”为 framing；当前代码已具备 `RuleTraceArtifact` capture/readback，剩余问题更准确地是 schema semantics 与 service contract 收口。
 - 2026-03-18: engine witness parity 的第一轮不应直接承诺 `souffle/problog` 拥有 native 级 witness；当前更准确的剩余问题是 engine candidate 的显式降级语义、`support_kind` contract，以及 service explain surface 如何表达“无 witness”。
+- 2026-03-18: 在当前实现基线下，evidence tree 不应被表述为新的计划线；它属于本母蓝图原本就预留的 `proof-tree / support-graph-oriented` 下一阶段，并且默认不被 `temporal-hybrid` 或 `durable-artifact-storage` 作为前置阻塞。

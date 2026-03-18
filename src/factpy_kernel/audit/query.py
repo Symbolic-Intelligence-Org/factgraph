@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from factpy_kernel.core.store._candidate_evidence_tree import build_candidate_evidence_tree
 from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
 from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
 
@@ -62,6 +63,50 @@ class AuditQuery:
         if state is not None:
             rows = [row for row in rows if row.get("state") == state]
         return sorted(rows, key=lambda row: (str(row.get("candidate_id", "")), str(row.get("asrt_id", ""))))
+
+    def get_candidate_evidence_tree(self, candidate_id: str) -> dict[str, Any] | None:
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise AuditQueryError("candidate_id must be non-empty string")
+        rows = [dict(row) for row in self.package.candidate_ledger if row.get("candidate_id") == candidate_id]
+        if not rows:
+            return None
+        support_digests = {
+            row["support_digest"]
+            for row in rows
+            if isinstance(row.get("support_digest"), str) and row.get("support_digest")
+        }
+        support_kinds = {
+            row["support_kind"]
+            for row in rows
+            if isinstance(row.get("support_kind"), str) and row.get("support_kind")
+        }
+        if len(support_digests) != 1:
+            raise AuditQueryError(f"candidate has inconsistent support_digest rows: {candidate_id}")
+        if len(support_kinds) != 1:
+            raise AuditQueryError(f"candidate has inconsistent support_kind rows: {candidate_id}")
+        support_digest = next(iter(support_digests))
+        support_kind = next(iter(support_kinds))
+        if support_kind != "native_binding_v1":
+            raise AuditQueryError(
+                f"candidate evidence tree only supports native support_kind, got: {support_kind}"
+            )
+        support = self._get_support_artifact(support_digest)
+        if support is None:
+            raise AuditQueryError(f"support artifact not found: {support_digest}")
+        try:
+            assertion_index = load_assertion_index(self.package)
+        except AuditAssertionReadError as exc:
+            raise AuditQueryError(str(exc)) from exc
+        try:
+            return build_candidate_evidence_tree(
+                candidate_id=candidate_id,
+                support_digest=support_digest,
+                support_kind=support_kind,
+                support=support,
+                assertion_lookup=assertion_index.get_assertion_detail,
+            )
+        except ValueError as exc:
+            raise AuditQueryError(str(exc)) from exc
 
     def list_decisions(
         self,
@@ -280,6 +325,12 @@ class AuditQuery:
             return render_rule_run_narrative(summary, locale="en")
         except ValueError as exc:
             raise AuditQueryError(str(exc)) from exc
+
+    def _get_support_artifact(self, support_digest: str) -> dict[str, Any] | None:
+        for row in self.package.support_artifacts:
+            if row.get("support_digest") == support_digest:
+                return dict(row)
+        return None
 
     @staticmethod
     def _row_has_run_id(row: dict[str, Any], run_id: str) -> bool:

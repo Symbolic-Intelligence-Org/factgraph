@@ -82,6 +82,36 @@
   - [docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
     - 已提出 `audit-log -> proof-tree -> graph-based` 的长期排序，但尚未展开承载模型本身。
 
+### 4.1 Current Position After Delivery Closure
+
+自本母蓝图打开以来，仓库已经落地了一批当时仍处于讨论阶段的 child slices。按当前代码真相，以下事项已不再属于“未来可能”：
+
+- native `SupportArtifact` capture / readback 已存在
+- `candidate_id -> support_digest/support_kind` 已存在
+- `rule_run_id -> RuleTraceArtifact` explain readback 已存在
+- runtime `rule_run` delivery spine 已闭环：
+  - raw
+  - summary
+  - narrative
+  - NL explain
+- audit/static proof-entry 也已闭环：
+  - `rule_traces/{rule_run_id}.html`
+  - 离线 `rule_run_summary`
+  - 离线 `rule_run_narrative`
+
+这意味着本母蓝图里较早期的某些担忧，今天已经需要按“已完成第一阶段”来重读，尤其是：
+
+- delivery shape 不再是空白；
+- proof entry handle 不再是完全空白；
+- `audit-log-first` 已不只是倾向，而是已经被一系列 child slices 与 walkthrough 验证压实的当前阶段基线。
+
+因此，若这条母蓝图下一步继续推进，最自然的剩余方向不再是继续补同层 delivery，而是进入它原本就预留的下一阶段：
+
+- `proof-tree / support-graph-oriented`
+- 即 result-centric / recursive evidence tree 能力
+
+这应被视为 **原计划中的下一子阶段**，不是新的母计划。
+
 ## 5. Proposed Shape
 
 ### 5.1 Positioning
@@ -160,6 +190,16 @@
 - NL explain 类形态（自然语言解释）是否属于近期目标，还是交由 LLM 层在 service 外部组装？
 
 这些追问当前不要求给出答案，但如果不明确，§5.4 中关于 proof carrier 的 framing 选择（snapshot vs reference、candidate-level vs proof-level）将很难在后续讨论中收口。
+
+基于 2026-03-18 之前已经落地的 child slices，delivery shape 的 first-round 问题现在也有了更明确的当前答案：
+
+- structured JSON surface：已存在
+- deterministic NL explain：已存在
+- shareable audit/static proof-entry：已存在
+
+因此，本母蓝图若继续向前推进，delivery shape 的下一问题不再是“有没有 consumer-facing surface”，而是：
+
+- 是否需要一个 **tree-oriented / result-centric** surface，而不是继续停留在 `rule_run`-centric proof-entry。
 
 ### 5.4 Carrying Objects, Value Semantics, And Mapping Boundaries
 
@@ -321,6 +361,15 @@
    一句话总结：**长期正确方向不是"给每个结果挂一个新 ID"，而是"让现有结果 ID 能解引用到 evaluate 当时捕获的真实 artifact"；derivation 先走 `candidate_id + support_digest`，assertion 继续走 `asrt_id`，rule run 则在已存在 trace 的基础上继续收口 schema / contract。**
 
    与此相关的第一份实现型切口，现已拆到子蓝图 [2026-03-17_support-artifact-native-capture.md](../archive/2026-03-17_support-artifact-native-capture.md)。service 层的统一 explain contract 也已作为独立子蓝图落地并归档到 [2026-03-17_explain-ref-service-unification.md](../archive/2026-03-17_explain-ref-service-unification.md)。针对 `rule_run`，schema / contract 收口工作也已作为独立子蓝图落地并归档到 [2026-03-17_rule-run-trace-schema-contract.md](../archive/2026-03-17_rule-run-trace-schema-contract.md)，用于按当前代码现实而不是更早期假设来冻结 trace payload 边界。针对 engine witness output，第一轮“显式 degraded explain 优先于真 witness parity”的子蓝图现已实现并归档到 [2026-03-18_engine-witness-parity.md](../archive/2026-03-18_engine-witness-parity.md)。本母蓝图保留总问题 framing，不在此处继续展开 native `SupportArtifact` 的实现细节；后续若进入更强的 engine witness output，也更适合继续拆成后续子蓝图。
+
+   在当前代码现实下，若本母蓝图继续推进实现型 child slice，最自然的下一项已经不是再补同层 explain delivery，而是把现有：
+
+   - `candidate_id + support_digest/support_kind`
+   - `rule_run_id + RuleTraceArtifact`
+   - assertion drill-down
+   - runtime/audit/static delivery spine
+
+   提升成 **result-centric recursive evidence tree / proof-tree surface**。这条线应被视为本母蓝图里 `proof-tree / support-graph-oriented` 方向的第一实现阶段，而不是新的独立母计划。
 
 ### 5.5 Cross-domain Discussion Prompts
 

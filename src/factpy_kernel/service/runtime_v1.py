@@ -27,6 +27,7 @@ from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
 from factpy_kernel.core.schema.schema_ir import schema_digest
 from factpy_kernel.core.store import builders
 from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar
+from factpy_kernel.core.store._candidate_evidence_tree import build_candidate_evidence_tree
 from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
@@ -287,6 +288,25 @@ def explain_runtime_ref(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
         return _explain_ref_rule_run(session, id_)
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_explain_ref")
+        return error_response([err])
+
+
+def explain_runtime_tree(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        kind = dto.get("kind")
+        if kind != "candidate":
+            raise facade_error(
+                f"unsupported explain_tree kind: {kind!r}",
+                kind="shape",
+                path="$.kind",
+            )
+        candidate_id = _require_non_empty_str(dto.get("id"), path="$.id")
+        return _explain_tree_candidate(session, candidate_id)
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_tree")
         return error_response([err])
 
 
@@ -862,6 +882,53 @@ def _runtime_explain_not_found(*, handle_kind: str, handle_value: str, path: str
     )
 
 
+def _runtime_explain_not_supported(*, candidate_id: str, support_kind: str) -> Exception:
+    return facade_error(
+        f"runtime evidence tree only supports native candidate support, got: {support_kind}",
+        kind="runtime_explain_not_supported",
+        path="$.id",
+        details={"candidate_id": candidate_id, "support_kind": support_kind},
+    )
+
+
+def _explain_tree_candidate(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
+    support_digest = session.store.get_candidate_support_digest(candidate_id)
+    if support_digest is None:
+        raise _runtime_explain_not_found(
+            handle_kind="candidate_id",
+            handle_value=candidate_id,
+            path="$.id",
+        )
+    support_kind = session.store.get_candidate_support_kind(candidate_id)
+    if support_kind != "native_binding_v1":
+        if support_kind is None:
+            raise _runtime_explain_not_found(
+                handle_kind="candidate_id",
+                handle_value=candidate_id,
+                path="$.id",
+            )
+        raise _runtime_explain_not_supported(candidate_id=candidate_id, support_kind=support_kind)
+    support = session.store.explain_support(support_digest)
+    if support is None:
+        raise _runtime_explain_not_found(
+            handle_kind="support_digest",
+            handle_value=support_digest,
+            path="$.id",
+        )
+    tree = build_candidate_evidence_tree(
+        candidate_id=candidate_id,
+        support_digest=support_digest,
+        support_kind=support_kind,
+        support=support,
+        assertion_lookup=lambda asrt_id: _runtime_assertion_detail_for_tree(session.store.ledger, asrt_id),
+    )
+    return ok_response(
+        meta={"candidate_id": candidate_id},
+        kind="candidate_evidence_tree",
+        tree=_to_jsonable(tree),
+    )
+
+
 def _explain_ref_candidate(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
     support_digest = session.store.get_candidate_support_digest(candidate_id)
     if support_digest is None:
@@ -970,6 +1037,30 @@ def _session_to_dict(session: RuntimeSession) -> dict[str, Any]:
             "meta_rows": len(ledger.meta_rows),
             "revokes": len(ledger.revokes),
         },
+    }
+
+
+def _runtime_assertion_detail_for_tree(ledger: Ledger, asrt_id: str) -> dict[str, Any] | None:
+    claim = ledger.get_claim(asrt_id)
+    if claim is None:
+        return None
+    claim_args = [
+        {
+            "idx": row.idx,
+            "val": "" if row.val_atom is None else str(row.val_atom),
+            "tag": row.tag,
+        }
+        for row in ledger.find_claim_args(asrt_id=asrt_id)
+    ]
+    claim_args.sort(key=lambda row: (row["idx"], row["tag"], row["val"]))
+    return {
+        "asrt_id": asrt_id,
+        "claim": {
+            "asrt_id": asrt_id,
+            "pred_id": claim.pred_id,
+            "e_ref": claim.e_ref,
+        },
+        "claim_args": claim_args,
     }
 
 
