@@ -12,6 +12,7 @@
 
 - audit package 读取
 - run / candidate / materialization / decision / failure 查询
+- requirement-scoped compliance matrix 查询
 - authoring apply events 查询
 - 审计 DTO 构建
 - 静态审计页面生成
@@ -28,6 +29,8 @@
   - 从 audit package 目录读取数据
 - `AuditQuery`
   - 结构化查询入口
+- `extend_schema_ir_with_ecss_vcd_predicates(...)`
+  - 为 `ECSS-M-ST-10` 风格 requirement/compliance facts 提供最小 predicate schema helper
 - `render_audit_static_site(...)`
   - 生成静态审计站点
 - `load_authoring_apply_events(...)`
@@ -41,6 +44,7 @@
 - `static_ui.py`
 - `authoring_events.py`
 - `assertions.py`
+- `compliance.py`
 
 ## 3. 典型工作流
 
@@ -56,18 +60,40 @@
 2. 调用：
    - `list_runs()`
    - `get_run_bundle(run_id)`
-   - `list_materializations(...)`
    - `list_candidates(...)`
    - `list_decisions(...)`
    - `list_failures(...)`
+   - `list_compliance_matrix(...)`
    - `get_mapping_resolution(...)`
    - `list_authoring_apply_events(...)`
 
-### 3.3 静态审计页面
+### 3.3 Requirement / Compliance Matrix
+
+当 audit package 中包含 requirement-scoped assertions 时，当前 `audit` 层可以离线组装 ECSS VCD / compliance matrix：
+
+1. 在写入侧使用 requirement/compliance predicates，例如：
+   - `ecss:requirement`
+   - `ecss:verification_method`
+   - `ecss:compliance_status`
+   - `ecss:requirement_rid`
+   - `ecss:review_milestone`
+2. export 仍使用现有 `package_kind="audit"`，不新增专用 raw matrix artifact
+3. consumer 通过：
+   - `AuditQuery.list_compliance_matrix(...)`
+   - `build_compliance_matrix_dto(...)`
+4. query 实现会下探到 package 内已有的 assertion/fact 文件，而不是只消费 JSONL audit ledgers
+
+### 3.4 静态审计页面
 
 1. 准备 `AuditPackageData`
 2. 调用 `render_audit_static_site(...)`
 3. 输出静态 HTML/资源
+
+当 package 中存在 requirement/compliance facts 时，当前静态站点也会额外生成：
+
+- `compliance_matrix.html`
+  - 以离线 compliance matrix 表格形式展示 requirement、status、milestone、verification methods、RID links
+  - 每一行通过 assertion id 链接到既有 assertion detail 页面
 
 ## 4. 与其他层的边界
 
@@ -77,12 +103,16 @@
   - audit 不直接查询 live `Ledger`
 - `authoring`
   - audit 可消费 package 中携带的 authoring apply events，但不直接管理 registry
+- `explainability`
+  - compliance matrix 只负责 requirement-level delivery；更细的 assertion/support 证据下钻仍由 assertion detail / explainability substrate 承担
 
 ## 5. 当前限制
 
 - audit 主要面向离线快照，不是实时审计接口
 - 没有直接把 live runtime store 映射成 audit query 的入口
 - 审计能力依赖导出的 package 是否完整包含所需 ledger / decision / authoring event 信息
+- requirement/compliance matrix 当前是 offline-query-first 形态，不提供 live service endpoint
+- static UI 对 compliance matrix 的支持当前是单页总览，不包含 per-requirement detail page 或额外搜索 facet
 
 ## 6. Audit Package Artifact Files
 

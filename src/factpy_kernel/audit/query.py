@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .assertions import AuditAssertionReadError, load_assertion_index
+from .compliance import AuditComplianceError, build_compliance_matrix_rows
 from .reader import AuditPackageData
 
 
@@ -194,6 +196,34 @@ class AuditQuery:
             "events": events,
             "summary": summary,
         }
+
+    def list_compliance_matrix(
+        self,
+        *,
+        req_id: str | None = None,
+        status: str | None = None,
+        milestone: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if req_id is not None and (not isinstance(req_id, str) or not req_id):
+            raise AuditQueryError("req_id must be non-empty string when provided")
+        if status is not None and (not isinstance(status, str) or not status):
+            raise AuditQueryError("status must be non-empty string when provided")
+        if milestone is not None and (not isinstance(milestone, str) or not milestone):
+            raise AuditQueryError("milestone must be non-empty string when provided")
+
+        try:
+            assertion_index = load_assertion_index(self.package)
+            rows = build_compliance_matrix_rows(assertion_index)
+        except (AuditAssertionReadError, AuditComplianceError) as exc:
+            raise AuditQueryError(str(exc)) from exc
+
+        if req_id is not None:
+            rows = [row for row in rows if row.get("req_id") == req_id]
+        if status is not None:
+            rows = [row for row in rows if row.get("status") == status]
+        if milestone is not None:
+            rows = [row for row in rows if row.get("review_milestone") == milestone]
+        return rows
 
     @staticmethod
     def _row_has_run_id(row: dict[str, Any], run_id: str) -> bool:

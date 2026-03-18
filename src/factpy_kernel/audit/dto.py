@@ -104,6 +104,26 @@ def build_decision_detail_dto(query: AuditQuery, decision_id: str) -> dict[str, 
     }
 
 
+def build_compliance_matrix_dto(
+    query: AuditQuery,
+    *,
+    req_id: str | None = None,
+    status: str | None = None,
+    milestone: str | None = None,
+) -> dict[str, Any]:
+    _ensure_query(query)
+    try:
+        rows = query.list_compliance_matrix(req_id=req_id, status=status, milestone=milestone)
+    except AuditQueryError as exc:
+        raise AuditDTOError(str(exc)) from exc
+    return {
+        "audit_ui_dto_version": "audit_ui_dto_v1",
+        "kind": "compliance_matrix",
+        "count": len(rows),
+        "rows": [dict(row) for row in rows],
+    }
+
+
 def build_authoring_apply_run_list_dto(query: AuditQuery) -> dict[str, Any]:
     _ensure_query(query)
     runs = query.list_authoring_apply_runs()

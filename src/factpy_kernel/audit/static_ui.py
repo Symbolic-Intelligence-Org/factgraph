@@ -35,6 +35,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
     query = AuditQuery(data)
     authoring_apply_events = load_authoring_apply_events(package_dir)
     authoring_apply_summary = summarize_authoring_apply_events(authoring_apply_events)
+    compliance_matrix_rows = query.list_compliance_matrix()
     root = Path(out_dir)
     runs_dir = root / "runs"
     decisions_dir = root / "decisions"
@@ -99,11 +100,14 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
 
     authoring_apply_page = _render_authoring_apply_events_page(authoring_apply_events, authoring_apply_summary)
     (root / "authoring_apply_events.html").write_text(authoring_apply_page, encoding="utf-8")
+    compliance_matrix_page = _render_compliance_matrix_page(compliance_matrix_rows)
+    (root / "compliance_matrix.html").write_text(compliance_matrix_page, encoding="utf-8")
 
     index_html = _render_index_page(
         run_list,
         index_pages=sorted(index_pages.keys()),
         authoring_apply_summary=authoring_apply_summary,
+        compliance_matrix_count=len(compliance_matrix_rows),
     )
     (root / "index.html").write_text(index_html, encoding="utf-8")
     (root / "search.html").write_text(_render_search_page(), encoding="utf-8")
@@ -116,6 +120,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         authoring_apply_run_ids=sorted(set(authoring_apply_run_ids)),
         index_pages=sorted(index_pages.keys()),
         authoring_apply_summary=authoring_apply_summary,
+        compliance_matrix_rows=compliance_matrix_rows,
     )
     (root / "ui_index.json").write_text(
         json.dumps(ui_index_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
@@ -139,6 +144,8 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         "search": "search.html",
         "ui_index": "ui_index.json",
         "authoring_apply_events": "authoring_apply_events.html",
+        "compliance_matrix": "compliance_matrix.html",
+        "compliance_matrix_row_count": len(compliance_matrix_rows),
     }
     (root / "site_manifest.json").write_text(
         json.dumps(site_manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
@@ -152,6 +159,7 @@ def _render_index_page(
     *,
     index_pages: list[str],
     authoring_apply_summary: dict[str, Any] | None = None,
+    compliance_matrix_count: int = 0,
 ) -> str:
     rows = []
     for run in run_list.get("runs", []):
@@ -180,6 +188,7 @@ def _render_index_page(
             "<h1>Audit Runs</h1>"
             "<p><a href='search.html'>Search</a></p>"
             f"<p><a href='authoring_apply_events.html'>Authoring Apply Events</a> ({escape(str(apply_count))})</p>"
+            f"<p><a href='compliance_matrix.html'>Compliance Matrix</a> ({escape(str(compliance_matrix_count))})</p>"
             "<h2>Indexes</h2>"
             f"<ul>{''.join(_index_page_links(index_pages)) if index_pages else '<li>None</li>'}</ul>"
             "<h2>Runs</h2>"
@@ -189,6 +198,110 @@ def _render_index_page(
             "</table>"
         ),
     )
+
+
+def _render_compliance_matrix_page(rows: list[dict[str, Any]]) -> str:
+    table_rows: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        req_id = row.get("req_id")
+        title = row.get("title")
+        standard_ref = row.get("standard_ref")
+        status = row.get("status")
+        milestone = row.get("review_milestone")
+        verification_methods = row.get("verification_methods")
+        rid_links = row.get("rid_links")
+        methods_cell = _render_method_links(verification_methods)
+        rid_cell = _render_rid_links(rid_links)
+        evidence_cell = _render_compliance_evidence_links(row)
+        table_rows.append(
+            "<tr>"
+            f"<td>{escape(str(req_id or ''))}</td>"
+            f"<td>{escape(str(title or ''))}</td>"
+            f"<td>{escape(str(standard_ref or ''))}</td>"
+            f"<td>{escape(str(status or ''))}</td>"
+            f"<td>{escape(str(milestone or ''))}</td>"
+            f"<td>{methods_cell}</td>"
+            f"<td>{rid_cell}</td>"
+            f"<td>{evidence_cell}</td>"
+            "</tr>"
+        )
+    return _html_page(
+        title="Compliance Matrix",
+        body=(
+            "<h1>Compliance Matrix</h1>"
+            "<p><a href='index.html'>Back to runs</a></p>"
+            f"<p>Rows: {escape(str(len(rows)))}</p>"
+            "<table>"
+            "<thead><tr><th>Requirement</th><th>Title</th><th>Standard Ref</th><th>Status</th><th>Milestone</th><th>Verification Methods</th><th>RID Links</th><th>Evidence</th></tr></thead>"
+            f"<tbody>{''.join(table_rows) if table_rows else '<tr><td colspan=8>None</td></tr>'}</tbody>"
+            "</table>"
+        ),
+    )
+
+
+def _render_method_links(value: Any) -> str:
+    if not isinstance(value, list) or not value:
+        return "-"
+    items: list[str] = []
+    for row in value:
+        if not isinstance(row, dict):
+            continue
+        method = row.get("method")
+        asrt_ids = row.get("asrt_ids")
+        if not isinstance(method, str) or not method:
+            continue
+        items.append(
+            f"{escape(method)} ({_render_assertion_links_inline(asrt_ids)})"
+        )
+    return "<br>".join(items) if items else "-"
+
+
+def _render_rid_links(value: Any) -> str:
+    if not isinstance(value, list) or not value:
+        return "-"
+    items: list[str] = []
+    for row in value:
+        if not isinstance(row, dict):
+            continue
+        rid_id = row.get("rid_id")
+        asrt_ids = row.get("asrt_ids")
+        if not isinstance(rid_id, str) or not rid_id:
+            continue
+        items.append(
+            f"{escape(rid_id)} ({_render_assertion_links_inline(asrt_ids)})"
+        )
+    return "<br>".join(items) if items else "-"
+
+
+def _render_compliance_evidence_links(row: dict[str, Any]) -> str:
+    links: list[str] = []
+    for label, key in (
+        ("requirement", "requirement_asrt_id"),
+        ("status", "status_asrt_id"),
+        ("milestone", "review_milestone_asrt_id"),
+    ):
+        asrt_id = row.get(key)
+        if isinstance(asrt_id, str) and asrt_id:
+            links.append(f"{escape(label)}: {_render_assertion_link(asrt_id)}")
+    return "<br>".join(links) if links else "-"
+
+
+def _render_assertion_links_inline(value: Any) -> str:
+    if not isinstance(value, list) or not value:
+        return "-"
+    links = [
+        _render_assertion_link(asrt_id)
+        for asrt_id in value
+        if isinstance(asrt_id, str) and asrt_id
+    ]
+    return ", ".join(links) if links else "-"
+
+
+def _render_assertion_link(asrt_id: str) -> str:
+    href = f"assertions/{_slug_id(asrt_id)}.html"
+    return f"<a href='{escape(href, quote=True)}'>{escape(asrt_id)}</a>"
 
 
 def _render_run_detail_page(
@@ -440,6 +553,7 @@ def _build_ui_index_payload(
     authoring_apply_run_ids: list[str],
     index_pages: list[str],
     authoring_apply_summary: dict[str, Any] | None = None,
+    compliance_matrix_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     decisions = query.list_decisions()
     failures = query.list_failures()
@@ -616,6 +730,7 @@ def _build_ui_index_payload(
             "decisions": len(decision_ids),
             "assertions": len(assertion_ids),
             "failures": len(failures),
+            "compliance_matrix_rows": len(compliance_matrix_rows or []),
             "authoring_apply_events": (
                 authoring_apply_summary.get("event_count", 0)
                 if isinstance(authoring_apply_summary, dict)
@@ -627,6 +742,7 @@ def _build_ui_index_payload(
             "search": "search.html",
             "site_manifest": "site_manifest.json",
             "authoring_apply_events": "authoring_apply_events.html",
+            "compliance_matrix": "compliance_matrix.html",
             "indexes": [f"indexes/{name}" for name in index_pages],
         },
         "lookup": {
@@ -688,6 +804,10 @@ def _build_ui_index_payload(
             ],
         },
         "authoring_apply": _json_safe(authoring_apply_summary or {"event_count": 0, "status_counts": {}, "section_counts": {}}),
+        "compliance_matrix": {
+            "page": "compliance_matrix.html",
+            "count": len(compliance_matrix_rows or []),
+        },
     }
 
 

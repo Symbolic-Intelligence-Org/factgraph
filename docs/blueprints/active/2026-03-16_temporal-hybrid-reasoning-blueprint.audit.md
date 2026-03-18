@@ -7,6 +7,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-03-16 | draft | Blueprint created | Established a discussion entry for temporal semantics, hybrid execution, and future LLM/rule-governance boundaries. |
+| 2026-03-18 | draft | Scenario-anchoring child blueprint linked | Added a bridge note to `2026-03-18_ecss-scenario-anchoring.md` so the next concrete step starts from named ECSS/ESA scenarios rather than abstract engine selection. |
 
 ## Decision Notes
 
@@ -30,6 +31,12 @@
   - **staged pipeline 的定位修正**: 从"建议探索的架构方向"修正为"当单引擎遇到性能瓶颈或语义能力缺口时的 escape hatch"。
   - **更简单的替代方案**: ProbLog + certainty=1.0 跑全程（确定性部分标注概率为 1.0）。在中小规模规则集下，这种方案的性能开销可能完全不重要。只有在大规模递归闭包导致概率引擎性能不可接受，或者需要单引擎根本不支持的语义（如时间区间状态传播）时，staged pipeline 才值得引入。
   - **影响范围**: 蓝图 5.1 重写（加入设计原则和触发条件），5.3 Q4 追加讨论进展。
+
+- 2026-03-18
+  - 在继续进入 `PyReason`、temporal runtime contract 或更强 uncertainty semantics 之前，当前更高优先级的动作是先把 ESA / ECSS 方向锚定到具名 reference scenarios。
+  - 新子蓝图 `2026-03-18_ecss-scenario-anchoring.md` 用来收口这一前置问题，避免后续优先级讨论继续漂浮在抽象架构偏好上。
+  - `ecss-scenario-anchoring` 的第一轮结论进一步表明：近期更适合先走 `ECSS-M-ST-10` 风格的 compliance-matrix / VCD delivery，而不是先开 `PyReason` 或 temporal runtime semantics。
+  - `ecss-vcd-compliance-delivery` 现已实现并归档，说明近期 ECSS-M-ST-10 锚点已经形成一个真实的 offline compliance delivery 路径，而不再只是讨论中的下游入口。
 
 ## Rejected Options
 

@@ -268,6 +268,21 @@
 - `pyreason-integration-spike-blueprint`
   - 如果后续决定探索 PyReason，单独做限边界的 spike，而不是直接把其语义写进主蓝图。
 
+在这些候选子蓝图之前，当前更基础的前置动作是先把“ESA / ECSS 方向”锚定到具名场景，而不是继续停留在抽象引擎与语义讨论中。为此，新的活动子蓝图已打开为 [2026-03-18_ecss-scenario-anchoring.md](./2026-03-18_ecss-scenario-anchoring.md)，先比较 design-review/compliance 与 debris-mitigation 两类 reference scenarios，再决定后续的 temporal / uncertainty / engine 优先级。
+
+当前该子蓝图的第一轮结论已明确倾向：
+
+- 近期优先锚点：`ECSS-M-ST-10` 风格的 VCD / compliance-matrix scenario
+- 中期驱动场景：`ESSB-ST-U-007` 风格的 debris-mitigation scenario
+
+这意味着在 temporal-hybrid 主线上，下一条更自然的实现型子蓝图并不是 `pyreason-integration-spike` 或 `temporal-semantics`，而更接近：
+
+- `ecss-vcd-compliance-delivery`
+
+该子蓝图现已实现并归档为 [2026-03-18_ecss-vcd-compliance-delivery.md](../archive/2026-03-18_ecss-vcd-compliance-delivery.md)，说明近期 ECSS-M-ST-10 锚点已经从“优先级判断”推进为一个真实的 offline delivery 能力切片。
+
+后两者仍然保留，但更适合作为被 ESSB-ST-U-007 场景反向驱动的中期切口。
+
 ## 6. Boundaries And Invariants
 
 - 必须保持的边界：

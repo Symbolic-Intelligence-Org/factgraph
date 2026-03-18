@@ -5,10 +5,23 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
+from factpy_kernel.audit import (
+    AuditQuery,
+    ECSS_COMPLIANCE_STATUS_PRED_ID,
+    ECSS_REQUIREMENT_PRED_ID,
+    ECSS_REQUIREMENT_RID_PRED_ID,
+    ECSS_REVIEW_MILESTONE_PRED_ID,
+    ECSS_VERIFICATION_METHOD_PRED_ID,
+    build_compliance_matrix_dto,
+    extend_schema_ir_with_ecss_vcd_predicates,
+    load_audit_package,
+    render_audit_static_site,
+)
 from factpy_kernel.authoring import (
     AuthoringDerivationCompileError,
     build_derivation_preview_dto,
@@ -43,7 +56,8 @@ from factpy_kernel.core.store._support import (
     support_artifact_from_dict,
     support_artifact_to_dict,
 )
-from factpy_kernel.core.evidence.write_protocol import WriteProtocolError
+from factpy_kernel.core.evidence.write_protocol import WriteProtocolError, set_field
+from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
 from factpy_kernel.core.view.projector import project_view_facts
 from factpy_kernel.sdk import (
     Body,
@@ -1544,6 +1558,119 @@ Derivation(
         self.assertIsNone(sdk.store.get_candidate_support_digest(compat_candidate.candidate_id))
         self.assertIsNone(sdk.store.get_candidate_support_kind(compat_candidate.candidate_id))
 
+    def test_ecss_vcd_schema_helper_extends_schema_ir_idempotently(self) -> None:
+        base = _schema_ir()
+        extended = extend_schema_ir_with_ecss_vcd_predicates(base)
+        extended_again = extend_schema_ir_with_ecss_vcd_predicates(extended)
+
+        pred_ids = [pred["pred_id"] for pred in extended["predicates"]]
+        self.assertIn(ECSS_REQUIREMENT_PRED_ID, pred_ids)
+        self.assertIn(ECSS_VERIFICATION_METHOD_PRED_ID, pred_ids)
+        self.assertIn(ECSS_COMPLIANCE_STATUS_PRED_ID, pred_ids)
+        self.assertIn(ECSS_REQUIREMENT_RID_PRED_ID, pred_ids)
+        self.assertIn(ECSS_REVIEW_MILESTONE_PRED_ID, pred_ids)
+
+        self.assertEqual(pred_ids.count(ECSS_REQUIREMENT_PRED_ID), 1)
+        self.assertEqual(extended_again["predicates"], extended["predicates"])
+        self.assertEqual(
+            extended_again["projection"]["predicates"],
+            extended["projection"]["predicates"],
+        )
+
+    def test_audit_query_builds_ecss_compliance_matrix_from_package_facts(self) -> None:
+        schema_ir = extend_schema_ir_with_ecss_vcd_predicates(_schema_ir())
+        store = Store(schema_ir)
+        seeded = _seed_ecss_compliance_facts(store)
+        req1_ref = seeded["req1_ref"]
+        req2_ref = seeded["req2_ref"]
+        open_asrt_id = seeded["open_asrt_id"]
+        closed_asrt_id = seeded["closed_asrt_id"]
+
+        with TemporaryDirectory() as tmp_dir:
+            manifest_path = export_package(
+                store,
+                Path(tmp_dir),
+                ExportOptions(package_kind="audit"),
+            )
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertNotIn("compliance_matrix", manifest["paths"]["audit_files"])
+
+            package = load_audit_package(tmp_dir)
+            query = AuditQuery(package)
+
+            rows = query.list_compliance_matrix()
+            self.assertEqual([row["req_id"] for row in rows], ["REQ-001", "REQ-002"])
+
+            req1 = next(row for row in rows if row["req_id"] == "REQ-001")
+            self.assertEqual(req1["requirement_ref"], req1_ref)
+            self.assertEqual(req1["title"], "Battery test evidence")
+            self.assertEqual(req1["standard_ref"], "ECSS-M-ST-10/5.1")
+            self.assertEqual(req1["status"], "closed")
+            self.assertEqual(req1["status_asrt_id"], closed_asrt_id)
+            self.assertNotEqual(req1["status_asrt_id"], open_asrt_id)
+            self.assertEqual(req1["review_milestone"], "CDR")
+            self.assertEqual(
+                [item["method"] for item in req1["verification_methods"]],
+                ["Analysis", "Test"],
+            )
+            self.assertTrue(all(len(item["asrt_ids"]) == 1 for item in req1["verification_methods"]))
+            self.assertEqual([item["rid_id"] for item in req1["rid_links"]], ["RID-007"])
+            self.assertEqual(len(req1["rid_links"][0]["asrt_ids"]), 1)
+
+            req2 = next(row for row in rows if row["req_id"] == "REQ-002")
+            self.assertEqual(req2["requirement_ref"], req2_ref)
+            self.assertEqual(req2["title"], "Inspection note")
+            self.assertIsNone(req2["standard_ref"])
+            self.assertEqual(req2["status"], "waived")
+
+            self.assertEqual(
+                [row["req_id"] for row in query.list_compliance_matrix(status="closed")],
+                ["REQ-001"],
+            )
+            self.assertEqual(
+                [row["req_id"] for row in query.list_compliance_matrix(milestone="CDR")],
+                ["REQ-001"],
+            )
+
+            dto = build_compliance_matrix_dto(query, status="closed")
+            self.assertEqual(dto["audit_ui_dto_version"], "audit_ui_dto_v1")
+            self.assertEqual(dto["kind"], "compliance_matrix")
+            self.assertEqual(dto["count"], 1)
+            self.assertEqual(dto["rows"][0]["req_id"], "REQ-001")
+
+    def test_render_audit_static_site_includes_compliance_matrix_page(self) -> None:
+        schema_ir = extend_schema_ir_with_ecss_vcd_predicates(_schema_ir())
+        store = Store(schema_ir)
+        seeded = _seed_ecss_compliance_facts(store)
+
+        with TemporaryDirectory() as package_dir, TemporaryDirectory() as site_dir:
+            export_package(
+                store,
+                Path(package_dir),
+                ExportOptions(package_kind="audit"),
+            )
+            site_manifest = render_audit_static_site(package_dir, site_dir)
+
+            self.assertEqual(site_manifest["compliance_matrix"], "compliance_matrix.html")
+            self.assertEqual(site_manifest["compliance_matrix_row_count"], 2)
+
+            compliance_path = Path(site_dir) / "compliance_matrix.html"
+            self.assertTrue(compliance_path.exists())
+            compliance_html = compliance_path.read_text(encoding="utf-8")
+            self.assertIn("Compliance Matrix", compliance_html)
+            self.assertIn("REQ-001", compliance_html)
+            self.assertIn("Battery test evidence", compliance_html)
+            self.assertIn("RID-007", compliance_html)
+            self.assertIn(f"assertions/{seeded['closed_asrt_id']}.html", compliance_html)
+
+            index_html = (Path(site_dir) / "index.html").read_text(encoding="utf-8")
+            self.assertIn("compliance_matrix.html", index_html)
+
+            ui_index = json.loads((Path(site_dir) / "ui_index.json").read_text(encoding="utf-8"))
+            self.assertEqual(ui_index["links"]["compliance_matrix"], "compliance_matrix.html")
+            self.assertEqual(ui_index["counts"]["compliance_matrix_rows"], 2)
+            self.assertEqual(ui_index["compliance_matrix"]["count"], 2)
+
     def test_support_artifact_from_dict_round_trip_ignores_envelope_and_restores_bytes(self) -> None:
         row = {
             "support_digest": "sha256:" + ("ab" * 32),
@@ -2224,6 +2351,88 @@ def _seed_users_for_syntax_matrix(sdk: SDKStore) -> dict[str, str]:
         "u1": u1.e_ref,
         "u2": u2.e_ref,
         "u3": u3.e_ref,
+    }
+
+
+def _seed_ecss_compliance_facts(store: Store) -> dict[str, str]:
+    req1_ref = encode_idref_v1("ECSSRequirement", [("req_id", "string", "REQ-001")])
+    req2_ref = encode_idref_v1("ECSSRequirement", [("req_id", "string", "REQ-002")])
+
+    with patch(
+        "factpy_kernel.core.evidence.write_protocol.now_epoch_nanos",
+        side_effect=[100, 110, 120, 130, 140, 150, 160, 170, 180],
+    ):
+        requirement_asrt_id = set_field(
+            store.ledger,
+            ECSS_REQUIREMENT_PRED_ID,
+            req1_ref,
+            [
+                ("string", "REQ-001"),
+                ("string", "Battery test evidence"),
+                ("string", "ECSS-M-ST-10/5.1"),
+            ],
+        )
+        analysis_asrt_id = set_field(
+            store.ledger,
+            ECSS_VERIFICATION_METHOD_PRED_ID,
+            req1_ref,
+            [("string", "Analysis")],
+        )
+        test_asrt_id = set_field(
+            store.ledger,
+            ECSS_VERIFICATION_METHOD_PRED_ID,
+            req1_ref,
+            [("string", "Test")],
+        )
+        open_asrt_id = set_field(
+            store.ledger,
+            ECSS_COMPLIANCE_STATUS_PRED_ID,
+            req1_ref,
+            [("string", "open")],
+        )
+        closed_asrt_id = set_field(
+            store.ledger,
+            ECSS_COMPLIANCE_STATUS_PRED_ID,
+            req1_ref,
+            [("string", "closed")],
+        )
+        rid_asrt_id = set_field(
+            store.ledger,
+            ECSS_REQUIREMENT_RID_PRED_ID,
+            req1_ref,
+            [("string", "RID-007")],
+        )
+        milestone_asrt_id = set_field(
+            store.ledger,
+            ECSS_REVIEW_MILESTONE_PRED_ID,
+            req1_ref,
+            [("string", "CDR")],
+        )
+        requirement2_asrt_id = set_field(
+            store.ledger,
+            ECSS_REQUIREMENT_PRED_ID,
+            req2_ref,
+            [("string", "REQ-002"), ("string", "Inspection note"), ("string", "")],
+        )
+        waived_asrt_id = set_field(
+            store.ledger,
+            ECSS_COMPLIANCE_STATUS_PRED_ID,
+            req2_ref,
+            [("string", "waived")],
+        )
+
+    return {
+        "req1_ref": req1_ref,
+        "req2_ref": req2_ref,
+        "requirement_asrt_id": requirement_asrt_id,
+        "analysis_asrt_id": analysis_asrt_id,
+        "test_asrt_id": test_asrt_id,
+        "open_asrt_id": open_asrt_id,
+        "closed_asrt_id": closed_asrt_id,
+        "rid_asrt_id": rid_asrt_id,
+        "milestone_asrt_id": milestone_asrt_id,
+        "requirement2_asrt_id": requirement2_asrt_id,
+        "waived_asrt_id": waived_asrt_id,
     }
 
 
