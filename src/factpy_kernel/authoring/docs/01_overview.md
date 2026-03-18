@@ -1,7 +1,7 @@
 # Authoring 模块总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/authoring`
-- 最后更新：2026-03-10
+- 最后更新：2026-03-18
 - 目标读者：需要理解 schema/rule/derivation 预检、发布、registry 工作流的开发者
 
 ## 1. 模块职责
@@ -222,6 +222,9 @@ root_dir/
   - `SDKRegistry` 对 `authoring` 做更友好的封装
 - `service`
   - service 层可把 authoring registry 暴露成前端可消费接口
+- `ecss`
+  - `factpy_kernel.ecss` 负责提供 shared domain preset（如 ECSS VCD predicates）
+  - authoring 可消费这些 preset 进入 schema/registry 工作流，但不拥有 preset 本身
 - `audit`
   - audit 读取的是导出的 package，不直接消费 authoring registry
 

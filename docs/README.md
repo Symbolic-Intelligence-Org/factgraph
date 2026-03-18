@@ -18,7 +18,7 @@
   - 模块文档最小结构要求、写作约定、触发更新的场景、起点模板。
 - [references/README.md](/Users/zhenzhili/hnsm-backend/docs/references/README.md)
   - 外部比较、桥接提炼和工作参考材料的管理规则；可作为 blueprint 输入材料，但不是当前实现真相。
-- [session_handoff_2026-03-17.md](/Users/zhenzhili/hnsm-backend/docs/session_handoff_2026-03-17.md)
+- [session_handoff_2026-03-18.md](/Users/zhenzhili/hnsm-backend/docs/session_handoff_2026-03-18.md)
   - 新 session 恢复上下文用的 handoff 文档；不是模块真相，也不替代 active blueprint。
 - [blueprint_history/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/README.md)
   - 旧蓝图归档区的说明与使用边界。
@@ -34,6 +34,7 @@
 - [src/factpy_kernel/authoring/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/authoring/docs/README.md)
 - [src/factpy_kernel/adapters/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/adapters/docs/README.md)
 - [src/factpy_kernel/audit/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/audit/docs/README.md)
+- [src/factpy_kernel/ecss/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/ecss/docs/README.md)
 
 ## 工作流摘要
 

@@ -1,7 +1,7 @@
 # Audit 模块总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/audit`
-- 最后更新：2026-02-28
+- 最后更新：2026-03-18
 - 目标读者：需要消费 audit package、做离线审计查询或静态展示的开发者
 
 ## 1. 模块职责
@@ -31,6 +31,7 @@
   - 结构化查询入口
 - `extend_schema_ir_with_ecss_vcd_predicates(...)`
   - 为 `ECSS-M-ST-10` 风格 requirement/compliance facts 提供最小 predicate schema helper
+  - 当前由 `factpy_kernel.ecss.vcd` 拥有，`audit` 侧仅保留兼容 re-export
 - `render_audit_static_site(...)`
   - 生成静态审计站点
 - `load_authoring_apply_events(...)`
@@ -103,6 +104,9 @@
   - audit 不直接查询 live `Ledger`
 - `authoring`
   - audit 可消费 package 中携带的 authoring apply events，但不直接管理 registry
+- `ecss`
+  - requirement/compliance predicates 的 canonical preset owner 在 `factpy_kernel.ecss.vcd`
+  - audit 复用这组 shared constants/helper，但 matrix row 组装仍留在 `audit`
 - `explainability`
   - compliance matrix 只负责 requirement-level delivery；更细的 assertion/support 证据下钻仍由 assertion detail / explainability substrate 承担
 

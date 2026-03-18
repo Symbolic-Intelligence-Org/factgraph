@@ -1422,3 +1422,33 @@ where=[
 * `Field.dims`, `Field.fact_key`, and `Field.pred_id` have been removed
 * `Identity(primary_key=True)` is required for cross-coordinate joins
 * `sdk_batch_plan_v1` wire payload no longer carries `dims` / `fact_key`
+
+---
+
+## 13. ECSS VCD Helpers (Submodule)
+
+ECSS VCD helpers are exposed through a submodule rather than `factpy_kernel.sdk.__init__`:
+
+```python
+from factpy_kernel.sdk import SDKStore, compile_schema_from_classes
+from factpy_kernel.sdk.ecss import apply_ecss_vcd_schema, write_ecss_requirement_bundle
+
+schema_ir = apply_ecss_vcd_schema(compile_schema_from_classes([User]))
+sdk = SDKStore([User], schema_ir=schema_ir)
+
+write_ecss_requirement_bundle(
+    sdk,
+    req_id="REQ-001",
+    title="Battery test evidence",
+    standard_ref="ECSS-M-ST-10/5.1",
+    status="closed",
+    verification_methods=["Analysis", "Test"],
+    rid_links=["RID-007"],
+    review_milestone="CDR",
+)
+```
+
+Notes:
+
+* The helpers reuse the shared preset owned by `factpy_kernel.ecss.vcd`; the SDK layer is not the canonical predicate owner.
+* These preset predicates do not have matching `Entity` descriptors, so the helper uses a dedicated SDK convenience wrapper instead of `sdk.batch()` field handles.

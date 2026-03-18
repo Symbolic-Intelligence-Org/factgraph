@@ -34,6 +34,7 @@ from factpy_kernel.authoring.where_schema_lowering import (
     WhereSchemaLoweringError,
     lower_blueprint_where_sugar_with_schema_v1,
 )
+from factpy_kernel.ecss import EcssVcdError
 from factpy_kernel.core.rules.rule_ir import (
     RuleCompileError,
     RuleRegistry,
@@ -75,6 +76,11 @@ from factpy_kernel.sdk import (
     SDKStoreError,
     compile_schema_from_classes,
     vars as sdk_vars,
+)
+from factpy_kernel.sdk.ecss import (
+    apply_ecss_vcd_schema,
+    make_ecss_requirement_ref,
+    write_ecss_requirement_bundle,
 )
 from factpy_kernel.sdk.ingest import CONVENTION_META_KEYS, SENSITIVE_SEMANTIC_META_KEYS
 from factpy_kernel.service.app_v1 import app
@@ -1577,6 +1583,10 @@ Derivation(
             extended["projection"]["predicates"],
         )
 
+    def test_shared_ecss_vcd_schema_helper_rejects_invalid_shape(self) -> None:
+        with self.assertRaises(EcssVcdError):
+            apply_ecss_vcd_schema(["not-a-schema"])  # type: ignore[arg-type]
+
     def test_audit_query_builds_ecss_compliance_matrix_from_package_facts(self) -> None:
         schema_ir = extend_schema_ir_with_ecss_vcd_predicates(_schema_ir())
         store = Store(schema_ir)
@@ -1670,6 +1680,46 @@ Derivation(
             self.assertEqual(ui_index["links"]["compliance_matrix"], "compliance_matrix.html")
             self.assertEqual(ui_index["counts"]["compliance_matrix_rows"], 2)
             self.assertEqual(ui_index["compliance_matrix"]["count"], 2)
+
+    def test_sdk_ecss_requirement_bundle_round_trips_into_compliance_matrix(self) -> None:
+        schema_ir = apply_ecss_vcd_schema(_schema_ir())
+        sdk = SDKStore([User], schema_ir=schema_ir)
+
+        expected_ref = make_ecss_requirement_ref("REQ-100")
+        written = write_ecss_requirement_bundle(
+            sdk,
+            req_id="REQ-100",
+            title="Power budget closure",
+            standard_ref="ECSS-M-ST-10/7.2",
+            status="closed",
+            verification_methods=["Analysis", "Review"],
+            rid_links=["RID-100"],
+            review_milestone="PDR",
+            meta={"source": "seed", "trace_id": "ecss-req-100"},
+        )
+
+        self.assertEqual(written["requirement_ref"], expected_ref)
+        self.assertEqual(len(written["verification_method_asrt_ids"]), 2)
+        self.assertEqual(len(written["rid_asrt_ids"]), 1)
+
+        with TemporaryDirectory() as tmp_dir:
+            export_package(
+                sdk.store,
+                Path(tmp_dir),
+                ExportOptions(package_kind="audit"),
+            )
+            package = load_audit_package(tmp_dir)
+            rows = AuditQuery(package).list_compliance_matrix()
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["req_id"], "REQ-100")
+        self.assertEqual(rows[0]["requirement_ref"], expected_ref)
+        self.assertEqual(rows[0]["status"], "closed")
+        self.assertEqual(
+            [item["method"] for item in rows[0]["verification_methods"]],
+            ["Analysis", "Review"],
+        )
+        self.assertEqual([item["rid_id"] for item in rows[0]["rid_links"]], ["RID-100"])
 
     def test_support_artifact_from_dict_round_trip_ignores_envelope_and_restores_bytes(self) -> None:
         row = {

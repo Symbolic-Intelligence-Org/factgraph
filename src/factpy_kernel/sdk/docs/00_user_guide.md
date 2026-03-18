@@ -1394,3 +1394,33 @@ where=[
 - `Field.dims`、`Field.fact_key`、`Field.pred_id` 已移除
 - `Identity(primary_key=True)` 是跨坐标 join 的必要条件
 - `sdk_batch_plan_v1` wire payload 不再携带 `dims` / `fact_key`
+
+---
+
+## 13. ECSS VCD helper（子模块）
+
+ECSS VCD preset 不在 `factpy_kernel.sdk.__init__` 顶层导出，而是走子模块：
+
+```python
+from factpy_kernel.sdk import SDKStore, compile_schema_from_classes
+from factpy_kernel.sdk.ecss import apply_ecss_vcd_schema, write_ecss_requirement_bundle
+
+schema_ir = apply_ecss_vcd_schema(compile_schema_from_classes([User]))
+sdk = SDKStore([User], schema_ir=schema_ir)
+
+write_ecss_requirement_bundle(
+    sdk,
+    req_id="REQ-001",
+    title="Battery test evidence",
+    standard_ref="ECSS-M-ST-10/5.1",
+    status="closed",
+    verification_methods=["Analysis", "Test"],
+    rid_links=["RID-007"],
+    review_milestone="CDR",
+)
+```
+
+说明：
+
+- 这组 helper 复用 `factpy_kernel.ecss.vcd` 的 shared preset，不在 SDK 层重新定义 canonical predicates。
+- 因为这些 preset predicates 没有对应 `Entity` descriptor，helper 直接走 SDK convenience wrapper，而不是 `sdk.batch()` 字段句柄。
