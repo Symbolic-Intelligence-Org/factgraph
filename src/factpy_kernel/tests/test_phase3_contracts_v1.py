@@ -2356,6 +2356,242 @@ Derivation(
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
 
+    def test_process_safety_shutdown_walkthrough_reuses_five_layer_explain_delivery(self) -> None:
+        schema_ir = _process_safety_shutdown_schema_ir()
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            unit_ref = encode_idref_v1("ProcessUnit", [("unit_id", "string", "UNIT-001")])
+
+            assertion_ids: dict[str, str] = {}
+            for pred_id, rest_terms in (
+                (
+                    PROCESS_HIGH_HIGH_TEMPERATURE_PRED_ID,
+                    [("int", 510)],
+                ),
+                (
+                    PROCESS_TEMPERATURE_SHUTDOWN_THRESHOLD_PRED_ID,
+                    [("int", 500)],
+                ),
+                (
+                    PROCESS_HIGH_HIGH_PRESSURE_PRED_ID,
+                    [("int", 245)],
+                ),
+                (
+                    PROCESS_PRESSURE_SHUTDOWN_THRESHOLD_PRED_ID,
+                    [("int", 240)],
+                ),
+                (
+                    PROCESS_SHUTDOWN_ALARM_ACTIVE_PRED_ID,
+                    [],
+                ),
+                (
+                    PROCESS_SHUTDOWN_INTERLOCK_ARMED_PRED_ID,
+                    [],
+                ),
+                (
+                    PROCESS_MANUAL_OVERRIDE_CLEARED_PRED_ID,
+                    [],
+                ),
+            ):
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": pred_id,
+                        "e_ref": unit_ref,
+                        "rest_terms": [[tag, value] for tag, value in rest_terms],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+                assertion_ids.setdefault(f"{pred_id}:{len(assertion_ids)}", write_resp["write"]["assertion_id"])
+
+            rule_resp = run_runtime_rule(
+                session_id,
+                {
+                    "rule": {
+                        "rule_id": "q.process_shutdown_required_walkthrough",
+                        "version": "1.0.0",
+                        "select": [
+                            "$unit",
+                            "$temperature_c",
+                            "$temperature_threshold_c",
+                            "$pressure_kpa",
+                            "$pressure_threshold_kpa",
+                        ],
+                        "where": [
+                            ["pred", PROCESS_HIGH_HIGH_TEMPERATURE_PRED_ID, ["$unit", "$temperature_c"]],
+                            ["pred", PROCESS_TEMPERATURE_SHUTDOWN_THRESHOLD_PRED_ID, ["$unit", "$temperature_threshold_c"]],
+                            ["ge", "$temperature_c", "$temperature_threshold_c"],
+                            ["pred", PROCESS_HIGH_HIGH_PRESSURE_PRED_ID, ["$unit", "$pressure_kpa"]],
+                            ["pred", PROCESS_PRESSURE_SHUTDOWN_THRESHOLD_PRED_ID, ["$unit", "$pressure_threshold_kpa"]],
+                            ["ge", "$pressure_kpa", "$pressure_threshold_kpa"],
+                            ["pred", PROCESS_SHUTDOWN_ALARM_ACTIVE_PRED_ID, ["$unit"]],
+                            ["pred", PROCESS_SHUTDOWN_INTERLOCK_ARMED_PRED_ID, ["$unit"]],
+                            ["pred", PROCESS_MANUAL_OVERRIDE_CLEARED_PRED_ID, ["$unit"]],
+                        ],
+                    },
+                    "capture_trace": True,
+                },
+            )
+            self.assertTrue(rule_resp["ok"])
+            rule_run_id = rule_resp["result"]["trace"]["rule_run_id"]
+
+            raw_resp = explain_runtime_ref(session_id, {"kind": "rule_run", "id": rule_run_id})
+            summary_resp = explain_runtime_summary(session_id, {"kind": "rule_run", "id": rule_run_id})
+            narrative_resp = explain_runtime_narrative(session_id, {"kind": "rule_run", "id": rule_run_id})
+            nl_resp = explain_runtime_nl(session_id, {"kind": "rule_run", "id": rule_run_id})
+            self.assertTrue(raw_resp["ok"])
+            self.assertTrue(summary_resp["ok"])
+            self.assertTrue(narrative_resp["ok"])
+            self.assertTrue(nl_resp["ok"])
+
+            raw_explain = raw_resp["explain"]
+            summary = summary_resp["summary"]
+            narrative = narrative_resp["narrative"]
+            explain_nl = nl_resp["explain_nl"]
+
+            self.assertEqual(raw_explain["root_rule"]["rule_id"], "q.process_shutdown_required_walkthrough")
+            self.assertEqual(
+                raw_explain["root_rows"],
+                [[unit_ref, 510, 500, 245, 240]],
+            )
+
+            invocation = next(
+                inv
+                for inv in raw_explain["invocations"]
+                if inv["rule"]["rule_id"] == "q.process_shutdown_required_walkthrough"
+            )
+            self.assertEqual(len(invocation["pred_witnesses"]), 7)
+            self.assertEqual(len(invocation["non_fact_steps"]), 2)
+            self.assertEqual({step["kind"] for step in invocation["non_fact_steps"]}, {"ge"})
+
+            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            self.assertEqual(
+                pred_atom_keys,
+                {
+                    "b0.a0:process:high_high_temperature",
+                    "b0.a1:process:temperature_shutdown_threshold",
+                    "b0.a3:process:high_high_pressure",
+                    "b0.a4:process:pressure_shutdown_threshold",
+                    "b0.a6:process:shutdown_alarm_active",
+                    "b0.a7:process:shutdown_interlock_armed",
+                    "b0.a8:process:manual_override_cleared",
+                },
+            )
+
+            non_fact_by_key = {step["step_key"]: step for step in invocation["non_fact_steps"]}
+            self.assertEqual(sorted(non_fact_by_key.keys()), ["b0.a2:ge", "b0.a5:ge"])
+            temp_binding = dict(dict(non_fact_by_key["b0.a2:ge"]["details"])["binding"])
+            pressure_binding = dict(dict(non_fact_by_key["b0.a5:ge"]["details"])["binding"])
+            self.assertEqual(temp_binding["$temperature_c"], 510)
+            self.assertEqual(temp_binding["$temperature_threshold_c"], 500)
+            self.assertEqual(pressure_binding["$pressure_kpa"], 245)
+            self.assertEqual(pressure_binding["$pressure_threshold_kpa"], 240)
+
+            witness_groups = {row["pred_id"]: row for row in summary["predicate_witness_groups"]}
+            self.assertEqual(summary["root_row_count"], 1)
+            self.assertEqual(summary["invocation_count"], 1)
+            self.assertEqual(len(summary["witness_assertion_ids"]), 7)
+            self.assertEqual(
+                witness_groups[PROCESS_HIGH_HIGH_TEMPERATURE_PRED_ID]["asrt_ids"],
+                [assertion_ids["process:high_high_temperature:0"]],
+            )
+            self.assertEqual(
+                witness_groups[PROCESS_SHUTDOWN_INTERLOCK_ARMED_PRED_ID]["asrt_ids"],
+                [assertion_ids["process:shutdown_interlock_armed:5"]],
+            )
+            self.assertEqual(
+                witness_groups[PROCESS_MANUAL_OVERRIDE_CLEARED_PRED_ID]["asrt_ids"],
+                [assertion_ids["process:manual_override_cleared:6"]],
+            )
+
+            self.assertIn(
+                "Predicate process:high_high_temperature was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+            self.assertIn(
+                "Predicate process:shutdown_interlock_armed was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+            self.assertIn(
+                "Predicate process:manual_override_cleared was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+            self.assertIn(
+                "Check kind ge was evaluated 2 time(s) across 1 invocation(s).",
+                narrative["non_fact_check_lines"],
+            )
+
+            self.assertEqual(
+                explain_nl["headline"],
+                "Rule q.process_shutdown_required_walkthrough@1.0.0 matched 1 root row(s) across 1 invocation(s).",
+            )
+            self.assertTrue(any("process:high_high_temperature" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertTrue(any("process:shutdown_interlock_armed" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertTrue(any("process:manual_override_cleared" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertFalse(any("review" in paragraph.lower() for paragraph in explain_nl["paragraphs"]))
+            self.assertFalse(any("flagged" in paragraph.lower() for paragraph in explain_nl["paragraphs"]))
+
+            with TemporaryDirectory() as package_dir:
+                session = _require_session(session_id)
+                export_package(session.store, Path(package_dir), ExportOptions(package_kind="audit"))
+                package = load_audit_package(package_dir)
+                query = AuditQuery(package)
+                assertion_index = load_assertion_index(package)
+
+                audit_summary = query.get_rule_trace_summary(rule_run_id)
+                audit_narrative = query.get_rule_trace_narrative(rule_run_id)
+                self.assertEqual(audit_summary, summary)
+                self.assertEqual(audit_narrative, narrative)
+
+                for key, pred_id in (
+                    ("process:high_high_temperature:0", PROCESS_HIGH_HIGH_TEMPERATURE_PRED_ID),
+                    ("process:shutdown_alarm_active:4", PROCESS_SHUTDOWN_ALARM_ACTIVE_PRED_ID),
+                    ("process:shutdown_interlock_armed:5", PROCESS_SHUTDOWN_INTERLOCK_ARMED_PRED_ID),
+                    ("process:manual_override_cleared:6", PROCESS_MANUAL_OVERRIDE_CLEARED_PRED_ID),
+                ):
+                    detail = assertion_index.get_assertion_detail(assertion_ids[key])
+                    self.assertIsNotNone(detail)
+                    assert detail is not None
+                    self.assertEqual(detail["claim"]["pred_id"], pred_id)
+
+                with TemporaryDirectory() as out_dir:
+                    site_manifest = render_audit_static_site(package_dir, out_dir)
+                    self.assertEqual(site_manifest["rule_trace_count"], 1)
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    self.assertTrue(rule_trace_page.exists())
+                    html = rule_trace_page.read_text(encoding="utf-8")
+                    self.assertIn("q.process_shutdown_required_walkthrough", html)
+                    self.assertIn(
+                        "Predicate process:shutdown_interlock_armed was witnessed by 1 assertion(s) across 1 invocation(s).",
+                        html,
+                    )
+                    self.assertIn(
+                        "Predicate process:manual_override_cleared was witnessed by 1 assertion(s) across 1 invocation(s).",
+                        html,
+                    )
+                    self.assertIn(assertion_ids["process:shutdown_interlock_armed:5"], html)
+                    self.assertIn(assertion_ids["process:manual_override_cleared:6"], html)
+
+                    for key in (
+                        "process:high_high_temperature:0",
+                        "process:temperature_shutdown_threshold:1",
+                        "process:high_high_pressure:2",
+                        "process:pressure_shutdown_threshold:3",
+                        "process:shutdown_alarm_active:4",
+                        "process:shutdown_interlock_armed:5",
+                        "process:manual_override_cleared:6",
+                    ):
+                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        self.assertTrue(assertion_page.exists())
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
     def test_runtime_explain_ref_candidate_degraded_for_engine_and_legacy_none(self) -> None:
         sdk = SDKStore([User])
         refs = _seed_users_for_syntax_matrix(sdk)
@@ -4241,6 +4477,13 @@ AML_WINDOWED_STRUCTURING_SIGNAL_PRED_ID = "aml:windowed_structuring_signal"
 AML_HIGH_RISK_OUTFLOW_SIGNAL_PRED_ID = "aml:high_risk_outflow_signal"
 AML_TRIGGER_SCORE_PPM_PRED_ID = "aml:trigger_score_ppm"
 AML_TRIGGER_SCORE_THRESHOLD_PPM_PRED_ID = "aml:trigger_score_threshold_ppm"
+PROCESS_HIGH_HIGH_TEMPERATURE_PRED_ID = "process:high_high_temperature"
+PROCESS_TEMPERATURE_SHUTDOWN_THRESHOLD_PRED_ID = "process:temperature_shutdown_threshold"
+PROCESS_HIGH_HIGH_PRESSURE_PRED_ID = "process:high_high_pressure"
+PROCESS_PRESSURE_SHUTDOWN_THRESHOLD_PRED_ID = "process:pressure_shutdown_threshold"
+PROCESS_SHUTDOWN_ALARM_ACTIVE_PRED_ID = "process:shutdown_alarm_active"
+PROCESS_SHUTDOWN_INTERLOCK_ARMED_PRED_ID = "process:shutdown_interlock_armed"
+PROCESS_MANUAL_OVERRIDE_CLEARED_PRED_ID = "process:manual_override_cleared"
 
 
 def _aml_case_review_schema_ir() -> dict[str, Any]:
@@ -4401,6 +4644,97 @@ def _aml_aggregation_materialization_schema_ir() -> dict[str, Any]:
     ]
     existing = {pred.get("pred_id") for pred in predicates if isinstance(pred, dict)}
     for predicate in aml_predicates:
+        pred_id = predicate["pred_id"]
+        if pred_id not in existing:
+            predicates.append(predicate)
+            existing.add(pred_id)
+        if pred_id not in projection_predicates:
+            projection_predicates.append(pred_id)
+    return schema_ir
+
+
+def _process_safety_shutdown_schema_ir() -> dict[str, Any]:
+    schema_ir = copy.deepcopy(_schema_ir())
+    predicates = schema_ir["predicates"]
+    projection_predicates = schema_ir["projection"]["predicates"]
+    process_predicates = [
+        {
+            "pred_id": PROCESS_HIGH_HIGH_TEMPERATURE_PRED_ID,
+            "owner_type": "process_unit",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "unit_ref", "type_domain": "entity_ref"},
+                {"name": "temperature_c", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": PROCESS_TEMPERATURE_SHUTDOWN_THRESHOLD_PRED_ID,
+            "owner_type": "process_unit",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "unit_ref", "type_domain": "entity_ref"},
+                {"name": "threshold_c", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": PROCESS_HIGH_HIGH_PRESSURE_PRED_ID,
+            "owner_type": "process_unit",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "unit_ref", "type_domain": "entity_ref"},
+                {"name": "pressure_kpa", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": PROCESS_PRESSURE_SHUTDOWN_THRESHOLD_PRED_ID,
+            "owner_type": "process_unit",
+            "arity": 2,
+            "arg_specs": [
+                {"name": "unit_ref", "type_domain": "entity_ref"},
+                {"name": "threshold_kpa", "type_domain": "int"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0, 1],
+        },
+        {
+            "pred_id": PROCESS_SHUTDOWN_ALARM_ACTIVE_PRED_ID,
+            "owner_type": "process_unit",
+            "arity": 1,
+            "arg_specs": [
+                {"name": "unit_ref", "type_domain": "entity_ref"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0],
+        },
+        {
+            "pred_id": PROCESS_SHUTDOWN_INTERLOCK_ARMED_PRED_ID,
+            "owner_type": "process_unit",
+            "arity": 1,
+            "arg_specs": [
+                {"name": "unit_ref", "type_domain": "entity_ref"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0],
+        },
+        {
+            "pred_id": PROCESS_MANUAL_OVERRIDE_CLEARED_PRED_ID,
+            "owner_type": "process_unit",
+            "arity": 1,
+            "arg_specs": [
+                {"name": "unit_ref", "type_domain": "entity_ref"},
+            ],
+            "cardinality": "multi",
+            "group_key_indexes": [0],
+        },
+    ]
+    existing = {pred.get("pred_id") for pred in predicates if isinstance(pred, dict)}
+    for predicate in process_predicates:
         pred_id = predicate["pred_id"]
         if pred_id not in existing:
             predicates.append(predicate)
