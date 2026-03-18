@@ -4097,6 +4097,482 @@ Derivation(
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
 
+    def test_conflicting_multi_note_evidence_walkthrough_retains_non_witnessed_side(self) -> None:
+        schema_ir = _conflicting_multi_note_evidence_schema_ir()
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            refs = {
+                "account": encode_idref_v1("AMLAccount", [("account_id", "string", "ACCT-CONFLICT-001")]),
+                "beneficiary": encode_idref_v1("AMLBeneficiary", [("beneficiary_id", "string", "BEN-CONFLICT-001")]),
+                "device": encode_idref_v1("AMLDevice", [("device_id", "string", "DEV-CONFLICT-001")]),
+                "note_a": encode_idref_v1("AMLInvestigatorNote", [("note_id", "string", "NOTE-A")]),
+                "note_b": encode_idref_v1("AMLInvestigatorNote", [("note_id", "string", "NOTE-B")]),
+            }
+            note_fixtures = [
+                {
+                    "note_id": "NOTE-A",
+                    "text": (
+                        "Investigator note NOTE-A for account ACCT-CONFLICT-001: between 100 and 300 "
+                        "the account sent three rapid outbound payments to beneficiary BEN-CONFLICT-001. "
+                        "The destination was described as a \"low-risk corridor\". "
+                        "Background note: caller remained cooperative."
+                    ),
+                    "note_ref": refs["note_a"],
+                },
+                {
+                    "note_id": "NOTE-B",
+                    "text": (
+                        "Investigator note NOTE-B for account ACCT-CONFLICT-001: the same beneficiary "
+                        "BEN-CONFLICT-001 was described as an \"elevated-risk corridor\". Activity was "
+                        "observed from device DEV-CONFLICT-001 and the profile appears off from the "
+                        "recorded beneficial owner. Evaluate at 200. Current trigger score 910000 "
+                        "against review floor 900000."
+                    ),
+                    "note_ref": refs["note_b"],
+                },
+            ]
+
+            def extract_conflicting_multi_notes(
+                notes: list[dict[str, Any]],
+            ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+                extracted: list[dict[str, Any]] = []
+                extraction_meta = {
+                    "conflict_detected": {},
+                    "excerpt_map": {},
+                    "skipped_phrases": {},
+                }
+
+                for note in notes:
+                    text = note["text"]
+                    note_key = note["note_id"]
+                    note_ref = note["note_ref"]
+                    if (
+                        "between 100 and 300" in text
+                        and "three rapid outbound payments" in text
+                    ):
+                        extracted.append(
+                            {
+                                "key": f"review_window_summary:{note_key}",
+                                "pred_id": MULTI_NOTE_EXTRACTED_REVIEW_WINDOW_SUMMARY_PRED_ID,
+                                "e_ref": refs["account"],
+                                "rest_terms": [
+                                    ("time", 100),
+                                    ("time", 300),
+                                    ("time", 200),
+                                    ("int", 3),
+                                    ("entity_ref", note_ref),
+                                ],
+                            }
+                        )
+                        extraction_meta["excerpt_map"][f"review_window_phrase:{note_key}"] = (
+                            "between 100 and 300 the account sent three rapid outbound payments"
+                        )
+                    if "low-risk corridor" in text:
+                        extracted.append(
+                            {
+                                "key": f"beneficiary_risk_low:{note_key}",
+                                "pred_id": MULTI_NOTE_EXTRACTED_BENEFICIARY_RISK_PRED_ID,
+                                "e_ref": refs["account"],
+                                "rest_terms": [
+                                    ("entity_ref", refs["beneficiary"]),
+                                    ("string", "low-risk-jurisdiction"),
+                                    ("entity_ref", note_ref),
+                                ],
+                            }
+                        )
+                        extraction_meta["excerpt_map"][f"low_risk_phrase:{note_key}"] = "low-risk corridor"
+                    if "elevated-risk corridor" in text:
+                        extracted.append(
+                            {
+                                "key": f"beneficiary_risk_high:{note_key}",
+                                "pred_id": MULTI_NOTE_EXTRACTED_BENEFICIARY_RISK_PRED_ID,
+                                "e_ref": refs["account"],
+                                "rest_terms": [
+                                    ("entity_ref", refs["beneficiary"]),
+                                    ("string", "high-risk-jurisdiction"),
+                                    ("entity_ref", note_ref),
+                                ],
+                            }
+                        )
+                        extraction_meta["excerpt_map"][f"high_risk_phrase:{note_key}"] = "elevated-risk corridor"
+                    if "device DEV-CONFLICT-001" in text:
+                        extracted.append(
+                            {
+                                "key": f"shared_device_signal:{note_key}",
+                                "pred_id": MULTI_NOTE_EXTRACTED_SHARED_DEVICE_SIGNAL_PRED_ID,
+                                "e_ref": refs["account"],
+                                "rest_terms": [
+                                    ("entity_ref", refs["device"]),
+                                    ("entity_ref", note_ref),
+                                ],
+                            }
+                        )
+                    if "profile appears off from the recorded beneficial owner" in text:
+                        extracted.append(
+                            {
+                                "key": f"bo_mismatch_signal:{note_key}",
+                                "pred_id": MULTI_NOTE_EXTRACTED_BO_MISMATCH_SIGNAL_PRED_ID,
+                                "e_ref": refs["account"],
+                                "rest_terms": [
+                                    ("string", "beneficial_owner_mismatch"),
+                                    ("entity_ref", note_ref),
+                                ],
+                            }
+                        )
+                    if "trigger score 910000" in text:
+                        extracted.append(
+                            {
+                                "key": f"trigger_score_ppm:{note_key}",
+                                "pred_id": MULTI_NOTE_EXTRACTED_TRIGGER_SCORE_PPM_PRED_ID,
+                                "e_ref": refs["account"],
+                                "rest_terms": [
+                                    ("int", 910000),
+                                    ("entity_ref", note_ref),
+                                ],
+                            }
+                        )
+                        extraction_meta["excerpt_map"][f"trigger_score_phrase:{note_key}"] = "trigger score 910000"
+                    if "review floor 900000" in text:
+                        extracted.append(
+                            {
+                                "key": f"trigger_score_threshold_ppm:{note_key}",
+                                "pred_id": MULTI_NOTE_EXTRACTED_TRIGGER_SCORE_THRESHOLD_PPM_PRED_ID,
+                                "e_ref": refs["account"],
+                                "rest_terms": [
+                                    ("int", 900000),
+                                    ("entity_ref", note_ref),
+                                ],
+                            }
+                        )
+                    if "caller remained cooperative" in text:
+                        extraction_meta["skipped_phrases"][f"background:{note_key}"] = {
+                            "raw": "caller remained cooperative",
+                            "status": "explicit_skip_background",
+                        }
+
+                extraction_meta["conflict_detected"]["jurisdiction_conflict"] = {
+                    "keys": ["beneficiary_risk_low:NOTE-A", "beneficiary_risk_high:NOTE-B"],
+                    "status": "retained_conflict",
+                }
+                return extracted, extraction_meta
+
+            def materialize_conflict_trigger_support(
+                extracted_rows: list[dict[str, Any]],
+            ) -> list[dict[str, Any]]:
+                extracted_by_key = {row["key"]: row for row in extracted_rows}
+                review_window_terms = extracted_by_key["review_window_summary:NOTE-A"]["rest_terms"]
+                high_risk_terms = extracted_by_key["beneficiary_risk_high:NOTE-B"]["rest_terms"]
+                return [
+                    {
+                        "key": "trigger_evaluation_time",
+                        "pred_id": AML_TRIGGER_EVALUATION_TIME_PRED_ID,
+                        "e_ref": refs["account"],
+                        "rest_terms": [review_window_terms[2]],
+                    },
+                    {
+                        "key": "windowed_structuring_signal",
+                        "pred_id": AML_WINDOWED_STRUCTURING_SIGNAL_PRED_ID,
+                        "e_ref": refs["account"],
+                        "rest_terms": [
+                            review_window_terms[0],
+                            review_window_terms[1],
+                            review_window_terms[3],
+                        ],
+                    },
+                    {
+                        "key": "high_risk_outflow_signal",
+                        "pred_id": AML_HIGH_RISK_OUTFLOW_SIGNAL_PRED_ID,
+                        "e_ref": refs["account"],
+                        "rest_terms": high_risk_terms[:2],
+                    },
+                    {
+                        "key": "shared_device_signal_materialized",
+                        "pred_id": AML_SHARED_DEVICE_SIGNAL_PRED_ID,
+                        "e_ref": refs["account"],
+                        "rest_terms": extracted_by_key["shared_device_signal:NOTE-B"]["rest_terms"][:1],
+                    },
+                    {
+                        "key": "bo_mismatch_signal_materialized",
+                        "pred_id": AML_BO_MISMATCH_SIGNAL_PRED_ID,
+                        "e_ref": refs["account"],
+                        "rest_terms": extracted_by_key["bo_mismatch_signal:NOTE-B"]["rest_terms"][:1],
+                    },
+                    {
+                        "key": "trigger_score_ppm_materialized",
+                        "pred_id": AML_TRIGGER_SCORE_PPM_PRED_ID,
+                        "e_ref": refs["account"],
+                        "rest_terms": extracted_by_key["trigger_score_ppm:NOTE-B"]["rest_terms"][:1],
+                    },
+                    {
+                        "key": "trigger_score_threshold_ppm_materialized",
+                        "pred_id": AML_TRIGGER_SCORE_THRESHOLD_PPM_PRED_ID,
+                        "e_ref": refs["account"],
+                        "rest_terms": extracted_by_key["trigger_score_threshold_ppm:NOTE-B"]["rest_terms"][:1],
+                    },
+                ]
+
+            extracted_facts, extraction_meta = extract_conflicting_multi_notes(note_fixtures)
+            materialized_facts = materialize_conflict_trigger_support(extracted_facts)
+            extracted_by_key = {row["key"]: row for row in extracted_facts}
+
+            self.assertIn(extraction_meta["excerpt_map"]["low_risk_phrase:NOTE-A"], note_fixtures[0]["text"])
+            self.assertIn(extraction_meta["excerpt_map"]["high_risk_phrase:NOTE-B"], note_fixtures[1]["text"])
+            self.assertEqual(
+                extracted_by_key["beneficiary_risk_low:NOTE-A"]["rest_terms"][1],
+                ("string", "low-risk-jurisdiction"),
+            )
+            self.assertEqual(
+                extracted_by_key["beneficiary_risk_high:NOTE-B"]["rest_terms"][1],
+                ("string", "high-risk-jurisdiction"),
+            )
+            self.assertEqual(
+                extracted_by_key["beneficiary_risk_low:NOTE-A"]["rest_terms"][2],
+                ("entity_ref", refs["note_a"]),
+            )
+            self.assertEqual(
+                extracted_by_key["beneficiary_risk_high:NOTE-B"]["rest_terms"][2],
+                ("entity_ref", refs["note_b"]),
+            )
+            self.assertNotEqual(
+                extracted_by_key["beneficiary_risk_low:NOTE-A"]["rest_terms"][2],
+                extracted_by_key["beneficiary_risk_high:NOTE-B"]["rest_terms"][2],
+            )
+            self.assertEqual(
+                extraction_meta["conflict_detected"]["jurisdiction_conflict"],
+                {
+                    "keys": ["beneficiary_risk_low:NOTE-A", "beneficiary_risk_high:NOTE-B"],
+                    "status": "retained_conflict",
+                },
+            )
+            self.assertEqual(
+                extraction_meta["skipped_phrases"]["background:NOTE-A"],
+                {
+                    "raw": "caller remained cooperative",
+                    "status": "explicit_skip_background",
+                },
+            )
+
+            assertion_ids: dict[str, str] = {}
+            for row in extracted_facts + materialized_facts:
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": row["pred_id"],
+                        "e_ref": row["e_ref"],
+                        "rest_terms": [[tag, value] for tag, value in row["rest_terms"]],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+                assertion_ids[row["key"]] = write_resp["write"]["assertion_id"]
+
+            rule_resp = run_runtime_rule(
+                session_id,
+                {
+                    "rule": {
+                        "rule_id": "q.conflicting_multi_note_evidence_walkthrough",
+                        "version": "1.0.0",
+                        "select": [
+                            "$account",
+                            "$beneficiary",
+                            "$jurisdiction",
+                            "$window_start_ts",
+                            "$window_end_ts",
+                            "$eval_ts",
+                            "$score_ppm",
+                        ],
+                        "where": [
+                            ["pred", AML_TRIGGER_EVALUATION_TIME_PRED_ID, ["$account", "$eval_ts"]],
+                            [
+                                "pred",
+                                AML_WINDOWED_STRUCTURING_SIGNAL_PRED_ID,
+                                ["$account", "$window_start_ts", "$window_end_ts", "$structuring_tx_count"],
+                            ],
+                            ["le", "$window_start_ts", "$eval_ts"],
+                            ["le", "$eval_ts", "$window_end_ts"],
+                            [
+                                "pred",
+                                AML_HIGH_RISK_OUTFLOW_SIGNAL_PRED_ID,
+                                ["$account", "$beneficiary", "$jurisdiction"],
+                            ],
+                            ["pred", AML_SHARED_DEVICE_SIGNAL_PRED_ID, ["$account", "$device"]],
+                            ["pred", AML_BO_MISMATCH_SIGNAL_PRED_ID, ["$account", "$mismatch_kind"]],
+                            ["pred", AML_TRIGGER_SCORE_PPM_PRED_ID, ["$account", "$score_ppm"]],
+                            [
+                                "pred",
+                                AML_TRIGGER_SCORE_THRESHOLD_PPM_PRED_ID,
+                                ["$account", "$score_threshold_ppm"],
+                            ],
+                            ["ge", "$score_ppm", "$score_threshold_ppm"],
+                        ],
+                    },
+                    "capture_trace": True,
+                },
+            )
+            self.assertTrue(rule_resp["ok"])
+            rule_run_id = rule_resp["result"]["trace"]["rule_run_id"]
+
+            raw_resp = explain_runtime_ref(session_id, {"kind": "rule_run", "id": rule_run_id})
+            summary_resp = explain_runtime_summary(session_id, {"kind": "rule_run", "id": rule_run_id})
+            narrative_resp = explain_runtime_narrative(session_id, {"kind": "rule_run", "id": rule_run_id})
+            nl_resp = explain_runtime_nl(session_id, {"kind": "rule_run", "id": rule_run_id})
+            self.assertTrue(raw_resp["ok"])
+            self.assertTrue(summary_resp["ok"])
+            self.assertTrue(narrative_resp["ok"])
+            self.assertTrue(nl_resp["ok"])
+
+            raw_explain = raw_resp["explain"]
+            summary = summary_resp["summary"]
+            narrative = narrative_resp["narrative"]
+            explain_nl = nl_resp["explain_nl"]
+
+            self.assertEqual(
+                raw_explain["root_rule"]["rule_id"],
+                "q.conflicting_multi_note_evidence_walkthrough",
+            )
+            self.assertEqual(
+                raw_explain["root_rows"],
+                [[refs["account"], refs["beneficiary"], "high-risk-jurisdiction", 100, 300, 200, 910000]],
+            )
+
+            invocation = next(
+                inv
+                for inv in raw_explain["invocations"]
+                if inv["rule"]["rule_id"] == "q.conflicting_multi_note_evidence_walkthrough"
+            )
+            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            self.assertEqual(
+                pred_atom_keys,
+                {
+                    "b0.a0:aml:trigger_evaluation_time",
+                    "b0.a1:aml:windowed_structuring_signal",
+                    "b0.a4:aml:high_risk_outflow_signal",
+                    "b0.a5:aml:shared_device_signal",
+                    "b0.a6:aml:bo_mismatch_signal",
+                    "b0.a7:aml:trigger_score_ppm",
+                    "b0.a8:aml:trigger_score_threshold_ppm",
+                },
+            )
+            self.assertEqual(len(invocation["pred_witnesses"]), 7)
+            self.assertEqual(len(invocation["non_fact_steps"]), 3)
+            self.assertFalse(any(":notes:" in key for key in pred_atom_keys))
+
+            witness_groups = {row["pred_id"]: row for row in summary["predicate_witness_groups"]}
+            self.assertNotIn(MULTI_NOTE_EXTRACTED_BENEFICIARY_RISK_PRED_ID, witness_groups)
+            self.assertIn(AML_HIGH_RISK_OUTFLOW_SIGNAL_PRED_ID, witness_groups)
+            self.assertEqual(summary["root_row_count"], 1)
+            self.assertEqual(summary["invocation_count"], 1)
+            self.assertEqual(len(summary["witness_assertion_ids"]), 7)
+
+            self.assertIn(
+                "Predicate aml:high_risk_outflow_signal was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+            self.assertNotIn(
+                "Predicate notes:beneficiary_risk_extracted was witnessed by 1 assertion(s) across 1 invocation(s).",
+                narrative["predicate_lines"],
+            )
+
+            self.assertEqual(
+                explain_nl["headline"],
+                "Rule q.conflicting_multi_note_evidence_walkthrough@1.0.0 matched 1 root row(s) across 1 invocation(s).",
+            )
+            self.assertTrue(any("aml:high_risk_outflow_signal" in paragraph for paragraph in explain_nl["paragraphs"]))
+            self.assertFalse(any("notes:" in paragraph for paragraph in explain_nl["paragraphs"]))
+            lowered_nl_paragraphs = [paragraph.lower() for paragraph in explain_nl["paragraphs"]]
+            self.assertFalse(any("confirmed" in paragraph for paragraph in lowered_nl_paragraphs))
+            self.assertFalse(any("certain" in paragraph for paragraph in lowered_nl_paragraphs))
+            self.assertFalse(any("verified" in paragraph for paragraph in lowered_nl_paragraphs))
+            self.assertFalse(any("resolved" in paragraph for paragraph in lowered_nl_paragraphs))
+            self.assertFalse(any("resolution" in paragraph for paragraph in lowered_nl_paragraphs))
+            self.assertFalse(any("judgment" in paragraph for paragraph in lowered_nl_paragraphs))
+
+            with TemporaryDirectory() as package_dir:
+                session = _require_session(session_id)
+                export_package(session.store, Path(package_dir), ExportOptions(package_kind="audit"))
+                package = load_audit_package(package_dir)
+                query = AuditQuery(package)
+                assertion_index = load_assertion_index(package)
+
+                audit_summary = query.get_rule_trace_summary(rule_run_id)
+                audit_narrative = query.get_rule_trace_narrative(rule_run_id)
+                self.assertEqual(audit_summary, summary)
+                self.assertEqual(audit_narrative, narrative)
+
+                extracted_low_detail = assertion_index.get_assertion_detail(assertion_ids["beneficiary_risk_low:NOTE-A"])
+                extracted_high_detail = assertion_index.get_assertion_detail(assertion_ids["beneficiary_risk_high:NOTE-B"])
+                extracted_window_detail = assertion_index.get_assertion_detail(assertion_ids["review_window_summary:NOTE-A"])
+                materialized_risk_detail = assertion_index.get_assertion_detail(assertion_ids["high_risk_outflow_signal"])
+                self.assertIsNotNone(extracted_low_detail)
+                self.assertIsNotNone(extracted_high_detail)
+                self.assertIsNotNone(extracted_window_detail)
+                self.assertIsNotNone(materialized_risk_detail)
+                assert extracted_low_detail is not None
+                assert extracted_high_detail is not None
+                assert extracted_window_detail is not None
+                assert materialized_risk_detail is not None
+                self.assertEqual(extracted_low_detail["claim"]["pred_id"], MULTI_NOTE_EXTRACTED_BENEFICIARY_RISK_PRED_ID)
+                self.assertEqual(extracted_high_detail["claim"]["pred_id"], MULTI_NOTE_EXTRACTED_BENEFICIARY_RISK_PRED_ID)
+                self.assertEqual(extracted_low_detail["claim_args"][1]["tag"], "string")
+                self.assertEqual(extracted_low_detail["claim_args"][1]["val"], "low-risk-jurisdiction")
+                self.assertEqual(extracted_low_detail["claim_args"][2]["tag"], "entity_ref")
+                self.assertEqual(extracted_low_detail["claim_args"][2]["val"], refs["note_a"])
+                self.assertEqual(extracted_high_detail["claim_args"][1]["tag"], "string")
+                self.assertEqual(extracted_high_detail["claim_args"][1]["val"], "high-risk-jurisdiction")
+                self.assertEqual(extracted_high_detail["claim_args"][2]["tag"], "entity_ref")
+                self.assertEqual(extracted_high_detail["claim_args"][2]["val"], refs["note_b"])
+                self.assertEqual(extracted_window_detail["claim_args"][4]["val"], refs["note_a"])
+                self.assertEqual(materialized_risk_detail["claim"]["pred_id"], AML_HIGH_RISK_OUTFLOW_SIGNAL_PRED_ID)
+                self.assertEqual(materialized_risk_detail["claim_args"][1]["tag"], "string")
+                self.assertEqual(materialized_risk_detail["claim_args"][1]["val"], "high-risk-jurisdiction")
+
+                with TemporaryDirectory() as out_dir:
+                    site_manifest = render_audit_static_site(package_dir, out_dir)
+                    self.assertEqual(site_manifest["rule_trace_count"], 1)
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    self.assertTrue(rule_trace_page.exists())
+                    html = rule_trace_page.read_text(encoding="utf-8")
+                    self.assertIn("q.conflicting_multi_note_evidence_walkthrough", html)
+                    self.assertIn(
+                        "Predicate aml:high_risk_outflow_signal was witnessed by 1 assertion(s) across 1 invocation(s).",
+                        html,
+                    )
+                    self.assertNotIn("Predicate notes:beneficiary_risk_extracted was witnessed", html)
+                    lowered_html = html.lower()
+                    self.assertNotIn("confirmed", lowered_html)
+                    self.assertNotIn("certain", lowered_html)
+                    self.assertNotIn("verified", lowered_html)
+                    self.assertNotIn("resolved", lowered_html)
+                    self.assertNotIn("resolution", lowered_html)
+                    self.assertNotIn("judgment", lowered_html)
+                    self.assertIn(assertion_ids["high_risk_outflow_signal"], html)
+
+                    for key in (
+                        "review_window_summary:NOTE-A",
+                        "beneficiary_risk_low:NOTE-A",
+                        "beneficiary_risk_high:NOTE-B",
+                        "shared_device_signal:NOTE-B",
+                        "bo_mismatch_signal:NOTE-B",
+                        "trigger_score_ppm:NOTE-B",
+                        "trigger_score_threshold_ppm:NOTE-B",
+                        "trigger_evaluation_time",
+                        "windowed_structuring_signal",
+                        "high_risk_outflow_signal",
+                        "shared_device_signal_materialized",
+                        "bo_mismatch_signal_materialized",
+                        "trigger_score_ppm_materialized",
+                        "trigger_score_threshold_ppm_materialized",
+                    ):
+                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        self.assertTrue(assertion_page.exists())
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
     def test_process_safety_shutdown_walkthrough_reuses_five_layer_explain_delivery(self) -> None:
         schema_ir = _process_safety_shutdown_schema_ir()
 
@@ -7132,6 +7608,10 @@ def _correlated_multi_note_review_schema_ir() -> dict[str, Any]:
         if pred_id not in projection_predicates:
             projection_predicates.append(pred_id)
     return schema_ir
+
+
+def _conflicting_multi_note_evidence_schema_ir() -> dict[str, Any]:
+    return _correlated_multi_note_review_schema_ir()
 
 
 def _seed_users_for_syntax_matrix(sdk: SDKStore) -> dict[str, str]:
