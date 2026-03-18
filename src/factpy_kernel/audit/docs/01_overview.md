@@ -29,6 +29,7 @@
   - 从 audit package 目录读取数据
 - `AuditQuery`
   - 结构化查询入口
+  - 当前也提供 rule trace artifact 的离线查询
 - `extend_schema_ir_with_ecss_vcd_predicates(...)`
   - 为 `ECSS-M-ST-10` 风格 requirement/compliance facts 提供最小 predicate schema helper
   - 当前由 `factpy_kernel.ecss.vcd` 拥有，`audit` 侧仅保留兼容 re-export
@@ -65,6 +66,11 @@
    - `list_decisions(...)`
    - `list_failures(...)`
    - `list_compliance_matrix(...)`
+   - `list_rule_traces(...)`
+   - `get_rule_trace(rule_run_id)`
+   - `list_rule_trace_summaries(...)`
+   - `get_rule_trace_summary(rule_run_id)`
+   - `get_rule_trace_narrative(rule_run_id)`
    - `get_mapping_resolution(...)`
    - `list_authoring_apply_events(...)`
 
@@ -95,6 +101,28 @@
 - `compliance_matrix.html`
   - 以离线 compliance matrix 表格形式展示 requirement、status、milestone、verification methods、RID links
   - 每一行通过 assertion id 链接到既有 assertion detail 页面
+- `rule_traces.html`
+  - 作为 `rule_run_id` proof-entry index
+- `rule_traces/{rule_run_id}.html`
+  - 作为单条 rule trace 的 shareable detail page
+  - 页面顶部包含从 `rule_run_summary` 纯派生的 deterministic narrative block
+  - 页面会展示 root rule、invocations、`pred_witnesses`、`non_fact_steps`
+  - witness assertion 仍下钻到既有 assertion detail 页面
+
+与 static HTML 并行，当前 audit 侧也已经提供 machine-readable `rule_run_summary` derived surface：
+
+- `AuditQuery.get_rule_trace_summary(rule_run_id)`
+- `AuditQuery.list_rule_trace_summaries(...)`
+- `build_rule_trace_summary_dto(...)`
+- `build_rule_trace_summary_list_dto(...)`
+
+在此基础上，当前 audit 侧也已提供 machine-readable `rule_run_narrative` surface：
+
+- `AuditQuery.get_rule_trace_narrative(rule_run_id)`
+- `build_rule_trace_narrative_dto(...)`
+
+这组 summary 与 runtime `rule_run_summary` 保持同构，且只从现有 raw trace payload 派生。
+这组 narrative 与 runtime `rule_run_narrative` 保持同构，且只从既有 `rule_run_summary` 纯派生。
 
 ## 4. 与其他层的边界
 
@@ -109,6 +137,7 @@
   - audit 复用这组 shared constants/helper，但 matrix row 组装仍留在 `audit`
 - `explainability`
   - compliance matrix 只负责 requirement-level delivery；更细的 assertion/support 证据下钻仍由 assertion detail / explainability substrate 承担
+  - rule trace static delivery 只消费 package 内已有 `RuleTraceArtifact`，不新增 live explain endpoint
 
 ## 5. 当前限制
 
@@ -116,7 +145,8 @@
 - 没有直接把 live runtime store 映射成 audit query 的入口
 - 审计能力依赖导出的 package 是否完整包含所需 ledger / decision / authoring event 信息
 - requirement/compliance matrix 当前是 offline-query-first 形态，不提供 live service endpoint
-- static UI 对 compliance matrix 的支持当前是单页总览，不包含 per-requirement detail page 或额外搜索 facet
+- static UI 的 proof-entry 当前是 `rule_run_id` page，不是递归 evidence tree 或 candidate-level stable proof id
+- static UI 对 compliance matrix 的支持当前仍是单页总览，不包含 per-requirement detail page 或额外搜索 facet
 
 ## 6. Audit Package Artifact Files
 
@@ -130,3 +160,13 @@
   - payload 复用 `RuleTraceArtifact` 的 JSON-friendly shape
 
 这些文件当前是全量导出，不做引用子集裁剪；它们的职责是让离线 audit consumer 能读取 explain carrier，而不是提供 online durable readback。
+
+当前 `audit.reader` / `AuditQuery` / static UI 已统一消费 `rule_trace_artifacts.jsonl`：
+
+- reader 读取 JSONL rows（旧 package 若没有该文件则返回空集）
+- query 可按 `rule_run_id` 离线查询
+- query / dto 也可从同一份 raw rows 派生 `rule_run_summary`
+- query / dto 也可从同一份 summary surface 继续派生 `rule_run_narrative`
+- static site 可把 `rule_run_id` 渲染成可分享 proof-entry page，并通过 audit narrative DTO 在页面顶部附加 deterministic rule-run narrative
+
+当前不会新增 `rule_trace_summary` 专用 artifact 文件；summary 是 read/query 层的纯派生面，不是新的 durable package contract。

@@ -51,7 +51,8 @@ src/factpy_kernel/core/
 | `rules.where_ast*` | where AST 解析与校验 | `parse_where_ir_to_ast`, `validate_where_ast` |
 | `rules.where_eval` | where 解释执行（native 路径） | `evaluate_where` |
 | `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef 执行 | `run_rule`, `run_rule_with_trace` |
-| `rules._trace` | rule runtime trace carrier 与序列化 | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict` |
+| `rules._trace` | rule runtime trace carrier、序列化与 summary derivation | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict`, `summarize_rule_trace_artifact_dict` |
+| `rules._trace_narrative` | rule-run summary 上的 deterministic narrative rendering | `render_rule_run_narrative` |
 | `derivation.candidates` | 候选结构与 digest/key 计算 | `CandidateSet`, `make_candidate` |
 | `derivation.accept` | candidate accept 与 batch accept_many | `accept_candidate_set`, `accept_many_candidate_sets` |
 | `mapping.canon` | mapping 冲突解析与 tie-break | `resolve_mapping_predicate` |
@@ -137,6 +138,7 @@ flowchart LR
 - `T1` temporal checks 不新增 trace carrier 字段：fact-backed temporal anchors 仍走 `pred_witnesses`，比较步骤的时间绑定值继续走 `non_fact_steps.details.binding`
 - `Scenario A` threshold-bearing uncertainty checks 同样不新增 trace carrier 字段：测量值/阈值 assertion 进入 `pred_witnesses`，比较绑定值继续走 `non_fact_steps.details.binding`
 - `RuleTraceArtifact` 与 derivation `SupportArtifact` 保持分离
+- `rule_run_summary` 之上的 deterministic narrative 由 `rules._trace_narrative` 统一拥有；presentation 层不应各自复制 narrative 模板
 
 ```mermaid
 flowchart LR

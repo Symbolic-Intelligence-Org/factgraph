@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
+from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
+
 from .assertions import AuditAssertionReadError, load_assertion_index
 from .compliance import AuditComplianceError, build_compliance_matrix_rows
 from .reader import AuditPackageData
@@ -224,6 +227,59 @@ class AuditQuery:
         if milestone is not None:
             rows = [row for row in rows if row.get("review_milestone") == milestone]
         return rows
+
+    def list_rule_traces(
+        self,
+        *,
+        root_rule_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if root_rule_id is not None and (not isinstance(root_rule_id, str) or not root_rule_id):
+            raise AuditQueryError("root_rule_id must be non-empty string when provided")
+        rows = [dict(row) for row in self.package.rule_trace_artifacts]
+        if root_rule_id is not None:
+            rows = [
+                row
+                for row in rows
+                if isinstance(row.get("root_rule"), dict) and row["root_rule"].get("rule_id") == root_rule_id
+            ]
+        return sorted(rows, key=lambda row: str(row.get("rule_run_id", "")))
+
+    def list_rule_trace_summaries(
+        self,
+        *,
+        root_rule_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        try:
+            rows = self.list_rule_traces(root_rule_id=root_rule_id)
+            return [summarize_rule_trace_artifact_dict(row) for row in rows]
+        except ValueError as exc:
+            raise AuditQueryError(str(exc)) from exc
+
+    def get_rule_trace(self, rule_run_id: str) -> dict[str, Any] | None:
+        if not isinstance(rule_run_id, str) or not rule_run_id:
+            raise AuditQueryError("rule_run_id must be non-empty string")
+        for row in self.package.rule_trace_artifacts:
+            if row.get("rule_run_id") == rule_run_id:
+                return dict(row)
+        return None
+
+    def get_rule_trace_summary(self, rule_run_id: str) -> dict[str, Any] | None:
+        try:
+            trace = self.get_rule_trace(rule_run_id)
+            if trace is None:
+                return None
+            return summarize_rule_trace_artifact_dict(trace)
+        except ValueError as exc:
+            raise AuditQueryError(str(exc)) from exc
+
+    def get_rule_trace_narrative(self, rule_run_id: str) -> dict[str, Any] | None:
+        try:
+            summary = self.get_rule_trace_summary(rule_run_id)
+            if summary is None:
+                return None
+            return render_rule_run_narrative(summary, locale="en")
+        except ValueError as exc:
+            raise AuditQueryError(str(exc)) from exc
 
     @staticmethod
     def _row_has_run_id(row: dict[str, Any], run_id: str) -> bool:

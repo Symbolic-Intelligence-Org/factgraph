@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from typing import Any
 import unittest
 from unittest.mock import patch
+from urllib.parse import quote
 
 from fastapi.testclient import TestClient
 
@@ -17,6 +18,9 @@ from factpy_kernel.audit import (
     ECSS_REQUIREMENT_RID_PRED_ID,
     ECSS_REVIEW_MILESTONE_PRED_ID,
     ECSS_VERIFICATION_METHOD_PRED_ID,
+    build_rule_trace_narrative_dto,
+    build_rule_trace_summary_dto,
+    build_rule_trace_summary_list_dto,
     build_compliance_matrix_dto,
     extend_schema_ir_with_ecss_vcd_predicates,
     load_audit_package,
@@ -62,7 +66,9 @@ from factpy_kernel.core.rules._trace import (
     RuleTraceRuleRefLink,
     rule_trace_artifact_from_dict,
     rule_trace_artifact_to_dict,
+    summarize_rule_trace_artifact_dict,
 )
+from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
 from factpy_kernel.core.rules.where_eval import _plan_body_atoms
 from factpy_kernel.core.store import Store, register_engine_evaluator
 import factpy_kernel.core.store._builders as store_builders
@@ -103,8 +109,10 @@ from factpy_kernel.service.runtime_v1 import (
     _require_session,
     close_runtime_session,
     evaluate_runtime_derivation,
+    explain_runtime_narrative,
     explain_runtime_ref,
     explain_runtime_rule_trace,
+    explain_runtime_summary,
     explain_runtime_support,
     open_runtime_session,
     project_runtime_view_facts,
@@ -1192,6 +1200,384 @@ Derivation(
             close_runtime_session(second_session_id)
             reset_runtime_sessions_for_tests()
 
+    def test_runtime_rule_run_explain_ref_is_canonical_and_locks_stable_shape(self) -> None:
+        schema_ir = extend_schema_ir_with_ecss_temporal_predicates(_schema_ir())
+        sdk = SDKStore([User], schema_ir=schema_ir)
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            for pred_id, time_value in (
+                (ECSS_OBLIGATION_TIMESTAMP_PRED_ID, 100),
+                (ECSS_WINDOW_START_PRED_ID, 80),
+            ):
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": pred_id,
+                        "e_ref": refs["u1"],
+                        "rest_terms": [["time", time_value]],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+            rule_resp = run_runtime_rule(
+                session_id,
+                {
+                    "rule": {
+                        "rule_id": "q.runtime_rule_run_contract",
+                        "version": "1.0.0",
+                        "select": ["$a", "$window_start_ts", "$event_ts"],
+                        "where": [
+                            ["pred", ECSS_OBLIGATION_TIMESTAMP_PRED_ID, ["$a", "$event_ts"]],
+                            ["pred", ECSS_WINDOW_START_PRED_ID, ["$a", "$window_start_ts"]],
+                            ["le", "$window_start_ts", "$event_ts"],
+                        ],
+                    },
+                    "capture_trace": True,
+                },
+            )
+            self.assertTrue(rule_resp["ok"])
+            rule_run_id = rule_resp["result"]["trace"]["rule_run_id"]
+
+            legacy_resp = explain_runtime_rule_trace(session_id, {"rule_run_id": rule_run_id})
+            canonical_resp = explain_runtime_ref(session_id, {"kind": "rule_run", "id": rule_run_id})
+
+            self.assertTrue(legacy_resp["ok"])
+            self.assertTrue(canonical_resp["ok"])
+            self.assertNotIn("kind", legacy_resp)
+            self.assertEqual(canonical_resp["kind"], "rule_run")
+            self.assertEqual(legacy_resp["meta"]["rule_run_id"], rule_run_id)
+            self.assertEqual(canonical_resp["meta"]["rule_run_id"], rule_run_id)
+            self.assertEqual(canonical_resp["explain"], legacy_resp["explain"])
+
+            explain = canonical_resp["explain"]
+            self.assertEqual(explain["rule_run_id"], rule_run_id)
+            self.assertEqual(
+                explain["root_rule"],
+                {"rule_id": "q.runtime_rule_run_contract", "version": "1.0.0"},
+            )
+            self.assertEqual(explain["select_vars"], ["$a", "$window_start_ts", "$event_ts"])
+            self.assertEqual(explain["root_rows"], [[refs["u1"], 80, 100]])
+            self.assertIsInstance(explain["invocations"], list)
+            self.assertNotIn("kind", explain)
+
+            invocation = next(
+                inv
+                for inv in explain["invocations"]
+                if inv["rule"]["rule_id"] == "q.runtime_rule_run_contract"
+            )
+            self.assertTrue(
+                {
+                    "invocation_id",
+                    "parent_invocation_id",
+                    "rule",
+                    "memo_hit",
+                    "memo_source_invocation_id",
+                    "original_where",
+                    "rewritten_where",
+                    "bindings",
+                    "output_rows",
+                    "pred_witnesses",
+                    "non_fact_steps",
+                    "ruleref_links",
+                }.issubset(invocation.keys())
+            )
+            self.assertNotIn("child_invocations", invocation)
+            self.assertIsInstance(invocation["original_where"], list)
+            self.assertIsInstance(invocation["rewritten_where"], list)
+            self.assertIsNone(invocation["parent_invocation_id"])
+            self.assertIsInstance(invocation["ruleref_links"], list)
+            self.assertEqual(invocation["ruleref_links"], [])
+
+            self.assertEqual(len(invocation["pred_witnesses"]), 2)
+            witness_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            self.assertEqual(
+                witness_keys,
+                {"b0.a0:ecss:obligation_timestamp", "b0.a1:ecss:window_start"},
+            )
+
+            self.assertEqual(len(invocation["non_fact_steps"]), 1)
+            step = invocation["non_fact_steps"][0]
+            self.assertTrue(
+                {"binding_index", "step_key", "kind", "status", "details"}.issubset(step.keys())
+            )
+            self.assertEqual(step["kind"], "le")
+            details = dict(step["details"])
+            self.assertIn("binding", details)
+            self.assertIn("atom", details)
+            self.assertIsInstance(details["atom"], list)
+            binding = dict(details["binding"])
+            self.assertEqual(binding["$window_start_ts"], 80)
+            self.assertEqual(binding["$event_ts"], 100)
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_runtime_rule_run_explain_summary_is_pure_derivation_from_raw_payload(self) -> None:
+        schema_ir = extend_schema_ir_with_ecss_temporal_predicates(_schema_ir())
+        sdk = SDKStore([User], schema_ir=schema_ir)
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            for pred_id, time_value in (
+                (ECSS_OBLIGATION_TIMESTAMP_PRED_ID, 100),
+                (ECSS_WINDOW_START_PRED_ID, 80),
+            ):
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": pred_id,
+                        "e_ref": refs["u1"],
+                        "rest_terms": [["time", time_value]],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+            rule_resp = run_runtime_rule(
+                session_id,
+                {
+                    "rule": {
+                        "rule_id": "q.runtime_rule_run_summary",
+                        "version": "1.0.0",
+                        "select": ["$a", "$window_start_ts", "$event_ts"],
+                        "where": [
+                            ["pred", ECSS_OBLIGATION_TIMESTAMP_PRED_ID, ["$a", "$event_ts"]],
+                            ["pred", ECSS_WINDOW_START_PRED_ID, ["$a", "$window_start_ts"]],
+                            ["le", "$window_start_ts", "$event_ts"],
+                        ],
+                    },
+                    "capture_trace": True,
+                },
+            )
+            self.assertTrue(rule_resp["ok"])
+            rule_run_id = rule_resp["result"]["trace"]["rule_run_id"]
+
+            raw_resp = explain_runtime_ref(session_id, {"kind": "rule_run", "id": rule_run_id})
+            summary_resp = explain_runtime_summary(session_id, {"kind": "rule_run", "id": rule_run_id})
+
+            self.assertTrue(raw_resp["ok"])
+            self.assertTrue(summary_resp["ok"])
+            self.assertEqual(summary_resp["kind"], "rule_run_summary")
+            self.assertEqual(summary_resp["meta"]["rule_run_id"], rule_run_id)
+
+            raw = raw_resp["explain"]
+            summary = summary_resp["summary"]
+            self.assertEqual(
+                sorted(summary.keys()),
+                [
+                    "invocation_count",
+                    "non_fact_step_groups",
+                    "predicate_witness_groups",
+                    "root_row_count",
+                    "root_rule",
+                    "rule_run_id",
+                    "witness_assertion_ids",
+                ],
+            )
+            self.assertEqual(summary["rule_run_id"], raw["rule_run_id"])
+            self.assertEqual(summary["root_rule"], raw["root_rule"])
+            self.assertEqual(summary["root_row_count"], len(raw["root_rows"]))
+            self.assertEqual(summary["invocation_count"], len(raw["invocations"]))
+            self.assertNotIn("raw_ref", summary)
+            self.assertNotIn("assertion_refs", summary)
+
+            expected_witness_assertion_ids = sorted(
+                {
+                    asrt_id
+                    for invocation in raw["invocations"]
+                    for witness in invocation["pred_witnesses"]
+                    for asrt_id in witness["asrt_ids"]
+                }
+            )
+            self.assertEqual(summary["witness_assertion_ids"], expected_witness_assertion_ids)
+
+            expected_predicate_group_map: dict[str, dict[str, set[str]]] = {}
+            for invocation in raw["invocations"]:
+                invocation_id = invocation["invocation_id"]
+                for witness in invocation["pred_witnesses"]:
+                    pred_id = witness["pred_atom_key"].split(":", 1)[1]
+                    group = expected_predicate_group_map.setdefault(
+                        pred_id,
+                        {"asrt_ids": set(), "invocation_ids": set()},
+                    )
+                    group["invocation_ids"].add(invocation_id)
+                    group["asrt_ids"].update(witness["asrt_ids"])
+            expected_predicate_groups = [
+                {
+                    "pred_id": pred_id,
+                    "asrt_ids": sorted(group["asrt_ids"]),
+                    "invocation_ids": sorted(group["invocation_ids"]),
+                }
+                for pred_id, group in sorted(expected_predicate_group_map.items())
+            ]
+            self.assertEqual(
+                summary["predicate_witness_groups"],
+                expected_predicate_groups,
+            )
+            self.assertEqual(
+                summary["non_fact_step_groups"],
+                [
+                    {
+                        "kind": "le",
+                        "count": 1,
+                        "invocation_ids": [raw["invocations"][0]["invocation_id"]],
+                    }
+                ],
+            )
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_audit_rule_trace_summary_matches_runtime_summary_contract(self) -> None:
+        schema_ir = extend_schema_ir_with_ecss_temporal_predicates(_schema_ir())
+        sdk = SDKStore([User], schema_ir=schema_ir)
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            for pred_id, time_value in (
+                (ECSS_OBLIGATION_TIMESTAMP_PRED_ID, 100),
+                (ECSS_WINDOW_START_PRED_ID, 80),
+            ):
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": pred_id,
+                        "e_ref": refs["u1"],
+                        "rest_terms": [["time", time_value]],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+            rule_resp = run_runtime_rule(
+                session_id,
+                {
+                    "rule": {
+                        "rule_id": "q.audit_rule_run_summary_export",
+                        "version": "1.0.0",
+                        "select": ["$a", "$window_start_ts", "$event_ts"],
+                        "where": [
+                            ["pred", ECSS_OBLIGATION_TIMESTAMP_PRED_ID, ["$a", "$event_ts"]],
+                            ["pred", ECSS_WINDOW_START_PRED_ID, ["$a", "$window_start_ts"]],
+                            ["le", "$window_start_ts", "$event_ts"],
+                        ],
+                    },
+                    "capture_trace": True,
+                },
+            )
+            self.assertTrue(rule_resp["ok"])
+            rule_run_id = rule_resp["result"]["trace"]["rule_run_id"]
+
+            raw_resp = explain_runtime_ref(session_id, {"kind": "rule_run", "id": rule_run_id})
+            runtime_summary_resp = explain_runtime_summary(session_id, {"kind": "rule_run", "id": rule_run_id})
+            runtime_narrative_resp = explain_runtime_narrative(session_id, {"kind": "rule_run", "id": rule_run_id})
+            self.assertTrue(raw_resp["ok"])
+            self.assertTrue(runtime_summary_resp["ok"])
+            self.assertTrue(runtime_narrative_resp["ok"])
+
+            raw_explain = raw_resp["explain"]
+            runtime_summary = runtime_summary_resp["summary"]
+            runtime_narrative = runtime_narrative_resp["narrative"]
+            self.assertEqual(runtime_summary, summarize_rule_trace_artifact_dict(raw_explain))
+            self.assertEqual(runtime_narrative, render_rule_run_narrative(runtime_summary, locale="en"))
+
+            with TemporaryDirectory() as package_dir:
+                session = _require_session(session_id)
+                export_package(session.store, Path(package_dir), ExportOptions(package_kind="audit"))
+
+                package = load_audit_package(package_dir)
+                query = AuditQuery(package)
+
+                audit_summary = query.get_rule_trace_summary(rule_run_id)
+                self.assertIsNotNone(audit_summary)
+                assert audit_summary is not None
+                self.assertEqual(audit_summary, runtime_summary)
+                self.assertEqual(
+                    query.list_rule_trace_summaries(root_rule_id="q.audit_rule_run_summary_export"),
+                    [runtime_summary],
+                )
+
+                audit_narrative = query.get_rule_trace_narrative(rule_run_id)
+                self.assertIsNotNone(audit_narrative)
+                assert audit_narrative is not None
+                self.assertEqual(audit_narrative, runtime_narrative)
+
+                summary_dto = build_rule_trace_summary_dto(query, rule_run_id)
+                self.assertEqual(summary_dto["kind"], "rule_run_summary")
+                self.assertEqual(summary_dto["summary"], runtime_summary)
+
+                narrative_dto = build_rule_trace_narrative_dto(query, rule_run_id)
+                self.assertEqual(narrative_dto["kind"], "rule_run_narrative")
+                self.assertEqual(narrative_dto["rule_run_id"], rule_run_id)
+                self.assertEqual(narrative_dto["narrative"], runtime_narrative)
+
+                summary_list_dto = build_rule_trace_summary_list_dto(
+                    query,
+                    root_rule_id="q.audit_rule_run_summary_export",
+                )
+                self.assertEqual(summary_list_dto["kind"], "rule_run_summary_list")
+                self.assertEqual(summary_list_dto["count"], 1)
+                self.assertEqual(summary_list_dto["rule_run_summaries"], [runtime_summary])
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_rule_run_narrative_is_deterministic_from_summary(self) -> None:
+        summary = {
+            "rule_run_id": "rt_123",
+            "root_rule": {"rule_id": "q.foo", "version": "1.0.0"},
+            "root_row_count": 1,
+            "invocation_count": 3,
+            "witness_assertion_ids": ["A1", "A2"],
+            "predicate_witness_groups": [
+                {"pred_id": "ecss:window_start", "asrt_ids": ["A1"], "invocation_ids": ["rt_123:i1"]},
+                {"pred_id": "ecss:obligation_timestamp", "asrt_ids": ["A2"], "invocation_ids": ["rt_123:i1", "rt_123:i2"]},
+            ],
+            "non_fact_step_groups": [
+                {"kind": "ge", "count": 1, "invocation_ids": ["rt_123:i1"]},
+                {"kind": "le", "count": 2, "invocation_ids": ["rt_123:i1", "rt_123:i2"]},
+            ],
+        }
+
+        narrative = render_rule_run_narrative(summary, locale="en")
+        self.assertEqual(
+            narrative,
+            {
+                "headline": "Rule q.foo@1.0.0 produced 1 root row(s) across 3 invocation(s).",
+                "overview_lines": [
+                    "Witness assertions: 2 unique assertion(s).",
+                    "Predicate witness groups: 2.",
+                    "Non-fact check groups: 2.",
+                ],
+                "predicate_lines": [
+                    "Predicate ecss:obligation_timestamp was witnessed by 1 assertion(s) across 2 invocation(s).",
+                    "Predicate ecss:window_start was witnessed by 1 assertion(s) across 1 invocation(s).",
+                ],
+                "non_fact_check_lines": [
+                    "Check kind ge was evaluated 1 time(s) across 1 invocation(s).",
+                    "Check kind le was evaluated 2 time(s) across 2 invocation(s).",
+                ],
+                "drilldown_lines": [
+                    "Open the linked assertion detail page(s) for 2 witness assertion(s) to inspect supporting facts.",
+                    "Continue below for invocation-level detail and the full raw trace payload.",
+                ],
+            },
+        )
+
     def test_runtime_explain_ref_candidate_degraded_for_engine_and_legacy_none(self) -> None:
         sdk = SDKStore([User])
         refs = _seed_users_for_syntax_matrix(sdk)
@@ -1339,6 +1725,14 @@ Derivation(
                 "/v1/runtime/sessions/{session_id}/queries/explain",
                 {route.path for route in app.routes},
             )
+            self.assertIn(
+                "/v1/runtime/sessions/{session_id}/queries/explain-summary",
+                {route.path for route in app.routes},
+            )
+            self.assertIn(
+                "/v1/runtime/sessions/{session_id}/queries/explain-narrative",
+                {route.path for route in app.routes},
+            )
 
             with TestClient(app) as client:
                 candidate_http = client.post(
@@ -1365,6 +1759,24 @@ Derivation(
                 self.assertTrue(rule_run_http.json()["ok"])
                 self.assertEqual(rule_run_http.json()["kind"], "rule_run")
 
+                summary_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-summary",
+                    json={"kind": "rule_run", "id": rule_run_id},
+                )
+                self.assertEqual(summary_http.status_code, 200)
+                self.assertTrue(summary_http.json()["ok"])
+                self.assertEqual(summary_http.json()["kind"], "rule_run_summary")
+                self.assertIn("summary", summary_http.json())
+
+                narrative_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-narrative",
+                    json={"kind": "rule_run", "id": rule_run_id},
+                )
+                self.assertEqual(narrative_http.status_code, 200)
+                self.assertTrue(narrative_http.json()["ok"])
+                self.assertEqual(narrative_http.json()["kind"], "rule_run_narrative")
+                self.assertIn("narrative", narrative_http.json())
+
                 unsupported_kind_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain",
                     json={"kind": "fact", "id": "ignored"},
@@ -1380,6 +1792,38 @@ Derivation(
                 self.assertEqual(missing_kind_http.status_code, 200)
                 self.assertFalse(missing_kind_http.json()["ok"])
                 self.assertEqual(missing_kind_http.json()["errors"][0]["kind"], "shape")
+
+                unsupported_summary_kind_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-summary",
+                    json={"kind": "candidate", "id": candidate_id},
+                )
+                self.assertEqual(unsupported_summary_kind_http.status_code, 200)
+                self.assertFalse(unsupported_summary_kind_http.json()["ok"])
+                self.assertEqual(unsupported_summary_kind_http.json()["errors"][0]["kind"], "shape")
+
+                missing_summary_kind_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-summary",
+                    json={"id": rule_run_id},
+                )
+                self.assertEqual(missing_summary_kind_http.status_code, 200)
+                self.assertFalse(missing_summary_kind_http.json()["ok"])
+                self.assertEqual(missing_summary_kind_http.json()["errors"][0]["kind"], "shape")
+
+                unsupported_narrative_kind_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-narrative",
+                    json={"kind": "candidate", "id": candidate_id},
+                )
+                self.assertEqual(unsupported_narrative_kind_http.status_code, 200)
+                self.assertFalse(unsupported_narrative_kind_http.json()["ok"])
+                self.assertEqual(unsupported_narrative_kind_http.json()["errors"][0]["kind"], "shape")
+
+                missing_narrative_kind_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-narrative",
+                    json={"id": rule_run_id},
+                )
+                self.assertEqual(missing_narrative_kind_http.status_code, 200)
+                self.assertFalse(missing_narrative_kind_http.json()["ok"])
+                self.assertEqual(missing_narrative_kind_http.json()["errors"][0]["kind"], "shape")
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
@@ -1902,6 +2346,256 @@ Derivation(
         ge_binding = dict(ge_details["binding"])
         self.assertEqual(ge_binding["$success_ppm"], 920000)
         self.assertEqual(ge_binding["$success_threshold_ppm"], 900000)
+
+    def test_scenario_a_composite_reference_check_has_live_and_audit_parity(self) -> None:
+        schema_ir = extend_schema_ir_with_ecss_temporal_predicates(_schema_ir())
+        schema_ir = extend_schema_ir_with_ecss_uncertainty_predicates(schema_ir)
+        sdk = SDKStore([User], schema_ir=schema_ir)
+
+        assessment_ref = encode_idref_v1("ECSSAssessment", [("assessment_id", "string", "A-COMPOSITE-001")])
+        with patch(
+            "factpy_kernel.core.evidence.write_protocol.now_epoch_nanos",
+            side_effect=[100, 110, 120, 130, 140, 150, 160],
+        ):
+            event_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_OBLIGATION_TIMESTAMP_PRED_ID,
+                assessment_ref,
+                [("time", 100)],
+            )
+            window_start_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_WINDOW_START_PRED_ID,
+                assessment_ref,
+                [("time", 80)],
+            )
+            window_end_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_WINDOW_END_PRED_ID,
+                assessment_ref,
+                [("time", 120)],
+            )
+            collision_prob_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_COLLISION_PROBABILITY_PPM_PRED_ID,
+                assessment_ref,
+                [("int", 80)],
+            )
+            collision_threshold_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID,
+                assessment_ref,
+                [("int", 100)],
+            )
+            success_prob_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_DISPOSAL_SUCCESS_PROBABILITY_PPM_PRED_ID,
+                assessment_ref,
+                [("int", 920000)],
+            )
+            success_threshold_asrt_id = set_field(
+                sdk.store.ledger,
+                ECSS_DISPOSAL_SUCCESS_THRESHOLD_PPM_PRED_ID,
+                assessment_ref,
+                [("int", 900000)],
+            )
+
+        with sdk_vars(
+            "assessment",
+            "event_ts",
+            "window_start_ts",
+            "window_end_ts",
+            "pc_ppm",
+            "pc_threshold_ppm",
+            "success_ppm",
+            "success_threshold_ppm",
+        ) as (
+            assessment,
+            event_ts,
+            window_start_ts,
+            window_end_ts,
+            pc_ppm,
+            pc_threshold_ppm,
+            success_ppm,
+            success_threshold_ppm,
+        ):
+            composite_rule = Rule(
+                id="q.scenario_a_composite_reference_check",
+                version="1.0.0",
+                select=[assessment],
+                where=[
+                    Pred(ECSS_OBLIGATION_TIMESTAMP_PRED_ID, assessment, event_ts),
+                    Pred(ECSS_WINDOW_START_PRED_ID, assessment, window_start_ts),
+                    Pred(ECSS_WINDOW_END_PRED_ID, assessment, window_end_ts),
+                    Pred(ECSS_COLLISION_PROBABILITY_PPM_PRED_ID, assessment, pc_ppm),
+                    Pred(ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID, assessment, pc_threshold_ppm),
+                    Pred(ECSS_DISPOSAL_SUCCESS_PROBABILITY_PPM_PRED_ID, assessment, success_ppm),
+                    Pred(ECSS_DISPOSAL_SUCCESS_THRESHOLD_PPM_PRED_ID, assessment, success_threshold_ppm),
+                    window_start_ts <= event_ts,
+                    event_ts <= window_end_ts,
+                    pc_ppm <= pc_threshold_ppm,
+                    success_ppm >= success_threshold_ppm,
+                ],
+            )
+
+        compiled = sdk._compile_rule_input(composite_rule)
+        rule_spec = RuleSpec(
+            rule_id=compiled["rule_id"],
+            version=compiled["version"],
+            select_vars=list(compiled["select_vars"]),
+            where=list(compiled["where"]),
+            expose=bool(compiled.get("expose", False)),
+        )
+
+        trace_result = run_rule_with_trace(sdk.store, rule_spec, RuleRegistry())
+        self.assertEqual(trace_result.rows, [(assessment_ref,)])
+
+        live_trace = sdk.store.explain_rule_trace(trace_result.rule_run_id)
+        self.assertIsNotNone(live_trace)
+        assert live_trace is not None
+        live_invocation = next(
+            inv
+            for inv in live_trace["invocations"]
+            if inv["rule"]["rule_id"] == "q.scenario_a_composite_reference_check"
+        )
+
+        self.assertEqual(live_trace["root_rule"], {"rule_id": "q.scenario_a_composite_reference_check", "version": "1.0.0"})
+        self.assertEqual(len(live_invocation["pred_witnesses"]), 7)
+        self.assertEqual(len(live_invocation["non_fact_steps"]), 4)
+
+        live_witness_map = {
+            witness["pred_atom_key"]: tuple(witness["asrt_ids"])
+            for witness in live_invocation["pred_witnesses"]
+        }
+        self.assertEqual(live_witness_map["b0.a0:ecss:obligation_timestamp"], (event_asrt_id,))
+        self.assertEqual(live_witness_map["b0.a1:ecss:window_start"], (window_start_asrt_id,))
+        self.assertEqual(live_witness_map["b0.a2:ecss:window_end"], (window_end_asrt_id,))
+        self.assertEqual(live_witness_map["b0.a3:ecss:collision_probability_ppm"], (collision_prob_asrt_id,))
+        self.assertEqual(
+            live_witness_map["b0.a4:ecss:collision_probability_threshold_ppm"],
+            (collision_threshold_asrt_id,),
+        )
+        self.assertEqual(
+            live_witness_map["b0.a5:ecss:disposal_success_probability_ppm"],
+            (success_prob_asrt_id,),
+        )
+        self.assertEqual(
+            live_witness_map["b0.a6:ecss:disposal_success_threshold_ppm"],
+            (success_threshold_asrt_id,),
+        )
+
+        live_non_fact_by_key = {step["step_key"]: step for step in live_invocation["non_fact_steps"]}
+        self.assertEqual(sorted(live_non_fact_by_key.keys()), ["b0.a10:ge", "b0.a7:le", "b0.a8:le", "b0.a9:le"])
+
+        ge_binding = dict(dict(live_non_fact_by_key["b0.a10:ge"]["details"])["binding"])
+        self.assertEqual(ge_binding["$window_start_ts"], 80)
+        self.assertEqual(ge_binding["$event_ts"], 100)
+        self.assertEqual(ge_binding["$window_end_ts"], 120)
+        self.assertEqual(ge_binding["$pc_ppm"], 80)
+        self.assertEqual(ge_binding["$pc_threshold_ppm"], 100)
+        self.assertEqual(ge_binding["$success_ppm"], 920000)
+        self.assertEqual(ge_binding["$success_threshold_ppm"], 900000)
+
+        with TemporaryDirectory() as package_dir, TemporaryDirectory() as site_dir:
+            manifest_path = export_package(
+                sdk.store,
+                Path(package_dir),
+                ExportOptions(package_kind="audit"),
+            )
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            audit_files = manifest["paths"]["audit_files"]
+
+            trace_rows = [
+                json.loads(line)
+                for line in (Path(package_dir) / audit_files["rule_trace_artifacts"]).read_text(encoding="utf-8").splitlines()
+                if line
+            ]
+            offline_trace_row = next(row for row in trace_rows if row["rule_run_id"] == trace_result.rule_run_id)
+            self.assertEqual(offline_trace_row["root_rule"], live_trace["root_rule"])
+
+            offline_artifact = rule_trace_artifact_from_dict(offline_trace_row)
+            self.assertEqual(
+                rule_trace_artifact_to_dict(offline_artifact),
+                offline_trace_row,
+            )
+
+            offline_invocation = next(
+                inv
+                for inv in offline_trace_row["invocations"]
+                if inv["rule"]["rule_id"] == "q.scenario_a_composite_reference_check"
+            )
+            self.assertEqual(offline_invocation["pred_witnesses"], live_invocation["pred_witnesses"])
+            self.assertEqual(offline_invocation["non_fact_steps"], live_invocation["non_fact_steps"])
+
+            package = load_audit_package(package_dir)
+            self.assertEqual(package.manifest["package_kind"], "audit")
+            self.assertTrue(package.rule_trace_artifacts)
+            query = AuditQuery(package)
+            loaded_trace = query.get_rule_trace(trace_result.rule_run_id)
+            self.assertIsNotNone(loaded_trace)
+            assert loaded_trace is not None
+            self.assertEqual(loaded_trace["root_rule"], live_trace["root_rule"])
+            self.assertEqual(
+                [row["rule_run_id"] for row in query.list_rule_traces(root_rule_id="q.scenario_a_composite_reference_check")],
+                [trace_result.rule_run_id],
+            )
+
+            site_manifest = render_audit_static_site(package_dir, site_dir)
+            self.assertEqual(site_manifest["rule_trace_index"], "rule_traces.html")
+            self.assertEqual(site_manifest["rule_trace_count"], 1)
+            trace_page_rel = f"rule_traces/{quote(trace_result.rule_run_id, safe='')}.html"
+            self.assertEqual(site_manifest["rule_traces"], [trace_page_rel])
+            witness_asrt_ids = sorted(
+                {
+                    asrt_id
+                    for witness in live_invocation["pred_witnesses"]
+                    for asrt_id in witness["asrt_ids"]
+                }
+            )
+            for asrt_id in witness_asrt_ids:
+                assertion_page = Path(site_dir) / "assertions" / f"{quote(asrt_id, safe='')}.html"
+                self.assertTrue(assertion_page.exists())
+
+            sample_assertion_html = (
+                Path(site_dir) / "assertions" / f"{quote(collision_threshold_asrt_id, safe='')}.html"
+            ).read_text(encoding="utf-8")
+            self.assertIn(collision_threshold_asrt_id, sample_assertion_html)
+
+            trace_index_html = (Path(site_dir) / "rule_traces.html").read_text(encoding="utf-8")
+            self.assertIn(trace_result.rule_run_id, trace_index_html)
+            self.assertIn("q.scenario_a_composite_reference_check", trace_index_html)
+
+            trace_page_html = (Path(site_dir) / trace_page_rel).read_text(encoding="utf-8")
+            self.assertIn(trace_result.rule_run_id, trace_page_html)
+            self.assertIn("q.scenario_a_composite_reference_check", trace_page_html)
+            self.assertIn("Narrative", trace_page_html)
+            self.assertIn(
+                "Rule q.scenario_a_composite_reference_check@1.0.0 produced 1 root row(s) across 1 invocation(s).",
+                trace_page_html,
+            )
+            self.assertIn(
+                "Predicate ecss:collision_probability_ppm was witnessed by 1 assertion(s) across 1 invocation(s).",
+                trace_page_html,
+            )
+            self.assertIn(
+                "Check kind le was evaluated 3 time(s) across 1 invocation(s).",
+                trace_page_html,
+            )
+            self.assertIn(collision_threshold_asrt_id, trace_page_html)
+            self.assertIn(f"../assertions/{quote(collision_threshold_asrt_id, safe='')}.html", trace_page_html)
+
+            index_html = (Path(site_dir) / "index.html").read_text(encoding="utf-8")
+            self.assertIn("rule_traces.html", index_html)
+
+            ui_index = json.loads((Path(site_dir) / "ui_index.json").read_text(encoding="utf-8"))
+            self.assertEqual(ui_index["counts"]["rule_traces"], 1)
+            self.assertEqual(ui_index["links"]["rule_traces"], "rule_traces.html")
+            self.assertEqual(
+                ui_index["lookup"]["rule_trace_pages"][trace_result.rule_run_id],
+                trace_page_rel,
+            )
+            self.assertEqual(ui_index["rule_trace_index"]["count"], 1)
+
     def test_audit_query_builds_ecss_compliance_matrix_from_package_facts(self) -> None:
         schema_ir = extend_schema_ir_with_ecss_vcd_predicates(_schema_ir())
         store = Store(schema_ir)
@@ -1995,6 +2689,39 @@ Derivation(
             self.assertEqual(ui_index["links"]["compliance_matrix"], "compliance_matrix.html")
             self.assertEqual(ui_index["counts"]["compliance_matrix_rows"], 2)
             self.assertEqual(ui_index["compliance_matrix"]["count"], 2)
+
+    def test_load_audit_package_keeps_legacy_packages_without_rule_trace_artifacts(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            (root / "audit").mkdir(parents=True, exist_ok=True)
+            (root / "outputs").mkdir(parents=True, exist_ok=True)
+            manifest = {
+                "package_kind": "audit",
+                "paths": {
+                    "audit_files": {
+                        "run_ledger": "audit/run_ledger.jsonl",
+                        "candidate_ledger": "audit/candidate_ledger.jsonl",
+                        "accept_write_ledger": "audit/accept_write_ledger.jsonl",
+                        "accept_failed": "audit/accept_failed.jsonl",
+                        "mapping_resolution": "audit/mapping_resolution.json",
+                        "decision_log": "audit/decision_log.jsonl",
+                    }
+                },
+            }
+            (root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            for rel in (
+                "audit/run_ledger.jsonl",
+                "audit/candidate_ledger.jsonl",
+                "audit/accept_write_ledger.jsonl",
+                "audit/accept_failed.jsonl",
+                "audit/decision_log.jsonl",
+            ):
+                (root / rel).write_text("", encoding="utf-8")
+            (root / "audit/mapping_resolution.json").write_text("{}", encoding="utf-8")
+
+            package = load_audit_package(root)
+            self.assertEqual(package.rule_trace_artifacts, [])
+            self.assertEqual(AuditQuery(package).list_rule_traces(), [])
 
     def test_sdk_ecss_requirement_bundle_round_trips_into_compliance_matrix(self) -> None:
         schema_ir = apply_ecss_vcd_schema(_schema_ir())

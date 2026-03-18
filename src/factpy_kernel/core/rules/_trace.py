@@ -226,6 +226,20 @@ def _normalize_non_fact_status(status: str) -> str:
     return _LEGACY_STATUS_MAP.get(status, status)
 
 
+class RuleTraceSummaryError(ValueError):
+    def __init__(self, message: str, *, path: str) -> None:
+        super().__init__(message)
+        self.kind = "runtime"
+        self.path = path
+        self.details = {"message": message}
+
+
+def _require_summary_non_empty_str(value: Any, *, path: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise RuleTraceSummaryError("must be non-empty string", path=path)
+    return value
+
+
 def rule_trace_artifact_to_dict(artifact: RuleTraceArtifact) -> dict[str, Any]:
     if not isinstance(artifact, RuleTraceArtifact):
         raise ValueError("artifact must be RuleTraceArtifact")
@@ -349,6 +363,110 @@ def _rule_trace_invocation_from_dict(row: Mapping[str, Any]) -> RuleTraceInvocat
     )
 
 
+def summarize_rule_trace_artifact_dict(explain: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(explain, Mapping):
+        raise RuleTraceSummaryError("explain must be object", path="$.explain")
+
+    rule_run_id = _require_summary_non_empty_str(explain.get("rule_run_id"), path="$.explain.rule_run_id")
+    root_rule = explain.get("root_rule")
+    if not isinstance(root_rule, Mapping):
+        raise RuleTraceSummaryError("root_rule must be object", path="$.explain.root_rule")
+    invocations = explain.get("invocations")
+    if not isinstance(invocations, list):
+        raise RuleTraceSummaryError("invocations must be list", path="$.explain.invocations")
+    root_rows = explain.get("root_rows")
+    if not isinstance(root_rows, list):
+        raise RuleTraceSummaryError("root_rows must be list", path="$.explain.root_rows")
+
+    witness_assertion_ids: set[str] = set()
+    predicate_witness_groups: dict[str, dict[str, Any]] = {}
+    non_fact_step_groups: dict[str, dict[str, Any]] = {}
+
+    for invocation in invocations:
+        if not isinstance(invocation, Mapping):
+            raise RuleTraceSummaryError("invocation row must be object", path="$.explain.invocations[]")
+        invocation_id = _require_summary_non_empty_str(
+            invocation.get("invocation_id"),
+            path="$.explain.invocations[].invocation_id",
+        )
+        pred_witnesses = invocation.get("pred_witnesses")
+        if isinstance(pred_witnesses, list):
+            for witness in pred_witnesses:
+                if not isinstance(witness, Mapping):
+                    raise RuleTraceSummaryError(
+                        "pred_witness row must be object",
+                        path="$.explain.invocations[].pred_witnesses[]",
+                    )
+                pred_atom_key = _require_summary_non_empty_str(
+                    witness.get("pred_atom_key"),
+                    path="$.explain.invocations[].pred_witnesses[].pred_atom_key",
+                )
+                pred_id = _pred_id_from_pred_atom_key(pred_atom_key)
+                group = predicate_witness_groups.setdefault(
+                    pred_id,
+                    {"pred_id": pred_id, "asrt_ids": set(), "invocation_ids": set()},
+                )
+                group["invocation_ids"].add(invocation_id)
+                asrt_ids = witness.get("asrt_ids")
+                if isinstance(asrt_ids, list):
+                    for asrt_id in asrt_ids:
+                        if isinstance(asrt_id, str) and asrt_id:
+                            witness_assertion_ids.add(asrt_id)
+                            group["asrt_ids"].add(asrt_id)
+
+        non_fact_steps = invocation.get("non_fact_steps")
+        if isinstance(non_fact_steps, list):
+            for step in non_fact_steps:
+                if not isinstance(step, Mapping):
+                    raise RuleTraceSummaryError(
+                        "non_fact_step row must be object",
+                        path="$.explain.invocations[].non_fact_steps[]",
+                    )
+                kind = _require_summary_non_empty_str(
+                    step.get("kind"),
+                    path="$.explain.invocations[].non_fact_steps[].kind",
+                )
+                group = non_fact_step_groups.setdefault(
+                    kind,
+                    {"kind": kind, "count": 0, "invocation_ids": set()},
+                )
+                group["count"] += 1
+                group["invocation_ids"].add(invocation_id)
+
+    return {
+        "rule_run_id": rule_run_id,
+        "root_rule": {
+            "rule_id": root_rule.get("rule_id"),
+            "version": root_rule.get("version"),
+        },
+        "root_row_count": len(root_rows),
+        "invocation_count": len(invocations),
+        "witness_assertion_ids": sorted(witness_assertion_ids),
+        "predicate_witness_groups": [
+            {
+                "pred_id": pred_id,
+                "asrt_ids": sorted(group["asrt_ids"]),
+                "invocation_ids": sorted(group["invocation_ids"]),
+            }
+            for pred_id, group in sorted(predicate_witness_groups.items())
+        ],
+        "non_fact_step_groups": [
+            {
+                "kind": kind,
+                "count": int(group["count"]),
+                "invocation_ids": sorted(group["invocation_ids"]),
+            }
+            for kind, group in sorted(non_fact_step_groups.items())
+        ],
+    }
+
+
+def _pred_id_from_pred_atom_key(pred_atom_key: str) -> str:
+    if ":" not in pred_atom_key:
+        return pred_atom_key
+    return pred_atom_key.split(":", 1)[1]
+
+
 __all__ = [
     "RuleRunResult",
     "RuleTraceArtifact",
@@ -357,7 +475,9 @@ __all__ = [
     "RuleTraceNonFactStep",
     "RuleTracePredWitness",
     "RuleTraceRuleRefLink",
+    "RuleTraceSummaryError",
     "rule_trace_artifact_bytes",
     "rule_trace_artifact_from_dict",
     "rule_trace_artifact_to_dict",
+    "summarize_rule_trace_artifact_dict",
 ]

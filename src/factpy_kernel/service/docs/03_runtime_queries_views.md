@@ -9,6 +9,8 @@
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-support`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-rule-trace`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain`
+- `POST /v1/runtime/sessions/{session_id}/queries/explain-summary`
+- `POST /v1/runtime/sessions/{session_id}/queries/explain-narrative`
 - `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 - `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
@@ -210,14 +212,20 @@
 
 - 该 endpoint 内部直接调用 `Store.explain_rule_trace(...)`。
 - 该 endpoint 继续作为 legacy compatibility wrapper 保留，供已直接持有 `rule_run_id` 的客户端使用。
+- canonical public surface 是统一 `POST /queries/explain` + `{"kind":"rule_run","id":"..."}`。
+- 本 endpoint 是 `rule_run` structured explain object 的 legacy alias。
 - 默认情况下它仍是 session-scoped readback。
 - 若打开 session 时配置了 `artifact_store_root`，则可从共享 sidecar root 回读旧 `rule_run_id`。
 - `rule_run_id` 目前只会在 `/rules/run` 传 `capture_trace=true` 时返回。
 - 若当前 session 中不存在对应 artifact，返回 `runtime_explain_not_found`。
 - 为兼容旧客户端，响应顶层不新增 `kind` 字段。
-- `rule_run` explain payload 的稳定 contract 第一轮包括：
+- canonical endpoint 与 legacy alias 共享同一个 `explain` payload shape；两条路径唯一允许存在的 envelope 差异是 canonical 顶层多一个 `kind="rule_run"` discriminator。
+- `rule_run` explain payload 的 stable contract 第一轮包括：
   - 顶层：`rule_run_id`、`root_rule`、`select_vars`、`root_rows`
-  - `invocations[]`：`invocation_id`、`parent_invocation_id`、`rule`、`memo_hit`、`memo_source_invocation_id`、`bindings`、`output_rows`
+  - `invocations[]`
+    - `invocations` 本身是 stable flat list shape
+    - consumer 通过 `parent_invocation_id` 与 `ruleref_links.child_invocation_id` 重建 tree
+    - stable 字段：`invocation_id`、`parent_invocation_id`、`rule`、`memo_hit`、`memo_source_invocation_id`、`bindings`、`output_rows`
   - `pred_witnesses[]`：`binding_index`、`pred_atom_key`、`asrt_ids`
   - `ruleref_links[]`：`ruleref_atom_key`、`child_invocation_id`
   - `non_fact_steps[]`：`binding_index`、`step_key`、`kind`、`status`
@@ -233,6 +241,10 @@
   - 数值比较绑定值出现在 `details.binding`
   - 不新增 uncertainty 专用字段
 - `original_where` 与 `rewritten_where` 也保持 opaque passthrough；客户端只能假定它们是 JSON-native payload，不能假定内部结构在 service v1 中稳定。
+- 第一轮不引入 payload-internal discriminator 或 version tag：
+  - 不新增 `explain.kind`
+  - 不新增 `rule_run_v1`
+  - object version boundary 继续留在 service/envelope 层处理
 
 错误 kinds：
 
@@ -332,12 +344,14 @@
 - `assertion` 返回 narrow single-`asrt_id` explain payload，不等价于 pair-level `explain-fact` 查询。
 - `rule_run` 直接桥接既有 `rule_run_id -> RuleTraceArtifact` explain 路径。
 - `kind="rule_run"` 的 `explain` payload 与 `explain-rule-trace` 使用同一底层 `RuleTraceArtifact` dict 形态：
+  - `explain` payload 本身与 legacy alias identical
   - 稳定字段、部分稳定字段、opaque 边界与上一节保持一致
-  - 统一 endpoint 只是额外在顶层增加 `kind="rule_run"` discriminator
+  - 统一 endpoint 只是在 envelope 顶层增加 `kind="rule_run"` discriminator
 - 统一成功响应总是包含顶层 `kind` 与 `explain`。
 - `kind` 缺失或值不在 `{candidate, assertion, rule_run}` 内时，返回 `HTTP 200` + `ok=false` + `errors[0].kind="shape"`。
 - `kind="fact"` 不受支持；`explain-fact` 仍是独立 endpoint。
 - 旧 `explain-support` / `explain-rule-trace` 继续保留，但其响应 shape 不会新增顶层 `kind`。
+- 第一轮不在 `explain` payload 内部重复放置 object-level discriminator 或 version tag；统一入口的顶层 `kind` 已足够区分 `rule_run` object。
 
 错误 kinds：
 
@@ -345,7 +359,149 @@
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
 
-## 5. `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
+## 5. `POST /v1/runtime/sessions/{session_id}/queries/explain-summary`
+
+请求：
+
+```json
+{
+  "kind": "rule_run",
+  "id": "rt_trace_123"
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "rule_run_id": "rt_trace_123"
+  },
+  "kind": "rule_run_summary",
+  "summary": {
+    "rule_run_id": "rt_trace_123",
+    "root_rule": {
+      "rule_id": "q_country_rows",
+      "version": "1.0.0"
+    },
+    "root_row_count": 1,
+    "invocation_count": 1,
+    "witness_assertion_ids": ["A1"],
+    "predicate_witness_groups": [
+      {
+        "pred_id": "person:country",
+        "asrt_ids": ["A1"],
+        "invocation_ids": ["rt_trace_123:i1"]
+      }
+    ],
+    "non_fact_step_groups": []
+  }
+}
+```
+
+说明：
+
+- 这是 service v1 的 consumer-facing derived DTO endpoint，第一轮只接受 `{kind:"rule_run", id}`。
+- 它不会修改或替代 raw `rule_run` explain contract。
+- 它内部直接复用 canonical raw explain path：`POST /queries/explain` + `kind="rule_run"`。
+- summary 是 pure derivation：
+  - 每个 summary 字段都直接从 canonical raw `rule_run` payload 派生
+  - summary 不会要求 raw carrier 改 shape
+- 第一轮 `rule_run_summary` 只包含 7 个字段：
+  - `rule_run_id`
+  - `root_rule`
+  - `root_row_count`
+  - `invocation_count`
+  - `witness_assertion_ids`
+  - `predicate_witness_groups`
+  - `non_fact_step_groups`
+- `witness_assertion_ids` 是跨全部 invocations 的 `pred_witnesses.asrt_ids` flat 去重结果。
+- `predicate_witness_groups` 采用 flat semantic-key grouping：
+  - grouping key = 从 raw `pred_atom_key` 派生出的 `pred_id`
+  - group fields = `pred_id`、`asrt_ids`、`invocation_ids`
+- `non_fact_step_groups` 也采用 flat semantic-key grouping：
+  - grouping key = raw `non_fact_steps.kind`
+  - group fields = `kind`、`count`、`invocation_ids`
+- 第一轮不把 `binding_index`、`step_key`、`details.atom` 提升进 summary DTO；这些仍属于 raw payload 的消费层级。
+- `rule_run_id` 本身就是回跳 raw explain 的充分 handle。
+- `witness_assertion_ids` 本身就是回跳 `explain_ref(kind="assertion")` 的充分 handle。
+- 第一轮不支持 `candidate` / `assertion` summary；`kind` 取其他值时返回 `shape` error。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+
+## 6. `POST /v1/runtime/sessions/{session_id}/queries/explain-narrative`
+
+请求：
+
+```json
+{
+  "kind": "rule_run",
+  "id": "rt_trace_123"
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "rule_run_id": "rt_trace_123"
+  },
+  "kind": "rule_run_narrative",
+  "narrative": {
+    "headline": "Rule q_country_rows@1.0.0 produced 1 root row(s) across 1 invocation(s).",
+    "overview_lines": [
+      "Witness assertions: 1 unique assertion(s).",
+      "Predicate witness groups: 1.",
+      "Non-fact check groups: 0."
+    ],
+    "predicate_lines": [
+      "Predicate person:country was witnessed by 1 assertion(s) across 1 invocation(s)."
+    ],
+    "non_fact_check_lines": [
+      "No non-fact check groups were captured."
+    ],
+    "drilldown_lines": [
+      "Open the linked assertion detail page(s) for 1 witness assertion(s) to inspect supporting facts.",
+      "Continue below for invocation-level detail and the full raw trace payload."
+    ]
+  }
+}
+```
+
+说明：
+
+- 这是 service v1 的 narrative DTO endpoint，第一轮只接受 `{kind:"rule_run", id}`。
+- narrative 不是 raw explain 或 summary 的替代物；它是建立在 `rule_run_summary` 之上的 deterministic presentation layer。
+- 它内部调用链为：
+  - canonical raw explain
+  - `rule_run_summary`
+  - `render_rule_run_narrative(..., locale="en")`
+- 第一轮 narrative DTO 固定为 5 个字段：
+  - `headline`
+  - `overview_lines`
+  - `predicate_lines`
+  - `non_fact_check_lines`
+  - `drilldown_lines`
+- 这些字段都只从 `rule_run_summary` 纯派生，不直接下探 raw trace carrier。
+- 第一轮故意不把 narrative 打包进 `explain-summary`；bundled delivery 若需要，后续另行评估。
+- 第一轮不支持 `candidate` / `assertion` narrative；`kind` 取其他值时返回 `shape` error。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+
+## 7. `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
 
 请求：
 
@@ -427,7 +583,7 @@
 - `authoring_derivation_compile`
 - `derivation_evaluate`
 
-## 6. `POST /v1/runtime/sessions/{session_id}/derivations/accept`
+## 8. `POST /v1/runtime/sessions/{session_id}/derivations/accept`
 
 请求：
 
@@ -508,7 +664,7 @@
 - `runtime_session_not_found`
 - `derivation_accept`
 
-## 7. `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
+## 9. `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
 
 请求：
 
@@ -558,7 +714,7 @@
 - `runtime_session_not_found`
 - `query_explain_fact`
 
-## 8. `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
+## 10. `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 
 请求：
 
@@ -594,7 +750,7 @@
 - `runtime_session_not_found`
 - `query_conflicts`
 
-## 9. `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
+## 11. `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 
 请求：
 
@@ -688,7 +844,7 @@
 - `mapping_conflict`
 - `query_resolve_mapping`
 
-## 10. `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
+## 12. `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
 
 请求（使用内联 view）：
 
@@ -752,7 +908,7 @@
 - `runtime_session_not_found`
 - `query_view_facts`
 
-## 11. `POST /v1/runtime/sessions/{session_id}/views/create`
+## 13. `POST /v1/runtime/sessions/{session_id}/views/create`
 
 请求：
 
@@ -797,7 +953,7 @@
 - `runtime_session_not_found`
 - `view_create`
 
-## 12. `POST /v1/runtime/sessions/{session_id}/views/update`
+## 14. `POST /v1/runtime/sessions/{session_id}/views/update`
 
 请求与成功响应结构同 `views/create`，但要求 `name` 已存在。
 
@@ -807,7 +963,7 @@
 - `runtime_session_not_found`
 - `view_update`
 
-## 13. `POST /v1/runtime/sessions/{session_id}/views/delete`
+## 15. `POST /v1/runtime/sessions/{session_id}/views/delete`
 
 请求：
 
@@ -840,7 +996,7 @@
 - `runtime_session_not_found`
 - `view_delete`
 
-## 14. `POST /v1/runtime/sessions/{session_id}/views/get`
+## 16. `POST /v1/runtime/sessions/{session_id}/views/get`
 
 请求：
 
@@ -874,7 +1030,7 @@
 - `runtime_session_not_found`
 - `view_get`
 
-## 15. `GET /v1/runtime/sessions/{session_id}/views`
+## 17. `GET /v1/runtime/sessions/{session_id}/views`
 
 成功响应：
 
@@ -904,7 +1060,7 @@
 - `runtime_session_not_found`
 - `view_list`
 
-## 16. `POST /v1/runtime/sessions/{session_id}/packages/export`
+## 18. `POST /v1/runtime/sessions/{session_id}/packages/export`
 
 请求：
 

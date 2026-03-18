@@ -1,6 +1,6 @@
 # Task Blueprint: ECSS Scenario Anchoring
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-18
 - Last Updated: 2026-03-18
 - Related Modules:
@@ -308,9 +308,17 @@ authority note:
   - scenario comparison memo 已完成（§5.3–§5.5）
   - adopted conclusion 已写入蓝图
   - `temporal-hybrid-reasoning` 的优先级 note 已同步更新
+  - 后续实现切片已按该锚点推进并归档：
+    - `ecss-vcd-compliance-delivery`
+    - `audit-compliance-matrix-ui`
+    - `ecss-requirement-authoring-surface`
+    - `scenario-a-temporal-semantics`
+    - `scenario-a-uncertainty-and-confidence`
+    - `scenario-a-composite-reference-check`
+    - `scenario-a-audit-delivery-shape`
 - 与 blueprint 不同的地方：
   - 无实质偏差。§5.3 直接在蓝图内写成 memo，而不是拆成独立文档
 - 为什么会有这些调整：
   - scenario comparison memo 体量适中，独立文档只会增加引用负担；直接内嵌更利于追溯
 - 归档说明：
-  - 本切片为纯分析型输出，无代码实现、无测试；下一条次级产物是 `ecss-vcd-compliance-delivery` 子蓝图入口
+  - 本切片为纯分析型输出，无代码实现、无测试；其锚点职责已被后续 Scenario A / Scenario B 子切片消费完成，因此归档退出 active 集合

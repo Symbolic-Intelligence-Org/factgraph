@@ -20,7 +20,9 @@ from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptResult
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
 from factpy_kernel.core.mapping.canon import MappingConflictError, MappingResolution
+from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
 from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule, run_rule_with_trace
+from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
 from factpy_kernel.core.schema.schema_ir import schema_digest
 from factpy_kernel.core.store import builders
 from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar
@@ -284,6 +286,53 @@ def explain_runtime_ref(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
         return _explain_ref_rule_run(session, id_)
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_explain_ref")
+        return error_response([err])
+
+
+def explain_runtime_summary(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        kind = dto.get("kind")
+        if kind != "rule_run":
+            raise facade_error(
+                f"unsupported explain_summary kind: {kind!r}",
+                kind="shape",
+                path="$.kind",
+            )
+        id_ = _require_non_empty_str(dto.get("id"), path="$.id")
+        return ok_response(
+            meta={"rule_run_id": id_},
+            kind="rule_run_summary",
+            summary=_get_rule_run_summary(session, id_),
+        )
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_summary")
+        return error_response([err])
+
+
+def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        kind = dto.get("kind")
+        if kind != "rule_run":
+            raise facade_error(
+                f"unsupported explain_narrative kind: {kind!r}",
+                kind="shape",
+                path="$.kind",
+            )
+        id_ = _require_non_empty_str(dto.get("id"), path="$.id")
+        summary = _get_rule_run_summary(session, id_)
+        return ok_response(
+            meta={"rule_run_id": id_},
+            kind="rule_run_narrative",
+            narrative=render_rule_run_narrative(summary, locale="en"),
+        )
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_narrative")
         return error_response([err])
 
 
@@ -860,6 +909,18 @@ def _explain_ref_rule_run(session: RuntimeSession, rule_run_id: str) -> dict[str
         kind="rule_run",
         explain=_to_jsonable(explain),
     )
+
+
+def _get_rule_run_summary(session: RuntimeSession, rule_run_id: str) -> dict[str, Any]:
+    raw_resp = _explain_ref_rule_run(session, rule_run_id)
+    raw_explain = raw_resp.get("explain")
+    if not isinstance(raw_explain, dict):
+        raise facade_error(
+            "rule_run explain payload must be object",
+            kind="runtime",
+            path="$.explain",
+        )
+    return summarize_rule_trace_artifact_dict(raw_explain)
 
 
 def _session_to_dict(session: RuntimeSession) -> dict[str, Any]:

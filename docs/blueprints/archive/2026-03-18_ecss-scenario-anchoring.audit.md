@@ -10,6 +10,7 @@
 | 2026-03-18 | scoped | Scope frozen | Replaced high-level acceptance themes with memo-verifiable outputs, recorded the adopted Scenario B / Scenario A prioritization, and closed the authority boundary around non-authoritative ESSB working-note thresholds. |
 | 2026-03-18 | scoped | Compliance-delivery child blueprint linked | Added a bridge note to `2026-03-18_ecss-vcd-compliance-delivery.md` so Scenario B can proceed as a concrete implementation-facing slice without reopening scenario prioritization. |
 | 2026-03-18 | scoped | Compliance-delivery child archived | Updated the Scenario B bridge note to point at the archived `2026-03-18_ecss-vcd-compliance-delivery.md` after its offline-query-first implementation landed. |
+| 2026-03-18 | archived | Analysis anchor completed | Scenario A and Scenario B follow-on slices have now consumed the anchoring memo; no further active work remains in this blueprint. |
 
 ## Decision Notes
 

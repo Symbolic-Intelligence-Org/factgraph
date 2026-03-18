@@ -25,6 +25,11 @@ from .dto import (
     build_authoring_apply_run_list_dto,
     build_compliance_matrix_dto,
     build_decision_detail_dto,
+    build_rule_trace_detail_dto,
+    build_rule_trace_list_dto,
+    build_rule_trace_narrative_dto,
+    build_rule_trace_summary_dto,
+    build_rule_trace_summary_list_dto,
     build_run_detail_dto,
     build_run_list_dto,
 )
@@ -62,5 +67,10 @@ __all__ = [
     "build_run_detail_dto",
     "build_decision_detail_dto",
     "build_compliance_matrix_dto",
+    "build_rule_trace_list_dto",
+    "build_rule_trace_narrative_dto",
+    "build_rule_trace_summary_list_dto",
+    "build_rule_trace_summary_dto",
+    "build_rule_trace_detail_dto",
     "render_audit_static_site",
 ]

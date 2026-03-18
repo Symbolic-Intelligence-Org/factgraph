@@ -124,6 +124,149 @@ def build_compliance_matrix_dto(
     }
 
 
+def build_rule_trace_list_dto(
+    query: AuditQuery,
+    *,
+    root_rule_id: str | None = None,
+) -> dict[str, Any]:
+    _ensure_query(query)
+    try:
+        rows = query.list_rule_traces(root_rule_id=root_rule_id)
+    except AuditQueryError as exc:
+        raise AuditDTOError(str(exc)) from exc
+    items = [_rule_trace_summary_item(row) for row in rows]
+    return {
+        "audit_ui_dto_version": "audit_ui_dto_v1",
+        "kind": "rule_trace_list",
+        "count": len(items),
+        "rule_traces": items,
+    }
+
+
+def build_rule_trace_summary_list_dto(
+    query: AuditQuery,
+    *,
+    root_rule_id: str | None = None,
+) -> dict[str, Any]:
+    _ensure_query(query)
+    try:
+        rows = query.list_rule_trace_summaries(root_rule_id=root_rule_id)
+    except AuditQueryError as exc:
+        raise AuditDTOError(str(exc)) from exc
+    return {
+        "audit_ui_dto_version": "audit_ui_dto_v1",
+        "kind": "rule_run_summary_list",
+        "count": len(rows),
+        "rule_run_summaries": [dict(row) for row in rows],
+    }
+
+
+def build_rule_trace_summary_dto(query: AuditQuery, rule_run_id: str) -> dict[str, Any]:
+    _ensure_query(query)
+    try:
+        summary = query.get_rule_trace_summary(rule_run_id)
+    except AuditQueryError as exc:
+        raise AuditDTOError(str(exc)) from exc
+    if summary is None:
+        raise AuditDTOError(f"rule trace not found: {rule_run_id}")
+    return {
+        "audit_ui_dto_version": "audit_ui_dto_v1",
+        "kind": "rule_run_summary",
+        "summary": dict(summary),
+    }
+
+
+def build_rule_trace_narrative_dto(query: AuditQuery, rule_run_id: str) -> dict[str, Any]:
+    _ensure_query(query)
+    try:
+        narrative = query.get_rule_trace_narrative(rule_run_id)
+    except AuditQueryError as exc:
+        raise AuditDTOError(str(exc)) from exc
+    if narrative is None:
+        raise AuditDTOError(f"rule trace not found: {rule_run_id}")
+    return {
+        "audit_ui_dto_version": "audit_ui_dto_v1",
+        "kind": "rule_run_narrative",
+        "rule_run_id": rule_run_id,
+        "narrative": dict(narrative),
+    }
+
+
+def build_rule_trace_detail_dto(query: AuditQuery, rule_run_id: str) -> dict[str, Any]:
+    _ensure_query(query)
+    try:
+        trace = query.get_rule_trace(rule_run_id)
+    except AuditQueryError as exc:
+        raise AuditDTOError(str(exc)) from exc
+    if trace is None:
+        raise AuditDTOError(f"rule trace not found: {rule_run_id}")
+
+    invocations = [dict(item) for item in trace.get("invocations", []) if isinstance(item, dict)]
+    witness_assertion_ids = sorted(
+        {
+            asrt_id
+            for invocation in invocations
+            for witness in invocation.get("pred_witnesses", [])
+            if isinstance(witness, dict)
+            for asrt_id in witness.get("asrt_ids", [])
+            if isinstance(asrt_id, str) and asrt_id
+        }
+    )
+    invocation_summaries = [
+        {
+            "invocation_id": invocation.get("invocation_id"),
+            "parent_invocation_id": invocation.get("parent_invocation_id"),
+            "rule": dict(invocation.get("rule"))
+            if isinstance(invocation.get("rule"), dict)
+            else {},
+            "memo_hit": bool(invocation.get("memo_hit")),
+            "binding_count": len(invocation.get("bindings", [])) if isinstance(invocation.get("bindings"), list) else 0,
+            "output_row_count": (
+                len(invocation.get("output_rows", []))
+                if isinstance(invocation.get("output_rows"), list)
+                else 0
+            ),
+            "pred_witness_count": (
+                len(invocation.get("pred_witnesses", []))
+                if isinstance(invocation.get("pred_witnesses"), list)
+                else 0
+            ),
+            "non_fact_step_count": (
+                len(invocation.get("non_fact_steps", []))
+                if isinstance(invocation.get("non_fact_steps"), list)
+                else 0
+            ),
+            "ruleref_link_count": (
+                len(invocation.get("ruleref_links", []))
+                if isinstance(invocation.get("ruleref_links"), list)
+                else 0
+            ),
+        }
+        for invocation in invocations
+    ]
+    root_rule = dict(trace.get("root_rule")) if isinstance(trace.get("root_rule"), dict) else {}
+    select_vars = [item for item in trace.get("select_vars", []) if isinstance(item, str)]
+    root_rows = [list(row) for row in trace.get("root_rows", []) if isinstance(row, list)]
+    return {
+        "audit_ui_dto_version": "audit_ui_dto_v1",
+        "kind": "rule_trace_detail",
+        "rule_run_id": rule_run_id,
+        "root_rule": root_rule,
+        "select_vars": select_vars,
+        "root_rows": root_rows,
+        "trace": dict(trace),
+        "invocation_summaries": invocation_summaries,
+        "witness_assertion_ids": witness_assertion_ids,
+        "stats": {
+            "invocation_count": len(invocations),
+            "root_row_count": len(root_rows),
+            "witness_assertion_count": len(witness_assertion_ids),
+            "pred_witness_count": sum(item["pred_witness_count"] for item in invocation_summaries),
+            "non_fact_step_count": sum(item["non_fact_step_count"] for item in invocation_summaries),
+        },
+    }
+
+
 def build_authoring_apply_run_list_dto(query: AuditQuery) -> dict[str, Any]:
     _ensure_query(query)
     runs = query.list_authoring_apply_runs()
@@ -281,6 +424,37 @@ def _run_summary_item(row: dict[str, Any]) -> dict[str, Any]:
         "event_ts_max": row.get("event_ts_max"),
         "candidate_ids": _sorted_strings(row.get("candidate_ids")),
         "pred_ids": _sorted_strings(row.get("pred_ids")),
+    }
+
+
+def _rule_trace_summary_item(row: dict[str, Any]) -> dict[str, Any]:
+    root_rule = row.get("root_rule") if isinstance(row.get("root_rule"), dict) else {}
+    invocations = [item for item in row.get("invocations", []) if isinstance(item, dict)]
+    witness_assertion_ids = sorted(
+        {
+            asrt_id
+            for invocation in invocations
+            for witness in invocation.get("pred_witnesses", [])
+            if isinstance(witness, dict)
+            for asrt_id in witness.get("asrt_ids", [])
+            if isinstance(asrt_id, str) and asrt_id
+        }
+    )
+    non_fact_step_count = sum(
+        len(invocation.get("non_fact_steps", []))
+        for invocation in invocations
+        if isinstance(invocation.get("non_fact_steps"), list)
+    )
+    return {
+        "rule_run_id": row.get("rule_run_id"),
+        "root_rule": {
+            "rule_id": root_rule.get("rule_id"),
+            "version": root_rule.get("version"),
+        },
+        "invocation_count": len(invocations),
+        "root_row_count": len(row.get("root_rows", [])) if isinstance(row.get("root_rows"), list) else 0,
+        "witness_assertion_count": len(witness_assertion_ids),
+        "non_fact_step_count": non_fact_step_count,
     }
 
 

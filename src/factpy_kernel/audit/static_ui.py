@@ -11,6 +11,9 @@ from .assertions import load_assertion_index
 from .dto import (
     build_authoring_apply_run_detail_dto,
     build_decision_detail_dto,
+    build_rule_trace_detail_dto,
+    build_rule_trace_list_dto,
+    build_rule_trace_narrative_dto,
     build_run_detail_dto,
     build_run_list_dto,
 )
@@ -40,20 +43,24 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
     runs_dir = root / "runs"
     decisions_dir = root / "decisions"
     assertions_dir = root / "assertions"
+    rule_traces_dir = root / "rule_traces"
     authoring_apply_runs_dir = root / "authoring_apply_runs"
     indexes_dir = root / "indexes"
     root.mkdir(parents=True, exist_ok=True)
     runs_dir.mkdir(parents=True, exist_ok=True)
     decisions_dir.mkdir(parents=True, exist_ok=True)
     assertions_dir.mkdir(parents=True, exist_ok=True)
+    rule_traces_dir.mkdir(parents=True, exist_ok=True)
     authoring_apply_runs_dir.mkdir(parents=True, exist_ok=True)
     indexes_dir.mkdir(parents=True, exist_ok=True)
 
     run_list = build_run_list_dto(query)
+    rule_trace_list = build_rule_trace_list_dto(query)
     assertion_index = load_assertion_index(data)
     run_ids: list[str] = []
     decision_ids: set[str] = set()
     assertion_ids = sorted(assertion_index.claims.keys())
+    rule_trace_ids: list[str] = []
 
     for asrt_id in assertion_ids:
         detail = assertion_index.get_assertion_detail(asrt_id)
@@ -61,6 +68,19 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
             continue
         page = _render_assertion_detail_page(detail)
         (assertions_dir / f"{_slug_id(asrt_id)}.html").write_text(page, encoding="utf-8")
+
+    for row in rule_trace_list.get("rule_traces", []):
+        if not isinstance(row, dict):
+            continue
+        rule_run_id = row.get("rule_run_id")
+        if not isinstance(rule_run_id, str) or not rule_run_id:
+            continue
+        rule_trace_ids.append(rule_run_id)
+        detail = build_rule_trace_detail_dto(query, rule_run_id)
+        narrative_dto = build_rule_trace_narrative_dto(query, rule_run_id)
+        narrative = narrative_dto.get("narrative") if isinstance(narrative_dto.get("narrative"), dict) else None
+        page = _render_rule_trace_detail_page(detail, assertion_index=assertion_index, narrative=narrative)
+        (rule_traces_dir / f"{_slug_id(rule_run_id)}.html").write_text(page, encoding="utf-8")
 
     for run in run_list["runs"]:
         run_id = run.get("run_id")
@@ -100,6 +120,8 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
 
     authoring_apply_page = _render_authoring_apply_events_page(authoring_apply_events, authoring_apply_summary)
     (root / "authoring_apply_events.html").write_text(authoring_apply_page, encoding="utf-8")
+    rule_trace_page = _render_rule_trace_index_page(rule_trace_list.get("rule_traces", []))
+    (root / "rule_traces.html").write_text(rule_trace_page, encoding="utf-8")
     compliance_matrix_page = _render_compliance_matrix_page(compliance_matrix_rows)
     (root / "compliance_matrix.html").write_text(compliance_matrix_page, encoding="utf-8")
 
@@ -107,6 +129,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         run_list,
         index_pages=sorted(index_pages.keys()),
         authoring_apply_summary=authoring_apply_summary,
+        rule_trace_count=len(rule_trace_ids),
         compliance_matrix_count=len(compliance_matrix_rows),
     )
     (root / "index.html").write_text(index_html, encoding="utf-8")
@@ -117,10 +140,12 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         run_ids=sorted(set(run_ids)),
         decision_ids=sorted(decision_ids),
         assertion_ids=assertion_ids,
+        rule_trace_ids=sorted(set(rule_trace_ids)),
         authoring_apply_run_ids=sorted(set(authoring_apply_run_ids)),
         index_pages=sorted(index_pages.keys()),
         authoring_apply_summary=authoring_apply_summary,
         compliance_matrix_rows=compliance_matrix_rows,
+        rule_trace_rows=rule_trace_list.get("rule_traces", []),
     )
     (root / "ui_index.json").write_text(
         json.dumps(ui_index_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
@@ -132,9 +157,13 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         "run_count": len(run_ids),
         "decision_count": len(decision_ids),
         "assertion_count": len(assertion_ids),
+        "rule_trace_count": len(rule_trace_ids),
         "authoring_apply_event_count": authoring_apply_summary.get("event_count", 0),
         "runs": [f"runs/{_slug_id(run_id)}.html" for run_id in sorted(set(run_ids))],
         "assertions": [f"assertions/{_slug_id(asrt_id)}.html" for asrt_id in assertion_ids],
+        "rule_traces": [
+            f"rule_traces/{_slug_id(rule_run_id)}.html" for rule_run_id in sorted(set(rule_trace_ids))
+        ],
         "authoring_apply_runs": [
             f"authoring_apply_runs/{_slug_id(apply_request_id)}.html"
             for apply_request_id in sorted(set(authoring_apply_run_ids))
@@ -144,6 +173,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         "search": "search.html",
         "ui_index": "ui_index.json",
         "authoring_apply_events": "authoring_apply_events.html",
+        "rule_trace_index": "rule_traces.html",
         "compliance_matrix": "compliance_matrix.html",
         "compliance_matrix_row_count": len(compliance_matrix_rows),
     }
@@ -159,6 +189,7 @@ def _render_index_page(
     *,
     index_pages: list[str],
     authoring_apply_summary: dict[str, Any] | None = None,
+    rule_trace_count: int = 0,
     compliance_matrix_count: int = 0,
 ) -> str:
     rows = []
@@ -188,6 +219,7 @@ def _render_index_page(
             "<h1>Audit Runs</h1>"
             "<p><a href='search.html'>Search</a></p>"
             f"<p><a href='authoring_apply_events.html'>Authoring Apply Events</a> ({escape(str(apply_count))})</p>"
+            f"<p><a href='rule_traces.html'>Rule Traces</a> ({escape(str(rule_trace_count))})</p>"
             f"<p><a href='compliance_matrix.html'>Compliance Matrix</a> ({escape(str(compliance_matrix_count))})</p>"
             "<h2>Indexes</h2>"
             f"<ul>{''.join(_index_page_links(index_pages)) if index_pages else '<li>None</li>'}</ul>"
@@ -508,6 +540,201 @@ def _render_assertion_detail_page(payload: dict[str, Any]) -> str:
     )
 
 
+def _render_rule_trace_index_page(rows: list[dict[str, Any]]) -> str:
+    table_rows: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        rule_run_id = row.get("rule_run_id")
+        root_rule = row.get("root_rule") if isinstance(row.get("root_rule"), dict) else {}
+        if not isinstance(rule_run_id, str) or not rule_run_id:
+            continue
+        href = f"rule_traces/{_slug_id(rule_run_id)}.html"
+        table_rows.append(
+            "<tr>"
+            f"<td><a href='{escape(href, quote=True)}'>{escape(rule_run_id)}</a></td>"
+            f"<td>{escape(str(root_rule.get('rule_id') or ''))}</td>"
+            f"<td>{escape(str(root_rule.get('version') or ''))}</td>"
+            f"<td>{escape(str(row.get('invocation_count', 0)))}</td>"
+            f"<td>{escape(str(row.get('witness_assertion_count', 0)))}</td>"
+            f"<td>{escape(str(row.get('non_fact_step_count', 0)))}</td>"
+            f"<td>{escape(str(row.get('root_row_count', 0)))}</td>"
+            "</tr>"
+        )
+    return _html_page(
+        title="Rule Traces",
+        body=(
+            "<h1>Rule Traces</h1>"
+            "<p><a href='index.html'>Back to runs</a></p>"
+            f"<p>Rows: {escape(str(len(rows)))}</p>"
+            "<table>"
+            "<thead><tr><th>rule_run_id</th><th>root_rule</th><th>version</th><th>invocations</th><th>witness assertions</th><th>non-fact steps</th><th>root rows</th></tr></thead>"
+            f"<tbody>{''.join(table_rows) if table_rows else '<tr><td colspan=7>None</td></tr>'}</tbody>"
+            "</table>"
+        ),
+    )
+
+
+def _render_rule_trace_detail_page(
+    payload: dict[str, Any],
+    *,
+    assertion_index,
+    narrative: dict[str, Any] | None = None,
+) -> str:
+    rule_run_id = str(payload.get("rule_run_id", ""))
+    root_rule = payload.get("root_rule") if isinstance(payload.get("root_rule"), dict) else {}
+    stats = payload.get("stats") if isinstance(payload.get("stats"), dict) else {}
+    trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
+    witness_assertion_ids = [
+        item for item in payload.get("witness_assertion_ids", []) if isinstance(item, str) and item
+    ]
+    select_vars = [item for item in payload.get("select_vars", []) if isinstance(item, str)]
+    root_rows = [item for item in payload.get("root_rows", []) if isinstance(item, list)]
+
+    root_row_items = [
+        "<li>" + escape(json.dumps(row, ensure_ascii=False, sort_keys=True)) + "</li>"
+        for row in root_rows
+    ]
+    witness_links = [
+        f"<li><a href='../assertions/{escape(_slug_id(asrt_id), quote=True)}.html'>{escape(asrt_id)}</a></li>"
+        for asrt_id in witness_assertion_ids
+    ]
+
+    invocation_blocks: list[str] = []
+    invocations = [item for item in trace.get("invocations", []) if isinstance(item, dict)]
+    for invocation in invocations:
+        rule = invocation.get("rule") if isinstance(invocation.get("rule"), dict) else {}
+        witness_rows: list[str] = []
+        for witness in invocation.get("pred_witnesses", []):
+            if not isinstance(witness, dict):
+                continue
+            asrt_links = []
+            for asrt_id in witness.get("asrt_ids", []):
+                if not isinstance(asrt_id, str) or not asrt_id:
+                    continue
+                href = f"../assertions/{_slug_id(asrt_id)}.html"
+                asrt_links.append(f"<a href='{escape(href, quote=True)}'>{escape(asrt_id)}</a>")
+            witness_rows.append(
+                "<tr>"
+                f"<td>{escape(str(witness.get('binding_index')))}</td>"
+                f"<td>{escape(str(witness.get('pred_atom_key')))}</td>"
+                f"<td>{', '.join(asrt_links) if asrt_links else '-'}</td>"
+                "</tr>"
+            )
+        non_fact_rows: list[str] = []
+        for step in invocation.get("non_fact_steps", []):
+            if not isinstance(step, dict):
+                continue
+            non_fact_rows.append(
+                "<tr>"
+                f"<td>{escape(str(step.get('binding_index')))}</td>"
+                f"<td>{escape(str(step.get('step_key')))}</td>"
+                f"<td>{escape(str(step.get('kind')))}</td>"
+                f"<td>{escape(str(step.get('status')))}</td>"
+                f"<td><pre>{escape(json.dumps(step.get('details'), ensure_ascii=False, sort_keys=True, indent=2))}</pre></td>"
+                "</tr>"
+            )
+        ruleref_items: list[str] = []
+        for link in invocation.get("ruleref_links", []):
+            if not isinstance(link, dict):
+                continue
+            ruleref_items.append(
+                "<li>"
+                f"{escape(str(link.get('ruleref_atom_key')))} -> {escape(str(link.get('child_invocation_id')))}"
+                "</li>"
+            )
+        invocation_blocks.append(
+            "<div style='border:1px solid #eee;padding:12px;margin:12px 0'>"
+            f"<h3>{escape(str(invocation.get('invocation_id')))}</h3>"
+            "<ul>"
+            f"<li>parent_invocation_id={escape(str(invocation.get('parent_invocation_id')))}</li>"
+            f"<li>rule_id={escape(str(rule.get('rule_id')))}</li>"
+            f"<li>version={escape(str(rule.get('version')))}</li>"
+            f"<li>memo_hit={escape(str(invocation.get('memo_hit')))}</li>"
+            f"<li>binding_count={escape(str(len(invocation.get('bindings', [])) if isinstance(invocation.get('bindings'), list) else 0))}</li>"
+            f"<li>output_row_count={escape(str(len(invocation.get('output_rows', [])) if isinstance(invocation.get('output_rows'), list) else 0))}</li>"
+            "</ul>"
+            "<h4>Predicate Witnesses</h4>"
+            "<table><thead><tr><th>binding_index</th><th>pred_atom_key</th><th>assertions</th></tr></thead>"
+            f"<tbody>{''.join(witness_rows) if witness_rows else '<tr><td colspan=3>None</td></tr>'}</tbody></table>"
+            "<h4>Non-fact Steps</h4>"
+            "<table><thead><tr><th>binding_index</th><th>step_key</th><th>kind</th><th>status</th><th>details</th></tr></thead>"
+            f"<tbody>{''.join(non_fact_rows) if non_fact_rows else '<tr><td colspan=5>None</td></tr>'}</tbody></table>"
+            "<h4>RuleRef Links</h4>"
+            f"<ul>{''.join(ruleref_items) if ruleref_items else '<li>None</li>'}</ul>"
+            "</div>"
+        )
+
+    assertion_summary_blocks = []
+    for asrt_id in witness_assertion_ids:
+        detail = assertion_index.get_assertion_detail(asrt_id)
+        if isinstance(detail, dict):
+            assertion_summary_blocks.append(_render_assertion_summary_block(detail, "../assertions"))
+
+    narrative_block = _render_rule_trace_narrative_block(narrative)
+
+    return _html_page(
+        title=f"Rule Trace {rule_run_id}",
+        body=(
+            f"<h1>Rule Trace {escape(rule_run_id)}</h1>"
+            "<p><a href='../index.html'>Back to runs</a> | "
+            "<a href='../rule_traces.html'>All rule traces</a></p>"
+            f"{narrative_block}"
+            "<h2>Summary</h2>"
+            "<ul>"
+            f"<li>root_rule_id={escape(str(root_rule.get('rule_id')))}</li>"
+            f"<li>root_rule_version={escape(str(root_rule.get('version')))}</li>"
+            f"<li>select_vars={escape(json.dumps(select_vars, ensure_ascii=False))}</li>"
+            f"<li>root_row_count={escape(str(stats.get('root_row_count', 0)))}</li>"
+            f"<li>invocation_count={escape(str(stats.get('invocation_count', 0)))}</li>"
+            f"<li>witness_assertion_count={escape(str(stats.get('witness_assertion_count', 0)))}</li>"
+            f"<li>pred_witness_count={escape(str(stats.get('pred_witness_count', 0)))}</li>"
+            f"<li>non_fact_step_count={escape(str(stats.get('non_fact_step_count', 0)))}</li>"
+            "</ul>"
+            "<h2>Root Rows</h2>"
+            f"<ul>{''.join(root_row_items) if root_row_items else '<li>None</li>'}</ul>"
+            "<h2>Witness Assertions</h2>"
+            f"<ul>{''.join(witness_links) if witness_links else '<li>None</li>'}</ul>"
+            "<h2>Assertion Summaries</h2>"
+            f"{''.join(assertion_summary_blocks) if assertion_summary_blocks else '<p>None</p>'}"
+            "<h2>Invocations</h2>"
+            f"{''.join(invocation_blocks) if invocation_blocks else '<p>None</p>'}"
+            "<h2>Payload</h2>"
+            f"<pre>{escape(json.dumps(trace, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
+        ),
+    )
+
+
+def _render_rule_trace_narrative_block(narrative: dict[str, Any] | None) -> str:
+    if not isinstance(narrative, dict):
+        return ""
+
+    def _line_list(lines: Any) -> str:
+        if not isinstance(lines, list) or not lines:
+            return "<p>None</p>"
+        items = [f"<li>{escape(str(line))}</li>" for line in lines if isinstance(line, str) and line]
+        return f"<ul>{''.join(items) if items else '<li>None</li>'}</ul>"
+
+    headline = narrative.get("headline")
+    headline_html = (
+        f"<p>{escape(headline)}</p>"
+        if isinstance(headline, str) and headline
+        else "<p>None</p>"
+    )
+    return (
+        "<h2>Narrative</h2>"
+        f"{headline_html}"
+        "<h3>Overview</h3>"
+        f"{_line_list(narrative.get('overview_lines'))}"
+        "<h3>Predicate Witnesses</h3>"
+        f"{_line_list(narrative.get('predicate_lines'))}"
+        "<h3>Non-fact Checks</h3>"
+        f"{_line_list(narrative.get('non_fact_check_lines'))}"
+        "<h3>Drilldown</h3>"
+        f"{_line_list(narrative.get('drilldown_lines'))}"
+    )
+
+
 def _render_filter_index_pages(query: AuditQuery) -> dict[str, str]:
     decisions = query.list_decisions()
     failures = query.list_failures()
@@ -550,10 +777,12 @@ def _build_ui_index_payload(
     run_ids: list[str],
     decision_ids: list[str],
     assertion_ids: list[str],
+    rule_trace_ids: list[str],
     authoring_apply_run_ids: list[str],
     index_pages: list[str],
     authoring_apply_summary: dict[str, Any] | None = None,
     compliance_matrix_rows: list[dict[str, Any]] | None = None,
+    rule_trace_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     decisions = query.list_decisions()
     failures = query.list_failures()
@@ -646,6 +875,7 @@ def _build_ui_index_payload(
     run_pages = {run_id: f"runs/{_slug_id(run_id)}.html" for run_id in run_ids}
     decision_pages = {decision_id: f"decisions/{_slug_id(decision_id)}.html" for decision_id in decision_ids}
     assertion_pages = {asrt_id: f"assertions/{_slug_id(asrt_id)}.html" for asrt_id in assertion_ids}
+    rule_trace_pages = {rule_run_id: f"rule_traces/{_slug_id(rule_run_id)}.html" for rule_run_id in rule_trace_ids}
     authoring_apply_run_pages = {
         request_id: f"authoring_apply_runs/{_slug_id(request_id)}.html"
         for request_id in sorted({rid for rid in authoring_apply_run_ids if isinstance(rid, str) and rid})
@@ -729,6 +959,7 @@ def _build_ui_index_payload(
             "runs": len(run_ids),
             "decisions": len(decision_ids),
             "assertions": len(assertion_ids),
+            "rule_traces": len(rule_trace_ids),
             "failures": len(failures),
             "compliance_matrix_rows": len(compliance_matrix_rows or []),
             "authoring_apply_events": (
@@ -742,6 +973,7 @@ def _build_ui_index_payload(
             "search": "search.html",
             "site_manifest": "site_manifest.json",
             "authoring_apply_events": "authoring_apply_events.html",
+            "rule_traces": "rule_traces.html",
             "compliance_matrix": "compliance_matrix.html",
             "indexes": [f"indexes/{name}" for name in index_pages],
         },
@@ -749,6 +981,7 @@ def _build_ui_index_payload(
             "run_pages": run_pages,
             "decision_pages": decision_pages,
             "assertion_pages": assertion_pages,
+            "rule_trace_pages": rule_trace_pages,
             "authoring_apply_request_pages": authoring_apply_request_pages,
             "authoring_apply_run_pages": authoring_apply_run_pages,
             "run_to_decisions": {k: sorted(v) for k, v in sorted(run_to_decisions.items())},
@@ -759,6 +992,7 @@ def _build_ui_index_payload(
             "assertion_to_decisions": {k: sorted(v) for k, v in sorted(assertion_to_decisions.items())},
         },
         "runs": run_rows,
+        "rule_traces": [_json_safe(row) for row in (rule_trace_rows or []) if isinstance(row, dict)],
         "authoring_apply_runs": authoring_apply_runs,
         "filters": {
             "event_kinds": [
@@ -802,8 +1036,26 @@ def _build_ui_index_payload(
                 }
                 for request_id in sorted(authoring_apply_request_ids)
             ],
+            "rule_traces": [
+                {
+                    "rule_run_id": row.get("rule_run_id"),
+                    "root_rule_id": (
+                        row["root_rule"].get("rule_id")
+                        if isinstance(row.get("root_rule"), dict)
+                        else None
+                    ),
+                    "count": 1,
+                    "page": rule_trace_pages.get(str(row.get("rule_run_id", "")), "rule_traces.html"),
+                }
+                for row in (rule_trace_rows or [])
+                if isinstance(row, dict) and isinstance(row.get("rule_run_id"), str) and row.get("rule_run_id")
+            ],
         },
         "authoring_apply": _json_safe(authoring_apply_summary or {"event_count": 0, "status_counts": {}, "section_counts": {}}),
+        "rule_trace_index": {
+            "page": "rule_traces.html",
+            "count": len(rule_trace_rows or []),
+        },
         "compliance_matrix": {
             "page": "compliance_matrix.html",
             "count": len(compliance_matrix_rows or []),
@@ -989,6 +1241,7 @@ def _render_search_page() -> str:
   const TYPE_MAP = {
     all: null,
     run: "runs",
+    rule_trace: "ruleTraces",
     decision: "decisions",
     assertion: "assertions",
     pred_id: "predicates",
@@ -1003,15 +1256,22 @@ def _render_search_page() -> str:
     const needle = q.trim().toLowerCase();
     const selectedBucket = TYPE_MAP[typeFilter] || null;
     if (!needle) {
-      countsEl.textContent = "Type to search runs / decisions / assertions / predicates / event kinds / error classes / authoring apply";
+      countsEl.textContent = "Type to search runs / rule traces / decisions / assertions / predicates / event kinds / error classes / authoring apply";
       resultsEl.innerHTML = "";
       return;
     }
 
-    const hits = { runs: [], decisions: [], assertions: [], predicates: [], eventKinds: [], errorClasses: [], authoringApplyRequestIds: [], authoringApplyStatuses: [], authoringApplySections: [] };
+    const hits = { runs: [], ruleTraces: [], decisions: [], assertions: [], predicates: [], eventKinds: [], errorClasses: [], authoringApplyRequestIds: [], authoringApplyStatuses: [], authoringApplySections: [] };
     for (const run of (index.runs || [])) {
       if (String(run.run_id || "").toLowerCase().includes(needle)) {
         hits.runs.push(run);
+      }
+    }
+    for (const row of (index.rule_traces || [])) {
+      const ruleRunId = String(row.rule_run_id || "").toLowerCase();
+      const rootRuleId = String(((row.root_rule || {}).rule_id) || "").toLowerCase();
+      if (ruleRunId.includes(needle) || rootRuleId.includes(needle)) {
+        hits.ruleTraces.push(row);
       }
     }
     for (const [decisionId, path] of Object.entries((index.lookup || {}).decision_pages || {})) {
@@ -1055,7 +1315,7 @@ def _render_search_page() -> str:
       }
     }
 
-    const visibleBuckets = selectedBucket ? [selectedBucket] : ["runs","decisions","assertions","predicates","eventKinds","errorClasses","authoringApplyRequestIds","authoringApplyStatuses","authoringApplySections"];
+    const visibleBuckets = selectedBucket ? [selectedBucket] : ["runs","ruleTraces","decisions","assertions","predicates","eventKinds","errorClasses","authoringApplyRequestIds","authoringApplyStatuses","authoringApplySections"];
     const total = visibleBuckets.reduce((n, key) => n + (hits[key] || []).length, 0);
     countsEl.textContent = `Results: ${total} (type=${typeFilter || "all"})`;
 
@@ -1064,6 +1324,7 @@ def _render_search_page() -> str:
       if (visibleBuckets.includes(bucketKey)) sections.push(html);
     }
     maybePush("runs", "<h2>Runs</h2><ul>" + (hits.runs.map(r => rowLink(r.path, r.run_id, `claims=${r.claim_count} decisions=${r.decision_count} errors=${r.error_count}`)).join("") || "<li>None</li>") + "</ul>");
+    maybePush("ruleTraces", "<h2>Rule Traces</h2><ul>" + (hits.ruleTraces.map(r => rowLink(((index.lookup || {}).rule_trace_pages || {})[r.rule_run_id] || \"rule_traces.html\", r.rule_run_id, `root_rule=${((r.root_rule || {}).rule_id) || \"\"} witnesses=${r.witness_assertion_count || 0}`)).join("") || "<li>None</li>") + "</ul>");
     maybePush("decisions", "<h2>Decisions</h2><ul>" + (hits.decisions.map(r => rowLink(r.path, r.decision_id, "")).join("") || "<li>None</li>") + "</ul>");
     maybePush("assertions", "<h2>Assertions</h2><ul>" + (hits.assertions.map(r => rowLink(r.path, r.asrt_id, "")).join("") || "<li>None</li>") + "</ul>");
     maybePush("predicates", "<h2>Predicates</h2><ul>" + (hits.predicates.map(r => rowLink(r.page, r.pred_id, `decisions=${r.decision_count} accept_writes=${r.accept_write_count}`)).join("") || "<li>None</li>") + "</ul>");
@@ -1116,6 +1377,7 @@ def _render_search_page() -> str:
             "<select id='type'>"
             "<option value='all'>all</option>"
             "<option value='run'>run</option>"
+            "<option value='rule_trace'>rule_trace</option>"
             "<option value='decision'>decision</option>"
             "<option value='assertion'>assertion</option>"
             "<option value='pred_id'>pred_id</option>"

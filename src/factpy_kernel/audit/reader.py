@@ -23,6 +23,7 @@ class AuditPackageData:
     decision_log: list[dict[str, Any]]
     accept_failed: list[dict[str, Any]]
     mapping_resolution: dict[str, Any] | None
+    rule_trace_artifacts: list[dict[str, Any]]
     authoring_apply_events: list[dict[str, Any]]
 
 
@@ -54,6 +55,7 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
         decision_log=_read_jsonl(_required_rel_path(root, audit_files, "decision_log")),
         accept_failed=_read_jsonl(_required_rel_path(root, audit_files, "accept_failed")),
         mapping_resolution=mapping_resolution,
+        rule_trace_artifacts=_read_optional_jsonl(root, audit_files, "rule_trace_artifacts"),
         authoring_apply_events=[dict(evt.raw) for evt in load_authoring_apply_events(root)],
     )
 
@@ -79,6 +81,10 @@ def _read_manifest_audit_files(manifest: dict[str, Any]) -> dict[str, str]:
         if not isinstance(value, str) or not value:
             raise AuditReadError(f"manifest.paths.audit_files.{key} must be non-empty string")
         out[key] = value
+    for key in ("rule_trace_artifacts", "support_artifacts"):
+        value = audit_files.get(key)
+        if isinstance(value, str) and value:
+            out[key] = value
     return out
 
 
@@ -90,6 +96,16 @@ def _required_rel_path(root: Path, mapping: dict[str, str], key: str) -> Path:
     if not path.exists():
         raise AuditReadError(f"missing audit file: {path}")
     return path
+
+
+def _read_optional_jsonl(root: Path, mapping: dict[str, str], key: str) -> list[dict[str, Any]]:
+    rel = mapping.get(key)
+    if not isinstance(rel, str) or not rel:
+        return []
+    path = root / rel
+    if not path.exists():
+        return []
+    return _read_jsonl(path)
 
 
 def _read_json(path: Path) -> dict[str, Any] | list[Any] | Any:
