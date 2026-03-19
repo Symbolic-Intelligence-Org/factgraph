@@ -147,6 +147,18 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     只保留 adopted branch 的 proof body
   - 若多个 branch 对同一 final binding 都满足，则采用 `source-order wins`
   - selected branch identity 继续通过现有 `b{branch}.a{atom}:...` key namespace recoverable，不新增 top-level branch 字段
+  - native candidate proof tree 的 unresolved / boundary taxonomy 现已冻结为正式 contract：
+    - `unresolved_support`
+      - `child_support_unavailable`
+        - capture / substrate-owned
+      - `artifact_missing`
+        - support lookup / readback-owned
+    - `recursion_boundary`
+      - `cycle`
+      - `depth_limit`
+        - 两者都属于 traversal-owned boundary reason
+  - runtime / audit / static 继续共享同一组 raw terminal reason enum，不引入 consumer-specific 翻译层
+  - richer taxonomy 只适用于 structured `rule_ref_edges` path；只有 legacy `rule_refs` 的旧 artifact 继续回退到 flat `rule_ref` 节点，不进入 recursive terminal taxonomy
 
 ```mermaid
 flowchart LR

@@ -140,6 +140,15 @@
     - `referenced_support`
     - `unresolved_support`
     - `recursion_boundary`
+  - audit 在 candidate tree 上消费与 runtime 相同的 terminal taxonomy contract：
+    - `unresolved_support`
+      - `child_support_unavailable`
+      - `artifact_missing`
+    - `recursion_boundary`
+      - `cycle`
+      - `depth_limit`
+  - audit 不发明新的 reason enum；summary/query/static 都继续消费同一组 raw node-kind 与 reason 字段
+  - 只有 structured `rule_ref_edges` path 会进入 recursive terminal taxonomy；legacy `rule_refs` fallback 仍保持 flat `rule_ref` 节点
 
 这组 summary 与 runtime `rule_run_summary` 保持同构，且只从现有 raw trace payload 派生。
 这组 narrative 与 runtime `rule_run_narrative` 保持同构，且只从既有 `rule_run_summary` 纯派生。

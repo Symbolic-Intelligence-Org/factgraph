@@ -436,6 +436,18 @@
   - `unresolved_reason`
 - 当 `child_support_digest` 可解引用时，tree 会继续展开 `referenced_support`；否则会落到 `unresolved_support`。
 - `artifact_missing`、`cycle`、`depth_limit` 是 tree terminal reason，不属于 capture-side `unresolved_reason`。
+- 这些 terminal reason 现在属于正式的 shared taxonomy contract，不再只是实现细节：
+  - `unresolved_support`
+    - `child_support_unavailable`
+      - capture / substrate-owned
+    - `artifact_missing`
+      - lookup / readback-owned
+  - `recursion_boundary`
+    - `cycle`
+    - `depth_limit`
+      - traversal-owned
+- runtime / audit / static 三侧共享同一组 raw reason enum；service 不在 transport 层再翻译成另一套状态名。
+- richer taxonomy 只适用于 structured `rule_ref_edges` path；只有 legacy `rule_refs` 的旧 artifact 仍只展示 flat `rule_ref` 节点，不进入 recursive terminal taxonomy。
 - native candidate proof 现在会在 support capture 时做 winning-branch narrowing：
   - `support_section` / `rule_ref_section` 只反映 adopted branch
   - 若多个 branch 都满足同一 final binding，则采用 `source-order wins`
