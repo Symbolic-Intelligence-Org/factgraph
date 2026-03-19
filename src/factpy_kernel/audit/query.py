@@ -104,6 +104,7 @@ class AuditQuery:
                 support_kind=support_kind,
                 support=support,
                 assertion_lookup=assertion_index.get_assertion_detail,
+                support_lookup=self._get_support_artifact,
             )
         except ValueError as exc:
             raise AuditQueryError(str(exc)) from exc

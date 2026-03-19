@@ -147,9 +147,16 @@
 - 若当前 session 中不存在对应 artifact，返回 `runtime_explain_not_found`。
 - 未配置 `artifact_store_root` 时，这不是 durable lookup；session 清理后 handle 可能失效。
 - 为兼容旧客户端，响应顶层不新增 `kind` 字段。
-- native `SupportArtifact` 当前可能包含 direct `rule_refs`：
-  - 这些是 derivation native `RuleRef` 执行时记录的直接引用规则 id
-  - 还不是 `child_support_digest` 级别的递归 child proof handle
+- native `SupportArtifact` 当前可能同时包含：
+  - legacy `rule_refs`
+  - structured `rule_ref_edges`
+- `rule_ref_edges` 是 per-occurrence child-proof edges：
+  - `ruleref_atom_key`
+  - `rule_ref_id`
+  - `rule_ref_version`
+  - `child_support_digest | None`
+  - `unresolved_reason | None`
+- first-round `unresolved_reason` 只使用 `child_support_unavailable`；artifact readback miss 与 recursion boundary 不写进这个字段。
 
 错误 kinds：
 
@@ -413,12 +420,23 @@
   - support section children：
     - `predicate_witness_group`
     - `non_fact_check`
-  - leaves：
+  - leaf / recursive nodes：
     - `assertion_fact`
-    - optional minimal `rule_ref`
+    - `rule_ref`
+    - `referenced_support`
+    - `unresolved_support`
+    - `recursion_boundary`
 - `support_section` 当前始终存在。
-- `rule_ref_section` 只在 `SupportArtifact.rule_refs` 非空时 emit；不会输出空 section 占位节点。
-- 当前 `rule_ref_section` 只表达 first-round 的 direct referenced rule ids，不承诺递归 child proof expansion。
+- `rule_ref_section` 在 `SupportArtifact.rule_ref_edges` 非空时优先按 structured edge emit；若只有 legacy `rule_refs`，则回退到 minimal `rule_ref` 节点。
+- `rule_ref` 节点当前会显式暴露：
+  - `ruleref_atom_key`
+  - `rule_ref_id`
+  - `rule_ref_version`
+  - `child_support_digest`
+  - `unresolved_reason`
+- 当 `child_support_digest` 可解引用时，tree 会继续展开 `referenced_support`；否则会落到 `unresolved_support`。
+- `artifact_missing`、`cycle`、`depth_limit` 是 tree terminal reason，不属于 capture-side `unresolved_reason`。
+- multi-branch winning semantics 继续 deferred；当前 recursive child proof 仍是保守 capture，不承诺 winning proof path。
 - `assertion_fact` leaf 只携带：
   - `asrt_id`
   - `pred_id`
@@ -720,6 +738,9 @@
   - 或 session-level `registry_root`
   提供显式 registry context；否则运行时会 fail fast。
 - native derivation support 当前可记录 direct `rule_refs`，因此后续 `explain-support` / `explain-tree` 可能看到 minimal `rule_ref` 节点；这还不是递归 child proof。
+- native derivation support 现在会优先记录 structured `rule_ref_edges`，因此后续 `explain-support` / `explain-tree` 已可沿 `child_support_digest` 继续展开 first-round recursive proof。
+- direct `rule_refs` 继续保留为兼容摘要字段；child row proof 复用既有 native `SupportArtifact` readback，而不是发明第二套 handle。
+- branch-winning semantics 仍未冻结；多分支 `RuleRef` child proof 继续按保守 capture 处理。
 - engine evaluate（`souffle` / `problog`）第一轮显式返回 `support_kind="engine_no_witness_v1"`：
   - 这表示 candidate 本身有效，但当前 engine path 不产出可解引用的 witness artifact
   - 统一 `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`，而不是 `runtime_explain_not_found`

@@ -1,18 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from factpy_kernel.core.rules.ruleref_common import internal_rule_pred_id, resolve_exposed_rule_ref
+from factpy_kernel.core.rules.ruleref_types import NativeRuleRefResolution, NativeRuleRefRowSupport
 from factpy_kernel.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
 from factpy_kernel.core.rules.where_ast_validate import WhereASTValidationError, validate_where_ast
 from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_where
+from factpy_kernel.core.store._support import ProjectedFact, SupportArtifact, compute_support_digest
+from factpy_kernel.core.store._support_capture import (
+    build_support_artifact_for_binding,
+    derive_rule_ref_edges_for_binding,
+)
 
 
 @dataclass(frozen=True)
 class NativeWhereEvaluation:
     bindings: list[dict[str, Any]]
     rule_refs: tuple[str, ...] = ()
+    rule_ref_resolutions: tuple[NativeRuleRefResolution, ...] = ()
+
+
+@dataclass(frozen=True)
+class _RegisteredRuleEvaluation:
+    rows: tuple[tuple[Any, ...], ...]
+    row_supports: tuple[NativeRuleRefRowSupport, ...]
 
 
 def evaluate_native_where(
@@ -20,6 +33,31 @@ def evaluate_native_where(
     where: list[Any],
     *,
     registry: Any | None = None,
+    witness_facts: dict[str, list[ProjectedFact]] | None = None,
+    remember_support_artifact: Callable[[str, SupportArtifact], None] | None = None,
+) -> NativeWhereEvaluation:
+    memo_outputs: dict[tuple[str, str], _RegisteredRuleEvaluation] = {}
+    stack: set[tuple[str, str]] = set()
+    return _evaluate_native_where_internal(
+        view_facts,
+        where,
+        registry=registry,
+        witness_facts=witness_facts,
+        remember_support_artifact=remember_support_artifact,
+        memo_outputs=memo_outputs,
+        stack=stack,
+    )
+
+
+def _evaluate_native_where_internal(
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    where: list[Any],
+    *,
+    registry: Any | None,
+    witness_facts: dict[str, list[ProjectedFact]] | None,
+    remember_support_artifact: Callable[[str, SupportArtifact], None] | None,
+    memo_outputs: dict[tuple[str, str], _RegisteredRuleEvaluation],
+    stack: set[tuple[str, str]],
 ) -> NativeWhereEvaluation:
     has_ruleref = _contains_ruleref_atom(where)
     if registry is None:
@@ -29,19 +67,23 @@ def evaluate_native_where(
 
     if has_ruleref:
         _validate_where_for_ruleref(where)
-        memo_rows: dict[tuple[str, str], list[tuple[Any, ...]]] = {}
-        stack: set[tuple[str, str]] = set()
-        rewritten_where, overlay, direct_rule_refs = _rewrite_where_rule_refs(
+        rewritten_where, overlay, resolutions = _rewrite_where_rule_refs(
             where,
             registry=registry,
             base_view_facts=view_facts,
-            memo_rows=memo_rows,
+            witness_facts=witness_facts,
+            remember_support_artifact=remember_support_artifact,
+            memo_outputs=memo_outputs,
             stack=stack,
         )
         resolved_view_facts = dict(view_facts)
         resolved_view_facts.update(overlay)
         bindings = evaluate_where(resolved_view_facts, rewritten_where)
-        return NativeWhereEvaluation(bindings=bindings, rule_refs=tuple(sorted(set(direct_rule_refs))))
+        return NativeWhereEvaluation(
+            bindings=bindings,
+            rule_refs=tuple(sorted({row.rule_ref_id for row in resolutions})),
+            rule_ref_resolutions=tuple(sorted(resolutions, key=lambda row: row.ruleref_atom_key)),
+        )
 
     return NativeWhereEvaluation(bindings=evaluate_where(view_facts, where))
 
@@ -65,13 +107,15 @@ def _rewrite_where_rule_refs(
     *,
     registry: Any,
     base_view_facts: dict[str, list[tuple[Any, ...]]],
-    memo_rows: dict[tuple[str, str], list[tuple[Any, ...]]],
+    witness_facts: dict[str, list[ProjectedFact]] | None,
+    remember_support_artifact: Callable[[str, SupportArtifact], None] | None,
+    memo_outputs: dict[tuple[str, str], _RegisteredRuleEvaluation],
     stack: set[tuple[str, str]],
-) -> tuple[list[Any], dict[str, list[tuple[Any, ...]]], list[str]]:
+) -> tuple[list[Any], dict[str, list[tuple[Any, ...]]], tuple[NativeRuleRefResolution, ...]]:
     overlay: dict[str, list[tuple[Any, ...]]] = {}
-    direct_rule_refs: list[str] = []
+    resolutions: list[NativeRuleRefResolution] = []
 
-    def rewrite_atom(atom: Any) -> Any:
+    def rewrite_atom(branch_index: int, atom_index: int, atom: Any) -> Any:
         if not isinstance(atom, tuple) or not atom:
             return atom
         if atom[0] != "ruleref":
@@ -88,77 +132,139 @@ def _rewrite_where_rule_refs(
             terms_len=len(terms),
             error_factory=WhereValidationError,
         )
-        rows = _evaluate_registered_rule_rows(
+        registered = _evaluate_registered_rule_output(
             ref_spec,
             base_view_facts=base_view_facts,
+            witness_facts=witness_facts,
             registry=registry,
-            memo_rows=memo_rows,
+            remember_support_artifact=remember_support_artifact,
+            memo_outputs=memo_outputs,
             stack=stack,
         )
         pred_id = internal_rule_pred_id(ref_spec.rule_id, ref_spec.version)
-        overlay[pred_id] = rows
-        direct_rule_refs.append(ref_spec.rule_id)
+        overlay[pred_id] = list(registered.rows)
+        resolutions.append(
+            NativeRuleRefResolution(
+                ruleref_atom_key=f"b{branch_index}.a{atom_index}:ruleref",
+                rule_ref_id=ref_spec.rule_id,
+                rule_ref_version=ref_spec.version,
+                row_supports=registered.row_supports,
+            )
+        )
         return ("pred", pred_id, terms)
 
     if all(isinstance(item, tuple) for item in where):
-        return [rewrite_atom(atom) for atom in where], overlay, direct_rule_refs
+        return (
+            [rewrite_atom(0, atom_index, atom) for atom_index, atom in enumerate(where)],
+            overlay,
+            tuple(sorted(resolutions, key=lambda row: row.ruleref_atom_key)),
+        )
     if all(isinstance(item, list) for item in where):
         out_branches: list[list[Any]] = []
-        for branch in where:
+        for branch_index, branch in enumerate(where):
             if not isinstance(branch, list):
                 raise WhereValidationError("invalid where branch")
-            out_branches.append([rewrite_atom(atom) for atom in branch])
-        return out_branches, overlay, direct_rule_refs
-    return where, overlay, direct_rule_refs
+            out_branches.append(
+                [rewrite_atom(branch_index, atom_index, atom) for atom_index, atom in enumerate(branch)]
+            )
+        return out_branches, overlay, tuple(sorted(resolutions, key=lambda row: row.ruleref_atom_key))
+    return where, overlay, tuple()
 
 
-def _evaluate_registered_rule_rows(
+def _evaluate_registered_rule_output(
     rule_spec: Any,
     *,
     base_view_facts: dict[str, list[tuple[Any, ...]]],
+    witness_facts: dict[str, list[ProjectedFact]] | None,
     registry: Any,
-    memo_rows: dict[tuple[str, str], list[tuple[Any, ...]]],
+    remember_support_artifact: Callable[[str, SupportArtifact], None] | None,
+    memo_outputs: dict[tuple[str, str], _RegisteredRuleEvaluation],
     stack: set[tuple[str, str]],
-) -> list[tuple[Any, ...]]:
+) -> _RegisteredRuleEvaluation:
     key = (rule_spec.rule_id, rule_spec.version)
-    if key in memo_rows:
-        return memo_rows[key]
+    if key in memo_outputs:
+        return memo_outputs[key]
     if key in stack:
         raise WhereValidationError(f"RuleRef cycle detected at {rule_spec.rule_id}@{rule_spec.version}")
 
     stack.add(key)
     try:
-        if _contains_ruleref_atom(rule_spec.where):
-            _validate_where_for_ruleref(rule_spec.where)
-            rewritten_where, overlay, _ = _rewrite_where_rule_refs(
-                rule_spec.where,
-                registry=registry,
-                base_view_facts=base_view_facts,
-                memo_rows=memo_rows,
-                stack=stack,
+        evaluation = _evaluate_native_where_internal(
+            base_view_facts,
+            rule_spec.where,
+            registry=registry,
+            witness_facts=witness_facts,
+            remember_support_artifact=remember_support_artifact,
+            memo_outputs=memo_outputs,
+            stack=stack,
+        )
+        row_supports_by_terms: dict[tuple[Any, ...], NativeRuleRefRowSupport] = {}
+        for binding in evaluation.bindings:
+            row_terms = tuple(binding[var] for var in rule_spec.select_vars)
+            row_support = _build_rule_row_support(
+                rule_spec_where=rule_spec.where,
+                binding=binding,
+                row_terms=row_terms,
+                witness_facts=witness_facts,
+                remember_support_artifact=remember_support_artifact,
+                child_rule_ref_resolutions=evaluation.rule_ref_resolutions,
             )
-            resolved_view_facts = dict(base_view_facts)
-            resolved_view_facts.update(overlay)
-            bindings = evaluate_where(resolved_view_facts, rewritten_where)
-        else:
-            bindings = evaluate_where(base_view_facts, rule_spec.where)
-        rows = _rows_from_bindings(bindings, rule_spec.select_vars)
-        memo_rows[key] = rows
-        return rows
+            existing = row_supports_by_terms.get(row_terms)
+            if existing is None or _row_support_sort_key(row_support) < _row_support_sort_key(existing):
+                row_supports_by_terms[row_terms] = row_support
+        output = _RegisteredRuleEvaluation(
+            rows=tuple(sorted(row_supports_by_terms.keys(), key=lambda row: tuple(str(cell) for cell in row))),
+            row_supports=tuple(sorted(row_supports_by_terms.values(), key=_row_support_sort_key)),
+        )
+        memo_outputs[key] = output
+        return output
     finally:
         stack.remove(key)
 
 
-def _rows_from_bindings(bindings: list[dict[str, Any]], select_vars: list[str]) -> list[tuple[Any, ...]]:
-    rows: list[tuple[Any, ...]] = []
-    for binding in bindings:
-        row: list[Any] = []
-        for var in select_vars:
-            if var not in binding:
-                raise WhereValidationError(f"select var is unbound: {var}")
-            row.append(binding[var])
-        rows.append(tuple(row))
-    return sorted(set(rows), key=lambda item: tuple(str(cell) for cell in item))
+def _build_rule_row_support(
+    *,
+    rule_spec_where: list[Any],
+    binding: dict[str, Any],
+    row_terms: tuple[Any, ...],
+    witness_facts: dict[str, list[ProjectedFact]] | None,
+    remember_support_artifact: Callable[[str, SupportArtifact], None] | None,
+    child_rule_ref_resolutions: tuple[NativeRuleRefResolution, ...],
+) -> NativeRuleRefRowSupport:
+    if witness_facts is None or remember_support_artifact is None:
+        return NativeRuleRefRowSupport(
+            row_terms=row_terms,
+            child_support_digest=None,
+            unresolved_reason="child_support_unavailable",
+        )
+
+    rule_ref_edges = derive_rule_ref_edges_for_binding(
+        where=rule_spec_where,
+        binding=binding,
+        rule_ref_resolutions=child_rule_ref_resolutions,
+    )
+    artifact = build_support_artifact_for_binding(
+        where=rule_spec_where,
+        binding=binding,
+        witness_facts=witness_facts,
+        root_result_kind="row",
+        rule_ref_edges=rule_ref_edges,
+    )
+    support_digest = compute_support_digest(artifact)
+    remember_support_artifact(support_digest, artifact)
+    return NativeRuleRefRowSupport(
+        row_terms=row_terms,
+        child_support_digest=support_digest,
+        unresolved_reason=None,
+    )
+
+
+def _row_support_sort_key(row: NativeRuleRefRowSupport) -> tuple[tuple[Any, ...], str, str]:
+    return (
+        row.row_terms,
+        row.child_support_digest or "",
+        row.unresolved_reason or "",
+    )
 
 
 def _contains_ruleref_atom(where: Any) -> bool:
@@ -169,3 +275,6 @@ def _contains_ruleref_atom(where: Any) -> bool:
     if isinstance(where, list):
         return any(_contains_ruleref_atom(item) for item in where)
     return False
+
+
+__all__ = ["NativeWhereEvaluation", "evaluate_native_where"]

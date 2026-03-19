@@ -126,9 +126,21 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - `candidate_result`
     - `support_section`
     - optional `rule_ref_section`
-    - `predicate_witness_group` / `non_fact_check` / `assertion_fact` / minimal `rule_ref`
+    - `predicate_witness_group` / `non_fact_check` / `assertion_fact` / `rule_ref`
+    - recursive child layer:
+      - `referenced_support`
+      - `unresolved_support`
+      - `recursion_boundary`
   - 这仍是 native-first consumer surface，不是 engine parity、graph UI、或更细 provenance contract
-  - native `SupportArtifact.rule_refs` 现在可记录 direct referenced rule ids，但尚不携带 child support handle；递归 child-proof expansion 仍未进入 current contract
+  - native `SupportArtifact` 现在同时保留：
+    - legacy `rule_refs` summary
+    - structured `rule_ref_edges`
+  - `rule_ref_edges` 按 `ruleref_atom_key` 记录 per-occurrence child proof edge，并携带：
+    - `rule_ref_id`
+    - `rule_ref_version`
+    - `child_support_digest | unresolved_reason`
+  - child support 继续复用既有 `support_digest -> SupportArtifact` readback；内部 child row proof 通过 `root_result_kind="row"` 的 native support artifact 表达
+  - first-round recursive proof 仍保持保守边界：multi-branch winning semantics 继续 deferred
 
 ```mermaid
 flowchart LR

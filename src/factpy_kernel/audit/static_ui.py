@@ -632,6 +632,11 @@ def _render_candidate_evidence_page(tree: dict[str, Any]) -> str:
     root = tree.get("root") if isinstance(tree.get("root"), dict) else {}
     binding = root.get("binding") if isinstance(root.get("binding"), dict) else {}
     rule_refs = [item for item in root.get("rule_refs", []) if isinstance(item, str) and item]
+    rule_ref_edges = [
+        item
+        for item in root.get("rule_ref_edges", [])
+        if isinstance(item, dict)
+    ]
     return _html_page(
         title=f"Candidate Evidence {candidate_id}",
         body=(
@@ -644,6 +649,7 @@ def _render_candidate_evidence_page(tree: dict[str, Any]) -> str:
             f"<li>support_kind={escape(support_kind)}</li>"
             f"<li>root_result_kind={escape(str(root.get('root_result_kind')))}</li>"
             f"<li>rule_refs={escape(','.join(rule_refs)) or '-'}</li>"
+            f"<li>rule_ref_edges={escape(str(len(rule_ref_edges)))}</li>"
             "</ul>"
             "<h2>Binding</h2>"
             f"<pre>{escape(json.dumps(binding, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
@@ -669,7 +675,19 @@ def _render_candidate_evidence_node(node: dict[str, Any], *, assertion_href_pref
     elif node_kind == "rule_ref_section":
         items.append(f"<li>section_children={escape(str(len(node.get('children', []))))}</li>")
     elif node_kind == "rule_ref":
+        items.append(f"<li>ruleref_atom_key={escape(str(node.get('ruleref_atom_key')))}</li>")
         items.append(f"<li>rule_ref_id={escape(str(node.get('rule_ref_id')))}</li>")
+        items.append(f"<li>rule_ref_version={escape(str(node.get('rule_ref_version')))}</li>")
+        items.append(f"<li>child_support_digest={escape(str(node.get('child_support_digest')))}</li>")
+        items.append(f"<li>unresolved_reason={escape(str(node.get('unresolved_reason')))}</li>")
+    elif node_kind == "referenced_support":
+        items.append(f"<li>support_digest={escape(str(node.get('support_digest')))}</li>")
+        items.append(f"<li>root_result_kind={escape(str(node.get('root_result_kind')))}</li>")
+    elif node_kind == "unresolved_support":
+        items.append(f"<li>reason={escape(str(node.get('reason')))}</li>")
+        items.append(f"<li>child_support_digest={escape(str(node.get('child_support_digest')))}</li>")
+    elif node_kind == "recursion_boundary":
+        items.append(f"<li>boundary_reason={escape(str(node.get('boundary_reason')))}</li>")
     elif node_kind == "predicate_witness_group":
         items.append(f"<li>pred_atom_key={escape(str(node.get('pred_atom_key')))}</li>")
         items.append(f"<li>pred_id={escape(str(node.get('pred_id')))}</li>")

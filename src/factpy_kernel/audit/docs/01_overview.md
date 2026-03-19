@@ -135,7 +135,11 @@
 - `candidate_evidence/{candidate_id}.html`
   - node-kind-aware nested tree page
   - assertion leaves 继续下钻到既有 assertion detail 页面
-  - 若 candidate 具有 `rule_refs`，页面会按需展示 `rule_ref_section`
+  - 若 candidate 具有 `rule_ref_edges` 或 legacy `rule_refs`，页面会按需展示 `rule_ref_section`
+  - 当前也支持 recursive child proof node：
+    - `referenced_support`
+    - `unresolved_support`
+    - `recursion_boundary`
 
 这组 summary 与 runtime `rule_run_summary` 保持同构，且只从现有 raw trace payload 派生。
 这组 narrative 与 runtime `rule_run_narrative` 保持同构，且只从既有 `rule_run_summary` 纯派生。
@@ -193,8 +197,9 @@
 
 - reader 读取 JSONL rows（旧 package 若没有该文件则返回空集）
 - query 可按 `candidate_id -> support_digest` 离线重建 native candidate evidence tree
+- query 会优先消费 `SupportArtifact.rule_ref_edges`，并按 `child_support_digest` 继续离线解引用 child support artifact；若 package 只有 legacy `rule_refs`，则保持 minimal fallback tree
 - dto 可直接返回与 runtime 同构的 `candidate_evidence_tree`
-- static site 可把 `candidate_id` 渲染成 sectioned nested tree page，并继续下钻到既有 assertion detail 页面
+- static site 可把 `candidate_id` 渲染成 recursive sectioned tree page，并继续下钻到既有 assertion detail 页面
 
 当前不会新增 `rule_trace_summary` 专用 artifact 文件；summary 是 read/query 层的纯派生面，不是新的 durable package contract。
 当前也不会新增 `candidate_evidence_tree` 专用 artifact 文件；candidate tree 同样是 read/query 层的纯派生面，不是新的 durable package contract。

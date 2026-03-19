@@ -6,7 +6,7 @@ from typing import Any, Literal, Mapping, Sequence, TypeAlias
 
 from factpy_kernel.core.protocol.digests import sha256_token
 
-SupportRootResultKind: TypeAlias = Literal["fact", "entity"]
+SupportRootResultKind: TypeAlias = Literal["fact", "entity", "row"]
 BindingItems: TypeAlias = tuple[tuple[str, Any], ...]
 DetailItems: TypeAlias = tuple[tuple[str, Any], ...]
 ENGINE_NO_WITNESS_KIND = "engine_no_witness_v1"
@@ -56,6 +56,37 @@ class NonFactStep:
 
 
 @dataclass(frozen=True)
+class RuleRefEdge:
+    ruleref_atom_key: str
+    rule_ref_id: str
+    rule_ref_version: str
+    child_support_digest: str | None = None
+    unresolved_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.ruleref_atom_key, str) or not self.ruleref_atom_key:
+            raise ValueError("RuleRefEdge.ruleref_atom_key must be non-empty string")
+        if not isinstance(self.rule_ref_id, str) or not self.rule_ref_id:
+            raise ValueError("RuleRefEdge.rule_ref_id must be non-empty string")
+        if not isinstance(self.rule_ref_version, str) or not self.rule_ref_version:
+            raise ValueError("RuleRefEdge.rule_ref_version must be non-empty string")
+        if self.child_support_digest is None and self.unresolved_reason is None:
+            raise ValueError("RuleRefEdge must have child_support_digest or unresolved_reason")
+        if self.child_support_digest is not None:
+            if (
+                not isinstance(self.child_support_digest, str)
+                or not self.child_support_digest.startswith("sha256:")
+            ):
+                raise ValueError("RuleRefEdge.child_support_digest must be sha256 token")
+            if self.unresolved_reason is not None:
+                raise ValueError("resolved RuleRefEdge must not carry unresolved_reason")
+        if self.unresolved_reason is not None and (
+            not isinstance(self.unresolved_reason, str) or not self.unresolved_reason
+        ):
+            raise ValueError("RuleRefEdge.unresolved_reason must be non-empty string")
+
+
+@dataclass(frozen=True)
 class SupportArtifact:
     kind: str
     root_result_kind: SupportRootResultKind
@@ -63,12 +94,13 @@ class SupportArtifact:
     pred_witnesses: tuple[PredWitness, ...]
     non_fact_steps: tuple[NonFactStep, ...] = ()
     rule_refs: tuple[str, ...] = ()
+    rule_ref_edges: tuple[RuleRefEdge, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, str) or not self.kind:
             raise ValueError("SupportArtifact.kind must be non-empty string")
-        if self.root_result_kind not in {"fact", "entity"}:
-            raise ValueError("SupportArtifact.root_result_kind must be 'fact' or 'entity'")
+        if self.root_result_kind not in {"fact", "entity", "row"}:
+            raise ValueError("SupportArtifact.root_result_kind must be 'fact', 'entity', or 'row'")
         if tuple(self.binding_items) != normalize_binding_items(self.binding_items):
             raise ValueError("SupportArtifact.binding_items must be sorted binding tuples")
         if tuple(self.pred_witnesses) != tuple(
@@ -82,6 +114,9 @@ class SupportArtifact:
         normalized_rule_refs = tuple(sorted(_normalize_non_empty_strings(self.rule_refs)))
         if tuple(self.rule_refs) != normalized_rule_refs:
             raise ValueError("SupportArtifact.rule_refs must be sorted unique non-empty strings")
+        normalized_rule_ref_edges = tuple(sorted(self.rule_ref_edges, key=_rule_ref_edge_sort_key))
+        if tuple(self.rule_ref_edges) != normalized_rule_ref_edges:
+            raise ValueError("SupportArtifact.rule_ref_edges must be sorted")
 
 
 @dataclass(frozen=True)
@@ -189,6 +224,16 @@ def support_artifact_to_dict(artifact: SupportArtifact) -> dict[str, Any]:
             for row in artifact.non_fact_steps
         ],
         "rule_refs": list(artifact.rule_refs),
+        "rule_ref_edges": [
+            {
+                "ruleref_atom_key": row.ruleref_atom_key,
+                "rule_ref_id": row.rule_ref_id,
+                "rule_ref_version": row.rule_ref_version,
+                "child_support_digest": row.child_support_digest,
+                "unresolved_reason": row.unresolved_reason,
+            }
+            for row in artifact.rule_ref_edges
+        ],
     }
 
 
@@ -216,6 +261,16 @@ def support_artifact_from_dict(row: Mapping[str, Any]) -> SupportArtifact:
             for item in row.get("non_fact_steps", ())
         ),
         rule_refs=tuple(row.get("rule_refs", ())),
+        rule_ref_edges=tuple(
+            RuleRefEdge(
+                ruleref_atom_key=item["ruleref_atom_key"],
+                rule_ref_id=item["rule_ref_id"],
+                rule_ref_version=item["rule_ref_version"],
+                child_support_digest=item.get("child_support_digest"),
+                unresolved_reason=item.get("unresolved_reason"),
+            )
+            for item in row.get("rule_ref_edges", ())
+        ),
     )
 
 
@@ -239,6 +294,15 @@ def _normalize_non_empty_strings(values: Sequence[str]) -> set[str]:
             raise ValueError("expected non-empty strings")
         normalized.add(value)
     return normalized
+
+
+def _rule_ref_edge_sort_key(edge: RuleRefEdge) -> tuple[str, str, str, str]:
+    return (
+        edge.ruleref_atom_key,
+        edge.rule_ref_id,
+        edge.rule_ref_version,
+        edge.child_support_digest or "",
+    )
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -272,6 +336,7 @@ __all__ = [
     "NonFactStep",
     "PredWitness",
     "ProjectedFact",
+    "RuleRefEdge",
     "SupportArtifact",
     "SupportRootResultKind",
     "_DEGRADED_SUPPORT_KINDS",

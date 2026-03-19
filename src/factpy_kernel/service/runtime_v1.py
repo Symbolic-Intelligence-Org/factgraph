@@ -927,6 +927,7 @@ def _explain_tree_candidate(session: RuntimeSession, candidate_id: str) -> dict[
         support_kind=support_kind,
         support=support,
         assertion_lookup=lambda asrt_id: _runtime_assertion_detail_for_tree(session.store.ledger, asrt_id),
+        support_lookup=session.store.explain_support,
     )
     return ok_response(
         meta={"candidate_id": candidate_id},

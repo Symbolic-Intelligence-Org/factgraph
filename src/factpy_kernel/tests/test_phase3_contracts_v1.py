@@ -75,10 +75,12 @@ from factpy_kernel.core.rules._trace import (
 )
 from factpy_kernel.core.rules._trace_nl import render_rule_run_nl_explain
 from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
-from factpy_kernel.core.rules.where_eval import _plan_body_atoms
+from factpy_kernel.core.rules.ruleref_types import NativeRuleRefResolution, NativeRuleRefRowSupport
+from factpy_kernel.core.rules.where_eval import WhereValidationError, _plan_body_atoms
 from factpy_kernel.core.store import Store, register_engine_evaluator
 import factpy_kernel.core.store._builders as store_builders
 from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar, GCResult
+from factpy_kernel.core.store._support_capture import derive_rule_ref_edges_for_binding
 from factpy_kernel.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
     support_artifact_from_dict,
@@ -915,6 +917,19 @@ Derivation(
         self.assertIsNotNone(support)
         assert support is not None
         self.assertEqual(support["rule_refs"], ["q.user_tag_rows"])
+        self.assertEqual(
+            support["rule_ref_edges"],
+            [
+                {
+                    "ruleref_atom_key": "b0.a0:ruleref",
+                    "rule_ref_id": "q.user_tag_rows",
+                    "rule_ref_version": "1.0.0",
+                    "child_support_digest": support["rule_ref_edges"][0]["child_support_digest"],
+                    "unresolved_reason": None,
+                }
+            ],
+        )
+        self.assertTrue(str(support["rule_ref_edges"][0]["child_support_digest"]).startswith("sha256:"))
 
     def test_derivation_preview_dto_default_mode_is_native(self) -> None:
         sdk = SDKStore([User])
@@ -1128,6 +1143,124 @@ Derivation(
                 )
                 self.assertTrue(explain_support_resp["ok"])
                 self.assertEqual(explain_support_resp["explain"]["rule_refs"], ["q.user_tag_rows"])
+                self.assertEqual(
+                    explain_support_resp["explain"]["rule_ref_edges"][0]["ruleref_atom_key"],
+                    "b0.a0:ruleref",
+                )
+                self.assertEqual(
+                    explain_support_resp["explain"]["rule_ref_edges"][0]["rule_ref_version"],
+                    "1.0.0",
+                )
+                child_support_digest = explain_support_resp["explain"]["rule_ref_edges"][0]["child_support_digest"]
+                self.assertTrue(str(child_support_digest).startswith("sha256:"))
+
+                explain_tree_resp = explain_runtime_tree(session_id, {"kind": "candidate", "id": candidate["candidate_id"]})
+                self.assertTrue(explain_tree_resp["ok"])
+                rule_ref_section = explain_tree_resp["tree"]["root"]["children"][1]
+                self.assertEqual(rule_ref_section["node_kind"], "rule_ref_section")
+                rule_ref_node = rule_ref_section["children"][0]
+                self.assertEqual(rule_ref_node["ruleref_atom_key"], "b0.a0:ruleref")
+                self.assertEqual(rule_ref_node["child_support_digest"], child_support_digest)
+                referenced_support = rule_ref_node["children"][0]
+                self.assertEqual(referenced_support["node_kind"], "referenced_support")
+                self.assertEqual(referenced_support["root_result_kind"], "row")
+                self.assertEqual(referenced_support["support_digest"], child_support_digest)
+            finally:
+                close_runtime_session(session_id)
+                reset_runtime_sessions_for_tests()
+
+    def test_recursive_candidate_evidence_tree_round_trips_through_audit_and_static(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "tag") as (u, tag):
+            helper_rule = Rule(
+                id="q.user_tag_rows",
+                version="1.0.0",
+                select=[u, tag],
+                where=[Pred("user:tag", u, tag)],
+                expose=True,
+            )
+
+        compiled_rule = sdk._compile_rule_input(helper_rule)
+
+        with TemporaryDirectory() as tmp_dir:
+            registry = FileAuthoringRegistry(Path(tmp_dir))
+            registry.upsert_schema_ir(sdk.schema_ir)
+            registry.register_rule_spec(compiled_rule)
+
+            reset_runtime_sessions_for_tests()
+            open_resp = open_runtime_session({"registry_root": tmp_dir})
+            self.assertTrue(open_resp["ok"])
+            session_id = open_resp["session"]["session_id"]
+            try:
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": "user:tag",
+                        "e_ref": refs["u1"],
+                        "rest_terms": [["string", "vip"]],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+                eval_resp = evaluate_runtime_derivation(
+                    session_id,
+                    {
+                        "derivation": {
+                            "derivation_id": "drv.runtime.user_tag_tree",
+                            "version": "1.0.0",
+                            "target": "user:tag",
+                            "head_vars": ["$u", "$tag"],
+                            "where": [
+                                ["ruleref", "q.user_tag_rows", "1.0.0", ["$u", "$tag"]],
+                                ["eq", "$tag", "vip"],
+                            ],
+                            "mode": "native",
+                        }
+                    },
+                )
+                self.assertTrue(eval_resp["ok"])
+                candidate_id = eval_resp["evaluation"]["candidates"][0]["candidate_id"]
+
+                runtime_tree_resp = explain_runtime_tree(session_id, {"kind": "candidate", "id": candidate_id})
+                self.assertTrue(runtime_tree_resp["ok"])
+                runtime_rule_ref_node = runtime_tree_resp["tree"]["root"]["children"][1]["children"][0]
+                self.assertEqual(runtime_rule_ref_node["children"][0]["node_kind"], "referenced_support")
+
+                package_dir = str(Path(tmp_dir) / "audit_package")
+                accept_resp = accept_runtime_derivation(
+                    session_id,
+                    {
+                        "candidate": eval_resp["evaluation"]["candidates"][0],
+                        "options": {"approved_by": "alice"},
+                    },
+                )
+                self.assertTrue(accept_resp["ok"])
+                export_resp = export_runtime_package(
+                    session_id,
+                    {"out_dir": package_dir, "package_kind": "audit"},
+                )
+                self.assertTrue(export_resp["ok"])
+                package = load_audit_package(package_dir)
+                audit_query = AuditQuery(package)
+
+                audit_tree = audit_query.get_candidate_evidence_tree(candidate_id)
+                assert audit_tree is not None
+                audit_rule_ref_node = audit_tree["root"]["children"][1]["children"][0]
+                self.assertEqual(audit_rule_ref_node["node_kind"], "rule_ref")
+                self.assertEqual(audit_rule_ref_node["children"][0]["node_kind"], "referenced_support")
+
+                site_dir = str(Path(tmp_dir) / "site")
+                render_audit_static_site(package_dir, site_dir)
+                html = (
+                    Path(site_dir)
+                    / "candidate_evidence"
+                    / f"{quote(candidate_id, safe='')}.html"
+                ).read_text(encoding="utf-8")
+                self.assertIn("Referenced support", html)
+                self.assertIn("rule_ref_edges=1", html)
             finally:
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
@@ -7207,8 +7340,129 @@ Derivation(
                     }
                 ],
                 "rule_refs": ["r.1"],
+                "rule_ref_edges": [],
             },
         )
+
+    def test_runtime_tree_renders_unresolved_rule_ref_edge_terminal_node(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            write_resp = write_runtime_fact(
+                session_id,
+                {
+                    "pred_id": "user:tag",
+                    "e_ref": refs["u1"],
+                    "rest_terms": [["string", "vip"]],
+                },
+                kind="add",
+            )
+            self.assertTrue(write_resp["ok"])
+            asrt_id = write_resp["write"]["assertion_id"]
+
+            session = _require_session(session_id)
+            support_digest = "sha256:" + ("cd" * 32)
+            artifact = support_artifact_from_dict(
+                {
+                    "support_digest": support_digest,
+                    "kind": "native_binding_v1",
+                    "root_result_kind": "fact",
+                    "binding": [["$tag", "vip"], ["$u", refs["u1"]]],
+                    "pred_witnesses": [
+                        {
+                            "pred_atom_key": "b0.a0:user:tag",
+                            "asrt_ids": [asrt_id],
+                        }
+                    ],
+                    "non_fact_steps": [
+                        {
+                            "step_key": "b0.a1:ruleref",
+                            "kind": "ruleref",
+                            "status": "satisfied",
+                            "details": [],
+                        }
+                    ],
+                    "rule_refs": ["q.child_rule"],
+                    "rule_ref_edges": [
+                        {
+                            "ruleref_atom_key": "b0.a1:ruleref",
+                            "rule_ref_id": "q.child_rule",
+                            "rule_ref_version": "1.0.0",
+                            "child_support_digest": None,
+                            "unresolved_reason": "child_support_unavailable",
+                        }
+                    ],
+                }
+            )
+            session.store._remember_support_artifact(support_digest, artifact)
+            session.store._remember_candidate_support("cand-unresolved-rule-ref", support_digest, "native_binding_v1")
+
+            tree_resp = explain_runtime_tree(session_id, {"kind": "candidate", "id": "cand-unresolved-rule-ref"})
+            self.assertTrue(tree_resp["ok"])
+            rule_ref_section = tree_resp["tree"]["root"]["children"][1]
+            self.assertEqual(rule_ref_section["node_kind"], "rule_ref_section")
+            rule_ref_node = rule_ref_section["children"][0]
+            self.assertEqual(rule_ref_node["ruleref_atom_key"], "b0.a1:ruleref")
+            self.assertIsNone(rule_ref_node["child_support_digest"])
+            self.assertEqual(rule_ref_node["unresolved_reason"], "child_support_unavailable")
+            unresolved = rule_ref_node["children"][0]
+            self.assertEqual(unresolved["node_kind"], "unresolved_support")
+            self.assertEqual(unresolved["reason"], "child_support_unavailable")
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_rule_ref_edge_derivation_skips_zero_match_rows(self) -> None:
+        edges = derive_rule_ref_edges_for_binding(
+            where=[("ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"])],
+            binding={"$u": "user-1", "$tag": "vip"},
+            rule_ref_resolutions=(
+                NativeRuleRefResolution(
+                    ruleref_atom_key="b0.a0:ruleref",
+                    rule_ref_id="q.child_rule",
+                    rule_ref_version="1.0.0",
+                    row_supports=(
+                        NativeRuleRefRowSupport(
+                            row_terms=("user-2", "vip"),
+                            child_support_digest="sha256:" + ("12" * 32),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        self.assertEqual(edges, ())
+
+    def test_rule_ref_edge_derivation_fails_fast_on_duplicate_row_support_match(self) -> None:
+        with self.assertRaises(WhereValidationError) as ctx:
+            derive_rule_ref_edges_for_binding(
+                where=[("ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"])],
+                binding={"$u": "user-1", "$tag": "vip"},
+                rule_ref_resolutions=(
+                    NativeRuleRefResolution(
+                        ruleref_atom_key="b0.a0:ruleref",
+                        rule_ref_id="q.child_rule",
+                        rule_ref_version="1.0.0",
+                        row_supports=(
+                            NativeRuleRefRowSupport(
+                                row_terms=("user-1", "vip"),
+                                child_support_digest="sha256:" + ("12" * 32),
+                            ),
+                            NativeRuleRefRowSupport(
+                                row_terms=("user-1", "vip"),
+                                child_support_digest="sha256:" + ("34" * 32),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+
+        self.assertIn("multiple row_support matches", str(ctx.exception))
 
     def test_rule_trace_rule_ref_link_and_invocation_sorting_validation(self) -> None:
         with self.assertRaises(ValueError) as ctx_empty_key:
