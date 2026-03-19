@@ -4,13 +4,15 @@ This document enables a new agent to resume work with full context. It supersede
 
 ## 1. Current Stage
 
-The project has progressed well beyond evidence tree v2. Three major implementation rounds have landed since the last handoff:
+The project has progressed well beyond evidence tree v2. Five major implementation rounds have landed on the native candidate-proof line since the earlier handoff refresh:
 
 1. **RuleRef execution substrate** (commit `a8e1b5d`) - unified native RuleRef execution for query and derivation
 2. **Recursive proof edges** (commit `f4756d9`) - structured `rule_ref_edges` on `SupportArtifact`, recursive child support expansion in evidence tree
-3. **Winning-branch semantics blueprint** (draft, untracked) - capability decision opened but not yet scoped
+3. **Winning-branch narrowing** (commit `13b7827`) - native support capture now narrows to a single adopted OR branch
+4. **Richer unresolved taxonomy** (commit `f649c5d`) - recursive proof unresolved/boundary reasons are now a formal shared contract
+5. **Engine degraded tree shape** (commit `cf7f56d`) - engine candidates now return a valid degraded explain-tree instead of unsupported
 
-Current position: **recursive proof semantics are implemented; winning-branch semantics are the next open decision**.
+Current position: **native candidate proof is implemented through recursive proof + winning-branch narrowing + unresolved taxonomy, and engine degraded candidates now have a legal tree surface**.
 
 ## 2. Capability Baseline
 
@@ -101,32 +103,58 @@ Blueprint: `2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.
 - `audit/query.py`: `get_candidate_evidence_tree()` passes `support_lookup=self._get_support_artifact`
 - `audit/static_ui.py`: renders `referenced_support`, `unresolved_support`, `recursion_boundary` node kinds
 
-### 2.5 Winning-Branch Semantics (draft - CURRENT OPEN QUESTION)
+### 2.5 Winning-Branch Semantics + Narrowing (implemented)
 
-Blueprint: `2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md` (status: **draft**, untracked/uncommitted)
+Blueprints:
+- `2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md`
+- `2026-03-19_native-candidate-evidence-tree-winning-branch-narrowing.md`
 
-This is a **capability decision** blueprint, not an implementation blueprint. It asks:
+- Native support capture now adopts exactly one satisfying OR branch per binding.
+- Selection happens in `_support_capture.py`, not in tree readback.
+- Tie rule is `source-order wins`.
+- No non-winning shadow metadata is retained in first-round artifacts.
+- Selected branch identity remains recoverable from existing `b{branch}.a{atom}` keys; no new top-level branch field was introduced.
 
-- Should each native support artifact only express one "winning" OR branch, or continue conservative full-branch capture?
-- If winning-branch semantics are adopted, at which layer should branch selection happen?
-  - `where_eval` / substrate
-  - `_support_capture`
-  - `_builders` candidate merge
-  - tree readback
-- What is the minimal identity for a winning branch? (`branch_index`, branch-local key namespace, etc.)
-- How to handle ties when multiple branches satisfy the same final binding?
+### 2.6 Richer Unresolved Taxonomy (implemented)
 
-**Current state**: The user wrote the draft and stated: "the next step is to discuss the freeze of section 5 questions." This discussion has NOT yet started. The agent responded "ready when you are" and the session ended.
+Blueprint: `2026-03-19_native-candidate-evidence-tree-richer-unresolved-taxonomy.md`
 
-**Key constraint**: This blueprint explicitly does NOT reopen execution substrate DTOs or recursive proof DTOs. It also does NOT introduce multi-support candidates or branch-set carriers.
+- First-round recursive proof taxonomy now formally freezes four reasons:
+  - `child_support_unavailable`
+  - `artifact_missing`
+  - `cycle`
+  - `depth_limit`
+- `unresolved_support` and `recursion_boundary` stay split:
+  - unresolved = wanted child proof but could not obtain it
+  - boundary = traversal stopped intentionally
+- Owner split is explicit:
+  - capture owns `child_support_unavailable`
+  - lookup/readback owns `artifact_missing`
+  - traversal owns `cycle` / `depth_limit`
+- Runtime, audit, and static share the same raw enum surface.
+
+### 2.7 Engine Degraded Tree Shape (implemented)
+
+Blueprint: `2026-03-19_engine-candidate-explain-tree-degraded-node-shape.md`
+
+- Engine candidates with `support_kind in {"engine_no_witness_v1", "none"}` no longer return `runtime_explain_not_supported` on the tree surface.
+- First-round engine degraded tree shape is:
+  - `candidate_result`
+  - `support_section`
+  - `degraded_support`
+- `degraded_support` is its own node kind and does not reuse native recursive proof terminals.
+- `engine_no_witness_v1` and legacy `"none"` are tree-isomorphic, differing only in the raw `support_kind` value.
 
 ## 3. Git State
 
 - Branch: `master`
-- Latest commit: `f4756d9` (recursive proof edges)
-- Working tree: clean except for 2 untracked files:
-  - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md`
-  - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.audit.md`
+- Latest landed commits on this line:
+  - `a8e1b5d` - unify native RuleRef execution
+  - `f4756d9` - recursive proof edges
+  - `13b7827` - winning-branch narrowing
+  - `f649c5d` - richer unresolved taxonomy contract
+  - `cf7f56d` - engine degraded tree shape
+- Working tree state is not a stable truth source; inspect `git status` at session start.
 - Remote: ahead of `origin/master` by multiple commits (not pushed)
 
 **Known issue**: Git `index.lock` files sometimes appear spuriously. If a git operation fails with "Unable to create index.lock", run `rm -f .git/index.lock` and retry immediately.
@@ -141,18 +169,19 @@ This is a **capability decision** blueprint, not an implementation blueprint. It
 | `2026-03-16_temporal-hybrid-reasoning-blueprint.md` | draft | Temporal reasoning |
 | `2026-03-17_durable-artifact-storage.md` | scoped | Storage layer |
 | `2026-03-17_runtime-traceability-explainability-blueprint.md` | draft | Parent blueprint for evidence tree line |
-| `2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.md` | implemented | Recursive proof edges |
-| `2026-03-19_native-derivation-ruleref-execution-decision.md` | implemented | Decision to unify RuleRef execution |
-| `2026-03-19_native-where-ruleref-execution-substrate.md` | implemented | Shared RuleRef substrate |
-| `2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md` | **draft** | **Current open question** |
 
 ### Key Archived Blueprints (evidence tree lineage)
 
 - `2026-03-18_runtime-traceability-evidence-tree-realignment.md` - why evidence tree belongs to the plan
 - `2026-03-18_native-candidate-evidence-tree-v1.md` - V1 shape
 - `2026-03-19_native-candidate-evidence-tree-v2.md` - V2 sectioned tree
-- `2026-03-19_native-where-ruleref-execution-substrate.md` - also in archive copy
-- `2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.md` - also in archive copy
+- `2026-03-19_native-derivation-ruleref-execution-decision.md` - decision to unify RuleRef execution
+- `2026-03-19_native-where-ruleref-execution-substrate.md` - shared RuleRef substrate
+- `2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.md` - recursive proof edges
+- `2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md` - winning-branch contract
+- `2026-03-19_native-candidate-evidence-tree-winning-branch-narrowing.md` - winning-branch implementation
+- `2026-03-19_native-candidate-evidence-tree-richer-unresolved-taxonomy.md` - recursive proof taxonomy contract
+- `2026-03-19_engine-candidate-explain-tree-degraded-node-shape.md` - engine degraded tree contract
 
 ## 5. Test Baseline
 
@@ -218,64 +247,63 @@ Rule: no concrete trigger = no capability blueprint.
 
 ### 7.2 Evidence-tree-adjacent deferred lines
 
-After recursive proof, the natural next candidates are:
+After recursive proof, winning-branch narrowing, richer taxonomy, and engine degraded tree shape, the natural next candidates are:
 
-1. **Winning-branch semantics** - currently open as draft blueprint (see section 2.5)
-2. **Richer unresolved taxonomy** - expand `unresolved_reason` beyond `child_support_unavailable`
-3. **Engine witness parity** - let evidence tree work for non-native (souffle/problog) candidates
-4. **Proof graph / graph UI** - promote tree to graph-oriented evidence surface
-5. **Annotation / value semantics / salience** - contribution / impact annotations on tree nodes
-6. **Finer provenance** - snippet/span level source positioning
+1. **Provenance / source taxonomy** - decide whether tree nodes need a formal `source_kind` / `provenance_kind` contract
+2. **Engine witness parity** - go beyond degraded tree shape toward richer non-native explain surfaces
+3. **Proof graph / graph UI** - promote tree to graph-oriented evidence surface
+4. **Annotation / value semantics / salience** - contribution / impact annotations on tree nodes
+5. **Finer provenance** - snippet/span level source positioning
 
 ## 8. Collaboration Protocol
 
 The established working protocol between user and agent is:
 
 1. **Blueprint-driven**: all non-trivial work starts with a blueprint that goes through `draft -> scoped -> implementing -> implemented -> archived`
-2. **User implements, agent reviews**: the user writes code; the agent reviews implementations against scoped blueprint acceptance criteria, proposes modifications, and performs git commits
-3. **Agent never creates files or modifies code** without explicit user instruction
-4. **Scope discipline**: each blueprint opens exactly one capability line; deferred lines are not pulled in
-5. **M1 testing principle**: if blueprint says X is load-bearing, test must assert it
-6. **Single commit per coherent phase**: one commit for each implementation round
-7. **Git housekeeping**: agent handles commits when requested, using detailed multi-line messages
+2. **Scope discipline**: each blueprint opens exactly one capability line; deferred lines are not pulled in
+3. **Contract-first**: freeze DTO / taxonomy / owner boundaries before multi-file implementation
+4. **Docs sync is mandatory**: module docs must be updated before a blueprint is archived
+5. **Testing principle**: if a blueprint says X is load-bearing, targeted tests should assert it
+6. **Single commit per coherent phase**: keep capability, implementation, and pure docs promotions as separate commits when possible
 
 ## 9. What the Next Agent Should Do
 
-### If user opens winning-branch discussion
+### If user opens provenance / source taxonomy discussion
 
-The user said "the next step is to discuss the freeze of section 5 questions." The winning-branch blueprint's section 5 contains five open questions:
+Open a new narrow capability blueprint. Keep it focused on the tree-surface contract:
 
-1. Should winning-branch become a formal contract?
-2. At which layer should selection happen?
-3. What is the minimal identity shape?
-4. How to handle multi-branch ties?
-5. Should non-winning branch capture be retained as shadow metadata?
+1. Which node kinds need a formal source/provenance taxonomy?
+2. Whether native recursive nodes and engine degraded nodes share the same vocabulary
+3. Whether provenance is a carrier contract or only a display contract
+4. How to avoid reopening the already-frozen unresolved taxonomy or winning-branch contracts
 
-The agent should be ready to discuss these questions using knowledge of the current implementation. Key code context: `_support_capture.build_support_artifact_for_binding(...)` currently iterates all `_normalize_where_branches(where)` branches and captures all matching `pred_witnesses`, `non_fact_steps`, and `rule_ref_edges`.
+### If user opens broader engine witness parity discussion
 
-### If user wants to move to a different line
-
-Respect the user's choice. Do not advocate for winning-branch if user wants engine parity, richer taxonomy, or another direction.
+Keep it narrower than full adapter parity at first. The already-landed degraded tree shape should be treated as the current baseline, not thrown away.
 
 ### What NOT to do
 
 - Do not reopen recursive proof DTOs
 - Do not reopen RuleRef execution substrate
-- Do not write code without user implementing first
+- Do not reopen winning-branch or unresolved taxonomy unless there is a concrete regression
 - Do not run full test suite unless asked
-- Do not commit the untracked winning-branch blueprint files unless asked
+- Do not treat `docs/session_handoff_2026-03-19.md` as implementation truth; module docs remain canonical
 
 ## 10. Minimal Startup Reading List
 
 For a new agent, read in this order:
 
 1. **This handoff** (you're reading it)
-2. **Winning-branch blueprint** (current open question):
-   - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md`
-   - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.audit.md`
-3. **Recursive proof blueprint** (implemented, for context on what's already decided):
-   - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.md`
-   - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.audit.md`
+2. **Archived 2026-03-19 evidence-tree lineage blueprints**:
+   - `docs/blueprints/archive/2026-03-19_native-where-ruleref-execution-substrate.md`
+   - `docs/blueprints/archive/2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.md`
+   - `docs/blueprints/archive/2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md`
+   - `docs/blueprints/archive/2026-03-19_native-candidate-evidence-tree-winning-branch-narrowing.md`
+   - `docs/blueprints/archive/2026-03-19_native-candidate-evidence-tree-richer-unresolved-taxonomy.md`
+   - `docs/blueprints/archive/2026-03-19_engine-candidate-explain-tree-degraded-node-shape.md`
+3. **Still-active parent blueprints**:
+   - `docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md`
+   - `docs/blueprints/active/2026-03-17_durable-artifact-storage.md`
 4. **Key implementation files** (current truth):
    - `src/factpy_kernel/core/store/_support_capture.py` - capture layer
    - `src/factpy_kernel/core/store/_support.py` - DTOs
@@ -286,4 +314,4 @@ For a new agent, read in this order:
    - `src/factpy_kernel/service/docs/03_runtime_queries_views.md`
    - `src/factpy_kernel/audit/docs/01_overview.md`
 
-Then wait for user direction on whether to proceed with winning-branch section 5 discussion.
+Then wait for user direction on whether to proceed with provenance/source taxonomy, engine witness parity, or another deferred line.
