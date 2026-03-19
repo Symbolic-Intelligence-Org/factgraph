@@ -80,9 +80,15 @@ from factpy_kernel.core.rules.where_eval import WhereValidationError, _plan_body
 from factpy_kernel.core.store import Store, register_engine_evaluator
 import factpy_kernel.core.store._builders as store_builders
 from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar, GCResult
-from factpy_kernel.core.store._support_capture import derive_rule_ref_edges_for_binding
+from factpy_kernel.core.store._support_capture import (
+    build_support_artifact_for_binding,
+    derive_rule_ref_edges_for_binding,
+    find_winning_branch_index,
+)
 from factpy_kernel.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
+    ProjectedFact,
+    compute_support_digest,
     support_artifact_from_dict,
     support_artifact_to_dict,
 )
@@ -7417,10 +7423,126 @@ Derivation(
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
 
-    def test_rule_ref_edge_derivation_skips_zero_match_rows(self) -> None:
-        edges = derive_rule_ref_edges_for_binding(
-            where=[("ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"])],
-            binding={"$u": "user-1", "$tag": "vip"},
+    def test_winning_branch_single_branch_rule_is_no_op(self) -> None:
+        witness_facts = {
+            "user:tag": [
+                ProjectedFact(asrt_id="A1", fact_tuple=("user-1", "vip")),
+            ]
+        }
+        binding = {"$u": "user-1"}
+        where = [("pred", "user:tag", ["$u", "vip"])]
+
+        selected_branch_index = find_winning_branch_index(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            rule_ref_resolutions=(),
+        )
+        self.assertEqual(selected_branch_index, 0)
+
+        artifact = build_support_artifact_for_binding(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            root_result_kind="fact",
+            selected_branch_index=selected_branch_index,
+            rule_ref_edges=(),
+        )
+        self.assertEqual(
+            [row.pred_atom_key for row in artifact.pred_witnesses],
+            ["b0.a0:user:tag"],
+        )
+
+    def test_winning_branch_prefers_lowest_index_when_multiple_branches_satisfy(self) -> None:
+        witness_facts = {
+            "user:tag": [
+                ProjectedFact(asrt_id="A1", fact_tuple=("user-1", "vip")),
+            ]
+        }
+        binding = {"$u": "user-1"}
+        where = [
+            [("pred", "user:tag", ["$u", "vip"])],
+            [("pred", "user:tag", ["$u", "vip"])],
+        ]
+
+        selected_branch_index = find_winning_branch_index(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            rule_ref_resolutions=(),
+        )
+        self.assertEqual(selected_branch_index, 0)
+
+        artifact = build_support_artifact_for_binding(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            root_result_kind="fact",
+            selected_branch_index=selected_branch_index,
+            rule_ref_edges=(),
+        )
+        self.assertEqual(
+            [row.pred_atom_key for row in artifact.pred_witnesses],
+            ["b0.a0:user:tag"],
+        )
+
+    def test_winning_branch_excludes_non_satisfying_pred_branch(self) -> None:
+        witness_facts = {
+            "user:tag": [
+                ProjectedFact(asrt_id="A1", fact_tuple=("user-1", "vip")),
+            ]
+        }
+        binding = {"$u": "user-1"}
+        where = [
+            [("pred", "user:tag", ["$u", "blocked"])],
+            [("pred", "user:tag", ["$u", "vip"])],
+        ]
+
+        selected_branch_index = find_winning_branch_index(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            rule_ref_resolutions=(),
+        )
+        self.assertEqual(selected_branch_index, 1)
+
+    def test_winning_branch_not_atom_recheck_excludes_branch_with_negated_match(self) -> None:
+        witness_facts = {
+            "user:tag": [
+                ProjectedFact(asrt_id="A1", fact_tuple=("user-1", "vip")),
+                ProjectedFact(asrt_id="A2", fact_tuple=("user-1", "blocked")),
+            ]
+        }
+        binding = {"$u": "user-1"}
+        where = [
+            [("not", [("pred", "user:tag", ["$u", "blocked"])]), ("pred", "user:tag", ["$u", "vip"])],
+            [("pred", "user:tag", ["$u", "vip"])],
+        ]
+
+        selected_branch_index = find_winning_branch_index(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            rule_ref_resolutions=(),
+        )
+        self.assertEqual(selected_branch_index, 1)
+
+    def test_winning_branch_ruleref_that_cannot_ground_does_not_satisfy(self) -> None:
+        witness_facts = {
+            "user:tag": [
+                ProjectedFact(asrt_id="A1", fact_tuple=("user-1", "vip")),
+            ]
+        }
+        binding = {"$u": "user-1"}
+        where = [
+            [("ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"])],
+            [("pred", "user:tag", ["$u", "vip"])],
+        ]
+
+        selected_branch_index = find_winning_branch_index(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
             rule_ref_resolutions=(
                 NativeRuleRefResolution(
                     ruleref_atom_key="b0.a0:ruleref",
@@ -7428,15 +7550,95 @@ Derivation(
                     rule_ref_version="1.0.0",
                     row_supports=(
                         NativeRuleRefRowSupport(
-                            row_terms=("user-2", "vip"),
+                            row_terms=("user-1", "vip"),
                             child_support_digest="sha256:" + ("12" * 32),
                         ),
                     ),
                 ),
             ),
         )
+        self.assertEqual(selected_branch_index, 1)
 
-        self.assertEqual(edges, ())
+    def test_winning_branch_arith_mismatch_excludes_branch(self) -> None:
+        witness_facts = {
+            "user:tag": [
+                ProjectedFact(asrt_id="A1", fact_tuple=("user-1", "vip")),
+            ]
+        }
+        binding = {"$u": "user-1", "$x": 3, "$sum": 99}
+        where = [
+            [("addc", "$sum", "$x", 2)],
+            [("pred", "user:tag", ["$u", "vip"])],
+        ]
+
+        selected_branch_index = find_winning_branch_index(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            rule_ref_resolutions=(),
+        )
+        self.assertEqual(selected_branch_index, 1)
+
+    def test_winning_branch_digest_is_stable_for_same_input(self) -> None:
+        witness_facts = {
+            "user:tag": [
+                ProjectedFact(asrt_id="A1", fact_tuple=("user-1", "vip")),
+            ]
+        }
+        binding = {"$u": "user-1"}
+        where = [
+            [("pred", "user:tag", ["$u", "vip"])],
+            [("pred", "user:tag", ["$u", "vip"])],
+        ]
+
+        first_branch_index = find_winning_branch_index(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            rule_ref_resolutions=(),
+        )
+        first_artifact = build_support_artifact_for_binding(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            root_result_kind="fact",
+            selected_branch_index=first_branch_index,
+            rule_ref_edges=(),
+        )
+        second_branch_index = find_winning_branch_index(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            rule_ref_resolutions=(),
+        )
+        second_artifact = build_support_artifact_for_binding(
+            where=where,
+            binding=binding,
+            witness_facts=witness_facts,
+            root_result_kind="fact",
+            selected_branch_index=second_branch_index,
+            rule_ref_edges=(),
+        )
+
+        self.assertEqual(first_branch_index, 0)
+        self.assertEqual(second_branch_index, 0)
+        self.assertEqual(compute_support_digest(first_artifact), compute_support_digest(second_artifact))
+
+    def test_winning_branch_fails_fast_when_no_branch_satisfies_final_binding(self) -> None:
+        witness_facts = {
+            "user:tag": [
+                ProjectedFact(asrt_id="A1", fact_tuple=("user-1", "vip")),
+            ]
+        }
+
+        with self.assertRaises(WhereValidationError) as ctx:
+            find_winning_branch_index(
+                where=[("pred", "user:tag", ["$u", "blocked"])],
+                binding={"$u": "user-1"},
+                witness_facts=witness_facts,
+                rule_ref_resolutions=(),
+            )
+        self.assertIn("no satisfying branch", str(ctx.exception))
 
     def test_rule_ref_edge_derivation_fails_fast_on_duplicate_row_support_match(self) -> None:
         with self.assertRaises(WhereValidationError) as ctx:
@@ -7460,6 +7662,7 @@ Derivation(
                         ),
                     ),
                 ),
+                selected_branch_index=0,
             )
 
         self.assertIn("multiple row_support matches", str(ctx.exception))

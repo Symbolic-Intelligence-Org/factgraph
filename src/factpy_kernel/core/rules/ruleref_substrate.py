@@ -12,6 +12,7 @@ from factpy_kernel.core.store._support import ProjectedFact, SupportArtifact, co
 from factpy_kernel.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
+    find_winning_branch_index,
 )
 
 
@@ -238,16 +239,24 @@ def _build_rule_row_support(
             unresolved_reason="child_support_unavailable",
         )
 
+    selected_branch_index = find_winning_branch_index(
+        where=rule_spec_where,
+        binding=binding,
+        witness_facts=witness_facts,
+        rule_ref_resolutions=child_rule_ref_resolutions,
+    )
     rule_ref_edges = derive_rule_ref_edges_for_binding(
         where=rule_spec_where,
         binding=binding,
         rule_ref_resolutions=child_rule_ref_resolutions,
+        selected_branch_index=selected_branch_index,
     )
     artifact = build_support_artifact_for_binding(
         where=rule_spec_where,
         binding=binding,
         witness_facts=witness_facts,
         root_result_kind="row",
+        selected_branch_index=selected_branch_index,
         rule_ref_edges=rule_ref_edges,
     )
     support_digest = compute_support_digest(artifact)

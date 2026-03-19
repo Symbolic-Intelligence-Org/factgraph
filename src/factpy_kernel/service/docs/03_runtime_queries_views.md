@@ -436,7 +436,10 @@
   - `unresolved_reason`
 - 当 `child_support_digest` 可解引用时，tree 会继续展开 `referenced_support`；否则会落到 `unresolved_support`。
 - `artifact_missing`、`cycle`、`depth_limit` 是 tree terminal reason，不属于 capture-side `unresolved_reason`。
-- multi-branch winning semantics 继续 deferred；当前 recursive child proof 仍是保守 capture，不承诺 winning proof path。
+- native candidate proof 现在会在 support capture 时做 winning-branch narrowing：
+  - `support_section` / `rule_ref_section` 只反映 adopted branch
+  - 若多个 branch 都满足同一 final binding，则采用 `source-order wins`
+  - selected branch identity 继续通过现有 atom keys recoverable
 - `assertion_fact` leaf 只携带：
   - `asrt_id`
   - `pred_id`
@@ -740,7 +743,12 @@
 - native derivation support 当前可记录 direct `rule_refs`，因此后续 `explain-support` / `explain-tree` 可能看到 minimal `rule_ref` 节点；这还不是递归 child proof。
 - native derivation support 现在会优先记录 structured `rule_ref_edges`，因此后续 `explain-support` / `explain-tree` 已可沿 `child_support_digest` 继续展开 first-round recursive proof。
 - direct `rule_refs` 继续保留为兼容摘要字段；child row proof 复用既有 native `SupportArtifact` readback，而不是发明第二套 handle。
-- branch-winning semantics 仍未冻结；多分支 `RuleRef` child proof 继续按保守 capture 处理。
+- native derivation support 现已在 capture 阶段应用 winning-branch narrowing：
+  - `pred_witnesses`
+  - `non_fact_steps`
+  - `rule_ref_edges`
+  只反映 selected branch
+- 若多个 OR branch 都满足同一 final binding，则采用 `source-order wins`；若没有任何 branch 满足该 binding，则视为 capture contract violation 并 fail fast。
 - engine evaluate（`souffle` / `problog`）第一轮显式返回 `support_kind="engine_no_witness_v1"`：
   - 这表示 candidate 本身有效，但当前 engine path 不产出可解引用的 witness artifact
   - 统一 `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`，而不是 `runtime_explain_not_found`

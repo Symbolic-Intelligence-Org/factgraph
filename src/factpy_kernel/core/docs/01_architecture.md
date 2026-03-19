@@ -140,7 +140,13 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - `rule_ref_version`
     - `child_support_digest | unresolved_reason`
   - child support 继续复用既有 `support_digest -> SupportArtifact` readback；内部 child row proof 通过 `root_result_kind="row"` 的 native support artifact 表达
-  - first-round recursive proof 仍保持保守边界：multi-branch winning semantics 继续 deferred
+  - native support capture 现已在 artifact 生成时做 winning-branch narrowing：
+    - `pred_witnesses`
+    - `non_fact_steps`
+    - `rule_ref_edges`
+    只保留 adopted branch 的 proof body
+  - 若多个 branch 对同一 final binding 都满足，则采用 `source-order wins`
+  - selected branch identity 继续通过现有 `b{branch}.a{atom}:...` key namespace recoverable，不新增 top-level branch 字段
 
 ```mermaid
 flowchart LR
