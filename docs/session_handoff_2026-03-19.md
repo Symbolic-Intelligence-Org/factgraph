@@ -1,132 +1,211 @@
-# Session Handoff: 2026-03-19
+# Session Handoff: 2026-03-19 (Updated)
 
-这份文档用于让新的 agent 快速恢复当前仓库状态。它是 session handoff / restart reference，不替代 active blueprint、archived blueprint 或模块 docs。
+This document enables a new agent to resume work with full context. It supersedes all prior handoff documents. It is a session restart reference, not a substitute for active blueprints, archived blueprints, or module docs.
 
-## 1. 当前阶段结论
+## 1. Current Stage
 
-项目已经从 `cross-domain validation stable stopping point` 进一步推进到了 **native candidate evidence tree v2**：
+The project has progressed well beyond evidence tree v2. Three major implementation rounds have landed since the last handoff:
 
-- cross-domain / mixed-source walkthrough 阶段已经完成并归档
-- `Rainbird-style evidence chain` 相关工作已经不再停留在 flat explain
-- 当前已具备一个可信的 **candidate-centric evidence tree v2 底座**
-  - native only
-  - candidate entry
-  - runtime / audit / static 三层交付
-  - sectioned tree shape
-  - minimal `rule_ref` nodes
+1. **RuleRef execution substrate** (commit `a8e1b5d`) - unified native RuleRef execution for query and derivation
+2. **Recursive proof edges** (commit `f4756d9`) - structured `rule_ref_edges` on `SupportArtifact`, recursive child support expansion in evidence tree
+3. **Winning-branch semantics blueprint** (draft, untracked) - capability decision opened but not yet scoped
 
-因此，下一次 session 的默认起点不再是“是否要开始做 tree”，而是：
+Current position: **recursive proof semantics are implemented; winning-branch semantics are the next open decision**.
 
-- **evidence tree 之后的下一条 capability decision 是什么**
+## 2. Capability Baseline
 
-## 2. 当前能力基线
+### 2.1 Explain / Audit Delivery Spine (stable)
 
-### 2.1 Explain / Audit Delivery Spine
+- raw explain, summary, narrative, NL explain, audit/static proof-entry
+- This is baseline infrastructure, not active work.
 
-当前 explain / audit 主线已经稳定存在：
+### 2.2 Candidate Evidence Tree V1 + V2 (archived)
 
-- raw explain
-- summary
-- narrative
-- NL explain
-- audit/static proof-entry
+- V1: candidate-centric tree entry, runtime/audit/static delivery
+- V2: sectioned tree (`support_section` + `rule_ref_section`), node-kind-aware rendering
+- Both archived. Current tree is significantly richer than V2.
 
-这部分不再是待建能力，而是当前实现基线。
+### 2.3 RuleRef Execution Substrate (implemented)
 
-### 2.2 Candidate Evidence Tree V1
+Blueprint: `2026-03-19_native-where-ruleref-execution-substrate.md` (status: implemented)
 
-已完成并归档：
+- Shared `ruleref_substrate.evaluate_native_where(...)` used by both query and derivation paths
+- `RuleRegistry` injection: SDK uses explicit registry, service uses `override_registry_root` / `registry_root` / `session.registry_root`
+- `NativeWhereEvaluation` returns `bindings + rule_refs + rule_ref_resolutions`
+- `ruleref_common.py` provides shared resolution helpers
+- `where_eval.py` still has `allow_ruleref=False` (legacy guard); substrate bypasses it
 
-- `candidate_id` 成为 result-centric tree entry
-- runtime 新增 `POST /v1/runtime/sessions/{session_id}/queries/explain-tree`
-- audit 新增 `get_candidate_evidence_tree(candidate_id)`
-- static 新增 candidate evidence page
-- tree leaf 保持窄边界：
-  - `asrt_id`
-  - `pred_id`
-  - `e_ref`
-  - `claim_args`
+Key files:
+- `src/factpy_kernel/core/rules/ruleref_substrate.py`
+- `src/factpy_kernel/core/rules/ruleref_common.py`
+- `src/factpy_kernel/core/rules/ruleref_types.py`
+- `src/factpy_kernel/core/store/_evaluate.py`
+- `src/factpy_kernel/sdk/store.py`
 
-### 2.3 Candidate Evidence Tree V2
+### 2.4 Recursive Proof Semantics (implemented)
 
-已完成并归档：
+Blueprint: `2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.md` (status: implemented)
 
-- tree 从 v1 的 shallow grouping 深化为 **sectioned tree**
-- `root.children` 现在是：
-  - `support_section`（始终存在）
-  - `rule_ref_section`（仅当 `rule_refs` 非空时出现）
-- static candidate tree page 已改为 node-kind-aware nested rendering
-- assertion leaf 继续保持 v1 的窄边界，没有退化成 full assertion dump
+#### Core DTOs
 
-## 3. 当前最重要的 truth 入口
+**`NativeRuleRefRowSupport`** (in `ruleref_types.py`):
+- `row_terms: tuple[Any, ...]`
+- `child_support_digest: str | None`
+- `unresolved_reason: str | None`
+- Must have exactly one of `child_support_digest` or `unresolved_reason`
 
-新的 agent 若要继续，不应从 handoff 文档本身推断实现细节，而应先看这些入口：
+**`NativeRuleRefResolution`** (in `ruleref_types.py`):
+- `ruleref_atom_key: str` (e.g., `b0.a1:ruleref`)
+- `rule_ref_id: str`
+- `rule_ref_version: str`
+- `row_supports: tuple[NativeRuleRefRowSupport, ...]`
 
-### 3.1 Parent Blueprint
+**`RuleRefEdge`** (in `_support.py`):
+- `ruleref_atom_key: str`
+- `rule_ref_id: str`
+- `rule_ref_version: str`
+- `child_support_digest: str | None`
+- `unresolved_reason: str | None`
 
-- [2026-03-17_runtime-traceability-explainability-blueprint.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md)
+**`SupportArtifact`** (in `_support.py`) now has:
+- `rule_ref_edges: tuple[RuleRefEdge, ...] = ()` alongside legacy `rule_refs: tuple[str, ...] = ()`
+- `root_result_kind` accepts `"row"` for child rule support artifacts
 
-这是当前 evidence tree 所属的母蓝图。当前位置已经被对齐为：
+#### Capture Layer
 
-- `audit-log-first` / delivery spine 已完成第一阶段
-- `proof-tree / support-graph` 是原计划中的下一子阶段
+`_support_capture.py` (new module) provides:
+- `build_support_artifact_for_binding(...)` - builds SupportArtifact with structured edges
+- `derive_rule_ref_edges_for_binding(...)` - implements exact tuple match rule:
+  - Grounds ruleref terms from binding
+  - Matches against `row_supports` by exact `row_terms` equality
+  - 0 matches = skip (no edge emitted)
+  - 1 match = emit edge
+  - >1 matches = `WhereValidationError` (contract violation)
+- `unresolved_reason` on capture side: only `"child_support_unavailable"` in first-round
 
-### 3.2 Evidence Tree 相关归档蓝图
+#### Tree Expansion
 
-- [2026-03-18_runtime-traceability-evidence-tree-realignment.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/2026-03-18_runtime-traceability-evidence-tree-realignment.md)
-- [2026-03-18_native-candidate-evidence-tree-v1.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/2026-03-18_native-candidate-evidence-tree-v1.md)
-- [2026-03-19_native-candidate-evidence-tree-v2.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/2026-03-19_native-candidate-evidence-tree-v2.md)
+`_candidate_evidence_tree.py` now supports:
+- Recursive child support expansion via `support_lookup` callback
+- Cycle detection via `ancestry: set[str]` (support digest set)
+- Depth limit: `_MAX_RECURSION_DEPTH = 8`
+- New tree node kinds:
+  - `referenced_support` - resolved child proof subtree
+  - `unresolved_support` - proof data missing (reason: `artifact_missing`, `child_support_unavailable`)
+  - `recursion_boundary` - traversal stopped (reason: `cycle`, `depth_limit`)
+- Falls back to legacy `rule_refs` flat rendering when `rule_ref_edges` is empty
 
-这三份 archive 基本定义了：
+#### Consumer Updates
 
-- 为什么 evidence tree 属于原计划
-- v1 做了什么
-- v2 又深化了什么
-- 哪些能力仍然继续 deferred
+- `runtime_v1.py`: `_explain_tree_candidate()` passes `support_lookup=session.store.explain_support`
+- `audit/query.py`: `get_candidate_evidence_tree()` passes `support_lookup=self._get_support_artifact`
+- `audit/static_ui.py`: renders `referenced_support`, `unresolved_support`, `recursion_boundary` node kinds
 
-### 3.3 模块真相文档
+### 2.5 Winning-Branch Semantics (draft - CURRENT OPEN QUESTION)
 
-- [01_architecture.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/core/docs/01_architecture.md)
-- [03_runtime_queries_views.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/service/docs/03_runtime_queries_views.md)
-- [01_overview.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/audit/docs/01_overview.md)
+Blueprint: `2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md` (status: **draft**, untracked/uncommitted)
 
-这里才是当前实现真相。
+This is a **capability decision** blueprint, not an implementation blueprint. It asks:
 
-### 3.4 关键实现文件
+- Should each native support artifact only express one "winning" OR branch, or continue conservative full-branch capture?
+- If winning-branch semantics are adopted, at which layer should branch selection happen?
+  - `where_eval` / substrate
+  - `_support_capture`
+  - `_builders` candidate merge
+  - tree readback
+- What is the minimal identity for a winning branch? (`branch_index`, branch-local key namespace, etc.)
+- How to handle ties when multiple branches satisfy the same final binding?
 
-- [\_candidate_evidence_tree.py](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/core/store/_candidate_evidence_tree.py)
-- [runtime_v1.py](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/service/runtime_v1.py)
-- [query.py](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/audit/query.py)
-- [static_ui.py](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/audit/static_ui.py)
-- [test_phase3_contracts_v1.py](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/tests/test_phase3_contracts_v1.py)
+**Current state**: The user wrote the draft and stated: "the next step is to discuss the freeze of section 5 questions." This discussion has NOT yet started. The agent responded "ready when you are" and the session ended.
 
-## 4. 已验证的旧基线仍然有效
+**Key constraint**: This blueprint explicitly does NOT reopen execution substrate DTOs or recursive proof DTOs. It also does NOT introduce multi-support candidates or branch-set carriers.
 
-在 evidence tree 之前，仓库已经完成了一轮很长的 cross-domain validation。那些结论仍然成立，不应被新 agent 重新打开：
+## 3. Git State
 
-- 多域 walkthrough 已完成：
-  - ECSS
-  - AML
-  - process safety
-  - clinical weak-signal
-- 多种 source shape 已完成：
-  - structured feed
-  - structured form-like document
-  - single-note free-text
-  - correlated multi-note
-  - conflicting multi-note
-  - mixed-source same-case pack
+- Branch: `master`
+- Latest commit: `f4756d9` (recursive proof edges)
+- Working tree: clean except for 2 untracked files:
+  - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md`
+  - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.audit.md`
+- Remote: ahead of `origin/master` by multiple commits (not pushed)
 
-这些工作共同证明：
+**Known issue**: Git `index.lock` files sometimes appear spuriously. If a git operation fails with "Unable to create index.lock", run `rm -f .git/index.lock` and retry immediately.
 
-- 当前 substrate 的适用边界比最初预期更宽
-- 没有 concrete trigger 时，不应主动重开旧的 scenario walkthrough 线
+## 4. Blueprint Status Summary
 
-## 5. Deferred Gaps 当前状态
+### Active Blueprints
 
-### 5.1 旧的 scenario-driven deferred gaps
+| Blueprint | Status | Notes |
+| --- | --- | --- |
+| `2026-03-15_overall-system-blueprint.md` | draft | Top-level system blueprint |
+| `2026-03-16_temporal-hybrid-reasoning-blueprint.md` | draft | Temporal reasoning |
+| `2026-03-17_durable-artifact-storage.md` | scoped | Storage layer |
+| `2026-03-17_runtime-traceability-explainability-blueprint.md` | draft | Parent blueprint for evidence tree line |
+| `2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.md` | implemented | Recursive proof edges |
+| `2026-03-19_native-derivation-ruleref-execution-decision.md` | implemented | Decision to unify RuleRef execution |
+| `2026-03-19_native-where-ruleref-execution-substrate.md` | implemented | Shared RuleRef substrate |
+| `2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md` | **draft** | **Current open question** |
 
-以下旧 gap 仍然存在，但**仍无 concrete trigger**：
+### Key Archived Blueprints (evidence tree lineage)
+
+- `2026-03-18_runtime-traceability-evidence-tree-realignment.md` - why evidence tree belongs to the plan
+- `2026-03-18_native-candidate-evidence-tree-v1.md` - V1 shape
+- `2026-03-19_native-candidate-evidence-tree-v2.md` - V2 sectioned tree
+- `2026-03-19_native-where-ruleref-execution-substrate.md` - also in archive copy
+- `2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.md` - also in archive copy
+
+## 5. Test Baseline
+
+- Test file: `src/factpy_kernel/tests/test_phase3_contracts_v1.py`
+- Test count: **85 tests** (`def test_` count)
+- Test file size: ~8925 lines
+- Run command: `PYTHONPATH=src python -m unittest src.factpy_kernel.tests.test_phase3_contracts_v1`
+- **Note**: Full suite was NOT run after the recursive proof implementation. Only targeted tests were executed and passed during development.
+
+Key recursive-proof-specific tests:
+- `test_query_ruleref_object_dependency_auto_registers` - SDK query with RuleRef(RuleObj)
+- `test_query_ruleref_string_requires_explicit_registry` - string RuleRef without registry fails fast
+- `test_derivation_ruleref_object_dependency_auto_registers_and_captures_rule_refs` - SDK derivation with RuleRef, verifies `rule_ref_edges`
+- `test_runtime_derivation_ruleref_uses_session_registry_root` - service-level with FileAuthoringRegistry
+- `test_recursive_candidate_evidence_tree_round_trips_through_audit_and_static` - full round-trip runtime -> explain tree -> accept -> audit -> static
+- `test_runtime_tree_renders_unresolved_rule_ref_edge_terminal_node` - unresolved_support terminal
+- `test_rule_ref_edge_derivation_skips_zero_match_rows` - 0-match -> no edge
+- `test_rule_ref_edge_derivation_fails_fast_on_duplicate_row_support_match` - >1 match -> error
+
+## 6. Key Implementation Files
+
+### Core (proof substrate)
+
+| File | Role |
+| --- | --- |
+| `src/factpy_kernel/core/rules/ruleref_substrate.py` | Shared native where evaluation with RuleRef support |
+| `src/factpy_kernel/core/rules/ruleref_common.py` | Shared resolution helpers |
+| `src/factpy_kernel/core/rules/ruleref_types.py` | `NativeRuleRefRowSupport`, `NativeRuleRefResolution` DTOs |
+| `src/factpy_kernel/core/store/_support.py` | `RuleRefEdge`, `SupportArtifact`, `BindingSupportCapture` |
+| `src/factpy_kernel/core/store/_support_capture.py` | `build_support_artifact_for_binding`, `derive_rule_ref_edges_for_binding` |
+| `src/factpy_kernel/core/store/_evaluate.py` | `evaluate_store`, `_evaluate_where_over_view_with_support` |
+| `src/factpy_kernel/core/store/_candidate_evidence_tree.py` | Recursive tree builder with cycle/depth guards |
+
+### Consumers
+
+| File | Role |
+| --- | --- |
+| `src/factpy_kernel/service/runtime_v1.py` | Runtime service: `_explain_tree_candidate()`, derivation evaluate |
+| `src/factpy_kernel/audit/query.py` | Audit query: `get_candidate_evidence_tree()` |
+| `src/factpy_kernel/audit/static_ui.py` | Static site rendering for all tree node kinds |
+| `src/factpy_kernel/sdk/store.py` | SDK surface: `RuleRegistry` injection |
+
+### Module Docs (implementation truth)
+
+| File | Scope |
+| --- | --- |
+| `src/factpy_kernel/core/docs/01_architecture.md` | Core architecture |
+| `src/factpy_kernel/service/docs/03_runtime_queries_views.md` | Runtime service queries/views |
+| `src/factpy_kernel/audit/docs/01_overview.md` | Audit package overview |
+
+## 7. Deferred Gaps
+
+### 7.1 Scenario-driven deferred gaps (still no trigger)
 
 - `T2 sequence/state semantics`
 - judgment / obligation contract
@@ -135,108 +214,76 @@
 - extraction uncertainty
 - source-linkage contract
 
-当前结论仍是：
+Rule: no concrete trigger = no capability blueprint.
 
-- 没有 trigger，就不开 capability blueprint
+### 7.2 Evidence-tree-adjacent deferred lines
 
-### 5.2 Evidence-tree-adjacent deferred capability lines
+After recursive proof, the natural next candidates are:
 
-在 evidence tree v2 之后，真正值得作为下一条 capability decision 比较的，是这些方向：
+1. **Winning-branch semantics** - currently open as draft blueprint (see section 2.5)
+2. **Richer unresolved taxonomy** - expand `unresolved_reason` beyond `child_support_unavailable`
+3. **Engine witness parity** - let evidence tree work for non-native (souffle/problog) candidates
+4. **Proof graph / graph UI** - promote tree to graph-oriented evidence surface
+5. **Annotation / value semantics / salience** - contribution / impact annotations on tree nodes
+6. **Finer provenance** - snippet/span level source positioning
 
-1. **proof graph / graph UI**
-   - 把 tree 继续提升为 graph-oriented evidence surface
-2. **engine parity**
-   - 让 evidence tree 不再只支持 native candidate
-3. **annotation / value semantics / salience**
-   - 给 tree 增加 contribution / impact / value-level semantics
-4. **finer provenance**
-   - 例如 snippet/span 级来源定位
-5. **richer recursive proof semantics**
-   - 比 v2 更深的 rule-chain / referenced-support expansion
+## 8. Collaboration Protocol
 
-这些都还没有被选成“下一条”，只是当前最自然的候选集。
+The established working protocol between user and agent is:
 
-## 6. 新 agent 不应误判的边界
+1. **Blueprint-driven**: all non-trivial work starts with a blueprint that goes through `draft -> scoped -> implementing -> implemented -> archived`
+2. **User implements, agent reviews**: the user writes code; the agent reviews implementations against scoped blueprint acceptance criteria, proposes modifications, and performs git commits
+3. **Agent never creates files or modifies code** without explicit user instruction
+4. **Scope discipline**: each blueprint opens exactly one capability line; deferred lines are not pulled in
+5. **M1 testing principle**: if blueprint says X is load-bearing, test must assert it
+6. **Single commit per coherent phase**: one commit for each implementation round
+7. **Git housekeeping**: agent handles commits when requested, using detailed multi-line messages
 
-下一位 agent 默认不应该把当前状态误判成下面这些：
+## 9. What the Next Agent Should Do
 
-- 不是“tree 还没开始做”
-- 不是“应该继续补更多 explain delivery layer”
-- 不是“必须立刻做 graph”
-- 不是“应该顺手一起开 engine parity / salience / snippet/span”
-- 不是“应该重开一轮 synthetic walkthrough 再找 blocker”
+### If user opens winning-branch discussion
 
-当前更准确的边界是：
+The user said "the next step is to discuss the freeze of section 5 questions." The winning-branch blueprint's section 5 contains five open questions:
 
-- tree 核心已经有一个稳定的 v2 底座
-- 下一步应是新的 capability decision
-- 那个 decision 应只打开一条主线，而不是并行铺开多条高级能力
+1. Should winning-branch become a formal contract?
+2. At which layer should selection happen?
+3. What is the minimal identity shape?
+4. How to handle multi-branch ties?
+5. Should non-winning branch capture be retained as shadow metadata?
 
-## 7. 下一步 capability decision 的推荐起手方式
+The agent should be ready to discuss these questions using knowledge of the current implementation. Key code context: `_support_capture.build_support_artifact_for_binding(...)` currently iterates all `_normalize_where_branches(where)` branches and captures all matching `pred_witnesses`, `non_fact_steps`, and `rule_ref_edges`.
 
-若新 agent 要继续推进，不建议直接写代码。推荐顺序是：
+### If user wants to move to a different line
 
-1. 先确认下一条 capability line 要开哪一条
-2. 若没有明确用户指示，优先做一个很窄的 active blueprint
-   - 比较 1 到 2 条最合理的下一步
-   - 不要同时比较所有 deferred lines
-3. 默认只开下面之一：
-   - proof graph
-   - engine parity
-   - annotation/value semantics
-   - finer provenance
-   - richer recursive proof semantics
-4. 一旦选中，就保持 native-first / scoped-first 的纪律，不把其他 deferred lines 顺手带进来
+Respect the user's choice. Do not advocate for winning-branch if user wants engine parity, richer taxonomy, or another direction.
 
-## 8. 推荐的下一步起点
+### What NOT to do
 
-如果下一次 session 没有额外用户偏好，我建议新 agent 先做：
+- Do not reopen recursive proof DTOs
+- Do not reopen RuleRef execution substrate
+- Do not write code without user implementing first
+- Do not run full test suite unless asked
+- Do not commit the untracked winning-branch blueprint files unless asked
 
-- **一条很窄的 capability-direction blueprint**
+## 10. Minimal Startup Reading List
 
-它的目的不是立刻实现，而是回答：
+For a new agent, read in this order:
 
-- evidence tree v2 之后，下一条主线究竟先开哪条
+1. **This handoff** (you're reading it)
+2. **Winning-branch blueprint** (current open question):
+   - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.md`
+   - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-winning-branch-semantics.audit.md`
+3. **Recursive proof blueprint** (implemented, for context on what's already decided):
+   - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.md`
+   - `docs/blueprints/active/2026-03-19_native-candidate-evidence-tree-recursive-proof-semantics.audit.md`
+4. **Key implementation files** (current truth):
+   - `src/factpy_kernel/core/store/_support_capture.py` - capture layer
+   - `src/factpy_kernel/core/store/_support.py` - DTOs
+   - `src/factpy_kernel/core/store/_candidate_evidence_tree.py` - tree builder
+   - `src/factpy_kernel/core/rules/ruleref_substrate.py` - execution substrate
+5. **Module docs**:
+   - `src/factpy_kernel/core/docs/01_architecture.md`
+   - `src/factpy_kernel/service/docs/03_runtime_queries_views.md`
+   - `src/factpy_kernel/audit/docs/01_overview.md`
 
-当前更值得优先考虑的通常是：
-
-- `richer recursive proof semantics`
-  - 因为它最直接延续现有 tree 本体
-
-而不是马上切去：
-
-- engine parity
-- graph
-- salience
-- snippet/span
-
-但这仍然是 **下一次 capability decision**，不是当前已冻结结论。
-
-## 9. 验证基线
-
-当前最近一次完整回归命令：
-
-```bash
-PYTHONPATH=src python -m unittest src.factpy_kernel.tests.test_phase3_contracts_v1
-```
-
-当前结果：
-
-- `77 tests` 全通过
-
-## 10. 给新 agent 的最小启动清单
-
-开始前先看：
-
-1. [2026-03-17_runtime-traceability-explainability-blueprint.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md)
-2. [2026-03-18_runtime-traceability-evidence-tree-realignment.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/2026-03-18_runtime-traceability-evidence-tree-realignment.md)
-3. [2026-03-18_native-candidate-evidence-tree-v1.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/2026-03-18_native-candidate-evidence-tree-v1.md)
-4. [2026-03-19_native-candidate-evidence-tree-v2.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/2026-03-19_native-candidate-evidence-tree-v2.md)
-5. [01_architecture.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/core/docs/01_architecture.md)
-6. [03_runtime_queries_views.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/service/docs/03_runtime_queries_views.md)
-7. [01_overview.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/audit/docs/01_overview.md)
-
-然后再决定：
-
-- 是继续 evidence tree 本体
-- 还是转向 graph / engine parity / value semantics / finer provenance 中的某一条
+Then wait for user direction on whether to proceed with winning-branch section 5 discussion.
