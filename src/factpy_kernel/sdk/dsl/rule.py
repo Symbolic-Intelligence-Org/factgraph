@@ -84,32 +84,7 @@ class Rule:
         return payload
 
     def dependency_rules(self) -> list[Rule]:
-        found: dict[tuple[str, str], Rule] = {}
-
-        def walk(node: Any) -> None:
-            if isinstance(node, list):
-                for item in node:
-                    walk(item)
-                return
-            if isinstance(node, tuple):
-                for item in node:
-                    walk(item)
-                return
-            if isinstance(node, RuleRefAtom):
-                dep = node.rule_obj
-                if isinstance(dep, Rule):
-                    found[(dep.id, dep.version)] = dep
-                return
-            if isinstance(node, CompareExpr):
-                walk(node.left)
-                walk(node.right)
-                return
-            if isinstance(node, NotExpr):
-                walk(node.body)
-                return
-
-        walk(self.where)
-        return list(found.values())
+        return _dependency_rules_from_where(self.where)
 
 
 @dataclass(frozen=True)
@@ -165,6 +140,9 @@ class Derivation:
         if self.tags:
             payload["tags"] = list(self.tags)
         return payload
+
+    def dependency_rules(self) -> list[Rule]:
+        return _dependency_rules_from_where(self.where)
 
 
 @dataclass(frozen=True)
@@ -256,6 +234,9 @@ class Query:
             "initial_bound_vars": sorted(self._initial_bound_vars),
         }
 
+    def dependency_rules(self) -> list[Rule]:
+        return _dependency_rules_from_where(self.where)
+
 
 def _lower_select_item(item: Any) -> Any:
     if hasattr(item, "token") and isinstance(getattr(item, "token", None), str):
@@ -272,6 +253,38 @@ def _normalize_rule_where_for_payload(where: list[Any]) -> list[Any]:
     if not all(isinstance(item, Body) for item in where):
         raise SDKDSLError("where/body cannot mix Body(...) with bare branches")
     return [list(item.atoms) for item in where]
+
+
+def _dependency_rules_from_where(where: Any) -> list[Rule]:
+    found: dict[tuple[str, str], Rule] = {}
+
+    def walk(node: Any) -> None:
+        if isinstance(node, Body):
+            walk(list(node.atoms))
+            return
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+            return
+        if isinstance(node, tuple):
+            for item in node:
+                walk(item)
+            return
+        if isinstance(node, RuleRefAtom):
+            dep = node.rule_obj
+            if isinstance(dep, Rule):
+                found[(dep.id, dep.version)] = dep
+            return
+        if isinstance(node, CompareExpr):
+            walk(node.left)
+            walk(node.right)
+            return
+        if isinstance(node, NotExpr):
+            walk(node.body)
+            return
+
+    walk(where)
+    return list(found.values())
 
 
 def _validate_optional_description(value: str | None, *, owner: str) -> None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from uuid import uuid4
 
 from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
@@ -31,6 +31,9 @@ from factpy_kernel.core.store.types import (
     HeadVarsIR,
     WhereIR,
 )
+
+if TYPE_CHECKING:
+    from factpy_kernel.core.rules.rule_ir import RuleRegistry
 
 
 _ENGINE_REGISTRY: dict[str, EngineEvaluatorFn] = {}
@@ -200,6 +203,7 @@ class Store:
         mode: EvaluateMode = "native",
         head: HeadSpecIR | None = None,
         body_confidences: BodyConfidencesIR = None,
+        registry: "RuleRegistry | None" = None,
     ) -> list[CandidateSet]:
         return evaluate_store(
             self,
@@ -212,6 +216,7 @@ class Store:
             head=head,
             body_confidences=body_confidences,
             engine_evaluate=self.evaluate_engine,
+            registry=registry,
         )
 
     def evaluate_engine(

@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
+from factpy_kernel.core.rules.ruleref_substrate import evaluate_native_where
 from factpy_kernel.core.rules.rule_ast import lower_query_rule_ast_to_ir
-from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_where
+from factpy_kernel.core.rules.where_eval import WhereValidationError
 from factpy_kernel.core.view.projector import project_view_facts
 
 from .dsl import ReturnContractEntry
@@ -24,11 +25,11 @@ class _EntityFieldSpec:
     cardinality: str
 
 
-def execute_query_plan(sdk: "SDKStore", plan: QueryPlan) -> list[Any]:
+def execute_query_plan(sdk: "SDKStore", plan: QueryPlan, *, registry: Any | None = None) -> list[Any]:
     view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
     where_ir = lower_query_rule_ast_to_ir(plan.rule_ast)["where"]
     try:
-        bindings = evaluate_where(view_facts, where_ir)
+        bindings = evaluate_native_where(view_facts, where_ir, registry=registry).bindings
     except WhereValidationError as exc:
         path = getattr(exc, "path", None) or "$.query_rule.where"
         raise SDKStoreError(f"query where evaluation failed: {exc}", path=path) from exc

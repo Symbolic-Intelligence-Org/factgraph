@@ -1,7 +1,7 @@
 # Core 架构总览（factpy_kernel）
 
 - 适用范围：`src/factpy_kernel/core`
-- 最后更新：2026-03-17
+- 最后更新：2026-03-19
 - 代码基线：`Store.evaluate` 仅支持 `native|souffle|problog`；`Ledger` 为 SQLite write-through cache；`ProjectorAudit` 为 v2 结构
 - 目标读者：需要理解 core 语义边界、关键入口与扩展点的开发者
 
@@ -31,7 +31,7 @@ src/factpy_kernel/core/
   evidence/                # append-only 写协议（set/add/retract/replace）
   policy/                  # active/chosen/policy_ir
   view/                    # 视图投影（facts + display + audit）
-  rules/                   # where AST/validator + evaluator + RuleRef 执行
+  rules/                   # where AST/validator + plain evaluator + shared RuleRef substrate + rule runtime
   derivation/              # CandidateSet 生成/接受（含 batch accept_many）
   mapping/                 # mapping 冲突解析与决策
   annotation/              # internal prototype annotation kernel（A/C workload slice）
@@ -50,6 +50,7 @@ src/factpy_kernel/core/
 | `view.projector` | 核心事实投影与审计统计 | `project_view_facts`, `project_view_facts_with_audit`, `project_display_facts` |
 | `rules.where_ast*` | where AST 解析与校验 | `parse_where_ir_to_ast`, `validate_where_ast` |
 | `rules.where_eval` | where 解释执行（native 路径） | `evaluate_where` |
+| `rules.ruleref_substrate` | `query + derivation` 共享 native `RuleRef` 执行 substrate | `evaluate_native_where` |
 | `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef 执行 | `run_rule`, `run_rule_with_trace` |
 | `rules._trace` | rule runtime trace carrier、序列化与 summary derivation | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict`, `summarize_rule_trace_artifact_dict` |
 | `rules._trace_narrative` | rule-run summary 上的 deterministic narrative rendering | `render_rule_run_narrative` |
@@ -98,9 +99,16 @@ flowchart LR
 
 `Store.evaluate(...)` 当前模式：
 
-- `native`：core 内部执行 `project_view_facts -> evaluate_where -> builders`
+- `native`：core 内部执行 `project_view_facts -> ruleref_substrate.evaluate_native_where -> builders`
 - `souffle` / `problog`：委托已注册的 engine evaluator
 - `python` / `engine`：已移除，调用会抛 `ValueError`
+
+native `RuleRef` 语义的当前边界：
+
+- plain `rules.where_eval.evaluate_where(...)` 仍只负责无 registry 的基础 where 求值，不单独承诺 `RuleRef`
+- `query + derivation` 若要执行 `RuleRef`，必须经由 `rules.ruleref_substrate.evaluate_native_where(...)`
+- 当 `registry is None` 且 where 中包含 `ruleref` 时，shared substrate 会 fail fast
+- 当提供 `registry` 时，shared substrate 会先做 `allow_ruleref=True` AST 校验，再做 expose/arity 校验、cycle guard 与 per-evaluation memo，然后把 direct `RuleRef` rewrite 成 internal overlay predicates 交回 plain `evaluate_where(...)`
 
 evaluate 结束后现在会登记一层轻量 candidate explain backref：
 
@@ -120,11 +128,12 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - optional `rule_ref_section`
     - `predicate_witness_group` / `non_fact_check` / `assertion_fact` / minimal `rule_ref`
   - 这仍是 native-first consumer surface，不是 engine parity、graph UI、或更细 provenance contract
+  - native `SupportArtifact.rule_refs` 现在可记录 direct referenced rule ids，但尚不携带 child support handle；递归 child-proof expansion 仍未进入 current contract
 
 ```mermaid
 flowchart LR
   A["Store.evaluate(mode='native')"] --> B["view.projector.project_view_facts"]
-  B --> C["rules.where_eval.evaluate_where"]
+  B --> C["rules.ruleref_substrate.evaluate_native_where"]
   C --> D["store.builders.*_from_bindings"]
   D --> E["CandidateSet list"]
   E --> F["Store._candidate_support_index"]
@@ -214,12 +223,23 @@ flowchart LR
 - candidate 生成
 - accept/accept_many 写入语义
 
-## 7. 规则校验 gate（where AST）
+## 7. 规则校验 gate（where AST / RuleRef substrate）
 
-`rules.where_eval.evaluate_where(...)` 在执行前会尝试：
+plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 
 - `parse_where_ir_to_ast(...)`
 - `validate_where_ast(..., mode='python', capabilities={'allow_ruleref': False})`
+
+补充当前边界：
+
+- 这个 plain evaluator 仍不是 `RuleRef` 的正式入口
+- `query + derivation` 的 native `RuleRef` 路径必须走 `rules.ruleref_substrate.evaluate_native_where(...)`
+- shared substrate 会：
+  - 在 `registry is None` 且存在 `ruleref` 时直接 fail fast
+  - 在有 `registry` 时先用 `allow_ruleref=True` 做 AST 校验
+  - 通过共享 helper 统一做 target lookup、`expose=True` gate、arity 校验
+  - 在当前 first-round 内执行 recursion/cycle guard 与 per-evaluation memo
+  - 然后再调用 plain `evaluate_where(...)` 执行 rewritten where
 
 环境变量：
 

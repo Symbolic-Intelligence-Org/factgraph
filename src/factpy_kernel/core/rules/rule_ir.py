@@ -13,6 +13,7 @@ from factpy_kernel.core.rules._trace import (
     RuleTracePredWitness,
     RuleTraceRuleRefLink,
 )
+from factpy_kernel.core.rules.ruleref_common import internal_rule_pred_id, resolve_exposed_rule_ref
 from factpy_kernel.core.store._support import ProjectedFact, make_non_fact_step_key, make_pred_atom_key
 from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_where
 from factpy_kernel.core.store.runtime import Store
@@ -123,22 +124,6 @@ def run_rule_with_trace(
     )
     store._remember_rule_trace_artifact(trace_ctx.rule_run_id, artifact)
     return RuleRunResult(rule_run_id=trace_ctx.rule_run_id, rows=rows)
-
-
-def internal_rule_pred_id(rule_id: str, version: str) -> str:
-    safe_rule = _sanitize(rule_id)
-    safe_ver = _sanitize(version)
-    return f"__rule_ref__{safe_rule}__{safe_ver}"
-
-
-def _sanitize(text: str) -> str:
-    out: list[str] = []
-    for ch in text:
-        if ch.isalnum():
-            out.append(ch.lower())
-        else:
-            out.append("_")
-    return "".join(out)
 
 
 def _run_rule_core(
@@ -279,20 +264,15 @@ def _rewrite_where_rule_refs(
         if len(atom) != 4:
             raise RuleCompileError("ruleref atom must be ('ruleref', rule_id, version, [terms...])")
         _, rule_id, version, terms = atom
-        if not isinstance(rule_id, str) or not rule_id:
-            raise RuleCompileError("ruleref rule_id must be non-empty string")
-        if not isinstance(version, str) or not version:
-            raise RuleCompileError("ruleref version must be non-empty string")
         if not isinstance(terms, list) or not terms:
             raise RuleCompileError("ruleref terms must be non-empty list")
-
-        ref_spec = registry.resolve(rule_id, version)
-        if not ref_spec.expose:
-            raise RuleCompileError(f"RuleRef target must be expose=True: {rule_id}@{version}")
-        if len(terms) != len(ref_spec.select_vars):
-            raise RuleCompileError(
-                f"RuleRef arity mismatch for {rule_id}@{version}: expected {len(ref_spec.select_vars)}, got {len(terms)}"
-            )
+        ref_spec = resolve_exposed_rule_ref(
+            registry,
+            rule_id=rule_id,
+            version=version,
+            terms_len=len(terms),
+            error_factory=RuleCompileError,
+        )
         rows = _evaluate_rule(
             ref_spec,
             registry,

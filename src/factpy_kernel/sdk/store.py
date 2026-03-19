@@ -337,15 +337,15 @@ class SDKStore:
         row_format: str | None,
         view_spec: ViewSpec | None,
         return_display_meta: bool,
-        registry: RuleRegistry | None,  # reserved for unified run() signature
+        registry: RuleRegistry | None,
     ) -> list[Any]:
-        del registry
         if view_spec is not None:
             raise SDKStoreError("view is not supported for Query in run(); use Rule with run(view=...)")
         if return_display_meta:
             raise SDKStoreError("return_display_meta is not supported for Query in run()", path="$.run.return_display_meta")
         resolved_row_format = _resolve_query_row_format(row_format)
-        return self._run_query(query, row_format=resolved_row_format)
+        runtime_registry = self._resolve_runtime_registry(query, explicit_registry=registry)
+        return self._run_query(query, row_format=resolved_row_format, registry=runtime_registry)
 
     def _run_dispatch_derivation(
         self,
@@ -423,9 +423,15 @@ class SDKStore:
         )
         return formatted, display_meta
 
-    def _run_query(self, query: Any, *, row_format: str = "dict") -> list[Any]:
+    def _run_query(
+        self,
+        query: Any,
+        *,
+        row_format: str = "dict",
+        registry: RuleRegistry | None = None,
+    ) -> list[Any]:
         plan = self._lower_query(query, return_mode=row_format)
-        return execute_query_plan(self, plan)
+        return execute_query_plan(self, plan, registry=registry)
 
     def _lower_query(self, query: Any, *, return_mode: str = "dict") -> QueryPlan:
         try:
@@ -460,23 +466,29 @@ class SDKStore:
             # Snapshot read views (.at/.version) are already implemented in sdk.facade.
             # Re-enable only after derivation/runtime temporal write semantics are defined.
             raise SDKStoreError("temporal_view is removed from evaluate(); use active/history views on read APIs")
+        registry = kwargs.pop("registry", None)
         if args and isinstance(args[0], str):
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Derivation object or structured derivation dict"
             )
         if args and hasattr(args[0], "to_authoring_payload"):
             derivation = args[0]
+            runtime_registry = self._resolve_runtime_registry(derivation, explicit_registry=registry)
             compiled_plans = self._compile_derivation_input(derivation)
             return self._evaluate_compiled_derivation_plans(
                 compiled_plans,
                 mode=kwargs.pop("mode", None),
+                registry=runtime_registry,
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
             compiled_plans = self._compile_derivation_input(args[0])
             return self._evaluate_compiled_derivation_plans(
                 compiled_plans,
                 mode=kwargs.pop("mode", None),
+                registry=registry,
             )
+        if registry is not None:
+            kwargs["registry"] = registry
         return self._store.evaluate(*args, **kwargs)
 
     def _evaluate_compiled_derivation_plans(
@@ -484,11 +496,13 @@ class SDKStore:
         compiled_plans: list[dict[str, Any]],
         *,
         mode: str | None,
+        registry: RuleRegistry | None,
     ) -> list[CandidateSet]:
         if len(compiled_plans) == 1:
             return self._evaluate_single_derivation_plan(
                 compiled_plans[0],
                 mode=mode,
+                registry=registry,
             )
 
         shared_run_id = self._derive_shared_run_id(compiled_plans[0]["derivation_id"])
@@ -497,6 +511,7 @@ class SDKStore:
             plan_candidates = self._evaluate_single_derivation_plan(
                 plan,
                 mode=mode,
+                registry=registry,
             )
             merged.extend(_with_candidate_run_id(plan_candidates, run_id=shared_run_id))
         return merged
@@ -506,6 +521,7 @@ class SDKStore:
         compiled: dict[str, Any],
         *,
         mode: str | None,
+        registry: RuleRegistry | None,
     ) -> list[CandidateSet]:
         resolved_mode = mode if mode is not None else compiled.get("mode", "native")
         body_confidences = _coerce_body_confidences(
@@ -523,6 +539,7 @@ class SDKStore:
             head=compiled.get("head"),
             body_confidences=body_confidences,
             engine_evaluate=self._store.evaluate_engine,
+            registry=registry,
         )
 
     @staticmethod
@@ -639,6 +656,23 @@ class SDKStore:
 
         for dep in deps:
             add_dep(dep)
+
+    def _resolve_runtime_registry(
+        self,
+        obj: Any,
+        *,
+        explicit_registry: RuleRegistry | None,
+    ) -> RuleRegistry | None:
+        if explicit_registry is not None:
+            return explicit_registry
+        if not hasattr(obj, "dependency_rules"):
+            return None
+        deps = obj.dependency_rules()
+        if not isinstance(deps, list) or not deps:
+            return None
+        registry = RuleRegistry()
+        self._register_rule_dependencies(registry, obj)
+        return registry
 
     def _compile_derivation_input(self, derivation: Any) -> list[dict[str, Any]]:
         if isinstance(derivation, dict) and {

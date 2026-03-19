@@ -147,6 +147,9 @@
 - 若当前 session 中不存在对应 artifact，返回 `runtime_explain_not_found`。
 - 未配置 `artifact_store_root` 时，这不是 durable lookup；session 清理后 handle 可能失效。
 - 为兼容旧客户端，响应顶层不新增 `kind` 字段。
+- native `SupportArtifact` 当前可能包含 direct `rule_refs`：
+  - 这些是 derivation native `RuleRef` 执行时记录的直接引用规则 id
+  - 还不是 `child_support_digest` 级别的递归 child proof handle
 
 错误 kinds：
 
@@ -415,6 +418,7 @@
     - optional minimal `rule_ref`
 - `support_section` 当前始终存在。
 - `rule_ref_section` 只在 `SupportArtifact.rule_refs` 非空时 emit；不会输出空 section 占位节点。
+- 当前 `rule_ref_section` 只表达 first-round 的 direct referenced rule ids，不承诺递归 child proof expansion。
 - `assertion_fact` leaf 只携带：
   - `asrt_id`
   - `pred_id`
@@ -654,6 +658,7 @@
     "where": [["pred", "person:country", ["$E", "$C"]]],
     "mode": "native"
   },
+  "override_registry_root": "/tmp/registry",
   "limit": 50
 }
 ```
@@ -707,6 +712,14 @@
 
 - `evaluate` 返回完整 candidate 对象，供后续 `accept` 原样 round-trip。
 - native derivation evaluate 当前会填充 `support_kind="native_binding_v1"`。
+- `override_registry_root` 可选；未提供时默认复用 session 绑定的 `registry_root`。
+- 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供。
+- native derivation where 若使用字符串 `RuleRef("rule_id", version)`，必须通过：
+  - `override_registry_root`
+  - legacy `registry_root`
+  - 或 session-level `registry_root`
+  提供显式 registry context；否则运行时会 fail fast。
+- native derivation support 当前可记录 direct `rule_refs`，因此后续 `explain-support` / `explain-tree` 可能看到 minimal `rule_ref` 节点；这还不是递归 child proof。
 - engine evaluate（`souffle` / `problog`）第一轮显式返回 `support_kind="engine_no_witness_v1"`：
   - 这表示 candidate 本身有效，但当前 engine path 不产出可解引用的 witness artifact
   - 统一 `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`，而不是 `runtime_explain_not_found`

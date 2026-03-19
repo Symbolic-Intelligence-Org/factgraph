@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from factpy_kernel.core.rules.ruleref_substrate import evaluate_native_where
 from factpy_kernel.core.store._support import (
     _DEGRADED_SUPPORT_KINDS,
     BindingSupportCapture,
@@ -16,7 +17,7 @@ from factpy_kernel.core.store._support import (
     normalize_detail_items,
 )
 from factpy_kernel.core.derivation.candidates import CandidateSet
-from factpy_kernel.core.rules.where_eval import WhereValidationError, evaluate_where
+from factpy_kernel.core.rules.where_eval import WhereValidationError
 from factpy_kernel.core.store import builders
 from factpy_kernel.core.store.types import (
     BodyConfidencesIR,
@@ -41,6 +42,7 @@ def evaluate_store(
     head: HeadSpecIR | None = None,
     body_confidences: BodyConfidencesIR = None,
     engine_evaluate: EngineEvaluatorFn,
+    registry: Any | None = None,
 ) -> list[CandidateSet]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
@@ -77,6 +79,7 @@ def evaluate_store(
             store,
             where,
             root_result_kind="entity",
+            registry=registry,
         )
         if not captures:
             return []
@@ -123,6 +126,7 @@ def evaluate_store(
         store,
         where,
         root_result_kind="fact",
+        registry=registry,
     )
     if not captures:
         return []
@@ -144,12 +148,14 @@ def evaluate_store(
 def _evaluate_where_over_view(
     store: Any,
     where: WhereIR,
-) -> list[dict[str, Any]]:
+    *,
+    registry: Any | None = None,
+) -> Any:
     view_facts = project_view_facts(
         store.ledger,
         store.schema_ir,
     )
-    return evaluate_where(view_facts, where)
+    return evaluate_native_where(view_facts, where, registry=registry)
 
 
 def _evaluate_where_over_view_with_support(
@@ -157,8 +163,10 @@ def _evaluate_where_over_view_with_support(
     where: WhereIR,
     *,
     root_result_kind: str,
+    registry: Any | None = None,
 ) -> list[BindingSupportCapture]:
-    bindings = _evaluate_where_over_view(store, where)
+    evaluation = _evaluate_where_over_view(store, where, registry=registry)
+    bindings = evaluation.bindings
     if not bindings:
         return []
 
@@ -177,6 +185,7 @@ def _evaluate_where_over_view_with_support(
             binding=binding,
             witness_facts=witness_facts,
             root_result_kind=root_result_kind,
+            rule_refs=evaluation.rule_refs,
         )
         support_digest = compute_support_digest(artifact)
         store._remember_support_artifact(support_digest, artifact)
@@ -219,6 +228,7 @@ def _build_support_artifact_for_binding(
     binding: dict[str, Any],
     witness_facts: dict[str, list[Any]],
     root_result_kind: str,
+    rule_refs: tuple[str, ...] = (),
 ) -> SupportArtifact:
     pred_witnesses: list[PredWitness] = []
     non_fact_steps: list[NonFactStep] = []
@@ -261,7 +271,7 @@ def _build_support_artifact_for_binding(
         non_fact_steps=tuple(
             sorted(non_fact_steps, key=lambda row: (row.step_key, row.kind, row.status, row.details))
         ),
-        rule_refs=(),
+        rule_refs=tuple(rule_refs),
     )
 
 

@@ -671,6 +671,11 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             )
         compiled = _compile_runtime_derivation(dto, schema_ir=session.store.schema_ir)
         limit = _optional_limit(dto.get("limit"), path="$.limit")
+        active_registry = None
+        registry_root = _resolve_rule_registry_root(session, dto)
+        if registry_root is not None:
+            active_registry = RuleRegistry()
+            _load_registered_rules(active_registry, registry_root)
         candidates = session.store.evaluate(
             derivation_id=compiled["derivation_id"],
             version=compiled["version"],
@@ -680,6 +685,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             mode=compiled["mode"],
             head=compiled.get("head"),
             body_confidences=compiled.get("body_confidences"),
+            registry=active_registry,
         )
         returned_candidates = candidates if limit is None else candidates[:limit]
         return ok_response(

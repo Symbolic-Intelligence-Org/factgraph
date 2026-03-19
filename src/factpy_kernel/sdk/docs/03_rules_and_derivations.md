@@ -91,8 +91,15 @@ RuleRef(existing_rule_obj)
 规则：
 - RuleRef 目标规则必须 `expose=True`，否则运行时报 `RuleCompileError`。
 - `RuleRef` 不允许出现在 `Not(...)` 体内（编译期错误）。
-- `sdk.run(..., registry=None)` 时会自动注册 `RuleRef(RuleObj)` 依赖。
+- native runtime 的 canonical registry injection surface 是：
+  - `sdk.run(Query(...), registry=RuleRegistry | None)`
+  - `sdk.run(Rule(...), registry=RuleRegistry | None)`
+  - `sdk.evaluate(Derivation(...), registry=RuleRegistry | None)`
+- `registry=None` 时，只会自动注册 object-backed `RuleRef(existing_rule_obj)` 依赖。
 - 显式传 `registry` 时不自动补依赖。
+- 字符串 `RuleRef("rule_id", version=...)` 不会隐式猜测外部 registry：
+  - `Rule` 路径仍走显式 `registry` / 新建空 registry 的既有语义
+  - `Query` / `Derivation` 路径若缺少显式 `RuleRegistry`，运行时会 fail fast
 
 ## 5. Query DSL
 
@@ -116,6 +123,9 @@ rows = sdk.run(q)  # list[dict]
 - where 未绑定变量会在构造期报 `SDKDSLError(code="QUERY_UNBOUND_VAR")`。
 - `on_missing` / `on_type_mismatch` 仅支持 `error|skip|null`。
 - Query 使用非法 `row_format`、或 instance 形态与 head 不匹配，会抛 `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`。
+- Query where 若使用 `RuleRef`：
+  - `RuleRef(RuleObj)` 可在 `registry=None` 时自动补依赖
+  - 字符串 `RuleRef("rule_id", version=...)` 需要显式传 `registry`
 
 ## 6. Derivation DSL
 
@@ -142,6 +152,7 @@ res = sdk.accept(cands[0], approved_by="alice")
 - `Rule/Derivation.where` 都支持 `Body(...)`；Rule 路径仅展开 atoms，不消费 `confidence`。
 - `sdk.run(derivation)` 不支持，必须走 `sdk.evaluate(...)`。
 - `sdk.run(derivation)` 报错码为 `QUERY_INVALID_ROW_FORMAT`（语义上提示改用 `evaluate()`）。
+- Derivation where 若使用 `RuleRef`，registry 规则与 Query 相同。
 
 ## 7. 编译期硬约束（v2）
 
@@ -176,13 +187,17 @@ res = sdk.accept(cands[0], approved_by="alice")
 ### 8.1 `sdk.evaluate(...)`
 
 ```python
-cands = sdk.evaluate(drv, mode="native")
+cands = sdk.evaluate(drv, mode="native", registry=registry)
 ```
 
 - `mode`：`native`（默认）/ `souffle` / `problog`。
 - 旧名 `python` / `engine` 会明确报错，并提示新名称。
 - `souffle` / `problog` 路径依赖已注册后端（例如 `import factpy_kernel.adapters.souffle`、`import factpy_kernel.adapters.problog`）。
 - `sdk.evaluate(..., view=...)` 不支持；推理始终基于完整 active 断言集。
+- `registry` 是 native `RuleRef` 执行的显式上下文：
+  - `RuleRef(RuleObj)` 可在 `registry=None` 时自动补依赖
+  - 字符串 `RuleRef("rule_id", version=...)` 需要显式 `RuleRegistry`
+- native derivation 的 `SupportArtifact` 当前只会记录 direct `rule_refs`，不会产出 child support handle 或完整 child invocation tree。
 
 ### 8.2 `CandidateSet` 关键字段
 

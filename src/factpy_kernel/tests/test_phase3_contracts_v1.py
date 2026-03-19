@@ -32,6 +32,7 @@ from factpy_kernel.audit import (
 from factpy_kernel.audit.assertions import load_assertion_index
 from factpy_kernel.authoring import (
     AuthoringDerivationCompileError,
+    FileAuthoringRegistry,
     build_derivation_preview_dto,
     compile_authoring_schema_v1,
     compile_authoring_derivation_v1,
@@ -844,6 +845,77 @@ Derivation(
         self.assertEqual(ctx.exception.code, "QUERY_INVALID_ROW_FORMAT")
         self.assertIn("requires exactly one Entity(var)", str(ctx.exception))
 
+    def test_query_ruleref_object_dependency_auto_registers(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "tag") as (u, tag):
+            tag_rows = Rule(
+                id="q.user_tag_rows",
+                version="1.0.0",
+                select=[u, tag],
+                where=[Pred("user:tag", u, tag)],
+                expose=True,
+            )
+            query = Query(
+                head=User(u),
+                where=[
+                    RuleRef(tag_rows)(u, tag),
+                    tag == "vip",
+                ],
+            )
+
+        rows = sdk.run(query, row_format="instance")
+        self.assertEqual([row.ref for row in rows], [refs["u1"]])
+
+    def test_query_ruleref_string_requires_explicit_registry(self) -> None:
+        sdk = SDKStore([User])
+        _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "tag") as (u, tag):
+            query = Query(
+                head=User(u),
+                where=[
+                    RuleRef("q.user_tag_rows", version="1.0.0")(u, tag),
+                    tag == "vip",
+                ],
+            )
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.run(query)
+        self.assertIn("RuleRef execution requires explicit RuleRegistry", str(ctx.exception))
+
+    def test_derivation_ruleref_object_dependency_auto_registers_and_captures_rule_refs(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "tag") as (u, tag):
+            tag_rows = Rule(
+                id="q.user_tag_rows",
+                version="1.0.0",
+                select=[u, tag],
+                where=[Pred("user:tag", u, tag)],
+                expose=True,
+            )
+            drv = Derivation(
+                id="drv.user_tag_copy",
+                version="1.0.0",
+                where=[
+                    RuleRef(tag_rows)(u, tag),
+                    tag == "vip",
+                ],
+                target="user:tag",
+                head_vars=[u, tag],
+            )
+
+        candidates = sdk.evaluate(drv, mode="native")
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].payload["terms"][0]["value"], refs["u1"])
+        support = sdk.store.explain_support(candidates[0].support_digest)
+        self.assertIsNotNone(support)
+        assert support is not None
+        self.assertEqual(support["rule_refs"], ["q.user_tag_rows"])
+
     def test_derivation_preview_dto_default_mode_is_native(self) -> None:
         sdk = SDKStore([User])
         _seed_users_for_syntax_matrix(sdk)
@@ -994,6 +1066,71 @@ Derivation(
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
+
+    def test_runtime_derivation_ruleref_uses_session_registry_root(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with sdk_vars("u", "tag") as (u, tag):
+            helper_rule = Rule(
+                id="q.user_tag_rows",
+                version="1.0.0",
+                select=[u, tag],
+                where=[Pred("user:tag", u, tag)],
+                expose=True,
+            )
+
+        compiled_rule = sdk._compile_rule_input(helper_rule)
+
+        with TemporaryDirectory() as tmp_dir:
+            registry = FileAuthoringRegistry(Path(tmp_dir))
+            registry.upsert_schema_ir(sdk.schema_ir)
+            registry.register_rule_spec(compiled_rule)
+
+            reset_runtime_sessions_for_tests()
+            open_resp = open_runtime_session({"registry_root": tmp_dir})
+            self.assertTrue(open_resp["ok"])
+            session_id = open_resp["session"]["session_id"]
+            try:
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": "user:tag",
+                        "e_ref": refs["u1"],
+                        "rest_terms": [["string", "vip"]],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+                eval_resp = evaluate_runtime_derivation(
+                    session_id,
+                    {
+                        "derivation": {
+                            "derivation_id": "drv.runtime.user_tag_copy",
+                            "version": "1.0.0",
+                            "target": "user:tag",
+                            "head_vars": ["$u", "$tag"],
+                            "where": [
+                                ["ruleref", "q.user_tag_rows", "1.0.0", ["$u", "$tag"]],
+                                ["eq", "$tag", "vip"],
+                            ],
+                            "mode": "native",
+                        }
+                    },
+                )
+                self.assertTrue(eval_resp["ok"])
+                candidate = eval_resp["evaluation"]["candidates"][0]
+                self.assertEqual(candidate["payload"]["terms"][0]["value"], refs["u1"])
+
+                explain_support_resp = explain_runtime_support(
+                    session_id,
+                    {"support_digest": candidate["support_digest"]},
+                )
+                self.assertTrue(explain_support_resp["ok"])
+                self.assertEqual(explain_support_resp["explain"]["rule_refs"], ["q.user_tag_rows"])
+            finally:
+                close_runtime_session(session_id)
+                reset_runtime_sessions_for_tests()
 
     def test_runtime_service_explain_support_and_rule_trace(self) -> None:
         sdk = SDKStore([User])

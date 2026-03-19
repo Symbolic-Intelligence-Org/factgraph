@@ -211,7 +211,7 @@ root_dir/
 
 - `SDKRegistry` 是 `authoring` 的 Python 友好 facade
 - `service.registry_v1` 通过 `FileAuthoringRegistry` 提供 HTTP 读接口
-- `service.runtime_v1` 也可读取 registry 中的 schema/rule，以支持 runtime session 与 `RuleRef` 解析
+- `service.runtime_v1` 也可读取 registry 中的 schema/rule，以支持 runtime session、`/rules/run` 与 native `/derivations/evaluate` 的 `RuleRef` 解析/执行
 
 ## 8. 与其他层的边界
 
