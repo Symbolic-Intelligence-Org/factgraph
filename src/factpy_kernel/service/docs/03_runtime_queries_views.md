@@ -409,9 +409,11 @@
 
 - 这是 candidate explain 的独立 tree surface，不会修改既有 `POST /queries/explain` 的 flat DTO。
 - 第一轮只接受 `{kind:"candidate", id}`。
-- 第一轮只支持 `support_kind="native_binding_v1"`：
-  - engine degraded candidate 继续走 flat `explain(kind="candidate")`
-  - `explain-tree` 对非 native candidate 返回 `runtime_explain_not_supported`
+- 第一轮支持两类 candidate tree：
+  - native
+    - `support_kind="native_binding_v1"`
+  - engine degraded
+    - `support_kind in {"engine_no_witness_v1", "none"}`
 - `tree` DTO 是 recursive schema，并在当前版本采用 sectioned shape：
   - root：`candidate_result`
   - section layer：
@@ -420,6 +422,7 @@
   - support section children：
     - `predicate_witness_group`
     - `non_fact_check`
+    - `degraded_support`
   - leaf / recursive nodes：
     - `assertion_fact`
     - `rule_ref`
@@ -448,6 +451,19 @@
       - traversal-owned
 - runtime / audit / static 三侧共享同一组 raw reason enum；service 不在 transport 层再翻译成另一套状态名。
 - richer taxonomy 只适用于 structured `rule_ref_edges` path；只有 legacy `rule_refs` 的旧 artifact 仍只展示 flat `rule_ref` 节点，不进入 recursive terminal taxonomy。
+- engine degraded candidate 则走单独的 tree contract：
+  - envelope 仍是 `candidate_evidence_tree`
+  - first-round shape 固定为：
+    - `candidate_result`
+    - `support_section`
+    - `degraded_support`
+  - `degraded_support` 最小字段为：
+    - `support_kind`
+    - `witness_status="degraded"`
+    - `children=[]`
+  - `degraded_support` 不复用 `unresolved_support` / `recursion_boundary`
+  - node 本体不暴露 `support_digest`；若需要 raw digest，只从顶层 envelope 兼容字段读取
+  - legacy `"none"` 与 `engine_no_witness_v1` 在 tree surface 上同构
 - native candidate proof 现在会在 support capture 时做 winning-branch narrowing：
   - `support_section` / `rule_ref_section` 只反映 adopted branch
   - 若多个 branch 都满足同一 final binding，则采用 `source-order wins`
@@ -476,7 +492,6 @@
 - `shape`
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
-- `runtime_explain_not_supported`
 
 ## 5. `POST /v1/runtime/sessions/{session_id}/queries/explain-summary`
 

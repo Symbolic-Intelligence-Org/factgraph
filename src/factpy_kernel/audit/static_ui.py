@@ -637,6 +637,7 @@ def _render_candidate_evidence_page(tree: dict[str, Any]) -> str:
         for item in root.get("rule_ref_edges", [])
         if isinstance(item, dict)
     ]
+    root_result_kind = root.get("root_result_kind")
     return _html_page(
         title=f"Candidate Evidence {candidate_id}",
         body=(
@@ -647,7 +648,7 @@ def _render_candidate_evidence_page(tree: dict[str, Any]) -> str:
             "<ul>"
             f"<li>support_digest={escape(support_digest)}</li>"
             f"<li>support_kind={escape(support_kind)}</li>"
-            f"<li>root_result_kind={escape(str(root.get('root_result_kind')))}</li>"
+            f"<li>root_result_kind={escape('-' if root_result_kind is None else str(root_result_kind))}</li>"
             f"<li>rule_refs={escape(','.join(rule_refs)) or '-'}</li>"
             f"<li>rule_ref_edges={escape(str(len(rule_ref_edges)))}</li>"
             "</ul>"
@@ -669,11 +670,15 @@ def _render_candidate_evidence_node(node: dict[str, Any], *, assertion_href_pref
         f"<li>node_kind={escape(node_kind)}</li>",
     ]
     if node_kind == "candidate_result":
-        items.append(f"<li>root_result_kind={escape(str(node.get('root_result_kind')))}</li>")
+        root_result_kind = node.get("root_result_kind")
+        items.append(f"<li>root_result_kind={escape('-' if root_result_kind is None else str(root_result_kind))}</li>")
     elif node_kind == "support_section":
         items.append(f"<li>section_children={escape(str(len(node.get('children', []))))}</li>")
     elif node_kind == "rule_ref_section":
         items.append(f"<li>section_children={escape(str(len(node.get('children', []))))}</li>")
+    elif node_kind == "degraded_support":
+        items.append(f"<li>support_kind={escape(str(node.get('support_kind')))}</li>")
+        items.append(f"<li>witness_status={escape(str(node.get('witness_status')))}</li>")
     elif node_kind == "rule_ref":
         items.append(f"<li>ruleref_atom_key={escape(str(node.get('ruleref_atom_key')))}</li>")
         items.append(f"<li>rule_ref_id={escape(str(node.get('rule_ref_id')))}</li>")

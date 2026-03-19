@@ -119,19 +119,19 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
   - service `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`
 - `Store.get_candidate_support_digest(candidate_id)` 与 `Store.get_candidate_support_kind(candidate_id)` 都只在当前 `Store` 实例内回取第一跳
 - 若 `Store(..., artifact_sidecar=...)` 已配置，只有 native `support_digest -> SupportArtifact` 第二跳可在共享 sidecar root 的后续 `Store` 实例中被重新解引用
-- 在此基础上，service/audit 现在已能把 native candidate explain 组装成当前 `candidate_evidence_tree`：
+- 在此基础上，service/audit 现在已能把 candidate explain 组装成当前 `candidate_evidence_tree`：
   - 入口仍是 `candidate_id`
-  - proof substrate 仍是既有 `SupportArtifact`
+  - native proof substrate 仍是既有 `SupportArtifact`
   - 当前 tree 采用 sectioned shape：
     - `candidate_result`
     - `support_section`
     - optional `rule_ref_section`
-    - `predicate_witness_group` / `non_fact_check` / `assertion_fact` / `rule_ref`
+    - `predicate_witness_group` / `non_fact_check` / `assertion_fact` / `rule_ref` / `degraded_support`
     - recursive child layer:
       - `referenced_support`
       - `unresolved_support`
       - `recursion_boundary`
-  - 这仍是 native-first consumer surface，不是 engine parity、graph UI、或更细 provenance contract
+  - 这仍是 candidate-first consumer surface，不是 full engine parity、graph UI、或更细 provenance contract
   - native `SupportArtifact` 现在同时保留：
     - legacy `rule_refs` summary
     - structured `rule_ref_edges`
@@ -159,6 +159,19 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
         - 两者都属于 traversal-owned boundary reason
   - runtime / audit / static 继续共享同一组 raw terminal reason enum，不引入 consumer-specific 翻译层
   - richer taxonomy 只适用于 structured `rule_ref_edges` path；只有 legacy `rule_refs` 的旧 artifact 继续回退到 flat `rule_ref` 节点，不进入 recursive terminal taxonomy
+  - engine degraded candidate 现在也有合法 tree surface：
+    - 顶层 envelope 仍是 `candidate_evidence_tree`
+    - first-round shape 固定为：
+      - `candidate_result`
+      - `support_section`
+      - `degraded_support`
+    - `degraded_support` 最小字段为：
+      - `support_kind`
+      - `witness_status="degraded"`
+      - `children=[]`
+    - `degraded_support` 不复用 `unresolved_support` / `recursion_boundary`
+    - node 本体不暴露 `support_digest`；当前 zero digest 仍只作为顶层兼容 placeholder
+    - legacy `"none"` 与 `engine_no_witness_v1` 在 tree surface 上同构
 
 ```mermaid
 flowchart LR

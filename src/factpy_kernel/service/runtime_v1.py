@@ -27,7 +27,10 @@ from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
 from factpy_kernel.core.schema.schema_ir import schema_digest
 from factpy_kernel.core.store import builders
 from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar
-from factpy_kernel.core.store._candidate_evidence_tree import build_candidate_evidence_tree
+from factpy_kernel.core.store._candidate_evidence_tree import (
+    build_candidate_evidence_tree,
+    build_degraded_candidate_evidence_tree,
+)
 from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
@@ -890,7 +893,7 @@ def _runtime_explain_not_found(*, handle_kind: str, handle_value: str, path: str
 
 def _runtime_explain_not_supported(*, candidate_id: str, support_kind: str) -> Exception:
     return facade_error(
-        f"runtime evidence tree only supports native candidate support, got: {support_kind}",
+        f"runtime evidence tree only supports native or degraded candidate support, got: {support_kind}",
         kind="runtime_explain_not_supported",
         path="$.id",
         details={"candidate_id": candidate_id, "support_kind": support_kind},
@@ -912,6 +915,17 @@ def _explain_tree_candidate(session: RuntimeSession, candidate_id: str) -> dict[
                 handle_kind="candidate_id",
                 handle_value=candidate_id,
                 path="$.id",
+            )
+        if support_kind in _DEGRADED_SUPPORT_KINDS:
+            tree = build_degraded_candidate_evidence_tree(
+                candidate_id=candidate_id,
+                support_digest=support_digest,
+                support_kind=support_kind,
+            )
+            return ok_response(
+                meta={"candidate_id": candidate_id},
+                kind="candidate_evidence_tree",
+                tree=_to_jsonable(tree),
             )
         raise _runtime_explain_not_supported(candidate_id=candidate_id, support_kind=support_kind)
     support = session.store.explain_support(support_digest)

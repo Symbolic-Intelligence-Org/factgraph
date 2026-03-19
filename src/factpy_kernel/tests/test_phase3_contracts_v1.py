@@ -6110,8 +6110,20 @@ Derivation(
                 session_id,
                 {"kind": "candidate", "id": candidate["candidate_id"]},
             )
-            self.assertFalse(explain_engine_tree["ok"])
-            self.assertEqual(explain_engine_tree["errors"][0]["kind"], "runtime_explain_not_supported")
+            self.assertTrue(explain_engine_tree["ok"])
+            self.assertEqual(explain_engine_tree["kind"], "candidate_evidence_tree")
+            engine_tree = explain_engine_tree["tree"]
+            self.assertEqual(engine_tree["support_kind"], ENGINE_NO_WITNESS_KIND)
+            root = engine_tree["root"]
+            self.assertEqual(root["node_kind"], "candidate_result")
+            support_section = root["children"][0]
+            self.assertEqual(support_section["node_kind"], "support_section")
+            degraded_node = support_section["children"][0]
+            self.assertEqual(degraded_node["node_kind"], "degraded_support")
+            self.assertEqual(degraded_node["support_kind"], ENGINE_NO_WITNESS_KIND)
+            self.assertEqual(degraded_node["witness_status"], "degraded")
+            self.assertNotIn("support_digest", degraded_node)
+            self.assertEqual(degraded_node["children"], [])
 
             session.store._remember_candidate_support("cand-legacy-none", zero_digest, "none")
             explain_legacy_none = explain_runtime_ref(
@@ -6128,8 +6140,127 @@ Derivation(
                 session_id,
                 {"kind": "candidate", "id": "cand-legacy-none"},
             )
-            self.assertFalse(explain_legacy_tree["ok"])
-            self.assertEqual(explain_legacy_tree["errors"][0]["kind"], "runtime_explain_not_supported")
+            self.assertTrue(explain_legacy_tree["ok"])
+            legacy_tree = explain_legacy_tree["tree"]
+            self.assertEqual(legacy_tree["support_kind"], "none")
+            legacy_degraded_node = legacy_tree["root"]["children"][0]["children"][0]
+            self.assertEqual(legacy_degraded_node["node_kind"], "degraded_support")
+            self.assertEqual(legacy_degraded_node["support_kind"], "none")
+            self.assertEqual(legacy_degraded_node["witness_status"], "degraded")
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+            register_engine_evaluator(None, "souffle")
+
+    def test_engine_candidate_evidence_tree_round_trips_through_audit_and_static(self) -> None:
+        zero_digest = f"sha256:{'0' * 64}"
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        def fake_souffle_evaluator(
+            store: Any,
+            *,
+            derivation_id: str,
+            version: str,
+            target_pred_id: str,
+            head_vars: list[Any],
+            where: list[Any],
+            head: dict[str, Any] | None = None,
+        ) -> list[Any]:
+            schema_pred = store_builders.find_schema_pred(store, target_pred_id)
+            self.assertIsNotNone(schema_pred)
+            return store_builders.candidates_from_bindings(
+                store,
+                derivation_id=derivation_id,
+                version=version,
+                target_pred_id=target_pred_id,
+                arg_specs=schema_pred["arg_specs"],
+                head_vars=head_vars,
+                schema_pred=schema_pred,
+                bindings=[{"$u": refs["u1"], "$tag": "vip"}],
+            )
+
+        register_engine_evaluator(fake_souffle_evaluator, "souffle")
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            eval_resp = evaluate_runtime_derivation(
+                session_id,
+                {
+                    "derivation": {
+                        "derivation_id": "drv.engine_degraded_tree.audit",
+                        "version": "1.0.0",
+                        "target": "user:tag",
+                        "head_vars": ["$u", "$tag"],
+                        "where": [["pred", "user:tag", ["$u", "$tag"]]],
+                        "mode": "souffle",
+                    }
+                },
+            )
+            self.assertTrue(eval_resp["ok"])
+            engine_candidate = eval_resp["evaluation"]["candidates"][0]
+            self.assertEqual(engine_candidate["support_kind"], ENGINE_NO_WITNESS_KIND)
+            self.assertEqual(engine_candidate["support_digest"], zero_digest)
+
+            with TemporaryDirectory() as tmpdir:
+                package_dir = str(Path(tmpdir) / "pkg")
+                accept_resp = accept_runtime_derivation(
+                    session_id,
+                    {
+                        "candidate": engine_candidate,
+                        "options": {"approved_by": "alice"},
+                    },
+                )
+                self.assertTrue(accept_resp["ok"])
+                export_resp = export_runtime_package(
+                    session_id,
+                    {"out_dir": package_dir, "package_kind": "audit"},
+                )
+                self.assertTrue(export_resp["ok"])
+
+                package = load_audit_package(package_dir)
+                query = AuditQuery(package)
+
+                engine_tree = query.get_candidate_evidence_tree(engine_candidate["candidate_id"])
+                self.assertIsNotNone(engine_tree)
+                self.assertEqual(engine_tree["support_kind"], ENGINE_NO_WITNESS_KIND)
+                degraded_node = engine_tree["root"]["children"][0]["children"][0]
+                self.assertEqual(degraded_node["node_kind"], "degraded_support")
+                self.assertEqual(degraded_node["support_kind"], ENGINE_NO_WITNESS_KIND)
+                self.assertEqual(degraded_node["witness_status"], "degraded")
+                self.assertNotIn("support_digest", degraded_node)
+
+                dto_tree = build_candidate_evidence_tree_dto(query, engine_candidate["candidate_id"])
+                self.assertEqual(dto_tree["support_kind"], ENGINE_NO_WITNESS_KIND)
+                self.assertEqual(dto_tree["root"]["children"][0]["children"][0]["node_kind"], "degraded_support")
+
+                query.package.candidate_ledger.append(
+                    {
+                        "candidate_id": "cand-legacy-none",
+                        "support_digest": zero_digest,
+                        "support_kind": "none",
+                    }
+                )
+                legacy_tree = query.get_candidate_evidence_tree("cand-legacy-none")
+                self.assertIsNotNone(legacy_tree)
+                legacy_degraded_node = legacy_tree["root"]["children"][0]["children"][0]
+                self.assertEqual(legacy_degraded_node["node_kind"], "degraded_support")
+                self.assertEqual(legacy_degraded_node["support_kind"], "none")
+                self.assertEqual(legacy_degraded_node["witness_status"], "degraded")
+
+                static_out = Path(tmpdir) / "site"
+                render_audit_static_site(package_dir, static_out)
+                engine_page = (
+                    Path(static_out)
+                    / "candidate_evidence"
+                    / f"{quote(engine_candidate['candidate_id'], safe='')}.html"
+                ).read_text(encoding="utf-8")
+                self.assertIn("degraded_support", engine_page)
+                self.assertIn(ENGINE_NO_WITNESS_KIND, engine_page)
+                self.assertIn("witness_status=degraded", engine_page)
+                self.assertNotIn("child_support_digest", engine_page)
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()

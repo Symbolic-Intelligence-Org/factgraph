@@ -128,7 +128,7 @@
 - `AuditQuery.get_candidate_evidence_tree(candidate_id)`
 - `build_candidate_evidence_tree_dto(...)`
 
-若 package 中存在 native candidate support rows，当前静态站点也会额外生成：
+若 package 中存在 candidate rows，当前静态站点也会额外生成：
 
 - `candidate_evidence.html`
   - candidate evidence tree index
@@ -140,6 +140,10 @@
     - `referenced_support`
     - `unresolved_support`
     - `recursion_boundary`
+  - 当前也支持 engine degraded candidate tree：
+    - `candidate_result`
+    - `support_section`
+    - `degraded_support`
   - audit 在 candidate tree 上消费与 runtime 相同的 terminal taxonomy contract：
     - `unresolved_support`
       - `child_support_unavailable`
@@ -149,10 +153,20 @@
       - `depth_limit`
   - audit 不发明新的 reason enum；summary/query/static 都继续消费同一组 raw node-kind 与 reason 字段
   - 只有 structured `rule_ref_edges` path 会进入 recursive terminal taxonomy；legacy `rule_refs` fallback 仍保持 flat `rule_ref` 节点
+  - audit 也消费与 runtime 相同的 engine degraded tree contract：
+    - `degraded_support`
+      - `support_kind`
+      - `witness_status="degraded"`
+      - `children=[]`
+    - `degraded_support` 不复用 native recursive terminal taxonomy
+  - legacy `"none"` 与 `engine_no_witness_v1` 在 tree surface 上同构
 
 这组 summary 与 runtime `rule_run_summary` 保持同构，且只从现有 raw trace payload 派生。
 这组 narrative 与 runtime `rule_run_narrative` 保持同构，且只从既有 `rule_run_summary` 纯派生。
-这组 candidate tree 与 runtime `candidate_evidence_tree` 保持同构，且只从 `candidate_ledger + support_artifacts + assertion detail` 派生。
+这组 candidate tree 与 runtime `candidate_evidence_tree` 保持同构，且从：
+- native path：`candidate_ledger + support_artifacts + assertion detail`
+- engine degraded path：`candidate_ledger`
+纯派生。
 
 ## 4. 与其他层的边界
 

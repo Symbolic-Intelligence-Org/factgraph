@@ -54,6 +54,52 @@ def build_candidate_evidence_tree(
     }
 
 
+def build_degraded_candidate_evidence_tree(
+    *,
+    candidate_id: str,
+    support_digest: str,
+    support_kind: str,
+) -> dict[str, Any]:
+    if not isinstance(candidate_id, str) or not candidate_id:
+        raise ValueError("candidate_id must be non-empty string")
+    if not isinstance(support_digest, str) or not support_digest:
+        raise ValueError("support_digest must be non-empty string")
+    if not isinstance(support_kind, str) or not support_kind:
+        raise ValueError("support_kind must be non-empty string")
+
+    return {
+        "kind": "candidate_evidence_tree",
+        "candidate_id": candidate_id,
+        "support_digest": support_digest,
+        "support_kind": support_kind,
+        "root": {
+            "node_id": f"cand:{candidate_id}",
+            "node_kind": "candidate_result",
+            "title": f"Candidate {candidate_id}",
+            "binding": {},
+            "rule_refs": [],
+            "rule_ref_edges": [],
+            "children": [
+                {
+                    "node_id": f"support:{candidate_id}",
+                    "node_kind": "support_section",
+                    "title": "Support",
+                    "children": [
+                        {
+                            "node_id": f"degraded:{candidate_id}",
+                            "node_kind": "degraded_support",
+                            "title": "Degraded support",
+                            "support_kind": support_kind,
+                            "witness_status": "degraded",
+                            "children": [],
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+
+
 def _build_support_sections(
     *,
     node_key: str,
@@ -402,4 +448,4 @@ def _require_non_empty_str(value: Any, *, label: str) -> str:
     return value
 
 
-__all__ = ["build_candidate_evidence_tree"]
+__all__ = ["build_candidate_evidence_tree", "build_degraded_candidate_evidence_tree"]

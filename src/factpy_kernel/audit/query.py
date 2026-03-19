@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from factpy_kernel.core.store._candidate_evidence_tree import build_candidate_evidence_tree
+from factpy_kernel.core.store._candidate_evidence_tree import (
+    build_candidate_evidence_tree,
+    build_degraded_candidate_evidence_tree,
+)
+from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS
 from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
 from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
 
@@ -87,8 +91,14 @@ class AuditQuery:
         support_digest = next(iter(support_digests))
         support_kind = next(iter(support_kinds))
         if support_kind != "native_binding_v1":
+            if support_kind in _DEGRADED_SUPPORT_KINDS:
+                return build_degraded_candidate_evidence_tree(
+                    candidate_id=candidate_id,
+                    support_digest=support_digest,
+                    support_kind=support_kind,
+                )
             raise AuditQueryError(
-                f"candidate evidence tree only supports native support_kind, got: {support_kind}"
+                f"candidate evidence tree only supports native or degraded support_kind, got: {support_kind}"
             )
         support = self._get_support_artifact(support_digest)
         if support is None:
