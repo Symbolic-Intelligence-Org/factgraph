@@ -30,11 +30,29 @@ def build_candidate_evidence_tree(
     rule_refs = _normalize_strings(support.get("rule_refs", []), label="support.rule_refs")
     root_result_kind = _require_non_empty_str(support.get("root_result_kind"), label="support.root_result_kind")
 
-    children: list[dict[str, Any]] = []
+    support_children: list[dict[str, Any]] = []
     for witness in pred_witnesses:
-        children.append(_build_predicate_witness_group(witness, assertion_lookup=assertion_lookup))
+        support_children.append(_build_predicate_witness_group(witness, assertion_lookup=assertion_lookup))
     for step in non_fact_steps:
-        children.append(_build_non_fact_check(step))
+        support_children.append(_build_non_fact_check(step))
+
+    children: list[dict[str, Any]] = [
+        {
+            "node_id": f"support:{candidate_id}",
+            "node_kind": "support_section",
+            "title": "Support",
+            "children": support_children,
+        }
+    ]
+    if rule_refs:
+        children.append(
+            {
+                "node_id": f"rule_refs:{candidate_id}",
+                "node_kind": "rule_ref_section",
+                "title": "Rule References",
+                "children": [_build_rule_ref_node(rule_ref_id) for rule_ref_id in rule_refs],
+            }
+        )
 
     return {
         "kind": "candidate_evidence_tree",
@@ -108,6 +126,16 @@ def _build_assertion_leaf(asrt_id: str, *, assertion_lookup: AssertionDetailLook
         "pred_id": pred_id,
         "e_ref": e_ref,
         "claim_args": claim_args,
+        "children": [],
+    }
+
+
+def _build_rule_ref_node(rule_ref_id: str) -> dict[str, Any]:
+    return {
+        "node_id": f"ruleref:{rule_ref_id}",
+        "node_kind": "rule_ref",
+        "title": f"Rule reference {rule_ref_id}",
+        "rule_ref_id": rule_ref_id,
         "children": [],
     }
 

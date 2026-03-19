@@ -1260,9 +1260,13 @@ Derivation(
             self.assertEqual(tree["support_digest"], candidate["support_digest"])
             self.assertEqual(tree["support_kind"], "native_binding_v1")
             self.assertEqual(tree["root"]["node_kind"], "candidate_result")
-
+            self.assertEqual(
+                [row.get("node_kind") for row in tree["root"]["children"]],
+                ["support_section"],
+            )
+            support_section = tree["root"]["children"][0]
             pred_nodes = [
-                row for row in tree["root"]["children"] if row.get("node_kind") == "predicate_witness_group"
+                row for row in support_section["children"] if row.get("node_kind") == "predicate_witness_group"
             ]
             self.assertEqual(len(pred_nodes), 1)
             self.assertEqual(pred_nodes[0]["pred_id"], "user:tag")
@@ -1323,8 +1327,74 @@ Derivation(
                 html = page_path.read_text(encoding="utf-8")
                 self.assertIn(candidate_id, html)
                 self.assertIn(f"assertions/{quote(asrt_id, safe='')}.html", html)
+                self.assertIn("Support", html)
                 self.assertNotIn("revoked_by", html)
                 self.assertNotIn("is_revoked", html)
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_native_candidate_evidence_tree_v2_emits_rule_ref_section_only_when_present(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            write_resp = write_runtime_fact(
+                session_id,
+                {
+                    "pred_id": "user:tag",
+                    "e_ref": refs["u1"],
+                    "rest_terms": [["string", "vip"]],
+                },
+                kind="add",
+            )
+            self.assertTrue(write_resp["ok"])
+            asrt_id = write_resp["write"]["assertion_id"]
+
+            session = _require_session(session_id)
+            support_digest = "sha256:" + ("ab" * 32)
+            artifact = support_artifact_from_dict(
+                {
+                    "support_digest": support_digest,
+                    "kind": "native_binding_v1",
+                    "root_result_kind": "entity",
+                    "binding": [["$u", refs["u1"]]],
+                    "pred_witnesses": [
+                        {
+                            "pred_atom_key": "b0.a0:user:tag",
+                            "asrt_ids": [asrt_id],
+                        }
+                    ],
+                    "non_fact_steps": [],
+                    "rule_refs": ["q.child_rule_a", "q.child_rule_b"],
+                }
+            )
+            session.store._remember_support_artifact(support_digest, artifact)
+            session.store._remember_candidate_support("cand-with-rule-refs", support_digest, "native_binding_v1")
+
+            tree_resp = explain_runtime_tree(session_id, {"kind": "candidate", "id": "cand-with-rule-refs"})
+            self.assertTrue(tree_resp["ok"])
+            tree = tree_resp["tree"]
+            self.assertEqual(
+                [row.get("node_kind") for row in tree["root"]["children"]],
+                ["support_section", "rule_ref_section"],
+            )
+            support_section, rule_ref_section = tree["root"]["children"]
+            self.assertEqual(support_section["title"], "Support")
+            self.assertEqual(rule_ref_section["title"], "Rule References")
+            self.assertEqual(
+                [row.get("node_kind") for row in rule_ref_section["children"]],
+                ["rule_ref", "rule_ref"],
+            )
+            self.assertEqual(
+                [row.get("rule_ref_id") for row in rule_ref_section["children"]],
+                ["q.child_rule_a", "q.child_rule_b"],
+            )
+            self.assertEqual(rule_ref_section["children"][0]["children"], [])
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()

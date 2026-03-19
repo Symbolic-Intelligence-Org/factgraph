@@ -111,10 +111,14 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
   - service `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`
 - `Store.get_candidate_support_digest(candidate_id)` 与 `Store.get_candidate_support_kind(candidate_id)` 都只在当前 `Store` 实例内回取第一跳
 - 若 `Store(..., artifact_sidecar=...)` 已配置，只有 native `support_digest -> SupportArtifact` 第二跳可在共享 sidecar root 的后续 `Store` 实例中被重新解引用
-- 在此基础上，service/audit 现在已能把 native candidate explain 组装成第一版 `candidate_evidence_tree`：
+- 在此基础上，service/audit 现在已能把 native candidate explain 组装成当前 `candidate_evidence_tree`：
   - 入口仍是 `candidate_id`
   - proof substrate 仍是既有 `SupportArtifact`
-  - V1 只是把 flat support 重新组织成 `candidate_result -> witness/check -> assertion_fact` 的 tree DTO
+  - 当前 tree 采用 sectioned shape：
+    - `candidate_result`
+    - `support_section`
+    - optional `rule_ref_section`
+    - `predicate_witness_group` / `non_fact_check` / `assertion_fact` / minimal `rule_ref`
   - 这仍是 native-first consumer surface，不是 engine parity、graph UI、或更细 provenance contract
 
 ```mermaid

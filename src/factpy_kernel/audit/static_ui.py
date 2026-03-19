@@ -649,8 +649,9 @@ def _render_candidate_evidence_page(tree: dict[str, Any]) -> str:
             f"<pre>{escape(json.dumps(binding, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
             "<h2>Tree</h2>"
             f"{_render_candidate_evidence_node(root, assertion_href_prefix='../assertions')}"
-            "<h2>Payload</h2>"
+            "<details><summary>Raw Payload</summary>"
             f"<pre>{escape(json.dumps(tree, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
+            "</details>"
         ),
     )
 
@@ -661,7 +662,15 @@ def _render_candidate_evidence_node(node: dict[str, Any], *, assertion_href_pref
     items: list[str] = [
         f"<li>node_kind={escape(node_kind)}</li>",
     ]
-    if node_kind == "predicate_witness_group":
+    if node_kind == "candidate_result":
+        items.append(f"<li>root_result_kind={escape(str(node.get('root_result_kind')))}</li>")
+    elif node_kind == "support_section":
+        items.append(f"<li>section_children={escape(str(len(node.get('children', []))))}</li>")
+    elif node_kind == "rule_ref_section":
+        items.append(f"<li>section_children={escape(str(len(node.get('children', []))))}</li>")
+    elif node_kind == "rule_ref":
+        items.append(f"<li>rule_ref_id={escape(str(node.get('rule_ref_id')))}</li>")
+    elif node_kind == "predicate_witness_group":
         items.append(f"<li>pred_atom_key={escape(str(node.get('pred_atom_key')))}</li>")
         items.append(f"<li>pred_id={escape(str(node.get('pred_id')))}</li>")
         items.append(f"<li>assertion_count={escape(str(node.get('assertion_count')))}</li>")

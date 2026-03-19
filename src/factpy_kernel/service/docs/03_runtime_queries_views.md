@@ -402,10 +402,19 @@
 - 第一轮只支持 `support_kind="native_binding_v1"`：
   - engine degraded candidate 继续走 flat `explain(kind="candidate")`
   - `explain-tree` 对非 native candidate 返回 `runtime_explain_not_supported`
-- `tree` DTO 是 **recursive schema, shallow semantics**：
+- `tree` DTO 是 recursive schema，并在当前版本采用 sectioned shape：
   - root：`candidate_result`
-  - middle：`predicate_witness_group` / `non_fact_check`
-  - leaf：`assertion_fact`
+  - section layer：
+    - `support_section`
+    - optional `rule_ref_section`
+  - support section children：
+    - `predicate_witness_group`
+    - `non_fact_check`
+  - leaves：
+    - `assertion_fact`
+    - optional minimal `rule_ref`
+- `support_section` 当前始终存在。
+- `rule_ref_section` 只在 `SupportArtifact.rule_refs` 非空时 emit；不会输出空 section 占位节点。
 - `assertion_fact` leaf 只携带：
   - `asrt_id`
   - `pred_id`
@@ -423,6 +432,7 @@
   - 不表达 non-witnessed alternatives
   - 不表达 conflict-resolution
   - 不表达 source-linkage graph
+- 当前 tree 相比最初 v1 引入了 section layer；这是已接受的、范围受控的 shape change，而不是纯 additive enrichment。
 
 错误 kinds：
 
