@@ -281,25 +281,49 @@ Full lineage from V1 through current state:
 7. **Souffle adapter contract** — `_w` witness variant rules, TSV column layout, `souffle_witness_v1` support kind
 8. **NL explain chain** — candidate tree summary (12 core fields) → narrative → NL; delivery matrix: runtime full, audit summary+narrative, static narrative block
 
-## 8. Remaining Open Directions
+## 8. Traceability-Explainability Completion Summary
 
-### 8.1 Mother blueprint (traceability-explainability) remaining lines
+### 8.1 Full delivery matrix
 
-| Direction | Status | Blocker |
+| Capability Line | Status | Delivery | Commit |
+| --- | --- | --- | --- |
+| Recursive proof edges | ✅ closed | code | `f4756d9` |
+| Winning-branch narrowing | ✅ closed | code | `13b7827` |
+| Richer unresolved taxonomy | ✅ closed | code | `f649c5d` |
+| Engine degraded tree | ✅ closed | code | `cf7f56d` |
+| Provenance-role taxonomy | ✅ closed | doc-only freeze | `729362f` |
+| NL explain for tree | ✅ closed | code | `9560fd2` |
+| Souffle partial witness | ✅ closed | code (adapter → runtime → audit → static) | `0157c57` + `18bcd2c` |
+| Live evidence URL | ✅ closed | code | `9eb6f8b` |
+| Salience / impact | ⏸️ frozen | doc-only, blocked on certainty/weight | `69d45d9` |
+| Assertion-origin taxonomy | 🔲 deferred | requires assertion provenance metadata | — |
+| ProbLog witness parity | 🔲 deferred | widest scope, would reopen adapter/library | — |
+| Missing optional conditions | 🔲 deferred | depends on authoring/rule IR optional semantics | — |
+
+**8 closed, 1 frozen, 3 deferred.** The mother blueprint's actionable mainline is substantially complete.
+
+### 8.2 Remaining deferred lines (within traceability-explainability)
+
+| Direction | Blocker | When to revisit |
 | --- | --- | --- |
-| Assertion-origin taxonomy | deferred | Requires assertion provenance metadata from assertion_lookup |
-| ProbLog witness parity | deferred | Widest scope — would reopen adapter/library integration |
-| Missing optional conditions | deferred | Depends on authoring/rule IR optional semantics |
-| Salience / impact | blocked | Requires certainty/weight vocabulary (not yet designed) |
+| Assertion-origin taxonomy | Requires assertion provenance metadata from assertion_lookup | When assertion metadata schema is designed |
+| ProbLog witness parity | Widest scope — would reopen adapter/library integration | When ProbLog integration is prioritized |
+| Missing optional conditions | Depends on authoring/rule IR optional semantics | When rule authoring supports optional predicates |
+| Salience / impact | Requires certainty/weight vocabulary (not yet designed) | When certainty/weight infrastructure exists |
 
-### 8.2 Suggested priority for next session
+All 4 have significant prerequisites. Continuing to push within traceability-explainability has diminishing returns at this point.
 
-1. **Assertion-origin taxonomy** — if assertion provenance metadata becomes available
-2. **ProbLog witness parity** — scope widest but follows Souffle pattern
-3. **Missing optional conditions** — depends on authoring
-4. **Salience / impact** — continues blocked until certainty/weight
+### 8.3 Suggested next direction
 
-### 8.3 Scenario-driven deferred gaps (still no trigger)
+The recommended pivot is to **leave traceability-explainability in maintenance mode** and shift to other active blueprints:
+
+1. **Run full test regression first** — multiple implementation rounds landed without a full suite run
+2. **`durable-artifact-storage`** (status: scoped) — most implementation-ready among active blueprints
+3. **`temporal-hybrid-reasoning-blueprint`** (status: draft) — broader scope, may need scoping first
+
+The traceability-explainability deferred lines can be revisited when their prerequisites are met, triggered by work on other blueprints (e.g., authoring changes may unblock `missing optional conditions`).
+
+### 8.4 Scenario-driven deferred gaps (still no trigger)
 
 - `T2 sequence/state semantics`
 - judgment / obligation contract
@@ -328,6 +352,19 @@ Run a full test suite regression before starting any new capability line:
 ```bash
 PYTHONPATH=src python -m unittest discover -s src/factpy_kernel/tests -p "test_*.py"
 ```
+Multiple implementation rounds landed without a full suite run. This should be done before any new work.
+
+### Recommended next direction
+
+**Pivot to `durable-artifact-storage`** (status: scoped, most implementation-ready). The traceability-explainability mainline is substantially complete; its remaining deferred lines all have external prerequisites.
+
+If user prefers to stay within traceability-explainability, the only lines worth opening are:
+- **Assertion-origin taxonomy** — if assertion metadata schema work has progressed
+- **ProbLog witness parity** — follows Souffle pattern but wider scope
+
+### If user opens durable-artifact-storage
+
+Read the scoped blueprint: `docs/blueprints/active/2026-03-17_durable-artifact-storage.md`. It is the most implementation-ready active blueprint.
 
 ### If user opens assertion-origin taxonomy
 
