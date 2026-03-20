@@ -26,6 +26,7 @@
 | 2026-03-18 | draft | Engine witness child blueprint archived | Updated the parent bridge note to point at archived `2026-03-18_engine-witness-parity.md` after explicit degraded explain semantics landed for engine candidates. |
 | 2026-03-18 | draft | Parent blueprint realigned to current baseline | Added an explicit current-position section noting that support capture, explain-ref handles, runtime `raw -> summary -> narrative -> NL`, and audit/static proof-entry are now implemented; clarified that evidence tree belongs to the parent blueprint's original `proof-tree / support-graph` next stage rather than a new mother plan. |
 | 2026-03-20 | draft | Parent blueprint baseline refreshed | Updated the current-position section after provenance-role taxonomy and candidate tree NL explain landed; remaining open directions now start at salience / impact and stronger engine witness parity. |
+| 2026-03-20 | draft | Salience / impact child blueprint frozen and archived | Salience / impact scoped as decision-only archive: owner = annotation/value-semantics, compute-time = query-time, blocked on certainty/weight vocabulary, no implementation slice. |
 
 ## Decision Notes
 
@@ -54,4 +55,5 @@
 - 2026-03-17: `rule_run` 的下一切口不应再以“缺少 trace capture”为 framing；当前代码已具备 `RuleTraceArtifact` capture/readback，剩余问题更准确地是 schema semantics 与 service contract 收口。
 - 2026-03-18: engine witness parity 的第一轮不应直接承诺 `souffle/problog` 拥有 native 级 witness；当前更准确的剩余问题是 engine candidate 的显式降级语义、`support_kind` contract，以及 service explain surface 如何表达“无 witness”。
 - 2026-03-18: 在当前实现基线下，evidence tree 不应被表述为新的计划线；它属于本母蓝图原本就预留的 `proof-tree / support-graph-oriented` 下一阶段，并且默认不被 `temporal-hybrid` 或 `durable-artifact-storage` 作为前置阻塞。
-- 2026-03-20: provenance-role taxonomy 与 candidate tree NL explain 已完成后，母蓝图的剩余方向应从“proof-tree 是否存在”转向“proof-tree 还缺哪些 richer semantics / delivery layers”。
+- 2026-03-20: provenance-role taxonomy 与 candidate tree NL explain 已完成后，母蓝图的剩余方向应从”proof-tree 是否存在”转向”proof-tree 还缺哪些 richer semantics / delivery layers”。
+- 2026-03-20: salience / impact 归属冻结为 annotation / value-semantics 层，compute-time 冻结为 query-time / read-time；现有 tree/summary 结构信号不足以产出有意义的 salience；”structural salience proxy” 被否决。Implementation blocked on certainty / weight vocabulary。

@@ -157,10 +157,12 @@
 
 1. ~~**Provenance / source taxonomy**~~ ✅ 已完成并归档 — `node_kind` 提升为 provenance-role carrier，零新字段
 2. ~~**NL explain for evidence tree**~~ ✅ 已完成并归档 — candidate tree 现已具备 summary / narrative / NL 分层
-3. **Salience / impact breakdown** — Rainbird 最强差异化特性，但依赖 certainty/weight 基础设施
+3. ~~**Salience / impact breakdown**~~ ⏸️ 归属与计算时机已冻结（annotation/value-semantics 层，query-time derivation），但 implementation blocked on certainty / weight vocabulary — [decision-only archive](../archive/2026-03-20_candidate-evidence-tree-salience-impact.md)
 4. **Engine witness parity** — 在 degraded tree 基础上向更丰富的非 native explain 推进
 
-这些方向仍应以 child blueprint 逐条推进，本母蓝图保持 framing 角色。
+salience / impact 的 4 条冻结结论：owner = annotation/value-semantics; compute-time = query-time; blocked on certainty/weight; no implementation slice until prerequisites exist。
+
+剩余方向仍应以 child blueprint 逐条推进，本母蓝图保持 framing 角色。
 
 ## 5. Proposed Shape
 
