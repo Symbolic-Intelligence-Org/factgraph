@@ -77,11 +77,26 @@
 
 explainability 补充：
 
-- 当前 Souffle evaluate 只回读 binding rows，不输出可回映到 `asrt_id` 的 witness / provenance。
-- 因此由该适配器生成的 candidates 第一轮会显式标记：
-  - `support_kind="engine_no_witness_v1"`
-  - `support_digest="sha256:000...0"`（兼容占位符）
-- service `explain_ref(kind="candidate")` 对这类 candidate 返回 `ok=true` + `witness_status="degraded"`，表示 candidate 有效但当前无 witness artifact。
+- 当前 Souffle evaluate 分两条 explainability 路径：
+  - **partial witness path**
+    - 当 where 含有 top-level `pred` atoms 时，adapter 会导出 `_w` witness 变体 view，并让 query output 额外穿透 witness 列
+    - engine_eval 会按 binding 聚合这些 witness 列，构建 `SupportArtifact` 的受限子集并注册到 `Store`
+    - 对外 `support_kind="souffle_witness_v1"`
+    - 当前承诺的字段范围：
+      - `binding`
+      - `pred_witnesses`
+      - minimal `non_fact_steps`
+      - `rule_ref_edges=[]`
+    - 同一 final binding 若跨多个 OR branch 都有 witness row，adapter 侧采用 `source-order wins`
+    - 这不是 Soufflé 官方 provenance proof tree，而是 adapter-level witness sidecar via Datalog rewriting
+  - **degraded path**
+    - 若当前 query 无法走 partial witness，candidate 继续显式标记：
+      - `support_kind="engine_no_witness_v1"`
+      - `support_digest="sha256:000...0"`（兼容占位符）
+    - service `explain_ref(kind="candidate")` 对这类 candidate 返回 `ok=true` + `witness_status="degraded"`
+- first-round consumer surface 仍收窄在 runtime：
+  - runtime `explain` / `explain-tree` 接受 `souffle_witness_v1`
+  - audit/static 对 `souffle_witness_v1` 继续 deferred
 
 ### 4.2 Package 导出
 
@@ -120,4 +135,4 @@ Souffle 二进制查找顺序：
 - 依赖外部 Souffle CLI；缺失时 runner 会回退 `noop`
 - `engine_eval` 不接受 `noop` 结果作为有效求值
 - 当前适配目标是 query/derivation 执行，不是 Deontic 规范推理引擎
-- 当前不输出 native 级 witness；只保证显式 degraded explain，而不是静默 zero-digest 降级
+- 当前不承诺 full native parity；Souffle first-round 只输出 partial witness，而不是完整 rule-chain / recursive proof

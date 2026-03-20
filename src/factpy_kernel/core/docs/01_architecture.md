@@ -117,6 +117,15 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
 
 - `candidate_id -> (support_digest, support_kind)`
 - native candidates 写入 `support_kind="native_binding_v1"`，并可继续串联 `Store.explain_support(...)`
+- Souffle first-round partial witness 现在可写入 `support_kind="souffle_witness_v1"`：
+  - carrier 继续复用 `SupportArtifact`
+  - 当前只承诺 native 子集：
+    - `binding`
+    - `pred_witnesses`
+    - minimal `non_fact_steps`
+    - `rule_ref_edges=[]`
+  - witness 通过 adapter-level Datalog rewriting 产出，不是 Soufflé 官方 provenance proof tree
+  - 同一 final binding 若在多个 OR branch 上都有 witness row，则 adapter 侧采用 `source-order wins`
 - engine candidates 第一轮显式写入 `support_kind="engine_no_witness_v1"` + zero digest placeholder：
   - 这不是 artifact miss，而是 no-witness 降级语义
   - service `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`
@@ -184,6 +193,10 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - `degraded_support` 不复用 `unresolved_support` / `recursion_boundary`
     - node 本体不暴露 `support_digest`；当前 zero digest 仍只作为顶层兼容 placeholder
     - legacy `"none"` 与 `engine_no_witness_v1` 在 tree surface 上同构
+  - runtime 当前将 `{"native_binding_v1", "souffle_witness_v1"}` 统一视为 witness-bearing candidate support kind：
+    - `Store.explain_support(...)` 可直接回放 flat support
+    - `candidate_evidence_tree` 可继续复用既有 native tree builder
+    - audit/static 对 `souffle_witness_v1` 仍 deferred，当前不承诺离线消费
   - 在 raw tree 之上，candidate explain 现在也已有 deterministic derived layers：
     - `candidate_evidence_tree_summary`
       - 由 `store._candidate_evidence_tree_summary` 从 raw tree 纯派生

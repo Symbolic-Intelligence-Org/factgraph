@@ -10,7 +10,9 @@ SupportRootResultKind: TypeAlias = Literal["fact", "entity", "row"]
 BindingItems: TypeAlias = tuple[tuple[str, Any], ...]
 DetailItems: TypeAlias = tuple[tuple[str, Any], ...]
 ENGINE_NO_WITNESS_KIND = "engine_no_witness_v1"
+SOUFFLE_WITNESS_KIND = "souffle_witness_v1"
 _DEGRADED_SUPPORT_KINDS = frozenset({"none", ENGINE_NO_WITNESS_KIND})
+_WITNESS_BEARING_SUPPORT_KINDS = frozenset({"native_binding_v1", SOUFFLE_WITNESS_KIND})
 
 
 @dataclass(frozen=True)
@@ -337,9 +339,11 @@ __all__ = [
     "PredWitness",
     "ProjectedFact",
     "RuleRefEdge",
+    "SOUFFLE_WITNESS_KIND",
     "SupportArtifact",
     "SupportRootResultKind",
     "_DEGRADED_SUPPORT_KINDS",
+    "_WITNESS_BEARING_SUPPORT_KINDS",
     "binding_dict_from_items",
     "compute_support_digest",
     "make_non_fact_step_key",

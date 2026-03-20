@@ -1,19 +1,36 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 import os
 from typing import Any
 
 from factpy_kernel.adapters.souffle.pred_norm import normalize_pred_id
+from factpy_kernel.adapters.souffle.souffle_view_gen import witness_rel_name
 from factpy_kernel.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
 from factpy_kernel.core.rules.where_ast_validate import (
     WhereASTValidationError,
     validate_where_ast,
 )
 from factpy_kernel.core.rules.where_eval import WhereValidationError
+from factpy_kernel.core.store._support import make_pred_atom_key
 
 _ARITH_KINDS = {"add", "sub", "neg", "addc", "mulc"}
+
+
+@dataclass(frozen=True)
+class PredWitnessColumnSpec:
+    pred_atom_key: str
+    pred_id: str
+    branch_index: int
+    atom_index: int
+
+
+@dataclass(frozen=True)
+class QueryWitnessLayout:
+    query_variables: tuple[str, ...]
+    pred_witness_columns: tuple[PredWitnessColumnSpec, ...]
 
 
 def compile_where_to_query_dl(
@@ -21,6 +38,7 @@ def compile_where_to_query_dl(
     schema_ir: dict,
     where: list[Any],
     query_rel: str,
+    include_pred_witness_columns: bool = False,
 ) -> str:
     ast_gate_on = _where_ast_gate_enabled()
     if not isinstance(schema_ir, dict):
@@ -37,23 +55,36 @@ def compile_where_to_query_dl(
     pred_type_domains = _schema_pred_type_domains(schema_ir)
     pred_arities = {pred_id: len(arg_types) for pred_id, arg_types in pred_type_domains.items()}
     bodies = _normalize_where_subset(where)
-    variables = extract_where_variables(where)
+    if include_pred_witness_columns:
+        witness_layout = build_query_witness_layout(where)
+        variables = list(witness_layout.query_variables)
+    else:
+        witness_layout = None
+        variables = extract_where_variables(where)
     if not variables:
         raise WhereValidationError("where must contain at least one variable")
 
     var_symbols = {var: f"C{i}" for i, var in enumerate(variables)}
     head_vars = [var_symbols[var] for var in variables]
     query_decl_cols = [f"{var_symbols[var]}:symbol" for var in variables]
+    pred_witness_symbols: dict[tuple[int, int], str] = {}
+    if witness_layout is not None:
+        for index, spec in enumerate(witness_layout.pred_witness_columns):
+            witness_symbol = f"W{index}"
+            pred_witness_symbols[(spec.branch_index, spec.atom_index)] = witness_symbol
+            head_vars.append(witness_symbol)
+            query_decl_cols.append(f"{witness_symbol}:symbol")
 
     in_rel_values: dict[str, tuple[str, ...]] = {}
     not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]] = {}
     rule_lines: list[str] = []
 
-    for body in bodies:
+    for branch_index, body in enumerate(bodies):
         bound_vars: set[str] = set()
         var_type_domains = _infer_var_type_domains(body, pred_type_domains)
         body_terms: list[str] = []
-        for atom in body:
+        seen_pred_occurrences: set[tuple[int, int]] = set()
+        for atom_index, atom in enumerate(body):
             body_terms.append(
                 _compile_atom(
                     atom=atom,
@@ -66,8 +97,19 @@ def compile_where_to_query_dl(
                     query_variables=variables,
                     not_rel_defs=not_rel_defs,
                     ast_gate_on=ast_gate_on,
+                    branch_index=branch_index,
+                    atom_index=atom_index,
+                    pred_witness_symbols=pred_witness_symbols,
                 )
             )
+            if atom[0] == "pred" and witness_layout is not None:
+                seen_pred_occurrences.add((branch_index, atom_index))
+        if witness_layout is not None:
+            for spec in witness_layout.pred_witness_columns:
+                occurrence = (spec.branch_index, spec.atom_index)
+                if occurrence in seen_pred_occurrences:
+                    continue
+                body_terms.append(f'{pred_witness_symbols[occurrence]} = ""')
         missing_vars = [var for var in variables if var not in bound_vars]
         if missing_vars:
             raise WhereValidationError(
@@ -190,6 +232,29 @@ def canonical_where_json_bytes(where: list[Any]) -> bytes:
     ).encode("utf-8")
 
 
+def build_query_witness_layout(where: list[Any]) -> QueryWitnessLayout:
+    variables = tuple(extract_where_variables(where))
+    bodies = _normalize_where_subset(where)
+    pred_witness_columns: list[PredWitnessColumnSpec] = []
+    for branch_index, body in enumerate(bodies):
+        for atom_index, atom in enumerate(body):
+            if atom[0] != "pred":
+                continue
+            _, pred_id, _terms = atom
+            pred_witness_columns.append(
+                PredWitnessColumnSpec(
+                    pred_atom_key=make_pred_atom_key(branch_index, atom_index, pred_id),
+                    pred_id=pred_id,
+                    branch_index=branch_index,
+                    atom_index=atom_index,
+                )
+            )
+    return QueryWitnessLayout(
+        query_variables=variables,
+        pred_witness_columns=tuple(pred_witness_columns),
+    )
+
+
 def _compile_atom(
     *,
     atom: tuple[Any, ...],
@@ -202,6 +267,9 @@ def _compile_atom(
     query_variables: list[str],
     not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]],
     ast_gate_on: bool,
+    branch_index: int,
+    atom_index: int,
+    pred_witness_symbols: dict[tuple[int, int], str],
 ) -> str:
     kind = atom[0]
 
@@ -221,7 +289,12 @@ def _compile_atom(
                 bound_vars.add(term)
             else:
                 args.append(_literal_to_symbol(term))
+        occurrence = (branch_index, atom_index)
+        witness_symbol = pred_witness_symbols.get(occurrence)
         rel_name = normalize_pred_id(pred_id)
+        if witness_symbol is not None:
+            rel_name = witness_rel_name(rel_name)
+            args.append(witness_symbol)
         return f'{rel_name}({", ".join(args)})'
 
     if kind == "eq":

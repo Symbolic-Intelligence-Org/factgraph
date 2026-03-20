@@ -96,6 +96,7 @@ def export_package(
     view_dl = generate_view_dl(
         store.schema_ir,
         include_active_rule=(options.policy_mode != "idb"),
+        include_witness_views=bool(query and query.get("include_pred_witness_columns")),
     )
     (rules_dir / "view.dl").write_text(view_dl, encoding="utf-8", newline="\n")
 
@@ -116,6 +117,7 @@ def export_package(
             schema_ir=store.schema_ir,
             where=where,
             query_rel=query_rel,
+            include_pred_witness_columns=bool(query.get("include_pred_witness_columns")),
         )
         outputs_map["__query__"] = [query_rel]
 

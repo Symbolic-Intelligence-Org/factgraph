@@ -40,7 +40,7 @@ from factpy_kernel.core.store._candidate_evidence_tree_nl import (
 from factpy_kernel.core.store._candidate_evidence_tree_summary import (
     summarize_candidate_evidence_tree_dict,
 )
-from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS
+from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS, _WITNESS_BEARING_SUPPORT_KINDS
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
 from factpy_kernel.core.store.types import ViewSpec
@@ -922,7 +922,7 @@ def _runtime_explain_not_found(*, handle_kind: str, handle_value: str, path: str
 
 def _runtime_explain_not_supported(*, candidate_id: str, support_kind: str) -> Exception:
     return facade_error(
-        f"runtime evidence tree only supports native or degraded candidate support, got: {support_kind}",
+        f"runtime evidence tree only supports witness-bearing or degraded candidate support, got: {support_kind}",
         kind="runtime_explain_not_supported",
         path="$.id",
         details={"candidate_id": candidate_id, "support_kind": support_kind},
@@ -938,7 +938,7 @@ def _get_candidate_tree(session: RuntimeSession, candidate_id: str) -> dict[str,
             path="$.id",
         )
     support_kind = session.store.get_candidate_support_kind(candidate_id)
-    if support_kind != "native_binding_v1":
+    if support_kind not in _WITNESS_BEARING_SUPPORT_KINDS:
         if support_kind is None:
             raise _runtime_explain_not_found(
                 handle_kind="candidate_id",

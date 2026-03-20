@@ -1,6 +1,6 @@
 # Task Blueprint: Engine Partial Witness — Adapter Contract
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-20
 - Last Updated: 2026-03-20
 - Related Modules:
@@ -278,9 +278,17 @@ ProbLog partial witness deferred 到后续轮次。原因：
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
-
 - 最终落地结果：
+  - `souffle_view_gen.py` 已生成 `_w` witness 变体 view rules，并保持默认导出 shape 不变
+  - `where_compile.py` 已支持 witness-aware query columns 与稳定 `pred_atom_key` layout
+  - `engine_eval.py` 已把 Souffle witness rows 聚合为 `SupportArtifact` 受限子集，并写入 `support_kind="souffle_witness_v1"`
+  - runtime `explain` / `explain-tree` 已接受 witness-bearing support kinds，不再把 `souffle_witness_v1` 视为 unsupported
+  - ProbLog 与其他未支持 engine 继续保持 `engine_no_witness_v1`
 - 与 blueprint 不同的地方：
+  - 没有修改 `_builders.py`；adapter 直接产出 `rows=BindingSupportCapture`，继续复用现有 builders 的 `rows=` path
+  - `_evaluate.py` 只做了 candidate support backref 放行，没有新增 engine-side capture 逻辑
 - 为什么会有这些调整：
+  - 现有 builders 已支持 `rows=` 输入，没有必要再开一条 Souffle witness 专用 candidate builder
+  - witness 聚合与 branch 选择都发生在 adapter 内，更符合本蓝图“adapter contract first”的定位
 - 归档说明：
+  - 本蓝图已完成 first-round Souffle partial witness runtime surface，实现后应归档到 `docs/blueprints/archive/`

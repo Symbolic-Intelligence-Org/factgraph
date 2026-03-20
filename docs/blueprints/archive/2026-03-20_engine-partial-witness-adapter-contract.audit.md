@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-03-20 | draft | Blueprint created | Opened a narrow adapter-contract scoping draft for engine partial witness. Cuts from adapter/evaluator layer, not tree surface. Continues from archived first-round engine witness parity (2026-03-18). |
 | 2026-03-20 | scoped | Freeze confirmed | 5 freeze decisions: (1) Souffle-only via Datalog rule rewriting; (2) native SupportArtifact restricted subset with souffle_witness_v1; (3) EngineEvaluatorFn prefer unchanged; (4) runtime-only consumer surface; (5) ProbLog continues degraded. |
+| 2026-03-20 | implemented | Runtime partial witness landed | Souffle adapter now emits witness-aware `_w` views and query columns, aggregates witness rows into `SupportArtifact(kind=\"souffle_witness_v1\")`, and runtime `explain` / `explain-tree` accepts witness-bearing engine support. Audit/static remain deferred. |
 
 ## Decision Notes
 
@@ -22,3 +23,5 @@
 - 2026-03-20: **Freeze: EngineEvaluatorFn** — prefer unchanged，adapter 内部注册 witness 到 Store。显式承认这是 adapter→Store 内部耦合 tradeoff；若实现时证明不可维护，应回到扩展返回类型方案。
 - 2026-03-20: **Freeze: consumer surface** — first-round runtime-only（explain + explain-tree）。audit/static deferred。最大风险在 adapter contract，不在离线消费面。
 - 2026-03-20: **Freeze: ProbLog** — 继续 `engine_no_witness_v1` + degraded tree。ProbLog partial witness 需要 CLI→library 迁移，deferred 到后续轮次。
+- 2026-03-20: **Implementation: builder reuse** — 实际实现没有改 `_builders.py`；adapter 直接产出 `rows=BindingSupportCapture` 并复用现有 builders 的 `rows=` path。
+- 2026-03-20: **Implementation: backref boundary** — `_evaluate.py` 只扩 witness-bearing support backref 放行，不承担 Souffle witness capture 本体；capture 仍完全停留在 adapter 内。

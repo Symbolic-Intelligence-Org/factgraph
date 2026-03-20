@@ -348,6 +348,10 @@
   - 第一跳 `candidate_id -> (support_digest, support_kind)` 只存在于当前 session 的 `_candidate_support_index` / `_candidate_support_kind_index`
   - 第一跳 miss 时直接返回 `runtime_explain_not_found`
   - 第二跳 `support_digest -> SupportArtifact` 可受 sidecar durability 覆盖
+  - 若 `support_kind in {"native_binding_v1", "souffle_witness_v1"}`，service 会继续回放 `Store.explain_support(...)`：
+    - 响应仍为 `ok=true`
+    - `explain.support` 携带 flat support payload
+    - 当前不额外写 `witness_status`
   - 若 `support_kind="engine_no_witness_v1"`（legacy `"none"` 读回也按同类处理），则该 candidate 表示 engine no-witness 降级路径：
     - 响应仍为 `ok=true`
     - `explain.support_kind="engine_no_witness_v1"`（或 legacy `"none"`）
@@ -410,8 +414,8 @@
 - 这是 candidate explain 的独立 tree surface，不会修改既有 `POST /queries/explain` 的 flat DTO。
 - 第一轮只接受 `{kind:"candidate", id}`。
 - 第一轮支持两类 candidate tree：
-  - native
-    - `support_kind="native_binding_v1"`
+  - witness-bearing
+    - `support_kind in {"native_binding_v1", "souffle_witness_v1"}`
   - engine degraded
     - `support_kind in {"engine_no_witness_v1", "none"}`
 - `tree` DTO 是 recursive schema，并在当前版本采用 sectioned shape：
@@ -451,6 +455,13 @@
       - traversal-owned
 - runtime / audit / static 三侧共享同一组 raw reason enum；service 不在 transport 层再翻译成另一套状态名。
 - richer taxonomy 只适用于 structured `rule_ref_edges` path；只有 legacy `rule_refs` 的旧 artifact 仍只展示 flat `rule_ref` 节点，不进入 recursive terminal taxonomy。
+- `souffle_witness_v1` 当前复用既有 witness-bearing tree shape：
+  - envelope 仍是 `candidate_evidence_tree`
+  - root 仍是 `candidate_result`
+  - `support_section` 下仍使用：
+    - `predicate_witness_group`
+    - minimal `non_fact_check`
+  - `rule_ref_section` / recursive child proof 当前不适用于此 kind
 - engine degraded candidate 则走单独的 tree contract：
   - envelope 仍是 `candidate_evidence_tree`
   - first-round shape 固定为：
@@ -809,6 +820,10 @@
 
 - `evaluate` 返回完整 candidate 对象，供后续 `accept` 原样 round-trip。
 - native derivation evaluate 当前会填充 `support_kind="native_binding_v1"`。
+- `souffle` evaluate 现在可在 runtime live path 上填充 `support_kind="souffle_witness_v1"`：
+  - 前提是 adapter 能通过 `_w` witness 变体为当前 where 产出 assertion witness
+  - 此时 `support_digest` 为真实 digest，不再是 zero placeholder
+  - runtime `explain` / `explain-tree` 会把它视为 witness-bearing support
 - `override_registry_root` 可选；未提供时默认复用 session 绑定的 `registry_root`。
 - 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供。
 - native derivation where 若使用字符串 `RuleRef("rule_id", version)`，必须通过：
@@ -825,9 +840,16 @@
   - `rule_ref_edges`
   只反映 selected branch
 - 若多个 OR branch 都满足同一 final binding，则采用 `source-order wins`；若没有任何 branch 满足该 binding，则视为 capture contract violation 并 fail fast。
-- engine evaluate（`souffle` / `problog`）第一轮显式返回 `support_kind="engine_no_witness_v1"`：
-  - 这表示 candidate 本身有效，但当前 engine path 不产出可解引用的 witness artifact
-  - 统一 `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`，而不是 `runtime_explain_not_found`
+- engine evaluate（`souffle` / `problog`）当前分两种 explainability surface：
+  - partial witness
+    - 目前只覆盖 `souffle`
+    - `support_kind="souffle_witness_v1"`
+    - 仍是 engine path，不伪装成 `native_binding_v1`
+  - degraded
+    - `support_kind="engine_no_witness_v1"`
+    - 这表示 candidate 本身有效，但当前 engine path 不产出可解引用的 witness artifact
+    - 统一 `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`，而不是 `runtime_explain_not_found`
+- audit/static 对 `souffle_witness_v1` 仍 deferred；第一轮只承诺 runtime live surface。
 - legacy `support_kind="none"` 只作为兼容读回值保留；新 writer 不再产生它。
 - `limit` 只影响返回条数，不改变底层总候选数；总量体现在 `meta.candidate_count`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。

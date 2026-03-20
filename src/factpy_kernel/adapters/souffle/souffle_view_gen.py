@@ -3,7 +3,12 @@ from __future__ import annotations
 from factpy_kernel.adapters.souffle.pred_norm import normalize_pred_id
 
 
-def generate_view_dl(schema_ir: dict, *, include_active_rule: bool = True) -> str:
+def generate_view_dl(
+    schema_ir: dict,
+    *,
+    include_active_rule: bool = True,
+    include_witness_views: bool = False,
+) -> str:
     if not isinstance(schema_ir, dict):
         raise TypeError("schema_ir must be dict")
 
@@ -57,10 +62,14 @@ def generate_view_dl(schema_ir: dict, *, include_active_rule: bool = True) -> st
         )
 
         engine_pred = normalize_pred_id(pred_id)
+        witness_pred = witness_rel_name(engine_pred)
         value_vars = [f"V{i}" for i in range(arg_count - 1)]
         output_decl_args = ["E:symbol", *[f"{var}:symbol" for var in value_vars]]
         lines.append(f'.decl {engine_pred}({", ".join(output_decl_args)})')
         lines.append(f'.output {engine_pred}')
+        if include_witness_views:
+            witness_decl_args = [*output_decl_args, "WA:symbol"]
+            lines.append(f'.decl {witness_pred}({", ".join(witness_decl_args)})')
 
         output_head = f'{engine_pred}({", ".join(["E", *value_vars])})'
         if cardinality == "multi":
@@ -73,6 +82,9 @@ def generate_view_dl(schema_ir: dict, *, include_active_rule: bool = True) -> st
                 ],
             ]
             lines.append(f'{output_head} :- {", ".join(output_body_parts)}.')
+            if include_witness_views:
+                witness_head = f'{witness_pred}({", ".join(["E", *value_vars, "A"])})'
+                lines.append(f'{witness_head} :- {", ".join(output_body_parts)}.')
             lines.append("")
             continue
 
@@ -140,9 +152,18 @@ def generate_view_dl(schema_ir: dict, *, include_active_rule: bool = True) -> st
             ],
         ]
         lines.append(f'{output_head} :- {", ".join(output_body_parts)}.')
+        if include_witness_views:
+            witness_head = f'{witness_pred}({", ".join(["E", *value_vars, "A"])})'
+            lines.append(f'{witness_head} :- {", ".join(output_body_parts)}.')
         lines.append('')
 
     return "\n".join(lines).rstrip() + "\n"
+
+
+def witness_rel_name(engine_pred: str) -> str:
+    if not isinstance(engine_pred, str) or not engine_pred:
+        raise ValueError("engine_pred must be non-empty string")
+    return f"{engine_pred}_w"
 
 
 def _normalize_group_key_indexes(
@@ -179,3 +200,6 @@ def _normalize_group_key_indexes(
         )
 
     return out
+
+
+__all__ = ["generate_view_dl", "witness_rel_name"]
