@@ -10,6 +10,7 @@ from .authoring_events import load_authoring_apply_events, summarize_authoring_a
 from .assertions import load_assertion_index
 from .dto import (
     build_authoring_apply_run_detail_dto,
+    build_candidate_evidence_tree_narrative_dto,
     build_candidate_evidence_tree_dto,
     build_decision_detail_dto,
     build_rule_trace_detail_dto,
@@ -94,7 +95,13 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         }
     ):
         candidate_tree = build_candidate_evidence_tree_dto(query, candidate_id)
-        page = _render_candidate_evidence_page(candidate_tree)
+        candidate_narrative_dto = build_candidate_evidence_tree_narrative_dto(query, candidate_id)
+        candidate_narrative = (
+            candidate_narrative_dto.get("narrative")
+            if isinstance(candidate_narrative_dto.get("narrative"), dict)
+            else None
+        )
+        page = _render_candidate_evidence_page(candidate_tree, narrative=candidate_narrative)
         (candidate_evidence_dir / f"{_slug_id(candidate_id)}.html").write_text(page, encoding="utf-8")
         candidate_evidence_ids.append(candidate_id)
 
@@ -625,7 +632,7 @@ def _render_candidate_evidence_index_page(candidate_ids: list[str]) -> str:
     )
 
 
-def _render_candidate_evidence_page(tree: dict[str, Any]) -> str:
+def _render_candidate_evidence_page(tree: dict[str, Any], *, narrative: dict[str, Any] | None = None) -> str:
     candidate_id = str(tree.get("candidate_id", ""))
     support_digest = str(tree.get("support_digest", ""))
     support_kind = str(tree.get("support_kind", ""))
@@ -638,6 +645,7 @@ def _render_candidate_evidence_page(tree: dict[str, Any]) -> str:
         if isinstance(item, dict)
     ]
     root_result_kind = root.get("root_result_kind")
+    narrative_block = _render_candidate_evidence_narrative_block(narrative)
     return _html_page(
         title=f"Candidate Evidence {candidate_id}",
         body=(
@@ -652,6 +660,7 @@ def _render_candidate_evidence_page(tree: dict[str, Any]) -> str:
             f"<li>rule_refs={escape(','.join(rule_refs)) or '-'}</li>"
             f"<li>rule_ref_edges={escape(str(len(rule_ref_edges)))}</li>"
             "</ul>"
+            f"{narrative_block}"
             "<h2>Binding</h2>"
             f"<pre>{escape(json.dumps(binding, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
             "<h2>Tree</h2>"
@@ -871,12 +880,6 @@ def _render_rule_trace_narrative_block(narrative: dict[str, Any] | None) -> str:
     if not isinstance(narrative, dict):
         return ""
 
-    def _line_list(lines: Any) -> str:
-        if not isinstance(lines, list) or not lines:
-            return "<p>None</p>"
-        items = [f"<li>{escape(str(line))}</li>" for line in lines if isinstance(line, str) and line]
-        return f"<ul>{''.join(items) if items else '<li>None</li>'}</ul>"
-
     headline = narrative.get("headline")
     headline_html = (
         f"<p>{escape(headline)}</p>"
@@ -895,6 +898,39 @@ def _render_rule_trace_narrative_block(narrative: dict[str, Any] | None) -> str:
         "<h3>Drilldown</h3>"
         f"{_line_list(narrative.get('drilldown_lines'))}"
     )
+
+
+def _render_candidate_evidence_narrative_block(narrative: dict[str, Any] | None) -> str:
+    if not isinstance(narrative, dict):
+        return ""
+
+    headline = narrative.get("headline")
+    headline_html = (
+        f"<p>{escape(headline)}</p>"
+        if isinstance(headline, str) and headline
+        else "<p>None</p>"
+    )
+    return (
+        "<h2>Narrative</h2>"
+        f"{headline_html}"
+        "<h3>Overview</h3>"
+        f"{_line_list(narrative.get('overview_lines'))}"
+        "<h3>Evidence</h3>"
+        f"{_line_list(narrative.get('evidence_lines'))}"
+        "<h3>Rule Chain</h3>"
+        f"{_line_list(narrative.get('rule_chain_lines'))}"
+        "<h3>Terminal</h3>"
+        f"{_line_list(narrative.get('terminal_lines'))}"
+        "<h3>Drilldown</h3>"
+        f"{_line_list(narrative.get('drilldown_lines'))}"
+    )
+
+
+def _line_list(lines: Any) -> str:
+    if not isinstance(lines, list) or not lines:
+        return "<p>None</p>"
+    items = [f"<li>{escape(str(line))}</li>" for line in lines if isinstance(line, str) and line]
+    return f"<ul>{''.join(items) if items else '<li>None</li>'}</ul>"
 
 
 def _render_filter_index_pages(query: AuditQuery) -> dict[str, str]:

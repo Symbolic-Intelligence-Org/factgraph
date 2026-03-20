@@ -1,7 +1,7 @@
 # Core 架构总览（factpy_kernel）
 
 - 适用范围：`src/factpy_kernel/core`
-- 最后更新：2026-03-19
+- 最后更新：2026-03-20
 - 代码基线：`Store.evaluate` 仅支持 `native|souffle|problog`；`Ledger` 为 SQLite write-through cache；`ProjectorAudit` 为 v2 结构
 - 目标读者：需要理解 core 语义边界、关键入口与扩展点的开发者
 
@@ -55,6 +55,9 @@ src/factpy_kernel/core/
 | `rules._trace` | rule runtime trace carrier、序列化与 summary derivation | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict`, `summarize_rule_trace_artifact_dict` |
 | `rules._trace_narrative` | rule-run summary 上的 deterministic narrative rendering | `render_rule_run_narrative` |
 | `rules._trace_nl` | summary+narrative 上的 deterministic NL explain rendering | `render_rule_run_nl_explain` |
+| `store._candidate_evidence_tree_summary` | candidate evidence tree 上的 deterministic summary derivation | `summarize_candidate_evidence_tree_dict` |
+| `store._candidate_evidence_tree_narrative` | candidate tree summary 上的 deterministic narrative rendering | `render_candidate_evidence_tree_narrative` |
+| `store._candidate_evidence_tree_nl` | candidate tree summary+narrative 上的 deterministic NL explain rendering | `render_candidate_evidence_tree_nl_explain` |
 | `derivation.candidates` | 候选结构与 digest/key 计算 | `CandidateSet`, `make_candidate` |
 | `derivation.accept` | candidate accept 与 batch accept_many | `accept_candidate_set`, `accept_many_candidate_sets` |
 | `mapping.canon` | mapping 冲突解析与 tie-break | `resolve_mapping_predicate` |
@@ -132,6 +135,15 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
       - `unresolved_support`
       - `recursion_boundary`
   - 这仍是 candidate-first consumer surface，不是 full engine parity、graph UI、或更细 provenance contract
+  - `node_kind` 是 carrier-level provenance-role taxonomy（冻结 contract）：
+    - **structural**：`candidate_result`, `support_section`, `rule_ref_section` — 纯结构容器，不自身承载来源语义
+    - **witness**：`predicate_witness_group`, `assertion_fact` — 直接见证 ledger 中的事实
+    - **constraint**：`non_fact_check` — 非事实约束检查（eq/ne/gt/not/ruleref/...）
+    - **rule_chain**：`rule_ref`, `referenced_support` — 规则引用及递归证明展开
+    - **terminal**：`unresolved_support`, `recursion_boundary` — 遍历终止或证据不可用
+    - **degraded**：`degraded_support` — Engine 路径无 witness artifact
+  - first-round 不新增 `source_kind` / `provenance_kind` 字段；`node_kind` 本身即为 provenance-role carrier
+  - deeper assertion-origin taxonomy（direct write / derivation accept / import）deferred；若需要，未来在 `assertion_fact` 节点上扩展
   - native `SupportArtifact` 现在同时保留：
     - legacy `rule_refs` summary
     - structured `rule_ref_edges`
@@ -172,6 +184,46 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - `degraded_support` 不复用 `unresolved_support` / `recursion_boundary`
     - node 本体不暴露 `support_digest`；当前 zero digest 仍只作为顶层兼容 placeholder
     - legacy `"none"` 与 `engine_no_witness_v1` 在 tree surface 上同构
+  - 在 raw tree 之上，candidate explain 现在也已有 deterministic derived layers：
+    - `candidate_evidence_tree_summary`
+      - 由 `store._candidate_evidence_tree_summary` 从 raw tree 纯派生
+      - first-round 为 provenance-role-first 的 12 字段 core set：
+        - `candidate_id`
+        - `support_kind`
+        - `is_degraded`
+        - `root_result_kind`
+        - `node_count_by_role`
+        - `witness_assertion_count`
+        - `rule_ref_count`
+        - `recursive_depth`
+        - `has_unresolved`
+        - `has_boundary`
+        - `unresolved_reasons`
+        - `boundary_reasons`
+    - `candidate_evidence_tree_narrative`
+      - 由 `store._candidate_evidence_tree_narrative` 只从 summary 纯派生
+      - 固定 shape：
+        - `headline`
+        - `overview_lines`
+        - `evidence_lines`
+        - `rule_chain_lines`
+        - `terminal_lines`
+        - `drilldown_lines`
+    - `candidate_evidence_tree_nl_explain`
+      - 由 `store._candidate_evidence_tree_nl` 只从 summary + narrative 纯派生
+      - 固定 shape：
+        - `headline`
+        - `paragraphs`
+  - 这三层继续遵循与 `rule_run` 相同的 4-layer explain pattern：
+    - raw tree
+    - summary
+    - narrative
+    - NL explain
+  - delivery matrix 保持收窄：
+    - runtime：summary + narrative + NL
+    - audit：summary + narrative
+    - static：narrative block
+    - audit/static 第一轮不单独交付 candidate NL DTO
 
 ```mermaid
 flowchart LR

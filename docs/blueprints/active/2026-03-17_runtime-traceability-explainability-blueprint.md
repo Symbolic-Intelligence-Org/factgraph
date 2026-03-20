@@ -105,12 +105,62 @@
 - proof entry handle 不再是完全空白；
 - `audit-log-first` 已不只是倾向，而是已经被一系列 child slices 与 walkthrough 验证压实的当前阶段基线。
 
-因此，若这条母蓝图下一步继续推进，最自然的剩余方向不再是继续补同层 delivery，而是进入它原本就预留的下一阶段：
+因此，若这条母蓝图下一步继续推进，最自然的剩余方向已经不再是 proof-tree 本体，而是 tree surface 的 richer delivery / semantics：
 
-- `proof-tree / support-graph-oriented`
-- 即 result-centric / recursive evidence tree 能力
+- salience / impact
+- stronger engine witness parity
+- optional / missing-condition style semantics
 
-这应被视为 **原计划中的下一子阶段**，不是新的母计划。
+也就是说，`result-centric / recursive evidence tree` 已从“下一子阶段”转入“当前已完成基线”。
+
+### 4.2 Current Position After Evidence Tree Implementation (2026-03-20)
+
+§4.1 指出的"下一子阶段"——result-centric recursive evidence tree——现已完成六轮实现并全部归档。按当前代码真相：
+
+**已落地能力（5 个冻结合约）：**
+
+1. **RuleRef execution substrate** (`a8e1b5d`) — 统一的 `evaluate_native_where()`，SDK/service 共享
+2. **Recursive proof edges** (`f4756d9`) — `RuleRefEdge` + `SupportArtifact.rule_ref_edges`，递归子 support 展开，cycle detection + depth limit=8
+3. **Winning-branch narrowing** (`13b7827`) — 每个 binding 只采纳一个 OR 分支，source-order wins，capture 侧选择
+4. **Richer unresolved taxonomy** (`f649c5d`) — 4 terminal reasons × 2 node kinds × 3 owner layers
+5. **Engine degraded tree shape** (`cf7f56d`) — `degraded_support` 节点，`none` ≡ `engine_no_witness_v1`
+6. **Provenance-role taxonomy** (doc-and-contract promotion) — `node_kind` 正式提升为 carrier-level provenance-role taxonomy，零新字段，映射写入 core/service/audit docs；[archived blueprint](../archive/2026-03-19_candidate-evidence-tree-provenance-source-taxonomy.md)
+
+**已落地 tree node taxonomy（完整）：**
+
+- Native path: `candidate_result → support_section / rule_ref_section → predicate_witness_group / non_fact_check / assertion_fact / rule_ref / referenced_support / unresolved_support / recursion_boundary`
+- Engine degraded path: `candidate_result → support_section → degraded_support`
+
+**三通道交付已闭环：** runtime `explain_tree(kind="candidate")` + audit `get_candidate_evidence_tree()` + static site rendering
+
+这意味着本母蓝图 §4.1 中预设的两阶段路线——`audit-log-first → proof-tree / support-graph-oriented`——的前两阶段现在都已完成。
+
+**对照 Rainbird 的剩余 gap 重评估：**
+
+以 [rainbird-evidence-chain-compare.md](../../references/external/rainbird-evidence-chain-compare.md) 为参照基线，Rainbird 比较文档中标识的主要 gap 在 evidence tree 实现后的状态如下：
+
+| Rainbird gap | 当前状态 | 说明 |
+|---|---|---|
+| Result carrier / proof entry | ⚠️ native path 基本关闭；全局仍部分开放 | native path: `candidate_id → support_digest → SupportArtifact` 是真实 artifact。但 engine candidate 仍走 degraded 路径（无真实 witness artifact），且 `candidate_id → support_digest/support_kind` 的第一跳仍是 Store 实例内索引，不是 Rainbird 那种稳定 proof entry |
+| Evidence tree recursive | ✅ 已关闭 | 完整递归证明、4 terminal reasons、cycle/depth 保护 |
+| Structured API | ✅ 已关闭 | runtime + audit + static 三通道 |
+| Audit/session trace | ✅ 已关闭 | audit package + static site |
+| Visual evidence URL | ⚠️ 部分完成 | 当前 audit/static 已能离线渲染 per-candidate evidence tree 页面；但尚无 Rainbird 那种从任意结果直接获取 live shareable URL 的能力 |
+| **Source taxonomy** | ⚠️ provenance-role 已冻结；assertion-origin 仍开放 | `node_kind → provenance role category` 映射已冻结为 carrier contract（[provenance blueprint](../archive/2026-03-19_candidate-evidence-tree-provenance-source-taxonomy.md)）；更深的 assertion-origin taxonomy（direct write / derivation accept / import）deferred |
+| **Salience / Impact** | ⚠️ 仍开放 | 仍在 §5.9 候选清单，依赖 certainty/weight 基础设施 |
+| **Missing optional conditions** | ⚠️ 仍开放 | 依赖 rule authoring optional 语义，当前不具备 |
+| **NL explain for tree** | ✅ 已关闭 | candidate evidence tree 现已具备 runtime summary / narrative / NL explain，以及 audit summary / narrative 和 static narrative block |
+
+**下一阶段方向判断：**
+
+本母蓝图的下一阶段不再是"补 proof-tree surface"（已完成），而是进入 tree surface 的丰富化：
+
+1. ~~**Provenance / source taxonomy**~~ ✅ 已完成并归档 — `node_kind` 提升为 provenance-role carrier，零新字段
+2. ~~**NL explain for evidence tree**~~ ✅ 已完成并归档 — candidate tree 现已具备 summary / narrative / NL 分层
+3. **Salience / impact breakdown** — Rainbird 最强差异化特性，但依赖 certainty/weight 基础设施
+4. **Engine witness parity** — 在 degraded tree 基础上向更丰富的非 native explain 推进
+
+这些方向仍应以 child blueprint 逐条推进，本母蓝图保持 framing 角色。
 
 ## 5. Proposed Shape
 
@@ -197,9 +247,15 @@
 - deterministic NL explain：已存在
 - shareable audit/static proof-entry：已存在
 
-因此，本母蓝图若继续向前推进，delivery shape 的下一问题不再是“有没有 consumer-facing surface”，而是：
+因此，本母蓝图若继续向前推进，delivery shape 的下一问题不再是”有没有 consumer-facing surface”，而是：
 
 - 是否需要一个 **tree-oriented / result-centric** surface，而不是继续停留在 `rule_run`-centric proof-entry。
+
+**2026-03-20 更新：tree-oriented surface 现已存在。** evidence tree 六轮实现后，`candidate_evidence_tree` 是一个完整的 result-centric recursive tree surface，通过 runtime / audit / static 三通道交付。delivery shape 的下一问题现在是：
+
+- 当前 tree node 的来源/承载语义是否需要从隐式推断（`node_kind + support_kind`）提升为正式 `source_kind` / `provenance_kind` contract？（→ provenance/source taxonomy blueprint）
+- salience / impact breakdown 的数据结构是否应进入 tree carrier，还是作为 annotation layer 的派生视图？（→ §5.8 #3 归属问题）
+- evidence tree 是否需要自己的 NL explain 端点，还是继续依赖 rule_run 级别的 NL explain？
 
 ### 5.4 Carrying Objects, Value Semantics, And Mapping Boundaries
 

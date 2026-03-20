@@ -1,7 +1,7 @@
 # Audit 模块总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/audit`
-- 最后更新：2026-03-18
+- 最后更新：2026-03-20
 - 目标读者：需要消费 audit package、做离线审计查询或静态展示的开发者
 
 ## 1. 模块职责
@@ -128,12 +128,20 @@
 - `AuditQuery.get_candidate_evidence_tree(candidate_id)`
 - `build_candidate_evidence_tree_dto(...)`
 
+在此基础上，当前 audit 侧也已提供 machine-readable candidate derived surfaces：
+
+- `AuditQuery.get_candidate_evidence_tree_summary(candidate_id)`
+- `AuditQuery.get_candidate_evidence_tree_narrative(candidate_id)`
+- `build_candidate_evidence_tree_summary_dto(...)`
+- `build_candidate_evidence_tree_narrative_dto(...)`
+
 若 package 中存在 candidate rows，当前静态站点也会额外生成：
 
 - `candidate_evidence.html`
   - candidate evidence tree index
 - `candidate_evidence/{candidate_id}.html`
   - node-kind-aware nested tree page
+  - 页面顶部包含从 `candidate_evidence_tree_summary` 纯派生的 deterministic narrative block
   - assertion leaves 继续下钻到既有 assertion detail 页面
   - 若 candidate 具有 `rule_ref_edges` 或 legacy `rule_refs`，页面会按需展示 `rule_ref_section`
   - 当前也支持 recursive child proof node：
@@ -152,6 +160,15 @@
       - `cycle`
       - `depth_limit`
   - audit 不发明新的 reason enum；summary/query/static 都继续消费同一组 raw node-kind 与 reason 字段
+  - audit 也消费与 runtime 相同的 `node_kind` provenance-role taxonomy（冻结 contract）：
+    - **structural**：`candidate_result`, `support_section`, `rule_ref_section`
+    - **witness**：`predicate_witness_group`, `assertion_fact`
+    - **constraint**：`non_fact_check`
+    - **rule_chain**：`rule_ref`, `referenced_support`
+    - **terminal**：`unresolved_support`, `recursion_boundary`
+    - **degraded**：`degraded_support`
+  - first-round 不新增 `source_kind` / `provenance_kind`；`node_kind` 即为 provenance-role carrier
+  - deeper assertion-origin taxonomy deferred
   - 只有 structured `rule_ref_edges` path 会进入 recursive terminal taxonomy；legacy `rule_refs` fallback 仍保持 flat `rule_ref` 节点
   - audit 也消费与 runtime 相同的 engine degraded tree contract：
     - `degraded_support`
@@ -167,6 +184,9 @@
 - native path：`candidate_ledger + support_artifacts + assertion detail`
 - engine degraded path：`candidate_ledger`
 纯派生。
+这组 candidate summary 与 runtime `candidate_evidence_tree_summary` 保持同构，且只从既有 raw tree 纯派生。
+这组 candidate narrative 与 runtime `candidate_evidence_tree_narrative` 保持同构，且只从既有 candidate summary 纯派生。
+candidate NL explain 当前不在 audit first-round scope；静态页只消费 narrative block，不发明单独 NL DTO。
 
 ## 4. 与其他层的边界
 

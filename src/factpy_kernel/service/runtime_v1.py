@@ -31,6 +31,15 @@ from factpy_kernel.core.store._candidate_evidence_tree import (
     build_candidate_evidence_tree,
     build_degraded_candidate_evidence_tree,
 )
+from factpy_kernel.core.store._candidate_evidence_tree_narrative import (
+    render_candidate_evidence_tree_narrative,
+)
+from factpy_kernel.core.store._candidate_evidence_tree_nl import (
+    render_candidate_evidence_tree_nl_explain,
+)
+from factpy_kernel.core.store._candidate_evidence_tree_summary import (
+    summarize_candidate_evidence_tree_dict,
+)
 from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
@@ -319,17 +328,23 @@ def explain_runtime_summary(session_id: str, dto: dict[str, Any]) -> dict[str, A
         if not isinstance(dto, dict):
             raise facade_error("dto must be object", kind="shape", path="$")
         kind = dto.get("kind")
-        if kind != "rule_run":
-            raise facade_error(
-                f"unsupported explain_summary kind: {kind!r}",
-                kind="shape",
-                path="$.kind",
-            )
         id_ = _require_non_empty_str(dto.get("id"), path="$.id")
-        return ok_response(
-            meta={"rule_run_id": id_},
-            kind="rule_run_summary",
-            summary=_get_rule_run_summary(session, id_),
+        if kind == "rule_run":
+            return ok_response(
+                meta={"rule_run_id": id_},
+                kind="rule_run_summary",
+                summary=_get_rule_run_summary(session, id_),
+            )
+        if kind == "candidate":
+            return ok_response(
+                meta={"candidate_id": id_},
+                kind="candidate_evidence_tree_summary",
+                summary=_get_candidate_tree_summary(session, id_),
+            )
+        raise facade_error(
+            f"unsupported explain_summary kind: {kind!r}",
+            kind="shape",
+            path="$.kind",
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_explain_summary")
@@ -342,17 +357,23 @@ def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str,
         if not isinstance(dto, dict):
             raise facade_error("dto must be object", kind="shape", path="$")
         kind = dto.get("kind")
-        if kind != "rule_run":
-            raise facade_error(
-                f"unsupported explain_narrative kind: {kind!r}",
-                kind="shape",
-                path="$.kind",
-            )
         id_ = _require_non_empty_str(dto.get("id"), path="$.id")
-        return ok_response(
-            meta={"rule_run_id": id_},
-            kind="rule_run_narrative",
-            narrative=_get_rule_run_narrative(session, id_),
+        if kind == "rule_run":
+            return ok_response(
+                meta={"rule_run_id": id_},
+                kind="rule_run_narrative",
+                narrative=_get_rule_run_narrative(session, id_),
+            )
+        if kind == "candidate":
+            return ok_response(
+                meta={"candidate_id": id_},
+                kind="candidate_evidence_tree_narrative",
+                narrative=_get_candidate_tree_narrative(session, id_),
+            )
+        raise facade_error(
+            f"unsupported explain_narrative kind: {kind!r}",
+            kind="shape",
+            path="$.kind",
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_explain_narrative")
@@ -365,19 +386,27 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(dto, dict):
             raise facade_error("dto must be object", kind="shape", path="$")
         kind = dto.get("kind")
-        if kind != "rule_run":
-            raise facade_error(
-                f"unsupported explain_nl kind: {kind!r}",
-                kind="shape",
-                path="$.kind",
-            )
         id_ = _require_non_empty_str(dto.get("id"), path="$.id")
-        summary = _get_rule_run_summary(session, id_)
-        narrative = _render_rule_run_narrative_from_summary(summary)
-        return ok_response(
-            meta={"rule_run_id": id_},
-            kind="rule_run_nl_explain",
-            explain_nl=render_rule_run_nl_explain(summary, narrative, locale="en"),
+        if kind == "rule_run":
+            summary = _get_rule_run_summary(session, id_)
+            narrative = _render_rule_run_narrative_from_summary(summary)
+            return ok_response(
+                meta={"rule_run_id": id_},
+                kind="rule_run_nl_explain",
+                explain_nl=render_rule_run_nl_explain(summary, narrative, locale="en"),
+            )
+        if kind == "candidate":
+            summary = _get_candidate_tree_summary(session, id_)
+            narrative = _render_candidate_tree_narrative_from_summary(summary)
+            return ok_response(
+                meta={"candidate_id": id_},
+                kind="candidate_evidence_tree_nl_explain",
+                explain_nl=render_candidate_evidence_tree_nl_explain(summary, narrative, locale="en"),
+            )
+        raise facade_error(
+            f"unsupported explain_nl kind: {kind!r}",
+            kind="shape",
+            path="$.kind",
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_explain_nl")
@@ -900,7 +929,7 @@ def _runtime_explain_not_supported(*, candidate_id: str, support_kind: str) -> E
     )
 
 
-def _explain_tree_candidate(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
+def _get_candidate_tree(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
     support_digest = session.store.get_candidate_support_digest(candidate_id)
     if support_digest is None:
         raise _runtime_explain_not_found(
@@ -917,15 +946,10 @@ def _explain_tree_candidate(session: RuntimeSession, candidate_id: str) -> dict[
                 path="$.id",
             )
         if support_kind in _DEGRADED_SUPPORT_KINDS:
-            tree = build_degraded_candidate_evidence_tree(
+            return build_degraded_candidate_evidence_tree(
                 candidate_id=candidate_id,
                 support_digest=support_digest,
                 support_kind=support_kind,
-            )
-            return ok_response(
-                meta={"candidate_id": candidate_id},
-                kind="candidate_evidence_tree",
-                tree=_to_jsonable(tree),
             )
         raise _runtime_explain_not_supported(candidate_id=candidate_id, support_kind=support_kind)
     support = session.store.explain_support(support_digest)
@@ -935,7 +959,7 @@ def _explain_tree_candidate(session: RuntimeSession, candidate_id: str) -> dict[
             handle_value=support_digest,
             path="$.id",
         )
-    tree = build_candidate_evidence_tree(
+    return build_candidate_evidence_tree(
         candidate_id=candidate_id,
         support_digest=support_digest,
         support_kind=support_kind,
@@ -943,6 +967,10 @@ def _explain_tree_candidate(session: RuntimeSession, candidate_id: str) -> dict[
         assertion_lookup=lambda asrt_id: _runtime_assertion_detail_for_tree(session.store.ledger, asrt_id),
         support_lookup=session.store.explain_support,
     )
+
+
+def _explain_tree_candidate(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
+    tree = _get_candidate_tree(session, candidate_id)
     return ok_response(
         meta={"candidate_id": candidate_id},
         kind="candidate_evidence_tree",
@@ -1040,8 +1068,20 @@ def _get_rule_run_narrative(session: RuntimeSession, rule_run_id: str) -> dict[s
     return _render_rule_run_narrative_from_summary(_get_rule_run_summary(session, rule_run_id))
 
 
+def _get_candidate_tree_summary(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
+    return summarize_candidate_evidence_tree_dict(_get_candidate_tree(session, candidate_id))
+
+
+def _get_candidate_tree_narrative(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
+    return _render_candidate_tree_narrative_from_summary(_get_candidate_tree_summary(session, candidate_id))
+
+
 def _render_rule_run_narrative_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
     return render_rule_run_narrative(summary, locale="en")
+
+
+def _render_candidate_tree_narrative_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    return render_candidate_evidence_tree_narrative(summary, locale="en")
 
 
 def _session_to_dict(session: RuntimeSession) -> dict[str, Any]:

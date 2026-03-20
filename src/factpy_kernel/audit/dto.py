@@ -115,6 +115,38 @@ def build_candidate_evidence_tree_dto(query: AuditQuery, candidate_id: str) -> d
     return dict(tree)
 
 
+def build_candidate_evidence_tree_summary_dto(query: AuditQuery, candidate_id: str) -> dict[str, Any]:
+    _ensure_query(query)
+    try:
+        summary = query.get_candidate_evidence_tree_summary(candidate_id)
+    except AuditQueryError as exc:
+        raise AuditDTOError(str(exc)) from exc
+    if summary is None:
+        raise AuditDTOError(f"candidate not found: {candidate_id}")
+    return {
+        "audit_ui_dto_version": "audit_ui_dto_v1",
+        "kind": "candidate_evidence_tree_summary",
+        "candidate_id": candidate_id,
+        "summary": dict(summary),
+    }
+
+
+def build_candidate_evidence_tree_narrative_dto(query: AuditQuery, candidate_id: str) -> dict[str, Any]:
+    _ensure_query(query)
+    try:
+        narrative = query.get_candidate_evidence_tree_narrative(candidate_id)
+    except AuditQueryError as exc:
+        raise AuditDTOError(str(exc)) from exc
+    if narrative is None:
+        raise AuditDTOError(f"candidate not found: {candidate_id}")
+    return {
+        "audit_ui_dto_version": "audit_ui_dto_v1",
+        "kind": "candidate_evidence_tree_narrative",
+        "candidate_id": candidate_id,
+        "narrative": dict(narrative),
+    }
+
+
 def build_compliance_matrix_dto(
     query: AuditQuery,
     *,

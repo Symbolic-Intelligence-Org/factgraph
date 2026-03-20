@@ -19,6 +19,8 @@ from factpy_kernel.audit import (
     ECSS_REQUIREMENT_RID_PRED_ID,
     ECSS_REVIEW_MILESTONE_PRED_ID,
     ECSS_VERIFICATION_METHOD_PRED_ID,
+    build_candidate_evidence_tree_narrative_dto,
+    build_candidate_evidence_tree_summary_dto,
     build_candidate_evidence_tree_dto,
     build_rule_trace_narrative_dto,
     build_rule_trace_detail_dto,
@@ -80,6 +82,9 @@ from factpy_kernel.core.rules.where_eval import WhereValidationError, _plan_body
 from factpy_kernel.core.store import Store, register_engine_evaluator
 import factpy_kernel.core.store._builders as store_builders
 from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar, GCResult
+from factpy_kernel.core.store._candidate_evidence_tree_narrative import render_candidate_evidence_tree_narrative
+from factpy_kernel.core.store._candidate_evidence_tree_nl import render_candidate_evidence_tree_nl_explain
+from factpy_kernel.core.store._candidate_evidence_tree_summary import summarize_candidate_evidence_tree_dict
 from factpy_kernel.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
@@ -1528,13 +1533,31 @@ Derivation(
             self.assertNotIn("tree", explain_candidate_resp)
 
             tree_resp = explain_runtime_tree(session_id, {"kind": "candidate", "id": candidate_id})
+            summary_resp = explain_runtime_summary(session_id, {"kind": "candidate", "id": candidate_id})
+            narrative_resp = explain_runtime_narrative(session_id, {"kind": "candidate", "id": candidate_id})
+            nl_resp = explain_runtime_nl(session_id, {"kind": "candidate", "id": candidate_id})
             self.assertTrue(tree_resp["ok"])
+            self.assertTrue(summary_resp["ok"])
+            self.assertTrue(narrative_resp["ok"])
+            self.assertTrue(nl_resp["ok"])
             self.assertEqual(tree_resp["kind"], "candidate_evidence_tree")
             self.assertEqual(tree_resp["meta"]["candidate_id"], candidate_id)
             tree = tree_resp["tree"]
             self.assertEqual(tree["candidate_id"], candidate_id)
             self.assertEqual(tree["support_digest"], candidate["support_digest"])
             self.assertEqual(tree["support_kind"], "native_binding_v1")
+            runtime_summary = summary_resp["summary"]
+            runtime_narrative = narrative_resp["narrative"]
+            runtime_nl = nl_resp["explain_nl"]
+            self.assertEqual(summary_resp["kind"], "candidate_evidence_tree_summary")
+            self.assertEqual(narrative_resp["kind"], "candidate_evidence_tree_narrative")
+            self.assertEqual(nl_resp["kind"], "candidate_evidence_tree_nl_explain")
+            self.assertEqual(runtime_summary, summarize_candidate_evidence_tree_dict(tree))
+            self.assertEqual(runtime_narrative, render_candidate_evidence_tree_narrative(runtime_summary, locale="en"))
+            self.assertEqual(
+                runtime_nl,
+                render_candidate_evidence_tree_nl_explain(runtime_summary, runtime_narrative, locale="en"),
+            )
             self.assertEqual(tree["root"]["node_kind"], "candidate_result")
             self.assertEqual(
                 [row.get("node_kind") for row in tree["root"]["children"]],
@@ -1590,6 +1613,18 @@ Derivation(
                 self.assertEqual(audit_tree, tree)
                 dto_tree = build_candidate_evidence_tree_dto(query, candidate_id)
                 self.assertEqual(dto_tree, tree)
+                audit_summary = query.get_candidate_evidence_tree_summary(candidate_id)
+                audit_narrative = query.get_candidate_evidence_tree_narrative(candidate_id)
+                self.assertEqual(audit_summary, runtime_summary)
+                self.assertEqual(audit_narrative, runtime_narrative)
+                summary_dto = build_candidate_evidence_tree_summary_dto(query, candidate_id)
+                narrative_dto = build_candidate_evidence_tree_narrative_dto(query, candidate_id)
+                self.assertEqual(summary_dto["kind"], "candidate_evidence_tree_summary")
+                self.assertEqual(summary_dto["candidate_id"], candidate_id)
+                self.assertEqual(summary_dto["summary"], runtime_summary)
+                self.assertEqual(narrative_dto["kind"], "candidate_evidence_tree_narrative")
+                self.assertEqual(narrative_dto["candidate_id"], candidate_id)
+                self.assertEqual(narrative_dto["narrative"], runtime_narrative)
 
                 site_dir = str(Path(tmp_dir) / "site")
                 site_manifest = render_audit_static_site(package_dir, site_dir)
@@ -1604,6 +1639,8 @@ Derivation(
                 self.assertIn(candidate_id, html)
                 self.assertIn(f"assertions/{quote(asrt_id, safe='')}.html", html)
                 self.assertIn("Support", html)
+                self.assertIn("Narrative", html)
+                self.assertIn(runtime_narrative["headline"], html)
                 self.assertNotIn("revoked_by", html)
                 self.assertNotIn("is_revoked", html)
         finally:
@@ -2281,6 +2318,323 @@ Derivation(
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
+
+    def test_candidate_evidence_tree_summary_narrative_and_nl_are_deterministic_for_native_tree(self) -> None:
+        tree = {
+            "kind": "candidate_evidence_tree",
+            "candidate_id": "cand-native",
+            "support_digest": "sha256:native",
+            "support_kind": "native_binding_v1",
+            "root": {
+                "node_id": "cand:cand-native",
+                "node_kind": "candidate_result",
+                "title": "Candidate cand-native",
+                "root_result_kind": "fact",
+                "binding": {"$u": "user:1"},
+                "rule_refs": ["q.child.unresolved", "q.child.recursive", "q.child.boundary"],
+                "rule_ref_edges": [],
+                "children": [
+                    {
+                        "node_id": "support:cand-native",
+                        "node_kind": "support_section",
+                        "title": "Support",
+                        "children": [
+                            {
+                                "node_id": "atom:b0.a0:user:tag",
+                                "node_kind": "predicate_witness_group",
+                                "title": "Predicate witness user:tag",
+                                "pred_atom_key": "b0.a0:user:tag",
+                                "pred_id": "user:tag",
+                                "assertion_count": 1,
+                                "children": [
+                                    {
+                                        "node_id": "asrt:A1",
+                                        "node_kind": "assertion_fact",
+                                        "title": "Assertion A1",
+                                        "asrt_id": "A1",
+                                        "pred_id": "user:tag",
+                                        "e_ref": "user:1",
+                                        "claim_args": [],
+                                        "children": [],
+                                    }
+                                ],
+                            },
+                            {
+                                "node_id": "step:b0.a1:eq",
+                                "node_kind": "non_fact_check",
+                                "title": "Non-fact check b0.a1:eq",
+                                "step_key": "b0.a1:eq",
+                                "check_kind": "eq",
+                                "status": "satisfied",
+                                "details": {"lhs": "$tag", "rhs": "vip"},
+                                "children": [],
+                            },
+                        ],
+                    },
+                    {
+                        "node_id": "rule_refs:cand-native",
+                        "node_kind": "rule_ref_section",
+                        "title": "Rule References",
+                        "children": [
+                            {
+                                "node_id": "ruleref:b0.a2:ruleref",
+                                "node_kind": "rule_ref",
+                                "title": "Rule reference q.child.recursive",
+                                "ruleref_atom_key": "b0.a2:ruleref",
+                                "rule_ref_id": "q.child.recursive",
+                                "rule_ref_version": "1.0.0",
+                                "child_support_digest": "sha256:child1",
+                                "unresolved_reason": None,
+                                "children": [
+                                    {
+                                        "node_id": "referenced_support:sha256:child1",
+                                        "node_kind": "referenced_support",
+                                        "title": "Referenced support sha256:child1",
+                                        "support_digest": "sha256:child1",
+                                        "root_result_kind": "row",
+                                        "binding": {"$u": "user:1"},
+                                        "rule_refs": [],
+                                        "rule_ref_edges": [],
+                                        "children": [
+                                            {
+                                                "node_id": "support:sha256:child1",
+                                                "node_kind": "support_section",
+                                                "title": "Support",
+                                                "children": [
+                                                    {
+                                                        "node_id": "atom:b0.a0:user:status",
+                                                        "node_kind": "predicate_witness_group",
+                                                        "title": "Predicate witness user:status",
+                                                        "pred_atom_key": "b0.a0:user:status",
+                                                        "pred_id": "user:status",
+                                                        "assertion_count": 1,
+                                                        "children": [
+                                                            {
+                                                                "node_id": "asrt:A2",
+                                                                "node_kind": "assertion_fact",
+                                                                "title": "Assertion A2",
+                                                                "asrt_id": "A2",
+                                                                "pred_id": "user:status",
+                                                                "e_ref": "user:1",
+                                                                "claim_args": [],
+                                                                "children": [],
+                                                            }
+                                                        ],
+                                                    }
+                                                ],
+                                            }
+                                        ],
+                                    }
+                                ],
+                            },
+                            {
+                                "node_id": "ruleref:b0.a3:ruleref",
+                                "node_kind": "rule_ref",
+                                "title": "Rule reference q.child.unresolved",
+                                "ruleref_atom_key": "b0.a3:ruleref",
+                                "rule_ref_id": "q.child.unresolved",
+                                "rule_ref_version": "1.0.0",
+                                "child_support_digest": None,
+                                "unresolved_reason": "child_support_unavailable",
+                                "children": [
+                                    {
+                                        "node_id": "unresolved:b0.a3:ruleref",
+                                        "node_kind": "unresolved_support",
+                                        "title": "Unresolved support",
+                                        "reason": "child_support_unavailable",
+                                        "child_support_digest": None,
+                                        "children": [],
+                                    }
+                                ],
+                            },
+                            {
+                                "node_id": "ruleref:b0.a4:ruleref",
+                                "node_kind": "rule_ref",
+                                "title": "Rule reference q.child.boundary",
+                                "ruleref_atom_key": "b0.a4:ruleref",
+                                "rule_ref_id": "q.child.boundary",
+                                "rule_ref_version": "1.0.0",
+                                "child_support_digest": "sha256:cycle1",
+                                "unresolved_reason": None,
+                                "children": [
+                                    {
+                                        "node_id": "boundary:b0.a4:ruleref",
+                                        "node_kind": "recursion_boundary",
+                                        "title": "Recursion boundary",
+                                        "boundary_reason": "depth_limit",
+                                        "children": [],
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            },
+        }
+
+        summary = summarize_candidate_evidence_tree_dict(tree)
+        self.assertEqual(
+            summary,
+            {
+                "candidate_id": "cand-native",
+                "support_kind": "native_binding_v1",
+                "is_degraded": False,
+                "root_result_kind": "fact",
+                "node_count_by_role": {
+                    "structural": 4,
+                    "witness": 4,
+                    "constraint": 1,
+                    "rule_chain": 4,
+                    "terminal": 2,
+                    "degraded": 0,
+                },
+                "witness_assertion_count": 2,
+                "rule_ref_count": 3,
+                "recursive_depth": 1,
+                "has_unresolved": True,
+                "has_boundary": True,
+                "unresolved_reasons": ["child_support_unavailable"],
+                "boundary_reasons": ["depth_limit"],
+            },
+        )
+
+        narrative = render_candidate_evidence_tree_narrative(summary, locale="en")
+        self.assertEqual(
+            narrative,
+            {
+                "headline": "Candidate cand-native uses support kind native_binding_v1 across 15 tree node(s).",
+                "overview_lines": [
+                    "Root result kind: fact.",
+                    "Role counts: structural=4, witness=4, constraint=1, rule_chain=4, terminal=2, degraded=0.",
+                    "Recursive depth: 1.",
+                ],
+                "evidence_lines": [
+                    "Witness assertions: 2.",
+                    "Witness nodes: 4; constraint nodes: 1.",
+                ],
+                "rule_chain_lines": [
+                    "Rule reference nodes: 3.",
+                    "Recursive proof depth: 1.",
+                ],
+                "terminal_lines": [
+                    "Unresolved support reasons: child_support_unavailable.",
+                    "Recursion boundary reasons: depth_limit.",
+                ],
+                "drilldown_lines": [
+                    "Open referenced support branches to inspect recursive child proof.",
+                    "Open linked assertion nodes to inspect witness facts.",
+                ],
+            },
+        )
+
+        explain_nl = render_candidate_evidence_tree_nl_explain(summary, narrative, locale="en")
+        self.assertEqual(
+            explain_nl,
+            {
+                "headline": "Candidate cand-native is explained by support kind native_binding_v1 with root result kind fact.",
+                "paragraphs": [
+                    "Candidate cand-native uses support kind native_binding_v1 across 15 tree node(s). Root result kind: fact. Role counts: structural=4, witness=4, constraint=1, rule_chain=4, terminal=2, degraded=0. Recursive depth: 1.",
+                    "Evidence summary: Witness assertions: 2. Witness nodes: 4; constraint nodes: 1.",
+                    "Rule-chain summary: Rule reference nodes: 3. Recursive proof depth: 1.",
+                    "Terminal and drill-down summary: Unresolved support reasons: child_support_unavailable. Recursion boundary reasons: depth_limit. Open referenced support branches to inspect recursive child proof. Open linked assertion nodes to inspect witness facts.",
+                ],
+            },
+        )
+
+    def test_candidate_evidence_tree_summary_narrative_and_nl_are_deterministic_for_degraded_tree(self) -> None:
+        tree = {
+            "kind": "candidate_evidence_tree",
+            "candidate_id": "cand-degraded",
+            "support_digest": "sha256:0000",
+            "support_kind": ENGINE_NO_WITNESS_KIND,
+            "root": {
+                "node_id": "cand:cand-degraded",
+                "node_kind": "candidate_result",
+                "title": "Candidate cand-degraded",
+                "binding": {},
+                "rule_refs": [],
+                "rule_ref_edges": [],
+                "children": [
+                    {
+                        "node_id": "support:cand-degraded",
+                        "node_kind": "support_section",
+                        "title": "Support",
+                        "children": [
+                            {
+                                "node_id": "degraded:cand-degraded",
+                                "node_kind": "degraded_support",
+                                "title": "Degraded support",
+                                "support_kind": ENGINE_NO_WITNESS_KIND,
+                                "witness_status": "degraded",
+                                "children": [],
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+
+        summary = summarize_candidate_evidence_tree_dict(tree)
+        self.assertEqual(
+            summary,
+            {
+                "candidate_id": "cand-degraded",
+                "support_kind": ENGINE_NO_WITNESS_KIND,
+                "is_degraded": True,
+                "root_result_kind": None,
+                "node_count_by_role": {
+                    "structural": 2,
+                    "witness": 0,
+                    "constraint": 0,
+                    "rule_chain": 0,
+                    "terminal": 0,
+                    "degraded": 1,
+                },
+                "witness_assertion_count": 0,
+                "rule_ref_count": 0,
+                "recursive_depth": 0,
+                "has_unresolved": False,
+                "has_boundary": False,
+                "unresolved_reasons": [],
+                "boundary_reasons": [],
+            },
+        )
+
+        narrative = render_candidate_evidence_tree_narrative(summary, locale="en")
+        self.assertEqual(
+            narrative,
+            {
+                "headline": f"Candidate cand-degraded uses degraded support kind {ENGINE_NO_WITNESS_KIND} without witness artifacts.",
+                "overview_lines": [
+                    "Root result kind: -.",
+                    "Role counts: structural=2, witness=0, constraint=0, rule_chain=0, terminal=0, degraded=1.",
+                    "Recursive depth: 0.",
+                ],
+                "evidence_lines": [
+                    "No witness assertions or constraint checks are available because this candidate uses degraded support."
+                ],
+                "rule_chain_lines": ["No recursive rule-chain proof is available for degraded support."],
+                "terminal_lines": ["No unresolved support or recursion boundaries were encountered."],
+                "drilldown_lines": [
+                    "Open the raw tree below to inspect the degraded support envelope.",
+                    "This candidate does not expose native witness assertions or recursive child proof.",
+                ],
+            },
+        )
+
+        explain_nl = render_candidate_evidence_tree_nl_explain(summary, narrative, locale="en")
+        self.assertEqual(
+            explain_nl,
+            {
+                "headline": f"Candidate cand-degraded has degraded support kind {ENGINE_NO_WITNESS_KIND}.",
+                "paragraphs": [
+                    f"Candidate cand-degraded uses degraded support kind {ENGINE_NO_WITNESS_KIND} without witness artifacts. Root result kind: -. Role counts: structural=2, witness=0, constraint=0, rule_chain=0, terminal=0, degraded=1. Recursive depth: 0.",
+                    "Evidence summary: No witness assertions or constraint checks are available because this candidate uses degraded support.",
+                    "Rule-chain summary: No recursive rule-chain proof is available for degraded support.",
+                    "Terminal and drill-down summary: No unresolved support or recursion boundaries were encountered. Open the raw tree below to inspect the degraded support envelope. This candidate does not expose native witness assertions or recursive child proof.",
+                ],
+            },
+        )
 
     def test_aml_trigger_walkthrough_reuses_five_layer_explain_delivery_with_temporal_and_threshold_placeholders(
         self,
@@ -6231,10 +6585,39 @@ Derivation(
                 self.assertEqual(degraded_node["support_kind"], ENGINE_NO_WITNESS_KIND)
                 self.assertEqual(degraded_node["witness_status"], "degraded")
                 self.assertNotIn("support_digest", degraded_node)
+                runtime_summary_resp = explain_runtime_summary(
+                    session_id, {"kind": "candidate", "id": engine_candidate["candidate_id"]}
+                )
+                runtime_narrative_resp = explain_runtime_narrative(
+                    session_id, {"kind": "candidate", "id": engine_candidate["candidate_id"]}
+                )
+                runtime_nl_resp = explain_runtime_nl(
+                    session_id, {"kind": "candidate", "id": engine_candidate["candidate_id"]}
+                )
+                self.assertTrue(runtime_summary_resp["ok"])
+                self.assertTrue(runtime_narrative_resp["ok"])
+                self.assertTrue(runtime_nl_resp["ok"])
+                runtime_summary = runtime_summary_resp["summary"]
+                runtime_narrative = runtime_narrative_resp["narrative"]
+                runtime_nl = runtime_nl_resp["explain_nl"]
+                self.assertEqual(runtime_summary, summarize_candidate_evidence_tree_dict(engine_tree))
+                self.assertEqual(runtime_narrative, render_candidate_evidence_tree_narrative(runtime_summary, locale="en"))
+                self.assertEqual(
+                    runtime_nl,
+                    render_candidate_evidence_tree_nl_explain(runtime_summary, runtime_narrative, locale="en"),
+                )
 
                 dto_tree = build_candidate_evidence_tree_dto(query, engine_candidate["candidate_id"])
                 self.assertEqual(dto_tree["support_kind"], ENGINE_NO_WITNESS_KIND)
                 self.assertEqual(dto_tree["root"]["children"][0]["children"][0]["node_kind"], "degraded_support")
+                audit_summary = query.get_candidate_evidence_tree_summary(engine_candidate["candidate_id"])
+                audit_narrative = query.get_candidate_evidence_tree_narrative(engine_candidate["candidate_id"])
+                self.assertEqual(audit_summary, runtime_summary)
+                self.assertEqual(audit_narrative, runtime_narrative)
+                summary_dto = build_candidate_evidence_tree_summary_dto(query, engine_candidate["candidate_id"])
+                narrative_dto = build_candidate_evidence_tree_narrative_dto(query, engine_candidate["candidate_id"])
+                self.assertEqual(summary_dto["summary"], runtime_summary)
+                self.assertEqual(narrative_dto["narrative"], runtime_narrative)
 
                 query.package.candidate_ledger.append(
                     {
@@ -6260,6 +6643,7 @@ Derivation(
                 self.assertIn("degraded_support", engine_page)
                 self.assertIn(ENGINE_NO_WITNESS_KIND, engine_page)
                 self.assertIn("witness_status=degraded", engine_page)
+                self.assertIn(runtime_narrative["headline"], engine_page)
                 self.assertNotIn("child_support_digest", engine_page)
         finally:
             close_runtime_session(session_id)
@@ -6382,6 +6766,15 @@ Derivation(
                 self.assertEqual(summary_http.json()["kind"], "rule_run_summary")
                 self.assertIn("summary", summary_http.json())
 
+                candidate_summary_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-summary",
+                    json={"kind": "candidate", "id": candidate_id},
+                )
+                self.assertEqual(candidate_summary_http.status_code, 200)
+                self.assertTrue(candidate_summary_http.json()["ok"])
+                self.assertEqual(candidate_summary_http.json()["kind"], "candidate_evidence_tree_summary")
+                self.assertIn("summary", candidate_summary_http.json())
+
                 narrative_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain-narrative",
                     json={"kind": "rule_run", "id": rule_run_id},
@@ -6391,6 +6784,15 @@ Derivation(
                 self.assertEqual(narrative_http.json()["kind"], "rule_run_narrative")
                 self.assertIn("narrative", narrative_http.json())
 
+                candidate_narrative_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-narrative",
+                    json={"kind": "candidate", "id": candidate_id},
+                )
+                self.assertEqual(candidate_narrative_http.status_code, 200)
+                self.assertTrue(candidate_narrative_http.json()["ok"])
+                self.assertEqual(candidate_narrative_http.json()["kind"], "candidate_evidence_tree_narrative")
+                self.assertIn("narrative", candidate_narrative_http.json())
+
                 nl_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain-nl",
                     json={"kind": "rule_run", "id": rule_run_id},
@@ -6399,6 +6801,15 @@ Derivation(
                 self.assertTrue(nl_http.json()["ok"])
                 self.assertEqual(nl_http.json()["kind"], "rule_run_nl_explain")
                 self.assertIn("explain_nl", nl_http.json())
+
+                candidate_nl_http = client.post(
+                    f"/v1/runtime/sessions/{session_id}/queries/explain-nl",
+                    json={"kind": "candidate", "id": candidate_id},
+                )
+                self.assertEqual(candidate_nl_http.status_code, 200)
+                self.assertTrue(candidate_nl_http.json()["ok"])
+                self.assertEqual(candidate_nl_http.json()["kind"], "candidate_evidence_tree_nl_explain")
+                self.assertIn("explain_nl", candidate_nl_http.json())
 
                 unsupported_kind_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain",
@@ -6432,14 +6843,6 @@ Derivation(
                 self.assertFalse(missing_tree_kind_http.json()["ok"])
                 self.assertEqual(missing_tree_kind_http.json()["errors"][0]["kind"], "shape")
 
-                unsupported_summary_kind_http = client.post(
-                    f"/v1/runtime/sessions/{session_id}/queries/explain-summary",
-                    json={"kind": "candidate", "id": candidate_id},
-                )
-                self.assertEqual(unsupported_summary_kind_http.status_code, 200)
-                self.assertFalse(unsupported_summary_kind_http.json()["ok"])
-                self.assertEqual(unsupported_summary_kind_http.json()["errors"][0]["kind"], "shape")
-
                 missing_summary_kind_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain-summary",
                     json={"id": rule_run_id},
@@ -6448,14 +6851,6 @@ Derivation(
                 self.assertFalse(missing_summary_kind_http.json()["ok"])
                 self.assertEqual(missing_summary_kind_http.json()["errors"][0]["kind"], "shape")
 
-                unsupported_narrative_kind_http = client.post(
-                    f"/v1/runtime/sessions/{session_id}/queries/explain-narrative",
-                    json={"kind": "candidate", "id": candidate_id},
-                )
-                self.assertEqual(unsupported_narrative_kind_http.status_code, 200)
-                self.assertFalse(unsupported_narrative_kind_http.json()["ok"])
-                self.assertEqual(unsupported_narrative_kind_http.json()["errors"][0]["kind"], "shape")
-
                 missing_narrative_kind_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain-narrative",
                     json={"id": rule_run_id},
@@ -6463,14 +6858,6 @@ Derivation(
                 self.assertEqual(missing_narrative_kind_http.status_code, 200)
                 self.assertFalse(missing_narrative_kind_http.json()["ok"])
                 self.assertEqual(missing_narrative_kind_http.json()["errors"][0]["kind"], "shape")
-
-                unsupported_nl_kind_http = client.post(
-                    f"/v1/runtime/sessions/{session_id}/queries/explain-nl",
-                    json={"kind": "candidate", "id": candidate_id},
-                )
-                self.assertEqual(unsupported_nl_kind_http.status_code, 200)
-                self.assertFalse(unsupported_nl_kind_http.json()["ok"])
-                self.assertEqual(unsupported_nl_kind_http.json()["errors"][0]["kind"], "shape")
 
                 missing_nl_kind_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain-nl",

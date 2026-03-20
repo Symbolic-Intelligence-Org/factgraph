@@ -7,6 +7,12 @@ from factpy_kernel.core.store._candidate_evidence_tree import (
     build_candidate_evidence_tree,
     build_degraded_candidate_evidence_tree,
 )
+from factpy_kernel.core.store._candidate_evidence_tree_narrative import (
+    render_candidate_evidence_tree_narrative,
+)
+from factpy_kernel.core.store._candidate_evidence_tree_summary import (
+    summarize_candidate_evidence_tree_dict,
+)
 from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS
 from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
 from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
@@ -116,6 +122,24 @@ class AuditQuery:
                 assertion_lookup=assertion_index.get_assertion_detail,
                 support_lookup=self._get_support_artifact,
             )
+        except ValueError as exc:
+            raise AuditQueryError(str(exc)) from exc
+
+    def get_candidate_evidence_tree_summary(self, candidate_id: str) -> dict[str, Any] | None:
+        tree = self.get_candidate_evidence_tree(candidate_id)
+        if tree is None:
+            return None
+        try:
+            return summarize_candidate_evidence_tree_dict(tree)
+        except ValueError as exc:
+            raise AuditQueryError(str(exc)) from exc
+
+    def get_candidate_evidence_tree_narrative(self, candidate_id: str) -> dict[str, Any] | None:
+        summary = self.get_candidate_evidence_tree_summary(candidate_id)
+        if summary is None:
+            return None
+        try:
+            return render_candidate_evidence_tree_narrative(summary, locale="en")
         except ValueError as exc:
             raise AuditQueryError(str(exc)) from exc
 

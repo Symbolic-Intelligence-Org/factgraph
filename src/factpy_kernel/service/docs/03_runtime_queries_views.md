@@ -486,6 +486,16 @@
   - 不表达 conflict-resolution
   - 不表达 source-linkage graph
 - 当前 tree 相比最初 v1 引入了 section layer；这是已接受的、范围受控的 shape change，而不是纯 additive enrichment。
+- `node_kind` 是 carrier-level provenance-role taxonomy（冻结 contract），consumer 可直接基于 `node_kind` 做渲染/分类决策：
+  - **structural**：`candidate_result`, `support_section`, `rule_ref_section` — 纯结构容器
+  - **witness**：`predicate_witness_group`, `assertion_fact` — 直接见证 ledger 事实
+  - **constraint**：`non_fact_check` — 非事实约束检查
+  - **rule_chain**：`rule_ref`, `referenced_support` — 规则引用及递归证明
+  - **terminal**：`unresolved_support`, `recursion_boundary` — 遍历终止或证据不可用
+  - **degraded**：`degraded_support` — Engine 路径无 witness artifact
+- first-round 不新增 `source_kind` / `provenance_kind` 字段；`node_kind` 本身即为 provenance-role carrier
+- `rule_ref` node_kind 同时用于 legacy flat 和 structured edge；consumer 通过 `ruleref_atom_key` 字段有无区分
+- deeper assertion-origin taxonomy（direct write / derivation accept / import）deferred
 
 错误 kinds：
 
@@ -537,13 +547,16 @@
 
 说明：
 
-- 这是 service v1 的 consumer-facing derived DTO endpoint，第一轮只接受 `{kind:"rule_run", id}`。
-- 它不会修改或替代 raw `rule_run` explain contract。
-- 它内部直接复用 canonical raw explain path：`POST /queries/explain` + `kind="rule_run"`。
+- 这是 service v1 的 consumer-facing derived DTO endpoint，当前支持：
+  - `{kind:"rule_run", id}`
+  - `{kind:"candidate", id}`
+- 它不会修改或替代 raw `rule_run` / `candidate_evidence_tree` explain contract。
+- `rule_run` summary 继续直接复用 canonical raw explain path：`POST /queries/explain` + `kind="rule_run"`。
+- `candidate` summary 则复用 canonical tree path：`POST /queries/explain-tree` + `kind="candidate"`。
 - summary 是 pure derivation：
-  - 每个 summary 字段都直接从 canonical raw `rule_run` payload 派生
+  - 每个 summary 字段都直接从 canonical raw carrier 派生
   - summary 不会要求 raw carrier 改 shape
-- 第一轮 `rule_run_summary` 只包含 7 个字段：
+- `rule_run_summary` 继续只包含 7 个字段：
   - `rule_run_id`
   - `root_rule`
   - `root_row_count`
@@ -551,6 +564,20 @@
   - `witness_assertion_ids`
   - `predicate_witness_groups`
   - `non_fact_step_groups`
+- `candidate_evidence_tree_summary` 则采用 provenance-role-first 的 12 字段 core set：
+  - `candidate_id`
+  - `support_kind`
+  - `is_degraded`
+  - `root_result_kind`
+  - `node_count_by_role`
+  - `witness_assertion_count`
+  - `rule_ref_count`
+  - `recursive_depth`
+  - `has_unresolved`
+  - `has_boundary`
+  - `unresolved_reasons`
+  - `boundary_reasons`
+- `candidate` summary 不新增 `node_count_by_kind`、`witness_predicate_ids`、`constraint_check_kinds`；这些仍属于 deferred enhancement。
 - `witness_assertion_ids` 是跨全部 invocations 的 `pred_witnesses.asrt_ids` flat 去重结果。
 - `predicate_witness_groups` 采用 flat semantic-key grouping：
   - grouping key = 从 raw `pred_atom_key` 派生出的 `pred_id`
@@ -558,10 +585,10 @@
 - `non_fact_step_groups` 也采用 flat semantic-key grouping：
   - grouping key = raw `non_fact_steps.kind`
   - group fields = `kind`、`count`、`invocation_ids`
-- 第一轮不把 `binding_index`、`step_key`、`details.atom` 提升进 summary DTO；这些仍属于 raw payload 的消费层级。
+- 第一轮不把 `binding_index`、`step_key`、`details.atom` 提升进 `rule_run_summary` DTO；这些仍属于 raw payload 的消费层级。
 - `rule_run_id` 本身就是回跳 raw explain 的充分 handle。
-- `witness_assertion_ids` 本身就是回跳 `explain_ref(kind="assertion")` 的充分 handle。
-- 第一轮不支持 `candidate` / `assertion` summary；`kind` 取其他值时返回 `shape` error。
+- `candidate_id` 本身就是回跳 raw tree explain 的充分 handle。
+- 第一轮不支持 `assertion` summary；`kind` 取其他值时返回 `shape` error。
 
 错误 kinds：
 
@@ -613,21 +640,35 @@
 
 说明：
 
-- 这是 service v1 的 narrative DTO endpoint，第一轮只接受 `{kind:"rule_run", id}`。
-- narrative 不是 raw explain 或 summary 的替代物；它是建立在 `rule_run_summary` 之上的 deterministic presentation layer。
-- 它内部调用链为：
+- 这是 service v1 的 narrative DTO endpoint，当前支持：
+  - `{kind:"rule_run", id}`
+  - `{kind:"candidate", id}`
+- narrative 不是 raw explain 或 summary 的替代物；它是建立在 summary 之上的 deterministic presentation layer。
+- `rule_run` narrative 调用链为：
   - canonical raw explain
   - `rule_run_summary`
   - `render_rule_run_narrative(..., locale="en")`
-- 第一轮 narrative DTO 固定为 5 个字段：
+- `candidate` narrative 调用链为：
+  - canonical raw tree
+  - `candidate_evidence_tree_summary`
+  - `render_candidate_evidence_tree_narrative(..., locale="en")`
+- `rule_run_narrative` 继续固定为 5 个字段：
   - `headline`
   - `overview_lines`
   - `predicate_lines`
   - `non_fact_check_lines`
   - `drilldown_lines`
-- 这些字段都只从 `rule_run_summary` 纯派生，不直接下探 raw trace carrier。
+- `candidate_evidence_tree_narrative` 固定为 6 个字段：
+  - `headline`
+  - `overview_lines`
+  - `evidence_lines`
+  - `rule_chain_lines`
+  - `terminal_lines`
+  - `drilldown_lines`
+- 这些字段都只从对应 summary 纯派生，不直接下探 raw carrier。
+- 对 degraded candidate，narrative 也必须生成非空降级说明，而不是返回空段。
 - 第一轮故意不把 narrative 打包进 `explain-summary`；bundled delivery 若需要，后续另行评估。
-- 第一轮不支持 `candidate` / `assertion` narrative；`kind` 取其他值时返回 `shape` error。
+- 第一轮不支持 `assertion` narrative；`kind` 取其他值时返回 `shape` error。
 
 错误 kinds：
 
@@ -670,21 +711,29 @@
 
 说明：
 
-- 这是 service v1 的 deterministic prose endpoint，第一轮只接受 `{kind:\"rule_run\", id}`。
+- 这是 service v1 的 deterministic prose endpoint，当前支持：
+  - `{kind:"rule_run", id}`
+  - `{kind:"candidate", id}`
 - 它不是 raw / summary / narrative 的替代物，而是建立在这两层 structured DTO 之上的 runtime-first prose view。
-- 它内部调用链为：
+- `rule_run` 调用链为：
   - canonical raw explain
   - `rule_run_summary`
   - `rule_run_narrative`
-  - `render_rule_run_nl_explain(..., locale=\"en\")`
-- 第一轮 `rule_run_nl_explain` 只包含 2 个字段：
+  - `render_rule_run_nl_explain(..., locale="en")`
+- `candidate` 调用链为：
+  - canonical raw tree
+  - `candidate_evidence_tree_summary`
+  - `candidate_evidence_tree_narrative`
+  - `render_candidate_evidence_tree_nl_explain(..., locale="en")`
+- `rule_run_nl_explain` 与 `candidate_evidence_tree_nl_explain` 都只包含 2 个字段：
   - `headline`
   - `paragraphs`
 - `paragraphs` 是 deterministic prose composition：
-  - 会吸收 narrative 中的 overview、predicate evidence、non-fact checks 与 drill-down guidance
+  - 会吸收 narrative 中的 section lines
   - 但不会继续暴露 narrative 的结构化 section 字段
 - 若 consumer 需要结构化 drill-down affordance，应继续使用 `explain-narrative`。
-- 第一轮不支持 `candidate` / `assertion` NL explain；`kind` 取其他值时返回 `shape` error。
+- audit/static 第一轮不单独交付 candidate NL；candidate NL 当前是 runtime-only surface。
+- 第一轮不支持 `assertion` NL explain；`kind` 取其他值时返回 `shape` error。
 
 错误 kinds：
 
