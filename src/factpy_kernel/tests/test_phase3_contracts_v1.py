@@ -6722,6 +6722,14 @@ Derivation(
                 "/v1/runtime/sessions/{session_id}/queries/explain-nl",
                 {route.path for route in app.routes},
             )
+            self.assertIn(
+                "/v1/runtime/sessions/{session_id}/evidence/candidate/{candidate_id}",
+                {route.path for route in app.routes},
+            )
+            self.assertIn(
+                "/v1/runtime/sessions/{session_id}/evidence/rule-trace/{rule_run_id}",
+                {route.path for route in app.routes},
+            )
 
             with TestClient(app) as client:
                 candidate_http = client.post(
@@ -6810,6 +6818,24 @@ Derivation(
                 self.assertTrue(candidate_nl_http.json()["ok"])
                 self.assertEqual(candidate_nl_http.json()["kind"], "candidate_evidence_tree_nl_explain")
                 self.assertIn("explain_nl", candidate_nl_http.json())
+
+                candidate_html_http = client.get(
+                    f"/v1/runtime/sessions/{session_id}/evidence/candidate/{candidate_id}",
+                )
+                self.assertEqual(candidate_html_http.status_code, 200)
+                self.assertTrue(candidate_html_http.headers["content-type"].startswith("text/html"))
+                self.assertIn(f"Candidate Evidence {candidate_id}", candidate_html_http.text)
+                self.assertIn("Narrative", candidate_html_http.text)
+                self.assertIn("predicate_witness_group", candidate_html_http.text)
+
+                rule_trace_html_http = client.get(
+                    f"/v1/runtime/sessions/{session_id}/evidence/rule-trace/{rule_run_id}",
+                )
+                self.assertEqual(rule_trace_html_http.status_code, 200)
+                self.assertTrue(rule_trace_html_http.headers["content-type"].startswith("text/html"))
+                self.assertIn(f"Rule Trace {rule_run_id}", rule_trace_html_http.text)
+                self.assertIn("Narrative", rule_trace_html_http.text)
+                self.assertIn("Predicate Witnesses", rule_trace_html_http.text)
 
                 unsupported_kind_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain",

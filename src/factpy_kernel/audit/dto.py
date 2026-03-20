@@ -244,6 +244,15 @@ def build_rule_trace_detail_dto(query: AuditQuery, rule_run_id: str) -> dict[str
     if trace is None:
         raise AuditDTOError(f"rule trace not found: {rule_run_id}")
 
+    return build_rule_trace_detail_payload(trace, rule_run_id=rule_run_id)
+
+
+def build_rule_trace_detail_payload(trace: dict[str, Any], *, rule_run_id: str) -> dict[str, Any]:
+    if not isinstance(trace, dict):
+        raise AuditDTOError("rule trace must be object")
+    if not isinstance(rule_run_id, str) or not rule_run_id:
+        raise AuditDTOError("rule_run_id must be non-empty string")
+
     invocations = [dict(item) for item in trace.get("invocations", []) if isinstance(item, dict)]
     witness_assertion_ids = sorted(
         {

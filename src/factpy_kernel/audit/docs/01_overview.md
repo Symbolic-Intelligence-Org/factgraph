@@ -202,6 +202,7 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 - `explainability`
   - compliance matrix 只负责 requirement-level delivery；更细的 assertion/support 证据下钻仍由 assertion detail / explainability substrate 承担
   - rule trace static delivery 只消费 package 内已有 `RuleTraceArtifact`，不新增 live explain endpoint
+  - runtime live permalink 若存在，也应优先复用本模块已有的 page renderers 与 data shape，而不是新建第二套 HTML 模板
 
 ## 5. 当前限制
 
@@ -214,6 +215,7 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
   - witness-bearing candidate evidence tree page
 - 但仍不支持 graph UI、salience breakdown 或更细 provenance contract
 - static UI 对 compliance matrix 的支持当前仍是单页总览，不包含 per-requirement detail page 或额外搜索 facet
+- live permalink 若由 runtime service 提供，当前也只是对既有 rule-trace / candidate page renderers 的在线复用；audit export 仍是 durable shareable surface
 
 ## 6. Audit Package Artifact Files
 

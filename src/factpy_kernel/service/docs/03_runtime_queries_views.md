@@ -13,6 +13,8 @@
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-summary`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-narrative`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-nl`
+- `GET /v1/runtime/sessions/{session_id}/evidence/candidate/{candidate_id}`
+- `GET /v1/runtime/sessions/{session_id}/evidence/rule-trace/{rule_run_id}`
 - `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 - `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
@@ -751,6 +753,34 @@
 - `shape`
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
+
+## 7A. `GET /v1/runtime/sessions/{session_id}/evidence/...`
+
+当前 runtime 也提供 session-bound live proof-entry permalink：
+
+- `GET /v1/runtime/sessions/{session_id}/evidence/candidate/{candidate_id}`
+- `GET /v1/runtime/sessions/{session_id}/evidence/rule-trace/{rule_run_id}`
+
+约束：
+
+- 第一轮只覆盖 `candidate_id` 与 `rule_run_id`
+- route 直接返回 `text/html`
+- permalink 是 **session-bound ephemeral URL**
+- 不承诺 durable live URL；长期分享仍以 audit/static export 为主
+
+复用边界：
+
+- candidate page 复用既有 candidate tree renderer：
+  - runtime 直接组出 `tree + narrative`
+- rule-trace page 复用既有 rule-trace detail renderer：
+  - runtime 直接组出 `detail payload + narrative`
+  - assertion detail lookup 继续从当前 session ledger 读取
+- service 不新建第二套 HTML 模板
+
+错误：
+
+- 成功时返回 HTML
+- 失败时仍复用 service 的统一异常处理
 
 ## 8. `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
 

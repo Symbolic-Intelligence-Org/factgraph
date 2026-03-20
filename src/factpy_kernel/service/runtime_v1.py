@@ -49,6 +49,8 @@ from factpy_kernel.core.view.projector import (
     project_view_facts,
     project_view_facts_with_audit,
 )
+from factpy_kernel.audit import build_rule_trace_detail_payload
+from factpy_kernel.audit.static_ui import render_candidate_evidence_html, render_rule_trace_detail_html
 
 from ._common import error_response, exception_to_error, facade_error, ok_response
 from ._registry_io import load_registry_schema_ir
@@ -1068,6 +1070,18 @@ def _get_rule_run_narrative(session: RuntimeSession, rule_run_id: str) -> dict[s
     return _render_rule_run_narrative_from_summary(_get_rule_run_summary(session, rule_run_id))
 
 
+def _get_rule_run_detail_payload(session: RuntimeSession, rule_run_id: str) -> dict[str, Any]:
+    raw_resp = _explain_ref_rule_run(session, rule_run_id)
+    raw_explain = raw_resp.get("explain")
+    if not isinstance(raw_explain, dict):
+        raise facade_error(
+            "rule_run explain payload must be object",
+            kind="runtime",
+            path="$.explain",
+        )
+    return build_rule_trace_detail_payload(raw_explain, rule_run_id=rule_run_id)
+
+
 def _get_candidate_tree_summary(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
     return summarize_candidate_evidence_tree_dict(_get_candidate_tree(session, candidate_id))
 
@@ -1082,6 +1096,24 @@ def _render_rule_run_narrative_from_summary(summary: dict[str, Any]) -> dict[str
 
 def _render_candidate_tree_narrative_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
     return render_candidate_evidence_tree_narrative(summary, locale="en")
+
+
+def render_runtime_candidate_evidence_html(session_id: str, candidate_id: str) -> str:
+    session = _require_session(session_id)
+    tree = _get_candidate_tree(session, candidate_id)
+    narrative = _get_candidate_tree_narrative(session, candidate_id)
+    return render_candidate_evidence_html(tree, narrative=narrative)
+
+
+def render_runtime_rule_trace_html(session_id: str, rule_run_id: str) -> str:
+    session = _require_session(session_id)
+    detail = _get_rule_run_detail_payload(session, rule_run_id)
+    narrative = _get_rule_run_narrative(session, rule_run_id)
+    return render_rule_trace_detail_html(
+        detail,
+        assertion_lookup=lambda asrt_id: _runtime_assertion_detail_for_tree(session.store.ledger, asrt_id),
+        narrative=narrative,
+    )
 
 
 def _session_to_dict(session: RuntimeSession) -> dict[str, Any]:

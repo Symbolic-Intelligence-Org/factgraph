@@ -1,6 +1,6 @@
 # Task Blueprint: Live Evidence URL — Runtime Permalink
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-20
 - Last Updated: 2026-03-20
 - Related Modules:
@@ -11,7 +11,7 @@
   - `src/factpy_kernel/audit/query.py`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [2026-03-17_runtime-traceability-explainability-blueprint.md](../active/2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [rainbird-evidence-chain-compare.md](../../references/external/rainbird-evidence-chain-compare.md)
   - [src/factpy_kernel/service/docs/03_runtime_queries_views.md](../../../src/factpy_kernel/service/docs/03_runtime_queries_views.md)
   - [src/factpy_kernel/audit/docs/01_overview.md](../../../src/factpy_kernel/audit/docs/01_overview.md)
@@ -105,8 +105,8 @@
 - **Runtime GET route 直接返回 HTML**
 - 不做 redirect 到 static site（避免外部部署依赖）
 - Route shape:
-  - `GET /sessions/{session_id}/evidence/candidate/{candidate_id}` → HTML
-  - `GET /sessions/{session_id}/evidence/rule-trace/{rule_run_id}` → HTML
+  - `GET /v1/runtime/sessions/{session_id}/evidence/candidate/{candidate_id}` → HTML
+  - `GET /v1/runtime/sessions/{session_id}/evidence/rule-trace/{rule_run_id}` → HTML
 
 **Q3: Session-binding 立场**
 - **First-round 明确是 session-bound ephemeral permalink**
@@ -137,11 +137,11 @@
 
 ## 7. Acceptance
 
-- [ ] first-round permalink 对象范围已冻结
-- [ ] GET route delivery shape 已冻结
-- [ ] session-binding stance 已冻结
-- [ ] 与 static/audit 渲染复用边界已冻结
-- [ ] blueprint outcome 已填写并归档
+- [x] first-round permalink 对象范围已冻结
+- [x] GET route delivery shape 已冻结
+- [x] session-binding stance 已冻结
+- [x] 与 static/audit 渲染复用边界已冻结
+- [x] blueprint outcome 已填写并归档
 
 ## 8. Implementation Plan
 
@@ -161,9 +161,15 @@
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
-
 - 最终落地结果：
+  - runtime 现已提供 2 条 session-bound live HTML permalink：
+    - `GET /v1/runtime/sessions/{session_id}/evidence/candidate/{candidate_id}`
+    - `GET /v1/runtime/sessions/{session_id}/evidence/rule-trace/{rule_run_id}`
+  - candidate page 直接复用 runtime tree + narrative 与 static candidate renderer
+  - rule-trace page 通过一个纯 `detail payload` helper 复用 static rule-trace renderer
 - 与 blueprint 不同的地方：
+  - 实现里额外抽出了 `build_rule_trace_detail_payload(...)` 纯 helper，供 audit DTO 与 runtime permalink 共用
 - 为什么会有这些调整：
+  - rule-trace renderer 需要 DTO-enriched payload；抽纯 helper 比引入 `AuditQuery` adapter 更窄，也更符合 freeze 的复用边界
 - 归档说明：
+  - 本蓝图为小型 implementation slice，已完成并归档到 `docs/blueprints/archive/`

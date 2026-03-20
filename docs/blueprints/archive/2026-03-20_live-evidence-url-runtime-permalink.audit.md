@@ -7,6 +7,8 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-03-20 | draft | Blueprint created | Live evidence permalink problem scoped around runtime GET routes and static reuse. |
+| 2026-03-20 | scoped | Scope freeze completed | Object scope, HTML delivery, session-bound lifecycle, and renderer/data-shape reuse boundary frozen. |
+| 2026-03-20 | implemented | Runtime GET permalink routes landed | Candidate and rule-trace HTML pages now render live from session data without introducing a second HTML system. |
 | 2026-03-20 | scoped | Freeze confirmed | Four positions frozen: (1) candidate_id + rule_run_id only; (2) runtime GET returns HTML directly; (3) session-bound ephemeral, not durable; (4) reuse static renderers + data shapes, not AuditQuery adapter. |
 
 ## Decision Notes
@@ -14,6 +16,7 @@
 - First-round discussion is intentionally narrow: candidate/rule-run proof-entry only, not full object permalink coverage.
 - The key decision boundary is delivery shape and runtime/static reuse, not proof carrier redesign.
 - Rainbird comparison is used only as consumer-gap motivation; no external URL or hosting model is imported as contract.
+- Rule-trace live permalink required a thin pure payload helper; this was accepted as a data-shape reuse aid, not an `AuditQuery` adapter.
 - 2026-03-20: **Freeze: object scope** — `candidate_id` + `rule_run_id` only. assertion/run/decision deferred.
 - 2026-03-20: **Freeze: delivery shape** — runtime GET route returns HTML directly. No redirect to static site.
 - 2026-03-20: **Freeze: session lifecycle** — ephemeral, session-scoped permalink. Not durable. Static audit export remains the durable proof-entry surface.

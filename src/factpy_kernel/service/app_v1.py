@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from fastapi import Body, FastAPI, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from factpy_kernel.service.registry_v1 import (
     list_registry_assets,
@@ -37,6 +37,8 @@ from factpy_kernel.service.runtime_v1 import (
     open_runtime_session,
     project_runtime_view_facts,
     resolve_runtime_mapping,
+    render_runtime_candidate_evidence_html,
+    render_runtime_rule_trace_html,
     retract_runtime_fact,
     run_runtime_rule,
     update_runtime_view,
@@ -150,6 +152,16 @@ def post_runtime_explain_support(session_id: str, payload: dict[str, Any] = Body
 @app.post("/v1/runtime/sessions/{session_id}/queries/explain-rule-trace")
 def post_runtime_explain_rule_trace(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return explain_runtime_rule_trace(session_id, payload)
+
+
+@app.get("/v1/runtime/sessions/{session_id}/evidence/candidate/{candidate_id}")
+def get_runtime_candidate_evidence_page(session_id: str, candidate_id: str) -> HTMLResponse:
+    return HTMLResponse(render_runtime_candidate_evidence_html(session_id, candidate_id))
+
+
+@app.get("/v1/runtime/sessions/{session_id}/evidence/rule-trace/{rule_run_id}")
+def get_runtime_rule_trace_page(session_id: str, rule_run_id: str) -> HTMLResponse:
+    return HTMLResponse(render_runtime_rule_trace_html(session_id, rule_run_id))
 
 
 @app.post("/v1/runtime/sessions/{session_id}/queries/conflicts")

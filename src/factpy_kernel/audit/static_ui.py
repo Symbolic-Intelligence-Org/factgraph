@@ -672,6 +672,10 @@ def _render_candidate_evidence_page(tree: dict[str, Any], *, narrative: dict[str
     )
 
 
+def render_candidate_evidence_html(tree: dict[str, Any], *, narrative: dict[str, Any] | None = None) -> str:
+    return _render_candidate_evidence_page(tree, narrative=narrative)
+
+
 def _render_candidate_evidence_node(node: dict[str, Any], *, assertion_href_prefix: str) -> str:
     node_kind = str(node.get("node_kind", ""))
     title = str(node.get("title", node.get("node_id", "")))
@@ -873,6 +877,23 @@ def _render_rule_trace_detail_page(
             "<h2>Payload</h2>"
             f"<pre>{escape(json.dumps(trace, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
         ),
+    )
+
+
+def render_rule_trace_detail_html(
+    payload: dict[str, Any],
+    *,
+    assertion_lookup,
+    narrative: dict[str, Any] | None = None,
+) -> str:
+    class _AssertionLookupAdapter:
+        def get_assertion_detail(self, asrt_id: str) -> dict[str, Any] | None:
+            return assertion_lookup(asrt_id)
+
+    return _render_rule_trace_detail_page(
+        payload,
+        assertion_index=_AssertionLookupAdapter(),
+        narrative=narrative,
     )
 
 

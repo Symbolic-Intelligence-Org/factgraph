@@ -147,7 +147,7 @@
 | Evidence tree recursive | ✅ 已关闭 | 完整递归证明、4 terminal reasons、cycle/depth 保护 |
 | Structured API | ✅ 已关闭 | runtime + audit + static 三通道 |
 | Audit/session trace | ✅ 已关闭 | audit package + static site |
-| Visual evidence URL | ⚠️ 部分完成 | 当前 audit/static 已能离线渲染 per-candidate evidence tree 页面；但尚无 Rainbird 那种从任意结果直接获取 live shareable URL 的能力 |
+| Visual evidence URL | ⚠️ 部分完成 | 当前 runtime 已为 `candidate_id` / `rule_run_id` 提供 session-bound live HTML permalink；audit/static 仍是 durable shareable surface，但尚无 session-less live URL |
 | **Source taxonomy** | ⚠️ provenance-role 已冻结；assertion-origin 仍开放 | `node_kind → provenance role category` 映射已冻结为 carrier contract（[provenance blueprint](../archive/2026-03-19_candidate-evidence-tree-provenance-source-taxonomy.md)）；更深的 assertion-origin taxonomy（direct write / derivation accept / import）deferred |
 | **Salience / Impact** | ⚠️ 仍开放 | 仍在 §5.9 候选清单，依赖 certainty/weight 基础设施 |
 | **Missing optional conditions** | ⚠️ 仍开放 | 依赖 rule authoring optional 语义，当前不具备 |
