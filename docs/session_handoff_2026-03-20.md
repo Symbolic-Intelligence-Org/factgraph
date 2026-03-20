@@ -35,6 +35,91 @@ Full lineage from V1 through current state:
 - Provenance-role taxonomy (node_kind as carrier contract)
 - NL explain chain (summary → narrative → NL)
 
+#### RuleRef Execution Substrate
+
+- Shared `ruleref_substrate.evaluate_native_where(...)` used by both query and derivation
+- `RuleRegistry` injection: SDK uses explicit registry, service uses `registry_root`
+- `NativeWhereEvaluation` returns `bindings + rule_refs + rule_ref_resolutions`
+
+#### Recursive Proof DTOs
+
+- **`NativeRuleRefRowSupport`** (`ruleref_types.py`): `row_terms`, `child_support_digest | unresolved_reason` (exactly one)
+- **`NativeRuleRefResolution`** (`ruleref_types.py`): `ruleref_atom_key`, `rule_ref_id`, `rule_ref_version`, `row_supports`
+- **`RuleRefEdge`** (`_support.py`): `ruleref_atom_key`, `rule_ref_id`, `rule_ref_version`, `child_support_digest | unresolved_reason`
+- **`SupportArtifact`** (`_support.py`): has `rule_ref_edges` alongside legacy `rule_refs`; `root_result_kind` accepts `"row"` for child rule support
+
+#### Capture Layer
+
+- `_support_capture.py`: `build_support_artifact_for_binding(...)`, `derive_rule_ref_edges_for_binding(...)`
+- Exact tuple match rule: 0 match = skip (no edge), 1 = emit, >1 = `WhereValidationError`
+- Only capture-side unresolved reason: `"child_support_unavailable"`
+
+#### Tree Expansion
+
+- Recursive child support expansion via `support_lookup` callback
+- Cycle detection via `ancestry: set[str]` (support digest set)
+- Depth limit: `_MAX_RECURSION_DEPTH = 8`
+- Falls back to legacy `rule_refs` flat rendering when `rule_ref_edges` is empty
+
+#### Winning-Branch Narrowing
+
+- Native support capture adopts exactly one satisfying OR branch per binding
+- Selection in `_support_capture.py`, not in tree readback
+- Tie rule: `source-order wins`
+- No non-winning shadow metadata retained in first-round
+- Branch identity recoverable from existing `b{branch}.a{atom}` keys
+
+#### Unresolved/Boundary Taxonomy
+
+| Reason | Owner | Node Kind |
+|---|---|---|
+| `child_support_unavailable` | capture | `unresolved_support` |
+| `artifact_missing` | lookup/readback | `unresolved_support` |
+| `cycle` | traversal | `recursion_boundary` |
+| `depth_limit` | traversal | `recursion_boundary` |
+
+#### Engine Degraded Tree Shape
+
+- `support_kind in {"engine_no_witness_v1", "none"}` → valid degraded tree
+- Fixed shape: `candidate_result → support_section → degraded_support`
+- `degraded_support` is a dedicated node kind; does NOT reuse native recursive terminals
+
+#### Complete Tree Node Kind Taxonomy
+
+**Native recursive proof path** (requires `support_kind in _WITNESS_BEARING_SUPPORT_KINDS`):
+
+| Node Kind | Parent | Description |
+|---|---|---|
+| `candidate_result` | root | Top-level candidate node |
+| `support_section` | `candidate_result` | Groups support-derived children |
+| `rule_ref_section` | `candidate_result` | Groups rule-ref-derived children (optional) |
+| `predicate_witness_group` | `support_section` | Witness bindings per predicate |
+| `non_fact_check` | `support_section` | Non-fact-check items |
+| `assertion_fact` | `predicate_witness_group` | Individual assertion references |
+| `rule_ref` | `rule_ref_section` | Legacy flat rule_ref (no recursive proof) |
+| `referenced_support` | `rule_ref_section` | Resolved recursive child proof subtree |
+| `unresolved_support` | `rule_ref_section` | Wanted child proof but failed |
+| `recursion_boundary` | `rule_ref_section` | Traversal intentionally stopped |
+
+**Engine degraded path** (requires `support_kind in _DEGRADED_SUPPORT_KINDS`):
+
+| Node Kind | Parent | Description |
+|---|---|---|
+| `candidate_result` | root | Top-level candidate node |
+| `support_section` | `candidate_result` | Contains single degraded child |
+| `degraded_support` | `support_section` | Engine candidate with no witness artifact |
+
+**Provenance-role categories** (carrier contract, documented in module docs):
+
+| Category | Node Kinds |
+|---|---|
+| structural | `candidate_result`, `support_section`, `rule_ref_section` |
+| witness | `predicate_witness_group`, `assertion_fact` |
+| constraint | `non_fact_check` |
+| rule_chain | `rule_ref`, `referenced_support` |
+| terminal | `unresolved_support`, `recursion_boundary` |
+| degraded | `degraded_support` |
+
 ### 2.3 Engine Witness Parity (Souffle partial, ProbLog deferred)
 
 - Souffle adapter generates `_w` witness-variant view rules via rule rewriting
@@ -64,7 +149,15 @@ Full lineage from V1 through current state:
 
 - Branch: `master`
 - All commits pushed to `origin/master` — remote is up to date
-- This session's commits (chronological):
+- Prior session commits (2026-03-19, evidence tree foundation):
+  - `a8e1b5d` - unify native RuleRef execution
+  - `f4756d9` - recursive proof edges
+  - `13b7827` - winning-branch narrowing
+  - `f649c5d` - richer unresolved taxonomy contract
+  - `cf7f56d` - engine degraded tree shape
+  - `874d256` - archive completed blueprints, refresh handoff links
+  - `485622b` - draft provenance taxonomy blueprint
+- This session's commits (2026-03-20, chronological):
   - `9560fd2` - candidate evidence tree NL explain
   - `729362f` - worktree cleanup + provenance blueprint archive
   - `69d45d9` - salience/impact ownership freeze
@@ -73,6 +166,8 @@ Full lineage from V1 through current state:
   - `18bcd2c` - audit/static surface accepts souffle_witness_v1
   - `1ae7d12` - live evidence URL blueprint scoped
   - `9eb6f8b` - session-bound live evidence permalink GET routes
+  - `c213a5f` - session handoff update
+  - `36110ce` - remove superseded handoff files
 
 **Known issue**: Git `index.lock` files sometimes appear spuriously. If a git operation fails with "Unable to create index.lock", run `rm -f .git/index.lock` and retry.
 
@@ -148,10 +243,23 @@ Full lineage from V1 through current state:
 
 | File | Role |
 | --- | --- |
-| `src/factpy_kernel/core/store/_support.py` | DTOs, support kind constants |
-| `src/factpy_kernel/core/store/_candidate_evidence_tree.py` | Recursive tree builder |
-| `src/factpy_kernel/core/store/_support_capture.py` | Support capture layer |
-| `src/factpy_kernel/core/rules/ruleref_substrate.py` | Shared native where evaluation |
+| `src/factpy_kernel/core/store/_support.py` | `RuleRefEdge`, `SupportArtifact`, `BindingSupportCapture`, support kind constants |
+| `src/factpy_kernel/core/store/_candidate_evidence_tree.py` | Recursive tree builder + `build_degraded_candidate_evidence_tree` |
+| `src/factpy_kernel/core/store/_support_capture.py` | `build_support_artifact_for_binding`, `derive_rule_ref_edges_for_binding` |
+| `src/factpy_kernel/core/store/_evaluate.py` | `evaluate_store`, where evaluation with support capture |
+| `src/factpy_kernel/core/rules/ruleref_substrate.py` | Shared native where evaluation with RuleRef support |
+| `src/factpy_kernel/core/rules/ruleref_common.py` | Shared resolution helpers |
+| `src/factpy_kernel/core/rules/ruleref_types.py` | `NativeRuleRefRowSupport`, `NativeRuleRefResolution` DTOs |
+
+### Consumers
+
+| File | Role |
+| --- | --- |
+| `src/factpy_kernel/service/runtime_v1.py` | Runtime service: explain, tree, NL, permalinks |
+| `src/factpy_kernel/audit/query.py` | Audit query: `get_candidate_evidence_tree()`, routes native vs degraded |
+| `src/factpy_kernel/audit/dto.py` | Audit DTOs including candidate tree summary/narrative |
+| `src/factpy_kernel/audit/static_ui.py` | Static site rendering for all tree node kinds |
+| `src/factpy_kernel/sdk/store.py` | SDK surface: `RuleRegistry` injection |
 
 ### Module Docs (implementation truth)
 
