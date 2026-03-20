@@ -849,7 +849,10 @@
     - `support_kind="engine_no_witness_v1"`
     - 这表示 candidate 本身有效，但当前 engine path 不产出可解引用的 witness artifact
     - 统一 `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`，而不是 `runtime_explain_not_found`
-- audit/static 对 `souffle_witness_v1` 仍 deferred；第一轮只承诺 runtime live surface。
+- audit/static 现在也接受 `souffle_witness_v1`：
+  - `AuditQuery.get_candidate_evidence_tree(...)` 与 DTO/static 页面继续复用既有 witness-bearing tree shape
+  - 不新增专用 engine DTO 或 static 分支
+  - `ProbLog` 和其他 degraded engine 仍保持 `engine_no_witness_v1`
 - legacy `support_kind="none"` 只作为兼容读回值保留；新 writer 不再产生它。
 - `limit` 只影响返回条数，不改变底层总候选数；总量体现在 `meta.candidate_count`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。

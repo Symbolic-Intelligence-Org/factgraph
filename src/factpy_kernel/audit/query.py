@@ -13,7 +13,7 @@ from factpy_kernel.core.store._candidate_evidence_tree_narrative import (
 from factpy_kernel.core.store._candidate_evidence_tree_summary import (
     summarize_candidate_evidence_tree_dict,
 )
-from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS
+from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS, _WITNESS_BEARING_SUPPORT_KINDS
 from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
 from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
 
@@ -96,7 +96,7 @@ class AuditQuery:
             raise AuditQueryError(f"candidate has inconsistent support_kind rows: {candidate_id}")
         support_digest = next(iter(support_digests))
         support_kind = next(iter(support_kinds))
-        if support_kind != "native_binding_v1":
+        if support_kind not in _WITNESS_BEARING_SUPPORT_KINDS:
             if support_kind in _DEGRADED_SUPPORT_KINDS:
                 return build_degraded_candidate_evidence_tree(
                     candidate_id=candidate_id,

@@ -30,7 +30,7 @@
 - `AuditQuery`
   - 结构化查询入口
   - 当前也提供 rule trace artifact 的离线查询
-  - 当前也提供 native candidate evidence tree 的离线查询
+  - 当前也提供 witness-bearing candidate evidence tree 的离线查询
 - `extend_schema_ir_with_ecss_vcd_predicates(...)`
   - 为 `ECSS-M-ST-10` 风格 requirement/compliance facts 提供最小 predicate schema helper
   - 当前由 `factpy_kernel.ecss.vcd` 拥有，`audit` 侧仅保留兼容 re-export
@@ -181,7 +181,7 @@
 这组 summary 与 runtime `rule_run_summary` 保持同构，且只从现有 raw trace payload 派生。
 这组 narrative 与 runtime `rule_run_narrative` 保持同构，且只从既有 `rule_run_summary` 纯派生。
 这组 candidate tree 与 runtime `candidate_evidence_tree` 保持同构，且从：
-- native path：`candidate_ledger + support_artifacts + assertion detail`
+- witness-bearing path：`candidate_ledger + support_artifacts + assertion detail`
 - engine degraded path：`candidate_ledger`
 纯派生。
 这组 candidate summary 与 runtime `candidate_evidence_tree_summary` 保持同构，且只从既有 raw tree 纯派生。
@@ -211,7 +211,7 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 - requirement/compliance matrix 当前是 offline-query-first 形态，不提供 live service endpoint
 - static UI 当前同时支持：
   - `rule_run_id` proof-entry page
-  - native candidate evidence tree page
+  - witness-bearing candidate evidence tree page
 - 但仍不支持 graph UI、salience breakdown 或更细 provenance contract
 - static UI 对 compliance matrix 的支持当前仍是单页总览，不包含 per-requirement detail page 或额外搜索 facet
 
@@ -239,7 +239,7 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 当前 `audit.reader` / `AuditQuery` / static UI 也已统一消费 `support_artifacts.jsonl`：
 
 - reader 读取 JSONL rows（旧 package 若没有该文件则返回空集）
-- query 可按 `candidate_id -> support_digest` 离线重建 native candidate evidence tree
+- query 可按 `candidate_id -> support_digest` 离线重建 witness-bearing candidate evidence tree（当前包括 `native_binding_v1` 与 `souffle_witness_v1`）
 - query 会优先消费 `SupportArtifact.rule_ref_edges`，并按 `child_support_digest` 继续离线解引用 child support artifact；若 package 只有 legacy `rule_refs`，则保持 minimal fallback tree
 - dto 可直接返回与 runtime 同构的 `candidate_evidence_tree`
 - static site 可把 `candidate_id` 渲染成 recursive sectioned tree page，并继续下钻到既有 assertion detail 页面

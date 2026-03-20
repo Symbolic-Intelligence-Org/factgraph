@@ -126,7 +126,7 @@
 5. **Engine degraded tree shape** (`cf7f56d`) — `degraded_support` 节点，`none` ≡ `engine_no_witness_v1`
 6. **Provenance-role taxonomy** (doc-and-contract promotion) — `node_kind` 正式提升为 carrier-level provenance-role taxonomy，零新字段，映射写入 core/service/audit docs；[archived blueprint](../archive/2026-03-19_candidate-evidence-tree-provenance-source-taxonomy.md)
 7. **Candidate evidence tree NL explain** (`9560fd2`) — tree → summary → narrative → NL，runtime/audit/static delivery matrix 已冻结
-8. **Souffle partial witness runtime surface** — adapter-level witness sidecar via Datalog rewriting，`support_kind="souffle_witness_v1"`，runtime `explain` / `explain-tree` 已接受 witness-bearing engine support
+8. **Souffle partial witness delivery surface** — adapter-level witness sidecar via Datalog rewriting，`support_kind="souffle_witness_v1"`，runtime + audit + static 现已接受 witness-bearing engine support
 
 **已落地 tree node taxonomy（完整）：**
 
@@ -160,7 +160,7 @@
 1. ~~**Provenance / source taxonomy**~~ ✅ 已完成并归档 — `node_kind` 提升为 provenance-role carrier，零新字段
 2. ~~**NL explain for evidence tree**~~ ✅ 已完成并归档 — candidate tree 现已具备 summary / narrative / NL 分层
 3. ~~**Salience / impact breakdown**~~ ⏸️ 归属与计算时机已冻结（annotation/value-semantics 层，query-time derivation），但 implementation blocked on certainty / weight vocabulary — [decision-only archive](../archive/2026-03-20_candidate-evidence-tree-salience-impact.md)
-4. **Stronger engine witness parity** — 当前只完成 Souffle runtime partial witness；audit/static parity、ProbLog、以及更强 proof-bearing engine explain 仍开放
+4. **Stronger engine witness parity** — 当前已完成 Souffle partial witness 的 runtime + audit + static delivery；ProbLog、以及更强 proof-bearing engine explain 仍开放
 
 salience / impact 的 4 条冻结结论：owner = annotation/value-semantics; compute-time = query-time; blocked on certainty/weight; no implementation slice until prerequisites exist。
 
