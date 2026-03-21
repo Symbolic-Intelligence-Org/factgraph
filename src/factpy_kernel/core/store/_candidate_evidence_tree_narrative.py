@@ -21,6 +21,7 @@ _ROLE_ORDER = (
 def render_candidate_evidence_tree_narrative(
     summary: dict[str, Any],
     *,
+    certainty_summary: dict[str, Any] | None = None,
     locale: str = "en",
 ) -> dict[str, Any]:
     if not isinstance(summary, Mapping):
@@ -117,7 +118,7 @@ def render_candidate_evidence_tree_narrative(
             ),
         ]
 
-    return {
+    narrative = {
         "headline": headline,
         "overview_lines": overview_lines,
         "evidence_lines": evidence_lines,
@@ -125,6 +126,51 @@ def render_candidate_evidence_tree_narrative(
         "terminal_lines": terminal_lines,
         "drilldown_lines": drilldown_lines,
     }
+    if certainty_summary is not None:
+        narrative["certainty_lines"] = _build_certainty_lines(certainty_summary)
+    return narrative
+
+
+def _build_certainty_lines(value: Any) -> list[str]:
+    if not isinstance(value, Mapping):
+        raise CandidateEvidenceTreeNarrativeError("certainty_summary must be object")
+    aggregate_certainty = _optional_number(
+        value.get("aggregate_certainty"),
+        path="certainty_summary.aggregate_certainty",
+    )
+    conditions = value.get("conditions")
+    if not isinstance(conditions, list):
+        raise CandidateEvidenceTreeNarrativeError("certainty_summary.conditions must be list[object]")
+
+    lines = [
+        "Certainty (eligible child-proof subtree): "
+        f"aggregate certainty (bottleneck): {aggregate_certainty if aggregate_certainty is not None else '-'}."
+    ]
+    for index, item in enumerate(conditions):
+        if not isinstance(item, Mapping):
+            raise CandidateEvidenceTreeNarrativeError("certainty_summary.conditions must be list[object]")
+        atom_key = _require_non_empty_str(
+            item.get("atom_key"),
+            path=f"certainty_summary.conditions[{index}].atom_key",
+        )
+        node_kind = _require_non_empty_str(
+            item.get("node_kind"),
+            path=f"certainty_summary.conditions[{index}].node_kind",
+        )
+        weight = _optional_number(
+            item.get("weight"),
+            path=f"certainty_summary.conditions[{index}].weight",
+        )
+        impact = _optional_number(
+            item.get("impact"),
+            path=f"certainty_summary.conditions[{index}].impact",
+        )
+        if weight is None:
+            lines.append(f"Condition {atom_key} ({node_kind}): unweighted.")
+            continue
+        impact_text = impact if impact is not None else "-"
+        lines.append(f"Condition {atom_key} ({node_kind}): weight={weight}, impact={impact_text}.")
+    return lines
 
 
 def _require_non_empty_str(value: Any, *, path: str) -> str:
@@ -137,6 +183,14 @@ def _require_non_negative_int(value: Any, *, path: str) -> int:
     if not isinstance(value, int) or value < 0:
         raise CandidateEvidenceTreeNarrativeError(f"{path} must be non-negative int")
     return value
+
+
+def _optional_number(value: Any, *, path: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise CandidateEvidenceTreeNarrativeError(f"{path} must be number or null")
+    return float(value)
 
 
 def _require_bool(value: Any, *, path: str) -> bool:

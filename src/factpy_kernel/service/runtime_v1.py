@@ -10,14 +10,14 @@ from typing import Any
 from uuid import uuid4
 
 from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
-from factpy_kernel.authoring import FileAuthoringRegistry
+from factpy_kernel.authoring.registry_fs import FileAuthoringRegistry
 from factpy_kernel.authoring.derivation_compile import (
     AuthoringDerivationCompileError,
     compile_authoring_derivation_v1,
 )
 from factpy_kernel.authoring.rules import compile_authoring_rule_v1
 from factpy_kernel.core.derivation.accept import AcceptOptions, AcceptResult
-from factpy_kernel.core.derivation.candidates import CandidateSet
+from factpy_kernel.core.derivation.candidates import CONFIDENCE_KINDS, CandidateSet
 from factpy_kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
 from factpy_kernel.core.mapping.canon import MappingConflictError, MappingResolution
 from factpy_kernel.core.rules._trace_nl import render_rule_run_nl_explain
@@ -27,6 +27,10 @@ from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
 from factpy_kernel.core.schema.schema_ir import schema_digest
 from factpy_kernel.core.store import builders
 from factpy_kernel.core.store._artifact_sidecar import FileArtifactSidecar
+from factpy_kernel.core.store._certainty_materializer import (
+    extract_single_referenced_support_tree,
+    materialize_certainty_summary,
+)
 from factpy_kernel.core.store._candidate_evidence_tree import (
     build_candidate_evidence_tree,
     build_degraded_candidate_evidence_tree,
@@ -338,10 +342,20 @@ def explain_runtime_summary(session_id: str, dto: dict[str, Any]) -> dict[str, A
                 summary=_get_rule_run_summary(session, id_),
             )
         if kind == "candidate":
+            registry_root = _resolve_rule_registry_root(session, dto)
+            tree = _get_candidate_tree(session, id_)
+            summary = summarize_candidate_evidence_tree_dict(tree)
+            certainty_summary = _compute_certainty_summary_from_tree(
+                session,
+                id_,
+                tree,
+                registry_root=registry_root,
+            )
             return ok_response(
                 meta={"candidate_id": id_},
                 kind="candidate_evidence_tree_summary",
-                summary=_get_candidate_tree_summary(session, id_),
+                summary=summary,
+                certainty_summary=certainty_summary,
             )
         raise facade_error(
             f"unsupported explain_summary kind: {kind!r}",
@@ -367,10 +381,22 @@ def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str,
                 narrative=_get_rule_run_narrative(session, id_),
             )
         if kind == "candidate":
+            registry_root = _resolve_rule_registry_root(session, dto)
+            tree = _get_candidate_tree(session, id_)
+            summary = summarize_candidate_evidence_tree_dict(tree)
+            certainty_summary = _compute_certainty_summary_from_tree(
+                session,
+                id_,
+                tree,
+                registry_root=registry_root,
+            )
             return ok_response(
                 meta={"candidate_id": id_},
                 kind="candidate_evidence_tree_narrative",
-                narrative=_get_candidate_tree_narrative(session, id_),
+                narrative=_render_candidate_tree_narrative_from_summary(
+                    summary,
+                    certainty_summary=certainty_summary,
+                ),
             )
         raise facade_error(
             f"unsupported explain_narrative kind: {kind!r}",
@@ -398,8 +424,19 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
                 explain_nl=render_rule_run_nl_explain(summary, narrative, locale="en"),
             )
         if kind == "candidate":
-            summary = _get_candidate_tree_summary(session, id_)
-            narrative = _render_candidate_tree_narrative_from_summary(summary)
+            registry_root = _resolve_rule_registry_root(session, dto)
+            tree = _get_candidate_tree(session, id_)
+            summary = summarize_candidate_evidence_tree_dict(tree)
+            certainty_summary = _compute_certainty_summary_from_tree(
+                session,
+                id_,
+                tree,
+                registry_root=registry_root,
+            )
+            narrative = _render_candidate_tree_narrative_from_summary(
+                summary,
+                certainty_summary=certainty_summary,
+            )
             return ok_response(
                 meta={"candidate_id": id_},
                 kind="candidate_evidence_tree_nl_explain",
@@ -783,11 +820,15 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
                 path="$.package_kind",
             )
         query = dto.get("query")
+        certainty_map: dict[str, dict[str, Any]] | None = None
+        if package_kind == "audit" and session.registry_root is not None:
+            certainty_map = _compute_all_certainty_summaries(session)
         export_package(
             session.store,
             out_dir,
             ExportOptions(package_kind=package_kind),
             query=query,
+            certainty_summaries=certainty_map,
         )
         return ok_response(
             package={
@@ -1086,6 +1127,107 @@ def _get_candidate_tree_summary(session: RuntimeSession, candidate_id: str) -> d
     return summarize_candidate_evidence_tree_dict(_get_candidate_tree(session, candidate_id))
 
 
+def _lookup_condition_weights_for_candidate(
+    store: Store,
+    candidate_id: str,
+    tree_dict: dict[str, Any],
+    *,
+    registry_root: str | None,
+) -> dict[str, float] | None:
+    support_digest = store.get_candidate_support_digest(candidate_id)
+    if support_digest is None:
+        return None
+    support = store.explain_support(support_digest)
+    if not isinstance(support, dict):
+        return None
+
+    rule_ref_edges = support.get("rule_ref_edges")
+    if not isinstance(rule_ref_edges, list):
+        return None
+    structured_edges = [
+        edge
+        for edge in rule_ref_edges
+        if isinstance(edge, dict)
+        and (
+            isinstance(edge.get("child_support_digest"), str)
+            or isinstance(edge.get("unresolved_reason"), str)
+        )
+    ]
+    if len(structured_edges) != 1:
+        return None
+    if extract_single_referenced_support_tree(tree_dict) is None:
+        return None
+
+    edge = structured_edges[0]
+    rule_ref_id = edge.get("rule_ref_id")
+    rule_ref_version = edge.get("rule_ref_version")
+    if not isinstance(rule_ref_id, str) or not rule_ref_id:
+        return None
+    if not isinstance(rule_ref_version, str) or not rule_ref_version:
+        return None
+    if registry_root is None:
+        return None
+
+    payload = FileAuthoringRegistry(registry_root).read_rule_spec(rule_ref_id, rule_ref_version)
+    if not isinstance(payload, dict):
+        return None
+    raw_condition_weights = payload.get("condition_weights")
+    if raw_condition_weights is None:
+        return {}
+    if not isinstance(raw_condition_weights, dict):
+        return None
+    condition_weights: dict[str, float] = {}
+    for key, value in raw_condition_weights.items():
+        if (
+            not isinstance(key, str)
+            or not key
+            or isinstance(value, bool)
+            or not isinstance(value, (int, float))
+        ):
+            return None
+        condition_weights[key] = float(value)
+    return condition_weights
+
+
+def _compute_certainty_summary_from_tree(
+    session: RuntimeSession,
+    candidate_id: str,
+    tree_dict: dict[str, Any],
+    *,
+    registry_root: str | None,
+) -> dict[str, Any] | None:
+    condition_weights = _lookup_condition_weights_for_candidate(
+        session.store,
+        candidate_id,
+        tree_dict,
+        registry_root=registry_root,
+    )
+    return materialize_certainty_summary(
+        session.store,
+        candidate_id,
+        tree_dict,
+        condition_weights=condition_weights,
+    )
+
+
+def _compute_all_certainty_summaries(session: RuntimeSession) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for candidate_id in session.store.list_candidate_ids():
+        try:
+            tree = _get_candidate_tree(session, candidate_id)
+        except Exception:
+            continue
+        certainty_summary = _compute_certainty_summary_from_tree(
+            session,
+            candidate_id,
+            tree,
+            registry_root=session.registry_root,
+        )
+        if certainty_summary is not None:
+            result[candidate_id] = certainty_summary
+    return result
+
+
 def _get_candidate_tree_narrative(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
     return _render_candidate_tree_narrative_from_summary(_get_candidate_tree_summary(session, candidate_id))
 
@@ -1094,8 +1236,16 @@ def _render_rule_run_narrative_from_summary(summary: dict[str, Any]) -> dict[str
     return render_rule_run_narrative(summary, locale="en")
 
 
-def _render_candidate_tree_narrative_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
-    return render_candidate_evidence_tree_narrative(summary, locale="en")
+def _render_candidate_tree_narrative_from_summary(
+    summary: dict[str, Any],
+    *,
+    certainty_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return render_candidate_evidence_tree_narrative(
+        summary,
+        certainty_summary=certainty_summary,
+        locale="en",
+    )
 
 
 def render_runtime_candidate_evidence_html(session_id: str, candidate_id: str) -> str:
@@ -1249,6 +1399,7 @@ def _candidate_to_dict(candidate: CandidateSet) -> dict[str, Any]:
         "generated_at": candidate.generated_at,
         "state": candidate.state,
         "confidence": candidate.confidence,
+        "confidence_kind": candidate.confidence_kind,
     }
 
 
@@ -1271,6 +1422,10 @@ def _candidate_from_dict(value: Any, *, path: str) -> CandidateSet:
         generated_at=generated_at,
         state=_require_non_empty_str(value.get("state"), path=f"{path}.state"),
         confidence=_optional_candidate_confidence(value.get("confidence"), path=f"{path}.confidence"),
+        confidence_kind=_candidate_confidence_kind(
+            value.get("confidence_kind", "none"),
+            path=f"{path}.confidence_kind",
+        ),
         candidate_id=_optional_str_or_none(value.get("candidate_id"), path=f"{path}.candidate_id") or "",
         candidate_key=_optional_str_or_none(value.get("candidate_key"), path=f"{path}.candidate_key") or "",
         candidate_kind=_require_non_empty_str(value.get("candidate_kind"), path=f"{path}.candidate_kind"),
@@ -1282,6 +1437,19 @@ def _optional_candidate_confidence(value: Any, *, path: str) -> float | None:
         return None
     if isinstance(value, bool) or not isinstance(value, float):
         raise facade_error("confidence must be float or null", kind="shape", path=path)
+    return value
+
+
+def _candidate_confidence_kind(value: Any, *, path: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise facade_error("confidence_kind must be non-empty string", kind="shape", path=path)
+    if value not in CONFIDENCE_KINDS:
+        allowed = ", ".join(sorted(CONFIDENCE_KINDS))
+        raise facade_error(
+            f"confidence_kind must be one of: {allowed}",
+            kind="shape",
+            path=path,
+        )
     return value
 
 

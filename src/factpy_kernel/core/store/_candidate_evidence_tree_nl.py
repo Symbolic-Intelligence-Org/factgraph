@@ -33,6 +33,12 @@ def render_candidate_evidence_tree_nl_explain(
     rule_chain_lines = _require_string_list(narrative.get("rule_chain_lines"), path="narrative.rule_chain_lines")
     terminal_lines = _require_string_list(narrative.get("terminal_lines"), path="narrative.terminal_lines")
     drilldown_lines = _require_string_list(narrative.get("drilldown_lines"), path="narrative.drilldown_lines")
+    certainty_lines: list[str] | None = None
+    if narrative.get("certainty_lines") is not None:
+        certainty_lines = _require_string_list(
+            narrative.get("certainty_lines"),
+            path="narrative.certainty_lines",
+        )
 
     headline = (
         f"Candidate {candidate_id} has degraded support kind {support_kind}."
@@ -48,6 +54,8 @@ def render_candidate_evidence_tree_nl_explain(
         f"Rule-chain summary: {_join_sentences(rule_chain_lines)}",
         f"Terminal and drill-down summary: {_join_sentences(terminal_lines + drilldown_lines)}",
     ]
+    if certainty_lines:
+        paragraphs.append(f"Certainty summary: {_join_sentences(certainty_lines)}")
     return {"headline": headline, "paragraphs": paragraphs}
 
 
