@@ -26,6 +26,7 @@ class AuditPackageData:
     support_artifacts: list[dict[str, Any]]
     rule_trace_artifacts: list[dict[str, Any]]
     authoring_apply_events: list[dict[str, Any]]
+    certainty_summaries: dict[str, dict[str, Any]]
 
 
 def load_audit_package(package_dir: str | Path) -> AuditPackageData:
@@ -59,6 +60,7 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
         support_artifacts=_read_optional_jsonl(root, audit_files, "support_artifacts"),
         rule_trace_artifacts=_read_optional_jsonl(root, audit_files, "rule_trace_artifacts"),
         authoring_apply_events=[dict(evt.raw) for evt in load_authoring_apply_events(root)],
+        certainty_summaries=_read_certainty_summaries(root, audit_files),
     )
 
 
@@ -83,7 +85,7 @@ def _read_manifest_audit_files(manifest: dict[str, Any]) -> dict[str, str]:
         if not isinstance(value, str) or not value:
             raise AuditReadError(f"manifest.paths.audit_files.{key} must be non-empty string")
         out[key] = value
-    for key in ("rule_trace_artifacts", "support_artifacts"):
+    for key in ("rule_trace_artifacts", "support_artifacts", "certainty_summaries"):
         value = audit_files.get(key)
         if isinstance(value, str) and value:
             out[key] = value
@@ -108,6 +110,21 @@ def _read_optional_jsonl(root: Path, mapping: dict[str, str], key: str) -> list[
     if not path.exists():
         return []
     return _read_jsonl(path)
+
+
+def _read_certainty_summaries(root: Path, mapping: dict[str, str]) -> dict[str, dict[str, Any]]:
+    rows = _read_optional_jsonl(root, mapping, "certainty_summaries")
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        candidate_id = row.get("candidate_id")
+        certainty_summary = row.get("certainty_summary")
+        if (
+            isinstance(candidate_id, str)
+            and candidate_id
+            and isinstance(certainty_summary, dict)
+        ):
+            result[candidate_id] = certainty_summary
+    return result
 
 
 def _read_json(path: Path) -> dict[str, Any] | list[Any] | Any:

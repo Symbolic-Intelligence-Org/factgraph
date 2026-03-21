@@ -931,6 +931,10 @@ def _render_candidate_evidence_narrative_block(narrative: dict[str, Any] | None)
         if isinstance(headline, str) and headline
         else "<p>None</p>"
     )
+    certainty_html = ""
+    certainty_lines = narrative.get("certainty_lines")
+    if isinstance(certainty_lines, list) and certainty_lines:
+        certainty_html = "<h3>Certainty</h3>" + _line_list(certainty_lines)
     return (
         "<h2>Narrative</h2>"
         f"{headline_html}"
@@ -944,6 +948,7 @@ def _render_candidate_evidence_narrative_block(narrative: dict[str, Any] | None)
         f"{_line_list(narrative.get('terminal_lines'))}"
         "<h3>Drilldown</h3>"
         f"{_line_list(narrative.get('drilldown_lines'))}"
+        f"{certainty_html}"
     )
 
 

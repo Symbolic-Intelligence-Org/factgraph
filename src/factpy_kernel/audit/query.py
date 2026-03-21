@@ -138,10 +138,20 @@ class AuditQuery:
         summary = self.get_candidate_evidence_tree_summary(candidate_id)
         if summary is None:
             return None
+        certainty_summary = self.get_candidate_certainty_summary(candidate_id)
         try:
-            return render_candidate_evidence_tree_narrative(summary, locale="en")
+            return render_candidate_evidence_tree_narrative(
+                summary,
+                certainty_summary=certainty_summary,
+                locale="en",
+            )
         except ValueError as exc:
             raise AuditQueryError(str(exc)) from exc
+
+    def get_candidate_certainty_summary(self, candidate_id: str) -> dict[str, Any] | None:
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise AuditQueryError("candidate_id must be non-empty string")
+        return self.package.certainty_summaries.get(candidate_id)
 
     def list_decisions(
         self,

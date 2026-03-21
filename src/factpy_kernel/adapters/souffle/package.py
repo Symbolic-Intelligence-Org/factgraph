@@ -51,11 +51,15 @@ def export_package(
     out_dir: Path,
     options: ExportOptions,
     query: dict[str, Any] | None = None,
+    *,
+    certainty_summaries: dict[str, dict[str, Any]] | None = None,
 ) -> Path:
     if not isinstance(store, Store):
         raise TypeError("store must be Store")
     if not isinstance(options, ExportOptions):
         raise TypeError("options must be ExportOptions")
+    if certainty_summaries is not None and not isinstance(certainty_summaries, dict):
+        raise TypeError("certainty_summaries must be dict[str, dict] | None")
 
     package_dir = Path(out_dir)
     schema_dir = package_dir / "schema"
@@ -171,6 +175,14 @@ def export_package(
         _write_jsonl(run_ledger_path, run_ledger_rows)
         audit_files["mapping_resolution"] = "audit/mapping_resolution.json"
         audit_files["decision_log"] = "audit/decision_log.jsonl"
+        if certainty_summaries:
+            certainty_rows = [
+                {"candidate_id": candidate_id, "certainty_summary": summary}
+                for candidate_id, summary in sorted(certainty_summaries.items())
+            ]
+            certainty_path = audit_dir / "certainty_summaries.jsonl"
+            _write_jsonl(certainty_path, certainty_rows)
+            audit_files["certainty_summaries"] = "audit/certainty_summaries.jsonl"
 
     (
         claim_rows,
