@@ -2,7 +2,7 @@
 
 - 适用范围：`src/factpy_kernel/core/annotation`
 - 状态：internal / prototype
-- 最后更新：2026-03-17
+- 最后更新：2026-03-21
 
 ## 1. 模块边界
 
@@ -18,6 +18,25 @@
 - `_evidence.py`
   - `Workload C` 对应的结构候选 / 直接证据 / provenance 重建与 `max` 聚合 helper
   - 当前已实现 prototype 级 raw candidate 与 provenance 能力；Top-K 仍留在 benchmark harness
+- `_certainty.py`
+  - certainty-weight vocabulary 的 first-consumer prototype
+  - 消费 `confidence_kind="certainty"`、rule metadata `condition_weights` 与 candidate evidence tree
+  - 产出 `CertaintySummary` / `ConditionImpact`，用于 candidate-level certainty summary 派生
+  - 当前只实现 certainty lane；`probability` / `none` 直接返回 `None`
+  - 当前 production consumers：
+    - runtime candidate explain delivery：
+      - `queries/explain-summary` 的 response-level sibling `certainty_summary`
+      - `queries/explain-narrative` 的 additive `certainty_lines`
+      - `queries/explain-nl` 的 additive certainty paragraph
+    - audit package + static site delivery：
+      - `export_package` 通过预计算写入 `certainty_summaries.jsonl`
+      - `AuditQuery.get_candidate_certainty_summary(candidate_id)` 读取物化值
+      - `AuditQuery.get_candidate_evidence_tree_narrative(candidate_id)` 传入 certainty_summary，产出含 `certainty_lines` 的 narrative
+      - static site candidate evidence page 渲染 certainty section
+  - runtime / audit / static 三面共享同一条 certainty 派生链路：
+    - 只在 candidate tree 能定位到唯一 child-rule `referenced_support` subtree 时派生
+    - `condition_weights` 从该 subtree 对应的单条 `rule_ref_edge -> rule_ref_id@version -> registry rule payload` 查询
+    - 多 rule、递归 nested subtree、unresolved child support、或 registry 链路缺失时 graceful degrade 为 `certainty_summary=null`
 - `types.py`
   - 仅放最小共享基础类型
   - 不在第一轮 prototype 中引入通用 annotation algebra
@@ -35,6 +54,10 @@
 
 - 不直接进入正式 `Store.evaluate(...)` public contract
 - 不修改 `CandidateSet` 稳定结构
+- 不把 certainty summary 写回 `CandidateSet`、`SupportArtifact` 或 evidence tree core summary 12 字段
+- 结构化 `certainty_summary` 只允许以 response-level sibling 形式暴露，不嵌入 core 12 字段 summary set
+- runtime narrative / NL 允许消费已派生的 certainty summary，并以 additive `certainty_lines` / certainty paragraph 呈现
+- audit package 允许物化 certainty_summary（export-time 预计算），但不导出 `condition_weights` 本身
 - 不把 `Workload B` 时序语义混入第一轮 prototype
 
 ## 5. Provenance Summary Schema
