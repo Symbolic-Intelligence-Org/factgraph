@@ -1,6 +1,6 @@
 # Task Blueprint: Durable Artifact Storage
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-17
 - Last Updated: 2026-03-17
 - Related Modules:
@@ -316,9 +316,13 @@ durable artifact 一旦落地，就会出现新的运维问题：
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
-
-- 最终落地结果：
+- 最终落地结果：全部 4 个 child slice 已实现并归档。
+  1. `audit-package-artifact-export` — audit package 导出 artifact files（全量 session registry）
+  2. `artifact-sidecar-store` — file-backed sidecar carrier，Store constructor injection，cross-store readback
+  3. `candidate-id-support-backref` — `candidate_id → support_digest/support_kind` session-scoped backref index
+  4. `sidecar-retention-gc` — sidecar-adjacent `.meta.json`，`RuleTraceArtifact` age-only TTL GC
 - 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+  - §7 Selected Direction 原计划"第一阶段只做 audit/export completeness"，实际推进中 sidecar store + backref + GC 也在同一批次落地，覆盖了原定后续阶段的 online durable readback 能力。
+  - §3 Non-goals 中的 "`candidate_id -> support_digest` 反查"实际已在 backref child slice 中实现（session-scoped）。
+- 为什么会有这些调整：evidence tree 六轮实现需要 candidate → support 的 readback 链路作为前置；sidecar store 的 gap audit 发现先前归档状态不实，触发了真实实现。
+- 归档说明：母蓝图移至 `docs/blueprints/archive/`。所有 acceptance criteria 已满足，4 个 child slice 均已独立归档。
