@@ -109,6 +109,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-21 | certainty-audit-static-delivery | implemented | Certainty audit+static export-time materialization |
 | 2026-03-21 | certainty-aware-narrative-nl-delivery | implemented | Certainty-aware narrative/NL delivery |
 | 2026-03-21 | certainty-summary-explain-delivery | implemented | Certainty summary explain delivery |
+| 2026-03-21 | confidence-kind-certainty-routing | implemented | Resolver protocol + create-time certainty routing |
 | 2026-03-21 | certainty-runtime-boundary-cleanup | implemented | Certainty helper extraction + archive inventory |
 | 2026-03-21 | certainty-salience-ranking-v1 | implemented | Salience ranking: impact 升序 + bottleneck 标注 + NL weakest-condition |
 | 2026-03-21 | phase3-test-decomposition | implemented | 10K-line test monolith → 7 capability files |

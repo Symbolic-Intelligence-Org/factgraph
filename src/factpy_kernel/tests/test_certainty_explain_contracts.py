@@ -1080,7 +1080,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
 
                 self.assertEqual(
                     session.store.get_candidate_confidence_kind(candidate_id),
-                    "none",
+                    "certainty",
                 )
 
                 tree = _get_candidate_tree(session, candidate_id)
@@ -1193,9 +1193,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 self.assertTrue(eval_resp["ok"])
                 candidate = dict(eval_resp["evaluation"]["candidates"][0])
                 candidate_id = candidate["candidate_id"]
-                session = _require_session(session_id)
-                session.store._candidate_confidence_kind_index[candidate_id] = "certainty"
-                candidate["confidence_kind"] = "certainty"
+                self.assertEqual(candidate["confidence_kind"], "certainty")
 
                 runtime_summary_resp = explain_runtime_summary(
                     session_id,
@@ -1316,6 +1314,96 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
 
+    def test_evaluate_without_registry_keeps_confidence_kind_none(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            write_resp = write_runtime_fact(
+                session_id,
+                {
+                    "pred_id": "user:tag",
+                    "e_ref": refs["u1"],
+                    "rest_terms": [["string", "vip"]],
+                },
+                kind="add",
+            )
+            self.assertTrue(write_resp["ok"])
+
+            eval_resp = evaluate_runtime_derivation(
+                session_id,
+                {
+                    "derivation": {
+                        "derivation_id": "drv.no_registry",
+                        "version": "1.0.0",
+                        "target": "user:tag",
+                        "head_vars": ["$u", "$tag"],
+                        "where": [["pred", "user:tag", ["$u", "$tag"]]],
+                        "mode": "native",
+                    }
+                },
+            )
+            self.assertTrue(eval_resp["ok"])
+            candidate = eval_resp["evaluation"]["candidates"][0]
+            self.assertEqual(candidate["confidence_kind"], "none")
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_evaluate_with_rule_without_condition_weights_keeps_none(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with TemporaryDirectory() as registry_root:
+            _register_exposed_user_tag_rule(
+                sdk,
+                registry_root,
+                condition_weights=None,
+            )
+
+            reset_runtime_sessions_for_tests()
+            open_resp = open_runtime_session({"registry_root": registry_root})
+            self.assertTrue(open_resp["ok"])
+            session_id = open_resp["session"]["session_id"]
+            try:
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": "user:tag",
+                        "e_ref": refs["u1"],
+                        "rest_terms": [["string", "vip"]],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+                eval_resp = evaluate_runtime_derivation(
+                    session_id,
+                    {
+                        "derivation": {
+                            "derivation_id": "drv.no_weights",
+                            "version": "1.0.0",
+                            "target": "user:tag",
+                            "head_vars": ["$u", "$tag"],
+                            "where": [
+                                ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
+                                ["eq", "$tag", "vip"],
+                            ],
+                            "mode": "native",
+                        }
+                    },
+                )
+                self.assertTrue(eval_resp["ok"])
+                candidate = eval_resp["evaluation"]["candidates"][0]
+                self.assertEqual(candidate["confidence_kind"], "none")
+            finally:
+                close_runtime_session(session_id)
+                reset_runtime_sessions_for_tests()
+
     def test_static_site_renders_certainty_section_in_candidate_evidence_page(self) -> None:
         sdk = SDKStore([User])
         refs = _seed_users_for_syntax_matrix(sdk)
@@ -1362,9 +1450,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 self.assertTrue(eval_resp["ok"])
                 candidate = dict(eval_resp["evaluation"]["candidates"][0])
                 candidate_id = candidate["candidate_id"]
-                session = _require_session(session_id)
-                session.store._candidate_confidence_kind_index[candidate_id] = "certainty"
-                candidate["confidence_kind"] = "certainty"
+                self.assertEqual(candidate["confidence_kind"], "certainty")
 
                 accept_resp = accept_runtime_derivation(
                     session_id,

@@ -41,6 +41,7 @@ from factpy_kernel.core.store._candidate_evidence_tree_summary import (
     summarize_candidate_evidence_tree_dict,
 )
 from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS, _WITNESS_BEARING_SUPPORT_KINDS
+from factpy_kernel.core.store._confidence_kind_resolver import CertaintyConfidenceKindResolver
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
 from factpy_kernel.core.store.types import ViewSpec
@@ -744,9 +745,13 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
         limit = _optional_limit(dto.get("limit"), path="$.limit")
         active_registry = None
         registry_root = _resolve_rule_registry_root(session, dto)
+        certainty_resolver = None
         if registry_root is not None:
             active_registry = RuleRegistry()
             _load_registered_rules(active_registry, registry_root)
+            certainty_resolver = CertaintyConfidenceKindResolver(
+                FileAuthoringRegistry(registry_root),
+            )
         candidates = session.store.evaluate(
             derivation_id=compiled["derivation_id"],
             version=compiled["version"],
@@ -757,6 +762,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             head=compiled.get("head"),
             body_confidences=compiled.get("body_confidences"),
             registry=active_registry,
+            confidence_kind_resolver=certainty_resolver,
         )
         returned_candidates = candidates if limit is None else candidates[:limit]
         return ok_response(

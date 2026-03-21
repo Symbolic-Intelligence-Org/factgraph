@@ -219,6 +219,7 @@ class Store:
         head: HeadSpecIR | None = None,
         body_confidences: BodyConfidencesIR = None,
         registry: "RuleRegistry | None" = None,
+        confidence_kind_resolver: Any | None = None,
     ) -> list[CandidateSet]:
         return evaluate_store(
             self,
@@ -232,6 +233,7 @@ class Store:
             body_confidences=body_confidences,
             engine_evaluate=self.evaluate_engine,
             registry=registry,
+            confidence_kind_resolver=confidence_kind_resolver,
         )
 
     def evaluate_engine(

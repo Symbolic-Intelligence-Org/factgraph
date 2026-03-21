@@ -41,6 +41,7 @@ def evaluate_store(
     body_confidences: BodyConfidencesIR = None,
     engine_evaluate: EngineEvaluatorFn,
     registry: Any | None = None,
+    confidence_kind_resolver: Any | None = None,
 ) -> list[CandidateSet]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
@@ -87,6 +88,7 @@ def evaluate_store(
             version=version,
             entity_spec=entity_spec,
             rows=captures,
+            confidence_kind_resolver=confidence_kind_resolver,
         )
         _remember_candidate_support_backrefs(store, candidates)
         return candidates
@@ -138,6 +140,7 @@ def evaluate_store(
         head_vars=head_vars,
         schema_pred=schema_pred,
         rows=captures,
+        confidence_kind_resolver=confidence_kind_resolver,
     )
     _remember_candidate_support_backrefs(store, candidates)
     return candidates

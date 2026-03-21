@@ -601,6 +601,7 @@
     - 在唯一 `referenced_support` subtree 上调用 annotation prototype `derive_certainty_summary(...)`
   - 若出现多 rule_ref_edges、nested referenced_support、unresolved child support、缺失 registry_root、rule payload 缺失等情况，则 graceful degrade 为 `certainty_summary=null`
   - 若 rule payload 存在但未声明 `condition_weights`，则 `certainty_summary` 仍可返回；此时所有 condition 都是 unweighted
+  - 对 runtime native derivation 而言，eligible candidate 的 `confidence_kind="certainty"` 现在由 evaluate create-time routing 自动写入；不再依赖调用侧 patch
 - `certainty_summary` 的 stable shape 第一轮为：
   - `confidence_kind`
   - `condition_count`
@@ -904,7 +905,11 @@
   - `none`
   - `probability`
   - `certainty`
-- 当前 native / Souffle deterministic 路径写 `confidence_kind="none"`；ProbLog 路径在填充 `confidence` 时写 `confidence_kind="probability"`。
+- Souffle deterministic 路径当前写 `confidence_kind="none"`；ProbLog 路径在填充 `confidence` 时写 `confidence_kind="probability"`。
+- runtime native derivation 当前会在 create-time 注入 certainty resolver：
+  - 只有 single resolved child-rule edge 且 child rule payload 含非空 `condition_weights` 时，candidate DTO 才会自动写 `confidence_kind="certainty"`
+  - 其余 native 场景继续回落到 `none`
+  - SDK parity 当前 deferred；未注入 resolver 的路径保持 `none`
 - native derivation evaluate 当前会填充 `support_kind="native_binding_v1"`。
 - `souffle` evaluate 现在可在 runtime live path 上填充 `support_kind="souffle_witness_v1"`：
   - 前提是 adapter 能通过 `_w` witness 变体为当前 where 产出 assertion witness
@@ -1469,6 +1474,7 @@
   - `audit/certainty_summaries.jsonl`（可选 — 当 session 有 `registry_root` 且 candidate certainty 可派生时写入）
   前两个文件分别导出 `SupportArtifact` 与 `RuleTraceArtifact` 的 flat JSONL rows，用于离线 audit / explain 消费。
   `certainty_summaries.jsonl` 导出 export-time 预计算的 `certainty_summary` dict（每行 `{candidate_id, certainty_summary}`），因为 `condition_weights` 只在 registry filesystem 可用、离线 audit 无法 query-time 派生。
+  routing 与 delivery 分开：candidate 必须先在 evaluate 时被标成 `confidence_kind="certainty"`，export 才会继续物化 certainty summary。
 
 错误 kinds：
 

@@ -13,10 +13,8 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from factpy_kernel.authoring.registry_fs import FileAuthoringRegistry
-from factpy_kernel.core.store._certainty_materializer import (
-    extract_single_referenced_support_tree,
-    materialize_certainty_summary,
-)
+from factpy_kernel.core.store._certainty_materializer import materialize_certainty_summary
+from factpy_kernel.core.store._confidence_kind_resolver import check_certainty_artifact_eligibility
 from factpy_kernel.core.store.runtime import Store
 
 
@@ -27,43 +25,24 @@ def _lookup_condition_weights_for_candidate(
     *,
     registry_root: str | None,
 ) -> dict[str, float] | None:
+    if registry_root is None:
+        return None
     support_digest = store.get_candidate_support_digest(candidate_id)
     if support_digest is None:
         return None
-    support = store.explain_support(support_digest)
-    if not isinstance(support, dict):
+    artifact = store._lookup_support_artifact(support_digest)
+    if artifact is None:
         return None
-
-    rule_ref_edges = support.get("rule_ref_edges")
-    if not isinstance(rule_ref_edges, list):
-        return None
-    structured_edges = [
-        edge
-        for edge in rule_ref_edges
-        if isinstance(edge, dict)
-        and (
-            isinstance(edge.get("child_support_digest"), str)
-            or isinstance(edge.get("unresolved_reason"), str)
-        )
-    ]
-    if len(structured_edges) != 1:
-        return None
-    if extract_single_referenced_support_tree(tree_dict) is None:
-        return None
-
-    edge = structured_edges[0]
-    rule_ref_id = edge.get("rule_ref_id")
-    rule_ref_version = edge.get("rule_ref_version")
-    if not isinstance(rule_ref_id, str) or not rule_ref_id:
-        return None
-    if not isinstance(rule_ref_version, str) or not rule_ref_version:
-        return None
-    if registry_root is None:
+    edge = check_certainty_artifact_eligibility(
+        artifact,
+        store._lookup_support_artifact,
+    )
+    if edge is None:
         return None
 
     payload = FileAuthoringRegistry(registry_root).read_rule_spec(
-        rule_ref_id,
-        rule_ref_version,
+        edge.rule_ref_id,
+        edge.rule_ref_version,
     )
     if not isinstance(payload, dict):
         return None

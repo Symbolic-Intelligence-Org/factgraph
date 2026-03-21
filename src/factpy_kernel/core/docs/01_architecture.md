@@ -66,6 +66,7 @@ src/factpy_kernel/core/
 | `annotation._min_max` | internal prototype 的 min-max 路径置信度传播 | `derive_min_max_path_confidence` |
 | `annotation._evidence` | internal prototype 的 Workload C 证据展开 / provenance 重建 / max 聚合 helper | `build_direct_evidence_candidates_proto`, `build_max_evidence_provenance`, `apply_max_evidence_aggregation` |
 | `annotation._certainty` | internal prototype 的 certainty lane condition-weight impact derivation + salience ranking | `derive_certainty_summary`, `rank_certainty_conditions`, `RankedCondition` |
+| `store._confidence_kind_resolver` | create-time `confidence_kind` routing protocol、certainty resolver 与 shared artifact eligibility helper | `RuleSpecReader`, `ConfidenceKindResolver`, `CertaintyConfidenceKindResolver`, `check_certainty_artifact_eligibility` |
 | `store._certainty_materializer` | service-neutral certainty 物化（从 pre-resolved condition_weights 派生 certainty_summary dict） | `materialize_certainty_summary`, `extract_single_referenced_support_tree`, `certainty_summary_to_dict` |
 | `store._artifact_sidecar` | explain artifact 的 file-backed durable carrier、capture-time retention metadata、rule-trace TTL GC maintenance | `FileArtifactSidecar`, `GCResult`, `FileArtifactSidecar.gc_rule_trace` |
 | `store.runtime` | `Store` 门面、engine 注册点，以及默认 in-process / 可选 sidecar explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest`, `Store.get_candidate_support_kind`, `Store.get_candidate_confidence_kind`, `Store.list_candidate_ids` |
@@ -138,7 +139,10 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
   - `none`
   - `probability`
   - `certainty`
-  - deterministic native / Souffle 路径当前写 `confidence_kind="none"`
+  - deterministic Souffle 路径当前写 `confidence_kind="none"`
+  - native 路径默认仍是 `none`，但 runtime native derivation 现在可在 create-time 通过 `ConfidenceKindResolver` 自动写入 `certainty`
+    - 当前 v1 resolver 只覆盖 single resolved child-rule edge + child rule payload 含非空 `condition_weights` 的场景
+    - SDK parity 当前 deferred；未注入 resolver 的路径继续保持 `none`
   - ProbLog 路径在写入 `candidate.confidence` 时同时写 `confidence_kind="probability"`
   - `confidence_kind` 不进入 `candidate_key` / `candidate_id` / `support_digest` 计算，也不改变 evaluate / accept / chosen 行为
 - `Store.get_candidate_support_digest(candidate_id)`、`Store.get_candidate_support_kind(candidate_id)` 与 `Store.get_candidate_confidence_kind(candidate_id)` 都只在当前 `Store` 实例内回取第一跳
@@ -244,6 +248,7 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - service runtime `explain-summary(kind="candidate")` 现在还可附加 response-level `certainty_summary`：
       - 不属于 core 12 字段 summary set
       - 只在 `Store.get_candidate_confidence_kind(candidate_id) == "certainty"` 时尝试派生
+      - runtime native derivation 现在会在 candidate 创建时做 certainty routing；不再依赖测试/调用侧 patch
       - 当前只消费 single structured `rule_ref_edge` 指向的唯一 `referenced_support` subtree
       - `condition_weights` 由 service 通过 `support.rule_ref_edges -> registry rule payload` 查询
       - 多 rule、nested referenced_support、unresolved child support、或 registry 链路缺失时统一降级为 `null`

@@ -21,6 +21,7 @@
 - `_certainty.py`
   - certainty-weight vocabulary 的 first-consumer prototype
   - 消费 `confidence_kind="certainty"`、rule metadata `condition_weights` 与 candidate evidence tree
+  - `confidence_kind="certainty"` 的 producer routing 不在 annotation 内实现；当前由 core `store._confidence_kind_resolver` 在 candidate 创建时决定
   - 产出 `CertaintySummary` / `ConditionImpact`，用于 candidate-level certainty summary 派生
   - `rank_certainty_conditions(conditions, aggregate_certainty)` → `list[RankedCondition]`
     - 按 impact 升序排序（weighted first → unweighted last）
@@ -57,6 +58,7 @@
 ## 4. 不变量
 
 - 不直接进入正式 `Store.evaluate(...)` public contract
+- 不拥有 `confidence_kind` producer routing；annotation 只消费已确定的 semantic lane
 - 不修改 `CandidateSet` 稳定结构
 - 不把 certainty summary 写回 `CandidateSet`、`SupportArtifact` 或 evidence tree core summary 12 字段
 - 结构化 `certainty_summary` 只允许以 response-level sibling 形式暴露，不嵌入 core 12 字段 summary set

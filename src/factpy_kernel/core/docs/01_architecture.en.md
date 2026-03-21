@@ -66,6 +66,7 @@ src/factpy_kernel/core/
 | `annotation._min_max` | internal prototype min-max path confidence propagation | `derive_min_max_path_confidence` |
 | `annotation._evidence` | internal prototype Workload C evidence expansion / provenance reconstruction / max aggregation helpers | `build_direct_evidence_candidates_proto`, `build_max_evidence_provenance`, `apply_max_evidence_aggregation` |
 | `annotation._certainty` | internal prototype certainty-lane condition-weight impact derivation + salience ranking | `derive_certainty_summary`, `rank_certainty_conditions`, `RankedCondition` |
+| `store._confidence_kind_resolver` | create-time `confidence_kind` routing protocol, certainty resolver, and shared artifact eligibility helper | `RuleSpecReader`, `ConfidenceKindResolver`, `CertaintyConfidenceKindResolver`, `check_certainty_artifact_eligibility` |
 | `store._certainty_materializer` | service-neutral certainty materialization (derives certainty_summary dict from pre-resolved condition_weights) | `materialize_certainty_summary`, `extract_single_referenced_support_tree`, `certainty_summary_to_dict` |
 | `store._artifact_sidecar` | file-backed durable explain carrier, capture-time retention metadata, and rule-trace TTL GC maintenance | `FileArtifactSidecar`, `GCResult`, `FileArtifactSidecar.gc_rule_trace` |
 | `store.runtime` | `Store` facade, engine registration, and default in-process / optional sidecar-backed explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest`, `Store.get_candidate_support_kind`, `Store.get_candidate_confidence_kind`, `Store.list_candidate_ids` |
@@ -138,7 +139,10 @@ Evaluate now also records a lightweight candidate explain backref after candidat
   - `none`
   - `probability`
   - `certainty`
-  - deterministic native / Souffle paths currently write `confidence_kind="none"`
+  - deterministic Souffle paths currently write `confidence_kind="none"`
+  - the native path still defaults to `none`, but runtime native derivation may now write `certainty` at candidate creation time through a `ConfidenceKindResolver`
+    - the current v1 resolver only covers the single resolved child-rule edge + non-empty `condition_weights` case
+    - SDK parity is currently deferred; paths without an injected resolver continue to stay `none`
   - ProbLog writes `confidence_kind="probability"` when setting `candidate.confidence`
   - `confidence_kind` does not enter `candidate_key` / `candidate_id` / `support_digest` computation, nor does it change evaluate / accept / chosen behavior
 - `Store.get_candidate_support_digest(candidate_id)`, `Store.get_candidate_support_kind(candidate_id)`, and `Store.get_candidate_confidence_kind(candidate_id)` all recover only the first hop inside the current `Store` instance
@@ -244,6 +248,7 @@ Evaluate now also records a lightweight candidate explain backref after candidat
     - service runtime `explain-summary(kind="candidate")` may also attach a response-level `certainty_summary`:
       - not part of the core 12-field summary set
       - only attempted when `Store.get_candidate_confidence_kind(candidate_id) == "certainty"`
+      - runtime native derivation now performs certainty routing at candidate creation time; this no longer depends on test/caller patching
       - currently only consumes the single structured `rule_ref_edge` pointing to the unique `referenced_support` subtree
       - `condition_weights` are looked up by the service through `support.rule_ref_edges -> registry rule payload`
       - multi-rule, nested referenced_support, unresolved child support, or missing registry chain all degrade gracefully to `null`

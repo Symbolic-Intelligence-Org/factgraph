@@ -32,6 +32,7 @@ def candidates_from_bindings(
     schema_pred: dict[str, Any],
     rows: list[BindingSupportCapture] | None = None,
     bindings: list[dict[str, Any]] | None = None,
+    confidence_kind_resolver: Any | None = None,
 ) -> list[CandidateSet]:
     run_id = uuid4().hex
     group_key_indexes = read_group_key_indexes(schema_pred, len(arg_specs))
@@ -77,7 +78,12 @@ def candidates_from_bindings(
             tup_digest=tup_digest,
             state="generated",
             candidate_kind="fact",
-            confidence_kind="none",
+            confidence_kind=_resolve_confidence_kind(
+                confidence_kind_resolver,
+                row.support_digest,
+                row.support_kind,
+                store,
+            ),
         )
         candidates.append(candidate)
 
@@ -98,6 +104,7 @@ def entity_candidates_from_bindings(
     entity_spec: dict[str, Any],
     rows: list[BindingSupportCapture] | None = None,
     bindings: list[dict[str, Any]] | None = None,
+    confidence_kind_resolver: Any | None = None,
 ) -> list[CandidateSet]:
     run_id = uuid4().hex
     entity_type = entity_spec["entity_type"]
@@ -160,7 +167,12 @@ def entity_candidates_from_bindings(
             generated_at=now_epoch_nanos(),
             state="generated",
             candidate_kind="entity",
-            confidence_kind="none",
+            confidence_kind=_resolve_confidence_kind(
+                confidence_kind_resolver,
+                row.support_digest,
+                row.support_kind,
+                store,
+            ),
         )
         candidates.append(entity_candidate)
 
@@ -189,7 +201,12 @@ def entity_candidates_from_bindings(
                 tup_digest=fact_tup_digest,
                 state="generated",
                 candidate_kind="fact",
-                confidence_kind="none",
+                confidence_kind=_resolve_confidence_kind(
+                    confidence_kind_resolver,
+                    row.support_digest,
+                    row.support_kind,
+                    store,
+                ),
             )
             candidates.append(role_candidate)
 
@@ -229,6 +246,17 @@ def _support_is_better(candidate: CandidateSet, existing: CandidateSet) -> bool:
     if candidate.support_digest == existing.support_digest:
         return candidate.support_kind < existing.support_kind
     return False
+
+
+def _resolve_confidence_kind(
+    resolver: Any | None,
+    support_digest: str,
+    support_kind: str,
+    store: Any,
+) -> str:
+    if resolver is None:
+        return "none"
+    return resolver.resolve(support_digest, support_kind, store._lookup_support_artifact)
 
 
 def find_schema_pred(store: Any, pred_id: str) -> dict[str, Any] | None:
