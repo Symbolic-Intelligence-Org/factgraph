@@ -7,6 +7,8 @@ from typing import Any
 from factpy_kernel.core.protocol.digests import sha256_hex, sha256_token
 from factpy_kernel.core.protocol.tup_v1 import canonical_bytes_tup_v1
 
+CONFIDENCE_KINDS = frozenset({"none", "probability", "certainty"})
+
 
 @dataclass(frozen=True)
 class CandidateSet:
@@ -22,6 +24,7 @@ class CandidateSet:
     generated_at: int
     state: str
     confidence: float | None = None
+    confidence_kind: str = "none"
     candidate_id: str = ""
     candidate_key: str = ""
     candidate_kind: str = "fact"
@@ -44,6 +47,8 @@ class CandidateSet:
         if self.confidence is not None:
             if isinstance(self.confidence, bool) or not isinstance(self.confidence, float):
                 raise ValueError("confidence must be float or None")
+        if not isinstance(self.confidence_kind, str) or self.confidence_kind not in CONFIDENCE_KINDS:
+            raise ValueError("confidence_kind must be one of: none, probability, certainty")
         key = self.candidate_key or compute_candidate_key_v2(
             derivation_id=self.derivation_id,
             derivation_version=self.derivation_version,
@@ -235,6 +240,7 @@ def make_candidate(
     tup_digest: str | None = None,
     candidate_kind: str = "fact",
     confidence: float | None = None,
+    confidence_kind: str = "none",
 ) -> CandidateSet:
     if not isinstance(derivation_id, str) or not derivation_id:
         raise ValueError("derivation_id must be non-empty string")
@@ -277,6 +283,7 @@ def make_candidate(
         generated_at=generated_at,
         state=state,
         confidence=confidence,
+        confidence_kind=confidence_kind,
         candidate_kind=candidate_kind,
         candidate_key=candidate_key,
         candidate_id=candidate_id,

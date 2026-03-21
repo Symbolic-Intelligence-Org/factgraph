@@ -41,7 +41,7 @@ _ATOM_TAGS = {
 def validate_rule(dto: dict) -> dict:
     try:
         payload, meta, effective_profile, _strict_for_compile = _prepare_request(dto)
-        ast = parse_query_rule_ir_to_ast(payload)
+        ast = parse_query_rule_ir_to_ast(_rule_ast_payload(payload))
         validate_query_rule_ast(ast, mode=meta["mode"], profile=effective_profile)
         return ok_response(meta=meta)
     except Exception as exc:
@@ -53,7 +53,7 @@ def validate_rule(dto: dict) -> dict:
 def compile_rule_preview(dto: dict) -> dict:
     try:
         payload, meta, effective_profile, strict_for_compile = _prepare_request(dto)
-        ast = parse_query_rule_ir_to_ast(payload)
+        ast = parse_query_rule_ir_to_ast(_rule_ast_payload(payload))
         validate_query_rule_ast(ast, mode=meta["mode"], profile=effective_profile)
 
         authoring_rule: dict[str, Any] = {
@@ -64,6 +64,12 @@ def compile_rule_preview(dto: dict) -> dict:
         }
         if "expose" in payload:
             authoring_rule["expose"] = payload["expose"]
+        if "description" in payload:
+            authoring_rule["description"] = payload["description"]
+        if "tags" in payload:
+            authoring_rule["tags"] = payload["tags"]
+        if "condition_weights" in payload:
+            authoring_rule["condition_weights"] = payload["condition_weights"]
         if "meta" in payload:
             authoring_rule["meta"] = payload["meta"]
 
@@ -170,6 +176,20 @@ def _json_where_to_ir(where_json: Any) -> Any:
     if isinstance(where_json, dict):
         return {key: _json_where_to_ir(value) for key, value in where_json.items()}
     return where_json
+
+
+def _rule_ast_payload(rule_payload: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "rule_id": rule_payload["rule_id"],
+        "version": rule_payload["version"],
+        "select_vars": rule_payload["select_vars"],
+        "where": rule_payload["where"],
+    }
+    if "expose" in rule_payload:
+        out["expose"] = rule_payload["expose"]
+    if "meta" in rule_payload:
+        out["meta"] = rule_payload["meta"]
+    return out
 
 
 def _resolve_profile(profile_obj: Any, strict: bool) -> tuple[BackendProfile | None, str]:

@@ -145,6 +145,8 @@
     "support_kind": "none",
     "generated_at": 0,
     "state": "generated",
+    "confidence": null,
+    "confidence_kind": "none",
     "payload": {
       "pred_id": "person:country_copy",
       "terms": [

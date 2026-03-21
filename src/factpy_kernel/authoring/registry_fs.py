@@ -6,8 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from factpy_kernel.authoring.derivation_compile import compile_authoring_derivation_v1
+from factpy_kernel.authoring.rule_compile import (
+    AuthoringRuleCompileError,
+    compile_authoring_rule_v1,
+)
 from factpy_kernel.core.protocol.digests import sha256_token
-from factpy_kernel.core.rules.rule_ir import RuleSpec
 from factpy_kernel.core.schema.schema_ir import canonicalize_schema_ir_jcs, ensure_schema_ir, schema_digest
 
 
@@ -479,25 +482,16 @@ def _canonical_rule_spec_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise AuthoringRegistryFSError("rule_spec_payload must be object")
     try:
-        spec = RuleSpec(
-            rule_id=payload["rule_id"],
-            version=payload["version"],
-            select_vars=payload["select_vars"],
-            where=payload["where"],
-            expose=bool(payload.get("expose", False)),
-        )
+        return compile_authoring_rule_v1(payload)
+    except AuthoringRuleCompileError as exc:
+        origin_path = getattr(exc, "path", None)
+        raise AuthoringRegistryFSError(
+            f"invalid rule spec payload: {exc}",
+            path=origin_path,
+            details={"origin_path": origin_path} if origin_path is not None else {},
+        ) from exc
     except Exception as exc:  # noqa: BLE001 - normalize to registry error
         raise AuthoringRegistryFSError(f"invalid rule spec payload: {exc}") from exc
-
-    out: dict[str, Any] = {
-        "rule_id": spec.rule_id,
-        "version": spec.version,
-        "select_vars": list(spec.select_vars),
-        "where": spec.where,
-    }
-    if spec.expose:
-        out["expose"] = True
-    return out
 
 
 def _normalize_manifest_items(value: Any) -> dict[str, dict[str, Any]]:

@@ -22,6 +22,7 @@ SENSITIVE_SEMANTIC_META_KEYS: frozenset[str] = frozenset(
         "run_id",
         "support_digest",
         "support_kind",
+        "confidence_kind",
         "candidate_id",
         "candidate_key",
         "candidate_kind",
@@ -464,6 +465,7 @@ def _coerce_provenance_input(obj: Any) -> dict[str, Any]:
             "run_id": obj.run_id,
             "support_digest": obj.support_digest,
             "support_kind": obj.support_kind,
+            "confidence_kind": obj.confidence_kind,
         }
     if isinstance(obj, dict):
         return dict(obj)

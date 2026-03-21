@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import re
 from typing import Any
@@ -47,6 +48,11 @@ def compile_authoring_rule_v1(
     select_vars = _compile_select_vars(authoring_rule)
     where = _compile_where(authoring_rule, schema_ir=schema_ir)
     expose = _compile_expose(authoring_rule)
+    condition_weights = _compile_condition_weights(
+        authoring_rule.get("condition_weights"),
+        where=where,
+        path="$.condition_weights",
+    )
 
     ast_payload: dict[str, Any] = {
         "rule_id": rule_id,
@@ -68,6 +74,8 @@ def compile_authoring_rule_v1(
         payload["description"] = description
     if tags is not None:
         payload["tags"] = tags
+    if condition_weights is not None:
+        payload["condition_weights"] = condition_weights
     return payload
 
 
@@ -152,6 +160,63 @@ def _compile_optional_tags(value: Any, *, path: str) -> list[str] | None:
             raise _compile_error("tags items must be non-empty string", path=f"{path}[{index}]")
         out.append(tag)
     return out
+
+
+def _compile_condition_weights(
+    value: Any,
+    *,
+    where: list[Any],
+    path: str,
+) -> dict[str, float] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise _compile_error("condition_weights must be object[str, number]", path=path)
+
+    valid_keys = _collect_condition_keys(where)
+    out: dict[str, float] = {}
+    for key, raw_weight in value.items():
+        if not isinstance(key, str) or not key:
+            raise _compile_error("condition_weights keys must be non-empty string", path=path)
+        item_path = f'{path}["{key}"]'
+        if key not in valid_keys:
+            raise _compile_error(
+                "condition_weights key must match existing where atom position",
+                path=item_path,
+            )
+        if isinstance(raw_weight, bool) or not isinstance(raw_weight, (int, float)):
+            raise _compile_error("condition weight must be numeric", path=item_path)
+        weight = float(raw_weight)
+        if not math.isfinite(weight) or weight <= 0:
+            raise _compile_error("condition weight must be positive finite number", path=item_path)
+        out[key] = weight
+    if not out:
+        return None
+    return {key: out[key] for key in sorted(out)}
+
+
+def _collect_condition_keys(where: list[Any]) -> set[str]:
+    branches = _where_branches(where)
+    out: set[str] = set()
+    for branch_index, branch in enumerate(branches):
+        for atom_index, _atom in enumerate(branch):
+            out.add(f"b{branch_index}.a{atom_index}")
+    return out
+
+
+def _where_branches(where: list[Any]) -> list[list[Any]]:
+    if where and all(_is_where_atom(item) for item in where):
+        return [list(where)]
+    branches: list[list[Any]] = []
+    for branch in where:
+        if not isinstance(branch, list) or not branch or not all(_is_where_atom(atom) for atom in branch):
+            raise _compile_error("where must be list of atoms or OR branches", path="$.where")
+        branches.append(list(branch))
+    return branches
+
+
+def _is_where_atom(value: Any) -> bool:
+    return isinstance(value, (list, tuple)) and bool(value) and isinstance(value[0], str)
 
 
 def _rule_ast_gate_enabled() -> bool:

@@ -229,7 +229,12 @@ def _remember_candidate_support_backrefs(
         support_kind = candidate.support_kind
         support_digest = candidate.support_digest
         if support_kind in _DEGRADED_SUPPORT_KINDS:
-            store._remember_candidate_support(candidate.candidate_id, support_digest, support_kind)
+            store._remember_candidate_support(
+                candidate.candidate_id,
+                support_digest,
+                support_kind,
+                confidence_kind=candidate.confidence_kind,
+            )
             continue
         if support_kind not in _WITNESS_BEARING_SUPPORT_KINDS:
             continue
@@ -237,4 +242,9 @@ def _remember_candidate_support_backrefs(
             continue
         if support_digest == f"sha256:{'0' * 64}":
             continue
-        store._remember_candidate_support(candidate.candidate_id, support_digest, support_kind)
+        store._remember_candidate_support(
+            candidate.candidate_id,
+            support_digest,
+            support_kind,
+            confidence_kind=candidate.confidence_kind,
+        )

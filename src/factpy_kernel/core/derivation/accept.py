@@ -774,6 +774,7 @@ def _build_base_write_meta(
         write_meta["policy_digest"] = policy_digest_token
     if candidate_set.confidence is not None:
         write_meta["confidence"] = candidate_set.confidence
+    write_meta["confidence_kind"] = candidate_set.confidence_kind
     if options.approved_by is not None:
         write_meta["approved_by"] = options.approved_by
         write_meta["accepted_by"] = options.approved_by

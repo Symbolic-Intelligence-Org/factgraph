@@ -76,6 +76,7 @@ class Store:
         self._support_artifacts: dict[str, SupportArtifact] = {}
         self._candidate_support_index: dict[str, str] = {}
         self._candidate_support_kind_index: dict[str, str] = {}
+        self._candidate_confidence_kind_index: dict[str, str] = {}
         self._rule_trace_artifacts: dict[str, RuleTraceArtifact] = {}
         if engine_evaluator is not None:
             self._engine_overrides["souffle"] = engine_evaluator
@@ -129,6 +130,8 @@ class Store:
         candidate_id: str,
         support_digest: str,
         support_kind: str,
+        *,
+        confidence_kind: str = "none",
     ) -> None:
         if not isinstance(candidate_id, str) or not candidate_id:
             raise ValueError("candidate_id must be non-empty string")
@@ -136,11 +139,15 @@ class Store:
             raise ValueError("support_digest must be sha256 token")
         if not isinstance(support_kind, str) or not support_kind:
             raise ValueError("support_kind must be non-empty string")
+        if not isinstance(confidence_kind, str) or not confidence_kind:
+            raise ValueError("confidence_kind must be non-empty string")
         if candidate_id in self._candidate_support_index:
             self._candidate_support_kind_index.setdefault(candidate_id, support_kind)
+            self._candidate_confidence_kind_index.setdefault(candidate_id, confidence_kind)
             return
         self._candidate_support_index[candidate_id] = support_digest
         self._candidate_support_kind_index[candidate_id] = support_kind
+        self._candidate_confidence_kind_index[candidate_id] = confidence_kind
 
     def _lookup_candidate_support(
         self,
@@ -157,6 +164,14 @@ class Store:
         if not isinstance(candidate_id, str) or not candidate_id:
             raise ValueError("candidate_id must be non-empty string")
         return self._candidate_support_kind_index.get(candidate_id)
+
+    def _lookup_candidate_confidence_kind(
+        self,
+        candidate_id: str,
+    ) -> str | None:
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise ValueError("candidate_id must be non-empty string")
+        return self._candidate_confidence_kind_index.get(candidate_id)
 
     def _remember_rule_trace_artifact(
         self,
@@ -288,6 +303,7 @@ class Store:
             tup_digest=tup_digest,
             state="generated",
             candidate_kind="fact",
+            confidence_kind="none",
         )
 
     def accept(
@@ -330,6 +346,12 @@ class Store:
 
     def get_candidate_support_kind(self, candidate_id: str) -> str | None:
         return self._lookup_candidate_support_kind(candidate_id)
+
+    def get_candidate_confidence_kind(self, candidate_id: str) -> str | None:
+        return self._lookup_candidate_confidence_kind(candidate_id)
+
+    def list_candidate_ids(self) -> list[str]:
+        return sorted(self._candidate_support_index.keys())
 
     def explain_rule_trace(self, rule_run_id: str) -> dict[str, Any] | None:
         artifact = self._lookup_rule_trace_artifact(rule_run_id)

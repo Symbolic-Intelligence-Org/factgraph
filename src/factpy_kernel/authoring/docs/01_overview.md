@@ -1,7 +1,7 @@
 # Authoring 模块总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/authoring`
-- 最后更新：2026-03-18
+- 最后更新：2026-03-20
 - 目标读者：需要理解 schema/rule/derivation 预检、发布、registry 工作流的开发者
 
 ## 1. 模块职责
@@ -48,11 +48,17 @@
 
 ## 3. 声明元数据 contract（当前实现）
 
-authoring 当前对 schema / rule / derivation 的“管理型声明元数据”已收敛为一组最小字段：
+authoring 当前对 schema / rule / derivation 的“管理型声明元数据”已收敛为以下边界：
 
-- `version`
-- `description`
-- `tags`
+- schema / derivation：
+  - `version`
+  - `description`
+  - `tags`
+- rule：
+  - `version`
+  - `description`
+  - `tags`
+  - `condition_weights`
 
 边界约束：
 
@@ -62,7 +68,9 @@ authoring 当前对 schema / rule / derivation 的“管理型声明元数据”
   - `Meta.description` 优先；仅当未显式提供 `description` 时才回退类 docstring
   - `Meta` 不是开放字典，出现其他键会在 parse / SDK 声明期报错
 - `Rule`
-  - `description`、`tags` 走 `Rule(...)` 顶层参数或 authoring payload 顶层键
+  - `description`、`tags`、`condition_weights` 走 `Rule(...)` 顶层参数或 authoring payload 顶层键
+  - `condition_weights` 是 version-scoped rule metadata，key 采用 atom-position key：`b{branch}.a{atom}`
+  - `condition_weights` 在 compiler / registry 中保留，但不进入 `RuleSpec` 或 where evaluator 执行面
 - `Derivation`
   - `description`、`tags` 走 `Derivation(...)` 顶层参数或 authoring payload 顶层键
   - `target` 仍是兼容字段；高层声明推荐以 `head` 为主
@@ -92,6 +100,7 @@ rule_payload = {
     "version": "v1",
     "description": "匹配雇佣相关事实",
     "tags": ["employment", "query"],
+    "condition_weights": {"b0.a0": 0.75},
     "select": ["$u"],
     "where": [("pred", "user:name", ["$u", "$name"])],
 }

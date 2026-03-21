@@ -41,6 +41,12 @@ rows = sdk.run(rule, row_format="dict")
 稳定合约：
 - `Rule.id/version` 必须是非空字符串。
 - `Rule.select/where` 必须是非空列表。
+- `Rule` 的声明元数据当前支持：
+  - `description`
+  - `tags`
+  - `condition_weights`
+- `condition_weights` 是 version-scoped rule metadata，key 使用 atom-position key：`b{branch}.a{atom}`。
+- `condition_weights` 的 value 必须是正的有限数；缺失 key 表示 unweighted，不自动补成 `1.0`。
 - `sdk.run(rule, row_format=...)` 仅 Rule 路径支持 `row_format`。
 - `row_format` 优先级：调用参数 > `SDKStore(default_row_format=...)` > `FACTPY_ROW_FORMAT` > `"dict"`。
 - 当解析结果为 `"tuple"` 时会触发 `DeprecationWarning`（建议统一 `"dict"`）。

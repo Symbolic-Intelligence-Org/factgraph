@@ -46,6 +46,8 @@ Shared top-level fields:
   "support_kind": "native_binding_v1|none",
   "generated_at": 0,
   "state": "generated",
+  "confidence": null,
+  "confidence_kind": "none|probability|certainty",
   "payload": {}
 }
 ```
@@ -58,6 +60,15 @@ Support fields:
 - `support_kind`
   - `native_binding_v1`: native derivation support captured from evaluate-time binding/witness summary
   - `none`: no support artifact captured for this candidate path yet; compatibility/engine paths may still emit this value
+- `confidence`
+  - optional narrow numeric value carried by the candidate
+  - current writers either leave it `null` or write an engine-specific value (for example ProbLog probability)
+- `confidence_kind`
+  - additive semantic discriminator for `confidence`
+  - `none`: no modeled numeric semantics on this candidate
+  - `probability`: the numeric value is probabilistic
+  - `certainty`: reserved for future certainty-weighted reasoning paths
+  - does not enter `candidate_key`, `candidate_id`, or `support_digest` computation
 
 Entity payload:
 
@@ -165,6 +176,7 @@ Every accepted claim writes derivation metadata including:
 
 Conditionally included fields:
 
+- `confidence_kind` (currently always written by derivation accept; defaults to `"none"` for legacy candidate payloads)
 - `schema_digest`, `policy_digest` when available from store metadata
 - `confidence` when the candidate carries it
 - `approved_by` / `accepted_by` only when `options.approved_by` is supplied

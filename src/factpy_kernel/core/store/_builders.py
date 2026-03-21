@@ -77,6 +77,7 @@ def candidates_from_bindings(
             tup_digest=tup_digest,
             state="generated",
             candidate_kind="fact",
+            confidence_kind="none",
         )
         candidates.append(candidate)
 
@@ -159,6 +160,7 @@ def entity_candidates_from_bindings(
             generated_at=now_epoch_nanos(),
             state="generated",
             candidate_kind="entity",
+            confidence_kind="none",
         )
         candidates.append(entity_candidate)
 
@@ -187,6 +189,7 @@ def entity_candidates_from_bindings(
                 tup_digest=fact_tup_digest,
                 state="generated",
                 candidate_kind="fact",
+                confidence_kind="none",
             )
             candidates.append(role_candidate)
 

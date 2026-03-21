@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from factpy_kernel.authoring.derivation_compile import (
     AuthoringDerivationCompileError,
     compile_authoring_derivation_v1,
 )
+from factpy_kernel.authoring.registry_fs import FileAuthoringRegistry
 from factpy_kernel.authoring.rule_compile import AuthoringRuleCompileError, compile_authoring_rule_v1
 from factpy_kernel.authoring.schema_compile import compile_authoring_schema_v1
 from factpy_kernel.authoring.schema_dsl_parse import (
     AuthoringSchemaDSLParseError,
     parse_authoring_schema_dsl_v1,
 )
+from factpy_kernel.service.registry_v1 import read_registry_rule
+from factpy_kernel.service.rules_v1 import compile_rule_preview
 from factpy_kernel.sdk import (
     Derivation,
     Entity,
@@ -138,6 +143,25 @@ class EmploymentEvent(Entity):
         self.assertEqual(compiled["description"], "Find employment related matches")
         self.assertEqual(compiled["tags"], ["employment", "match"])
 
+    def test_rule_condition_weights_round_trip_through_compiler(self) -> None:
+        rule = Rule(
+            id="employment_match",
+            version="v1",
+            select=["$u"],
+            where=[
+                ("pred", "user:name", ["$u", "$name"]),
+                ("pred", "user:tag", ["$u", "employment"]),
+            ],
+            description="Find employment related matches",
+            tags=["employment", "match"],
+            condition_weights={"b0.a1": 0.25, "b0.a0": 0.75},
+        )
+
+        compiled = compile_authoring_rule_v1(rule.to_authoring_payload())
+        self.assertEqual(compiled["description"], "Find employment related matches")
+        self.assertEqual(compiled["tags"], ["employment", "match"])
+        self.assertEqual(compiled["condition_weights"], {"b0.a0": 0.75, "b0.a1": 0.25})
+
     def test_rule_compiler_rejects_invalid_tags(self) -> None:
         with self.assertRaises(AuthoringRuleCompileError) as ctx:
             compile_authoring_rule_v1(
@@ -152,6 +176,117 @@ class EmploymentEvent(Entity):
             )
 
         self.assertEqual(ctx.exception.path, "$.tags[1]")
+
+    def test_rule_compiler_rejects_unknown_condition_weight_key(self) -> None:
+        with self.assertRaises(AuthoringRuleCompileError) as ctx:
+            compile_authoring_rule_v1(
+                {
+                    "rule_id": "employment_match",
+                    "version": "v1",
+                    "select": ["$u"],
+                    "where": [
+                        ("pred", "user:name", ["$u", "$name"]),
+                        ("pred", "user:tag", ["$u", "employment"]),
+                    ],
+                    "condition_weights": {"b0.a9": 0.5},
+                }
+            )
+
+        self.assertEqual(ctx.exception.path, '$.condition_weights["b0.a9"]')
+
+    def test_rule_compiler_rejects_non_positive_condition_weight(self) -> None:
+        with self.assertRaises(AuthoringRuleCompileError) as ctx:
+            compile_authoring_rule_v1(
+                {
+                    "rule_id": "employment_match",
+                    "version": "v1",
+                    "select": ["$u"],
+                    "where": [
+                        ("pred", "user:name", ["$u", "$name"]),
+                        ("pred", "user:tag", ["$u", "employment"]),
+                    ],
+                    "condition_weights": {"b0.a0": 0},
+                }
+            )
+
+        self.assertEqual(ctx.exception.path, '$.condition_weights["b0.a0"]')
+
+    def test_rule_metadata_survives_service_compile_preview(self) -> None:
+        compiled = compile_authoring_rule_v1(
+            {
+                "rule_id": "employment_match",
+                "version": "v1",
+                "description": "Find employment related matches",
+                "tags": ["employment", "match"],
+                "condition_weights": {"b0.a1": 0.25, "b0.a0": 0.75},
+                "select": ["$u"],
+                "where": [
+                    ("pred", "user:name", ["$u", "$name"]),
+                    ("pred", "user:tag", ["$u", "employment"]),
+                ],
+            }
+        )
+
+        response = compile_rule_preview(
+            {
+                "api_version": "v1",
+                "mode": "souffle",
+                "rule": compiled,
+            }
+        )
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(
+            response["preview"]["compiled_payload"]["description"],
+            "Find employment related matches",
+        )
+        self.assertEqual(
+            response["preview"]["compiled_payload"]["tags"],
+            ["employment", "match"],
+        )
+        self.assertEqual(
+            response["preview"]["compiled_payload"]["condition_weights"],
+            {"b0.a0": 0.75, "b0.a1": 0.25},
+        )
+
+    def test_rule_metadata_survives_registry_round_trip(self) -> None:
+        compiled = compile_authoring_rule_v1(
+            {
+                "rule_id": "employment_match",
+                "version": "v1",
+                "description": "Find employment related matches",
+                "tags": ["employment", "match"],
+                "condition_weights": {"b0.a1": 0.25, "b0.a0": 0.75},
+                "select": ["$u"],
+                "where": [
+                    ("pred", "user:name", ["$u", "$name"]),
+                    ("pred", "user:tag", ["$u", "employment"]),
+                ],
+            }
+        )
+
+        with TemporaryDirectory() as tmp_dir:
+            registry = FileAuthoringRegistry(Path(tmp_dir))
+            registry.register_rule_spec(compiled)
+
+            response = read_registry_rule(
+                {
+                    "root_dir": tmp_dir,
+                    "rule_id": "employment_match",
+                    "version": "v1",
+                }
+            )
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(
+            response["rule_spec"]["description"],
+            "Find employment related matches",
+        )
+        self.assertEqual(response["rule_spec"]["tags"], ["employment", "match"])
+        self.assertEqual(
+            response["rule_spec"]["condition_weights"],
+            {"b0.a0": 0.75, "b0.a1": 0.25},
+        )
 
     def test_derivation_description_and_tags_survive_sdk_store_compile_path(self) -> None:
         class User(Entity):

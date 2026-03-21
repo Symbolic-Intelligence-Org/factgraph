@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -52,6 +53,7 @@ class Rule:
     status: str | None = None
     description: str | None = None
     tags: list[str] = field(default_factory=list)
+    condition_weights: dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id:
@@ -64,6 +66,7 @@ class Rule:
             raise SDKDSLError("Rule.where must be non-empty list")
         _validate_optional_description(self.description, owner="Rule")
         _validate_tags(self.tags, owner="Rule")
+        _validate_condition_weights(self.condition_weights, owner="Rule")
 
     def to_authoring_payload(self) -> dict[str, Any]:
         normalized_where = _normalize_rule_where_for_payload(self.where)
@@ -81,6 +84,10 @@ class Rule:
             payload["description"] = self.description
         if self.tags:
             payload["tags"] = list(self.tags)
+        if self.condition_weights:
+            payload["condition_weights"] = {
+                key: float(self.condition_weights[key]) for key in sorted(self.condition_weights)
+            }
         return payload
 
     def dependency_rules(self) -> list[Rule]:
@@ -300,6 +307,19 @@ def _validate_tags(tags: Any, *, owner: str) -> None:
     for index, tag in enumerate(tags):
         if not isinstance(tag, str) or not tag:
             raise SDKDSLError(f"{owner}.tags[{index}] must be non-empty string")
+
+
+def _validate_condition_weights(condition_weights: Any, *, owner: str) -> None:
+    if not isinstance(condition_weights, dict):
+        raise SDKDSLError(f"{owner}.condition_weights must be dict[str, float]")
+    for key, value in condition_weights.items():
+        if not isinstance(key, str) or not key:
+            raise SDKDSLError(f"{owner}.condition_weights keys must be non-empty string")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise SDKDSLError(f'{owner}.condition_weights["{key}"] must be numeric')
+        weight = float(value)
+        if not math.isfinite(weight) or weight <= 0:
+            raise SDKDSLError(f'{owner}.condition_weights["{key}"] must be positive finite number')
 
 
 def _validate_query_where_body_confidence(node: Any, *, path: str) -> None:

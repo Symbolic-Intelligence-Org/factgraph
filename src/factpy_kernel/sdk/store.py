@@ -1312,6 +1312,7 @@ def _with_candidate_run_id(candidates: list[CandidateSet], *, run_id: str) -> li
                 generated_at=candidate.generated_at,
                 state=candidate.state,
                 confidence=candidate.confidence,
+                confidence_kind=candidate.confidence_kind,
                 candidate_key=candidate.candidate_key,
                 candidate_kind=candidate.candidate_kind,
             )
