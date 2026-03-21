@@ -212,9 +212,13 @@ class CertaintyExplainContractsTests(unittest.TestCase):
             narrative["certainty_lines"],
             [
                 "Certainty (eligible child-proof subtree): aggregate certainty (bottleneck): 0.64.",
-                "Condition b0.a0 (predicate_witness_group): weight=0.8, impact=0.64.",
+                "Condition b0.a0 (predicate_witness_group): weight=0.8, impact=0.64. [bottleneck]",
                 "Condition b0.a1 (non_fact_check): unweighted.",
             ],
+        )
+        self.assertEqual(
+            narrative["certainty_bottleneck"],
+            {"atom_keys": ["b0.a0"], "impact": 0.64},
         )
 
     def test_candidate_tree_nl_appends_certainty_paragraph_from_narrative(self) -> None:
@@ -243,6 +247,79 @@ class CertaintyExplainContractsTests(unittest.TestCase):
         self.assertEqual(
             explain_nl["paragraphs"][4],
             "Certainty summary: Certainty (eligible child-proof subtree): aggregate certainty (bottleneck): 0.8. Condition b0.a0 (predicate_witness_group): weight=0.8, impact=0.8.",
+        )
+
+    def test_nl_certainty_paragraph_includes_single_bottleneck_sentence(self) -> None:
+        summary = {
+            "candidate_id": "cand-bn1",
+            "support_kind": "native_binding_v1",
+            "is_degraded": False,
+            "root_result_kind": "fact",
+        }
+        narrative = {
+            "headline": "Candidate cand-bn1 headline.",
+            "overview_lines": ["Overview."],
+            "evidence_lines": ["Evidence."],
+            "rule_chain_lines": ["Rule chain."],
+            "terminal_lines": ["Terminal."],
+            "drilldown_lines": ["Drilldown."],
+            "certainty_lines": [
+                "Certainty (eligible child-proof subtree): aggregate certainty (bottleneck): 0.24.",
+                "Condition b0.a0 (predicate_witness_group): weight=0.4, impact=0.24. [bottleneck]",
+                "Condition b0.a1 (predicate_witness_group): weight=0.6, impact=0.54.",
+            ],
+            "certainty_bottleneck": {"atom_keys": ["b0.a0"], "impact": 0.24},
+        }
+        result = render_candidate_evidence_tree_nl_explain(summary, narrative, locale="en")
+        self.assertIn(
+            "The weakest condition is b0.a0 with impact 0.24.",
+            result["paragraphs"][4],
+        )
+
+    def test_nl_certainty_paragraph_includes_dual_bottleneck_sentence(self) -> None:
+        summary = {
+            "candidate_id": "cand-bn2",
+            "support_kind": "native_binding_v1",
+            "is_degraded": False,
+            "root_result_kind": "fact",
+        }
+        narrative = {
+            "headline": "Candidate cand-bn2 headline.",
+            "overview_lines": ["Overview."],
+            "evidence_lines": ["Evidence."],
+            "rule_chain_lines": ["Rule chain."],
+            "terminal_lines": ["Terminal."],
+            "drilldown_lines": ["Drilldown."],
+            "certainty_lines": ["Certainty line."],
+            "certainty_bottleneck": {"atom_keys": ["b0.a0", "b0.a1"], "impact": 0.3},
+        }
+        result = render_candidate_evidence_tree_nl_explain(summary, narrative, locale="en")
+        self.assertIn(
+            "The weakest conditions are b0.a0 and b0.a1, each with impact 0.3.",
+            result["paragraphs"][4],
+        )
+
+    def test_nl_certainty_paragraph_includes_triple_bottleneck_sentence(self) -> None:
+        summary = {
+            "candidate_id": "cand-bn3",
+            "support_kind": "native_binding_v1",
+            "is_degraded": False,
+            "root_result_kind": "fact",
+        }
+        narrative = {
+            "headline": "Candidate cand-bn3 headline.",
+            "overview_lines": ["Overview."],
+            "evidence_lines": ["Evidence."],
+            "rule_chain_lines": ["Rule chain."],
+            "terminal_lines": ["Terminal."],
+            "drilldown_lines": ["Drilldown."],
+            "certainty_lines": ["Certainty line."],
+            "certainty_bottleneck": {"atom_keys": ["b0.a0", "b0.a1", "b0.a2"], "impact": 0.2},
+        }
+        result = render_candidate_evidence_tree_nl_explain(summary, narrative, locale="en")
+        self.assertIn(
+            "There are 3 equally weak conditions (impact 0.2): b0.a0, b0.a1, and b0.a2.",
+            result["paragraphs"][4],
         )
 
     def test_confidence_meta_requires_float_in_range(self) -> None:
@@ -539,13 +616,17 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                     narrative_resp["narrative"]["certainty_lines"],
                     [
                         "Certainty (eligible child-proof subtree): aggregate certainty (bottleneck): 0.8.",
-                        "Condition b0.a0 (predicate_witness_group): weight=0.8, impact=0.8.",
+                        "Condition b0.a0 (predicate_witness_group): weight=0.8, impact=0.8. [bottleneck]",
                     ],
+                )
+                self.assertEqual(
+                    narrative_resp["narrative"]["certainty_bottleneck"],
+                    {"atom_keys": ["b0.a0"], "impact": 0.8},
                 )
                 self.assertEqual(len(nl_resp["explain_nl"]["paragraphs"]), 5)
                 self.assertEqual(
                     nl_resp["explain_nl"]["paragraphs"][4],
-                    "Certainty summary: Certainty (eligible child-proof subtree): aggregate certainty (bottleneck): 0.8. Condition b0.a0 (predicate_witness_group): weight=0.8, impact=0.8.",
+                    "Certainty summary: Certainty (eligible child-proof subtree): aggregate certainty (bottleneck): 0.8. Condition b0.a0 (predicate_witness_group): weight=0.8, impact=0.8. [bottleneck] The weakest condition is b0.a0 with impact 0.8.",
                 )
             finally:
                 close_runtime_session(session_id)

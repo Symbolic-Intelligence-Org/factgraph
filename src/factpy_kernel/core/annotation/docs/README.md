@@ -22,6 +22,10 @@
   - certainty-weight vocabulary 的 first-consumer prototype
   - 消费 `confidence_kind="certainty"`、rule metadata `condition_weights` 与 candidate evidence tree
   - 产出 `CertaintySummary` / `ConditionImpact`，用于 candidate-level certainty summary 派生
+  - `rank_certainty_conditions(conditions, aggregate_certainty)` → `list[RankedCondition]`
+    - 按 impact 升序排序（weighted first → unweighted last）
+    - `is_bottleneck=True` 当 condition impact == aggregate_certainty（tie 全标）
+    - narrative / NL 消费 ranked view，不自行排序
   - 当前只实现 certainty lane；`probability` / `none` 直接返回 `None`
   - 当前 production consumers：
     - runtime candidate explain delivery：
@@ -57,6 +61,8 @@
 - 不把 certainty summary 写回 `CandidateSet`、`SupportArtifact` 或 evidence tree core summary 12 字段
 - 结构化 `certainty_summary` 只允许以 response-level sibling 形式暴露，不嵌入 core 12 字段 summary set
 - runtime narrative / NL 允许消费已派生的 certainty summary，并以 additive `certainty_lines` / certainty paragraph 呈现
+- narrative 中 `certainty_lines` 按 `rank_certainty_conditions` 排序输出，bottleneck 行标 `[bottleneck]`
+- narrative 同时产出 machine-readable `certainty_bottleneck` key（`{atom_keys, impact}`），NL 从此 key 消费 weakest-condition 句
 - audit package 允许物化 certainty_summary（export-time 预计算），但不导出 `condition_weights` 本身
 - 不把 `Workload B` 时序语义混入第一轮 prototype
 

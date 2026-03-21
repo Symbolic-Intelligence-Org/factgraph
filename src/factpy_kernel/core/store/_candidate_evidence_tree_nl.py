@@ -55,8 +55,33 @@ def render_candidate_evidence_tree_nl_explain(
         f"Terminal and drill-down summary: {_join_sentences(terminal_lines + drilldown_lines)}",
     ]
     if certainty_lines:
-        paragraphs.append(f"Certainty summary: {_join_sentences(certainty_lines)}")
+        certainty_text = f"Certainty summary: {_join_sentences(certainty_lines)}"
+        bottleneck_sentence = _build_bottleneck_sentence(narrative.get("certainty_bottleneck"))
+        if bottleneck_sentence:
+            certainty_text = f"{certainty_text} {bottleneck_sentence}"
+        paragraphs.append(certainty_text)
     return {"headline": headline, "paragraphs": paragraphs}
+
+
+def _build_bottleneck_sentence(bottleneck: Any) -> str | None:
+    if not isinstance(bottleneck, Mapping):
+        return None
+    atom_keys = bottleneck.get("atom_keys")
+    impact = bottleneck.get("impact")
+    if not isinstance(atom_keys, list) or not atom_keys or impact is None:
+        return None
+    if len(atom_keys) == 1:
+        return f"The weakest condition is {atom_keys[0]} with impact {impact}."
+    if len(atom_keys) == 2:
+        return (
+            f"The weakest conditions are {atom_keys[0]} and {atom_keys[1]}, "
+            f"each with impact {impact}."
+        )
+    enumerated = ", ".join(atom_keys[:-1]) + f", and {atom_keys[-1]}"
+    return (
+        f"There are {len(atom_keys)} equally weak conditions "
+        f"(impact {impact}): {enumerated}."
+    )
 
 
 def _join_sentences(lines: list[str]) -> str:

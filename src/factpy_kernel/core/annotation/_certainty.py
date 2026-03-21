@@ -140,8 +140,61 @@ def _condition_confidence(node: Mapping[str, Any]) -> float | None:
     return round(confidence, 6)
 
 
+@dataclass(frozen=True)
+class RankedCondition:
+    atom_key: str
+    node_kind: str
+    weight: float | None
+    impact: float | None
+    is_bottleneck: bool
+
+
+def rank_certainty_conditions(
+    conditions: Sequence[ConditionImpact],
+    aggregate_certainty: float | None,
+) -> list[RankedCondition]:
+    """Sort conditions by impact ascending; mark bottleneck(s)."""
+    weighted: list[ConditionImpact] = []
+    unweighted: list[ConditionImpact] = []
+    for condition in conditions:
+        if condition.impact is not None:
+            weighted.append(condition)
+        else:
+            unweighted.append(condition)
+
+    weighted.sort(key=lambda condition: (condition.impact, condition.atom_key))
+    unweighted.sort(key=lambda condition: condition.atom_key)
+
+    result: list[RankedCondition] = []
+    for condition in weighted:
+        result.append(
+            RankedCondition(
+                atom_key=condition.atom_key,
+                node_kind=condition.node_kind,
+                weight=condition.weight,
+                impact=condition.impact,
+                is_bottleneck=(
+                    aggregate_certainty is not None and condition.impact == aggregate_certainty
+                ),
+            )
+        )
+    for condition in unweighted:
+        result.append(
+            RankedCondition(
+                atom_key=condition.atom_key,
+                node_kind=condition.node_kind,
+                weight=condition.weight,
+                impact=condition.impact,
+                is_bottleneck=False,
+            )
+        )
+    return result
+
+
 __all__ = [
     "CertaintySummary",
     "ConditionImpact",
+    "RankedCondition",
     "derive_certainty_summary",
+    "rank_certainty_conditions",
 ]

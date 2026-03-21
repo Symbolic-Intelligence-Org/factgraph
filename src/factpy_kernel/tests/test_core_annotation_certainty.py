@@ -14,7 +14,9 @@ if str(SRC_ROOT) not in sys.path:
 from factpy_kernel.core.annotation import (  # noqa: E402
     CertaintySummary,
     ConditionImpact,
+    RankedCondition,
     derive_certainty_summary,
+    rank_certainty_conditions,
 )
 
 
@@ -245,6 +247,121 @@ class CertaintyAnnotationKernelTests(unittest.TestCase):
         )
         with self.assertRaises(FrozenInstanceError):
             summary.condition_count = 5  # type: ignore[misc]
+
+
+class RankCertaintyConditionsTests(unittest.TestCase):
+    def test_weighted_conditions_sorted_by_impact_ascending(self) -> None:
+        conditions = (
+            ConditionImpact(
+                atom_key="b0.a2",
+                node_kind="predicate_witness_group",
+                weight=0.7,
+                impact=0.56,
+            ),
+            ConditionImpact(
+                atom_key="b0.a0",
+                node_kind="predicate_witness_group",
+                weight=0.4,
+                impact=0.24,
+            ),
+            ConditionImpact(
+                atom_key="b0.a1",
+                node_kind="predicate_witness_group",
+                weight=0.6,
+                impact=0.54,
+            ),
+        )
+        ranked = rank_certainty_conditions(conditions, aggregate_certainty=0.24)
+        self.assertEqual([item.atom_key for item in ranked], ["b0.a0", "b0.a1", "b0.a2"])
+        self.assertEqual([item.impact for item in ranked], [0.24, 0.54, 0.56])
+
+    def test_unweighted_conditions_sorted_after_weighted_by_atom_key(self) -> None:
+        conditions = (
+            ConditionImpact(atom_key="b0.c1", node_kind="non_fact_check", weight=None, impact=None),
+            ConditionImpact(
+                atom_key="b0.a0",
+                node_kind="predicate_witness_group",
+                weight=0.5,
+                impact=0.4,
+            ),
+            ConditionImpact(atom_key="b0.c0", node_kind="non_fact_check", weight=None, impact=None),
+        )
+        ranked = rank_certainty_conditions(conditions, aggregate_certainty=0.4)
+        self.assertEqual([item.atom_key for item in ranked], ["b0.a0", "b0.c0", "b0.c1"])
+        self.assertFalse(ranked[1].is_bottleneck)
+        self.assertFalse(ranked[2].is_bottleneck)
+
+    def test_bottleneck_marked_for_min_impact(self) -> None:
+        conditions = (
+            ConditionImpact(
+                atom_key="b0.a0",
+                node_kind="predicate_witness_group",
+                weight=0.4,
+                impact=0.24,
+            ),
+            ConditionImpact(
+                atom_key="b0.a1",
+                node_kind="predicate_witness_group",
+                weight=0.6,
+                impact=0.54,
+            ),
+        )
+        ranked = rank_certainty_conditions(conditions, aggregate_certainty=0.24)
+        self.assertTrue(ranked[0].is_bottleneck)
+        self.assertFalse(ranked[1].is_bottleneck)
+
+    def test_tie_all_bottlenecks_marked(self) -> None:
+        conditions = (
+            ConditionImpact(
+                atom_key="b0.a0",
+                node_kind="predicate_witness_group",
+                weight=0.3,
+                impact=0.3,
+            ),
+            ConditionImpact(
+                atom_key="b0.a1",
+                node_kind="predicate_witness_group",
+                weight=0.3,
+                impact=0.3,
+            ),
+            ConditionImpact(
+                atom_key="b0.a2",
+                node_kind="predicate_witness_group",
+                weight=0.9,
+                impact=0.9,
+            ),
+        )
+        ranked = rank_certainty_conditions(conditions, aggregate_certainty=0.3)
+        self.assertTrue(ranked[0].is_bottleneck)
+        self.assertTrue(ranked[1].is_bottleneck)
+        self.assertFalse(ranked[2].is_bottleneck)
+        self.assertEqual(ranked[0].atom_key, "b0.a0")
+        self.assertEqual(ranked[1].atom_key, "b0.a1")
+
+    def test_unweighted_only_no_bottleneck(self) -> None:
+        conditions = (
+            ConditionImpact(atom_key="b0.c1", node_kind="non_fact_check", weight=None, impact=None),
+            ConditionImpact(atom_key="b0.c0", node_kind="non_fact_check", weight=None, impact=None),
+        )
+        ranked = rank_certainty_conditions(conditions, aggregate_certainty=None)
+        self.assertEqual(len(ranked), 2)
+        self.assertEqual([item.atom_key for item in ranked], ["b0.c0", "b0.c1"])
+        self.assertFalse(any(item.is_bottleneck for item in ranked))
+
+    def test_empty_conditions(self) -> None:
+        ranked = rank_certainty_conditions((), aggregate_certainty=None)
+        self.assertEqual(ranked, [])
+
+    def test_ranked_condition_is_frozen(self) -> None:
+        ranked_condition = RankedCondition(
+            atom_key="b0.a0",
+            node_kind="predicate_witness_group",
+            weight=0.5,
+            impact=0.4,
+            is_bottleneck=True,
+        )
+        with self.assertRaises(FrozenInstanceError):
+            ranked_condition.is_bottleneck = False  # type: ignore[misc]
 
 
 if __name__ == "__main__":

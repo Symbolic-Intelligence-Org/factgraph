@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from factpy_kernel.core.annotation import ConditionImpact, rank_certainty_conditions
+
 
 class CandidateEvidenceTreeNarrativeError(ValueError):
     pass
@@ -127,11 +129,15 @@ def render_candidate_evidence_tree_narrative(
         "drilldown_lines": drilldown_lines,
     }
     if certainty_summary is not None:
-        narrative["certainty_lines"] = _build_certainty_lines(certainty_summary)
+        certainty_lines, certainty_bottleneck = _build_certainty_section(certainty_summary)
+        narrative["certainty_lines"] = certainty_lines
+        if certainty_bottleneck is not None:
+            narrative["certainty_bottleneck"] = certainty_bottleneck
     return narrative
 
 
-def _build_certainty_lines(value: Any) -> list[str]:
+def _build_certainty_section(value: Any) -> tuple[list[str], dict[str, Any] | None]:
+    """Return (certainty_lines, certainty_bottleneck) from certainty_summary dict."""
     if not isinstance(value, Mapping):
         raise CandidateEvidenceTreeNarrativeError("certainty_summary must be object")
     aggregate_certainty = _optional_number(
@@ -142,10 +148,7 @@ def _build_certainty_lines(value: Any) -> list[str]:
     if not isinstance(conditions, list):
         raise CandidateEvidenceTreeNarrativeError("certainty_summary.conditions must be list[object]")
 
-    lines = [
-        "Certainty (eligible child-proof subtree): "
-        f"aggregate certainty (bottleneck): {aggregate_certainty if aggregate_certainty is not None else '-'}."
-    ]
+    condition_impacts: list[ConditionImpact] = []
     for index, item in enumerate(conditions):
         if not isinstance(item, Mapping):
             raise CandidateEvidenceTreeNarrativeError("certainty_summary.conditions must be list[object]")
@@ -165,12 +168,44 @@ def _build_certainty_lines(value: Any) -> list[str]:
             item.get("impact"),
             path=f"certainty_summary.conditions[{index}].impact",
         )
-        if weight is None:
-            lines.append(f"Condition {atom_key} ({node_kind}): unweighted.")
+        condition_impacts.append(
+            ConditionImpact(
+                atom_key=atom_key,
+                node_kind=node_kind,
+                weight=weight,
+                impact=impact,
+            )
+        )
+
+    ranked = rank_certainty_conditions(condition_impacts, aggregate_certainty)
+
+    lines = [
+        "Certainty (eligible child-proof subtree): "
+        f"aggregate certainty (bottleneck): {aggregate_certainty if aggregate_certainty is not None else '-'}."
+    ]
+    bottleneck_keys: list[str] = []
+    bottleneck_impact: float | None = None
+    for ranked_condition in ranked:
+        if ranked_condition.weight is None:
+            lines.append(
+                f"Condition {ranked_condition.atom_key} ({ranked_condition.node_kind}): unweighted."
+            )
             continue
-        impact_text = impact if impact is not None else "-"
-        lines.append(f"Condition {atom_key} ({node_kind}): weight={weight}, impact={impact_text}.")
-    return lines
+        impact_text = ranked_condition.impact if ranked_condition.impact is not None else "-"
+        suffix = " [bottleneck]" if ranked_condition.is_bottleneck else ""
+        lines.append(
+            f"Condition {ranked_condition.atom_key} ({ranked_condition.node_kind}): "
+            f"weight={ranked_condition.weight}, impact={impact_text}.{suffix}"
+        )
+        if ranked_condition.is_bottleneck:
+            bottleneck_keys.append(ranked_condition.atom_key)
+            bottleneck_impact = ranked_condition.impact
+
+    bottleneck: dict[str, Any] | None = None
+    if bottleneck_keys and bottleneck_impact is not None:
+        bottleneck = {"atom_keys": bottleneck_keys, "impact": bottleneck_impact}
+
+    return lines, bottleneck
 
 
 def _require_non_empty_str(value: Any, *, path: str) -> str:
