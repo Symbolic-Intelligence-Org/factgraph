@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import time
+from pathlib import Path
 from statistics import median
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 from factpy_kernel.core.evidence.write_protocol import set_field
 from factpy_kernel.core.mapping.canon import resolve_mapping_predicate
@@ -36,8 +43,8 @@ def main() -> None:
         _bench(lambda: compute_chosen_for_predicate(store.ledger, schema_pred_country), args.rounds),
     )
     _print_result(
-        "project_view_facts(record)",
-        _bench(lambda: project_view_facts(store.ledger, store.schema_ir, temporal_view="record"), args.rounds),
+        "project_view_facts()",
+        _bench(lambda: project_view_facts(store.ledger, store.schema_ir), args.rounds),
     )
     _print_result(
         "resolve_mapping_predicate(er:canon_of)",
@@ -109,7 +116,7 @@ def _schema() -> dict:
                     {"name": "country", "type_domain": "string"},
                 ],
                 "group_key_indexes": [0],
-                "cardinality": "functional",
+                "cardinality": "single",
             },
             {
                 "pred_id": "person:lang",
@@ -127,7 +134,7 @@ def _schema() -> dict:
                     {"name": "canonical", "type_domain": "entity_ref"},
                 ],
                 "group_key_indexes": [0],
-                "cardinality": "functional",
+                "cardinality": "single",
                 "is_mapping": True,
                 "mapping_kind": "single_valued",
                 "mapping_key_positions": [0],

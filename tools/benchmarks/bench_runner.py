@@ -24,7 +24,9 @@ from factpy_kernel.core.annotation import (
     build_direct_evidence_candidates_proto,
     build_max_evidence_provenance,
     build_min_max_provenance_entries,
+    derive_certainty_summary,
     derive_min_max_path_confidence,
+    rank_certainty_conditions,
     serialize_min_max_conclusions,
     sort_raw_candidates_proto,
 )
@@ -51,13 +53,14 @@ from workload_c_reference import (
 WORKLOAD_A = "A"
 WORKLOAD_B = "B"
 WORKLOAD_C = "C"
-BASELINES = {"problog", "pyreason", "souffle_proto", "souffle_full_a"}
+WORKLOAD_D = "D"
+BASELINES = {"problog", "pyreason", "souffle_proto", "souffle_full_a", "annotation_kernel"}
 _EPSILON = 1e-9
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark runner for annotation-kernel spike workloads.")
-    parser.add_argument("--workload", required=True, choices=["A", "B", "C"])
+    parser.add_argument("--workload", required=True, choices=["A", "B", "C", "D"])
     parser.add_argument("--baseline", required=True, choices=sorted(BASELINES))
     parser.add_argument("--input", required=True, help="Input workload JSON file")
     parser.add_argument("--output", required=True, help="Output normalized result JSON file")
@@ -93,9 +96,16 @@ def main() -> None:
             "pyreason": _run_workload_c_pyreason,
             "souffle_proto": _run_workload_c_souffle_proto,
         }[args.baseline]
+    elif args.workload == WORKLOAD_D:
+        if args.baseline not in {"annotation_kernel"}:
+            raise SystemExit(f"baseline {args.baseline} is not supported for workload {WORKLOAD_D}")
+        payload = _load_workload_d(input_path)
+        runner = {
+            "annotation_kernel": _run_workload_d_annotation_kernel,
+        }[args.baseline]
     else:
         raise SystemExit(
-            f"bench_runner smoke v0 currently implements only workloads {WORKLOAD_A}, {WORKLOAD_B}, and {WORKLOAD_C}"
+            f"bench_runner smoke v0 currently implements only workloads {WORKLOAD_A}, {WORKLOAD_B}, {WORKLOAD_C}, and {WORKLOAD_D}"
         )
 
     result = _run_with_measurement(
@@ -157,6 +167,74 @@ def _load_workload_c(path: Path) -> dict[str, Any]:
         "seed": raw.get("seed"),
         "struct_facts": struct_facts,
         "evidence_facts": evidence_facts,
+    }
+
+
+def _load_workload_d(path: Path) -> dict[str, Any]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("workload input must be a JSON object")
+
+    workload = raw.get("workload")
+    if workload not in {None, WORKLOAD_D}:
+        raise ValueError(f"workload input must target {WORKLOAD_D}, got: {workload!r}")
+
+    evidence_tree = raw.get("evidence_tree")
+    condition_weights = raw.get("condition_weights")
+    if not isinstance(evidence_tree, dict):
+        raise ValueError("workload D input must provide 'evidence_tree' dict")
+    if not isinstance(condition_weights, dict):
+        raise ValueError("workload D input must provide 'condition_weights' dict")
+
+    return {
+        "workload": WORKLOAD_D,
+        "seed": raw.get("seed"),
+        "scale": raw.get("scale", "1x"),
+        "confidence_kind": raw.get("confidence_kind", "certainty"),
+        "evidence_tree": evidence_tree,
+        "condition_weights": condition_weights,
+    }
+
+
+def _run_workload_d_annotation_kernel(payload: dict[str, Any]) -> dict[str, Any]:
+    tree_dict = payload["evidence_tree"]
+    cw = payload["condition_weights"]
+    ck = payload.get("confidence_kind", "certainty")
+
+    summary = derive_certainty_summary(tree_dict, cw, ck)
+    if summary is None:
+        return {
+            "workload": WORKLOAD_D,
+            "baseline": "annotation_kernel",
+            "algebra": "bottleneck_min",
+            "aggregate_certainty": None,
+            "condition_count": 0,
+            "weighted_condition_count": 0,
+            "results": [],
+            "unsupported_features": [],
+            "notes": "derive_certainty_summary returned None",
+        }
+
+    ranked = rank_certainty_conditions(summary.conditions, summary.aggregate_certainty)
+    return {
+        "workload": WORKLOAD_D,
+        "baseline": "annotation_kernel",
+        "algebra": "bottleneck_min",
+        "aggregate_certainty": summary.aggregate_certainty,
+        "condition_count": summary.condition_count,
+        "weighted_condition_count": summary.weighted_condition_count,
+        "results": [
+            {
+                "atom_key": rc.atom_key,
+                "node_kind": rc.node_kind,
+                "weight": rc.weight,
+                "impact": rc.impact,
+                "is_bottleneck": rc.is_bottleneck,
+            }
+            for rc in ranked
+        ],
+        "unsupported_features": [],
+        "notes": "",
     }
 
 
