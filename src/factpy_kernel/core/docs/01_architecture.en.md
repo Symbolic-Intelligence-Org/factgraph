@@ -430,19 +430,21 @@ Additional notes:
 
 ## 8.1 Annotation Prototype Boundary
 
-`src/factpy_kernel/core/annotation/` is currently an internal / prototype module, not part of the stable public contract.
+`src/factpy_kernel/core/annotation/` is currently an internal / prototype module.
 
-Current constraints:
+**Certainty v1 is frozen** (see `annotation/docs/README.md` §5 for full contract):
+
+- `derive_certainty_summary(..., aggregation="bottleneck"|"additive")`
+- `rank_certainty_conditions(...)`
+- `CertaintyConfidenceKindResolver` create-time routing
+- evidence tree carrier: `assertion_fact.confidence` + `predicate_witness_group.condition_confidence`
+- delivery chain: runtime summary/narrative/NL (dual strategy) → audit/static (bottleneck only)
+
+**Certainty semantic changes are contract changes and require a blueprint.** Only bug fixes, performance work, and docs clarifications are accepted without a blueprint.
+
+Other annotation capabilities (`_min_max.py`, `_evidence.py`) remain in prototype status:
 
 - first-round only covers the benchmark-validated `Workload A + C` annotation capabilities
-- certainty/weight vocabulary now adds a first-consumer prototype:
-  - `derive_certainty_summary(..., aggregation="bottleneck"|"additive")`
-  - the service currently wires it to the runtime `candidate_evidence_tree_summary` response-level extension
-  - only consumes `confidence_kind="certainty"` + child rule `condition_weights` + the unique `referenced_support` subtree
-  - supports two aggregation strategies: bottleneck (`min` weighted impact) and additive (normalized weighted sum)
-  - explain endpoints accept `certainty_aggregation` query option to switch strategy; default is bottleneck
-  - only produces an additive certainty summary; does not modify the core 12-field summary set
-- does not directly enter the `Store.evaluate(...)` execution path
 - does not expand the stable interfaces of `CandidateSet`, SDK, or service
 - `tools/benchmarks/workload_*_reference.py` continues to serve as the oracle; `core/annotation/*` remains an independent prototype implementation
 

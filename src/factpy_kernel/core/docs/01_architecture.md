@@ -430,19 +430,21 @@ plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 
 ## 8.1 Annotation Prototype Boundary
 
-`src/factpy_kernel/core/annotation/` 当前是 internal / prototype 落点，不属于稳定 public contract。
+`src/factpy_kernel/core/annotation/` 当前是 internal / prototype 落点。
 
-当前约束：
+其中 **certainty v1 已冻结**（详见 `annotation/docs/README.md` §5）：
+
+- `derive_certainty_summary(..., aggregation="bottleneck"|"additive")`
+- `rank_certainty_conditions(...)`
+- `CertaintyConfidenceKindResolver` create-time routing
+- evidence tree carrier：`assertion_fact.confidence` + `predicate_witness_group.condition_confidence`
+- delivery chain：runtime summary/narrative/NL（双策略）→ audit/static（固定 bottleneck）
+
+**certainty 语义改动属于 contract change，必须经 blueprint。** 后续只接受 bug fix / performance / docs clarification。
+
+其余 annotation 能力（`_min_max.py`、`_evidence.py`）仍为 prototype 状态：
 
 - 第一轮只承接 benchmark 已验证的 `Workload A + C` annotation 能力
-- certainty/weight vocabulary 现新增一个 first-consumer prototype：
-  - `derive_certainty_summary(..., aggregation="bottleneck"|"additive")`
-  - service 当前把它接到 runtime `candidate_evidence_tree_summary` 的 response-level extension
-  - 只消费 `confidence_kind="certainty"` + child rule `condition_weights` + 唯一 `referenced_support` subtree
-  - 支持两种聚合策略：bottleneck（`min` weighted impact）和 additive（归一化权重加和）
-  - explain 端点通过 `certainty_aggregation` query option 切换策略，默认 bottleneck
-  - 只产出 additive certainty summary，不改 core 12 字段 summary set
-- 不直接进入 `Store.evaluate(...)` 正式执行路径
 - 不扩张 `CandidateSet`、SDK、service 的稳定接口
 - `tools/benchmarks/workload_*_reference.py` 继续作为 oracle；`core/annotation/*` 作为独立 prototype 实现
 

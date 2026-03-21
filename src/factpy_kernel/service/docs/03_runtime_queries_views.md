@@ -590,7 +590,7 @@
   - `has_boundary`
   - `unresolved_reasons`
   - `boundary_reasons`
-- `candidate` summary 响应当前还允许附加 response-level sibling `certainty_summary`：
+- `candidate` summary 响应当前还允许附加 response-level sibling `certainty_summary`（**certainty v1 contract frozen** — 语义改动必须经 blueprint）：
   - 不嵌入 `summary` dict
   - 不改变 12 字段 core set
   - `confidence_kind != "certainty"` 时固定为 `null`

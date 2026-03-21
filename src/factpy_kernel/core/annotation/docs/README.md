@@ -71,24 +71,61 @@
 - runtime narrative / NL 允许消费已派生的 certainty summary，并以 additive `certainty_lines` / certainty paragraph 呈现
 - audit package 允许物化 certainty_summary（export-time 预计算），但不导出 `condition_weights` 本身
 
-## 5. Known Gaps
+## 5. Certainty V1 Contract (frozen)
 
-- **fact-level confidence carrier 未接通**：
-  - `_condition_confidence(node)` 已支持从 `predicate_witness_group` 节点读取 `condition_confidence` / `confidence` 字段
-  - `write_protocol.py` 已支持 `meta={"confidence": 0.9}` 写入
-  - 但 evidence tree 构建链路（`_runtime_assertion_detail_for_tree` → `_build_assertion_leaf`）跳过 meta，不把 confidence 放进节点
-  - 导致 production path 下所有 condition 的 confidence 均为隐含 `1.0`，impact 退化为纯 weight
-- **chain / recursive certainty 传播未开放**：
-  - eligibility guard 遇到嵌套 `referenced_support` 直接返回 `null`
-  - 当前只支持单层 child proof subtree 的 flat min (bottleneck)
-  - 这是显式推迟（见 `certainty-propagation-prototype` blueprint §5.2），不是遗漏
-- **leaf min / weighted mean 聚合未实现**：
-  - 当前仅实现 bottleneck（min weighted impact）聚合
-  - 其他聚合语义显式推迟到 salience/impact 完整落地范围
-- narrative 中 `certainty_lines` 按 `rank_certainty_conditions` 排序输出，bottleneck 行标 `[bottleneck]`
-- narrative 同时产出 machine-readable `certainty_bottleneck` key（`{atom_keys, impact}`），NL 从此 key 消费 weakest-condition 句
-- audit package 允许物化 certainty_summary（export-time 预计算），但不导出 `condition_weights` 本身
-- 不把 `Workload B` 时序语义混入第一轮 prototype
+**状态：v1 已冻结。语义改动必须经 blueprint，不允许直接迭代。**
+
+### 5.1 Frozen Contract
+
+以下 contract 已稳定，后续只接受 bug fix / performance / docs clarification：
+
+- **Producer contract**
+  - 仅 `native` 路径
+  - 仅 create-time `CertaintyConfidenceKindResolver` 自动标记
+  - 仅 eligible child-proof subtree（single structured `rule_ref_edge` + no nested `referenced_support`）
+- **Evidence tree carrier contract**
+  - `assertion_fact.confidence` — 从 `meta.confidence` 读取
+  - `predicate_witness_group.condition_confidence = max(child confidences)`
+  - tree 只是 carrier，不 bake scoring 语义
+- **Summary contract**
+  - `bottleneck` = 默认策略：`impact = weight × confidence`，`aggregate = min(impacts)`
+  - `additive` = explain-time 可选策略：`impact = (weight / Σweights) × confidence`，`aggregate = sum(impacts)`
+  - `ConditionImpact.impact` 语义随策略改变
+  - `CertaintySummary` shape：`confidence_kind`, `condition_count`, `weighted_condition_count`, `conditions`, `aggregate_certainty`, `aggregation`
+- **Delivery contract**
+  - runtime summary / narrative / NL 支持双策略（via `certainty_aggregation` query option）
+  - narrative：`certainty_lines`（ranked by impact ascending）+ `certainty_bottleneck`（machine-readable，bottleneck only）
+  - NL：weakest-condition sentence（bottleneck only）
+  - audit / static：固定走默认 `bottleneck`
+  - export-time materialization：`certainty_summaries.jsonl`
+
+### 5.2 变更门槛
+
+以下改动必须开新 blueprint：
+- `CertaintySummary` shape
+- `certainty_summary` response shape
+- evidence tree carrier fields（`confidence` / `condition_confidence`）
+- resolver eligibility 规则
+- aggregation 公式或策略
+- audit/static certainty contract
+
+### 5.3 Non-goals (显式推迟)
+
+以下不在 v1 范围，不是遗漏：
+- chain / recursive certainty 传播（eligibility guard 遇嵌套 `referenced_support` 返回 `null`）
+- leaf min / weighted mean 聚合
+- probability explainability
+- additive 策略在 audit/static 的 parity
+- engine parity（`souffle` / `problog`）
+- SDK certainty auto-routing parity
+- rule cap / threshold / optional conditions
+- `Workload B` 时序语义
+
+### 5.4 测试基线
+
+- 234 tests 全绿
+- 关键 contract test：auto-routing e2e、fact-confidence propagation、bottleneck vs additive、ranking/narrative/NL wording、audit/static round-trip
+- 改语义先更新 blueprint，不先改测试预期
 
 ## 5. Provenance Summary Schema
 
