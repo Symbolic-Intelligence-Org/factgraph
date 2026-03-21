@@ -436,9 +436,11 @@ plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 
 - 第一轮只承接 benchmark 已验证的 `Workload A + C` annotation 能力
 - certainty/weight vocabulary 现新增一个 first-consumer prototype：
-  - `derive_certainty_summary(...)`
+  - `derive_certainty_summary(..., aggregation="bottleneck"|"additive")`
   - service 当前把它接到 runtime `candidate_evidence_tree_summary` 的 response-level extension
   - 只消费 `confidence_kind="certainty"` + child rule `condition_weights` + 唯一 `referenced_support` subtree
+  - 支持两种聚合策略：bottleneck（`min` weighted impact）和 additive（归一化权重加和）
+  - explain 端点通过 `certainty_aggregation` query option 切换策略，默认 bottleneck
   - 只产出 additive certainty summary，不改 core 12 字段 summary set
 - 不直接进入 `Store.evaluate(...)` 正式执行路径
 - 不扩张 `CandidateSet`、SDK、service 的稳定接口

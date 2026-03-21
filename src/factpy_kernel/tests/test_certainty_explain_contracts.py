@@ -1654,6 +1654,97 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
 
+    def test_explain_summary_with_additive_aggregation(self) -> None:
+        sdk = SDKStore([User])
+
+        with TemporaryDirectory() as registry_root:
+            _register_exposed_user_tag_rule(
+                sdk,
+                registry_root,
+                condition_weights={"b0.a0": 0.8},
+            )
+
+            with sdk.batch() as tx:
+                user = tx.entity(User, user_id="u-additive-1", locale="en")
+                user.name.set("Alice")
+                tx.commit()
+            user_ref = sdk.ref(User, user_id="u-additive-1", locale="en")
+
+            reset_runtime_sessions_for_tests()
+            open_resp = open_runtime_session({"registry_root": registry_root})
+            self.assertTrue(open_resp["ok"])
+            session_id = open_resp["session"]["session_id"]
+            try:
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": "user:tag",
+                        "e_ref": user_ref,
+                        "rest_terms": [["string", "vip"]],
+                        "meta": {"confidence": 0.7},
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+                eval_resp = evaluate_runtime_derivation(
+                    session_id,
+                    {
+                        "derivation": {
+                            "derivation_id": "drv.additive.e2e",
+                            "version": "1.0.0",
+                            "target": "user:tag",
+                            "head_vars": ["$u", "$tag"],
+                            "where": [
+                                ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
+                                ["eq", "$tag", "vip"],
+                            ],
+                            "mode": "native",
+                        }
+                    },
+                )
+                self.assertTrue(eval_resp["ok"])
+                candidate_id = eval_resp["evaluation"]["candidates"][0]["candidate_id"]
+
+                summary_default = explain_runtime_summary(
+                    session_id,
+                    {"kind": "candidate", "id": candidate_id},
+                )
+                self.assertTrue(summary_default["ok"])
+                certainty_default = summary_default["certainty_summary"]
+                self.assertEqual(certainty_default["aggregation"], "bottleneck")
+                self.assertAlmostEqual(certainty_default["aggregate_certainty"], 0.56)
+
+                summary_additive = explain_runtime_summary(
+                    session_id,
+                    {
+                        "kind": "candidate",
+                        "id": candidate_id,
+                        "certainty_aggregation": "additive",
+                    },
+                )
+                self.assertTrue(summary_additive["ok"])
+                certainty_additive = summary_additive["certainty_summary"]
+                self.assertEqual(certainty_additive["aggregation"], "additive")
+                self.assertAlmostEqual(certainty_additive["aggregate_certainty"], 0.7)
+                self.assertAlmostEqual(certainty_additive["conditions"][0]["impact"], 0.7)
+
+                narrative_resp = explain_runtime_narrative(
+                    session_id,
+                    {
+                        "kind": "candidate",
+                        "id": candidate_id,
+                        "certainty_aggregation": "additive",
+                    },
+                )
+                self.assertTrue(narrative_resp["ok"])
+                certainty_lines = narrative_resp["narrative"].get("certainty_lines", [])
+                self.assertTrue(any("additive" in line.lower() for line in certainty_lines))
+                self.assertNotIn("certainty_bottleneck", narrative_resp["narrative"])
+            finally:
+                close_runtime_session(session_id)
+                reset_runtime_sessions_for_tests()
+
 
 if __name__ == "__main__":
     unittest.main()

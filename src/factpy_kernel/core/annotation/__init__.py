@@ -1,6 +1,7 @@
 """Internal prototype annotation kernel capabilities."""
 
 from factpy_kernel.core.annotation._certainty import (
+    AGGREGATION_STRATEGIES,
     CertaintySummary,
     ConditionImpact,
     RankedCondition,
@@ -22,6 +23,7 @@ from factpy_kernel.core.annotation._evidence import (
 )
 
 __all__ = [
+    "AGGREGATION_STRATEGIES",
     "CertaintySummary",
     "ConditionImpact",
     "RankedCondition",

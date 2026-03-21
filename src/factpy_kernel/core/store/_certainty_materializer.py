@@ -75,6 +75,7 @@ def certainty_summary_to_dict(summary: CertaintySummary) -> dict[str, Any]:
             for item in summary.conditions
         ],
         "aggregate_certainty": summary.aggregate_certainty,
+        "aggregation": summary.aggregation,
     }
 
 
@@ -84,6 +85,7 @@ def materialize_certainty_summary(
     tree_dict: dict[str, Any],
     *,
     condition_weights: dict[str, float] | None,
+    aggregation: str = "bottleneck",
 ) -> dict[str, Any] | None:
     confidence_kind = store.get_candidate_confidence_kind(candidate_id)
     if confidence_kind != "certainty":
@@ -91,7 +93,12 @@ def materialize_certainty_summary(
     certainty_tree = extract_single_referenced_support_tree(tree_dict)
     if condition_weights is None or certainty_tree is None:
         return None
-    raw = derive_certainty_summary(certainty_tree, condition_weights, confidence_kind)
+    raw = derive_certainty_summary(
+        certainty_tree,
+        condition_weights,
+        confidence_kind,
+        aggregation=aggregation,
+    )
     if raw is None:
         return None
     return certainty_summary_to_dict(raw)

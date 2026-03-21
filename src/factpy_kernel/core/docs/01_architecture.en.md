@@ -436,9 +436,11 @@ Current constraints:
 
 - first-round only covers the benchmark-validated `Workload A + C` annotation capabilities
 - certainty/weight vocabulary now adds a first-consumer prototype:
-  - `derive_certainty_summary(...)`
+  - `derive_certainty_summary(..., aggregation="bottleneck"|"additive")`
   - the service currently wires it to the runtime `candidate_evidence_tree_summary` response-level extension
   - only consumes `confidence_kind="certainty"` + child rule `condition_weights` + the unique `referenced_support` subtree
+  - supports two aggregation strategies: bottleneck (`min` weighted impact) and additive (normalized weighted sum)
+  - explain endpoints accept `certainty_aggregation` query option to switch strategy; default is bottleneck
   - only produces an additive certainty summary; does not modify the core 12-field summary set
 - does not directly enter the `Store.evaluate(...)` execution path
 - does not expand the stable interfaces of `CandidateSet`, SDK, or service

@@ -344,6 +344,7 @@ def explain_runtime_summary(session_id: str, dto: dict[str, Any]) -> dict[str, A
             )
         if kind == "candidate":
             registry_root = _resolve_rule_registry_root(session, dto)
+            aggregation = dto.get("certainty_aggregation", "bottleneck")
             tree = _get_candidate_tree(session, id_)
             summary = summarize_candidate_evidence_tree_dict(tree)
             certainty_summary = _compute_certainty_summary_from_tree(
@@ -351,6 +352,7 @@ def explain_runtime_summary(session_id: str, dto: dict[str, Any]) -> dict[str, A
                 id_,
                 tree,
                 registry_root=registry_root,
+                aggregation=aggregation,
             )
             return ok_response(
                 meta={"candidate_id": id_},
@@ -383,6 +385,7 @@ def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str,
             )
         if kind == "candidate":
             registry_root = _resolve_rule_registry_root(session, dto)
+            aggregation = dto.get("certainty_aggregation", "bottleneck")
             tree = _get_candidate_tree(session, id_)
             summary = summarize_candidate_evidence_tree_dict(tree)
             certainty_summary = _compute_certainty_summary_from_tree(
@@ -390,6 +393,7 @@ def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str,
                 id_,
                 tree,
                 registry_root=registry_root,
+                aggregation=aggregation,
             )
             return ok_response(
                 meta={"candidate_id": id_},
@@ -426,6 +430,7 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
             )
         if kind == "candidate":
             registry_root = _resolve_rule_registry_root(session, dto)
+            aggregation = dto.get("certainty_aggregation", "bottleneck")
             tree = _get_candidate_tree(session, id_)
             summary = summarize_candidate_evidence_tree_dict(tree)
             certainty_summary = _compute_certainty_summary_from_tree(
@@ -433,6 +438,7 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
                 id_,
                 tree,
                 registry_root=registry_root,
+                aggregation=aggregation,
             )
             narrative = _render_candidate_tree_narrative_from_summary(
                 summary,

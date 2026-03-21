@@ -177,11 +177,20 @@ def _build_certainty_section(value: Any) -> tuple[list[str], dict[str, Any] | No
             )
         )
 
-    ranked = rank_certainty_conditions(condition_impacts, aggregate_certainty)
+    aggregation = value.get("aggregation", "bottleneck")
+    if not isinstance(aggregation, str) or not aggregation:
+        raise CandidateEvidenceTreeNarrativeError("certainty_summary.aggregation must be non-empty string")
 
+    ranked = rank_certainty_conditions(
+        condition_impacts,
+        aggregate_certainty,
+        aggregation=aggregation,
+    )
+
+    aggregate_label = "additive" if aggregation == "additive" else "bottleneck"
     lines = [
         "Certainty (eligible child-proof subtree): "
-        f"aggregate certainty (bottleneck): {aggregate_certainty if aggregate_certainty is not None else '-'}."
+        f"aggregate certainty ({aggregate_label}): {aggregate_certainty if aggregate_certainty is not None else '-'}."
     ]
     bottleneck_keys: list[str] = []
     bottleneck_impact: float | None = None

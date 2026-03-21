@@ -602,7 +602,7 @@
   - 若出现多 rule_ref_edges、nested referenced_support、unresolved child support、缺失 registry_root、rule payload 缺失等情况，则 graceful degrade 为 `certainty_summary=null`
   - 若 rule payload 存在但未声明 `condition_weights`，则 `certainty_summary` 仍可返回；此时所有 condition 都是 unweighted
   - 对 runtime native derivation 而言，eligible candidate 的 `confidence_kind="certainty"` 现在由 evaluate create-time routing 自动写入；不再依赖调用侧 patch
-- `certainty_summary` 的 stable shape 第一轮为：
+- `certainty_summary` 的 stable shape 为：
   - `confidence_kind`
   - `condition_count`
   - `weighted_condition_count`
@@ -610,8 +610,13 @@
     - `atom_key`
     - `node_kind`
     - `weight`
-    - `impact`
-  - `aggregate_certainty`
+    - `impact`（bottleneck: 绝对 `weight × confidence`；additive: 归一化 contribution `(weight/Σweights) × confidence`）
+  - `aggregate_certainty`（bottleneck: `min(impacts)`；additive: `sum(impacts)`）
+  - `aggregation`（`"bottleneck"` 或 `"additive"`）
+- candidate explain 端点（summary/narrative/NL）接受可选 `certainty_aggregation` 参数：
+  - `"bottleneck"`（默认）— 最弱环节决定整体强度
+  - `"additive"` — 按归一化权重加和各条件贡献
+  - 不传时使用默认 `"bottleneck"`，完全向后兼容
 - `candidate` summary 不新增 `node_count_by_kind`、`witness_predicate_ids`、`constraint_check_kinds`；这些仍属于 deferred enhancement。
 - `witness_assertion_ids` 是跨全部 invocations 的 `pred_witnesses.asrt_ids` flat 去重结果。
 - `predicate_witness_groups` 采用 flat semantic-key grouping：

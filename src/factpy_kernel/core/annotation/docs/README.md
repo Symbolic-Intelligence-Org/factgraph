@@ -23,9 +23,15 @@
   - 消费 `confidence_kind="certainty"`、rule metadata `condition_weights` 与 candidate evidence tree
   - `confidence_kind="certainty"` 的 producer routing 不在 annotation 内实现；当前由 core `store._confidence_kind_resolver` 在 candidate 创建时决定
   - 产出 `CertaintySummary` / `ConditionImpact`，用于 candidate-level certainty summary 派生
-  - `rank_certainty_conditions(conditions, aggregate_certainty)` → `list[RankedCondition]`
+  - 支持两种聚合策略（`AGGREGATION_STRATEGIES`）：
+    - `"bottleneck"`（默认）：`impact = weight × confidence`，`aggregate = min(impacts)`
+    - `"additive"`：`impact = (weight / Σweights) × confidence`，`aggregate = sum(impacts)`
+  - `CertaintySummary.aggregation` 字段标识使用的策略
+  - `ConditionImpact.impact` 的语义随策略改变：bottleneck 为绝对 weighted impact，additive 为归一化 contribution
+  - `rank_certainty_conditions(conditions, aggregate_certainty, *, aggregation=...)` → `list[RankedCondition]`
     - 按 impact 升序排序（weighted first → unweighted last）
-    - `is_bottleneck=True` 当 condition impact == aggregate_certainty（tie 全标）
+    - bottleneck 模式：`is_bottleneck=True` 当 condition impact == aggregate_certainty（tie 全标）
+    - additive 模式：`is_bottleneck=False`（additive 无 bottleneck 概念）
     - narrative / NL 消费 ranked view，不自行排序
   - 当前只实现 certainty lane；`probability` / `none` 直接返回 `None`
   - 当前 production consumers：

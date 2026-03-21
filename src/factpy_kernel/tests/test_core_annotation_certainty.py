@@ -244,9 +244,103 @@ class CertaintyAnnotationKernelTests(unittest.TestCase):
             weighted_condition_count=0,
             conditions=(),
             aggregate_certainty=None,
+            aggregation="bottleneck",
         )
         with self.assertRaises(FrozenInstanceError):
             summary.condition_count = 5  # type: ignore[misc]
+
+    def test_additive_single_condition(self) -> None:
+        tree = _make_tree(_pwg("b0.a0:user:name", confidence=0.8))
+        result = derive_certainty_summary(
+            tree,
+            {"b0.a0": 0.9},
+            "certainty",
+            aggregation="additive",
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.aggregation, "additive")
+        self.assertEqual(result.condition_count, 1)
+        self.assertAlmostEqual(result.conditions[0].impact, 0.8)
+        self.assertAlmostEqual(result.aggregate_certainty, 0.8)
+
+    def test_additive_two_conditions_normalized(self) -> None:
+        tree = _make_tree(
+            _pwg("b0.a0:user:name", confidence=0.9),
+            _pwg("b0.a1:user:tag", confidence=0.6),
+        )
+        result = derive_certainty_summary(
+            tree,
+            {"b0.a0": 0.9, "b0.a1": 0.4},
+            "certainty",
+            aggregation="additive",
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.aggregation, "additive")
+        self.assertAlmostEqual(result.aggregate_certainty, 0.807692, places=4)
+        impacts = {condition.atom_key: condition.impact for condition in result.conditions}
+        self.assertAlmostEqual(impacts["b0.a0"], 0.623077, places=4)
+        self.assertAlmostEqual(impacts["b0.a1"], 0.184615, places=4)
+
+    def test_additive_no_confidence_defaults_to_one(self) -> None:
+        tree = _make_tree(_pwg("b0.a0:user:name"))
+        result = derive_certainty_summary(
+            tree,
+            {"b0.a0": 0.5},
+            "certainty",
+            aggregation="additive",
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertAlmostEqual(result.aggregate_certainty, 1.0)
+
+    def test_additive_all_confidence_one_gives_aggregate_one(self) -> None:
+        tree = _make_tree(
+            _pwg("b0.a0:user:name", confidence=1.0),
+            _pwg("b0.a1:user:tag", confidence=1.0),
+        )
+        result = derive_certainty_summary(
+            tree,
+            {"b0.a0": 0.7, "b0.a1": 0.3},
+            "certainty",
+            aggregation="additive",
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertAlmostEqual(result.aggregate_certainty, 1.0)
+
+    def test_additive_ranking_no_bottleneck(self) -> None:
+        tree = _make_tree(
+            _pwg("b0.a0:user:name", confidence=0.9),
+            _pwg("b0.a1:user:tag", confidence=0.5),
+        )
+        result = derive_certainty_summary(
+            tree,
+            {"b0.a0": 0.6, "b0.a1": 0.4},
+            "certainty",
+            aggregation="additive",
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        ranked = rank_certainty_conditions(
+            result.conditions,
+            result.aggregate_certainty,
+            aggregation="additive",
+        )
+        self.assertTrue(all(not item.is_bottleneck for item in ranked))
+        impacts = [item.impact for item in ranked if item.impact is not None]
+        self.assertEqual(impacts, sorted(impacts))
+
+    def test_invalid_aggregation_raises(self) -> None:
+        tree = _make_tree(_pwg("b0.a0:user:name"))
+        with self.assertRaises(ValueError):
+            derive_certainty_summary(
+                tree,
+                {"b0.a0": 0.5},
+                "certainty",
+                aggregation="unknown",
+            )
 
 
 class RankCertaintyConditionsTests(unittest.TestCase):

@@ -70,6 +70,7 @@ def _compute_certainty_summary_from_tree(
     tree_dict: dict[str, Any],
     *,
     registry_root: str | None,
+    aggregation: str = "bottleneck",
 ) -> dict[str, Any] | None:
     condition_weights = _lookup_condition_weights_for_candidate(
         store,
@@ -82,6 +83,7 @@ def _compute_certainty_summary_from_tree(
         candidate_id,
         tree_dict,
         condition_weights=condition_weights,
+        aggregation=aggregation,
     )
 
 
