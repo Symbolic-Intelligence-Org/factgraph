@@ -1029,6 +1029,124 @@ class CertaintyExplainContractsTests(unittest.TestCase):
         self.assertEqual(summary.conditions[0].impact, 0.2)
         self.assertEqual(summary.aggregate_certainty, 0.2)
 
+    def test_real_evaluate_output_compatible_with_certainty_chain(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with TemporaryDirectory() as registry_root:
+            _register_exposed_user_tag_rule(
+                sdk,
+                registry_root,
+                condition_weights={"b0.a0": 0.8},
+            )
+
+            reset_runtime_sessions_for_tests()
+            open_resp = open_runtime_session({"registry_root": registry_root})
+            self.assertTrue(open_resp["ok"])
+            session_id = open_resp["session"]["session_id"]
+            try:
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": "user:tag",
+                        "e_ref": refs["u1"],
+                        "rest_terms": [["string", "vip"]],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+                eval_resp = evaluate_runtime_derivation(
+                    session_id,
+                    {
+                        "derivation": {
+                            "derivation_id": "drv.certainty.e2e",
+                            "version": "1.0.0",
+                            "target": "user:tag",
+                            "head_vars": ["$u", "$tag"],
+                            "where": [
+                                ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
+                                ["eq", "$tag", "vip"],
+                            ],
+                            "mode": "native",
+                        }
+                    },
+                )
+                self.assertTrue(eval_resp["ok"])
+                candidate = eval_resp["evaluation"]["candidates"][0]
+                candidate_id = candidate["candidate_id"]
+
+                session = _require_session(session_id)
+
+                self.assertEqual(
+                    session.store.get_candidate_confidence_kind(candidate_id),
+                    "none",
+                )
+
+                tree = _get_candidate_tree(session, candidate_id)
+                self.assertIsInstance(tree, dict)
+                self.assertIn("root", tree)
+
+                condition_weights = _lookup_condition_weights_for_candidate(
+                    session.store,
+                    candidate_id,
+                    tree,
+                    registry_root=registry_root,
+                )
+                self.assertIsNotNone(condition_weights)
+                assert condition_weights is not None
+                self.assertEqual(condition_weights["b0.a0"], 0.8)
+
+                derived = derive_certainty_summary(tree, condition_weights, "certainty")
+                self.assertIsNotNone(derived)
+                assert derived is not None
+                self.assertGreater(derived.condition_count, 0)
+                self.assertGreater(derived.weighted_condition_count, 0)
+                self.assertIsNotNone(derived.aggregate_certainty)
+
+                session.store._candidate_confidence_kind_index[candidate_id] = "certainty"
+
+                summary_resp = explain_runtime_summary(
+                    session_id,
+                    {"kind": "candidate", "id": candidate_id},
+                )
+                self.assertTrue(summary_resp["ok"])
+                certainty_summary = summary_resp["certainty_summary"]
+                self.assertIsNotNone(certainty_summary)
+                assert certainty_summary is not None
+                self.assertIn("aggregate_certainty", certainty_summary)
+                self.assertIn("conditions", certainty_summary)
+                self.assertGreater(len(certainty_summary["conditions"]), 0)
+                for condition in certainty_summary["conditions"]:
+                    self.assertIn("atom_key", condition)
+                    self.assertIn("weight", condition)
+                    self.assertIn("impact", condition)
+
+                narrative_resp = explain_runtime_narrative(
+                    session_id,
+                    {"kind": "candidate", "id": candidate_id},
+                )
+                self.assertTrue(narrative_resp["ok"])
+                narrative = narrative_resp["narrative"]
+                self.assertIn("certainty_lines", narrative)
+                self.assertIn("certainty_bottleneck", narrative)
+                bottleneck_lines = [
+                    line for line in narrative["certainty_lines"] if "[bottleneck]" in line
+                ]
+                self.assertGreater(len(bottleneck_lines), 0)
+
+                nl_resp = explain_runtime_nl(
+                    session_id,
+                    {"kind": "candidate", "id": candidate_id},
+                )
+                self.assertTrue(nl_resp["ok"])
+                paragraphs = nl_resp["explain_nl"]["paragraphs"]
+                self.assertEqual(len(paragraphs), 5)
+                self.assertIn("weakest condition", paragraphs[4].lower())
+            finally:
+                close_runtime_session(session_id)
+                reset_runtime_sessions_for_tests()
+
     def test_audit_round_trip_materializes_certainty_summary_and_narrative(self) -> None:
         sdk = SDKStore([User])
         refs = _seed_users_for_syntax_matrix(sdk)
