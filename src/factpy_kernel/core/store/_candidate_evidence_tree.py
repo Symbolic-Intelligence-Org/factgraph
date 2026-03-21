@@ -171,7 +171,7 @@ def _build_predicate_witness_group(
     asrt_ids = _normalize_strings(row.get("asrt_ids"), label=f"{pred_atom_key}.asrt_ids")
     pred_id = pred_atom_key.split(":", 1)[1] if ":" in pred_atom_key else pred_atom_key
     leaves = [_build_assertion_leaf(asrt_id, assertion_lookup=assertion_lookup) for asrt_id in asrt_ids]
-    return {
+    node: dict[str, Any] = {
         "node_id": f"atom:{pred_atom_key}",
         "node_kind": "predicate_witness_group",
         "title": f"Predicate witness {pred_id}",
@@ -180,6 +180,14 @@ def _build_predicate_witness_group(
         "assertion_count": len(leaves),
         "children": leaves,
     }
+    child_confidences = [
+        leaf["confidence"]
+        for leaf in leaves
+        if "confidence" in leaf and isinstance(leaf["confidence"], (int, float))
+    ]
+    if child_confidences:
+        node["condition_confidence"] = max(child_confidences)
+    return node
 
 
 def _build_non_fact_check(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -209,7 +217,7 @@ def _build_assertion_leaf(asrt_id: str, *, assertion_lookup: AssertionDetailLook
     pred_id = _require_non_empty_str(claim.get("pred_id"), label=f"{asrt_id}.claim.pred_id")
     e_ref = _require_non_empty_str(claim.get("e_ref"), label=f"{asrt_id}.claim.e_ref")
     claim_args = _normalize_claim_args(detail.get("claim_args"), label=f"{asrt_id}.claim_args")
-    return {
+    node: dict[str, Any] = {
         "node_id": f"asrt:{asrt_id}",
         "node_kind": "assertion_fact",
         "title": f"Assertion {asrt_id}",
@@ -219,6 +227,10 @@ def _build_assertion_leaf(asrt_id: str, *, assertion_lookup: AssertionDetailLook
         "claim_args": claim_args,
         "children": [],
     }
+    confidence = detail.get("confidence")
+    if confidence is not None:
+        node["confidence"] = confidence
+    return node
 
 
 def _build_legacy_rule_ref_node(rule_ref_id: str) -> dict[str, Any]:

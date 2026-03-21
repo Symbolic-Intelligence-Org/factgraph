@@ -28,6 +28,7 @@ from factpy_kernel.service.runtime_v1 import (
     explain_runtime_narrative,
     explain_runtime_nl,
     explain_runtime_summary,
+    explain_runtime_tree,
     open_runtime_session,
     reset_runtime_sessions_for_tests,
     write_runtime_fact,
@@ -1483,6 +1484,172 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 self.assertIn("<h3>Certainty</h3>", html)
                 self.assertIn("aggregate certainty (bottleneck): 0.8", html)
                 self.assertIn("weight=0.8, impact=0.8", html)
+            finally:
+                close_runtime_session(session_id)
+                reset_runtime_sessions_for_tests()
+
+    def test_fact_confidence_carried_to_evidence_tree(self) -> None:
+        sdk = SDKStore([User])
+
+        with TemporaryDirectory() as registry_root:
+            _register_exposed_user_tag_rule(
+                sdk,
+                registry_root,
+                condition_weights={"b0.a0": 0.8},
+            )
+
+            with sdk.batch() as tx:
+                user = tx.entity(User, user_id="u-conf-1", locale="en")
+                user.name.set("Alice")
+                tx.commit()
+            user_ref = sdk.ref(User, user_id="u-conf-1", locale="en")
+
+            reset_runtime_sessions_for_tests()
+            open_resp = open_runtime_session({"registry_root": registry_root})
+            self.assertTrue(open_resp["ok"])
+            session_id = open_resp["session"]["session_id"]
+            try:
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": "user:tag",
+                        "e_ref": user_ref,
+                        "rest_terms": [["string", "vip"]],
+                        "meta": {"confidence": 0.7},
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+                eval_resp = evaluate_runtime_derivation(
+                    session_id,
+                    {
+                        "derivation": {
+                            "derivation_id": "drv.conf_carrier",
+                            "version": "1.0.0",
+                            "target": "user:tag",
+                            "head_vars": ["$u", "$tag"],
+                            "where": [
+                                ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
+                                ["eq", "$tag", "vip"],
+                            ],
+                            "mode": "native",
+                        }
+                    },
+                )
+                self.assertTrue(eval_resp["ok"])
+                candidate_id = eval_resp["evaluation"]["candidates"][0]["candidate_id"]
+
+                tree_resp = explain_runtime_tree(
+                    session_id,
+                    {"kind": "candidate", "id": candidate_id},
+                )
+                self.assertTrue(tree_resp["ok"])
+                tree = tree_resp["tree"]
+
+                root = tree["root"]
+                rule_ref_section = [child for child in root["children"] if child["node_kind"] == "rule_ref_section"][0]
+                rule_ref = rule_ref_section["children"][0]
+                referenced_support = rule_ref["children"][0]
+                support_section = [
+                    child for child in referenced_support["children"] if child["node_kind"] == "support_section"
+                ][0]
+                predicate_witness_group = support_section["children"][0]
+                self.assertEqual(predicate_witness_group["node_kind"], "predicate_witness_group")
+
+                assertion = predicate_witness_group["children"][0]
+                self.assertEqual(assertion["node_kind"], "assertion_fact")
+                self.assertIn("confidence", assertion)
+                self.assertAlmostEqual(assertion["confidence"], 0.7)
+
+                self.assertIn("condition_confidence", predicate_witness_group)
+                self.assertAlmostEqual(predicate_witness_group["condition_confidence"], 0.7)
+            finally:
+                close_runtime_session(session_id)
+                reset_runtime_sessions_for_tests()
+
+    def test_fact_confidence_propagates_to_certainty_summary(self) -> None:
+        sdk = SDKStore([User])
+
+        with TemporaryDirectory() as registry_root:
+            _register_exposed_user_tag_rule(
+                sdk,
+                registry_root,
+                condition_weights={"b0.a0": 0.8},
+            )
+
+            with sdk.batch() as tx:
+                user = tx.entity(User, user_id="u-conf-2", locale="en")
+                user.name.set("Bob")
+                tx.commit()
+            user_ref = sdk.ref(User, user_id="u-conf-2", locale="en")
+
+            reset_runtime_sessions_for_tests()
+            open_resp = open_runtime_session({"registry_root": registry_root})
+            self.assertTrue(open_resp["ok"])
+            session_id = open_resp["session"]["session_id"]
+            try:
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": "user:tag",
+                        "e_ref": user_ref,
+                        "rest_terms": [["string", "vip"]],
+                        "meta": {"confidence": 0.6},
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+                eval_resp = evaluate_runtime_derivation(
+                    session_id,
+                    {
+                        "derivation": {
+                            "derivation_id": "drv.conf_e2e",
+                            "version": "1.0.0",
+                            "target": "user:tag",
+                            "head_vars": ["$u", "$tag"],
+                            "where": [
+                                ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
+                                ["eq", "$tag", "vip"],
+                            ],
+                            "mode": "native",
+                        }
+                    },
+                )
+                self.assertTrue(eval_resp["ok"])
+                candidate_id = eval_resp["evaluation"]["candidates"][0]["candidate_id"]
+
+                summary_resp = explain_runtime_summary(
+                    session_id,
+                    {"kind": "candidate", "id": candidate_id},
+                )
+                self.assertTrue(summary_resp["ok"])
+                certainty_summary = summary_resp["certainty_summary"]
+                self.assertIsNotNone(certainty_summary)
+                assert certainty_summary is not None
+                self.assertEqual(certainty_summary["condition_count"], 1)
+                condition = certainty_summary["conditions"][0]
+                self.assertAlmostEqual(condition["weight"], 0.8)
+                self.assertAlmostEqual(condition["impact"], 0.48)
+                self.assertAlmostEqual(certainty_summary["aggregate_certainty"], 0.48)
+
+                narrative_resp = explain_runtime_narrative(
+                    session_id,
+                    {"kind": "candidate", "id": candidate_id},
+                )
+                self.assertTrue(narrative_resp["ok"])
+                certainty_lines = narrative_resp["narrative"].get("certainty_lines", [])
+                self.assertTrue(any("0.48" in line for line in certainty_lines))
+
+                nl_resp = explain_runtime_nl(
+                    session_id,
+                    {"kind": "candidate", "id": candidate_id},
+                )
+                self.assertTrue(nl_resp["ok"])
+                paragraphs = nl_resp["explain_nl"]["paragraphs"]
+                self.assertEqual(len(paragraphs), 5)
+                self.assertIn("0.48", paragraphs[4])
             finally:
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()

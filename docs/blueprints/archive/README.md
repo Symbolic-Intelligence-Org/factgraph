@@ -113,3 +113,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-21 | certainty-runtime-boundary-cleanup | implemented | Certainty helper extraction + archive inventory |
 | 2026-03-21 | certainty-salience-ranking-v1 | implemented | Salience ranking: impact 升序 + bottleneck 标注 + NL weakest-condition |
 | 2026-03-21 | phase3-test-decomposition | implemented | 10K-line test monolith → 7 capability files |
+| 2026-03-21 | fact-confidence-to-evidence-tree | implemented | Fact-level confidence carrier: meta.confidence → assertion_fact → condition_confidence=max(children) |

@@ -1205,7 +1205,7 @@ def _runtime_assertion_detail_for_tree(ledger: Ledger, asrt_id: str) -> dict[str
         for row in ledger.find_claim_args(asrt_id=asrt_id)
     ]
     claim_args.sort(key=lambda row: (row["idx"], row["tag"], row["val"]))
-    return {
+    result: dict[str, Any] = {
         "asrt_id": asrt_id,
         "claim": {
             "asrt_id": asrt_id,
@@ -1214,6 +1214,13 @@ def _runtime_assertion_detail_for_tree(ledger: Ledger, asrt_id: str) -> dict[str
         },
         "claim_args": claim_args,
     }
+    confidence_rows = ledger.find_meta(asrt_id=asrt_id, key="confidence", kind="float")
+    if confidence_rows:
+        try:
+            result["confidence"] = float(confidence_rows[0].value)
+        except (TypeError, ValueError):
+            pass
+    return result
 
 
 def _claim_to_dict(
