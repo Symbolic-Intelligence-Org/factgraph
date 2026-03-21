@@ -23,3 +23,6 @@ venv/
 /out/
 /archive/
 /hnsm-frontend-master/
+
+# Third-party Claude skills (installed, not project-owned)
+.claude/skills/gstack/
