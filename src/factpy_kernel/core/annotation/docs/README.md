@@ -63,6 +63,22 @@
 - 不把 certainty summary 写回 `CandidateSet`、`SupportArtifact` 或 evidence tree core summary 12 字段
 - 结构化 `certainty_summary` 只允许以 response-level sibling 形式暴露，不嵌入 core 12 字段 summary set
 - runtime narrative / NL 允许消费已派生的 certainty summary，并以 additive `certainty_lines` / certainty paragraph 呈现
+- audit package 允许物化 certainty_summary（export-time 预计算），但不导出 `condition_weights` 本身
+
+## 5. Known Gaps
+
+- **fact-level confidence carrier 未接通**：
+  - `_condition_confidence(node)` 已支持从 `predicate_witness_group` 节点读取 `condition_confidence` / `confidence` 字段
+  - `write_protocol.py` 已支持 `meta={"confidence": 0.9}` 写入
+  - 但 evidence tree 构建链路（`_runtime_assertion_detail_for_tree` → `_build_assertion_leaf`）跳过 meta，不把 confidence 放进节点
+  - 导致 production path 下所有 condition 的 confidence 均为隐含 `1.0`，impact 退化为纯 weight
+- **chain / recursive certainty 传播未开放**：
+  - eligibility guard 遇到嵌套 `referenced_support` 直接返回 `null`
+  - 当前只支持单层 child proof subtree 的 flat min (bottleneck)
+  - 这是显式推迟（见 `certainty-propagation-prototype` blueprint §5.2），不是遗漏
+- **leaf min / weighted mean 聚合未实现**：
+  - 当前仅实现 bottleneck（min weighted impact）聚合
+  - 其他聚合语义显式推迟到 salience/impact 完整落地范围
 - narrative 中 `certainty_lines` 按 `rank_certainty_conditions` 排序输出，bottleneck 行标 `[bottleneck]`
 - narrative 同时产出 machine-readable `certainty_bottleneck` key（`{atom_keys, impact}`），NL 从此 key 消费 weakest-condition 句
 - audit package 允许物化 certainty_summary（export-time 预计算），但不导出 `condition_weights` 本身

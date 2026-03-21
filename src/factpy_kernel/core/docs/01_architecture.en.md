@@ -260,6 +260,14 @@ Evaluate now also records a lightweight candidate explain backref after candidat
         - `AuditQuery.get_candidate_evidence_tree_narrative` passes materialized certainty_summary, producing narrative with `certainty_lines`
         - static site candidate evidence page renders a certainty section
         - `condition_weights` only exist on registry filesystem; offline audit does not perform query-time computation
+    - **Known gap — fact-level confidence carrier**:
+      - `write_protocol.py` already supports `meta={"confidence": 0.9}` write; value stored in ledger `meta_rows` table
+      - however `_runtime_assertion_detail_for_tree()` reads assertions but **skips all meta**
+      - as a result `assertion_fact` and `predicate_witness_group` nodes carry no confidence
+      - `_condition_confidence(node)` always returns `None`; impact degrades to `weight × 1.0`
+      - fix path: assertion detail → tree node → condition_confidence — three wiring points
+      - does not affect computation model (`derive_certainty_summary` already correctly consumes the confidence field)
+      - does not affect future chain/recursive propagation enablement (orthogonal concern)
   - these three layers follow the same 4-layer explain pattern as `rule_run`:
     - raw tree
     - summary

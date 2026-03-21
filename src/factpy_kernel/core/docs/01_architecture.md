@@ -260,6 +260,14 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
         - `AuditQuery.get_candidate_evidence_tree_narrative` 传入物化 certainty_summary，产出含 `certainty_lines` 的 narrative
         - static site candidate evidence page 渲染 certainty section
         - `condition_weights` 只在 registry filesystem 可用，离线 audit 不做 query-time 计算
+    - **Known gap — fact-level confidence carrier**：
+      - `write_protocol.py` 已支持 `meta={"confidence": 0.9}` 写入，值存在 ledger `meta_rows` 表
+      - 但 `_runtime_assertion_detail_for_tree()` 读取 assertion 时**跳过所有 meta**
+      - 导致 `assertion_fact` 和 `predicate_witness_group` 节点不携带 confidence
+      - `_condition_confidence(node)` 始终返回 `None`，impact 退化为 `weight × 1.0`
+      - 修复路径：assertion detail → tree node → condition_confidence 三处接线
+      - 不影响计算模型（`derive_certainty_summary` 已正确消费 confidence 字段）
+      - 不影响 chain/recursive propagation 的后续开放（正交关切）
   - 这三层继续遵循与 `rule_run` 相同的 4-layer explain pattern：
     - raw tree
     - summary
