@@ -17,12 +17,12 @@ from factpy_kernel.core.store._candidate_evidence_tree_narrative import render_c
 from factpy_kernel.core.store._candidate_evidence_tree_nl import render_candidate_evidence_tree_nl_explain
 from factpy_kernel.core.store._support import ENGINE_NO_WITNESS_KIND, compute_support_digest, support_artifact_from_dict
 from factpy_kernel.sdk import SDKStore
+from factpy_kernel.service._certainty_service import _lookup_condition_weights_for_candidate
 from factpy_kernel.service.runtime_v1 import (
     accept_runtime_derivation,
     evaluate_runtime_derivation,
     export_runtime_package,
     _get_candidate_tree,
-    _lookup_condition_weights_for_candidate,
     _require_session,
     close_runtime_session,
     explain_runtime_narrative,

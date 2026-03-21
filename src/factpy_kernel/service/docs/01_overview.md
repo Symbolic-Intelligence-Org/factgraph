@@ -1,7 +1,7 @@
 # Service 模块总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/service`
-- 最后更新：2026-03-15
+- 最后更新：2026-03-21
 - 目标读者：需要通过 HTTP 对接 runtime / registry 的前后端开发者
 
 ## 1. 模块职责
@@ -39,6 +39,10 @@
   - registry 只读接口
 - `_common.py`
   - `ok/error` envelope 与错误转换
+- `_certainty_service.py`
+  - certainty derivation helper（condition_weights lookup / summary 计算 / batch 预计算）
+  - 依赖 core（Store, _certainty_materializer）+ authoring（FileAuthoringRegistry）
+  - 不反向依赖 runtime_v1
 - `_registry_io.py`
   - 从 registry root 读取 schema 等底层辅助
 
