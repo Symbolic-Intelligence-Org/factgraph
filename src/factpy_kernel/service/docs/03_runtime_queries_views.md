@@ -590,6 +590,27 @@
   - `has_boundary`
   - `unresolved_reasons`
   - `boundary_reasons`
+- `candidate` summary 响应当前还允许附加 response-level sibling `certainty_summary`：
+  - 不嵌入 `summary` dict
+  - 不改变 12 字段 core set
+  - `confidence_kind != "certainty"` 时固定为 `null`
+  - `confidence_kind == "certainty"` 时，service 会尝试：
+    - 从 `candidate_id` 回取 `confidence_kind`
+    - 从 `support.rule_ref_edges` 定位单条 structured child rule edge
+    - 用该 edge 的 `rule_ref_id@version` 到 registry 读取 `condition_weights`
+    - 在唯一 `referenced_support` subtree 上调用 annotation prototype `derive_certainty_summary(...)`
+  - 若出现多 rule_ref_edges、nested referenced_support、unresolved child support、缺失 registry_root、rule payload 缺失等情况，则 graceful degrade 为 `certainty_summary=null`
+  - 若 rule payload 存在但未声明 `condition_weights`，则 `certainty_summary` 仍可返回；此时所有 condition 都是 unweighted
+- `certainty_summary` 的 stable shape 第一轮为：
+  - `confidence_kind`
+  - `condition_count`
+  - `weighted_condition_count`
+  - `conditions[]`
+    - `atom_key`
+    - `node_kind`
+    - `weight`
+    - `impact`
+  - `aggregate_certainty`
 - `candidate` summary 不新增 `node_count_by_kind`、`witness_predicate_ids`、`constraint_check_kinds`；这些仍属于 deferred enhancement。
 - `witness_assertion_ids` 是跨全部 invocations 的 `pred_witnesses.asrt_ids` flat 去重结果。
 - `predicate_witness_groups` 采用 flat semantic-key grouping：
@@ -598,6 +619,10 @@
 - `non_fact_step_groups` 也采用 flat semantic-key grouping：
   - grouping key = raw `non_fact_steps.kind`
   - group fields = `kind`、`count`、`invocation_ids`
+- `queries/explain-summary` 的 candidate 请求也支持可选 `override_registry_root`：
+  - 未提供时默认复用 session 绑定的 `registry_root`
+  - 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供
+  - 若 evaluate 时使用了 override root，summary 查询时必须传回同一个 root；否则 `certainty_summary` 可能降级为 `null`
 - 第一轮不把 `binding_index`、`step_key`、`details.atom` 提升进 `rule_run_summary` DTO；这些仍属于 raw payload 的消费层级。
 - `rule_run_id` 本身就是回跳 raw explain 的充分 handle。
 - `candidate_id` 本身就是回跳 raw tree explain 的充分 handle。
@@ -678,9 +703,17 @@
   - `rule_chain_lines`
   - `terminal_lines`
   - `drilldown_lines`
+- 当 candidate certainty lane 可派生时，runtime narrative 还可附加 additive `certainty_lines`：
+  - 不改变上述 6 个基础字段
+  - 首行显式标注 scope：`Certainty (eligible child-proof subtree): ...`
+  - 后续每行对应一个 condition，保持 atom position order，不做排序
+  - 无 certainty_summary 时不返回该 key
 - 这些字段都只从对应 summary 纯派生，不直接下探 raw carrier。
 - 对 degraded candidate，narrative 也必须生成非空降级说明，而不是返回空段。
 - 第一轮故意不把 narrative 打包进 `explain-summary`；bundled delivery 若需要，后续另行评估。
+- `queries/explain-narrative` 的 candidate 请求也支持可选 `override_registry_root`：
+  - registry root 解析语义与 `queries/explain-summary` 一致
+  - 只影响 additive `certainty_lines` 是否可派生；基础 narrative output 不受影响
 - 第一轮不支持 `assertion` narrative；`kind` 取其他值时返回 `shape` error。
 
 错误 kinds：
@@ -733,6 +766,23 @@
   - `rule_run_summary`
   - `rule_run_narrative`
   - `render_rule_run_nl_explain(..., locale="en")`
+- `candidate` 调用链为：
+  - canonical raw tree
+  - `candidate_evidence_tree_summary`
+  - optional additive `certainty_summary`
+  - `candidate_evidence_tree_narrative`
+  - `render_candidate_evidence_tree_nl_explain(..., locale="en")`
+- candidate NL 默认仍是 4 段：
+  - overview
+  - evidence
+  - rule-chain
+  - terminal + drill-down
+- 当 candidate narrative 含 `certainty_lines` 时，NL 追加第 5 段：
+  - `Certainty summary: ...`
+  - 该段只复述 narrative 的 certainty lines，不新增计算语义
+- `queries/explain-nl` 的 candidate 请求也支持可选 `override_registry_root`：
+  - registry root 解析语义与 `queries/explain-summary` / `queries/explain-narrative` 一致
+  - 只影响第 5 段 certainty paragraph 是否可派生；基础 4 段不受影响
 - `candidate` 调用链为：
   - canonical raw tree
   - `candidate_evidence_tree_summary`
@@ -839,7 +889,8 @@
         "support_kind": "native_binding_v1",
         "generated_at": 1730000000000000000,
         "state": "generated",
-        "confidence": null
+        "confidence": null,
+        "confidence_kind": "none"
       }
     ]
   }
@@ -849,6 +900,11 @@
 说明：
 
 - `evaluate` 返回完整 candidate 对象，供后续 `accept` 原样 round-trip。
+- candidate DTO 现在包含 additive `confidence_kind`：
+  - `none`
+  - `probability`
+  - `certainty`
+- 当前 native / Souffle deterministic 路径写 `confidence_kind="none"`；ProbLog 路径在填充 `confidence` 时写 `confidence_kind="probability"`。
 - native derivation evaluate 当前会填充 `support_kind="native_binding_v1"`。
 - `souffle` evaluate 现在可在 runtime live path 上填充 `support_kind="souffle_witness_v1"`：
   - 前提是 adapter 能通过 `_w` witness 变体为当前 where 产出 assertion witness
@@ -922,7 +978,8 @@
     "support_kind": "native_binding_v1",
     "generated_at": 1730000000000000000,
     "state": "generated",
-    "confidence": null
+    "confidence": null,
+    "confidence_kind": "none"
   },
   "options": {
     "approved_by": "alice",
@@ -965,6 +1022,7 @@
 说明：
 
 - 客户端应原样回传 `evaluate` 返回的 candidate 对象，不要裁剪字段。
+- 为兼容旧客户端，若 `candidate.confidence_kind` 缺失，service 默认按 `"none"` 处理。
 - fact candidate 必须保留完整 `payload.terms`。
 - entity candidate 必须保留 identity 相关字段（如 `entity_type / identity_fields / resolved_identity / missing_identity_fields / proposed_entity_ref`）。
 - `options.identity_override` 可选，用于 entity candidate 的 identity 覆盖。
@@ -1408,7 +1466,9 @@
 - 当 `package_kind="audit"` 时，当前 package 还会额外包含：
   - `audit/support_artifacts.jsonl`
   - `audit/rule_trace_artifacts.jsonl`
-  这两个文件分别导出 `SupportArtifact` 与 `RuleTraceArtifact` 的 flat JSONL rows，用于离线 audit / explain 消费。
+  - `audit/certainty_summaries.jsonl`（可选 — 当 session 有 `registry_root` 且 candidate certainty 可派生时写入）
+  前两个文件分别导出 `SupportArtifact` 与 `RuleTraceArtifact` 的 flat JSONL rows，用于离线 audit / explain 消费。
+  `certainty_summaries.jsonl` 导出 export-time 预计算的 `certainty_summary` dict（每行 `{candidate_id, certainty_summary}`），因为 `condition_weights` 只在 registry filesystem 可用、离线 audit 无法 query-time 派生。
 
 错误 kinds：
 

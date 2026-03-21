@@ -1,7 +1,7 @@
 # Core 架构总览（factpy_kernel）
 
 - 适用范围：`src/factpy_kernel/core`
-- 最后更新：2026-03-20
+- 最后更新：2026-03-21
 - 代码基线：`Store.evaluate` 仅支持 `native|souffle|problog`；`Ledger` 为 SQLite write-through cache；`ProjectorAudit` 为 v2 结构
 - 目标读者：需要理解 core 语义边界、关键入口与扩展点的开发者
 
@@ -16,7 +16,9 @@
 
 补充边界：
 
-- `authoring/sdk` 侧当前统一声明元数据为 `version / description / tags`
+- `authoring/sdk` 侧当前声明元数据边界为：
+  - schema / derivation：`version / description / tags`
+  - rule：`version / description / tags`，外加 version-scoped `condition_weights`
 - 这些字段属于声明与管理信息，不属于 core 运行时语义
 - core 可以承载由上层编译带下来的说明性字段，但不会据此改变 `evaluate/chosen/accept` 行为
 
@@ -63,8 +65,10 @@ src/factpy_kernel/core/
 | `mapping.canon` | mapping 冲突解析与 tie-break | `resolve_mapping_predicate` |
 | `annotation._min_max` | internal prototype 的 min-max 路径置信度传播 | `derive_min_max_path_confidence` |
 | `annotation._evidence` | internal prototype 的 Workload C 证据展开 / provenance 重建 / max 聚合 helper | `build_direct_evidence_candidates_proto`, `build_max_evidence_provenance`, `apply_max_evidence_aggregation` |
+| `annotation._certainty` | internal prototype 的 certainty lane condition-weight impact derivation | `derive_certainty_summary` |
+| `store._certainty_materializer` | service-neutral certainty 物化（从 pre-resolved condition_weights 派生 certainty_summary dict） | `materialize_certainty_summary`, `extract_single_referenced_support_tree`, `certainty_summary_to_dict` |
 | `store._artifact_sidecar` | explain artifact 的 file-backed durable carrier、capture-time retention metadata、rule-trace TTL GC maintenance | `FileArtifactSidecar`, `GCResult`, `FileArtifactSidecar.gc_rule_trace` |
-| `store.runtime` | `Store` 门面、engine 注册点，以及默认 in-process / 可选 sidecar explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest`, `Store.get_candidate_support_kind` |
+| `store.runtime` | `Store` 门面、engine 注册点，以及默认 in-process / 可选 sidecar explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest`, `Store.get_candidate_support_kind`, `Store.get_candidate_confidence_kind`, `Store.list_candidate_ids` |
 | `store.evaluation` | `Store.evaluate` 公共入口 | `evaluate_store` |
 | `store.queries` | explain/conflicts/resolve_mapping 查询 | `explain_fact`, `conflicts`, `resolve_mapping` |
 | `store.builders` | 候选构建、head/entity 解析、值 coercion | `candidates_from_bindings`, `entity_candidates_from_bindings` |
@@ -116,6 +120,7 @@ native `RuleRef` 语义的当前边界：
 evaluate 结束后现在会登记一层轻量 candidate explain backref：
 
 - `candidate_id -> (support_digest, support_kind)`
+- `candidate_id -> confidence_kind`
 - native candidates 写入 `support_kind="native_binding_v1"`，并可继续串联 `Store.explain_support(...)`
 - Souffle first-round partial witness 现在可写入 `support_kind="souffle_witness_v1"`：
   - carrier 继续复用 `SupportArtifact`
@@ -129,7 +134,14 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
 - engine candidates 第一轮显式写入 `support_kind="engine_no_witness_v1"` + zero digest placeholder：
   - 这不是 artifact miss，而是 no-witness 降级语义
   - service `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`
-- `Store.get_candidate_support_digest(candidate_id)` 与 `Store.get_candidate_support_kind(candidate_id)` 都只在当前 `Store` 实例内回取第一跳
+- `CandidateSet` 当前保留窄 `confidence: float | None`，并新增 additive `confidence_kind` value-semantics 标注：
+  - `none`
+  - `probability`
+  - `certainty`
+  - deterministic native / Souffle 路径当前写 `confidence_kind="none"`
+  - ProbLog 路径在写入 `candidate.confidence` 时同时写 `confidence_kind="probability"`
+  - `confidence_kind` 不进入 `candidate_key` / `candidate_id` / `support_digest` 计算，也不改变 evaluate / accept / chosen 行为
+- `Store.get_candidate_support_digest(candidate_id)`、`Store.get_candidate_support_kind(candidate_id)` 与 `Store.get_candidate_confidence_kind(candidate_id)` 都只在当前 `Store` 实例内回取第一跳
 - 若 `Store(..., artifact_sidecar=...)` 已配置，只有 native `support_digest -> SupportArtifact` 第二跳可在共享 sidecar root 的后续 `Store` 实例中被重新解引用
 - 在此基础上，service/audit 现在已能把 candidate explain 组装成当前 `candidate_evidence_tree`：
   - 入口仍是 `candidate_id`
@@ -214,19 +226,35 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
         - `unresolved_reasons`
         - `boundary_reasons`
     - `candidate_evidence_tree_narrative`
-      - 由 `store._candidate_evidence_tree_narrative` 只从 summary 纯派生
-      - 固定 shape：
+      - 由 `store._candidate_evidence_tree_narrative` 从 summary 纯派生；runtime certainty lane 可选再附加 additive certainty section
+      - 基础 shape：
         - `headline`
         - `overview_lines`
         - `evidence_lines`
         - `rule_chain_lines`
         - `terminal_lines`
         - `drilldown_lines`
+      - runtime first-round 还允许附加可选 `certainty_lines`
     - `candidate_evidence_tree_nl_explain`
       - 由 `store._candidate_evidence_tree_nl` 只从 summary + narrative 纯派生
-      - 固定 shape：
+      - 基础 shape：
         - `headline`
         - `paragraphs`
+      - runtime candidate narrative 含 `certainty_lines` 时，NL 允许追加第 5 段 certainty paragraph
+    - service runtime `explain-summary(kind="candidate")` 现在还可附加 response-level `certainty_summary`：
+      - 不属于 core 12 字段 summary set
+      - 只在 `Store.get_candidate_confidence_kind(candidate_id) == "certainty"` 时尝试派生
+      - 当前只消费 single structured `rule_ref_edge` 指向的唯一 `referenced_support` subtree
+      - `condition_weights` 由 service 通过 `support.rule_ref_edges -> registry rule payload` 查询
+      - 多 rule、nested referenced_support、unresolved child support、或 registry 链路缺失时统一降级为 `null`
+      - runtime `explain-narrative(kind="candidate")` 与 `explain-nl(kind="candidate")` 现在复用同一 certainty derivation helper：
+        - narrative 仅在 certainty 可派生时附加 `certainty_lines`
+        - NL 仅在 narrative 含 `certainty_lines` 时追加 certainty paragraph
+      - audit / static 也消费同一 certainty delivery：
+        - `export_package` 在 export time 通过 `materialize_certainty_summary` 预计算，写入 `certainty_summaries.jsonl`
+        - `AuditQuery.get_candidate_evidence_tree_narrative` 传入物化 certainty_summary，产出含 `certainty_lines` 的 narrative
+        - static site candidate evidence page 渲染 certainty section
+        - `condition_weights` 只在 registry filesystem 可用，离线 audit 不做 query-time 计算
   - 这三层继续遵循与 `rule_run` 相同的 4-layer explain pattern：
     - raw tree
     - summary
@@ -322,7 +350,7 @@ flowchart LR
 对接 `authoring/sdk` 时，需要区分两类“meta”：
 
 - 断言写入元数据：走 `MetaRow`，参与事实写入与时态/审计链路
-- 声明元数据：如 `version / description / tags`，属于 schema/rule/derivation 资产说明
+- 声明元数据：如 `version / description / tags`，以及 rule asset 的 `condition_weights`，属于 schema/rule/derivation 资产说明
 
 当前口径下，后者不参与：
 
@@ -394,6 +422,11 @@ plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 当前约束：
 
 - 第一轮只承接 benchmark 已验证的 `Workload A + C` annotation 能力
+- certainty/weight vocabulary 现新增一个 first-consumer prototype：
+  - `derive_certainty_summary(...)`
+  - service 当前把它接到 runtime `candidate_evidence_tree_summary` 的 response-level extension
+  - 只消费 `confidence_kind="certainty"` + child rule `condition_weights` + 唯一 `referenced_support` subtree
+  - 只产出 additive certainty summary，不改 core 12 字段 summary set
 - 不直接进入 `Store.evaluate(...)` 正式执行路径
 - 不扩张 `CandidateSet`、SDK、service 的稳定接口
 - `tools/benchmarks/workload_*_reference.py` 继续作为 oracle；`core/annotation/*` 作为独立 prototype 实现

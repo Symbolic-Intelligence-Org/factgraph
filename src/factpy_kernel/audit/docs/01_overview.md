@@ -1,7 +1,7 @@
 # Audit 模块总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/audit`
-- 最后更新：2026-03-20
+- 最后更新：2026-03-21
 - 目标读者：需要消费 audit package、做离线审计查询或静态展示的开发者
 
 ## 1. 模块职责
@@ -65,6 +65,7 @@
    - `get_run_bundle(run_id)`
    - `list_candidates(...)`
    - `get_candidate_evidence_tree(candidate_id)`
+   - `get_candidate_certainty_summary(candidate_id)`
    - `list_decisions(...)`
    - `list_failures(...)`
    - `list_compliance_matrix(...)`
@@ -186,6 +187,7 @@
 纯派生。
 这组 candidate summary 与 runtime `candidate_evidence_tree_summary` 保持同构，且只从既有 raw tree 纯派生。
 这组 candidate narrative 与 runtime `candidate_evidence_tree_narrative` 保持同构，且只从既有 candidate summary 纯派生。
+当 audit package 包含 `certainty_summaries.jsonl` 时，candidate narrative 也会含 additive `certainty_lines` section，与 runtime 产出一致。
 candidate NL explain 当前不在 audit first-round scope；静态页只消费 narrative block，不发明单独 NL DTO。
 
 ## 4. 与其他层的边界
@@ -227,6 +229,12 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 - `audit/rule_trace_artifacts.jsonl`
   - 以 `rule_run_id` 为 key 的 flat JSONL rows
   - payload 复用 `RuleTraceArtifact` 的 JSON-friendly shape
+- `audit/certainty_summaries.jsonl`（可选）
+  - 以 `candidate_id` 为 key 的 flat JSONL rows
+  - 每行格式：`{"candidate_id": "...", "certainty_summary": {...}}`
+  - 只在 export time 有 `registry_root` 且 candidate 的 certainty 可派生时写入
+  - `certainty_summary` payload 与 runtime `explain-summary` 的 `certainty_summary` 字段同构
+  - 旧 package 不含该文件时，reader 返回空 dict（向后兼容）
 
 这些文件当前是全量导出，不做引用子集裁剪；它们的职责是让离线 audit consumer 能读取 explain carrier，而不是提供 online durable readback。
 
@@ -245,6 +253,14 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 - query 会优先消费 `SupportArtifact.rule_ref_edges`，并按 `child_support_digest` 继续离线解引用 child support artifact；若 package 只有 legacy `rule_refs`，则保持 minimal fallback tree
 - dto 可直接返回与 runtime 同构的 `candidate_evidence_tree`
 - static site 可把 `candidate_id` 渲染成 recursive sectioned tree page，并继续下钻到既有 assertion detail 页面
+
+当前 `audit.reader` / `AuditQuery` / static UI 也已统一消费 `certainty_summaries.jsonl`：
+
+- reader 读取 JSONL rows → 解析为 `{candidate_id: certainty_summary_dict}` mapping（旧 package 若没有该文件则返回空 dict）
+- query 可按 `candidate_id` 查询物化的 certainty_summary
+- query 的 `get_candidate_evidence_tree_narrative(candidate_id)` 会将物化的 certainty_summary 传入 narrative renderer，产出含 additive `certainty_lines` 的 narrative
+- static site candidate evidence page 在 narrative block 末尾渲染 certainty section（当 certainty_lines 存在时）
+- certainty_summary 在 export time 由 runtime service 预计算（通过 core `materialize_certainty_summary` helper），audit 侧不做 query-time 计算（因为 `condition_weights` 离线不可用）
 
 当前不会新增 `rule_trace_summary` 专用 artifact 文件；summary 是 read/query 层的纯派生面，不是新的 durable package contract。
 当前也不会新增 `candidate_evidence_tree` 专用 artifact 文件；candidate tree 同样是 read/query 层的纯派生面，不是新的 durable package contract。

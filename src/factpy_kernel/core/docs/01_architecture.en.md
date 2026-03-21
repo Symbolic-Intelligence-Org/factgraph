@@ -1,7 +1,7 @@
 # Core Architecture Overview (factpy_kernel)
 
 - Scope: `src/factpy_kernel/core`
-- Last updated: 2026-03-17
+- Last updated: 2026-03-21
 - Code baseline: `Store.evaluate` supports only `native|souffle|problog`; `Ledger` is a SQLite write-through cache; `ProjectorAudit` is v2
 - Audience: developers who need to understand core semantic boundaries, key entrypoints, and extension points
 
@@ -16,7 +16,9 @@ This document describes only the `core` semantic kernel. It does not cover imple
 
 Additional boundary notes:
 
-- `authoring/sdk` currently use a unified declaration metadata contract: `version / description / tags`
+- `authoring/sdk` currently use the following declaration metadata boundary:
+  - schema / derivation: `version / description / tags`
+  - rule: `version / description / tags`, plus version-scoped `condition_weights`
 - those fields are declaration and management metadata, not core runtime semantics
 - core may carry descriptive fields compiled from upper layers, but does not change `evaluate/chosen/accept` behavior because of them
 
@@ -31,9 +33,10 @@ src/factpy_kernel/core/
   evidence/                # append-only write protocol (set/add/retract/replace)
   policy/                  # active/chosen/policy_ir
   view/                    # view projection (facts + display + audit)
-  rules/                   # where AST/validator + evaluator + RuleRef execution
+  rules/                   # where AST/validator + plain evaluator + shared RuleRef substrate + rule runtime
   derivation/              # CandidateSet generation/accept (including batch accept_many)
   mapping/                 # mapping conflict resolution and decisions
+  annotation/              # internal prototype annotation kernel (A/C workload slice)
 ```
 
 ## 3. Module Responsibility Map
@@ -49,13 +52,23 @@ src/factpy_kernel/core/
 | `view.projector` | core fact projection and audit statistics | `project_view_facts`, `project_view_facts_with_audit`, `project_display_facts` |
 | `rules.where_ast*` | where AST parsing and validation | `parse_where_ir_to_ast`, `validate_where_ast` |
 | `rules.where_eval` | where interpreter for the native path | `evaluate_where` |
+| `rules.ruleref_substrate` | shared native `RuleRef` execution substrate for `query + derivation` | `evaluate_native_where` |
 | `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef execution | `run_rule`, `run_rule_with_trace` |
-| `rules._trace` | rule runtime trace carrier and serialization | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict` |
+| `rules._trace` | rule runtime trace carrier, serialization, and summary derivation | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict`, `summarize_rule_trace_artifact_dict` |
+| `rules._trace_narrative` | deterministic narrative rendering on top of rule-run summary | `render_rule_run_narrative` |
+| `rules._trace_nl` | deterministic NL explain rendering on top of summary+narrative | `render_rule_run_nl_explain` |
+| `store._candidate_evidence_tree_summary` | deterministic summary derivation on candidate evidence tree | `summarize_candidate_evidence_tree_dict` |
+| `store._candidate_evidence_tree_narrative` | deterministic narrative rendering on candidate tree summary | `render_candidate_evidence_tree_narrative` |
+| `store._candidate_evidence_tree_nl` | deterministic NL explain rendering on candidate tree summary+narrative | `render_candidate_evidence_tree_nl_explain` |
 | `derivation.candidates` | candidate structure and digest/key computation | `CandidateSet`, `make_candidate` |
 | `derivation.accept` | candidate accept and batch accept_many | `accept_candidate_set`, `accept_many_candidate_sets` |
 | `mapping.canon` | mapping conflict resolution and tie-break | `resolve_mapping_predicate` |
+| `annotation._min_max` | internal prototype min-max path confidence propagation | `derive_min_max_path_confidence` |
+| `annotation._evidence` | internal prototype Workload C evidence expansion / provenance reconstruction / max aggregation helpers | `build_direct_evidence_candidates_proto`, `build_max_evidence_provenance`, `apply_max_evidence_aggregation` |
+| `annotation._certainty` | internal prototype certainty-lane condition-weight impact derivation | `derive_certainty_summary` |
+| `store._certainty_materializer` | service-neutral certainty materialization (derives certainty_summary dict from pre-resolved condition_weights) | `materialize_certainty_summary`, `extract_single_referenced_support_tree`, `certainty_summary_to_dict` |
 | `store._artifact_sidecar` | file-backed durable explain carrier, capture-time retention metadata, and rule-trace TTL GC maintenance | `FileArtifactSidecar`, `GCResult`, `FileArtifactSidecar.gc_rule_trace` |
-| `store.runtime` | `Store` facade, engine registration, and default in-process / optional sidecar-backed explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest`, `Store.get_candidate_support_kind` |
+| `store.runtime` | `Store` facade, engine registration, and default in-process / optional sidecar-backed explain readback / backref lookup | `Store`, `register_engine_evaluator`, `Store.explain_support`, `Store.explain_rule_trace`, `Store.get_candidate_support_digest`, `Store.get_candidate_support_kind`, `Store.get_candidate_confidence_kind`, `Store.list_candidate_ids` |
 | `store.evaluation` | public `Store.evaluate` entrypoint | `evaluate_store` |
 | `store.queries` | explain/conflicts/resolve_mapping queries | `explain_fact`, `conflicts`, `resolve_mapping` |
 | `store.builders` | candidate building, head/entity parsing, value coercion | `candidates_from_bindings`, `entity_candidates_from_bindings` |
@@ -93,27 +106,174 @@ flowchart LR
 
 Current `Store.evaluate(...)` modes:
 
-- `native`: core executes `project_view_facts -> evaluate_where -> builders`
+- `native`: core executes `project_view_facts -> ruleref_substrate.evaluate_native_where -> builders`
 - `souffle` / `problog`: delegate to registered engine evaluators
 - `python` / `engine`: removed; calls raise `ValueError`
+
+Native `RuleRef` semantics and current boundary:
+
+- plain `rules.where_eval.evaluate_where(...)` still handles basic where evaluation without a registry; it does not itself promise `RuleRef` support
+- `query + derivation` must go through `rules.ruleref_substrate.evaluate_native_where(...)` for native `RuleRef` execution
+- when `registry is None` and the where clause contains `ruleref`, the shared substrate fails fast
+- when a `registry` is provided, the shared substrate first does `allow_ruleref=True` AST validation, then performs target lookup, `expose=True` gate, arity checks, cycle guard, and per-evaluation memo, before rewriting direct `RuleRef` atoms into internal overlay predicates and delegating to plain `evaluate_where(...)`
 
 Evaluate now also records a lightweight candidate explain backref after candidate construction:
 
 - `candidate_id -> (support_digest, support_kind)`
+- `candidate_id -> confidence_kind`
 - native candidates write `support_kind="native_binding_v1"` and can continue to `Store.explain_support(...)`
+- Souffle first-round partial witness now writes `support_kind="souffle_witness_v1"`:
+  - the carrier continues to reuse `SupportArtifact`
+  - currently only promises the native subset:
+    - `binding`
+    - `pred_witnesses`
+    - minimal `non_fact_steps`
+    - `rule_ref_edges=[]`
+  - witnesses are produced through adapter-level Datalog rewriting, not the official Soufflé provenance proof tree
+  - when the same final binding has witness rows across multiple OR branches, the adapter uses `source-order wins`
 - engine candidates now explicitly write `support_kind="engine_no_witness_v1"` plus the zero-digest placeholder:
   - this is a no-witness degraded explain state, not an artifact-missing error
   - service `explain_ref(kind="candidate")` returns `witness_status="degraded"` for this path
-- `Store.get_candidate_support_digest(candidate_id)` and `Store.get_candidate_support_kind(candidate_id)` both recover only this first hop inside the current `Store` instance
+- `CandidateSet` retains the narrow `confidence: float | None` field and adds an additive `confidence_kind` value-semantics tag:
+  - `none`
+  - `probability`
+  - `certainty`
+  - deterministic native / Souffle paths currently write `confidence_kind="none"`
+  - ProbLog writes `confidence_kind="probability"` when setting `candidate.confidence`
+  - `confidence_kind` does not enter `candidate_key` / `candidate_id` / `support_digest` computation, nor does it change evaluate / accept / chosen behavior
+- `Store.get_candidate_support_digest(candidate_id)`, `Store.get_candidate_support_kind(candidate_id)`, and `Store.get_candidate_confidence_kind(candidate_id)` all recover only the first hop inside the current `Store` instance
 - when `Store(..., artifact_sidecar=...)` is configured, only the native `support_digest -> SupportArtifact` second hop can be re-read from later `Store` instances sharing the same sidecar root
+- on this foundation, service/audit can now assemble the candidate explain into a `candidate_evidence_tree`:
+  - entrypoint is still `candidate_id`
+  - native proof substrate remains the existing `SupportArtifact`
+  - the current tree uses a sectioned shape:
+    - `candidate_result`
+    - `support_section`
+    - optional `rule_ref_section`
+    - `predicate_witness_group` / `non_fact_check` / `assertion_fact` / `rule_ref` / `degraded_support`
+    - recursive child layer:
+      - `referenced_support`
+      - `unresolved_support`
+      - `recursion_boundary`
+  - this remains a candidate-first consumer surface, not full engine parity, graph UI, or a deeper provenance contract
+  - `node_kind` is the carrier-level provenance-role taxonomy (frozen contract):
+    - **structural**: `candidate_result`, `support_section`, `rule_ref_section` — pure structural containers, no source semantics
+    - **witness**: `predicate_witness_group`, `assertion_fact` — directly witness facts in the ledger
+    - **constraint**: `non_fact_check` — non-fact constraint checks (eq/ne/gt/not/ruleref/...)
+    - **rule_chain**: `rule_ref`, `referenced_support` — rule references and recursive proof expansion
+    - **terminal**: `unresolved_support`, `recursion_boundary` — traversal stop or evidence unavailable
+    - **degraded**: `degraded_support` — engine path with no witness artifact
+  - first-round does not add `source_kind` / `provenance_kind` fields; `node_kind` itself serves as the provenance-role carrier
+  - deeper assertion-origin taxonomy (direct write / derivation accept / import) is deferred; if needed, it would be extended on `assertion_fact` nodes in the future
+  - native `SupportArtifact` now retains both:
+    - legacy `rule_refs` summary
+    - structured `rule_ref_edges`
+  - `rule_ref_edges` records per-occurrence child proof edges by `ruleref_atom_key`, carrying:
+    - `rule_ref_id`
+    - `rule_ref_version`
+    - `child_support_digest | unresolved_reason`
+  - child support continues to reuse the existing `support_digest -> SupportArtifact` readback; internal child row proof is expressed through native support artifacts with `root_result_kind="row"`
+  - native support capture now performs winning-branch narrowing at artifact generation time:
+    - `pred_witnesses`
+    - `non_fact_steps`
+    - `rule_ref_edges`
+    only retain the adopted branch's proof body
+  - when multiple branches satisfy the same final binding, `source-order wins` is applied
+  - selected branch identity remains recoverable through the existing `b{branch}.a{atom}:...` key namespace; no new top-level branch field is added
+  - native candidate proof tree unresolved / boundary taxonomy is now frozen as an official contract:
+    - `unresolved_support`
+      - `child_support_unavailable`
+        - capture / substrate-owned
+      - `artifact_missing`
+        - support lookup / readback-owned
+    - `recursion_boundary`
+      - `cycle`
+      - `depth_limit`
+        - both are traversal-owned boundary reasons
+  - runtime / audit / static continue to share the same raw terminal reason enum; no consumer-specific translation layer is introduced
+  - the richer taxonomy applies only to the structured `rule_ref_edges` path; old artifacts with only legacy `rule_refs` fall back to flat `rule_ref` nodes and do not enter the recursive terminal taxonomy
+  - engine degraded candidates now also have a legitimate tree surface:
+    - the top-level envelope is still `candidate_evidence_tree`
+    - first-round shape is fixed to:
+      - `candidate_result`
+      - `support_section`
+      - `degraded_support`
+    - `degraded_support` minimum fields:
+      - `support_kind`
+      - `witness_status="degraded"`
+      - `children=[]`
+    - `degraded_support` does not reuse `unresolved_support` / `recursion_boundary`
+    - the node itself does not expose `support_digest`; the current zero digest remains a top-level compatibility placeholder only
+    - legacy `"none"` and `engine_no_witness_v1` are isomorphic on the tree surface
+  - runtime currently treats `{"native_binding_v1", "souffle_witness_v1"}` as witness-bearing candidate support kinds:
+    - `Store.explain_support(...)` can directly replay flat support
+    - `candidate_evidence_tree` can continue to reuse the existing native tree builder
+    - audit/static for `souffle_witness_v1` remains deferred; offline consumption is not promised in this round
+  - on top of the raw tree, candidate explain now has deterministic derived layers:
+    - `candidate_evidence_tree_summary`
+      - derived purely from the raw tree by `store._candidate_evidence_tree_summary`
+      - first-round is a provenance-role-first 12-field core set:
+        - `candidate_id`
+        - `support_kind`
+        - `is_degraded`
+        - `root_result_kind`
+        - `node_count_by_role`
+        - `witness_assertion_count`
+        - `rule_ref_count`
+        - `recursive_depth`
+        - `has_unresolved`
+        - `has_boundary`
+        - `unresolved_reasons`
+        - `boundary_reasons`
+    - `candidate_evidence_tree_narrative`
+      - derived purely from summary by `store._candidate_evidence_tree_narrative`; runtime certainty lane may optionally attach an additive certainty section
+      - base shape:
+        - `headline`
+        - `overview_lines`
+        - `evidence_lines`
+        - `rule_chain_lines`
+        - `terminal_lines`
+        - `drilldown_lines`
+      - runtime first-round also allows an optional `certainty_lines` section
+    - `candidate_evidence_tree_nl_explain`
+      - derived purely from summary + narrative by `store._candidate_evidence_tree_nl`
+      - base shape:
+        - `headline`
+        - `paragraphs`
+      - when the runtime candidate narrative includes `certainty_lines`, the NL layer appends a 5th certainty paragraph
+    - service runtime `explain-summary(kind="candidate")` may also attach a response-level `certainty_summary`:
+      - not part of the core 12-field summary set
+      - only attempted when `Store.get_candidate_confidence_kind(candidate_id) == "certainty"`
+      - currently only consumes the single structured `rule_ref_edge` pointing to the unique `referenced_support` subtree
+      - `condition_weights` are looked up by the service through `support.rule_ref_edges -> registry rule payload`
+      - multi-rule, nested referenced_support, unresolved child support, or missing registry chain all degrade gracefully to `null`
+      - runtime `explain-narrative(kind="candidate")` and `explain-nl(kind="candidate")` now reuse the same certainty derivation helper:
+        - narrative only attaches `certainty_lines` when certainty is derivable
+        - NL only appends a certainty paragraph when narrative contains `certainty_lines`
+      - audit / static also consume the same certainty delivery:
+        - `export_package` pre-computes at export time via `materialize_certainty_summary`, writes `certainty_summaries.jsonl`
+        - `AuditQuery.get_candidate_evidence_tree_narrative` passes materialized certainty_summary, producing narrative with `certainty_lines`
+        - static site candidate evidence page renders a certainty section
+        - `condition_weights` only exist on registry filesystem; offline audit does not perform query-time computation
+  - these three layers follow the same 4-layer explain pattern as `rule_run`:
+    - raw tree
+    - summary
+    - narrative
+    - NL explain
+  - delivery matrix remains narrowed:
+    - runtime: summary + narrative + NL
+    - audit: summary + narrative
+    - static: narrative block
+    - audit/static first-round does not deliver a separate candidate NL DTO
 
 ```mermaid
 flowchart LR
   A["Store.evaluate(mode='native')"] --> B["view.projector.project_view_facts"]
-  B --> C["rules.where_eval.evaluate_where"]
+  B --> C["rules.ruleref_substrate.evaluate_native_where"]
   C --> D["store.builders.*_from_bindings"]
   D --> E["CandidateSet list"]
   E --> F["Store._candidate_support_index"]
+  F --> G["candidate evidence tree v1 (service/audit derived surface)"]
 ```
 
 ### 5.3 Rule Runtime Flow
@@ -133,7 +293,9 @@ Current trace semantics:
 - `original_where`, `rewritten_where`, and `non_fact_steps.details.atom` remain opaque payloads; the typed contract only promises their surrounding fields
 - `T1` temporal checks do not add new trace-carrier fields: fact-backed temporal anchors still surface through `pred_witnesses`, and scalar comparison bindings stay in `non_fact_steps.details.binding`
 - Scenario A threshold-bearing uncertainty checks follow the same rule: measurement/threshold assertions surface through `pred_witnesses`, and scalar comparison bindings stay in `non_fact_steps.details.binding`
+- deterministic NL explain sits on top of summary/narrative and only consumes those two structured DTOs; it does not read the raw trace payload directly
 - `RuleTraceArtifact` remains separate from derivation `SupportArtifact`
+- `rule_run_summary`'s deterministic narrative is solely owned by `rules._trace_narrative`; the presentation layer should not duplicate narrative templates
 
 ```mermaid
 flowchart LR
@@ -188,7 +350,7 @@ Note: current core projection APIs no longer expose `temporal_view` or `legacy_r
 When integrating with `authoring/sdk`, distinguish between two different kinds of "meta":
 
 - assertion write metadata: stored via `MetaRow`, participates in write/audit/temporal paths
-- declaration metadata: `version / description / tags` on schema/rule/derivation assets
+- declaration metadata: `version / description / tags`, plus rule-asset `condition_weights`, on schema/rule/derivation assets
 
 Under the current contract, declaration metadata does not participate in:
 
@@ -197,12 +359,23 @@ Under the current contract, declaration metadata does not participate in:
 - candidate generation
 - accept/accept_many write semantics
 
-## 7. Rule Validation Gate (where AST)
+## 7. Rule Validation Gate (where AST / RuleRef substrate)
 
-Before execution, `rules.where_eval.evaluate_where(...)` attempts:
+Before execution, plain `rules.where_eval.evaluate_where(...)` attempts:
 
 - `parse_where_ir_to_ast(...)`
 - `validate_where_ast(..., mode='python', capabilities={'allow_ruleref': False})`
+
+Additional boundary notes:
+
+- this plain evaluator is still not the official entrypoint for `RuleRef`
+- `query + derivation` native `RuleRef` paths must go through `rules.ruleref_substrate.evaluate_native_where(...)`
+- the shared substrate will:
+  - fail fast when `registry is None` and `ruleref` atoms are present
+  - when a `registry` is provided, first do `allow_ruleref=True` AST validation
+  - perform target lookup, `expose=True` gate, arity checks via shared helpers
+  - execute recursion/cycle guard and per-evaluation memo in the current first-round
+  - then delegate to plain `evaluate_where(...)` for the rewritten where clause
 
 Environment variable:
 
@@ -222,7 +395,7 @@ Current adapter-side behavior:
 - importing `factpy_kernel.adapters.souffle` registers `souffle`
 - importing `factpy_kernel.adapters.problog` registers `problog`
 
-Additional note:
+Additional notes:
 
 - `Store` now maintains two separate in-process explain registries:
   - `_support_artifacts` for derivation-native support capture
@@ -241,6 +414,22 @@ Additional note:
   - it applies age-only TTL GC only to `RuleTraceArtifact`
   - `SupportArtifact` remains write-and-retain
   - payload orphans are reported and skipped, while metadata orphans may be cleaned up
+
+## 8.1 Annotation Prototype Boundary
+
+`src/factpy_kernel/core/annotation/` is currently an internal / prototype module, not part of the stable public contract.
+
+Current constraints:
+
+- first-round only covers the benchmark-validated `Workload A + C` annotation capabilities
+- certainty/weight vocabulary now adds a first-consumer prototype:
+  - `derive_certainty_summary(...)`
+  - the service currently wires it to the runtime `candidate_evidence_tree_summary` response-level extension
+  - only consumes `confidence_kind="certainty"` + child rule `condition_weights` + the unique `referenced_support` subtree
+  - only produces an additive certainty summary; does not modify the core 12-field summary set
+- does not directly enter the `Store.evaluate(...)` execution path
+- does not expand the stable interfaces of `CandidateSet`, SDK, or service
+- `tools/benchmarks/workload_*_reference.py` continues to serve as the oracle; `core/annotation/*` remains an independent prototype implementation
 
 ## 9. Invariants That Must Hold
 
