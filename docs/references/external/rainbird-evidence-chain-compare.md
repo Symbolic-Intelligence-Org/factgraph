@@ -7,7 +7,10 @@
   - 可用于 blueprint 中的证据链、delivery shape、explainability 对照讨论
   - 不应单独作为本项目 contract 或实现承诺
 
-## 评估：蓝图证据链设计的完整性 vs. Rainbird 的实现
+## 评估：证据链设计的完整性 vs. Rainbird 的实现
+
+> **Last reviewed against codebase: 2026-03-20**
+> 本节的"当前状态"列反映截至该日期的代码真相（含 evidence tree 六轮实现、Souffle partial witness、live permalink、NL explain）。
 
 ### 一、Rainbird 证据链设计的核心结构（先建立比较基线）
 
@@ -36,48 +39,48 @@ Result (factID + certainty)
 
 对照 Rainbird，逐层检查蓝图当前的定义：
 
-#### 层 1：Result 载体（`CandidateSet` + `confidence`）
+#### 层 1：Result 载体（`CandidateSet` + `support_digest/support_kind`）
 
-| 维度 | Rainbird | 当前蓝图 | 差距 |
+| 维度 | Rainbird | 当前状态 | 差距 |
 |---|---|---|---|
-| 结论对象 | `subject + relationship + object + certainty + factID` | `CandidateSet` + 窄 `confidence` 字段 | ⚠️ `factID` 等价物缺失：没有一个能直接指向证据树的唯一入口标识 |
-| 置信度语义 | 明确是 certainty-weighted（非概率），1-100 整数，有 rule-level cap | `confidence` 语义未分离（certainty vs probability 混用风险，蓝图 §5.4 已点出） | ⚠️ 语义分离问题已识别但未解决 |
-| 多结果 | 每个 result 有独立 evidence tree | `CandidateSet` 支持多候选，但各候选是否各有独立 proof 入口未明确 | ⚠️ 需要明确 |
+| 结论对象 | `subject + relationship + object + certainty + factID` | `CandidateSet` 携带 `candidate_id` + `support_digest` + `support_kind`；`candidate_id` 即为 proof entry handle，可串联 `SupportArtifact` readback | ✅ `factID` 等价物已存在 |
+| 置信度语义 | 明确是 certainty-weighted（非概率），1-100 整数，有 rule-level cap | `confidence` 语义未分离（certainty vs probability 混用风险，母蓝图 §5.4 已点出） | ⚠️ 语义分离问题已识别但未解决 |
+| 多结果 | 每个 result 有独立 evidence tree | 每个 candidate 有独立 `support_digest` + `support_kind`，可各自展开为独立 `candidate_evidence_tree` | ✅ 已明确 |
 
 #### 层 2：Evidence Tree（proof/provenance carrier）
 
-| 维度 | Rainbird | 当前蓝图 | 差距 |
+| 维度 | Rainbird | 当前状态 | 差距 |
 |---|---|---|---|
-| 树的入口 | `factID` → `GET /analysis/evidence/{factID}/{sessionID}` | 无对应的 stable per-result proof entry point | ❌ **关键缺口**：蓝图讨论了 proof/provenance carrier 的形态，但没有定义"如何从一个 candidate 结论找到它的证明树入口" |
-| 递归结构 | 每个 condition 有 `factID`，可无限递归到 leaf | 蓝图 §5.4.1 讨论了 run-scoped proof instance vs proof signature，但没有定义递归边界 | ⚠️ 递归终止条件未定义（何时到达 leaf：inject / KM global / user answer） |
-| 条件来源类型 | 6 种明确的 source（Rule/Inject/Answer/Datasource/KM/Synthesised），颜色编码 | 蓝图提到 `support/provenance`，但没有枚举来源类型 | ⚠️ fact source taxonomy 缺失 |
-| 可选条件处理 | optional condition 缺失时生成 synthesised fact at 0%，在树中显示为 strikethrough | 蓝图 §5.8 提到 `missing optional conditions`，但没有定义运行时表达方式 | ⚠️ 缺失条件的运行时表达方式未定义 |
+| 树的入口 | `factID` → `GET /analysis/evidence/{factID}/{sessionID}` | `candidate_id` → `Store.get_candidate_support_digest()` → `SupportArtifact` → recursive `candidate_evidence_tree`；runtime 提供 `GET /v1/runtime/sessions/{sid}/evidence/candidate/{cid}` HTML permalink | ✅ per-result proof entry point 已存在 |
+| 递归结构 | 每个 condition 有 `factID`，可无限递归到 leaf | `candidate_evidence_tree` 已实现递归展开：`rule_ref_edges` → child `SupportArtifact` → 递归子树；`_MAX_RECURSION_DEPTH=8`；cycle detection via `ancestry: set[str]`；4 种 terminal reason（`child_support_unavailable` / `artifact_missing` / `cycle` / `depth_limit`） | ✅ 递归结构与终止条件已定义 |
+| 条件来源类型 | 6 种明确的 source（Rule/Inject/Answer/Datasource/KM/Synthesised），颜色编码 | `node_kind` 已提升为 carrier-level provenance-role taxonomy（6 类：structural / witness / constraint / rule_chain / terminal / degraded）；但更深的 assertion-origin taxonomy（direct write / derivation accept / import）仍 deferred | ⚠️ provenance-role 层已关闭；assertion-origin 层仍开放（依赖 assertion metadata schema） |
+| 可选条件处理 | optional condition 缺失时生成 synthesised fact at 0%，在树中显示为 strikethrough | `unresolved_support` + `unresolved_reason` 机制可表达"子证明不可用"；但 **optional condition 语义**（rule IR 级别的"条件缺失但允许跳过"）仍未实现 | ⚠️ 结构性 unresolved 机制存在，但 authoring-level optional 语义仍为 deferred |
 
 #### 层 3：Salience / Impact Breakdown（certainty 分解）
 
-| 维度 | Rainbird | 当前蓝图 | 差距 |
+| 维度 | Rainbird | 当前状态 | 差距 |
 |---|---|---|---|
-| 条件权重 | 每个条件有 explicit weight，impact = f(weight, condition certainty) | 蓝图 §5.8 提到 `contribution/impact breakdown`，但作为 annotation extension candidate，未进入核心 contract | ⚠️ impact breakdown 目前只是候选能力，没有明确是否进入 proof carrier 还是 annotation layer |
-| Salience Chart | 独立视图，显示每条件的 actual impact vs max possible impact | 无对应概念 | ❌ **gap**：即使不做完整可视化，impact breakdown 的数据结构需要在 carrier 层定义 |
-| Rule-level certainty cap | 规则本身有 max certainty 上限，独立于条件 certainty | 蓝图未讨论 rule-level certainty cap 的存在 | ⚠️ 规则级 certainty 上限是个重要的 authoring contract 问题 |
+| 条件权重 | 每个条件有 explicit weight，impact = f(weight, condition certainty) | salience/impact 归属已冻结为 annotation/value-semantics 层，compute-time = query-time；**blocked on certainty/weight vocabulary**（当前不存在） | ⚠️ 归属问题已关闭，但实现 blocked on 前置基础设施 |
+| Salience Chart | 独立视图，显示每条件的 actual impact vs max possible impact | 无对应概念；当前 tree summary 仅有结构性统计（node counts / assertion counts / recursive depth），不含数值权重 | ❌ **gap**：impact breakdown 的数据结构需要 certainty/weight 基础设施才能定义 |
+| Rule-level certainty cap | 规则本身有 max certainty 上限，独立于条件 certainty | 未实现 | ⚠️ 规则级 certainty 上限是 authoring contract 问题，属于 certainty/weight 基础设施的一部分 |
 
 #### 层 4：Audit / Session Trace（interaction log）
 
-| 维度 | Rainbird | 当前蓝图 | 差距 |
+| 维度 | Rainbird | 当前状态 | 差距 |
 |---|---|---|---|
-| Session 级别的事件流 | `GET /analysis/interactions/{sessionID}` 返回完整事件序列（query/inject/question/answer/result/error），可导出 CSV | 蓝图的 `audit-log` 对应 run/candidate/decision/apply event，结构类似 | ✅ 概念覆盖，但 Rainbird 明确支持 session 级别聚合，蓝图的 audit 是 package 导出模式 |
-| Live vs offline audit | Rainbird 的 evidence 和 interaction log 是 live API，保留 7-30 天 | 蓝图明确：`audit` 是离线 package 消费，不直接暴露 live runtime trace | ⚠️ live trace 的需求在 reference scenario 中（AML/ESA 场景都需要"当时为何决策"）已经浮现，但蓝图尚未决策是否扩展 audit 到 live 模式 |
+| Session 级别的事件流 | `GET /analysis/interactions/{sessionID}` 返回完整事件序列（query/inject/question/answer/result/error），可导出 CSV | audit package 对应 run/candidate/decision/apply event，结构类似；audit query 已支持 `get_candidate_evidence_tree()` | ✅ 概念覆盖；Rainbird 侧是 session 级聚合，本项目是 package 导出 + candidate-level tree |
+| Live vs offline audit | Rainbird 的 evidence 和 interaction log 是 live API，保留 7-30 天 | audit 仍为离线 package 消费；但 runtime 现已提供 session-bound live evidence permalink（HTML GET routes，session 生命周期内可用） | ⚠️ live evidence 已存在但仅限 session scope；durable（跨 session）live URL 仍未实现 |
 
 #### 层 5：对外交付形态（最终成品方式）
 
-这是 Rainbird 文档**与当前蓝图差距最大的维度**：
+Rainbird 的三种交付形态现已在本项目中各有对应落点：
 
-| 维度 | Rainbird | 当前蓝图 |
-|---|---|---|
-| 最终用户界面 | Rainbird Agent（iFrame/URL），React SDK，visual evidence tree URL | **完全未定义** |
-| "为什么"的消费形态 | 三种并存：visual tree URL（可嵌入）/ API 递归遍历 / NL Explain endpoint | 蓝图 §5.6 只提到 `proof/support graph -> UI / service delivery`，无具体形态 |
-| 开发者集成 | REST API + JS/Go SDK，明确的 QuestionResponse / ResultResponse schema | `service` 层存在，但 traceability/explainability 的 service delivery contract 未定义 |
-| 竞争差异化 | visual evidence tree + salience chart + NL explain 的组合 | 蓝图有四个候选方向但没有哪种被明确对应到"用户能摸得到的东西" |
+| 维度 | Rainbird | 当前状态 | 差距 |
+|---|---|---|---|
+| Visual evidence URL | Rainbird Agent（iFrame/URL），visual evidence tree URL | `GET /v1/runtime/sessions/{sid}/evidence/candidate/{cid}` → HTML；audit static site 也渲染 candidate evidence page | ✅ session-bound live permalink + offline static page 均存在 |
+| Structured API | REST API 递归遍历，明确 schema | 7 个 explain POST 端点（explain-tree / summary / narrative / support / nl / rule-trace / explain-fact），返回 structured JSON | ✅ 已存在 |
+| NL Explain | NL Explain endpoint（BETA） | `POST .../queries/explain-nl` 支持 `kind="candidate"` 和 `kind="rule_run"`；当前为 **deterministic template-based** rendering，不依赖 LLM | ✅ deterministic NL 已存在；LLM-powered NL explain 仍为候选方向（若需更高质量的自然语言输出） |
+| 竞争差异化 | visual evidence tree + salience chart + NL explain 的组合 | evidence tree + NL explain 已具备；**salience chart 仍为空白**（blocked on certainty/weight）；temporal logic + deontic reasoning 是本项目独有的差异化来源（Rainbird 不具备） | ⚠️ salience chart 是与 Rainbird 对比中仍缺失的主要可视化能力 |
 
 ---
 
@@ -101,30 +104,60 @@ Rainbird 能做 `今天 - 开户日 > 36小时`，但不能做 `在36小时窗�
 
 ### 四、证据链完整性的总结评分
 
-| 层次 | 完整度 | 主要缺口 |
+| 层次 | 完整度 | 主要剩余缺口 |
 |---|---|---|
-| Result 载体 | 60% | 缺少 proof entry point 标识（`factID` 等价物），certainty 语义未分离 |
-| Evidence Tree 结构 | 40% | 递归结构、来源类型枚举、可选条件运行时表达，三者均未定义 |
-| Impact / Salience | 30% | impact breakdown 只在 annotation extension candidates 中，未进入核心 carrier contract |
-| Audit / Session Trace | 70% | offline package 模式存在，live trace 需求已浮现但未决策 |
-| **对外交付形态** | **10%** | **最大缺口：没有一种"用户能看到的东西"被明确定义** |
+| Result 载体 | 85% | certainty vs probability 语义分离仍未解决 |
+| Evidence Tree 结构 | 80% | assertion-origin taxonomy deferred；optional condition 语义依赖 rule IR 扩展 |
+| Impact / Salience | 30% | 归属已冻结（annotation/value-semantics 层），但 **blocked on certainty/weight vocabulary** |
+| Audit / Session Trace | 75% | offline audit + session-bound live permalink 均存在；durable（跨 session）live URL 未实现 |
+| 对外交付形态 | 70% | evidence tree URL + structured API + deterministic NL 三种形态均已存在；salience chart 缺失；LLM-powered NL 仍为候选 |
+
+> 与本文早期版本相比，Result 载体、Evidence Tree 结构和对外交付形态三层的完整度在 evidence tree 六轮实现后有大幅提升。当前与 Rainbird 对比中最大的结构性缺口集中在 **Impact / Salience** 层（certainty/weight 基础设施缺失），以及 **certainty 语义分离** 这一贯穿多层的设计问题。
 
 ---
 
-### 五、给蓝图的具体建议
+### 五、剩余差距与下一步建议
 
-**最需要补充的是：把交付形态纳入 §5.3 的第 4 个问题**
+以下建议基于当前已落地能力，聚焦于与 Rainbird 对比中仍然开放的设计问题。
 
-当前 §5.3 的第 4 个问题是"哪类承载方式最适合近期对外演示"，但回答时缺少对**交付形态**的约束。借鉴 Rainbird，可以考虑三种近期可行的形态：
+#### 5.1 已关闭的早期建议（仅作历史记录）
 
-| 形态 | 对应 Rainbird | 实现成本 | ESA/AML 适用性 |
-|---|---|---|---|
-| **Shareable audit URL**（给定 candidate ID，打开完整 audit trace 页面）| Evidence Tree URL | 低，复用现有 audit 基础设施 | ✅ ESA SDMR close-out reference 直接映射 |
-| **Structured JSON API**（`GET /explain/{candidate_id}`，返回 proof chain JSON）| Evidence API | 中，需要定义 schema | ✅ 开发者可自定义渲染 |
-| **NL explain**（自然语言解释一个 candidate 为何成立）| `/nl/explain` BETA | 中高，需要 LLM 集成 | ✅ ESA 要求"对非形式逻辑背景的人可理解" |
+- ~~把交付形态纳入讨论~~：三种形态（evidence URL / structured API / NL explain）均已实现
+- ~~把 `factID` 等价物加入设计~~：`candidate_id → support_digest → SupportArtifact → candidate_evidence_tree` 链路已完整
 
-**以及：把 `factID` 等价物（proof entry point）加入 §5.4 的讨论**
+#### 5.2 当前最大的结构性 gap：certainty/weight 基础设施
 
-Rainbird 架构中最优雅的设计是：`result` 里携带 `factID`，作为连接 decision 层和 evidence 层的桥梁。这在蓝图 §5.4.1 的 `run-scoped proof instance` 讨论中已经隐含了，但没有明确提出"每个 candidate 结论需要一个 proof entry point identifier"这个设计决策。这是证据链完整性最关键的缺失环节。
+Rainbird 的 salience chart 依赖两个前提：(1) 每个条件有 explicit weight；(2) certainty 语义明确（1-100 整数，非概率）。本项目当前 **两者均不具备**：
 
-需要我帮你把这些内容具体起草为蓝图 §5.3 和 §5.4 的修订建议，还是你希望先在这里讨论某个具体的设计选择？
+- `confidence` 字段语义未分离（certainty vs probability 混用风险）
+- rule authoring 不支持 per-condition weight
+- 因此 salience / impact breakdown 在当前基础设施上无法实现
+
+这不是单独一个 feature 的缺失，而是 **贯穿 Result 载体 → Evidence Tree → Salience 三层的共同前置依赖**。建议：
+
+1. 先在 certainty vs probability 语义分离上形成 contract-level decision
+2. 再决定 per-condition weight 是否进入 rule authoring contract
+3. salience / impact 作为最后一环，在前两者就绪后自然展开
+
+#### 5.3 assertion-origin taxonomy
+
+Rainbird 的 6 种 source 类型（Rule / Inject / Answer / Datasource / KM / Synthesised）在本项目中对应的问题是 assertion-origin taxonomy：一个 `assertion_fact` 树节点的事实来源是 ledger write（≈ Inject）、derivation accept（≈ Rule）、还是 import？
+
+当前 `node_kind` provenance-role taxonomy 已关闭，但它只回答"节点在树中的角色"，不回答"事实的来源"。assertion-origin taxonomy 仍 deferred，blocked on assertion metadata schema 设计。
+
+#### 5.4 optional condition 语义
+
+Rainbird 用 synthesised fact at 0% 表达"条件缺失但允许跳过"。本项目当前有 `unresolved_support` 机制表达"子证明不可用"，但这是 tree traversal 层面的事实，不是 rule authoring 层面的"可选条件"语义。
+
+实现 optional condition 需要 rule IR 扩展（标记某个 predicate atom 为 optional），这属于 authoring contract 变更，scope 超出 traceability-explainability 母蓝图。
+
+#### 5.5 本项目超越 Rainbird 的方向
+
+以下能力是 Rainbird 不具备的，是本项目的差异化来源（详见第三节）：
+
+- temporal logic（时间窗口内事件序列的累积状态推理）
+- obligation / deontic 语义（被允许 / 被禁止 / 有义务）
+- multi-engine architecture（native / Souffle / ProbLog，各有独立 witness 通道）
+- Souffle partial witness via adapter-level Datalog rewriting（Rainbird 无对应能力）
+
+这些方向的 traceability / explainability 需求可能需要超出 Rainbird 比较框架来单独设计。

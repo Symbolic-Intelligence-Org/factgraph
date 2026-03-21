@@ -70,7 +70,7 @@ def parse_problog_output(raw: str, rule_spec: dict[str, Any], ledger: Ledger) ->
         if prob is None:
             out.append(candidate)
         else:
-            out.append(replace(candidate, confidence=float(prob)))
+            out.append(replace(candidate, confidence=float(prob), confidence_kind="probability"))
     return out
 
 

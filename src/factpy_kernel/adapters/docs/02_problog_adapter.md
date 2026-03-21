@@ -1,7 +1,7 @@
 # ProbLog Adapter 总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/problog`
-- 最后更新：2026-03-18
+- 最后更新：2026-03-20
 - 目标读者：需要理解 ProbLog 导出、执行、结果回读链路的开发者
 
 ## 1. 模块职责
@@ -14,7 +14,7 @@
 - where IR 到 ProbLog 子句的导出
 - 调用 ProbLog CLI 执行
 - 把 CLI 输出解析回 bindings，再构造成候选集
-- 将概率写回 `CandidateSet.confidence`
+- 将概率写回 `CandidateSet.confidence`，并写 `confidence_kind="probability"`
 
 它不负责：
 
@@ -51,7 +51,7 @@
 3. `export_problog(...)` 生成临时 `query.pl`
 4. `run_problog(...)` 调用 ProbLog CLI
 5. `parse_problog_output(...)` 解析结果并映射为 `CandidateSet`
-6. 将推导概率写入 `candidate.confidence`
+6. 将推导概率写入 `candidate.confidence`，并标注 `candidate.confidence_kind="probability"`
 
 explainability 补充：
 
@@ -101,6 +101,7 @@ CLI 二进制：
 - 按 `query_pred`（默认 `answer`）过滤
 - 同一 binding 取最大概率
 - 再按候选键聚合概率，回填 `CandidateSet.confidence`
+- 同时把 `CandidateSet.confidence_kind` 标注为 `"probability"`
 - 最终候选构造仍复用 `store_builders`（与 native/souffle 路径一致）
 
 ## 8. 当前限制
