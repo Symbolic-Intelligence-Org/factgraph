@@ -95,21 +95,33 @@ class SouffleProofTree:
 
 ### 5.2 Runner Changes
 
-`runner.py` gains ONE new optional parameter:
+**`run_package` signature and return type are unchanged.** It still returns a `Path` to `run_manifest.json`.
+
+A NEW standalone function handles provenance:
 
 ```python
-def run_package(
-    ...,
-    provenance_queries: list[str] | None = None,  # NEW
-) -> RunResult:
+def run_provenance_explain(
+    souffle_bin_path: Path,
+    program_path: Path,
+    facts_dir: Path,
+    queries: list[str],
+) -> list[SouffleProofTree]:
+    """Run Souffle with -t explain and parse JSON proof trees.
+
+    Completely independent of run_package. Does not modify any existing
+    outputs. Callers who want provenance call this AFTER run_package.
+    """
 ```
 
-When `provenance_queries` is provided:
-1. Normal evaluation runs first (unchanged)
-2. After evaluation, if queries exist, re-run with `-t explain`
-3. Pipe `format json` + `explain <query>` commands via stdin
-4. Parse JSON responses into `SouffleProofTree` objects
-5. Return alongside normal outputs in `RunResult`
+This function:
+1. Runs Souffle with `-t explain` flag (separate subprocess from normal evaluation)
+2. Pipes `format json` + `explain <query>` commands via stdin
+3. Parses JSON responses into `SouffleProofTree` objects
+4. Returns the list — caller decides what to do with it
+
+Optionally, results can be written to an adapter-local sidecar file
+(`outputs/provenance.json`) for later consumption, but this is NOT part
+of `run_manifest.json` and NOT consumed by any existing code path.
 
 ### 5.3 Coexistence Contract
 
@@ -144,10 +156,11 @@ The caller decides which to use.
 - Parse relation name + args from premise/axiom strings
 - Map rule numbers to rule text
 
-### Phase 2: Runner Integration (adapters/souffle/runner.py)
-- Add `provenance_queries` parameter to `run_package`
-- Subprocess with `-t explain` + stdin pipe
-- Parse stdout JSON, return `SouffleProofTree` list in result
+### Phase 2: Runner Integration (adapters/souffle/provenance.py or runner.py)
+- New standalone `run_provenance_explain()` function
+- Separate subprocess with `-t explain` + stdin pipe
+- `run_package` signature and return type completely unchanged
+- Optional sidecar file write (`outputs/provenance.json`)
 
 ### Phase 3: Validation Script (examples/)
 - ECSS disposal check: compliant proof tree
@@ -163,7 +176,7 @@ The caller decides which to use.
 ## 7. Acceptance Criteria
 
 1. `parse_souffle_proof_json` correctly parses both PoC outputs (disposal + passivation)
-2. `run_package(provenance_queries=[...])` returns proof trees alongside normal outputs
+2. `run_provenance_explain(...)` returns proof trees as a standalone call; `run_package` is completely unchanged
 3. Recursive chain: `component_not_passivated("power_system")` shows full chain to `battery_2`
 4. Negation: `!component_passivated("battery_2")` appears as a leaf node
 5. Rule text: each derived node's `rule_number` maps to the correct rule body
