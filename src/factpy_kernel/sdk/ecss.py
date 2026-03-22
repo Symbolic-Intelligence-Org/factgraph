@@ -5,7 +5,7 @@ from typing import Any
 
 from factpy_kernel.core.evidence.write_protocol import add_field, set_field
 from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
-from factpy_kernel.ecss.vcd import (
+from factpy_kernel.domains.ecss.vcd import (
     ECSS_COMPLIANCE_STATUS_PRED_ID,
     ECSS_REQUIREMENT_PRED_ID,
     ECSS_REQUIREMENT_RID_PRED_ID,

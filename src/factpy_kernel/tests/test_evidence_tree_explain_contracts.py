@@ -46,7 +46,7 @@ from factpy_kernel.authoring.where_schema_lowering import (
     WhereSchemaLoweringError,
     lower_blueprint_where_sugar_with_schema_v1,
 )
-from factpy_kernel.ecss import (
+from factpy_kernel.domains.ecss import (
     ECSS_COLLISION_PROBABILITY_PPM_PRED_ID,
     ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID,
     ECSS_INTERVAL_END_PRED_ID,

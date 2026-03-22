@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from factpy_kernel.ecss.vcd import (
+from factpy_kernel.domains.ecss.vcd import (
     ECSS_COMPLIANCE_STATUS_PRED_ID,
     ECSS_REQUIREMENT_PRED_ID,
     ECSS_REQUIREMENT_RID_PRED_ID,
