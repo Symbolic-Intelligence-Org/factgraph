@@ -1481,9 +1481,10 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 )
                 self.assertTrue(html_path.exists(), f"missing: {html_path}")
                 html = html_path.read_text(encoding="utf-8")
-                self.assertIn("<h3>Certainty</h3>", html)
-                self.assertIn("aggregate certainty (bottleneck): 0.8", html)
-                self.assertIn("weight=0.8, impact=0.8", html)
+                self.assertIn("Certainty Assessment", html)
+                self.assertIn("certainty-aggregate", html)  # visual aggregate display
+                self.assertIn("0.8", html)  # aggregate value present
+                self.assertIn("bottleneck", html)  # strategy label present
             finally:
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()

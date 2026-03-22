@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import copy
 import json
+import re as _re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 import unittest
 from unittest.mock import patch
 from urllib.parse import quote
+
+
+def _strip_style(html: str) -> str:
+    """Strip <style> blocks so CSS class names don't trigger content assertions."""
+    return _re.sub(r"<style[^>]*>.*?</style>", "", html, flags=_re.DOTALL)
 
 from fastapi.testclient import TestClient
 
@@ -2130,9 +2136,9 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         html,
                     )
                     self.assertNotIn("Predicate note:beneficiary_risk_extracted was witnessed", html)
-                    self.assertNotIn("confirmed", html.lower())
-                    self.assertNotIn("certain", html.lower())
-                    self.assertNotIn("verified", html.lower())
+                    self.assertNotIn("confirmed", _strip_style(html).lower())
+                    self.assertNotIn("certain", _strip_style(html).lower())
+                    self.assertNotIn("verified", _strip_style(html).lower())
                     self.assertIn(assertion_ids["windowed_structuring_signal"], html)
 
                     for key in (
@@ -2641,12 +2647,12 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         html,
                     )
                     self.assertNotIn("Predicate notes:beneficiary_risk_extracted was witnessed", html)
-                    lowered_html = html.lower()
-                    self.assertNotIn("confirmed", lowered_html)
-                    self.assertNotIn("certain", lowered_html)
-                    self.assertNotIn("verified", lowered_html)
-                    self.assertNotIn("synthesis", lowered_html)
-                    self.assertNotIn("comprehensive analysis", lowered_html)
+                    lowered_body = _strip_style(html).lower()
+                    self.assertNotIn("confirmed", lowered_body)
+                    self.assertNotIn("certain", lowered_body)
+                    self.assertNotIn("verified", lowered_body)
+                    self.assertNotIn("synthesis", lowered_body)
+                    self.assertNotIn("comprehensive analysis", lowered_body)
                     self.assertIn(assertion_ids["windowed_structuring_signal"], html)
 
                     for key in (
@@ -3115,13 +3121,13 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         html,
                     )
                     self.assertNotIn("Predicate notes:beneficiary_risk_extracted was witnessed", html)
-                    lowered_html = html.lower()
-                    self.assertNotIn("confirmed", lowered_html)
-                    self.assertNotIn("certain", lowered_html)
-                    self.assertNotIn("verified", lowered_html)
-                    self.assertNotIn("resolved", lowered_html)
-                    self.assertNotIn("resolution", lowered_html)
-                    self.assertNotIn("judgment", lowered_html)
+                    lowered_body = _strip_style(html).lower()
+                    self.assertNotIn("confirmed", lowered_body)
+                    self.assertNotIn("certain", lowered_body)
+                    self.assertNotIn("verified", lowered_body)
+                    self.assertNotIn("resolved", lowered_body)
+                    self.assertNotIn("resolution", lowered_body)
+                    self.assertNotIn("judgment", lowered_body)
                     self.assertIn(assertion_ids["high_risk_outflow_signal"], html)
 
                     for key in (

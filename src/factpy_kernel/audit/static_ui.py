@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -646,26 +647,32 @@ def _render_candidate_evidence_page(tree: dict[str, Any], *, narrative: dict[str
     ]
     root_result_kind = root.get("root_result_kind")
     narrative_block = _render_candidate_evidence_narrative_block(narrative)
+    short_digest = support_digest[:30] + "..." if len(support_digest) > 30 else support_digest
     return _html_page(
         title=f"Candidate Evidence {candidate_id}",
         body=(
-            f"<h1>Candidate Evidence {escape(candidate_id)}</h1>"
-            "<p><a href='../index.html'>Back to runs</a> | "
-            "<a href='../candidate_evidence.html'>All candidate evidence trees</a></p>"
-            "<h2>Summary</h2>"
-            "<ul>"
-            f"<li>support_digest={escape(support_digest)}</li>"
-            f"<li>support_kind={escape(support_kind)}</li>"
-            f"<li>root_result_kind={escape('-' if root_result_kind is None else str(root_result_kind))}</li>"
-            f"<li>rule_refs={escape(','.join(rule_refs)) or '-'}</li>"
-            f"<li>rule_ref_edges={escape(str(len(rule_ref_edges)))}</li>"
-            "</ul>"
+            f"<h1>\U0001f4cb Candidate Evidence</h1>"
+            f"<p style='color:var(--color-muted);font-size:.85rem;margin-top:-4px;word-break:break-all'>{escape(candidate_id)}</p>"
+            "<div class='nav'>"
+            "<a href='../index.html'>\u2190 Runs</a>"
+            "<a href='../candidate_evidence.html'>\u2190 All Evidence Trees</a>"
+            "</div>"
+            "<dl class='summary-grid'>"
+            f"<dt>Support kind</dt><dd>{escape(support_kind)}</dd>"
+            f"<dt>Result type</dt><dd>{escape('-' if root_result_kind is None else str(root_result_kind))}</dd>"
+            f"<dt>Digest</dt><dd><code>{escape(short_digest)}</code></dd>"
+            f"<dt>Rule refs</dt><dd>{escape(','.join(rule_refs)) or '-'}</dd>"
+            f"<dt>Rule edges</dt><dd>{escape(str(len(rule_ref_edges)))}</dd>"
+            "</dl>"
             f"{narrative_block}"
             "<h2>Binding</h2>"
             f"<pre>{escape(json.dumps(binding, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
-            "<h2>Tree</h2>"
+            "<h2>\U0001f333 Evidence Tree</h2>"
+            "<p style='color:var(--color-muted);font-size:.85rem;margin-bottom:12px'>"
+            "This tree shows the complete proof chain \u2014 how the system arrived at this conclusion, "
+            "which rules were applied, and what facts were used as evidence.</p>"
             f"{_render_candidate_evidence_node(root, assertion_href_prefix='../assertions')}"
-            "<details><summary>Raw Payload</summary>"
+            "<details><summary>\U0001f4be Raw JSON Payload</summary>"
             f"<pre>{escape(json.dumps(tree, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
             "</details>"
         ),
@@ -676,79 +683,141 @@ def render_candidate_evidence_html(tree: dict[str, Any], *, narrative: dict[str,
     return _render_candidate_evidence_page(tree, narrative=narrative)
 
 
+_NODE_HUMAN_LABEL = {
+    "candidate_result": ("\U0001f4cb", "Derived Result", "The conclusion derived by the reasoning engine"),
+    "support_section": ("\U0001f4e6", "Supporting Evidence", "Evidence that supports this conclusion"),
+    "rule_ref_section": ("\U0001f517", "Rule References", "Rules that were invoked to produce this result"),
+    "degraded_support": ("\u26a0\ufe0f", "Degraded Evidence", "Evidence was expected but could not be fully resolved"),
+    "rule_ref": ("\u27a1\ufe0f", "Rule Invocation", "A specific rule that was applied"),
+    "referenced_support": ("\U0001f50d", "Child Proof", "Proof from a child rule that was referenced"),
+    "unresolved_support": ("\u274c", "Unresolved", "Evidence that could not be resolved"),
+    "recursion_boundary": ("\U0001f504", "Recursion Limit", "Proof chain stopped to prevent infinite loops"),
+    "predicate_witness_group": ("\U0001f4ca", "Fact Match", "Facts that matched this condition in the rule"),
+    "non_fact_check": ("\u2705", "Constraint Check", "A structural constraint that was verified"),
+    "assertion_fact": ("\U0001f4c4", "Witness Fact", "An actual data fact used as evidence"),
+}
+
+_NODE_KIND_ROLE = {
+    "candidate_result": "structural",
+    "support_section": "structural",
+    "rule_ref_section": "structural",
+    "degraded_support": "degraded",
+    "rule_ref": "rule-chain",
+    "referenced_support": "rule-chain",
+    "unresolved_support": "terminal",
+    "recursion_boundary": "terminal",
+    "predicate_witness_group": "witness",
+    "non_fact_check": "constraint",
+    "assertion_fact": "witness",
+}
+
+
+def _node_prop(key: str, val: str) -> str:
+    return (
+        f"<div class='prop'><span class='prop-key'>{escape(key)}</span>"
+        f"<span class='prop-val'>{escape(val)}</span></div>"
+    )
+
+
+def _confidence_badge(value: float) -> str:
+    if value >= 0.8:
+        color, bg = "#2e7d32", "#e8f5e9"
+    elif value >= 0.5:
+        color, bg = "#f57f17", "#fff8e1"
+    else:
+        color, bg = "#c62828", "#ffebee"
+    return (
+        f"<span style='display:inline-block;padding:1px 8px;border-radius:10px;"
+        f"font-size:.8rem;font-weight:600;background:{bg};color:{color}'>"
+        f"{value:.0%}</span>"
+    )
+
+
 def _render_candidate_evidence_node(node: dict[str, Any], *, assertion_href_prefix: str) -> str:
     node_kind = str(node.get("node_kind", ""))
-    title = str(node.get("title", node.get("node_id", "")))
-    items: list[str] = [
-        f"<li>node_kind={escape(node_kind)}</li>",
-    ]
+    role = _NODE_KIND_ROLE.get(node_kind, "structural")
+    icon, label, description = _NODE_HUMAN_LABEL.get(node_kind, ("\u25cb", node_kind, ""))
+
+    props: list[str] = []
+
     if node_kind == "candidate_result":
-        root_result_kind = node.get("root_result_kind")
-        items.append(f"<li>root_result_kind={escape('-' if root_result_kind is None else str(root_result_kind))}</li>")
+        rk = node.get("root_result_kind")
+        if rk:
+            props.append(_node_prop("Result type", str(rk)))
     elif node_kind == "support_section":
-        items.append(f"<li>section_children={escape(str(len(node.get('children', []))))}</li>")
+        props.append(_node_prop("Evidence items", str(len(node.get("children", [])))))
     elif node_kind == "rule_ref_section":
-        items.append(f"<li>section_children={escape(str(len(node.get('children', []))))}</li>")
+        props.append(_node_prop("Rules referenced", str(len(node.get("children", [])))))
     elif node_kind == "degraded_support":
-        items.append(f"<li>support_kind={escape(str(node.get('support_kind')))}</li>")
-        items.append(f"<li>witness_status={escape(str(node.get('witness_status')))}</li>")
+        props.append(_node_prop("Support kind", str(node.get("support_kind"))))
+        props.append(_node_prop("Status", str(node.get("witness_status"))))
     elif node_kind == "rule_ref":
-        items.append(f"<li>ruleref_atom_key={escape(str(node.get('ruleref_atom_key')))}</li>")
-        items.append(f"<li>rule_ref_id={escape(str(node.get('rule_ref_id')))}</li>")
-        items.append(f"<li>rule_ref_version={escape(str(node.get('rule_ref_version')))}</li>")
-        items.append(f"<li>child_support_digest={escape(str(node.get('child_support_digest')))}</li>")
-        items.append(f"<li>unresolved_reason={escape(str(node.get('unresolved_reason')))}</li>")
+        rid = node.get("rule_ref_id", "")
+        ver = node.get("rule_ref_version", "")
+        props.append(_node_prop("Rule", f"{rid} (v{ver})"))
     elif node_kind == "referenced_support":
-        items.append(f"<li>support_digest={escape(str(node.get('support_digest')))}</li>")
-        items.append(f"<li>root_result_kind={escape(str(node.get('root_result_kind')))}</li>")
+        sd = str(node.get("support_digest", ""))
+        props.append(_node_prop("Proof digest", sd[:24] + "..." if len(sd) > 24 else sd))
     elif node_kind == "unresolved_support":
-        items.append(f"<li>reason={escape(str(node.get('reason')))}</li>")
-        items.append(f"<li>child_support_digest={escape(str(node.get('child_support_digest')))}</li>")
+        props.append(_node_prop("Reason", str(node.get("reason"))))
     elif node_kind == "recursion_boundary":
-        items.append(f"<li>boundary_reason={escape(str(node.get('boundary_reason')))}</li>")
+        props.append(_node_prop("Reason", str(node.get("boundary_reason"))))
     elif node_kind == "predicate_witness_group":
-        items.append(f"<li>pred_atom_key={escape(str(node.get('pred_atom_key')))}</li>")
-        items.append(f"<li>pred_id={escape(str(node.get('pred_id')))}</li>")
-        items.append(f"<li>assertion_count={escape(str(node.get('assertion_count')))}</li>")
+        pred_id = str(node.get("pred_id", ""))
+        count = node.get("assertion_count", 0)
+        cc = node.get("condition_confidence")
+        props.append(_node_prop("Predicate", pred_id))
+        props.append(_node_prop("Matching facts", str(count)))
+        if cc is not None:
+            props.append(
+                f"<div class=\'prop\'><span class=\'prop-key\'>Confidence</span>"
+                f"<span class=\'prop-val\'>{_confidence_badge(cc)}</span></div>"
+            )
     elif node_kind == "non_fact_check":
-        items.append(f"<li>step_key={escape(str(node.get('step_key')))}</li>")
-        items.append(f"<li>check_kind={escape(str(node.get('check_kind')))}</li>")
-        items.append(f"<li>status={escape(str(node.get('status')))}</li>")
-        items.append(
-            "<li>details="
-            f"<pre>{escape(json.dumps(node.get('details'), ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
-            "</li>"
-        )
+        status = str(node.get("status", ""))
+        check_kind = str(node.get("check_kind", ""))
+        status_icon = "\u2705" if status == "satisfied" else "\u274c"
+        label_map = {"ruleref": "Rule reference resolved", "eq": "Equality constraint"}
+        human_check = label_map.get(check_kind, check_kind)
+        props.append(_node_prop("Check", f"{human_check} {status_icon}"))
     elif node_kind == "assertion_fact":
         asrt_id = str(node.get("asrt_id", ""))
         href = f"{assertion_href_prefix}/{_slug_id(asrt_id)}.html"
-        items.append(
-            "<li>assertion="
-            f"<a href='{escape(href, quote=True)}'>{escape(asrt_id)}</a>"
-            "</li>"
-        )
-        items.append(f"<li>pred_id={escape(str(node.get('pred_id')))}</li>")
-        items.append(f"<li>e_ref={escape(str(node.get('e_ref')))}</li>")
-        items.append(
-            "<li>claim_args="
-            f"<pre>{escape(json.dumps(node.get('claim_args'), ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
-            "</li>"
+        claim_args = node.get("claim_args", [])
+        values = ", ".join(
+            str(a.get("val", "")) for a in claim_args if isinstance(a, dict)
+        ) if isinstance(claim_args, list) else ""
+        pred_id = str(node.get("pred_id", ""))
+        conf = node.get("confidence")
+        if values:
+            props.append(
+                f"<div class=\'prop\'><span class=\'prop-key\'>Value</span>"
+                f"<span class=\'prop-val\' style=\'font-weight:600;font-size:.95rem\'>{escape(values)}</span></div>"
+            )
+        props.append(_node_prop("Predicate", pred_id))
+        if conf is not None:
+            props.append(
+                f"<div class=\'prop\'><span class=\'prop-key\'>Confidence</span>"
+                f"<span class=\'prop-val\'>{_confidence_badge(conf)}</span></div>"
+            )
+        props.append(
+            f"<div class=\'prop\'><span class=\'prop-key\'>Detail</span>"
+            f"<span class=\'prop-val\'><a href=\'{escape(href, quote=True)}\'>View assertion \u2192</a></span></div>"
         )
 
     children = [child for child in node.get("children", []) if isinstance(child, dict)]
     child_html = "".join(
-        f"<li>{_render_candidate_evidence_node(child, assertion_href_prefix=assertion_href_prefix)}</li>"
+        _render_candidate_evidence_node(child, assertion_href_prefix=assertion_href_prefix)
         for child in children
     )
+    desc_html = f"<div class='node-desc'>{escape(description)}</div>" if description else ""
     return (
-        "<div style='border:1px solid #eee;padding:12px;margin:12px 0'>"
-        f"<h3>{escape(title)}</h3>"
-        f"<ul>{''.join(items)}</ul>"
-        "<h4>Children</h4>"
-        f"<ul>{child_html if child_html else '<li>None</li>'}</ul>"
-        "</div>"
+        f"<div class='tree-node node-kind-{escape(role)}'>"
+        f"<div class='node-header'><span class='icon'>{icon}</span> {escape(label)}</div>"
+        f"<div class='node-body'>{desc_html}{''.join(props)}</div>"
+        + (f"<div class='node-children'>{child_html}</div>" if child_html else "")
+        + "</div>"
     )
-
 
 def _render_rule_trace_detail_page(
     payload: dict[str, Any],
@@ -921,33 +990,111 @@ def _render_rule_trace_narrative_block(narrative: dict[str, Any] | None) -> str:
     )
 
 
+def _render_certainty_visual(narrative: dict[str, Any]) -> str:
+    certainty_lines = narrative.get("certainty_lines")
+    if not isinstance(certainty_lines, list) or not certainty_lines:
+        return ""
+
+    bottleneck = narrative.get("certainty_bottleneck")
+    bottleneck_keys: set[str] = set()
+    if isinstance(bottleneck, dict):
+        bottleneck_keys = set(bottleneck.get("atom_keys", []))
+
+    first_line = certainty_lines[0] if certainty_lines else ""
+    aggregate_val = ""
+    strategy = "bottleneck"
+    if "additive" in first_line.lower():
+        strategy = "additive"
+    agg_match = re.search(r":\s*([\d.]+)", first_line)
+    if agg_match:
+        aggregate_val = agg_match.group(1)
+
+    bars_html = ""
+    for line in certainty_lines[1:]:
+        if not line.startswith("Condition "):
+            continue
+        parts = re.match(
+            r"Condition (\S+) \((\w+)\): weight=([\d.]+), impact=([\d.]+)\.(.*)",
+            line,
+        )
+        if not parts:
+            continue
+        atom_key = parts.group(1)
+        _nk = parts.group(2)
+        weight = parts.group(3)
+        impact_str = parts.group(4)
+        is_bottleneck = atom_key in bottleneck_keys
+        try:
+            impact_pct = float(impact_str) * 100
+        except ValueError:
+            impact_pct = 0
+        bar_class = "bottleneck" if is_bottleneck else "normal"
+        badge = (
+            "<span class=\'certainty-badge bottleneck\'>\u26a0 weakest</span>"
+            if is_bottleneck else ""
+        )
+        bars_html += (
+            "<div class=\'certainty-bar-row\'>"
+            f"<span class=\'certainty-bar-label\'>{escape(atom_key)}{badge}</span>"
+            f"<div class=\'certainty-bar-track\'>"
+            f"<div class=\'certainty-bar-fill {bar_class}\' style=\'width:{impact_pct:.1f}%\'></div>"
+            "</div>"
+            f"<span class=\'certainty-bar-value\'>{escape(impact_str)}</span>"
+            f"<span style=\'color:var(--color-muted);font-size:.8rem\'>(w={escape(weight)})</span>"
+            "</div>"
+        )
+
+    return (
+        "<div class=\'certainty-section\'>"
+        "<div class=\'certainty-header\'>"
+        "<h3>\U0001f4ca Certainty Assessment</h3>"
+        f"<span class=\'certainty-aggregate\'>{escape(aggregate_val)}</span>"
+        "</div>"
+        f"<p style=\'color:var(--color-muted);font-size:.85rem;margin:0 0 12px\'>"
+        f"\U0001f3af Strategy: <strong>{escape(strategy)}</strong> \u2014 "
+        f"{'Weakest-link model: the lowest condition determines overall certainty' if strategy == 'bottleneck' else 'Proportional model: each condition contributes to overall certainty'}"
+        "</p>"
+        "<p style=\'font-size:.85rem;margin:0 0 8px\'>"
+        "Each bar shows how much a condition contributes to the overall certainty "
+        "(impact = weight \u00d7 confidence):</p>"
+        f"{bars_html}"
+        "</div>"
+    )
+
+
 def _render_candidate_evidence_narrative_block(narrative: dict[str, Any] | None) -> str:
     if not isinstance(narrative, dict):
         return ""
 
     headline = narrative.get("headline")
     headline_html = (
-        f"<p>{escape(headline)}</p>"
+        f"<p><strong>{escape(headline)}</strong></p>"
         if isinstance(headline, str) and headline
-        else "<p>None</p>"
+        else ""
     )
-    certainty_html = ""
-    certainty_lines = narrative.get("certainty_lines")
-    if isinstance(certainty_lines, list) and certainty_lines:
-        certainty_html = "<h3>Certainty</h3>" + _line_list(certainty_lines)
+
+    certainty_html = _render_certainty_visual(narrative)
+
     return (
-        "<h2>Narrative</h2>"
+        "<div class=\'narrative-section\'>"
+        "<h2 style=\'margin-top:0;border:0\'>\U0001f4dd Analysis Summary</h2>"
         f"{headline_html}"
-        "<h3>Overview</h3>"
+        "<h3>\U0001f50e Overview</h3>"
+        "<p style=\'color:var(--color-muted);font-size:.85rem;margin:0 0 4px\'>High-level summary of what was derived and how the evidence is structured:</p>"
         f"{_line_list(narrative.get('overview_lines'))}"
-        "<h3>Evidence</h3>"
+        "<h3>\U0001f4d1 Evidence Details</h3>"
+        "<p style=\'color:var(--color-muted);font-size:.85rem;margin:0 0 4px\'>What facts were found to support this derivation:</p>"
         f"{_line_list(narrative.get('evidence_lines'))}"
-        "<h3>Rule Chain</h3>"
+        "<h3>\u2699\ufe0f Rule Chain</h3>"
+        "<p style=\'color:var(--color-muted);font-size:.85rem;margin:0 0 4px\'>Which rules were invoked and how deep the proof chain extends:</p>"
         f"{_line_list(narrative.get('rule_chain_lines'))}"
-        "<h3>Terminal</h3>"
+        "<h3>\U0001f6a7 Completeness</h3>"
+        "<p style=\'color:var(--color-muted);font-size:.85rem;margin:0 0 4px\'>Whether any evidence gaps or recursion limits were encountered:</p>"
         f"{_line_list(narrative.get('terminal_lines'))}"
-        "<h3>Drilldown</h3>"
+        "<h3>\U0001f50d Drill-Down</h3>"
+        "<p style=\'color:var(--color-muted);font-size:.85rem;margin:0 0 4px\'>How to explore the evidence tree in more detail:</p>"
         f"{_line_list(narrative.get('drilldown_lines'))}"
+        "</div>"
         f"{certainty_html}"
     )
 
@@ -1827,9 +1974,64 @@ def _html_page(*, title: str, body: str) -> str:
         "<!doctype html><html><head><meta charset='utf-8'>"
         f"<title>{escape(title)}</title>"
         "<style>"
-        "body{font-family:system-ui,Arial,sans-serif;margin:24px;line-height:1.4}"
-        "table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px;text-align:left}"
-        "th{background:#f5f5f5}code,pre{font-family:ui-monospace,Menlo,monospace}pre{overflow:auto;background:#fafafa;padding:12px;border:1px solid #eee}"
+        ":root{"
+        "--color-structural:#5b7bb4;--color-witness:#4caf50;--color-constraint:#ff9800;"
+        "--color-rule-chain:#7e57c2;--color-terminal:#ef5350;--color-degraded:#9e9e9e;"
+        "--color-bg:#f8f9fa;--color-border:#e0e0e0;--color-text:#333;--color-muted:#888;"
+        "--radius:8px;--shadow:0 1px 3px rgba(0,0,0,0.08)"
+        "}"
+        "body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:24px 32px;line-height:1.5;"
+        "color:var(--color-text);background:var(--color-bg);max-width:1200px;margin:0 auto;padding:24px 32px}"
+        "h1{font-size:1.5rem;font-weight:600;margin-bottom:4px}"
+        "h2{font-size:1.15rem;font-weight:600;margin-top:28px;padding-bottom:6px;border-bottom:2px solid var(--color-border)}"
+        "a{color:#1976d2;text-decoration:none}a:hover{text-decoration:underline}"
+        "table{border-collapse:collapse;width:100%}th,td{border:1px solid var(--color-border);padding:8px;text-align:left}"
+        "th{background:#eef1f5;font-weight:600;font-size:.85rem;text-transform:uppercase;letter-spacing:.03em}"
+        "code,pre{font-family:ui-monospace,\'SF Mono\',Menlo,monospace;font-size:.85rem}"
+        "pre{overflow:auto;background:#fff;padding:12px 16px;border:1px solid var(--color-border);border-radius:var(--radius)}"
+        ".nav{margin-bottom:20px;font-size:.85rem;color:var(--color-muted)}"
+        ".nav a{margin-right:12px}"
+        ".summary-grid{display:grid;grid-template-columns:140px 1fr;gap:4px 12px;font-size:.9rem;margin:8px 0 16px}"
+        ".summary-grid dt{color:var(--color-muted);font-weight:500;text-align:right}"
+        ".summary-grid dd{margin:0;word-break:break-all}"
+        ".tree-node{border-left:3px solid var(--color-border);background:#fff;border-radius:var(--radius);"
+        "box-shadow:var(--shadow);margin:8px 0;padding:0;overflow:hidden}"
+        ".tree-node>.node-header{display:flex;align-items:center;gap:8px;padding:8px 14px;"
+        "font-weight:600;font-size:.85rem;color:#fff}"
+        ".tree-node>.node-body{padding:8px 14px 10px;font-size:.85rem}"
+        ".tree-node>.node-body .prop{display:flex;gap:6px;padding:2px 0}"
+        ".tree-node>.node-body .prop-key{color:var(--color-muted);min-width:100px;flex-shrink:0}"
+        ".tree-node>.node-body .prop-val{word-break:break-all}"
+        ".tree-node>.node-children{padding:0 0 0 20px}"
+        ".node-kind-structural>.node-header{background:var(--color-structural)}"
+        ".node-kind-witness>.node-header{background:var(--color-witness)}"
+        ".node-kind-constraint>.node-header{background:var(--color-constraint)}"
+        ".node-kind-rule-chain>.node-header{background:var(--color-rule-chain)}"
+        ".node-kind-terminal>.node-header{background:var(--color-terminal)}"
+        ".node-kind-degraded>.node-header{background:var(--color-degraded)}"
+        ".icon{font-size:1rem;line-height:1}"
+        ".certainty-section{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);"
+        "padding:16px 20px;margin:12px 0}"
+        ".certainty-header{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}"
+        ".certainty-header h3{margin:0;font-size:1rem}"
+        ".certainty-aggregate{font-size:1.4rem;font-weight:700;color:var(--color-structural)}"
+        ".certainty-bar-row{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:.85rem}"
+        ".certainty-bar-label{min-width:180px;flex-shrink:0}"
+        ".certainty-bar-track{flex:1;height:20px;background:#eee;border-radius:10px;overflow:hidden;position:relative}"
+        ".certainty-bar-fill{height:100%;border-radius:10px;transition:width .3s}"
+        ".certainty-bar-fill.bottleneck{background:linear-gradient(90deg,#ef5350,#ff7043)}"
+        ".certainty-bar-fill.normal{background:linear-gradient(90deg,#42a5f5,#66bb6a)}"
+        ".certainty-bar-value{min-width:50px;text-align:right;font-weight:600}"
+        ".certainty-badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.75rem;"
+        "font-weight:600;margin-left:6px}"
+        ".certainty-badge.bottleneck{background:#ffebee;color:#c62828}"
+        ".certainty-strategy{font-size:.8rem;color:var(--color-muted);font-weight:400}"
+        ".narrative-section{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);"
+        "padding:16px 20px;margin:12px 0}"
+        ".narrative-section h3{font-size:.95rem;color:var(--color-muted);margin:12px 0 4px;font-weight:600}"
+        ".narrative-section ul{margin:0;padding-left:20px}"
+        ".narrative-section li{margin:2px 0;font-size:.9rem}"
+        ".node-desc{color:var(--color-muted);font-size:.8rem;font-style:italic;margin-bottom:4px}details{margin-top:16px}summary{cursor:pointer;font-weight:600;font-size:.9rem;color:var(--color-muted)}"
         "</style></head><body>"
         f"{body}"
         "</body></html>"

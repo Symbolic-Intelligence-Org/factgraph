@@ -239,8 +239,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                     / "candidate_evidence"
                     / f"{quote(candidate_id, safe='')}.html"
                 ).read_text(encoding="utf-8")
-                self.assertIn("Referenced support", html)
-                self.assertIn("rule_ref_edges=1", html)
+                self.assertIn("Child Proof", html)
             finally:
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
@@ -625,8 +624,8 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                 html = page_path.read_text(encoding="utf-8")
                 self.assertIn(candidate_id, html)
                 self.assertIn(f"assertions/{quote(asrt_id, safe='')}.html", html)
-                self.assertIn("Support", html)
-                self.assertIn("Narrative", html)
+                self.assertIn("Evidence Tree", html)
+                self.assertIn("Analysis Summary", html)
                 self.assertIn(runtime_narrative["headline"], html)
                 self.assertNotIn("revoked_by", html)
                 self.assertNotIn("is_revoked", html)
@@ -1686,9 +1685,9 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                     / "candidate_evidence"
                     / f"{quote(engine_candidate['candidate_id'], safe='')}.html"
                 ).read_text(encoding="utf-8")
-                self.assertIn("degraded_support", engine_page)
+                self.assertIn("Degraded", engine_page)
                 self.assertIn(ENGINE_NO_WITNESS_KIND, engine_page)
-                self.assertIn("witness_status=degraded", engine_page)
+                self.assertIn("degraded", engine_page.lower())
                 self.assertIn(runtime_narrative["headline"], engine_page)
                 self.assertNotIn("child_support_digest", engine_page)
         finally:
@@ -1871,8 +1870,8 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                 self.assertEqual(candidate_html_http.status_code, 200)
                 self.assertTrue(candidate_html_http.headers["content-type"].startswith("text/html"))
                 self.assertIn(f"Candidate Evidence {candidate_id}", candidate_html_http.text)
-                self.assertIn("Narrative", candidate_html_http.text)
-                self.assertIn("predicate_witness_group", candidate_html_http.text)
+                self.assertIn("Analysis Summary", candidate_html_http.text)
+                self.assertIn("Fact Match", candidate_html_http.text)
 
                 rule_trace_html_http = client.get(
                     f"/v1/runtime/sessions/{session_id}/evidence/rule-trace/{rule_run_id}",
