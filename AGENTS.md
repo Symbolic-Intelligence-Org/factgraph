@@ -8,6 +8,8 @@
   - External comparisons, bridge notes, and working reference materials that can feed blueprint work but do not define current implementation truth.
 - `docs/blueprints/active/*.md` + `*.audit.md`
   - Task-scoped blueprints and their audit trails.
+- `memory/`
+  - Operational memory, session continuity, and handoff archives; not current implementation truth.
 - `src/factpy_kernel/*/docs/`
   - Current implementation truth for each module.
 - `docs/blueprints/archive/` and `docs/blueprint_history/`
@@ -20,6 +22,7 @@
 - Keep the blueprint in `draft` while exploring. Move it to `scoped` before multi-file implementation starts.
 - If implementation needs to expand or change scope, update the blueprint and audit first, then continue coding.
 - Keep external, bridge, and working reference notes under `docs/references/`, not at the repository root.
+- Keep session continuity and handoff material under `memory/`, not under `docs/` root.
 - If a reference document materially affects task scope, architecture decisions, or acceptance shape, cite it from the active blueprint and record the adopted conclusion in the audit log.
 - After implementation, update the affected module docs under `src/factpy_kernel/*/docs/`.
 - If a new module is introduced, create its `docs/README.md` in the same change.

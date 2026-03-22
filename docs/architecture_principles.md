@@ -44,9 +44,16 @@
 - 若历史内容仍有价值，应提炼到原则文档、当前模块 docs 或新任务蓝图中，而不是直接重写旧文档。
 - 若需要把历史蓝图桥接到新归档区，应创建显式标注的 reconstructed archive 条目，并保留 `Historical Source` 与可验证 provenance。
 
+### 6. Operational Memory 不等于当前真相
+
+- `memory/` 用于 session continuity、handoff 和当前工作记忆。
+- `memory/` 不应承担当前实现真相、稳定原则或 active blueprint 约束。
+- 当 memory 中的结论变成 durable boundary，应迁回 blueprint、模块 docs 或原则文档。
+
 ## 当前系统边界
 
 - 当前实现真相以 `src/factpy_kernel/*/docs/` 为准。
+- `memory/` 承载 operational memory，不承担当前实现真相。
 - `docs/blueprints/active/` 只放正在推进的任务蓝图。
 - `docs/blueprints/archive/` 放按新流程归档的蓝图。
 - `docs/blueprint_history/` 保留历史遗留蓝图，不承担新的活动任务。

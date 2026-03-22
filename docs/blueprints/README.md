@@ -10,6 +10,8 @@
   - 外部比较、历史桥接和工作参考材料；可作为 blueprint 输入，但不承担当前实现真相。
 - `docs/blueprints/active/`
   - 正在推进的任务蓝图与审计记录。
+- `memory/`
+  - operational memory、session continuity 与 handoff archive；不承担当前实现真相，也不替代 active blueprint。
 - `src/factpy_kernel/*/docs/`
   - 当前实现真相。
 - `docs/blueprints/archive/`
@@ -98,7 +100,8 @@
 5. 实现期间把关键决策和 scope 变化写入 audit。
 6. 代码完成后更新受影响模块的 `docs/`。
 7. 若新增持久文档入口，更新 [docs/README.md](/Users/zhenzhili/hnsm-backend/docs/README.md)。
-8. 补齐 `Outcome / Deviations`，再归档到 `archive/`。
+8. 若新增或调整 session continuity 机制，更新 `memory/README.md` 与 `memory/current.md`，不要把 handoff 再放回 `docs/` 根目录。
+9. 补齐 `Outcome / Deviations`，再归档到 `archive/`。
 
 ## 模板
 
