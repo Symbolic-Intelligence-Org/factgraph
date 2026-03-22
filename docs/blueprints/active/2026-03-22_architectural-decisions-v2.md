@@ -1,0 +1,394 @@
+# Architecture Decision Blueprint: factpy Architectural Pivot v2
+
+- Status: scoped
+- Type: architectural-decision (guides child blueprints, not directly actionable)
+- Created: 2026-03-22
+- Last Updated: 2026-03-22
+- Supersedes:
+  - `docs/blueprints/archive/2026-03-15_overall-system-blueprint.md`
+  - `docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md`
+  - `docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.md`
+- Child Blueprints:
+  - `docs/blueprints/active/2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md`
+- Related Docs:
+  - `docs/architecture_principles.md`
+  - `src/factpy_kernel/core/docs/01_architecture.md`
+  - `src/factpy_kernel/core/annotation/docs/README.md`
+  - `src/factpy_kernel/audit/docs/01_overview.md`
+  - `memory/current.md`
+- Audit Log:
+  - `docs/blueprints/active/2026-03-22_architectural-decisions-v2.audit.md`
+
+## 1. Purpose
+
+本蓝图是**架构决策记录**（ADR），不是实施计划。它记录经过调研和验证的架构决策，约束所有子蓝图的方向。子蓝图提供具体行动指导；本蓝图提供方向约束和设计参考。
+
+**任何偏离本蓝图的决策必须先修改本蓝图，不能在子蓝图中默默绕过。**
+
+## 2. Product Identity
+
+**factpy 是 auditable reasoning framework，不是 reasoning engine。**
+
+依据：
+- 代码实际结构：schema, metadata, audit, render 是主体；推理引擎（Souffle/ProbLog）是插件
+- ESA 反馈："especially the explainability and traceability aspects"
+- 引擎可替换，审计层不可替换
+
+含义：
+- 框架的价值 = "不管你用什么推理引擎，我们让推理过程可审计"
+- 引擎是可替换的计算后端，框架是产品层
+- 不宣称"我们的推理引擎有概率推理能力"
+
+## 3. Three-Layer Data Architecture
+
+### 3.1 核心原则：Input / Output / View 分离
+
+```
+┌─────────────────┐     ┌──────────────────────┐
+│  Fact Store      │     │  Provenance Store     │
+│  (INPUT layer)   │     │  (OUTPUT layer)       │
+│                  │     │                       │
+│  assertion:      │     │  derivation:          │
+│    value         │     │    rule_id            │
+│    meta:         │     │    inputs: [asrt_ids] │
+│      confidence  │     │    engine: souffle    │
+│      source      │     │    timestamp          │
+│      analyst     │     │    min_height         │
+│      method      │     │                       │
+│      date        │     │  (NO reference to     │
+│                  │     │   evidence tree)      │
+│  (NO reference   │     │                       │
+│   to evidence    │     │                       │
+│   tree or        │     │                       │
+│   provenance)    │     │                       │
+└────────┬─────────┘     └──────────┬────────────┘
+         │                          │
+         │    READ                  │    READ
+         └──────────┐  ┌───────────┘
+                    ▼  ▼
+           ┌─────────────────┐
+           │  Evidence Tree   │
+           │  (READ-ONLY VIEW)│
+           │                  │
+           │  Combines:       │
+           │  - fact values   │
+           │  - fact metadata │
+           │  - provenance    │
+           │                  │
+           │  NO write-back   │
+           │  to either store │
+           └──────────────────┘
+```
+
+### 3.2 边界规则
+
+- Fact metadata 不知道 evidence tree 的存在
+- Provenance 不知道 evidence tree 的存在
+- Evidence tree 是**只读视图**，从两个 store 读取后融合展示
+- **没有反向引用 → 没有循环**
+- Evidence tree 不应该有自己的 ID 让别人引用——它是查询结果，不是持久实体
+
+### 3.3 审计查询路径
+
+```
+"这个数据从哪来的？" → Fact Store metadata（不需要 evidence tree）
+"这个结论怎么推出来的？" → Provenance Store derivation graph（不需要 fact metadata）
+"给我看完整审计链" → Evidence Tree view（融合 fact meta + provenance）
+```
+
+### 3.4 持久化策略
+
+```
+短期（当前 + ESA demo）：
+  Fact meta → ledger（已有）
+  Provenance → audit package JSONL（support_artifacts + engine provenance）
+  Evidence tree → 实时构建的视图
+
+长期（产品化）：
+  Fact meta → 数据库（PostgreSQL / Neo4j）
+  Provenance → 独立 store（engine provenance + derivation graph）
+  Evidence tree → 按需构建的视图，不是存储的实体
+```
+
+## 4. Carrier Layer Boundary
+
+### 4.1 三层能力归属
+
+以下归属决策约束所有子蓝图：
+
+| 能力 | 归属 | 理由 |
+|------|------|------|
+| Source taxonomy（事实来源分类） | **Proof/Provenance carrier** | "从规则推导的 vs 直接注入的 vs 用户回答的"是结构性 provenance 信息 |
+| Missing optional conditions | **Proof carrier（结构）+ Annotation（数值）** | carrier 记录"哪些条件缺失且被跳过"；annotation 记录"跳过后 certainty 的变化量" |
+| Contribution/impact breakdown | **Annotation / value-semantics layer** | impact 是数值语义；但计算依赖 proof carrier 提供的条件权重和条件 certainty |
+
+### 4.2 归属漂移防线
+
+如果归属不明确，后续很容易出现：
+- proof carrier 开始承担数值语义
+- annotation 开始承担结构信息
+- 两者边界随迭代漂移
+
+**检验标准**：如果一个信息回答"怎么推出来的"→ proof carrier；如果回答"推得有多确定"→ annotation。
+
+## 5. Multi-Engine Architecture
+
+### 5.1 引擎定位
+
+```
+Souffle:  确定性 Datalog（递归、固定点、关系推导）
+ProbLog:  概率逻辑（WMC、概率事实、annotated disjunctions）
+PyReason: 图神经推理（区间传播、时序推理、annotated graphs）
+```
+
+三者的编程模型根本不同，不应强行统一规则语法。
+
+### 5.2 统一什么、不统一什么
+
+| 层 | 统一？ | 说明 |
+|----|--------|------|
+| Schema / 实体定义 | ✅ 是 | 所有引擎都需要知道"有哪些实体和谓词" |
+| 事实写入 | ✅ 是 | 一套用户 API + adapter 编译到各引擎原生格式 |
+| 规则定义 | ❌ 否 | 编程模型不同，三层规则系统（见 §5.3） |
+| 执行/查询 | ⚠️ 部分 | "跑一下，告诉我结果"可统一；引擎特定行为不统一 |
+| Provenance 消费 | ✅ 是 | Unified ProofNode（见 §5.4） |
+| Audit / Delivery | ✅ 是 | 框架核心价值 |
+
+### 5.3 三层规则系统
+
+```
+Layer 1: Core Rule IR（现有 where_ast.py）
+  - 平坦合取：Pred + Cmp + Eq
+  - 变量绑定
+  - 基本聚合
+  → 适用于：所有引擎的公共子集
+
+Layer 2: Engine Extensions
+  - Souffle: 分层否定、subsumption、ADT、lattice
+  - ProbLog: 概率事实（0.3::fact）、annotated disjunctions
+  - PyReason: 时间步（t, t+1）、区间标注、图结构操作
+  → 以 extension block 挂载，不污染 Core IR
+
+Layer 3: Raw Syntax Escape Hatch
+  - 直接写引擎原生语法（.dl / .pl / PyReason DSL）
+  → 最大灵活性，最少框架保证
+  → 框架仍提供 fact 注入 + provenance 消费
+```
+
+### 5.4 Unified ProofNode
+
+```python
+@dataclass(frozen=True)
+class ProofNode:
+    node_id: str
+    node_type: str          # "fact" | "derived" | "negation"
+    relation: str           # "reachable" / "compliant" / ...
+    args: tuple[str, ...]   # ("alice", "zone_3")
+    rule_id: str | None     # which rule derived this
+    children: tuple[ProofNode, ...]
+    annotations: dict[str, Any]
+    # Souffle: {"min_height": 3, "rule_number": 2}
+    # ProbLog: {"probability": 0.73, "proof_index": 1}
+    # PyReason: {"lower": 0.6, "upper": 0.9, "iteration": 5}
+```
+
+每个引擎的 adapter 负责：engine-specific output → ProofNode tree/DAG + engine-specific annotations。
+
+### 5.5 跨引擎互通
+
+**不追求自动互通。** 各引擎独立运行、统一审计。
+
+如果确实需要跨引擎 pipeline，使用**显式语义桥**：
+
+```
+确定性 → 概率:  无损（p = 1.0）
+概率 → 确定性:  有损（阈值化，用户显式决策）
+确定性 → 区间:  无损（[1.0, 1.0]）
+区间 → 确定性:  有损（阈值化）
+```
+
+桥接操作本身作为审计证据记录。
+
+## 6. Engine Provenance Strategy
+
+### 6.1 调研结论（2026-03-22 verified）
+
+**Souffle provenance** (`-t explain`):
+- 完整递归证明链 ✅
+- 最小高度证明 ✅
+- JSON 输出 ✅
+- 负向推理（交互式 `explainnegation`）⚠️
+- 性能：~1.3-1.5x overhead
+- **接入成本：低**——factpy 已用 interpreter 模式，加 flag 即可
+
+**ProbLog explanation**:
+- 互斥证明枚举 ✅
+- LogicFormula 地面公式图 ✅
+- aProbLog provenance semiring（per-fact 概率归因）✅
+- **接入成本：中**——需从 subprocess 改为 Python API
+
+### 6.2 接入优先级
+
+```
+1. Souffle provenance（-t explain + JSON）→ 低成本，直接增厚 evidence tree
+2. ProbLog explain mode → 中成本，概率证据结构
+3. aProbLog provenance semiring → 高成本，per-fact 概率归因
+```
+
+### 6.3 核心原则
+
+**Provenance 应该从引擎里拿，不是在框架外部重建。**
+
+当前 certainty v1 在 annotation 层重建 traceability，只能看到引擎给的 support artifact，信息不够。正确模型：引擎产出 provenance → 框架消费和呈现。
+
+## 7. Certainty V1 Assessment
+
+### 7.1 已冻结，16 条 contract
+
+Certainty v1 已完成并冻结（234 tests）。详见 `src/factpy_kernel/core/annotation/docs/README.md`。
+
+### 7.2 诚实评估
+
+| 维度 | 评估 |
+|------|------|
+| 覆盖面 | 窄——只处理 flat single-rule cases |
+| 递归 | 返回 null |
+| 多路径 | 只看 1 条 proof |
+| 在 ECSS 场景下 | **够用**——ECSS 规则大多是 flat 合取 + 阈值 |
+| Delivery pipeline | **有价值**——summary/narrative/NL/audit/static 可复用 |
+| 定位 | 引擎不给 provenance 时的 fallback 启发式 |
+
+### 7.3 Evidence Tree 的真实能力
+
+| 能力 | 状态 |
+|------|------|
+| 展示规则结构 + 具体事实实例 | ✅ |
+| 展示递归推导链 | ❌ 只看最后一步 |
+| 解释为什么不成立（负向推理）| ❌ |
+| 展示替代证明路径 | ❌ |
+| 反事实分析 | ❌ |
+| 最小证明 | ❌ |
+
+**定位**：evidence tree 是"审计留痕"，不是"推理解释"。对 ESA 合规审计有价值；但用户已知的规则结构不算新信息。
+
+## 8. ECSS Domain Validation（2026-03-22 verified）
+
+### 8.1 ESSB-ST-U-007 规则复杂度
+
+| 类型 | 存在？ | 对 Datalog 的适配性 |
+|------|--------|-------------------|
+| 平坦合取 | ✅ 主要 | 完全适配 |
+| 阈值比较 | ✅ 常见 | 完全适配 |
+| 条件分支 | ✅ 中等 | 适配 |
+| 浅层递归（组件 for-all）| ✅ 有限 | 分层否定可表达 |
+| 深层递归 | ❌ | 不需要 |
+| 复杂时序 | ❌ | 不需要 |
+
+**结论**：Datalog (Souffle) 完全适配 ECSS 合规规则。当前 evidence tree 在 ECSS 场景下大概率满血可用。
+
+### 8.2 已有领域代码
+
+`src/factpy_kernel/domains/ecss/` 已包含：
+- `vcd.py`: requirement, verification_method, compliance_status, requirement_rid, review_milestone
+- `uncertainty.py`: collision_probability_ppm, disposal_success_probability_ppm + thresholds
+- `temporal.py`: obligation_timestamp, window_start/end, interval_start/end
+
+### 8.3 Demo 规则候选
+
+优先编码（Tier 1）：
+- 处置成功概率 ≥ 90%（或星座 ≥ 95%）
+- 碰撞概率 < 1:1000
+- 轨道清除 ≤ 5 年
+- 无碎片释放
+
+## 9. ESA Interaction Context
+
+### 9.1 ESA 反馈摘要
+
+联系人：Christophe Honvault, Head of AI and Data Science section, ESA Future Engineering Division
+
+ESA 的评价：
+- "especially the explainability and traceability aspects"
+- "the tool can estimate the certainty and source of extracted facts is also a feature we enjoy"
+
+ESA 的要求：
+- 具体 use case + vs 竞品优势
+- 用户交互形态（web app? library? agent?）
+- 非技术人员可理解的表述
+
+### 9.2 ESA 推荐的合作路径
+
+- ESA Discovery element: ideas.esa.int → Open Discovery Ideas Channel
+- 推荐 use case: ECSS 标准验证、ESSB-ST-U-007 碎片减缓
+- 推荐展示场合: FLoC "Automated Reasoning for Future Space Logistics" workshop
+
+### 9.3 产品叙事
+
+> "上次你们看到我们用 LLM 生成规则，你们担心可靠性。我们听进去了。
+> 现在规则仍然可以 LLM 辅助生成，但人工审核后进入形式化推理引擎，
+> 每一步推导都有完整的、可验证的证明链。
+> 这就是你们说的 traceability——不是 LLM 说的，是逻辑推理证明的。"
+
+## 10. Annotation Extension Candidates
+
+以下候选能力保留观察，不进入当前实施范围：
+
+### 近期保留（和当前架构方向一致）
+
+1. **Fact metadata 透传到 evidence tree**——让 tree node 展示 source, analyst, method, date
+2. **Engine provenance 集成**——Souffle explain / ProbLog LogicFormula → ProofNode
+3. **Source taxonomy**——proof carrier 层记录事实来源类型
+
+### 中期观察
+
+4. **Missing optional conditions**——proof carrier 记录结构，annotation 记录数值影响
+5. **Why-not / counterfactual**——需要 Souffle `explainnegation` 或等价能力
+6. **Certainty evaluator vs probabilistic evaluator 分离**——共享 proof carrier，不共享 confidence 语义
+7. **Interval annotation**——PyReason 接入时需要
+
+### 不作为当前方向
+
+8. Generic annotation algebra
+9. Annotation as the only traceability carrier
+10. Full PyReason-style unified annotation semantics
+
+## 11. Reference Scenarios
+
+用于持续检验候选设计：
+
+### Scenario A: ESA SDM Compliance
+
+一个候选设计必须能回答：
+- 某条 requirement 为什么当前是 compliant / partial / non-compliant
+- 这一状态由哪次 run、哪类 analysis、哪些 supporting artifacts 得到
+- 对应 evidence / justification / close-out reference 如何被消费
+
+### Scenario B: AML/KYC Suspicious Account（中期参考）
+
+一个候选设计必须能回答：
+- 系统是否能把分布式事件聚合成 obligation / risk state
+- 是否能解释"为什么在此刻触发"
+- 是否能表达弱信号组合、缺失条件、主要/次要 proof 的关系
+
+## 12. Frozen Decisions（变更需先修改本蓝图）
+
+1. 产品定位：auditable reasoning framework
+2. 三层数据架构：Fact Store / Provenance Store / Evidence Tree View
+3. 引擎隔离：统一 fact + audit，不统一规则
+4. ProofNode 作为统一 provenance 中间层
+5. 跨引擎不自动互通
+6. Provenance 从引擎里拿，不在外部重建
+7. Certainty v1 冻结（16 条 contract）
+8. ECSS 作为第一领域验证目标
+9. 领域先行，系统跟上（不再 system-first）
+
+## 13. Acceptance
+
+本蓝图的验收标准是**决策记录完整且被子蓝图引用**：
+
+- [x] 产品定位已冻结
+- [x] 三层数据架构已定义
+- [x] 引擎 provenance 调研已完成
+- [x] ECSS 适配性已验证
+- [x] 子蓝图（ECSS validation PoC）已创建并引用本蓝图
+- [ ] 至少一个子蓝图进入 implementing 状态（验证决策可执行）

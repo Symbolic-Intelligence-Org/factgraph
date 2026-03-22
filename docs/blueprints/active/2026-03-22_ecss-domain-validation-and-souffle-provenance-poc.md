@@ -10,6 +10,8 @@
   - `src/factpy_kernel/service`
   - `src/factpy_kernel/audit`
   - `src/factpy_kernel/sdk`
+- Parent Blueprint:
+  - [2026-03-22_architectural-decisions-v2.md](./2026-03-22_architectural-decisions-v2.md)
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
   - [src/factpy_kernel/core/docs/01_architecture.md](../../../src/factpy_kernel/core/docs/01_architecture.md)
