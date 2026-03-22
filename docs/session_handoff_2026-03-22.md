@@ -1,0 +1,312 @@
+# Session Handoff: 2026-03-22
+
+This document supersedes `session_handoff_2026-03-21.md`. It is a session restart reference, not a substitute for active blueprints, archived blueprints, or module docs.
+
+## 1. Current Stage
+
+Building on the 2026-03-21 baseline (certainty v1 complete from annotation through salience ranking), this session accomplished two major things:
+
+**A. Completed remaining certainty v1 capabilities and froze the line:**
+
+1. **Certainty salience ranking v1** (`defd56a`) — `rank_certainty_conditions`, bottleneck marking, NL weakest-condition sentence
+2. **Confidence-kind certainty routing** (`de083d1`) — `ConfidenceKindResolver` protocol for create-time routing; no post-evaluation patching
+3. **E2E certainty compatibility verification** (`d5a9ca0`) — proved real native evaluate output is structurally compatible with certainty chain
+4. **Certainty annotation benchmark (Workload D)** (`5cf1076`) — 0.0009s, annotation overhead negligible
+5. **Fact-level confidence to evidence tree** (`e2619f0`) — `assertion_fact.confidence`, `predicate_witness_group.condition_confidence = max(children)`
+6. **Weighted additive aggregation strategy** (`389708b`) — dual strategy (bottleneck + additive), normalized contribution semantics
+7. **Certainty v1 contract freeze** (`e9f9bc2`) — frozen contracts documented in architecture + annotation + service docs
+8. **Visual upgrade for static HTML audit site** (`392e985`) — color-coded tree nodes, icons, human-readable labels, certainty bar charts
+9. **Certainty demo notebook** (`4cd22ae`) — comprehensive end-to-end demo with fact confidence + dual aggregation
+
+**B. Critical architectural reassessment and strategic pivot:**
+
+10. **Architectural pivot design doc** (`11cd219`) — honest assessment of certainty v1 limitations, product identity clarification, engine provenance research, multi-engine architecture design
+11. **Engine provenance research** — Souffle provenance (`-t explain`, JSON, interpreter-compatible) and ProbLog explanation (aProbLog semiring, LogicFormula) both feasible
+12. **Product identity**: "auditable reasoning framework" not "reasoning engine"
+13. **Unified ProofNode architecture** designed (not yet implemented)
+14. **Three-layer rule system** designed: Core IR + engine extensions + raw syntax escape hatch
+15. **ESA interaction analysis** + EXIST rejection analysis → ECSS compliance demo as narrowest wedge
+
+**Current position**: Certainty v1 is frozen. The delivery pipeline is well-built but the content flowing through it is thin (evidence tree = audit trail, not reasoning explanation). **Next step is domain validation**: read ECSS standards, encode 3-5 rules, and do a Souffle provenance PoC. Do NOT build more delivery pipeline features until domain validation is complete.
+
+## 2. Capability Baseline
+
+### 2.1 Certainty v1 (FROZEN — this session)
+
+Full pipeline frozen with dual aggregation:
+
+```
+confidence_kind="certainty" (create-time routing via ConfidenceKindResolver)
+  + condition_weights (rule metadata) + fact confidence (instance meta)
+  → derive_certainty_summary (annotation, bottleneck or additive)
+  → CertaintySummary { conditions, aggregate_certainty, aggregation }
+  → rank_certainty_conditions (annotation, impact ascending, bottleneck marked)
+  → explain-summary: certainty_summary sibling (with certainty_aggregation option)
+  → explain-narrative: certainty_lines + certainty_bottleneck
+  → explain-nl: certainty paragraph + weakest-condition sentence
+  → export: certainty_summaries.jsonl
+  → audit: get_candidate_certainty_summary()
+  → static site: visual certainty bar charts
+```
+
+**Honest assessment** (documented in `docs/design-20260322-architectural-pivot.md`):
+- Only works for flat, single-rule, non-recursive cases
+- Returns null for recursive Datalog, multi-path, OR branches
+- Evidence tree shows rule structure + fact instances but is NOT deep reasoning explanation
+- Narrative/NL is presentation of shallow underlying data
+- **The delivery pipeline is valuable infrastructure; it just needs richer data sources (engine provenance)**
+
+### 2.2 Evidence Tree + Traceability (from prior sessions, stable)
+
+All 8 frozen contracts from 2026-03-20 remain frozen. Evidence tree provides audit trail (positive proof logging) for all Souffle complexity levels. Limitation: cannot show recursive derivation chains (only last step), alternative proof paths, or negative reasoning.
+
+### 2.3 Confidence-Kind Infrastructure (this session, stable)
+
+- `CONFIDENCE_KINDS = frozenset({"none", "probability", "certainty"})`
+- `CertaintyConfidenceKindResolver` + `RuleSpecReader` protocol
+- Create-time routing: eligible candidates auto-marked "certainty" during evaluate
+- SDK parity deferred (seam exists, reader implementation needed)
+
+### 2.4 Test Decomposition (prior session, stable)
+
+7 focused test files + shared helpers, residual 1,166 lines.
+
+### 2.5 Helper Layering (this session, cleaned up)
+
+| Module | Layer | Dependencies | Role |
+|--------|-------|-------------|------|
+| `annotation/_certainty.py` | core | core only | `derive_certainty_summary`, `rank_certainty_conditions`, dual aggregation |
+| `store/_certainty_materializer.py` | core | core only | export-time materialization, tree eligibility, serialization |
+| `store/_confidence_kind_resolver.py` | core | core only | `ConfidenceKindResolver`, `RuleSpecReader`, shared eligibility |
+| `store/_candidate_evidence_tree.py` | core | core only | tree builder with confidence carrier |
+| `service/_certainty_service.py` | service | core + authoring | condition_weights lookup, certainty computation |
+| `adapters/souffle/package.py` | adapters | core only | `export_package` pure writer |
+| `audit/reader.py` | audit | core | `AuditPackageData.certainty_summaries` |
+| `audit/query.py` | audit | core | `get_candidate_certainty_summary()`, narrative with certainty |
+| `audit/static_ui.py` | audit | core | visual HTML rendering with certainty bars |
+
+Import graph verified clean: no core→authoring, no adapters→service, no audit→service.
+
+### 2.6 Static HTML Audit Site (upgraded this session)
+
+Candidate evidence pages now use:
+- Color-coded tree nodes with provenance-role taxonomy colors
+- Human-readable labels (Derived Result, Supporting Evidence, Fact Match, Child Proof, etc.)
+- Icons per node type
+- Narrative sections with contextual descriptions
+- Certainty bar charts with bottleneck highlighting
+- Raw JSON payload in collapsible details section
+
+### 2.7 Benchmarks (this session)
+
+Workload D benchmarks certainty derivation + ranking pipeline: 0.0009s, 0.02MB for 20 conditions / depth 4. A/B/C/D all match golden.
+
+## 3. Git State
+
+- Branch: `master`
+- Working tree: **clean** (no uncommitted changes)
+- This session's commits (2026-03-21 to 2026-03-22, chronological):
+  - `85e94aa` — archive durable-artifact-storage blueprint
+  - `9147008` — candidate confidence-kind + rule condition-weight metadata
+  - `4ce084d` — certainty annotation prototype
+  - `6f5473c` — certainty explain delivery (summary + narrative + NL)
+  - `c2b061f` — test decomposition (10K → 7 files)
+  - `62a6c2a` — certainty audit + static delivery
+  - `f62061e` — architecture + module docs sync
+  - `1c4a352` — misc docs cleanup + worktree removal
+  - `f0fd28a` — certainty runtime boundary cleanup
+  - `defd56a` — certainty salience ranking delivery
+  - `d72a1b8` — 2026-03-21 session handoff
+  - `5cf1076` — certainty annotation benchmark (Workload D)
+  - `d5a9ca0` — end-to-end certainty chain compatibility verification
+  - `de083d1` — ConfidenceKindResolver protocol
+  - `4eeb0bc` — certainty demo notebook
+  - `e2bffb2`..`8d34dbf` — notebook iterations
+  - `e85ebcd` — fact-level confidence known gap docs
+  - `e2619f0` — fact-level confidence to evidence tree
+  - `389708b` — weighted additive aggregation strategy
+  - `0df60cc` — blueprint lifecycle skill
+  - `a568732` — gitignore gstack
+  - `b111553` — rewrite demo notebook
+  - `ce55f56` — handoff skill
+  - `5e2d928` — updated handoff
+  - `e9f9bc2` — freeze certainty v1 contract
+  - `11cd219` — architectural pivot design doc
+  - `392e985` — visual upgrade static HTML + test assertion fixes
+  - `4cd22ae` — update certainty demo notebook
+  - `483f2d7` — update handoff + migrate agents/commands
+  - `ee56393` — gitignore gstack skill directories
+
+## 4. Blueprint Status Summary
+
+### Active Blueprints
+
+| Blueprint | Status | Notes |
+|-----------|--------|-------|
+| `2026-03-15_overall-system-blueprint.md` | draft | Top-level system blueprint |
+| `2026-03-16_temporal-hybrid-reasoning-blueprint.md` | draft | Temporal reasoning |
+| `2026-03-17_runtime-traceability-explainability-blueprint.md` | draft | Parent blueprint for evidence tree line |
+
+### Key Archived Blueprints (this session)
+
+- `certainty-summary-explain-delivery` — runtime explain endpoints with certainty
+- `certainty-aware-narrative-nl-delivery` — narrative/NL additive certainty
+- `certainty-audit-static-delivery` — export-time materialization
+- `phase3-test-decomposition` — 10K-line monolith split
+- `certainty-runtime-boundary-cleanup` — helper extraction + archive index
+- `certainty-salience-ranking-v1` — impact ranking + bottleneck marking
+- `confidence-kind-certainty-routing` — ConfidenceKindResolver protocol
+- `fact-confidence-to-evidence-tree` — fact-level confidence carrier
+- `certainty-additive-aggregation-v1` — dual aggregation strategies
+
+### Full Archive Inventory
+
+`docs/blueprints/archive/README.md` contains a ~88-entry inventory table.
+
+## 5. Test Baseline
+
+- **234 tests, all green**
+- Run command: `PYTHONPATH=src python -m unittest discover -s src/factpy_kernel/tests -p "test_*.py"`
+- No flaky or skipped tests
+- Full regression verified after every change
+
+## 6. Key Implementation Files
+
+### New/Changed This Session
+
+| File | Role |
+|------|------|
+| `src/factpy_kernel/core/annotation/_certainty.py` | `derive_certainty_summary`, `rank_certainty_conditions`, dual aggregation |
+| `src/factpy_kernel/core/store/_confidence_kind_resolver.py` | `ConfidenceKindResolver`, `RuleSpecReader`, shared eligibility |
+| `src/factpy_kernel/core/store/_candidate_evidence_tree.py` | Tree builder with `assertion_fact.confidence` + `condition_confidence` carrier |
+| `src/factpy_kernel/core/store/_candidate_evidence_tree_narrative.py` | Narrative with sorted `certainty_lines` + `certainty_bottleneck` |
+| `src/factpy_kernel/core/store/_candidate_evidence_tree_nl.py` | NL with weakest-condition sentence |
+| `src/factpy_kernel/service/_certainty_service.py` | Condition weights lookup + certainty computation |
+| `src/factpy_kernel/audit/static_ui.py` | Visual HTML with tree nodes, icons, certainty bars |
+| `examples/certainty_evidence_tree.ipynb` | End-to-end demo notebook |
+| `docs/design-20260322-architectural-pivot.md` | **Critical**: architectural pivot design doc with engine provenance research |
+| `tools/benchmarks/workload_d_reference.py` | Certainty annotation benchmark |
+
+### Module Docs (implementation truth)
+
+| File | Scope |
+|------|-------|
+| `src/factpy_kernel/core/docs/01_architecture.md` | Core architecture (CN, source of truth) |
+| `src/factpy_kernel/core/docs/01_architecture.en.md` | Core architecture (EN, synced) |
+| `src/factpy_kernel/core/annotation/docs/README.md` | Annotation prototype: certainty + ranking + aggregation + v1 freeze |
+| `src/factpy_kernel/service/docs/01_overview.md` | Service module overview |
+| `src/factpy_kernel/service/docs/03_runtime_queries_views.md` | Runtime queries, views, export |
+| `src/factpy_kernel/audit/docs/01_overview.md` | Audit package, query, static |
+
+## 7. Frozen Contracts (DO NOT REOPEN)
+
+All 8 frozen contracts from 2026-03-20 handoff remain frozen, plus:
+
+9. **CertaintySummary shape** — `confidence_kind`, `condition_count`, `weighted_condition_count`, `conditions`, `aggregate_certainty`, `aggregation`
+10. **Certainty eligibility guard** — single structured `rule_ref_edge` + no nested `referenced_support`
+11. **Export-time materialization** — `certainty_summaries.jsonl` in audit package; audit does not do query-time derivation
+12. **Ranking in annotation layer** — `rank_certainty_conditions` is the single ranking source; narrative/NL only consume
+13. **ConfidenceKindResolver protocol** — create-time routing; no post-evaluation patching
+14. **Fact-level confidence carrier** — `assertion_fact.confidence` → `predicate_witness_group.condition_confidence = max(children)`; tree is carrier only
+15. **Additive aggregation semantics** — `impact = (weight / Σweights) × confidence`, `aggregate = sum(impacts)`
+16. **Certainty v1 boundary** — no new certainty features without blueprint; only bug fixes, performance, docs clarification allowed
+
+## 8. Known Gaps / Risk Assessment
+
+### 8.1 Evidence Tree Provides Audit Trail, NOT Reasoning Explanation (NEW — critical)
+
+**What exists**: evidence tree shows rule structure + specific fact instances for all Souffle complexity.
+
+**What it cannot do**:
+- Show recursive derivation chains (only last step visible)
+- Explain why something was NOT derived (negative reasoning)
+- Show alternative proof paths
+- Answer counterfactual questions
+- Provide minimal proof (which facts are essential)
+
+**Implication**: for ESA demo, evidence tree is "audit trail" not "reasoning explanation." For ECSS compliance, "why is this NOT compliant?" may be more important than "why IS it compliant?"
+
+### 8.2 Souffle Provenance — Feasible, Low Cost (NEW — researched)
+
+**Key finding**: Souffle `-t explain` provides full recursive proof trees, minimal-height proofs, and interactive negative reasoning. JSON output available. factpy already uses interpreter mode — adding `-t explain` requires NO architecture change.
+
+**Performance**: ~1.3-1.5x overhead, lazy construction.
+
+**Limitations**: interpreter-only (already factpy default), minimal-height only (can't enumerate all paths), negation is interactive, aggregates unclear, no Python API (stdin/stdout only).
+
+### 8.3 ProbLog Explanation — Feasible, Medium Cost (NEW — researched)
+
+ProbLog can produce mutually exclusive proof enumeration, ground formula graphs, and per-fact probability attribution via aProbLog provenance semiring. Requires switching from subprocess to Python API.
+
+### 8.4 ECSS Rule Encoding — NOT YET ATTEMPTED (CRITICAL)
+
+No ECSS standard has been read or encoded. All architecture decisions (ProofNode, three-layer rules, adapter pattern) are based on assumptions about ECSS rule complexity. **This is the single most important next step.**
+
+### 8.5 Unified ProofNode Architecture — Designed, Not Implemented
+
+See `docs/design-20260322-architectural-pivot.md` §Unified ProofNode Architecture. Engine-agnostic proof tree with engine-specific annotations dict. Migration path: coexist with current evidence tree, gradually replace.
+
+### 8.6 Three-Layer Rule System — Designed, Not Implemented
+
+Layer 1 (Core IR = existing `where_ast.py`), Layer 2 (engine extensions), Layer 3 (raw syntax escape hatch). See design doc.
+
+### 8.7 Prior Gaps (carried forward)
+
+- Chain/recursive certainty: deferred (frozen v1 boundary)
+- Probability lane: deferred
+- SDK certainty auto-routing parity: deferred (seam exists)
+
+## 9. Collaboration Protocol
+
+1. **Blueprint-driven**: all non-trivial work starts with a blueprint: `draft → scoped → implementing → implemented → archived`
+2. **Hook restriction**: PreToolUse hook blocks non-.md file edits in `src/factpy_kernel/` (except tests, which were unblocked this session); agent provides code, user applies
+3. **Scope discipline**: each blueprint covers exactly one capability line
+4. **Contract-first**: freeze DTO / taxonomy / owner boundaries before implementation
+5. **Docs sync is mandatory**: module docs updated before blueprint archived
+6. **Commit conventions**: capability, implementation, docs as separate commits; `.claude` changes committed separately
+7. **Decision-only blueprints are valid**: freezing ownership/scope is a legitimate deliverable
+8. **Archive inventory**: update `docs/blueprints/archive/README.md` when archiving
+9. **Domain-first, not system-first**: do NOT build more delivery pipeline features until real domain rules are validated (lesson from certainty v1)
+
+## 10. What the Next Agent Should Do
+
+### Recommended first action
+
+Run full test regression:
+```bash
+PYTHONPATH=src python -m unittest discover -s src/factpy_kernel/tests -p "test_*.py"
+```
+Expected: 234 tests, OK.
+
+### Recommended next direction
+
+**DO NOT build more engine/delivery features.** Instead:
+
+1. **Read ECSS standard** (ESSB-ST-U-007 debris mitigation or ECSS-M-ST-10 subset). Find 3 simplest compliance rules. Try to encode 1 as Datalog in the SDK Rule DSL.
+
+2. **Souffle provenance PoC** (in parallel): add `-t explain` to `runner.py`, run on a recursive rule, parse JSON output. Verify it can feed into existing pipeline.
+
+3. Based on results: if ECSS rules are flat → current evidence tree may suffice for demo; if recursive → provenance PoC becomes mandatory.
+
+**Read `docs/design-20260322-architectural-pivot.md` first** — it contains the complete architectural reassessment, engine provenance research results, ProofNode design, and multi-engine architecture decisions.
+
+### What NOT to do
+
+- Do not build more certainty features (v1 is frozen)
+- Do not build probability lane (blocked on ECSS validation)
+- Do not build ProofNode implementation (design only, validate with real data first)
+- Do not assume ECSS rules fit Datalog (read the standard first)
+- Do not reopen any of the 16 frozen contracts
+- Do not build more delivery pipeline polish (narrative/NL/ranking) — the pipeline is good enough, the data source is the bottleneck
+
+## 11. Minimal Startup Reading List
+
+1. **This handoff** (you're reading it)
+2. **`docs/design-20260322-architectural-pivot.md`** — architectural pivot, engine provenance research, ProofNode design, multi-engine architecture
+3. **`src/factpy_kernel/core/docs/01_architecture.md`** — core architecture (CN)
+4. **`src/factpy_kernel/core/annotation/docs/README.md`** — certainty v1 (frozen) + known gaps
+5. **`src/factpy_kernel/service/docs/03_runtime_queries_views.md`** — runtime queries, views, export
+6. **`src/factpy_kernel/audit/docs/01_overview.md`** — audit package, query, static
+7. **`src/factpy_kernel/adapters/souffle/runner.py`** — Souffle invocation (provenance PoC insertion point)
+8. **`examples/certainty_evidence_tree.ipynb`** — working demo of certainty v1
+9. **`docs/blueprints/archive/README.md`** — archive inventory (~88 entries)
