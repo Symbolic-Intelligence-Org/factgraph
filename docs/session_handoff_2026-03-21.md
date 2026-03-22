@@ -2,6 +2,11 @@
 
 This document enables a new agent to resume work with full context. It supersedes all prior handoff documents. It is a session restart reference, not a substitute for active blueprints, archived blueprints, or module docs.
 
+Quick orientation:
+- `certainty v1` is now **implemented and frozen**
+- canonical behavior lives in module docs, especially `core/docs/01_architecture*.md`, `annotation/docs/README.md`, and `service/docs/03_runtime_queries_views.md`
+- the recommended next step is **probability feasibility / scoping**, not more certainty semantics work
+
 ## 1. Current Stage
 
 Building on the 2026-03-20 baseline (evidence tree NL explain + Souffle partial witness + live permalinks + salience/impact ownership freeze), this session landed the **complete certainty delivery chain** from annotation through audit/static, plus structural cleanup and tooling:
@@ -20,10 +25,11 @@ Building on the 2026-03-20 baseline (evidence tree NL explain + Souffle partial 
 12. **Certainty evidence tree demo notebook** (`4eeb0bc`→`b111553`) — end-to-end Jupyter notebook with tree, summary, narrative, NL, audit, static HTML
 13. **Fact-level confidence carrier** (`e2619f0`) — connects `meta.confidence` from assertions through evidence tree to certainty summary
 14. **Additive aggregation strategy** (`389708b`) — second certainty strategy: `sum(normalized_weight × confidence)`, query-time selectable
-15. **Blueprint lifecycle skill** (`0df60cc`) — `.claude/skills/blueprint/`
-16. **Handoff session document skill** (`ce55f56`) — `.claude/skills/handoff/`
+15. **Certainty v1 freeze** (`e9f9bc2`) — frozen contract, explicit non-goals, blueprint gate for any semantics changes
+16. **Blueprint lifecycle skill** (`0df60cc`) — `.claude/skills/blueprint/`
+17. **Handoff session document skill** (`ce55f56`) — `.claude/skills/handoff/`
 
-Current position: **certainty lane is feature-complete** — from fact-level confidence write through create-time routing, dual aggregation strategies (bottleneck + additive), ranking, narrative/NL delivery, audit export, and static site rendering. The next natural direction is **probability lane scoping** or **chain/recursive certainty propagation**.
+Current position: **certainty v1 is complete and frozen** — from fact-level confidence write through create-time routing, dual aggregation strategies (bottleneck + additive), ranking, narrative/NL delivery, audit export, and static site rendering. The recommended next direction is **probability feasibility / scoping**. Chain/recursive certainty propagation remains a legitimate future line, but it is no longer the default next step.
 
 ## 2. Capability Baseline
 
@@ -39,7 +45,7 @@ fact write with meta.confidence
   → CertaintySummary { conditions, aggregate_certainty, aggregation }
   → rank_certainty_conditions (impact ascending, bottleneck marked)
   → explain-summary: response-level certainty_summary sibling (with certainty_aggregation option)
-  → explain-narrative: additive certainty_lines (sorted, [bottleneck] tagged)
+  → explain-narrative: certainty_lines (sorted, [bottleneck] tagged in bottleneck mode)
                         + certainty_bottleneck (machine-readable, bottleneck mode only)
   → explain-nl: certainty paragraph + weakest-condition sentence (bottleneck mode)
   → export: certainty_summaries.jsonl (export-time materialization)
@@ -60,7 +66,26 @@ Key design decisions:
 - **Ranking in annotation layer**: `rank_certainty_conditions` is a pure function; narrative/NL only consume its output
 - **Impact semantics vary by strategy**: bottleneck = absolute `weight × confidence`; additive = normalized `(weight/Σweights) × confidence`
 
-### 2.2 Confidence Kind Infrastructure (new this session, stable)
+### 2.2 Certainty V1 Freeze Status (new this session, stable)
+
+`certainty v1` is now frozen. The freeze is recorded in:
+- `src/factpy_kernel/core/annotation/docs/README.md` §5
+- `src/factpy_kernel/core/docs/01_architecture.md` §8.1
+- `src/factpy_kernel/core/docs/01_architecture.en.md` §8.1
+- `src/factpy_kernel/service/docs/03_runtime_queries_views.md`
+
+Frozen contract categories:
+- producer contract: create-time certainty routing on native path
+- carrier contract: `assertion_fact.confidence` and `predicate_witness_group.condition_confidence`
+- summary contract: `bottleneck` default + `additive` optional explain-time strategy
+- delivery contract: runtime dual-strategy support, audit/static fixed to default bottleneck
+
+Semantics changes now require a blueprint. Safe direct changes without reopening the contract:
+- bug fixes
+- performance work
+- docs clarification
+
+### 2.3 Confidence Kind Infrastructure (new this session, stable)
 
 - `CONFIDENCE_KINDS = frozenset({"none", "probability", "certainty"})` — frozen
 - `CandidateSet.confidence_kind: str = "none"` — validated at creation
@@ -73,7 +98,7 @@ Key design decisions:
 - `Store.get_candidate_confidence_kind(candidate_id)` — public accessor
 - `Store.list_candidate_ids()` — enumeration for export-time batch
 
-### 2.3 Test Decomposition (new this session, stable)
+### 2.4 Test Decomposition (new this session, stable)
 
 Original monolith `test_phase3_contracts_v1.py` (10,372 lines) split into:
 
@@ -89,11 +114,11 @@ Original monolith `test_phase3_contracts_v1.py` (10,372 lines) split into:
 | `test_core_annotation_certainty.py` | Certainty derivation + ranking + additive unit tests | ~30 |
 | `_test_helpers.py` | Shared fixtures | — |
 
-### 2.4 Evidence Tree + Traceability (from prior sessions, still stable)
+### 2.5 Evidence Tree + Traceability (from prior sessions, still stable)
 
 Unchanged from 2026-03-20 handoff §2.1–§2.4. All 8 frozen contracts remain frozen.
 
-### 2.5 Helper Layering (cleaned up this session)
+### 2.6 Helper Layering (cleaned up this session)
 
 | Module | Layer | Dependencies | Role |
 |--------|-------|-------------|------|
@@ -108,7 +133,7 @@ Unchanged from 2026-03-20 handoff §2.1–§2.4. All 8 frozen contracts remain f
 
 Import graph verified clean: no core→authoring, no adapters→service, no audit→service.
 
-### 2.6 Benchmarks (new this session, stable)
+### 2.7 Benchmarks (new this session, stable)
 
 - Workload D (`tools/benchmarks/workload_d_reference.py`): certainty derivation + ranking pipeline benchmark
 - Performance: **0.0009s / 0.02MB** for 20 conditions, depth 4 — certainty overhead negligible
@@ -138,13 +163,17 @@ Import graph verified clean: no core→authoring, no adapters→service, no audi
   - `e85ebcd` — document fact-level confidence known gap
   - `e2619f0` — connect fact-level confidence to evidence tree
   - `389708b` — weighted additive certainty aggregation strategy
+  - `e9f9bc2` — freeze certainty v1 contract
   - `0df60cc` — blueprint lifecycle skill
   - `a568732` — gitignore third-party gstack skill directory
   - `ce55f56` — handoff session document skill
 - Uncommitted:
   - `examples/certainty_evidence_tree.ipynb` (modified — notebook updates in progress)
+  - `src/factpy_kernel/audit/static_ui.py` (modified — unrelated worktree change)
   - `.claude/agents/blueprint-editor.md` (deleted — migrated to skill)
   - `.claude/commands/blueprint.md` (deleted — migrated to skill)
+  - `.claude/skills/*` (multiple untracked skill directories)
+  - `tools/apply_static_ui_visual_upgrade.py` (untracked utility script)
 
 ## 4. Blueprint Status Summary
 
@@ -273,12 +302,17 @@ All 8 frozen contracts from 2026-03-20 handoff §7 remain frozen, plus:
 
 **Status**: Explicitly deferred. The seam exists; SDK just needs a reader implementation.
 
-### 8.4 Annotation Docs Known Gap List (needs update)
+### 8.4 Certainty V1 Non-Goals (frozen, not accidental omissions)
 
-The `annotation/docs/README.md` §5 still lists "fact-level confidence carrier 未接通" and "leaf min / weighted mean 聚合未实现" as known gaps, but both have been partially addressed:
-- Fact-level confidence IS now connected (`e2619f0`)
-- Additive aggregation IS now implemented (`389708b`)
-- Chain/recursive propagation and leaf min remain genuinely open
+These are explicitly deferred, not forgotten:
+- chain / recursive certainty propagation
+- rule-level certainty cap
+- thresholded certainty gating
+- additional aggregation strategies beyond `bottleneck` and `additive`
+- additive parity in audit/static export
+- SDK certainty auto-routing parity
+- engine parity for certainty delivery outside native
+- probability-specific explainability
 
 ## 9. Collaboration Protocol
 
@@ -303,15 +337,24 @@ Expected: 234 tests, OK.
 
 ### Recommended next direction
 
-Two equally valid paths:
+Primary recommendation:
 
-**Option A: Probability lane scoping blueprint** (decision-freeze, not implementation). The certainty lane is feature-complete; the structural asymmetry is the biggest remaining gap. Should answer:
-1. Aggregation semantics
-2. Per-condition model
-3. Cross-engine mapping
-4. Delivery surface naming
+**Probability feasibility / scoping blueprint** (decision-freeze, not implementation).
 
-**Option B: Chain/recursive certainty propagation**. The flat-min limitation means certainty breaks silently on nested rule chains. Opening this before probability would make the certainty model more complete before building a parallel probability model.
+Why this is the recommended next move:
+- `certainty v1` is now frozen, so more certainty semantics work has lower immediate leverage
+- the largest remaining asymmetry in the confidence system is `confidence_kind="probability"`
+- the real open question is not scalar delivery, but whether probability can support an honest explain surface at all
+
+This blueprint should answer:
+1. What artifacts ProbLog actually produces today
+2. Whether scalar probability v0 is independently valuable even without attribution
+3. Which explain / attribution surfaces are blocked and must remain blocked
+4. Whether any probability summary should share namespace with certainty or stay independent
+
+Secondary future option:
+
+**Chain/recursive certainty propagation** remains valid, but should be treated as a later `certainty v2` line rather than the default next step.
 
 ### What NOT to do
 
@@ -320,7 +363,7 @@ Two equally valid paths:
 - Do not couple probability lane to ProbLog (must be engine-agnostic)
 - Do not treat this handoff as implementation truth; module docs remain canonical
 - Do not skip blueprint scoping for non-trivial work
-- Update `annotation/docs/README.md` §5 known gaps to reflect fact-confidence and additive are now closed
+- Do not reopen certainty semantics without first treating it as a contract change
 
 ## 11. Minimal Startup Reading List
 
@@ -339,3 +382,16 @@ For a new agent, read in this order:
    - `src/factpy_kernel/service/_certainty_service.py`
 4. **Demo notebook**: `examples/certainty_evidence_tree.ipynb`
 5. **Archive index**: `docs/blueprints/archive/README.md`
+
+## 12. Suggested First Blueprint After This Handoff
+
+If starting a new capability line immediately, prefer:
+
+`probability-feasibility` (name tentative)
+
+Target outcome:
+- a scoped decision document, not implementation
+- clear answer on whether `probability summary v0` has standalone product value
+- explicit blocked surface list for probability attribution
+
+Avoid turning this into a hidden implementation blueprint. The first deliverable should be a framing decision, not code.
