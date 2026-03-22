@@ -11,7 +11,7 @@
   - `src/factpy_kernel/core/rules/rule_ir.py`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [2026-03-17_runtime-traceability-explainability-blueprint.md](../active/2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [2026-03-17_support-artifact-readback.md](./2026-03-17_support-artifact-readback.md)
   - [2026-03-17_run-rule-trace-capture.md](./2026-03-17_run-rule-trace-capture.md)
 - Audit Log:

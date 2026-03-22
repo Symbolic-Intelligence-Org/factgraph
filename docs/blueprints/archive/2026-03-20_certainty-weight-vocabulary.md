@@ -14,9 +14,9 @@
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
   - [docs/references/external/rainbird-evidence-chain-compare.md](../../references/external/rainbird-evidence-chain-compare.md)
-  - [docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md](../active/2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [docs/blueprints/archive/2026-03-20_candidate-evidence-tree-salience-impact.md](../archive/2026-03-20_candidate-evidence-tree-salience-impact.md)
-  - [docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md](../active/2026-03-16_temporal-hybrid-reasoning-blueprint.md)
+  - [docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
   - [src/factpy_kernel/core/docs/01_architecture.md](../../../src/factpy_kernel/core/docs/01_architecture.md)
 - Audit Log:
   - [2026-03-20_certainty-weight-vocabulary.audit.md](./2026-03-20_certainty-weight-vocabulary.audit.md)

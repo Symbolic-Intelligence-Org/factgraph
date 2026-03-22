@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-03-16 | draft | Blueprint created | Established a discussion entry for temporal semantics, hybrid execution, and future LLM/rule-governance boundaries. |
 | 2026-03-18 | draft | Scenario-anchoring child blueprint linked | Added a bridge note to `2026-03-18_ecss-scenario-anchoring.md` so the next concrete step starts from named ECSS/ESA scenarios rather than abstract engine selection. |
+| 2026-03-22 | superseded | Successor designated | Replaced by `2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md` as the current stage mother blueprint after the domain-first pivot. |
 
 ## Decision Notes
 
@@ -37,6 +38,9 @@
   - 新子蓝图 `2026-03-18_ecss-scenario-anchoring.md` 用来收口这一前置问题，避免后续优先级讨论继续漂浮在抽象架构偏好上。
   - `ecss-scenario-anchoring` 的第一轮结论进一步表明：近期更适合先走 `ECSS-M-ST-10` 风格的 compliance-matrix / VCD delivery，而不是先开 `PyReason` 或 temporal runtime semantics。
   - `ecss-vcd-compliance-delivery` 现已实现并归档，说明近期 ECSS-M-ST-10 锚点已经形成一个真实的 offline compliance delivery 路径，而不再只是讨论中的下游入口。
+
+- 2026-03-22
+  - The blueprint is no longer the right active parent because the current stage is not “temporal/hybrid exploration” but “ECSS fit + provenance feasibility”.
 
 ## Rejected Options
 

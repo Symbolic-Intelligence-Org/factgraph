@@ -14,7 +14,7 @@
   - `src/factpy_kernel/core/docs/01_architecture.md`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [2026-03-16_temporal-hybrid-reasoning-blueprint.md](../active/2026-03-16_temporal-hybrid-reasoning-blueprint.md)
+  - [2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
   - [2026-03-18_ecss-scenario-anchoring.md](../active/2026-03-18_ecss-scenario-anchoring.md)
   - [src/factpy_kernel/audit/docs/01_overview.md](../../../src/factpy_kernel/audit/docs/01_overview.md)
   - [src/factpy_kernel/service/docs/03_runtime_queries_views.md](../../../src/factpy_kernel/service/docs/03_runtime_queries_views.md)

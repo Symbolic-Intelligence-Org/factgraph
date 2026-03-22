@@ -14,7 +14,7 @@
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
   - [2026-03-17_durable-artifact-storage.md](../active/2026-03-17_durable-artifact-storage.md)
-  - [2026-03-17_runtime-traceability-explainability-blueprint.md](../active/2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [2026-03-17_audit-package-artifact-export.md](../archive/2026-03-17_audit-package-artifact-export.md)
 - Audit Log:
   - [2026-03-17_artifact-sidecar-store.audit.md](./2026-03-17_artifact-sidecar-store.audit.md)

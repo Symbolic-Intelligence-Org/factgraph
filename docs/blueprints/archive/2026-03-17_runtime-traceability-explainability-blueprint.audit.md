@@ -27,6 +27,7 @@
 | 2026-03-18 | draft | Parent blueprint realigned to current baseline | Added an explicit current-position section noting that support capture, explain-ref handles, runtime `raw -> summary -> narrative -> NL`, and audit/static proof-entry are now implemented; clarified that evidence tree belongs to the parent blueprint's original `proof-tree / support-graph` next stage rather than a new mother plan. |
 | 2026-03-20 | draft | Parent blueprint baseline refreshed | Updated the current-position section after provenance-role taxonomy and candidate tree NL explain landed; remaining open directions now start at salience / impact and stronger engine witness parity. |
 | 2026-03-20 | draft | Salience / impact child blueprint frozen and archived | Salience / impact scoped as decision-only archive: owner = annotation/value-semantics, compute-time = query-time, blocked on certainty/weight vocabulary, no implementation slice. |
+| 2026-03-22 | superseded | Successor designated | Replaced by `2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md` after the stage boundary shifted from framework-internal explainability expansion to domain validation plus engine provenance feasibility. |
 
 ## Decision Notes
 
@@ -57,3 +58,6 @@
 - 2026-03-18: 在当前实现基线下，evidence tree 不应被表述为新的计划线；它属于本母蓝图原本就预留的 `proof-tree / support-graph-oriented` 下一阶段，并且默认不被 `temporal-hybrid` 或 `durable-artifact-storage` 作为前置阻塞。
 - 2026-03-20: provenance-role taxonomy 与 candidate tree NL explain 已完成后，母蓝图的剩余方向应从”proof-tree 是否存在”转向”proof-tree 还缺哪些 richer semantics / delivery layers”。
 - 2026-03-20: salience / impact 归属冻结为 annotation / value-semantics 层，compute-time 冻结为 query-time / read-time；现有 tree/summary 结构信号不足以产出有意义的 salience；”structural salience proxy” 被否决。Implementation blocked on certainty / weight vocabulary。
+
+- 2026-03-22
+  - The blueprint remains historically important because many child slices landed under it, but it is no longer the right active parent: the next unresolved bottleneck is not richer framework delivery, but real ECSS rule complexity and engine-native provenance access.

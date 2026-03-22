@@ -16,7 +16,7 @@
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
   - [docs/references/external/rainbird-evidence-chain-compare.md](../../references/external/rainbird-evidence-chain-compare.md)
-  - [docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [docs/blueprints/active/2026-03-17_durable-artifact-storage.md](./2026-03-17_durable-artifact-storage.md)
   - [docs/blueprints/archive/2026-03-17_support-artifact-native-capture.md](../archive/2026-03-17_support-artifact-native-capture.md)
   - [docs/blueprints/archive/2026-03-17_explain-ref-service-unification.md](../archive/2026-03-17_explain-ref-service-unification.md)

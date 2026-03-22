@@ -43,8 +43,8 @@
 - [docs/README.md](/Users/zhenzhili/hnsm-backend/docs/README.md) 当前只收口原则、蓝图、模块 docs、legacy history 和 session handoff。
 - [docs/blueprints/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/README.md) 当前没有给 reference 文档单独留位。
 - `temp.md`、`rainbird_compare.md`、`symir_blueprint_extraction.md` 目前位于仓库根目录。
-- [2026-03-15_overall-system-blueprint.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-03-15_overall-system-blueprint.md) 已引用 `symir_blueprint_extraction.md`。
-- [2026-03-17_runtime-traceability-explainability-blueprint.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md) 和其 audit 已引用 `temp.md`。
+- [2026-03-15_overall-system-blueprint.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/2026-03-15_overall-system-blueprint.md) 已引用 `symir_blueprint_extraction.md`。
+- [2026-03-17_runtime-traceability-explainability-blueprint.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.md) 和其 audit 已引用 `temp.md`。
 
 ## 5. Proposed Shape
 
@@ -89,9 +89,9 @@
 - `docs/blueprints/README.md`
 - `docs/references/README.md`
 - `docs/references/templates/reference_note.md`
-- `docs/blueprints/active/2026-03-15_overall-system-blueprint.md`
-- `docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md`
-- `docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.audit.md`
+- `docs/blueprints/archive/2026-03-15_overall-system-blueprint.md`
+- `docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.md`
+- `docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.audit.md`
 
 ## 10. Outcome / Deviations
 

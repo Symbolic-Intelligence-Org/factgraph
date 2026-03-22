@@ -8,8 +8,8 @@
   - `docs/session_handoff_2026-03-18.md`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [2026-03-16_temporal-hybrid-reasoning-blueprint.md](../active/2026-03-16_temporal-hybrid-reasoning-blueprint.md)
-  - [2026-03-17_runtime-traceability-explainability-blueprint.md](../active/2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
+  - [2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [2026-03-18_ecss-scenario-anchoring.md](../active/2026-03-18_ecss-scenario-anchoring.md)
 - Audit Log:
   - [2026-03-18_session-handoff-refresh.audit.md](./2026-03-18_session-handoff-refresh.audit.md)

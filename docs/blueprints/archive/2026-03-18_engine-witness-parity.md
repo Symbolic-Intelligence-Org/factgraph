@@ -14,7 +14,7 @@
   - `src/factpy_kernel/service/docs/03_runtime_queries_views.md`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [2026-03-17_runtime-traceability-explainability-blueprint.md](../active/2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [2026-03-17_support-artifact-native-capture.md](../archive/2026-03-17_support-artifact-native-capture.md)
   - [2026-03-17_explain-ref-service-unification.md](../archive/2026-03-17_explain-ref-service-unification.md)
   - [2026-03-17_rule-run-trace-schema-contract.md](../archive/2026-03-17_rule-run-trace-schema-contract.md)
@@ -100,7 +100,7 @@ engine 路径（`souffle` / `problog`）则处于完全不同的状态：
     - 已让 `candidate` 进入统一 explain surface，但没有定义 engine-no-witness 的显式 service semantics
   - [2026-03-17_rule-run-trace-schema-contract.md](../archive/2026-03-17_rule-run-trace-schema-contract.md)
     - 已收口 `rule_run` trace schema；当前剩余 engine explain gap 主要落在 derivation candidate 路径
-  - [2026-03-17_runtime-traceability-explainability-blueprint.md](../active/2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
     - 已把 engine witness output 作为仍未拆解的剩余方向
 
 ## 5. Proposed Shape

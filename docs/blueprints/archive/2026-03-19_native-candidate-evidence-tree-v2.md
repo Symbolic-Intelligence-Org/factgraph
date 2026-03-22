@@ -14,7 +14,7 @@
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
   - [docs/references/external/rainbird-evidence-chain-compare.md](../../references/external/rainbird-evidence-chain-compare.md)
-  - [docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md](../active/2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [docs/blueprints/archive/2026-03-18_runtime-traceability-evidence-tree-realignment.md](../archive/2026-03-18_runtime-traceability-evidence-tree-realignment.md)
   - [docs/blueprints/archive/2026-03-18_native-candidate-evidence-tree-v1.md](../archive/2026-03-18_native-candidate-evidence-tree-v1.md)
   - [src/factpy_kernel/core/docs/01_architecture.md](../../../src/factpy_kernel/core/docs/01_architecture.md)

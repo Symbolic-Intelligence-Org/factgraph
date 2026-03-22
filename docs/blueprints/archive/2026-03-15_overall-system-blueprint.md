@@ -1,8 +1,8 @@
 # Task Blueprint: Overall System Blueprint
 
-- Status: draft
+- Status: superseded
 - Created: 2026-03-15
-- Last Updated: 2026-03-15
+- Last Updated: 2026-03-22
 - Related Modules:
   - `src/factpy_kernel/core`
   - `src/factpy_kernel/authoring`
@@ -158,8 +158,8 @@
 
 ## 9. Docs To Update
 
-- `docs/blueprints/active/2026-03-15_overall-system-blueprint.md`
-- `docs/blueprints/active/2026-03-15_overall-system-blueprint.audit.md`
+- `docs/blueprints/archive/2026-03-15_overall-system-blueprint.md`
+- `docs/blueprints/archive/2026-03-15_overall-system-blueprint.audit.md`
 - `docs/README.md`（当前 draft 阶段暂不更新；若后续归档或变成持久入口，再讨论）
 
 ## 10. Outcome / Deviations
@@ -167,6 +167,10 @@
 任务完成后填写：
 
 - 最终落地结果：
+  - 该母蓝图完成了“跨层统一语言和分层骨架”的早期探索职责，但没有继续进入独立实现线。
 - 与 blueprint 不同的地方：
+  - 后续阶段没有围绕它继续拆分“overall-system”子蓝图，而是由更具体的 traceability、temporal 和 certainty 线路分别推进。
 - 为什么会有这些调整：
+  - 2026-03-22 的阶段判断已经把当前主线收敛到“ECSS domain validation + Souffle provenance PoC”，不再需要一个继续保持 active 的泛化总蓝图。
 - 归档说明：
+  - 本蓝图已由 `2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md` 接替当前阶段母图角色，并按 `superseded` 路径归档。

@@ -299,7 +299,7 @@ authority note:
 
 - `docs/blueprints/active/2026-03-18_ecss-scenario-anchoring.md`
 - `docs/blueprints/active/2026-03-18_ecss-scenario-anchoring.audit.md`
-- `docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md`（若结论足以影响其优先级描述）
+- `docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md`（若结论足以影响其优先级描述）
 - `docs/README.md`（仅当新增持久 reference/doc 入口时）
 
 ## 10. Outcome / Deviations

@@ -9,7 +9,7 @@
   - `src/factpy_kernel/sdk`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
+  - [docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
   - [src/factpy_kernel/core/docs/01_architecture.md](../../../src/factpy_kernel/core/docs/01_architecture.md)
   - [src/factpy_kernel/adapters/docs/01_souffle_adapter.md](../../../src/factpy_kernel/adapters/docs/01_souffle_adapter.md)
   - [src/factpy_kernel/adapters/docs/02_problog_adapter.md](../../../src/factpy_kernel/adapters/docs/02_problog_adapter.md)
@@ -57,7 +57,7 @@
   - `core` 是 runtime semantic kernel；若 annotation 语义会影响 accept/audit/provenance，不应放在 adapter 私有逻辑中。
   - `sdk.evaluate(..., view=...)` 不支持，说明“事实切片”和“执行规划”当前仍是两件事。
 - 当前相关母蓝图：
-  - [docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
+  - [docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
     - 本蓝图作为其子蓝图，专门收口 `Souffle` 底座 + annotation kernel 的可行性。
 - 当前 baseline 假设：
   - `PyReason` 代表 annotation-first、现成可运行的参考基线。
@@ -415,7 +415,7 @@ Smoke test 不是 go/no-go 决策点。Go/no-go 决策依据第 5.11 节的 Gate
 
 - `docs/blueprints/archive/2026-03-16_souffle-backed-annotation-kernel-spike.md`
 - `docs/blueprints/archive/2026-03-16_souffle-backed-annotation-kernel-spike.audit.md`
-- `docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md`
+- `docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md`
 
 ## 10. Outcome / Deviations
 

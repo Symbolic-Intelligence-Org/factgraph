@@ -11,7 +11,7 @@
   - `src/factpy_kernel/tests/test_phase3_contracts_v1.py`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [2026-03-17_runtime-traceability-explainability-blueprint.md](../active/2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [2026-03-20_engine-partial-witness-adapter-contract.md](./2026-03-20_engine-partial-witness-adapter-contract.md)
   - [src/factpy_kernel/service/docs/03_runtime_queries_views.md](../../../src/factpy_kernel/service/docs/03_runtime_queries_views.md)
   - [src/factpy_kernel/audit/docs/01_overview.md](../../../src/factpy_kernel/audit/docs/01_overview.md)

@@ -1,8 +1,8 @@
 # Task Blueprint: Runtime Traceability And Explainability Blueprint
 
-- Status: draft
+- Status: superseded
 - Created: 2026-03-17
-- Last Updated: 2026-03-17
+- Last Updated: 2026-03-22
 - Related Modules:
   - `src/factpy_kernel/core`
   - `src/factpy_kernel/audit`
@@ -13,8 +13,8 @@
   - [docs/references/README.md](../../references/README.md)
   - [docs/references/working/cross-domain-compliance-framing.md](../../references/working/cross-domain-compliance-framing.md)
   - [docs/references/external/rainbird-evidence-chain-compare.md](../../references/external/rainbird-evidence-chain-compare.md)
-  - [docs/blueprints/active/2026-03-15_overall-system-blueprint.md](./2026-03-15_overall-system-blueprint.md)
-  - [docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
+  - [docs/blueprints/archive/2026-03-15_overall-system-blueprint.md](./2026-03-15_overall-system-blueprint.md)
+  - [docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
   - [docs/blueprints/archive/2026-03-16_souffle-backed-annotation-kernel-spike.md](../archive/2026-03-16_souffle-backed-annotation-kernel-spike.md)
   - [docs/blueprints/archive/2026-03-17_souffle-annotation-kernel-prototype.md](../archive/2026-03-17_souffle-annotation-kernel-prototype.md)
   - [src/factpy_kernel/core/docs/01_architecture.md](../../../src/factpy_kernel/core/docs/01_architecture.md)
@@ -79,7 +79,7 @@
     - 已证明 annotation 在部分 workload 上有价值，但价值具有 workload 依赖性。
   - [docs/blueprints/archive/2026-03-17_souffle-annotation-kernel-prototype.md](../archive/2026-03-17_souffle-annotation-kernel-prototype.md)
     - 已将 A/C 的 annotation 能力沉淀为 internal prototype。
-  - [docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
+  - [docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
     - 已提出 `audit-log -> proof-tree -> graph-based` 的长期排序，但尚未展开承载模型本身。
 
 ### 4.1 Current Position After Delivery Closure
@@ -681,16 +681,20 @@ salience / impact 的 4 条冻结结论：owner = annotation/value-semantics; co
 
 ## 9. Docs To Update
 
-- `docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md`
-- `docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.audit.md`
-- `docs/blueprints/active/2026-03-15_overall-system-blueprint.md`
-- `docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md`
+- `docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.md`
+- `docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.audit.md`
+- `docs/blueprints/archive/2026-03-15_overall-system-blueprint.md`
+- `docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md`
 
 ## 10. Outcome / Deviations
 
 任务完成后填写：
 
 - 最终落地结果：
+  - 该母蓝图完成了 runtime traceability / explainability 第一阶段的 umbrella 角色，并为 evidence tree、rule-trace delivery、certainty explain 以及相关 audit/static slices 提供了上游 framing。
 - 与 blueprint 不同的地方：
+  - 后续实现证明：annotation layer 能支撑一部分 delivery 与 certainty lane，但不能替代 engine-native reasoning provenance；因此“继续沿 annotation 扩张 traceability”不再是当前主方向。
 - 为什么会有这些调整：
+  - 2026-03-22 的阶段反思已经把当前瓶颈重定位为 domain validation 与 engine provenance consumption，而不是继续在 framework 内部补更丰富的浅层 explain delivery。
 - 归档说明：
+  - 本蓝图已由 `2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md` 接替当前阶段母图角色，并按 `superseded` 路径归档。

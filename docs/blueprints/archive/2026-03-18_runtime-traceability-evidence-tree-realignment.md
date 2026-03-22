@@ -9,10 +9,10 @@
   - `src/factpy_kernel/audit`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [docs/blueprints/active/2026-03-15_overall-system-blueprint.md](./2026-03-15_overall-system-blueprint.md)
-  - [docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
+  - [docs/blueprints/archive/2026-03-15_overall-system-blueprint.md](./2026-03-15_overall-system-blueprint.md)
+  - [docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md](./2026-03-16_temporal-hybrid-reasoning-blueprint.md)
   - [docs/blueprints/active/2026-03-17_durable-artifact-storage.md](./2026-03-17_durable-artifact-storage.md)
-  - [docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [src/factpy_kernel/core/docs/01_architecture.md](../../../src/factpy_kernel/core/docs/01_architecture.md)
   - [src/factpy_kernel/service/docs/03_runtime_queries_views.md](../../../src/factpy_kernel/service/docs/03_runtime_queries_views.md)
   - [src/factpy_kernel/audit/docs/01_overview.md](../../../src/factpy_kernel/audit/docs/01_overview.md)
@@ -143,8 +143,8 @@ evidence tree 应被明确视为：
 
 ## 9. Docs To Update
 
-- `docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.md`
-- `docs/blueprints/active/2026-03-17_runtime-traceability-explainability-blueprint.audit.md`
+- `docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.md`
+- `docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.audit.md`
 - `docs/blueprints/active/2026-03-18_runtime-traceability-evidence-tree-realignment.md`
 - `docs/blueprints/active/2026-03-18_runtime-traceability-evidence-tree-realignment.audit.md`
 

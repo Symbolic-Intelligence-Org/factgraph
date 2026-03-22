@@ -23,15 +23,17 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-03-21
+最后更新：2026-03-22
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
 | 2026-03-15 | blueprint-workflow-foundation | archived | 建立可持续、可审计的 blueprint 工作流 |
 | 2026-03-15 | historical-blueprint-status-backfill | archived | 回填 blueprint_history/ 的状态一致性 |
 | 2026-03-15 | legacy-reconstructed-archive-rules | archived (reconstructed) | 定义 reconstructed archive 迁移规则 |
+| 2026-03-15 | overall-system-blueprint | superseded | 早期跨层总蓝图；已由 2026-03-22 阶段母图接替当前 framing 角色 |
 | 2026-03-16 | souffle-annotation-benchmark-spec | archived | Souffle annotation benchmark 规格 |
 | 2026-03-16 | souffle-backed-annotation-kernel-spike | implemented | Souffle-backed reasoning kernel spike |
+| 2026-03-16 | temporal-hybrid-reasoning-blueprint | superseded | 早期 temporal/hybrid 母蓝图；当前阶段已收敛到 ECSS fit 与 provenance feasibility |
 | 2026-03-17 | artifact-sidecar-store | implemented | File-backed durable explain carrier |
 | 2026-03-17 | audit-package-artifact-export | implemented | Explain artifact audit package 导出 |
 | 2026-03-17 | candidate-id-support-backref | implemented | Candidate→support backref 补齐 |
@@ -41,6 +43,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-17 | rule-run-trace-schema-contract | implemented | Rule run trace schema contract |
 | 2026-03-17 | run-rule-trace-capture | implemented | Rule trace capture at evaluate time |
 | 2026-03-17 | runtime-service-explain-readback | implemented | Service 层 explain readback |
+| 2026-03-17 | runtime-traceability-explainability-blueprint | superseded | Traceability/explainability 母蓝图；子实现已落地，当前方向改为 domain validation + engine provenance |
 | 2026-03-17 | sidecar-retention-gc | implemented | Sidecar retention + TTL GC |
 | 2026-03-17 | souffle-annotation-kernel-prototype | implemented | Souffle annotation kernel prototype |
 | 2026-03-17 | support-artifact-native-capture | implemented | Native derivation support artifact capture |
@@ -115,3 +118,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-21 | phase3-test-decomposition | implemented | 10K-line test monolith → 7 capability files |
 | 2026-03-21 | fact-confidence-to-evidence-tree | implemented | Fact-level confidence carrier: meta.confidence → assertion_fact → condition_confidence=max(children) |
 | 2026-03-21 | certainty-additive-aggregation-v1 | implemented | Second aggregation strategy: weighted additive contribution alongside bottleneck/min |
+| 2026-03-22 | docs-memory-and-blueprint-realignment | archived | design→active mother blueprint、handoff→memory、旧 active 母蓝图 superseded 归档 |

@@ -1,8 +1,8 @@
 # Task Blueprint: Temporal Hybrid Reasoning Blueprint
 
-- Status: draft
+- Status: superseded
 - Created: 2026-03-16
-- Last Updated: 2026-03-16
+- Last Updated: 2026-03-22
 - Related Modules:
   - `src/factpy_kernel/core`
   - `src/factpy_kernel/authoring`
@@ -13,7 +13,7 @@
   - `src/factpy_kernel/audit`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [docs/blueprints/active/2026-03-15_overall-system-blueprint.md](./2026-03-15_overall-system-blueprint.md)
+  - [docs/blueprints/archive/2026-03-15_overall-system-blueprint.md](./2026-03-15_overall-system-blueprint.md)
   - [src/factpy_kernel/core/docs/01_architecture.md](../../../src/factpy_kernel/core/docs/01_architecture.md)
   - [src/factpy_kernel/authoring/docs/01_overview.md](../../../src/factpy_kernel/authoring/docs/01_overview.md)
   - [src/factpy_kernel/adapters/docs/01_souffle_adapter.md](../../../src/factpy_kernel/adapters/docs/01_souffle_adapter.md)
@@ -318,8 +318,8 @@
 
 ## 9. Docs To Update
 
-- `docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.md`
-- `docs/blueprints/active/2026-03-16_temporal-hybrid-reasoning-blueprint.audit.md`
+- `docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.md`
+- `docs/blueprints/archive/2026-03-16_temporal-hybrid-reasoning-blueprint.audit.md`
 - `docs/README.md`（当前 draft 阶段暂不更新；若后续产出持久入口或归档，再讨论）
 
 ## 10. Outcome / Deviations
@@ -327,6 +327,10 @@
 任务完成后填写：
 
 - 最终落地结果：
+  - 该母蓝图完成了对“单引擎优先 vs 复合执行 escape hatch”的早期收口，并为 ECSS 场景锚定、engine capability 讨论和后续 certainty/provenance 线路提供了上游 framing。
 - 与 blueprint 不同的地方：
+  - 当前阶段并未继续沿 temporal runtime contract 或 PyReason integration 开实现线，而是先收敛到 ECSS 规则 fit 与 Souffle provenance feasibility。
 - 为什么会有这些调整：
+  - 2026-03-22 的阶段判断表明，真实 ECSS 规则复杂度与 engine-native provenance 才是当前最关键的未知数，优先级高于抽象 temporal/hybrid 讨论。
 - 归档说明：
+  - 本蓝图已由 `2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md` 接替当前阶段母图角色，并按 `superseded` 路径归档。

@@ -9,7 +9,7 @@
   - `HANDOUT.md`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [2026-03-17_runtime-traceability-explainability-blueprint.md](../active/2026-03-17_runtime-traceability-explainability-blueprint.md)
+  - [2026-03-17_runtime-traceability-explainability-blueprint.md](./2026-03-17_runtime-traceability-explainability-blueprint.md)
   - [2026-03-18_runtime-traceability-evidence-tree-realignment.md](./2026-03-18_runtime-traceability-evidence-tree-realignment.md)
   - [2026-03-18_native-candidate-evidence-tree-v1.md](./2026-03-18_native-candidate-evidence-tree-v1.md)
   - [2026-03-19_native-candidate-evidence-tree-v2.md](./2026-03-19_native-candidate-evidence-tree-v2.md)
