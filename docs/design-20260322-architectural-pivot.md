@@ -331,6 +331,137 @@ Migration path: `ProofNode` lives alongside the existing evidence tree initially
 - Framework never interprets engine-specific annotations without checking their presence first
 - Engine adapters are the ONLY place that knows engine-specific provenance format
 
+### Three-Layer Data Architecture: Fact Store × Provenance Store × Evidence View
+
+**Problem identified this session**: Metadata and evidence tree are disconnected. Facts carry rich metadata (source, analyst, method, date, confidence) in the ledger, but evidence tree only surfaces `confidence`. Engine provenance (full derivation chains) is not persisted at all. Users want to see "920000 ppm — source: ESA Orbit Report — analyst: Dr. Mueller — confidence: 0.85" but currently only see "920000".
+
+**Root cause**: The system conflates two fundamentally different kinds of information:
+- **Fact metadata** (INPUT to reasoning): who wrote this fact, when, how confident, what method
+- **Derivation provenance** (OUTPUT of reasoning): which facts + rules → which conclusions, derivation chain
+
+Mixing them in a single "metadata" concept creates circular reference risk: provenance references facts, facts display provenance, provenance references the display...
+
+**Solution — three layers with strict directionality (no back-references)**:
+
+```
+┌─────────────────────┐     ┌──────────────────────────┐
+│  Fact Store          │     │  Provenance Store         │
+│  (持久层 — 数据库)     │     │  (持久层 — 数据库/JSONL)   │
+│                      │     │                           │
+│  assertion:          │     │  derivation_record:       │
+│    value: 920000     │     │    conclusion: compliant  │
+│    meta:             │     │    rule: disposal_check   │
+│      confidence: 0.85│     │    inputs: [asrt_1, asrt_2]│
+│      source: "ESA.." │     │    engine: souffle        │
+│      analyst: "Dr.M" │     │    timestamp: 2026-03-22  │
+│      method: "MC sim"│     │    min_height: 2          │
+│      date: 2026-01   │     │    proof_tree: {...}      │
+│                      │     │                           │
+│  ❌ NO reference to  │     │  ❌ NO reference to       │
+│     evidence tree    │     │     evidence tree         │
+│  ❌ NO reference to  │     │  ❌ NO reference to       │
+│     provenance store │     │     fact store meta       │
+└──────────┬───────────┘     └──────────┬────────────────┘
+           │                            │
+           │    READ-ONLY               │    READ-ONLY
+           └──────────┐  ┌─────────────┘
+                      ▼  ▼
+             ┌─────────────────────┐
+             │  Evidence Tree      │
+             │  (只读视图 — 不持久化) │
+             │                     │
+             │  每个节点融合:        │
+             │  - fact value       │
+             │  - fact metadata    │
+             │  - provenance info  │
+             │                     │
+             │  ❌ NO write-back   │
+             │     to either store │
+             │  ❌ NO own ID for   │
+             │     external ref    │
+             └─────────────────────┘
+```
+
+**Key principles**:
+
+1. **Fact Store is INPUT-side**: stores what users/sensors/imports assert. Each assertion has a value and arbitrary `meta` dict. Fact Store does not know about reasoning results or evidence trees.
+
+2. **Provenance Store is OUTPUT-side**: stores what the engine derived and how. Each derivation record captures the rule, inputs, engine, timing, and (when available) the engine-native proof tree. Provenance Store does not embed fact metadata — it only references assertion IDs.
+
+3. **Evidence Tree is a READ-ONLY VIEW**: constructed on-demand by reading from both stores. It is not a persistent entity. It has no ID that other systems reference. Like a SQL VIEW, it composes data from underlying tables but is not itself a table.
+
+4. **No circular references**: Fact Store → (read by) → Evidence Tree. Provenance Store → (read by) → Evidence Tree. No back-references. No entity references its own view.
+
+**What each audit question queries**:
+
+| Audit Question | Primary Store | Evidence Tree Needed? |
+|---------------|--------------|----------------------|
+| "Where did this data come from?" | Fact Store (meta: source, analyst, method) | No |
+| "How was this conclusion derived?" | Provenance Store (derivation record) | No |
+| "Show me the complete audit trail" | Both → Evidence Tree view | Yes |
+| "What changed since last audit?" | Fact Store (temporal diff) | No |
+| "Is this conclusion still valid?" | Re-run engine, compare provenance | No |
+
+**How metadata flows into evidence tree nodes**:
+
+```python
+# Current state (thin):
+assertion_fact_node = {
+    "node_kind": "assertion_fact",
+    "claim_args": [{"val": "920000"}],
+    "confidence": 0.85,         # ← only meta field surfaced
+}
+
+# Target state (rich):
+assertion_fact_node = {
+    "node_kind": "assertion_fact",
+    "claim_args": [{"val": "920000"}],
+    "confidence": 0.85,
+    "meta": {                   # ← full fact metadata transparently carried
+        "source": "ESA Orbit Analysis Report v3.2",
+        "analyst": "Dr. Mueller",
+        "method": "Monte Carlo simulation (10^6 runs)",
+        "date": "2026-01-15",
+        "confidence": 0.85,
+    },
+}
+```
+
+**Minimal implementation path (no storage architecture change)**:
+
+```
+Step 1: Transparently carry full assertion meta into evidence tree nodes
+        (change: _build_assertion_leaf reads and forwards meta dict)
+        → ESA demo immediately shows richer fact context
+
+Step 2: Persist engine provenance as audit artifact
+        (change: Souffle -t explain JSON → stored alongside support_artifacts.jsonl)
+        → Audit package includes derivation records
+
+Step 3: Evidence tree view reads from both
+        (change: tree builder consumes provenance records when available)
+        → "Complete audit trail" query works
+```
+
+Step 1 requires NO storage architecture changes — meta is already in the ledger. Step 2 adds a new JSONL file to the audit package (same pattern as `certainty_summaries.jsonl`). Step 3 is the integration that makes the view "thick".
+
+**Long-term storage direction**:
+
+```
+Short-term (ESA demo):
+  Fact metadata → already in ledger (just pass through to tree nodes)
+  Provenance → audit package JSONL (new file, same pattern)
+
+Long-term (product):
+  Fact metadata → database (PostgreSQL / Neo4j)
+  Provenance → dedicated store (engine provenance + derivation graph)
+  Evidence tree → always a computed view, never a stored entity
+```
+
+**Relationship to Neo4j frontend**:
+
+The frontend's Neo4j knowledge graph visualization is a SEPARATE view of the Fact Store — it shows entities and their relationships. The Evidence Tree is a different view of the same underlying data, optimized for audit/traceability. Both read from the Fact Store; neither writes back to it. This means Neo4j and Evidence Tree can coexist without conflict.
+
 ### Multi-Engine Data Format Architecture
 
 **Key decision**: One user-facing format, engine-specific compilation hidden in adapters.
@@ -512,10 +643,28 @@ Adding new engine requires:
 
 **Frontend implications**: The graphical rule builder in the frontend should target Layer 1 (core rules). Layer 2/3 rules are shown in a code editor with syntax highlighting for the target engine. This means the frontend doesn't need to understand every engine's syntax — it only needs to render the Core IR graphically and provide a text editor fallback for engine-specific rules.
 
-### ECSS Rule Complexity Assessment (STILL NEEDED)
-- Encoding real ECSS rules will reveal: are they flat or recursive?
-- This determines whether current evidence tree + Souffle provenance is sufficient
-- **This is still the most important next step** — grounds everything in reality
+### ECSS Rule Complexity Assessment (VALIDATED ✅)
+
+**Research findings**: ESSB-ST-U-007 (space debris mitigation) rules are **low-to-moderate complexity, firmly within Datalog's sweet spot**:
+
+| Rule pattern | Present? | Notes |
+|-------------|----------|-------|
+| Flat conjunction | ✅ Primary | Most compliance = A AND B AND C |
+| Threshold comparison | ✅ Very common | probability >= 90%, collision < 0.1% |
+| Conditional rules | ✅ Moderate | Different thresholds for constellation vs single |
+| Shallow recursion | ✅ Limited | "All energy sources passivated" (for-all) |
+| Deep recursion | ❌ Not needed | No transitive closure or recursive component trees |
+| Complex temporal | ❌ Not needed | 5-year disposal window = simple date comparison |
+
+**End-to-end demo validated** (`examples/ecss_compliance_demo.py`):
+- Disposal success probability ≥ 90% → PASSED, with certainty routing + confidence
+- Collision probability ≤ 0.1% → PASSED, with certainty + NL explanation
+- Full pipeline works without any core code changes
+- Static HTML audit site generated with 13 pages
+
+**Existing `domains/ecss/` schema presets directly map to ESSB-ST-U-007** — `collision_probability_ppm`, `disposal_success_probability_ppm`, and their thresholds are already defined.
+
+**Conclusion**: Current system handles ECSS compliance rules. Souffle provenance is "nice to have" for this domain, not "must have". The evidence tree limitation (no recursive chains, no negative reasoning) is acceptable because ECSS rules are mostly flat.
 
 ## Certainty v1 — Frozen, Honest Assessment
 
@@ -600,28 +749,45 @@ Import graph verified clean: no core→authoring, no adapters→service, no audi
 
 ## Open Questions
 
-1. **Souffle provenance**: What does `-p` flag output look like? Can factpy consume it?
-2. **ProbLog explanations**: What explanation structures does ProbLog expose?
-3. **ECSS rule complexity**: Are ECSS compliance rules flat (evidence tree sufficient) or recursive (need engine provenance)?
-4. **Negative reasoning**: How to explain "why NOT compliant?" — this may be the most important ESA feature
-5. **FLoC workshop deadline**: ar4space.github.io/2026/ submission requirements
+### Resolved ✅
+1. ~~**Souffle provenance**~~: `-t explain` produces JSON proof trees with minimal-height tracking. Interpreter mode (already factpy default). Integration cost: low (~50-80 lines adapter). See engine provenance research section.
+2. ~~**ProbLog explanations**~~: `explain` mode enumerates mutually exclusive proofs. aProbLog semiring gives per-fact provenance polynomials. Python API needed (medium cost). See engine provenance research section.
+3. ~~**ECSS rule complexity**~~: ESSB-ST-U-007 is flat conjunction + threshold. Datalog fits perfectly. Demo validated end-to-end. See ECSS assessment section.
+
+### Still Open
+4. **Negative reasoning**: "Why NOT compliant?" is critical for ESA. Souffle `explainnegation` exists but is interactive. ProbLog has no built-in why-not. This remains the hardest UX/engine gap.
+5. **FLoC workshop deadline**: ar4space.github.io/2026/ submission requirements unknown.
+6. **Fact metadata → evidence tree passthrough**: Design is clear (three-layer architecture), implementation not started. Minimal effort for ESA demo value.
+7. **Provenance persistence**: Engine provenance (Souffle JSON proof trees) should be persisted as audit artifacts. Format decided (JSONL), implementation not started.
+8. **Audit round-trip gap**: ECSS demo exports audit package but `audit candidates = 0`. Accept step needs debugging.
+9. **vs DOORS/Jama comparison**: ESA requires "clear distinction from similar technologies". Not yet researched.
 
 ## Success Criteria
 
-1. 3 ECSS rules running on Souffle with evidence tree output
-2. Static audit site that a non-technical ESA reviewer can understand
+1. ~~3 ECSS rules running on Souffle with evidence tree output~~ → 2 rules validated ✅ (need 1-3 more for demo)
+2. Static audit site that a non-technical ESA reviewer can understand → visual upgrade done, needs metadata passthrough
 3. ESA Open Discovery application submitted
 4. Clear "vs DOORS/Jama" comparison document
-5. Engine provenance research completed with feasibility assessment
+5. ~~Engine provenance research completed with feasibility assessment~~ ✅ (Souffle low-cost, ProbLog medium-cost)
 6. Material reusable for EXIST resubmission
+7. **NEW**: Fact metadata transparently visible in evidence tree nodes (three-layer architecture Step 1)
+8. **NEW**: Engine provenance persisted as audit artifact (three-layer architecture Step 2)
 
 ## The Assignment
 
-**Immediate**: Research Souffle provenance and ProbLog explanation capabilities.
+~~**Immediate**: Research Souffle provenance and ProbLog explanation capabilities.~~ ✅ Done.
 
-**This week**: Read ESSB-ST-U-007 (debris mitigation standard) or a subset of ECSS-M-ST-10. Find the 3 simplest compliance rules. Try to write one as a Datalog rule in existing SDK. This will simultaneously test: (a) Datalog-ECSS fit, (b) evidence tree sufficiency, (c) whether engine provenance is needed.
+~~**This week**: Read ESSB-ST-U-007 and encode rules.~~ ✅ Done. 2 rules validated end-to-end.
 
-**Do not build more delivery pipeline features until domain validation is complete.**
+**Next priorities (in order)**:
+
+1. **Fix audit round-trip gap** — debug why `audit candidates = 0` in ECSS demo; get candidate evidence pages in static site
+2. **Pass fact metadata through to evidence tree** — three-layer architecture Step 1; minimal change, big demo impact
+3. **Add 2-3 more ECSS rules** — top-level compliance (conjunction of sub-checks), passivation (for-all over components), non-compliant case
+4. **Souffle provenance hands-on PoC** — add `-t explain`, parse JSON, verify it works in factpy's environment
+5. **Prepare ESA re-engagement package** — updated demo + static site + "vs DOORS" positioning
+
+**Do not build new framework features. Focus on domain content and data richness.**
 
 ## Team Reflection / Lessons
 
