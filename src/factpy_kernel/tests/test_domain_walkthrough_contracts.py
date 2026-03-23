@@ -8,7 +8,6 @@ from tempfile import TemporaryDirectory
 from typing import Any
 import unittest
 from unittest.mock import patch
-from urllib.parse import quote
 
 
 def _strip_style(html: str) -> str:
@@ -38,6 +37,7 @@ from factpy_kernel.audit import (
     render_audit_static_site,
 )
 from factpy_kernel.audit.assertions import load_assertion_index
+from factpy_kernel.audit.static_ui import _slug_id
 from factpy_kernel.authoring import (
     AuthoringDerivationCompileError,
     FileAuthoringRegistry,
@@ -378,7 +378,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
                     self.assertIn("rule_traces.html", site_manifest["rule_trace_index"])
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("Rule Trace", html)
@@ -629,7 +629,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
                     self.assertIn("rule_traces.html", site_manifest["rule_trace_index"])
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("Rule Trace", html)
@@ -905,7 +905,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 with TemporaryDirectory() as out_dir:
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("q.aml_aggregation_materialization_walkthrough", html)
@@ -929,7 +929,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         "aml:transaction_timestamp:5",
                         "aml:beneficiary_risk:6",
                     ):
-                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        assertion_page = Path(out_dir) / "assertions" / f"{_slug_id(assertion_ids[key])}.html"
                         self.assertTrue(assertion_page.exists())
         finally:
             close_runtime_session(session_id)
@@ -1273,7 +1273,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 with TemporaryDirectory() as out_dir:
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("q.aml_transaction_feed_materialization_walkthrough", html)
@@ -1300,7 +1300,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         "bo_mismatch_signal",
                         "windowed_structuring_signal",
                     ):
-                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        assertion_page = Path(out_dir) / "assertions" / f"{_slug_id(assertion_ids[key])}.html"
                         self.assertTrue(assertion_page.exists())
         finally:
             close_runtime_session(session_id)
@@ -1664,7 +1664,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 with TemporaryDirectory() as out_dir:
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("q.form_document_extraction_walkthrough", html)
@@ -1693,7 +1693,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         "trigger_score_ppm_materialized",
                         "trigger_score_threshold_ppm_materialized",
                     ):
-                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        assertion_page = Path(out_dir) / "assertions" / f"{_slug_id(assertion_ids[key])}.html"
                         self.assertTrue(assertion_page.exists())
         finally:
             close_runtime_session(session_id)
@@ -2123,7 +2123,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 with TemporaryDirectory() as out_dir:
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("q.single_note_narrative_extraction_walkthrough", html)
@@ -2156,7 +2156,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         "trigger_score_ppm_materialized",
                         "trigger_score_threshold_ppm_materialized",
                     ):
-                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        assertion_page = Path(out_dir) / "assertions" / f"{_slug_id(assertion_ids[key])}.html"
                         self.assertTrue(assertion_page.exists())
         finally:
             close_runtime_session(session_id)
@@ -2634,7 +2634,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 with TemporaryDirectory() as out_dir:
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("q.correlated_multi_note_review_walkthrough", html)
@@ -2670,7 +2670,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         "trigger_score_ppm_materialized",
                         "trigger_score_threshold_ppm_materialized",
                     ):
-                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        assertion_page = Path(out_dir) / "assertions" / f"{_slug_id(assertion_ids[key])}.html"
                         self.assertTrue(assertion_page.exists())
         finally:
             close_runtime_session(session_id)
@@ -3112,7 +3112,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 with TemporaryDirectory() as out_dir:
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("q.conflicting_multi_note_evidence_walkthrough", html)
@@ -3146,7 +3146,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         "trigger_score_ppm_materialized",
                         "trigger_score_threshold_ppm_materialized",
                     ):
-                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        assertion_page = Path(out_dir) / "assertions" / f"{_slug_id(assertion_ids[key])}.html"
                         self.assertTrue(assertion_page.exists())
         finally:
             close_runtime_session(session_id)
@@ -3603,7 +3603,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 with TemporaryDirectory() as out_dir:
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("q.mixed_source_case_pack_walkthrough", html)
@@ -3642,7 +3642,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         "trigger_score_ppm_materialized",
                         "trigger_score_threshold_ppm_materialized",
                     ):
-                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        assertion_page = Path(out_dir) / "assertions" / f"{_slug_id(assertion_ids[key])}.html"
                         self.assertTrue(assertion_page.exists())
         finally:
             close_runtime_session(session_id)
@@ -3854,7 +3854,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 with TemporaryDirectory() as out_dir:
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("q.process_shutdown_required_walkthrough", html)
@@ -3878,7 +3878,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         "process:shutdown_interlock_armed:5",
                         "process:manual_override_cleared:6",
                     ):
-                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        assertion_page = Path(out_dir) / "assertions" / f"{_slug_id(assertion_ids[key])}.html"
                         self.assertTrue(assertion_page.exists())
         finally:
             close_runtime_session(session_id)
@@ -4107,7 +4107,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 with TemporaryDirectory() as out_dir:
                     site_manifest = render_audit_static_site(package_dir, out_dir)
                     self.assertEqual(site_manifest["rule_trace_count"], 1)
-                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{quote(rule_run_id, safe='')}.html"
+                    rule_trace_page = Path(out_dir) / "rule_traces" / f"{_slug_id(rule_run_id)}.html"
                     self.assertTrue(rule_trace_page.exists())
                     html = rule_trace_page.read_text(encoding="utf-8")
                     self.assertIn("q.clinical_weak_signal_walkthrough", html)
@@ -4133,7 +4133,7 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                         "clinical:abnormal_indicator_count:6",
                         "clinical:deterioration_count_threshold:7",
                     ):
-                        assertion_page = Path(out_dir) / "assertions" / f"{quote(assertion_ids[key], safe='')}.html"
+                        assertion_page = Path(out_dir) / "assertions" / f"{_slug_id(assertion_ids[key])}.html"
                         self.assertTrue(assertion_page.exists())
         finally:
             close_runtime_session(session_id)

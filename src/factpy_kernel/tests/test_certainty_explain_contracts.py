@@ -9,6 +9,7 @@ from typing import Any
 from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
 from factpy_kernel.adapters.problog.problog_import import parse_problog_output
 from factpy_kernel.audit import AuditQuery, load_audit_package, render_audit_static_site
+from factpy_kernel.audit.static_ui import _slug_id
 from factpy_kernel.authoring import FileAuthoringRegistry
 from factpy_kernel.core.annotation import derive_certainty_summary
 from factpy_kernel.core.derivation.candidates import make_candidate
@@ -1472,12 +1473,10 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 site_dir = str(Path(tmp_dir) / "site")
                 render_audit_static_site(package_dir, site_dir)
 
-                from urllib.parse import quote
-
                 html_path = (
                     Path(site_dir)
                     / "candidate_evidence"
-                    / f"{quote(candidate_id, safe='')}.html"
+                    / f"{_slug_id(candidate_id)}.html"
                 )
                 self.assertTrue(html_path.exists(), f"missing: {html_path}")
                 html = html_path.read_text(encoding="utf-8")

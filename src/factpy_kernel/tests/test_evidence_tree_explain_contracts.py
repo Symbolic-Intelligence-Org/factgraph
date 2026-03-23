@@ -7,7 +7,6 @@ from tempfile import TemporaryDirectory
 from typing import Any
 import unittest
 from unittest.mock import patch
-from urllib.parse import quote
 
 from fastapi.testclient import TestClient
 
@@ -33,6 +32,7 @@ from factpy_kernel.audit import (
     render_audit_static_site,
 )
 from factpy_kernel.audit.assertions import load_assertion_index
+from factpy_kernel.audit.static_ui import _slug_id
 from factpy_kernel.authoring import (
     AuthoringDerivationCompileError,
     FileAuthoringRegistry,
@@ -237,7 +237,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                 html = (
                     Path(site_dir)
                     / "candidate_evidence"
-                    / f"{quote(candidate_id, safe='')}.html"
+                    / f"{_slug_id(candidate_id)}.html"
                 ).read_text(encoding="utf-8")
                 self.assertIn("Child Proof", html)
             finally:
@@ -616,14 +616,14 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                 site_manifest = render_audit_static_site(package_dir, site_dir)
                 self.assertIn("candidate_evidence_index", site_manifest)
                 self.assertIn(
-                    f"candidate_evidence/{quote(candidate_id, safe='')}.html",
+                    f"candidate_evidence/{_slug_id(candidate_id)}.html",
                     site_manifest["candidate_evidence"],
                 )
-                page_path = Path(site_dir) / "candidate_evidence" / f"{quote(candidate_id, safe='')}.html"
+                page_path = Path(site_dir) / "candidate_evidence" / f"{_slug_id(candidate_id)}.html"
                 self.assertTrue(page_path.exists())
                 html = page_path.read_text(encoding="utf-8")
                 self.assertIn(candidate_id, html)
-                self.assertIn(f"assertions/{quote(asrt_id, safe='')}.html", html)
+                self.assertIn(f"assertions/{_slug_id(asrt_id)}.html", html)
                 self.assertIn("Evidence Tree", html)
                 self.assertIn("Analysis Summary", html)
                 self.assertIn(runtime_narrative["headline"], html)
@@ -1683,7 +1683,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                 engine_page = (
                     Path(static_out)
                     / "candidate_evidence"
-                    / f"{quote(engine_candidate['candidate_id'], safe='')}.html"
+                    / f"{_slug_id(engine_candidate['candidate_id'])}.html"
                 ).read_text(encoding="utf-8")
                 self.assertIn("Degraded", engine_page)
                 self.assertIn(ENGINE_NO_WITNESS_KIND, engine_page)

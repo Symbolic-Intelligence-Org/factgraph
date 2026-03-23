@@ -7,7 +7,6 @@ from tempfile import TemporaryDirectory
 from typing import Any
 import unittest
 from unittest.mock import patch
-from urllib.parse import quote
 
 from fastapi.testclient import TestClient
 
@@ -32,6 +31,7 @@ from factpy_kernel.audit import (
     render_audit_static_site,
 )
 from factpy_kernel.audit.assertions import load_assertion_index
+from factpy_kernel.audit.static_ui import _slug_id
 from factpy_kernel.authoring import (
     AuthoringDerivationCompileError,
     FileAuthoringRegistry,
@@ -668,7 +668,7 @@ class EcssComplianceContractsTests(unittest.TestCase):
             site_manifest = render_audit_static_site(package_dir, site_dir)
             self.assertEqual(site_manifest["rule_trace_index"], "rule_traces.html")
             self.assertEqual(site_manifest["rule_trace_count"], 1)
-            trace_page_rel = f"rule_traces/{quote(trace_result.rule_run_id, safe='')}.html"
+            trace_page_rel = f"rule_traces/{_slug_id(trace_result.rule_run_id)}.html"
             self.assertEqual(site_manifest["rule_traces"], [trace_page_rel])
             witness_asrt_ids = sorted(
                 {
@@ -678,11 +678,11 @@ class EcssComplianceContractsTests(unittest.TestCase):
                 }
             )
             for asrt_id in witness_asrt_ids:
-                assertion_page = Path(site_dir) / "assertions" / f"{quote(asrt_id, safe='')}.html"
+                assertion_page = Path(site_dir) / "assertions" / f"{_slug_id(asrt_id)}.html"
                 self.assertTrue(assertion_page.exists())
 
             sample_assertion_html = (
-                Path(site_dir) / "assertions" / f"{quote(collision_threshold_asrt_id, safe='')}.html"
+                Path(site_dir) / "assertions" / f"{_slug_id(collision_threshold_asrt_id)}.html"
             ).read_text(encoding="utf-8")
             self.assertIn(collision_threshold_asrt_id, sample_assertion_html)
 
@@ -707,7 +707,7 @@ class EcssComplianceContractsTests(unittest.TestCase):
                 trace_page_html,
             )
             self.assertIn(collision_threshold_asrt_id, trace_page_html)
-            self.assertIn(f"../assertions/{quote(collision_threshold_asrt_id, safe='')}.html", trace_page_html)
+            self.assertIn(f"../assertions/{_slug_id(collision_threshold_asrt_id)}.html", trace_page_html)
 
             index_html = (Path(site_dir) / "index.html").read_text(encoding="utf-8")
             self.assertIn("rule_traces.html", index_html)
