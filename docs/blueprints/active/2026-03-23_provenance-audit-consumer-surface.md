@@ -84,18 +84,22 @@ Each line is `SouffleProofTreeV0` serialized to dict, keyed by `candidate_id`.
 ```python
 # In RuntimeSession (or equivalent session state):
 derivation_recipes: dict[str, dict] = {}
-# Keyed by derivation_id, value = {
+# Keyed by run_id (stable per evaluate invocation), value = {
 #   "where": [...],          # compiled where IR (supports ruleref)
 #   "head_vars": [...],      # e.g., ["$m", "$status"]
 #   "target_pred_id": "...", # e.g., "mission:overall_compliance_status"
 #   "registry_root": "...",  # needed for ruleref expansion in query export
+#   "derivation_id": "...", # for reference
+#   "derivation_version": "...",
 # }
 ```
 
+**Why `run_id`, not `derivation_id`**: A session may call `evaluate_runtime_derivation` multiple times with the same `derivation_id` but different `where` clauses. `derivation_id` is a user-supplied label, not a unique execution key. `run_id` is generated per evaluate invocation and is the stable key preserved in accepted candidate durable meta (see `accept.py` line 756, `runtime_v1.py` line 774).
+
 **Lifecycle**:
-1. `evaluate_runtime_derivation(...)` already has `compiled["where"]`, `compiled["head_vars"]`, `compiled["target_pred_id"]`. After successful evaluate, cache these in `session.derivation_recipes[derivation_id]`.
-2. `export_runtime_package(package_kind="audit")` iterates accepted candidates. For each candidate, look up `derivation_id` in the recipe cache. If found, attempt provenance materialization.
-3. Session close clears the cache (no durable persistence needed).
+1. `evaluate_runtime_derivation(...)` already has `compiled["where"]`, `compiled["head_vars"]`, `compiled["target_pred_id"]`, and the resulting `run_id`. After successful evaluate, cache recipe in `session.derivation_recipes[run_id]`.
+2. `export_runtime_package(package_kind="audit")` iterates accepted candidates. For each candidate, look up its `run_id` in the recipe cache. If found, attempt provenance materialization.
+3. Session close clears the cache (no durable persistence needed — recipe is session-scoped only).
 
 **Provenance materialization per candidate**:
 1. Look up recipe by `candidate.derivation_id`
@@ -154,9 +158,10 @@ This is NOT the old "non-Souffle / ruleref failure" framing. The real gate is: *
 ## 5. Implementation Plan
 
 ```
-Step 1: Derivation recipe cache
-  - runtime_v1.py: add session.derivation_recipes dict
-  - evaluate_runtime_derivation: cache compiled where/head_vars/target after success
+Step 1: Derivation recipe cache (keyed by run_id)
+  - runtime_v1.py: add session.derivation_recipes dict keyed by run_id
+  - evaluate_runtime_derivation: cache compiled where/head_vars/target/registry_root after success
+  - Export path: look up recipe by candidate's run_id, not derivation_id
 
 Step 2: Export writer
   - package.py: add provenance_trees parameter + JSONL writer
@@ -178,7 +183,8 @@ Step 6: Tests
   - Audit round-trip: export → load → query provenance matches runtime
   - Backward compat: old package without provenance_trees.jsonl → no errors
   - Static site: provenance section appears when data exists
-  - Recipe cache: evaluate caches recipe, export uses it
+  - Recipe cache: evaluate caches by run_id, export looks up by run_id
+  - Same derivation_id reused with different where: each gets correct recipe
 
 Step 7: Docs + demo update
   - Adapter docs, audit docs, demo walkthrough
