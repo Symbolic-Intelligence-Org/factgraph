@@ -1248,8 +1248,14 @@ def _materialize_provenance_trees(session: RuntimeSession) -> dict[str, dict[str
     import tempfile
 
     from factpy_kernel.adapters.souffle.provenance import run_package_provenance
+    from factpy_kernel.adapters.souffle.package import _load_query_rule_registry
     from factpy_kernel.adapters.souffle.runner import run_package
     from factpy_kernel.adapters.souffle.tsv_v1 import tsv_cell_v1_decode
+    from factpy_kernel.adapters.souffle.where_compile import (
+        _expand_ruleref_relations_for_query_export,
+        _schema_pred_type_domains,
+        extract_where_variables,
+    )
 
     if not session.derivation_recipes:
         return {}
@@ -1272,6 +1278,14 @@ def _materialize_provenance_trees(session: RuntimeSession) -> dict[str, dict[str
     for run_id, candidate_rows in by_run_id.items():
         recipe = session.derivation_recipes[run_id]
         try:
+            pred_type_domains = _schema_pred_type_domains(session.store.schema_ir)
+            registry = _load_query_rule_registry(recipe.registry_root) if recipe.registry_root is not None else None
+            expanded = _expand_ruleref_relations_for_query_export(
+                where=recipe.where,
+                registry=registry,
+                pred_type_domains=pred_type_domains,
+            )
+            query_variables = extract_where_variables(expanded.rewritten_where)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 package_dir = Path(tmp_dir) / "provenance"
                 query_rel = f"__prov_{run_id[:16]}__"
@@ -1304,7 +1318,13 @@ def _materialize_provenance_trees(session: RuntimeSession) -> dict[str, dict[str
                     continue
 
                 for row in candidate_rows:
-                    binding = tuple(row["query_args"])
+                    binding = _candidate_binding_for_recipe(
+                        recipe,
+                        accepted_args=row["accepted_args"],
+                        query_variables=query_variables,
+                    )
+                    if binding is None:
+                        continue
                     query_text = binding_to_query.get(binding)
                     if query_text is None:
                         continue
@@ -1329,7 +1349,7 @@ def _accepted_candidate_provenance_rows(session: RuntimeSession) -> list[dict[st
             {
                 "candidate_id": candidate_id,
                 "run_id": run_id,
-                "query_args": _claim_query_args(claim),
+                "accepted_args": _claim_query_args(claim),
             }
         )
     return rows
@@ -1346,6 +1366,20 @@ def _claim_query_args(claim: Claim) -> list[str]:
     args = [claim.e_ref]
     args.extend(str(value) for _tag, value in claim.rest_terms)
     return args
+
+
+def _candidate_binding_for_recipe(
+    recipe: RuntimeDerivationRecipe,
+    *,
+    accepted_args: list[str],
+    query_variables: list[str],
+) -> tuple[str, ...] | None:
+    if len(recipe.head_vars) != len(accepted_args):
+        return None
+    binding_by_var = {var: value for var, value in zip(recipe.head_vars, accepted_args)}
+    if any(var not in binding_by_var for var in query_variables):
+        return None
+    return tuple(binding_by_var[var] for var in query_variables)
 
 
 def _souffle_query_text(relation: str, args: tuple[str, ...]) -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from math import inf, nan
 from pathlib import Path
@@ -40,6 +41,87 @@ from factpy_kernel.tests._test_helpers import (
     _register_exposed_user_tag_rule,
     _seed_users_for_syntax_matrix,
 )
+
+
+def _skip_without_souffle(testcase: unittest.TestCase) -> None:
+    from factpy_kernel.adapters.souffle.runner import find_souffle_binary
+
+    if find_souffle_binary() is None:
+        testcase.skipTest("souffle binary is unavailable; skipping provenance audit test")
+
+
+def _export_single_candidate_audit_package_with_provenance(
+    *,
+    registry_root: str,
+    tmp_dir: str,
+) -> tuple[str, str]:
+    sdk = SDKStore([User])
+    refs = _seed_users_for_syntax_matrix(sdk)
+    _register_exposed_user_tag_rule(
+        sdk,
+        registry_root,
+        condition_weights={"b0.a0": 0.8},
+    )
+
+    reset_runtime_sessions_for_tests()
+    open_resp = open_runtime_session({"registry_root": registry_root})
+    if not open_resp["ok"]:
+        raise AssertionError(f"open_runtime_session failed: {open_resp}")
+    session_id = open_resp["session"]["session_id"]
+    try:
+        write_resp = write_runtime_fact(
+            session_id,
+            {
+                "pred_id": "user:tag",
+                "e_ref": refs["u1"],
+                "rest_terms": [["string", "vip"]],
+            },
+            kind="add",
+        )
+        if not write_resp["ok"]:
+            raise AssertionError(f"write_runtime_fact failed: {write_resp}")
+
+        eval_resp = evaluate_runtime_derivation(
+            session_id,
+            {
+                "derivation": {
+                    "derivation_id": "drv.provenance.audit",
+                    "version": "1.0.0",
+                    "target": "user:tag",
+                    "head_vars": ["$u", "$tag"],
+                    "where": [
+                        ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
+                        ["eq", "$tag", "vip"],
+                    ],
+                    "mode": "native",
+                }
+            },
+        )
+        if not eval_resp["ok"]:
+            raise AssertionError(f"evaluate_runtime_derivation failed: {eval_resp}")
+        candidate = dict(eval_resp["evaluation"]["candidates"][0])
+
+        accept_resp = accept_runtime_derivation(
+            session_id,
+            {
+                "candidate": candidate,
+                "options": {"approved_by": "alice"},
+            },
+        )
+        if not accept_resp["ok"]:
+            raise AssertionError(f"accept_runtime_derivation failed: {accept_resp}")
+
+        package_dir = str(Path(tmp_dir) / "audit_package")
+        export_resp = export_runtime_package(
+            session_id,
+            {"out_dir": package_dir, "package_kind": "audit"},
+        )
+        if not export_resp["ok"]:
+            raise AssertionError(f"export_runtime_package failed: {export_resp}")
+        return package_dir, candidate["candidate_id"]
+    finally:
+        close_runtime_session(session_id)
+        reset_runtime_sessions_for_tests()
 
 
 def _base_certainty_tree(condition_node: dict[str, Any]) -> dict[str, Any]:
@@ -1487,6 +1569,133 @@ class CertaintyExplainContractsTests(unittest.TestCase):
             finally:
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
+
+    def test_provenance_trees_materialized_in_audit_package(self) -> None:
+        _skip_without_souffle(self)
+
+        with TemporaryDirectory() as registry_root, TemporaryDirectory() as tmp_dir:
+            package_dir, candidate_id = _export_single_candidate_audit_package_with_provenance(
+                registry_root=registry_root,
+                tmp_dir=tmp_dir,
+            )
+
+            provenance_path = Path(package_dir) / "audit" / "provenance_trees.jsonl"
+            self.assertTrue(provenance_path.exists(), f"missing: {provenance_path}")
+
+            rows = [
+                json.loads(line)
+                for line in provenance_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual([row["candidate_id"] for row in rows], [candidate_id])
+            tree = rows[0]["provenance_tree"]
+            root = tree.get("root")
+            self.assertIsInstance(root, dict)
+            assert isinstance(root, dict)
+            self.assertIsInstance(root.get("relation"), str)
+            self.assertIsInstance(root.get("node_type"), str)
+            self.assertIsInstance(root.get("args"), list)
+
+    def test_provenance_trees_loaded_by_audit_reader(self) -> None:
+        _skip_without_souffle(self)
+
+        with TemporaryDirectory() as registry_root, TemporaryDirectory() as tmp_dir:
+            package_dir, candidate_id = _export_single_candidate_audit_package_with_provenance(
+                registry_root=registry_root,
+                tmp_dir=tmp_dir,
+            )
+
+            package = load_audit_package(package_dir)
+            self.assertIsInstance(package.provenance_trees, dict)
+            self.assertIn(candidate_id, package.provenance_trees)
+
+            audit_query = AuditQuery(package)
+            tree = audit_query.get_candidate_provenance_tree(candidate_id)
+            self.assertIsNotNone(tree)
+            assert tree is not None
+            self.assertIsInstance(tree.get("query"), str)
+            self.assertIsInstance(tree.get("root"), dict)
+            self.assertIsInstance(tree.get("rules"), dict)
+
+    def test_old_package_without_provenance_returns_empty(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        with TemporaryDirectory() as tmp_dir:
+            reset_runtime_sessions_for_tests()
+            open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+            self.assertTrue(open_resp["ok"])
+            session_id = open_resp["session"]["session_id"]
+            try:
+                write_resp = write_runtime_fact(
+                    session_id,
+                    {
+                        "pred_id": "user:tag",
+                        "e_ref": refs["u1"],
+                        "rest_terms": [["string", "vip"]],
+                    },
+                    kind="add",
+                )
+                self.assertTrue(write_resp["ok"])
+
+                eval_resp = evaluate_runtime_derivation(
+                    session_id,
+                    {
+                        "derivation": {
+                            "derivation_id": "drv.no_provenance",
+                            "version": "1.0.0",
+                            "target": "user:tag",
+                            "head_vars": ["$u", "$tag"],
+                            "where": [["pred", "user:tag", ["$u", "$tag"]]],
+                            "mode": "native",
+                        }
+                    },
+                )
+                self.assertTrue(eval_resp["ok"])
+                candidate = dict(eval_resp["evaluation"]["candidates"][0])
+
+                accept_resp = accept_runtime_derivation(
+                    session_id,
+                    {
+                        "candidate": candidate,
+                        "options": {"approved_by": "alice"},
+                    },
+                )
+                self.assertTrue(accept_resp["ok"])
+
+                package_dir = str(Path(tmp_dir) / "audit_package")
+                export_package(
+                    _require_session(session_id).store,
+                    Path(package_dir),
+                    ExportOptions(package_kind="audit"),
+                )
+
+                package = load_audit_package(package_dir)
+                self.assertEqual(package.provenance_trees, {})
+
+                audit_query = AuditQuery(package)
+                self.assertIsNone(audit_query.get_candidate_provenance_tree(candidate["candidate_id"]))
+            finally:
+                close_runtime_session(session_id)
+                reset_runtime_sessions_for_tests()
+
+    def test_static_site_renders_engine_provenance_section_in_candidate_evidence_page(self) -> None:
+        _skip_without_souffle(self)
+
+        with TemporaryDirectory() as registry_root, TemporaryDirectory() as tmp_dir:
+            package_dir, candidate_id = _export_single_candidate_audit_package_with_provenance(
+                registry_root=registry_root,
+                tmp_dir=tmp_dir,
+            )
+
+            site_dir = str(Path(tmp_dir) / "site")
+            render_audit_static_site(package_dir, site_dir)
+
+            html_path = Path(site_dir) / "candidate_evidence" / f"{_slug_id(candidate_id)}.html"
+            self.assertTrue(html_path.exists(), f"missing: {html_path}")
+            html = html_path.read_text(encoding="utf-8")
+            self.assertIn("Engine Provenance", html)
+            self.assertIn("Base Fact", html)
 
     def test_fact_confidence_carried_to_evidence_tree(self) -> None:
         sdk = SDKStore([User])
