@@ -51,12 +51,17 @@ Produce a self-contained demo package that answers all four ESA requests. Engine
 
 ### D2: Static HTML Polish
 
-Minimal changes to `static_ui.py` to make the demo site presentable:
+Template-only changes to the generated HTML surfaces to make the demo site presentable:
 
-- Index page shows "ESSB-ST-U-007 Space Debris Mitigation Compliance Audit"
-- Candidate evidence pages have human-readable mission names (not just IDs)
-- Certainty bars use green/yellow/red coloring based on aggregate value
-- Compliance status clearly visible (COMPLIANT / NON-COMPLIANT)
+- Demo landing page is branded for the ESA walkthrough
+- Candidate evidence pages emphasize verdict, rule chain, and audit context
+- Certainty bars use green/yellow/red coloring based on impact level
+- Compliance status is clearly visible where the candidate binding exposes it
+
+Out of scope for this phase:
+
+- DTO enrichment for human-readable mission names
+- Any change that requires modifying audit package shape or query DTOs
 
 ### D3: One-Page Positioning Document
 
@@ -97,9 +102,9 @@ Minimal changes to `static_ui.py` to make the demo site presentable:
 - Verify it produces complete output directory
 
 ### Phase 2: Static HTML Polish
-- Minimal `static_ui.py` improvements for presentation quality
-- Index page branding
-- Human-readable labels
+- Template/CSS/text improvements for presentation quality
+- Demo landing page branding
+- Candidate evidence status + certainty emphasis
 
 ### Phase 3: ESA Documents
 - `docs/esa/positioning.md`
