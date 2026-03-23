@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import base64
 import binascii
-from dataclasses import asdict, dataclass
+from copy import deepcopy
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from threading import RLock
 from time import time_ns
@@ -80,6 +81,16 @@ _ATOM_TAGS = {
 
 
 @dataclass
+class RuntimeDerivationRecipe:
+    derivation_id: str
+    derivation_version: str
+    target_pred_id: str
+    head_vars: list[str]
+    where: Any
+    registry_root: str | None
+
+
+@dataclass
 class RuntimeSession:
     session_id: str
     store: Store
@@ -88,6 +99,7 @@ class RuntimeSession:
     schema_digest: str
     opened_at_ns: int
     views: dict[str, ViewSpec]
+    derivation_recipes: dict[str, RuntimeDerivationRecipe] = field(default_factory=dict)
 
 
 class _RuntimeSessionManager:
@@ -770,6 +782,12 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             registry=active_registry,
             confidence_kind_resolver=certainty_resolver,
         )
+        _cache_derivation_recipe(
+            session,
+            candidates=candidates,
+            compiled=compiled,
+            registry_root=registry_root,
+        )
         returned_candidates = candidates if limit is None else candidates[:limit]
         return ok_response(
             meta={
@@ -1196,6 +1214,28 @@ def _session_to_dict(session: RuntimeSession) -> dict[str, Any]:
             "revokes": len(ledger.revokes),
         },
     }
+
+
+def _cache_derivation_recipe(
+    session: RuntimeSession,
+    *,
+    candidates: list[CandidateSet],
+    compiled: dict[str, Any],
+    registry_root: str | None,
+) -> None:
+    run_ids = {candidate.run_id for candidate in candidates if candidate.run_id}
+    if not run_ids:
+        return
+    recipe = RuntimeDerivationRecipe(
+        derivation_id=str(compiled["derivation_id"]),
+        derivation_version=str(compiled["version"]),
+        target_pred_id=str(compiled["target_pred_id"]),
+        head_vars=list(compiled["head_vars"]),
+        where=deepcopy(compiled["where"]),
+        registry_root=registry_root,
+    )
+    for run_id in run_ids:
+        session.derivation_recipes[run_id] = recipe
 
 
 def _runtime_assertion_detail_for_tree(ledger: Ledger, asrt_id: str) -> dict[str, Any] | None:

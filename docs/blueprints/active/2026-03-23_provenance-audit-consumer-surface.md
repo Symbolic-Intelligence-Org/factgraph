@@ -102,7 +102,7 @@ derivation_recipes: dict[str, dict] = {}
 3. Session close clears the cache (no durable persistence needed — recipe is session-scoped only).
 
 **Provenance materialization per candidate**:
-1. Look up recipe by `candidate.derivation_id`
+1. Look up recipe by `candidate.run_id`
 2. `export_package(store, tmpdir, options, query={"where": recipe["where"], "query_rel": query_rel, "registry_root": recipe["registry_root"]})`
 3. `run_package(tmpdir, ["__query__"])` to execute
 4. Read output rows, find the row matching this candidate's payload terms
@@ -125,7 +125,7 @@ This is NOT the old "non-Souffle / ruleref failure" framing. The real gate is: *
 - Pure writer, no computation (same as `certainty_summaries`)
 
 **service/runtime_v1.py**:
-- `evaluate_runtime_derivation(...)`: after successful evaluate, cache recipe in `session.derivation_recipes[derivation_id]`
+- `evaluate_runtime_derivation(...)`: after successful evaluate, cache recipe in `session.derivation_recipes[run_id]`
 - `export_runtime_package(package_kind="audit")`: iterate accepted candidates, look up recipe, attempt provenance materialization, collect results
 - Pass resulting dict to `export_package(..., provenance_trees=...)`
 - Silent skip per candidate when gate conditions fail (logged, not raised)

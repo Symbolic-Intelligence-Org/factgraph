@@ -1162,5 +1162,143 @@ Derivation(
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
 
+    def test_runtime_derivation_caches_recipe_by_run_id(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            write_resp = write_runtime_fact(
+                session_id,
+                {
+                    "pred_id": "user:tag",
+                    "e_ref": refs["u1"],
+                    "rest_terms": [["string", "vip"]],
+                },
+                kind="add",
+            )
+            self.assertTrue(write_resp["ok"])
+            eval_resp = evaluate_runtime_derivation(
+                session_id,
+                {
+                    "derivation": {
+                        "derivation_id": "drv.runtime.user_tag_recipe",
+                        "version": "1.0.0",
+                        "target": "user:tag",
+                        "head_vars": ["$u", "$tag"],
+                        "where": [
+                            ["pred", "user:tag", ["$u", "$tag"]],
+                            ["eq", "$tag", "vip"],
+                        ],
+                        "mode": "native",
+                    }
+                },
+            )
+            self.assertTrue(eval_resp["ok"])
+            candidate = eval_resp["evaluation"]["candidates"][0]
+
+            session = _require_session(session_id)
+            recipe = session.derivation_recipes[candidate["run_id"]]
+            self.assertEqual(recipe.derivation_id, "drv.runtime.user_tag_recipe")
+            self.assertEqual(recipe.derivation_version, "1.0.0")
+            self.assertEqual(recipe.target_pred_id, "user:tag")
+            self.assertEqual(recipe.head_vars, ["$u", "$tag"])
+            self.assertEqual(recipe.where, [("pred", "user:tag", ["$u", "$tag"]), ("eq", "$tag", "vip")])
+            self.assertIsNone(recipe.registry_root)
+            self.assertEqual(candidate["payload"]["terms"][0]["value"], refs["u1"])
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_runtime_derivation_recipe_cache_keeps_distinct_run_ids_for_same_derivation_id(self) -> None:
+        sdk = SDKStore([User])
+        refs = _seed_users_for_syntax_matrix(sdk)
+
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            first_write = write_runtime_fact(
+                session_id,
+                {
+                    "pred_id": "user:tag",
+                    "e_ref": refs["u1"],
+                    "rest_terms": [["string", "vip"]],
+                },
+                kind="add",
+            )
+            second_write = write_runtime_fact(
+                session_id,
+                {
+                    "pred_id": "user:tag",
+                    "e_ref": refs["u2"],
+                    "rest_terms": [["string", "staff"]],
+                },
+                kind="add",
+            )
+            self.assertTrue(first_write["ok"])
+            self.assertTrue(second_write["ok"])
+            first_eval = evaluate_runtime_derivation(
+                session_id,
+                {
+                    "derivation": {
+                        "derivation_id": "drv.runtime.user_tag_reused",
+                        "version": "1.0.0",
+                        "target": "user:tag",
+                        "head_vars": ["$u", "$tag"],
+                        "where": [
+                            ["pred", "user:tag", ["$u", "$tag"]],
+                            ["eq", "$tag", "staff"],
+                        ],
+                        "mode": "native",
+                    }
+                },
+            )
+            self.assertTrue(first_eval["ok"])
+            first_run_id = first_eval["evaluation"]["candidates"][0]["run_id"]
+
+            second_eval = evaluate_runtime_derivation(
+                session_id,
+                {
+                    "derivation": {
+                        "derivation_id": "drv.runtime.user_tag_reused",
+                        "version": "1.0.0",
+                        "target": "user:tag",
+                        "head_vars": ["$u", "$tag"],
+                        "where": [
+                            ["pred", "user:tag", ["$u", "$tag"]],
+                            ["eq", "$tag", "vip"],
+                        ],
+                        "mode": "native",
+                    }
+                },
+            )
+            self.assertTrue(second_eval["ok"])
+            second_run_id = second_eval["evaluation"]["candidates"][0]["run_id"]
+
+            self.assertNotEqual(first_run_id, second_run_id)
+            session = _require_session(session_id)
+            self.assertEqual(
+                set(session.derivation_recipes.keys()),
+                {first_run_id, second_run_id},
+            )
+            self.assertEqual(
+                session.derivation_recipes[first_run_id].where,
+                [("pred", "user:tag", ["$u", "$tag"]), ("eq", "$tag", "staff")],
+            )
+            self.assertEqual(
+                session.derivation_recipes[second_run_id].where,
+                [("pred", "user:tag", ["$u", "$tag"]), ("eq", "$tag", "vip")],
+            )
+            self.assertEqual(session.derivation_recipes[first_run_id].derivation_id, "drv.runtime.user_tag_reused")
+            self.assertEqual(session.derivation_recipes[second_run_id].derivation_id, "drv.runtime.user_tag_reused")
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
 if __name__ == "__main__":
     unittest.main()
