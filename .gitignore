@@ -48,3 +48,4 @@ venv/
 .claude/skills/setup-browser-cookies
 .claude/skills/ship
 .claude/skills/unfreeze
+esa_demo_output/
