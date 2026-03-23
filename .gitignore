@@ -49,3 +49,4 @@ venv/
 .claude/skills/ship
 .claude/skills/unfreeze
 esa_demo_output/
+dora_demo_output/
