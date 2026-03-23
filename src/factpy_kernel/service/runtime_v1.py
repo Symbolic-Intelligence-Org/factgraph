@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -851,18 +852,22 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
             )
         query = dto.get("query")
         certainty_map: dict[str, dict[str, Any]] | None = None
+        provenance_map: dict[str, dict[str, Any]] | None = None
         if package_kind == "audit" and session.registry_root is not None:
             certainty_map = _compute_all_certainty_summaries(
                 session.store,
                 registry_root=session.registry_root,
                 get_candidate_tree=lambda cid: _get_candidate_tree(session, cid),
             )
+        if package_kind == "audit" and session.derivation_recipes:
+            provenance_map = _materialize_provenance_trees(session)
         export_package(
             session.store,
             out_dir,
             ExportOptions(package_kind=package_kind),
             query=query,
             certainty_summaries=certainty_map,
+            provenance_trees=provenance_map,
         )
         return ok_response(
             package={
@@ -1236,6 +1241,122 @@ def _cache_derivation_recipe(
     )
     for run_id in run_ids:
         session.derivation_recipes[run_id] = recipe
+
+
+def _materialize_provenance_trees(session: RuntimeSession) -> dict[str, dict[str, Any]]:
+    """Materialize Souffle provenance for accepted candidates with cached recipes."""
+    import tempfile
+
+    from factpy_kernel.adapters.souffle.provenance import run_package_provenance
+    from factpy_kernel.adapters.souffle.runner import run_package
+    from factpy_kernel.adapters.souffle.tsv_v1 import tsv_cell_v1_decode
+
+    if not session.derivation_recipes:
+        return {}
+
+    accepted_candidates = _accepted_candidate_provenance_rows(session)
+    if not accepted_candidates:
+        return {}
+
+    by_run_id: dict[str, list[dict[str, Any]]] = {}
+    for row in accepted_candidates:
+        run_id = row["run_id"]
+        if run_id not in session.derivation_recipes:
+            continue
+        by_run_id.setdefault(run_id, []).append(row)
+
+    if not by_run_id:
+        return {}
+
+    provenance_trees: dict[str, dict[str, Any]] = {}
+    for run_id, candidate_rows in by_run_id.items():
+        recipe = session.derivation_recipes[run_id]
+        try:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                package_dir = Path(tmp_dir) / "provenance"
+                query_rel = f"__prov_{run_id[:16]}__"
+                export_package(
+                    session.store,
+                    package_dir,
+                    ExportOptions(package_kind="inference"),
+                    query={
+                        "where": recipe.where,
+                        "query_rel": query_rel,
+                        "registry_root": recipe.registry_root,
+                    },
+                )
+                run_manifest_path = run_package(package_dir, ["__query__"], engine="souffle")
+                run_manifest = json.loads(run_manifest_path.read_text(encoding="utf-8"))
+                if run_manifest.get("engine_mode") != "souffle" or run_manifest.get("exit_code") != 0:
+                    continue
+
+                out_path = package_dir / "outputs" / f"{query_rel}.out.facts"
+                binding_to_query: dict[tuple[str, ...], str] = {}
+                with out_path.open("r", encoding="utf-8") as handle:
+                    for raw_line in handle:
+                        line = raw_line.rstrip("\n")
+                        if not line:
+                            continue
+                        row_values = tuple(tsv_cell_v1_decode(cell) for cell in line.split("\t"))
+                        binding_to_query[row_values] = _souffle_query_text(query_rel, row_values)
+
+                if not binding_to_query:
+                    continue
+
+                for row in candidate_rows:
+                    binding = tuple(row["query_args"])
+                    query_text = binding_to_query.get(binding)
+                    if query_text is None:
+                        continue
+                    trees = run_package_provenance(package_dir, [query_text])
+                    if not trees:
+                        continue
+                    provenance_trees[row["candidate_id"]] = _proof_tree_to_dict(trees[0])
+        except Exception:
+            continue
+
+    return provenance_trees
+
+
+def _accepted_candidate_provenance_rows(session: RuntimeSession) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for claim in sorted(session.store.ledger.claims, key=lambda item: item.asrt_id):
+        candidate_id = _candidate_meta_str(session, claim.asrt_id, "candidate_id")
+        run_id = _candidate_meta_str(session, claim.asrt_id, "run_id")
+        if candidate_id is None or run_id is None:
+            continue
+        rows.append(
+            {
+                "candidate_id": candidate_id,
+                "run_id": run_id,
+                "query_args": _claim_query_args(claim),
+            }
+        )
+    return rows
+
+
+def _candidate_meta_str(session: RuntimeSession, asrt_id: str, key: str) -> str | None:
+    for row in session.store.ledger.find_meta(asrt_id=asrt_id, key=key, kind="str"):
+        if isinstance(row.value, str) and row.value:
+            return row.value
+    return None
+
+
+def _claim_query_args(claim: Claim) -> list[str]:
+    args = [claim.e_ref]
+    args.extend(str(value) for _tag, value in claim.rest_terms)
+    return args
+
+
+def _souffle_query_text(relation: str, args: tuple[str, ...]) -> str:
+    if not args:
+        return f"{relation}()"
+    rendered_args = ", ".join(json.dumps(arg, ensure_ascii=False) for arg in args)
+    return f"{relation}({rendered_args})"
+
+
+def _proof_tree_to_dict(tree: Any) -> dict[str, Any]:
+    return asdict(tree)
 
 
 def _runtime_assertion_detail_for_tree(ledger: Ledger, asrt_id: str) -> dict[str, Any] | None:
