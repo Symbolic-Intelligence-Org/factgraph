@@ -73,9 +73,47 @@ Provenance follows the exact same pattern.
 
 Each line is `SouffleProofTreeV0` serialized to dict, keyed by `candidate_id`.
 
-**Export-time computation**: For each accepted candidate with a query-exportable derivation, run `run_package_provenance(...)` and serialize the result. Candidates without provenance (e.g., non-Souffle, ruleref export failure) are silently skipped.
+**Export-time computation**: requires a **derivation recipe** to replay each candidate's evaluation as a query-bearing Souffle package. See §4.3 for how the recipe is obtained.
 
-### 4.3 Changes by Layer
+### 4.3 Provenance Query Recipe
+
+**Problem**: At audit export time, we need each candidate's derivation `where` clause + `head_vars` + `target_pred_id` to construct a provenance query. But `accept` only persists `derivation_id` / `derivation_version` — the compiled where clause is discarded after evaluate.
+
+**Solution**: Session-scoped derivation recipe cache.
+
+```python
+# In RuntimeSession (or equivalent session state):
+derivation_recipes: dict[str, dict] = {}
+# Keyed by derivation_id, value = {
+#   "where": [...],          # compiled where IR (supports ruleref)
+#   "head_vars": [...],      # e.g., ["$m", "$status"]
+#   "target_pred_id": "...", # e.g., "mission:overall_compliance_status"
+#   "registry_root": "...",  # needed for ruleref expansion in query export
+# }
+```
+
+**Lifecycle**:
+1. `evaluate_runtime_derivation(...)` already has `compiled["where"]`, `compiled["head_vars"]`, `compiled["target_pred_id"]`. After successful evaluate, cache these in `session.derivation_recipes[derivation_id]`.
+2. `export_runtime_package(package_kind="audit")` iterates accepted candidates. For each candidate, look up `derivation_id` in the recipe cache. If found, attempt provenance materialization.
+3. Session close clears the cache (no durable persistence needed).
+
+**Provenance materialization per candidate**:
+1. Look up recipe by `candidate.derivation_id`
+2. `export_package(store, tmpdir, options, query={"where": recipe["where"], "query_rel": query_rel, "registry_root": recipe["registry_root"]})`
+3. `run_package(tmpdir, ["__query__"])` to execute
+4. Read output rows, find the row matching this candidate's payload terms
+5. `run_package_provenance(tmpdir, [query_string])` to get proof tree
+6. Serialize `SouffleProofTreeV0` to dict
+
+**Skip gate**: A candidate is skipped (no provenance) when:
+- Its `derivation_id` is not in the recipe cache (e.g., accepted from a prior session)
+- The query export fails (e.g., where clause contains atoms the export path doesn't support)
+- Souffle execution or provenance explain returns no result
+- No output row matches this candidate
+
+This is NOT the old "non-Souffle / ruleref failure" framing. The real gate is: **can we replay this candidate's derivation as a query-bearing Souffle package and match a concrete output row to the candidate?**
+
+### 4.4 Changes by Layer
 
 **adapters/souffle/package.py**:
 - `export_package(...)` gains optional `provenance_trees: dict[str, dict] | None = None`
@@ -83,10 +121,10 @@ Each line is `SouffleProofTreeV0` serialized to dict, keyed by `candidate_id`.
 - Pure writer, no computation (same as `certainty_summaries`)
 
 **service/runtime_v1.py**:
-- `export_runtime_package(...)` for `package_kind="audit"` computes provenance trees
-- For each candidate: attempt `run_package_provenance` with candidate's derivation where clause
-- Silently skip candidates where provenance fails (non-exportable ruleref, no Souffle, etc.)
+- `evaluate_runtime_derivation(...)`: after successful evaluate, cache recipe in `session.derivation_recipes[derivation_id]`
+- `export_runtime_package(package_kind="audit")`: iterate accepted candidates, look up recipe, attempt provenance materialization, collect results
 - Pass resulting dict to `export_package(..., provenance_trees=...)`
+- Silent skip per candidate when gate conditions fail (logged, not raised)
 
 **audit/reader.py**:
 - `AuditPackageData` gains `provenance_trees: dict[str, dict]` field
@@ -106,7 +144,7 @@ Each line is `SouffleProofTreeV0` serialized to dict, keyed by `candidate_id`.
 - Remove standalone provenance JSON generation (now in audit package)
 - Or keep both (standalone + audit) for backward compat
 
-### 4.4 Boundary Constraints
+### 4.5 Boundary Constraints
 
 - `SouffleProofTreeV0` is serialized as-is (dict). No conversion to `ProofNode` or core types.
 - `provenance_trees.jsonl` is an audit-package-local artifact, not a durable API contract.
@@ -116,28 +154,33 @@ Each line is `SouffleProofTreeV0` serialized to dict, keyed by `candidate_id`.
 ## 5. Implementation Plan
 
 ```
-Step 1: Export writer
+Step 1: Derivation recipe cache
+  - runtime_v1.py: add session.derivation_recipes dict
+  - evaluate_runtime_derivation: cache compiled where/head_vars/target after success
+
+Step 2: Export writer
   - package.py: add provenance_trees parameter + JSONL writer
   - Mirror certainty_summaries pattern exactly
 
-Step 2: Runtime export computation
-  - runtime_v1.py: compute provenance for accepted candidates during audit export
-  - Silent skip on failure
+Step 3: Runtime export computation
+  - runtime_v1.py: iterate accepted candidates, look up recipe, materialize provenance
+  - Silent skip per candidate when gate fails
 
-Step 3: Reader + Query
+Step 4: Reader + Query
   - reader.py: AuditPackageData.provenance_trees + loader
   - query.py: get_candidate_provenance_tree(cid)
 
-Step 4: Static site rendering
+Step 5: Static site rendering
   - static_ui.py: "Engine Provenance" section on candidate evidence page
   - Nested tree visualization with node-type styling
 
-Step 5: Tests
+Step 6: Tests
   - Audit round-trip: export → load → query provenance matches runtime
   - Backward compat: old package without provenance_trees.jsonl → no errors
   - Static site: provenance section appears when data exists
+  - Recipe cache: evaluate caches recipe, export uses it
 
-Step 6: Docs + demo update
+Step 7: Docs + demo update
   - Adapter docs, audit docs, demo walkthrough
   - esa_demo.py updated to show provenance in audit site
 ```
