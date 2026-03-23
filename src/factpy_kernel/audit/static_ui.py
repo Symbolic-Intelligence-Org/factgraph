@@ -157,6 +157,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         authoring_apply_summary=authoring_apply_summary,
         rule_trace_count=len(rule_trace_ids),
         compliance_matrix_count=len(compliance_matrix_rows),
+        candidate_evidence_count=len(candidate_evidence_ids),
     )
     (root / "index.html").write_text(index_html, encoding="utf-8")
     (root / "search.html").write_text(_render_search_page(), encoding="utf-8")
