@@ -1491,9 +1491,11 @@
   - `audit/support_artifacts.jsonl`
   - `audit/rule_trace_artifacts.jsonl`
   - `audit/certainty_summaries.jsonl`（可选 — 当 session 有 `registry_root` 且 candidate certainty 可派生时写入）
+  - `audit/provenance_trees.jsonl`（可选 — 当 accepted candidate 仍可通过当前 session 的 `run_id`-keyed derivation recipe replay 成 query-bearing Souffle package，并能匹配到具体 output row 时写入）
   前两个文件分别导出 `SupportArtifact` 与 `RuleTraceArtifact` 的 flat JSONL rows，用于离线 audit / explain 消费。
   `certainty_summaries.jsonl` 导出 export-time 预计算的 `certainty_summary` dict（每行 `{candidate_id, certainty_summary}`），因为 `condition_weights` 只在 registry filesystem 可用、离线 audit 无法 query-time 派生。
   routing 与 delivery 分开：candidate 必须先在 evaluate 时被标成 `confidence_kind="certainty"`，export 才会继续物化 certainty summary。
+  `provenance_trees.jsonl` 导出 runtime export-time replay 的 Souffle proof tree dict（每行 `{candidate_id, provenance_tree}`）；缺少 recipe、query export 失败、Souffle explain 失败或无法匹配 output row 的 candidate 会被静默跳过，不影响整个 package export。
 
 错误 kinds：
 

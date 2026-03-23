@@ -238,6 +238,12 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
   - 只在 export time 有 `registry_root` 且 candidate 的 certainty 可派生时写入
   - `certainty_summary` payload 与 runtime `explain-summary` 的 `certainty_summary` 字段同构
   - 旧 package 不含该文件时，reader 返回空 dict（向后兼容）
+- `audit/provenance_trees.jsonl`（可选）
+  - 以 `candidate_id` 为 key 的 flat JSONL rows
+  - 每行格式：`{"candidate_id": "...", "provenance_tree": {...}}`
+  - 只在 export time 既有 accepted candidate、又能用 session-scoped derivation recipe replay 成 query-bearing Souffle package 时写入
+  - `provenance_tree` payload 复用 adapter-local `SouffleProofTreeV0` dict shape（`query` / `root` / `rules`）
+  - 旧 package 不含该文件时，reader 返回空 dict（向后兼容）
 
 这些文件当前是全量导出，不做引用子集裁剪；它们的职责是让离线 audit consumer 能读取 explain carrier，而不是提供 online durable readback。
 
@@ -264,6 +270,13 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 - query 的 `get_candidate_evidence_tree_narrative(candidate_id)` 会将物化的 certainty_summary 传入 narrative renderer，产出含 additive `certainty_lines` 的 narrative
 - static site candidate evidence page 在 narrative block 末尾渲染 certainty section（当 certainty_lines 存在时）
 - certainty_summary 在 export time 由 runtime service 预计算（通过 core `materialize_certainty_summary` helper），audit 侧不做 query-time 计算（因为 `condition_weights` 离线不可用）
+
+当前 `audit.reader` / `AuditQuery` / static UI 也已统一消费 `provenance_trees.jsonl`：
+
+- reader 读取 JSONL rows → 解析为 `{candidate_id: provenance_tree_dict}` mapping（旧 package 若没有该文件则返回空 dict）
+- query 可按 `candidate_id` 查询物化的 engine-native provenance tree
+- static site candidate evidence page 在 certainty section 后渲染 additive `Engine Provenance` section（当 provenance_tree 存在时）
+- provenance_tree 在 export time 由 runtime service 通过 query-bearing Souffle package replay 物化；audit 侧不做 query-time Souffle 执行
 
 当前不会新增 `rule_trace_summary` 专用 artifact 文件；summary 是 read/query 层的纯派生面，不是新的 durable package contract。
 当前也不会新增 `candidate_evidence_tree` 专用 artifact 文件；candidate tree 同样是 read/query 层的纯派生面，不是新的 durable package contract。

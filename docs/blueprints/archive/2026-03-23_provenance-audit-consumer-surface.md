@@ -1,9 +1,10 @@
 # Sub-Blueprint: Provenance Audit Consumer Surface
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-23
+- Last Updated: 2026-03-23
 - Parent Blueprint:
-  - [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](./2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
+  - [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](../active/2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
 - Related Modules:
   - `src/factpy_kernel/adapters/souffle/provenance.py`
   - `src/factpy_kernel/adapters/souffle/package.py`
@@ -13,10 +14,11 @@
   - `src/factpy_kernel/service/runtime_v1.py`
   - `examples/esa_demo.py`
 - Related Docs:
-  - [2026-03-22_architectural-decisions-v2.md](./2026-03-22_architectural-decisions-v2.md) — ADR #19, #20
+  - [2026-03-22_architectural-decisions-v2.md](../active/2026-03-22_architectural-decisions-v2.md) — ADR #19, #20
   - [01_souffle_adapter.md](../../../src/factpy_kernel/adapters/docs/01_souffle_adapter.md) — provenance v0 spec
   - [01_overview.md](../../../src/factpy_kernel/audit/docs/01_overview.md) — audit package artifact files
-  - [certainty-audit-static-delivery](../archive/2026-03-21_certainty-audit-static-delivery.md) — reference pattern
+  - [03_runtime_queries_views.md](../../../src/factpy_kernel/service/docs/03_runtime_queries_views.md) — audit package export DTO and artifact notes
+  - [certainty-audit-static-delivery](./2026-03-21_certainty-audit-static-delivery.md) — reference pattern
 - Audit Log:
   - [2026-03-23_provenance-audit-consumer-surface.audit.md](./2026-03-23_provenance-audit-consumer-surface.audit.md)
 
@@ -199,3 +201,17 @@ Step 7: Docs + demo update
 4. Old audit packages without `provenance_trees.jsonl` continue to load and display without errors
 5. 244+ tests green (new tests for round-trip + backward compat + static rendering)
 6. `esa_demo.py` audit site shows provenance in candidate evidence pages
+
+## 7. Outcome / Deviations
+
+- 最终落地结果：
+  - `RuntimeSession` 新增 run-scoped `derivation_recipes` cache；`evaluate_runtime_derivation(...)` 成功后按 `run_id` 缓存 compiled `where` / `head_vars` / `target_pred_id` / `registry_root`，供后续 audit export replay 使用。
+  - `export_runtime_package(package_kind="audit")` 现在会尝试为 accepted candidates 物化 `audit/provenance_trees.jsonl`；写入格式与 `certainty_summaries.jsonl` 同样是 additive JSONL pattern。
+  - `audit.reader` / `AuditQuery` / static UI 已打通正式 consumer surface：audit package 读取 provenance tree，candidate evidence page 渲染 additive `Engine Provenance` section。
+  - 回归测试覆盖了 export materialization、reader/query round-trip、旧 package backward compatibility、static HTML rendering。
+- 与原蓝图相比的实现细节：
+  - provenance replay 不是按 `candidate.derivation_id` 匹配，而是按 accepted candidate durable meta 里的 `run_id` 取 recipe；这避免了同一 session 内重复复用 `derivation_id` 时的 recipe 污染。
+  - candidate 到 query output row 的匹配不是直接用 accepted claim arg 顺序，而是先对 query export 做 `ruleref` expansion，再按生成后的 query variable order 绑定；这是为了与 Souffle exporter 实际输出列顺序保持一致。
+  - `examples/esa_demo.py` 继续保留 standalone `provenance/*.json` 产物，但 audit package / static HTML 现在已经成为正式的产品内 provenance consumer surface。
+- 归档说明：
+  - 该子蓝图已完成并归档；母蓝图继续保持 active，用于后续 provenance consumer surface / ECSS 阶段决策。
