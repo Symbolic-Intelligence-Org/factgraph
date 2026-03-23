@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from factpy_kernel.authoring.registry_fs import FileAuthoringRegistry
 from factpy_kernel.adapters.souffle.pred_norm import normalize_pred_id
 from factpy_kernel.adapters.souffle.tsv_v1 import write_tsv
 from factpy_kernel.core.mapping.canon import MappingConflictError
@@ -21,11 +22,30 @@ from factpy_kernel.adapters.souffle.where_compile import (
     compile_where_to_query_dl,
     query_rel_for_where,
 )
+from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factpy_kernel.core.rules._trace import rule_trace_artifact_to_dict
 from factpy_kernel.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
 from factpy_kernel.core.store._support import support_artifact_to_dict
 from factpy_kernel.core.store.runtime import Store
 from factpy_kernel.adapters.souffle.souffle_view_gen import generate_view_dl
+
+_WHERE_ATOM_TAGS = {
+    "pred",
+    "ruleref",
+    "eq",
+    "ne",
+    "gt",
+    "ge",
+    "lt",
+    "le",
+    "in",
+    "not",
+    "add",
+    "sub",
+    "neg",
+    "addc",
+    "mulc",
+}
 
 
 @dataclass(frozen=True)
@@ -117,11 +137,18 @@ def export_package(
             query_rel = query_rel_for_where(where)
         if not isinstance(query_rel, str) or not query_rel:
             raise ValueError("query.query_rel must be non-empty string")
+        registry = None
+        registry_root = query.get("registry_root")
+        if registry_root is not None:
+            if not isinstance(registry_root, str) or not registry_root:
+                raise ValueError("query.registry_root must be non-empty string when provided")
+            registry = _load_query_rule_registry(registry_root)
         idb_text = compile_where_to_query_dl(
             schema_ir=store.schema_ir,
             where=where,
             query_rel=query_rel,
             include_pred_witness_columns=bool(query.get("include_pred_witness_columns")),
+            registry=registry,
         )
         outputs_map["__query__"] = [query_rel]
 
@@ -1079,3 +1106,36 @@ def _stable_key_hash(value: Any) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:12]
+
+
+def _load_query_rule_registry(root_dir: str | Path) -> RuleRegistry:
+    file_registry = FileAuthoringRegistry(Path(root_dir))
+    registry = RuleRegistry()
+    for rule_id in file_registry.list_rule_ids():
+        for version_row in file_registry.list_rule_versions(rule_id):
+            version = version_row.get("version")
+            if not isinstance(version, str) or not version:
+                continue
+            payload = file_registry.read_rule_spec(rule_id, version)
+            if not isinstance(payload, dict):
+                continue
+            registry.register(
+                RuleSpec(
+                    rule_id=str(payload["rule_id"]),
+                    version=str(payload["version"]),
+                    select_vars=list(payload["select_vars"]),
+                    where=list(_json_where_to_ir(payload["where"])),
+                    expose=bool(payload.get("expose", False)),
+                )
+            )
+    return registry
+
+
+def _json_where_to_ir(where_json: Any) -> Any:
+    if isinstance(where_json, list):
+        if where_json and isinstance(where_json[0], str) and where_json[0] in _WHERE_ATOM_TAGS:
+            return tuple(_json_where_to_ir(item) for item in where_json)
+        return [_json_where_to_ir(item) for item in where_json]
+    if isinstance(where_json, dict):
+        return {key: _json_where_to_ir(value) for key, value in where_json.items()}
+    return where_json

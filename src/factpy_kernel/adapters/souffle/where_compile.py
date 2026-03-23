@@ -8,6 +8,7 @@ from typing import Any
 
 from factpy_kernel.adapters.souffle.pred_norm import normalize_pred_id
 from factpy_kernel.adapters.souffle.souffle_view_gen import witness_rel_name
+from factpy_kernel.core.rules.ruleref_common import internal_rule_pred_id, resolve_exposed_rule_ref
 from factpy_kernel.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
 from factpy_kernel.core.rules.where_ast_validate import (
     WhereASTValidationError,
@@ -33,12 +34,20 @@ class QueryWitnessLayout:
     pred_witness_columns: tuple[PredWitnessColumnSpec, ...]
 
 
+@dataclass(frozen=True)
+class _RuleRefRelationSpec:
+    rel_name: str
+    select_vars: tuple[str, ...]
+    where: list[Any]
+
+
 def compile_where_to_query_dl(
     *,
     schema_ir: dict,
     where: list[Any],
     query_rel: str,
     include_pred_witness_columns: bool = False,
+    registry: Any | None = None,
 ) -> str:
     ast_gate_on = _where_ast_gate_enabled()
     if not isinstance(schema_ir, dict):
@@ -53,70 +62,49 @@ def compile_where_to_query_dl(
             raise _adapt_where_ast_error(exc) from exc
 
     pred_type_domains = _schema_pred_type_domains(schema_ir)
+    expanded = _expand_ruleref_relations_for_query_export(
+        where=where,
+        registry=registry,
+        pred_type_domains=pred_type_domains,
+    )
     pred_arities = {pred_id: len(arg_types) for pred_id, arg_types in pred_type_domains.items()}
-    bodies = _normalize_where_subset(where)
-    if include_pred_witness_columns:
-        witness_layout = build_query_witness_layout(where)
-        variables = list(witness_layout.query_variables)
-    else:
-        witness_layout = None
-        variables = extract_where_variables(where)
-    if not variables:
-        raise WhereValidationError("where must contain at least one variable")
-
-    var_symbols = {var: f"C{i}" for i, var in enumerate(variables)}
-    head_vars = [var_symbols[var] for var in variables]
-    query_decl_cols = [f"{var_symbols[var]}:symbol" for var in variables]
-    pred_witness_symbols: dict[tuple[int, int], str] = {}
-    if witness_layout is not None:
-        for index, spec in enumerate(witness_layout.pred_witness_columns):
-            witness_symbol = f"W{index}"
-            pred_witness_symbols[(spec.branch_index, spec.atom_index)] = witness_symbol
-            head_vars.append(witness_symbol)
-            query_decl_cols.append(f"{witness_symbol}:symbol")
-
     in_rel_values: dict[str, tuple[str, ...]] = {}
     not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]] = {}
-    rule_lines: list[str] = []
+    relation_blocks: list[list[str]] = []
+    for rel_name in sorted(expanded.relation_specs):
+        spec = expanded.relation_specs[rel_name]
+        relation_blocks.append(
+            _compile_relation_to_dl_block(
+                relation_name=normalize_pred_id(rel_name),
+                where=spec.where,
+                relation_variables=list(spec.select_vars),
+                pred_arities=pred_arities,
+                pred_type_domains=pred_type_domains,
+                in_rel_values=in_rel_values,
+                not_rel_defs=not_rel_defs,
+                ast_gate_on=ast_gate_on,
+                include_pred_witness_columns=False,
+                emit_output=False,
+                not_rel_namespace=rel_name,
+            )
+        )
 
-    for branch_index, body in enumerate(bodies):
-        bound_vars: set[str] = set()
-        var_type_domains = _infer_var_type_domains(body, pred_type_domains)
-        body_terms: list[str] = []
-        seen_pred_occurrences: set[tuple[int, int]] = set()
-        for atom_index, atom in enumerate(body):
-            body_terms.append(
-                _compile_atom(
-                    atom=atom,
-                    pred_arities=pred_arities,
-                    pred_type_domains=pred_type_domains,
-                    var_symbols=var_symbols,
-                    bound_vars=bound_vars,
-                    var_type_domains=var_type_domains,
-                    in_rel_values=in_rel_values,
-                    query_variables=variables,
-                    not_rel_defs=not_rel_defs,
-                    ast_gate_on=ast_gate_on,
-                    branch_index=branch_index,
-                    atom_index=atom_index,
-                    pred_witness_symbols=pred_witness_symbols,
-                )
-            )
-            if atom[0] == "pred" and witness_layout is not None:
-                seen_pred_occurrences.add((branch_index, atom_index))
-        if witness_layout is not None:
-            for spec in witness_layout.pred_witness_columns:
-                occurrence = (spec.branch_index, spec.atom_index)
-                if occurrence in seen_pred_occurrences:
-                    continue
-                body_terms.append(f'{pred_witness_symbols[occurrence]} = ""')
-        missing_vars = [var for var in variables if var not in bound_vars]
-        if missing_vars:
-            raise WhereValidationError(
-                "where branch must bind all query variables; missing: "
-                + ", ".join(missing_vars)
-            )
-        rule_lines.append(f'{query_rel}({", ".join(head_vars)}) :- {", ".join(body_terms)}.')
+    query_variables = extract_where_variables(expanded.rewritten_where)
+    relation_blocks.append(
+        _compile_relation_to_dl_block(
+            relation_name=query_rel,
+            where=expanded.rewritten_where,
+            relation_variables=query_variables,
+            pred_arities=pred_arities,
+            pred_type_domains=pred_type_domains,
+            in_rel_values=in_rel_values,
+            not_rel_defs=not_rel_defs,
+            ast_gate_on=ast_gate_on,
+            include_pred_witness_columns=include_pred_witness_columns,
+            emit_output=True,
+            not_rel_namespace=None,
+        )
+    )
 
     lines: list[str] = []
     for rel_name in sorted(in_rel_values):
@@ -127,10 +115,10 @@ def compile_where_to_query_dl(
         lines.append("")
 
     for rel_name in sorted(not_rel_defs):
-        key_vars, body_term_groups = not_rel_defs[rel_name]
-        if key_vars:
-            key_decl_cols = ", ".join(f"K{i}:symbol" for i in range(len(key_vars)))
-            head_args = ", ".join(var_symbols[var] for var in key_vars)
+        key_args, body_term_groups = not_rel_defs[rel_name]
+        if key_args:
+            key_decl_cols = ", ".join(f"K{i}:symbol" for i in range(len(key_args)))
+            head_args = ", ".join(key_args)
             lines.append(f".decl {rel_name}({key_decl_cols})")
             for body_terms in body_term_groups:
                 lines.append(f'{rel_name}({head_args}) :- {", ".join(body_terms)}.')
@@ -140,14 +128,8 @@ def compile_where_to_query_dl(
                 lines.append(f'{rel_name}() :- {", ".join(body_terms)}.')
         lines.append("")
 
-    lines.extend(
-        [
-            f'.decl {query_rel}({", ".join(query_decl_cols)})',
-            f'.output {query_rel}',
-            "",
-            *rule_lines,
-        ]
-    )
+    for block in relation_blocks:
+        lines.extend(block)
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -255,6 +237,192 @@ def build_query_witness_layout(where: list[Any]) -> QueryWitnessLayout:
     )
 
 
+def _compile_relation_to_dl_block(
+    *,
+    relation_name: str,
+    where: list[Any],
+    relation_variables: list[str],
+    pred_arities: dict[str, int],
+    pred_type_domains: dict[str, list[str]],
+    in_rel_values: dict[str, tuple[str, ...]],
+    not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]],
+    ast_gate_on: bool,
+    include_pred_witness_columns: bool,
+    emit_output: bool,
+    not_rel_namespace: str | None,
+) -> list[str]:
+    bodies = _normalize_where_subset(where)
+    if include_pred_witness_columns:
+        witness_layout = build_query_witness_layout(where)
+        head_relation_variables = list(witness_layout.query_variables)
+        all_variables = list(witness_layout.query_variables)
+    else:
+        witness_layout = None
+        head_relation_variables = list(relation_variables)
+        all_variables = extract_where_variables(where)
+    if not all_variables:
+        raise WhereValidationError("where must contain at least one variable")
+
+    ordered_variables = list(head_relation_variables)
+    for var in all_variables:
+        if var not in head_relation_variables:
+            ordered_variables.append(var)
+    var_symbols = {var: f"C{i}" for i, var in enumerate(ordered_variables)}
+    head_vars = [var_symbols[var] for var in head_relation_variables]
+    relation_decl_cols = [f"{var_symbols[var]}:symbol" for var in head_relation_variables]
+    pred_witness_symbols: dict[tuple[int, int], str] = {}
+    if witness_layout is not None:
+        for index, spec in enumerate(witness_layout.pred_witness_columns):
+            witness_symbol = f"W{index}"
+            pred_witness_symbols[(spec.branch_index, spec.atom_index)] = witness_symbol
+            head_vars.append(witness_symbol)
+            relation_decl_cols.append(f"{witness_symbol}:symbol")
+
+    rule_lines: list[str] = []
+    for branch_index, body in enumerate(bodies):
+        bound_vars: set[str] = set()
+        var_type_domains = _infer_var_type_domains(body, pred_type_domains)
+        body_terms: list[str] = []
+        seen_pred_occurrences: set[tuple[int, int]] = set()
+        for atom_index, atom in enumerate(body):
+            body_terms.append(
+                _compile_atom(
+                    atom=atom,
+                    pred_arities=pred_arities,
+                    pred_type_domains=pred_type_domains,
+                    var_symbols=var_symbols,
+                    bound_vars=bound_vars,
+                    var_type_domains=var_type_domains,
+                    in_rel_values=in_rel_values,
+                    query_variables=head_relation_variables,
+                    not_rel_defs=not_rel_defs,
+                    ast_gate_on=ast_gate_on,
+                    branch_index=branch_index,
+                    atom_index=atom_index,
+                    pred_witness_symbols=pred_witness_symbols,
+                    not_rel_namespace=not_rel_namespace,
+                )
+            )
+            if atom[0] == "pred" and witness_layout is not None:
+                seen_pred_occurrences.add((branch_index, atom_index))
+        if witness_layout is not None:
+            for spec in witness_layout.pred_witness_columns:
+                occurrence = (spec.branch_index, spec.atom_index)
+                if occurrence in seen_pred_occurrences:
+                    continue
+                body_terms.append(f'{pred_witness_symbols[occurrence]} = ""')
+        missing_vars = [var for var in head_relation_variables if var not in bound_vars]
+        if missing_vars:
+            raise WhereValidationError(
+                "where branch must bind all query variables; missing: "
+                + ", ".join(missing_vars)
+            )
+        rule_lines.append(f'{relation_name}({", ".join(head_vars)}) :- {", ".join(body_terms)}.')
+
+    lines = [f'.decl {relation_name}({", ".join(relation_decl_cols)})']
+    if emit_output:
+        lines.append(f".output {relation_name}")
+    lines.append("")
+    lines.extend(rule_lines)
+    return lines
+
+
+def _expand_ruleref_relations_for_query_export(
+    *,
+    where: list[Any],
+    registry: Any | None,
+    pred_type_domains: dict[str, list[str]],
+) -> "_ExpandedRuleRefQuery":
+    relation_specs: dict[str, _RuleRefRelationSpec] = {}
+    pending_rule_specs: dict[tuple[str, str], tuple[str, tuple[str, ...], list[Any]]] = {}
+
+    def rewrite_where_expr(expr: list[Any]) -> list[Any]:
+        if all(isinstance(item, tuple) for item in expr):
+            return [rewrite_atom(atom) for atom in expr]
+        if all(isinstance(item, list) for item in expr):
+            return [rewrite_where_expr(branch) for branch in expr]
+        raise WhereValidationError("where must be one-level AND or two-level OR-of-AND")
+
+    def rewrite_atom(atom: tuple[Any, ...]) -> tuple[Any, ...]:
+        if atom[0] != "ruleref":
+            return atom
+        if registry is None:
+            raise WhereValidationError("query export with ruleref requires registry_root")
+        if len(atom) != 4:
+            raise WhereValidationError("ruleref atom must be ('ruleref', rule_id, version, [terms...])")
+        _, rule_id, version, terms = atom
+        if not isinstance(terms, list):
+            raise WhereValidationError("ruleref atom terms must be list")
+        ref_spec = resolve_exposed_rule_ref(
+            registry,
+            rule_id=rule_id,
+            version=version,
+            terms_len=len(terms),
+            error_factory=WhereValidationError,
+        )
+        key = (ref_spec.rule_id, ref_spec.version)
+        rel_name = internal_rule_pred_id(ref_spec.rule_id, ref_spec.version)
+        if key not in pending_rule_specs:
+            pending_rule_specs[key] = (rel_name, tuple(ref_spec.select_vars), [])
+            pred_type_domains.setdefault(rel_name, ["symbol"] * len(ref_spec.select_vars))
+            rewritten_child = rewrite_where_expr(ref_spec.where)
+            pending_rule_specs[key] = (rel_name, tuple(ref_spec.select_vars), rewritten_child)
+            pred_type_domains[rel_name] = _infer_rule_output_domains(
+                where=rewritten_child,
+                select_vars=list(ref_spec.select_vars),
+                pred_type_domains=pred_type_domains,
+            )
+            relation_specs[rel_name] = _RuleRefRelationSpec(
+                rel_name=rel_name,
+                select_vars=tuple(ref_spec.select_vars),
+                where=rewritten_child,
+            )
+        return ("pred", rel_name, terms)
+
+    rewritten_where = rewrite_where_expr(where)
+    return _ExpandedRuleRefQuery(
+        rewritten_where=rewritten_where,
+        relation_specs=relation_specs,
+    )
+
+
+@dataclass(frozen=True)
+class _ExpandedRuleRefQuery:
+    rewritten_where: list[Any]
+    relation_specs: dict[str, _RuleRefRelationSpec]
+
+
+def _infer_rule_output_domains(
+    *,
+    where: list[Any],
+    select_vars: list[str],
+    pred_type_domains: dict[str, list[str]],
+) -> list[str]:
+    bodies = _normalize_where_subset(where)
+    body_domains = [_infer_var_type_domains(body, pred_type_domains) for body in bodies]
+    out: list[str] = []
+    for select_var in select_vars:
+        domains: set[str] = set()
+        for item in body_domains:
+            domains.update(item.get(select_var, set()))
+        out.append(_collapse_domains_for_internal_relation(domains))
+    return out
+
+
+def _collapse_domains_for_internal_relation(domains: set[str]) -> str:
+    if not domains:
+        return "symbol"
+    if domains <= {"int"}:
+        return "int"
+    if domains <= {"time"}:
+        return "time"
+    if domains <= {"int", "time"}:
+        return "time" if "time" in domains else "int"
+    if len(domains) == 1:
+        return next(iter(domains))
+    return "symbol"
+
+
 def _compile_atom(
     *,
     atom: tuple[Any, ...],
@@ -270,6 +438,7 @@ def _compile_atom(
     branch_index: int,
     atom_index: int,
     pred_witness_symbols: dict[tuple[int, int], str],
+    not_rel_namespace: str | None,
 ) -> str:
     kind = atom[0]
 
@@ -397,7 +566,8 @@ def _compile_atom(
             )
 
         key_vars = tuple(var for var in query_variables if var in vars_in_not_body)
-        rel_name = _not_rel_name(not_body)
+        key_args = tuple(var_symbols[var] for var in key_vars)
+        rel_name = _not_rel_name(not_body, namespace=not_rel_namespace)
         body_term_groups: list[tuple[str, ...]] = []
         for branch in not_bodies:
             local_bound_vars = set(bound_vars)
@@ -424,7 +594,7 @@ def _compile_atom(
                     + ", ".join(missing_key_vars)
                 )
             body_term_groups.append(tuple(branch_terms))
-        rel_def = (key_vars, tuple(body_term_groups))
+        rel_def = (key_args, tuple(body_term_groups))
 
         existing = not_rel_defs.get(rel_name)
         if existing is None:
@@ -625,9 +795,9 @@ def _in_rel_name(values: tuple[str, ...]) -> str:
     return f"__in_{digest[:12]}"
 
 
-def _not_rel_name(not_body: list[tuple[Any, ...]]) -> str:
+def _not_rel_name(not_body: list[tuple[Any, ...]], *, namespace: str | None = None) -> str:
     payload = json.dumps(
-        not_body,
+        [namespace, not_body],
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
