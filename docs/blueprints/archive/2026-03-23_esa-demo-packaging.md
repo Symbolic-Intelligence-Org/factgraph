@@ -1,6 +1,6 @@
 # Sub-Blueprint: ESA Demo Packaging
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-23
 - Parent Blueprint:
   - [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](./2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)

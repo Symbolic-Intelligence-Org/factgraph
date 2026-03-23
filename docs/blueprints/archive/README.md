@@ -121,3 +121,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-22 | docs-memory-and-blueprint-realignment | archived | design→active mother blueprint、handoff→memory、旧 active 母蓝图 superseded 归档 |
 | 2026-03-22 | souffle-provenance-adapter-v0 | implemented | Adapter-local Souffle `-t explain` parser/runner helper；验证递归链、否定叶子与规则编号，不触碰 core/service/audit 契约 |
 | 2026-03-23 | ruleref-souffle-query-export | implemented | 为 query-bearing package export 增加 registry-backed `ruleref` 编译；真实 ECSS top-level compliance 已可产出 Souffle proof tree |
+| 2026-03-23 | esa-demo-packaging | implemented | Standalone ESA demo script + static HTML polish + positioning doc + walkthrough doc; 9 ECSS rules, 2 missions, provenance, 26-page audit site |
