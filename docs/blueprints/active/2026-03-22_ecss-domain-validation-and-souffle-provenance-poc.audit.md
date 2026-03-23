@@ -25,3 +25,5 @@
   - Child blueprints remain mandatory for any concrete capability line.
   - Certainty v1, probability lane, and delivery-pipeline polish stay out of scope until domain validation closes the key decision gates.
   - Engine-native provenance necessity is now empirically confirmed on real ECSS data; future explain work should prefer engine provenance consumption over external reconstruction.
+
+| 2026-03-23 | implemented | Mother blueprint closed | All 3 decision gates closed (ECSS fit ✅, evidence sufficiency ✅, provenance necessity ✅). 4 child blueprints delivered and archived. 250 tests green. Retained in `active/` as reference for mid-term directions (ProofNode, three-layer rules) in §5.7. |
