@@ -27,6 +27,7 @@ class AuditPackageData:
     rule_trace_artifacts: list[dict[str, Any]]
     authoring_apply_events: list[dict[str, Any]]
     certainty_summaries: dict[str, dict[str, Any]]
+    provenance_trees: dict[str, dict[str, Any]]
 
 
 def load_audit_package(package_dir: str | Path) -> AuditPackageData:
@@ -61,6 +62,7 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
         rule_trace_artifacts=_read_optional_jsonl(root, audit_files, "rule_trace_artifacts"),
         authoring_apply_events=[dict(evt.raw) for evt in load_authoring_apply_events(root)],
         certainty_summaries=_read_certainty_summaries(root, audit_files),
+        provenance_trees=_read_provenance_trees(root, audit_files),
     )
 
 
@@ -85,7 +87,7 @@ def _read_manifest_audit_files(manifest: dict[str, Any]) -> dict[str, str]:
         if not isinstance(value, str) or not value:
             raise AuditReadError(f"manifest.paths.audit_files.{key} must be non-empty string")
         out[key] = value
-    for key in ("rule_trace_artifacts", "support_artifacts", "certainty_summaries"):
+    for key in ("rule_trace_artifacts", "support_artifacts", "certainty_summaries", "provenance_trees"):
         value = audit_files.get(key)
         if isinstance(value, str) and value:
             out[key] = value
@@ -124,6 +126,21 @@ def _read_certainty_summaries(root: Path, mapping: dict[str, str]) -> dict[str, 
             and isinstance(certainty_summary, dict)
         ):
             result[candidate_id] = certainty_summary
+    return result
+
+
+def _read_provenance_trees(root: Path, mapping: dict[str, str]) -> dict[str, dict[str, Any]]:
+    rows = _read_optional_jsonl(root, mapping, "provenance_trees")
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        candidate_id = row.get("candidate_id")
+        provenance_tree = row.get("provenance_tree")
+        if (
+            isinstance(candidate_id, str)
+            and candidate_id
+            and isinstance(provenance_tree, dict)
+        ):
+            result[candidate_id] = provenance_tree
     return result
 
 

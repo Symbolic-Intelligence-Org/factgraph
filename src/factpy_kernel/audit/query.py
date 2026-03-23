@@ -153,6 +153,11 @@ class AuditQuery:
             raise AuditQueryError("candidate_id must be non-empty string")
         return self.package.certainty_summaries.get(candidate_id)
 
+    def get_candidate_provenance_tree(self, candidate_id: str) -> dict[str, Any] | None:
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise AuditQueryError("candidate_id must be non-empty string")
+        return self.package.provenance_trees.get(candidate_id)
+
     def list_decisions(
         self,
         *,
