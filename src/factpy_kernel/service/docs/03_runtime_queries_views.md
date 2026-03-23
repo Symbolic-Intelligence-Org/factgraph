@@ -1449,7 +1449,8 @@
   "out_dir": "/tmp/pkg",
   "package_kind": "audit",
   "query": {
-    "predicates": ["person:country"]
+    "where": [["pred", "person:country", ["$e", "$country"]]],
+    "query_rel": "country_query"
   }
 }
 ```
@@ -1473,6 +1474,19 @@
 
 - `package_kind` 只接受 `inference` 或 `audit`。
 - `query` 为可选透传字段，由底层 exporter 解释。
+- 当 `query.where` 含 `ruleref` 时，当前 exporter 额外接受 `query.registry_root`：
+
+```json
+{
+  "query": {
+    "where": [["ruleref", "q.example_rule", "1.0.0", ["$e", "$status"]]],
+    "query_rel": "example_query",
+    "registry_root": "/tmp/registry"
+  }
+}
+```
+
+  这不会改变 outer DTO；只是让 package exporter 在编译 `rules/idb.dl` 时能够读取 registry 中的 exposed rules，把 composed query 展开成 Souffle 可执行的 internal relations。
 - 当 `package_kind="audit"` 时，当前 package 还会额外包含：
   - `audit/support_artifacts.jsonl`
   - `audit/rule_trace_artifacts.jsonl`

@@ -1,7 +1,7 @@
 # Souffle Adapter 总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/souffle`
-- 最后更新：2026-03-22
+- 最后更新：2026-03-23
 - 目标读者：需要理解 Souffle 导出、执行、查询编译链路的开发者
 
 ## 1. 模块职责
@@ -137,6 +137,7 @@ Souffle 二进制查找顺序：
   - 接收已导出的 factpy package 目录
   - 复用 package manifest 中的 `view/idb/policy` 组装逻辑
   - 自动定位 Souffle binary 后调用 `run_provenance_explain(...)`
+  - 对 flat query package 直接可用；对含 `ruleref` 的 composed query package，导出时需要提供 `query.registry_root`
 - `parse_souffle_proof_json(...)`
   - 解析 Souffle JSON proof stream
   - depth-limited `subproof ...` 截断节点会保留为 `node_type="subproof"` 的叶子，而不是报错
@@ -164,6 +165,10 @@ Souffle 二进制查找顺序：
 - 支持 AND 与 OR-of-AND 结构
 - query relation 名为 `query__<sha256前8位>`（协议约束）
 - not body 与数据流约束由 validator + 编译期检查共同保证
+- 当 query where 含 `ruleref` 时：
+  - exporter 可通过 `query.registry_root` 加载 registry 中的 exposed rules
+  - compiler 会递归重写 `ruleref` 为 adapter-local internal relations，并把这些 relation 一起写入同一个 `rules/idb.dl`
+  - flat query 的输出形状保持不变
 
 ## 6. 当前限制
 
