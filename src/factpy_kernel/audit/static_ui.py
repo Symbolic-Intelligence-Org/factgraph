@@ -102,7 +102,12 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
             if isinstance(candidate_narrative_dto.get("narrative"), dict)
             else None
         )
-        page = _render_candidate_evidence_page(candidate_tree, narrative=candidate_narrative)
+        provenance_tree = query.get_candidate_provenance_tree(candidate_id)
+        page = _render_candidate_evidence_page(
+            candidate_tree,
+            narrative=candidate_narrative,
+            provenance_tree=provenance_tree,
+        )
         (candidate_evidence_dir / f"{_slug_id(candidate_id)}.html").write_text(page, encoding="utf-8")
         candidate_evidence_ids.append(candidate_id)
 
@@ -653,7 +658,12 @@ def _render_candidate_evidence_index_page(candidate_ids: list[str]) -> str:
     )
 
 
-def _render_candidate_evidence_page(tree: dict[str, Any], *, narrative: dict[str, Any] | None = None) -> str:
+def _render_candidate_evidence_page(
+    tree: dict[str, Any],
+    *,
+    narrative: dict[str, Any] | None = None,
+    provenance_tree: dict[str, Any] | None = None,
+) -> str:
     candidate_id = str(tree.get("candidate_id", ""))
     support_digest = str(tree.get("support_digest", ""))
     support_kind = str(tree.get("support_kind", ""))
@@ -687,6 +697,18 @@ def _render_candidate_evidence_page(tree: dict[str, Any], *, narrative: dict[str
             f"<dt>{escape(_status_label(status_value))}</dt><dd>{status_badge}</dd>"
         )
     summary_rows.append("</dl>")
+    provenance_block = ""
+    if isinstance(provenance_tree, dict):
+        provenance_root = provenance_tree.get("root")
+        if isinstance(provenance_root, dict):
+            provenance_block = (
+                "<h2>\U0001f52c Engine Provenance</h2>"
+                "<p style='color:var(--color-muted);font-size:.9rem;margin-bottom:12px'>"
+                "Complete derivation chain from the Souffle reasoning engine. "
+                "Each node shows a derivation step, leaf nodes are base facts or negation checks."
+                "</p>"
+                f"{_render_provenance_node_html(provenance_root)}"
+            )
     return _html_page(
         title=f"Candidate Evidence {candidate_id}",
         body=(
@@ -708,6 +730,7 @@ def _render_candidate_evidence_page(tree: dict[str, Any], *, narrative: dict[str
             "</div>"
             f"{''.join(summary_rows)}"
             f"{narrative_block}"
+            f"{provenance_block}"
             "<h2>Derived Binding</h2>"
             "<p class='section-copy'>Bound values returned by the reasoning engine for this candidate.</p>"
             f"<pre>{escape(json.dumps(binding, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
@@ -723,8 +746,76 @@ def _render_candidate_evidence_page(tree: dict[str, Any], *, narrative: dict[str
     )
 
 
-def render_candidate_evidence_html(tree: dict[str, Any], *, narrative: dict[str, Any] | None = None) -> str:
-    return _render_candidate_evidence_page(tree, narrative=narrative)
+def render_candidate_evidence_html(
+    tree: dict[str, Any],
+    *,
+    narrative: dict[str, Any] | None = None,
+    provenance_tree: dict[str, Any] | None = None,
+) -> str:
+    return _render_candidate_evidence_page(
+        tree,
+        narrative=narrative,
+        provenance_tree=provenance_tree,
+    )
+
+
+def _render_provenance_node_html(node: dict[str, Any], depth: int = 0) -> str:
+    """Render a Souffle proof tree node as nested HTML."""
+    node_type = str(node.get("node_type", "unknown"))
+    relation = str(node.get("relation", "?"))
+    args = node.get("args")
+    arg_values = args if isinstance(args, list) else []
+    rule_number = node.get("rule_number")
+    children = node.get("children")
+    child_nodes = children if isinstance(children, list) else []
+
+    if node_type == "axiom":
+        icon = "\U0001f4c4"
+        label = "Base Fact"
+        border_color = "var(--color-witness)"
+        background = "#f0faf0"
+    elif node_type == "negation":
+        icon = "\u274c"
+        label = "Negation Check"
+        border_color = "var(--color-terminal)"
+        background = "#fef0f0"
+    elif node_type == "subproof":
+        icon = "\U0001f50d"
+        label = "Truncated (depth limit)"
+        border_color = "var(--color-muted)"
+        background = "#f5f5f5"
+    else:
+        icon = "\U0001f4cb"
+        label = f"Rule {rule_number}" if isinstance(rule_number, str) and rule_number else "Derived"
+        border_color = "var(--color-rule-chain)"
+        background = "#f5f0ff"
+
+    args_display = ", ".join(str(arg) for arg in arg_values[:4])
+    if len(arg_values) > 4:
+        args_display += ", ..."
+
+    html = (
+        f"<div style='border-left:3px solid {border_color};background:{background};"
+        "border-radius:6px;padding:0;overflow:hidden;"
+        f"margin:{4 if depth > 0 else 8}px 0 0 {depth * 20}px'>"
+        "<div style='padding:8px 12px;font-size:.85rem'>"
+        f"<span style='margin-right:6px'>{icon}</span>"
+        f"<strong>{escape(label)}</strong>"
+        f"<code style='margin-left:8px;font-size:.8rem;color:var(--color-muted)'>"
+        f"{escape(relation)}({escape(args_display)})"
+        "</code>"
+        "</div>"
+    )
+
+    if child_nodes:
+        html += "<div style='padding:0 8px 8px'>"
+        for child in child_nodes:
+            if isinstance(child, dict):
+                html += _render_provenance_node_html(child, depth + 1)
+        html += "</div>"
+
+    html += "</div>"
+    return html
 
 
 _NODE_HUMAN_LABEL = {
