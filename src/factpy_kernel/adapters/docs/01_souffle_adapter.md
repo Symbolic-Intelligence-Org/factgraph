@@ -1,7 +1,7 @@
 # Souffle Adapter 总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/souffle`
-- 最后更新：2026-03-18
+- 最后更新：2026-03-22
 - 目标读者：需要理解 Souffle 导出、执行、查询编译链路的开发者
 
 ## 1. 模块职责
@@ -32,6 +32,10 @@
   - `ExportOptions`、`export_package(...)`
 - `runner.py`
   - `run_package(...)`、`find_souffle_binary(...)`
+- `provenance.py`
+  - `SouffleProofNodeV0`、`SouffleProofTreeV0`
+  - `parse_souffle_proof_json(...)`
+  - `run_provenance_explain(...)`
 - `where_compile.py`
   - `compile_where_to_query_dl(...)`、`query_rel_for_where(...)`
 - `souffle_view_gen.py`
@@ -121,6 +125,37 @@ Souffle 二进制查找顺序：
 1. 环境变量 `SOUFFLE_BIN`
 2. `PATH` 中的 `souffle`
 
+### 4.4 Provenance Helper（V0, adapter-local）
+
+当前 `adapters.souffle` 还提供一个 **adapter-local provenance helper**：
+
+- `run_provenance_explain(...)`
+  - 独立调用 Souffle `-t explain`
+  - 通过 stdin 发送 `format json` / `explain ...`
+  - 解析为 `SouffleProofTreeV0`
+- `run_package_provenance(...)`
+  - 接收已导出的 factpy package 目录
+  - 复用 package manifest 中的 `view/idb/policy` 组装逻辑
+  - 自动定位 Souffle binary 后调用 `run_provenance_explain(...)`
+- `parse_souffle_proof_json(...)`
+  - 解析 Souffle JSON proof stream
+  - depth-limited `subproof ...` 截断节点会保留为 `node_type="subproof"` 的叶子，而不是报错
+
+边界：
+
+- 不修改 `run_package(...)` 的签名或返回值
+- 不进入 `core/` 公共 contract
+- 不引入新的 service endpoint
+- 不写入新的 audit durable artifact
+- 不替换当前 `candidate_evidence_tree`
+
+这条路径当前只用于：
+
+- 真实 ECSS rule / provenance shape 验证
+- adapter-local proof consumption spike
+
+它不是通用 `ProofNode`，也不是已经进入 runtime/audit/static 正式消费链的稳定 contract。
+
 ## 5. where 编译与校验口径
 
 `where_compile.py` 支持把 where 子集编译为 query relation，并默认走 AST gate（`FACTPY_WHERE_AST_VALIDATE`）：
@@ -136,3 +171,7 @@ Souffle 二进制查找顺序：
 - `engine_eval` 不接受 `noop` 结果作为有效求值
 - 当前适配目标是 query/derivation 执行，不是 Deontic 规范推理引擎
 - 当前不承诺 full native parity；Souffle first-round 只输出 partial witness，而不是完整 rule-chain / recursive proof
+- Souffle provenance helper 当前仍是 adapter-local V0：
+  - 只验证 recursive chain / negation / rule-number capture
+  - 尚未进入 runtime/audit/static delivery
+  - 尚未与其他 engine 对齐为统一 proof carrier

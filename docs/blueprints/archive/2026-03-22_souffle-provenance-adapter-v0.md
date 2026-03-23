@@ -1,8 +1,8 @@
 # Sub-Blueprint: Souffle Provenance Adapter V0
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-22
-- Parent: [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](./2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
+- Parent: [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](../active/2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
 - Related Modules:
   - `src/factpy_kernel/adapters/souffle/runner.py`
   - `src/factpy_kernel/adapters/souffle/engine_eval.py`
@@ -77,19 +77,19 @@ This blueprint defines the **minimum viable adapter** to make Souffle provenance
 # In adapters/souffle/provenance.py
 
 @dataclass(frozen=True)
-class SouffleProofNode:
+class SouffleProofNodeV0:
     """Single node in a Souffle proof tree. Adapter-local, NOT a core contract."""
     node_type: str          # "derived" | "axiom" | "negation"
     relation: str           # "disposal_compliant" | "has_sub_component" | ...
     args: tuple[str, ...]   # ("sentinel_7", "920000")
     rule_number: str | None # "(R1)" for derived, None for axiom
-    children: tuple['SouffleProofNode', ...]  # empty for leaves
+    children: tuple['SouffleProofNodeV0', ...]  # empty for leaves
 
 @dataclass(frozen=True)
-class SouffleProofTree:
+class SouffleProofTreeV0:
     """Complete proof response from Souffle -t explain."""
     query: str                          # "disposal_compliant(\"sentinel_7\", 920000)"
-    root: SouffleProofNode
+    root: SouffleProofNodeV0
     rules: dict[str, str]               # {"(R1)": "disposal_compliant(M,P) :- ..."}
 ```
 
@@ -105,7 +105,7 @@ def run_provenance_explain(
     program_path: Path,
     facts_dir: Path,
     queries: list[str],
-) -> list[SouffleProofTree]:
+) -> list[SouffleProofTreeV0]:
     """Run Souffle with -t explain and parse JSON proof trees.
 
     Completely independent of run_package. Does not modify any existing
@@ -116,7 +116,7 @@ def run_provenance_explain(
 This function:
 1. Runs Souffle with `-t explain` flag (separate subprocess from normal evaluation)
 2. Pipes `format json` + `explain <query>` commands via stdin
-3. Parses JSON responses into `SouffleProofTree` objects
+3. Parses JSON responses into `SouffleProofTreeV0` objects
 4. Returns the list — caller decides what to do with it
 
 Optionally, results can be written to an adapter-local sidecar file
@@ -130,7 +130,7 @@ Current path (unchanged):
   evaluate → SupportArtifact → build_candidate_evidence_tree → evidence tree
 
 New path (additive):
-  evaluate → provenance_queries → SouffleProofTree → (raw, queryable)
+  evaluate → provenance_queries → SouffleProofTreeV0 → (raw, queryable)
 
 Both paths produce output. Neither depends on the other.
 The caller decides which to use.
@@ -151,7 +151,7 @@ The caller decides which to use.
 ## 6. Implementation Plan
 
 ### Phase 1: Parser (adapters/souffle/provenance.py)
-- `parse_souffle_proof_json(json_str) -> list[SouffleProofTree]`
+- `parse_souffle_proof_json(json_str) -> list[SouffleProofTreeV0]`
 - Handle inner nodes, axiom leaves, negation leaves
 - Parse relation name + args from premise/axiom strings
 - Map rule numbers to rule text
@@ -196,8 +196,15 @@ Until then, `SouffleProofTreeV0` stays in `adapters/souffle/` and is NOT promote
 
 ## 9. Outcome
 
-*Fill after implementation.*
-
 - Final result:
+  - Added adapter-local `src/factpy_kernel/adapters/souffle/provenance.py` with `SouffleProofNodeV0` / `SouffleProofTreeV0`, JSON proof parsing, and standalone `run_provenance_explain(...)`.
+  - Added targeted tests for flat proof, recursive proof, negation leaf handling, JSON array payloads, and subprocess error handling.
+  - Added `examples/souffle_provenance_v0_demo.py` to render the recursive passivation proof tree outside the existing runtime/audit/static surfaces.
+  - Updated `src/factpy_kernel/adapters/docs/01_souffle_adapter.md` and `runner.py` boundary docs so the helper is clearly additive and adapter-local.
 - Deviations from blueprint:
+  - No optional `outputs/provenance.json` sidecar writer was added in V0. The helper currently returns raw proof trees directly and leaves persistence to future callers.
+  - The validation script uses embedded PoC JSON instead of shelling out to a local Souffle binary; this keeps the example deterministic while still exercising the parser and tree rendering path.
 - Archive notes:
+  - `run_package(...) -> Path` remained completely unchanged.
+  - No imports or contracts were added in `core/`, `service/`, or `audit/`.
+  - `SouffleProofTreeV0` remains adapter-local pending the ProofNode v1 upgrade checklist.

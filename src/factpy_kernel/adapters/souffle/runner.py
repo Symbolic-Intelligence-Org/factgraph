@@ -37,6 +37,12 @@ def run_package(
     entrypoints: list[str],
     engine: str = "souffle",
 ) -> Path:
+    """Execute an exported package and return `outputs/run_manifest.json`.
+
+    This runner only covers normal package execution (`souffle` / `noop`).
+    Souffle `-t explain` provenance remains an additive, standalone helper in
+    `adapters.souffle.provenance.run_provenance_explain(...)`.
+    """
     if engine not in {"souffle", "noop"}:
         raise ValueError("engine must be 'souffle' or 'noop'")
 

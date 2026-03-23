@@ -119,3 +119,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-21 | fact-confidence-to-evidence-tree | implemented | Fact-level confidence carrier: meta.confidence → assertion_fact → condition_confidence=max(children) |
 | 2026-03-21 | certainty-additive-aggregation-v1 | implemented | Second aggregation strategy: weighted additive contribution alongside bottleneck/min |
 | 2026-03-22 | docs-memory-and-blueprint-realignment | archived | design→active mother blueprint、handoff→memory、旧 active 母蓝图 superseded 归档 |
+| 2026-03-22 | souffle-provenance-adapter-v0 | implemented | Adapter-local Souffle `-t explain` parser/runner helper；验证递归链、否定叶子与规则编号，不触碰 core/service/audit 契约 |
