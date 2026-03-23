@@ -99,6 +99,9 @@
 2. 调用 `render_audit_static_site(...)`
 3. 输出静态 HTML/资源
 
+当前静态站点的 page filenames / hrefs 使用 filesystem-safe reversible slug，而不是原始 percent-encoded id。
+这样生成的站点可直接通过常见静态文件服务器浏览，不依赖服务器对 `%xx` 路径的特殊处理。
+
 当 package 中存在 requirement/compliance facts 时，当前静态站点也会额外生成：
 
 - `compliance_matrix.html`

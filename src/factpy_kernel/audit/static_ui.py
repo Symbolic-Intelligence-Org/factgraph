@@ -2054,7 +2054,7 @@ def _sorted_unique_strings(value: Any) -> list[str]:
 
 
 def _slug_id(value: str) -> str:
-    return quote(value, safe="")
+    return quote(value, safe="").replace("%", "~")
 
 
 def _html_page(*, title: str, body: str) -> str:
