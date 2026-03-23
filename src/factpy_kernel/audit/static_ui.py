@@ -247,18 +247,37 @@ def _render_index_page(
         if isinstance(authoring_apply_summary, dict)
         else 0
     )
+    hero_cards = (
+        "<div class='metric-grid'>"
+        f"{_metric_card('Runs', len(run_list.get('runs', [])), 'Recorded reasoning runs in this audit bundle.')}"
+        f"{_metric_card('Evidence Trees', candidate_evidence_count, 'Open these pages to inspect why a candidate was derived.')}"
+        f"{_metric_card('Rule Traces', rule_trace_count, 'Trace which rules executed and how the proof chain expanded.')}"
+        f"{_metric_card('Apply Events', apply_count, 'Authoring and audit events captured in the package.')}"
+        "</div>"
+    )
     return _html_page(
-        title="Audit Runs",
+        title="Compliance Audit Review Site",
         body=(
-            "<h1>Audit Runs</h1>"
-            "<p><a href='search.html'>Search</a></p>"
-            f"<p><a href='authoring_apply_events.html'>Authoring Apply Events</a> ({escape(str(apply_count))})</p>"
-            f"<p><a href='rule_traces.html'>Rule Traces</a> ({escape(str(rule_trace_count))})</p>"
-            f"<p><a href='candidate_evidence.html'>Candidate Evidence Trees</a> ({escape(str(candidate_evidence_count))})</p>"
-            f"<p><a href='compliance_matrix.html'>Compliance Matrix</a> ({escape(str(compliance_matrix_count))})</p>"
+            "<div class='hero'>"
+            "<p class='eyebrow'>Audit Review Site</p>"
+            "<h1>Compliance Audit Review Site</h1>"
+            "<p class='hero-copy'>"
+            "Review verdicts, inspect evidence trees, understand certainty, and share the exported audit "
+            "bundle with any reviewer in a browser."
+            "</p>"
+            f"{hero_cards}"
+            "</div>"
+            "<div class='link-rail'>"
+            "<a href='search.html'>Search</a>"
+            f"<a href='authoring_apply_events.html'>Authoring Apply Events ({escape(str(apply_count))})</a>"
+            f"<a href='rule_traces.html'>Rule Traces ({escape(str(rule_trace_count))})</a>"
+            f"<a href='candidate_evidence.html'>Candidate Evidence Trees ({escape(str(candidate_evidence_count))})</a>"
+            f"<a href='compliance_matrix.html'>Compliance Matrix ({escape(str(compliance_matrix_count))})</a>"
+            "</div>"
             "<h2>Indexes</h2>"
             f"<ul>{''.join(_index_page_links(index_pages)) if index_pages else '<li>None</li>'}</ul>"
             "<h2>Runs</h2>"
+            "<p class='section-copy'>Each run captures a deterministic reasoning session with its resulting decisions and evidence.</p>"
             "<table>"
             "<thead><tr><th>Run</th><th>Claims</th><th>Decisions</th><th>Errors</th><th>Last Event</th></tr></thead>"
             f"<tbody>{body}</tbody>"
@@ -639,6 +658,8 @@ def _render_candidate_evidence_page(tree: dict[str, Any], *, narrative: dict[str
     support_kind = str(tree.get("support_kind", ""))
     root = tree.get("root") if isinstance(tree.get("root"), dict) else {}
     binding = root.get("binding") if isinstance(root.get("binding"), dict) else {}
+    mission_ref = binding.get("$m") if isinstance(binding.get("$m"), str) else None
+    status_value = binding.get("$status") if isinstance(binding.get("$status"), str) else None
     rule_refs = [item for item in root.get("rule_refs", []) if isinstance(item, str) and item]
     rule_ref_edges = [
         item
@@ -648,27 +669,49 @@ def _render_candidate_evidence_page(tree: dict[str, Any], *, narrative: dict[str
     root_result_kind = root.get("root_result_kind")
     narrative_block = _render_candidate_evidence_narrative_block(narrative)
     short_digest = support_digest[:30] + "..." if len(support_digest) > 30 else support_digest
+    status_badge = _status_badge(status_value) if status_value is not None else ""
+    fallback_badge = _status_badge(root_result_kind, label="DERIVED")
+    summary_rows = [
+        "<dl class='summary-grid'>",
+        f"<dt>Support kind</dt><dd>{escape(support_kind)}</dd>",
+        f"<dt>Result type</dt><dd>{escape('-' if root_result_kind is None else str(root_result_kind))}</dd>",
+        f"<dt>Primary rule</dt><dd>{escape(rule_refs[0]) if rule_refs else '-'}</dd>",
+        f"<dt>Rule chain depth</dt><dd>{escape(str(len(rule_ref_edges)))}</dd>",
+        f"<dt>Digest</dt><dd><code>{escape(short_digest)}</code></dd>",
+    ]
+    if mission_ref is not None:
+        summary_rows.append(f"<dt>Mission ref</dt><dd><code>{escape(mission_ref)}</code></dd>")
+    if status_value is not None:
+        summary_rows.append(
+            f"<dt>{escape(_status_label(status_value))}</dt><dd>{status_badge}</dd>"
+        )
+    summary_rows.append("</dl>")
     return _html_page(
         title=f"Candidate Evidence {candidate_id}",
         body=(
-            f"<h1>\U0001f4cb Candidate Evidence</h1>"
+            "<div class='snapshot-card'>"
+            "<div>"
+            "<p class='eyebrow'>Candidate Evidence</p>"
+            "<h1>Evidence Tree Review</h1>"
+            "<p class='hero-copy'>"
+            "Use this page to answer three review questions: what result was derived, which rule chain produced it, "
+            "and which facts support it."
+            "</p>"
+            "</div>"
+            f"<div class='snapshot-meta'>{status_badge if status_badge else fallback_badge}</div>"
+            "</div>"
             f"<p style='color:var(--color-muted);font-size:.85rem;margin-top:-4px;word-break:break-all'>{escape(candidate_id)}</p>"
             "<div class='nav'>"
             "<a href='../index.html'>\u2190 Runs</a>"
             "<a href='../candidate_evidence.html'>\u2190 All Evidence Trees</a>"
             "</div>"
-            "<dl class='summary-grid'>"
-            f"<dt>Support kind</dt><dd>{escape(support_kind)}</dd>"
-            f"<dt>Result type</dt><dd>{escape('-' if root_result_kind is None else str(root_result_kind))}</dd>"
-            f"<dt>Digest</dt><dd><code>{escape(short_digest)}</code></dd>"
-            f"<dt>Rule refs</dt><dd>{escape(','.join(rule_refs)) or '-'}</dd>"
-            f"<dt>Rule edges</dt><dd>{escape(str(len(rule_ref_edges)))}</dd>"
-            "</dl>"
+            f"{''.join(summary_rows)}"
             f"{narrative_block}"
-            "<h2>Binding</h2>"
+            "<h2>Derived Binding</h2>"
+            "<p class='section-copy'>Bound values returned by the reasoning engine for this candidate.</p>"
             f"<pre>{escape(json.dumps(binding, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
             "<h2>\U0001f333 Evidence Tree</h2>"
-            "<p style='color:var(--color-muted);font-size:.85rem;margin-bottom:12px'>"
+            "<p class='section-copy'>"
             "This tree shows the complete proof chain \u2014 how the system arrived at this conclusion, "
             "which rules were applied, and what facts were used as evidence.</p>"
             f"{_render_candidate_evidence_node(root, assertion_href_prefix='../assertions')}"
@@ -731,6 +774,35 @@ def _confidence_badge(value: float) -> str:
         f"font-size:.8rem;font-weight:600;background:{bg};color:{color}'>"
         f"{value:.0%}</span>"
     )
+
+
+def _status_label(value: str | None) -> str:
+    normalized = _normalize_status(value)
+    if normalized in {"compliant", "non_compliant"}:
+        return "Compliance status"
+    if normalized:
+        return "Derived status"
+    return "Status"
+
+
+def _status_badge(value: Any, *, label: str | None = None) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return ""
+    normalized = _normalize_status(value)
+    display = label or value.strip().replace("_", "-").upper()
+    if normalized in {"compliant", "complete", "pass", "passed"}:
+        css_class = "status-ok"
+    elif normalized in {"non_compliant", "incomplete", "fail", "failed"}:
+        css_class = "status-bad"
+    else:
+        css_class = "status-neutral"
+    return f"<span class='status-badge {css_class}'>{escape(display)}</span>"
+
+
+def _normalize_status(value: str | None) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip().lower().replace("-", "_").replace(" ", "_")
 
 
 def _render_candidate_evidence_node(node: dict[str, Any], *, assertion_href_prefix: str) -> str:
@@ -1008,6 +1080,11 @@ def _render_certainty_visual(narrative: dict[str, Any]) -> str:
     agg_match = re.search(r":\s*([\d.]+)", first_line)
     if agg_match:
         aggregate_val = agg_match.group(1)
+    aggregate_class = "neutral"
+    try:
+        aggregate_class = _certainty_level_class(float(aggregate_val))
+    except ValueError:
+        aggregate_class = "neutral"
 
     bars_html = ""
     for line in certainty_lines[1:]:
@@ -1025,10 +1102,12 @@ def _render_certainty_visual(narrative: dict[str, Any]) -> str:
         impact_str = parts.group(4)
         is_bottleneck = atom_key in bottleneck_keys
         try:
-            impact_pct = float(impact_str) * 100
+            impact_num = float(impact_str)
+            impact_pct = impact_num * 100
         except ValueError:
+            impact_num = 0.0
             impact_pct = 0
-        bar_class = "bottleneck" if is_bottleneck else "normal"
+        bar_class = _certainty_level_class(impact_num)
         badge = (
             "<span class=\'certainty-badge bottleneck\'>\u26a0 weakest</span>"
             if is_bottleneck else ""
@@ -1048,7 +1127,7 @@ def _render_certainty_visual(narrative: dict[str, Any]) -> str:
         "<div class=\'certainty-section\'>"
         "<div class=\'certainty-header\'>"
         "<h3>\U0001f4ca Certainty Assessment</h3>"
-        f"<span class=\'certainty-aggregate\'>{escape(aggregate_val)}</span>"
+        f"<span class=\'certainty-aggregate {aggregate_class}\'>{escape(aggregate_val)}</span>"
         "</div>"
         f"<p style=\'color:var(--color-muted);font-size:.85rem;margin:0 0 12px\'>"
         f"\U0001f3af Strategy: <strong>{escape(strategy)}</strong> \u2014 "
@@ -1060,6 +1139,14 @@ def _render_certainty_visual(narrative: dict[str, Any]) -> str:
         f"{bars_html}"
         "</div>"
     )
+
+
+def _certainty_level_class(value: float) -> str:
+    if value >= 0.8:
+        return "high"
+    if value >= 0.5:
+        return "medium"
+    return "low"
 
 
 def _render_candidate_evidence_narrative_block(narrative: dict[str, Any] | None) -> str:
@@ -1975,26 +2062,46 @@ def _html_page(*, title: str, body: str) -> str:
         f"<title>{escape(title)}</title>"
         "<style>"
         ":root{"
-        "--color-structural:#5b7bb4;--color-witness:#4caf50;--color-constraint:#ff9800;"
-        "--color-rule-chain:#7e57c2;--color-terminal:#ef5350;--color-degraded:#9e9e9e;"
-        "--color-bg:#f8f9fa;--color-border:#e0e0e0;--color-text:#333;--color-muted:#888;"
-        "--radius:8px;--shadow:0 1px 3px rgba(0,0,0,0.08)"
+        "--color-structural:#375a7f;--color-witness:#2e7d32;--color-constraint:#ad6800;"
+        "--color-rule-chain:#7c4d9d;--color-terminal:#b42318;--color-degraded:#6b7280;"
+        "--color-bg:#f5f2ea;--color-surface:#fffdf8;--color-border:#d6d1c4;--color-text:#2b2b2b;--color-muted:#6b6b6b;"
+        "--color-accent:#9c6b2f;--color-accent-soft:#efe3cf;--color-success:#2e7d32;--color-success-soft:#e7f4ea;"
+        "--color-warning:#ad6800;--color-warning-soft:#fff3d6;--color-danger:#b42318;--color-danger-soft:#fdecea;"
+        "--radius:10px;--shadow:0 10px 30px rgba(43,43,43,0.08)"
         "}"
-        "body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:24px 32px;line-height:1.5;"
-        "color:var(--color-text);background:var(--color-bg);max-width:1200px;margin:0 auto;padding:24px 32px}"
-        "h1{font-size:1.5rem;font-weight:600;margin-bottom:4px}"
+        "body{font-family:Georgia,'Times New Roman',serif;margin:0;padding:24px 32px;line-height:1.5;"
+        "color:var(--color-text);background:linear-gradient(180deg,#f7f4ee 0%,#f1ede3 100%);max-width:1200px;margin:0 auto;padding:24px 32px}"
+        "h1{font-size:1.8rem;font-weight:700;margin-bottom:4px;letter-spacing:-0.01em}"
         "h2{font-size:1.15rem;font-weight:600;margin-top:28px;padding-bottom:6px;border-bottom:2px solid var(--color-border)}"
-        "a{color:#1976d2;text-decoration:none}a:hover{text-decoration:underline}"
-        "table{border-collapse:collapse;width:100%}th,td{border:1px solid var(--color-border);padding:8px;text-align:left}"
-        "th{background:#eef1f5;font-weight:600;font-size:.85rem;text-transform:uppercase;letter-spacing:.03em}"
+        "a{color:#0f5d85;text-decoration:none}a:hover{text-decoration:underline}"
+        "table{border-collapse:collapse;width:100%;background:var(--color-surface)}th,td{border:1px solid var(--color-border);padding:8px;text-align:left}"
+        "th{background:#ece4d6;font-weight:600;font-size:.85rem;text-transform:uppercase;letter-spacing:.03em}"
         "code,pre{font-family:ui-monospace,\'SF Mono\',Menlo,monospace;font-size:.85rem}"
-        "pre{overflow:auto;background:#fff;padding:12px 16px;border:1px solid var(--color-border);border-radius:var(--radius)}"
+        "pre{overflow:auto;background:var(--color-surface);padding:12px 16px;border:1px solid var(--color-border);border-radius:var(--radius)}"
         ".nav{margin-bottom:20px;font-size:.85rem;color:var(--color-muted)}"
         ".nav a{margin-right:12px}"
         ".summary-grid{display:grid;grid-template-columns:140px 1fr;gap:4px 12px;font-size:.9rem;margin:8px 0 16px}"
         ".summary-grid dt{color:var(--color-muted);font-weight:500;text-align:right}"
         ".summary-grid dd{margin:0;word-break:break-all}"
-        ".tree-node{border-left:3px solid var(--color-border);background:#fff;border-radius:var(--radius);"
+        ".hero,.snapshot-card,.narrative-section,.certainty-section{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);box-shadow:var(--shadow)}"
+        ".hero{padding:22px 24px;margin-bottom:20px;background:linear-gradient(135deg,#fdfaf4 0%,#f4ebdb 100%)}"
+        ".snapshot-card{padding:20px 22px;margin-bottom:10px;display:flex;align-items:flex-start;justify-content:space-between;gap:18px}"
+        ".eyebrow{margin:0 0 6px;font-size:.75rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent)}"
+        ".hero-copy{margin:0;color:var(--color-muted);max-width:780px}"
+        ".metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:18px}"
+        ".metric-card{background:rgba(255,255,255,0.72);border:1px solid var(--color-border);border-radius:var(--radius);padding:14px 16px}"
+        ".metric-card-label{display:block;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--color-muted)}"
+        ".metric-card-value{display:block;font-size:1.7rem;font-weight:700;margin:4px 0 6px}"
+        ".metric-card-copy{display:block;font-size:.85rem;color:var(--color-muted)}"
+        ".link-rail{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 18px}"
+        ".link-rail a{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:var(--color-surface);border:1px solid var(--color-border);box-shadow:var(--shadow)}"
+        ".section-copy{color:var(--color-muted);font-size:.88rem;margin:0 0 12px}"
+        ".status-badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:.8rem;font-weight:700;letter-spacing:.04em}"
+        ".status-ok{background:var(--color-success-soft);color:var(--color-success)}"
+        ".status-bad{background:var(--color-danger-soft);color:var(--color-danger)}"
+        ".status-neutral{background:var(--color-accent-soft);color:var(--color-accent)}"
+        ".snapshot-meta{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}"
+        ".tree-node{border-left:3px solid var(--color-border);background:var(--color-surface);border-radius:var(--radius);"
         "box-shadow:var(--shadow);margin:8px 0;padding:0;overflow:hidden}"
         ".tree-node>.node-header{display:flex;align-items:center;gap:8px;padding:8px 14px;"
         "font-weight:600;font-size:.85rem;color:#fff}"
@@ -2010,29 +2117,43 @@ def _html_page(*, title: str, body: str) -> str:
         ".node-kind-terminal>.node-header{background:var(--color-terminal)}"
         ".node-kind-degraded>.node-header{background:var(--color-degraded)}"
         ".icon{font-size:1rem;line-height:1}"
-        ".certainty-section{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);"
-        "padding:16px 20px;margin:12px 0}"
+        ".certainty-section{padding:16px 20px;margin:12px 0}"
         ".certainty-header{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}"
         ".certainty-header h3{margin:0;font-size:1rem}"
-        ".certainty-aggregate{font-size:1.4rem;font-weight:700;color:var(--color-structural)}"
+        ".certainty-aggregate{font-size:1.1rem;font-weight:700;border-radius:999px;padding:4px 12px}"
+        ".certainty-aggregate.high{background:var(--color-success-soft);color:var(--color-success)}"
+        ".certainty-aggregate.medium{background:var(--color-warning-soft);color:var(--color-warning)}"
+        ".certainty-aggregate.low{background:var(--color-danger-soft);color:var(--color-danger)}"
+        ".certainty-aggregate.neutral{background:var(--color-accent-soft);color:var(--color-accent)}"
         ".certainty-bar-row{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:.85rem}"
         ".certainty-bar-label{min-width:180px;flex-shrink:0}"
-        ".certainty-bar-track{flex:1;height:20px;background:#eee;border-radius:10px;overflow:hidden;position:relative}"
+        ".certainty-bar-track{flex:1;height:20px;background:#e8e3d8;border-radius:10px;overflow:hidden;position:relative}"
         ".certainty-bar-fill{height:100%;border-radius:10px;transition:width .3s}"
-        ".certainty-bar-fill.bottleneck{background:linear-gradient(90deg,#ef5350,#ff7043)}"
-        ".certainty-bar-fill.normal{background:linear-gradient(90deg,#42a5f5,#66bb6a)}"
+        ".certainty-bar-fill.high{background:linear-gradient(90deg,#4caf50,#2e7d32)}"
+        ".certainty-bar-fill.medium{background:linear-gradient(90deg,#ffd54f,#ad6800)}"
+        ".certainty-bar-fill.low{background:linear-gradient(90deg,#ef9a9a,#b42318)}"
         ".certainty-bar-value{min-width:50px;text-align:right;font-weight:600}"
         ".certainty-badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.75rem;"
         "font-weight:600;margin-left:6px}"
         ".certainty-badge.bottleneck{background:#ffebee;color:#c62828}"
         ".certainty-strategy{font-size:.8rem;color:var(--color-muted);font-weight:400}"
-        ".narrative-section{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);"
-        "padding:16px 20px;margin:12px 0}"
+        ".narrative-section{padding:16px 20px;margin:12px 0}"
         ".narrative-section h3{font-size:.95rem;color:var(--color-muted);margin:12px 0 4px;font-weight:600}"
         ".narrative-section ul{margin:0;padding-left:20px}"
         ".narrative-section li{margin:2px 0;font-size:.9rem}"
         ".node-desc{color:var(--color-muted);font-size:.8rem;font-style:italic;margin-bottom:4px}details{margin-top:16px}summary{cursor:pointer;font-weight:600;font-size:.9rem;color:var(--color-muted)}"
+        "@media (max-width: 800px){body{padding:16px}.summary-grid{grid-template-columns:1fr}.summary-grid dt{text-align:left}.snapshot-card{flex-direction:column}.certainty-bar-row{flex-direction:column;align-items:stretch}.certainty-bar-label{min-width:0}.link-rail{flex-direction:column}}"
         "</style></head><body>"
         f"{body}"
         "</body></html>"
+    )
+
+
+def _metric_card(label: str, value: Any, copy: str) -> str:
+    return (
+        "<div class='metric-card'>"
+        f"<span class='metric-card-label'>{escape(label)}</span>"
+        f"<span class='metric-card-value'>{escape(str(value))}</span>"
+        f"<span class='metric-card-copy'>{escape(copy)}</span>"
+        "</div>"
     )

@@ -4,6 +4,7 @@ import argparse
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 from typing import Any
@@ -114,6 +115,7 @@ def main() -> None:
     audit_dir = output_root / "audit"
     site_dir = output_root / "site"
     provenance_dir = output_root / "provenance"
+    _reset_demo_output(output_root)
     provenance_dir.mkdir(parents=True, exist_ok=True)
 
     reporter = Reporter()
@@ -145,6 +147,7 @@ def main() -> None:
         package = load_audit_package(audit_dir)
         audit_query = AuditQuery(package)
         site_manifest = render_audit_static_site(audit_dir, site_dir)
+        _brand_esa_demo_site(site_dir)
 
         provenance_payloads = _write_provenance_artifacts(
             session_id=session_id,
@@ -634,6 +637,39 @@ def _emit_summary(
     reporter.line(f"- site_pages={site_manifest.get('assertion_count', 0) + site_manifest.get('rule_trace_count', 0) + site_manifest.get('candidate_evidence_count', 0)} (see site_manifest.json for full counts)")
     reporter.line(f"- site_index={site_dir / 'index.html'}")
     reporter.line()
+
+
+def _reset_demo_output(output_root: Path) -> None:
+    for child_name in ("audit", "site", "provenance"):
+        child = output_root / child_name
+        if child.exists():
+            shutil.rmtree(child)
+    summary_path = output_root / "summary.txt"
+    if summary_path.exists():
+        summary_path.unlink()
+
+
+def _brand_esa_demo_site(site_dir: Path) -> None:
+    index_path = site_dir / "index.html"
+    if not index_path.exists():
+        return
+    html = index_path.read_text(encoding="utf-8")
+    html = html.replace(
+        "<title>Compliance Audit Review Site</title>",
+        "<title>ESSB-ST-U-007 Space Debris Mitigation Compliance Audit</title>",
+        1,
+    )
+    html = html.replace(
+        "<h1>Compliance Audit Review Site</h1>",
+        "<h1>ESSB-ST-U-007 Space Debris Mitigation Compliance Audit</h1>",
+        1,
+    )
+    html = html.replace(
+        "Review verdicts, inspect evidence trees, understand certainty, and share the exported audit bundle with any reviewer in a browser.",
+        "Two missions, nine ECSS rules, deterministic compliance decisions, certainty scoring, and exportable audit evidence for ESA review.",
+        1,
+    )
+    index_path.write_text(html, encoding="utf-8")
 
 
 def _compact_terms(terms: list[dict[str, Any]]) -> str:
