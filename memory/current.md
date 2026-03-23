@@ -1,43 +1,39 @@
 # Current Operational Memory
 
-最后更新：2026-03-22
+最后更新：2026-03-23
 
 ## 当前阶段
 
-当前阶段的唯一 active 母蓝图是：
+Active 蓝图：
 
-- [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
+- **母蓝图**: [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md) — Phase 1 验证基本完成
+- **ADR**: [2026-03-22_architectural-decisions-v2.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-03-22_architectural-decisions-v2.md) — 12 条冻结决策
 
-当前阶段的核心判断：
+核心判断：
 
-- 项目定位是 **auditable reasoning framework**，不是自研 reasoning engine。
-- `certainty v1` 已冻结，只作为窄覆盖 heuristic lane 存在。
-- 当前 `candidate_evidence_tree` 更接近 audit trail，不是完整 reasoning explanation。
-- 下一步优先级不是继续补 delivery pipeline，而是：
-  - 真实 ECSS 规则验证
-  - Souffle provenance feasibility PoC
+- 项目定位是 **auditable reasoning framework**，不是自研 reasoning engine
+- **Engine-native provenance 优于外部重建** — 在真实 ECSS 数据上实证确认
+- Certainty v1 已冻结（16 contracts），只作为窄覆盖 heuristic lane
+- Souffle provenance adapter v0 已实现（adapter-local，6 tests）
+- ECSS 规则复杂度确认为低到中等，Datalog 完全适配
+- **唯一技术阻塞**：`ruleref → Souffle query export` 边界阻止 composed 规则的 provenance
 
 ## 当前运行基线
 
-- 测试基线：234 tests 全绿
+- 测试基线：**240 tests 全绿**
 - 分支：`master`
-- delivery baseline：
-  - runtime explain summary / narrative / NL
-  - audit package / query / static site
-  - candidate evidence tree
-  - certainty v1 export / audit / static delivery
+- ECSS demo：9 rules, 2 missions, 5 validation slices, 41 static HTML pages
+- Souffle provenance：flat 规则可用（positive + negative proof trees）
 
-## 当前主风险
+## 下一步方向
 
-- 还没有读并编码真实 ECSS 规则
-- 还没有验证规则复杂度是否超出当前 evidence tree 能力
-- 还没有验证 Souffle provenance 接入成本与 proof shape
+**解决 `ruleref → Souffle query export` 边界**。这是阻止完整 ECSS demo provenance 的唯一 blocker。涉及 `where_compile.py`，需要开子蓝图。
 
 ## 当前不应继续扩张的方向
 
 - certainty v1 新功能
 - probability lane
-- ProofNode implementation
+- ProofNode v1 implementation（等 2+ 引擎样本）
 - 更多 narrative / NL / ranking polish
 
 ## Handoff Archive
@@ -45,11 +41,15 @@
 - [2026-03-20.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-03-20.md)
 - [2026-03-21.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-03-21.md)
 - [2026-03-22.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-03-22.md)
+- [2026-03-23.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-03-23.md)
 
 ## 启动阅读顺序
 
-1. [当前阶段母蓝图](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
-2. [core 架构文档](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/core/docs/01_architecture.md)
-3. [annotation README](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/core/annotation/docs/README.md)
-4. [service runtime docs](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/service/docs/03_runtime_queries_views.md)
-5. [audit overview](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/audit/docs/01_overview.md)
+1. [当前 handoff](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-03-23.md)
+2. [ADR v2](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-03-22_architectural-decisions-v2.md)
+3. [母蓝图](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
+4. [Souffle provenance.py](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/adapters/souffle/provenance.py)
+5. [ECSS demo notebook](/Users/zhenzhili/hnsm-backend/examples/ecss_compliance_demo.ipynb)
+6. [core 架构文档](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/core/docs/01_architecture.md)
+7. [annotation README](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/core/annotation/docs/README.md)
+8. [archive inventory](/Users/zhenzhili/hnsm-backend/docs/blueprints/archive/README.md)
