@@ -1,8 +1,9 @@
 # Sub-Blueprint: Provenance Coverage, Bridge, and Query Ergonomics
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-23
-- Parent: [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](./2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
+- Last Updated: 2026-03-26
+- Parent: [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](../active/2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
 - Audit Log: [2026-03-23_provenance-coverage-and-bridge.audit.md](./2026-03-23_provenance-coverage-and-bridge.audit.md)
 
 ## 1. Problem
@@ -110,7 +111,7 @@ Step 1: provenance_statuses.jsonl
   - query.py: get_candidate_provenance_status
 
 Step 2: candidate page bridge + truncation UX
-  - static_ui.py: status badge, truncation warning, rule number cross-ref
+  - static_ui.py: status badge, truncation warning, visual bridge note
 
 Step 3: package-level summary
   - query.py: list_candidates_with/without_provenance, summarize_provenance_coverage
@@ -127,7 +128,7 @@ Step 3: package-level summary
 - Landing page shows provenance coverage percentage
 - `summarize_provenance_coverage()` returns accurate counts
 - Old packages without `provenance_statuses.jsonl` gracefully fall back to empty
-- 250+ tests green
+- 253+ tests green
 - Audit docs updated
 
 ## 7. Boundary
@@ -137,3 +138,17 @@ Step 3: package-level summary
 - No new service endpoints
 - No multi-engine support
 - Evidence tree ↔ provenance bridge is visual only (HTML labels), not a data model merge
+
+## 8. Outcome / Deviations
+
+- 最终落地结果：
+  - audit package 新增 additive `provenance_statuses.jsonl`，按 candidate 记录 provenance `status` / `engine` / `truncated` / 可选 `reason`。
+  - `AuditQuery` 新增 provenance coverage helpers：`get_candidate_provenance_status(...)`、`list_candidates_with_provenance()`、`list_candidates_without_provenance()`、`summarize_provenance_coverage()`。
+  - static candidate page 现在会显示 provenance availability badge、depth-truncation warning 和 visual bridge note。
+  - static landing page 现在会在 package 含 provenance status rows 时显示 `Provenance Coverage` 与 `Truncated Proofs` metric cards。
+  - regression 覆盖补齐了 status artifact、coverage summary、旧 package fallback、candidate page badge 和 landing page coverage metric。
+- 与原蓝图不同的地方：
+  - package-level coverage 统计明确按唯一 `candidate_id` 去重，而不是按 `candidate_ledger` 原始行数统计。
+  - 没有实现 rule-number cross-reference；最终保留的是 visual bridge note。这与 scoped 修订后的边界一致，也符合当前 audit package 里没有 factpy `rule_ref_id` ↔ Souffle `(Rn)` 显式 mapping artifact 的现实。
+- 归档说明：
+  - 该子蓝图已完成并归档；它是 `provenance-audit-consumer-surface` 之后的收口层，把 provenance 从“已进入产品管道”推进到“可见 coverage、可解释缺口、可读 bridge”的单引擎完整 consumer surface。

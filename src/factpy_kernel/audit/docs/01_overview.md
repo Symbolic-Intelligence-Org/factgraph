@@ -244,6 +244,11 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
   - 只在 export time 既有 accepted candidate、又能用 session-scoped derivation recipe replay 成 query-bearing Souffle package 时写入
   - `provenance_tree` payload 复用 adapter-local `SouffleProofTreeV0` dict shape（`query` / `root` / `rules`）
   - 旧 package 不含该文件时，reader 返回空 dict（向后兼容）
+- `audit/provenance_statuses.jsonl`（可选）
+  - 以 `candidate_id` 为 key 的 flat JSONL rows
+  - 每行格式：`{"candidate_id": "...", "status": "...", "engine": "souffle", "truncated": false, "reason": "..."?}`
+  - 记录 provenance 是否可用、为什么不可用，以及 proof tree 是否含 `subproof` depth truncation
+  - 与 `provenance_trees.jsonl` 一样在 export time 物化；旧 package 不含该文件时，reader 返回空 dict（向后兼容）
 
 这些文件当前是全量导出，不做引用子集裁剪；它们的职责是让离线 audit consumer 能读取 explain carrier，而不是提供 online durable readback。
 
@@ -277,6 +282,14 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 - query 可按 `candidate_id` 查询物化的 engine-native provenance tree
 - static site candidate evidence page 在 certainty section 后渲染 additive `Engine Provenance` section（当 provenance_tree 存在时）
 - provenance_tree 在 export time 由 runtime service 通过 query-bearing Souffle package replay 物化；audit 侧不做 query-time Souffle 执行
+
+当前 `audit.reader` / `AuditQuery` / static UI 也已统一消费 `provenance_statuses.jsonl`：
+
+- reader 读取 JSONL rows → 解析为 `{candidate_id: provenance_status_dict}` mapping（旧 package 若没有该文件则返回空 dict）
+- query 可按 `candidate_id` 查询单个 provenance status，也可做 package-level coverage summary
+- `list_candidates_with_provenance()` / `list_candidates_without_provenance()` / `summarize_provenance_coverage()` 都按唯一 `candidate_id` 统计，而不是按 `candidate_ledger` 原始行数统计
+- static site candidate evidence page 会渲染 provenance availability badge；当 `truncated=true` 时追加 depth-truncation warning
+- static site landing page 会在 package 含 `provenance_statuses.jsonl` 时显示 provenance coverage / truncated proof metric cards
 
 当前不会新增 `rule_trace_summary` 专用 artifact 文件；summary 是 read/query 层的纯派生面，不是新的 durable package contract。
 当前也不会新增 `candidate_evidence_tree` 专用 artifact 文件；candidate tree 同样是 read/query 层的纯派生面，不是新的 durable package contract。
