@@ -33,7 +33,7 @@
 
 ## 4. Current Context
 
-### 4.1 现有 write_runtime_fact 签名
+### 4.1 Souffle 写入路径（已有，不改）
 
 ```python
 write_runtime_fact(session_id, {
@@ -44,20 +44,22 @@ write_runtime_fact(session_id, {
 }, kind="add")
 ```
 
-### 4.2 PyReason 需要什么
+### 4.2 PyReason 需要什么（引擎特定 session）
 
 ```python
-# Node fact:
-pr.add_fact(pr.Fact("affected_clients(entity)", "fact_name", 0, 5))
-# 对应 write_runtime_fact + meta.valid_from/valid_to
+# Node fact — 引擎特有参数在 session API 里：
+pyreason_session.write_node_fact(
+    pred_id="affected_clients", node_ref=entity_ref,
+    value="15000", bound=[0.8, 0.9], active_from=0, active_to=5,
+    meta={"confidence": [0.8, 0.9], "source": "..."},
+)
 
-# Edge fact:
-g.add_edge("John", "Mary", Friends=1)
-# 对应 write_runtime_edge_fact（当前不存在）
-
-# Interval bound:
-pr.add_fact(pr.Fact("confidence(entity)", "fact", 0, 5, bound=[0.8, 0.9]))
-# 对应 meta.confidence = [0.8, 0.9]
+# Edge fact — 图关系，PyReason 一等概念：
+pyreason_session.write_edge_fact(
+    pred_id="friends:strength", from_ref=ref_a, to_ref=ref_b,
+    value="0.9", bound=[0.9, 0.9],
+    meta={"source": "survey"},
+)
 ```
 
 ## 5. Design

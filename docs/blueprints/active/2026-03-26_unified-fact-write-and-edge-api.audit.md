@@ -7,3 +7,5 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-03-26 | scoped | Sub-blueprint created | ADR-14a/b/c decisions frozen; implementation plan defined |
+| 2026-03-26 | scoped | Multiple P1 findings resolved | belief→confidence, dual-write compat, file scope corrections, Relationship predicate shape frozen |
+| 2026-03-26 | implementing | Implementation started | Blueprint cleaned, starting Step 1 (Relationship SDK type) |

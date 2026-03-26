@@ -208,6 +208,68 @@ class Entity(metaclass=EntityMeta):
         return spec
 
 
+class RelationshipMeta(type):
+    def __new__(mcls, name: str, bases: tuple[type, ...], namespace: dict[str, Any]):
+        cls = super().__new__(mcls, name, bases, namespace)
+        if name == "Relationship":
+            return cls
+
+        annotations = dict(getattr(cls, "__annotations__", {}))
+        from_entity = namespace.get("from_entity")
+        if from_entity is None:
+            from_entity = annotations.get("from_entity")
+        to_entity = namespace.get("to_entity")
+        if to_entity is None:
+            to_entity = annotations.get("to_entity")
+
+        if from_entity is None:
+            raise SDKSchemaError(f"Relationship '{name}' must declare from_entity")
+        if to_entity is None:
+            raise SDKSchemaError(f"Relationship '{name}' must declare to_entity")
+
+        from_entity_type = _relationship_endpoint_type_name(
+            from_entity,
+            relationship_name=name,
+            field_name="from_entity",
+        )
+        to_entity_type = _relationship_endpoint_type_name(
+            to_entity,
+            relationship_name=name,
+            field_name="to_entity",
+        )
+
+        fields: list[tuple[str, Field, Any]] = []
+        for attr_name, annotation in annotations.items():
+            if attr_name in {"from_entity", "to_entity"}:
+                continue
+            member = getattr(cls, attr_name, None)
+            if isinstance(member, Field):
+                fields.append((attr_name, member, annotation))
+
+        spec = {
+            "relationship_type": name,
+            "from_entity_type": from_entity_type,
+            "to_entity_type": to_entity_type,
+            "fields": [
+                member.to_authoring(type_domain=_annotation_to_type_domain_runtime(annotation))
+                for _, member, annotation in fields
+            ],
+        }
+        cls.__sdk_relationship_spec__ = spec
+        return cls
+
+
+class Relationship(metaclass=RelationshipMeta):
+    """Base class for relationship (edge) type declarations."""
+
+    @classmethod
+    def sdk_relationship_spec(cls) -> dict[str, Any]:
+        spec = getattr(cls, "__sdk_relationship_spec__", None)
+        if not isinstance(spec, dict):
+            raise SDKSchemaError(f"class '{cls.__name__}' is not a compiled Relationship declaration")
+        return dict(spec)
+
+
 class _UnsetFieldValue:
     """Sentinel for an unset `Field` value on a plain `Entity` instance.
 
@@ -313,6 +375,18 @@ def _looks_like_sdk_dsl_entity_call(args: tuple[Any, ...], kwargs: dict[str, Any
     if len(args) == 1:
         return _is_sdk_dsl_value(args[0])
     return False
+
+
+def _relationship_endpoint_type_name(annotation: Any, *, relationship_name: str, field_name: str) -> str:
+    if isinstance(annotation, str):
+        if not annotation:
+            raise SDKSchemaError(f"Relationship '{relationship_name}' {field_name} must be non-empty string")
+        return annotation
+    if isinstance(annotation, type) and issubclass(annotation, Entity):
+        return annotation.__name__
+    raise SDKSchemaError(
+        f"Relationship '{relationship_name}' {field_name} must be Entity subclass or string"
+    )
 
 
 def _annotation_to_type_domain_runtime(annotation: Any) -> str:

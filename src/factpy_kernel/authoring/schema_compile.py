@@ -31,12 +31,23 @@ def compile_authoring_schema_v1(
     predicates_out: list[dict[str, Any]] = []
     projection_preds: list[str] = []
     projection_entities: list[str] = []
+    relationships_raw = authoring_schema.get("relationships", [])
+    if relationships_raw is None:
+        relationships_raw = []
+    if not isinstance(relationships_raw, list):
+        raise _compile_error("authoring_schema.relationships must be list when provided", path="$.relationships")
 
     for entity_index, entity_raw in enumerate(entities_raw):
         entity_out, entity_preds = _compile_entity(entity_raw, entity_index)
         entities_out.append(entity_out)
         projection_entities.append(entity_out["entity_type"])
         for pred in entity_preds:
+            predicates_out.append(pred)
+            projection_preds.append(pred["pred_id"])
+
+    for rel_index, rel_raw in enumerate(relationships_raw):
+        rel_preds = _compile_relationship(rel_raw, rel_index)
+        for pred in rel_preds:
             predicates_out.append(pred)
             projection_preds.append(pred["pred_id"])
 
@@ -159,6 +170,58 @@ def _compile_entity(entity_raw: Any, entity_index: int) -> tuple[dict[str, Any],
         )
 
     return entity_out, predicates
+
+
+def _compile_relationship(rel_raw: Any, rel_index: int) -> list[dict[str, Any]]:
+    if not isinstance(rel_raw, dict):
+        raise _compile_error(
+            f"relationships[{rel_index}] must be object",
+            path=f"$.relationships[{rel_index}]",
+        )
+
+    relationship_type = rel_raw.get("relationship_type")
+    if not isinstance(relationship_type, str) or not relationship_type:
+        raise _compile_error(
+            f"relationships[{rel_index}].relationship_type must be non-empty string",
+            path=f"$.relationships[{rel_index}].relationship_type",
+        )
+
+    from_entity_type = rel_raw.get("from_entity_type")
+    if not isinstance(from_entity_type, str) or not from_entity_type:
+        raise _compile_error(
+            f"relationships[{rel_index}].from_entity_type must be non-empty string",
+            path=f"$.relationships[{rel_index}].from_entity_type",
+        )
+
+    to_entity_type = rel_raw.get("to_entity_type")
+    if not isinstance(to_entity_type, str) or not to_entity_type:
+        raise _compile_error(
+            f"relationships[{rel_index}].to_entity_type must be non-empty string",
+            path=f"$.relationships[{rel_index}].to_entity_type",
+        )
+
+    fields_raw = rel_raw.get("fields")
+    if not isinstance(fields_raw, list):
+        raise _compile_error(
+            f"relationships[{rel_index}].fields must be list",
+            path=f"$.relationships[{rel_index}].fields",
+        )
+
+    relationship_prefix = _owner_prefix(relationship_type)
+    predicates: list[dict[str, Any]] = []
+    for field_index, field_raw in enumerate(fields_raw):
+        predicates.append(
+            _compile_relationship_field(
+                field_raw=field_raw,
+                relationship_type=relationship_type,
+                relationship_prefix=relationship_prefix,
+                from_entity_type=from_entity_type,
+                to_entity_type=to_entity_type,
+                rel_index=rel_index,
+                field_index=field_index,
+            )
+        )
+    return predicates
 
 
 def _compile_identity_predicate(
@@ -300,6 +363,78 @@ def _compile_field(
     return predicate
 
 
+def _compile_relationship_field(
+    *,
+    field_raw: Any,
+    relationship_type: str,
+    relationship_prefix: str,
+    from_entity_type: str,
+    to_entity_type: str,
+    rel_index: int,
+    field_index: int,
+) -> dict[str, Any]:
+    if not isinstance(field_raw, dict):
+        raise _compile_error(
+            f"relationships[{rel_index}].fields[{field_index}] must be object",
+            path=f"$.relationships[{rel_index}].fields[{field_index}]",
+        )
+
+    py_name = field_raw.get("py_name")
+    if not isinstance(py_name, str) or not py_name:
+        raise _compile_error(
+            f"relationships[{rel_index}].fields[{field_index}].py_name must be non-empty string",
+            path=f"$.relationships[{rel_index}].fields[{field_index}].py_name",
+        )
+
+    cardinality = field_raw.get("cardinality")
+    if cardinality not in {"single", "multi"}:
+        raise _compile_error(
+            f"relationships[{rel_index}].fields[{field_index}].cardinality must be one of single|multi",
+            path=f"$.relationships[{rel_index}].fields[{field_index}].cardinality",
+        )
+
+    value_type = field_raw.get("type_domain")
+    if value_type not in CANONICAL_TAGS:
+        raise _compile_error(
+            f"relationships[{rel_index}].fields[{field_index}].type_domain invalid: {value_type}",
+            path=f"$.relationships[{rel_index}].fields[{field_index}].type_domain",
+        )
+
+    pred_id = _compile_relationship_pred_id(
+        field_raw=field_raw,
+        relationship_prefix=relationship_prefix,
+        rel_index=rel_index,
+        field_index=field_index,
+    )
+
+    arg_specs = [
+        {"name": "from_ref", "type_domain": "entity_ref"},
+        {"name": "to_ref", "type_domain": "entity_ref"},
+        {"name": py_name, "type_domain": value_type},
+    ]
+
+    predicate: dict[str, Any] = {
+        "pred_id": pred_id,
+        "arity": len(arg_specs),
+        "arg_specs": arg_specs,
+        "cardinality": cardinality,
+        "group_key_indexes": [0, 1],
+        "relationship_type": relationship_type,
+        "from_entity_type": from_entity_type,
+        "to_entity_type": to_entity_type,
+        "py_field_name": py_name,
+    }
+    description = field_raw.get("description")
+    if description is not None:
+        if not isinstance(description, str) or not description:
+            raise _compile_error(
+                f"relationships[{rel_index}].fields[{field_index}].description must be non-empty string",
+                path=f"$.relationships[{rel_index}].fields[{field_index}].description",
+            )
+        predicate["description"] = description
+    return predicate
+
+
 def _compile_pred_id(
     *,
     field_raw: dict[str, Any],
@@ -319,6 +454,27 @@ def _compile_pred_id(
             path=f"$.entities[{entity_index}].fields[{field_index}].py_name",
         )
     return f"{owner_prefix}:{local}"
+
+
+def _compile_relationship_pred_id(
+    *,
+    field_raw: dict[str, Any],
+    relationship_prefix: str,
+    rel_index: int,
+    field_index: int,
+) -> str:
+    local = field_raw.get("py_name")
+    if not isinstance(local, str) or not local:
+        raise _compile_error(
+            f"relationships[{rel_index}].fields[{field_index}] must provide py_name",
+            path=f"$.relationships[{rel_index}].fields[{field_index}]",
+        )
+    if not _IDENT_RE.fullmatch(local):
+        raise _compile_error(
+            f"relationships[{rel_index}].fields[{field_index}] local predicate name must match {_IDENT_RE.pattern}: {local}",
+            path=f"$.relationships[{rel_index}].fields[{field_index}].py_name",
+        )
+    return f"{relationship_prefix}:{local}"
 
 
 def _owner_prefix(entity_type: str) -> str:

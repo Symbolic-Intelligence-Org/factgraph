@@ -24,7 +24,7 @@ from .error_codes import (
     QUERY_UNBOUND_VAR,
 )
 from .registry import SDKRegistry
-from .schema import Entity, Field, Identity
+from .schema import Entity, Field, Identity, Relationship
 from .store import SDKStore
 from .dsl import Body, Derivation, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
 from .ingest import IngestResult, ValidationReport
@@ -51,6 +51,7 @@ __all__ = [
     "Entity",
     "Field",
     "Identity",
+    "Relationship",
     "Rule",
     "RuleRef",
     "Derivation",
