@@ -103,10 +103,12 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
             else None
         )
         provenance_tree = query.get_candidate_provenance_tree(candidate_id)
+        provenance_status = query.get_candidate_provenance_status(candidate_id)
         page = _render_candidate_evidence_page(
             candidate_tree,
             narrative=candidate_narrative,
             provenance_tree=provenance_tree,
+            provenance_status=provenance_status,
         )
         (candidate_evidence_dir / f"{_slug_id(candidate_id)}.html").write_text(page, encoding="utf-8")
         candidate_evidence_ids.append(candidate_id)
@@ -663,6 +665,7 @@ def _render_candidate_evidence_page(
     *,
     narrative: dict[str, Any] | None = None,
     provenance_tree: dict[str, Any] | None = None,
+    provenance_status: dict[str, Any] | None = None,
 ) -> str:
     candidate_id = str(tree.get("candidate_id", ""))
     support_digest = str(tree.get("support_digest", ""))
@@ -697,12 +700,63 @@ def _render_candidate_evidence_page(
             f"<dt>{escape(_status_label(status_value))}</dt><dd>{status_badge}</dd>"
         )
     summary_rows.append("</dl>")
+    provenance_status_block = ""
+    if isinstance(provenance_status, dict):
+        ps = str(provenance_status.get("status", "unknown"))
+        truncated = bool(provenance_status.get("truncated"))
+        engine = provenance_status.get("engine")
+        engine_label = engine if isinstance(engine, str) and engine else "unknown"
+        if ps == "present" and not truncated:
+            badge_html = (
+                "<span style='display:inline-block;padding:4px 12px;border-radius:20px;"
+                "font-size:.78rem;font-weight:700;background:#c8e6c9;color:#1b5e20'>"
+                f"Engine Provenance: Available ({escape(engine_label)})"
+                "</span>"
+            )
+        elif ps == "present" and truncated:
+            badge_html = (
+                "<span style='display:inline-block;padding:4px 12px;border-radius:20px;"
+                "font-size:.78rem;font-weight:700;background:#fff3e0;color:#e65100'>"
+                f"Engine Provenance: Truncated ({escape(engine_label)})"
+                "</span>"
+            )
+        else:
+            reason = provenance_status.get("reason")
+            reason_text = reason if isinstance(reason, str) and reason else ps
+            badge_html = (
+                "<span style='display:inline-block;padding:4px 12px;border-radius:20px;"
+                "font-size:.78rem;font-weight:700;background:#ffcdd2;color:#b71c1c'>"
+                f"Engine Provenance: Unavailable — {escape(reason_text)}"
+                "</span>"
+            )
+        provenance_status_block = f"<div style='margin:12px 0'>{badge_html}</div>"
     provenance_block = ""
     if isinstance(provenance_tree, dict):
         provenance_root = provenance_tree.get("root")
         if isinstance(provenance_root, dict):
+            bridge_note = (
+                "<p style='color:var(--color-muted);font-size:.85rem;margin-bottom:8px'>"
+                "The provenance tree below shows the Souffle engine's internal derivation for this candidate. "
+                "Rule numbers (R1, R2, ...) are Souffle-internal and correspond to the compiled form of the "
+                "rules shown in the Evidence Tree above."
+                "</p>"
+            )
+            truncation_warning = ""
+            if isinstance(provenance_status, dict) and provenance_status.get("truncated"):
+                truncation_warning = (
+                    "<div style='background:#fff3e0;border:1px solid #ffe0b2;border-radius:8px;"
+                    "padding:10px 14px;margin:8px 0;font-size:.83rem'>"
+                    "<strong style='color:#e65100'>⚠️ Depth-Truncated Proof</strong><br>"
+                    "This proof tree was truncated by the Souffle engine at its default depth limit. "
+                    "Nodes marked \"Truncated (depth limit)\" represent subtrees that can be expanded with "
+                    "deeper analysis. The truncation does not indicate missing evidence — the full "
+                    "derivation exists in the engine."
+                    "</div>"
+                )
             provenance_block = (
                 "<h2>\U0001f52c Engine Provenance</h2>"
+                f"{bridge_note}"
+                f"{truncation_warning}"
                 "<p style='color:var(--color-muted);font-size:.9rem;margin-bottom:12px'>"
                 "Complete derivation chain from the Souffle reasoning engine. "
                 "Each node shows a derivation step, leaf nodes are base facts or negation checks."
@@ -729,6 +783,7 @@ def _render_candidate_evidence_page(
             "<a href='../candidate_evidence.html'>\u2190 All Evidence Trees</a>"
             "</div>"
             f"{''.join(summary_rows)}"
+            f"{provenance_status_block}"
             f"{narrative_block}"
             f"{provenance_block}"
             "<h2>Derived Binding</h2>"
@@ -751,11 +806,13 @@ def render_candidate_evidence_html(
     *,
     narrative: dict[str, Any] | None = None,
     provenance_tree: dict[str, Any] | None = None,
+    provenance_status: dict[str, Any] | None = None,
 ) -> str:
     return _render_candidate_evidence_page(
         tree,
         narrative=narrative,
         provenance_tree=provenance_tree,
+        provenance_status=provenance_status,
     )
 
 
