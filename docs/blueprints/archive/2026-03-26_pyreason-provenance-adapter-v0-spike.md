@@ -1,6 +1,6 @@
 # Task Blueprint: PyReason Provenance Adapter V0 Spike
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-26
 - Parent: [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](./2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
 - Related:
@@ -164,7 +164,7 @@ Step 5: Tests (adapter-local only)
 
 Fill after implementation:
 
-- Final result:
-- Deviations from blueprint:
-- Updated ProofNode v1 recommendation:
-- Archive notes:
+- Final result: PyReason provenance spike complete. Adapter-local trace carrier (`PyReasonTraceEventV0`/`PyReasonTraceV0`) extracts event-log provenance from PyReason's DataFrame output. Spike script verified on real PyReason 3.0.0 reasoning. 7 synthetic tests, 260 total green.
+- Deviations from blueprint: (1) `pyreason==3.4.0` fails on ARM64 macOS; pinned to 3.0.0. (2) `shared_pet_popularity` rule didn't fire for Bob because the graph needed bidirectional friend edges or different topology; `dog_owner_outdoorsy` rule fired correctly demonstrating clause grounding trace. (3) provenance.py conditionally imports pandas to avoid breaking non-PyReason paths.
+- Updated ProofNode v1 recommendation: Confirmed that proof tree (Souffle) and event log (PyReason) are fundamentally different shapes. Recommend per-candidate engine-specific payload (ADR candidate A) over forced unified tree. ProofNode v1 should NOT be started until at least one more engine's provenance goes through the full audit → static pipeline.
+- Archive notes: Move to archive/. Mother blueprint audit updated.
