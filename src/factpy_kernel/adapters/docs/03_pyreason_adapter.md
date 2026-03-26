@@ -23,6 +23,7 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 |------|------|
 | `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` |
 | `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 batch API / bound / active_from / active_to / annotation templates |
+| `accept.py` | `accept_pyreason_session(...)` — adapter-local accept helper；通过 shared `set_field()` 获取真实 `asrt_id`，再把 `pyreason/semantic/*` 模板落到 `annotation_rows` |
 | `__init__.py` | 空模块入口 |
 
 ## 4. PyReason 推理模型
@@ -94,6 +95,34 @@ with session.batch() as tx:
 | `shared` | `derived` | `confidence_source` | 当前固定为 `pyreason:lower_bound` |
 | `shared` | `source` | `source` / `analyst` / `method` | 从 shared meta 转发 |
 
+### 5A.3 Accept Helper
+
+当前已经有一条最小的 adapter-local accept 路径：
+
+```python
+from factpy_kernel.adapters.pyreason.accept import accept_pyreason_session
+
+result = accept_pyreason_session(ledger, session)
+```
+
+它做两件事：
+
+1. 对每条 buffered fact 走 shared `set_field()`，拿到真正的 `asrt_id`
+2. 只把 `session.annotation_templates` 中的 `pyreason/*` 条目 materialize 成 `AnnotationRow` 并写入 `ledger.append_annotations()`
+
+`shared/*` annotation 不在这里重复写入，因为 `set_field()` 已经会通过 shared whitelist 自动写入。
+
+### 5A.4 当前 accept 约束
+
+PyReason session 内部的 graph node id 仍然是裸字符串（如 `Alice` / `Dog`），而 shared write path 的 ingest key 计算要求 `entity_ref` 走 canonical token。
+
+因此 `accept_pyreason_session(...)` 在写入 Ledger 前会做一个最小的 adapter-local materialization：
+
+- node fact: `Alice` → `idref_v1:User:Alice`
+- edge `to_ref`: `Bob` → `idref_v1:User:Bob`
+
+这不是完整的 factpy entity identity 对齐，只是为了让 PyReason 的 raw graph ids 能进入当前 shared write path。更完整的 identity/encoding 方案留待后续蓝图。
+
 ## 6. Souffle vs PyReason Provenance 对比
 
 ### 6.1 形态
@@ -134,7 +163,7 @@ with session.batch() as tx:
 ## 7. 当前限制
 
 - 不是完整的 factpy adapter（无 evaluate dispatch / rule builder / Ledger accept 集成）
-- `session.annotation_templates` 目前只是模板，还没有直接落到 Ledger `annotation_rows`
+- `session.annotation_templates` 已可通过 `accept_pyreason_session(...)` 落到 Ledger；但当前 accept 仍依赖 adapter-local synthetic `entity_ref` materialization
 - 依赖 `pyreason==3.0.0`（非 repo-managed dependency）
 - ARM64 macOS 首次 JIT 约 `85s`
 - `PyReasonTraceEventV0` 字段未冻结
