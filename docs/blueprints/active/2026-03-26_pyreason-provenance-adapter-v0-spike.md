@@ -99,24 +99,29 @@ def pyreason_trace_to_dict(trace: PyReasonTraceV0) -> dict[str, Any]:
     """Serialize to JSON-friendly dict."""
 ```
 
-### D4: Comparison document (`adapters/pyreason/docs/souffle_vs_pyreason_provenance.md`)
+### D4: Adapter doc + comparison section (`src/factpy_kernel/adapters/docs/03_pyreason_adapter.md`)
 
-Structured comparison:
-- Shape: tree vs event log
-- Temporal: none vs native timesteps
-- Values: Boolean vs interval
-- World assumption: closed vs open
-- Fields that could unify across engines
-- Fields that are engine-specific and should stay in annotations
-- Updated recommendation on ProofNode v1 timing
+Follows existing adapter docs convention (`adapters/docs/01_souffle_adapter.md`, `02_problog_adapter.md`). Contains:
+- PyReason adapter overview (graph input, interval semantics, temporal steps)
+- Trace carrier shape (`PyReasonTraceEventV0` / `PyReasonTraceV0`)
+- §Souffle vs PyReason provenance comparison section:
+  - Shape: tree vs event log
+  - Temporal: none vs native timesteps
+  - Values: Boolean vs interval
+  - World assumption: closed vs open
+  - Fields that could unify across engines
+  - Fields that are engine-specific and should stay in annotations
+  - Updated recommendation on ProofNode v1 timing
 
 ## 6. Implementation Plan
 
 ```
 Step 1: Install + verify PyReason
-  - pip install pyreason
+  - pip install pyreason (manual prerequisite, not added to pyproject.toml)
   - Verify import works on Python 3.10
   - Run a minimal 3-node example
+  - NOTE: pyreason is a spike-only dependency; repo pyproject.toml is NOT modified.
+    Acceptance does not require clean-env/CI reproducibility for this spike.
 
 Step 2: Build pyreason_spike.py
   - Graph with propagation scenario
@@ -128,7 +133,8 @@ Step 3: Create adapters/pyreason/provenance.py
   - parse_pyreason_trace
   - pyreason_trace_to_dict
 
-Step 4: Write comparison doc
+Step 4: Write adapter doc (src/factpy_kernel/adapters/docs/03_pyreason_adapter.md)
+  - Includes Souffle vs PyReason provenance comparison as a section
 
 Step 5: Tests (adapter-local only)
   - Trace parsing from synthetic DataFrame
@@ -138,12 +144,12 @@ Step 5: Tests (adapter-local only)
 
 ## 7. Acceptance Criteria
 
-1. `python examples/pyreason_spike.py` runs successfully on current environment (Python 3.10)
+1. `python examples/pyreason_spike.py` runs successfully on current environment (Python 3.10, with `pip install pyreason` as manual prerequisite)
 2. `nodes_trace` / `edges_trace` DataFrames are extracted and printed
 3. `PyReasonTraceV0` can be serialized to JSON and deserialized
 4. Comparison doc explicitly states "PyReason provenance is an event log, not a proof tree"
 5. Comparison doc gives updated recommendation on whether to proceed to ProofNode v1
-6. No changes to any file outside `adapters/pyreason/`, `examples/`, `docs/`, and `tests/`
+6. No changes to any file outside `adapters/pyreason/`, `adapters/docs/`, `examples/`, `docs/`, and `tests/`. `pyproject.toml` is NOT modified — pyreason is a manual install prerequisite for this spike only
 7. Existing 253 tests unaffected
 
 ## 8. Boundary Constraints
