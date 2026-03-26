@@ -2,11 +2,11 @@
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
 - 最后更新：2026-03-26
-- 状态：adapter-local V0 spike（非正式集成）
+- 状态：adapter-local V0（provenance + session 写入）
 
 ## 1. 概述
 
-PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的最小接入验证。当前只实现了 provenance trace 提取，不包含完整的 schema/fact/rule/evaluate 集成。
+PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的接入。当前实现了 provenance trace 提取和引擎特定写入 session。Rule builder 和 evaluate dispatch 尚未实现（Phase 2/3）。
 
 PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上做区间值时序推理，与 Souffle（确定性 Datalog）和 ProbLog（概率逻辑）都有本质差异。
 
@@ -22,6 +22,7 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 | 文件 | 角色 |
 |------|------|
 | `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` |
+| `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 bound / active_from / active_to |
 | `__init__.py` | 空模块入口 |
 
 ## 4. PyReason 推理模型

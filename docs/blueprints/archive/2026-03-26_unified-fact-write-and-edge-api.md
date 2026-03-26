@@ -1,6 +1,6 @@
 # Sub-Blueprint: Shared Schema Extension + Engine Session Write Path
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-26
 - Parent: [2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md](./2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md)
 - ADR Reference: [2026-03-22_architectural-decisions-v2.md](./2026-03-22_architectural-decisions-v2.md) §ADR-14a, §ADR-14b, §ADR-14c
@@ -227,6 +227,6 @@ Step 4: Integration example
 
 任务完成后填写：
 
-- Final result:
-- Deviations:
-- Archive notes:
+- Final result: Relationship SDK type + PyReason engine session + integration demo. Schema → Relationship → PyReasonSession → write → reason → trace path verified on real pyreason==3.0.0.
+- Deviations: (1) Step 2 cancelled — confidence interval in shared layer violates ADR-14a. Bound→confidence mapping moved to PyReason session. (2) write_protocol.py not changed (removed from scope). (3) runtime_v1.py not changed (PyReason has own session, doesn't go through shared write path).
+- Archive notes: Move to archive/. 291 tests green.
