@@ -1617,6 +1617,61 @@ class CertaintyExplainContractsTests(unittest.TestCase):
             self.assertIsInstance(tree.get("root"), dict)
             self.assertIsInstance(tree.get("rules"), dict)
 
+    def test_provenance_statuses_materialized_in_audit_package(self) -> None:
+        _skip_without_souffle(self)
+
+        with TemporaryDirectory() as registry_root, TemporaryDirectory() as tmp_dir:
+            package_dir, candidate_id = _export_single_candidate_audit_package_with_provenance(
+                registry_root=registry_root,
+                tmp_dir=tmp_dir,
+            )
+
+            status_path = Path(package_dir) / "audit" / "provenance_statuses.jsonl"
+            self.assertTrue(status_path.exists(), f"missing: {status_path}")
+
+            rows = [
+                json.loads(line)
+                for line in status_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual([row["candidate_id"] for row in rows], [candidate_id])
+            self.assertEqual(rows[0]["status"], "present")
+            self.assertEqual(rows[0]["engine"], "souffle")
+            self.assertIn("truncated", rows[0])
+
+    def test_provenance_statuses_loaded_and_summarized_by_audit_query(self) -> None:
+        _skip_without_souffle(self)
+
+        with TemporaryDirectory() as registry_root, TemporaryDirectory() as tmp_dir:
+            package_dir, candidate_id = _export_single_candidate_audit_package_with_provenance(
+                registry_root=registry_root,
+                tmp_dir=tmp_dir,
+            )
+
+            package = load_audit_package(package_dir)
+            self.assertIsInstance(package.provenance_statuses, dict)
+            self.assertIn(candidate_id, package.provenance_statuses)
+
+            audit_query = AuditQuery(package)
+            status = audit_query.get_candidate_provenance_status(candidate_id)
+            self.assertIsNotNone(status)
+            assert status is not None
+            self.assertEqual(status.get("status"), "present")
+            self.assertEqual(status.get("engine"), "souffle")
+
+            with_provenance = audit_query.list_candidates_with_provenance()
+            without_provenance = audit_query.list_candidates_without_provenance()
+            summary = audit_query.summarize_provenance_coverage()
+
+            self.assertEqual(len(with_provenance), 1)
+            self.assertEqual(with_provenance[0]["candidate_id"], candidate_id)
+            self.assertEqual(without_provenance, [])
+            self.assertEqual(summary["total_candidates"], 1)
+            self.assertEqual(summary["with_provenance"], 1)
+            self.assertEqual(summary["without_provenance"], 0)
+            self.assertEqual(summary["coverage_pct"], 100.0)
+            self.assertEqual(summary["by_status"].get("present"), 1)
+
     def test_old_package_without_provenance_returns_empty(self) -> None:
         sdk = SDKStore([User])
         refs = _seed_users_for_syntax_matrix(sdk)
@@ -1672,9 +1727,22 @@ class CertaintyExplainContractsTests(unittest.TestCase):
 
                 package = load_audit_package(package_dir)
                 self.assertEqual(package.provenance_trees, {})
+                self.assertEqual(package.provenance_statuses, {})
 
                 audit_query = AuditQuery(package)
                 self.assertIsNone(audit_query.get_candidate_provenance_tree(candidate["candidate_id"]))
+                self.assertIsNone(audit_query.get_candidate_provenance_status(candidate["candidate_id"]))
+                self.assertEqual(audit_query.list_candidates_with_provenance(), [])
+                without_provenance = audit_query.list_candidates_without_provenance()
+                self.assertEqual(len(without_provenance), 1)
+                self.assertEqual(without_provenance[0]["candidate_id"], candidate["candidate_id"])
+                self.assertEqual(without_provenance[0]["provenance_status"], "unknown")
+                summary = audit_query.summarize_provenance_coverage()
+                self.assertEqual(summary["total_candidates"], 1)
+                self.assertEqual(summary["with_provenance"], 0)
+                self.assertEqual(summary["without_provenance"], 1)
+                self.assertEqual(summary["coverage_pct"], 0.0)
+                self.assertEqual(summary["by_status"].get("unknown"), 1)
             finally:
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
@@ -1695,7 +1763,27 @@ class CertaintyExplainContractsTests(unittest.TestCase):
             self.assertTrue(html_path.exists(), f"missing: {html_path}")
             html = html_path.read_text(encoding="utf-8")
             self.assertIn("Engine Provenance", html)
+            self.assertIn("Engine Provenance: Available", html)
             self.assertIn("Base Fact", html)
+
+    def test_static_site_index_renders_provenance_coverage_metrics(self) -> None:
+        _skip_without_souffle(self)
+
+        with TemporaryDirectory() as registry_root, TemporaryDirectory() as tmp_dir:
+            package_dir, _candidate_id = _export_single_candidate_audit_package_with_provenance(
+                registry_root=registry_root,
+                tmp_dir=tmp_dir,
+            )
+
+            site_dir = str(Path(tmp_dir) / "site")
+            render_audit_static_site(package_dir, site_dir)
+
+            html_path = Path(site_dir) / "index.html"
+            self.assertTrue(html_path.exists(), f"missing: {html_path}")
+            html = html_path.read_text(encoding="utf-8")
+            self.assertIn("Provenance Coverage", html)
+            self.assertIn("100.0%", html)
+            self.assertIn("1/1 candidates with engine proof", html)
 
     def test_fact_confidence_carried_to_evidence_tree(self) -> None:
         sdk = SDKStore([User])
