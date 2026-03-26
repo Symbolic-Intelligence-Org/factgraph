@@ -428,6 +428,21 @@ meta = {
 
 旧 surface 读区间时取 `lower`。引擎特有参数不进 meta。
 
+### ADR-14c.1: 已知 Debt — ProbLog 概率参数在共享层
+
+当前 ProbLog 的 `body_confidences` 和 `Body.confidence` 侵入了共享层：
+
+```
+sdk/dsl/body.py          → Body 类有 confidence 字段
+core/store/_evaluate.py   → body_confidences 参数贯穿 evaluate
+core/store/runtime.py     → Store.evaluate 接受 body_confidences
+core/store/types.py       → BodyConfidencesIR 类型
+```
+
+按 ADR-14a 原则，这些应留在 ProbLog adapter 内部。但当前代码能工作且无产品压力，不在本轮修正。
+
+**迁移时机**：ProbLog provenance spike 时一起重构。将 `body_confidences` 从 core evaluate 签名移到 ProbLog adapter 的 engine_kwargs 里，`Body.confidence` 改为 ProbLogRule 的引擎特定参数。
+
 ### ADR-14d: Layer 2 Rule Builder
 
 **决策（保持）：引擎特定 Rule 子类。**
