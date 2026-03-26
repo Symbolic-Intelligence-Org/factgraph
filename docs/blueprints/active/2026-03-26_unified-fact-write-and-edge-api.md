@@ -119,7 +119,9 @@ class Friends(Relationship):
     strength: str = Field(cardinality="single")
 ```
 
-`Relationship` 在 `schema_ir` 里生成一个 predicate，arity = from_fields + to_fields + own_fields。
+`Relationship` 在 `schema_ir` 里生成一个 predicate，形态为 `(e_ref_from, e_ref_to, ...field_args)`。
+
+**和 edge claim 编码对齐**：`e_ref` = from, `rest_terms[0]` = to, `rest_terms[1:]` = field values。schema_ir predicate 的 `arg_specs[0]` 是 from entity ref，`arg_specs[1]` 是 to entity ref，后续是 Relationship 自身的 Field args。不展开 identity fields——from/to 都用 entity ref（和现有 Entity predicate 的 `e_ref` 约定一致）。
 
 ### 5.4 PyReason Fact Adapter Compiler
 
@@ -145,8 +147,10 @@ def compile_meta_to_bound(meta) -> tuple[float, float]:
 ## 6. Implementation Plan
 
 ```
-Step 1: Meta schema validation
-  - runtime_v1.py: validate extended meta (confidence as float|list, valid_from/to)
+Step 1: Meta schema validation (service + write protocol)
+  - write_protocol.py: 放宽 meta.confidence 校验（float → float | [float, float]）
+  - write_protocol.py: 放宽 meta.valid_from / valid_to 校验（str → int | None）
+  - runtime_v1.py: 透传扩展 meta（不额外校验，依赖 write_protocol）
   - 不改 Souffle 行为（Souffle 忽略 interval/temporal meta）
 
 Step 2: Edge fact API
@@ -184,6 +188,7 @@ Step 5: Integration example
 - `src/factpy_kernel/service/runtime_v1.py`（edge fact endpoint）
 - `src/factpy_kernel/core/store/runtime.py`（edge claim）
 - `src/factpy_kernel/core/store/ledger.py`（edge claim storage if needed）
+- `src/factpy_kernel/core/evidence/write_protocol.py`（meta 校验放宽）
 - `src/factpy_kernel/sdk/`（Relationship type）
 - `src/factpy_kernel/sdk/compile.py`（Relationship → schema_ir 编译）
 - `src/factpy_kernel/authoring/schema_compile.py`（Relationship predicate 生成）
