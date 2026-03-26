@@ -74,6 +74,7 @@ def export_package(
     *,
     certainty_summaries: dict[str, dict[str, Any]] | None = None,
     provenance_trees: dict[str, dict[str, Any]] | None = None,
+    provenance_statuses: dict[str, dict[str, Any]] | None = None,
 ) -> Path:
     if not isinstance(store, Store):
         raise TypeError("store must be Store")
@@ -83,6 +84,8 @@ def export_package(
         raise TypeError("certainty_summaries must be dict[str, dict] | None")
     if provenance_trees is not None and not isinstance(provenance_trees, dict):
         raise TypeError("provenance_trees must be dict[str, dict] | None")
+    if provenance_statuses is not None and not isinstance(provenance_statuses, dict):
+        raise TypeError("provenance_statuses must be dict[str, dict] | None")
 
     package_dir = Path(out_dir)
     schema_dir = package_dir / "schema"
@@ -221,6 +224,14 @@ def export_package(
             provenance_path = audit_dir / "provenance_trees.jsonl"
             _write_jsonl(provenance_path, provenance_rows)
             audit_files["provenance_trees"] = "audit/provenance_trees.jsonl"
+        if provenance_statuses:
+            provenance_status_rows = [
+                {"candidate_id": candidate_id, **status_row}
+                for candidate_id, status_row in sorted(provenance_statuses.items())
+            ]
+            provenance_status_path = audit_dir / "provenance_statuses.jsonl"
+            _write_jsonl(provenance_status_path, provenance_status_rows)
+            audit_files["provenance_statuses"] = "audit/provenance_statuses.jsonl"
 
     (
         claim_rows,

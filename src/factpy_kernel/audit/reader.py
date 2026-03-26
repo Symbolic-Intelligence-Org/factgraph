@@ -28,6 +28,7 @@ class AuditPackageData:
     authoring_apply_events: list[dict[str, Any]]
     certainty_summaries: dict[str, dict[str, Any]]
     provenance_trees: dict[str, dict[str, Any]]
+    provenance_statuses: dict[str, dict[str, Any]]
 
 
 def load_audit_package(package_dir: str | Path) -> AuditPackageData:
@@ -63,6 +64,7 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
         authoring_apply_events=[dict(evt.raw) for evt in load_authoring_apply_events(root)],
         certainty_summaries=_read_certainty_summaries(root, audit_files),
         provenance_trees=_read_provenance_trees(root, audit_files),
+        provenance_statuses=_read_provenance_statuses(root, audit_files),
     )
 
 
@@ -87,7 +89,13 @@ def _read_manifest_audit_files(manifest: dict[str, Any]) -> dict[str, str]:
         if not isinstance(value, str) or not value:
             raise AuditReadError(f"manifest.paths.audit_files.{key} must be non-empty string")
         out[key] = value
-    for key in ("rule_trace_artifacts", "support_artifacts", "certainty_summaries", "provenance_trees"):
+    for key in (
+        "rule_trace_artifacts",
+        "support_artifacts",
+        "certainty_summaries",
+        "provenance_trees",
+        "provenance_statuses",
+    ):
         value = audit_files.get(key)
         if isinstance(value, str) and value:
             out[key] = value
@@ -141,6 +149,19 @@ def _read_provenance_trees(root: Path, mapping: dict[str, str]) -> dict[str, dic
             and isinstance(provenance_tree, dict)
         ):
             result[candidate_id] = provenance_tree
+    return result
+
+
+def _read_provenance_statuses(root: Path, mapping: dict[str, str]) -> dict[str, dict[str, Any]]:
+    rows = _read_optional_jsonl(root, mapping, "provenance_statuses")
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        candidate_id = row.get("candidate_id")
+        if not isinstance(candidate_id, str) or not candidate_id:
+            continue
+        status_row = {key: value for key, value in row.items() if key != "candidate_id"}
+        if status_row:
+            result[candidate_id] = status_row
     return result
 
 

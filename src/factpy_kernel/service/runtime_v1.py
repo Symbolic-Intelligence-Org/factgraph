@@ -853,14 +853,15 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
         query = dto.get("query")
         certainty_map: dict[str, dict[str, Any]] | None = None
         provenance_map: dict[str, dict[str, Any]] | None = None
+        provenance_status_map: dict[str, dict[str, Any]] | None = None
         if package_kind == "audit" and session.registry_root is not None:
             certainty_map = _compute_all_certainty_summaries(
                 session.store,
                 registry_root=session.registry_root,
                 get_candidate_tree=lambda cid: _get_candidate_tree(session, cid),
             )
-        if package_kind == "audit" and session.derivation_recipes:
-            provenance_map = _materialize_provenance_trees(session)
+        if package_kind == "audit":
+            provenance_map, provenance_status_map = _materialize_provenance_trees(session)
         export_package(
             session.store,
             out_dir,
@@ -868,6 +869,7 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
             query=query,
             certainty_summaries=certainty_map,
             provenance_trees=provenance_map,
+            provenance_statuses=provenance_status_map,
         )
         return ok_response(
             package={
@@ -1243,8 +1245,10 @@ def _cache_derivation_recipe(
         session.derivation_recipes[run_id] = recipe
 
 
-def _materialize_provenance_trees(session: RuntimeSession) -> dict[str, dict[str, Any]]:
-    """Materialize Souffle provenance for accepted candidates with cached recipes."""
+def _materialize_provenance_trees(
+    session: RuntimeSession,
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Materialize Souffle provenance plus per-candidate status rows."""
     import tempfile
 
     from factpy_kernel.adapters.souffle.provenance import run_package_provenance
@@ -1257,24 +1261,37 @@ def _materialize_provenance_trees(session: RuntimeSession) -> dict[str, dict[str
         extract_where_variables,
     )
 
-    if not session.derivation_recipes:
-        return {}
-
     accepted_candidates = _accepted_candidate_provenance_rows(session)
     if not accepted_candidates:
-        return {}
+        return {}, {}
 
     by_run_id: dict[str, list[dict[str, Any]]] = {}
+    provenance_trees: dict[str, dict[str, Any]] = {}
+    provenance_statuses: dict[str, dict[str, Any]] = {}
     for row in accepted_candidates:
-        run_id = row["run_id"]
+        candidate_id = row["candidate_id"]
+        run_id = row.get("run_id")
+        if not isinstance(run_id, str) or not run_id:
+            provenance_statuses[candidate_id] = {
+                "status": "missing_recipe",
+                "reason": "no run_id found",
+                "engine": "souffle",
+                "truncated": False,
+            }
+            continue
         if run_id not in session.derivation_recipes:
+            provenance_statuses[candidate_id] = {
+                "status": "missing_recipe",
+                "reason": "no cached recipe for run_id",
+                "engine": "souffle",
+                "truncated": False,
+            }
             continue
         by_run_id.setdefault(run_id, []).append(row)
 
     if not by_run_id:
-        return {}
+        return provenance_trees, provenance_statuses
 
-    provenance_trees: dict[str, dict[str, Any]] = {}
     for run_id, candidate_rows in by_run_id.items():
         recipe = session.derivation_recipes[run_id]
         try:
@@ -1302,9 +1319,25 @@ def _materialize_provenance_trees(session: RuntimeSession) -> dict[str, dict[str
                 run_manifest_path = run_package(package_dir, ["__query__"], engine="souffle")
                 run_manifest = json.loads(run_manifest_path.read_text(encoding="utf-8"))
                 if run_manifest.get("engine_mode") != "souffle" or run_manifest.get("exit_code") != 0:
+                    for row in candidate_rows:
+                        provenance_statuses[row["candidate_id"]] = {
+                            "status": "export_failed",
+                            "reason": "Souffle query execution failed",
+                            "engine": "souffle",
+                            "truncated": False,
+                        }
                     continue
 
                 out_path = package_dir / "outputs" / f"{query_rel}.out.facts"
+                if not out_path.exists():
+                    for row in candidate_rows:
+                        provenance_statuses[row["candidate_id"]] = {
+                            "status": "no_matching_row",
+                            "reason": "Souffle produced no output",
+                            "engine": "souffle",
+                            "truncated": False,
+                        }
+                    continue
                 binding_to_query: dict[tuple[str, ...], str] = {}
                 with out_path.open("r", encoding="utf-8") as handle:
                     for raw_line in handle:
@@ -1315,27 +1348,76 @@ def _materialize_provenance_trees(session: RuntimeSession) -> dict[str, dict[str
                         binding_to_query[row_values] = _souffle_query_text(query_rel, row_values)
 
                 if not binding_to_query:
+                    for row in candidate_rows:
+                        provenance_statuses[row["candidate_id"]] = {
+                            "status": "no_matching_row",
+                            "reason": "Souffle produced no output",
+                            "engine": "souffle",
+                            "truncated": False,
+                        }
                     continue
 
                 for row in candidate_rows:
+                    candidate_id = row["candidate_id"]
                     binding = _candidate_binding_for_recipe(
                         recipe,
                         accepted_args=row["accepted_args"],
                         query_variables=query_variables,
                     )
                     if binding is None:
+                        provenance_statuses[candidate_id] = {
+                            "status": "no_matching_row",
+                            "reason": "candidate terms could not be mapped to query variables",
+                            "engine": "souffle",
+                            "truncated": False,
+                        }
                         continue
                     query_text = binding_to_query.get(binding)
                     if query_text is None:
+                        provenance_statuses[candidate_id] = {
+                            "status": "no_matching_row",
+                            "reason": "candidate not found in query output",
+                            "engine": "souffle",
+                            "truncated": False,
+                        }
                         continue
-                    trees = run_package_provenance(package_dir, [query_text])
+                    try:
+                        trees = run_package_provenance(package_dir, [query_text])
+                    except Exception as exc:
+                        provenance_statuses[candidate_id] = {
+                            "status": "explain_failed",
+                            "reason": str(exc)[:200],
+                            "engine": "souffle",
+                            "truncated": False,
+                        }
+                        continue
                     if not trees:
+                        provenance_statuses[candidate_id] = {
+                            "status": "explain_failed",
+                            "reason": "no proof tree returned",
+                            "engine": "souffle",
+                            "truncated": False,
+                        }
                         continue
-                    provenance_trees[row["candidate_id"]] = _proof_tree_to_dict(trees[0])
+                    tree_dict = _proof_tree_to_dict(trees[0])
+                    truncated = _tree_has_subproof(tree_dict.get("root"))
+                    provenance_trees[candidate_id] = tree_dict
+                    provenance_statuses[candidate_id] = {
+                        "status": "present",
+                        "engine": "souffle",
+                        "truncated": truncated,
+                    }
         except Exception:
+            for row in candidate_rows:
+                provenance_statuses[row["candidate_id"]] = {
+                    "status": "export_failed",
+                    "reason": "query-bearing package export failed",
+                    "engine": "souffle",
+                    "truncated": False,
+                }
             continue
 
-    return provenance_trees
+    return provenance_trees, provenance_statuses
 
 
 def _accepted_candidate_provenance_rows(session: RuntimeSession) -> list[dict[str, Any]]:
@@ -1343,7 +1425,7 @@ def _accepted_candidate_provenance_rows(session: RuntimeSession) -> list[dict[st
     for claim in sorted(session.store.ledger.claims, key=lambda item: item.asrt_id):
         candidate_id = _candidate_meta_str(session, claim.asrt_id, "candidate_id")
         run_id = _candidate_meta_str(session, claim.asrt_id, "run_id")
-        if candidate_id is None or run_id is None:
+        if candidate_id is None:
             continue
         rows.append(
             {
@@ -1387,6 +1469,17 @@ def _souffle_query_text(relation: str, args: tuple[str, ...]) -> str:
         return f"{relation}()"
     rendered_args = ", ".join(json.dumps(arg, ensure_ascii=False) for arg in args)
     return f"{relation}({rendered_args})"
+
+
+def _tree_has_subproof(node: Any) -> bool:
+    if not isinstance(node, dict):
+        return False
+    if node.get("node_type") == "subproof":
+        return True
+    children = node.get("children")
+    if not isinstance(children, list):
+        return False
+    return any(_tree_has_subproof(child) for child in children if isinstance(child, dict))
 
 
 def _proof_tree_to_dict(tree: Any) -> dict[str, Any]:
