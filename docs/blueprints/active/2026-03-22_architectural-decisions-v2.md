@@ -175,24 +175,40 @@ Layer 3: Raw Syntax Escape Hatch
   → 框架仍提供 fact 注入 + provenance 消费
 ```
 
-### 5.4 Unified ProofNode
+### 5.4 Provenance Payload Strategy (ADR-13, updated 2026-03-26)
+
+**Original design (2026-03-22):** Unified `ProofNode` tree with engine-specific annotations.
+
+**Updated decision (2026-03-26):** **Per-candidate engine-specific provenance envelope.** The original `ProofNode` tree design is withdrawn based on two real engine samples:
+
+- **Souffle** produces a **proof tree** (JSON, recursive nodes, per-conclusion)
+- **PyReason** produces an **event log** (DataFrame rows, per-change, temporal)
+
+These are fundamentally different shapes. Forcing PyReason's event log into a tree loses temporal ordering and interval semantics. Forcing Souffle's tree into an event log loses hierarchical proof structure.
+
+**Frozen decision:** Use a **provenance envelope** that preserves engine-native shape:
 
 ```python
+# NOT a unified tree — a typed envelope
 @dataclass(frozen=True)
-class ProofNode:
-    node_id: str
-    node_type: str          # "fact" | "derived" | "negation"
-    relation: str           # "reachable" / "compliant" / ...
-    args: tuple[str, ...]   # ("alice", "zone_3")
-    rule_id: str | None     # which rule derived this
-    children: tuple[ProofNode, ...]
-    annotations: dict[str, Any]
-    # Souffle: {"min_height": 3, "rule_number": 2}
-    # ProbLog: {"probability": 0.73, "proof_index": 1}
-    # PyReason: {"lower": 0.6, "upper": 0.9, "iteration": 5}
+class ProvenanceEnvelope:
+    candidate_id: str
+    engine: str              # "souffle" | "pyreason" | "problog"
+    payload_type: str        # "proof_tree" | "event_log" | "probability_decomposition"
+    payload: dict[str, Any]  # engine-native shape, not forced into a common schema
 ```
 
-每个引擎的 adapter 负责：engine-specific output → ProofNode tree/DAG + engine-specific annotations。
+**Consumer dispatch:** Static HTML, narrative, and query surfaces render by `payload_type`:
+- `proof_tree` → nested tree visualization (existing Souffle renderer)
+- `event_log` → temporal timeline visualization (future PyReason renderer)
+- `probability_decomposition` → probability attribution (future ProbLog renderer)
+
+**What this means for child blueprints:**
+- Do NOT build a unified `ProofNode` tree
+- Do NOT force engine output into a common node schema
+- DO preserve engine-native provenance in adapter-local carriers
+- DO use `engine` + `payload_type` for consumer dispatch
+- The envelope schema itself is a core contract; the payload contents are adapter-local
 
 ### 5.5 跨引擎互通
 
@@ -227,12 +243,21 @@ class ProofNode:
 - aProbLog provenance semiring（per-fact 概率归因）✅
 - **接入成本：中**——需从 subprocess 改为 Python API
 
-### 6.2 接入优先级
+**PyReason explanation** (added 2026-03-26, spike verified):
+- `pr.get_rule_trace()` event log ✅
+- 时间步 + 区间值变化 ✅
+- Clause grounding（哪些节点/边匹配了规则体）✅
+- **形态：event log（DataFrame），不是 proof tree**
+- **接入成本：低**——in-process Python API，无 subprocess
+- **环境约束：`pyreason==3.0.0`，ARM64 macOS 首次 JIT ~85s**
+
+### 6.2 接入优先级（updated 2026-03-26）
 
 ```
-1. Souffle provenance（-t explain + JSON）→ 低成本，直接增厚 evidence tree
-2. ProbLog explain mode → 中成本，概率证据结构
-3. aProbLog provenance semiring → 高成本，per-fact 概率归因
+1. Souffle provenance（-t explain + JSON）→ 已完成，audit pipeline 已接入
+2. PyReason provenance（get_rule_trace）→ spike 完成，adapter-local carrier 已验证
+3. ProbLog explain mode → 未开始，中成本
+4. aProbLog provenance semiring → 未开始，高成本
 ```
 
 ### 6.3 核心原则
@@ -375,7 +400,7 @@ ESA 的要求：
 1. 产品定位：auditable reasoning framework
 2. 三层数据架构：Fact Store / Provenance Store / Evidence Tree View
 3. 引擎隔离：统一 fact + audit，不统一规则
-4. ProofNode 作为统一 provenance 中间层
+4. ~~ProofNode 作为统一 provenance 中间层~~ → **Per-candidate engine-specific provenance envelope**（ADR-13, updated 2026-03-26; see §5.4）
 5. 跨引擎不自动互通
 6. Provenance 从引擎里拿，不在外部重建
 7. Certainty v1 冻结（16 条 contract）
