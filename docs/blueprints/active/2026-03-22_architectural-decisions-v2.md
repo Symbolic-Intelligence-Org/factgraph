@@ -326,6 +326,117 @@ Certainty v1 已完成并冻结（234 tests）。详见 `src/factpy_kernel/core/
 - 轨道清除 ≤ 5 年
 - 无碎片释放
 
+## ADR-14: Multi-Engine Integration Boundary (2026-03-26)
+
+基于 Souffle（完整集成）+ PyReason（spike 验证）+ ProbLog（调研完成）三个真实样本的可行性分析。
+
+### ADR-14a: 事实写入统一（Fact Write Unification）
+
+**决策：统一 API，adapter 编译。**
+
+`write_runtime_fact` 的当前形态（`pred_id` + `e_ref` + `rest_terms` + `meta`）足够通用。各引擎 adapter 负责编译成原生格式：
+
+```
+Souffle adapter: → claim.facts TSV 行
+ProbLog adapter: → Prolog clause（probability 从 meta.confidence 取）
+PyReason adapter: → pr.add_fact() + graph attribute
+```
+
+**Meta schema 扩展**（additive，不破坏现有）：
+
+- `confidence: float | [float, float]` — 单值（Souffle/ProbLog）或区间（PyReason `[lower, upper]`）
+- `valid_from: int | None` — 时间步起始（PyReason temporal facts）
+- `valid_to: int | None` — 时间步终止
+
+### ADR-14b: 边事实 API（Edge Fact API）
+
+**决策：新增 `write_runtime_edge_fact`，不改 `write_runtime_fact`。**
+
+PyReason 的图边是一等公民。在 `write_runtime_fact`（节点属性）旁边加：
+
+```python
+write_runtime_edge_fact(session_id, {
+    "pred_id": "Friends",
+    "from_ref": entity_ref_a,
+    "to_ref": entity_ref_b,
+    "rest_terms": [...],       # 边上的属性值
+    "meta": {...},
+})
+```
+
+Souffle/ProbLog adapter 把 edge fact 编译成普通二元谓词。PyReason adapter 编译成 `g.add_edge(a, b, Friends=val)`。
+
+### ADR-14c: Schema 中的 Relationship 类型
+
+**决策：新增 `Relationship` 概念，与 `Entity` 平行。**
+
+```python
+class Friends(Relationship):
+    from_entity: User
+    to_entity: User
+    strength: float = Field()
+```
+
+所有引擎的 adapter 都能消费 Relationship schema：
+- Souffle: 编译成二元/多元谓词
+- ProbLog: 编译成 Prolog 关系
+- PyReason: 编译成图边类型
+
+### ADR-14d: Layer 2 Rule Builder
+
+**决策：引擎特定 Rule 子类，不用 extension dict。**
+
+```python
+# Layer 1（已有，不改）：
+Rule(where=[Pred(...), ...])  # 所有引擎可用
+
+# Layer 2（新增）：
+PyReasonRule(
+    where=[Pred(...), GraphEdge("Friends", x, y)],
+    timestep_delay=1,
+    output_bound=[0.8, 1.0],
+)
+
+ProbLogRule(
+    where=[Pred(...), ...],
+    probability=0.3,
+)
+```
+
+子类继承 `Rule` 的共享字段（id, version, select, expose, condition_weights），增加引擎特定参数。Adapter compiler 按子类类型 dispatch。
+
+**不用 extension dict 的理由**：子类有类型检查、IDE 补全、明确的引擎归属。Dict 会让引擎边界模糊。
+
+### ADR-14e: Evaluate Engine Dispatch
+
+**决策：通过 `mode` 参数 dispatch，不开独立入口。**
+
+```python
+evaluate_runtime_derivation(session_id, {
+    "derivation": {
+        "mode": "native" | "souffle" | "pyreason" | "problog",
+        ...
+    },
+    "engine_options": {        # 引擎特定参数（可选）
+        "timesteps": 3,        # PyReason only
+    }
+})
+```
+
+`native` 保持现有行为（根据 where clause 类型自动选引擎）。显式 `pyreason` / `problog` 强制使用特定引擎。
+
+### ADR-14 实施优先级
+
+```
+Phase 1: 事实写入统一 + edge fact API
+Phase 2: Layer 2 Rule builder（PyReasonRule + ProbLogRule）
+Phase 3: Evaluate dispatch + result normalization
+```
+
+每个 Phase 开独立子蓝图。
+
+---
+
 ## 9. ESA Interaction Context
 
 ### 9.1 ESA 反馈摘要
