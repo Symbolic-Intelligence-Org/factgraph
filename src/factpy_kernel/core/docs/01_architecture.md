@@ -1,7 +1,7 @@
 # Core 架构总览（factpy_kernel）
 
 - 适用范围：`src/factpy_kernel/core`
-- 最后更新：2026-03-21
+- 最后更新：2026-03-26
 - 代码基线：`Store.evaluate` 仅支持 `native|souffle|problog`；`Ledger` 为 SQLite write-through cache；`ProjectorAudit` 为 v2 结构
 - 目标读者：需要理解 core 语义边界、关键入口与扩展点的开发者
 
@@ -81,27 +81,58 @@ src/factpy_kernel/core/
 
 - `Claim`：断言主记录（`asrt_id`, `pred_id`, `e_ref`, `rest_terms`）
 - `ClaimArg`：参数行式展开（`idx`, `val_atom`, `tag`）
-- `MetaRow`：元数据（`kind` in `str/int/float/bool/time/json`）
+- `MetaRow`：元数据（`kind` in `str/int/float/bool/time/json`）— **legacy compatibility layer**
+- `AnnotationRow`：assertion-level annotation（`asrt_id`, `namespace`, `category`, `key`, `kind`, `value`, `origin`, `derivation`）— **canonical annotation carrier**（2026-03-26 新增）
 - `Revokes`：撤销关系（`revoker_asrt_id -> revoked_asrt_id`）
 - `AppendResult`：原子写结果（`asrt_id`, `written`）
 
-持久化实现要点：
+### 4.1 四层数据架构（updated 2026-03-26）
 
-- SQLite 表为真相：`claims/claim_args/meta_rows/revokes/ingest_keys/ledger_meta`
+Ledger 的持久化表现在对应四层数据架构（详见 [Assertion Annotation Store Decision](../../../docs/blueprints/active/2026-03-26_assertion-annotation-store-decision.md)）：
+
+| 层 | SQLite 表 | 职责 |
+|----|----------|------|
+| **Claim Store** | `claims` + `claim_args` | 事实本身：pred_id + args |
+| **Annotation Store** | `annotation_rows` | 关于事实的所有附加语义：来源、引擎真值、派生摘要、操作状态 |
+| **Legacy Compat** | `meta_rows` | 旧 consumer 兼容层；新数据同时写入 annotation_rows 和 meta_rows |
+| **Provenance Store** | audit package JSONL | 推理过程（proof tree / event log） |
+
+`AnnotationRow` 按 `namespace` + `category` 组织：
+
+- `namespace`：`shared | pyreason | problog | souffle`
+- `category`：`source | semantic | derived | operational`
+- `origin`：`observed | derived`
+
+`meta_rows` 保留为 legacy compatibility layer。旧 consumer 继续读 `meta_rows`，新 consumer 应读 `annotation_rows`。
+
+### 4.2 持久化实现要点
+
+- SQLite 表为真相：`claims/claim_args/meta_rows/annotation_rows/revokes/ingest_keys/ledger_meta`
 - 内存索引为读缓存：启动加载 + 提交后写透维护
+- `annotation_rows` 具有 `UNIQUE(asrt_id, namespace, category, key)` 约束，支持 upsert 语义
 - `Ledger(path=":memory:")` 与 `Ledger(path="...")` 均可用
 
 ## 5. 关键运行链路
 
-### 5.1 写入链路（append-only）
+### 5.1 写入链路（append-only, updated 2026-03-26）
 
 ```mermaid
 flowchart LR
   A["write_protocol.set_field/add_field"] --> B["Ledger.append_assertion"]
+  A --> A2["_annotation_rows_for_claim (shared whitelist)"]
+  A2 --> B
   C["write_protocol.retract_by_asrt"] --> D["Ledger.append_revocation"]
   E["write_protocol.replace_field"] --> C
   E --> A
 ```
+
+`write_protocol` 现在在写入时做**双写**：白名单 meta key 同时投影到 `annotation_rows`（canonical）和 `meta_rows`（legacy）。
+
+白名单（`_SHARED_ANNOTATION_WHITELIST`）：
+- `shared/source`：`source`, `source_loc`, `trace_id`, `approved_by`, `note`
+- `shared/derived`：`confidence`
+
+未在白名单中的自定义 meta key 继续只写 `meta_rows`。Revocation 不产生 annotation。
 
 ### 5.2 Evaluate 链路
 

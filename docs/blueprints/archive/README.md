@@ -23,7 +23,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-03-23
+最后更新：2026-03-26
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
@@ -124,3 +124,6 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-23 | provenance-audit-consumer-surface | implemented | Souffle provenance 进入正式 audit pipeline：`provenance_trees.jsonl` 物化、AuditQuery 读取、candidate static page 渲染 `Engine Provenance` section |
 | 2026-03-23 | provenance-coverage-and-bridge | implemented | Provenance consumer surface 收口：`provenance_statuses.jsonl`、candidate badge / truncation UX、package-level coverage summary 与 landing page coverage metrics |
 | 2026-03-23 | esa-demo-packaging | implemented | Standalone ESA demo script + static HTML polish + positioning doc + walkthrough doc; 9 ECSS rules, 2 missions, provenance, 26-page audit site |
+| 2026-03-26 | pyreason-provenance-adapter-v0-spike | implemented | PyReason adapter-local provenance carrier (event log, not proof tree); `PyReasonTraceEventV0` / `PyReasonTraceV0`; verified on pyreason==3.0.0 |
+| 2026-03-26 | unified-fact-write-and-edge-api | implemented | Relationship SDK type + schema_ir compilation + PyReason engine-specific write session (Phase 1) |
+| 2026-03-26 | annotation-store-v0-schema-and-ledger | implemented | Assertion Annotation Store: `AnnotationRow` + `annotation_rows` DDL + shared whitelist dual-write in `write_protocol` + legacy `meta_rows` projection; 51 new tests |

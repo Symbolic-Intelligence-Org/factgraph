@@ -11,6 +11,8 @@ from typing import Any, Iterator, Literal
 
 
 META_KINDS = {"str", "int", "float", "bool", "time", "json"}
+ANNOTATION_ORIGINS = {"observed", "derived"}
+ANNOTATION_CATEGORIES = {"source", "semantic", "derived", "operational"}
 _JSON_BYTES_KEY = "__factpy_bytes_b64__"
 
 
@@ -36,6 +38,20 @@ class MetaRow:
     key: str
     kind: str
     value: Any
+
+
+@dataclass(frozen=True)
+class AnnotationRow:
+    """Assertion-level annotation per decision blueprint §4.1."""
+
+    asrt_id: str
+    namespace: str
+    category: str
+    key: str
+    kind: str
+    value: Any
+    origin: str
+    derivation: str | None = None
 
 
 @dataclass(frozen=True)
@@ -119,6 +135,25 @@ CREATE INDEX IF NOT EXISTS idx_meta_asrt_key_kind ON meta_rows(asrt_id, key, kin
 
 CREATE INDEX IF NOT EXISTS idx_revokes_revoked ON revokes(revoked_asrt_id);
 CREATE INDEX IF NOT EXISTS idx_revokes_revoker ON revokes(revoker_asrt_id);
+
+CREATE TABLE IF NOT EXISTS annotation_rows (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    asrt_id    TEXT NOT NULL,
+    namespace  TEXT NOT NULL,
+    category   TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    value      TEXT NOT NULL,
+    origin     TEXT NOT NULL,
+    derivation TEXT,
+    UNIQUE(asrt_id, namespace, category, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_anno_asrt ON annotation_rows(asrt_id);
+CREATE INDEX IF NOT EXISTS idx_anno_ns_cat ON annotation_rows(namespace, category);
+CREATE INDEX IF NOT EXISTS idx_anno_key ON annotation_rows(key);
+CREATE INDEX IF NOT EXISTS idx_anno_asrt_ns_cat_key
+    ON annotation_rows(asrt_id, namespace, category, key);
 """
 
 
@@ -271,12 +306,13 @@ class Ledger:
         claim: Claim,
         claim_args: list[ClaimArg],
         meta_rows: list[MetaRow],
+        annotation_rows: list[AnnotationRow] | None = None,
         idempotency: Idempotency | None = None,
         asrt_id: str | None = None,
     ) -> AppendResult:
         _validate_claim_input(claim, require_asrt_id=False)
         _validate_claim_args_rows(claim_args)
-        _validate_meta_rows(meta_rows)
+        _validate_meta_rows_for_append_assertion(meta_rows)
         effective_asrt_id = asrt_id or (
             claim.asrt_id if isinstance(claim.asrt_id, str) and claim.asrt_id else _new_asrt_id()
         )
@@ -315,11 +351,28 @@ class Ledger:
             )
             for row in meta_rows
         ]
+        actual_annotation_rows = [
+            AnnotationRow(
+                asrt_id=effective_asrt_id,
+                namespace=row.namespace,
+                category=row.category,
+                key=row.key,
+                kind=row.kind,
+                value=row.value,
+                origin=row.origin,
+                derivation=row.derivation,
+            )
+            for row in (annotation_rows or [])
+        ]
+        if actual_annotation_rows:
+            _validate_annotation_rows(actual_annotation_rows)
 
         with self._transaction():
             self._insert_claim(actual_claim, effective_asrt_id)
             self._insert_claim_args(actual_claim_args, effective_asrt_id)
             self._insert_meta_rows(actual_meta_rows, effective_asrt_id)
+            if actual_annotation_rows:
+                self._insert_annotation_rows(actual_annotation_rows)
             if idempotency is not None:
                 self._conn.execute(
                     "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, 'assertion')",
@@ -329,6 +382,8 @@ class Ledger:
         self._idx_add_claim(actual_claim)
         self._idx_add_claim_args(actual_claim_args)
         self._idx_add_meta(actual_meta_rows)
+        if actual_annotation_rows:
+            self._idx_add_annotation(actual_annotation_rows)
         if idempotency is not None:
             self._ingest_keys[idempotency.ingest_key] = (effective_asrt_id, "assertion")
         return AppendResult(asrt_id=effective_asrt_id, written=True)
@@ -450,6 +505,28 @@ class Ledger:
             )
         self._idx_add_meta(actual_rows)
 
+    def append_annotations(self, rows: list[AnnotationRow]) -> None:
+        _validate_annotation_rows(rows)
+        for row in rows:
+            if not self._is_known_asrt_id(row.asrt_id):
+                raise ValueError(f"unknown asrt_id for annotation: {row.asrt_id}")
+        actual_rows = [
+            AnnotationRow(
+                asrt_id=row.asrt_id,
+                namespace=row.namespace,
+                category=row.category,
+                key=row.key,
+                kind=row.kind,
+                value=row.value,
+                origin=row.origin,
+                derivation=row.derivation,
+            )
+            for row in rows
+        ]
+        with self._transaction():
+            self._insert_annotation_rows(actual_rows)
+        self._idx_add_annotation(actual_rows)
+
     def append_revokes(self, row: Revokes) -> None:
         """
         .. deprecated::
@@ -517,6 +594,33 @@ class Ledger:
             return list(self._meta_by_kind.get(kind, []))
         return list(self._meta_rows_data)
 
+    def find_annotations(
+        self,
+        asrt_id: str | None = None,
+        namespace: str | None = None,
+        category: str | None = None,
+        key: str | None = None,
+    ) -> list[AnnotationRow]:
+        if asrt_id is not None:
+            rows = self._anno_by_asrt_id.get(asrt_id, [])
+        elif namespace is not None and category is not None:
+            rows = self._anno_by_ns_cat.get((namespace, category), [])
+        elif key is not None:
+            rows = self._anno_by_key.get(key, [])
+        else:
+            rows = self._annotation_rows_data
+
+        result = rows
+        if asrt_id is not None:
+            result = [row for row in result if row.asrt_id == asrt_id]
+        if namespace is not None:
+            result = [row for row in result if row.namespace == namespace]
+        if category is not None:
+            result = [row for row in result if row.category == category]
+        if key is not None:
+            result = [row for row in result if row.key == key]
+        return list(result)
+
     def has_active_revocation(self, revoked_asrt_id: str) -> bool:
         return revoked_asrt_id in self._revoked_asrt_ids
 
@@ -534,6 +638,10 @@ class Ledger:
     @property
     def meta_rows(self) -> list[MetaRow]:
         return list(self._meta_rows_data)
+
+    @property
+    def annotation_rows(self) -> list[AnnotationRow]:
+        return list(self._annotation_rows_data)
 
     @property
     def _meta_rows(self) -> _MetaRowsProxy:
@@ -603,6 +711,12 @@ class Ledger:
         self._meta_by_asrt_id_key_kind: dict[tuple[str, str, str], list[MetaRow]] = {}
         self._meta_ingest_key_asrt_ids: dict[str, list[str]] = {}
 
+        self._annotation_rows_data: list[AnnotationRow] = []
+        self._anno_by_asrt_id: dict[str, list[AnnotationRow]] = {}
+        self._anno_by_ns_cat: dict[tuple[str, str], list[AnnotationRow]] = {}
+        self._anno_by_key: dict[str, list[AnnotationRow]] = {}
+        self._anno_by_identity: dict[tuple[str, str, str, str], AnnotationRow] = {}
+
         self._revokes_data: list[Revokes] = []
         self._revoker_asrt_ids: set[str] = set()
         self._revoked_asrt_ids: set[str] = set()
@@ -618,6 +732,13 @@ class Ledger:
         self._meta_by_asrt_id_key.clear()
         self._meta_by_asrt_id_key_kind.clear()
         self._meta_ingest_key_asrt_ids.clear()
+
+    def _clear_annotation_indexes(self) -> None:
+        self._annotation_rows_data = []
+        self._anno_by_asrt_id.clear()
+        self._anno_by_ns_cat.clear()
+        self._anno_by_key.clear()
+        self._anno_by_identity.clear()
 
     def _idx_add_claim(self, claim: Claim) -> None:
         self._claims.append(claim)
@@ -641,6 +762,45 @@ class Ledger:
             self._meta_by_asrt_id_key_kind.setdefault((row.asrt_id, row.key, row.kind), []).append(row)
             if row.key == "ingest_key" and row.kind == "str" and isinstance(row.value, str):
                 self._meta_ingest_key_asrt_ids.setdefault(row.value, []).append(row.asrt_id)
+
+    def _idx_add_annotation(self, rows: list[AnnotationRow]) -> None:
+        for row in rows:
+            identity = (row.asrt_id, row.namespace, row.category, row.key)
+            existing = self._anno_by_identity.get(identity)
+            if existing is not None:
+                self._idx_remove_annotation(existing)
+            self._annotation_rows_data.append(row)
+            self._anno_by_asrt_id.setdefault(row.asrt_id, []).append(row)
+            self._anno_by_ns_cat.setdefault((row.namespace, row.category), []).append(row)
+            self._anno_by_key.setdefault(row.key, []).append(row)
+            self._anno_by_identity[identity] = row
+
+    def _idx_remove_annotation(self, row: AnnotationRow) -> None:
+        with suppress(ValueError):
+            self._annotation_rows_data.remove(row)
+
+        rows = self._anno_by_asrt_id.get(row.asrt_id)
+        if rows is not None:
+            with suppress(ValueError):
+                rows.remove(row)
+            if not rows:
+                self._anno_by_asrt_id.pop(row.asrt_id, None)
+
+        rows = self._anno_by_ns_cat.get((row.namespace, row.category))
+        if rows is not None:
+            with suppress(ValueError):
+                rows.remove(row)
+            if not rows:
+                self._anno_by_ns_cat.pop((row.namespace, row.category), None)
+
+        rows = self._anno_by_key.get(row.key)
+        if rows is not None:
+            with suppress(ValueError):
+                rows.remove(row)
+            if not rows:
+                self._anno_by_key.pop(row.key, None)
+
+        self._anno_by_identity.pop((row.asrt_id, row.namespace, row.category, row.key), None)
 
     def _idx_add_revoke(self, row: Revokes) -> None:
         self._revokes_data.append(row)
@@ -667,6 +827,25 @@ class Ledger:
             "SELECT asrt_id, key, kind, value FROM meta_rows ORDER BY id"
         ).fetchall():
             self._idx_add_meta([MetaRow(row["asrt_id"], row["key"], row["kind"], _dec(row["value"]))])
+
+        for row in self._conn.execute(
+            "SELECT asrt_id, namespace, category, key, kind, value, origin, derivation"
+            " FROM annotation_rows ORDER BY id"
+        ).fetchall():
+            self._idx_add_annotation(
+                [
+                    AnnotationRow(
+                        row["asrt_id"],
+                        row["namespace"],
+                        row["category"],
+                        row["key"],
+                        row["kind"],
+                        _dec(row["value"]),
+                        row["origin"],
+                        row["derivation"],
+                    )
+                ]
+            )
 
         for row in self._conn.execute(
             "SELECT revoker_asrt_id, revoked_asrt_id FROM revokes ORDER BY id"
@@ -735,6 +914,26 @@ class Ledger:
             [(asrt_id, row.key, row.kind, _enc(row.value)) for row in rows],
         )
 
+    def _insert_annotation_rows(self, rows: list[AnnotationRow]) -> None:
+        self._conn.executemany(
+            "INSERT OR REPLACE INTO annotation_rows"
+            " (asrt_id, namespace, category, key, kind, value, origin, derivation)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    row.asrt_id,
+                    row.namespace,
+                    row.category,
+                    row.key,
+                    row.kind,
+                    _enc(row.value),
+                    row.origin,
+                    row.derivation,
+                )
+                for row in rows
+            ],
+        )
+
 
 def _new_asrt_id() -> str:
     return uuid.uuid4().hex
@@ -783,6 +982,40 @@ def _validate_meta_rows(rows: list[MetaRow]) -> None:
             raise ValueError("meta key must be non-empty str")
         if not isinstance(row.asrt_id, str) or not row.asrt_id:
             raise ValueError("meta asrt_id must be non-empty str")
+
+
+def _validate_meta_rows_for_append_assertion(rows: list[MetaRow]) -> None:
+    for row in rows:
+        if not isinstance(row, MetaRow):
+            raise TypeError("rows must contain MetaRow")
+        if row.kind not in META_KINDS:
+            raise ValueError(f"unsupported meta kind: {row.kind}")
+        if not isinstance(row.key, str) or not row.key:
+            raise ValueError("meta key must be non-empty str")
+        if not isinstance(row.asrt_id, str):
+            raise ValueError("meta asrt_id must be str when provided")
+
+
+def _validate_annotation_rows(rows: list[AnnotationRow]) -> None:
+    for row in rows:
+        if not isinstance(row, AnnotationRow):
+            raise TypeError("rows must contain AnnotationRow")
+        if not isinstance(row.asrt_id, str) or not row.asrt_id:
+            raise ValueError("annotation asrt_id must be non-empty str")
+        if not isinstance(row.namespace, str) or not row.namespace:
+            raise ValueError("annotation namespace must be non-empty str")
+        if row.category not in ANNOTATION_CATEGORIES:
+            raise ValueError(f"unsupported annotation category: {row.category}")
+        if not isinstance(row.key, str) or not row.key:
+            raise ValueError("annotation key must be non-empty str")
+        if row.kind not in META_KINDS:
+            raise ValueError(f"unsupported annotation kind: {row.kind}")
+        if row.origin not in ANNOTATION_ORIGINS:
+            raise ValueError(f"unsupported annotation origin: {row.origin}")
+        if row.origin == "derived" and (not isinstance(row.derivation, str) or not row.derivation):
+            raise ValueError("derivation must be non-empty when origin='derived'")
+        if row.derivation is not None and not isinstance(row.derivation, str):
+            raise ValueError("annotation derivation must be str when provided")
 
 
 def _validate_revokes_row(row: Revokes) -> None:

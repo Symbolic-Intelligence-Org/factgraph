@@ -10,6 +10,7 @@
   - `docs/blueprints/archive/2026-03-17_runtime-traceability-explainability-blueprint.md`
 - Child Blueprints:
   - `docs/blueprints/active/2026-03-22_ecss-domain-validation-and-souffle-provenance-poc.md`
+  - `docs/blueprints/active/2026-03-26_assertion-annotation-store-decision.md`
 - Related Docs:
   - `docs/architecture_principles.md`
   - `src/factpy_kernel/core/docs/01_architecture.md`
@@ -39,44 +40,41 @@
 - 引擎是可替换的计算后端，框架是产品层
 - 不宣称"我们的推理引擎有概率推理能力"
 
-## 3. Three-Layer Data Architecture
+## 3. Four-Layer Data Architecture (updated 2026-03-26)
 
-### 3.1 核心原则：Input / Output / View 分离
+### 3.1 核心原则：Claim / Annotation / Provenance / View 分离
+
+原三层架构（Fact Store / Provenance Store / Evidence Tree View）扩展为四层。Annotation Store 从原 Fact Store 的 `meta` 中分离出来，解决来源信息、引擎真值语义、派生摘要混在同一 key-value 空间的问题。详见 [Assertion Annotation Store Decision](./2026-03-26_assertion-annotation-store-decision.md)。
 
 ```
-┌─────────────────┐     ┌──────────────────────┐
-│  Fact Store      │     │  Provenance Store     │
-│  (INPUT layer)   │     │  (OUTPUT layer)       │
-│                  │     │                       │
-│  assertion:      │     │  derivation:          │
-│    value         │     │    rule_id            │
-│    meta:         │     │    inputs: [asrt_ids] │
-│      confidence  │     │    engine: souffle    │
-│      source      │     │    timestamp          │
-│      analyst     │     │    min_height         │
-│      method      │     │                       │
-│      date        │     │  (NO reference to     │
-│                  │     │   evidence tree)      │
-│  (NO reference   │     │                       │
-│   to evidence    │     │                       │
-│   tree or        │     │                       │
-│   provenance)    │     │                       │
-└────────┬─────────┘     └──────────┬────────────┘
-         │                          │
-         │    READ                  │    READ
-         └──────────┐  ┌───────────┘
+┌──────────────────┐
+│  Claim Store      │  事实本身：pred_id + args
+│  (INPUT)          │  回答："什么事实"
+└────────┬─────────┘
+         │
+┌────────┴─────────┐  ┌──────────────────────┐
+│  Annotation Store │  │  Provenance Store     │
+│  (METADATA)       │  │  (OUTPUT)             │
+│                   │  │                       │
+│  回答：           │  │  回答：               │
+│  "关于这条事实的  │  │  "这个结论怎么        │
+│   所有附加语义"   │  │   推出来的"           │
+│                   │  │                       │
+│  source / semantic│  │  proof tree /         │
+│  derived / oper.  │  │  event log /          │
+│                   │  │  prob. decomposition  │
+└────────┬─────────┘  └──────────┬────────────┘
+         │                       │
+         │    READ               │    READ
+         └──────────┐  ┌────────┘
                     ▼  ▼
            ┌─────────────────┐
-           │  Evidence Tree   │
-           │  (READ-ONLY VIEW)│
+           │  Evidence /      │
+           │  Audit View      │
+           │  (READ-ONLY)     │
            │                  │
-           │  Combines:       │
-           │  - fact values   │
-           │  - fact metadata │
-           │  - provenance    │
-           │                  │
-           │  NO write-back   │
-           │  to either store │
+           │  按 consumer     │
+           │  需要投影        │
            └──────────────────┘
 ```
 
@@ -168,7 +166,7 @@ PyReason: 图神经推理（区间传播、时序推理、annotated graphs）
 - `write_runtime_fact` 因新引擎增加 `engine_hints` 参数
 - Audit pipeline 因新引擎改变 JSONL 格式
 
-### 5.2.1 通用真值：`confidence` 值域扩展
+### 5.2.1 通用真值：`confidence` 语义 (updated 2026-03-26)
 
 所有引擎都需要表达"这条事实有多真"，但数学框架不同：
 
@@ -178,28 +176,38 @@ ProbLog:  概率（float in [0,1]）
 PyReason: 模糊区间（[lower, upper] in [0,1]）
 ```
 
-**决策：共享层 `confidence` 保持 `float`，不扩展为区间。**
+**决策（修订）：`confidence` 正式降级为面向 consumer 的派生摘要（derived summary），不是统一真值语义。**
 
 ```
-共享层 meta.confidence = float in (0, 1]  ← 不改
-PyReason session 内部 bound = [float, float]  ← 引擎特有，不进共享层
+confidence = float in (0, 1]  ← 类型不变，语义降级
+confidence_source = str        ← 新增，记录派生来源
 ```
 
-PyReason 的区间值 `[lower, upper]` 是引擎特有概念，留在 PyReason session API 里。PyReason session 向审计层写入时，自动取 `lower` 作为 compat `confidence`。
+引擎原生真值语义（bound, probability, boolean truth）通过 **Assertion Annotation Store** 持久化，不再被压缩为单一 confidence 值。详见 [Assertion Annotation Store Decision](./2026-03-26_assertion-annotation-store-decision.md)。
 
-共享层永远只看到 `confidence: float`。certainty v1 的 16 条冻结 contract 不受影响。
+certainty v1 的 16 条冻结 contract 不受影响（继续读 meta_rows 的 confidence）。
 
-### 5.2.2 引擎特有参数不进共享层
+**此修订 supersedes 原 ADR-14c 的具体措施，保留其精神（共享层不膨胀）。**
 
-引擎特有概念（PyReason 时间步、ProbLog annotated disjunctions 等）**留在引擎自己的写入路径和规则 builder 里**，不通过共享 meta 或共享 API 传递。
+### 5.2.2 引擎特有参数的存储策略 (updated 2026-03-26)
+
+引擎特有概念按作用域分层存储：
+
+| 作用域 | 例子 | 存储位置 |
+|--------|------|---------|
+| Assertion-level | `pyreason:bound_lower/upper`, `problog:probability` | Annotation Store (`annotation_rows`) |
+| Run-level | `pyreason:timesteps=5` | Run manifest / audit package metadata |
+| Rule-level | `pyreason:delay=1` | Rule definition / compile artifact |
+| Provenance-level | `trace_type=event_log` | Provenance envelope |
+
+Assertion-level 引擎原生值进入 Annotation Store，在命名空间下隔离（`pyreason/*`, `problog/*`），不污染 shared namespace。共享层永远不膨胀。
 
 ```
-✅ 正确：pyreason_session.write_fact(..., active_from=0, active_to=5)
-❌ 错误：write_runtime_fact(..., meta={"active_from": 0})
+✅ 正确：annotation_rows: pyreason / semantic / bound_lower = 0.6
+✅ 正确：annotation_rows: pyreason / semantic / active_from = 3
+❌ 错误：meta_rows: active_from = 0（引擎概念混入 shared meta）
 ❌ 错误：write_runtime_fact(..., engine_hints={"pyreason": {...}})
 ```
-
-这样共享层永远不膨胀。
 
 ### 5.3 三层规则系统
 
@@ -390,11 +398,12 @@ ProbLog:  problog_session.assert_fact(...)          ← 引擎特定 API
 
 所有路径共同约束：
   1. 校验 schema_ir（pred_id 必须在 schema 里）
-  2. 记录通用 meta（confidence, source, analyst）
+  2. 写入 Annotation Store：来源信息（shared/source）+ 引擎原生语义（engine/semantic）+ 派生摘要（shared/derived）
   3. 写入审计可追溯的存储
+  4. （兼容期）向 meta_rows 投影 legacy confidence
 ```
 
-**原因**：强行统一写入 API 会导致共享接口因新引擎不断膨胀。引擎特有概念（PyReason 时间步/区间/图边、ProbLog 概率标注）留在引擎自己的写入路径里，不进共享 meta。
+**原因**：强行统一写入 API 会导致共享接口因新引擎不断膨胀。引擎特有概念（PyReason 区间/时间步、ProbLog 概率标注）通过 Annotation Store 的命名空间隔离持久化，不进 shared meta namespace。详见 [Annotation Store Decision](./2026-03-26_assertion-annotation-store-decision.md)。
 
 ### ADR-14b: Relationship Schema
 
@@ -409,24 +418,28 @@ class Friends(Relationship):
 
 Relationship 在 `schema_ir` 里生成 predicate，形态 `(e_ref_from, e_ref_to, ...field_args)`。所有引擎的写入路径都校验 Relationship schema。
 
-### ADR-14c: 通用 Meta（confidence 不变 + 来源信息）
+### ADR-14c: 通用 Meta → Annotation Store (superseded 2026-03-26)
 
-**决策：共享 `confidence` 保持 `float`，不扩展值域。引擎特有值域在引擎 session 内部处理。**
+**原决策（2026-03-22）**：共享 `confidence` 保持 `float`，引擎特有值域在 session 内部处理，不进共享 meta。
+
+**修订（2026-03-26）**：原决策的精神保留（共享层不因新引擎膨胀），但具体措施由 [Assertion Annotation Store Decision](./2026-03-26_assertion-annotation-store-decision.md) supersede。主要变更：
+
+1. **`confidence` 降级为 derived summary**——不再是统一真值语义，而是面向 consumer 的派生摘要，附带 `confidence_source` 自文档化
+2. **引擎原生真值语义持久化**——`bound`, `probability` 等通过 Annotation Store 的命名空间隔离存储（`pyreason/semantic`, `problog/semantic`），不再被排斥在持久化之外
+3. **`meta_rows` 退化为 legacy compatibility layer**——旧 consumer 继续读 meta_rows，新数据写 Annotation Store
 
 ```python
-# 共享 meta（不改）：
-meta = {
-    "confidence": 0.8,    # float in (0, 1] — 不变
-    "source": "...",
-    "analyst": "...",
-}
+# 新路径（Annotation Store）：
+annotation: pyreason / semantic / bound_lower = 0.6   # 引擎原生值，零损失
+annotation: pyreason / semantic / bound_upper = 0.9
+annotation: shared / derived / confidence = 0.6        # 派生摘要
+annotation: shared / derived / confidence_source = "pyreason:lower_bound"
 
-# PyReason session 内部（引擎特有）：
-pyreason_session.write_fact(..., bound=[0.6, 0.9])
-# → session 自动记录 meta.confidence = 0.6 (lower) 到审计层
+# 兼容路径（legacy projection）：
+meta_rows: confidence = 0.6   # 旧 consumer 继续读
 ```
 
-引擎特有参数不进 meta。共享层永远不膨胀。
+**共享层仍然不膨胀**：新引擎只增加命名空间（`pyreason/*`），不改 `shared/*` 的 schema。
 
 ### ADR-14c.1: 已知 Debt — ProbLog 概率参数在共享层
 
@@ -443,15 +456,24 @@ core/store/types.py       → BodyConfidencesIR 类型
 
 **迁移时机**：ProbLog provenance spike 时一起重构。将 `body_confidences` 从 core evaluate 签名移到 ProbLog adapter 的 engine_kwargs 里，`Body.confidence` 改为 ProbLogRule 的引擎特定参数。
 
-### ADR-14d: Layer 2 Rule Builder
+### ADR-14d: Layer 2 Rule Builder (updated 2026-03-26)
 
-**决策（保持）：引擎特定 Rule 子类。**
+**决策（修正）：引擎特定语义通过 typed extension payload（`engine_ext`）挂载，不裂成完整子类家族。**
 
 ```python
-Rule(where=[Pred(...)])                                    # Layer 1: all engines
-PyReasonRule(where=[...], timestep_delay=1, bound=[...])  # Layer 2: PyReason
-ProbLogRule(where=[...], probability=0.3)                  # Layer 2: ProbLog
+# Layer 1: 共享——任何引擎消费（受 capability gate 约束）
+Rule(where=[Pred(...)])
+
+# Layer 2: 引擎扩展——通过 engine_ext payload 挂载
+Rule(where=[...], engine_ext=PyReasonRuleExt(timestep_delay=1, bound_threshold=[0.5, 1.0]))
+Rule(where=[...], engine_ext=ProbLogRuleExt(probability=0.3))
 ```
+
+**修正原因**：`Rule`、`Derivation`、`Query` 已在多条路径中被默认消费。裂成 `PyReasonRule/ProbLogRule` 完整子类会迫使 SDK/authoring/compile/registry/preflight 全部扩分支。`engine_ext` payload 保持 Rule 类型单态，只有目标编译器读取 ext。
+
+`engine_ext` 初期适用于 `Rule` 与 `Derivation`。`Query` 默认不分裂，引擎特定执行配置走 `engine_options`（ADR-14e）。
+
+详见 [Annotation Store Decision §Decision 5-6](./2026-03-26_assertion-annotation-store-decision.md)。
 
 ### ADR-14e: Evaluate Engine Dispatch
 
@@ -540,7 +562,7 @@ ESA 的要求：
 ## 12. Frozen Decisions（变更需先修改本蓝图）
 
 1. 产品定位：auditable reasoning framework
-2. 三层数据架构：Fact Store / Provenance Store / Evidence Tree View
+2. ~~三层数据架构：Fact Store / Provenance Store / Evidence Tree View~~ → **四层数据架构：Claim Store / Annotation Store / Provenance Store / Evidence-Audit View**（updated 2026-03-26; see §3 + [Annotation Store Decision](./2026-03-26_assertion-annotation-store-decision.md)）
 3. 引擎隔离：统一 fact + audit，不统一规则
 4. ~~ProofNode 作为统一 provenance 中间层~~ → **Per-candidate engine-specific provenance envelope**（ADR-13, updated 2026-03-26; see §5.4）
 5. 跨引擎不自动互通
@@ -548,6 +570,8 @@ ESA 的要求：
 7. Certainty v1 冻结（16 条 contract）
 8. ECSS 作为第一领域验证目标
 9. 领域先行，系统跟上（不再 system-first）
+10. **`confidence` 是面向 consumer 的派生摘要（derived summary），不是统一真值语义**（2026-03-26; see §5.2.1 + [Annotation Store Decision](./2026-03-26_assertion-annotation-store-decision.md)）
+11. **引擎对事实真值的解释属于 semantic annotation，不属于 claim 本身**（2026-03-26; see [Annotation Store Decision](./2026-03-26_assertion-annotation-store-decision.md)）
 
 ## 13. Acceptance
 

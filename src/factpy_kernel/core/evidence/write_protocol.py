@@ -7,7 +7,15 @@ from uuid import uuid4
 
 from factpy_kernel.core.protocol.digests import sha256_token
 from factpy_kernel.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
-from factpy_kernel.core.store.ledger import Claim, ClaimArg, Idempotency, Ledger, MetaRow, Revokes
+from factpy_kernel.core.store.ledger import (
+    AnnotationRow,
+    Claim,
+    ClaimArg,
+    Idempotency,
+    Ledger,
+    MetaRow,
+    Revokes,
+)
 
 
 class WriteProtocolError(Exception):
@@ -81,6 +89,16 @@ _required_kind_keys = _CONVENTION_META_KEYS | _SENSITIVE_SEMANTIC_META_KEYS
 _missing_kind_map_keys = sorted(_required_kind_keys - set(_KEY_KIND_MAP.keys()))
 if _missing_kind_map_keys:
     raise RuntimeError(f"_KEY_KIND_MAP is missing required keys: {', '.join(_missing_kind_map_keys)}")
+
+_SHARED_ANNOTATION_WHITELIST: dict[str, tuple[str, str]] = {
+    "source": ("source", "observed"),
+    "source_loc": ("source", "observed"),
+    "trace_id": ("source", "observed"),
+    "approved_by": ("source", "observed"),
+    "note": ("source", "observed"),
+    "confidence": ("derived", "observed"),
+}
+
 __all__ = [
     "WriteProtocolError",
     "PolicyNonDeterminismError",
@@ -122,10 +140,12 @@ def set_field(
         for idx, val_atom, tag in claim_arg_rows
     ]
     meta_rows = _meta_rows_for_claim(asrt_id, normalized_meta, ingest_key, ingested_at)
+    annotation_rows = _annotation_rows_for_claim(asrt_id, normalized_meta)
     result = ledger.append_assertion(
         claim=claim,
         claim_args=args,
         meta_rows=meta_rows,
+        annotation_rows=annotation_rows,
         idempotency=Idempotency(ingest_key=ingest_key, on_conflict="skip"),
         asrt_id=asrt_id,
     )
@@ -312,6 +332,36 @@ def _meta_rows_for_claim(
         MetaRow(asrt_id=asrt_id, key="ingest_key", kind="str", value=ingest_key),
     ]
     rows.extend(_user_meta_rows(asrt_id, meta))
+    return rows
+
+
+def _annotation_rows_for_claim(
+    asrt_id: str,
+    meta: dict[str, Any],
+) -> list[AnnotationRow]:
+    """Project whitelisted shared meta keys into canonical annotation rows."""
+    rows: list[AnnotationRow] = []
+    for key in sorted(meta.keys()):
+        entry = _SHARED_ANNOTATION_WHITELIST.get(key)
+        if entry is None:
+            continue
+        category, origin = entry
+        value = meta[key]
+        kind = _KEY_KIND_MAP.get(key)
+        if kind is None:
+            kind = _infer_meta_kind_by_value(key, value)
+        rows.append(
+            AnnotationRow(
+                asrt_id=asrt_id,
+                namespace="shared",
+                category=category,
+                key=key,
+                kind=kind,
+                value=value,
+                origin=origin,
+                derivation=None,
+            )
+        )
     return rows
 
 
