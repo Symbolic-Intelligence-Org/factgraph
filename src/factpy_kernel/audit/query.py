@@ -163,6 +163,65 @@ class AuditQuery:
             raise AuditQueryError("candidate_id must be non-empty string")
         return self.package.provenance_statuses.get(candidate_id)
 
+    def list_candidates_with_provenance(self) -> list[dict[str, Any]]:
+        """Return unique candidate rows that have materialized provenance trees."""
+        result: list[dict[str, Any]] = []
+        for row in self._unique_candidate_rows():
+            candidate_id = row.get("candidate_id")
+            if not isinstance(candidate_id, str) or not candidate_id:
+                continue
+            status = self.package.provenance_statuses.get(candidate_id, {})
+            if status.get("status") == "present":
+                result.append(row)
+        return result
+
+    def list_candidates_without_provenance(self) -> list[dict[str, Any]]:
+        """Return unique candidate rows missing provenance, with status and reason."""
+        result: list[dict[str, Any]] = []
+        for row in self._unique_candidate_rows():
+            candidate_id = row.get("candidate_id")
+            if not isinstance(candidate_id, str) or not candidate_id:
+                continue
+            status = self.package.provenance_statuses.get(candidate_id, {})
+            if status.get("status") == "present":
+                continue
+            item = dict(row)
+            item["provenance_status"] = status.get("status", "unknown")
+            item["provenance_reason"] = status.get("reason", "")
+            result.append(item)
+        return result
+
+    def summarize_provenance_coverage(self) -> dict[str, Any]:
+        """Return package-level provenance coverage for unique candidates."""
+        candidates = self._unique_candidate_rows()
+        total = len(candidates)
+        by_status: dict[str, int] = {}
+        truncated_count = 0
+
+        for row in candidates:
+            candidate_id = row.get("candidate_id")
+            if not isinstance(candidate_id, str) or not candidate_id:
+                continue
+            status = self.package.provenance_statuses.get(candidate_id, {})
+            status_value = status.get("status", "unknown")
+            status_key = status_value if isinstance(status_value, str) and status_value else "unknown"
+            by_status[status_key] = by_status.get(status_key, 0) + 1
+            if status.get("truncated") is True:
+                truncated_count += 1
+
+        with_provenance = by_status.get("present", 0)
+        without_provenance = total - with_provenance
+        coverage_pct = round((with_provenance / total) * 100, 1) if total > 0 else 0.0
+
+        return {
+            "total_candidates": total,
+            "with_provenance": with_provenance,
+            "without_provenance": without_provenance,
+            "truncated": truncated_count,
+            "by_status": by_status,
+            "coverage_pct": coverage_pct,
+        }
+
     def list_decisions(
         self,
         *,
@@ -262,6 +321,14 @@ class AuditQuery:
         if apply_request_id is not None:
             rows = [row for row in rows if row.get("apply_request_id") == apply_request_id]
         return sorted(rows, key=self._authoring_apply_sort_key)
+
+    def _unique_candidate_rows(self) -> list[dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for row in self.list_candidates():
+            candidate_id = row.get("candidate_id")
+            if isinstance(candidate_id, str) and candidate_id and candidate_id not in out:
+                out[candidate_id] = row
+        return [out[candidate_id] for candidate_id in sorted(out)]
 
     def list_authoring_apply_runs(self) -> list[dict[str, Any]]:
         return self.list_authoring_apply_events(kind="authoring_apply_execute_run")

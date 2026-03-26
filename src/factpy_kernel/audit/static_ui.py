@@ -157,6 +157,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
     (root / "candidate_evidence.html").write_text(candidate_evidence_page, encoding="utf-8")
     compliance_matrix_page = _render_compliance_matrix_page(compliance_matrix_rows)
     (root / "compliance_matrix.html").write_text(compliance_matrix_page, encoding="utf-8")
+    provenance_coverage = query.summarize_provenance_coverage() if data.provenance_statuses else None
 
     index_html = _render_index_page(
         run_list,
@@ -165,6 +166,7 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         rule_trace_count=len(rule_trace_ids),
         compliance_matrix_count=len(compliance_matrix_rows),
         candidate_evidence_count=len(candidate_evidence_ids),
+        provenance_coverage=provenance_coverage,
     )
     (root / "index.html").write_text(index_html, encoding="utf-8")
     (root / "search.html").write_text(_render_search_page(), encoding="utf-8")
@@ -233,6 +235,7 @@ def _render_index_page(
     rule_trace_count: int = 0,
     candidate_evidence_count: int = 0,
     compliance_matrix_count: int = 0,
+    provenance_coverage: dict[str, Any] | None = None,
 ) -> str:
     rows = []
     for run in run_list.get("runs", []):
@@ -255,12 +258,41 @@ def _render_index_page(
         if isinstance(authoring_apply_summary, dict)
         else 0
     )
+    provenance_cards = ""
+    if isinstance(provenance_coverage, dict):
+        total = provenance_coverage.get("total_candidates", 0)
+        with_provenance = provenance_coverage.get("with_provenance", 0)
+        coverage_pct = provenance_coverage.get("coverage_pct", 0.0)
+        truncated = provenance_coverage.get("truncated", 0)
+        try:
+            coverage_value = float(coverage_pct)
+        except (TypeError, ValueError):
+            coverage_value = 0.0
+        color = "#2e7d32" if coverage_value >= 80 else ("#ad6800" if coverage_value >= 40 else "#c62828")
+        provenance_cards = (
+            "<div class='metric-card'>"
+            "<span class='metric-card-label'>Provenance Coverage</span>"
+            f"<span class='metric-card-value' style='color:{escape(color)}'>{escape(str(coverage_pct))}%</span>"
+            f"<span class='metric-card-copy'>{escape(str(with_provenance))}/{escape(str(total))} candidates with engine proof</span>"
+            "</div>"
+        )
+        if isinstance(truncated, int) and truncated > 0:
+            provenance_cards += (
+                "<div class='metric-card'>"
+                "<span class='metric-card-label'>Truncated Proofs</span>"
+                "<span class='metric-card-value' style='color:#ad6800'>"
+                f"{escape(str(truncated))}"
+                "</span>"
+                "<span class='metric-card-copy'>Proof trees with depth-limited subtrees</span>"
+                "</div>"
+            )
     hero_cards = (
         "<div class='metric-grid'>"
         f"{_metric_card('Runs', len(run_list.get('runs', [])), 'Recorded reasoning runs in this audit bundle.')}"
         f"{_metric_card('Evidence Trees', candidate_evidence_count, 'Open these pages to inspect why a candidate was derived.')}"
         f"{_metric_card('Rule Traces', rule_trace_count, 'Trace which rules executed and how the proof chain expanded.')}"
         f"{_metric_card('Apply Events', apply_count, 'Authoring and audit events captured in the package.')}"
+        f"{provenance_cards}"
         "</div>"
     )
     return _html_page(
