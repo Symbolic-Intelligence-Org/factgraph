@@ -168,7 +168,7 @@ PyReason: 图神经推理（区间传播、时序推理、annotated graphs）
 - `write_runtime_fact` 因新引擎增加 `engine_hints` 参数
 - Audit pipeline 因新引擎改变 JSONL 格式
 
-### 5.2.1 通用真值：`belief` 区间
+### 5.2.1 通用真值：`confidence` 值域扩展
 
 所有引擎都需要表达"这条事实有多真"，但数学框架不同：
 
@@ -178,19 +178,19 @@ ProbLog:  概率（float in [0,1]）
 PyReason: 模糊区间（[lower, upper] in [0,1]）
 ```
 
-**通用表示**：`belief: float | [float, float]`（区间是通用形式，单值是区间的退化）
+**决策：不引入新字段。扩展 `confidence` 值域为 `float | [float, float]`。**
 
 ```
-belief = 0.8         → [0.8, 0.8]   所有引擎都能消费
-belief = [0.6, 0.9]  → [0.6, 0.9]   PyReason 直接用，Souffle/ProbLog 取 lower
+confidence = 0.8         → [0.8, 0.8]   所有引擎都能消费
+confidence = [0.6, 0.9]  → [0.6, 0.9]   PyReason 直接用，Souffle/ProbLog 取 lower
 ```
 
-每个引擎按自己的语义消费 `belief`：
+每个引擎按自己的语义消费 `confidence`：
 - Souffle certainty 系统：读 `lower` 作为 `condition_confidence`
 - ProbLog：读 `lower` 作为概率标注
 - PyReason：直接用 `[lower, upper]` 作为 bound
 
-`belief` 和冻结的 `confidence` 的关系：`confidence` 保留为向后兼容 alias。框架优先读 `belief`；如果没有，fallback 到 `confidence` → `[c, c]`。已冻结的 certainty v1 contract 不受影响。
+**规范化**：`write_protocol` 内部统一存储为 `[lower, upper]`。旧 surface 读 confidence 时，如果是区间取 `lower`（向后兼容）。certainty v1 的 16 条冻结 contract 不受影响。
 
 ### 5.2.2 引擎特有参数不进共享层
 
@@ -412,20 +412,21 @@ class Friends(Relationship):
 
 Relationship 在 `schema_ir` 里生成 predicate，形态 `(e_ref_from, e_ref_to, ...field_args)`。所有引擎的写入路径都校验 Relationship schema。
 
-### ADR-14c: 通用 Meta（belief + 来源信息）
+### ADR-14c: 通用 Meta（confidence 扩展 + 来源信息）
 
-**决策：`belief` 作为通用真值区间，不因新引擎膨胀。**
+**决策：不引入 `belief`。扩展 `confidence` 值域为 `float | [float, float]`。**
 
 ```python
 meta = {
-    "belief": 0.8,            # float → [0.8, 0.8]
-    "belief": [0.6, 0.9],    # [float, float] → PyReason 直接用
+    "confidence": 0.8,            # float → 内部存为 [0.8, 0.8]
+    # 或
+    "confidence": [0.6, 0.9],    # [float, float] → PyReason 直接用
     "source": "...",
     "analyst": "...",
 }
 ```
 
-`confidence` 保留为向后兼容 alias。引擎特有参数不进 meta。
+旧 surface 读区间时取 `lower`。引擎特有参数不进 meta。
 
 ### ADR-14d: Layer 2 Rule Builder
 

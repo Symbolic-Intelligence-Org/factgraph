@@ -62,20 +62,30 @@ pr.add_fact(pr.Fact("confidence(entity)", "fact", 0, 5, bound=[0.8, 0.9]))
 
 ## 5. Design
 
-### 5.1 通用 Meta：`belief` 区间
+### 5.1 通用 Meta：`confidence` 值域扩展
+
+**决策：不引入 `belief`。继续用 `confidence`，扩展值域为 `float | [float, float]`。**
 
 ```python
 # 通用 meta（所有引擎共用，不因新引擎膨胀）：
 meta = {
-    "belief": 0.8,            # float → 框架内部当作 [0.8, 0.8]
+    "confidence": 0.8,            # float → 框架内部当作 [0.8, 0.8]（已有，不改）
     # 或
-    "belief": [0.6, 0.9],    # [float, float] → PyReason 直接用
+    "confidence": [0.6, 0.9],    # [float, float] → 区间值（新增）
 
     "source": "...",
     "analyst": "...",
-    # confidence 保留为 alias（certainty v1 向后兼容）
 }
 ```
+
+**原因**：`confidence` 已在 16 条冻结 contract + runtime/certainty/mapping/sdk 多个 surface 使用。引入 `belief` 会造成全系统双轨不兼容。区间 `[0.6, 0.9]` 作为 confidence 的扩展值域语义自洽："置信度在 0.6 到 0.9 之间"。
+
+**规范化规则**：
+- `write_protocol` 接受 `confidence: float | [float, float]`
+- 内部 canonical 存储为 `[lower, upper]`
+- 单值 `0.8` 存储为 `[0.8, 0.8]`
+- 旧 surface 读 `confidence` 时：如果是区间，取 `lower`（向后兼容）
+- PyReason adapter 读 confidence 时：直接用 `[lower, upper]`
 
 引擎特有参数（`active_from`、`probability` 等）不进 meta，留在引擎自己的写入 API。
 
@@ -95,7 +105,7 @@ pyreason_session.write_node_fact(
     bound=[0.8, 0.9],       # PyReason 特有：区间值
     active_from=0,           # PyReason 特有：时间步
     active_to=5,
-    meta={"source": "..."},  # 通用 meta（belief 从 bound 自动派生）
+    meta={"confidence": [0.8, 0.9], "source": "..."},  # 通用 meta
 )
 
 # 写边事实（图关系，PyReason 一等概念）
@@ -145,14 +155,14 @@ def compile_node_fact(pred_id, e_ref, rest_terms, meta) -> pr.Fact:
 def compile_edge_fact(pred_id, from_ref, to_ref, rest_terms, meta) -> tuple:
     """Convert write_runtime_edge_fact input to NetworkX edge + pr.Fact."""
 
-def compile_meta_to_bound(meta) -> tuple[float, float]:
-    """Convert meta.confidence to PyReason interval bound."""
+def compile_confidence_to_bound(meta) -> tuple[float, float]:
+    """Convert meta.confidence (float | [float, float]) to PyReason bound."""
     confidence = meta.get("confidence")
-    if isinstance(confidence, list):
-        return tuple(confidence)  # [lower, upper]
+    if isinstance(confidence, (list, tuple)) and len(confidence) == 2:
+        return (float(confidence[0]), float(confidence[1]))
     if isinstance(confidence, (int, float)):
-        return (confidence, confidence)  # single value → point interval
-    return (0.0, 1.0)  # unknown → open world default
+        return (float(confidence), float(confidence))
+    return (0.0, 1.0)  # no confidence → open world default
 ```
 
 ## 6. Implementation Plan
@@ -185,8 +195,8 @@ Step 4: Integration example
 ## 7. Acceptance Criteria
 
 - [ ] 新增 `Relationship` SDK 类型，可编译为 `schema_ir`
-- [ ] `belief` meta 字段定义并校验（float | [float, float]）
-- [ ] `confidence` 保留为向后兼容 alias
+- [ ] `confidence` 值域扩展为 `float | [float, float]`（write_protocol 校验）
+- [ ] 旧 surface 读 confidence 区间时取 `lower`（向后兼容）
 - [ ] PyReason session 可写入 node/edge facts（校验 schema）
 - [ ] 引擎特有参数只在 PyReason session API 里，不进共享 meta
 - [ ] Souffle 现有路径不受影响（260 tests green）
