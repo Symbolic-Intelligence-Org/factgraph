@@ -91,7 +91,17 @@ write_runtime_edge_fact(session_id, {
 }, kind="add")
 ```
 
-Service 层新增 `write_runtime_edge_fact`。Store 层 ledger 用 `edge_claim` 或在现有 `claim` 表里加 `claim_type` 区分。
+Service 层新增 `write_runtime_edge_fact`。
+
+**Edge 存储策略（冻结）**：edge fact 编码成普通 `claim`，不改 ledger schema：
+- `pred_id` = relationship pred_id（例如 `"friends:strength"`）
+- `e_ref` = `from_ref`（边的起点实体）
+- `rest_terms[0]` = `to_ref`（边的终点实体，作为第一个 term）
+- `rest_terms[1:]` = 边属性值
+
+这样 Souffle adapter 自然编译成二元+ 谓词，PyReason adapter 解析 `rest_terms[0]` 为 `to_ref` 构建图边。
+
+**本轮不升级**：generic `list_facts` / `explain` / read surface 不感知 edge 语义。Edge claim 在这些接口里表现为普通 claim（`e_ref` = from, 第一个 term = to）。这是刻意的——避免蔓延到通用读接口。
 
 ### 5.3 Relationship Schema
 
@@ -175,6 +185,8 @@ Step 5: Integration example
 - `src/factpy_kernel/core/store/runtime.py`（edge claim）
 - `src/factpy_kernel/core/store/ledger.py`（edge claim storage if needed）
 - `src/factpy_kernel/sdk/`（Relationship type）
+- `src/factpy_kernel/sdk/compile.py`（Relationship → schema_ir 编译）
+- `src/factpy_kernel/authoring/schema_compile.py`（Relationship predicate 生成）
 - `src/factpy_kernel/adapters/pyreason/`（fact compiler）
 - `src/factpy_kernel/service/docs/`
 - `src/factpy_kernel/tests/`
@@ -185,6 +197,7 @@ Step 5: Integration example
 - Audit pipeline
 - Provenance modules
 - Certainty modules
+- Generic read/explain/list surface（不感知 edge 语义）
 
 ## 9. Outcome
 
