@@ -1,4 +1,4 @@
-# Sub-Blueprint: Unified Fact Write + Edge Fact API
+# Sub-Blueprint: Shared Schema Extension + Engine Session Write Path
 
 - Status: scoped
 - Created: 2026-03-26
@@ -7,25 +7,29 @@
 
 ## 1. Problem
 
-当前只有 Souffle 走了 `write_runtime_fact` → adapter 编译的完整路径。PyReason spike 直接调 `pr.add_fact()`，ProbLog adapter 用 subprocess 传文件。三个引擎的事实写入互不兼容，无法实现"用户写一次，三个引擎都能用"的框架承诺。
+当前只有 Souffle 走了 schema 校验 + 事实写入 + 审计记录的完整路径。PyReason spike 直接调 `pr.add_fact()` 绕过了框架。各引擎的事实写入互不兼容。
 
-此外，PyReason 的图边（edge）是一等公民，当前 API 没有表达能力。
+按修正后的 ADR-14a："Schema 是统一边界，审计是统一出口。写入路径是引擎适配层的事。" 不需要强行统一写入 API，但需要：
+1. 共享 schema 能表达图关系（Relationship）
+2. 通用 meta（belief 区间）有定义
+3. PyReason 有自己的写入 session，校验同一份 schema
 
 ## 2. Goals
 
-- 让 `write_runtime_fact` 的 meta schema 支持区间值和时间窗口
-- 新增 `write_runtime_edge_fact` API
-- 新增 `Relationship` schema 类型
-- 为 PyReason adapter 提供 fact compilation 路径（graph node/edge attribute）
+- 新增 `Relationship` schema 类型（与 Entity 平行）
+- 定义 `belief` 通用真值区间（`confidence` 向后兼容 alias）
+- 为 PyReason 实现引擎特定写入 session（校验 schema，记录审计）
 - 不改 Souffle 现有行为
 
 ## 3. Non-Goals
 
+- 不强行统一写入 API（ADR-14a 已明确：各引擎独立写入路径）
 - 不做 Layer 2 Rule builder（Phase 2）
 - 不做 Evaluate dispatch（Phase 3）
-- 不做 ProbLog fact adapter compiler（本轮只做 PyReason，ProbLog 留到后续）
+- 不做 ProbLog 写入 session（本轮只做 PyReason）
 - 不改 audit pipeline
 - 不改 provenance
+- 不给共享 meta 加引擎特有参数
 
 ## 4. Current Context
 
@@ -58,50 +62,57 @@ pr.add_fact(pr.Fact("confidence(entity)", "fact", 0, 5, bound=[0.8, 0.9]))
 
 ## 5. Design
 
-### 5.1 Meta schema 扩展
+### 5.1 通用 Meta：`belief` 区间
 
 ```python
-# 当前 meta（不改）：
-meta = {"confidence": 0.85}
-
-# 扩展后（additive）：
+# 通用 meta（所有引擎共用，不因新引擎膨胀）：
 meta = {
-    "confidence": 0.85,           # float: Souffle/ProbLog 单值
+    "belief": 0.8,            # float → 框架内部当作 [0.8, 0.8]
     # 或
-    "confidence": [0.8, 0.9],    # [float, float]: PyReason 区间 [lower, upper]
+    "belief": [0.6, 0.9],    # [float, float] → PyReason 直接用
 
-    "valid_from": 0,              # int | None: PyReason 时间步起始
-    "valid_to": 5,                # int | None: PyReason 时间步终止
-
-    # 已有的其他 meta 字段不受影响：
     "source": "...",
     "analyst": "...",
+    # confidence 保留为 alias（certainty v1 向后兼容）
 }
 ```
 
-### 5.2 Edge Fact API
+引擎特有参数（`active_from`、`probability` 等）不进 meta，留在引擎自己的写入 API。
+
+### 5.2 PyReason 写入 Session
+
+PyReason 有自己的写入路径，不走 `write_runtime_fact`：
 
 ```python
-write_runtime_edge_fact(session_id, {
-    "pred_id": "Friends",
-    "from_ref": entity_ref_a,
-    "to_ref": entity_ref_b,
-    "rest_terms": [["string", "1"]],   # 边上的属性值（可选）
-    "meta": {"confidence": 0.95},
-}, kind="add")
+# PyReason 写入 session（引擎特定 API）
+pyreason_session = open_pyreason_session(schema_ir=schema_ir)
+
+# 写节点事实（引擎特有参数在 API 里，不在 meta 里）
+pyreason_session.write_node_fact(
+    pred_id="ict_incident:affected_clients",
+    node_ref=entity_ref,
+    value="15000",
+    bound=[0.8, 0.9],       # PyReason 特有：区间值
+    active_from=0,           # PyReason 特有：时间步
+    active_to=5,
+    meta={"source": "..."},  # 通用 meta（belief 从 bound 自动派生）
+)
+
+# 写边事实（图关系，PyReason 一等概念）
+pyreason_session.write_edge_fact(
+    pred_id="friends:strength",
+    from_ref=entity_ref_a,
+    to_ref=entity_ref_b,
+    value="0.9",
+    bound=[0.9, 0.9],
+    meta={"source": "survey"},
+)
 ```
 
-Service 层新增 `write_runtime_edge_fact`。
-
-**Edge 存储策略（冻结）**：edge fact 编码成普通 `claim`，不改 ledger schema：
-- `pred_id` = relationship pred_id（例如 `"friends:strength"`）
-- `e_ref` = `from_ref`（边的起点实体）
-- `rest_terms[0]` = `to_ref`（边的终点实体，作为第一个 term）
-- `rest_terms[1:]` = 边属性值
-
-这样 Souffle adapter 自然编译成二元+ 谓词，PyReason adapter 解析 `rest_terms[0]` 为 `to_ref` 构建图边。
-
-**本轮不升级**：generic `list_facts` / `explain` / read surface 不感知 edge 语义。Edge claim 在这些接口里表现为普通 claim（`e_ref` = from, 第一个 term = to）。这是刻意的——避免蔓延到通用读接口。
+**共同约束**：
+1. `pred_id` 必须在 `schema_ir` 里（校验 Relationship / Entity schema）
+2. 通用 `meta`（belief, source, analyst）被记录到审计层
+3. 引擎特有参数（bound, active_from）只在 PyReason session 里，不进共享 meta
 
 ### 5.3 Relationship Schema
 
@@ -147,62 +158,57 @@ def compile_meta_to_bound(meta) -> tuple[float, float]:
 ## 6. Implementation Plan
 
 ```
-Step 1: Meta schema validation (service + write protocol)
-  - write_protocol.py: 放宽 meta.confidence 校验（float → float | [float, float]）
-  - write_protocol.py: 放宽 meta.valid_from / valid_to 校验（str → int | None）
-  - runtime_v1.py: 透传扩展 meta（不额外校验，依赖 write_protocol）
-  - 不改 Souffle 行为（Souffle 忽略 interval/temporal meta）
-
-Step 2: Edge fact API
-  - runtime_v1.py: write_runtime_edge_fact
-  - Store: edge claim storage (minimal — can be a tagged claim)
-  - 03_runtime_queries_views.md: document new endpoint
-
-Step 3: Relationship SDK type
-  - sdk/: Relationship class + schema_ir generation
+Step 1: Relationship SDK type + schema_ir 编译
+  - sdk/: Relationship class
+  - sdk/compile.py: Relationship → schema_ir predicate 生成
+  - authoring/schema_compile.py: 扩展 _compile 路径支持 Relationship
+  - predicate 形态: (e_ref_from, e_ref_to, ...field_args)
   - tests: relationship schema compilation
 
-Step 4: PyReason fact compiler
-  - adapters/pyreason/fact_compiler.py
-  - Convert node facts + edge facts to PyReason API calls
-  - tests: synthetic compilation (no real PyReason dependency)
+Step 2: belief meta 定义
+  - write_protocol.py: 放宽 meta 校验，接受 belief (float | [float, float])
+  - confidence 保留为向后兼容 alias
+  - 不改 Souffle 行为
 
-Step 5: Integration example
+Step 3: PyReason 写入 session
+  - adapters/pyreason/session.py: PyReasonSession class
+  - write_node_fact: 校验 schema + 记录 meta + 调 pr.add_fact
+  - write_edge_fact: 校验 Relationship schema + 调 g.add_edge
+  - 引擎特有参数（bound, active_from/to）在 session API 里
+  - tests: synthetic (no real PyReason JIT)
+
+Step 4: Integration example
   - examples/pyreason_integration_demo.py
-  - Uses write_runtime_fact + write_runtime_edge_fact + PyReason evaluate
+  - Schema → Relationship → PyReason session → write → reason → trace
 ```
 
 ## 7. Acceptance Criteria
 
-- [ ] `write_runtime_fact` 接受 `meta.confidence` 为 float 或 `[float, float]`
-- [ ] `write_runtime_fact` 接受 `meta.valid_from` / `meta.valid_to`
-- [ ] 新增 `write_runtime_edge_fact` service endpoint
 - [ ] 新增 `Relationship` SDK 类型，可编译为 `schema_ir`
-- [ ] PyReason fact compiler 可将 node/edge facts 转换为 PyReason API 调用
+- [ ] `belief` meta 字段定义并校验（float | [float, float]）
+- [ ] `confidence` 保留为向后兼容 alias
+- [ ] PyReason session 可写入 node/edge facts（校验 schema）
+- [ ] 引擎特有参数只在 PyReason session API 里，不进共享 meta
 - [ ] Souffle 现有路径不受影响（260 tests green）
-- [ ] 至少一个集成 example 展示 fact write → PyReason evaluate 路径
+- [ ] 至少一个集成 example 展示 schema → PyReason session → write → reason
 
 ## 8. File Scope
 
 允许修改：
-- `src/factpy_kernel/service/runtime_v1.py`（edge fact endpoint）
-- `src/factpy_kernel/core/store/runtime.py`（edge claim）
-- `src/factpy_kernel/core/store/ledger.py`（edge claim storage if needed）
-- `src/factpy_kernel/core/evidence/write_protocol.py`（meta 校验放宽）
 - `src/factpy_kernel/sdk/`（Relationship type）
-- `src/factpy_kernel/sdk/compile.py`（Relationship → schema_ir 编译）
+- `src/factpy_kernel/sdk/compile.py`（Relationship → schema_ir）
 - `src/factpy_kernel/authoring/schema_compile.py`（Relationship predicate 生成）
-- `src/factpy_kernel/adapters/pyreason/`（fact compiler）
-- `src/factpy_kernel/service/docs/`
+- `src/factpy_kernel/core/evidence/write_protocol.py`（belief meta 校验）
+- `src/factpy_kernel/adapters/pyreason/`（session + fact writer）
 - `src/factpy_kernel/tests/`
 - `examples/`
 
 不允许修改：
-- Souffle adapter（不改现有编译路径）
+- `src/factpy_kernel/service/runtime_v1.py`（不加 edge fact endpoint——PyReason 走自己的 session）
+- Souffle adapter（不改现有路径）
 - Audit pipeline
 - Provenance modules
 - Certainty modules
-- Generic read/explain/list surface（不感知 edge 语义）
 
 ## 9. Outcome
 

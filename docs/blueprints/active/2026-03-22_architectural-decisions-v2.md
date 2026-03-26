@@ -143,16 +143,66 @@ PyReason: 图神经推理（区间传播、时序推理、annotated graphs）
 
 三者的编程模型根本不同，不应强行统一规则语法。
 
-### 5.2 统一什么、不统一什么
+### 5.2 统一什么、不统一什么（updated 2026-03-26）
+
+核心理念：**各引擎独立运行，统一审计。** Schema 是统一边界，审计是统一出口。中间的写入/规则/执行是引擎适配层的事。
 
 | 层 | 统一？ | 说明 |
 |----|--------|------|
-| Schema / 实体定义 | ✅ 是 | 所有引擎都需要知道"有哪些实体和谓词" |
-| 事实写入 | ✅ 是 | 一套用户 API + adapter 编译到各引擎原生格式 |
+| Schema / 实体定义 | ✅ 是 | 所有引擎共享同一份 `schema_ir`（Entity, Field, Relationship）。任何引擎写入事实时都必须校验 schema。 |
+| Meta（事实元数据）| ✅ 是 | `belief`（通用真值区间）+ `source` / `analyst` / `method` 等。所有引擎通用，不因新引擎膨胀。 |
+| 事实写入 API | ⚠️ 部分 | **修正**：写入 API 不强行统一。每个引擎有自己的写入路径，但都校验同一份 schema、记录到审计层。Souffle 用 `write_runtime_fact`，PyReason 用引擎特定 session API，ProbLog 同理。 |
 | 规则定义 | ❌ 否 | 编程模型不同，三层规则系统（见 §5.3） |
-| 执行/查询 | ⚠️ 部分 | "跑一下，告诉我结果"可统一；引擎特定行为不统一 |
-| Provenance 消费 | ✅ 是 | Unified ProofNode（见 §5.4） |
-| Audit / Delivery | ✅ 是 | 框架核心价值 |
+| 执行/查询 | ⚠️ 部分 | "跑一下，告诉我结果"可统一接口；引擎特定参数（timesteps、convergence 等）通过 engine_options 传递 |
+| Provenance 消费 | ✅ 是 | Provenance envelope（见 §5.4）：per-candidate、engine-specific payload |
+| **Audit / Delivery** | **✅ 是** | **框架核心价值。所有引擎的推理结果汇入同一条审计管道。** |
+
+**设计原则**：新增引擎时，只需要：
+1. 实现自己的 fact write session（校验 schema，记录 audit）
+2. 实现自己的 rule builder（Layer 2/3）
+3. 实现自己的 provenance extractor（adapter-local carrier）
+4. 不改共享层（schema、meta、audit pipeline）
+
+**不应发生的事**：
+- 共享 `meta` schema 因新引擎增加字段
+- `write_runtime_fact` 因新引擎增加 `engine_hints` 参数
+- Audit pipeline 因新引擎改变 JSONL 格式
+
+### 5.2.1 通用真值：`belief` 区间
+
+所有引擎都需要表达"这条事实有多真"，但数学框架不同：
+
+```
+Souffle:  确定性（true/false），certainty 系统用 confidence 做加权
+ProbLog:  概率（float in [0,1]）
+PyReason: 模糊区间（[lower, upper] in [0,1]）
+```
+
+**通用表示**：`belief: float | [float, float]`（区间是通用形式，单值是区间的退化）
+
+```
+belief = 0.8         → [0.8, 0.8]   所有引擎都能消费
+belief = [0.6, 0.9]  → [0.6, 0.9]   PyReason 直接用，Souffle/ProbLog 取 lower
+```
+
+每个引擎按自己的语义消费 `belief`：
+- Souffle certainty 系统：读 `lower` 作为 `condition_confidence`
+- ProbLog：读 `lower` 作为概率标注
+- PyReason：直接用 `[lower, upper]` 作为 bound
+
+`belief` 和冻结的 `confidence` 的关系：`confidence` 保留为向后兼容 alias。框架优先读 `belief`；如果没有，fallback 到 `confidence` → `[c, c]`。已冻结的 certainty v1 contract 不受影响。
+
+### 5.2.2 引擎特有参数不进共享层
+
+引擎特有概念（PyReason 时间步、ProbLog annotated disjunctions 等）**留在引擎自己的写入路径和规则 builder 里**，不通过共享 meta 或共享 API 传递。
+
+```
+✅ 正确：pyreason_session.write_fact(..., active_from=0, active_to=5)
+❌ 错误：write_runtime_fact(..., meta={"active_from": 0})
+❌ 错误：write_runtime_fact(..., engine_hints={"pyreason": {...}})
+```
+
+这样共享层永远不膨胀。
 
 ### 5.3 三层规则系统
 
@@ -326,49 +376,32 @@ Certainty v1 已完成并冻结（234 tests）。详见 `src/factpy_kernel/core/
 - 轨道清除 ≤ 5 年
 - 无碎片释放
 
-## ADR-14: Multi-Engine Integration Boundary (2026-03-26)
+## ADR-14: Multi-Engine Integration Boundary (2026-03-26, revised)
 
-基于 Souffle（完整集成）+ PyReason（spike 验证）+ ProbLog（调研完成）三个真实样本的可行性分析。
+基于 Souffle（完整集成）+ PyReason（spike 验证）+ ProbLog（调研完成）三个真实样本。
 
-### ADR-14a: 事实写入统一（Fact Write Unification）
+核心原则：**Schema 是统一边界，审计是统一出口。写入/规则/执行是引擎适配层的事。**
 
-**决策：统一 API，adapter 编译。**
+### ADR-14a: 事实写入——共享 schema，独立写入路径
 
-`write_runtime_fact` 的当前形态（`pred_id` + `e_ref` + `rest_terms` + `meta`）足够通用。各引擎 adapter 负责编译成原生格式：
+**决策（修正）：不强行统一写入 API。每个引擎有自己的写入 session，但都校验同一份 schema、记录到审计层。**
 
 ```
-Souffle adapter: → claim.facts TSV 行
-ProbLog adapter: → Prolog clause（probability 从 meta.confidence 取）
-PyReason adapter: → pr.add_fact() + graph attribute
+Souffle:  write_runtime_fact(session_id, {...})     ← 已有，不改
+PyReason: pyreason_session.write_fact(...)          ← 引擎特定 API
+ProbLog:  problog_session.assert_fact(...)          ← 引擎特定 API
+
+所有路径共同约束：
+  1. 校验 schema_ir（pred_id 必须在 schema 里）
+  2. 记录通用 meta（belief, source, analyst）
+  3. 写入审计可追溯的存储
 ```
 
-**Meta schema 扩展**（additive，不破坏现有）：
+**原因**：强行统一写入 API 会导致共享接口因新引擎不断膨胀。引擎特有概念（PyReason 时间步/区间/图边、ProbLog 概率标注）留在引擎自己的写入路径里，不进共享 meta。
 
-- `confidence: float | [float, float]` — 单值（Souffle/ProbLog）或区间（PyReason `[lower, upper]`）
-- `valid_from: int | None` — 时间步起始（PyReason temporal facts）
-- `valid_to: int | None` — 时间步终止
+### ADR-14b: Relationship Schema
 
-### ADR-14b: 边事实 API（Edge Fact API）
-
-**决策：新增 `write_runtime_edge_fact`，不改 `write_runtime_fact`。**
-
-PyReason 的图边是一等公民。在 `write_runtime_fact`（节点属性）旁边加：
-
-```python
-write_runtime_edge_fact(session_id, {
-    "pred_id": "Friends",
-    "from_ref": entity_ref_a,
-    "to_ref": entity_ref_b,
-    "rest_terms": [...],       # 边上的属性值
-    "meta": {...},
-})
-```
-
-Souffle/ProbLog adapter 把 edge fact 编译成普通二元谓词。PyReason adapter 编译成 `g.add_edge(a, b, Friends=val)`。
-
-### ADR-14c: Schema 中的 Relationship 类型
-
-**决策：新增 `Relationship` 概念，与 `Entity` 平行。**
+**决策（保持）：新增 `Relationship` 概念，与 `Entity` 平行。**
 
 ```python
 class Friends(Relationship):
@@ -377,63 +410,45 @@ class Friends(Relationship):
     strength: float = Field()
 ```
 
-所有引擎的 adapter 都能消费 Relationship schema：
-- Souffle: 编译成二元/多元谓词
-- ProbLog: 编译成 Prolog 关系
-- PyReason: 编译成图边类型
+Relationship 在 `schema_ir` 里生成 predicate，形态 `(e_ref_from, e_ref_to, ...field_args)`。所有引擎的写入路径都校验 Relationship schema。
+
+### ADR-14c: 通用 Meta（belief + 来源信息）
+
+**决策：`belief` 作为通用真值区间，不因新引擎膨胀。**
+
+```python
+meta = {
+    "belief": 0.8,            # float → [0.8, 0.8]
+    "belief": [0.6, 0.9],    # [float, float] → PyReason 直接用
+    "source": "...",
+    "analyst": "...",
+}
+```
+
+`confidence` 保留为向后兼容 alias。引擎特有参数不进 meta。
 
 ### ADR-14d: Layer 2 Rule Builder
 
-**决策：引擎特定 Rule 子类，不用 extension dict。**
+**决策（保持）：引擎特定 Rule 子类。**
 
 ```python
-# Layer 1（已有，不改）：
-Rule(where=[Pred(...), ...])  # 所有引擎可用
-
-# Layer 2（新增）：
-PyReasonRule(
-    where=[Pred(...), GraphEdge("Friends", x, y)],
-    timestep_delay=1,
-    output_bound=[0.8, 1.0],
-)
-
-ProbLogRule(
-    where=[Pred(...), ...],
-    probability=0.3,
-)
+Rule(where=[Pred(...)])                                    # Layer 1: all engines
+PyReasonRule(where=[...], timestep_delay=1, bound=[...])  # Layer 2: PyReason
+ProbLogRule(where=[...], probability=0.3)                  # Layer 2: ProbLog
 ```
-
-子类继承 `Rule` 的共享字段（id, version, select, expose, condition_weights），增加引擎特定参数。Adapter compiler 按子类类型 dispatch。
-
-**不用 extension dict 的理由**：子类有类型检查、IDE 补全、明确的引擎归属。Dict 会让引擎边界模糊。
 
 ### ADR-14e: Evaluate Engine Dispatch
 
-**决策：通过 `mode` 参数 dispatch，不开独立入口。**
+**决策（保持）：`mode` 参数 dispatch + `engine_options`。**
 
-```python
-evaluate_runtime_derivation(session_id, {
-    "derivation": {
-        "mode": "native" | "souffle" | "pyreason" | "problog",
-        ...
-    },
-    "engine_options": {        # 引擎特定参数（可选）
-        "timesteps": 3,        # PyReason only
-    }
-})
-```
-
-`native` 保持现有行为（根据 where clause 类型自动选引擎）。显式 `pyreason` / `problog` 强制使用特定引擎。
-
-### ADR-14 实施优先级
+### ADR-14 实施优先级（修正）
 
 ```
-Phase 1: 事实写入统一 + edge fact API
+Phase 1: 共享 schema 扩展（Relationship + belief meta）
+         + PyReason 引擎 session 写入路径
 Phase 2: Layer 2 Rule builder（PyReasonRule + ProbLogRule）
 Phase 3: Evaluate dispatch + result normalization
 ```
-
-每个 Phase 开独立子蓝图。
 
 ---
 
