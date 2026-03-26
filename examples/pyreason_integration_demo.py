@@ -24,8 +24,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from factpy_kernel.sdk import Entity, Identity, Field, Relationship
 from factpy_kernel.sdk.compile import compile_schema_from_classes
+from factpy_kernel.sdk.dsl.expr import LogicVar, Pred
+from factpy_kernel.sdk.dsl.rule import Rule
 from factpy_kernel.adapters.pyreason.accept import accept_pyreason_session
 from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
+from factpy_kernel.adapters.pyreason.rule_ext import (
+    PyReasonFactDef,
+    PyReasonRuleDef,
+    PyReasonRuleExt,
+)
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
 from factpy_kernel.core.store.ledger import Ledger
 
@@ -142,21 +149,42 @@ for entry in session.all_facts_meta[:3]:
 # ════════════════════════════════════════════════════════════════
 
 try:
+    x = LogicVar("x")
+    y = LogicVar("y")
+    z = LogicVar("z")
     run_result = run_pyreason(
         session,
-        rules=[
-            (
-                "popular(x) <-1 popular(y), strength(x,y), since(y,z), since(x,z)",
-                "shared_pet_popularity",
+        rule_defs=[
+            PyReasonRuleDef(
+                rule=Rule(
+                    id="shared_pet_popularity",
+                    version="1.0",
+                    select=[Pred("user:popular", x)],
+                    where=[
+                        Pred("user:popular", y),
+                        Pred("friends:strength", x, y),
+                        Pred("owns:since", y, z),
+                        Pred("owns:since", x, z),
+                    ],
+                ),
+                ext=PyReasonRuleExt(timestep_delay=1),
             ),
-            (
-                "outdoorsy(x) <-0 since(x,y), dog_breed(y)",
-                "dog_owner_outdoorsy",
+            PyReasonRuleDef(
+                rule=Rule(
+                    id="dog_owner_outdoorsy",
+                    version="1.0",
+                    select=[Pred("user:outdoorsy", x)],
+                    where=[
+                        Pred("owns:since", x, y),
+                        Pred("pet:dog_breed", y),
+                    ],
+                ),
+                ext=PyReasonRuleExt(timestep_delay=0),
             ),
         ],
-        facts=[
-            ("popular(Alice)", "alice_popular", 0, 3),
-            ("dog_breed(Dog)", "dog_is_dog", 0, 3),
+        fact_defs=[
+            PyReasonFactDef(atom="popular(Alice)", name="alice_popular", start=0, end=3),
+            PyReasonFactDef(atom="dog_breed(Dog)", name="dog_is_dog", start=0, end=3),
         ],
         config=PyReasonRunConfig(timesteps=2, atom_trace=True),
     )
@@ -238,9 +266,10 @@ print()
 print("  Key integration points:")
 print("  1. Schema: factpy Relationship type → schema_ir predicates")
 print("  2. Session: entity-level batch API routes fields/relationships into facts")
-print("  3. Runner: session -> graph -> reason -> trace -> derived_session")
-print("  4. Confidence: bound=[0.9,0.9] → auto-derived confidence=0.9 for audit")
-print("  5. Annotations: session.annotation_templates + accept helper persist pyreason semantics")
-print("  6. Provenance: PyReasonTraceV0 event log (not proof tree)")
-print("  7. Audit: session.all_facts_meta carries shared meta for buffered facts")
+print("  3. Rules: adapter-local PyReasonRuleDef wraps shared Rule + timestep_delay")
+print("  4. Runner: session -> graph -> reason -> trace -> derived_session")
+print("  5. Confidence: bound=[0.9,0.9] → auto-derived confidence=0.9 for audit")
+print("  6. Annotations: session.annotation_templates + accept helper persist pyreason semantics")
+print("  7. Provenance: PyReasonTraceV0 event log (not proof tree)")
+print("  8. Audit: session.all_facts_meta carries shared meta for buffered facts")
 print(f"{'='*60}")

@@ -2,11 +2,11 @@
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
 - 最后更新：2026-03-26
-- 状态：adapter-local V0（provenance + session 写入 + batch API + runner + accept）
+- 状态：adapter-local V0（provenance + session 写入 + batch API + rule ext + runner + accept）
 
 ## 1. 概述
 
-PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的接入。当前实现了 provenance trace 提取、引擎特定写入 session、entity-level batch API、assertion annotation 模板生成，以及 reusable runner/accept helper。Rule builder 和 evaluate dispatch 尚未实现（Phase 2/3）。
+PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的接入。当前实现了 provenance trace 提取、引擎特定写入 session、entity-level batch API、assertion annotation 模板生成、adapter-local typed rule wrapper，以及 reusable runner/accept helper。Rule builder 和 evaluate dispatch 尚未实现（Phase 2/3）。
 
 PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上做区间值时序推理，与 Souffle（确定性 Datalog）和 ProbLog（概率逻辑）都有本质差异。
 
@@ -23,7 +23,8 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 |------|------|
 | `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` |
 | `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 batch API / bound / active_from / active_to / annotation templates |
-| `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult` |
+| `rule_ext.py` | `PyReasonRuleExt` / `PyReasonRuleDef` / `PyReasonFactDef` / `compile_pyreason_rule(...)` |
+| `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult`；接受 legacy tuple 或 typed defs |
 | `accept.py` | `accept_pyreason_session(...)` — adapter-local accept helper；通过 shared `set_field()` 获取真实 `asrt_id`，再把 `pyreason/semantic/*` 模板落到 `annotation_rows` |
 | `__init__.py` | 空模块入口 |
 
@@ -129,12 +130,35 @@ PyReason session 内部的 graph node id 仍然是裸字符串（如 `Alice` / `
 当前已有一条 reusable 的执行路径，但它仍是 adapter-local helper，不是 `Store.evaluate(mode="pyreason")`：
 
 ```python
+from factpy_kernel.adapters.pyreason.rule_ext import (
+    PyReasonFactDef,
+    PyReasonRuleDef,
+    PyReasonRuleExt,
+)
 from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
+from factpy_kernel.sdk.dsl.expr import LogicVar, Pred
+from factpy_kernel.sdk.dsl.rule import Rule
+
+x = LogicVar("x")
+y = LogicVar("y")
 
 result = run_pyreason(
     session,
-    rules=[("popular(x) <-1 popular(y), strength(x,y)", "friend_popularity")],
-    facts=[("popular(Alice)", "alice_popular", 0, 3)],
+    rule_defs=[
+        PyReasonRuleDef(
+            rule=Rule(
+                id="friend_popularity",
+                version="1.0",
+                select=[Pred("user:popular", x)],
+                where=[
+                    Pred("user:popular", y),
+                    Pred("friends:strength", x, y),
+                ],
+            ),
+            ext=PyReasonRuleExt(timestep_delay=1),
+        )
+    ],
+    fact_defs=[PyReasonFactDef(atom="popular(Alice)", name="alice_popular", start=0, end=3)],
     config=PyReasonRunConfig(timesteps=2, atom_trace=True),
 )
 ```
@@ -152,7 +176,9 @@ result = run_pyreason(
 
 ### 5B.2 Runner 边界
 
-- `run_pyreason(...)` 接受简单 tuple 形式的 rules/facts，不引入新的 rule DSL
+- `run_pyreason(...)` 同时接受 legacy tuple 形式的 `rules` / `facts`，以及 typed `rule_defs` / `fact_defs`
+- `PyReasonRuleDef` 是 adapter-local wrapper：`Rule + PyReasonRuleExt`，不修改 shared `Rule`
+- `compile_pyreason_rule(...)` 当前只支持 `PredAtom` + `LogicVar` + 字面量；`CompareExpr` / `NotExpr` / `RuleRefAtom` 会报明确错误
 - runner 不注册进 `Store.evaluate()`，因为那会引入 WHERE→PyReason rule 编译范围
 - `derived_session` 可以直接接到 `accept_pyreason_session(...)`
 

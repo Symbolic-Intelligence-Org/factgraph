@@ -10,6 +10,11 @@ from factpy_kernel.adapters.pyreason.provenance import (
     parse_pyreason_trace,
     pyreason_trace_to_dict,
 )
+from factpy_kernel.adapters.pyreason.rule_ext import (
+    PyReasonFactDef,
+    PyReasonRuleDef,
+    compile_pyreason_rule,
+)
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
 
 
@@ -160,7 +165,9 @@ def run_pyreason(
     session: PyReasonSession,
     *,
     rules: list[tuple[str, str]] | None = None,
+    rule_defs: list[PyReasonRuleDef] | None = None,
     facts: list[tuple[str, str, int, int]] | None = None,
+    fact_defs: list[PyReasonFactDef] | None = None,
     config: PyReasonRunConfig | None = None,
 ) -> PyReasonRunResult:
     """Run PyReason reasoning on a populated session."""
@@ -168,10 +175,14 @@ def run_pyreason(
 
     if config is None:
         config = PyReasonRunConfig()
-    if rules is None:
-        rules = []
-    if facts is None:
-        facts = []
+
+    all_rules: list[tuple[str, str]] = list(rules or [])
+    for rule_def in rule_defs or []:
+        all_rules.append(compile_pyreason_rule(rule_def))
+
+    all_facts: list[tuple[str, str, int, int]] = list(facts or [])
+    for fact_def in fact_defs or []:
+        all_facts.append((fact_def.atom, fact_def.name, fact_def.start, fact_def.end))
 
     start = time.monotonic()
 
@@ -179,10 +190,10 @@ def run_pyreason(
     pr.reset()
     pr.load_graph(graph)
 
-    for body_str, name_str in rules:
+    for body_str, name_str in all_rules:
         pr.add_rule(pr.Rule(body_str, name_str))
 
-    for atom_str, name_str, start_time, end_time in facts:
+    for atom_str, name_str, start_time, end_time in all_facts:
         pr.add_fact(pr.Fact(atom_str, name_str, start_time, end_time))
 
     pr.settings.atom_trace = config.atom_trace

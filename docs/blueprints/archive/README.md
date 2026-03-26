@@ -125,6 +125,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-23 | provenance-coverage-and-bridge | implemented | Provenance consumer surface 收口：`provenance_statuses.jsonl`、candidate badge / truncation UX、package-level coverage summary 与 landing page coverage metrics |
 | 2026-03-23 | esa-demo-packaging | implemented | Standalone ESA demo script + static HTML polish + positioning doc + walkthrough doc; 9 ECSS rules, 2 missions, provenance, 26-page audit site |
 | 2026-03-26 | pyreason-provenance-adapter-v0-spike | implemented | PyReason adapter-local provenance carrier (event log, not proof tree); `PyReasonTraceEventV0` / `PyReasonTraceV0`; verified on pyreason==3.0.0 |
+| 2026-03-26 | pyreason-rule-ext-v0 | implemented | Adapter-local `PyReasonRuleDef` / `PyReasonRuleExt` / `PyReasonFactDef` + minimal WHERE→PyReason compile helper; runner and demo now accept typed defs while preserving legacy tuples |
 | 2026-03-26 | pyreason-runner-v0 | implemented | Reusable runner helper: session -> graph -> reason -> trace -> derived_session; integration demo now delegates to runner |
 | 2026-03-26 | pyreason-session-batch-api-and-annotations | implemented | `PyReasonSession.batch()` entity-level API + annotation template generation + batch-based integration demo refresh |
 | 2026-03-26 | pyreason-session-annotation-accept-v0 | implemented | Adapter-local accept helper that persists `PyReasonSession` facts to Ledger and materializes `pyreason/semantic/*` annotations via real assertion `asrt_id` binding |
