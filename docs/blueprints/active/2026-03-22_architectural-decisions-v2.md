@@ -178,19 +178,16 @@ ProbLog:  概率（float in [0,1]）
 PyReason: 模糊区间（[lower, upper] in [0,1]）
 ```
 
-**决策：不引入新字段。扩展 `confidence` 值域为 `float | [float, float]`。**
+**决策：共享层 `confidence` 保持 `float`，不扩展为区间。**
 
 ```
-confidence = 0.8         → [0.8, 0.8]   所有引擎都能消费
-confidence = [0.6, 0.9]  → [0.6, 0.9]   PyReason 直接用，Souffle/ProbLog 取 lower
+共享层 meta.confidence = float in (0, 1]  ← 不改
+PyReason session 内部 bound = [float, float]  ← 引擎特有，不进共享层
 ```
 
-每个引擎按自己的语义消费 `confidence`：
-- Souffle certainty 系统：读 `lower` 作为 `condition_confidence`
-- ProbLog：读 `lower` 作为概率标注
-- PyReason：直接用 `[lower, upper]` 作为 bound
+PyReason 的区间值 `[lower, upper]` 是引擎特有概念，留在 PyReason session API 里。PyReason session 向审计层写入时，自动取 `lower` 作为 compat `confidence`。
 
-**规范化**：`write_protocol` 内部统一存储为 `[lower, upper]`。旧 surface 读 confidence 时，如果是区间取 `lower`（向后兼容）。certainty v1 的 16 条冻结 contract 不受影响。
+共享层永远只看到 `confidence: float`。certainty v1 的 16 条冻结 contract 不受影响。
 
 ### 5.2.2 引擎特有参数不进共享层
 
@@ -412,21 +409,24 @@ class Friends(Relationship):
 
 Relationship 在 `schema_ir` 里生成 predicate，形态 `(e_ref_from, e_ref_to, ...field_args)`。所有引擎的写入路径都校验 Relationship schema。
 
-### ADR-14c: 通用 Meta（confidence 扩展 + 来源信息）
+### ADR-14c: 通用 Meta（confidence 不变 + 来源信息）
 
-**决策：不引入 `belief`。扩展 `confidence` 值域为 `float | [float, float]`。**
+**决策：共享 `confidence` 保持 `float`，不扩展值域。引擎特有值域在引擎 session 内部处理。**
 
 ```python
+# 共享 meta（不改）：
 meta = {
-    "confidence": 0.8,            # float → 内部存为 [0.8, 0.8]
-    # 或
-    "confidence": [0.6, 0.9],    # [float, float] → PyReason 直接用
+    "confidence": 0.8,    # float in (0, 1] — 不变
     "source": "...",
     "analyst": "...",
 }
+
+# PyReason session 内部（引擎特有）：
+pyreason_session.write_fact(..., bound=[0.6, 0.9])
+# → session 自动记录 meta.confidence = 0.6 (lower) 到审计层
 ```
 
-旧 surface 读区间时取 `lower`。引擎特有参数不进 meta。
+引擎特有参数不进 meta。共享层永远不膨胀。
 
 ### ADR-14c.1: 已知 Debt — ProbLog 概率参数在共享层
 
@@ -460,7 +460,7 @@ ProbLogRule(where=[...], probability=0.3)                  # Layer 2: ProbLog
 ### ADR-14 实施优先级（修正）
 
 ```
-Phase 1: 共享 schema 扩展（Relationship + confidence 区间扩展）
+Phase 1: 共享 schema 扩展（Relationship）+ PyReason 引擎 session
          + PyReason 引擎 session 写入路径
 Phase 2: Layer 2 Rule builder（PyReasonRule + ProbLogRule）
 Phase 3: Evaluate dispatch + result normalization

@@ -177,15 +177,11 @@ Step 1: Relationship SDK type + schema_ir 编译
   - predicate 形态: (e_ref_from, e_ref_to, ...field_args)
   - tests: relationship schema compilation
 
-Step 2: confidence 值域扩展 (dual-write)
-  - write_protocol.py: 接受 confidence 为 float | [float, float]
-  - 存储策略 (dual-write):
-    - canonical: meta_float row with key="confidence_lower" + "confidence_upper"
-    - compat: 同时保留 meta_float key="confidence" value=lower
-    - 旧 surface (runtime_v1, canon.py, sdk/store) 继续读 key="confidence" → 拿到 lower
-    - 新 surface (PyReason adapter) 读 confidence_lower + confidence_upper → 拿到区间
-  - 不改旧 surface 文件（runtime_v1.py, canon.py 不在 file scope）
-  - 不改 Souffle 行为
+Step 2: (CANCELLED — violates ADR-14a)
+  原计划：扩展 write_protocol 接受 confidence interval
+  取消原因：区间值是 PyReason 引擎特有概念，不应进共享 write_protocol
+  替代方案：PyReason session (Step 3) 内部处理区间值，
+            向审计层写入时自动取 lower bound 作为 compat confidence
 
 Step 3: PyReason 写入 session
   - adapters/pyreason/session.py: PyReasonSession class
@@ -202,9 +198,8 @@ Step 4: Integration example
 ## 7. Acceptance Criteria
 
 - [ ] 新增 `Relationship` SDK 类型，可编译为 `schema_ir`
-- [ ] `confidence` 值域扩展为 `float | [float, float]`（write_protocol 校验）
-- [ ] Dual-write: 存 `confidence_lower` + `confidence_upper` + compat `confidence`=lower
-- [ ] 旧 surface 不改动，通过 compat key 自然读到 lower（向后兼容）
+- [ ] ~~confidence 值域扩展~~ (CANCELLED — violates ADR-14a)
+- [ ] PyReason session 内部处理 bound → confidence 映射（在 Step 3 实现）
 - [ ] PyReason session 可写入 node/edge facts（校验 schema）
 - [ ] 引擎特有参数只在 PyReason session API 里，不进共享 meta
 - [ ] Souffle 现有路径不受影响（260 tests green）
@@ -216,7 +211,7 @@ Step 4: Integration example
 - `src/factpy_kernel/sdk/`（Relationship type）
 - `src/factpy_kernel/sdk/compile.py`（Relationship → schema_ir）
 - `src/factpy_kernel/authoring/schema_compile.py`（Relationship predicate 生成）
-- `src/factpy_kernel/core/evidence/write_protocol.py`（confidence 值域扩展 + dual-write）
+- ~~`src/factpy_kernel/core/evidence/write_protocol.py`~~ (removed — Step 2 cancelled)
 - `src/factpy_kernel/adapters/pyreason/`（session + fact writer）
 - `src/factpy_kernel/tests/`
 - `examples/`
