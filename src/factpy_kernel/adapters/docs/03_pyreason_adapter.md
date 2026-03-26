@@ -2,11 +2,11 @@
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
 - 最后更新：2026-03-26
-- 状态：adapter-local V0（provenance + session 写入 + batch API）
+- 状态：adapter-local V0（provenance + session 写入 + batch API + runner + accept）
 
 ## 1. 概述
 
-PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的接入。当前实现了 provenance trace 提取、引擎特定写入 session、entity-level batch API，以及 assertion annotation 模板生成。Rule builder 和 evaluate dispatch 尚未实现（Phase 2/3）。
+PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的接入。当前实现了 provenance trace 提取、引擎特定写入 session、entity-level batch API、assertion annotation 模板生成，以及 reusable runner/accept helper。Rule builder 和 evaluate dispatch 尚未实现（Phase 2/3）。
 
 PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上做区间值时序推理，与 Souffle（确定性 Datalog）和 ProbLog（概率逻辑）都有本质差异。
 
@@ -23,6 +23,7 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 |------|------|
 | `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` |
 | `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 batch API / bound / active_from / active_to / annotation templates |
+| `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult` |
 | `accept.py` | `accept_pyreason_session(...)` — adapter-local accept helper；通过 shared `set_field()` 获取真实 `asrt_id`，再把 `pyreason/semantic/*` 模板落到 `annotation_rows` |
 | `__init__.py` | 空模块入口 |
 
@@ -123,6 +124,38 @@ PyReason session 内部的 graph node id 仍然是裸字符串（如 `Alice` / `
 
 这不是完整的 factpy entity identity 对齐，只是为了让 PyReason 的 raw graph ids 能进入当前 shared write path。更完整的 identity/encoding 方案留待后续蓝图。
 
+## 5B. Runner 模型
+
+当前已有一条 reusable 的执行路径，但它仍是 adapter-local helper，不是 `Store.evaluate(mode="pyreason")`：
+
+```python
+from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
+
+result = run_pyreason(
+    session,
+    rules=[("popular(x) <-1 popular(y), strength(x,y)", "friend_popularity")],
+    facts=[("popular(Alice)", "alice_popular", 0, 3)],
+    config=PyReasonRunConfig(timesteps=2, atom_trace=True),
+)
+```
+
+### 5B.1 Runner 输出
+
+| 字段 | 含义 |
+|------|------|
+| `interpretation` | 原始 PyReason `Interpretation` 对象 |
+| `trace` | `PyReasonTraceV0` |
+| `trace_dict` | 可序列化 trace dict |
+| `derived_session` | 只包含引擎推导出的新 facts 的 `PyReasonSession` |
+| `config` | 本次运行配置 |
+| `elapsed_seconds` | 运行耗时 |
+
+### 5B.2 Runner 边界
+
+- `run_pyreason(...)` 接受简单 tuple 形式的 rules/facts，不引入新的 rule DSL
+- runner 不注册进 `Store.evaluate()`，因为那会引入 WHERE→PyReason rule 编译范围
+- `derived_session` 可以直接接到 `accept_pyreason_session(...)`
+
 ## 6. Souffle vs PyReason Provenance 对比
 
 ### 6.1 形态
@@ -162,8 +195,9 @@ PyReason session 内部的 graph node id 仍然是裸字符串（如 `Alice` / `
 
 ## 7. 当前限制
 
-- 不是完整的 factpy adapter（无 evaluate dispatch / rule builder / Ledger accept 集成）
+- 不是完整的 factpy adapter（无 `Store.evaluate(mode="pyreason")` / rule builder 集成）
 - `session.annotation_templates` 已可通过 `accept_pyreason_session(...)` 落到 Ledger；但当前 accept 仍依赖 adapter-local synthetic `entity_ref` materialization
+- `run_pyreason(...)` 是 reusable helper，不是 core evaluate surface
 - 依赖 `pyreason==3.0.0`（非 repo-managed dependency）
 - ARM64 macOS 首次 JIT 约 `85s`
 - `PyReasonTraceEventV0` 字段未冻结

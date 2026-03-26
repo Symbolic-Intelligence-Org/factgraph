@@ -15,7 +15,6 @@ Note: First run has ~85s JIT warmup (numba); subsequent runs ~8-10s.
 """
 from __future__ import annotations
 
-import json
 import sys
 import time
 from pathlib import Path
@@ -25,7 +24,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from factpy_kernel.sdk import Entity, Identity, Field, Relationship
 from factpy_kernel.sdk.compile import compile_schema_from_classes
+from factpy_kernel.adapters.pyreason.accept import accept_pyreason_session
+from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
+from factpy_kernel.core.store.ledger import Ledger
 
 start = time.time()
 
@@ -136,84 +138,47 @@ for entry in session.all_facts_meta[:3]:
 
 
 # ════════════════════════════════════════════════════════════════
-# 3. PyReason Reasoning (requires pyreason==3.0.0)
+# 3. PyReason Runner (requires pyreason==3.0.0)
 # ════════════════════════════════════════════════════════════════
 
 try:
-    import pyreason as pr
+    run_result = run_pyreason(
+        session,
+        rules=[
+            (
+                "popular(x) <-1 popular(y), strength(x,y), since(y,z), since(x,z)",
+                "shared_pet_popularity",
+            ),
+            (
+                "outdoorsy(x) <-0 since(x,y), dog_breed(y)",
+                "dog_owner_outdoorsy",
+            ),
+        ],
+        facts=[
+            ("popular(Alice)", "alice_popular", 0, 3),
+            ("dog_breed(Dog)", "dog_is_dog", 0, 3),
+        ],
+        config=PyReasonRunConfig(timesteps=2, atom_trace=True),
+    )
 except Exception as exc:
-    print(f"\n[ERROR] pyreason import failed: {exc}")
+    print(f"\n[ERROR] pyreason run failed: {exc}")
     print("Expected environment: pyreason==3.0.0 with a working numba cache/runtime.")
     print("Skipping reasoning + provenance. Schema + session demo complete.")
     sys.exit(0)
 
-import networkx as nx
+interpretation = run_result.interpretation
+trace_dict = run_result.trace_dict or {}
+derived_session = run_result.derived_session
 
-# Build graph from session facts
-g = nx.DiGraph()
-
-# Add nodes
-nodes = set()
-for f in session.node_facts:
-    nodes.add(f["node_ref"])
-for f in session.edge_facts:
-    nodes.add(f["from_ref"])
-    nodes.add(f["to_ref"])
-for node in nodes:
-    g.add_node(node)
-
-# Add node attributes from facts
-for f in session.node_facts:
-    attr_name = f["pred_id"].split(":")[-1]
-    g.nodes[f["node_ref"]][attr_name] = 1
-
-# Add edges from edge facts
-for f in session.edge_facts:
-    attr_name = f["pred_id"].split(":")[-1]
-    if g.has_edge(f["from_ref"], f["to_ref"]):
-        g.edges[f["from_ref"], f["to_ref"]][attr_name] = 1
-    else:
-        g.add_edge(f["from_ref"], f["to_ref"], **{attr_name: 1})
-
-print(f"\n[{time.time()-start:.1f}s] Graph built: {g.number_of_nodes()} nodes, {g.number_of_edges()} edges")
-
-# Load graph + rules + facts into PyReason
-pr.reset()
-pr.load_graph(g)
-
-# Rules (engine-specific — not through factpy Rule DSL in this demo)
-pr.add_rule(pr.Rule(
-    "popular(x) <-1 popular(y), strength(x,y), since(y,z), since(x,z)",
-    "shared_pet_popularity",
-))
-pr.add_rule(pr.Rule(
-    "outdoorsy(x) <-0 since(x,y), dog_breed(y)",
-    "dog_owner_outdoorsy",
-))
-
-# Initial facts
-pr.add_fact(pr.Fact("popular(Alice)", "alice_popular", 0, 3))
-pr.add_fact(pr.Fact("dog_breed(Dog)", "dog_is_dog", 0, 3))
-
-pr.settings.atom_trace = True
-
-print(f"[{time.time()-start:.1f}s] Starting PyReason reasoning...")
-interpretation = pr.reason(timesteps=2)
-print(f"[{time.time()-start:.1f}s] Reasoning complete")
+print(f"\n[{time.time()-start:.1f}s] Runner complete:")
+print(f"  Derived node facts: {len(derived_session.node_facts)}")
+print(f"  Derived edge facts: {len(derived_session.edge_facts)}")
+print(f"  Elapsed: {run_result.elapsed_seconds:.1f}s")
 
 
 # ════════════════════════════════════════════════════════════════
-# 4. Provenance: Extract trace using adapter-local carrier
+# 4. Provenance: Parsed by runner helper
 # ════════════════════════════════════════════════════════════════
-
-from factpy_kernel.adapters.pyreason.provenance import (
-    parse_pyreason_trace,
-    pyreason_trace_to_dict,
-)
-
-nodes_trace, edges_trace = pr.get_rule_trace(interpretation)
-trace = parse_pyreason_trace(nodes_trace, edges_trace, timesteps=2)
-trace_dict = pyreason_trace_to_dict(trace)
 
 print(f"\n[{time.time()-start:.1f}s] Provenance extracted:")
 print(f"  Engine: {trace_dict['engine']}")
@@ -241,7 +206,20 @@ for t in sorted(d.keys()):
 
 
 # ════════════════════════════════════════════════════════════════
-# 6. Summary
+# 6. Accept: Derived session -> Ledger
+# ════════════════════════════════════════════════════════════════
+
+ledger = Ledger()
+accept_result = accept_pyreason_session(ledger, derived_session)
+
+print(f"\n[{time.time()-start:.1f}s] Derived facts accepted:")
+print(f"  Node assertions: {len(accept_result.node_asrt_ids)}")
+print(f"  Edge assertions: {len(accept_result.edge_asrt_ids)}")
+print(f"  PyReason annotations: {accept_result.annotation_count}")
+
+
+# ════════════════════════════════════════════════════════════════
+# 7. Summary
 # ════════════════════════════════════════════════════════════════
 
 elapsed = time.time() - start
@@ -250,19 +228,19 @@ print("INTEGRATION DEMO SUMMARY")
 print(f"{'='*60}")
 print(f"  Schema: {len(pred_ids)} predicates ({len(rel_preds)} relationship)")
 print(f"  Session: {len(session.node_facts)} node + {len(session.edge_facts)} edge facts")
-print(f"  Graph: {g.number_of_nodes()} nodes, {g.number_of_edges()} edges")
+print(f"  Derived session: {len(derived_session.node_facts)} node + {len(derived_session.edge_facts)} edge facts")
 print(f"  Rules: 2 (1 temporal <-1, 1 immediate <-0)")
 print(f"  Reasoning: {trace_dict['timesteps']} timesteps")
 print(f"  Trace: {len(trace_dict['node_events'])} events")
+print(f"  Accepted annotations: {accept_result.annotation_count}")
 print(f"  Total time: {elapsed:.1f}s")
 print()
 print("  Key integration points:")
 print("  1. Schema: factpy Relationship type → schema_ir predicates")
 print("  2. Session: entity-level batch API routes fields/relationships into facts")
-print("  3. Confidence: bound=[0.9,0.9] → auto-derived confidence=0.9 for audit")
-print("  4. Annotations: session.annotation_templates preserves pyreason semantics")
-print("  5. Provenance: PyReasonTraceV0 event log (not proof tree)")
-print("  6. Audit: session.all_facts_meta carries shared meta for all facts")
+print("  3. Runner: session -> graph -> reason -> trace -> derived_session")
+print("  4. Confidence: bound=[0.9,0.9] → auto-derived confidence=0.9 for audit")
+print("  5. Annotations: session.annotation_templates + accept helper persist pyreason semantics")
+print("  6. Provenance: PyReasonTraceV0 event log (not proof tree)")
+print("  7. Audit: session.all_facts_meta carries shared meta for buffered facts")
 print(f"{'='*60}")
-
-pr.reset()
