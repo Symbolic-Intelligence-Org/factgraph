@@ -72,37 +72,63 @@ for pid in pred_ids:
 
 
 # ════════════════════════════════════════════════════════════════
-# 2. PyReason Session: Write Facts (engine-specific path)
+# 2. PyReason Session: Write Facts (engine-specific batch path)
 # ════════════════════════════════════════════════════════════════
 
 session = PyReasonSession(schema_ir)
 
-# Node facts — entity attributes with interval bounds
-session.write_node_fact("user:popular", "Alice", "true",
-    bound=[1.0, 1.0], meta={"source": "manual_assessment", "analyst": "Admin"})
-session.write_node_fact("user:name", "Alice", "Alice",
-    bound=[1.0, 1.0], meta={"source": "user_profile"})
-session.write_node_fact("user:name", "Bob", "Bob",
-    bound=[1.0, 1.0], meta={"source": "user_profile"})
-session.write_node_fact("pet:species", "Dog", "canine",
-    bound=[1.0, 1.0])
-session.write_node_fact("pet:dog_breed", "Dog", "labrador",
-    bound=[1.0, 1.0])
+with session.batch() as tx:
+    alice = tx.entity(User, user_id="Alice")
+    bob = tx.entity(User, user_id="Bob")
+    dog = tx.entity(Pet, pet_id="Dog")
 
-# Edge facts — relationships with interval bounds
-session.write_edge_fact("friends:strength", "Alice", "Bob", "0.9",
-    bound=[0.9, 0.9], meta={"source": "social_network_data"})
-session.write_edge_fact("friends:strength", "Bob", "Alice", "0.9",
-    bound=[0.9, 0.9], meta={"source": "social_network_data"})
-session.write_edge_fact("owns:since", "Alice", "Dog", "2024",
-    bound=[1.0, 1.0], meta={"source": "pet_registry"})
-session.write_edge_fact("owns:since", "Bob", "Dog", "2023",
-    bound=[1.0, 1.0], meta={"source": "pet_registry"})
+    # Node facts — entity attributes with interval bounds
+    alice.popular.set("true", bound=[1.0, 1.0], meta={"source": "manual_assessment", "analyst": "Admin"})
+    alice.name.set("Alice", bound=[1.0, 1.0], meta={"source": "user_profile"})
+    bob.name.set("Bob", bound=[1.0, 1.0], meta={"source": "user_profile"})
+    dog.species.set("canine", bound=[1.0, 1.0])
+    dog.dog_breed.set("labrador", bound=[1.0, 1.0])
+
+    # Edge facts — relationships with interval bounds
+    tx.relationship(
+        Friends,
+        from_entity=alice,
+        to_entity=bob,
+        strength="0.9",
+        bound=[0.9, 0.9],
+        meta={"source": "social_network_data"},
+    )
+    tx.relationship(
+        Friends,
+        from_entity=bob,
+        to_entity=alice,
+        strength="0.9",
+        bound=[0.9, 0.9],
+        meta={"source": "social_network_data"},
+    )
+    tx.relationship(
+        Owns,
+        from_entity=alice,
+        to_entity=dog,
+        since="2024",
+        bound=[1.0, 1.0],
+        meta={"source": "pet_registry"},
+    )
+    tx.relationship(
+        Owns,
+        from_entity=bob,
+        to_entity=dog,
+        since="2023",
+        bound=[1.0, 1.0],
+        meta={"source": "pet_registry"},
+    )
+    tx.commit()
 
 print(f"\n[{time.time()-start:.1f}s] Session facts written:")
 print(f"  Node facts: {len(session.node_facts)}")
 print(f"  Edge facts: {len(session.edge_facts)}")
 print(f"  Audit meta entries: {len(session.all_facts_meta)}")
+print(f"  Annotation templates: {len(session.annotation_templates)}")
 
 # Show auto-derived confidence
 for entry in session.all_facts_meta[:3]:
@@ -115,8 +141,9 @@ for entry in session.all_facts_meta[:3]:
 
 try:
     import pyreason as pr
-except ImportError:
-    print("\n[ERROR] pyreason not installed. Run: pip install 'pyreason==3.0.0'")
+except Exception as exc:
+    print(f"\n[ERROR] pyreason import failed: {exc}")
+    print("Expected environment: pyreason==3.0.0 with a working numba cache/runtime.")
     print("Skipping reasoning + provenance. Schema + session demo complete.")
     sys.exit(0)
 
@@ -231,10 +258,11 @@ print(f"  Total time: {elapsed:.1f}s")
 print()
 print("  Key integration points:")
 print("  1. Schema: factpy Relationship type → schema_ir predicates")
-print("  2. Session: PyReasonSession validates against shared schema_ir")
+print("  2. Session: entity-level batch API routes fields/relationships into facts")
 print("  3. Confidence: bound=[0.9,0.9] → auto-derived confidence=0.9 for audit")
-print("  4. Provenance: PyReasonTraceV0 event log (not proof tree)")
-print("  5. Audit: session.all_facts_meta carries shared meta for all facts")
+print("  4. Annotations: session.annotation_templates preserves pyreason semantics")
+print("  5. Provenance: PyReasonTraceV0 event log (not proof tree)")
+print("  6. Audit: session.all_facts_meta carries shared meta for all facts")
 print(f"{'='*60}")
 
 pr.reset()

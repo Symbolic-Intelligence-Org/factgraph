@@ -2,11 +2,11 @@
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
 - 最后更新：2026-03-26
-- 状态：adapter-local V0（provenance + session 写入）
+- 状态：adapter-local V0（provenance + session 写入 + batch API）
 
 ## 1. 概述
 
-PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的接入。当前实现了 provenance trace 提取和引擎特定写入 session。Rule builder 和 evaluate dispatch 尚未实现（Phase 2/3）。
+PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的接入。当前实现了 provenance trace 提取、引擎特定写入 session、entity-level batch API，以及 assertion annotation 模板生成。Rule builder 和 evaluate dispatch 尚未实现（Phase 2/3）。
 
 PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上做区间值时序推理，与 Souffle（确定性 Datalog）和 ProbLog（概率逻辑）都有本质差异。
 
@@ -22,7 +22,7 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 | 文件 | 角色 |
 |------|------|
 | `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` |
-| `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 bound / active_from / active_to |
+| `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 batch API / bound / active_from / active_to / annotation templates |
 | `__init__.py` | 空模块入口 |
 
 ## 4. PyReason 推理模型
@@ -53,6 +53,46 @@ PyReason 的 `pr.get_rule_trace(interpretation)` 返回两个 pandas DataFrame�
 | Clause-1, Clause-2, ... | 具体的 clause grounding（哪些节点/边匹配了规则体原子） |
 
 **这是事件日志（event log），不是证明树（proof tree）。**
+
+## 5A. Session 写入模型
+
+当前写入路径不是 `runtime_v1` 的统一写入 API，而是 adapter-local 的 `PyReasonSession`：
+
+```python
+session = PyReasonSession(schema_ir)
+with session.batch() as tx:
+    alice = tx.entity(User, user_id="Alice")
+    alice.name.set("Alice", bound=[1.0, 1.0], meta={"source": "profile"})
+    tx.relationship(Friends, from_entity=alice, to_entity=bob,
+                    strength="0.9", bound=[0.9, 0.9])
+    tx.commit()
+```
+
+### 5A.1 当前 session API
+
+| API | 角色 |
+|-----|------|
+| `session.batch()` | entity-level batch transaction 入口 |
+| `tx.entity(EntityCls, **identity)` | 创建/复用 entity handle |
+| `handle.field.set(value, *, bound, active_from, active_to, meta)` | 写 node fact |
+| `tx.relationship(RelCls, *, from_entity, to_entity, **fields)` | 写 edge fact |
+| `session.node_facts` / `session.edge_facts` | engine consumption buffer |
+| `session.annotation_templates` | assertion annotation 模板（待 Ledger consumer 填充 `asrt_id`） |
+| `session.all_facts_meta` | audit-facing shared metadata |
+
+### 5A.2 Annotation 模板
+
+每条 buffered fact 同时生成 annotation-ready dict（`asrt_id=""` 占位）：
+
+| namespace | category | key | 说明 |
+|-----------|----------|-----|------|
+| `pyreason` | `semantic` | `bound_lower` | 区间下界 |
+| `pyreason` | `semantic` | `bound_upper` | 区间上界 |
+| `pyreason` | `semantic` | `active_from` | 非默认时写入 |
+| `pyreason` | `semantic` | `active_to` | 非 `None` 时写入 |
+| `shared` | `derived` | `confidence` | 派生摘要 = lower bound |
+| `shared` | `derived` | `confidence_source` | 当前固定为 `pyreason:lower_bound` |
+| `shared` | `source` | `source` / `analyst` / `method` | 从 shared meta 转发 |
 
 ## 6. Souffle vs PyReason Provenance 对比
 
@@ -93,8 +133,8 @@ PyReason 的 `pr.get_rule_trace(interpretation)` 返回两个 pandas DataFrame�
 
 ## 7. 当前限制
 
-- 不是完整的 factpy adapter（无 schema/fact/rule/evaluate 集成）
-- 只有 provenance trace 提取
+- 不是完整的 factpy adapter（无 evaluate dispatch / rule builder / Ledger accept 集成）
+- `session.annotation_templates` 目前只是模板，还没有直接落到 Ledger `annotation_rows`
 - 依赖 `pyreason==3.0.0`（非 repo-managed dependency）
 - ARM64 macOS 首次 JIT 约 `85s`
 - `PyReasonTraceEventV0` 字段未冻结
