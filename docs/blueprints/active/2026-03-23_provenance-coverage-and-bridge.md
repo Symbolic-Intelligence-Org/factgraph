@@ -71,7 +71,7 @@ Status values:
 2. **Truncation warning** when provenance tree contains subproof nodes:
    - "This proof tree was truncated by the Souffle engine at depth level 4. Nodes marked 'Truncated' can be expanded with deeper analysis. The truncation does not indicate missing evidence — the full derivation exists in the engine."
 
-3. **Rule number cross-reference**: in the evidence tree's `rule_ref` nodes, show the corresponding Souffle rule number (R1, R2, etc.) from the provenance tree when available. This is a lightweight visual bridge, not a data model change.
+3. **Visual bridge note**: at the top of the Engine Provenance section, add a brief explanation: "The provenance tree below shows the Souffle engine's internal derivation for this candidate. Rule numbers (R1, R2, ...) are Souffle-internal and correspond to the compiled form of the rules shown in the Evidence Tree above." No data-level cross-reference — mapping `rule_ref_id` to Souffle `(Rn)` requires an export-time mapping artifact not yet available.
 
 ### Step 3: AuditQuery Package-Level Provenance Summary
 
@@ -87,13 +87,14 @@ def list_candidates_without_provenance(self) -> list[dict]:
 def summarize_provenance_coverage(self) -> dict:
     """Package-level summary:
     {
-        "total_candidates": 7,
+        "total_candidates": 7,       # unique candidate_ids, not ledger rows
         "with_provenance": 3,
         "without_provenance": 4,
         "truncated": 1,
         "by_status": {"present": 3, "missing_recipe": 2, ...},
         "coverage_pct": 42.9,
     }
+    # Note: counts are by unique candidate_id, not candidate_ledger rows.
     """
 ```
 
