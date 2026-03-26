@@ -150,7 +150,7 @@ PyReason: 图神经推理（区间传播、时序推理、annotated graphs）
 | 层 | 统一？ | 说明 |
 |----|--------|------|
 | Schema / 实体定义 | ✅ 是 | 所有引擎共享同一份 `schema_ir`（Entity, Field, Relationship）。任何引擎写入事实时都必须校验 schema。 |
-| Meta（事实元数据）| ✅ 是 | `belief`（通用真值区间）+ `source` / `analyst` / `method` 等。所有引擎通用，不因新引擎膨胀。 |
+| Meta（事实元数据）| ✅ 是 | `confidence`（扩展为 `float | [float, float]` 区间）+ `source` / `analyst` / `method` 等。所有引擎通用，不因新引擎膨胀。 |
 | 事实写入 API | ⚠️ 部分 | **修正**：写入 API 不强行统一。每个引擎有自己的写入路径，但都校验同一份 schema、记录到审计层。Souffle 用 `write_runtime_fact`，PyReason 用引擎特定 session API，ProbLog 同理。 |
 | 规则定义 | ❌ 否 | 编程模型不同，三层规则系统（见 §5.3） |
 | 执行/查询 | ⚠️ 部分 | "跑一下，告诉我结果"可统一接口；引擎特定参数（timesteps、convergence 等）通过 engine_options 传递 |
@@ -393,7 +393,7 @@ ProbLog:  problog_session.assert_fact(...)          ← 引擎特定 API
 
 所有路径共同约束：
   1. 校验 schema_ir（pred_id 必须在 schema 里）
-  2. 记录通用 meta（belief, source, analyst）
+  2. 记录通用 meta（confidence, source, analyst）
   3. 写入审计可追溯的存储
 ```
 
@@ -460,7 +460,7 @@ ProbLogRule(where=[...], probability=0.3)                  # Layer 2: ProbLog
 ### ADR-14 实施优先级（修正）
 
 ```
-Phase 1: 共享 schema 扩展（Relationship + belief meta）
+Phase 1: 共享 schema 扩展（Relationship + confidence 区间扩展）
          + PyReason 引擎 session 写入路径
 Phase 2: Layer 2 Rule builder（PyReasonRule + ProbLogRule）
 Phase 3: Evaluate dispatch + result normalization

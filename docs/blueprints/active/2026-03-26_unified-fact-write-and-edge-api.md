@@ -11,13 +11,13 @@
 
 按修正后的 ADR-14a："Schema 是统一边界，审计是统一出口。写入路径是引擎适配层的事。" 不需要强行统一写入 API，但需要：
 1. 共享 schema 能表达图关系（Relationship）
-2. 通用 meta（belief 区间）有定义
+2. `confidence` 值域扩展为 `float | [float, float]`
 3. PyReason 有自己的写入 session，校验同一份 schema
 
 ## 2. Goals
 
 - 新增 `Relationship` schema 类型（与 Entity 平行）
-- 定义 `belief` 通用真值区间（`confidence` 向后兼容 alias）
+- 扩展 `confidence` 值域为 `float | [float, float]`（dual-write 向后兼容）
 - 为 PyReason 实现引擎特定写入 session（校验 schema，记录审计）
 - 不改 Souffle 现有行为
 
@@ -121,7 +121,7 @@ pyreason_session.write_edge_fact(
 
 **共同约束**：
 1. `pred_id` 必须在 `schema_ir` 里（校验 Relationship / Entity schema）
-2. 通用 `meta`（belief, source, analyst）被记录到审计层
+2. 通用 `meta`（confidence, source, analyst）被记录到审计层
 3. 引擎特有参数（bound, active_from）只在 PyReason session 里，不进共享 meta
 
 ### 5.3 Relationship Schema
@@ -175,9 +175,14 @@ Step 1: Relationship SDK type + schema_ir 编译
   - predicate 形态: (e_ref_from, e_ref_to, ...field_args)
   - tests: relationship schema compilation
 
-Step 2: belief meta 定义
-  - write_protocol.py: 放宽 meta 校验，接受 belief (float | [float, float])
-  - confidence 保留为向后兼容 alias
+Step 2: confidence 值域扩展 (dual-write)
+  - write_protocol.py: 接受 confidence 为 float | [float, float]
+  - 存储策略 (dual-write):
+    - canonical: meta_float row with key="confidence_lower" + "confidence_upper"
+    - compat: 同时保留 meta_float key="confidence" value=lower
+    - 旧 surface (runtime_v1, canon.py, sdk/store) 继续读 key="confidence" → 拿到 lower
+    - 新 surface (PyReason adapter) 读 confidence_lower + confidence_upper → 拿到区间
+  - 不改旧 surface 文件（runtime_v1.py, canon.py 不在 file scope）
   - 不改 Souffle 行为
 
 Step 3: PyReason 写入 session
@@ -196,7 +201,8 @@ Step 4: Integration example
 
 - [ ] 新增 `Relationship` SDK 类型，可编译为 `schema_ir`
 - [ ] `confidence` 值域扩展为 `float | [float, float]`（write_protocol 校验）
-- [ ] 旧 surface 读 confidence 区间时取 `lower`（向后兼容）
+- [ ] Dual-write: 存 `confidence_lower` + `confidence_upper` + compat `confidence`=lower
+- [ ] 旧 surface 不改动，通过 compat key 自然读到 lower（向后兼容）
 - [ ] PyReason session 可写入 node/edge facts（校验 schema）
 - [ ] 引擎特有参数只在 PyReason session API 里，不进共享 meta
 - [ ] Souffle 现有路径不受影响（260 tests green）
@@ -208,7 +214,7 @@ Step 4: Integration example
 - `src/factpy_kernel/sdk/`（Relationship type）
 - `src/factpy_kernel/sdk/compile.py`（Relationship → schema_ir）
 - `src/factpy_kernel/authoring/schema_compile.py`（Relationship predicate 生成）
-- `src/factpy_kernel/core/evidence/write_protocol.py`（belief meta 校验）
+- `src/factpy_kernel/core/evidence/write_protocol.py`（confidence 值域扩展 + dual-write）
 - `src/factpy_kernel/adapters/pyreason/`（session + fact writer）
 - `src/factpy_kernel/tests/`
 - `examples/`
