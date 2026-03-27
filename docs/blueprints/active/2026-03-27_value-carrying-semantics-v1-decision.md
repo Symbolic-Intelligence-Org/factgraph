@@ -145,8 +145,8 @@ Normalization registry (mapping arbitrary ranges to `[0, 1]`) is deferred to v2.
 
 ## 4. What this does NOT decide
 
-- **Value variables in rule syntax** — D-VC4 is explicitly left open
-- **CompareExpr compilation** — deferred to L3b, and now depends on D-VC4 resolution
+- **Value variables in rule syntax** — D-VC4 closed as infeasible (PyReason parser constraint)
+- **CompareExpr compilation** — not feasible without value variables; deferred beyond v1
 - **Arbitrary numeric encoding** — values outside `[0, 1]` (amounts, counts) not addressed
 - **String value encoding** — no attempt to encode strings as bounds
 - **Normalization registry** — deferred to v2
@@ -156,14 +156,19 @@ Normalization registry (mapping arbitrary ranges to `[0, 1]`) is deferred to v2.
 
 ## 5. Impact Assessment
 
-### Files that change in L3b implementation (if D-VC4 is resolved)
+### Files that change in L3b implementation
 
 | File | Change |
 |------|--------|
 | `adapters/pyreason/runner.py` | Graph builder: `= value` for bounded preds. Derived extraction: bound summary. |
 | `adapters/pyreason/engine_eval.py` | EDB materialization: check bounded domain contract |
-| `adapters/pyreason/session.py` | Value validation for bounded preds |
-| `adapters/pyreason/where_compile.py` | Only if D-VC4 is resolved — otherwise unchanged |
+
+### Files that do NOT change (confirmed by D-VC4 closure)
+
+| File | Why |
+|------|-----|
+| `adapters/pyreason/where_compile.py` | D-VC4 closed — no value variables in rule syntax |
+| `adapters/pyreason/session.py` | Session already handles float values; no additional validation needed |
 
 ### Files that do NOT change
 
