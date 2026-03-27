@@ -5,13 +5,14 @@ import unittest
 from unittest.mock import patch
 
 import factpy_kernel.adapters.pyreason  # noqa: F401
+from factpy_kernel.adapters.pyreason.accept import persist_pyreason_annotations
 from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
 from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
 from factpy_kernel.adapters.pyreason.where_compile import PyReasonWhereCompileError
 from factpy_kernel.core.derivation.accept import AcceptOptions
 from factpy_kernel.core.evidence.write_protocol import set_field
-from factpy_kernel.core.store.ledger import AnnotationRow, Claim
+from factpy_kernel.core.store.ledger import Claim
 from factpy_kernel.sdk.compile import compile_schema_from_classes
 from factpy_kernel.sdk.dsl import Derivation, Pred, vars as sdk_vars
 from factpy_kernel.sdk.schema import Entity, Field, Identity, Relationship
@@ -61,28 +62,6 @@ def _mock_run_pyreason(session, *, rules=None, rule_defs=None, facts=None, fact_
         config=config or PyReasonRunConfig(),
         elapsed_seconds=0.01,
     )
-
-
-def _persist_pending_pyreason_annotations(sdk: SDKStore, *, run_id: str, accept_asrt_id: str) -> list[AnnotationRow]:
-    pending_by_run = getattr(sdk.store, "_engine_pending_annotations", {})
-    templates = pending_by_run.pop(run_id, [])
-    rows = [
-        AnnotationRow(
-            asrt_id=accept_asrt_id,
-            namespace=template["namespace"],
-            category=template["category"],
-            key=template["key"],
-            kind=template["kind"],
-            value=template["value"],
-            origin=template["origin"],
-            derivation=template.get("derivation"),
-        )
-        for template in templates
-        if template.get("namespace") == "pyreason"
-    ]
-    if rows:
-        sdk.ledger.append_annotations(rows)
-    return rows
 
 
 class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
@@ -231,19 +210,46 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
 
         self.assertEqual(sdk.ledger.find_annotations(asrt_id=asrt_id, namespace="pyreason"), [])
 
-        rows = _persist_pending_pyreason_annotations(
-            sdk,
-            run_id=candidate.run_id,
-            accept_asrt_id=asrt_id,
+        written_count = persist_pyreason_annotations(
+            sdk.ledger,
+            candidate.run_id,
+            sdk.store,
+            accept_result,
         )
 
-        self.assertGreaterEqual(len(rows), 2)
+        self.assertGreaterEqual(written_count, 2)
         self.assertNotIn(candidate.run_id, getattr(sdk.store, "_engine_pending_annotations", {}))
 
         saved = sdk.ledger.find_annotations(asrt_id=asrt_id, namespace="pyreason")
         saved_keys = {row.key for row in saved}
         self.assertIn("bound_lower", saved_keys)
         self.assertIn("bound_upper", saved_keys)
+
+    @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    def test_persist_helper_writes_annotations(self, mock_run) -> None:
+        del mock_run
+        sdk = self._make_sdk()
+        derivation = self._make_derivation()
+
+        candidate = sdk.evaluate(derivation)[0]
+        accept_result = sdk.store.accept(
+            derivation_id=candidate.derivation_id,
+            version=candidate.derivation_version,
+            candidate_set=candidate,
+            options=AcceptOptions(),
+        )
+
+        count = persist_pyreason_annotations(
+            sdk.ledger,
+            candidate.run_id,
+            sdk.store,
+            accept_result,
+        )
+
+        self.assertGreater(count, 0)
+        asrt_id = accept_result.written_assertions[0]["asrt_id"]
+        saved = sdk.ledger.find_annotations(asrt_id=asrt_id, namespace="pyreason")
+        self.assertGreaterEqual(len(saved), 2)
 
     @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_sdk_evaluate_rejects_unsupported_where_atom(self, mock_run) -> None:

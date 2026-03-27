@@ -51,6 +51,10 @@ def evaluate_store(
         raise ValueError("mode='engine' is removed; use mode='souffle'")
     if mode not in {"native", "souffle", "problog", "pyreason"}:
         raise ValueError("mode must be one of: native, souffle, problog, pyreason")
+    if engine_ext is not None and not isinstance(engine_ext, EngineExtBase):
+        raise ValueError(
+            f"engine_ext must be an EngineExtBase instance, got {type(engine_ext).__name__}"
+        )
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         if mode in {"souffle", "problog", "pyreason"}:

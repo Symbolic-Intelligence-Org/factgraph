@@ -34,6 +34,12 @@ def pyreason_engine_eval(
     """Evaluate a derivation through the PyReason adapter."""
     del mode
     del head
+    from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
+
+    if engine_ext is not None and not isinstance(engine_ext, PyReasonRuleExt):
+        raise ValueError(
+            f"PyReason engine_ext must be PyReasonRuleExt, got {type(engine_ext).__name__}"
+        )
 
     session = _materialize_edb_session(store, store.schema_ir)
     rules = compile_where_ir_to_pyreason(

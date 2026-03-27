@@ -30,6 +30,53 @@ class AcceptResult:
     annotation_count: int = 0
 
 
+def persist_pyreason_annotations(
+    ledger: Ledger,
+    run_id: str,
+    store: Any,
+    accept_result: Any,
+) -> int:
+    """Persist pending ``pyreason/*`` annotations after shared ``Store.accept()``."""
+    if not isinstance(ledger, Ledger):
+        raise ValueError("ledger must be a Ledger instance")
+    if not isinstance(run_id, str) or not run_id:
+        raise ValueError("run_id must be non-empty string")
+
+    pending_by_run = getattr(store, "_engine_pending_annotations", {})
+    if not isinstance(pending_by_run, dict):
+        return 0
+    templates = pending_by_run.pop(run_id, [])
+    if not isinstance(templates, list) or not templates:
+        return 0
+
+    written = getattr(accept_result, "written_assertions", [])
+    if not isinstance(written, list) or not written:
+        return 0
+    first_written = written[0]
+    asrt_id = first_written.get("asrt_id", "") if isinstance(first_written, dict) else ""
+    if not isinstance(asrt_id, str) or not asrt_id or asrt_id == "<dry_run>":
+        return 0
+
+    rows = [
+        AnnotationRow(
+            asrt_id=asrt_id,
+            namespace=str(template["namespace"]),
+            category=str(template["category"]),
+            key=str(template["key"]),
+            kind=str(template["kind"]),
+            value=template["value"],
+            origin=str(template["origin"]),
+            derivation=template.get("derivation"),
+        )
+        for template in templates
+        if isinstance(template, dict) and template.get("namespace") == "pyreason"
+    ]
+    if not rows:
+        return 0
+    ledger.append_annotations(rows)
+    return len(rows)
+
+
 def accept_pyreason_session(ledger: Ledger, session: PyReasonSession) -> AcceptResult:
     """Accept all buffered facts from *session* into *ledger*."""
     if not isinstance(ledger, Ledger):

@@ -10,6 +10,7 @@ from factpy_kernel.adapters.pyreason.engine_eval import (
     _materialize_edb_session,
     pyreason_engine_eval,
 )
+from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
 from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
 from factpy_kernel.core.evidence.write_protocol import set_field
@@ -163,7 +164,7 @@ class EngineEvalTests(unittest.TestCase):
             target_pred_id="user:popular",
             head_vars=["$e"],
             where=[("pred", "user:name", ["$e", "$v"])],
-            engine_ext=MockPyReasonRuleExt(timestep_delay=2),
+            engine_ext=PyReasonRuleExt(timestep_delay=2),
         )
 
         self.assertEqual(len(candidates), 1)
@@ -207,6 +208,50 @@ class EngineEvalTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].target, "friends:strength")
         self.assertEqual(candidates[0].payload["terms"][1]["value"], "idref_v1:User:Bob")
+
+
+class EngineExtTypeGuardTests(unittest.TestCase):
+    def test_non_engine_ext_base_raises_at_core(self) -> None:
+        from factpy_kernel.core.store._evaluate import evaluate_store
+
+        with self.assertRaises(ValueError) as ctx:
+            evaluate_store(
+                None,
+                derivation_id="drv.popular",
+                version="1.0.0",
+                target_pred_id="user:popular",
+                head_vars=["$e"],
+                where=[("pred", "user:name", ["$e", "$v"])],
+                mode="pyreason",
+                engine_evaluate=lambda **kwargs: [],
+                engine_ext="not_an_ext",
+            )
+
+        self.assertIn("EngineExtBase", str(ctx.exception))
+
+    def test_wrong_ext_type_raises_at_adapter(self) -> None:
+        store = _mock_store_with_facts(
+            [
+                {
+                    "pred_id": "user:name",
+                    "e_ref": "idref_v1:User:Alice",
+                    "rest_terms": [("string", "Alice")],
+                }
+            ]
+        )
+
+        with self.assertRaises(ValueError) as ctx:
+            pyreason_engine_eval(
+                store,
+                derivation_id="drv.popular",
+                version="1.0.0",
+                target_pred_id="user:popular",
+                head_vars=["$e"],
+                where=[("pred", "user:name", ["$e", "$v"])],
+                engine_ext=MockPyReasonRuleExt(timestep_delay=1),
+            )
+
+        self.assertIn("PyReasonRuleExt", str(ctx.exception))
 
 
 if __name__ == "__main__":
