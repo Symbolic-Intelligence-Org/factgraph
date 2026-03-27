@@ -144,9 +144,11 @@ ProbLog 已经有基本的 `Store.evaluate(mode="problog")` 能力（`adapters/p
 
 每条线应该开独立的子蓝图，不在母蓝图中承诺实现细节。
 
+**编号澄清**：`engine_options` 不属于上述方向线编号。它作为 future design branch 单独跟踪于 [2026-03-27_engine-options-runtime-dispatch-decision.md](./2026-03-27_engine-options-runtime-dispatch-decision.md)；主线 **L4** 仍然是 ProbLog semantic-delivery parity。
+
 ### Future design branches（不在本阶段主线内）
 
-- `engine_options` 透传到 `Store.evaluate()` core 签名 — 需要 core 扩展，推迟到有真实 consumer 时再评估
+- `engine_options` 透传到 `Store.evaluate()` core 签名 — 已单独开 [2026-03-27_engine-options-runtime-dispatch-decision.md](./2026-03-27_engine-options-runtime-dispatch-decision.md) 做 decision-only 收口；仍不计入主线方向线编号
 - `Query.engine_ext` — 等有真实 consumer 再开
 
 ## §5. Non-goals
