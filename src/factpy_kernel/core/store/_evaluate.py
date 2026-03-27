@@ -19,6 +19,7 @@ from factpy_kernel.core.rules.where_eval import WhereValidationError
 from factpy_kernel.core.store import builders
 from factpy_kernel.core.store.types import (
     BodyConfidencesIR,
+    EngineExtBase,
     EngineEvaluatorFn,
     EvaluateMode,
     HeadSpecIR,
@@ -42,16 +43,17 @@ def evaluate_store(
     engine_evaluate: EngineEvaluatorFn,
     registry: Any | None = None,
     confidence_kind_resolver: Any | None = None,
+    engine_ext: EngineExtBase | None = None,
 ) -> list[CandidateSet]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
     if mode == "engine":
         raise ValueError("mode='engine' is removed; use mode='souffle'")
-    if mode not in {"native", "souffle", "problog"}:
-        raise ValueError("mode must be one of: native, souffle, problog")
+    if mode not in {"native", "souffle", "problog", "pyreason"}:
+        raise ValueError("mode must be one of: native, souffle, problog, pyreason")
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
-        if mode in {"souffle", "problog"}:
+        if mode in {"souffle", "problog", "pyreason"}:
             engine_kwargs = {
                 "mode": mode,
                 "derivation_id": derivation_id,
@@ -63,11 +65,13 @@ def evaluate_store(
             }
             if mode == "problog":
                 engine_kwargs["body_confidences"] = body_confidences
+            if engine_ext is not None:
+                engine_kwargs["engine_ext"] = engine_ext
             candidates = engine_evaluate(**engine_kwargs)
             _remember_candidate_support_backrefs(store, candidates)
             return candidates
         if mode != "native":
-            raise ValueError("mode must be one of: native, souffle, problog")
+            raise ValueError("mode must be one of: native, souffle, problog, pyreason")
 
         entity_spec = builders.entity_spec_from_head(
             store,
@@ -93,7 +97,7 @@ def evaluate_store(
         _remember_candidate_support_backrefs(store, candidates)
         return candidates
 
-    if mode in {"souffle", "problog"}:
+    if mode in {"souffle", "problog", "pyreason"}:
         engine_kwargs = {
             "mode": mode,
             "derivation_id": derivation_id,
@@ -105,11 +109,13 @@ def evaluate_store(
         }
         if mode == "problog":
             engine_kwargs["body_confidences"] = body_confidences
+        if engine_ext is not None:
+            engine_kwargs["engine_ext"] = engine_ext
         candidates = engine_evaluate(**engine_kwargs)
         _remember_candidate_support_backrefs(store, candidates)
         return candidates
     if mode != "native":
-        raise ValueError("mode must be one of: native, souffle, problog")
+        raise ValueError("mode must be one of: native, souffle, problog, pyreason")
 
     schema_pred = builders.find_schema_pred(store, target_pred_id)
     if schema_pred is None:

@@ -475,10 +475,12 @@ class SDKStore:
             derivation = args[0]
             runtime_registry = self._resolve_runtime_registry(derivation, explicit_registry=registry)
             compiled_plans = self._compile_derivation_input(derivation)
+            engine_ext = getattr(derivation, "engine_ext", None)
             return self._evaluate_compiled_derivation_plans(
                 compiled_plans,
                 mode=kwargs.pop("mode", None),
                 registry=runtime_registry,
+                engine_ext=engine_ext,
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
             compiled_plans = self._compile_derivation_input(args[0])
@@ -497,12 +499,14 @@ class SDKStore:
         *,
         mode: str | None,
         registry: RuleRegistry | None,
+        engine_ext: object | None = None,
     ) -> list[CandidateSet]:
         if len(compiled_plans) == 1:
             return self._evaluate_single_derivation_plan(
                 compiled_plans[0],
                 mode=mode,
                 registry=registry,
+                engine_ext=engine_ext,
             )
 
         shared_run_id = self._derive_shared_run_id(compiled_plans[0]["derivation_id"])
@@ -512,6 +516,7 @@ class SDKStore:
                 plan,
                 mode=mode,
                 registry=registry,
+                engine_ext=engine_ext,
             )
             merged.extend(_with_candidate_run_id(plan_candidates, run_id=shared_run_id))
         return merged
@@ -522,6 +527,7 @@ class SDKStore:
         *,
         mode: str | None,
         registry: RuleRegistry | None,
+        engine_ext: object | None = None,
     ) -> list[CandidateSet]:
         resolved_mode = mode if mode is not None else compiled.get("mode", "native")
         body_confidences = _coerce_body_confidences(
@@ -540,6 +546,7 @@ class SDKStore:
             body_confidences=body_confidences,
             engine_evaluate=self._store.evaluate_engine,
             registry=registry,
+            engine_ext=engine_ext,
         )
 
     @staticmethod

@@ -25,6 +25,7 @@ from factpy_kernel.core.store.queries import explain_fact as store_explain_fact
 from factpy_kernel.core.store.queries import resolve_mapping as store_resolve_mapping
 from factpy_kernel.core.store.types import (
     BodyConfidencesIR,
+    EngineExtBase,
     EngineEvaluatorFn,
     EvaluateMode,
     HeadSpecIR,
@@ -220,6 +221,7 @@ class Store:
         body_confidences: BodyConfidencesIR = None,
         registry: "RuleRegistry | None" = None,
         confidence_kind_resolver: Any | None = None,
+        engine_ext: EngineExtBase | None = None,
     ) -> list[CandidateSet]:
         return evaluate_store(
             self,
@@ -234,6 +236,7 @@ class Store:
             engine_evaluate=self.evaluate_engine,
             registry=registry,
             confidence_kind_resolver=confidence_kind_resolver,
+            engine_ext=engine_ext,
         )
 
     def evaluate_engine(
@@ -246,8 +249,9 @@ class Store:
         mode: str = "souffle",
         head: HeadSpecIR | None = None,
         body_confidences: list[float] | None = None,
+        engine_ext: EngineExtBase | None = None,
     ) -> list[CandidateSet]:
-        """Internal adapter entrypoint; prefer evaluate(mode='souffle'|'problog')."""
+        """Internal adapter entrypoint; prefer evaluate(mode='souffle'|'problog'|'pyreason')."""
         if not isinstance(mode, str) or not mode:
             raise WhereValidationError("mode must be non-empty string")
         evaluator = self._engine_overrides.get(mode)
@@ -267,6 +271,8 @@ class Store:
         }
         if mode == "problog":
             call_kwargs["body_confidences"] = body_confidences
+        if engine_ext is not None:
+            call_kwargs["engine_ext"] = engine_ext
         return evaluator(self, **call_kwargs)
 
     def evaluate_dummy(
