@@ -100,18 +100,29 @@ For non-bounded predicates: unchanged (`"true"/"false"` existence extraction).
 
 **Honest framing**: What we call "value extraction" is actually "reading back the PyReason-computed bound summary". The engine does not preserve the input value independently — it computes a new bound through reasoning. The derived value is the engine's conclusion, not a passthrough.
 
-### D-VC4: WhereIR compiler — NO value variables (open question)
+### D-VC4: Value variables in rule syntax — CLOSED (infeasible in v1)
 
-**Decision**: D-VC4 is **not frozen**. It remains an open question.
+**Decision**: D-VC4 is **closed as infeasible** on PyReason's current public surface.
 
-**Why**: PyReason's rule parser treats multi-variable node atoms as edge predicates. There is no native "value variable" concept for node predicates. Adding value variables would require either:
-- A new encoding strategy (synthetic edge representation)
-- Upstream PyReason changes
-- A workaround that may not be semantically correct
+**Research spike findings** (verified from PyReason v3.0.0 source):
+- `rule_parser.py:118`: variable count hardcoded as node/edge classifier — `len(head_variables) == 1` → node, else edge
+- No annotation, configuration, or API to override this classification
+- Label suffix comparison mechanism exists but is **deprecated** (`temp.py` — multiple `DEPRECATED` markers)
+- Interpretation output contains only `Dict[label] → Interval([lo, hi])` — no independent value channel
 
-This is deferred to a separate research spike or L3b, with an explicit requirement to validate against PyReason's parser before proposing a solution.
+**Workarounds considered and rejected**:
+- Label suffix encoding (`risk_score_0.7`): depends on deprecated mechanism, label explosion
+- Synthetic edge predicates (`has_risk_score(User, Score)`): semantic distortion, dummy nodes
+- Both violate the principle that framework entity semantics should not be warped for engine constraints
 
-**Current state preserved**: WhereIR compiler continues to emit existence-based atoms for all predicates. The value-carrying extension applies only to graph materialization (D-VC2) and derived extraction (D-VC3), not to rule syntax.
+**Consequence for L3b**: Value-carrying in v1 is limited to:
+- Bounded graph materialization (D-VC2) — `= value` instead of `= 1`
+- Bound summary extraction (D-VC3) — derived value = lower_bound
+- Schema-driven routing (D-VC5) — bounded domain contract
+- NO value variables in rule syntax
+- NO rule-level numeric comparison
+
+**Not "never possible"**: If upstream PyReason changes its parser/data model, or if a future adapter-internal encoding experiment succeeds, D-VC4 can be reopened as a new research spike. But v1 must not depend on it.
 
 ### D-VC5: Schema-driven routing — bounded domain contract
 
@@ -165,8 +176,8 @@ Normalization registry (mapping arbitrary ranges to `[0, 1]`) is deferred to v2.
 
 ## 6. Acceptance Criteria
 
-- [ ] D-VC1 through D-VC3, D-VC5, D-VC6 reviewed and approved (5 frozen decisions)
-- [ ] D-VC4 explicitly acknowledged as open question, not deferred implementation
+- [x] D-VC1 through D-VC3, D-VC5, D-VC6 reviewed and approved (5 frozen decisions)
+- [x] D-VC4 closed as infeasible via research spike — PyReason parser evidence definitive
 - [ ] Partial supersession of contract #49 (D7) is clear: default preserved, extension added
 - [ ] PyReason engine constraints (§2) verified and accepted as design constraints
 - [ ] Bounded domain contract (D-VC5) understood: not just type_domain, must be [0,1]
