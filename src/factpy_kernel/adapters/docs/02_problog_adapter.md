@@ -1,7 +1,7 @@
 # ProbLog Adapter 总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/problog`
-- 最后更新：2026-03-20
+- 最后更新：2026-03-27
 - 目标读者：需要理解 ProbLog 导出、执行、结果回读链路的开发者
 
 ## 1. 模块职责
@@ -15,6 +15,7 @@
 - 调用 ProbLog CLI 执行
 - 把 CLI 输出解析回 bindings，再构造成候选集
 - 将概率写回 `CandidateSet.confidence`，并写 `confidence_kind="probability"`
+- 将 accepted ProbLog 候选的概率以 `problog/semantic/probability` 写入 Annotation Store（通过 post-accept binder）
 
 它不负责：
 
@@ -27,6 +28,7 @@
 - `__init__.py`
   - 定义 `evaluate_problog(...)`
   - import 时注册：`register_engine_evaluator(evaluate_problog, "problog")`
+  - `persist_problog_annotations(...)`：shared accept 后绑定 `problog/semantic/probability`
 - `problog_export.py`
   - `export_problog(...)`：导出 `.pl`
 - `problog_engine.py`
@@ -52,6 +54,8 @@
 4. `run_problog(...)` 调用 ProbLog CLI
 5. `parse_problog_output(...)` 解析结果并映射为 `CandidateSet`
 6. 将推导概率写入 `candidate.confidence`，并标注 `candidate.confidence_kind="probability"`
+7. `evaluate_problog(...)` 把待持久化的 `problog/semantic/probability` 模板缓存到 store pending state
+8. caller 在 `accept` 后调用 `persist_problog_annotations(...)`，将真实 `asrt_id` 绑定到 Annotation Store
 
 explainability 补充：
 
@@ -60,6 +64,15 @@ explainability 补充：
   - `support_kind="engine_no_witness_v1"`
   - `support_digest="sha256:000...0"`（兼容占位符）
 - service `explain_ref(kind="candidate")` 对这类 candidate 返回 `ok=true` + `witness_status="degraded"`，表示 candidate 有效，但当前没有可解引用的 witness artifact。
+
+semantic-delivery 补充：
+
+- shared compatibility lane:
+  - `accept` 仍会把 `candidate.confidence` 写入 `meta.confidence`
+  - `confidence_kind="probability"` 也继续保留在 meta
+- engine-native semantic lane:
+  - `persist_problog_annotations(...)` 会把 accepted fact candidate 的概率写成 `problog/semantic/probability`
+  - L2 已完成的 audit export / reader / static annotation panel 会自动消费该 annotation
 
 ## 5. 导出口径（`problog_export.py`）
 
@@ -110,3 +123,4 @@ CLI 二进制：
 - `pred` 原子当前只支持 1/2 元参数映射
 - 主要服务 derivation query 执行，不覆盖 Deontic 规范执行
 - 当前不输出 derivation/proof witness；第一轮只保证显式 degraded explain 语义
+- 当前不提供 ProbLog session API、`engine_ext`、`engine_options` 或 provenance carrier；L4 只覆盖 semantic annotation parity

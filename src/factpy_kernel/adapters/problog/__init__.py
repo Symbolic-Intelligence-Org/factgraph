@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from factpy_kernel.adapters.problog.accept import persist_problog_annotations
 from factpy_kernel.adapters.problog.problog_engine import ProbLogEngineError, run_problog
 from factpy_kernel.adapters.problog.problog_export import ProbLogExportError, export_problog
 from factpy_kernel.adapters.problog.problog_import import ProbLogImportError, parse_problog_output
@@ -77,7 +78,44 @@ def evaluate_problog(
 
     parse_spec = dict(rule_spec)
     parse_spec["store"] = store
-    return parse_problog_output(raw_output, parse_spec, store.ledger)
+    candidates = parse_problog_output(raw_output, parse_spec, store.ledger)
+    _remember_pending_probability_annotations(store, candidates)
+    return candidates
+
+
+def _remember_pending_probability_annotations(
+    store: Any,
+    candidates: list[CandidateSet],
+) -> None:
+    if not isinstance(candidates, list) or not candidates:
+        return
+    if not hasattr(store, "_problog_pending_annotations"):
+        store._problog_pending_annotations = {}
+    pending_by_run = store._problog_pending_annotations
+    if not isinstance(pending_by_run, dict):
+        return
+
+    for candidate in candidates:
+        if not isinstance(candidate, CandidateSet):
+            continue
+        if candidate.candidate_kind != "fact":
+            continue
+        if candidate.confidence is None:
+            continue
+        run_pending = pending_by_run.setdefault(candidate.run_id, {})
+        if not isinstance(run_pending, dict):
+            continue
+        run_pending[candidate.candidate_id] = [
+            {
+                "namespace": "problog",
+                "category": "semantic",
+                "key": "probability",
+                "kind": "float",
+                "value": float(candidate.confidence),
+                "origin": "derived",
+                "derivation": candidate.derivation_id,
+            }
+        ]
 
 
 # Register on import for Store.evaluate(mode="problog").
@@ -91,5 +129,6 @@ __all__ = [
     "evaluate_problog",
     "export_problog",
     "parse_problog_output",
+    "persist_problog_annotations",
     "run_problog",
 ]

@@ -123,10 +123,21 @@ Schema → Session (batch API) → Runner (typed rules)
 
 ProbLog 已经有基本的 `Store.evaluate(mode="problog")` 能力（`adapters/problog/__init__.py` 已注册）。本方向不是"让它能跑"——而是补齐 semantic-delivery parity：
 
-- `ProbLogExt(EngineExtBase)` — 概率语义的 typed extension
 - `problog/semantic/probability` 进入 Annotation Store
-- ProbLog provenance carrier 进入审计面（类似 `PyReasonTraceV0`）
-- Static HTML / audit package 能展示 ProbLog 语义面板
+- 复用现有 audit package / assertion detail / static HTML annotation panel 消费该 annotation
+- 继续保留 shared compatibility lane：`meta.confidence` + `confidence_kind="probability"`
+
+本方向的实现范围刻意保持窄：
+
+- 不在 L4 内引入 `ProbLogExt(EngineExtBase)`
+- 不在 L4 内承诺 provenance carrier
+- 不在 L4 内新增 `engine_options`
+
+这些如果后续需要，应该各自开新的 spike / decision / implementation blueprint，而不是混入 semantic-delivery parity 主线。
+
+L4 已由子蓝图实现并归档：
+
+- [2026-03-27_problog-semantic-annotation-parity-l4.md](../archive/2026-03-27_problog-semantic-annotation-parity-l4.md)
 
 **Gate**：PyReason 真实验证通过（Gate 1）→ 才开始 ProbLog parity。否则可能在不成熟的框架上重复犯设计错误。
 
