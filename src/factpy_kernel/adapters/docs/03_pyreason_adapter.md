@@ -12,15 +12,12 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 
 ## 2. 环境要求
 
-- `pyreason==3.0.0`（3.4.0 在 ARM64 macOS 上 import 失败）
+- `pyreason==3.0.0`（或更新版本；3.4.0 依赖矩阵相同）
 - Python 3.10
 - 手动安装：`pip install 'pyreason==3.0.0'`（不在 `pyproject.toml` 中，spike-only dependency）
-- 当前本机实测环境（2026-03-27）：`numba==0.64.0`、`llvmlite==0.46.0`
-- 当前本机限制：
-  - plain `import pyreason` 会因 `numba` cache 报 `RuntimeError`（`Interpretation._init_reverse_neighbors` no locator available）
-  - 诊断用的 `numba.njit(cache=False)` monkeypatch 可以让 import 成功，但真实 `pyreason.reason()` 仍会进入长时间 `numba` / `llvmlite` 编译；这不是已验证的 operator path
-  - `NUMBA_DISABLE_JIT=1` 不可用：`pyreason` import 会改为触发 `Interval.__new__()` `TypeError`
-- 历史注记：2026-03-26 的 spike 记录过 ARM64 macOS 首次 JIT 约 `85s`、缓存后约 `8.7s` 的成功运行；这属于归档历史，不应视为当前环境的保证
+- 当前已验证环境（2026-03-27）：`numba==0.64.0`、`llvmlite==0.46.0`
+- **重要**：如果 `import pyreason` 报 numba cache 错误（`RuntimeError: cannot cache function ... no locator available`），清除过期 cache：`rm -rf $(python -c "import pyreason, pathlib; print(pathlib.Path(pyreason.__file__).parent / 'cache')")`
+- 首次运行时 numba JIT 编译约 `~170s`，后续运行使用 cache 约 `~8s`
 
 ## 3. 当前模块内容
 
