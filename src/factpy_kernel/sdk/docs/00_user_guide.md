@@ -812,14 +812,48 @@ res = sdk.accept_many(cands, mode="atomic")
 |------|------|
 | `"native"` | Python 内置求值器（原 `"python"`，已重命名） |
 | `"souffle"` | Souffle 引擎（原 `"engine"`，已重命名） |
-| `"problog"` | ProbLog 概率推理引擎（v3 新增） |
+| `"problog"` | ProbLog 概率推理引擎 |
+| `"pyreason"` | PyReason 图上模糊推理引擎 |
 
 旧名 `"python"` / `"engine"` 传入时明确报错，并提示新名称。
 
-引擎采用名称注册表（非单例）：`register_engine_evaluator(name -> fn)`。  
+引擎采用名称注册表（非单例）：`register_engine_evaluator(name -> fn)`。
 适配器模块导入时自动注册：
 - `import factpy_kernel.adapters.souffle` 注册 `"souffle"`
 - `import factpy_kernel.adapters.problog` 注册 `"problog"`
+- `import factpy_kernel.adapters.pyreason` 注册 `"pyreason"`
+
+### 6.4.1 PyReason 使用示例
+
+```python
+import factpy_kernel.adapters.pyreason  # 注册 "pyreason"
+from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
+from factpy_kernel.adapters.pyreason.accept import persist_pyreason_annotations
+
+# engine_ext 携带引擎特有规则语义（definition-time）
+drv = Derivation(
+    id="drv.popular",
+    version="v1",
+    where=[Pred("user:name", u, name)],
+    target="user:popular",
+    head_vars=[u],
+    mode="pyreason",
+    engine_ext=PyReasonRuleExt(timestep_delay=1),
+)
+
+# engine_options 携带运行时配置（call-time only，不进入 Derivation）
+cands = sdk.evaluate(drv, engine_options={"timesteps": 5})
+
+# accept 后持久化语义 annotation
+result = sdk.accept(cands[0])
+persist_pyreason_annotations(sdk.ledger, cands[0].run_id, sdk.store, result)
+# → pyreason/semantic/bound_lower, bound_upper 等写入 Annotation Store
+```
+
+**关键区分**：
+- `engine_ext`：规则级语义参数，挂在 `Derivation.engine_ext`，编译时伴随但不序列化
+- `engine_options`：运行时参数，call-time only，`mode="native"` 拒绝非空 options
+- 语义 annotation：accept 后需显式调用 `persist_pyreason_annotations()` 或 `persist_problog_annotations()` 完成持久化
 
 **稳定合约**
 - `sdk.evaluate(...)` 产出候选，不写 ledger；`sdk.accept(...)` 才写 ledger。

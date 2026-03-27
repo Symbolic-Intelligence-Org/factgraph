@@ -1,8 +1,8 @@
 # Core Architecture Overview (factpy_kernel)
 
 - Scope: `src/factpy_kernel/core`
-- Last updated: 2026-03-21
-- Code baseline: `Store.evaluate` supports only `native|souffle|problog`; `Ledger` is a SQLite write-through cache; `ProjectorAudit` is v2
+- Last updated: 2026-03-28
+- Code baseline: `Store.evaluate` supports `native|souffle|problog|pyreason`; `Ledger` is a SQLite write-through cache + `annotation_rows` (Annotation Store); `ProjectorAudit` is v2
 - Audience: developers who need to understand core semantic boundaries, key entrypoints, and extension points
 
 ## 1. Document Boundary

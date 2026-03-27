@@ -150,9 +150,13 @@
 
 ### 6.2 Derivation
 
-- `sdk.evaluate(Derivation(...), mode="native|souffle|problog") -> list[CandidateSet]`
+- `sdk.evaluate(Derivation(...), mode="native|souffle|problog|pyreason") -> list[CandidateSet]`
 - 旧名 `python|engine` 传入会明确报错并提示新名称
 - `head` 形态决定 candidate kind
 - `head=[...]` 支持 evaluate 展平输出
-- `CandidateSet.confidence`：`problog` 为 `float`，`native/souffle` 为 `None`
+- `CandidateSet.confidence`：`problog` 为概率 `float`，`pyreason` 为 lower bound `float`，`native/souffle` 为 `None`
 - `sdk.accept(...)` / `sdk.accept_many(...)` 负责写入与幂等
+- `engine_ext`：`Derivation.engine_ext` 传递引擎特有规则语义（如 `PyReasonRuleExt(timestep_delay=1)`），必须继承 `EngineExtBase`
+- `engine_options`：`sdk.evaluate(..., engine_options={"timesteps": 5})` 传递运行时配置，call-time only，不进入 Derivation 或 Ledger
+- `mode="native"` 拒绝非空 `engine_options`
+- 语义 annotation：PyReason 结果自动生成 `pyreason/semantic/*`，ProbLog 结果生成 `problog/semantic/probability`；accept 后需显式调用 `persist_pyreason_annotations()` 或 `persist_problog_annotations()` 完成持久化

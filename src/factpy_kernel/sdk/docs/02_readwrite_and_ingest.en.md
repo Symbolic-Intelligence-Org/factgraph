@@ -232,3 +232,32 @@ Output:
 - `ValidationReport.warnings`
 - `ValidationReport.errors`
 - `ValidationReport.diagnostics_contract_version`
+
+---
+
+## Annotation Store (Semantic Annotation Layer)
+
+The Annotation Store is a persistence layer independent of `meta_rows`, storing engine semantic properties of facts (e.g., PyReason bounds, ProbLog probability).
+
+### Core Concepts
+
+- **`AnnotationRow`**: `(asrt_id, namespace, category, key, kind, value, origin, derivation)`
+- **namespace**: `shared` (framework-wide) / `pyreason` / `problog` / `souffle`
+- **category**: `source` (provenance info) / `semantic` (fact truth semantics) / `derived` (computed summaries) / `operational` (status flags)
+- **origin**: `observed` (directly recorded) / `derived` (computed by mapping function)
+
+### Write Paths
+
+1. **Shared path (automatic)**: `write_protocol.set_field()` projects whitelisted meta keys (source, analyst, confidence, etc.) into `annotation_rows`
+2. **PyReason path**: `persist_pyreason_annotations(ledger, run_id, store, accept_result)` writes `pyreason/semantic/bound_lower`, `bound_upper`, etc. post-accept
+3. **ProbLog path**: `persist_problog_annotations(ledger, run_id, store, accept_result)` writes `problog/semantic/probability` post-accept
+
+### Read Paths
+
+- `ledger.find_annotations(asrt_id=..., namespace=..., category=...)` — query by criteria
+- Audit package automatically exports `assertion_annotations.jsonl`
+- Static HTML assertion detail pages automatically render annotation panels grouped by namespace
+
+### Relationship to meta_rows
+
+`meta_rows` is now a legacy compatibility layer. New engine semantics are written exclusively to the Annotation Store. `confidence` is retained in `meta_rows` as a compatibility projection, but its authoritative source is the `shared/derived/confidence` annotation.

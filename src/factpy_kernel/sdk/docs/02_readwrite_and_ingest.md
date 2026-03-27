@@ -232,3 +232,32 @@ report = sdk.validate_provenance(obj, standard="derivation_v1")
 - `ValidationReport.warnings`
 - `ValidationReport.errors`
 - `ValidationReport.diagnostics_contract_version`
+
+---
+
+## Annotation Store（语义标注层）
+
+Annotation Store 是独立于 `meta_rows` 的持久化层，存储事实的引擎语义属性（如 PyReason bound、ProbLog probability）。
+
+### 核心概念
+
+- **`AnnotationRow`**：`(asrt_id, namespace, category, key, kind, value, origin, derivation)`
+- **namespace**：`shared`（框架共享）/ `pyreason` / `problog` / `souffle`
+- **category**：`source`（来源信息）/ `semantic`（事实真值语义）/ `derived`（派生摘要）/ `operational`（操作状态）
+- **origin**：`observed`（直接观测）/ `derived`（由映射函数计算）
+
+### 写入路径
+
+1. **共享路径（自动）**：`write_protocol.set_field()` 会把白名单 meta key（source、analyst、confidence 等）同步投影到 `annotation_rows`
+2. **PyReason 路径**：`persist_pyreason_annotations(ledger, run_id, store, accept_result)` 在 accept 后写入 `pyreason/semantic/bound_lower`、`bound_upper` 等
+3. **ProbLog 路径**：`persist_problog_annotations(ledger, run_id, store, accept_result)` 在 accept 后写入 `problog/semantic/probability`
+
+### 读取路径
+
+- `ledger.find_annotations(asrt_id=..., namespace=..., category=...)` — 按条件查询
+- Audit package 自动导出 `assertion_annotations.jsonl`
+- Static HTML 的 assertion detail 页面自动渲染 annotation panel（按 namespace 分组）
+
+### 与 meta_rows 的关系
+
+`meta_rows` 已退化为 legacy compatibility layer。新的引擎语义只写 Annotation Store。`confidence` 在 `meta_rows` 中作为兼容投影保留，但其权威来源是 `shared/derived/confidence` annotation。

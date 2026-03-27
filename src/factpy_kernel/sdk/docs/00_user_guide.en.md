@@ -830,7 +830,8 @@ res = sdk.accept_many(cands, mode="atomic")
 | ----------- | -------------------------------------------------------- |
 | `"native"`  | Python built-in evaluator (formerly `"python"`, renamed) |
 | `"souffle"` | Soufflé engine (formerly `"engine"`, renamed)            |
-| `"problog"` | ProbLog probabilistic reasoning engine (new in v3)       |
+| `"problog"` | ProbLog probabilistic reasoning engine                   |
+| `"pyreason"`| PyReason graph-based fuzzy reasoning engine               |
 
 Passing old names `"python"` / `"engine"` raises a clear error and suggests the new name.
 
@@ -839,6 +840,39 @@ Adapters auto-register upon import:
 
 * `import factpy_kernel.adapters.souffle` registers `"souffle"`
 * `import factpy_kernel.adapters.problog` registers `"problog"`
+* `import factpy_kernel.adapters.pyreason` registers `"pyreason"`
+
+#### 6.4.1 PyReason Usage Example
+
+```python
+import factpy_kernel.adapters.pyreason  # registers "pyreason"
+from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
+from factpy_kernel.adapters.pyreason.accept import persist_pyreason_annotations
+
+# engine_ext carries engine-specific rule semantics (definition-time)
+drv = Derivation(
+    id="drv.popular",
+    version="v1",
+    where=[Pred("user:name", u, name)],
+    target="user:popular",
+    head_vars=[u],
+    mode="pyreason",
+    engine_ext=PyReasonRuleExt(timestep_delay=1),
+)
+
+# engine_options carries runtime config (call-time only, never enters Derivation)
+cands = sdk.evaluate(drv, engine_options={"timesteps": 5})
+
+# Persist semantic annotations after accept
+result = sdk.accept(cands[0])
+persist_pyreason_annotations(sdk.ledger, cands[0].run_id, sdk.store, result)
+# → pyreason/semantic/bound_lower, bound_upper etc. written to Annotation Store
+```
+
+**Key distinctions**:
+- `engine_ext`: rule-level semantic parameters on `Derivation.engine_ext`; accompanied through compile but never serialized
+- `engine_options`: runtime parameters, call-time only; `mode="native"` rejects non-empty options
+- Semantic annotations: post-accept, explicitly call `persist_pyreason_annotations()` or `persist_problog_annotations()` to persist
 
 **Stable contract**
 

@@ -2,7 +2,7 @@
 
 - 适用范围：`src/factpy_kernel/core`
 - 最后更新：2026-03-26
-- 代码基线：`Store.evaluate` 仅支持 `native|souffle|problog`；`Ledger` 为 SQLite write-through cache；`ProjectorAudit` 为 v2 结构
+- 代码基线：`Store.evaluate` 支持 `native|souffle|problog|pyreason`；`Ledger` 为 SQLite write-through cache + `annotation_rows`（Annotation Store）；`ProjectorAudit` 为 v2 结构
 - 目标读者：需要理解 core 语义边界、关键入口与扩展点的开发者
 
 ## 1. 文档边界
