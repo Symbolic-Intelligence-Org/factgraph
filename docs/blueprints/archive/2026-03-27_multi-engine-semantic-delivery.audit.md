@@ -12,3 +12,4 @@
 | 2026-03-27 | scoped | 3 P2/P3 fixes + status升级 | Gate 1 失败分支改为 L2/L3a/L3b/L4。归档蓝图数修正为 101（非 audit）。Audit log 方向线编号同步为 L1/L2/L3a/L3b/L4。 |
 | 2026-03-27 | scoped | engine_options branch opened | Added explicit link to `2026-03-27_engine-options-runtime-dispatch-decision.md`. Clarifies again that engine_options is a future design branch, not mainline L4. |
 | 2026-03-27 | scoped | L4 narrowed and completed | L4 was implemented as semantic annotation parity only: accepted ProbLog facts now persist `problog/semantic/probability`, and existing L2 audit/static consumers render it without new ProbLog-specific UI. `ProbLogExt`, provenance, and runtime options remain future branches. |
+| 2026-03-28 | implemented | Mother blueprint complete | All gates (1-3) closed. All direction lines (L1/L2/L3a/L3b/L4) complete. engine_options future branch also implemented. 499 tests green. Archived. |
