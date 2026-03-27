@@ -540,8 +540,8 @@ def _compile_mode(payload: dict[str, Any]) -> str:
         raise _compile_error("mode='python' is removed; use mode='native'", path="$.mode")
     if mode == "engine":
         raise _compile_error("mode='engine' is removed; use mode='souffle'", path="$.mode")
-    if mode not in {"native", "souffle", "problog"}:
-        raise _compile_error("mode must be one of: native, souffle, problog", path="$.mode")
+    if mode not in {"native", "souffle", "problog", "pyreason"}:
+        raise _compile_error("mode must be one of: native, souffle, problog, pyreason", path="$.mode")
     return str(mode)
 
 

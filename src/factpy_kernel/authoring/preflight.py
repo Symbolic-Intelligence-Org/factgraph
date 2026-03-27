@@ -286,8 +286,8 @@ def derivation_dry_run_preview(
         raise AuthoringPreflightError("mode='python' is removed; use mode='native'")
     if mode == "engine":
         raise AuthoringPreflightError("mode='engine' is removed; use mode='souffle'")
-    if mode not in {"native", "souffle", "problog"}:
-        raise AuthoringPreflightError("mode must be one of: native, souffle, problog")
+    if mode not in {"native", "souffle", "problog", "pyreason"}:
+        raise AuthoringPreflightError("mode must be one of: native, souffle, problog, pyreason")
 
     warnings: list[dict[str, Any]] = []
     if mode == "souffle" and _find_souffle_binary_safe() is None:
