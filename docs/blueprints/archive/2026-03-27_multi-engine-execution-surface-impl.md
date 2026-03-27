@@ -1,10 +1,10 @@
 # Task Blueprint: Multi-Engine Execution Surface v0 Implementation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-27
 - Last Updated: 2026-03-27
 - Parent Blueprint:
-  - [2026-03-27_multi-engine-execution-surface-decision.md](./2026-03-27_multi-engine-execution-surface-decision.md) (9 frozen decisions)
+  - [2026-03-27_multi-engine-execution-surface-decision.md](../active/2026-03-27_multi-engine-execution-surface-decision.md) (9 frozen decisions)
 - Related Modules:
   - `src/factpy_kernel/core/store/types.py`
   - `src/factpy_kernel/core/store/_evaluate.py`
@@ -79,12 +79,12 @@ Per parent decision blueprint §4.
 
 ## 5. Acceptance
 
-- [ ] `Derivation(engine_ext=PyReasonRuleExt(...))` constructs without error
-- [ ] `store.evaluate(mode="pyreason", ...)` returns `list[CandidateSet]`
-- [ ] `store.accept(candidate)` returns core `AcceptResult`
-- [ ] `pyreason/semantic/*` annotations persisted after accept
-- [ ] 435+ existing tests green
-- [ ] New integration tests pass
+- [x] `Derivation(engine_ext=PyReasonRuleExt(...))` constructs without error
+- [x] `store.evaluate(mode="pyreason", ...)` returns `list[CandidateSet]`
+- [x] `store.accept(candidate)` returns core `AcceptResult`
+- [x] `pyreason/semantic/*` annotations persisted after accept
+- [x] 435+ existing tests green
+- [x] New integration tests pass
 - [ ] Error case: wrong engine_ext type → ValueError
 
 ## 6. Docs To Update
@@ -94,4 +94,19 @@ Per parent decision blueprint §4.
 
 ## 7. Outcome / Deviations
 
-(To be filled after implementation)
+- Final outcome:
+  - Step 1 (`833075c`): added `EngineExtBase`, `Derivation.engine_ext`, and `EvaluateMode="pyreason"` support.
+  - Step 2 (`0a8a449`): threaded `engine_ext` through `sdk/store.py` → `core/store/_evaluate.py` → `runtime.py`.
+  - Step 3 (`62e5783`): added `adapters/pyreason/where_compile.py` plus focused compiler coverage.
+  - Step 4 (`5e7e7e8`): added `pyreason_engine_eval()`, EDB materialization, adapter registration, and pending annotation caching.
+  - Step 5 (`fa35c54`): added SDK end-to-end execution-surface coverage and patched authoring compile/preflight mode gates so `Derivation(mode="pyreason")` can actually reach execution.
+- Deviations from the original step text:
+  - OR branch groups are compiled into one PyReason rule per branch instead of being rejected as unsupported `branch-list`.
+  - Pending annotations are cached on `store._engine_pending_annotations`; `Store.accept()` does not auto-persist or auto-clear them. The current v0 close loop is `evaluate -> accept -> explicit bind/persist`.
+  - `wrong engine_ext type -> ValueError` remains deferred; the implementation does not yet reject cross-engine ext mismatches.
+- Validation:
+  - `PYTHONPATH=src python -m unittest factpy_kernel.tests.test_pyreason_e2e`
+  - `PYTHONPATH=src python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'`
+  - Result: `Ran 464 tests`, `OK`
+- Archive note:
+  - Adapter module docs were updated and the implementation blueprint was archived after code/tests/docs alignment.

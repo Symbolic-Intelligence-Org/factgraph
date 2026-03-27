@@ -1,12 +1,12 @@
 # PyReason Adapter（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
-- 最后更新：2026-03-26
-- 状态：adapter-local V0（provenance + session 写入 + batch API + rule ext + runner + accept）
+- 最后更新：2026-03-27
+- 状态：execution-surface V0（shared evaluate dispatch + adapter-local runner/session/accept helpers）
 
 ## 1. 概述
 
-PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的接入。当前实现了 provenance trace 提取、引擎特定写入 session、entity-level batch API、assertion annotation 模板生成、adapter-local typed rule wrapper，以及 reusable runner/accept helper。Rule builder 和 evaluate dispatch 尚未实现（Phase 2/3）。
+PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的接入。当前已经接上 shared evaluate surface：`Store.evaluate(mode="pyreason")` / `SDKStore.evaluate(Derivation(..., mode="pyreason"))` 会走 adapter 的 EDB materialization、WhereIR 编译、runner 和 CandidateSet 输出。adapter-local 的 provenance、session、rule ext、runner、accept helper 仍然保留，作为引擎内部实现与独立 helper 层。
 
 PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上做区间值时序推理，与 Souffle（确定性 Datalog）和 ProbLog（概率逻辑）都有本质差异。
 
@@ -24,9 +24,11 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 | `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` |
 | `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 batch API / bound / active_from / active_to / annotation templates |
 | `rule_ext.py` | `PyReasonRuleExt` / `PyReasonRuleDef` / `PyReasonFactDef` / `compile_pyreason_rule(...)` |
+| `where_compile.py` | `compile_where_ir_to_pyreason(...)` — lowered WhereIR → PyReason rule syntax（execution surface compiler） |
 | `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult`；接受 legacy tuple 或 typed defs |
+| `engine_eval.py` | `pyreason_engine_eval(...)` / `_materialize_edb_session(...)` — shared evaluate dispatch 入口，输出 `CandidateSet` 并缓存 pending annotations |
 | `accept.py` | `accept_pyreason_session(...)` — adapter-local accept helper；通过 shared `set_field()` 获取真实 `asrt_id`，再把 `pyreason/semantic/*` 模板落到 `annotation_rows` |
-| `__init__.py` | 空模块入口 |
+| `__init__.py` | import 时注册 `register_engine_evaluator(pyreason_engine_eval, "pyreason")` |
 
 ## 4. PyReason 推理模型
 
@@ -127,7 +129,7 @@ PyReason session 内部的 graph node id 仍然是裸字符串（如 `Alice` / `
 
 ## 5B. Runner 模型
 
-当前已有一条 reusable 的执行路径，但它仍是 adapter-local helper，不是 `Store.evaluate(mode="pyreason")`：
+当前仍有一条 reusable 的底层执行路径；shared evaluate surface 会在 `engine_eval.py` 里复用它：
 
 ```python
 from factpy_kernel.adapters.pyreason.rule_ext import (
@@ -179,8 +181,48 @@ result = run_pyreason(
 - `run_pyreason(...)` 同时接受 legacy tuple 形式的 `rules` / `facts`，以及 typed `rule_defs` / `fact_defs`
 - `PyReasonRuleDef` 是 adapter-local wrapper：`Rule + PyReasonRuleExt`，不修改 shared `Rule`
 - `compile_pyreason_rule(...)` 当前只支持 `PredAtom` + `LogicVar` + 字面量；`CompareExpr` / `NotExpr` / `RuleRefAtom` 会报明确错误
-- runner 不注册进 `Store.evaluate()`，因为那会引入 WHERE→PyReason rule 编译范围
+- `run_pyreason(...)` 本身仍是底层 helper；`Store.evaluate(mode="pyreason")` 通过 `engine_eval.py` 在外层完成 WHERE→PyReason 编译和 CandidateSet 组装
 - `derived_session` 可以直接接到 `accept_pyreason_session(...)`
+
+## 5C. Shared Execution Surface
+
+当前共享执行链路如下：
+
+```python
+import factpy_kernel.adapters.pyreason
+
+candidates = sdk.evaluate(
+    Derivation(
+        id="drv.pyreason_popular",
+        version="v1",
+        where=[Pred("user:name", u, name)],
+        target="user:popular",
+        head_vars=[u],
+        mode="pyreason",
+        engine_ext=PyReasonRuleExt(timestep_delay=2),
+    )
+)
+```
+
+执行顺序：
+
+1. `SDKStore.evaluate(...)` 从 `Derivation` 单独提取 `engine_ext`，不写入 `to_authoring_payload()`
+2. `evaluate_store(...)` / `Store.evaluate_engine(...)` 把 `mode="pyreason"` 与 `engine_ext` 转发到 adapter
+3. `pyreason_engine_eval(...)`：
+   - 用 `project_view_facts(...)` 把 Ledger active facts materialize 成 `PyReasonSession`
+   - 用 `compile_where_ir_to_pyreason(...)` 把 lowered WhereIR 编译成 PyReason rule strings
+   - 调用 `run_pyreason(...)`
+   - 把 derived session facts 转成 `CandidateSet`
+   - 把 annotation templates 缓存在 `store._engine_pending_annotations[run_id]`
+4. core `accept()` 负责把 candidate payload 写回 Ledger
+5. caller 在 post-accept 阶段显式把 pending `pyreason/*` templates 绑定到真实 `asrt_id` 后写入 `annotation_rows`
+
+v0 约束：
+
+- WhereIR compiler 只支持 lowered `("pred", pred_id, terms)` atoms；`eq` / `not` / `ruleref` 直接报错
+- 采用 attribute-existence model：node predicates 只编译实体变量，不带 value variable
+- `engine_ext` 只支持 `Derivation.engine_ext`，不进入持久化 payload
+- `Store.accept()` 当前不会自动 materialize / clear pending annotations；这一步仍是显式 side-channel
 
 ## 6. Souffle vs PyReason Provenance 对比
 
@@ -221,9 +263,10 @@ result = run_pyreason(
 
 ## 7. 当前限制
 
-- 不是完整的 factpy adapter（无 `Store.evaluate(mode="pyreason")` / rule builder 集成）
+- shared evaluate surface 已实现，但 rule registry / rule builder integration 仍未做
 - `session.annotation_templates` 已可通过 `accept_pyreason_session(...)` 落到 Ledger；但当前 accept 仍依赖 adapter-local synthetic `entity_ref` materialization
-- `run_pyreason(...)` 是 reusable helper，不是 core evaluate surface
+- pending `pyreason/*` annotations 仍需在 accept 后显式 bind/persist；core `Store.accept()` 不会自动完成这一步
+- `wrong engine_ext type -> ValueError` 还没补齐
 - 依赖 `pyreason==3.0.0`（非 repo-managed dependency）
 - ARM64 macOS 首次 JIT 约 `85s`
 - `PyReasonTraceEventV0` 字段未冻结
