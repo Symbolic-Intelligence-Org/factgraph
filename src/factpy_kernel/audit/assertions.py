@@ -21,6 +21,7 @@ class AuditAssertionIndex:
     meta: dict[str, dict[str, list[dict[str, Any]]]]
     revoked_by: dict[str, list[str]]
     revokes: dict[str, list[str]]
+    annotations: dict[str, list[dict[str, Any]]]
 
     def get_assertion_detail(self, asrt_id: str) -> dict[str, Any] | None:
         if not isinstance(asrt_id, str) or not asrt_id:
@@ -35,11 +36,13 @@ class AuditAssertionIndex:
         }
         revoked_by = sorted(self.revoked_by.get(asrt_id, []))
         revokes = sorted(self.revokes.get(asrt_id, []))
+        annotations = [dict(row) for row in self.annotations.get(asrt_id, [])]
         return {
             "asrt_id": asrt_id,
             "claim": dict(claim),
             "claim_args": claim_args,
             "meta": meta,
+            "annotations": annotations,
             "revoked_by": revoked_by,
             "revokes": revokes,
             "is_revoked": len(revoked_by) > 0,
@@ -106,6 +109,15 @@ def load_assertion_index(package: AuditPackageData | str | Path) -> AuditAsserti
         for asrt_id, values in mapping.items():
             values.sort()
 
+    annotations: dict[str, list[dict[str, Any]]] = {}
+    if isinstance(package, AuditPackageData):
+        for row in package.assertion_annotations:
+            asrt_id = row.get("asrt_id")
+            if isinstance(asrt_id, str) and asrt_id:
+                annotations.setdefault(asrt_id, []).append(row)
+    for asrt_id_rows in annotations.values():
+        asrt_id_rows.sort(key=lambda r: (str(r.get("namespace", "")), str(r.get("key", ""))))
+
     return AuditAssertionIndex(
         package_dir=package_dir,
         claims=claims,
@@ -113,6 +125,7 @@ def load_assertion_index(package: AuditPackageData | str | Path) -> AuditAsserti
         meta=meta,
         revoked_by=revoked_by,
         revokes=revokes,
+        annotations=annotations,
     )
 
 

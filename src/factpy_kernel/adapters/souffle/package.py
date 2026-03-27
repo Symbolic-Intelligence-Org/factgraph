@@ -232,6 +232,24 @@ def export_package(
             provenance_status_path = audit_dir / "provenance_statuses.jsonl"
             _write_jsonl(provenance_status_path, provenance_status_rows)
             audit_files["provenance_statuses"] = "audit/provenance_statuses.jsonl"
+        annotation_rows_list = store.ledger.annotation_rows
+        if annotation_rows_list:
+            annotation_export_rows = [
+                {
+                    "asrt_id": row.asrt_id,
+                    "namespace": row.namespace,
+                    "category": row.category,
+                    "key": row.key,
+                    "kind": row.kind,
+                    "value": row.value,
+                    "origin": row.origin,
+                    "derivation": row.derivation,
+                }
+                for row in annotation_rows_list
+            ]
+            annotation_path = audit_dir / "assertion_annotations.jsonl"
+            _write_jsonl(annotation_path, annotation_export_rows)
+            audit_files["assertion_annotations"] = "audit/assertion_annotations.jsonl"
 
     (
         claim_rows,

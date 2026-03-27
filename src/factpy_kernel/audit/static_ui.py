@@ -628,10 +628,54 @@ def _render_assertion_detail_page(payload: dict[str, Any]) -> str:
             f"<p>revokes={escape(','.join(revokes)) or '-'}</p>"
             "<h2>Meta</h2>"
             f"{''.join(meta_sections) if meta_sections else '<p>None</p>'}"
+            f"{_render_annotation_panel(payload.get('annotations', []))}"
             "<h2>Payload</h2>"
             f"<pre>{escape(json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
         ),
     )
+
+
+def _render_annotation_panel(annotations: list[dict[str, Any]]) -> str:
+    """Render assertion annotations grouped by namespace."""
+    if not isinstance(annotations, list) or not annotations:
+        return ""
+
+    by_namespace: dict[str, list[dict[str, Any]]] = {}
+    for ann in annotations:
+        if not isinstance(ann, dict):
+            continue
+        namespace = str(ann.get("namespace", "unknown"))
+        by_namespace.setdefault(namespace, []).append(ann)
+    if not by_namespace:
+        return ""
+
+    sections: list[str] = []
+    for namespace in sorted(by_namespace):
+        display_name = {
+            "pyreason": "PyReason",
+            "problog": "ProbLog",
+            "souffle": "Souffle",
+            "shared": "Shared",
+        }.get(namespace, namespace)
+        table_rows: list[str] = []
+        for row in by_namespace[namespace]:
+            table_rows.append(
+                "<tr>"
+                f"<td>{escape(str(row.get('category', '')))}</td>"
+                f"<td>{escape(str(row.get('key', '')))}</td>"
+                f"<td>{escape(str(row.get('value', '')))}</td>"
+                f"<td>{escape(str(row.get('origin', '')))}</td>"
+                "</tr>"
+            )
+        sections.append(
+            f"<h3>Annotations - {escape(display_name)}</h3>"
+            "<table><thead><tr>"
+            "<th>category</th><th>key</th><th>value</th><th>origin</th>"
+            "</tr></thead>"
+            f"<tbody>{''.join(table_rows)}</tbody></table>"
+        )
+
+    return f"<h2>Annotations</h2>{''.join(sections)}"
 
 
 def _render_rule_trace_index_page(rows: list[dict[str, Any]]) -> str:

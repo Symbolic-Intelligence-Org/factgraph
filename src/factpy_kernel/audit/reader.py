@@ -29,6 +29,7 @@ class AuditPackageData:
     certainty_summaries: dict[str, dict[str, Any]]
     provenance_trees: dict[str, dict[str, Any]]
     provenance_statuses: dict[str, dict[str, Any]]
+    assertion_annotations: list[dict[str, Any]]
 
 
 def load_audit_package(package_dir: str | Path) -> AuditPackageData:
@@ -65,6 +66,7 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
         certainty_summaries=_read_certainty_summaries(root, audit_files),
         provenance_trees=_read_provenance_trees(root, audit_files),
         provenance_statuses=_read_provenance_statuses(root, audit_files),
+        assertion_annotations=_read_optional_jsonl(root, audit_files, "assertion_annotations"),
     )
 
 
@@ -95,6 +97,7 @@ def _read_manifest_audit_files(manifest: dict[str, Any]) -> dict[str, str]:
         "certainty_summaries",
         "provenance_trees",
         "provenance_statuses",
+        "assertion_annotations",
     ):
         value = audit_files.get(key)
         if isinstance(value, str) and value:
