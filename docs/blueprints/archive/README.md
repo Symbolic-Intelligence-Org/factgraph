@@ -133,3 +133,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-26 | annotation-store-v0-schema-and-ledger | implemented | Assertion Annotation Store: `AnnotationRow` + `annotation_rows` DDL + shared whitelist dual-write in `write_protocol` + legacy `meta_rows` projection; 51 new tests |
 | 2026-03-27 | pyreason-execution-surface-v0-decision | superseded | Original 4 decisions (D1-D4) for PyReason execution surface; superseded by `multi-engine-execution-surface-decision` after office hours redesign revealed shadow pipeline problem |
 | 2026-03-27 | multi-engine-execution-surface-impl | implemented | PyReason joined the shared evaluate/accept surface via `engine_ext` passthrough, WhereIR compiler, engine evaluator, pending annotation side-channel, and SDK end-to-end coverage |
+| 2026-03-27 | pyreason-execution-surface-closeout | implemented | Closed the remaining `engine_ext` type-guard gap and formalized reusable post-accept PyReason annotation persistence |

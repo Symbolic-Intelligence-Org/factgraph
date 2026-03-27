@@ -27,7 +27,7 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 | `where_compile.py` | `compile_where_ir_to_pyreason(...)` — lowered WhereIR → PyReason rule syntax（execution surface compiler） |
 | `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult`；接受 legacy tuple 或 typed defs |
 | `engine_eval.py` | `pyreason_engine_eval(...)` / `_materialize_edb_session(...)` — shared evaluate dispatch 入口，输出 `CandidateSet` 并缓存 pending annotations |
-| `accept.py` | `accept_pyreason_session(...)` — adapter-local accept helper；通过 shared `set_field()` 获取真实 `asrt_id`，再把 `pyreason/semantic/*` 模板落到 `annotation_rows` |
+| `accept.py` | `accept_pyreason_session(...)` + `persist_pyreason_annotations(...)` — adapter-local accept helper and shared-surface post-accept annotation binder |
 | `__init__.py` | import 时注册 `register_engine_evaluator(pyreason_engine_eval, "pyreason")` |
 
 ## 4. PyReason 推理模型
@@ -215,14 +215,14 @@ candidates = sdk.evaluate(
    - 把 derived session facts 转成 `CandidateSet`
    - 把 annotation templates 缓存在 `store._engine_pending_annotations[run_id]`
 4. core `accept()` 负责把 candidate payload 写回 Ledger
-5. caller 在 post-accept 阶段显式把 pending `pyreason/*` templates 绑定到真实 `asrt_id` 后写入 `annotation_rows`
+5. caller 在 post-accept 阶段调用 `persist_pyreason_annotations(ledger, run_id, store, accept_result)`，把 pending `pyreason/*` templates 绑定到真实 `asrt_id` 后写入 `annotation_rows`
 
 v0 约束：
 
 - WhereIR compiler 只支持 lowered `("pred", pred_id, terms)` atoms；`eq` / `not` / `ruleref` 直接报错
 - 采用 attribute-existence model：node predicates 只编译实体变量，不带 value variable
 - `engine_ext` 只支持 `Derivation.engine_ext`，不进入持久化 payload
-- `Store.accept()` 当前不会自动 materialize / clear pending annotations；这一步仍是显式 side-channel
+- `Store.accept()` 当前不会自动 materialize / clear pending annotations；v0 通过 `persist_pyreason_annotations(...)` 完成这一步
 
 ## 6. Souffle vs PyReason Provenance 对比
 
@@ -265,8 +265,7 @@ v0 约束：
 
 - shared evaluate surface 已实现，但 rule registry / rule builder integration 仍未做
 - `session.annotation_templates` 已可通过 `accept_pyreason_session(...)` 落到 Ledger；但当前 accept 仍依赖 adapter-local synthetic `entity_ref` materialization
-- pending `pyreason/*` annotations 仍需在 accept 后显式 bind/persist；core `Store.accept()` 不会自动完成这一步
-- `wrong engine_ext type -> ValueError` 还没补齐
+- pending `pyreason/*` annotations 仍需在 accept 后显式 bind/persist；core `Store.accept()` 不会自动完成这一步，但 adapter 已提供 `persist_pyreason_annotations(...)`
 - 依赖 `pyreason==3.0.0`（非 repo-managed dependency）
 - ARM64 macOS 首次 JIT 约 `85s`
 - `PyReasonTraceEventV0` 字段未冻结
