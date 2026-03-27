@@ -27,6 +27,7 @@ from factpy_kernel.core.store.types import (
     BodyConfidencesIR,
     EngineExtBase,
     EngineEvaluatorFn,
+    EngineOptionsIR,
     EvaluateMode,
     HeadSpecIR,
     HeadVarsIR,
@@ -222,6 +223,7 @@ class Store:
         registry: "RuleRegistry | None" = None,
         confidence_kind_resolver: Any | None = None,
         engine_ext: EngineExtBase | None = None,
+        engine_options: EngineOptionsIR = None,
     ) -> list[CandidateSet]:
         return evaluate_store(
             self,
@@ -237,6 +239,7 @@ class Store:
             registry=registry,
             confidence_kind_resolver=confidence_kind_resolver,
             engine_ext=engine_ext,
+            engine_options=engine_options,
         )
 
     def evaluate_engine(
@@ -250,6 +253,7 @@ class Store:
         head: HeadSpecIR | None = None,
         body_confidences: list[float] | None = None,
         engine_ext: EngineExtBase | None = None,
+        engine_options: EngineOptionsIR = None,
     ) -> list[CandidateSet]:
         """Internal adapter entrypoint; prefer evaluate(mode='souffle'|'problog'|'pyreason')."""
         if not isinstance(mode, str) or not mode:
@@ -273,6 +277,8 @@ class Store:
             call_kwargs["body_confidences"] = body_confidences
         if engine_ext is not None:
             call_kwargs["engine_ext"] = engine_ext
+        if engine_options is not None:
+            call_kwargs["engine_options"] = engine_options
         return evaluator(self, **call_kwargs)
 
     def evaluate_dummy(

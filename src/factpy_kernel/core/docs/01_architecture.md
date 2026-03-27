@@ -139,8 +139,14 @@ flowchart LR
 `Store.evaluate(...)` 当前模式：
 
 - `native`：core 内部执行 `project_view_facts -> ruleref_substrate.evaluate_native_where -> builders`
-- `souffle` / `problog`：委托已注册的 engine evaluator
+- `souffle` / `problog` / `pyreason`：委托已注册的 engine evaluator
 - `python` / `engine`：已移除，调用会抛 `ValueError`
+
+共享 evaluate dispatch 还支持 call-time `engine_options`：
+
+- 仅 engine 路径消费，shared core 只校验 `dict | None` 并负责转发
+- `mode="native"` + 非空 `engine_options` 会显式报错
+- 支持哪些 key、默认值与归一化方式，都由对应 adapter 负责
 
 native `RuleRef` 语义的当前边界：
 

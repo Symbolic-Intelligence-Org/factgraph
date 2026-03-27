@@ -21,6 +21,7 @@ from factpy_kernel.core.store.types import (
     BodyConfidencesIR,
     EngineExtBase,
     EngineEvaluatorFn,
+    EngineOptionsIR,
     EvaluateMode,
     HeadSpecIR,
     HeadVarsIR,
@@ -44,6 +45,7 @@ def evaluate_store(
     registry: Any | None = None,
     confidence_kind_resolver: Any | None = None,
     engine_ext: EngineExtBase | None = None,
+    engine_options: EngineOptionsIR = None,
 ) -> list[CandidateSet]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
@@ -55,6 +57,12 @@ def evaluate_store(
         raise ValueError(
             f"engine_ext must be an EngineExtBase instance, got {type(engine_ext).__name__}"
         )
+    if engine_options is not None and not isinstance(engine_options, dict):
+        raise ValueError(
+            f"engine_options must be dict[str, Any] or None, got {type(engine_options).__name__}"
+        )
+    if mode == "native" and engine_options:
+        raise ValueError("engine_options are not supported for mode='native'")
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         if mode in {"souffle", "problog", "pyreason"}:
@@ -71,6 +79,8 @@ def evaluate_store(
                 engine_kwargs["body_confidences"] = body_confidences
             if engine_ext is not None:
                 engine_kwargs["engine_ext"] = engine_ext
+            if engine_options is not None:
+                engine_kwargs["engine_options"] = engine_options
             candidates = engine_evaluate(**engine_kwargs)
             _remember_candidate_support_backrefs(store, candidates)
             return candidates
@@ -115,6 +125,8 @@ def evaluate_store(
             engine_kwargs["body_confidences"] = body_confidences
         if engine_ext is not None:
             engine_kwargs["engine_ext"] = engine_ext
+        if engine_options is not None:
+            engine_kwargs["engine_options"] = engine_options
         candidates = engine_evaluate(**engine_kwargs)
         _remember_candidate_support_backrefs(store, candidates)
         return candidates

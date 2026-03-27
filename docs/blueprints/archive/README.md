@@ -135,4 +135,5 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-27 | multi-engine-execution-surface-impl | implemented | PyReason joined the shared evaluate/accept surface via `engine_ext` passthrough, WhereIR compiler, engine evaluator, pending annotation side-channel, and SDK end-to-end coverage |
 | 2026-03-27 | pyreason-execution-surface-closeout | implemented | Closed the remaining `engine_ext` type-guard gap and formalized reusable post-accept PyReason annotation persistence |
 | 2026-03-27 | pyreason-real-engine-validation | implemented | L1 gate passed: root cause was stale numba cache (144 files), not version incompatibility. Full real-engine chain validated: evaluate (166.6s first JIT) → 2 CandidateSet → accept → 6 annotations persisted |
+| 2026-03-27 | engine-options-impl | implemented | Shared evaluate dispatch now accepts call-time `engine_options`; SDK keeps it out of authored payloads, native rejects non-empty options, and PyReason exposes `timesteps`-only runtime config with adapter-local validation |
 - 2026-03-27_annotation-consumer-migration-l2 — L2 annotation consumer: export + reader + index + static UI panel

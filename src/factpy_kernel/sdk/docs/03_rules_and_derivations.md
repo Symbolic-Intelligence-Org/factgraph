@@ -196,10 +196,12 @@ res = sdk.accept(cands[0], approved_by="alice")
 cands = sdk.evaluate(drv, mode="native", registry=registry)
 ```
 
-- `mode`：`native`（默认）/ `souffle` / `problog`。
+- `mode`：`native`（默认）/ `souffle` / `problog` / `pyreason`。
 - 旧名 `python` / `engine` 会明确报错，并提示新名称。
-- `souffle` / `problog` 路径依赖已注册后端（例如 `import factpy_kernel.adapters.souffle`、`import factpy_kernel.adapters.problog`）。
+- `souffle` / `problog` / `pyreason` 路径依赖已注册后端（例如 `import factpy_kernel.adapters.souffle`、`import factpy_kernel.adapters.problog`、`import factpy_kernel.adapters.pyreason`）。
 - `sdk.evaluate(..., view=...)` 不支持；推理始终基于完整 active 断言集。
+- `engine_options` 是 call-time 的 engine run-time 配置，例如 `sdk.evaluate(drv, mode="pyreason", engine_options={"timesteps": 5})`。
+- `engine_options` 不进入 `Derivation` / `to_authoring_payload()`；`mode="native"` 不接受非空 `engine_options`。
 - `registry` 是 native `RuleRef` 执行的显式上下文：
   - `RuleRef(RuleObj)` 可在 `registry=None` 时自动补依赖
   - 字符串 `RuleRef("rule_id", version=...)` 需要显式 `RuleRegistry`

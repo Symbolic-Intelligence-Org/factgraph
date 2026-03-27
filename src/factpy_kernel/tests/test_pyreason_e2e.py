@@ -145,6 +145,29 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertIn("<-2", rules[0][0])
 
     @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    def test_engine_options_are_call_time_only_and_forwarded(self, mock_run) -> None:
+        sdk = self._make_sdk()
+        derivation = self._make_derivation()
+
+        compiled = sdk._compile_derivation_input(derivation)
+        self.assertNotIn("engine_options", compiled[0])
+
+        sdk.evaluate(derivation, engine_options={"timesteps": 5})
+
+        config = mock_run.call_args.kwargs["config"]
+        self.assertEqual(config.timesteps, 5)
+        self.assertFalse(config.atom_trace)
+
+    def test_sdk_evaluate_rejects_unknown_engine_options(self) -> None:
+        sdk = self._make_sdk()
+        derivation = self._make_derivation()
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.evaluate(derivation, engine_options={"atom_trace": True})
+
+        self.assertIn("Supported keys: timesteps", str(ctx.exception))
+
+    @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_runner_receives_materialized_edb_from_ledger(self, mock_run) -> None:
         sdk = self._make_sdk()
         derivation = self._make_derivation()

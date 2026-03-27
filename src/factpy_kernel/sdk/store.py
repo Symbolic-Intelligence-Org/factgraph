@@ -467,6 +467,7 @@ class SDKStore:
             # Re-enable only after derivation/runtime temporal write semantics are defined.
             raise SDKStoreError("temporal_view is removed from evaluate(); use active/history views on read APIs")
         registry = kwargs.pop("registry", None)
+        engine_options = kwargs.pop("engine_options", None)
         if args and isinstance(args[0], str):
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Derivation object or structured derivation dict"
@@ -481,6 +482,7 @@ class SDKStore:
                 mode=kwargs.pop("mode", None),
                 registry=runtime_registry,
                 engine_ext=engine_ext,
+                engine_options=engine_options,
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
             compiled_plans = self._compile_derivation_input(args[0])
@@ -488,9 +490,12 @@ class SDKStore:
                 compiled_plans,
                 mode=kwargs.pop("mode", None),
                 registry=registry,
+                engine_options=engine_options,
             )
         if registry is not None:
             kwargs["registry"] = registry
+        if engine_options is not None:
+            kwargs["engine_options"] = engine_options
         return self._store.evaluate(*args, **kwargs)
 
     def _evaluate_compiled_derivation_plans(
@@ -500,6 +505,7 @@ class SDKStore:
         mode: str | None,
         registry: RuleRegistry | None,
         engine_ext: object | None = None,
+        engine_options: dict[str, Any] | None = None,
     ) -> list[CandidateSet]:
         if len(compiled_plans) == 1:
             return self._evaluate_single_derivation_plan(
@@ -507,6 +513,7 @@ class SDKStore:
                 mode=mode,
                 registry=registry,
                 engine_ext=engine_ext,
+                engine_options=engine_options,
             )
 
         shared_run_id = self._derive_shared_run_id(compiled_plans[0]["derivation_id"])
@@ -517,6 +524,7 @@ class SDKStore:
                 mode=mode,
                 registry=registry,
                 engine_ext=engine_ext,
+                engine_options=engine_options,
             )
             merged.extend(_with_candidate_run_id(plan_candidates, run_id=shared_run_id))
         return merged
@@ -528,6 +536,7 @@ class SDKStore:
         mode: str | None,
         registry: RuleRegistry | None,
         engine_ext: object | None = None,
+        engine_options: dict[str, Any] | None = None,
     ) -> list[CandidateSet]:
         resolved_mode = mode if mode is not None else compiled.get("mode", "native")
         body_confidences = _coerce_body_confidences(
@@ -547,6 +556,7 @@ class SDKStore:
             engine_evaluate=self._store.evaluate_engine,
             registry=registry,
             engine_ext=engine_ext,
+            engine_options=engine_options,
         )
 
     @staticmethod

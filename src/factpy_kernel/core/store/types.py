@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Callable
-from typing import Literal, TypedDict, TypeAlias
+from typing import Any, Literal, TypedDict, TypeAlias
 
 from factpy_kernel.core.derivation.candidates import CandidateSet
 
@@ -10,6 +10,7 @@ HeadVarsIR: TypeAlias = list[object]
 WhereIR: TypeAlias = list[object]
 HeadSpecIR: TypeAlias = dict[str, object]
 BodyConfidencesIR: TypeAlias = list[float] | None
+EngineOptionsIR: TypeAlias = dict[str, Any] | None
 ConfidenceStrategy: TypeAlias = Literal["max", "mean", "median", "prefer_source"]
 EvaluateMode: TypeAlias = Literal["native", "souffle", "problog", "pyreason"]
 EngineEvaluatorFn: TypeAlias = Callable[..., list[CandidateSet]]

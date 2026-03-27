@@ -108,8 +108,14 @@ flowchart LR
 Current `Store.evaluate(...)` modes:
 
 - `native`: core executes `project_view_facts -> ruleref_substrate.evaluate_native_where -> builders`
-- `souffle` / `problog`: delegate to registered engine evaluators
+- `souffle` / `problog` / `pyreason`: delegate to registered engine evaluators
 - `python` / `engine`: removed; calls raise `ValueError`
+
+The shared evaluate dispatch also supports call-time `engine_options`:
+
+- only engine paths consume it; shared core only validates `dict | None` and forwards it
+- `mode="native"` with non-empty `engine_options` fails explicitly
+- supported keys, defaults, and normalization remain adapter-owned
 
 Native `RuleRef` semantics and current boundary:
 

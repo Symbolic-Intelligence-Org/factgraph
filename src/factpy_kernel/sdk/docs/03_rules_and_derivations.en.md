@@ -179,10 +179,12 @@ System-prefixed temporary names are reserved.
 cands = sdk.evaluate(drv, mode="native")
 ```
 
-- `mode`: `native` (default) / `souffle` / `problog`.
+- `mode`: `native` (default) / `souffle` / `problog` / `pyreason`.
 - Legacy names `python` / `engine` fail with explicit rename hints.
-- `souffle` / `problog` require registered adapters (for example `import factpy_kernel.adapters.souffle`, `import factpy_kernel.adapters.problog`).
+- `souffle` / `problog` / `pyreason` require registered adapters (for example `import factpy_kernel.adapters.souffle`, `import factpy_kernel.adapters.problog`, `import factpy_kernel.adapters.pyreason`).
 - `sdk.evaluate(..., view=...)` is not supported; inference always uses the full active assertion set.
+- `engine_options` is call-time engine run-time configuration, for example `sdk.evaluate(drv, mode="pyreason", engine_options={"timesteps": 5})`.
+- `engine_options` does not enter `Derivation` or `to_authoring_payload()`; `mode="native"` rejects non-empty `engine_options`.
 
 ### 8.2 `CandidateSet` key fields
 

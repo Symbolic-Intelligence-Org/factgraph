@@ -35,6 +35,7 @@ def pyreason_engine_eval(
     mode: str = "pyreason",
     head: dict[str, Any] | None = None,
     engine_ext: EngineExtBase | None = None,
+    engine_options: dict[str, Any] | None = None,
 ) -> list[CandidateSet]:
     """Evaluate a derivation through the PyReason adapter."""
     del mode
@@ -46,6 +47,7 @@ def pyreason_engine_eval(
             f"PyReason engine_ext must be PyReasonRuleExt, got {type(engine_ext).__name__}"
         )
 
+    config = resolve_pyreason_run_config(engine_options)
     session = _materialize_edb_session(store, store.schema_ir)
     rules = compile_where_ir_to_pyreason(
         target_pred_id=target_pred_id,
@@ -57,7 +59,7 @@ def pyreason_engine_eval(
     result = run_pyreason(
         session,
         rules=rules,
-        config=PyReasonRunConfig(timesteps=2, atom_trace=False),
+        config=config,
     )
 
     run_id = uuid4().hex
@@ -90,6 +92,35 @@ def pyreason_engine_eval(
         store._engine_pending_annotations = {}
     store._engine_pending_annotations[run_id] = list(result.derived_session.annotation_templates)
     return candidates
+
+
+def resolve_pyreason_run_config(engine_options: dict[str, Any] | None) -> PyReasonRunConfig:
+    """Normalize shared ``engine_options`` into adapter-local ``PyReasonRunConfig``."""
+    default = PyReasonRunConfig(timesteps=2, atom_trace=False)
+    if engine_options is None:
+        return default
+    if not isinstance(engine_options, dict):
+        raise ValueError(
+            f"PyReason engine_options must be dict[str, Any] or None, got {type(engine_options).__name__}"
+        )
+
+    supported_keys = {"timesteps"}
+    unknown_keys = sorted(str(key) for key in engine_options if key not in supported_keys)
+    if unknown_keys:
+        supported = ", ".join(sorted(supported_keys))
+        unknown = ", ".join(unknown_keys)
+        raise ValueError(f"Unsupported PyReason engine_options: {unknown}. Supported keys: {supported}")
+
+    timesteps = engine_options.get("timesteps", default.timesteps)
+    if not isinstance(timesteps, int) or isinstance(timesteps, bool) or timesteps <= 0:
+        raise ValueError("PyReason engine_options.timesteps must be a positive int")
+
+    return PyReasonRunConfig(
+        timesteps=timesteps,
+        atom_trace=default.atom_trace,
+        convergence_threshold=default.convergence_threshold,
+        convergence_bound_threshold=default.convergence_bound_threshold,
+    )
 
 
 def _materialize_edb_session(
@@ -292,5 +323,6 @@ def _relationship_pred_ids(schema_ir: dict[str, Any]) -> set[str]:
 
 __all__ = [
     "pyreason_engine_eval",
+    "resolve_pyreason_run_config",
     "_materialize_edb_session",
 ]

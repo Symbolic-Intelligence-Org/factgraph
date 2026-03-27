@@ -80,6 +80,8 @@
 - `run(...)` 支持 Rule/Query，不支持 Derivation。
 - `run(rule, view=...)` 支持具名/内联视图；Query 路径不支持 `view` 与 `return_display_meta`。
 - `evaluate(...)` 显式拒绝 `view` 与 `temporal_view`。
+- `evaluate(..., engine_options={...})` 支持 engine run-time 配置；该参数是 call-time only，不进入 `Derivation` / authoring payload。
+- `evaluate(mode="native", engine_options={...})` 会显式报错；engine_options 的 key 校验与默认值由目标 adapter 负责。
 - `run(rule)` 的 `row_format` 优先级：调用参数 > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`。
 - `FACTPY_ROW_FORMAT` 在 `SDKStore` 初始化时读取并缓存。
 - `row_format="tuple"` 仍可用但会触发 `DeprecationWarning`。

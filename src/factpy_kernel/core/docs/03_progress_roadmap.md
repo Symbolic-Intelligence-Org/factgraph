@@ -34,7 +34,7 @@
 结果：
 
 - core 无需静态 import adapter
-- `souffle/problog` 在适配器 import 时自注册 evaluator
+- `souffle/problog/pyreason` 在适配器 import 时自注册 evaluator
 
 ### M3. Ledger 持久化（完成）
 

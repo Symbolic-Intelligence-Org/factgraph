@@ -282,6 +282,140 @@ class EngineEvalTests(unittest.TestCase):
         self.assertEqual(candidates[0].payload["terms"][1]["value"], "idref_v1:User:Bob")
 
 
+class EngineOptionsDispatchTests(unittest.TestCase):
+    def test_evaluate_store_forwards_engine_options_to_adapter(self) -> None:
+        from factpy_kernel.core.store._evaluate import evaluate_store
+
+        captured: dict[str, Any] = {}
+
+        def fake_evaluator(**kwargs: Any) -> list[Any]:
+            captured.update(kwargs)
+            return []
+
+        candidates = evaluate_store(
+            None,
+            derivation_id="drv.popular",
+            version="1.0.0",
+            target_pred_id="user:popular",
+            head_vars=["$e"],
+            where=[("pred", "user:name", ["$e", "$v"])],
+            mode="pyreason",
+            engine_evaluate=fake_evaluator,
+            engine_options={"timesteps": 5},
+        )
+
+        self.assertEqual(candidates, [])
+        self.assertEqual(captured["engine_options"], {"timesteps": 5})
+
+    def test_native_mode_rejects_non_empty_engine_options(self) -> None:
+        from factpy_kernel.core.store._evaluate import evaluate_store
+
+        with self.assertRaises(ValueError) as ctx:
+            evaluate_store(
+                None,
+                derivation_id="drv.popular",
+                version="1.0.0",
+                target_pred_id="user:popular",
+                head_vars=["$e"],
+                where=[("pred", "user:name", ["$e", "$v"])],
+                mode="native",
+                engine_evaluate=lambda **kwargs: [],
+                engine_options={"timesteps": 5},
+            )
+
+        self.assertIn("mode='native'", str(ctx.exception))
+
+
+class PyReasonEngineOptionsTests(unittest.TestCase):
+    def _store_for_engine_options(self) -> Any:
+        return _mock_store_with_facts(
+            [
+                {
+                    "pred_id": "user:name",
+                    "e_ref": "idref_v1:User:Alice",
+                    "rest_terms": [("string", "Alice")],
+                }
+            ]
+        )
+
+    @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason")
+    def test_default_timesteps_used_when_engine_options_missing(self, mock_run: Any) -> None:
+        mock_run.return_value = PyReasonRunResult(
+            interpretation=None,
+            trace=None,
+            trace_dict=None,
+            derived_session=PyReasonSession(_test_schema_ir()),
+            config=PyReasonRunConfig(),
+            elapsed_seconds=0.01,
+        )
+
+        pyreason_engine_eval(
+            self._store_for_engine_options(),
+            derivation_id="drv.popular",
+            version="1.0.0",
+            target_pred_id="user:popular",
+            head_vars=["$e"],
+            where=[("pred", "user:name", ["$e", "$v"])],
+        )
+
+        config = mock_run.call_args.kwargs["config"]
+        self.assertEqual(config.timesteps, 2)
+        self.assertFalse(config.atom_trace)
+
+    @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason")
+    def test_engine_options_timesteps_override_default(self, mock_run: Any) -> None:
+        mock_run.return_value = PyReasonRunResult(
+            interpretation=None,
+            trace=None,
+            trace_dict=None,
+            derived_session=PyReasonSession(_test_schema_ir()),
+            config=PyReasonRunConfig(),
+            elapsed_seconds=0.01,
+        )
+
+        pyreason_engine_eval(
+            self._store_for_engine_options(),
+            derivation_id="drv.popular",
+            version="1.0.0",
+            target_pred_id="user:popular",
+            head_vars=["$e"],
+            where=[("pred", "user:name", ["$e", "$v"])],
+            engine_options={"timesteps": 5},
+        )
+
+        config = mock_run.call_args.kwargs["config"]
+        self.assertEqual(config.timesteps, 5)
+        self.assertFalse(config.atom_trace)
+
+    def test_unknown_engine_option_raises(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            pyreason_engine_eval(
+                self._store_for_engine_options(),
+                derivation_id="drv.popular",
+                version="1.0.0",
+                target_pred_id="user:popular",
+                head_vars=["$e"],
+                where=[("pred", "user:name", ["$e", "$v"])],
+                engine_options={"atom_trace": True},
+            )
+
+        self.assertIn("Supported keys: timesteps", str(ctx.exception))
+
+    def test_bad_timesteps_type_raises(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            pyreason_engine_eval(
+                self._store_for_engine_options(),
+                derivation_id="drv.popular",
+                version="1.0.0",
+                target_pred_id="user:popular",
+                head_vars=["$e"],
+                where=[("pred", "user:name", ["$e", "$v"])],
+                engine_options={"timesteps": "five"},
+            )
+
+        self.assertIn("positive int", str(ctx.exception))
+
+
 class EngineExtTypeGuardTests(unittest.TestCase):
     def test_non_engine_ext_base_raises_at_core(self) -> None:
         from factpy_kernel.core.store._evaluate import evaluate_store

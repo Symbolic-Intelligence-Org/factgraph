@@ -80,6 +80,8 @@ Key boundaries:
 - `run(...)` supports Rule/Query and rejects Derivation.
 - `run(rule, view=...)` supports named/inline views; Query path rejects `view` and `return_display_meta`.
 - `evaluate(...)` explicitly rejects `view` and `temporal_view`.
+- `evaluate(..., engine_options={...})` supports engine run-time configuration; it is call-time only and does not enter `Derivation` or authoring payloads.
+- `evaluate(mode="native", engine_options={...})` fails explicitly; engine_options key validation and defaults remain adapter-owned.
 - Rule `row_format` precedence: call-site > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`.
 - `FACTPY_ROW_FORMAT` is read once at `SDKStore` initialization and cached.
 - `row_format="tuple"` still works but emits `DeprecationWarning`.

@@ -2,7 +2,7 @@
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
 - 最后更新：2026-03-27
-- 状态：execution-surface V0 + bounded materialization L3b
+- 状态：execution-surface V1（engine_options: timesteps）+ bounded materialization L3b
 
 ## 1. 概述
 
@@ -202,22 +202,37 @@ candidates = sdk.evaluate(
         head_vars=[u],
         mode="pyreason",
         engine_ext=PyReasonRuleExt(timestep_delay=2),
-    )
+    ),
+    engine_options={"timesteps": 5},
 )
 ```
 
 执行顺序：
 
-1. `SDKStore.evaluate(...)` 从 `Derivation` 单独提取 `engine_ext`，不写入 `to_authoring_payload()`
-2. `evaluate_store(...)` / `Store.evaluate_engine(...)` 把 `mode="pyreason"` 与 `engine_ext` 转发到 adapter
+1. `SDKStore.evaluate(...)` 从 `Derivation` 单独提取 `engine_ext`，同时把 call-time `engine_options` 保持在 evaluate 调用层；两者都不写入 `to_authoring_payload()`
+2. `evaluate_store(...)` / `Store.evaluate_engine(...)` 把 `mode="pyreason"`、`engine_ext` 与 `engine_options` 转发到 adapter
 3. `pyreason_engine_eval(...)`：
    - 用 `project_view_facts(...)` 把 Ledger active facts materialize 成 `PyReasonSession`
    - 用 `compile_where_ir_to_pyreason(...)` 把 lowered WhereIR 编译成 PyReason rule strings
+   - 用 `resolve_pyreason_run_config(engine_options)` 归一化运行配置
    - 调用 `run_pyreason(...)`
    - 把 derived session facts 转成 `CandidateSet`
    - 把 annotation templates 缓存在 `store._engine_pending_annotations[run_id]`
 4. core `accept()` 负责把 candidate payload 写回 Ledger
 5. caller 在 post-accept 阶段调用 `persist_pyreason_annotations(ledger, run_id, store, accept_result)`，把 pending `pyreason/*` templates 绑定到真实 `asrt_id` 后写入 `annotation_rows`
+
+### 5C.0 Runtime options
+
+shared evaluate surface 当前对 PyReason 公开的 run-time 选项只有一个：
+
+- `timesteps: int`
+
+约束：
+
+- `sdk.evaluate(..., mode="pyreason", engine_options={"timesteps": 5})` 会生效
+- 缺省时使用 adapter 默认值 `timesteps=2`
+- unknown keys 直接报 `ValueError`
+- `atom_trace` / `convergence_*` 仍保持 adapter-internal，不通过 shared evaluate surface 暴露
 
 ### 5C.1 Bounded numeric extension (L3b)
 
@@ -244,6 +259,7 @@ v0 / v1 约束：
 - 采用 attribute-existence model：node predicates 只编译实体变量，不带 value variable
 - bounded numeric 只影响 materialization / extraction，不引入 rule syntax value variable
 - `engine_ext` 只支持 `Derivation.engine_ext`，不进入持久化 payload
+- `engine_options` 是 call-time only，不进入 `Derivation`、`to_authoring_payload()` 或 audit artifacts
 - `Store.accept()` 当前不会自动 materialize / clear pending annotations；v0 通过 `persist_pyreason_annotations(...)` 完成这一步
 
 ## 6. Souffle vs PyReason Provenance 对比

@@ -34,7 +34,7 @@ Result:
 Result:
 
 - core no longer needs static adapter imports
-- `souffle/problog` register evaluators on adapter import
+- `souffle/problog/pyreason` register evaluators on adapter import
 
 ### M3. Ledger persistence (done)
 
