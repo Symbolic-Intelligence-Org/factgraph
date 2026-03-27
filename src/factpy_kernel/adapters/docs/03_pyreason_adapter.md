@@ -15,7 +15,12 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 - `pyreason==3.0.0`（3.4.0 在 ARM64 macOS 上 import 失败）
 - Python 3.10
 - 手动安装：`pip install 'pyreason==3.0.0'`（不在 `pyproject.toml` 中，spike-only dependency）
-- 首次 Numba JIT 编译约 `85s`（ARM64 macOS），缓存后约 `8.7s`
+- 当前本机实测环境（2026-03-27）：`numba==0.64.0`、`llvmlite==0.46.0`
+- 当前本机限制：
+  - plain `import pyreason` 会因 `numba` cache 报 `RuntimeError`（`Interpretation._init_reverse_neighbors` no locator available）
+  - 诊断用的 `numba.njit(cache=False)` monkeypatch 可以让 import 成功，但真实 `pyreason.reason()` 仍会进入长时间 `numba` / `llvmlite` 编译；这不是已验证的 operator path
+  - `NUMBA_DISABLE_JIT=1` 不可用：`pyreason` import 会改为触发 `Interval.__new__()` `TypeError`
+- 历史注记：2026-03-26 的 spike 记录过 ARM64 macOS 首次 JIT 约 `85s`、缓存后约 `8.7s` 的成功运行；这属于归档历史，不应视为当前环境的保证
 
 ## 3. 当前模块内容
 
@@ -267,5 +272,5 @@ v0 约束：
 - `session.annotation_templates` 已可通过 `accept_pyreason_session(...)` 落到 Ledger；但当前 accept 仍依赖 adapter-local synthetic `entity_ref` materialization
 - pending `pyreason/*` annotations 仍需在 accept 后显式 bind/persist；core `Store.accept()` 不会自动完成这一步，但 adapter 已提供 `persist_pyreason_annotations(...)`
 - 依赖 `pyreason==3.0.0`（非 repo-managed dependency）
-- ARM64 macOS 首次 JIT 约 `85s`
+- 真实 execution-surface operator path 仍受外部 `pyreason` / `numba` / `llvmlite` 环境兼容性限制；当前本机组合 `numba==0.64.0`、`llvmlite==0.46.0` 未通过验证
 - `PyReasonTraceEventV0` 字段未冻结
