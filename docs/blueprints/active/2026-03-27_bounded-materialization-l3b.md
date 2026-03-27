@@ -1,6 +1,6 @@
 # Task Blueprint: Bounded Materialization L3b
 
-- Status: draft
+- Status: scoped
 - Created: 2026-03-27
 - Last Updated: 2026-03-27
 - Parent Blueprint:

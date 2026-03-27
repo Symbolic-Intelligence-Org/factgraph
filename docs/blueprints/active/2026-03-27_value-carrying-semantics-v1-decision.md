@@ -55,15 +55,19 @@ In PyReason's model, a fact's "value" IS its bound interval. `risk_score(Alice) 
 
 **Decision**: v1 extends D7 for predicates whose values naturally map to PyReason's `[0, 1]` bound domain. This means normalized truth-degree-like values only — not arbitrary numerics.
 
-**What qualifies**:
+**What qualifies (v1)**:
 - Values that are naturally in `[0, 1]`: probabilities, confidence scores, risk scores, similarity measures
-- Values that can be meaningfully normalized to `[0, 1]` with an explicit normalization contract
+- Predicate must be explicitly annotated as bounded in schema
 
 **What does NOT qualify**:
-- Arbitrary numerics: `amount_eur=2300000`, `count=42` — these have no natural bound representation
+- Arbitrary numerics: `amount_eur=2300000`, `count=42` — no natural bound representation
 - String values: `name="Alice"` — no bound representation
+- Values outside `[0, 1]` even if numeric — normalization registry is deferred to v2
 
-**Routing condition**: NOT `type_domain in ("float64", "int64")` alone. Must also satisfy a **bounded domain contract** — either the value is naturally in `[0, 1]`, or the predicate declares an explicit normalization strategy.
+**Routing condition (v1)**: 3 hard AND conditions per D-VC5:
+1. `type_domain` is numeric
+2. Predicate explicitly annotated as bounded
+3. Values guaranteed in `[0, 1]`
 
 **Impact**: D7 (existence model) remains the default. Bounded numeric is an extension, not a replacement.
 
