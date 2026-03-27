@@ -1,6 +1,6 @@
 # Task Blueprint: Bounded Materialization L3b
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-27
 - Last Updated: 2026-03-27
 - Parent Blueprint:
@@ -22,7 +22,7 @@ L3a froze 5 decisions + closed D-VC4 as infeasible. The v0 existence model (`= 1
 **In scope**:
 - D-VC2: Bounded graph materialization — `graph.nodes[ref][pred] = value` for bounded preds
 - D-VC3: Bound summary extraction — derived value = `str(lower_bound)` for bounded preds
-- D-VC5: Schema-driven routing — numeric type_domain + bounded annotation + `[0,1]` values
+- D-VC5: Schema-driven routing — numeric type_domain + `pyreason_bounded: true` + `[0,1]` values
 
 **Out of scope** (per D-VC4 closure):
 - Value variables in rule syntax
@@ -47,7 +47,7 @@ L3a froze 5 decisions + closed D-VC4 as infeasible. The v0 existence model (`= 1
 
 **Bounded domain check** (per D-VC5, 3 hard AND conditions):
 1. `type_domain` is numeric in `arg_specs` (`float64`, `float32`, or similar)
-2. Predicate is explicitly annotated as bounded (`bounded=True` in schema predicate spec)
+2. Predicate is explicitly annotated as bounded (`pyreason_bounded: true` in schema predicate spec)
 3. Actual value parses as float in `[0.0, 1.0]`
 
 ALL three must hold. If any fails → fallback to existence model. No implicit inference.
@@ -67,8 +67,8 @@ ALL three must hold. If any fails → fallback to existence model. No implicit i
 
 `pyreason_engine_eval()` materializes EDB from Ledger via `project_view_facts()`. Currently all facts get `bound=(1.0, 1.0)` and `value` is used as-is in session. Change to:
 - Pass `schema_ir` to the materialization step
-- For bounded numeric preds: materialize with actual float value
-- For non-bounded preds: materialize with existence (`"1"`) as before
+- For bounded numeric preds: materialize with point interval `bound=(v, v)`
+- For non-bounded preds: keep original session value and default `bound=(1.0, 1.0)`; existence collapse still happens in graph builder
 
 ### Step 4: Tests
 
@@ -91,17 +91,18 @@ ALL three must hold. If any fails → fallback to existence model. No implicit i
 - `where_compile.py` is NOT touched — rule atoms stay existence-based
 - Backward compatibility: non-bounded predicates behave exactly as v0
 - If a "bounded" value is outside `[0.0, 1.0]`, silently fall back to existence model
+- Canonical `float64` claim args from Ledger projection (`0x...` bit-pattern) must be decoded before bounded routing
 - Annotation templates (`pyreason/semantic/bound_lower/upper`) already handle this correctly — no annotation changes needed
 
 ## 6. Acceptance
 
-- [ ] Bounded node predicates materialized as float value in graph (not `= 1`)
-- [ ] Bounded edge predicates materialized as float value in graph (not `= 1`)
-- [ ] Non-bounded predicates (node + edge) still use `= 1` (backward compat)
-- [ ] Derived extraction returns `str(lower_bound)` for bounded preds (node + edge)
-- [ ] EDB materialization routes correctly for both node and edge
-- [ ] Tests cover bounded vs non-bounded routing for both node and edge paths
-- [ ] Full regression green
+- [x] Bounded node predicates materialized as float value in graph (not `= 1`)
+- [x] Bounded edge predicates materialized as float value in graph (not `= 1`)
+- [x] Non-bounded predicates (node + edge) still use `= 1` (backward compat)
+- [x] Derived extraction returns `str(lower_bound)` for bounded preds (node + edge)
+- [x] EDB materialization routes correctly for both node and edge
+- [x] Tests cover bounded vs non-bounded routing for both node and edge paths
+- [x] Full regression green
 
 ## 7. Docs To Update
 
@@ -109,4 +110,18 @@ ALL three must hold. If any fails → fallback to existence model. No implicit i
 
 ## 8. Outcome / Deviations
 
-(Fill after implementation)
+- Final outcome:
+  - `runner.py` now routes bounded node and edge predicates via an explicit adapter-local schema flag: `pyreason_bounded: true`.
+  - `build_pyreason_graph(...)` writes bounded predicate values into the graph as floats in `[0,1]`; non-bounded predicates still collapse to existence `= 1`.
+  - `_extract_derived_facts(...)` returns `str(lower_bound)` for bounded predicates while preserving prior v0 behavior for non-bounded predicates.
+  - `engine_eval.py` now materializes bounded EDB facts as point intervals `(v, v)` and decodes canonical `float64` `0x...` values from Ledger projection.
+  - Focused runner / engine-eval coverage was added for bounded node and edge routing, plus out-of-range fallback.
+- Deviations from initial wording:
+  - The explicit bounded annotation is implemented as adapter-local `pyreason_bounded: true`, not a shared `bounded=True` schema contract.
+  - Non-bounded EDB facts keep their original session value; the existence collapse occurs in graph building, not in session materialization.
+- Validation:
+  - `PYTHONPATH=src python -m unittest src.factpy_kernel.tests.test_pyreason_runner src.factpy_kernel.tests.test_pyreason_engine_eval`
+  - `PYTHONPATH=src python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'`
+  - Result: `Ran 487 tests`, `OK`
+- Archive note:
+  - Adapter docs were updated and the L3b blueprint was archived after code/tests/docs alignment.

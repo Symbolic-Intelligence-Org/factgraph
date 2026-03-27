@@ -1,6 +1,7 @@
 """PyReason reusable runner: session -> graph -> reason -> trace -> derived facts."""
 from __future__ import annotations
 
+import struct
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -40,7 +41,46 @@ class PyReasonRunResult:
     elapsed_seconds: float
 
 
-def build_pyreason_graph(session: PyReasonSession) -> Any:
+def _bounded_pred_ids(schema_ir: dict[str, Any]) -> set[str]:
+    """Return numeric pred_ids marked ``pyreason_bounded`` in schema_ir."""
+    result: set[str] = set()
+    for pred in schema_ir.get("predicates", []):
+        if not isinstance(pred, dict) or not pred.get("pyreason_bounded"):
+            continue
+        pred_id = pred.get("pred_id")
+        arg_specs = pred.get("arg_specs")
+        if not isinstance(pred_id, str) or not isinstance(arg_specs, list):
+            continue
+        value_idx = 2 if pred.get("relationship_type") else 1
+        if len(arg_specs) <= value_idx or not isinstance(arg_specs[value_idx], dict):
+            continue
+        type_domain = arg_specs[value_idx].get("type_domain")
+        if type_domain in {"int", "float64", "float32"}:
+            result.add(pred_id)
+    return result
+
+
+def _parse_bounded_float(value: Any) -> float | None:
+    """Parse a bounded numeric value from decimal or canonical float64 hex."""
+    try:
+        if isinstance(value, str) and value.startswith("0x") and len(value) == 18:
+            fval = struct.unpack(">d", int(value, 16).to_bytes(8, "big", signed=False))[0]
+        else:
+            fval = float(value)
+        if 0.0 <= fval <= 1.0:
+            return fval
+    except (OverflowError, ValueError, TypeError, struct.error):
+        pass
+    return None
+
+
+def _bounded_graph_value(value: str) -> float | int:
+    """Parse value as ``[0,1]`` float for bounded preds; fallback to ``1``."""
+    parsed = _parse_bounded_float(value)
+    return parsed if parsed is not None else 1
+
+
+def build_pyreason_graph(session: PyReasonSession, schema_ir: dict[str, Any] | None = None) -> Any:
     """Build a NetworkX DiGraph from session facts."""
     import networkx as nx
 
@@ -55,18 +95,26 @@ def build_pyreason_graph(session: PyReasonSession) -> Any:
     for node in sorted(nodes):
         graph.add_node(node)
 
+    bounded = _bounded_pred_ids(schema_ir) if schema_ir else set()
+
     for fact in session.node_facts:
-        attr_name = str(fact["pred_id"]).split(":", 1)[1]
-        graph.nodes[str(fact["node_ref"])][attr_name] = 1
+        pred_id = str(fact["pred_id"])
+        attr_name = pred_id.split(":", 1)[1]
+        if pred_id in bounded:
+            graph.nodes[str(fact["node_ref"])][attr_name] = _bounded_graph_value(str(fact["value"]))
+        else:
+            graph.nodes[str(fact["node_ref"])][attr_name] = 1
 
     for fact in session.edge_facts:
-        attr_name = str(fact["pred_id"]).split(":", 1)[1]
+        pred_id = str(fact["pred_id"])
+        attr_name = pred_id.split(":", 1)[1]
         from_ref = str(fact["from_ref"])
         to_ref = str(fact["to_ref"])
+        val = _bounded_graph_value(str(fact["value"])) if pred_id in bounded else 1
         if graph.has_edge(from_ref, to_ref):
-            graph.edges[from_ref, to_ref][attr_name] = 1
+            graph.edges[from_ref, to_ref][attr_name] = val
         else:
-            graph.add_edge(from_ref, to_ref, **{attr_name: 1})
+            graph.add_edge(from_ref, to_ref, **{attr_name: val})
 
     return graph
 
@@ -96,6 +144,7 @@ def _extract_derived_facts(
             if pred.get("relationship_type"):
                 rel_preds.add(pred["pred_id"])
 
+    bounded = _bounded_pred_ids(schema_ir)
     derived = PyReasonSession(schema_ir)
     interp_dict = interpretation.get_dict()
 
@@ -120,11 +169,12 @@ def _extract_derived_facts(
                     if key in input_edge_keys:
                         continue
                     input_edge_keys.add(key)
+                    edge_derived_value = str(lo) if pred_id in bounded else ""
                     derived._write_edge_fact_internal(
                         pred_id,
                         from_ref,
                         to_ref,
-                        "",
+                        edge_derived_value,
                         bound=[lo, hi],
                         active_from=timestep,
                         meta={"source": "pyreason_derived", "derived_at_timestep": timestep},
@@ -135,10 +185,11 @@ def _extract_derived_facts(
                 if key in input_node_keys:
                     continue
                 input_node_keys.add(key)
+                derived_value = str(lo) if pred_id in bounded else str(lo == 1.0 and hi == 1.0).lower()
                 derived._write_node_fact_internal(
                     pred_id,
                     str(component),
-                    str(lo == 1.0 and hi == 1.0).lower(),
+                    derived_value,
                     bound=[lo, hi],
                     active_from=timestep,
                     meta={"source": "pyreason_derived", "derived_at_timestep": timestep},
@@ -186,7 +237,7 @@ def run_pyreason(
 
     start = time.monotonic()
 
-    graph = build_pyreason_graph(session)
+    graph = build_pyreason_graph(session, schema_ir=session._schema_ir)
     pr.reset()
     pr.load_graph(graph)
 

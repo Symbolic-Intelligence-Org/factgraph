@@ -37,6 +37,7 @@ def _test_schema_ir() -> dict[str, Any]:
                     {"name": "user", "type_domain": "entity_ref"},
                     {"name": "name", "type_domain": "string"},
                 ],
+                "pyreason_bounded": True,
             },
             {
                 "pred_id": "user:popular",
@@ -47,6 +48,17 @@ def _test_schema_ir() -> dict[str, Any]:
                     {"name": "user", "type_domain": "entity_ref"},
                     {"name": "popular", "type_domain": "string"},
                 ],
+            },
+            {
+                "pred_id": "user:risk_score",
+                "arity": 2,
+                "cardinality": "single",
+                "group_key_indexes": [0],
+                "arg_specs": [
+                    {"name": "user", "type_domain": "entity_ref"},
+                    {"name": "risk_score", "type_domain": "float64"},
+                ],
+                "pyreason_bounded": True,
             },
             {
                 "pred_id": "friends:strength",
@@ -61,6 +73,21 @@ def _test_schema_ir() -> dict[str, Any]:
                     {"name": "to_ref", "type_domain": "entity_ref"},
                     {"name": "strength", "type_domain": "string"},
                 ],
+            },
+            {
+                "pred_id": "friends:trust_score",
+                "arity": 3,
+                "cardinality": "single",
+                "relationship_type": "Friends",
+                "from_entity_type": "User",
+                "to_entity_type": "User",
+                "group_key_indexes": [0, 1],
+                "arg_specs": [
+                    {"name": "from_ref", "type_domain": "entity_ref"},
+                    {"name": "to_ref", "type_domain": "entity_ref"},
+                    {"name": "trust_score", "type_domain": "float64"},
+                ],
+                "pyreason_bounded": True,
             },
         ],
     }
@@ -124,6 +151,51 @@ class MaterializeEDBTests(unittest.TestCase):
         fact = session.edge_facts[0]
         self.assertEqual(fact["pred_id"], "friends:strength")
         self.assertEqual(fact["bound"], (1.0, 1.0))
+
+    def test_bounded_node_fact_materialized_with_point_interval(self) -> None:
+        store = _mock_store_with_facts(
+            [
+                {
+                    "pred_id": "user:risk_score",
+                    "e_ref": "idref_v1:User:Alice",
+                    "rest_terms": [("float64", 0.85)],
+                }
+            ]
+        )
+        session = _materialize_edb_session(store, store.schema_ir)
+        self.assertEqual(len(session.node_facts), 1)
+        fact = session.node_facts[0]
+        self.assertEqual(fact["pred_id"], "user:risk_score")
+        self.assertEqual(fact["bound"], (0.85, 0.85))
+
+    def test_bounded_edge_fact_materialized_with_point_interval(self) -> None:
+        store = _mock_store_with_facts(
+            [
+                {
+                    "pred_id": "friends:trust_score",
+                    "e_ref": "idref_v1:User:Alice",
+                    "rest_terms": [("entity_ref", "idref_v1:User:Bob"), ("float64", 0.9)],
+                }
+            ]
+        )
+        session = _materialize_edb_session(store, store.schema_ir)
+        self.assertEqual(len(session.edge_facts), 1)
+        fact = session.edge_facts[0]
+        self.assertEqual(fact["pred_id"], "friends:trust_score")
+        self.assertEqual(fact["bound"], (0.9, 0.9))
+
+    def test_bounded_predicate_outside_range_falls_back_to_default_bound(self) -> None:
+        store = _mock_store_with_facts(
+            [
+                {
+                    "pred_id": "user:risk_score",
+                    "e_ref": "idref_v1:User:Alice",
+                    "rest_terms": [("float64", 1.2)],
+                }
+            ]
+        )
+        session = _materialize_edb_session(store, store.schema_ir)
+        self.assertEqual(session.node_facts[0]["bound"], (1.0, 1.0))
 
 
 class EngineEvalRegistrationTests(unittest.TestCase):

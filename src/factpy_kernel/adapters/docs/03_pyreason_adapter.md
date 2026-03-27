@@ -2,7 +2,7 @@
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
 - 最后更新：2026-03-27
-- 状态：execution-surface V0（shared evaluate dispatch + adapter-local runner/session/accept helpers）
+- 状态：execution-surface V0 + bounded materialization L3b
 
 ## 1. 概述
 
@@ -219,10 +219,30 @@ candidates = sdk.evaluate(
 4. core `accept()` 负责把 candidate payload 写回 Ledger
 5. caller 在 post-accept 阶段调用 `persist_pyreason_annotations(ledger, run_id, store, accept_result)`，把 pending `pyreason/*` templates 绑定到真实 `asrt_id` 后写入 `annotation_rows`
 
-v0 约束：
+### 5C.1 Bounded numeric extension (L3b)
+
+PyReason adapter 当前支持一个收窄的 value-carrying 路径：**bounded numeric predicates**。
+
+触发条件必须同时满足：
+
+1. predicate spec 显式声明 `pyreason_bounded: true`
+2. value `type_domain` 是 numeric（当前实际覆盖 `int` / `float64`）
+3. 事实值可解析为 `[0, 1]` 内的数值
+
+这是 adapter-local 语义扩展，不是 shared schema contract。没有 `pyreason_bounded: true` 的 predicate，即使值长得像 `0.85`，也继续走 v0 existence materialization。
+
+当前实现行为：
+
+- **EDB materialization**：`engine_eval.py` 把 bounded predicate 的 Ledger value 解析成 point interval `bound=(v, v)`；非 bounded predicate 仍用 `bound=(1.0, 1.0)`
+- **Graph build**：`runner.build_pyreason_graph(...)` 对 bounded predicate 写入 `graph.nodes[...] = v` / `graph.edges[...] = v`；非 bounded predicate 仍写 `= 1`
+- **Derived extraction**：`runner._extract_derived_facts(...)` 对 bounded predicate 返回 `value=str(lower_bound)`；非 bounded node 仍是 `"true"/"false"`，非 bounded edge 仍是空字符串
+- **Canonical float64**：通过 `project_view_facts(...)` 进入 adapter 的 `float64` 值会是 canonical `0x...` bit-pattern；bounded parser 已显式支持这种形态
+
+v0 / v1 约束：
 
 - WhereIR compiler 只支持 lowered `("pred", pred_id, terms)` atoms；`eq` / `not` / `ruleref` 直接报错
 - 采用 attribute-existence model：node predicates 只编译实体变量，不带 value variable
+- bounded numeric 只影响 materialization / extraction，不引入 rule syntax value variable
 - `engine_ext` 只支持 `Derivation.engine_ext`，不进入持久化 payload
 - `Store.accept()` 当前不会自动 materialize / clear pending annotations；v0 通过 `persist_pyreason_annotations(...)` 完成这一步
 

@@ -39,6 +39,55 @@ def _test_schema_ir() -> dict[str, object]:
     }
 
 
+def _bounded_schema_ir() -> dict[str, object]:
+    return {
+        "predicates": [
+            {
+                "pred_id": "user:name",
+                "arg_specs": [
+                    {"name": "user", "type_domain": "entity_ref"},
+                    {"name": "name", "type_domain": "string"},
+                ],
+                "pyreason_bounded": True,
+            },
+            {
+                "pred_id": "user:popular",
+                "arg_specs": [
+                    {"name": "user", "type_domain": "entity_ref"},
+                    {"name": "popular", "type_domain": "string"},
+                ],
+            },
+            {
+                "pred_id": "user:risk_score",
+                "arg_specs": [
+                    {"name": "user", "type_domain": "entity_ref"},
+                    {"name": "risk_score", "type_domain": "float64"},
+                ],
+                "pyreason_bounded": True,
+            },
+            {
+                "pred_id": "friends:strength",
+                "relationship_type": "Friends",
+                "arg_specs": [
+                    {"name": "from_ref", "type_domain": "entity_ref"},
+                    {"name": "to_ref", "type_domain": "entity_ref"},
+                    {"name": "strength", "type_domain": "string"},
+                ],
+            },
+            {
+                "pred_id": "friends:trust_score",
+                "relationship_type": "Friends",
+                "arg_specs": [
+                    {"name": "from_ref", "type_domain": "entity_ref"},
+                    {"name": "to_ref", "type_domain": "entity_ref"},
+                    {"name": "trust_score", "type_domain": "float64"},
+                ],
+                "pyreason_bounded": True,
+            },
+        ],
+    }
+
+
 class RunConfigTests(unittest.TestCase):
     def test_defaults(self) -> None:
         cfg = PyReasonRunConfig()
@@ -194,6 +243,91 @@ class ExtractDerivedFactsTests(unittest.TestCase):
         interpretation = self._mock_interpretation({1: {"Bob": {"popular": (0.8, 0.9)}}})
         derived = _extract_derived_facts(interpretation, _test_schema_ir(), session)
         self.assertGreater(len(derived.annotation_templates), 0)
+
+
+class BoundedRoutingTests(unittest.TestCase):
+    def _session(self) -> PyReasonSession:
+        return PyReasonSession(_bounded_schema_ir())
+
+    def _mock_interpretation(self, data: dict[int, dict[str, dict[str, tuple[float, float]]]]) -> object:
+        class MockInterpretation:
+            def __init__(self, payload) -> None:
+                self._payload = payload
+
+            def get_dict(self):
+                return self._payload
+
+        return MockInterpretation(data)
+
+    def test_bounded_node_uses_float_value_in_graph(self) -> None:
+        session = self._session()
+        session._write_node_fact_internal("user:risk_score", "Alice", "0.85")
+        session._write_node_fact_internal("user:name", "Alice", "0.85")
+
+        graph = build_pyreason_graph(session, schema_ir=_bounded_schema_ir())
+
+        self.assertEqual(graph.nodes["Alice"]["risk_score"], 0.85)
+        self.assertEqual(graph.nodes["Alice"]["name"], 1)
+
+    def test_bounded_edge_uses_float_value_in_graph(self) -> None:
+        session = self._session()
+        session._write_edge_fact_internal("friends:trust_score", "Alice", "Bob", "0.9")
+        session._write_edge_fact_internal("friends:strength", "Alice", "Bob", "0.9")
+
+        graph = build_pyreason_graph(session, schema_ir=_bounded_schema_ir())
+
+        self.assertEqual(graph.edges["Alice", "Bob"]["trust_score"], 0.9)
+        self.assertEqual(graph.edges["Alice", "Bob"]["strength"], 1)
+
+    def test_bounded_value_outside_range_falls_back_to_existence(self) -> None:
+        session = self._session()
+        session._write_node_fact_internal("user:risk_score", "Alice", "1.2")
+        session._write_edge_fact_internal("friends:trust_score", "Alice", "Bob", "-0.1")
+
+        graph = build_pyreason_graph(session, schema_ir=_bounded_schema_ir())
+
+        self.assertEqual(graph.nodes["Alice"]["risk_score"], 1)
+        self.assertEqual(graph.edges["Alice", "Bob"]["trust_score"], 1)
+
+    def test_extract_derived_uses_bound_summary_only_for_bounded_preds(self) -> None:
+        session = self._session()
+        session._write_node_fact_internal("user:name", "Alice", "Alice")
+
+        interpretation = self._mock_interpretation(
+            {
+                1: {
+                    "Bob": {
+                        "risk_score": (0.85, 0.9),
+                        "popular": (1.0, 1.0),
+                    }
+                }
+            }
+        )
+
+        derived = _extract_derived_facts(interpretation, _bounded_schema_ir(), session)
+        by_pred = {str(fact["pred_id"]): fact for fact in derived.node_facts}
+
+        self.assertEqual(by_pred["user:risk_score"]["value"], "0.85")
+        self.assertEqual(by_pred["user:popular"]["value"], "true")
+
+    def test_extract_derived_bounded_edge_uses_lower_bound_string(self) -> None:
+        session = self._session()
+        interpretation = self._mock_interpretation(
+            {
+                1: {
+                    "(Alice, Bob)": {
+                        "trust_score": (0.7, 0.9),
+                        "strength": (1.0, 1.0),
+                    }
+                }
+            }
+        )
+
+        derived = _extract_derived_facts(interpretation, _bounded_schema_ir(), session)
+        by_pred = {str(fact["pred_id"]): fact for fact in derived.edge_facts}
+
+        self.assertEqual(by_pred["friends:trust_score"]["value"], "0.7")
+        self.assertEqual(by_pred["friends:strength"]["value"], "")
 
 
 class RunResultShapeTests(unittest.TestCase):

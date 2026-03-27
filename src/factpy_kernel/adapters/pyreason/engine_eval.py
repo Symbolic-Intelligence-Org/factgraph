@@ -4,7 +4,12 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
+from factpy_kernel.adapters.pyreason.runner import (
+    PyReasonRunConfig,
+    _bounded_pred_ids,
+    _parse_bounded_float,
+    run_pyreason,
+)
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
 from factpy_kernel.adapters.pyreason.where_compile import compile_where_ir_to_pyreason
 from factpy_kernel.core.derivation.candidates import CandidateSet, make_candidate
@@ -93,11 +98,13 @@ def _materialize_edb_session(
 ) -> PyReasonSession:
     """Project active Ledger facts into a ``PyReasonSession``.
 
-    Per D9, all EDB facts enter PyReason with bound ``[1.0, 1.0]``.
+    Non-bounded EDB facts enter PyReason with bound ``[1.0, 1.0]``.
+    Predicates marked ``pyreason_bounded`` use point intervals from their value.
     """
     session = PyReasonSession(schema_ir)
     facts_by_pred = project_view_facts(store.ledger, schema_ir)
     relationship_preds = _relationship_pred_ids(schema_ir)
+    bounded = _bounded_pred_ids(schema_ir)
 
     for pred_id, fact_tuples in facts_by_pred.items():
         is_relationship = pred_id in relationship_preds
@@ -108,23 +115,25 @@ def _materialize_edb_session(
                 from_ref = str(fact_tuple[0])
                 to_ref = str(fact_tuple[1])
                 value = str(fact_tuple[2]) if len(fact_tuple) > 2 else ""
+                edge_bound = _edb_bound_for_value(value) if pred_id in bounded else (1.0, 1.0)
                 session._write_edge_fact_internal(
                     pred_id,
                     from_ref,
                     to_ref,
                     value,
-                    bound=(1.0, 1.0),
+                    bound=edge_bound,
                 )
                 continue
             if not fact_tuple:
                 continue
             node_ref = str(fact_tuple[0])
             value = str(fact_tuple[1]) if len(fact_tuple) > 1 else "true"
+            node_bound = _edb_bound_for_value(value) if pred_id in bounded else (1.0, 1.0)
             session._write_node_fact_internal(
                 pred_id,
                 node_ref,
                 value,
-                bound=(1.0, 1.0),
+                bound=node_bound,
             )
 
     return session
@@ -258,6 +267,14 @@ def _lower_bound_confidence(bound: Any) -> float | None:
         if isinstance(lo, (int, float)) and not isinstance(lo, bool):
             return float(lo)
     return None
+
+
+def _edb_bound_for_value(value: str) -> tuple[float, float]:
+    """Parse EDB value as ``[0,1]`` float -> point interval; fallback to ``(1.0, 1.0)``."""
+    parsed = _parse_bounded_float(value)
+    if parsed is None:
+        return (1.0, 1.0)
+    return (parsed, parsed)
 
 
 def _relationship_pred_ids(schema_ir: dict[str, Any]) -> set[str]:
