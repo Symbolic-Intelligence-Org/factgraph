@@ -1,6 +1,6 @@
 # Task Blueprint: Annotation Consumer Migration (L2)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-27
 - Last Updated: 2026-03-27
 - Parent Blueprint:
