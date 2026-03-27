@@ -4,12 +4,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from factpy_kernel.core.store.types import EngineExtBase
 from factpy_kernel.sdk.dsl.expr import HeadCall, LogicVar, PredAtom
 from factpy_kernel.sdk.dsl.rule import Rule
 
 
 @dataclass(frozen=True)
-class PyReasonRuleExt:
+class PyReasonRuleExt(EngineExtBase):
     """PyReason-specific rule definition parameters."""
 
     timestep_delay: int = 0

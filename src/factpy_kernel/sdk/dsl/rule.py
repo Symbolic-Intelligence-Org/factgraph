@@ -6,6 +6,7 @@ from typing import Any
 
 from factpy_kernel.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
 from factpy_kernel.core.rules.where_ast_validate import WhereASTValidationError, validate_where_ast
+from factpy_kernel.core.store.types import EngineExtBase
 
 from ..error_codes import QUERY_ALIAS_CONFLICT, QUERY_UNBOUND_VAR
 from .body import Body
@@ -103,6 +104,7 @@ class Derivation:
     target: str | None = None
     head_vars: list[Any] | None = None
     mode: str | None = None
+    engine_ext: EngineExtBase | None = None
     status: str | None = None
     description: str | None = None
     tags: list[str] = field(default_factory=list)

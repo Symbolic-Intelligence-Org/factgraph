@@ -11,8 +11,16 @@ WhereIR: TypeAlias = list[object]
 HeadSpecIR: TypeAlias = dict[str, object]
 BodyConfidencesIR: TypeAlias = list[float] | None
 ConfidenceStrategy: TypeAlias = Literal["max", "mean", "median", "prefer_source"]
-EvaluateMode: TypeAlias = Literal["native", "souffle", "problog"]
+EvaluateMode: TypeAlias = Literal["native", "souffle", "problog", "pyreason"]
 EngineEvaluatorFn: TypeAlias = Callable[..., list[CandidateSet]]
+
+
+class EngineExtBase:
+    """Base class for engine-specific rule/derivation extensions.
+
+    Subclasses must be frozen dataclasses. The framework never inspects
+    fields; only the target engine's adapter reads them.
+    """
 
 
 class RuleSpec(TypedDict, total=False):
