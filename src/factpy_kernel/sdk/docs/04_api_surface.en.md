@@ -156,7 +156,7 @@ Additional note:
 - `head=[...]` is supported in evaluate (flattened output)
 - `CandidateSet.confidence`: probability `float` for `problog`, lower bound `float` for `pyreason`, `None` for `native/souffle`
 - `sdk.accept(...)` / `sdk.accept_many(...)` handle writes and idempotency
-- `engine_ext`: `Derivation.engine_ext` carries engine-specific rule semantics (e.g., `PyReasonRuleExt(timestep_delay=1)`); must inherit `EngineExtBase`
+- `engine_ext`: shared definition-time engine semantics carrier on `Rule.engine_ext` or `Derivation.engine_ext` (for example `PyReasonRuleExt(timestep_delay=1)`); must inherit `EngineExtBase`
 - `engine_options`: `sdk.evaluate(..., engine_options={"timesteps": 5})` passes runtime config; call-time only, never enters Derivation or Ledger
 - `mode="native"` rejects non-empty `engine_options`
 - Semantic annotations: PyReason results generate `pyreason/semantic/*`, ProbLog generates `problog/semantic/probability`; post-accept, call `persist_pyreason_annotations()` or `persist_problog_annotations()` to persist

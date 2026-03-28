@@ -9,7 +9,7 @@ Supersedes: zhenzhili-master-design-20260321-office-hours.md
 
 ## Problem Statement
 
-PyReason has been integrated as an adapter-local vertical slice (schema, session, runner, accept, ledger), but its entire pipeline **bypasses core**. It uses a parallel set of containers (PyReasonRuleDef, PyReasonSession, adapter-local AcceptResult), a parallel compilation path, and a parallel accept flow. The decision to use `engine_ext` on shared Rule was frozen but never implemented; instead, an adapter-local wrapper was built.
+PyReason first landed as an adapter-local vertical slice (schema, session, runner, accept, ledger) that **bypassed core**. It used a parallel set of containers (PyReasonRuleDef, PyReasonSession, adapter-local AcceptResult), a parallel compilation path, and a parallel accept flow. The original problem statement in this rationale was that shared `Rule.engine_ext` had not yet been implemented and an adapter-local wrapper had been built instead.
 
 The result is two incompatible pipelines where users must learn different APIs depending on which engine they use. This contradicts the framework's core narrative: "users write rules and get results through one interface; engine-specific capabilities are handled by adapters behind that interface."
 
@@ -104,13 +104,13 @@ A framework where you can write `Rule(where=[...], engine_ext=PyReasonRuleExt(ti
 - The shadow pipeline gets further entrenched
 - Users learn two APIs
 - Design debt compounds
-- The frozen engine_ext decision remains unimplemented (third time deferred)
+- At the time of this rationale, the frozen engine_ext decision was still unimplemented
 
 ## Recommended Approach
 
 **Choose A: Interface-Level Fusion.**
 
-The engine_ext decision has been deferred twice. Each deferral created more divergence. A third engine won't reveal a better abstraction — it'll just add a third shadow pipeline.
+The engine_ext decision had already been deferred twice when this rationale was written. Each deferral created more divergence. That diagnosis still explains why the later `Rule.engine_ext` alignment was the correct cleanup path.
 
 The work is well-scoped: `EngineExtBase` base class (~5 lines), one field on Rule + Derivation, WhereIR compiler v0 (pred atoms + literals), `pyreason_engine_eval()` (wraps existing runner), and annotation persistence via `PyReasonEvalResult`. Core changes are ~15-25 lines across `types.py`, `_evaluate.py`, `runtime.py`.
 
@@ -152,12 +152,13 @@ v0 freezes on "attribute existence" model, consistent with current tested code:
 - WhereIR compiler generates: `popular(X) <-2 strength(Y, X), popular(Y)` (no value variables)
 - Value-carrying predicates deferred to v1
 
-### F4: v0 execution surface only requires Derivation.engine_ext
+### F4: v0 first closed on Derivation.engine_ext, then aligned Rule.engine_ext to the same carrier
 
-Rule.engine_ext is valuable but not required for v0 execution surface. The minimum closed loop is:
+The first closed loop was:
 - Derivation(where=[...], mode="pyreason", engine_ext=PyReasonRuleExt(...))
 - sdk.evaluate(derivation) → engine_ext extracted → pyreason_engine_eval()
-- Rule.engine_ext deferred to v1 when rule registry + rule compilation pipeline is ready
+
+Current implementation now also supports `Rule.engine_ext` as the preferred definition-time carrier for adapter-local PyReason rule compilation, while `PyReasonRuleDef` remains compatibility-only.
 
 ### F5: EDB materialization default bounds for non-PyReason facts
 

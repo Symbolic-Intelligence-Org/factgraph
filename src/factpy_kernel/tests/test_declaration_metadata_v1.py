@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
 from factpy_kernel.authoring.derivation_compile import (
     AuthoringDerivationCompileError,
     compile_authoring_derivation_v1,
@@ -161,6 +162,18 @@ class EmploymentEvent(Entity):
         self.assertEqual(compiled["description"], "Find employment related matches")
         self.assertEqual(compiled["tags"], ["employment", "match"])
         self.assertEqual(compiled["condition_weights"], {"b0.a0": 0.75, "b0.a1": 0.25})
+
+    def test_rule_engine_ext_stays_out_of_authoring_payload(self) -> None:
+        rule = Rule(
+            id="employment_match",
+            version="v1",
+            select=["$u"],
+            where=[("pred", "user:name", ["$u", "$name"])],
+            engine_ext=PyReasonRuleExt(timestep_delay=1),
+        )
+
+        payload = rule.to_authoring_payload()
+        self.assertNotIn("engine_ext", payload)
 
     def test_rule_compiler_rejects_invalid_tags(self) -> None:
         with self.assertRaises(AuthoringRuleCompileError) as ctx:

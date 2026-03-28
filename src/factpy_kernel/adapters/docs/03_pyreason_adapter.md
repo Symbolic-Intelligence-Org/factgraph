@@ -25,7 +25,7 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 |------|------|
 | `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` |
 | `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 batch API / bound / active_from / active_to / annotation templates |
-| `rule_ext.py` | `PyReasonRuleExt` / `PyReasonRuleDef` / `PyReasonFactDef` / `compile_pyreason_rule(...)` |
+| `rule_ext.py` | `PyReasonRuleExt` / `PyReasonRuleDef`（兼容 wrapper） / `PyReasonFactDef` / `compile_pyreason_rule(...)` |
 | `where_compile.py` | `compile_where_ir_to_pyreason(...)` — lowered WhereIR → PyReason rule syntax（execution surface compiler） |
 | `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult`；接受 legacy tuple 或 typed defs |
 | `engine_eval.py` | `pyreason_engine_eval(...)` / `_materialize_edb_session(...)` — shared evaluate dispatch 入口，输出 `CandidateSet` 并缓存 pending annotations |
@@ -143,7 +143,6 @@ PyReason session 内部的 graph node id 仍然是裸字符串（如 `Alice` / `
 ```python
 from factpy_kernel.adapters.pyreason.rule_ext import (
     PyReasonFactDef,
-    PyReasonRuleDef,
     PyReasonRuleExt,
 )
 from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
@@ -156,17 +155,15 @@ y = LogicVar("y")
 result = run_pyreason(
     session,
     rule_defs=[
-        PyReasonRuleDef(
-            rule=Rule(
-                id="friend_popularity",
-                version="1.0",
-                select=[Pred("user:popular", x)],
-                where=[
-                    Pred("user:popular", y),
-                    Pred("friends:strength", x, y),
-                ],
-            ),
-            ext=PyReasonRuleExt(timestep_delay=1),
+        Rule(
+            id="friend_popularity",
+            version="1.0",
+            select=[Pred("user:popular", x)],
+            where=[
+                Pred("user:popular", y),
+                Pred("friends:strength", x, y),
+            ],
+            engine_ext=PyReasonRuleExt(timestep_delay=1),
         )
     ],
     fact_defs=[
@@ -199,7 +196,7 @@ result = run_pyreason(
 - `PyReasonFactDef.bound` 是 typed initial fact 的显式区间入口；runner 会把它编码为 `pred(node) : [lo, hi]` 形式的 fact text 再传给底层 PyReason。未显式提供时默认 `(1.0, 1.0)`。
 - `PyReasonRuleExt` 除了 `timestep_delay` 之外，还支持 `body_predicate_bounds={pred_id: (lo, hi)}`。当 body atom 命中该映射时，compiler 会生成 `popular(y) : [0.5, 1.0]` 这类显式 clause interval。
 - 当存在 rule、initial **node** seed 使用非 `[1.0, 1.0]` bound，且 rule body 没有显式 clause interval 时，runner 会发出 `UserWarning`。warning 指向的是 **PyReason 的默认 body threshold 语义**，不是“bounded seed 永远不能参与匹配”。
-- `PyReasonRuleDef` 是 adapter-local wrapper：`Rule + PyReasonRuleExt`，不修改 shared `Rule`
+- 优先路径是 shared `Rule(..., engine_ext=PyReasonRuleExt(...))`；`PyReasonRuleDef` 只保留为兼容 wrapper，供旧的 adapter-local call site 过渡
 - `compile_pyreason_rule(...)` 当前只支持 `PredAtom` + `LogicVar` + 字面量；`CompareExpr` / `NotExpr` / `RuleRefAtom` 会报明确错误
 - `run_pyreason(...)` 本身仍是底层 helper；`Store.evaluate(mode="pyreason")` 通过 `engine_eval.py` 在外层完成 WHERE→PyReason 编译和 CandidateSet 组装
 - `derived_session` 可以直接接到 `accept_pyreason_session(...)`
@@ -279,7 +276,7 @@ v0 / v1 约束：
 - 采用 attribute-existence model：node predicates 只编译实体变量，不带 value variable
 - 可通过 `PyReasonRuleExt.body_predicate_bounds` 给 body atom 附显式 interval threshold，但这是 engine-specific compile hint，不是 shared DSL 新语义
 - bounded numeric 只影响 materialization / extraction，不引入 rule syntax value variable
-- `engine_ext` 只支持 `Derivation.engine_ext`，不进入持久化 payload
+- `engine_ext` 是 definition-time only 的共享 carrier；当前由 `Rule.engine_ext` 与 `Derivation.engine_ext` 使用，但都不进入持久化 payload
 - `engine_options` 是 call-time only，不进入 `Derivation`、`to_authoring_payload()` 或 audit artifacts
 - `Store.accept()` 当前不会自动 materialize / clear pending annotations；v0 通过 `persist_pyreason_annotations(...)` 完成这一步
 

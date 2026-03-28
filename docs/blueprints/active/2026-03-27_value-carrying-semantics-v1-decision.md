@@ -156,7 +156,7 @@ Normalization registry (mapping arbitrary ranges to `[0, 1]`) is deferred to v2.
 - **Normalization registry** — deferred to v2
 - **Multi-valued predicates** — not addressed
 - **ProbLog value-carrying** — PyReason-specific decision
-- **Rule.engine_ext** — still deferred (contract #50/D8)
+- **Rule.engine_ext** — now implemented as the shared definition-time carrier; this decision still does not reopen value variables or broader rule-syntax transport
 
 ## 5. Impact Assessment
 

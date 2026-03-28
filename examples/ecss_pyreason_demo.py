@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from factpy_kernel.adapters.pyreason.accept import accept_pyreason_session
-from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleDef, PyReasonRuleExt
+from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
 from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
 from factpy_kernel.core.store.ledger import Ledger
@@ -124,29 +124,25 @@ x = LogicVar("x")
 y = LogicVar("y")
 
 rules = [
-    PyReasonRuleDef(
-        rule=Rule(
-            id="disposal_watch_propagation",
-            version="1.0",
-            select=[Pred("mission:disposal_watch", x)],
-            where=[
-                Pred("mission:disposal_watch", y),
-                Pred("mission_phase:phase_link", y, x),
-            ],
-        ),
-        ext=PyReasonRuleExt(timestep_delay=1),
+    Rule(
+        id="disposal_watch_propagation",
+        version="1.0",
+        select=[Pred("mission:disposal_watch", x)],
+        where=[
+            Pred("mission:disposal_watch", y),
+            Pred("mission_phase:phase_link", y, x),
+        ],
+        engine_ext=PyReasonRuleExt(timestep_delay=1),
     ),
-    PyReasonRuleDef(
-        rule=Rule(
-            id="passivation_watch_propagation",
-            version="1.0",
-            select=[Pred("mission:passivation_watch", x)],
-            where=[
-                Pred("mission:passivation_watch", y),
-                Pred("mission_phase:phase_link", y, x),
-            ],
-        ),
-        ext=PyReasonRuleExt(timestep_delay=1),
+    Rule(
+        id="passivation_watch_propagation",
+        version="1.0",
+        select=[Pred("mission:passivation_watch", x)],
+        where=[
+            Pred("mission:passivation_watch", y),
+            Pred("mission_phase:phase_link", y, x),
+        ],
+        engine_ext=PyReasonRuleExt(timestep_delay=1),
     ),
 ]
 

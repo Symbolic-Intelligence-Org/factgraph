@@ -55,6 +55,7 @@ class Rule:
     description: str | None = None
     tags: list[str] = field(default_factory=list)
     condition_weights: dict[str, float] = field(default_factory=dict)
+    engine_ext: EngineExtBase | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id:

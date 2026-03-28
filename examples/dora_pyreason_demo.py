@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from factpy_kernel.adapters.pyreason.accept import accept_pyreason_session
-from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleDef, PyReasonRuleExt
+from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
 from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
 from factpy_kernel.core.store.ledger import Ledger
@@ -136,29 +136,25 @@ x = LogicVar("x")
 y = LogicVar("y")
 
 rules = [
-    PyReasonRuleDef(
-        rule=Rule(
-            id="vendor_risk_propagation",
-            version="1.0",
-            select=[Pred("vendor:at_risk_signal", x)],
-            where=[
-                Pred("vendor:at_risk_signal", y),
-                Pred("vendor_dependency:critical_path", y, x),
-            ],
-        ),
-        ext=PyReasonRuleExt(timestep_delay=1),
+    Rule(
+        id="vendor_risk_propagation",
+        version="1.0",
+        select=[Pred("vendor:at_risk_signal", x)],
+        where=[
+            Pred("vendor:at_risk_signal", y),
+            Pred("vendor_dependency:critical_path", y, x),
+        ],
+        engine_ext=PyReasonRuleExt(timestep_delay=1),
     ),
-    PyReasonRuleDef(
-        rule=Rule(
-            id="contingency_gap_propagation",
-            version="1.0",
-            select=[Pred("vendor:contingency_gap_signal", x)],
-            where=[
-                Pred("vendor:contingency_gap_signal", y),
-                Pred("vendor_dependency:critical_path", y, x),
-            ],
-        ),
-        ext=PyReasonRuleExt(timestep_delay=1),
+    Rule(
+        id="contingency_gap_propagation",
+        version="1.0",
+        select=[Pred("vendor:contingency_gap_signal", x)],
+        where=[
+            Pred("vendor:contingency_gap_signal", y),
+            Pred("vendor_dependency:critical_path", y, x),
+        ],
+        engine_ext=PyReasonRuleExt(timestep_delay=1),
     ),
 ]
 

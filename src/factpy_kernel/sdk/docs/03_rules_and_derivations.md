@@ -45,6 +45,7 @@ rows = sdk.run(rule, row_format="dict")
   - `description`
   - `tags`
   - `condition_weights`
+  - `engine_ext`（definition-time，引擎特有语义 carrier；不进入 authoring payload）
 - `condition_weights` 是 version-scoped rule metadata，key 使用 atom-position key：`b{branch}.a{atom}`。
 - `condition_weights` 的 value 必须是正的有限数；缺失 key 表示 unweighted，不自动补成 `1.0`。
 - `sdk.run(rule, row_format=...)` 仅 Rule 路径支持 `row_format`。
@@ -150,7 +151,7 @@ res = sdk.accept(cands[0], approved_by="alice")
 
 字段：
 - 必填：`id`、`version`、`where`
-- 可选：`head`、`target`、`head_vars`、`mode`、`status`
+- 可选：`head`、`target`、`head_vars`、`mode`、`engine_ext`、`status`
 
 稳定合约：
 - `head` 形态自动决定 candidate kind（fact/entity）。

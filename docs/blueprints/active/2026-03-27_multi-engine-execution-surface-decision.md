@@ -21,7 +21,7 @@
 
 ## 1. Problem
 
-PyReason has a complete adapter-local vertical slice (schema → session → runner → accept → ledger), but its entire pipeline **bypasses core**. It uses parallel containers (PyReasonRuleDef, adapter-local AcceptResult), a parallel compilation path, and a parallel accept flow. The frozen `engine_ext` decision was never implemented; an adapter-local wrapper was built instead.
+PyReason originally landed with a complete adapter-local vertical slice (schema → session → runner → accept → ledger) that **bypasses core**. It introduced parallel containers (`PyReasonRuleDef`, adapter-local AcceptResult), a parallel compilation path, and a parallel accept flow. The `Derivation.engine_ext` branch has since been implemented on the shared evaluate surface, and `Rule.engine_ext` is now available as the preferred rule-level carrier; `PyReasonRuleDef` survives only as a compatibility shim.
 
 The result is a **shadow pipeline**: users must learn different APIs depending on which engine they use. This contradicts the framework narrative: "users write rules and get results through one interface; engine-specific capabilities are handled by adapters behind that interface."
 
@@ -97,13 +97,13 @@ Consistent with current tested code:
 - WhereIR compiler generates: `popular(X) <-2 strength(Y, X), popular(Y)` (no value variables)
 - Value-carrying predicates deferred to v1
 
-### D8: v0 only requires Derivation.engine_ext
+### D8: v0 closed on Derivation.engine_ext first; Rule.engine_ext later aligned to the same carrier
 
-Rule.engine_ext is valuable but not required for v0 execution surface. Minimum closed loop:
+The first closed loop landed through `Derivation.engine_ext`:
 - `Derivation(where=[...], mode="pyreason", engine_ext=PyReasonRuleExt(...))`
 - `sdk.evaluate(derivation)` → engine_ext extracted → `pyreason_engine_eval()`
 
-Rule.engine_ext deferred to v1 when rule registry + rule compilation pipeline is ready.
+That deferral is now closed in implementation: shared `Rule.engine_ext` is also available as the preferred definition-time carrier for adapter-local PyReason rule compilation, and `PyReasonRuleDef` remains only as a backward-compatibility shim.
 
 ### D9: EDB materialization — default bounds for non-PyReason facts
 
@@ -192,4 +192,4 @@ Total: **~25 lines** of core changes.
 - [ ] `engine_no_witness_v1` reuse accepted
 - [ ] Store pending state annotation mechanism accepted
 - [ ] engine_ext compile-boundary crossing confirmed (independent kwarg, not in payload)
-- [ ] v0 scope confirmed: Derivation.engine_ext only, Rule.engine_ext deferred
+- [ ] v0 closure path confirmed: Derivation.engine_ext first; Rule.engine_ext later aligned without entering payload serialization

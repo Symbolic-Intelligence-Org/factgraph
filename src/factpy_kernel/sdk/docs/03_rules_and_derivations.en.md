@@ -41,6 +41,7 @@ rows = sdk.run(rule, row_format="dict")
 Stable contract:
 - `Rule.id/version` must be non-empty strings.
 - `Rule.select/where` must be non-empty lists.
+- `engine_ext` is available as a definition-time engine semantics carrier and never enters authoring payload serialization.
 - `row_format` is supported only on the Rule path.
 - `row_format` precedence is: call-site > `SDKStore(default_row_format=...)` > `FACTPY_ROW_FORMAT` > `"dict"`.
 - Resolving to `"tuple"` emits `DeprecationWarning` (prefer `"dict"`).
@@ -134,7 +135,7 @@ res = sdk.accept(cands[0], approved_by="alice")
 
 Fields:
 - required: `id`, `version`, `where`
-- optional: `head`, `target`, `head_vars`, `mode`, `status`
+- optional: `head`, `target`, `head_vars`, `mode`, `engine_ext`, `status`
 
 Stable contract:
 - `head` shape infers candidate kind (fact/entity).

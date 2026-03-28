@@ -30,7 +30,6 @@ from factpy_kernel.adapters.pyreason.accept import accept_pyreason_session
 from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
 from factpy_kernel.adapters.pyreason.rule_ext import (
     PyReasonFactDef,
-    PyReasonRuleDef,
     PyReasonRuleExt,
 )
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
@@ -155,31 +154,27 @@ try:
     run_result = run_pyreason(
         session,
         rule_defs=[
-            PyReasonRuleDef(
-                rule=Rule(
-                    id="shared_pet_popularity",
-                    version="1.0",
-                    select=[Pred("user:popular", x)],
-                    where=[
-                        Pred("user:popular", y),
-                        Pred("friends:strength", x, y),
-                        Pred("owns:since", y, z),
-                        Pred("owns:since", x, z),
-                    ],
-                ),
-                ext=PyReasonRuleExt(timestep_delay=1),
+            Rule(
+                id="shared_pet_popularity",
+                version="1.0",
+                select=[Pred("user:popular", x)],
+                where=[
+                    Pred("user:popular", y),
+                    Pred("friends:strength", x, y),
+                    Pred("owns:since", y, z),
+                    Pred("owns:since", x, z),
+                ],
+                engine_ext=PyReasonRuleExt(timestep_delay=1),
             ),
-            PyReasonRuleDef(
-                rule=Rule(
-                    id="dog_owner_outdoorsy",
-                    version="1.0",
-                    select=[Pred("user:outdoorsy", x)],
-                    where=[
-                        Pred("owns:since", x, y),
-                        Pred("pet:dog_breed", y),
-                    ],
-                ),
-                ext=PyReasonRuleExt(timestep_delay=0),
+            Rule(
+                id="dog_owner_outdoorsy",
+                version="1.0",
+                select=[Pred("user:outdoorsy", x)],
+                where=[
+                    Pred("owns:since", x, y),
+                    Pred("pet:dog_breed", y),
+                ],
+                engine_ext=PyReasonRuleExt(timestep_delay=0),
             ),
         ],
         fact_defs=[
@@ -266,7 +261,7 @@ print()
 print("  Key integration points:")
 print("  1. Schema: factpy Relationship type → schema_ir predicates")
 print("  2. Session: entity-level batch API routes fields/relationships into facts")
-print("  3. Rules: adapter-local PyReasonRuleDef wraps shared Rule + timestep_delay")
+print("  3. Rules: shared Rule(engine_ext=PyReasonRuleExt(...)) carries timestep_delay")
 print("  4. Runner: session -> graph -> reason -> trace -> derived_session")
 print("  5. Confidence: bound=[0.9,0.9] → auto-derived confidence=0.9 for audit")
 print("  6. Annotations: session.annotation_templates + accept helper persist pyreason semantics")

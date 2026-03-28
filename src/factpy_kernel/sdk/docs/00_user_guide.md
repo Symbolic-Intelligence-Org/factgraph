@@ -881,7 +881,7 @@ persist_pyreason_annotations(sdk.ledger, cands[0].run_id, sdk.store, result)
 ```
 
 **关键区分**：
-- `engine_ext`：规则级语义参数，挂在 `Derivation.engine_ext`，编译时伴随但不序列化
+- `engine_ext`：定义期引擎语义 carrier；共享类型上可挂在 `Rule.engine_ext` 或 `Derivation.engine_ext`，编译时伴随但不序列化
 - `engine_options`：运行时参数，call-time only，`mode="native"` 拒绝非空 options
 - 语义 annotation：accept 后需显式调用 `persist_pyreason_annotations()` 或 `persist_problog_annotations()` 完成持久化
 

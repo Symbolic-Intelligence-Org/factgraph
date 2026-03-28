@@ -870,7 +870,7 @@ persist_pyreason_annotations(sdk.ledger, cands[0].run_id, sdk.store, result)
 ```
 
 **Key distinctions**:
-- `engine_ext`: rule-level semantic parameters on `Derivation.engine_ext`; accompanied through compile but never serialized
+- `engine_ext`: definition-time engine semantics carrier on shared `Rule.engine_ext` or `Derivation.engine_ext`; it travels with compilation but is never serialized
 - `engine_options`: runtime parameters, call-time only; `mode="native"` rejects non-empty options
 - Semantic annotations: post-accept, explicitly call `persist_pyreason_annotations()` or `persist_problog_annotations()` to persist
 
