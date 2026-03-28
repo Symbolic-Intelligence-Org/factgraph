@@ -260,6 +260,13 @@ def render_evidence_graph_html(graph: EvidenceGraph) -> str:
 
 ### 7.4 Integration (candidate evidence page)
 
+插入点已冻结为：
+
+- `src/factpy_kernel/audit/static_ui.py`
+  - `_render_candidate_evidence_page(...)` 内部的 `provenance_block`
+
+Step 4 只产出 standalone fragment renderer；Step 6 再把它接到 candidate evidence page。
+
 In `_render_candidate_evidence_page()`:
 
 ```python

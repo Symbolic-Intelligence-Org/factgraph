@@ -42,7 +42,8 @@
   - 读取 authoring apply event 日志
 - `EvidenceGraph` / `EvidenceNode` / `EvidenceEdge`
   - audit 层统一 explainability DTO
-  - 当前只冻结 in-memory shared representation，不接 package / query / static UI
+  - 当前已支持 standalone HTML fragment renderer：`render_evidence_graph_html(...)`
+  - 当前仍不接 package / query / static UI page wiring
 
 对应模块：
 

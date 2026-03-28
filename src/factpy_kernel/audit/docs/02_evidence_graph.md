@@ -19,7 +19,7 @@
 - 替代各引擎自己的 provenance carrier
 - 写入 audit package durable artifact
 - 替代 Souffle 现有 `CandidateEvidenceTree`
-- 直接提供 HTML 渲染
+- 替代 `static_ui.py` 的整页模板
 
 ## 2. 当前数据模型
 
@@ -82,15 +82,41 @@
 
 当前 `engine_meta` / `metadata` 会做 `MappingProxyType` 浅冻结，避免 consumer 在渲染阶段原地改写共享 DTO。
 
-## 5. 当前边界
+## 5. 当前渲染器
+
+当前 `audit/evidence_graph.py` 已实现：
+
+- `render_evidence_graph_html(graph)`
+  - 根据 `layout_hint` 分派到：
+    - tree renderer
+    - timeline renderer
+- tree renderer
+  - 以 `root_node_id` 为入口
+  - 当前按 edge `from -> to` 的 child-to-parent 约定，把 incoming edges 渲染成子分支
+- timeline renderer
+  - 当前使用 CSS grid 形态：
+    - 列 = timestep
+    - 行 = component
+    - cell = stacked event cards
+
+当前 renderer 产出的是 **standalone HTML fragment**，不是整页 HTML。它的设计目标是后续被 `static_ui.py` 的 candidate evidence page 直接嵌入。
+
+## 6. 当前边界
 
 当前 `EvidenceGraph` 仍是内存内 DTO：
 
 - 还没有进 `AuditQuery`
 - 还没有写入 audit package
-- 还没有接入 `static_ui.py`
+- 还没有接入 `static_ui.py` 的 candidate evidence page
 - Souffle converter 还没有
 - PyReason converter 已在 `src/factpy_kernel/adapters/pyreason/provenance.py` 实现，但当前只产出 candidate-anchored timeline graph，不接 audit query / static UI
 - ProbLog converter 已在 `src/factpy_kernel/adapters/problog/provenance.py` 实现，但当前只产出 candidate-anchored call-frame tree，不接 audit query / static UI
+
+当前已确认的静态页插入 seam 是：
+
+- `src/factpy_kernel/audit/static_ui.py`
+  - `_render_candidate_evidence_page(...)` 内部的 `provenance_block`
+
+也就是说，Step 4 已冻结 renderer contract；Step 6 再把这个 fragment 接到 candidate evidence page。
 
 也就是说，当前实现只冻结共享表示层，不冻结 render contract 或 package contract。

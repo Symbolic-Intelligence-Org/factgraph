@@ -31,6 +31,7 @@ from .evidence_graph import (
     EvidenceEdge,
     EvidenceGraph,
     EvidenceNode,
+    render_evidence_graph_html,
 )
 from .dto import (
     AuditDTOError,
@@ -86,6 +87,7 @@ __all__ = [
     "EvidenceNode",
     "EvidenceEdge",
     "EvidenceGraph",
+    "render_evidence_graph_html",
     "AuditQuery",
     "AuditQueryError",
     "AuditDTOError",
