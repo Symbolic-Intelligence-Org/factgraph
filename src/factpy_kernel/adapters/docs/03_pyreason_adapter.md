@@ -1,7 +1,7 @@
 # PyReason Adapter（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
-- 最后更新：2026-03-27
+- 最后更新：2026-03-28
 - 状态：execution-surface V1（engine_options: timesteps）+ bounded materialization L3b
 
 ## 1. 概述
@@ -101,6 +101,13 @@ with session.batch() as tx:
 | `shared` | `derived` | `confidence_source` | 当前固定为 `pyreason:lower_bound` |
 | `shared` | `source` | `source` / `analyst` / `method` | 从 shared meta 转发 |
 
+session 会自动补 shared confidence 元信息：
+
+- 未显式给 `confidence` 时，默认 `confidence = lower_bound`
+- 未显式给 `confidence_source` 时：
+  - 默认 lower-bound 路径写 `pyreason:lower_bound`
+  - 若调用侧显式覆盖了 `confidence`，则写 `meta:confidence`
+
 ### 5A.3 Accept Helper
 
 当前已经有一条最小的 adapter-local accept 路径：
@@ -116,7 +123,7 @@ result = accept_pyreason_session(ledger, session)
 1. 对每条 buffered fact 走 shared `set_field()`，拿到真正的 `asrt_id`
 2. 只把 `session.annotation_templates` 中的 `pyreason/*` 条目 materialize 成 `AnnotationRow` 并写入 `ledger.append_annotations()`
 
-`shared/*` annotation 不在这里重复写入，因为 `set_field()` 已经会通过 shared whitelist 自动写入。
+`shared/*` annotation 不在这里重复写入，因为 `set_field()` 已经会通过 shared whitelist 自动写入。accept helper 现在会在本地校验 `origin/derivation` 组合，避免非法模板拖到 `Ledger.append_annotations()` 才失败。
 
 ### 5A.4 当前 accept 约束
 
@@ -162,7 +169,15 @@ result = run_pyreason(
             ext=PyReasonRuleExt(timestep_delay=1),
         )
     ],
-    fact_defs=[PyReasonFactDef(atom="popular(Alice)", name="alice_popular", start=0, end=3)],
+    fact_defs=[
+        PyReasonFactDef(
+            atom="popular(Alice)",
+            name="alice_popular",
+            start=0,
+            end=3,
+            bound=[0.8, 0.9],
+        )
+    ],
     config=PyReasonRunConfig(timesteps=2, atom_trace=True),
 )
 ```
@@ -181,6 +196,7 @@ result = run_pyreason(
 ### 5B.2 Runner 边界
 
 - `run_pyreason(...)` 同时接受 legacy tuple 形式的 `rules` / `facts`，以及 typed `rule_defs` / `fact_defs`
+- `PyReasonFactDef.bound` 是 typed initial fact 的显式区间入口；runner 会把它编码为 `pred(node) : [lo, hi]` 形式的 fact text 再传给底层 PyReason。未显式提供时默认 `(1.0, 1.0)`。
 - `PyReasonRuleDef` 是 adapter-local wrapper：`Rule + PyReasonRuleExt`，不修改 shared `Rule`
 - `compile_pyreason_rule(...)` 当前只支持 `PredAtom` + `LogicVar` + 字面量；`CompareExpr` / `NotExpr` / `RuleRefAtom` 会报明确错误
 - `run_pyreason(...)` 本身仍是底层 helper；`Store.evaluate(mode="pyreason")` 通过 `engine_eval.py` 在外层完成 WHERE→PyReason 编译和 CandidateSet 组装
@@ -249,7 +265,7 @@ PyReason adapter 当前支持一个收窄的 value-carrying 路径：**bounded n
 当前实现行为：
 
 - **EDB materialization**：`engine_eval.py` 把 bounded predicate 的 Ledger value 解析成 point interval `bound=(v, v)`；非 bounded predicate 仍用 `bound=(1.0, 1.0)`
-- **Graph build**：`runner.build_pyreason_graph(...)` 对 bounded predicate 写入 `graph.nodes[...] = v` / `graph.edges[...] = v`；非 bounded predicate 仍写 `= 1`
+- **Graph build**：`runner.build_pyreason_graph(...)` 对 bounded predicate 优先使用 fact bound 的 lower-bound summary；若没有显式 bound，则回退到解析 raw value。非 bounded predicate 仍写 `= 1`
 - **Derived extraction**：`runner._extract_derived_facts(...)` 对 bounded predicate 返回 `value=str(lower_bound)`；非 bounded node 仍是 `"true"/"false"`，非 bounded edge 仍是空字符串
 - **Canonical float64**：通过 `project_view_facts(...)` 进入 adapter 的 `float64` 值会是 canonical `0x...` bit-pattern；bounded parser 已显式支持这种形态
 

@@ -175,6 +175,29 @@ class AcceptPyReasonSessionTests(unittest.TestCase):
         self.assertIn("source", shared_keys)
         all_confidence = [a for a in shared if a.key == "confidence"]
         self.assertEqual(len(all_confidence), 1)
+        self.assertEqual(all_confidence[0].origin, "derived")
+        self.assertEqual(all_confidence[0].derivation, "pyreason:lower_bound")
+
+    def test_rejects_invalid_template_origin(self) -> None:
+        ledger, session = self._setup()
+        session._write_node_fact_internal("user:name", "Alice", "Alice")
+        session._annotation_templates.append(
+            {
+                "asrt_id": "",
+                "fact_index": 0,
+                "fact_kind": "node",
+                "namespace": "pyreason",
+                "category": "semantic",
+                "key": "bad_origin",
+                "kind": "str",
+                "value": "x",
+                "origin": "guessed",
+                "derivation": None,
+            }
+        )
+
+        with self.assertRaises(ValueError):
+            accept_pyreason_session(ledger, session)
 
     def test_edge_fact_annotations_persisted(self) -> None:
         ledger, session = self._setup()

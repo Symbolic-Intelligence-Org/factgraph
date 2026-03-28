@@ -123,6 +123,7 @@ class PyReasonSessionInternalTests(unittest.TestCase):
         s = self._session()
         s._write_node_fact_internal("user:name", "ref", "Alice", bound=[0.7, 0.9])
         self.assertAlmostEqual(s.node_facts[0]["meta"]["confidence"], 0.7)
+        self.assertEqual(s.node_facts[0]["meta"]["confidence_source"], "pyreason:lower_bound")
 
     def test_explicit_confidence_preserved(self) -> None:
         s = self._session()
@@ -134,6 +135,7 @@ class PyReasonSessionInternalTests(unittest.TestCase):
             meta={"confidence": 0.85},
         )
         self.assertAlmostEqual(s.node_facts[0]["meta"]["confidence"], 0.85)
+        self.assertEqual(s.node_facts[0]["meta"]["confidence_source"], "meta:confidence")
 
     def test_edge_fact_confidence_auto_derived(self) -> None:
         s = self._session()

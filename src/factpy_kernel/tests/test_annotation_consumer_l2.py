@@ -203,14 +203,15 @@ class AnnotationPanelRenderingTests(unittest.TestCase):
     def test_multiple_namespaces(self) -> None:
         annotations = [
             {"namespace": "pyreason", "category": "semantic",
-             "key": "bound_lower", "value": 0.6, "origin": "observed"},
+             "key": "bound_lower", "value": 0.6, "origin": "observed", "derivation": None},
             {"namespace": "shared", "category": "derived",
-             "key": "confidence", "value": 0.6, "origin": "derived"},
+             "key": "confidence", "value": 0.6, "origin": "derived", "derivation": "pyreason:lower_bound"},
         ]
         html = _render_annotation_panel(annotations)
         self.assertIn("PyReason", html)
         self.assertIn("Shared", html)
         self.assertIn("confidence", html)
+        self.assertIn("pyreason:lower_bound", html)
 
     def test_unknown_namespace(self) -> None:
         annotations = [
@@ -243,6 +244,7 @@ class AnnotationPanelRenderingTests(unittest.TestCase):
         self.assertIn("<th>key</th>", html)
         self.assertIn("<th>value</th>", html)
         self.assertIn("<th>origin</th>", html)
+        self.assertIn("<th>derivation</th>", html)
 
 
 if __name__ == "__main__":

@@ -60,6 +60,7 @@ _KEY_KIND_MAP = {
     "source_loc": "str",
     "trace_id": "str",
     "confidence": "float",
+    "confidence_source": "str",
     "approved_by": "str",
     "accepted_by": "str",
     "note": "str",
@@ -96,7 +97,7 @@ _SHARED_ANNOTATION_WHITELIST: dict[str, tuple[str, str]] = {
     "trace_id": ("source", "observed"),
     "approved_by": ("source", "observed"),
     "note": ("source", "observed"),
-    "confidence": ("derived", "observed"),
+    "confidence": ("derived", "derived"),
 }
 
 __all__ = [
@@ -181,6 +182,7 @@ def retract_by_asrt(
     normalized_meta = _normalize_meta(meta)
     revoker_asrt_id = new_assertion_id()
     ingested_at = now_epoch_nanos()
+    annotation_rows = _annotation_rows_for_claim(revoker_asrt_id, normalized_meta)
     meta_rows = [
         MetaRow(asrt_id=revoker_asrt_id, key="ingested_at", kind="time", value=ingested_at),
         MetaRow(
@@ -197,6 +199,8 @@ def retract_by_asrt(
         idempotency=None,
         revoker_asrt_id=revoker_asrt_id,
     )
+    if annotation_rows:
+        ledger.append_annotations(annotation_rows)
     return revoker_asrt_id
 
 
@@ -359,10 +363,19 @@ def _annotation_rows_for_claim(
                 kind=kind,
                 value=value,
                 origin=origin,
-                derivation=None,
+                derivation=_annotation_derivation_for_key(key, meta),
             )
         )
     return rows
+
+
+def _annotation_derivation_for_key(key: str, meta: dict[str, Any]) -> str | None:
+    if key != "confidence":
+        return None
+    source = meta.get("confidence_source")
+    if isinstance(source, str) and source:
+        return source
+    return "meta:confidence"
 
 
 def _user_meta_rows(asrt_id: str, meta: dict[str, Any]) -> list[MetaRow]:

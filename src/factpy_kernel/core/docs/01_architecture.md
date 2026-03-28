@@ -130,9 +130,9 @@ flowchart LR
 
 白名单（`_SHARED_ANNOTATION_WHITELIST`）：
 - `shared/source`：`source`, `source_loc`, `trace_id`, `approved_by`, `note`
-- `shared/derived`：`confidence`
+- `shared/derived`：`confidence`（`origin="derived"`，`derivation` 来自 `meta["confidence_source"]`，缺省回退 `meta:confidence`）
 
-未在白名单中的自定义 meta key 继续只写 `meta_rows`。Revocation 不产生 annotation。
+未在白名单中的自定义 meta key 继续只写 `meta_rows`。`retract_by_asrt(...)` 现在与 `set_field(...)` 一样，对传入的白名单 meta 做 shared annotation 双写；未传 meta 时仍不会生成 annotation。
 
 ### 5.2 Evaluate 链路
 

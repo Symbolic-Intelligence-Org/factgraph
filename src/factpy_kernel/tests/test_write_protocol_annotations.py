@@ -1,8 +1,8 @@
 """Tests for write_protocol annotation projection (Step 2).
 
 Covers: shared annotation whitelist projection via set_field/add_field/replace_field,
-non-whitelisted keys stay in meta_rows only, confidence category/origin,
-retraction does not produce annotations, and dual-write consistency.
+non-whitelisted keys stay in meta_rows only, confidence category/origin/derivation,
+revocation shared annotation dual-write, and dual-write consistency.
 """
 from __future__ import annotations
 
@@ -56,7 +56,8 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
         self.assertEqual(annos[0].key, "confidence")
         self.assertEqual(annos[0].value, 0.85)
         self.assertEqual(annos[0].kind, "float")
-        self.assertEqual(annos[0].origin, "observed")
+        self.assertEqual(annos[0].origin, "derived")
+        self.assertEqual(annos[0].derivation, "meta:confidence")
 
     def test_multiple_whitelisted_keys(self) -> None:
         ledger = Ledger()
@@ -226,8 +227,8 @@ class TestAddFieldAndReplaceField(unittest.TestCase):
         self.assertEqual(source_anno[0].value, "correction")
 
 
-class TestRetractDoesNotProduceAnnotations(unittest.TestCase):
-    """Revocations should not create annotation rows."""
+class TestRetractAnnotationProjection(unittest.TestCase):
+    """Revocations project shared annotations when whitelisted meta is provided."""
 
     def test_retract_no_annotations(self) -> None:
         ledger = Ledger()
@@ -246,6 +247,31 @@ class TestRetractDoesNotProduceAnnotations(unittest.TestCase):
         revoker_annos = ledger.find_annotations(asrt_id=revoker_id)
         self.assertEqual(len(revoker_annos), 0)
         self.assertEqual(len(ledger.annotation_rows), original_anno_count)
+
+    def test_retract_projects_whitelisted_meta(self) -> None:
+        ledger = Ledger()
+        asrt_id = set_field(
+            ledger,
+            "p:test",
+            _eref("e"),
+            [("string", "v")],
+            meta={"source": "s"},
+        )
+
+        revoker_id = retract_by_asrt(
+            ledger,
+            asrt_id,
+            meta={"source": "review", "confidence": 0.4, "confidence_source": "manual:review"},
+        )
+        self.assertIsNotNone(revoker_id)
+
+        annos = ledger.find_annotations(asrt_id=revoker_id, namespace="shared")
+        by_key = {row.key: row for row in annos}
+        self.assertEqual(by_key["source"].origin, "observed")
+        self.assertEqual(by_key["source"].value, "review")
+        self.assertEqual(by_key["confidence"].origin, "derived")
+        self.assertEqual(by_key["confidence"].derivation, "manual:review")
+        self.assertEqual(by_key["confidence"].value, 0.4)
 
 
 class TestWhitelistCoverage(unittest.TestCase):
@@ -266,7 +292,7 @@ class TestWhitelistCoverage(unittest.TestCase):
     def test_confidence_is_derived_not_source(self) -> None:
         cat, origin = _SHARED_ANNOTATION_WHITELIST["confidence"]
         self.assertEqual(cat, "derived")
-        self.assertEqual(origin, "observed")
+        self.assertEqual(origin, "derived")
 
     def test_source_keys_are_source_category(self) -> None:
         for key in ("source", "source_loc", "trace_id", "approved_by", "note"):

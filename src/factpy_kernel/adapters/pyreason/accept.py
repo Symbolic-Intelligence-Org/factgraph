@@ -20,6 +20,8 @@ from factpy_kernel.core.evidence.write_protocol import set_field
 from factpy_kernel.core.protocol.tup_v1 import ENTITY_REF_PREFIX
 from factpy_kernel.core.store.ledger import AnnotationRow, Ledger
 
+_ANNOTATION_ORIGINS = {"observed", "derived"}
+
 
 @dataclass
 class AcceptResult:
@@ -69,7 +71,7 @@ def persist_pyreason_annotations(
             derivation=template.get("derivation"),
         )
         for template in templates
-        if isinstance(template, dict) and template.get("namespace") == "pyreason"
+        if _is_validated_pyreason_template(template)
     ]
     if not rows:
         return 0
@@ -117,7 +119,7 @@ def accept_pyreason_session(ledger: Ledger, session: PyReasonSession) -> AcceptR
 
     pyreason_rows: list[AnnotationRow] = []
     for template in session.annotation_templates:
-        if template.get("namespace") != "pyreason":
+        if not _is_validated_pyreason_template(template):
             continue
         key = (str(template["fact_kind"]), int(template["fact_index"]))
         asrt_id = asrt_id_map.get(key)
@@ -217,6 +219,26 @@ def _entity_type_for_edge(pred_spec: dict[str, Any], key: str) -> str:
     if isinstance(entity_type, str) and entity_type:
         return entity_type
     return "PyReasonNode"
+
+
+def _is_validated_pyreason_template(template: Any) -> bool:
+    if not isinstance(template, dict):
+        return False
+    if template.get("namespace") != "pyreason":
+        return False
+    _validate_template_origin(template)
+    return True
+
+
+def _validate_template_origin(template: dict[str, Any]) -> None:
+    origin = template.get("origin")
+    if origin not in _ANNOTATION_ORIGINS:
+        raise ValueError(f"unsupported annotation origin in template: {origin!r}")
+    derivation = template.get("derivation")
+    if origin == "derived" and (not isinstance(derivation, str) or not derivation):
+        raise ValueError("derived annotation template must include non-empty derivation")
+    if derivation is not None and not isinstance(derivation, str):
+        raise ValueError("annotation template derivation must be str when provided")
 
 
 def _materialize_entity_ref(raw_ref: str, entity_type: str) -> str:

@@ -289,6 +289,16 @@ class BoundedRoutingTests(unittest.TestCase):
         self.assertEqual(graph.nodes["Alice"]["risk_score"], 1)
         self.assertEqual(graph.edges["Alice", "Bob"]["trust_score"], 1)
 
+    def test_bounded_graph_prefers_explicit_bound_lower_over_raw_value(self) -> None:
+        session = self._session()
+        session._write_node_fact_internal("user:risk_score", "Alice", "0.95", bound=[0.6, 0.9])
+        session._write_edge_fact_internal("friends:trust_score", "Alice", "Bob", "0.95", bound=[0.4, 0.8])
+
+        graph = build_pyreason_graph(session, schema_ir=_bounded_schema_ir())
+
+        self.assertEqual(graph.nodes["Alice"]["risk_score"], 0.6)
+        self.assertEqual(graph.edges["Alice", "Bob"]["trust_score"], 0.4)
+
     def test_extract_derived_uses_bound_summary_only_for_bounded_preds(self) -> None:
         session = self._session()
         session._write_node_fact_internal("user:name", "Alice", "Alice")

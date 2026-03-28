@@ -80,6 +80,17 @@ def _bounded_graph_value(value: str) -> float | int:
     return parsed if parsed is not None else 1
 
 
+def _bounded_graph_fact_value(fact: dict[str, Any]) -> float | int:
+    """Resolve the single numeric truth-degree PyReason graph ingest can carry."""
+    bound = fact.get("bound")
+    if isinstance(bound, (list, tuple)) and len(bound) == 2:
+        lo = _parse_bounded_float(bound[0])
+        hi = _parse_bounded_float(bound[1])
+        if lo is not None and hi is not None and lo <= hi and (lo != 1.0 or hi != 1.0):
+            return lo
+    return _bounded_graph_value(str(fact.get("value", "")))
+
+
 def build_pyreason_graph(session: PyReasonSession, schema_ir: dict[str, Any] | None = None) -> Any:
     """Build a NetworkX DiGraph from session facts."""
     import networkx as nx
@@ -101,7 +112,7 @@ def build_pyreason_graph(session: PyReasonSession, schema_ir: dict[str, Any] | N
         pred_id = str(fact["pred_id"])
         attr_name = pred_id.split(":", 1)[1]
         if pred_id in bounded:
-            graph.nodes[str(fact["node_ref"])][attr_name] = _bounded_graph_value(str(fact["value"]))
+            graph.nodes[str(fact["node_ref"])][attr_name] = _bounded_graph_fact_value(fact)
         else:
             graph.nodes[str(fact["node_ref"])][attr_name] = 1
 
@@ -110,7 +121,7 @@ def build_pyreason_graph(session: PyReasonSession, schema_ir: dict[str, Any] | N
         attr_name = pred_id.split(":", 1)[1]
         from_ref = str(fact["from_ref"])
         to_ref = str(fact["to_ref"])
-        val = _bounded_graph_value(str(fact["value"])) if pred_id in bounded else 1
+        val = _bounded_graph_fact_value(fact) if pred_id in bounded else 1
         if graph.has_edge(from_ref, to_ref):
             graph.edges[from_ref, to_ref][attr_name] = val
         else:
@@ -212,6 +223,13 @@ def _parse_edge_component(component: str) -> tuple[str, str] | None:
     return None
 
 
+def _format_fact_text_with_bound(atom: str, bound: tuple[float, float] | list[float]) -> str:
+    """Render a typed fact as PyReason fact text with an explicit interval."""
+    lo = float(bound[0])
+    hi = float(bound[1])
+    return f"{atom} : [{lo}, {hi}]"
+
+
 def run_pyreason(
     session: PyReasonSession,
     *,
@@ -233,7 +251,14 @@ def run_pyreason(
 
     all_facts: list[tuple[str, str, int, int]] = list(facts or [])
     for fact_def in fact_defs or []:
-        all_facts.append((fact_def.atom, fact_def.name, fact_def.start, fact_def.end))
+        all_facts.append(
+            (
+                _format_fact_text_with_bound(fact_def.atom, fact_def.bound),
+                fact_def.name,
+                fact_def.start,
+                fact_def.end,
+            )
+        )
 
     start = time.monotonic()
 
@@ -244,8 +269,8 @@ def run_pyreason(
     for body_str, name_str in all_rules:
         pr.add_rule(pr.Rule(body_str, name_str))
 
-    for atom_str, name_str, start_time, end_time in all_facts:
-        pr.add_fact(pr.Fact(atom_str, name_str, start_time, end_time))
+    for fact_text, name_str, start_time, end_time in all_facts:
+        pr.add_fact(pr.Fact(fact_text, name_str, start_time, end_time))
 
     pr.settings.atom_trace = config.atom_trace
     interpretation = pr.reason(timesteps=config.timesteps)

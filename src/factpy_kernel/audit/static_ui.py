@@ -659,18 +659,20 @@ def _render_annotation_panel(annotations: list[dict[str, Any]]) -> str:
         }.get(namespace, namespace)
         table_rows: list[str] = []
         for row in by_namespace[namespace]:
+            derivation = row.get("derivation")
             table_rows.append(
                 "<tr>"
                 f"<td>{escape(str(row.get('category', '')))}</td>"
                 f"<td>{escape(str(row.get('key', '')))}</td>"
                 f"<td>{escape(str(row.get('value', '')))}</td>"
                 f"<td>{escape(str(row.get('origin', '')))}</td>"
+                f"<td>{escape('' if derivation is None else str(derivation))}</td>"
                 "</tr>"
             )
         sections.append(
             f"<h3>Annotations - {escape(display_name)}</h3>"
             "<table><thead><tr>"
-            "<th>category</th><th>key</th><th>value</th><th>origin</th>"
+            "<th>category</th><th>key</th><th>value</th><th>origin</th><th>derivation</th>"
             "</tr></thead>"
             f"<tbody>{''.join(table_rows)}</tbody></table>"
         )

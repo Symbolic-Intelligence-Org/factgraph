@@ -616,7 +616,10 @@ def _validate_active_to(value: int | None) -> int | None:
 
 def _resolve_shared_meta(meta: dict[str, Any] | None, *, lower_bound: float) -> dict[str, Any]:
     if meta is None:
-        return {"confidence": lower_bound}
+        return {
+            "confidence": lower_bound,
+            "confidence_source": "pyreason:lower_bound",
+        }
     if not isinstance(meta, dict):
         raise ValueError("meta must be dict when provided")
 
@@ -624,11 +627,13 @@ def _resolve_shared_meta(meta: dict[str, Any] | None, *, lower_bound: float) -> 
     confidence = resolved.get("confidence")
     if confidence is None:
         resolved["confidence"] = lower_bound
-        return resolved
-    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
-        raise ValueError("meta['confidence'] must be float when provided")
-    normalized = float(confidence)
-    if not (0.0 < normalized <= 1.0):
-        raise ValueError("meta['confidence'] must be in (0, 1]")
-    resolved["confidence"] = normalized
+    else:
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            raise ValueError("meta['confidence'] must be float when provided")
+        normalized = float(confidence)
+        if not (0.0 < normalized <= 1.0):
+            raise ValueError("meta['confidence'] must be in (0, 1]")
+        resolved["confidence"] = normalized
+    if "confidence_source" not in resolved:
+        resolved["confidence_source"] = "meta:confidence" if confidence is not None else "pyreason:lower_bound"
     return resolved
