@@ -1,7 +1,7 @@
 # Audit 模块总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/audit`
-- 最后更新：2026-03-21
+- 最后更新：2026-03-28
 - 目标读者：需要消费 audit package、做离线审计查询或静态展示的开发者
 
 ## 1. 模块职责
@@ -16,12 +16,14 @@
 - authoring apply events 查询
 - 审计 DTO 构建
 - 静态审计页面生成
+- 跨引擎 explainability 的共享表示层（in-memory DTO）
 
 它不负责：
 
 - live runtime facts 查询
 - registry 资产版本管理
 - package 导出
+- engine-native provenance 生成
 
 ## 2. 当前公共入口
 
@@ -38,6 +40,9 @@
   - 生成静态审计站点
 - `load_authoring_apply_events(...)`
   - 读取 authoring apply event 日志
+- `EvidenceGraph` / `EvidenceNode` / `EvidenceEdge`
+  - audit 层统一 explainability DTO
+  - 当前只冻结 in-memory shared representation，不接 package / query / static UI
 
 对应模块：
 
@@ -48,6 +53,7 @@
 - `authoring_events.py`
 - `assertions.py`
 - `compliance.py`
+- `evidence_graph.py`
 
 ## 3. 典型工作流
 

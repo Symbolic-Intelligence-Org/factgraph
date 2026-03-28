@@ -39,6 +39,7 @@
 - [src/factpy_kernel/authoring/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/authoring/docs/README.md)
 - [src/factpy_kernel/adapters/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/adapters/docs/README.md)
 - [src/factpy_kernel/audit/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/audit/docs/README.md)
+  - audit package 查询/静态展示，以及 `EvidenceGraph` 统一 explainability DTO 的当前实现文档。
 
 ## 工作流摘要
 
