@@ -2,7 +2,7 @@
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
 - 最后更新：2026-03-28
-- 状态：execution-surface V1（engine_options: timesteps）+ bounded materialization L3b + runtime provenance explain spike
+- 状态：execution-surface V1（engine_options: timesteps）+ bounded materialization L3b + runtime provenance explain spike + EvidenceGraph converter Step 2
 
 ## 1. 概述
 
@@ -23,7 +23,7 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 
 | 文件 | 角色 |
 |------|------|
-| `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` |
+| `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` / `pyreason_trace_to_evidence_graph` |
 | `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 batch API / bound / active_from / active_to / annotation templates |
 | `rule_ext.py` | `PyReasonRuleExt` / `PyReasonRuleDef`（兼容 wrapper） / `PyReasonFactDef` / `compile_pyreason_rule(...)` |
 | `where_compile.py` | `compile_where_ir_to_pyreason(...)` — lowered WhereIR → PyReason rule syntax（execution surface compiler） |
@@ -324,6 +324,34 @@ v0 / v1 约束：
 4. **当前建议：选 A。** 保留引擎原生形态更诚实，也更符合 ADR 的 adapter-local before core 原则。
 5. **ProofNode v1 开启门槛**：至少有 2 个引擎的真实 provenance 通过 adapter → audit → static 完整管道验证后，再冻结统一抽象。当前 Souffle 已完整，PyReason 仍是 spike，不足以冻结。
 
+## 6A. 当前 EvidenceGraph Converter（Step 2）
+
+`pyreason_trace_to_evidence_graph(...)` 当前已实现一个 **candidate-anchored timeline converter**：
+
+- 输入：
+  - `PyReasonTraceV0`
+  - `candidate_id`
+  - `candidate_payload`（当前消费 `pred_id + terms`）
+- 输出：
+  - `EvidenceGraph(engine="pyreason", layout_hint="timeline", support_kind="pyreason_provenance_v1")`
+
+当前映射规则：
+
+- graph root 通过 candidate payload 锚定到 trace 中最后一个匹配事件：
+  - node candidate：`component=<entity_ref>` + `label=<pred short name>`
+  - edge candidate：`component=<from_ref->to_ref>` + `label=<pred short name>`
+- 所有 trace event 都进入 graph node
+- 只有 **同一 `(component_type, component, label)` 链** 上的连续事件会产出 `edge_kind="updates"` 的边
+- `occurred_due_to`、`old_bound/new_bound`、`clause_groundings` 当前都保留在 `engine_meta`
+
+当前刻意不做的事：
+
+- 不伪造跨 fact / cross-component 因果边
+- 不把 `clause_groundings` 强行解释成统一的 body-atom dependency edge
+- 不把 run-scoped event log 假装成 lossless proof tree
+
+原因是当前 v0 carrier 只有 grounding 文本，没有 body atom label / pred_id 级别的稳定锚点；因此 v1 converter 只承诺“诚实的 timeline + intra-fact update chain”。
+
 ## 7. 当前限制
 
 - shared evaluate surface 已实现，但 rule registry / rule builder integration 仍未做
@@ -333,3 +361,4 @@ v0 / v1 约束：
 - 依赖 `pyreason==3.0.0`（非 repo-managed dependency）
 - 真实 execution-surface operator path 仍受外部 `pyreason` / `numba` / `llvmlite` 环境兼容性限制；当前本机组合 `numba==0.64.0`、`llvmlite==0.46.0` 未通过验证
 - `PyReasonTraceEventV0` 字段未冻结
+- `pyreason_trace_to_evidence_graph(...)` 当前只建立同一 fact/edge 的 `updates` 链；cross-fact causal edges deferred

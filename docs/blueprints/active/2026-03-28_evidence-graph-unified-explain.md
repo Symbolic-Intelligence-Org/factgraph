@@ -219,7 +219,7 @@ def souffle_proof_tree_to_evidence_graph(
 
 # adapters/pyreason/provenance.py
 def pyreason_trace_to_evidence_graph(
-    trace: PyReasonTraceV0, candidate_id: str,
+    trace: PyReasonTraceV0, *, candidate_id: str, candidate_payload: Mapping[str, Any],
 ) -> EvidenceGraph: ...   # layout_hint="timeline"
 
 # adapters/problog/provenance.py
@@ -253,6 +253,8 @@ def render_evidence_graph_html(graph: EvidenceGraph) -> str:
 - Sticky header for timestep labels
 - Cell content: stacked event cards (label + bound change + rule annotation)
 - No connecting lines in v1
+- Step 2 当前只保证同一 `(component_type, component, label)` 链上的 `updates` edges
+- `clause_groundings` 先保留在 `engine_meta`，不伪造 cross-fact causal edges
 
 ### 7.4 Integration (candidate evidence page)
 

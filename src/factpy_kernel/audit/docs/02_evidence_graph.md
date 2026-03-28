@@ -89,6 +89,7 @@
 - 还没有进 `AuditQuery`
 - 还没有写入 audit package
 - 还没有接入 `static_ui.py`
-- 还没有 converter
+- Souffle / ProbLog converter 还没有
+- PyReason converter 已在 `src/factpy_kernel/adapters/pyreason/provenance.py` 实现，但当前只产出 candidate-anchored timeline graph，不接 audit query / static UI
 
 也就是说，当前实现只冻结共享表示层，不冻结 render contract 或 package contract。

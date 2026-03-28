@@ -11,7 +11,19 @@ Key difference from Souffle provenance:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Mapping
+
+from factpy_kernel.audit.evidence_graph import (
+    EDGE_UPDATES,
+    LAYOUT_TIMELINE,
+    NODE_CONCLUSION,
+    NODE_PREMISE,
+    NODE_SEED,
+    EvidenceEdge,
+    EvidenceGraph,
+    EvidenceNode,
+)
+from factpy_kernel.core.store._support import PYREASON_PROVENANCE_KIND
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -73,6 +85,141 @@ def pyreason_trace_to_dict(trace: PyReasonTraceV0) -> dict[str, Any]:
         "node_events": [_event_to_dict(event) for event in trace.node_events],
         "edge_events": [_event_to_dict(event) for event in trace.edge_events],
     }
+
+
+def pyreason_trace_to_evidence_graph(
+    trace: PyReasonTraceV0,
+    *,
+    candidate_id: str,
+    candidate_payload: Mapping[str, Any],
+    support_kind: str = PYREASON_PROVENANCE_KIND,
+) -> EvidenceGraph:
+    """Convert a PyReason event log into an EvidenceGraph timeline.
+
+    The current carrier is a run-scoped event log, not a lossless proof graph.
+    v1 therefore keeps all timeline events, roots the graph at the candidate's
+    matching event, and only materializes intra-fact update chains. Clause
+    groundings stay in ``engine_meta`` until a richer causal mapping is available.
+    """
+    if not isinstance(candidate_id, str) or not candidate_id:
+        raise ValueError("candidate_id must be non-empty string")
+
+    component_type, root_component, root_label = _resolve_candidate_anchor(candidate_payload)
+    ordered_events = sorted(
+        (*trace.node_events, *trace.edge_events),
+        key=lambda event: (
+            int(event.time),
+            int(event.fixpoint_op),
+            str(event.component_type),
+            _normalize_component_key(event),
+            str(event.label),
+        ),
+    )
+    if not ordered_events:
+        raise ValueError("PyReason trace has no events")
+
+    node_specs: list[tuple[PyReasonTraceEventV0, str]] = []
+    root_node_id: str | None = None
+    chains: dict[tuple[str, str, str], list[tuple[int, str, PyReasonTraceEventV0]]] = {}
+
+    matching_positions = [
+        idx
+        for idx, event in enumerate(ordered_events)
+        if event.component_type == component_type
+        and _normalize_component_key(event) == root_component
+        and event.label == root_label
+    ]
+    if not matching_positions:
+        raise ValueError(
+            "candidate anchor not found in PyReason trace: "
+            f"{component_type} {root_component} {root_label}"
+        )
+    root_position = matching_positions[-1]
+
+    for idx, event in enumerate(ordered_events):
+        component_key = _normalize_component_key(event)
+        node_id = f"pyreason:{candidate_id}:event:{idx}"
+        node_specs.append((event, node_id))
+        if idx == root_position:
+            root_node_id = node_id
+        chain_key = (event.component_type, component_key, event.label)
+        chains.setdefault(chain_key, []).append((idx, node_id, event))
+
+    if root_node_id is None:  # pragma: no cover - guarded by matching_positions
+        raise ValueError("failed to resolve root node for PyReason evidence graph")
+
+    nodes: list[EvidenceNode] = []
+    edges: list[EvidenceEdge] = []
+    first_positions_by_chain = {chain_key: chain[0][0] for chain_key, chain in chains.items()}
+
+    for idx, (event, node_id) in enumerate(node_specs):
+        component_key = _normalize_component_key(event)
+        chain_key = (event.component_type, component_key, event.label)
+        if idx == root_position:
+            node_kind = NODE_CONCLUSION
+        elif first_positions_by_chain[chain_key] == idx and _is_seed_event(event):
+            node_kind = NODE_SEED
+        else:
+            node_kind = NODE_PREMISE
+        nodes.append(
+            EvidenceNode(
+                node_id=node_id,
+                node_kind=node_kind,
+                component=component_key,
+                label=event.label,
+                value_summary=_format_bound_summary(event.new_bound),
+                timestamp=event.time,
+                engine_meta={
+                    "component_type": event.component_type,
+                    "fixpoint_op": event.fixpoint_op,
+                    "occurred_due_to": event.occurred_due_to,
+                    "old_bound": event.old_bound,
+                    "new_bound": event.new_bound,
+                    "clause_groundings": event.clause_groundings,
+                    "raw_component": event.component,
+                },
+            )
+        )
+
+    edge_counter = 0
+    for chain_key in sorted(chains):
+        chain = sorted(chains[chain_key], key=lambda item: item[0])
+        for previous, current in zip(chain, chain[1:]):
+            edge_counter += 1
+            _, previous_node_id, _previous_event = previous
+            _, current_node_id, current_event = current
+            edges.append(
+                EvidenceEdge(
+                    edge_id=f"pyreason:{candidate_id}:edge:{edge_counter}",
+                    from_node_id=previous_node_id,
+                    to_node_id=current_node_id,
+                    edge_kind=EDGE_UPDATES,
+                    rule_label=current_event.occurred_due_to,
+                    engine_meta={
+                        "component_type": current_event.component_type,
+                        "fixpoint_op": current_event.fixpoint_op,
+                        "clause_groundings": current_event.clause_groundings,
+                    },
+                )
+            )
+
+    return EvidenceGraph(
+        graph_id=f"eg:{candidate_id}",
+        engine="pyreason",
+        root_node_id=root_node_id,
+        nodes=tuple(nodes),
+        edges=tuple(edges),
+        support_kind=support_kind,
+        layout_hint=LAYOUT_TIMELINE,
+        metadata={
+            "timesteps": trace.timesteps,
+            "node_event_count": len(trace.node_events),
+            "edge_event_count": len(trace.edge_events),
+            "root_component_type": component_type,
+            "root_component": root_component,
+            "root_label": root_label,
+        },
+    )
 
 
 def _parse_trace_df(df: Any, component_type: str) -> list[PyReasonTraceEventV0]:
@@ -145,3 +292,71 @@ def _event_to_dict(event: PyReasonTraceEventV0) -> dict[str, Any]:
         "occurred_due_to": event.occurred_due_to,
         "clause_groundings": list(event.clause_groundings),
     }
+
+
+def _resolve_candidate_anchor(candidate_payload: Mapping[str, Any]) -> tuple[str, str, str]:
+    pred_id = candidate_payload.get("pred_id")
+    if not isinstance(pred_id, str) or not pred_id:
+        raise ValueError("candidate_payload.pred_id must be non-empty string")
+    terms = candidate_payload.get("terms")
+    if not isinstance(terms, list):
+        raise ValueError("candidate_payload.terms must be list")
+
+    entity_refs = [
+        str(term.get("value"))
+        for term in terms
+        if isinstance(term, dict)
+        and term.get("kind") == "entity_ref"
+        and isinstance(term.get("value"), str)
+        and term.get("value")
+    ]
+    if len(entity_refs) == 1:
+        return ("node", entity_refs[0], _pred_short_name(pred_id))
+    if len(entity_refs) >= 2:
+        return ("edge", f"{entity_refs[0]}->{entity_refs[1]}", _pred_short_name(pred_id))
+    raise ValueError("candidate_payload must include at least one entity_ref term")
+
+
+def _normalize_component_key(event: PyReasonTraceEventV0) -> str:
+    if event.component_type != "edge":
+        return event.component
+    parsed = _parse_edge_component(event.component)
+    if parsed is None:
+        return event.component
+    return f"{parsed[0]}->{parsed[1]}"
+
+
+def _parse_edge_component(component: str) -> tuple[str, str] | None:
+    if component.startswith("(") and component.endswith(")"):
+        inner = component[1:-1]
+        parts = [part.strip() for part in inner.split(",")]
+        if len(parts) == 2:
+            return (parts[0], parts[1])
+    if "-" in component:
+        parts = component.split("-", 1)
+        if len(parts) == 2:
+            return (parts[0], parts[1])
+    return None
+
+
+def _format_bound_summary(bound: tuple[float, float]) -> str:
+    return f"[{float(bound[0])}, {float(bound[1])}]"
+
+
+def _is_seed_event(event: PyReasonTraceEventV0) -> bool:
+    marker = event.occurred_due_to.strip().lower()
+    return "fact" in marker or "seed" in marker
+
+
+def _pred_short_name(pred_id: str) -> str:
+    parts = pred_id.split(":", 1)
+    return parts[1] if len(parts) > 1 else pred_id
+
+
+__all__ = [
+    "PyReasonTraceEventV0",
+    "PyReasonTraceV0",
+    "parse_pyreason_trace",
+    "pyreason_trace_to_dict",
+    "pyreason_trace_to_evidence_graph",
+]
