@@ -1,10 +1,10 @@
 # Decision + Implementation Blueprint: Evidence Graph — Unified Explain Representation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-28
 - Last Updated: 2026-03-28
 - Parent:
-  - [2026-03-28_engine-provenance-surface-spike.md](../archive/2026-03-28_engine-provenance-surface-spike.md)
+  - [2026-03-28_engine-provenance-surface-spike.md](./2026-03-28_engine-provenance-surface-spike.md)
 - Related Modules:
   - `src/factpy_kernel/core/store/_support.py` — ProvenanceEnvelope, SupportArtifact
   - `src/factpy_kernel/core/store/_candidate_evidence_tree.py` — existing Souffle tree
@@ -309,5 +309,25 @@ elif provenance_tree is not None:
 - [x] Tree renderer 能渲染 Souffle + ProbLog 的 evidence
 - [x] Timeline renderer（CSS grid）能渲染 PyReason 的 evidence
 - [ ] Candidate evidence page 显示 unified provenance section（non-Souffle 引擎）
+- [ ] Candidate evidence page 显示 unified provenance section（non-Souffle 引擎）
 - [x] Souffle 现有 explain pipeline 完全不受影响
 - [ ] Tests 覆盖 converter + renderer + integration
+
+## 11. Outcome / Deviations
+
+- 最终落地结果：
+  - `audit/evidence_graph.py` 已冻结 `EvidenceNode` / `EvidenceEdge` / `EvidenceGraph` 数据模型，并提供 tree / timeline HTML renderer。
+  - 三个 adapter 现在都有 converter：
+    - `pyreason_trace_to_evidence_graph(...)`
+    - `problog_trace_to_evidence_graph(...)`
+    - `souffle_proof_tree_to_evidence_graph(...)`
+  - `static_ui.py` 的 candidate evidence page 现在支持可选 `evidence_graph`，并在现有 provenance block 后追加 unified section。
+  - Souffle 现有 provenance tree viewer 与 `candidate_evidence_tree` 全链路保持原样，不做替换。
+- 与 blueprint 不同的地方：
+  - static site generation 当前是通过 audit package 中已有的 Souffle `provenance_tree` best-effort 重建 `EvidenceGraph`；`PyReason` / `ProbLog` 的 audit package delivery 还没有直接接到同一页面。
+  - Step 6 的实际落地点是“page renderer 支持统一 section + static site 对 Souffle 做重建桥接”，而不是“audit package 已能为所有引擎直接供给 EvidenceGraph”。
+- 为什么会有这些调整：
+  - D-EG4 明确冻结了第一轮不做 `EvidenceGraph` durable serialization；audit reader 也没有直接消费 provenance envelope 的新通道。
+  - 先保持 Souffle 旧页面完全不动，只把 unified section 作为追加层，可以显著降低 static UI 的回归风险。
+- 归档说明：
+  - 本 blueprint 已实现并归档到 `docs/blueprints/archive/`。如果后续要让 `PyReason` / `ProbLog` 在 audit package / static site 上直接出 unified section，需要单独蓝图来定义 EvidenceGraph 的 package delivery 或 envelope-to-graph 读取通道。
