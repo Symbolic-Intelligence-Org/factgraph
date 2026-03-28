@@ -8,6 +8,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from factpy_kernel.audit.evidence_graph import (
+    EDGE_SUPPORTS,
+    LAYOUT_TREE,
+    NODE_CONCLUSION,
+    NODE_PREMISE,
+    NODE_SEED,
+    EvidenceEdge,
+    EvidenceGraph,
+    EvidenceNode,
+)
+from factpy_kernel.core.store._support import SOUFFLE_WITNESS_KIND
+
 
 class SouffleProvenanceError(Exception):
     pass
@@ -31,6 +43,98 @@ class SouffleProofTreeV0:
     query: str
     root: SouffleProofNodeV0
     rules: dict[str, str]
+
+
+def souffle_proof_tree_to_evidence_graph(
+    proof_tree: SouffleProofTreeV0,
+    *,
+    candidate_id: str,
+    support_kind: str = SOUFFLE_WITNESS_KIND,
+) -> EvidenceGraph:
+    """Convert a Souffle proof tree into an EvidenceGraph tree."""
+    if not isinstance(candidate_id, str) or not candidate_id:
+        raise ValueError("candidate_id must be non-empty string")
+
+    nodes: list[EvidenceNode] = []
+    edges: list[EvidenceEdge] = []
+    node_counter = 0
+    edge_counter = 0
+
+    def _visit(node: SouffleProofNodeV0, *, is_root: bool) -> str:
+        nonlocal node_counter, edge_counter
+
+        node_id = f"souffle:{candidate_id}:node:{node_counter}"
+        node_counter += 1
+        atom_text = _proof_node_atom_text(node)
+        rule_text = proof_tree.rules.get(node.rule_number or "")
+        component, value_summary = _proof_node_component_and_value(node)
+
+        if is_root:
+            node_kind = NODE_CONCLUSION
+        elif node.node_type == "axiom":
+            node_kind = NODE_SEED
+        else:
+            node_kind = NODE_PREMISE
+
+        nodes.append(
+            EvidenceNode(
+                node_id=node_id,
+                node_kind=node_kind,
+                component=component,
+                label=node.relation,
+                value_summary=value_summary,
+                timestamp=None,
+                engine_meta={
+                    "goal": atom_text,
+                    "event_status": node.node_type,
+                    "relation": node.relation,
+                    "args": node.args,
+                    "rule_number": node.rule_number,
+                    "rule_text": rule_text,
+                    "occurred_due_to": rule_text or node.rule_number,
+                    "child_count": len(node.children),
+                },
+            )
+        )
+
+        for child in node.children:
+            child_node_id = _visit(child, is_root=False)
+            edge_counter += 1
+            edges.append(
+                EvidenceEdge(
+                    edge_id=f"souffle:{candidate_id}:edge:{edge_counter}",
+                    from_node_id=child_node_id,
+                    to_node_id=node_id,
+                    edge_kind=EDGE_SUPPORTS,
+                    rule_label=node.rule_number,
+                    engine_meta={
+                        "parent_atom": atom_text,
+                        "parent_rule_number": node.rule_number,
+                        "parent_rule_text": rule_text,
+                        "parent_node_type": node.node_type,
+                        "child_node_type": child.node_type,
+                    },
+                )
+            )
+
+        return node_id
+
+    root_node_id = _visit(proof_tree.root, is_root=True)
+    return EvidenceGraph(
+        graph_id=f"eg:{candidate_id}",
+        engine="souffle",
+        root_node_id=root_node_id,
+        nodes=tuple(nodes),
+        edges=tuple(edges),
+        support_kind=support_kind,
+        layout_hint=LAYOUT_TREE,
+        metadata={
+            "query": proof_tree.query,
+            "rule_count": len(proof_tree.rules),
+            "root_relation": proof_tree.root.relation,
+            "root_rule_number": proof_tree.root.rule_number,
+        },
+    )
 
 
 def parse_souffle_proof_json(json_text: str) -> list[SouffleProofTreeV0]:
@@ -283,6 +387,26 @@ def _parse_atom_arg(arg: ast.AST, source_text: str) -> str:
     return ast.unparse(arg)
 
 
+def _proof_node_atom_text(node: SouffleProofNodeV0) -> str:
+    base = node.relation
+    if node.args:
+        base = f"{base}({', '.join(node.args)})"
+    if node.node_type == "negation":
+        return f"!{base}"
+    if node.node_type == "subproof":
+        return f"subproof {base}"
+    return base
+
+
+def _proof_node_component_and_value(node: SouffleProofNodeV0) -> tuple[str, str]:
+    if not node.args:
+        return ("()", "true")
+    component = node.args[0]
+    if len(node.args) == 1:
+        return (component, "true")
+    return (component, ", ".join(node.args[1:]))
+
+
 def _decode_json_values(json_text: str) -> list[Any]:
     decoder = json.JSONDecoder()
     values: list[Any] = []
@@ -302,3 +426,14 @@ def _decode_json_values(json_text: str) -> list[Any]:
         values.append(value)
         index = next_index
     return values
+
+
+__all__ = [
+    "SouffleProofNodeV0",
+    "SouffleProofTreeV0",
+    "SouffleProvenanceError",
+    "parse_souffle_proof_json",
+    "run_provenance_explain",
+    "run_package_provenance",
+    "souffle_proof_tree_to_evidence_graph",
+]

@@ -108,7 +108,7 @@
 - 还没有进 `AuditQuery`
 - 还没有写入 audit package
 - 还没有接入 `static_ui.py` 的 candidate evidence page
-- Souffle converter 还没有
+- Souffle converter 已在 `src/factpy_kernel/adapters/souffle/provenance.py` 实现，当前直接消费 `SouffleProofTreeV0` 并产出 tree graph；映射口径是 root=`conclusion`、`axiom`=`seed`、`derived/negation/subproof`=`premise`
 - PyReason converter 已在 `src/factpy_kernel/adapters/pyreason/provenance.py` 实现，但当前只产出 candidate-anchored timeline graph，不接 audit query / static UI
 - ProbLog converter 已在 `src/factpy_kernel/adapters/problog/provenance.py` 实现，但当前只产出 candidate-anchored call-frame tree，不接 audit query / static UI
 
@@ -119,4 +119,4 @@
 
 也就是说，Step 4 已冻结 renderer contract；Step 6 再把这个 fragment 接到 candidate evidence page。
 
-也就是说，当前实现只冻结共享表示层，不冻结 render contract 或 package contract。
+也就是说，当前实现已经冻结共享表示层与 standalone fragment renderer contract，但还没有冻结 page integration contract 或 package contract。

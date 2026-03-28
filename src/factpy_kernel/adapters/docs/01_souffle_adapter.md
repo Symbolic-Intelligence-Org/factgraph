@@ -141,6 +141,15 @@ Souffle 二进制查找顺序：
 - `parse_souffle_proof_json(...)`
   - 解析 Souffle JSON proof stream
   - depth-limited `subproof ...` 截断节点会保留为 `node_type="subproof"` 的叶子，而不是报错
+- `souffle_proof_tree_to_evidence_graph(...)`
+  - 直接消费 `SouffleProofTreeV0`
+  - 产出 `EvidenceGraph(engine="souffle", layout_hint="tree", support_kind="souffle_witness_v1")`
+  - 当前映射口径：
+    - root = `conclusion`
+    - `axiom` = `seed`
+    - `derived` / `negation` / `subproof` = `premise`
+    - child node 通过 `edge_kind="supports"` 指向 parent node
+  - `rule-number` / `rule text` 保留在 `rule_label` + `engine_meta`
 
 边界：
 
@@ -178,5 +187,5 @@ Souffle 二进制查找顺序：
 - 当前不承诺 full native parity；Souffle first-round 只输出 partial witness，而不是完整 rule-chain / recursive proof
 - Souffle provenance helper 当前仍是 adapter-local V0：
   - 只验证 recursive chain / negation / rule-number capture
-  - 尚未进入 runtime/audit/static delivery
-  - 尚未与其他 engine 对齐为统一 proof carrier
+  - 已可转换到 `audit.EvidenceGraph`，但还没有接入 runtime/audit/static 正式交付链
+  - 不替代现有 `candidate_evidence_tree` / witness pipeline

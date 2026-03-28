@@ -246,6 +246,7 @@ def render_evidence_graph_html(graph: EvidenceGraph) -> str:
 
 - Root at top, indented children
 - Similar to existing `_render_provenance_node_html()` but consuming `EvidenceNode`
+- Step 5 当前的 Souffle converter 直接消费 `SouffleProofTreeV0`，按 `root=conclusion`、`axiom=seed`、`derived/negation/subproof=premise` 映射；所有 child branch 都以 `edge_kind="supports"` 指向 parent proof node，`rule-number` / `rule text` 保留在 `rule_label + engine_meta`
 - Step 3 当前的 ProbLog converter 以 call frame 为 node，不把 `result/complete/fail` 单独提升成 node
 - candidate root 优先匹配 final answer/query line 的 exact goal；若 query vars 含 body-only vars，则允许 payload term subset matching
 
@@ -303,10 +304,10 @@ elif provenance_tree is not None:
 
 ## 10. Acceptance Criteria
 
-- [ ] EvidenceGraph data model 定义清晰（frozen dataclasses in `audit/`）
-- [ ] 三个 converter 各产出正确的 graph（layout_hint 正确）
-- [ ] Tree renderer 能渲染 Souffle + ProbLog 的 evidence
-- [ ] Timeline renderer（CSS grid）能渲染 PyReason 的 evidence
+- [x] EvidenceGraph data model 定义清晰（frozen dataclasses in `audit/`）
+- [x] 三个 converter 各产出正确的 graph（layout_hint 正确）
+- [x] Tree renderer 能渲染 Souffle + ProbLog 的 evidence
+- [x] Timeline renderer（CSS grid）能渲染 PyReason 的 evidence
 - [ ] Candidate evidence page 显示 unified provenance section（non-Souffle 引擎）
-- [ ] Souffle 现有 explain pipeline 完全不受影响
+- [x] Souffle 现有 explain pipeline 完全不受影响
 - [ ] Tests 覆盖 converter + renderer + integration
