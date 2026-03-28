@@ -33,7 +33,7 @@
   - `resolve_problog_timeout(...)`：shared `engine_options` 归一化
   - `_remember_pending_probability_annotations(...)`
 - `provenance.py`
-  - `ProbLogTraceV0` / `ProbLogTraceEventV0` / `parse_problog_trace(...)`
+  - `ProbLogTraceV0` / `ProbLogTraceEventV0` / `parse_problog_trace(...)` / `problog_trace_to_evidence_graph(...)`
 - `problog_export.py`
   - `export_problog(...)`：导出 `.pl`
 - `problog_engine.py`
@@ -83,6 +83,24 @@ explainability 补充：
 - 若 future engine path 没有 trace，则仍会回落到：
   - `support_kind="engine_no_witness_v1"`
   - `support_digest="sha256:000...0"`
+
+EvidenceGraph 补充：
+
+- `problog_trace_to_evidence_graph(...)` 当前已实现 candidate-anchored tree converter：
+  - 输入：`ProbLogTraceV0 + candidate_id + candidate_payload`
+  - 输出：`EvidenceGraph(engine="problog", layout_hint="tree", support_kind="problog_provenance_v1")`
+- converter 当前把 trace 归一化为 **call frame tree**，不是逐 event 平铺：
+  - 一个 `call goal(...)` frame 变成一个 `EvidenceNode`
+  - `result / complete / fail` 留在该 node 的 `engine_meta`
+  - child call frame 通过 `edge_kind="derives"` 指向 parent frame
+- root anchoring 当前采用 best-effort 规则：
+  - 优先匹配 final answer/query line 与 call frame 的 exact goal
+  - candidate payload 的 term multiset 允许作为 answer args 的子集，以适配 query vars 含 body-only vars 的情况
+  - synthetic `answer(...)` / `query(...)` goal 会保留在 `engine_meta`；root node 的 renderer-facing `label/component` 仍取 candidate payload 语义
+- 当前不做的事：
+  - 不把每条 `result/complete/fail` 都提升成独立 `EvidenceNode`
+  - 不把 synthetic `answer(...)` 强行翻译回完整 rule-level semantic tree
+  - 不在这一层恢复 richer rule labels；`location` 继续保留在 `engine_meta`
 
 semantic-delivery 补充：
 
@@ -159,3 +177,4 @@ ProbLog 当前对 shared evaluate surface 公开的 run-time 选项只有一个�
 - 主要服务 derivation query 执行，不覆盖 Deontic 规范执行
 - 当前只承诺 runtime `explain_ref(kind="candidate")` flat provenance envelope；不会自动生成 candidate evidence tree / summary / narrative / NL
 - 当前不提供 ProbLog session API 或 `engine_ext`；shared runtime options 当前只开放 `timeout`
+- `problog_trace_to_evidence_graph(...)` 当前是 best-effort candidate anchoring；当同一 candidate 对应多个 synthetic answer frame 时，只会选最接近的一棵 call subtree

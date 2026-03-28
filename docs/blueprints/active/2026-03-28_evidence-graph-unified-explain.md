@@ -224,7 +224,7 @@ def pyreason_trace_to_evidence_graph(
 
 # adapters/problog/provenance.py
 def problog_trace_to_evidence_graph(
-    trace: ProbLogTraceV0, candidate_id: str,
+    trace: ProbLogTraceV0, *, candidate_id: str, candidate_payload: Mapping[str, Any],
 ) -> EvidenceGraph: ...   # layout_hint="tree"
 ```
 
@@ -246,6 +246,8 @@ def render_evidence_graph_html(graph: EvidenceGraph) -> str:
 
 - Root at top, indented children
 - Similar to existing `_render_provenance_node_html()` but consuming `EvidenceNode`
+- Step 3 当前的 ProbLog converter 以 call frame 为 node，不把 `result/complete/fail` 单独提升成 node
+- candidate root 优先匹配 final answer/query line 的 exact goal；若 query vars 含 body-only vars，则允许 payload term subset matching
 
 ### 7.3 Timeline Layout (PyReason)
 

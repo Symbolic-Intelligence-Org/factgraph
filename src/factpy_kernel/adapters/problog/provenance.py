@@ -1,9 +1,22 @@
 """ProbLog provenance trace carrier (adapter-local, V0 spike)."""
 from __future__ import annotations
 
+from collections import Counter
 import re
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Mapping
+
+from factpy_kernel.audit.evidence_graph import (
+    EDGE_DERIVES,
+    LAYOUT_TREE,
+    NODE_CONCLUSION,
+    NODE_PREMISE,
+    NODE_SEED,
+    EvidenceEdge,
+    EvidenceGraph,
+    EvidenceNode,
+)
+from factpy_kernel.core.store._support import PROBLOG_PROVENANCE_KIND
 
 _TRACE_CALL_RE = re.compile(
     r"^(?P<indent>\s*)(?P<event>call)\s+(?P<goal>.+?)\s+\{(?P<started>[0-9.]+)\}\s+\[(?P<location>[^\]]*)\]$"
@@ -43,6 +56,17 @@ class ProbLogAnswerV0:
 class ProbLogTraceV0:
     events: tuple[ProbLogTraceEventV0, ...]
     answers: tuple[ProbLogAnswerV0, ...]
+
+
+@dataclass
+class _ProbLogCallFrame:
+    frame_id: str
+    call_event: ProbLogTraceEventV0
+    parent_frame_id: str | None = None
+    child_frame_ids: list[str] = field(default_factory=list)
+    result_event: ProbLogTraceEventV0 | None = None
+    complete_event: ProbLogTraceEventV0 | None = None
+    fail_event: ProbLogTraceEventV0 | None = None
 
 
 def parse_problog_trace(raw_output: str) -> ProbLogTraceV0:
@@ -140,6 +164,119 @@ def problog_trace_to_dict(trace: ProbLogTraceV0) -> dict[str, Any]:
     }
 
 
+def problog_trace_to_evidence_graph(
+    trace: ProbLogTraceV0,
+    *,
+    candidate_id: str,
+    candidate_payload: Mapping[str, Any],
+    support_kind: str = PROBLOG_PROVENANCE_KIND,
+) -> EvidenceGraph:
+    """Convert a ProbLog proof trace into a candidate-anchored EvidenceGraph tree."""
+    if not isinstance(candidate_id, str) or not candidate_id:
+        raise ValueError("candidate_id must be non-empty string")
+    if not trace.events:
+        raise ValueError("ProbLog trace has no events")
+
+    candidate_info = _resolve_candidate_info(candidate_payload)
+    frames = _build_call_frames(trace)
+    if not frames:
+        raise ValueError("ProbLog trace has no call frames")
+
+    root_frame_id, matched_answer = _select_root_frame(
+        trace=trace,
+        frames=frames,
+        candidate_label=candidate_info["label"],
+        candidate_term_counter=candidate_info["term_counter"],
+    )
+    if root_frame_id is None:
+        raise ValueError("candidate anchor not found in ProbLog trace")
+
+    frame_order = _collect_frame_subtree(frames, root_frame_id)
+    nodes: list[EvidenceNode] = []
+    edges: list[EvidenceEdge] = []
+    node_id_by_frame_id: dict[str, str] = {}
+
+    for idx, frame_id in enumerate(frame_order):
+        frame = frames[frame_id]
+        goal_name, goal_args = _parse_goal_expr(frame.call_event.goal)
+        node_id = f"problog:{candidate_id}:frame:{idx}"
+        node_id_by_frame_id[frame_id] = node_id
+
+        if frame_id == root_frame_id:
+            node_kind = NODE_CONCLUSION
+            label = candidate_info["label"]
+            component = candidate_info["component"]
+            value_summary = _format_probability(matched_answer.probability) if matched_answer else _frame_value_summary(frame)
+        else:
+            label = goal_name
+            component = _goal_component(goal_args)
+            value_summary = _frame_value_summary(frame)
+            node_kind = NODE_SEED if not frame.child_frame_ids else NODE_PREMISE
+
+        nodes.append(
+            EvidenceNode(
+                node_id=node_id,
+                node_kind=node_kind,
+                component=component,
+                label=label,
+                value_summary=value_summary,
+                timestamp=None,
+                engine_meta={
+                    "goal": frame.call_event.goal,
+                    "goal_name": goal_name,
+                    "goal_args": goal_args,
+                    "call_started_seconds": frame.call_event.started_seconds,
+                    "location": frame.call_event.location,
+                    "result_terms": frame.result_event.result_terms if frame.result_event else (),
+                    "bindings_text": frame.result_event.bindings_text if frame.result_event else None,
+                    "elapsed_seconds": frame.complete_event.elapsed_seconds if frame.complete_event else None,
+                    "event_status": _frame_status(frame),
+                    "synthetic_goal": _is_synthetic_goal_name(goal_name),
+                    "answer_probability": matched_answer.probability if frame_id == root_frame_id and matched_answer else None,
+                },
+            )
+        )
+
+    edge_counter = 0
+    for frame_id in frame_order:
+        parent_frame = frames[frame_id]
+        for child_frame_id in parent_frame.child_frame_ids:
+            if child_frame_id not in node_id_by_frame_id:
+                continue
+            edge_counter += 1
+            child_frame = frames[child_frame_id]
+            edges.append(
+                EvidenceEdge(
+                    edge_id=f"problog:{candidate_id}:edge:{edge_counter}",
+                    from_node_id=node_id_by_frame_id[child_frame_id],
+                    to_node_id=node_id_by_frame_id[frame_id],
+                    edge_kind=EDGE_DERIVES,
+                    rule_label=None,
+                    engine_meta={
+                        "parent_goal": parent_frame.call_event.goal,
+                        "child_goal": child_frame.call_event.goal,
+                        "parent_location": parent_frame.call_event.location,
+                    },
+                )
+            )
+
+    return EvidenceGraph(
+        graph_id=f"eg:{candidate_id}",
+        engine="problog",
+        root_node_id=node_id_by_frame_id[root_frame_id],
+        nodes=tuple(nodes),
+        edges=tuple(edges),
+        support_kind=support_kind,
+        layout_hint=LAYOUT_TREE,
+        metadata={
+            "event_count": len(trace.events),
+            "answer_count": len(trace.answers),
+            "root_goal": frames[root_frame_id].call_event.goal,
+            "answer_probability": matched_answer.probability if matched_answer else None,
+        },
+    )
+
+
 def _normalize_depth(indent: str) -> int:
     if not indent:
         return 0
@@ -164,11 +301,302 @@ def _split_terms(raw_terms: str) -> tuple[str, ...]:
     return tuple(parts)
 
 
+def _build_call_frames(trace: ProbLogTraceV0) -> dict[str, _ProbLogCallFrame]:
+    frames: dict[str, _ProbLogCallFrame] = {}
+    open_stack: list[str] = []
+    counter = 0
+
+    for event in trace.events:
+        if event.event_type == "call":
+            while len(open_stack) > event.depth:
+                open_stack.pop()
+            parent_frame_id = open_stack[-1] if open_stack else None
+            frame_id = f"frame:{counter}"
+            counter += 1
+            frames[frame_id] = _ProbLogCallFrame(
+                frame_id=frame_id,
+                call_event=event,
+                parent_frame_id=parent_frame_id,
+            )
+            if parent_frame_id is not None:
+                frames[parent_frame_id].child_frame_ids.append(frame_id)
+            open_stack.append(frame_id)
+            continue
+
+        if event.event_type == "result":
+            frame_id = _find_matching_open_frame(
+                open_stack,
+                frames,
+                goal=event.goal,
+                expected_depth=event.depth - 1,
+            )
+            if frame_id is not None:
+                frames[frame_id].result_event = event
+            continue
+
+        if event.event_type in {"complete", "fail"}:
+            frame_id = _find_matching_open_frame(
+                open_stack,
+                frames,
+                goal=event.goal,
+                expected_depth=event.depth,
+            )
+            if frame_id is None:
+                continue
+            if event.event_type == "complete":
+                frames[frame_id].complete_event = event
+            else:
+                frames[frame_id].fail_event = event
+            while open_stack:
+                popped = open_stack.pop()
+                if popped == frame_id:
+                    break
+
+    return frames
+
+
+def _find_matching_open_frame(
+    open_stack: list[str],
+    frames: Mapping[str, _ProbLogCallFrame],
+    *,
+    goal: str,
+    expected_depth: int,
+) -> str | None:
+    for frame_id in reversed(open_stack):
+        frame = frames[frame_id]
+        if frame.call_event.goal != goal:
+            continue
+        if frame.call_event.depth != expected_depth:
+            continue
+        return frame_id
+    return None
+
+
+def _resolve_candidate_info(candidate_payload: Mapping[str, Any]) -> dict[str, Any]:
+    pred_id = candidate_payload.get("pred_id")
+    if not isinstance(pred_id, str) or not pred_id:
+        raise ValueError("candidate_payload.pred_id must be non-empty string")
+    terms = candidate_payload.get("terms")
+    if not isinstance(terms, list):
+        raise ValueError("candidate_payload.terms must be list")
+
+    normalized_terms: list[str] = []
+    entity_refs: list[str] = []
+    for term in terms:
+        if not isinstance(term, dict):
+            continue
+        kind = term.get("kind")
+        if kind == "entity_ref":
+            value = term.get("value")
+            if isinstance(value, str) and value:
+                entity_refs.append(value)
+                normalized_terms.append(value)
+            continue
+        if kind == "literal":
+            normalized_terms.append(_normalize_goal_token(term.get("value")))
+            continue
+        if kind == "candidate_ref":
+            candidate_key = term.get("candidate_key")
+            if isinstance(candidate_key, str) and candidate_key:
+                normalized_terms.append(candidate_key)
+
+    if entity_refs:
+        component = entity_refs[0] if len(entity_refs) == 1 else f"{entity_refs[0]}->{entity_refs[1]}"
+    elif normalized_terms:
+        component = " | ".join(normalized_terms)
+    else:
+        raise ValueError("candidate_payload.terms must carry at least one usable value")
+
+    return {
+        "label": _pred_short_name(pred_id),
+        "component": component,
+        "term_counter": Counter(normalized_terms),
+    }
+
+
+def _select_root_frame(
+    *,
+    trace: ProbLogTraceV0,
+    frames: Mapping[str, _ProbLogCallFrame],
+    candidate_label: str,
+    candidate_term_counter: Counter[str],
+) -> tuple[str | None, ProbLogAnswerV0 | None]:
+    best_answer: ProbLogAnswerV0 | None = None
+    best_answer_score: tuple[int, int, int] | None = None
+    for answer in trace.answers:
+        goal_name, goal_args = _parse_goal_expr(answer.query)
+        goal_counter = Counter(_normalize_goal_token(arg) for arg in goal_args)
+        if not _counter_is_subset(candidate_term_counter, goal_counter):
+            continue
+        synthetic_penalty = 1 if _is_synthetic_goal_name(goal_name) else 0
+        score = (sum(goal_counter.values()) - sum(candidate_term_counter.values()), synthetic_penalty, -len(goal_args))
+        if best_answer_score is None or score < best_answer_score:
+            best_answer = answer
+            best_answer_score = score
+
+    if best_answer is not None:
+        for frame_id, frame in frames.items():
+            if frame.call_event.goal == best_answer.query:
+                return frame_id, best_answer
+
+    best_frame_id: str | None = None
+    best_frame_score: tuple[int, int, int] | None = None
+    for frame_id, frame in frames.items():
+        goal_name, goal_args = _parse_goal_expr(frame.call_event.goal)
+        goal_counter = Counter(_normalize_goal_token(arg) for arg in goal_args)
+        if not _counter_is_subset(candidate_term_counter, goal_counter):
+            continue
+        label_penalty = 0 if goal_name == candidate_label else 1
+        synthetic_penalty = 1 if _is_synthetic_goal_name(goal_name) else 0
+        score = (label_penalty, sum(goal_counter.values()) - sum(candidate_term_counter.values()), synthetic_penalty)
+        if best_frame_score is None or score < best_frame_score:
+            best_frame_id = frame_id
+            best_frame_score = score
+    return best_frame_id, best_answer
+
+
+def _collect_frame_subtree(
+    frames: Mapping[str, _ProbLogCallFrame],
+    root_frame_id: str,
+) -> list[str]:
+    order: list[str] = []
+
+    def _walk(frame_id: str) -> None:
+        order.append(frame_id)
+        for child_frame_id in frames[frame_id].child_frame_ids:
+            _walk(child_frame_id)
+
+    _walk(root_frame_id)
+    return order
+
+
+def _parse_goal_expr(expr: str) -> tuple[str, tuple[str, ...]]:
+    text = expr.strip()
+    if not text:
+        raise ProbLogProvenanceError("empty goal expression in ProbLog trace")
+    if "(" not in text:
+        return text, ()
+    idx = text.find("(")
+    if idx <= 0 or not text.endswith(")"):
+        raise ProbLogProvenanceError(f"invalid goal expression: {expr}")
+    name = text[:idx].strip()
+    args_text = text[idx + 1 : -1].strip()
+    if not name:
+        raise ProbLogProvenanceError(f"invalid goal expression: {expr}")
+    if not args_text:
+        return name, ()
+    return name, tuple(_split_top_level_args(args_text))
+
+
+def _split_top_level_args(args_text: str) -> list[str]:
+    args: list[str] = []
+    start = 0
+    depth = 0
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(args_text):
+        ch = args_text[i]
+        if in_single:
+            if ch == "'" and i + 1 < len(args_text) and args_text[i + 1] == "'":
+                i += 2
+                continue
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == '"':
+                in_double = False
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
+        if ch in "([{":
+            depth += 1
+            i += 1
+            continue
+        if ch in ")]}":
+            depth = max(0, depth - 1)
+            i += 1
+            continue
+        if ch == "," and depth == 0:
+            args.append(args_text[start:i].strip())
+            start = i + 1
+        i += 1
+    args.append(args_text[start:].strip())
+    return args
+
+
+def _goal_component(goal_args: tuple[str, ...]) -> str:
+    normalized = [_normalize_goal_token(arg) for arg in goal_args]
+    if not normalized:
+        return "true"
+    if len(normalized) == 1:
+        return normalized[0]
+    if len(normalized) == 2:
+        return f"{normalized[0]}->{normalized[1]}"
+    return " | ".join(normalized)
+
+
+def _frame_value_summary(frame: _ProbLogCallFrame) -> str:
+    status = _frame_status(frame)
+    if status == "fail":
+        return "false"
+    if status == "result":
+        return "true"
+    return status
+
+
+def _frame_status(frame: _ProbLogCallFrame) -> str:
+    if frame.fail_event is not None:
+        return "fail"
+    if frame.result_event is not None:
+        return "result"
+    if frame.complete_event is not None:
+        return "complete"
+    return "call"
+
+
+def _counter_is_subset(need: Counter[str], have: Counter[str]) -> bool:
+    for key, count in need.items():
+        if have.get(key, 0) < count:
+            return False
+    return True
+
+
+def _normalize_goal_token(raw: Any) -> str:
+    text = str(raw).strip()
+    if len(text) >= 2 and ((text[0] == '"' and text[-1] == '"') or (text[0] == "'" and text[-1] == "'")):
+        text = text[1:-1]
+    return text
+
+
+def _format_probability(probability: float) -> str:
+    return f"{float(probability):.12g}"
+
+
+def _is_synthetic_goal_name(name: str) -> bool:
+    return name == "query" or name == "answer" or name.startswith("rule_body_")
+
+
+def _pred_short_name(pred_id: str) -> str:
+    parts = pred_id.split(":", 1)
+    return parts[1] if len(parts) > 1 else pred_id
+
+
 __all__ = [
     "ProbLogAnswerV0",
     "ProbLogProvenanceError",
     "ProbLogTraceEventV0",
     "ProbLogTraceV0",
     "parse_problog_trace",
+    "problog_trace_to_evidence_graph",
     "problog_trace_to_dict",
 ]
