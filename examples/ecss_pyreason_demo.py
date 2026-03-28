@@ -139,21 +139,25 @@ initial_facts = [
         atom="disposal_estimate(SENTINEL7)",
         name="sentinel7_disposal",
         start=0, end=3,
+        bound=[0.85, 0.95],
     ),
     PyReasonFactDef(
         atom="passivation_ok(SENTINEL7)",
         name="sentinel7_passivation",
         start=0, end=3,
+        bound=[1.0, 1.0],
     ),
     PyReasonFactDef(
         atom="disposal_estimate(DEBRIS_X)",
         name="debrisx_disposal",
         start=0, end=3,
+        bound=[0.60, 0.75],
     ),
     PyReasonFactDef(
         atom="passivation_ok(DEBRIS_X)",
         name="debrisx_passivation",
         start=0, end=3,
+        bound=[0.70, 0.80],
     ),
 ]
 

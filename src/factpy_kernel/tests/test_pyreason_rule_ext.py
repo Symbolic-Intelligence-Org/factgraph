@@ -107,6 +107,7 @@ class FactDefTests(unittest.TestCase):
         fact = PyReasonFactDef(atom="popular(Alice)", name="test")
         self.assertEqual(fact.start, 0)
         self.assertEqual(fact.end, 0)
+        self.assertEqual(tuple(fact.bound), (1.0, 1.0))
 
     def test_rejects_empty_atom(self) -> None:
         with self.assertRaises(ValueError):
@@ -115,6 +116,10 @@ class FactDefTests(unittest.TestCase):
     def test_rejects_empty_name(self) -> None:
         with self.assertRaises(ValueError):
             PyReasonFactDef(atom="popular(Alice)", name="")
+
+    def test_rejects_invalid_bound(self) -> None:
+        with self.assertRaises(ValueError):
+            PyReasonFactDef(atom="popular(Alice)", name="test", bound=[0.9, 0.2])
 
 
 class CompileRuleTests(unittest.TestCase):
@@ -261,7 +266,7 @@ class RunnerTypedDefTests(unittest.TestCase):
             ),
             ext=PyReasonRuleExt(timestep_delay=1),
         )
-        fact_def = PyReasonFactDef(atom="popular(Alice)", name="alice_pop", start=0, end=3)
+        fact_def = PyReasonFactDef(atom="popular(Alice)", name="alice_pop", start=0, end=3, bound=[0.4, 0.6])
 
         with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
             result = run_pyreason(
@@ -273,7 +278,7 @@ class RunnerTypedDefTests(unittest.TestCase):
 
         self.assertEqual(len(loaded_graphs), 1)
         self.assertEqual(added_rules, [("rule", "popular(x) <-1 popular(y), strength(x, y)", "friend_pop")])
-        self.assertEqual(added_facts, [("fact", "popular(Alice)", "alice_pop", 0, 3)])
+        self.assertEqual(added_facts, [("fact", "popular(Alice) : [0.4, 0.6]", "alice_pop", 0, 3)])
         self.assertEqual(result.config.timesteps, 2)
         self.assertEqual(reset_calls, [None, None])
 

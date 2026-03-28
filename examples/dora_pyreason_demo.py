@@ -183,14 +183,14 @@ rules = [
 ]
 
 initial_facts = [
-    PyReasonFactDef(atom="client_severity(INC2026043)", name="inc1_client", start=0, end=4),
-    PyReasonFactDef(atom="financial_severity(INC2026043)", name="inc1_financial", start=0, end=4),
-    PyReasonFactDef(atom="duration_severity(INC2026043)", name="inc1_duration", start=0, end=4),
-    PyReasonFactDef(atom="client_severity(INC2026044)", name="inc2_client", start=0, end=4),
-    PyReasonFactDef(atom="financial_severity(INC2026044)", name="inc2_financial", start=0, end=4),
-    PyReasonFactDef(atom="duration_severity(INC2026044)", name="inc2_duration", start=0, end=4),
-    PyReasonFactDef(atom="audit_rights(ACME_CLOUD)", name="acme_audit", start=0, end=4),
-    PyReasonFactDef(atom="exit_strategy(ACME_CLOUD)", name="acme_exit", start=0, end=4),
+    PyReasonFactDef(atom="client_severity(INC2026043)", name="inc1_client", start=0, end=4, bound=[0.7, 0.9]),
+    PyReasonFactDef(atom="financial_severity(INC2026043)", name="inc1_financial", start=0, end=4, bound=[0.8, 0.95]),
+    PyReasonFactDef(atom="duration_severity(INC2026043)", name="inc1_duration", start=0, end=4, bound=[0.6, 0.85]),
+    PyReasonFactDef(atom="client_severity(INC2026044)", name="inc2_client", start=0, end=4, bound=[0.1, 0.3]),
+    PyReasonFactDef(atom="financial_severity(INC2026044)", name="inc2_financial", start=0, end=4, bound=[0.05, 0.15]),
+    PyReasonFactDef(atom="duration_severity(INC2026044)", name="inc2_duration", start=0, end=4, bound=[0.2, 0.4]),
+    PyReasonFactDef(atom="audit_rights(ACME_CLOUD)", name="acme_audit", start=0, end=4, bound=[1.0, 1.0]),
+    PyReasonFactDef(atom="exit_strategy(ACME_CLOUD)", name="acme_exit", start=0, end=4, bound=[0.3, 0.5]),
 ]
 
 print(f"\n[{time.time()-start:.1f}s] Rules defined:")

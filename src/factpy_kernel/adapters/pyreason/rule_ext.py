@@ -44,6 +44,7 @@ class PyReasonFactDef:
     name: str
     start: int = 0
     end: int = 0
+    bound: tuple[float, float] | list[float] = (1.0, 1.0)
 
     def __post_init__(self) -> None:
         if not isinstance(self.atom, str) or not self.atom:
@@ -54,6 +55,17 @@ class PyReasonFactDef:
             raise ValueError("start must be int")
         if isinstance(self.end, bool) or not isinstance(self.end, int):
             raise ValueError("end must be int")
+        if not isinstance(self.bound, (list, tuple)) or len(self.bound) != 2:
+            raise ValueError("bound must be [float, float]")
+        lo_raw, hi_raw = self.bound
+        if isinstance(lo_raw, bool) or not isinstance(lo_raw, (int, float)):
+            raise ValueError("bound[0] must be numeric")
+        if isinstance(hi_raw, bool) or not isinstance(hi_raw, (int, float)):
+            raise ValueError("bound[1] must be numeric")
+        lo = float(lo_raw)
+        hi = float(hi_raw)
+        if not 0.0 <= lo <= hi <= 1.0:
+            raise ValueError("bound must satisfy 0.0 <= lower <= upper <= 1.0")
 
 
 class PyReasonCompileError(Exception):
