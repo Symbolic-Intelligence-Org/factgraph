@@ -508,6 +508,27 @@ class CertaintyExplainContractsTests(unittest.TestCase):
         self.assertEqual(candidates[0].confidence_kind, "probability")
         self.assertEqual(candidates[0].support_kind, ENGINE_NO_WITNESS_KIND)
 
+    def test_problog_parse_output_accepts_tab_format_with_trailing_colon(self) -> None:
+        sdk = SDKStore([User])
+        ref = sdk.ref(User, user_id="u1", locale="de")
+
+        candidates = parse_problog_output(
+            f'answer("{ref}","vip"):\t0.42',
+            {
+                "store": sdk.store,
+                "query_vars": ["$u", "$tag"],
+                "derivation_id": "drv.problog.tag",
+                "version": "1.0.0",
+                "target_pred_id": "user:tag",
+                "head_vars": ["$u", "$tag"],
+            },
+            sdk.ledger,
+        )
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].confidence, 0.42)
+        self.assertEqual(candidates[0].confidence_kind, "probability")
+
     def test_candidate_summary_certainty_uses_override_registry_root_and_child_rule_weights(self) -> None:
         sdk = SDKStore([User])
         refs = _seed_users_for_syntax_matrix(sdk)

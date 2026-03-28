@@ -1,0 +1,119 @@
+"""Tests for the ProbLog engine evaluator."""
+
+from __future__ import annotations
+
+import unittest
+from dataclasses import dataclass
+from unittest.mock import patch
+
+import factpy_kernel.adapters.problog  # noqa: F401
+from factpy_kernel.adapters.problog.engine_eval import evaluate_problog
+from factpy_kernel.core.store.runtime import get_engine_evaluator
+from factpy_kernel.core.store.types import EngineExtBase
+from factpy_kernel.core.evidence.write_protocol import set_field
+from factpy_kernel.sdk.dsl import Derivation, Pred, vars as sdk_vars
+from factpy_kernel.sdk.schema import Entity, Field, Identity
+from factpy_kernel.sdk.store import SDKStore
+
+
+class User(Entity):
+    user_id: str = Identity(primary_key=True)
+    name: str = Field(cardinality="single")
+    tag_seed: str = Field(cardinality="single")
+    tag: str = Field(cardinality="single")
+
+
+@dataclass(frozen=True)
+class DummyProbLogExt(EngineExtBase):
+    flag: int = 1
+
+
+class ProbLogEngineEvalTests(unittest.TestCase):
+    def _make_sdk(self) -> SDKStore:
+        sdk = SDKStore([User])
+        alice_ref = sdk.ref(User, user_id="Alice")
+        set_field(
+            sdk.ledger,
+            pred_id="user:name",
+            e_ref=alice_ref,
+            rest_terms=[("string", "Alice")],
+            meta={"source": "test", "confidence": 1.0},
+        )
+        set_field(
+            sdk.ledger,
+            pred_id="user:tag_seed",
+            e_ref=alice_ref,
+            rest_terms=[("string", "vip")],
+            meta={"source": "test", "confidence": 1.0},
+        )
+        return sdk
+
+    def _make_derivation(self, *, engine_ext: EngineExtBase | None = None) -> Derivation:
+        with sdk_vars("u", "tag") as (u, tag):
+            return Derivation(
+                id="drv.problog_tag",
+                version="v1",
+                where=[Pred("user:tag_seed", u, tag)],
+                target="user:tag",
+                head_vars=[u, tag],
+                mode="problog",
+                engine_ext=engine_ext,
+            )
+
+    def _mock_output(self, sdk: SDKStore) -> str:
+        return f'answer("vip","{sdk.ref(User, user_id="Alice")}"): 0.42'
+
+    def test_registration_on_import(self) -> None:
+        evaluator = get_engine_evaluator("problog")
+        self.assertIs(evaluator, evaluate_problog)
+
+    @patch("factpy_kernel.adapters.problog.engine_eval.run_problog")
+    def test_default_timeout_used_when_engine_options_missing(self, mock_run) -> None:
+        sdk = self._make_sdk()
+        mock_run.return_value = self._mock_output(sdk)
+
+        candidates = sdk.evaluate(self._make_derivation())
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(mock_run.call_args.kwargs["timeout"], 30)
+
+    @patch("factpy_kernel.adapters.problog.engine_eval.run_problog")
+    def test_engine_options_timeout_override_default(self, mock_run) -> None:
+        sdk = self._make_sdk()
+        mock_run.return_value = self._mock_output(sdk)
+
+        compiled = sdk._compile_derivation_input(self._make_derivation())
+        self.assertNotIn("engine_options", compiled[0])
+
+        candidates = sdk.evaluate(self._make_derivation(), engine_options={"timeout": 7})
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(mock_run.call_args.kwargs["timeout"], 7)
+
+    def test_unknown_engine_option_raises(self) -> None:
+        sdk = self._make_sdk()
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.evaluate(self._make_derivation(), engine_options={"timesteps": 5})
+
+        self.assertIn("Supported keys: timeout", str(ctx.exception))
+
+    def test_bad_timeout_type_raises(self) -> None:
+        sdk = self._make_sdk()
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.evaluate(self._make_derivation(), engine_options={"timeout": "slow"})
+
+        self.assertIn("positive int", str(ctx.exception))
+
+    def test_engine_ext_is_rejected(self) -> None:
+        sdk = self._make_sdk()
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.evaluate(self._make_derivation(engine_ext=DummyProbLogExt()))
+
+        self.assertIn("does not support engine_ext", str(ctx.exception))
+
+
+if __name__ == "__main__":
+    unittest.main()

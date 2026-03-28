@@ -1,7 +1,7 @@
 # ProbLog Adapter 总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/problog`
-- 最后更新：2026-03-27
+- 最后更新：2026-03-28
 - 目标读者：需要理解 ProbLog 导出、执行、结果回读链路的开发者
 
 ## 1. 模块职责
@@ -26,9 +26,12 @@
 ## 2. 当前模块结构
 
 - `__init__.py`
-  - 定义 `evaluate_problog(...)`
   - import 时注册：`register_engine_evaluator(evaluate_problog, "problog")`
-  - `persist_problog_annotations(...)`：shared accept 后绑定 `problog/semantic/probability`
+  - re-export `persist_problog_annotations(...)` 等公开入口
+- `engine_eval.py`
+  - `evaluate_problog(...)`
+  - `resolve_problog_timeout(...)`：shared `engine_options` 归一化
+  - `_remember_pending_probability_annotations(...)`
 - `problog_export.py`
   - `export_problog(...)`：导出 `.pl`
 - `problog_engine.py`
@@ -49,13 +52,14 @@
 `evaluate_problog(...)` 主流程：
 
 1. 校验目标和变量绑定（entity head / fact head）
-2. 组装 rule_spec（包含 `where/head/head_vars/query_vars/body_confidences`）
-3. `export_problog(...)` 生成临时 `query.pl`
-4. `run_problog(...)` 调用 ProbLog CLI
-5. `parse_problog_output(...)` 解析结果并映射为 `CandidateSet`
-6. 将推导概率写入 `candidate.confidence`，并标注 `candidate.confidence_kind="probability"`
-7. `evaluate_problog(...)` 把待持久化的 `problog/semantic/probability` 模板缓存到 store pending state
-8. caller 在 `accept` 后调用 `persist_problog_annotations(...)`，将真实 `asrt_id` 绑定到 Annotation Store
+2. 用 `resolve_problog_timeout(engine_options)` 归一化运行超时
+3. 组装 rule_spec（包含 `where/head/head_vars/query_vars/body_confidences`）
+4. `export_problog(...)` 生成临时 `query.pl`
+5. `run_problog(...)` 调用 ProbLog CLI
+6. `parse_problog_output(...)` 解析结果并映射为 `CandidateSet`
+7. 将推导概率写入 `candidate.confidence`，并标注 `candidate.confidence_kind="probability"`
+8. `evaluate_problog(...)` 把待持久化的 `problog/semantic/probability` 模板缓存到 store pending state
+9. caller 在 `accept` 后调用 `persist_problog_annotations(...)`，将真实 `asrt_id` 绑定到 Annotation Store
 
 explainability 补充：
 
@@ -101,12 +105,27 @@ CLI 二进制：
 
 - 默认命令：`problog`
 - 可由环境变量 `PROBLOG_BIN` 覆盖
+- shared evaluate surface 当前可通过 `engine_options={"timeout": 15}` 覆盖 CLI timeout；缺省 `timeout=30`
 
 错误处理：
 
 - 缺少 CLI：`ProbLogEngineError`
 - 超时：`ProbLogEngineError`
 - 非零退出码：`ProbLogEngineError`
+
+### 6A. Shared Runtime Options
+
+ProbLog 当前对 shared evaluate surface 公开的 run-time 选项只有一个：
+
+- `timeout: int`
+
+约束：
+
+- `sdk.evaluate(..., mode="problog", engine_options={"timeout": 15})` 会生效
+- 缺省时使用 adapter 默认值 `timeout=30`
+- unknown keys 直接报 `ValueError`
+- 非正整数直接报 `ValueError`
+- `engine_options` 是 call-time only，不进入 `Derivation`、`to_authoring_payload()` 或 Ledger
 
 ## 7. 输出解析口径（`problog_import.py`）
 
@@ -123,4 +142,4 @@ CLI 二进制：
 - `pred` 原子当前只支持 1/2 元参数映射
 - 主要服务 derivation query 执行，不覆盖 Deontic 规范执行
 - 当前不输出 derivation/proof witness；第一轮只保证显式 degraded explain 语义
-- 当前不提供 ProbLog session API、`engine_ext`、`engine_options` 或 provenance carrier；L4 只覆盖 semantic annotation parity
+- 当前不提供 ProbLog session API、`engine_ext` 或 provenance carrier；shared runtime options 当前只开放 `timeout`

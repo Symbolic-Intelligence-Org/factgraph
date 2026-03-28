@@ -61,7 +61,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         # query vars lexicographically: $tag before $u for this rule.
         return f'answer("vip","{sdk.ref(User, user_id="Alice")}"): 0.42'
 
-    @patch("factpy_kernel.adapters.problog.run_problog")
+    @patch("factpy_kernel.adapters.problog.engine_eval.run_problog")
     def test_evaluate_caches_pending_probability_annotation(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
@@ -78,7 +78,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         self.assertEqual(template["key"], "probability")
         self.assertEqual(template["value"], 0.42)
 
-    @patch("factpy_kernel.adapters.problog.run_problog")
+    @patch("factpy_kernel.adapters.problog.engine_eval.run_problog")
     def test_persist_problog_annotations_writes_annotation_and_clears_pending(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
@@ -103,7 +103,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         self.assertEqual(annotations[0].origin, "derived")
         self.assertNotIn(candidate.run_id, getattr(sdk.store, "_problog_pending_annotations", {}))
 
-    @patch("factpy_kernel.adapters.problog.run_problog")
+    @patch("factpy_kernel.adapters.problog.engine_eval.run_problog")
     def test_persist_problog_annotations_keeps_pending_on_dry_run(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
@@ -123,7 +123,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         self.assertIn(candidate.run_id, pending_by_run)
         self.assertIn(candidate.candidate_id, pending_by_run[candidate.run_id])
 
-    @patch("factpy_kernel.adapters.problog.run_problog")
+    @patch("factpy_kernel.adapters.problog.engine_eval.run_problog")
     def test_audit_export_and_static_panel_consume_problog_annotation(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)

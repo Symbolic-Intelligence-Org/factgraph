@@ -170,7 +170,10 @@ def _parse_rows(
 def _split_result_line(line: str) -> tuple[str, str] | None:
     if "\t" in line:
         lhs, rhs = line.rsplit("\t", 1)
-        return lhs.strip(), rhs.strip()
+        lhs_text = lhs.strip()
+        if lhs_text.endswith(":"):
+            lhs_text = lhs_text[:-1].rstrip()
+        return lhs_text, rhs.strip()
     if ":" in line:
         lhs, rhs = line.rsplit(":", 1)
         rhs_trimmed = rhs.strip()
