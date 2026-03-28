@@ -75,7 +75,17 @@ def _parse_bounded_float(value: Any) -> float | None:
 
 
 def build_pyreason_graph(session: PyReasonSession, schema_ir: dict[str, Any] | None = None) -> Any:
-    """Build a structure-only NetworkX DiGraph from session facts."""
+    """Build a NetworkX DiGraph with structure plus edge-label attributes.
+
+    PyReason uses separate channels for node labels and edge labels in the
+    integration path we support:
+
+    - node labels are registered later via ``pr.add_fact(...)``
+    - edge labels remain on graph edges as attributes
+
+    When an edge fact carries a non-default interval, the current adapter
+    lowers it to a lower-bound summary on the graph attribute.
+    """
     import networkx as nx
     del schema_ir
 
@@ -93,8 +103,13 @@ def build_pyreason_graph(session: PyReasonSession, schema_ir: dict[str, Any] | N
     for fact in session.edge_facts:
         from_ref = str(fact["from_ref"])
         to_ref = str(fact["to_ref"])
-        if not graph.has_edge(from_ref, to_ref):
-            graph.add_edge(from_ref, to_ref)
+        attr_name = _pred_short_name(str(fact["pred_id"]))
+        lo, hi = fact.get("bound", (1.0, 1.0))
+        val = lo if lo != 1.0 or hi != 1.0 else 1
+        if graph.has_edge(from_ref, to_ref):
+            graph.edges[from_ref, to_ref][attr_name] = val
+        else:
+            graph.add_edge(from_ref, to_ref, **{attr_name: val})
 
     return graph
 
@@ -209,6 +224,7 @@ def _session_fact_records(
     *,
     default_end_time: int,
 ) -> list[tuple[str, str, int, int]]:
+    """Lower session node facts into PyReason ``add_fact()`` records only."""
     records: list[tuple[str, str, int, int]] = []
     for idx, fact in enumerate(session.node_facts):
         atom = f"{_pred_short_name(str(fact['pred_id']))}({str(fact['node_ref'])})"
@@ -217,20 +233,6 @@ def _session_fact_records(
             (
                 _format_fact_text_with_bound(atom, fact.get("bound", (1.0, 1.0))),
                 f"session_node_{idx}",
-                int(fact.get("active_from", 0)),
-                end_time,
-            )
-        )
-    for idx, fact in enumerate(session.edge_facts):
-        atom = (
-            f"{_pred_short_name(str(fact['pred_id']))}"
-            f"({str(fact['from_ref'])}, {str(fact['to_ref'])})"
-        )
-        end_time = int(fact["active_to"]) if fact.get("active_to") is not None else default_end_time
-        records.append(
-            (
-                _format_fact_text_with_bound(atom, fact.get("bound", (1.0, 1.0))),
-                f"session_edge_{idx}",
                 int(fact.get("active_from", 0)),
                 end_time,
             )

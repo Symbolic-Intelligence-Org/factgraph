@@ -278,12 +278,12 @@ class RunnerTypedDefTests(unittest.TestCase):
             )
 
         self.assertEqual(len(loaded_graphs), 1)
+        self.assertEqual(loaded_graphs[0].edges["Alice", "Bob"]["strength"], 0.8)
         self.assertEqual(added_rules, [("rule", "popular(x) <-1 popular(y), strength(x, y)", "friend_pop")])
         self.assertEqual(
             added_facts,
             [
                 ("fact", "name(Alice) : [1.0, 1.0]", "session_node_0", 0, 2),
-                ("fact", "strength(Alice, Bob) : [0.8, 0.9]", "session_edge_0", 0, 2),
                 ("fact", "popular(Alice) : [0.4, 0.6]", "alice_pop", 0, 3),
             ],
         )

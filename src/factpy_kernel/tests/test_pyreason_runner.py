@@ -119,22 +119,23 @@ class BuildGraphTests(unittest.TestCase):
         self.assertIn("Alice", graph.nodes)
         self.assertEqual(dict(graph.nodes["Alice"]), {})
 
-    def test_edge_facts_become_edges(self) -> None:
+    def test_edge_facts_become_edge_attributes(self) -> None:
         session = self._session()
         session._write_node_fact_internal("user:name", "Alice", "Alice")
         session._write_node_fact_internal("user:name", "Bob", "Bob")
         session._write_edge_fact_internal("friends:strength", "Alice", "Bob", "0.9")
         graph = build_pyreason_graph(session)
         self.assertTrue(graph.has_edge("Alice", "Bob"))
-        self.assertEqual(dict(graph.edges["Alice", "Bob"]), {})
+        self.assertEqual(graph.edges["Alice", "Bob"]["strength"], 1)
 
-    def test_multiple_edge_facts_on_same_pair_keep_single_structure_edge(self) -> None:
+    def test_multiple_edge_facts_share_one_edge_with_multiple_attributes(self) -> None:
         session = self._session()
         session._write_edge_fact_internal("friends:strength", "Alice", "Bob", "0.9")
         session._write_edge_fact_internal("owns:since", "Alice", "Bob", "2024")
         graph = build_pyreason_graph(session)
         self.assertTrue(graph.has_edge("Alice", "Bob"))
-        self.assertEqual(dict(graph.edges["Alice", "Bob"]), {})
+        self.assertEqual(graph.edges["Alice", "Bob"]["strength"], 1)
+        self.assertEqual(graph.edges["Alice", "Bob"]["since"], 1)
 
     def test_nodes_from_edge_refs_included(self) -> None:
         session = self._session()
@@ -268,17 +269,18 @@ class BoundedRoutingTests(unittest.TestCase):
         self.assertIn("Alice", graph.nodes)
         self.assertEqual(dict(graph.nodes["Alice"]), {})
 
-    def test_bounded_edge_fact_does_not_write_graph_attributes(self) -> None:
+    def test_bounded_edge_fact_uses_bound_summary_on_graph_attribute(self) -> None:
         session = self._session()
-        session._write_edge_fact_internal("friends:trust_score", "Alice", "Bob", "0.9")
+        session._write_edge_fact_internal("friends:trust_score", "Alice", "Bob", "0.9", bound=[0.9, 0.9])
         session._write_edge_fact_internal("friends:strength", "Alice", "Bob", "0.9")
 
         graph = build_pyreason_graph(session, schema_ir=_bounded_schema_ir())
 
         self.assertTrue(graph.has_edge("Alice", "Bob"))
-        self.assertEqual(dict(graph.edges["Alice", "Bob"]), {})
+        self.assertEqual(graph.edges["Alice", "Bob"]["trust_score"], 0.9)
+        self.assertEqual(graph.edges["Alice", "Bob"]["strength"], 1)
 
-    def test_bounded_value_outside_range_still_preserves_structure(self) -> None:
+    def test_invalid_bounded_edge_value_falls_back_to_default_graph_truth(self) -> None:
         session = self._session()
         session._write_node_fact_internal("user:risk_score", "Alice", "1.2")
         session._write_edge_fact_internal("friends:trust_score", "Alice", "Bob", "-0.1")
@@ -287,6 +289,7 @@ class BoundedRoutingTests(unittest.TestCase):
 
         self.assertIn("Alice", graph.nodes)
         self.assertTrue(graph.has_edge("Alice", "Bob"))
+        self.assertEqual(graph.edges["Alice", "Bob"]["trust_score"], 1)
 
     def test_extract_derived_uses_bound_summary_only_for_bounded_preds(self) -> None:
         session = self._session()

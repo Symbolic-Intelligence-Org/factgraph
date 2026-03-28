@@ -265,8 +265,8 @@ PyReason adapter 当前支持一个收窄的 value-carrying 路径：**bounded n
 当前实现行为：
 
 - **EDB materialization**：`engine_eval.py` 把 bounded predicate 的 Ledger value 解析成 point interval `bound=(v, v)`；非 bounded predicate 仍用 `bound=(1.0, 1.0)`
-- **Graph build**：`runner.build_pyreason_graph(...)` 现在只保留结构（nodes + edges），不再把任何 predicate label 写成 graph attribute
-- **Initial fact registration**：`runner.run_pyreason(...)` 会把 `PyReasonSession` 中的 node/edge facts 全部 lower 成 `pr.add_fact(...)`；bounded predicate 通过 fact text interval 保留 `[lo, hi]`
+- **Graph build**：`runner.build_pyreason_graph(...)` 现在保留 graph 结构，并把 **edge labels** 写成 edge attributes；当 edge fact 有非默认 bound 时，当前写入 lower-bound summary，否则写 `1`
+- **Initial fact registration**：`runner.run_pyreason(...)` 只把 `PyReasonSession` 中的 **node facts** lower 成 `pr.add_fact(...)`；edge facts 不再重复注册。node facts 通过 fact text interval 保留 `[lo, hi]`，edge facts 当前继续通过 graph attribute lower-bound summary 进入引擎
 - **Derived extraction**：`runner._extract_derived_facts(...)` 对 bounded predicate 返回 `value=str(lower_bound)`；非 bounded node 仍是 `"true"/"false"`，非 bounded edge 仍是空字符串
 - **Canonical float64**：通过 `project_view_facts(...)` 进入 adapter 的 `float64` 值会是 canonical `0x...` bit-pattern；bounded parser 已显式支持这种形态
 
