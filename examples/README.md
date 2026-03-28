@@ -22,7 +22,7 @@
 - `examples/ecss_compliance_demo.ipynb`
   - `esa_demo.py` 的 notebook 版本。已同步去掉 `extend_schema_ir_with_ecss_*` hack。
 - `examples/ecss_pyreason_demo.py`
-  - ECSS + PyReason boolean/topology propagation demo。当前明确把 uncertainty 当作旁路展示，不再把 PyReason 表述成 fuzzy bound propagation 引擎。
+  - ECSS + PyReason boolean/topology propagation demo。当前仍把 uncertainty 当作旁路展示；虽然 adapter 现在支持用显式 body threshold 让 bounded seed 参与 rule matching，但 repo 口径仍不把 PyReason 表述成 fuzzy payload-transport 引擎。
 - `examples/ecss_pyreason_demo.ipynb`
   - notebook 版本。代码路径保留；输出是否可运行取决于 Jupyter kernel 环境。
 

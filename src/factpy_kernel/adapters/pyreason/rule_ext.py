@@ -14,12 +14,14 @@ class PyReasonRuleExt(EngineExtBase):
     """PyReason-specific rule definition parameters."""
 
     timestep_delay: int = 0
+    body_predicate_bounds: dict[str, tuple[float, float] | list[float]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if isinstance(self.timestep_delay, bool) or not isinstance(self.timestep_delay, int):
             raise ValueError("timestep_delay must be int")
         if self.timestep_delay < 0:
             raise ValueError("timestep_delay must be >= 0")
+        _normalize_body_predicate_bounds(self.body_predicate_bounds)
 
 
 @dataclass(frozen=True)
@@ -78,7 +80,10 @@ def compile_pyreason_rule(rule_def: PyReasonRuleDef) -> tuple[str, str]:
         raise PyReasonCompileError("Expected PyReasonRuleDef")
 
     head = _compile_head(rule_def.rule)
-    body = _compile_body(rule_def.rule.where)
+    body = _compile_body(
+        rule_def.rule.where,
+        body_predicate_bounds=_normalize_body_predicate_bounds(rule_def.ext.body_predicate_bounds),
+    )
     delay = rule_def.ext.timestep_delay
     return (f"{head} <-{delay} {body}", rule_def.rule.id)
 
@@ -102,14 +107,18 @@ def _compile_head(rule: Rule) -> str:
     )
 
 
-def _compile_body(where: list[Any]) -> str:
+def _compile_body(
+    where: list[Any],
+    *,
+    body_predicate_bounds: dict[str, tuple[float, float]],
+) -> str:
     if not where:
         raise PyReasonCompileError("Rule.where is empty")
 
     atoms: list[str] = []
     for atom in where:
         if isinstance(atom, PredAtom):
-            atoms.append(_compile_pred_atom(atom))
+            atoms.append(_compile_body_pred_atom(atom, body_predicate_bounds=body_predicate_bounds))
             continue
         raise PyReasonCompileError(
             f"Cannot compile WHERE atom of type {type(atom).__name__}. "
@@ -119,10 +128,58 @@ def _compile_body(where: list[Any]) -> str:
 
 
 def _compile_pred_atom(atom: PredAtom) -> str:
+    return _compile_pred_atom_with_interval(atom)
+
+
+def _compile_body_pred_atom(
+    atom: PredAtom,
+    *,
+    body_predicate_bounds: dict[str, tuple[float, float]],
+) -> str:
+    interval = body_predicate_bounds.get(atom.pred_id)
+    return _compile_pred_atom_with_interval(atom, interval=interval)
+
+
+def _compile_pred_atom_with_interval(
+    atom: PredAtom,
+    *,
+    interval: tuple[float, float] | None = None,
+) -> str:
     parts = atom.pred_id.split(":")
     field_name = parts[-1] if len(parts) > 1 else parts[0]
     terms = [_compile_term(term) for term in atom.terms]
-    return f"{field_name}({', '.join(terms)})"
+    compiled = f"{field_name}({', '.join(terms)})"
+    if interval is None:
+        return compiled
+    lo, hi = interval
+    return f"{compiled} : [{lo}, {hi}]"
+
+
+def _normalize_body_predicate_bounds(
+    bounds: dict[str, tuple[float, float] | list[float]] | None,
+) -> dict[str, tuple[float, float]]:
+    if bounds is None:
+        return {}
+    if not isinstance(bounds, dict):
+        raise ValueError("body_predicate_bounds must be dict[str, [float, float]]")
+
+    normalized: dict[str, tuple[float, float]] = {}
+    for pred_id, bound in bounds.items():
+        if not isinstance(pred_id, str) or not pred_id:
+            raise ValueError("body_predicate_bounds keys must be non-empty strings")
+        if not isinstance(bound, (list, tuple)) or len(bound) != 2:
+            raise ValueError("body_predicate_bounds values must be [float, float]")
+        lo_raw, hi_raw = bound
+        if isinstance(lo_raw, bool) or not isinstance(lo_raw, (int, float)):
+            raise ValueError("body_predicate_bounds lower bound must be numeric")
+        if isinstance(hi_raw, bool) or not isinstance(hi_raw, (int, float)):
+            raise ValueError("body_predicate_bounds upper bound must be numeric")
+        lo = float(lo_raw)
+        hi = float(hi_raw)
+        if not 0.0 <= lo <= hi <= 1.0:
+            raise ValueError("body_predicate_bounds must satisfy 0.0 <= lower <= upper <= 1.0")
+        normalized[pred_id] = (lo, hi)
+    return normalized
 
 
 def _compile_term(term: Any) -> str:

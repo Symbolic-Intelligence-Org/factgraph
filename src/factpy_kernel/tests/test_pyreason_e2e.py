@@ -142,6 +142,18 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertIn("<-2", rules[0][0])
 
     @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    def test_body_predicate_bounds_flow_to_compiled_rules(self, mock_run) -> None:
+        sdk = self._make_sdk()
+        derivation = self._make_derivation(
+            engine_ext=PyReasonRuleExt(body_predicate_bounds={"user:name": (0.5, 1.0)})
+        )
+
+        sdk.evaluate(derivation)
+
+        rules = mock_run.call_args.kwargs["rules"]
+        self.assertEqual(rules, [("popular(u) <-0 name(u) : [0.5, 1.0]", "derived_popular")])
+
+    @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_engine_options_are_call_time_only_and_forwarded(self, mock_run) -> None:
         sdk = self._make_sdk()
         derivation = self._make_derivation()

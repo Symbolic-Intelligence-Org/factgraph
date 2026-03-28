@@ -6,6 +6,8 @@ This demo shows the PyReason pattern that real-engine validation supports:
 - boolean mission labels propagate across topology and timesteps
 - uncertainty bands stay outside the PyReason rule engine as side-channel context
 - the audit path still captures when a propagated label first appears
+- bounded seeds can be admitted into rule matching with explicit body thresholds,
+  but that is different from transporting the input interval into derived heads
 
 Uses adapter-local session + runner (not Store.evaluate) for clarity.
 Gracefully exits if pyreason is not available.

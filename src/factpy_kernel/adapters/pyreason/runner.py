@@ -1,6 +1,7 @@
 """PyReason reusable runner: session -> graph -> reason -> trace -> derived facts."""
 from __future__ import annotations
 
+import re
 import struct
 import time
 import warnings
@@ -298,6 +299,8 @@ def _warn_on_bounded_node_seeds(
 ) -> None:
     if not all_rules:
         return
+    if _rules_have_explicit_body_intervals(all_rules):
+        return
 
     descriptors = _bounded_node_seed_descriptors(session, facts=facts, fact_defs=fact_defs)
     if not descriptors:
@@ -308,13 +311,22 @@ def _warn_on_bounded_node_seeds(
         preview = f"{preview}, ..."
 
     warnings.warn(
-        "PyReason does not currently use non-[1.0, 1.0] node seeds as reliable rule "
-        "propagation sources. This run combines rules with bounded node seeds, so "
-        "those labels may not propagate. Use boolean [1.0, 1.0] seeds for topology "
-        f"propagation and keep uncertainty as side-channel data. Affected seeds: {preview}",
+        "PyReason body clauses default to an implicit [1.0, 1.0] interval threshold. "
+        "This run combines rules with bounded node seeds and no explicit body-clause "
+        "intervals, so those seeds may fail to match rule bodies. Add explicit clause "
+        "bounds (for example `popular(y) : [0.5, 1.0]`) when bounded seeds should "
+        f"participate in matching. Affected seeds: {preview}",
         UserWarning,
         stacklevel=2,
     )
+
+
+def _rules_have_explicit_body_intervals(all_rules: list[tuple[str, str]]) -> bool:
+    for rule_text, _ in all_rules:
+        body = rule_text.split("<-", 1)[1] if "<-" in rule_text else rule_text
+        if re.search(r"\)\s*:\s*\[", body):
+            return True
+    return False
 
 
 def _session_fact_records(

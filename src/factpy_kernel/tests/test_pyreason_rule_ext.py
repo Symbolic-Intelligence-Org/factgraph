@@ -68,6 +68,14 @@ class RuleExtTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             PyReasonRuleExt(timestep_delay=True)
 
+    def test_accepts_body_predicate_bounds(self) -> None:
+        ext = PyReasonRuleExt(body_predicate_bounds={"user:popular": (0.5, 1.0)})
+        self.assertEqual(ext.body_predicate_bounds["user:popular"], (0.5, 1.0))
+
+    def test_rejects_invalid_body_predicate_bounds(self) -> None:
+        with self.assertRaises(ValueError):
+            PyReasonRuleExt(body_predicate_bounds={"user:popular": (1.1, 1.0)})
+
     def test_frozen(self) -> None:
         ext = PyReasonRuleExt(timestep_delay=1)
         with self.assertRaises(AttributeError):
@@ -171,6 +179,22 @@ class CompileRuleTests(unittest.TestCase):
             rule_str,
             "popular(x) <-1 popular(y), strength(x, y), since(y, z), since(x, z)",
         )
+
+    def test_body_predicate_bounds_compile_to_interval_suffix(self) -> None:
+        rule_def = PyReasonRuleDef(
+            rule=Rule(
+                id="friend_pop",
+                version="1.0",
+                select=[Pred("user:popular", x)],
+                where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
+            ),
+            ext=PyReasonRuleExt(
+                timestep_delay=1,
+                body_predicate_bounds={"user:popular": (0.5, 1.0)},
+            ),
+        )
+        rule_str, _ = compile_pyreason_rule(rule_def)
+        self.assertEqual(rule_str, "popular(x) <-1 popular(y) : [0.5, 1.0], strength(x, y)")
 
     def test_string_literal_in_term(self) -> None:
         rule_def = PyReasonRuleDef(
@@ -322,8 +346,8 @@ class RunnerTypedDefTests(unittest.TestCase):
                 )
 
         self.assertEqual(len(caught), 1)
-        self.assertIn("non-[1.0, 1.0] node seeds", str(caught[0].message))
-        self.assertIn("side-channel data", str(caught[0].message))
+        self.assertIn("implicit [1.0, 1.0] interval threshold", str(caught[0].message))
+        self.assertIn("explicit clause bounds", str(caught[0].message))
 
     def test_run_pyreason_warns_for_bounded_fact_defs_with_rules(self) -> None:
         session = PyReasonSession(_test_schema_ir())
@@ -352,6 +376,35 @@ class RunnerTypedDefTests(unittest.TestCase):
 
         self.assertEqual(len(caught), 1)
         self.assertIn("fact_def:alice_pop=(0.4, 0.6)", str(caught[0].message))
+
+    def test_run_pyreason_does_not_warn_when_rule_has_explicit_body_interval(self) -> None:
+        session = PyReasonSession(_test_schema_ir())
+        session._write_node_fact_internal("user:popular", "Alice", "true", bound=[0.4, 0.6])
+        fake_pyreason, _, _, _, _ = self._fake_pyreason()
+
+        rule_def = PyReasonRuleDef(
+            rule=Rule(
+                id="friend_pop",
+                version="1.0",
+                select=[Pred("user:popular", x)],
+                where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
+            ),
+            ext=PyReasonRuleExt(
+                timestep_delay=1,
+                body_predicate_bounds={"user:popular": (0.4, 1.0)},
+            ),
+        )
+
+        with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                run_pyreason(
+                    session,
+                    rule_defs=[rule_def],
+                    config=PyReasonRunConfig(timesteps=2, atom_trace=False),
+                )
+
+        self.assertEqual(caught, [])
 
     def test_run_pyreason_does_not_warn_for_boolean_seeds(self) -> None:
         session = PyReasonSession(_test_schema_ir())

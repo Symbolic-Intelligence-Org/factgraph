@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from factpy_kernel.adapters.pyreason.rule_ext import _normalize_body_predicate_bounds
 
 class PyReasonWhereCompileError(Exception):
     """Raised when WhereIR contains atoms unsupported by PyReason v0."""
@@ -40,6 +41,7 @@ def compile_where_ir_to_pyreason(
     branches = _extract_branches(where)
     relationship_preds = _relationship_pred_ids(schema_ir)
     delay = _resolve_delay(engine_ext)
+    body_predicate_bounds = _resolve_body_predicate_bounds(engine_ext)
 
     rules: list[tuple[str, str]] = []
     base_name = f"derived_{_pred_short_name(target_pred_id)}"
@@ -51,6 +53,7 @@ def compile_where_ir_to_pyreason(
             branch_atoms,
             relationship_preds=relationship_preds,
             delay=delay,
+            body_predicate_bounds=body_predicate_bounds,
         )
         rules.append((rule_str, rule_name))
     return rules
@@ -63,6 +66,7 @@ def _compile_single_branch(
     *,
     relationship_preds: set[str],
     delay: int,
+    body_predicate_bounds: dict[str, tuple[float, float]],
 ) -> str:
     if not atoms:
         raise PyReasonWhereCompileError("WHERE branch is empty")
@@ -84,7 +88,12 @@ def _compile_single_branch(
             relationship_preds=relationship_preds,
             position="body",
         )
-        body_parts.append(f"{_pred_short_name(pred_id)}({', '.join(compiled_terms)})")
+        body_atom = f"{_pred_short_name(pred_id)}({', '.join(compiled_terms)})"
+        bound = body_predicate_bounds.get(pred_id)
+        if bound is not None:
+            lo, hi = bound
+            body_atom = f"{body_atom} : [{lo}, {hi}]"
+        body_parts.append(body_atom)
 
     return f"{head_str} <-{delay} {', '.join(body_parts)}"
 
@@ -160,6 +169,15 @@ def _resolve_delay(engine_ext: Any | None) -> int:
     if isinstance(delay, bool) or not isinstance(delay, int) or delay < 0:
         raise PyReasonWhereCompileError("engine_ext.timestep_delay must be non-negative int")
     return delay
+
+
+def _resolve_body_predicate_bounds(engine_ext: Any | None) -> dict[str, tuple[float, float]]:
+    if engine_ext is None:
+        return {}
+    try:
+        return _normalize_body_predicate_bounds(getattr(engine_ext, "body_predicate_bounds", {}))
+    except ValueError as exc:
+        raise PyReasonWhereCompileError(str(exc)) from exc
 
 
 def _validate_term(term: Any) -> None:

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from factpy_kernel.adapters.pyreason.where_compile import (
     PyReasonWhereCompileError,
@@ -17,6 +17,7 @@ from factpy_kernel.core.store.types import EngineExtBase
 @dataclass(frozen=True)
 class MockPyReasonRuleExt(EngineExtBase):
     timestep_delay: int = 0
+    body_predicate_bounds: dict[str, tuple[float, float] | list[float]] = field(default_factory=dict)
 
 
 def _test_schema_ir() -> dict[str, object]:
@@ -93,6 +94,17 @@ class CompileWhereIRTests(unittest.TestCase):
             engine_ext=ext,
         )
         self.assertEqual(rules[0][0], "popular(e) <-2 name(e)")
+
+    def test_body_predicate_bounds_from_engine_ext(self) -> None:
+        ext = MockPyReasonRuleExt(body_predicate_bounds={"user:name": (0.5, 1.0)})
+        rules = compile_where_ir_to_pyreason(
+            target_pred_id="user:popular",
+            head_vars=["$e"],
+            where=[("pred", "user:name", ["$e", "$v"])],
+            schema_ir=_test_schema_ir(),
+            engine_ext=ext,
+        )
+        self.assertEqual(rules[0][0], "popular(e) <-0 name(e) : [0.5, 1.0]")
 
     def test_attribute_existence_model_skips_value_var(self) -> None:
         rules = compile_where_ir_to_pyreason(
@@ -171,6 +183,18 @@ class AtomValidationTests(unittest.TestCase):
                 schema_ir=_test_schema_ir(),
             )
         self.assertIn("Unsupported term type", str(ctx.exception))
+
+    def test_invalid_body_predicate_bounds_rejected(self) -> None:
+        ext = MockPyReasonRuleExt(body_predicate_bounds={"user:name": (1.2, 1.0)})
+        with self.assertRaises(PyReasonWhereCompileError) as ctx:
+            compile_where_ir_to_pyreason(
+                target_pred_id="user:popular",
+                head_vars=["$e"],
+                where=[("pred", "user:name", ["$e", "$v"])],
+                schema_ir=_test_schema_ir(),
+                engine_ext=ext,
+            )
+        self.assertIn("body_predicate_bounds", str(ctx.exception))
 
 
 class HelperTests(unittest.TestCase):
