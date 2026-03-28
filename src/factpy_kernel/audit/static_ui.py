@@ -20,6 +20,7 @@ from .dto import (
     build_run_detail_dto,
     build_run_list_dto,
 )
+from .evidence_graph import EvidenceGraph, render_evidence_graph_html
 from .query import AuditQuery
 from .reader import load_audit_package
 
@@ -104,11 +105,17 @@ def render_audit_static_site(package_dir: str | Path, out_dir: str | Path) -> di
         )
         provenance_tree = query.get_candidate_provenance_tree(candidate_id)
         provenance_status = query.get_candidate_provenance_status(candidate_id)
+        evidence_graph = _try_build_evidence_graph_from_provenance(
+            provenance_tree,
+            provenance_status,
+            candidate_id,
+        )
         page = _render_candidate_evidence_page(
             candidate_tree,
             narrative=candidate_narrative,
             provenance_tree=provenance_tree,
             provenance_status=provenance_status,
+            evidence_graph=evidence_graph,
         )
         (candidate_evidence_dir / f"{_slug_id(candidate_id)}.html").write_text(page, encoding="utf-8")
         candidate_evidence_ids.append(candidate_id)
@@ -744,6 +751,7 @@ def _render_candidate_evidence_page(
     narrative: dict[str, Any] | None = None,
     provenance_tree: dict[str, Any] | None = None,
     provenance_status: dict[str, Any] | None = None,
+    evidence_graph: EvidenceGraph | None = None,
 ) -> str:
     candidate_id = str(tree.get("candidate_id", ""))
     support_digest = str(tree.get("support_digest", ""))
@@ -864,6 +872,7 @@ def _render_candidate_evidence_page(
             f"{provenance_status_block}"
             f"{narrative_block}"
             f"{provenance_block}"
+            f"{_render_evidence_graph_section(evidence_graph)}"
             "<h2>Derived Binding</h2>"
             "<p class='section-copy'>Bound values returned by the reasoning engine for this candidate.</p>"
             f"<pre>{escape(json.dumps(binding, ensure_ascii=False, sort_keys=True, indent=2))}</pre>"
@@ -879,18 +888,106 @@ def _render_candidate_evidence_page(
     )
 
 
+def _render_evidence_graph_section(evidence_graph: EvidenceGraph | None) -> str:
+    """Render unified EvidenceGraph section if available."""
+    if evidence_graph is None:
+        return ""
+    engine = escape(evidence_graph.engine)
+    layout = escape(evidence_graph.layout_hint)
+    return (
+        "<h2>\U0001f50e Unified Evidence Graph</h2>"
+        "<p style='color:var(--color-muted);font-size:.85rem;margin-bottom:8px'>"
+        f"Engine: <strong>{engine}</strong> · Layout: <strong>{layout}</strong>"
+        "</p>"
+        f"{render_evidence_graph_html(evidence_graph)}"
+    )
+
+
 def render_candidate_evidence_html(
     tree: dict[str, Any],
     *,
     narrative: dict[str, Any] | None = None,
     provenance_tree: dict[str, Any] | None = None,
     provenance_status: dict[str, Any] | None = None,
+    evidence_graph: EvidenceGraph | None = None,
 ) -> str:
     return _render_candidate_evidence_page(
         tree,
         narrative=narrative,
         provenance_tree=provenance_tree,
         provenance_status=provenance_status,
+        evidence_graph=evidence_graph,
+    )
+
+
+def _try_build_evidence_graph_from_provenance(
+    provenance_tree: dict[str, Any] | None,
+    provenance_status: dict[str, Any] | None,
+    candidate_id: str,
+) -> EvidenceGraph | None:
+    """Best-effort: convert Souffle provenance tree to EvidenceGraph."""
+    if not isinstance(provenance_tree, dict):
+        return None
+    if isinstance(provenance_status, dict):
+        engine = provenance_status.get("engine")
+        if isinstance(engine, str) and engine and engine != "souffle":
+            return None
+    root_dict = provenance_tree.get("root")
+    if not isinstance(root_dict, dict):
+        return None
+    try:
+        from factpy_kernel.adapters.souffle.provenance import souffle_proof_tree_to_evidence_graph
+
+        tree_v0 = _dict_to_souffle_proof_tree(provenance_tree)
+        if tree_v0 is None:
+            return None
+        return souffle_proof_tree_to_evidence_graph(tree_v0, candidate_id=candidate_id)
+    except Exception:
+        return None
+
+
+def _dict_to_souffle_proof_tree(d: dict[str, Any]) -> Any | None:
+    """Reconstruct SouffleProofTreeV0 from audit package dict."""
+    from factpy_kernel.adapters.souffle.provenance import SouffleProofTreeV0
+
+    root = d.get("root")
+    if not isinstance(root, dict):
+        return None
+    try:
+        node = _dict_to_souffle_node(root)
+        query = str(d.get("query", ""))
+        rules = d.get("rules", {})
+        if not isinstance(rules, dict):
+            rules = {}
+        normalized_rules = {
+            str(key): str(value)
+            for key, value in rules.items()
+            if isinstance(key, str) and key and isinstance(value, str)
+        }
+        return SouffleProofTreeV0(query=query, root=node, rules=normalized_rules)
+    except Exception:
+        return None
+
+
+def _dict_to_souffle_node(d: dict[str, Any]) -> Any:
+    """Reconstruct SouffleProofNodeV0 from dict."""
+    from factpy_kernel.adapters.souffle.provenance import SouffleProofNodeV0
+
+    rule_number = d.get("rule_number")
+    raw_args = d.get("args")
+    args = tuple(str(arg) for arg in raw_args) if isinstance(raw_args, list) else ()
+    raw_children = d.get("children")
+    child_dicts = raw_children if isinstance(raw_children, list) else []
+    return SouffleProofNodeV0(
+        node_type=str(d.get("node_type", "unknown")),
+        relation=str(d.get("relation", "?")),
+        args=args,
+        rule_number=rule_number if isinstance(rule_number, str) else None,
+        children=tuple(
+            _dict_to_souffle_node(child)
+            for child in child_dicts
+            if isinstance(child, dict)
+        ),
     )
 
 
