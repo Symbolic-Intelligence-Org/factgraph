@@ -24,8 +24,6 @@ from factpy_kernel.domains.ecss import (
     ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID,
     ECSS_DISPOSAL_SUCCESS_PROBABILITY_PPM_PRED_ID,
     ECSS_DISPOSAL_SUCCESS_THRESHOLD_PPM_PRED_ID,
-    extend_schema_ir_with_ecss_uncertainty_predicates,
-    extend_schema_ir_with_ecss_vcd_predicates,
 )
 from factpy_kernel.sdk import Entity, Field, Identity, Pred, Rule, SDKStore, vars as sdk_vars
 from factpy_kernel.sdk.dsl.rule import RuleRef
@@ -49,6 +47,21 @@ class Mission(Entity):
     mission_profile: str = Field(cardinality="single")
     passivation_status: str = Field(cardinality="single")
     overall_compliance_status: str = Field(cardinality="single")
+
+
+class Ecss(Entity):
+    """Schema-only ECSS predicate anchor used to declare `ecss:*` predicates."""
+
+    anchor_id: str = Identity(primary_key=True)
+    collision_probability_ppm: int = Field(cardinality="single")
+    collision_probability_threshold_ppm: int = Field(cardinality="single")
+    disposal_success_probability_ppm: int = Field(cardinality="single")
+    disposal_success_threshold_ppm: int = Field(cardinality="single")
+    requirement: str = Field(cardinality="single")
+    verification_method: str = Field(cardinality="multi")
+    compliance_status: str = Field(cardinality="single")
+    requirement_rid: str = Field(cardinality="multi")
+    review_milestone: str = Field(cardinality="single")
 
 
 @dataclass(frozen=True)
@@ -187,10 +200,8 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _build_sdk_and_rules() -> tuple[SDKStore, dict[str, Rule]]:
-    sdk = SDKStore([Mission])
-    schema_ir = extend_schema_ir_with_ecss_uncertainty_predicates(sdk.schema_ir)
-    schema_ir = extend_schema_ir_with_ecss_vcd_predicates(schema_ir)
-    sdk = SDKStore([Mission], schema_ir=schema_ir)
+    # `Ecss` exists only to declare the demo's `ecss:*` predicates through the SDK.
+    sdk = SDKStore([Mission, Ecss])
 
     with sdk_vars("m", "prob", "threshold") as (m, prob, threshold):
         disposal_check_rule = Rule(

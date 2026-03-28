@@ -67,9 +67,6 @@ def _mock_run_pyreason(session, *, rules=None, rule_defs=None, facts=None, fact_
 class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
     def _make_sdk(self) -> SDKStore:
         schema_ir = compile_schema_from_classes([User, Friends])
-        for pred in schema_ir.get("predicates", []):
-            if isinstance(pred, dict) and pred.get("relationship_type") and not pred.get("owner_type"):
-                pred["owner_type"] = pred["relationship_type"]
         sdk = SDKStore([User], schema_ir=schema_ir)
 
         alice_ref = sdk.ref(User, user_id="Alice")

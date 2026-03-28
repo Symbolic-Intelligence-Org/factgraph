@@ -183,6 +183,36 @@ class LivesIn(Entity):
 
 **稳定合约**：编译后 schema 会为所有 `Entity` 生成 `<T>:exists` predicate；batch 写入字段时会自动补 `<T>:exists` 写入 op。
 
+### 2.4.1 Relationship Schema 编译
+
+当前也支持单独声明 `Relationship`，用于生成 `(from_ref, to_ref, value)` 形态的关系 predicate：
+
+```python
+from factpy_kernel.sdk import Entity, Identity, Field, Relationship, SDKStore
+from factpy_kernel.sdk.compile import compile_schema_from_classes
+
+
+class User(Entity):
+    user_id: str = Identity(primary_key=True)
+    name: str = Field(cardinality="single")
+
+
+class Friends(Relationship):
+    from_entity = User
+    to_entity = User
+    strength: str = Field(cardinality="single")
+
+
+schema_ir = compile_schema_from_classes([User, Friends])
+sdk = SDKStore([User], schema_ir=schema_ir)
+```
+
+**稳定合约**
+
+- relationship field predicate 会同时带 `owner_type=<RelationshipType>` 和 `relationship_type=<RelationshipType>`。
+- 不需要在示例或业务代码里手动篡改 `schema_ir["predicates"]` 来补 relationship metadata。
+- 当需要 `SDKStore` 参与运行时，构造器仍应接收需要直接通过 SDK 操作的 `Entity` 类；relationship predicate 通过显式传入的 `schema_ir` 提供。
+
 ### 2.5 常用类型映射
 
 | Python 注解 | type_domain |

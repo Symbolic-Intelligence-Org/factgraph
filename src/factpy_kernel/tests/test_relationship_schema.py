@@ -73,6 +73,7 @@ class RelationshipSchemaTests(unittest.TestCase):
         friends_pred = next(
             p for p in schema_ir["predicates"] if p["pred_id"] == "friends:strength"
         )
+        self.assertEqual(friends_pred.get("owner_type"), "Friends")
         self.assertEqual(friends_pred.get("relationship_type"), "Friends")
         self.assertEqual(friends_pred.get("from_entity_type"), "User")
         self.assertEqual(friends_pred.get("to_entity_type"), "User")

@@ -34,6 +34,7 @@
 
 - 当前只提供一个很窄的 VCD/compliance preset、一个第一轮 Scenario A temporal preset、以及一个第一轮 Scenario A uncertainty preset；还没有更广的 ECSS/ESSB preset 集合
 - preset 目前是手写 schema predicate dict，不是 `Entity` class/DSL sugar
+- 示例代码如果只是为了走当前 SDK 声明路径，优先在 demo 本地显式声明承载 schema 的 `Entity`，而不是在示例层直接用 `extend_schema_ir_with_ecss_*` 篡改已有 `schema_ir`
 - `audit` 仍 re-export `extend_schema_ir_with_ecss_vcd_predicates(...)` 以保持既有调用兼容，但 canonical owner 已迁到本模块
 
 ## 相关测试入口

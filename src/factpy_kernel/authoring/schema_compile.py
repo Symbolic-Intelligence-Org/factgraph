@@ -419,6 +419,7 @@ def _compile_relationship_field(
         "arg_specs": arg_specs,
         "cardinality": cardinality,
         "group_key_indexes": [0, 1],
+        "owner_type": relationship_type,
         "relationship_type": relationship_type,
         "from_entity_type": from_entity_type,
         "to_entity_type": to_entity_type,

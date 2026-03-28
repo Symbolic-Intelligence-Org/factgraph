@@ -19,6 +19,8 @@
   - 模块文档最小结构要求、写作约定、触发更新的场景、起点模板。
 - [references/README.md](/Users/zhenzhili/hnsm-backend/docs/references/README.md)
   - 外部比较、桥接提炼和工作参考材料的管理规则；可作为 blueprint 输入材料，但不是当前实现真相。
+- [../examples/README.md](/Users/zhenzhili/hnsm-backend/examples/README.md)
+  - 仓库示例与 notebook 的维护索引；说明哪些 demo 是当前口径、哪些是低层 spike、哪些是导出产物。
 - [memory/README.md](/Users/zhenzhili/hnsm-backend/memory/README.md)
   - 仓库级 operational memory 说明；定义 handoff 与 `current.md` 的边界。
 - [memory/current.md](/Users/zhenzhili/hnsm-backend/memory/current.md)

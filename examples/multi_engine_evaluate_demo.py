@@ -41,12 +41,8 @@ class Friends(Relationship):
 
 
 schema_ir = compile_schema_from_classes([User, Friends])
-# Ensure relationship predicates have owner_type for SDK compatibility
-for pred in schema_ir.get("predicates", []):
-    if isinstance(pred, dict) and pred.get("relationship_type") and not pred.get("owner_type"):
-        pred["owner_type"] = pred["relationship_type"]
-
-sdk = SDKStore([User, Friends], schema_ir=schema_ir)
+# `SDKStore` only needs entity classes here; relationship predicates come from schema_ir.
+sdk = SDKStore([User], schema_ir=schema_ir)
 print("Schema compiled:", [p["pred_id"] for p in schema_ir["predicates"]])
 
 
