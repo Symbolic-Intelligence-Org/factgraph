@@ -22,7 +22,7 @@
 - `examples/ecss_compliance_demo.ipynb`
   - `esa_demo.py` 的 notebook 版本。已同步去掉 `extend_schema_ir_with_ecss_*` hack。
 - `examples/ecss_pyreason_demo.py`
-  - ECSS + PyReason 区间推理 demo。当前 API 基本对齐，保留。
+  - ECSS + PyReason boolean/topology propagation demo。当前明确把 uncertainty 当作旁路展示，不再把 PyReason 表述成 fuzzy bound propagation 引擎。
 - `examples/ecss_pyreason_demo.ipynb`
   - notebook 版本。代码路径保留；输出是否可运行取决于 Jupyter kernel 环境。
 
@@ -33,7 +33,7 @@
 - `examples/dora_demo_standalone.html`
   - DORA demo 导出的静态 HTML 产物，不是主要维护入口。
 - `examples/dora_pyreason_demo.py`
-  - DORA + PyReason 模糊区间 demo。当前保留。
+  - DORA + PyReason boolean supply-chain propagation demo。当前把 severity/readiness 区间作为旁路审计信息展示，不作为 PyReason propagation payload。
 - `examples/dora_pyreason_demo.ipynb`
   - notebook 版本。当前保留。
 

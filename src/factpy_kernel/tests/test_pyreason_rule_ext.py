@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 import types
 import unittest
+import warnings
 from unittest.mock import patch
 
 from factpy_kernel.adapters.pyreason.rule_ext import (
@@ -233,11 +234,7 @@ class CompileRuleTests(unittest.TestCase):
 
 
 class RunnerTypedDefTests(unittest.TestCase):
-    def test_run_pyreason_accepts_rule_defs_and_fact_defs(self) -> None:
-        session = PyReasonSession(_test_schema_ir())
-        session._write_node_fact_internal("user:name", "Alice", "Alice", bound=[1.0, 1.0])
-        session._write_edge_fact_internal("friends:strength", "Alice", "Bob", "0.9", bound=[0.8, 0.9])
-
+    def _fake_pyreason(self) -> tuple[types.SimpleNamespace, list[object], list[object], list[object], list[None]]:
         added_rules: list[object] = []
         added_facts: list[object] = []
         loaded_graphs: list[object] = []
@@ -257,6 +254,14 @@ class RunnerTypedDefTests(unittest.TestCase):
             Rule=lambda body, name: ("rule", body, name),
             Fact=lambda atom, name, start, end: ("fact", atom, name, start, end),
         )
+        return fake_pyreason, added_rules, added_facts, loaded_graphs, reset_calls
+
+    def test_run_pyreason_accepts_rule_defs_and_fact_defs(self) -> None:
+        session = PyReasonSession(_test_schema_ir())
+        session._write_node_fact_internal("user:name", "Alice", "Alice", bound=[1.0, 1.0])
+        session._write_edge_fact_internal("friends:strength", "Alice", "Bob", "0.9", bound=[0.8, 0.9])
+
+        fake_pyreason, added_rules, added_facts, loaded_graphs, reset_calls = self._fake_pyreason()
 
         rule_def = PyReasonRuleDef(
             rule=Rule(
@@ -270,12 +275,14 @@ class RunnerTypedDefTests(unittest.TestCase):
         fact_def = PyReasonFactDef(atom="popular(Alice)", name="alice_pop", start=0, end=3, bound=[0.4, 0.6])
 
         with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
-            result = run_pyreason(
-                session,
-                rule_defs=[rule_def],
-                fact_defs=[fact_def],
-                config=PyReasonRunConfig(timesteps=2, atom_trace=False),
-            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                result = run_pyreason(
+                    session,
+                    rule_defs=[rule_def],
+                    fact_defs=[fact_def],
+                    config=PyReasonRunConfig(timesteps=2, atom_trace=False),
+                )
 
         self.assertEqual(len(loaded_graphs), 1)
         self.assertEqual(loaded_graphs[0].edges["Alice", "Bob"]["strength"], 0.8)
@@ -289,6 +296,88 @@ class RunnerTypedDefTests(unittest.TestCase):
         )
         self.assertEqual(result.config.timesteps, 2)
         self.assertEqual(reset_calls, [None, None])
+
+    def test_run_pyreason_warns_for_bounded_node_seeds_with_rules(self) -> None:
+        session = PyReasonSession(_test_schema_ir())
+        session._write_node_fact_internal("user:popular", "Alice", "true", bound=[0.4, 0.6])
+        fake_pyreason, _, _, _, _ = self._fake_pyreason()
+
+        rule_def = PyReasonRuleDef(
+            rule=Rule(
+                id="friend_pop",
+                version="1.0",
+                select=[Pred("user:popular", x)],
+                where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
+            ),
+            ext=PyReasonRuleExt(timestep_delay=1),
+        )
+
+        with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                run_pyreason(
+                    session,
+                    rule_defs=[rule_def],
+                    config=PyReasonRunConfig(timesteps=2, atom_trace=False),
+                )
+
+        self.assertEqual(len(caught), 1)
+        self.assertIn("non-[1.0, 1.0] node seeds", str(caught[0].message))
+        self.assertIn("side-channel data", str(caught[0].message))
+
+    def test_run_pyreason_warns_for_bounded_fact_defs_with_rules(self) -> None:
+        session = PyReasonSession(_test_schema_ir())
+        fake_pyreason, _, _, _, _ = self._fake_pyreason()
+
+        rule_def = PyReasonRuleDef(
+            rule=Rule(
+                id="friend_pop",
+                version="1.0",
+                select=[Pred("user:popular", x)],
+                where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
+            ),
+            ext=PyReasonRuleExt(timestep_delay=1),
+        )
+        fact_def = PyReasonFactDef(atom="popular(Alice)", name="alice_pop", start=0, end=3, bound=[0.4, 0.6])
+
+        with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                run_pyreason(
+                    session,
+                    rule_defs=[rule_def],
+                    fact_defs=[fact_def],
+                    config=PyReasonRunConfig(timesteps=2, atom_trace=False),
+                )
+
+        self.assertEqual(len(caught), 1)
+        self.assertIn("fact_def:alice_pop=(0.4, 0.6)", str(caught[0].message))
+
+    def test_run_pyreason_does_not_warn_for_boolean_seeds(self) -> None:
+        session = PyReasonSession(_test_schema_ir())
+        session._write_node_fact_internal("user:popular", "Alice", "true", bound=[1.0, 1.0])
+        fake_pyreason, _, _, _, _ = self._fake_pyreason()
+
+        rule_def = PyReasonRuleDef(
+            rule=Rule(
+                id="friend_pop",
+                version="1.0",
+                select=[Pred("user:popular", x)],
+                where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
+            ),
+            ext=PyReasonRuleExt(timestep_delay=1),
+        )
+
+        with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                run_pyreason(
+                    session,
+                    rule_defs=[rule_def],
+                    config=PyReasonRunConfig(timesteps=2, atom_trace=False),
+                )
+
+        self.assertEqual(caught, [])
 
 
 if __name__ == "__main__":

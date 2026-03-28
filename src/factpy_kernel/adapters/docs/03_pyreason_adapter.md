@@ -197,6 +197,7 @@ result = run_pyreason(
 
 - `run_pyreason(...)` 同时接受 legacy tuple 形式的 `rules` / `facts`，以及 typed `rule_defs` / `fact_defs`
 - `PyReasonFactDef.bound` 是 typed initial fact 的显式区间入口；runner 会把它编码为 `pred(node) : [lo, hi]` 形式的 fact text 再传给底层 PyReason。未显式提供时默认 `(1.0, 1.0)`。
+- 当存在 rule 且 initial **node** seed 使用非 `[1.0, 1.0]` bound 时，runner 会发出 `UserWarning`。这是当前 PyReason 能力边界的显式提示：这类 bounded node seed 是合法输入，但不会像 boolean truth seed 那样可靠地驱动 propagation。
 - `PyReasonRuleDef` 是 adapter-local wrapper：`Rule + PyReasonRuleExt`，不修改 shared `Rule`
 - `compile_pyreason_rule(...)` 当前只支持 `PredAtom` + `LogicVar` + 字面量；`CompareExpr` / `NotExpr` / `RuleRefAtom` 会报明确错误
 - `run_pyreason(...)` 本身仍是底层 helper；`Store.evaluate(mode="pyreason")` 通过 `engine_eval.py` 在外层完成 WHERE→PyReason 编译和 CandidateSet 组装
@@ -267,6 +268,7 @@ PyReason adapter 当前支持一个收窄的 value-carrying 路径：**bounded n
 - **EDB materialization**：`engine_eval.py` 把 bounded predicate 的 Ledger value 解析成 point interval `bound=(v, v)`；非 bounded predicate 仍用 `bound=(1.0, 1.0)`
 - **Graph build**：`runner.build_pyreason_graph(...)` 现在保留 graph 结构，并把 **edge labels** 写成 edge attributes；当 edge fact 有非默认 bound 时，当前写入 lower-bound summary，否则写 `1`
 - **Initial fact registration**：`runner.run_pyreason(...)` 只把 `PyReasonSession` 中的 **node facts** lower 成 `pr.add_fact(...)`；edge facts 不再重复注册。node facts 通过 fact text interval 保留 `[lo, hi]`，edge facts 当前继续通过 graph attribute lower-bound summary 进入引擎
+- **Propagation boundary**：当前真实引擎行为表明，非 `[1.0, 1.0]` 的 node seed bound 不会像 boolean truth seed 那样可靠参与 rule propagation。factpy 保留这些 bounded seed 的原始编码，但会在“有规则 + bounded node seed”组合下发 warning；调用方若要做 topology propagation，应使用 boolean `[1.0, 1.0]` seed，并把 uncertainty 作为 side-channel 数据单独展示
 - **Derived extraction**：`runner._extract_derived_facts(...)` 对 bounded predicate 返回 `value=str(lower_bound)`；非 bounded node 仍是 `"true"/"false"`，非 bounded edge 仍是空字符串
 - **Canonical float64**：通过 `project_view_facts(...)` 进入 adapter 的 `float64` 值会是 canonical `0x...` bit-pattern；bounded parser 已显式支持这种形态
 

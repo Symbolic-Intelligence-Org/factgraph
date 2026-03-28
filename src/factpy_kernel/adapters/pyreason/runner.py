@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import struct
 import time
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -219,6 +220,103 @@ def _pred_short_name(pred_id: str) -> str:
     return parts[1] if len(parts) > 1 else pred_id
 
 
+def _normalize_bound(bound: tuple[float, float] | list[float]) -> tuple[float, float]:
+    return (float(bound[0]), float(bound[1]))
+
+
+def _is_default_bound(bound: tuple[float, float] | list[float]) -> bool:
+    return _normalize_bound(bound) == (1.0, 1.0)
+
+
+def _is_node_fact_text(fact_text: str) -> bool:
+    compact = fact_text.replace(" ", "")
+    pred_comp = compact.split(":", 1)[0]
+    idx = pred_comp.find("(")
+    if idx < 0 or not pred_comp.endswith(")"):
+        return False
+    component = pred_comp[idx + 1:-1]
+    return "," not in component
+
+
+def _bound_from_fact_text(fact_text: str) -> tuple[float, float] | None:
+    compact = fact_text.replace(" ", "")
+    if ":" not in compact:
+        return (1.0, 1.0)
+
+    _, bound_text = compact.split(":", 1)
+    lowered = bound_text.lower()
+    if lowered == "true":
+        return (1.0, 1.0)
+    if lowered == "false":
+        return (0.0, 0.0)
+    if not (bound_text.startswith("[") and bound_text.endswith("]")):
+        return None
+
+    try:
+        lo_str, hi_str = bound_text[1:-1].split(",", 1)
+        return (float(lo_str), float(hi_str))
+    except (TypeError, ValueError):
+        return None
+
+
+def _bounded_node_seed_descriptors(
+    session: PyReasonSession,
+    *,
+    facts: list[tuple[str, str, int, int]] | None,
+    fact_defs: list[PyReasonFactDef] | None,
+) -> list[str]:
+    descriptors: list[str] = []
+
+    for fact in session.node_facts:
+        bound = fact.get("bound", (1.0, 1.0))
+        if _is_default_bound(bound):
+            continue
+        descriptors.append(f"session:{fact['pred_id']}@{fact['node_ref']}={_normalize_bound(bound)}")
+
+    for fact_def in fact_defs or []:
+        if _is_node_fact_text(fact_def.atom) and not _is_default_bound(fact_def.bound):
+            descriptors.append(f"fact_def:{fact_def.name}={_normalize_bound(fact_def.bound)}")
+
+    for fact_text, name_str, _, _ in facts or []:
+        if not _is_node_fact_text(fact_text):
+            continue
+        bound = _bound_from_fact_text(fact_text)
+        if bound is None or _is_default_bound(bound):
+            continue
+        label = name_str or fact_text
+        descriptors.append(f"fact:{label}={bound}")
+
+    return descriptors
+
+
+def _warn_on_bounded_node_seeds(
+    session: PyReasonSession,
+    *,
+    all_rules: list[tuple[str, str]],
+    facts: list[tuple[str, str, int, int]] | None,
+    fact_defs: list[PyReasonFactDef] | None,
+) -> None:
+    if not all_rules:
+        return
+
+    descriptors = _bounded_node_seed_descriptors(session, facts=facts, fact_defs=fact_defs)
+    if not descriptors:
+        return
+
+    preview = ", ".join(descriptors[:3])
+    if len(descriptors) > 3:
+        preview = f"{preview}, ..."
+
+    warnings.warn(
+        "PyReason does not currently use non-[1.0, 1.0] node seeds as reliable rule "
+        "propagation sources. This run combines rules with bounded node seeds, so "
+        "those labels may not propagate. Use boolean [1.0, 1.0] seeds for topology "
+        f"propagation and keep uncertainty as side-channel data. Affected seeds: {preview}",
+        UserWarning,
+        stacklevel=2,
+    )
+
+
 def _session_fact_records(
     session: PyReasonSession,
     *,
@@ -258,6 +356,13 @@ def run_pyreason(
     all_rules: list[tuple[str, str]] = list(rules or [])
     for rule_def in rule_defs or []:
         all_rules.append(compile_pyreason_rule(rule_def))
+
+    _warn_on_bounded_node_seeds(
+        session,
+        all_rules=all_rules,
+        facts=facts,
+        fact_defs=fact_defs,
+    )
 
     all_facts: list[tuple[str, str, int, int]] = _session_fact_records(
         session,
