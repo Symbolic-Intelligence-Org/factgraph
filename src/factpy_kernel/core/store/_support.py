@@ -11,8 +11,13 @@ BindingItems: TypeAlias = tuple[tuple[str, Any], ...]
 DetailItems: TypeAlias = tuple[tuple[str, Any], ...]
 ENGINE_NO_WITNESS_KIND = "engine_no_witness_v1"
 SOUFFLE_WITNESS_KIND = "souffle_witness_v1"
+PYREASON_PROVENANCE_KIND = "pyreason_provenance_v1"
+PROBLOG_PROVENANCE_KIND = "problog_provenance_v1"
 _DEGRADED_SUPPORT_KINDS = frozenset({"none", ENGINE_NO_WITNESS_KIND})
 _WITNESS_BEARING_SUPPORT_KINDS = frozenset({"native_binding_v1", SOUFFLE_WITNESS_KIND})
+_PROVENANCE_BEARING_SUPPORT_KINDS = frozenset(
+    {PYREASON_PROVENANCE_KIND, PROBLOG_PROVENANCE_KIND}
+)
 
 
 @dataclass(frozen=True)
@@ -137,6 +142,24 @@ class BindingSupportCapture:
 
     def binding_dict(self) -> dict[str, Any]:
         return binding_dict_from_items(self.binding_items)
+
+
+@dataclass(frozen=True)
+class ProvenanceEnvelope:
+    candidate_id: str
+    engine: str
+    payload_type: str
+    payload: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate_id, str) or not self.candidate_id:
+            raise ValueError("ProvenanceEnvelope.candidate_id must be non-empty string")
+        if not isinstance(self.engine, str) or not self.engine:
+            raise ValueError("ProvenanceEnvelope.engine must be non-empty string")
+        if not isinstance(self.payload_type, str) or not self.payload_type:
+            raise ValueError("ProvenanceEnvelope.payload_type must be non-empty string")
+        if not isinstance(self.payload, dict):
+            raise ValueError("ProvenanceEnvelope.payload must be dict")
 
 
 def normalize_binding_items(binding: Mapping[str, Any] | Sequence[tuple[str, Any]]) -> BindingItems:
@@ -289,6 +312,42 @@ def compute_support_digest(artifact: SupportArtifact) -> str:
     return sha256_token(support_artifact_bytes(artifact))
 
 
+def provenance_envelope_to_dict(envelope: ProvenanceEnvelope) -> dict[str, Any]:
+    return {
+        "candidate_id": envelope.candidate_id,
+        "engine": envelope.engine,
+        "payload_type": envelope.payload_type,
+        "payload": _to_jsonable(envelope.payload),
+    }
+
+
+def provenance_envelope_from_dict(row: Mapping[str, Any]) -> ProvenanceEnvelope:
+    if not isinstance(row, Mapping):
+        raise ValueError("row must be Mapping[str, Any]")
+    payload = row.get("payload")
+    if not isinstance(payload, Mapping):
+        raise ValueError("row.payload must be Mapping[str, Any]")
+    return ProvenanceEnvelope(
+        candidate_id=row["candidate_id"],
+        engine=row["engine"],
+        payload_type=row["payload_type"],
+        payload={str(key): _from_jsonable(value) for key, value in payload.items()},
+    )
+
+
+def provenance_envelope_bytes(envelope: ProvenanceEnvelope) -> bytes:
+    return json.dumps(
+        provenance_envelope_to_dict(envelope),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def compute_provenance_digest(envelope: ProvenanceEnvelope) -> str:
+    return sha256_token(provenance_envelope_bytes(envelope))
+
+
 def _normalize_non_empty_strings(values: Sequence[str]) -> set[str]:
     normalized: set[str] = set()
     for value in values:
@@ -338,19 +397,27 @@ __all__ = [
     "NonFactStep",
     "PredWitness",
     "ProjectedFact",
+    "PROBLOG_PROVENANCE_KIND",
+    "PYREASON_PROVENANCE_KIND",
+    "ProvenanceEnvelope",
     "RuleRefEdge",
     "SOUFFLE_WITNESS_KIND",
     "SupportArtifact",
     "SupportRootResultKind",
     "_DEGRADED_SUPPORT_KINDS",
+    "_PROVENANCE_BEARING_SUPPORT_KINDS",
     "_WITNESS_BEARING_SUPPORT_KINDS",
     "binding_dict_from_items",
+    "compute_provenance_digest",
     "compute_support_digest",
     "make_non_fact_step_key",
     "make_pred_atom_key",
     "normalize_asrt_ids",
     "normalize_binding_items",
     "normalize_detail_items",
+    "provenance_envelope_bytes",
+    "provenance_envelope_from_dict",
+    "provenance_envelope_to_dict",
     "support_artifact_bytes",
     "support_artifact_from_dict",
     "support_artifact_to_dict",

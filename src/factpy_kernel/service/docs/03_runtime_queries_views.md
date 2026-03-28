@@ -349,11 +349,18 @@
 - `candidate` 是 weak-durable convenience kind：
   - 第一跳 `candidate_id -> (support_digest, support_kind)` 只存在于当前 session 的 `_candidate_support_index` / `_candidate_support_kind_index`
   - 第一跳 miss 时直接返回 `runtime_explain_not_found`
-  - 第二跳 `support_digest -> SupportArtifact` 可受 sidecar durability 覆盖
+  - 第二跳按 `support_kind` 分流：
+    - native / Souffle tree-bearing kind：`support_digest -> SupportArtifact`
+    - engine provenance kind：`support_digest -> ProvenanceEnvelope`
   - 若 `support_kind in {"native_binding_v1", "souffle_witness_v1"}`，service 会继续回放 `Store.explain_support(...)`：
     - 响应仍为 `ok=true`
     - `explain.support` 携带 flat support payload
     - 当前不额外写 `witness_status`
+  - 若 `support_kind in {"pyreason_provenance_v1", "problog_provenance_v1"}`，service 会回放 `Store.explain_provenance(...)`：
+    - 响应仍为 `ok=true`
+    - `explain.support_kind` 保留当前 kind
+    - `explain.provenance` 携带 engine-native `ProvenanceEnvelope`
+    - 当前不把 envelope 强制转成 `SupportArtifact` 或 candidate evidence tree
   - 若 `support_kind="engine_no_witness_v1"`（legacy `"none"` 读回也按同类处理），则该 candidate 表示 engine no-witness 降级路径：
     - 响应仍为 `ok=true`
     - `explain.support_kind="engine_no_witness_v1"`（或 legacy `"none"`）
@@ -376,6 +383,7 @@
 - `shape`
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
+- `runtime_explain_not_supported`
 
 ## 4.1 `POST /v1/runtime/sessions/{session_id}/queries/explain-tree`
 
@@ -420,6 +428,13 @@
     - `support_kind in {"native_binding_v1", "souffle_witness_v1"}`
   - engine degraded
     - `support_kind in {"engine_no_witness_v1", "none"}`
+- `support_kind in {"pyreason_provenance_v1", "problog_provenance_v1"}` 当前不会自动渲染成 tree：
+  - `explain-tree`
+  - `explain-summary`
+  - `explain-narrative`
+  - `explain-nl`
+  - `GET /evidence/candidate/{candidate_id}`
+  都会返回 `runtime_explain_not_supported`
 - `tree` DTO 是 recursive schema，并在当前版本采用 sectioned shape：
   - root：`candidate_result`
   - section layer：
@@ -936,11 +951,16 @@
   - `rule_ref_edges`
   只反映 selected branch
 - 若多个 OR branch 都满足同一 final binding，则采用 `source-order wins`；若没有任何 branch 满足该 binding，则视为 capture contract violation 并 fail fast。
-- engine evaluate（`souffle` / `problog`）当前分两种 explainability surface：
-  - partial witness
-    - 目前只覆盖 `souffle`
+- engine evaluate 当前分三种 explainability surface：
+  - partial tree witness
+    - 目前覆盖 `souffle`
     - `support_kind="souffle_witness_v1"`
     - 仍是 engine path，不伪装成 `native_binding_v1`
+  - engine provenance envelope
+    - `pyreason`：`support_kind="pyreason_provenance_v1"`
+    - `problog`：`support_kind="problog_provenance_v1"`
+    - 统一 `explain_ref(kind="candidate")` 可返回 engine-native `ProvenanceEnvelope`
+    - tree/summary/narrative/NL/HTML surface 当前不支持这两类 support kind
   - degraded
     - `support_kind="engine_no_witness_v1"`
     - 这表示 candidate 本身有效，但当前 engine path 不产出可解引用的 witness artifact
@@ -948,7 +968,7 @@
 - audit/static 现在也接受 `souffle_witness_v1`：
   - `AuditQuery.get_candidate_evidence_tree(...)` 与 DTO/static 页面继续复用既有 witness-bearing tree shape
   - 不新增专用 engine DTO 或 static 分支
-  - `ProbLog` 和其他 degraded engine 仍保持 `engine_no_witness_v1`
+- `pyreason_provenance_v1` / `problog_provenance_v1` 当前只承诺 runtime live explain；audit/static candidate tree surface 仍未接入
 - legacy `support_kind="none"` 只作为兼容读回值保留；新 writer 不再产生它。
 - `limit` 只影响返回条数，不改变底层总候选数；总量体现在 `meta.candidate_count`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。

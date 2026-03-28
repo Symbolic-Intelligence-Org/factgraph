@@ -12,6 +12,7 @@ from factpy_kernel.adapters.pyreason.session import PyReasonSession
 from factpy_kernel.adapters.pyreason.where_compile import PyReasonWhereCompileError
 from factpy_kernel.core.derivation.accept import AcceptOptions
 from factpy_kernel.core.evidence.write_protocol import set_field
+from factpy_kernel.core.store._support import PYREASON_PROVENANCE_KIND
 from factpy_kernel.core.store.ledger import Claim
 from factpy_kernel.sdk.compile import compile_schema_from_classes
 from factpy_kernel.sdk.dsl import Derivation, Pred, vars as sdk_vars
@@ -57,7 +58,13 @@ def _mock_run_pyreason(session, *, rules=None, rule_defs=None, facts=None, fact_
     return PyReasonRunResult(
         interpretation=None,
         trace=None,
-        trace_dict=None,
+        trace_dict={
+            "engine": "pyreason",
+            "trace_type": "event_log",
+            "timesteps": 2,
+            "node_events": [],
+            "edge_events": [],
+        },
         derived_session=derived,
         config=config or PyReasonRunConfig(),
         elapsed_seconds=0.01,
@@ -118,7 +125,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertEqual(candidate.derivation_id, "drv.pyreason_popular")
         self.assertEqual(candidate.derivation_version, "v1")
         self.assertEqual(candidate.target, "user:popular")
-        self.assertEqual(candidate.support_kind, "engine_no_witness_v1")
+        self.assertEqual(candidate.support_kind, PYREASON_PROVENANCE_KIND)
         self.assertEqual(candidate.state, "generated")
         self.assertEqual(candidate.payload["pred_id"], "user:popular")
         self.assertEqual(candidate.payload["terms"][0]["value"], sdk.ref(User, user_id="Alice"))
@@ -175,7 +182,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
 
         config = mock_run.call_args.kwargs["config"]
         self.assertEqual(config.timesteps, 5)
-        self.assertFalse(config.atom_trace)
+        self.assertTrue(config.atom_trace)
 
     def test_sdk_evaluate_rejects_unknown_engine_options(self) -> None:
         sdk = self._make_sdk()

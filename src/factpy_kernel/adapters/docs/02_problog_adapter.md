@@ -32,10 +32,12 @@
   - `evaluate_problog(...)`
   - `resolve_problog_timeout(...)`：shared `engine_options` 归一化
   - `_remember_pending_probability_annotations(...)`
+- `provenance.py`
+  - `ProbLogTraceV0` / `ProbLogTraceEventV0` / `parse_problog_trace(...)`
 - `problog_export.py`
   - `export_problog(...)`：导出 `.pl`
 - `problog_engine.py`
-  - `run_problog(...)`：调用 ProbLog CLI
+  - `run_problog(...)`：调用 ProbLog CLI（当前 shared evaluate path 默认带 `--trace`）
 - `problog_import.py`
   - `parse_problog_output(...)`：解析输出并构造 `CandidateSet`
 
@@ -57,17 +59,30 @@
 4. `export_problog(...)` 生成临时 `query.pl`
 5. `run_problog(...)` 调用 ProbLog CLI
 6. `parse_problog_output(...)` 解析结果并映射为 `CandidateSet`
-7. 将推导概率写入 `candidate.confidence`，并标注 `candidate.confidence_kind="probability"`
-8. `evaluate_problog(...)` 把待持久化的 `problog/semantic/probability` 模板缓存到 store pending state
-9. caller 在 `accept` 后调用 `persist_problog_annotations(...)`，将真实 `asrt_id` 绑定到 Annotation Store
+7. `parse_problog_trace(...)` 把同一份 `--trace` 输出解析成 adapter-local proof trace
+8. 将推导概率写入 `candidate.confidence`，并标注 `candidate.confidence_kind="probability"`
+9. 若 trace 非空，则把每个 candidate 升级成：
+   - `support_kind="problog_provenance_v1"`
+   - `support_digest=<ProvenanceEnvelope digest>`
+   - runtime `explain_ref(kind="candidate")` 可直接读回 `payload_type="proof_trace"` 的 provenance envelope
+10. `evaluate_problog(...)` 把待持久化的 `problog/semantic/probability` 模板缓存到 store pending state
+11. caller 在 `accept` 后调用 `persist_problog_annotations(...)`，将真实 `asrt_id` 绑定到 Annotation Store
 
 explainability 补充：
 
-- 当前 ProbLog adapter 只回读概率结果，不输出 derivation witness / proof tree。
-- 因此由该适配器生成的 candidates 第一轮会显式标记：
+- 当前 ProbLog adapter 已能把 CLI `--trace` 输出接到 runtime candidate explain：
+  - `support_kind="problog_provenance_v1"`
+  - `support_digest=<ProvenanceEnvelope digest>`
+  - runtime `explain_ref(kind="candidate")` 返回 engine-native provenance envelope
+- 当前不会把这条 provenance 强制转成 `SupportArtifact` 或 candidate evidence tree：
+  - `explain-tree`
+  - `explain-summary`
+  - `explain-narrative`
+  - `explain-nl`
+  仍不支持 `problog_provenance_v1`
+- 若 future engine path 没有 trace，则仍会回落到：
   - `support_kind="engine_no_witness_v1"`
-  - `support_digest="sha256:000...0"`（兼容占位符）
-- service `explain_ref(kind="candidate")` 对这类 candidate 返回 `ok=true` + `witness_status="degraded"`，表示 candidate 有效，但当前没有可解引用的 witness artifact。
+  - `support_digest="sha256:000...0"`
 
 semantic-delivery 补充：
 
@@ -106,6 +121,7 @@ CLI 二进制：
 - 默认命令：`problog`
 - 可由环境变量 `PROBLOG_BIN` 覆盖
 - shared evaluate surface 当前可通过 `engine_options={"timeout": 15}` 覆盖 CLI timeout；缺省 `timeout=30`
+- shared evaluate path 当前默认追加 `--trace`，以便生成 runtime candidate provenance
 
 错误处理：
 
@@ -141,5 +157,5 @@ ProbLog 当前对 shared evaluate surface 公开的 run-time 选项只有一个�
 - 依赖外部 ProbLog CLI
 - `pred` 原子当前只支持 1/2 元参数映射
 - 主要服务 derivation query 执行，不覆盖 Deontic 规范执行
-- 当前不输出 derivation/proof witness；第一轮只保证显式 degraded explain 语义
-- 当前不提供 ProbLog session API、`engine_ext` 或 provenance carrier；shared runtime options 当前只开放 `timeout`
+- 当前只承诺 runtime `explain_ref(kind="candidate")` flat provenance envelope；不会自动生成 candidate evidence tree / summary / narrative / NL
+- 当前不提供 ProbLog session API 或 `engine_ext`；shared runtime options 当前只开放 `timeout`

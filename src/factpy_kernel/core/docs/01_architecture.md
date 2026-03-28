@@ -169,7 +169,13 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - `rule_ref_edges=[]`
   - witness 通过 adapter-level Datalog rewriting 产出，不是 Soufflé 官方 provenance proof tree
   - 同一 final binding 若在多个 OR branch 上都有 witness row，则 adapter 侧采用 `source-order wins`
-- engine candidates 第一轮显式写入 `support_kind="engine_no_witness_v1"` + zero digest placeholder：
+- engine provenance 现在走单独的 candidate explain lane：
+  - `pyreason` 可写入 `support_kind="pyreason_provenance_v1"`
+  - `problog` 可写入 `support_kind="problog_provenance_v1"`
+  - `support_digest` 不再是 zero placeholder，而是 per-candidate `ProvenanceEnvelope` digest
+  - `Store` 会在 in-process registry 中保留 `support_digest -> ProvenanceEnvelope`
+  - service `explain_ref(kind="candidate")` 可直接返回 engine-native provenance envelope
+- 仍没有 provenance 的 engine candidate 继续写 `support_kind="engine_no_witness_v1"` + zero digest placeholder：
   - 这不是 artifact miss，而是 no-witness 降级语义
   - service `explain_ref(kind="candidate")` 会返回 `witness_status="degraded"`
 - `CandidateSet` 当前保留窄 `confidence: float | None`，并新增 additive `confidence_kind` value-semantics 标注：
@@ -246,10 +252,14 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - `degraded_support` 不复用 `unresolved_support` / `recursion_boundary`
     - node 本体不暴露 `support_digest`；当前 zero digest 仍只作为顶层兼容 placeholder
     - legacy `"none"` 与 `engine_no_witness_v1` 在 tree surface 上同构
-  - runtime 当前将 `{"native_binding_v1", "souffle_witness_v1"}` 统一视为 witness-bearing candidate support kind：
+  - runtime 当前将 `{"native_binding_v1", "souffle_witness_v1"}` 统一视为 tree-bearing candidate support kind：
     - `Store.explain_support(...)` 可直接回放 flat support
     - `candidate_evidence_tree` 可继续复用既有 native tree builder
     - audit/static 对 `souffle_witness_v1` 仍 deferred，当前不承诺离线消费
+  - `{"pyreason_provenance_v1", "problog_provenance_v1"}` 走 `Store.explain_provenance(...)`：
+    - 当前只承诺 runtime `explain_ref(kind="candidate")` flat surface
+    - 不强制转成 `SupportArtifact`
+    - `candidate_evidence_tree` / summary / narrative / NL / runtime candidate HTML 当前都不支持这两类 support kind
   - 在 raw tree 之上，candidate explain 现在也已有 deterministic derived layers：
     - `candidate_evidence_tree_summary`
       - 由 `store._candidate_evidence_tree_summary` 从 raw tree 纯派生
@@ -438,24 +448,30 @@ plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 
 - 注册：`register_engine_evaluator(evaluator, name)`
 - 查询：`get_engine_evaluator(name)`
-- 运行：`Store.evaluate(mode='souffle'|'problog')`
+- 运行：`Store.evaluate(mode='souffle'|'problog'|'pyreason')`
 
 适配器侧（当前）：
 
 - `factpy_kernel.adapters.souffle` import 时注册 `souffle`
 - `factpy_kernel.adapters.problog` import 时注册 `problog`
+- `factpy_kernel.adapters.pyreason` import 时注册 `pyreason`
 
 补充：
 
-- `Store` 当前维护两个分离的 in-process explain registry：
+- `Store` 当前维护三个分离的 in-process explain registry：
   - `_support_artifacts`：derivation native support capture
+  - `_provenance_envelopes`：engine-native candidate provenance envelope
   - `_rule_trace_artifacts`：`run_rule_with_trace(...)` 产出的 rule runtime trace
 - `Store` 还维护 candidate explain 的 session-scoped backref index：
   - `_candidate_support_index`: `candidate_id -> support_digest`
   - `_candidate_support_kind_index`: `candidate_id -> support_kind`
   - 该索引不进 sidecar；engine degraded explain 与 native explain 都依赖这一跳
-- 两者当前只在 readback 协议层并列存在，不共享底层 carrier。
-- 若 `Store` 配置了 `artifact_sidecar`，上述两个 registry 会在 lookup miss 时从 sidecar 读回并 rehydrate 到当前内存 dict；未配置时仍保持纯 in-process 语义。
+- 三者当前只在 readback 协议层并列存在，不共享底层 carrier：
+  - native / Souffle witness → `SupportArtifact`
+  - engine provenance → `ProvenanceEnvelope`
+  - rule runtime trace → `RuleTraceArtifact`
+- 若 `Store` 配置了 `artifact_sidecar`，可 durably readback 的 registry 会在 lookup miss 时从 sidecar 读回并 rehydrate 到当前内存 dict；未配置时仍保持纯 in-process 语义。
+- 当前只有 `SupportArtifact` / `RuleTraceArtifact` 进入 sidecar；`ProvenanceEnvelope` 仍是 session-scoped in-process registry。
 - `FileArtifactSidecar` 当前在 payload `.json` 之外，还会为首次 durable write 写入 sidecar-adjacent `.meta.json`：
   - `support/sha256/<hex>.meta.json`
   - `rule_trace/<rule_run_id>.meta.json`

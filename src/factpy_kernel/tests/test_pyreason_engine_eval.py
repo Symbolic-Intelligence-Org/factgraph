@@ -14,7 +14,7 @@ from factpy_kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
 from factpy_kernel.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
 from factpy_kernel.core.evidence.write_protocol import set_field
-from factpy_kernel.core.store._support import ENGINE_NO_WITNESS_KIND
+from factpy_kernel.core.store._support import PYREASON_PROVENANCE_KIND
 from factpy_kernel.core.store.ledger import Ledger
 from factpy_kernel.core.store.runtime import get_engine_evaluator
 from factpy_kernel.core.store.types import EngineExtBase
@@ -105,12 +105,26 @@ def _mock_store_with_facts(facts: list[dict[str, Any]]) -> Any:
         )
 
     class MockStore:
-        pass
+        def __init__(self) -> None:
+            self._provenance_envelopes: dict[str, Any] = {}
+
+        def _remember_provenance_envelope(self, support_digest: str, envelope: Any) -> None:
+            self._provenance_envelopes[support_digest] = envelope
 
     store = MockStore()
     store.schema_ir = _test_schema_ir()
     store.ledger = ledger
     return store
+
+
+def _mock_trace_dict() -> dict[str, Any]:
+    return {
+        "engine": "pyreason",
+        "trace_type": "event_log",
+        "timesteps": 2,
+        "node_events": [],
+        "edge_events": [],
+    }
 
 
 class MaterializeEDBTests(unittest.TestCase):
@@ -214,7 +228,7 @@ class EngineEvalTests(unittest.TestCase):
         mock_run.return_value = PyReasonRunResult(
             interpretation=None,
             trace=None,
-            trace_dict=None,
+            trace_dict=_mock_trace_dict(),
             derived_session=derived,
             config=PyReasonRunConfig(),
             elapsed_seconds=0.01,
@@ -240,8 +254,8 @@ class EngineEvalTests(unittest.TestCase):
         )
 
         self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0].support_kind, ENGINE_NO_WITNESS_KIND)
-        self.assertEqual(candidates[0].support_digest, f"sha256:{'0' * 64}")
+        self.assertEqual(candidates[0].support_kind, PYREASON_PROVENANCE_KIND)
+        self.assertNotEqual(candidates[0].support_digest, f"sha256:{'0' * 64}")
         self.assertAlmostEqual(candidates[0].confidence or 0.0, 0.8)
         self.assertTrue(hasattr(store, "_engine_pending_annotations"))
         self.assertIn(candidates[0].run_id, store._engine_pending_annotations)
@@ -261,7 +275,7 @@ class EngineEvalTests(unittest.TestCase):
         mock_run.return_value = PyReasonRunResult(
             interpretation=None,
             trace=None,
-            trace_dict=None,
+            trace_dict=_mock_trace_dict(),
             derived_session=derived,
             config=PyReasonRunConfig(),
             elapsed_seconds=0.01,
@@ -360,7 +374,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
 
         config = mock_run.call_args.kwargs["config"]
         self.assertEqual(config.timesteps, 2)
-        self.assertFalse(config.atom_trace)
+        self.assertTrue(config.atom_trace)
 
     @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason")
     def test_engine_options_timesteps_override_default(self, mock_run: Any) -> None:
@@ -385,7 +399,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
 
         config = mock_run.call_args.kwargs["config"]
         self.assertEqual(config.timesteps, 5)
-        self.assertFalse(config.atom_trace)
+        self.assertTrue(config.atom_trace)
 
     @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason")
     def test_engine_ext_body_predicate_bounds_flow_into_compiled_rules(self, mock_run: Any) -> None:

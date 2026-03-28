@@ -5,6 +5,7 @@ from typing import Any
 from factpy_kernel.core.rules.ruleref_substrate import evaluate_native_where
 from factpy_kernel.core.store._support import (
     _DEGRADED_SUPPORT_KINDS,
+    _PROVENANCE_BEARING_SUPPORT_KINDS,
     _WITNESS_BEARING_SUPPORT_KINDS,
     BindingSupportCapture,
     compute_support_digest,
@@ -253,7 +254,7 @@ def _remember_candidate_support_backrefs(
     for candidate in candidates:
         support_kind = candidate.support_kind
         support_digest = candidate.support_digest
-        if support_kind in _DEGRADED_SUPPORT_KINDS:
+        if support_kind in _DEGRADED_SUPPORT_KINDS or support_kind in _PROVENANCE_BEARING_SUPPORT_KINDS:
             store._remember_candidate_support(
                 candidate.candidate_id,
                 support_digest,

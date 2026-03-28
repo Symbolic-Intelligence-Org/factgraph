@@ -9,7 +9,7 @@ class ProbLogEngineError(Exception):
     pass
 
 
-def run_problog(pl_path: Path, timeout: int = 30) -> str:
+def run_problog(pl_path: Path, timeout: int = 30, *, trace: bool = True) -> str:
     path = Path(pl_path)
     if not path.exists():
         raise ProbLogEngineError(f"ProbLog program not found: {path}")
@@ -18,9 +18,14 @@ def run_problog(pl_path: Path, timeout: int = 30) -> str:
         raise ProbLogEngineError("timeout must be positive int seconds")
 
     problog_bin = os.getenv("PROBLOG_BIN", "problog")
+    command = [problog_bin]
+    if trace:
+        command.append("--trace")
+    command.append(str(path))
+
     try:
         proc = subprocess.run(
-            [problog_bin, str(path)],
+            command,
             capture_output=True,
             text=True,
             timeout=timeout,

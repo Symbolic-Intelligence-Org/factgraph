@@ -17,7 +17,12 @@ from factpy_kernel.core.schema.schema_ir import ensure_schema_ir
 from factpy_kernel.core.store import _accept as _store_accept
 from factpy_kernel.core.store._artifact_sidecar import ArtifactSidecar
 from factpy_kernel.core.store._explain_support import render_support_artifact
-from factpy_kernel.core.store._support import ENGINE_NO_WITNESS_KIND, SupportArtifact
+from factpy_kernel.core.store._support import (
+    ENGINE_NO_WITNESS_KIND,
+    ProvenanceEnvelope,
+    SupportArtifact,
+    provenance_envelope_to_dict,
+)
 from factpy_kernel.core.store.evaluation import evaluate_store
 from factpy_kernel.core.store.ledger import Ledger
 from factpy_kernel.core.store.queries import conflicts as store_conflicts
@@ -76,6 +81,7 @@ class Store:
         self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
         self._artifact_sidecar = artifact_sidecar
         self._support_artifacts: dict[str, SupportArtifact] = {}
+        self._provenance_envelopes: dict[str, ProvenanceEnvelope] = {}
         self._candidate_support_index: dict[str, str] = {}
         self._candidate_support_kind_index: dict[str, str] = {}
         self._candidate_confidence_kind_index: dict[str, str] = {}
@@ -126,6 +132,30 @@ class Store:
             return None
         self._support_artifacts[support_digest] = artifact
         return artifact
+
+    def _remember_provenance_envelope(
+        self,
+        support_digest: str,
+        envelope: ProvenanceEnvelope,
+    ) -> None:
+        if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
+            raise ValueError("support_digest must be sha256 token")
+        if not isinstance(envelope, ProvenanceEnvelope):
+            raise ValueError("envelope must be ProvenanceEnvelope")
+        existing = self._provenance_envelopes.get(support_digest)
+        if existing is None:
+            self._provenance_envelopes[support_digest] = envelope
+            return
+        if existing != envelope:
+            raise ValueError("support_digest collision for different ProvenanceEnvelope")
+
+    def _lookup_provenance_envelope(
+        self,
+        support_digest: str,
+    ) -> ProvenanceEnvelope | None:
+        if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
+            raise ValueError("support_digest must be sha256 token")
+        return self._provenance_envelopes.get(support_digest)
 
     def _remember_candidate_support(
         self,
@@ -354,6 +384,12 @@ class Store:
         if artifact is None:
             return None
         return render_support_artifact(artifact)
+
+    def explain_provenance(self, support_digest: str) -> dict[str, Any] | None:
+        envelope = self._lookup_provenance_envelope(support_digest)
+        if envelope is None:
+            return None
+        return provenance_envelope_to_dict(envelope)
 
     def get_candidate_support_digest(self, candidate_id: str) -> str | None:
         return self._lookup_candidate_support(candidate_id)

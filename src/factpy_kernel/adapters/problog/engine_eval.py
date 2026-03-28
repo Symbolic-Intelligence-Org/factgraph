@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -9,10 +10,16 @@ from typing import Any
 from factpy_kernel.adapters.problog.problog_engine import run_problog
 from factpy_kernel.adapters.problog.problog_export import export_problog
 from factpy_kernel.adapters.problog.problog_import import parse_problog_output
+from factpy_kernel.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
 from factpy_kernel.adapters.souffle.where_compile import extract_where_variables
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.rules.where_eval import WhereValidationError
 from factpy_kernel.core.store import builders as store_builders
+from factpy_kernel.core.store._support import (
+    PROBLOG_PROVENANCE_KIND,
+    ProvenanceEnvelope,
+    compute_provenance_digest,
+)
 from factpy_kernel.core.store.types import EngineExtBase
 
 
@@ -82,11 +89,12 @@ def evaluate_problog(
     with tempfile.TemporaryDirectory() as tmpdir:
         pl_path = Path(tmpdir) / "query.pl"
         export_problog(store, rule_spec, pl_path)
-        raw_output = run_problog(pl_path, timeout=timeout)
+        raw_output = run_problog(pl_path, timeout=timeout, trace=True)
 
     parse_spec = dict(rule_spec)
     parse_spec["store"] = store
     candidates = parse_problog_output(raw_output, parse_spec, store.ledger)
+    candidates = _attach_problog_provenance(store, candidates, raw_output)
     _remember_pending_probability_annotations(store, candidates)
     return candidates
 
@@ -147,6 +155,39 @@ def _remember_pending_probability_annotations(
                 "derivation": candidate.derivation_id,
             }
         ]
+
+
+def _attach_problog_provenance(
+    store: Any,
+    candidates: list[CandidateSet],
+    raw_output: str,
+) -> list[CandidateSet]:
+    if not candidates or not isinstance(raw_output, str):
+        return candidates
+
+    trace = parse_problog_trace(raw_output)
+    if not trace.events:
+        return candidates
+    trace_dict = problog_trace_to_dict(trace)
+
+    attached: list[CandidateSet] = []
+    for candidate in candidates:
+        envelope = ProvenanceEnvelope(
+            candidate_id=candidate.candidate_id,
+            engine="problog",
+            payload_type="proof_trace",
+            payload=trace_dict,
+        )
+        support_digest = compute_provenance_digest(envelope)
+        store._remember_provenance_envelope(support_digest, envelope)
+        attached.append(
+            replace(
+                candidate,
+                support_digest=support_digest,
+                support_kind=PROBLOG_PROVENANCE_KIND,
+            )
+        )
+    return attached
 
 
 __all__ = [

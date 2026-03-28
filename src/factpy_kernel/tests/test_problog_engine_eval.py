@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import factpy_kernel.adapters.problog  # noqa: F401
 from factpy_kernel.adapters.problog.engine_eval import evaluate_problog
+from factpy_kernel.core.store._support import PROBLOG_PROVENANCE_KIND
 from factpy_kernel.core.store.runtime import get_engine_evaluator
 from factpy_kernel.core.store.types import EngineExtBase
 from factpy_kernel.core.evidence.write_protocol import set_field
@@ -61,7 +62,19 @@ class ProbLogEngineEvalTests(unittest.TestCase):
             )
 
     def _mock_output(self, sdk: SDKStore) -> str:
-        return f'answer("vip","{sdk.ref(User, user_id="Alice")}"): 0.42'
+        alice_ref = sdk.ref(User, user_id="Alice")
+        return "\n".join(
+            [
+                " call query(X1,X2) {0.00000} []",
+                f'  result query(X1,X2) ("vip","{alice_ref}") {{{{}}}} {{0.00012}} []',
+                " complete query(X1,X2) {0.00013} {0.00013} []",
+                f' call answer("vip","{alice_ref}") {{0.00019}} [at 4:7]',
+                f'  result answer("vip","{alice_ref}") ("vip","{alice_ref}") {{{{}}}} {{0.00060}} []',
+                f' complete answer("vip","{alice_ref}") {{0.00061}} {{0.00042}} []',
+                "",
+                f'answer("vip","{alice_ref}"):\t0.42',
+            ]
+        )
 
     def test_registration_on_import(self) -> None:
         evaluator = get_engine_evaluator("problog")
@@ -76,6 +89,9 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         self.assertEqual(len(candidates), 1)
         self.assertEqual(mock_run.call_args.kwargs["timeout"], 30)
+        self.assertTrue(mock_run.call_args.kwargs["trace"])
+        self.assertEqual(candidates[0].support_kind, PROBLOG_PROVENANCE_KIND)
+        self.assertNotEqual(candidates[0].support_digest, f"sha256:{'0' * 64}")
 
     @patch("factpy_kernel.adapters.problog.engine_eval.run_problog")
     def test_engine_options_timeout_override_default(self, mock_run) -> None:
@@ -89,6 +105,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         self.assertEqual(len(candidates), 1)
         self.assertEqual(mock_run.call_args.kwargs["timeout"], 7)
+        self.assertTrue(mock_run.call_args.kwargs["trace"])
 
     def test_unknown_engine_option_raises(self) -> None:
         sdk = self._make_sdk()

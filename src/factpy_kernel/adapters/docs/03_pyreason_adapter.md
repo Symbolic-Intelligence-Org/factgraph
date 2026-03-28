@@ -2,7 +2,7 @@
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
 - 最后更新：2026-03-28
-- 状态：execution-surface V1（engine_options: timesteps）+ bounded materialization L3b
+- 状态：execution-surface V1（engine_options: timesteps）+ bounded materialization L3b + runtime provenance explain spike
 
 ## 1. 概述
 
@@ -230,8 +230,12 @@ candidates = sdk.evaluate(
    - 用 `project_view_facts(...)` 把 Ledger active facts materialize 成 `PyReasonSession`
    - 用 `compile_where_ir_to_pyreason(...)` 把 lowered WhereIR 编译成 PyReason rule strings
    - 用 `resolve_pyreason_run_config(engine_options)` 归一化运行配置
-   - 调用 `run_pyreason(...)`
+   - 调用 `run_pyreason(...)`；当前 shared evaluate path 会内部强制 `atom_trace=True` 以产出 runtime provenance
    - 把 derived session facts 转成 `CandidateSet`
+   - 若本次 run 带 `trace_dict`，则把每个 candidate 升级成：
+     - `support_kind="pyreason_provenance_v1"`
+     - `support_digest=<ProvenanceEnvelope digest>`
+     - `Store.explain_provenance(...)` 可按 digest 回放 event-log envelope
    - 把 annotation templates 缓存在 `store._engine_pending_annotations[run_id]`
 4. core `accept()` 负责把 candidate payload 写回 Ledger
 5. caller 在 post-accept 阶段调用 `persist_pyreason_annotations(ledger, run_id, store, accept_result)`，把 pending `pyreason/*` templates 绑定到真实 `asrt_id` 后写入 `annotation_rows`
@@ -248,6 +252,7 @@ shared evaluate surface 当前对 PyReason 公开的 run-time 选项只有一个
 - 缺省时使用 adapter 默认值 `timesteps=2`
 - unknown keys 直接报 `ValueError`
 - `atom_trace` / `convergence_*` 仍保持 adapter-internal，不通过 shared evaluate surface 暴露
+- 虽然 `atom_trace` 不对 shared evaluate surface 暴露，runtime candidate explain 当前会在 adapter 内部强制开启它，用于生成 `PyReasonTraceV0` / `ProvenanceEnvelope`
 
 ### 5C.1 Bounded numeric extension (L3b)
 
@@ -322,6 +327,7 @@ v0 / v1 约束：
 ## 7. 当前限制
 
 - shared evaluate surface 已实现，但 rule registry / rule builder integration 仍未做
+- 当前只承诺 runtime `explain_ref(kind="candidate")` 可返回 `payload_type="event_log"` 的 provenance envelope；不会自动生成 candidate evidence tree / summary / narrative / NL
 - `session.annotation_templates` 已可通过 `accept_pyreason_session(...)` 落到 Ledger；但当前 accept 仍依赖 adapter-local synthetic `entity_ref` materialization
 - pending `pyreason/*` annotations 仍需在 accept 后显式 bind/persist；core `Store.accept()` 不会自动完成这一步，但 adapter 已提供 `persist_pyreason_annotations(...)`
 - 依赖 `pyreason==3.0.0`（非 repo-managed dependency）

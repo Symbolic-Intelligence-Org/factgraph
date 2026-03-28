@@ -1,6 +1,7 @@
 """PyReason engine evaluator for ``Store.evaluate(mode="pyreason")``."""
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 from uuid import uuid4
 
@@ -17,7 +18,12 @@ from factpy_kernel.core.evidence.write_protocol import now_epoch_nanos
 from factpy_kernel.core.protocol.tup_v1 import canonical_bytes_tup_v1
 from factpy_kernel.core.protocol.digests import sha256_token
 from factpy_kernel.core.store import builders as store_builders
-from factpy_kernel.core.store._support import ENGINE_NO_WITNESS_KIND
+from factpy_kernel.core.store._support import (
+    ENGINE_NO_WITNESS_KIND,
+    PYREASON_PROVENANCE_KIND,
+    ProvenanceEnvelope,
+    compute_provenance_digest,
+)
 from factpy_kernel.core.store.types import EngineExtBase
 from factpy_kernel.core.view.projector import project_view_facts
 
@@ -47,7 +53,7 @@ def pyreason_engine_eval(
             f"PyReason engine_ext must be PyReasonRuleExt, got {type(engine_ext).__name__}"
         )
 
-    config = resolve_pyreason_run_config(engine_options)
+    config = replace(resolve_pyreason_run_config(engine_options), atom_trace=True)
     session = _materialize_edb_session(store, store.schema_ir)
     rules = compile_where_ir_to_pyreason(
         target_pred_id=target_pred_id,
@@ -87,6 +93,7 @@ def pyreason_engine_eval(
         )
         if candidate is not None:
             candidates.append(candidate)
+    candidates = _attach_pyreason_provenance(store, candidates, result.trace_dict)
 
     if not hasattr(store, "_engine_pending_annotations"):
         store._engine_pending_annotations = {}
@@ -121,6 +128,34 @@ def resolve_pyreason_run_config(engine_options: dict[str, Any] | None) -> PyReas
         convergence_threshold=default.convergence_threshold,
         convergence_bound_threshold=default.convergence_bound_threshold,
     )
+
+
+def _attach_pyreason_provenance(
+    store: Any,
+    candidates: list[CandidateSet],
+    trace_dict: dict[str, Any] | None,
+) -> list[CandidateSet]:
+    if not candidates or not isinstance(trace_dict, dict):
+        return candidates
+
+    attached: list[CandidateSet] = []
+    for candidate in candidates:
+        envelope = ProvenanceEnvelope(
+            candidate_id=candidate.candidate_id,
+            engine="pyreason",
+            payload_type="event_log",
+            payload=trace_dict,
+        )
+        support_digest = compute_provenance_digest(envelope)
+        store._remember_provenance_envelope(support_digest, envelope)
+        attached.append(
+            replace(
+                candidate,
+                support_digest=support_digest,
+                support_kind=PYREASON_PROVENANCE_KIND,
+            )
+        )
+    return attached
 
 
 def _materialize_edb_session(
