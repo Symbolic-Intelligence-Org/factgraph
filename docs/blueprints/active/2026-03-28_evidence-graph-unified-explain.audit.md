@@ -1,0 +1,10 @@
+# Blueprint Audit: Evidence Graph — Unified Explain Surface
+
+- Blueprint: [2026-03-28_evidence-graph-unified-explain.md](./2026-03-28_evidence-graph-unified-explain.md)
+
+## Event Log
+
+| Date | Stage | Event | Notes |
+| --- | --- | --- | --- |
+| 2026-03-28 | draft | Blueprint created | Unified EvidenceGraph abstraction for traceability/explainability across all engines. Wrap-don't-replace design. 4 open questions for discussion. |
+| 2026-03-28 | scoped | 5 decisions frozen | D-EG1: audit/ not core/. D-EG2: CSS grid timeline. D-EG3: Souffle from SouffleProofTreeV0. D-EG4: no JSON serialization v1. D-EG5: candidate evidence page not assertion page. Integration point corrected. Naming principle: "evidence graph, not evidence tree". |
