@@ -74,26 +74,10 @@ def _parse_bounded_float(value: Any) -> float | None:
     return None
 
 
-def _bounded_graph_value(value: str) -> float | int:
-    """Parse value as ``[0,1]`` float for bounded preds; fallback to ``1``."""
-    parsed = _parse_bounded_float(value)
-    return parsed if parsed is not None else 1
-
-
-def _bounded_graph_fact_value(fact: dict[str, Any]) -> float | int:
-    """Resolve the single numeric truth-degree PyReason graph ingest can carry."""
-    bound = fact.get("bound")
-    if isinstance(bound, (list, tuple)) and len(bound) == 2:
-        lo = _parse_bounded_float(bound[0])
-        hi = _parse_bounded_float(bound[1])
-        if lo is not None and hi is not None and lo <= hi and (lo != 1.0 or hi != 1.0):
-            return lo
-    return _bounded_graph_value(str(fact.get("value", "")))
-
-
 def build_pyreason_graph(session: PyReasonSession, schema_ir: dict[str, Any] | None = None) -> Any:
-    """Build a NetworkX DiGraph from session facts."""
+    """Build a structure-only NetworkX DiGraph from session facts."""
     import networkx as nx
+    del schema_ir
 
     graph = nx.DiGraph()
 
@@ -106,26 +90,11 @@ def build_pyreason_graph(session: PyReasonSession, schema_ir: dict[str, Any] | N
     for node in sorted(nodes):
         graph.add_node(node)
 
-    bounded = _bounded_pred_ids(schema_ir) if schema_ir else set()
-
-    for fact in session.node_facts:
-        pred_id = str(fact["pred_id"])
-        attr_name = pred_id.split(":", 1)[1]
-        if pred_id in bounded:
-            graph.nodes[str(fact["node_ref"])][attr_name] = _bounded_graph_fact_value(fact)
-        else:
-            graph.nodes[str(fact["node_ref"])][attr_name] = 1
-
     for fact in session.edge_facts:
-        pred_id = str(fact["pred_id"])
-        attr_name = pred_id.split(":", 1)[1]
         from_ref = str(fact["from_ref"])
         to_ref = str(fact["to_ref"])
-        val = _bounded_graph_fact_value(fact) if pred_id in bounded else 1
-        if graph.has_edge(from_ref, to_ref):
-            graph.edges[from_ref, to_ref][attr_name] = val
-        else:
-            graph.add_edge(from_ref, to_ref, **{attr_name: val})
+        if not graph.has_edge(from_ref, to_ref):
+            graph.add_edge(from_ref, to_ref)
 
     return graph
 
@@ -230,6 +199,45 @@ def _format_fact_text_with_bound(atom: str, bound: tuple[float, float] | list[fl
     return f"{atom} : [{lo}, {hi}]"
 
 
+def _pred_short_name(pred_id: str) -> str:
+    parts = pred_id.split(":", 1)
+    return parts[1] if len(parts) > 1 else pred_id
+
+
+def _session_fact_records(
+    session: PyReasonSession,
+    *,
+    default_end_time: int,
+) -> list[tuple[str, str, int, int]]:
+    records: list[tuple[str, str, int, int]] = []
+    for idx, fact in enumerate(session.node_facts):
+        atom = f"{_pred_short_name(str(fact['pred_id']))}({str(fact['node_ref'])})"
+        end_time = int(fact["active_to"]) if fact.get("active_to") is not None else default_end_time
+        records.append(
+            (
+                _format_fact_text_with_bound(atom, fact.get("bound", (1.0, 1.0))),
+                f"session_node_{idx}",
+                int(fact.get("active_from", 0)),
+                end_time,
+            )
+        )
+    for idx, fact in enumerate(session.edge_facts):
+        atom = (
+            f"{_pred_short_name(str(fact['pred_id']))}"
+            f"({str(fact['from_ref'])}, {str(fact['to_ref'])})"
+        )
+        end_time = int(fact["active_to"]) if fact.get("active_to") is not None else default_end_time
+        records.append(
+            (
+                _format_fact_text_with_bound(atom, fact.get("bound", (1.0, 1.0))),
+                f"session_edge_{idx}",
+                int(fact.get("active_from", 0)),
+                end_time,
+            )
+        )
+    return records
+
+
 def run_pyreason(
     session: PyReasonSession,
     *,
@@ -249,7 +257,11 @@ def run_pyreason(
     for rule_def in rule_defs or []:
         all_rules.append(compile_pyreason_rule(rule_def))
 
-    all_facts: list[tuple[str, str, int, int]] = list(facts or [])
+    all_facts: list[tuple[str, str, int, int]] = _session_fact_records(
+        session,
+        default_end_time=config.timesteps,
+    )
+    all_facts.extend(list(facts or []))
     for fact_def in fact_defs or []:
         all_facts.append(
             (

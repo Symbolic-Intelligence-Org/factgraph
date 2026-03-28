@@ -235,7 +235,8 @@ class CompileRuleTests(unittest.TestCase):
 class RunnerTypedDefTests(unittest.TestCase):
     def test_run_pyreason_accepts_rule_defs_and_fact_defs(self) -> None:
         session = PyReasonSession(_test_schema_ir())
-        session._write_node_fact_internal("user:popular", "Alice", "true")
+        session._write_node_fact_internal("user:name", "Alice", "Alice", bound=[1.0, 1.0])
+        session._write_edge_fact_internal("friends:strength", "Alice", "Bob", "0.9", bound=[0.8, 0.9])
 
         added_rules: list[object] = []
         added_facts: list[object] = []
@@ -278,7 +279,14 @@ class RunnerTypedDefTests(unittest.TestCase):
 
         self.assertEqual(len(loaded_graphs), 1)
         self.assertEqual(added_rules, [("rule", "popular(x) <-1 popular(y), strength(x, y)", "friend_pop")])
-        self.assertEqual(added_facts, [("fact", "popular(Alice) : [0.4, 0.6]", "alice_pop", 0, 3)])
+        self.assertEqual(
+            added_facts,
+            [
+                ("fact", "name(Alice) : [1.0, 1.0]", "session_node_0", 0, 2),
+                ("fact", "strength(Alice, Bob) : [0.8, 0.9]", "session_edge_0", 0, 2),
+                ("fact", "popular(Alice) : [0.4, 0.6]", "alice_pop", 0, 3),
+            ],
+        )
         self.assertEqual(result.config.timesteps, 2)
         self.assertEqual(reset_calls, [None, None])
 
