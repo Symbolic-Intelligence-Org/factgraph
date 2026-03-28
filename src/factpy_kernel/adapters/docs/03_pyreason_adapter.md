@@ -194,7 +194,7 @@ result = run_pyreason(
 
 - `run_pyreason(...)` 同时接受 legacy tuple 形式的 `rules` / `facts`，以及 typed `rule_defs` / `fact_defs`
 - `PyReasonFactDef.bound` 是 typed initial fact 的显式区间入口；runner 会把它编码为 `pred(node) : [lo, hi]` 形式的 fact text 再传给底层 PyReason。未显式提供时默认 `(1.0, 1.0)`。
-- `PyReasonRuleExt` 除了 `timestep_delay` 之外，还支持 `body_predicate_bounds={pred_id: (lo, hi)}`。当 body atom 命中该映射时，compiler 会生成 `popular(y) : [0.5, 1.0]` 这类显式 clause interval。
+- `PyReasonRuleExt` 除了 `timestep_delay` 之外，还支持 `body_predicate_bounds={pred_id: (lo, hi)}` 与 `head_bound=(lo, hi)`。前者会把 body atom 编译成 `popular(y) : [0.5, 1.0]` 这类显式 clause interval；后者会把 head 编译成 `popular(x) : [0.8, 0.9] <-1 ...` 这类静态 head annotation。
 - 当存在 rule、initial **node** seed 使用非 `[1.0, 1.0]` bound，且 rule body 没有显式 clause interval 时，runner 会发出 `UserWarning`。warning 指向的是 **PyReason 的默认 body threshold 语义**，不是“bounded seed 永远不能参与匹配”。
 - 优先路径是 shared `Rule(..., engine_ext=PyReasonRuleExt(...))`；`PyReasonRuleDef` 只保留为兼容 wrapper，供旧的 adapter-local call site 过渡
 - `compile_pyreason_rule(...)` 当前只支持 `PredAtom` + `LogicVar` + 字面量；`CompareExpr` / `NotExpr` / `RuleRefAtom` 会报明确错误
@@ -267,6 +267,7 @@ PyReason adapter 当前支持一个收窄的 value-carrying 路径：**bounded n
 - **Graph build**：`runner.build_pyreason_graph(...)` 现在保留 graph 结构，并把 **edge labels** 写成 edge attributes；当 edge fact 有非默认 bound 时，当前写入 lower-bound summary，否则写 `1`
 - **Initial fact registration**：`runner.run_pyreason(...)` 只把 `PyReasonSession` 中的 **node facts** lower 成 `pr.add_fact(...)`；edge facts 不再重复注册。node facts 通过 fact text interval 保留 `[lo, hi]`，edge facts 当前继续通过 graph attribute lower-bound summary 进入引擎
 - **Propagation boundary**：当前真实引擎行为表明，非 `[1.0, 1.0]` 的 node seed 在 **默认 rule body threshold** 下不会匹配 body clause；若 compiler 发出显式 clause interval（例如 `popular(y) : [0.5, 1.0]`），bounded seed 可以参与 body matching。当前已验证到这里为止，不应自动外推成“derived head 会继承输入 interval”
+- **Derived head boundary**：当前真实引擎行为表明，未声明 head interval 时 derived head 默认是 `[1.0, 1.0]`；若 compiler 发出显式 head annotation（例如 `popular(x) : [0.8, 0.9] <-1 ...`），derived head 会得到这个静态 interval。这里的 interval 来自 rule head 声明，不是从 body bound 动态传播出来的。
 - **Derived extraction**：`runner._extract_derived_facts(...)` 对 bounded predicate 返回 `value=str(lower_bound)`；非 bounded node 仍是 `"true"/"false"`，非 bounded edge 仍是空字符串
 - **Canonical float64**：通过 `project_view_facts(...)` 进入 adapter 的 `float64` 值会是 canonical `0x...` bit-pattern；bounded parser 已显式支持这种形态
 
@@ -275,6 +276,7 @@ v0 / v1 约束：
 - WhereIR compiler 只支持 lowered `("pred", pred_id, terms)` atoms；`eq` / `not` / `ruleref` 直接报错
 - 采用 attribute-existence model：node predicates 只编译实体变量，不带 value variable
 - 可通过 `PyReasonRuleExt.body_predicate_bounds` 给 body atom 附显式 interval threshold，但这是 engine-specific compile hint，不是 shared DSL 新语义
+- 可通过 `PyReasonRuleExt.head_bound` 给 rule head 附静态 interval annotation，但这同样是 engine-specific compile hint，不是 shared DSL 的动态 uncertainty propagation 语义
 - bounded numeric 只影响 materialization / extraction，不引入 rule syntax value variable
 - `engine_ext` 是 definition-time only 的共享 carrier；当前由 `Rule.engine_ext` 与 `Derivation.engine_ext` 使用，但都不进入持久化 payload
 - `engine_options` 是 call-time only，不进入 `Derivation`、`to_authoring_payload()` 或 audit artifacts

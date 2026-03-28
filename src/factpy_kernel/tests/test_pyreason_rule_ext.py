@@ -73,9 +73,17 @@ class RuleExtTests(unittest.TestCase):
         ext = PyReasonRuleExt(body_predicate_bounds={"user:popular": (0.5, 1.0)})
         self.assertEqual(ext.body_predicate_bounds["user:popular"], (0.5, 1.0))
 
+    def test_accepts_head_bound(self) -> None:
+        ext = PyReasonRuleExt(head_bound=(0.8, 0.9))
+        self.assertEqual(tuple(ext.head_bound or ()), (0.8, 0.9))
+
     def test_rejects_invalid_body_predicate_bounds(self) -> None:
         with self.assertRaises(ValueError):
             PyReasonRuleExt(body_predicate_bounds={"user:popular": (1.1, 1.0)})
+
+    def test_rejects_invalid_head_bound(self) -> None:
+        with self.assertRaises(ValueError):
+            PyReasonRuleExt(head_bound=(1.1, 1.0))
 
     def test_frozen(self) -> None:
         ext = PyReasonRuleExt(timestep_delay=1)
@@ -189,6 +197,20 @@ class CompileRuleTests(unittest.TestCase):
         rule_str, _ = compile_pyreason_rule(rule)
         self.assertEqual(rule_str, "popular(x) <-1 popular(y) : [0.5, 1.0], strength(x, y)")
 
+    def test_head_bound_compile_to_head_interval_suffix(self) -> None:
+        rule = Rule(
+            id="friend_pop",
+            version="1.0",
+            select=[Pred("user:popular", x)],
+            where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
+            engine_ext=PyReasonRuleExt(
+                timestep_delay=1,
+                head_bound=(0.8, 0.9),
+            ),
+        )
+        rule_str, _ = compile_pyreason_rule(rule)
+        self.assertEqual(rule_str, "popular(x) : [0.8, 0.9] <-1 popular(y), strength(x, y)")
+
     def test_string_literal_in_term(self) -> None:
         rule = Rule(
             id="r2",
@@ -257,10 +279,10 @@ class CompileRuleTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
-            engine_ext=PyReasonRuleExt(timestep_delay=2),
+            engine_ext=PyReasonRuleExt(timestep_delay=2, head_bound=(0.8, 0.9)),
         )
         rule_str, _ = compile_pyreason_rule(PyReasonRuleDef(rule=rule))
-        self.assertEqual(rule_str, "popular(x) <-2 popular(y), strength(x, y)")
+        self.assertEqual(rule_str, "popular(x) : [0.8, 0.9] <-2 popular(y), strength(x, y)")
 
     def test_compat_wrapper_ext_overrides_rule_engine_ext(self) -> None:
         rule = Rule(
@@ -326,7 +348,7 @@ class RunnerTypedDefTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
-            engine_ext=PyReasonRuleExt(timestep_delay=1),
+            engine_ext=PyReasonRuleExt(timestep_delay=1, head_bound=(0.8, 0.9)),
         )
         fact_def = PyReasonFactDef(atom="popular(Alice)", name="alice_pop", start=0, end=3, bound=[0.4, 0.6])
 
@@ -342,7 +364,10 @@ class RunnerTypedDefTests(unittest.TestCase):
 
         self.assertEqual(len(loaded_graphs), 1)
         self.assertEqual(loaded_graphs[0].edges["Alice", "Bob"]["strength"], 0.8)
-        self.assertEqual(added_rules, [("rule", "popular(x) <-1 popular(y), strength(x, y)", "friend_pop")])
+        self.assertEqual(
+            added_rules,
+            [("rule", "popular(x) : [0.8, 0.9] <-1 popular(y), strength(x, y)", "friend_pop")],
+        )
         self.assertEqual(
             added_facts,
             [
@@ -364,7 +389,7 @@ class RunnerTypedDefTests(unittest.TestCase):
                 select=[Pred("user:popular", x)],
                 where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
             ),
-            ext=PyReasonRuleExt(timestep_delay=1),
+            ext=PyReasonRuleExt(timestep_delay=1, head_bound=(0.8, 0.9)),
         )
 
         with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
@@ -376,7 +401,10 @@ class RunnerTypedDefTests(unittest.TestCase):
                     config=PyReasonRunConfig(timesteps=2, atom_trace=False),
                 )
 
-        self.assertEqual(added_rules, [("rule", "popular(x) <-1 popular(y), strength(x, y)", "friend_pop")])
+        self.assertEqual(
+            added_rules,
+            [("rule", "popular(x) : [0.8, 0.9] <-1 popular(y), strength(x, y)", "friend_pop")],
+        )
 
     def test_run_pyreason_warns_for_bounded_node_seeds_with_rules(self) -> None:
         session = PyReasonSession(_test_schema_ir())

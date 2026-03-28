@@ -18,6 +18,7 @@ from factpy_kernel.core.store.types import EngineExtBase
 class MockPyReasonRuleExt(EngineExtBase):
     timestep_delay: int = 0
     body_predicate_bounds: dict[str, tuple[float, float] | list[float]] = field(default_factory=dict)
+    head_bound: tuple[float, float] | list[float] | None = None
 
 
 def _test_schema_ir() -> dict[str, object]:
@@ -105,6 +106,17 @@ class CompileWhereIRTests(unittest.TestCase):
             engine_ext=ext,
         )
         self.assertEqual(rules[0][0], "popular(e) <-0 name(e) : [0.5, 1.0]")
+
+    def test_head_bound_from_engine_ext(self) -> None:
+        ext = MockPyReasonRuleExt(head_bound=(0.8, 0.9))
+        rules = compile_where_ir_to_pyreason(
+            target_pred_id="user:popular",
+            head_vars=["$e"],
+            where=[("pred", "user:name", ["$e", "$v"])],
+            schema_ir=_test_schema_ir(),
+            engine_ext=ext,
+        )
+        self.assertEqual(rules[0][0], "popular(e) : [0.8, 0.9] <-0 name(e)")
 
     def test_attribute_existence_model_skips_value_var(self) -> None:
         rules = compile_where_ir_to_pyreason(
@@ -195,6 +207,18 @@ class AtomValidationTests(unittest.TestCase):
                 engine_ext=ext,
             )
         self.assertIn("body_predicate_bounds", str(ctx.exception))
+
+    def test_invalid_head_bound_rejected(self) -> None:
+        ext = MockPyReasonRuleExt(head_bound=(1.2, 1.0))
+        with self.assertRaises(PyReasonWhereCompileError) as ctx:
+            compile_where_ir_to_pyreason(
+                target_pred_id="user:popular",
+                head_vars=["$e"],
+                where=[("pred", "user:name", ["$e", "$v"])],
+                schema_ir=_test_schema_ir(),
+                engine_ext=ext,
+            )
+        self.assertIn("head_bound", str(ctx.exception))
 
 
 class HelperTests(unittest.TestCase):

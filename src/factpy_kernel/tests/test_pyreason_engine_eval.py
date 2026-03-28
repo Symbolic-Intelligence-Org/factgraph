@@ -411,6 +411,30 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(rules, [("popular(e) <-0 name(e) : [0.5, 1.0]", "derived_popular")])
 
+    @patch("factpy_kernel.adapters.pyreason.engine_eval.run_pyreason")
+    def test_engine_ext_head_bound_flows_into_compiled_rules(self, mock_run: Any) -> None:
+        mock_run.return_value = PyReasonRunResult(
+            interpretation=None,
+            trace=None,
+            trace_dict=None,
+            derived_session=PyReasonSession(_test_schema_ir()),
+            config=PyReasonRunConfig(),
+            elapsed_seconds=0.01,
+        )
+
+        pyreason_engine_eval(
+            self._store_for_engine_options(),
+            derivation_id="drv.popular",
+            version="1.0.0",
+            target_pred_id="user:popular",
+            head_vars=["$e"],
+            where=[("pred", "user:name", ["$e", "$v"])],
+            engine_ext=PyReasonRuleExt(head_bound=(0.8, 0.9)),
+        )
+
+        rules = mock_run.call_args.kwargs["rules"]
+        self.assertEqual(rules, [("popular(e) : [0.8, 0.9] <-0 name(e)", "derived_popular")])
+
     def test_unknown_engine_option_raises(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             pyreason_engine_eval(

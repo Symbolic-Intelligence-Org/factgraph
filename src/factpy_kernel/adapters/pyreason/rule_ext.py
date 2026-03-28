@@ -15,6 +15,7 @@ class PyReasonRuleExt(EngineExtBase):
 
     timestep_delay: int = 0
     body_predicate_bounds: dict[str, tuple[float, float] | list[float]] = field(default_factory=dict)
+    head_bound: tuple[float, float] | list[float] | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.timestep_delay, bool) or not isinstance(self.timestep_delay, int):
@@ -22,6 +23,8 @@ class PyReasonRuleExt(EngineExtBase):
         if self.timestep_delay < 0:
             raise ValueError("timestep_delay must be >= 0")
         _normalize_body_predicate_bounds(self.body_predicate_bounds)
+        if self.head_bound is not None:
+            _validate_bound_pair(self.head_bound, "head_bound")
 
 
 @dataclass(frozen=True)
@@ -84,7 +87,7 @@ def compile_pyreason_rule(rule_or_def: Rule | PyReasonRuleDef) -> tuple[str, str
     """Compile a Rule or compatibility wrapper to ``(pyreason_rule_str, rule_name)``."""
     rule, ext = _resolve_rule_and_ext(rule_or_def)
 
-    head = _compile_head(rule)
+    head = _compile_head(rule, head_bound=ext.head_bound)
     body = _compile_body(
         rule.where,
         body_predicate_bounds=_normalize_body_predicate_bounds(ext.body_predicate_bounds),
@@ -118,23 +121,33 @@ def _resolve_rule_and_ext(rule_or_def: Rule | PyReasonRuleDef) -> tuple[Rule, Py
     return (rule_or_def, rule_ext)
 
 
-def _compile_head(rule: Rule) -> str:
+def _compile_head(
+    rule: Rule,
+    *,
+    head_bound: tuple[float, float] | list[float] | None = None,
+) -> str:
     if not rule.select:
         raise PyReasonCompileError("Rule.select is empty; need at least one head atom")
 
     head_item = rule.select[0]
     if isinstance(head_item, PredAtom):
-        return _compile_pred_atom(head_item)
-    if isinstance(head_item, HeadCall):
+        compiled = _compile_pred_atom(head_item)
+    elif isinstance(head_item, HeadCall):
         field_name = head_item.field
         if not field_name or not head_item.kwargs:
             raise PyReasonCompileError("HeadCall head requires field name and kwargs")
         terms = [_compile_term(value) for value in head_item.kwargs.values()]
-        return f"{field_name}({', '.join(terms)})"
-    raise PyReasonCompileError(
-        f"Cannot compile head item of type {type(head_item).__name__} to PyReason syntax. "
-        "v0 supports PredAtom or HeadCall only."
-    )
+        compiled = f"{field_name}({', '.join(terms)})"
+    else:
+        raise PyReasonCompileError(
+            f"Cannot compile head item of type {type(head_item).__name__} to PyReason syntax. "
+            "v0 supports PredAtom or HeadCall only."
+        )
+
+    if head_bound is None:
+        return compiled
+    lo, hi = _validate_bound_pair(head_bound, "head_bound")
+    return f"{compiled} : [{lo}, {hi}]"
 
 
 def _compile_body(
@@ -197,19 +210,26 @@ def _normalize_body_predicate_bounds(
     for pred_id, bound in bounds.items():
         if not isinstance(pred_id, str) or not pred_id:
             raise ValueError("body_predicate_bounds keys must be non-empty strings")
-        if not isinstance(bound, (list, tuple)) or len(bound) != 2:
-            raise ValueError("body_predicate_bounds values must be [float, float]")
-        lo_raw, hi_raw = bound
-        if isinstance(lo_raw, bool) or not isinstance(lo_raw, (int, float)):
-            raise ValueError("body_predicate_bounds lower bound must be numeric")
-        if isinstance(hi_raw, bool) or not isinstance(hi_raw, (int, float)):
-            raise ValueError("body_predicate_bounds upper bound must be numeric")
-        lo = float(lo_raw)
-        hi = float(hi_raw)
-        if not 0.0 <= lo <= hi <= 1.0:
-            raise ValueError("body_predicate_bounds must satisfy 0.0 <= lower <= upper <= 1.0")
-        normalized[pred_id] = (lo, hi)
+        normalized[pred_id] = _validate_bound_pair(bound, "body_predicate_bounds")
     return normalized
+
+
+def _validate_bound_pair(
+    bound: tuple[float, float] | list[float],
+    name: str,
+) -> tuple[float, float]:
+    if not isinstance(bound, (list, tuple)) or len(bound) != 2:
+        raise ValueError(f"{name} must be [float, float]")
+    lo_raw, hi_raw = bound
+    if isinstance(lo_raw, bool) or not isinstance(lo_raw, (int, float)):
+        raise ValueError(f"{name} lower bound must be numeric")
+    if isinstance(hi_raw, bool) or not isinstance(hi_raw, (int, float)):
+        raise ValueError(f"{name} upper bound must be numeric")
+    lo = float(lo_raw)
+    hi = float(hi_raw)
+    if not 0.0 <= lo <= hi <= 1.0:
+        raise ValueError(f"{name} must satisfy 0.0 <= lower <= upper <= 1.0")
+    return (lo, hi)
 
 
 def _compile_term(term: Any) -> str:
