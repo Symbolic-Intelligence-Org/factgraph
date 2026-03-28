@@ -46,6 +46,7 @@ from factpy_kernel.core.store._support import (
     _DEGRADED_SUPPORT_KINDS,
     _PROVENANCE_BEARING_SUPPORT_KINDS,
     _WITNESS_BEARING_SUPPORT_KINDS,
+    SOUFFLE_WITNESS_KIND,
 )
 from factpy_kernel.core.store._confidence_kind_resolver import CertaintyConfidenceKindResolver
 from factpy_kernel.core.store.runtime import Store
@@ -57,6 +58,7 @@ from factpy_kernel.core.view.projector import (
     project_view_facts_with_audit,
 )
 from factpy_kernel.audit import build_rule_trace_detail_payload
+from factpy_kernel.audit.evidence_graph import evidence_graph_to_dict
 from factpy_kernel.audit.static_ui import render_candidate_evidence_html, render_rule_trace_detail_html
 
 from ._common import error_response, exception_to_error, facade_error, ok_response
@@ -858,6 +860,7 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
         certainty_map: dict[str, dict[str, Any]] | None = None
         provenance_map: dict[str, dict[str, Any]] | None = None
         provenance_status_map: dict[str, dict[str, Any]] | None = None
+        evidence_graph_map: dict[str, dict[str, Any]] | None = None
         if package_kind == "audit" and session.registry_root is not None:
             certainty_map = _compute_all_certainty_summaries(
                 session.store,
@@ -866,6 +869,10 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
             )
         if package_kind == "audit":
             provenance_map, provenance_status_map = _materialize_provenance_trees(session)
+            evidence_graph_map = _materialize_evidence_graphs(
+                session,
+                provenance_trees=provenance_map,
+            )
         export_package(
             session.store,
             out_dir,
@@ -874,6 +881,7 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
             certainty_summaries=certainty_map,
             provenance_trees=provenance_map,
             provenance_statuses=provenance_status_map,
+            evidence_graphs=evidence_graph_map,
         )
         return ok_response(
             package={
@@ -1442,18 +1450,109 @@ def _materialize_provenance_trees(
     return provenance_trees, provenance_statuses
 
 
+def _materialize_evidence_graphs(
+    session: RuntimeSession,
+    *,
+    provenance_trees: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Materialize additive audit-package EvidenceGraph rows where possible."""
+    from factpy_kernel.adapters.problog.provenance import (
+        problog_trace_from_dict,
+        problog_trace_to_evidence_graph,
+    )
+    from factpy_kernel.adapters.pyreason.provenance import (
+        pyreason_trace_from_dict,
+        pyreason_trace_to_evidence_graph,
+    )
+    from factpy_kernel.adapters.souffle.provenance import (
+        souffle_proof_tree_from_dict,
+        souffle_proof_tree_to_evidence_graph,
+    )
+
+    graphs: dict[str, dict[str, Any]] = {}
+    for row in _accepted_candidate_claim_rows(session):
+        candidate_id = row["candidate_id"]
+        support_kind = row.get("support_kind")
+        if not isinstance(support_kind, str) or not support_kind:
+            continue
+
+        try:
+            if support_kind == SOUFFLE_WITNESS_KIND:
+                tree_dict = provenance_trees.get(candidate_id)
+                if not isinstance(tree_dict, dict):
+                    continue
+                proof_tree = souffle_proof_tree_from_dict(tree_dict)
+                graph = souffle_proof_tree_to_evidence_graph(
+                    proof_tree,
+                    candidate_id=candidate_id,
+                    support_kind=support_kind,
+                )
+            elif support_kind in _PROVENANCE_BEARING_SUPPORT_KINDS:
+                support_digest = row.get("support_digest")
+                if not isinstance(support_digest, str) or not support_digest:
+                    continue
+                provenance = session.store.explain_provenance(support_digest)
+                if not isinstance(provenance, dict):
+                    continue
+                payload = provenance.get("payload")
+                if not isinstance(payload, dict):
+                    continue
+                candidate_payload = _candidate_payload_from_claim(row["claim"])
+                engine = provenance.get("engine")
+                if engine == "pyreason":
+                    graph = pyreason_trace_to_evidence_graph(
+                        pyreason_trace_from_dict(payload),
+                        candidate_id=candidate_id,
+                        candidate_payload=candidate_payload,
+                        support_kind=support_kind,
+                    )
+                elif engine == "problog":
+                    graph = problog_trace_to_evidence_graph(
+                        problog_trace_from_dict(payload),
+                        candidate_id=candidate_id,
+                        candidate_payload=candidate_payload,
+                        support_kind=support_kind,
+                    )
+                else:
+                    continue
+            else:
+                continue
+        except Exception:
+            continue
+
+        graphs[candidate_id] = evidence_graph_to_dict(graph)
+
+    return graphs
+
+
 def _accepted_candidate_provenance_rows(session: RuntimeSession) -> list[dict[str, Any]]:
+    return [
+        {
+            "candidate_id": row["candidate_id"],
+            "run_id": row["run_id"],
+            "accepted_args": row["accepted_args"],
+        }
+        for row in _accepted_candidate_claim_rows(session)
+    ]
+
+
+def _accepted_candidate_claim_rows(session: RuntimeSession) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    seen_candidate_ids: set[str] = set()
     for claim in sorted(session.store.ledger.claims, key=lambda item: item.asrt_id):
         candidate_id = _candidate_meta_str(session, claim.asrt_id, "candidate_id")
         run_id = _candidate_meta_str(session, claim.asrt_id, "run_id")
-        if candidate_id is None:
+        if candidate_id is None or candidate_id in seen_candidate_ids:
             continue
+        seen_candidate_ids.add(candidate_id)
         rows.append(
             {
                 "candidate_id": candidate_id,
                 "run_id": run_id,
                 "accepted_args": _claim_query_args(claim),
+                "claim": claim,
+                "support_digest": session.store.get_candidate_support_digest(candidate_id),
+                "support_kind": session.store.get_candidate_support_kind(candidate_id),
             }
         )
     return rows
@@ -1470,6 +1569,19 @@ def _claim_query_args(claim: Claim) -> list[str]:
     args = [claim.e_ref]
     args.extend(str(value) for _tag, value in claim.rest_terms)
     return args
+
+
+def _candidate_payload_from_claim(claim: Claim) -> dict[str, Any]:
+    terms: list[dict[str, Any]] = [{"kind": "entity_ref", "value": claim.e_ref}]
+    for tag, value in claim.rest_terms:
+        if tag == "entity_ref":
+            terms.append({"kind": "entity_ref", "value": str(value)})
+            continue
+        terms.append({"kind": "literal", "tag": tag, "value": value})
+    return {
+        "pred_id": claim.pred_id,
+        "terms": terms,
+    }
 
 
 def _candidate_binding_for_recipe(

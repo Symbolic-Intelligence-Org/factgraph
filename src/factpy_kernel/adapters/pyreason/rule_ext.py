@@ -28,26 +28,6 @@ class PyReasonRuleExt(EngineExtBase):
 
 
 @dataclass(frozen=True)
-class PyReasonRuleDef:
-    """Deprecated compatibility wrapper around ``Rule.engine_ext``.
-
-    Preferred:
-        ``Rule(..., engine_ext=PyReasonRuleExt(...))``
-
-    Kept for backward compatibility with adapter-local call sites.
-    """
-
-    rule: Rule
-    ext: PyReasonRuleExt = field(default_factory=PyReasonRuleExt)
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.rule, Rule):
-            raise ValueError("PyReasonRuleDef.rule must be a Rule instance")
-        if not isinstance(self.ext, PyReasonRuleExt):
-            raise ValueError("PyReasonRuleDef.ext must be a PyReasonRuleExt instance")
-
-
-@dataclass(frozen=True)
 class PyReasonFactDef:
     """Typed initial fact for PyReason reasoning."""
 
@@ -83,9 +63,9 @@ class PyReasonCompileError(Exception):
     """Raised when a WHERE atom cannot be compiled to PyReason syntax."""
 
 
-def compile_pyreason_rule(rule_or_def: Rule | PyReasonRuleDef) -> tuple[str, str]:
-    """Compile a Rule or compatibility wrapper to ``(pyreason_rule_str, rule_name)``."""
-    rule, ext = _resolve_rule_and_ext(rule_or_def)
+def compile_pyreason_rule(rule: Rule) -> tuple[str, str]:
+    """Compile a Rule to ``(pyreason_rule_str, rule_name)``."""
+    rule, ext = _resolve_rule_and_ext(rule)
 
     head = _compile_head(rule, head_bound=ext.head_bound)
     body = _compile_body(
@@ -96,29 +76,18 @@ def compile_pyreason_rule(rule_or_def: Rule | PyReasonRuleDef) -> tuple[str, str
     return (f"{head} <-{delay} {body}", rule.id)
 
 
-def _resolve_rule_and_ext(rule_or_def: Rule | PyReasonRuleDef) -> tuple[Rule, PyReasonRuleExt]:
-    if isinstance(rule_or_def, PyReasonRuleDef):
-        wrapper_ext = rule_or_def.ext
-        if wrapper_ext != PyReasonRuleExt():
-            return (rule_or_def.rule, wrapper_ext)
-        rule_ext = getattr(rule_or_def.rule, "engine_ext", None)
-        if isinstance(rule_ext, PyReasonRuleExt):
-            return (rule_or_def.rule, rule_ext)
-        return (rule_or_def.rule, wrapper_ext)
+def _resolve_rule_and_ext(rule: Rule) -> tuple[Rule, PyReasonRuleExt]:
+    if not isinstance(rule, Rule):
+        raise PyReasonCompileError(f"Expected Rule, got {type(rule).__name__}")
 
-    if not isinstance(rule_or_def, Rule):
-        raise PyReasonCompileError(
-            f"Expected Rule or PyReasonRuleDef, got {type(rule_or_def).__name__}"
-        )
-
-    rule_ext = getattr(rule_or_def, "engine_ext", None)
+    rule_ext = getattr(rule, "engine_ext", None)
     if rule_ext is None:
-        return (rule_or_def, PyReasonRuleExt())
+        return (rule, PyReasonRuleExt())
     if not isinstance(rule_ext, PyReasonRuleExt):
         raise PyReasonCompileError(
             f"Rule.engine_ext must be PyReasonRuleExt or None, got {type(rule_ext).__name__}"
         )
-    return (rule_or_def, rule_ext)
+    return (rule, rule_ext)
 
 
 def _compile_head(

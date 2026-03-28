@@ -23,7 +23,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-03-27
+最后更新：2026-03-28
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
@@ -136,6 +136,18 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-27 | pyreason-execution-surface-closeout | implemented | Closed the remaining `engine_ext` type-guard gap and formalized reusable post-accept PyReason annotation persistence |
 | 2026-03-27 | pyreason-real-engine-validation | implemented | L1 gate passed: root cause was stale numba cache (144 files), not version incompatibility. Full real-engine chain validated: evaluate (166.6s first JIT) → 2 CandidateSet → accept → 6 annotations persisted |
 | 2026-03-27 | engine-options-impl | implemented | Shared evaluate dispatch now accepts call-time `engine_options`; SDK keeps it out of authored payloads, native rejects non-empty options, and PyReason exposes `timesteps`-only runtime config with adapter-local validation |
-- 2026-03-27_annotation-consumer-migration-l2 — L2 annotation consumer: export + reader + index + static UI panel
+| 2026-03-27 | annotation-consumer-migration-l2 | implemented | Assertion annotation consumer lane: export + reader + query index + static UI panel |
 | 2026-03-27 | problog-semantic-annotation-parity-l4 | implemented | L4: ProbLog results write `problog/semantic/probability` annotations; enters unified audit/static consumer pipeline |
 | 2026-03-27 | multi-engine-semantic-delivery | implemented | Mother blueprint: all gates (1-3) closed, all direction lines (L1-L4) complete, engine_options future branch also done. 499 tests green |
+| 2026-03-28 | engine-provenance-surface-spike | implemented | Shared provenance envelope lane for PyReason/ProbLog runtime candidate explain; Store/runtime now records and reads back engine-native provenance carriers |
+| 2026-03-28 | problog-timeout-eval-surface | implemented | ProbLog eval split + runtime `engine_options.timeout` support + parser fix for tab-format CLI output |
+| 2026-03-28 | pyreason-graph-fact-materialization-fix | implemented | Real-engine fix: graph build becomes structure-only and node facts lower through explicit `add_fact(...)` registration |
+| 2026-03-28 | pyreason-node-edge-channel-split | implemented | PyReason runner now splits node facts and edge labels into different engine channels to match real propagation semantics |
+| 2026-03-28 | pyreason-threshold-aware-clause-bounds | implemented | Added `body_predicate_bounds` compile surface so bounded seeds can participate through explicit clause intervals |
+| 2026-03-28 | pyreason-static-head-bounds | implemented | Added static `head_bound` support for compiled PyReason rule heads |
+| 2026-03-28 | pyreason-seed-warning-and-demo-reframe | implemented | Narrowed bounded-seed warning to threshold semantics and reframed demo/docs around the real engine boundary |
+| 2026-03-28 | pyreason-annotation-gap-remediation | implemented | Closed annotation/design audit gaps around bounded materialization, revocation dual-write, accept validation, and static UI derivation display |
+| 2026-03-28 | rule-engine-ext-alignment | implemented | Shared `Rule.engine_ext` became the preferred PyReason rule carrier; adapter compilation/runner/tests/docs aligned to it |
+| 2026-03-28 | examples-sdk-schema-cleanup | implemented | Examples and notebooks refreshed to current SDK/schema usage and low-signal legacy scaffolding removed |
+| 2026-03-28 | evidence-graph-unified-explain | implemented | Unified `EvidenceGraph` DTO + converters + renderer + candidate-page integration landed across Souffle/PyReason/ProbLog |
+| 2026-03-28 | design-branch-closeout | implemented | Final branch closeout: durable `EvidenceGraph` audit delivery, `PyReasonRuleDef` removal, explicit deferred-backlog closure, and archive inventory sync |

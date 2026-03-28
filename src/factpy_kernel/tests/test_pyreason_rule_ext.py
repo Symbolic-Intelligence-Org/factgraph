@@ -10,7 +10,6 @@ from unittest.mock import patch
 from factpy_kernel.adapters.pyreason.rule_ext import (
     PyReasonCompileError,
     PyReasonFactDef,
-    PyReasonRuleDef,
     PyReasonRuleExt,
     compile_pyreason_rule,
 )
@@ -89,30 +88,6 @@ class RuleExtTests(unittest.TestCase):
         ext = PyReasonRuleExt(timestep_delay=1)
         with self.assertRaises(AttributeError):
             ext.timestep_delay = 2
-
-
-class RuleDefTests(unittest.TestCase):
-    def _rule(self) -> Rule:
-        return Rule(
-            id="test_rule",
-            version="1.0",
-            select=[Pred("user:popular", x)],
-            where=[Pred("user:popular", y)],
-        )
-
-    def test_wraps_rule(self) -> None:
-        rule = self._rule()
-        rule_def = PyReasonRuleDef(rule=rule, ext=PyReasonRuleExt(timestep_delay=1))
-        self.assertIs(rule_def.rule, rule)
-        self.assertEqual(rule_def.ext.timestep_delay, 1)
-
-    def test_default_ext(self) -> None:
-        rule_def = PyReasonRuleDef(rule=self._rule())
-        self.assertEqual(rule_def.ext.timestep_delay, 0)
-
-    def test_rejects_non_rule(self) -> None:
-        with self.assertRaises(ValueError):
-            PyReasonRuleDef(rule="not_a_rule")  # type: ignore[arg-type]
 
 
 class FactDefTests(unittest.TestCase):
@@ -273,30 +248,6 @@ class CompileRuleTests(unittest.TestCase):
         rule_str, _ = compile_pyreason_rule(rule)
         self.assertEqual(rule_str, "popular(x) <-0 popular(y)")
 
-    def test_compat_wrapper_with_default_ext_uses_rule_engine_ext(self) -> None:
-        rule = Rule(
-            id="friend_pop",
-            version="1.0",
-            select=[Pred("user:popular", x)],
-            where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
-            engine_ext=PyReasonRuleExt(timestep_delay=2, head_bound=(0.8, 0.9)),
-        )
-        rule_str, _ = compile_pyreason_rule(PyReasonRuleDef(rule=rule))
-        self.assertEqual(rule_str, "popular(x) : [0.8, 0.9] <-2 popular(y), strength(x, y)")
-
-    def test_compat_wrapper_ext_overrides_rule_engine_ext(self) -> None:
-        rule = Rule(
-            id="friend_pop",
-            version="1.0",
-            select=[Pred("user:popular", x)],
-            where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
-            engine_ext=PyReasonRuleExt(timestep_delay=2),
-        )
-        rule_str, _ = compile_pyreason_rule(
-            PyReasonRuleDef(rule=rule, ext=PyReasonRuleExt(timestep_delay=1))
-        )
-        self.assertEqual(rule_str, "popular(x) <-1 popular(y), strength(x, y)")
-
     def test_rejects_rule_with_wrong_engine_ext_type(self) -> None:
         class OtherExt(EngineExtBase):
             pass
@@ -377,34 +328,6 @@ class RunnerTypedDefTests(unittest.TestCase):
         )
         self.assertEqual(result.config.timesteps, 2)
         self.assertEqual(reset_calls, [None, None])
-
-    def test_run_pyreason_still_accepts_compat_wrapper_rule_defs(self) -> None:
-        session = PyReasonSession(_test_schema_ir())
-        fake_pyreason, added_rules, _, _, _ = self._fake_pyreason()
-
-        rule_def = PyReasonRuleDef(
-            rule=Rule(
-                id="friend_pop",
-                version="1.0",
-                select=[Pred("user:popular", x)],
-                where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
-            ),
-            ext=PyReasonRuleExt(timestep_delay=1, head_bound=(0.8, 0.9)),
-        )
-
-        with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                run_pyreason(
-                    session,
-                    rule_defs=[rule_def],
-                    config=PyReasonRunConfig(timesteps=2, atom_trace=False),
-                )
-
-        self.assertEqual(
-            added_rules,
-            [("rule", "popular(x) : [0.8, 0.9] <-1 popular(y), strength(x, y)", "friend_pop")],
-        )
 
     def test_run_pyreason_warns_for_bounded_node_seeds_with_rules(self) -> None:
         session = PyReasonSession(_test_schema_ir())

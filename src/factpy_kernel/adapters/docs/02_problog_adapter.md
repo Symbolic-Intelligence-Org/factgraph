@@ -89,6 +89,10 @@ EvidenceGraph 补充：
 - `problog_trace_to_evidence_graph(...)` 当前已实现 candidate-anchored tree converter：
   - 输入：`ProbLogTraceV0 + candidate_id + candidate_payload`
   - 输出：`EvidenceGraph(engine="problog", layout_hint="tree", support_kind="problog_provenance_v1")`
+- runtime export 当前会把 converter 结果物化到：
+  - `audit/evidence_graphs.jsonl`
+  - `AuditQuery.get_candidate_evidence_graph(...)`
+  - candidate static page unified `EvidenceGraph` section
 - converter 当前把 trace 归一化为 **call frame tree**，不是逐 event 平铺：
   - 一个 `call goal(...)` frame 变成一个 `EvidenceNode`
   - `result / complete / fail` 留在该 node 的 `engine_meta`

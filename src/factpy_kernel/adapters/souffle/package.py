@@ -75,6 +75,7 @@ def export_package(
     certainty_summaries: dict[str, dict[str, Any]] | None = None,
     provenance_trees: dict[str, dict[str, Any]] | None = None,
     provenance_statuses: dict[str, dict[str, Any]] | None = None,
+    evidence_graphs: dict[str, dict[str, Any]] | None = None,
 ) -> Path:
     if not isinstance(store, Store):
         raise TypeError("store must be Store")
@@ -86,6 +87,8 @@ def export_package(
         raise TypeError("provenance_trees must be dict[str, dict] | None")
     if provenance_statuses is not None and not isinstance(provenance_statuses, dict):
         raise TypeError("provenance_statuses must be dict[str, dict] | None")
+    if evidence_graphs is not None and not isinstance(evidence_graphs, dict):
+        raise TypeError("evidence_graphs must be dict[str, dict] | None")
 
     package_dir = Path(out_dir)
     schema_dir = package_dir / "schema"
@@ -232,6 +235,14 @@ def export_package(
             provenance_status_path = audit_dir / "provenance_statuses.jsonl"
             _write_jsonl(provenance_status_path, provenance_status_rows)
             audit_files["provenance_statuses"] = "audit/provenance_statuses.jsonl"
+        if evidence_graphs:
+            evidence_graph_rows = [
+                {"candidate_id": candidate_id, "evidence_graph": graph}
+                for candidate_id, graph in sorted(evidence_graphs.items())
+            ]
+            evidence_graph_path = audit_dir / "evidence_graphs.jsonl"
+            _write_jsonl(evidence_graph_path, evidence_graph_rows)
+            audit_files["evidence_graphs"] = "audit/evidence_graphs.jsonl"
         annotation_rows_list = store.ledger.annotation_rows
         if annotation_rows_list:
             annotation_export_rows = [

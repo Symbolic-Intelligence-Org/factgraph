@@ -137,6 +137,27 @@ def souffle_proof_tree_to_evidence_graph(
     )
 
 
+def souffle_proof_tree_from_dict(row: dict[str, Any]) -> SouffleProofTreeV0:
+    """Reconstruct ``SouffleProofTreeV0`` from an audit-package dict."""
+    if not isinstance(row, dict):
+        raise ValueError("row must be dict")
+    root = row.get("root")
+    if not isinstance(root, dict):
+        raise ValueError("row.root must be dict")
+    raw_rules = row.get("rules", {})
+    if not isinstance(raw_rules, dict):
+        raise ValueError("row.rules must be dict")
+    return SouffleProofTreeV0(
+        query=str(row.get("query", "")),
+        root=_souffle_proof_node_from_dict(root),
+        rules={
+            str(key): str(value)
+            for key, value in raw_rules.items()
+            if isinstance(key, str) and key and isinstance(value, str)
+        },
+    )
+
+
 def parse_souffle_proof_json(json_text: str) -> list[SouffleProofTreeV0]:
     payloads = _decode_json_values(json_text)
     trees: list[SouffleProofTreeV0] = []
@@ -407,6 +428,29 @@ def _proof_node_component_and_value(node: SouffleProofNodeV0) -> tuple[str, str]
     return (component, ", ".join(node.args[1:]))
 
 
+def _souffle_proof_node_from_dict(row: dict[str, Any]) -> SouffleProofNodeV0:
+    if not isinstance(row, dict):
+        raise ValueError("proof node row must be dict")
+    args = row.get("args")
+    children = row.get("children")
+    if not isinstance(args, list):
+        raise ValueError("proof node args must be list")
+    if not isinstance(children, list):
+        raise ValueError("proof node children must be list")
+    rule_number = row.get("rule_number")
+    return SouffleProofNodeV0(
+        node_type=str(row.get("node_type", "unknown")),
+        relation=str(row.get("relation", "?")),
+        args=tuple(str(arg) for arg in args),
+        rule_number=rule_number if isinstance(rule_number, str) else None,
+        children=tuple(
+            _souffle_proof_node_from_dict(child)
+            for child in children
+            if isinstance(child, dict)
+        ),
+    )
+
+
 def _decode_json_values(json_text: str) -> list[Any]:
     decoder = json.JSONDecoder()
     values: list[Any] = []
@@ -435,5 +479,6 @@ __all__ = [
     "parse_souffle_proof_json",
     "run_provenance_explain",
     "run_package_provenance",
+    "souffle_proof_tree_from_dict",
     "souffle_proof_tree_to_evidence_graph",
 ]

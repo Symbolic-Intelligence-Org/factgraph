@@ -87,6 +87,32 @@ def pyreason_trace_to_dict(trace: PyReasonTraceV0) -> dict[str, Any]:
     }
 
 
+def pyreason_trace_from_dict(row: Mapping[str, Any]) -> PyReasonTraceV0:
+    """Reconstruct ``PyReasonTraceV0`` from a JSON-friendly dict."""
+    if not isinstance(row, Mapping):
+        raise ValueError("row must be Mapping[str, Any]")
+    if row.get("engine") != "pyreason":
+        raise ValueError("row.engine must be 'pyreason'")
+    if row.get("trace_type") != "event_log":
+        raise ValueError("row.trace_type must be 'event_log'")
+
+    timesteps = row.get("timesteps")
+    if isinstance(timesteps, bool) or not isinstance(timesteps, int):
+        raise ValueError("row.timesteps must be int")
+    raw_node_events = row.get("node_events")
+    raw_edge_events = row.get("edge_events")
+    if not isinstance(raw_node_events, list):
+        raise ValueError("row.node_events must be list")
+    if not isinstance(raw_edge_events, list):
+        raise ValueError("row.edge_events must be list")
+
+    return PyReasonTraceV0(
+        timesteps=timesteps,
+        node_events=tuple(_event_from_dict(event) for event in raw_node_events),
+        edge_events=tuple(_event_from_dict(event) for event in raw_edge_events),
+    )
+
+
 def pyreason_trace_to_evidence_graph(
     trace: PyReasonTraceV0,
     *,
@@ -294,6 +320,25 @@ def _event_to_dict(event: PyReasonTraceEventV0) -> dict[str, Any]:
     }
 
 
+def _event_from_dict(row: Any) -> PyReasonTraceEventV0:
+    if not isinstance(row, Mapping):
+        raise ValueError("trace event row must be Mapping[str, Any]")
+    clause_groundings = row.get("clause_groundings")
+    if not isinstance(clause_groundings, list):
+        raise ValueError("trace event clause_groundings must be list")
+    return PyReasonTraceEventV0(
+        time=int(row.get("time", 0)),
+        fixpoint_op=int(row.get("fixpoint_op", 0)),
+        component=str(row.get("component", "?")),
+        component_type=str(row.get("component_type", "?")),
+        label=str(row.get("label", "?")),
+        old_bound=_parse_bound(row.get("old_bound", [0.0, 1.0])),
+        new_bound=_parse_bound(row.get("new_bound", [0.0, 1.0])),
+        occurred_due_to=str(row.get("occurred_due_to", "?")),
+        clause_groundings=tuple(str(item) for item in clause_groundings),
+    )
+
+
 def _resolve_candidate_anchor(candidate_payload: Mapping[str, Any]) -> tuple[str, str, str]:
     pred_id = candidate_payload.get("pred_id")
     if not isinstance(pred_id, str) or not pred_id:
@@ -357,6 +402,7 @@ __all__ = [
     "PyReasonTraceEventV0",
     "PyReasonTraceV0",
     "parse_pyreason_trace",
+    "pyreason_trace_from_dict",
     "pyreason_trace_to_dict",
     "pyreason_trace_to_evidence_graph",
 ]

@@ -2,7 +2,7 @@
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
 - 最后更新：2026-03-28
-- 状态：execution-surface V1（engine_options: timesteps）+ bounded materialization L3b + runtime provenance explain spike + EvidenceGraph converter Step 2
+- 状态：execution-surface V1（engine_options: timesteps）+ bounded materialization L3b + runtime provenance explain + EvidenceGraph audit/static delivery
 
 ## 1. 概述
 
@@ -25,9 +25,9 @@ PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上�
 |------|------|
 | `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` / `pyreason_trace_to_evidence_graph` |
 | `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 batch API / bound / active_from / active_to / annotation templates |
-| `rule_ext.py` | `PyReasonRuleExt` / `PyReasonRuleDef`（兼容 wrapper） / `PyReasonFactDef` / `compile_pyreason_rule(...)` |
+| `rule_ext.py` | `PyReasonRuleExt` / `PyReasonFactDef` / `compile_pyreason_rule(...)` |
 | `where_compile.py` | `compile_where_ir_to_pyreason(...)` — lowered WhereIR → PyReason rule syntax（execution surface compiler） |
-| `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult`；接受 legacy tuple 或 typed defs |
+| `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult`；接受 legacy tuple 与 shared `Rule` / typed `PyReasonFactDef` |
 | `engine_eval.py` | `pyreason_engine_eval(...)` / `_materialize_edb_session(...)` — shared evaluate dispatch 入口，输出 `CandidateSet` 并缓存 pending annotations |
 | `accept.py` | `accept_pyreason_session(...)` + `persist_pyreason_annotations(...)` — adapter-local accept helper and shared-surface post-accept annotation binder |
 | `__init__.py` | import 时注册 `register_engine_evaluator(pyreason_engine_eval, "pyreason")` |
@@ -192,11 +192,11 @@ result = run_pyreason(
 
 ### 5B.2 Runner 边界
 
-- `run_pyreason(...)` 同时接受 legacy tuple 形式的 `rules` / `facts`，以及 typed `rule_defs` / `fact_defs`
+- `run_pyreason(...)` 同时接受 legacy tuple 形式的 `rules` / `facts`，以及 shared `Rule` `rule_defs` / typed `fact_defs`
 - `PyReasonFactDef.bound` 是 typed initial fact 的显式区间入口；runner 会把它编码为 `pred(node) : [lo, hi]` 形式的 fact text 再传给底层 PyReason。未显式提供时默认 `(1.0, 1.0)`。
 - `PyReasonRuleExt` 除了 `timestep_delay` 之外，还支持 `body_predicate_bounds={pred_id: (lo, hi)}` 与 `head_bound=(lo, hi)`。前者会把 body atom 编译成 `popular(y) : [0.5, 1.0]` 这类显式 clause interval；后者会把 head 编译成 `popular(x) : [0.8, 0.9] <-1 ...` 这类静态 head annotation。
 - 当存在 rule、initial **node** seed 使用非 `[1.0, 1.0]` bound，且 rule body 没有显式 clause interval 时，runner 会发出 `UserWarning`。warning 指向的是 **PyReason 的默认 body threshold 语义**，不是“bounded seed 永远不能参与匹配”。
-- 优先路径是 shared `Rule(..., engine_ext=PyReasonRuleExt(...))`；`PyReasonRuleDef` 只保留为兼容 wrapper，供旧的 adapter-local call site 过渡
+- `Rule(..., engine_ext=PyReasonRuleExt(...))` 现在是唯一的 rule-definition 入口；`compile_pyreason_rule(...)` 与 `run_pyreason(..., rule_defs=[...])` 都直接消费 shared `Rule`
 - `compile_pyreason_rule(...)` 当前只支持 `PredAtom` + `LogicVar` + 字面量；`CompareExpr` / `NotExpr` / `RuleRefAtom` 会报明确错误
 - `run_pyreason(...)` 本身仍是底层 helper；`Store.evaluate(mode="pyreason")` 通过 `engine_eval.py` 在外层完成 WHERE→PyReason 编译和 CandidateSet 组装
 - `derived_session` 可以直接接到 `accept_pyreason_session(...)`
@@ -334,6 +334,10 @@ v0 / v1 约束：
   - `candidate_payload`（当前消费 `pred_id + terms`）
 - 输出：
   - `EvidenceGraph(engine="pyreason", layout_hint="timeline", support_kind="pyreason_provenance_v1")`
+- runtime export 现在会把该 graph 物化到 audit package：
+  - `audit/evidence_graphs.jsonl`
+  - `AuditQuery.get_candidate_evidence_graph(...)`
+  - candidate static page unified `EvidenceGraph` section
 
 当前映射规则：
 

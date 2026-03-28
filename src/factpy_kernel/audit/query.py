@@ -14,6 +14,7 @@ from factpy_kernel.core.store._candidate_evidence_tree_summary import (
     summarize_candidate_evidence_tree_dict,
 )
 from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS, _WITNESS_BEARING_SUPPORT_KINDS
+from factpy_kernel.core.store._support import _PROVENANCE_BEARING_SUPPORT_KINDS
 from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
 from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
 
@@ -97,7 +98,7 @@ class AuditQuery:
         support_digest = next(iter(support_digests))
         support_kind = next(iter(support_kinds))
         if support_kind not in _WITNESS_BEARING_SUPPORT_KINDS:
-            if support_kind in _DEGRADED_SUPPORT_KINDS:
+            if support_kind in _DEGRADED_SUPPORT_KINDS or support_kind in _PROVENANCE_BEARING_SUPPORT_KINDS:
                 return build_degraded_candidate_evidence_tree(
                     candidate_id=candidate_id,
                     support_digest=support_digest,
@@ -162,6 +163,11 @@ class AuditQuery:
         if not isinstance(candidate_id, str) or not candidate_id:
             raise AuditQueryError("candidate_id must be non-empty string")
         return self.package.provenance_statuses.get(candidate_id)
+
+    def get_candidate_evidence_graph(self, candidate_id: str):
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise AuditQueryError("candidate_id must be non-empty string")
+        return self.package.evidence_graphs.get(candidate_id)
 
     def list_candidates_with_provenance(self) -> list[dict[str, Any]]:
         """Return unique candidate rows that have materialized provenance trees."""

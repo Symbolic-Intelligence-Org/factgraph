@@ -164,6 +164,25 @@ def problog_trace_to_dict(trace: ProbLogTraceV0) -> dict[str, Any]:
     }
 
 
+def problog_trace_from_dict(row: Mapping[str, Any]) -> ProbLogTraceV0:
+    if not isinstance(row, Mapping):
+        raise ValueError("row must be Mapping[str, Any]")
+    if row.get("engine") != "problog":
+        raise ValueError("row.engine must be 'problog'")
+    if row.get("trace_type") != "proof_trace":
+        raise ValueError("row.trace_type must be 'proof_trace'")
+    raw_events = row.get("events")
+    raw_answers = row.get("answers")
+    if not isinstance(raw_events, list):
+        raise ValueError("row.events must be list")
+    if not isinstance(raw_answers, list):
+        raise ValueError("row.answers must be list")
+    return ProbLogTraceV0(
+        events=tuple(_trace_event_from_dict(event) for event in raw_events),
+        answers=tuple(_answer_from_dict(answer) for answer in raw_answers),
+    )
+
+
 def problog_trace_to_evidence_graph(
     trace: ProbLogTraceV0,
     *,
@@ -281,6 +300,42 @@ def _normalize_depth(indent: str) -> int:
     if not indent:
         return 0
     return max(0, len(indent) - 1)
+
+
+def _trace_event_from_dict(row: Any) -> ProbLogTraceEventV0:
+    if not isinstance(row, Mapping):
+        raise ValueError("trace event row must be Mapping[str, Any]")
+    result_terms = row.get("result_terms", [])
+    if not isinstance(result_terms, list):
+        raise ValueError("trace event result_terms must be list")
+    elapsed_seconds = row.get("elapsed_seconds")
+    if elapsed_seconds is not None:
+        elapsed_seconds = float(elapsed_seconds)
+    location = row.get("location")
+    if location is not None:
+        location = str(location)
+    bindings_text = row.get("bindings_text")
+    if bindings_text is not None:
+        bindings_text = str(bindings_text)
+    return ProbLogTraceEventV0(
+        depth=int(row.get("depth", 0)),
+        event_type=str(row.get("event_type", "")),
+        goal=str(row.get("goal", "")),
+        started_seconds=float(row.get("started_seconds", 0.0)),
+        elapsed_seconds=elapsed_seconds,
+        location=location,
+        result_terms=tuple(str(item) for item in result_terms),
+        bindings_text=bindings_text,
+    )
+
+
+def _answer_from_dict(row: Any) -> ProbLogAnswerV0:
+    if not isinstance(row, Mapping):
+        raise ValueError("answer row must be Mapping[str, Any]")
+    return ProbLogAnswerV0(
+        query=str(row.get("query", "")),
+        probability=float(row.get("probability", 0.0)),
+    )
 
 
 def _normalize_location(raw: str) -> str | None:
@@ -597,6 +652,7 @@ __all__ = [
     "ProbLogTraceEventV0",
     "ProbLogTraceV0",
     "parse_problog_trace",
+    "problog_trace_from_dict",
     "problog_trace_to_evidence_graph",
     "problog_trace_to_dict",
 ]

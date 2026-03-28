@@ -102,6 +102,69 @@ def render_evidence_graph_html(graph: EvidenceGraph) -> str:
     raise ValueError(f"unsupported layout_hint: {graph.layout_hint}")
 
 
+def evidence_graph_to_dict(graph: EvidenceGraph) -> dict[str, Any]:
+    """Serialize an ``EvidenceGraph`` to a JSON-friendly dict."""
+    if not isinstance(graph, EvidenceGraph):
+        raise ValueError("graph must be EvidenceGraph")
+    return {
+        "graph_id": graph.graph_id,
+        "engine": graph.engine,
+        "root_node_id": graph.root_node_id,
+        "nodes": [
+            {
+                "node_id": node.node_id,
+                "node_kind": node.node_kind,
+                "component": node.component,
+                "label": node.label,
+                "value_summary": node.value_summary,
+                "timestamp": node.timestamp,
+                "engine_meta": _to_jsonable(node.engine_meta),
+            }
+            for node in graph.nodes
+        ],
+        "edges": [
+            {
+                "edge_id": edge.edge_id,
+                "from_node_id": edge.from_node_id,
+                "to_node_id": edge.to_node_id,
+                "edge_kind": edge.edge_kind,
+                "rule_label": edge.rule_label,
+                "engine_meta": _to_jsonable(edge.engine_meta),
+            }
+            for edge in graph.edges
+        ],
+        "support_kind": graph.support_kind,
+        "layout_hint": graph.layout_hint,
+        "metadata": _to_jsonable(graph.metadata),
+    }
+
+
+def evidence_graph_from_dict(row: Mapping[str, Any]) -> EvidenceGraph:
+    """Reconstruct an ``EvidenceGraph`` from a JSON-friendly dict."""
+    if not isinstance(row, Mapping):
+        raise ValueError("row must be Mapping[str, Any]")
+    raw_nodes = row.get("nodes")
+    raw_edges = row.get("edges")
+    if not isinstance(raw_nodes, list):
+        raise ValueError("row.nodes must be list")
+    if not isinstance(raw_edges, list):
+        raise ValueError("row.edges must be list")
+    metadata = row.get("metadata", {})
+    if not isinstance(metadata, Mapping):
+        raise ValueError("row.metadata must be Mapping[str, Any]")
+
+    return EvidenceGraph(
+        graph_id=_require_non_empty_str(row.get("graph_id"), "row.graph_id"),
+        engine=_require_non_empty_str(row.get("engine"), "row.engine"),
+        root_node_id=_require_non_empty_str(row.get("root_node_id"), "row.root_node_id"),
+        nodes=tuple(_evidence_node_from_dict(node_row) for node_row in raw_nodes),
+        edges=tuple(_evidence_edge_from_dict(edge_row) for edge_row in raw_edges),
+        support_kind=_require_non_empty_str(row.get("support_kind"), "row.support_kind"),
+        layout_hint=_require_non_empty_str(row.get("layout_hint"), "row.layout_hint"),
+        metadata=_from_jsonable(metadata),
+    )
+
+
 def _render_tree_layout(graph: EvidenceGraph) -> str:
     node_by_id = {node.node_id: node for node in graph.nodes}
     incoming_edges: dict[str, list[EvidenceEdge]] = {node.node_id: [] for node in graph.nodes}
@@ -411,6 +474,69 @@ def _node_kind_order(node_kind: str) -> int:
     return 2
 
 
+def _evidence_node_from_dict(row: Any) -> EvidenceNode:
+    if not isinstance(row, Mapping):
+        raise ValueError("node row must be Mapping[str, Any]")
+    engine_meta = row.get("engine_meta", {})
+    if not isinstance(engine_meta, Mapping):
+        raise ValueError("node.engine_meta must be Mapping[str, Any]")
+    timestamp = row.get("timestamp")
+    if timestamp is not None and (isinstance(timestamp, bool) or not isinstance(timestamp, int)):
+        raise ValueError("node.timestamp must be int | None")
+    return EvidenceNode(
+        node_id=_require_non_empty_str(row.get("node_id"), "node.node_id"),
+        node_kind=_require_non_empty_str(row.get("node_kind"), "node.node_kind"),
+        component=_require_non_empty_str(row.get("component"), "node.component"),
+        label=_require_non_empty_str(row.get("label"), "node.label"),
+        value_summary=_require_non_empty_str(row.get("value_summary"), "node.value_summary"),
+        timestamp=timestamp,
+        engine_meta=_from_jsonable(engine_meta),
+    )
+
+
+def _evidence_edge_from_dict(row: Any) -> EvidenceEdge:
+    if not isinstance(row, Mapping):
+        raise ValueError("edge row must be Mapping[str, Any]")
+    engine_meta = row.get("engine_meta", {})
+    if not isinstance(engine_meta, Mapping):
+        raise ValueError("edge.engine_meta must be Mapping[str, Any]")
+    rule_label = row.get("rule_label")
+    if rule_label is not None and not isinstance(rule_label, str):
+        raise ValueError("edge.rule_label must be str | None")
+    return EvidenceEdge(
+        edge_id=_require_non_empty_str(row.get("edge_id"), "edge.edge_id"),
+        from_node_id=_require_non_empty_str(row.get("from_node_id"), "edge.from_node_id"),
+        to_node_id=_require_non_empty_str(row.get("to_node_id"), "edge.to_node_id"),
+        edge_kind=_require_non_empty_str(row.get("edge_kind"), "edge.edge_kind"),
+        rule_label=rule_label,
+        engine_meta=_from_jsonable(engine_meta),
+    )
+
+
+def _require_non_empty_str(value: Any, path: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{path} must be non-empty string")
+    return value
+
+
+def _to_jsonable(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _to_jsonable(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, list):
+        return [_to_jsonable(item) for item in value]
+    return value
+
+
+def _from_jsonable(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _from_jsonable(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return tuple(_from_jsonable(item) for item in value)
+    return value
+
+
 __all__ = [
     "LAYOUT_TREE",
     "LAYOUT_TIMELINE",
@@ -423,5 +549,7 @@ __all__ = [
     "EvidenceNode",
     "EvidenceEdge",
     "EvidenceGraph",
+    "evidence_graph_to_dict",
+    "evidence_graph_from_dict",
     "render_evidence_graph_html",
 ]

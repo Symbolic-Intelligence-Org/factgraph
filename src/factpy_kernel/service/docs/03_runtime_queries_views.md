@@ -960,7 +960,7 @@
     - `pyreason`：`support_kind="pyreason_provenance_v1"`
     - `problog`：`support_kind="problog_provenance_v1"`
     - 统一 `explain_ref(kind="candidate")` 可返回 engine-native `ProvenanceEnvelope`
-    - tree/summary/narrative/NL/HTML surface 当前不支持这两类 support kind
+    - runtime tree/summary/narrative/NL surface 当前不支持这两类 support kind
   - degraded
     - `support_kind="engine_no_witness_v1"`
     - 这表示 candidate 本身有效，但当前 engine path 不产出可解引用的 witness artifact
@@ -968,7 +968,11 @@
 - audit/static 现在也接受 `souffle_witness_v1`：
   - `AuditQuery.get_candidate_evidence_tree(...)` 与 DTO/static 页面继续复用既有 witness-bearing tree shape
   - 不新增专用 engine DTO 或 static 分支
-- `pyreason_provenance_v1` / `problog_provenance_v1` 当前只承诺 runtime live explain；audit/static candidate tree surface 仍未接入
+- `pyreason_provenance_v1` / `problog_provenance_v1` 现在有第二条离线交付链：
+  - runtime export 会物化 `audit/evidence_graphs.jsonl`
+  - `AuditQuery.get_candidate_evidence_graph(...)` 可直接读取 durable `EvidenceGraph`
+  - candidate static page 会在 degraded tree 之外追加统一 `EvidenceGraph` section
+  - 这仍不等于 runtime live tree/summary/narrative/NL 支持
 - legacy `support_kind="none"` 只作为兼容读回值保留；新 writer 不再产生它。
 - `limit` 只影响返回条数，不改变底层总候选数；总量体现在 `meta.candidate_count`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。
@@ -1513,11 +1517,13 @@
   - `audit/certainty_summaries.jsonl`（可选 — 当 session 有 `registry_root` 且 candidate certainty 可派生时写入）
   - `audit/provenance_trees.jsonl`（可选 — 当 accepted candidate 仍可通过当前 session 的 `run_id`-keyed derivation recipe replay 成 query-bearing Souffle package，并能匹配到具体 output row 时写入）
   - `audit/provenance_statuses.jsonl`（可选 — 当 `package_kind="audit"` 时与 provenance materialization 同步写入，按 candidate 记录 `present | missing_recipe | export_failed | no_matching_row | explain_failed` 等状态）
+  - `audit/evidence_graphs.jsonl`（可选 — 当 accepted candidate 的 engine provenance / proof tree 可在 export-time 确定性转换为 `EvidenceGraph` 时写入）
   前两个文件分别导出 `SupportArtifact` 与 `RuleTraceArtifact` 的 flat JSONL rows，用于离线 audit / explain 消费。
   `certainty_summaries.jsonl` 导出 export-time 预计算的 `certainty_summary` dict（每行 `{candidate_id, certainty_summary}`），因为 `condition_weights` 只在 registry filesystem 可用、离线 audit 无法 query-time 派生。
   routing 与 delivery 分开：candidate 必须先在 evaluate 时被标成 `confidence_kind="certainty"`，export 才会继续物化 certainty summary。
   `provenance_trees.jsonl` 导出 runtime export-time replay 的 Souffle proof tree dict（每行 `{candidate_id, provenance_tree}`）；缺少 recipe、query export 失败、Souffle explain 失败或无法匹配 output row 的 candidate 会被静默跳过，不影响整个 package export。
   `provenance_statuses.jsonl` 导出同一轮 replay 的 per-candidate status rows（含 `engine`、`truncated`、可选 `reason`）；它让离线 audit consumer 能区分“有 provenance”、“没有 provenance”以及“为什么没有”，而不是把所有缺失都折叠成静默空白。
+  `evidence_graphs.jsonl` 导出统一 explain DTO（每行 `{candidate_id, evidence_graph}`）；当前来源包括 Souffle proof tree replay、PyReason provenance envelope event log、以及 ProbLog provenance envelope proof trace。旧 package 没有这个文件时，static UI 仍会对 Souffle 保留基于 `provenance_trees.jsonl` 的 fallback。
 
 错误 kinds：
 

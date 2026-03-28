@@ -15,7 +15,6 @@ from factpy_kernel.adapters.pyreason.provenance import (
 )
 from factpy_kernel.adapters.pyreason.rule_ext import (
     PyReasonFactDef,
-    PyReasonRuleDef,
     compile_pyreason_rule,
 )
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
@@ -355,16 +354,12 @@ def run_pyreason(
     session: PyReasonSession,
     *,
     rules: list[tuple[str, str]] | None = None,
-    rule_defs: list[Rule | PyReasonRuleDef] | None = None,
+    rule_defs: list[Rule] | None = None,
     facts: list[tuple[str, str, int, int]] | None = None,
     fact_defs: list[PyReasonFactDef] | None = None,
     config: PyReasonRunConfig | None = None,
 ) -> PyReasonRunResult:
-    """Run PyReason reasoning on a populated session.
-
-    ``rule_defs`` accepts both shared ``Rule(..., engine_ext=PyReasonRuleExt(...))``
-    and the deprecated compatibility wrapper ``PyReasonRuleDef(rule, ext)``.
-    """
+    """Run PyReason reasoning on a populated session."""
     import pyreason as pr
 
     if config is None:

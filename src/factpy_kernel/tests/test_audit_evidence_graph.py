@@ -10,6 +10,8 @@ from factpy_kernel.audit import (
     EvidenceEdge,
     EvidenceGraph,
     EvidenceNode,
+    evidence_graph_from_dict,
+    evidence_graph_to_dict,
 )
 
 
@@ -152,6 +154,47 @@ class AuditEvidenceGraphTests(unittest.TestCase):
             graph.metadata["timesteps"] = 3  # type: ignore[index]
         with self.assertRaises(TypeError):
             graph.nodes[0].engine_meta["old_bound"] = [1, 1]  # type: ignore[index]
+
+    def test_graph_round_trips_through_json_friendly_dict(self) -> None:
+        graph = EvidenceGraph(
+            graph_id="eg:roundtrip",
+            engine="pyreason",
+            root_node_id="n:root",
+            nodes=(
+                EvidenceNode(
+                    node_id="n:root",
+                    node_kind=NODE_CONCLUSION,
+                    component="Alice",
+                    label="popular",
+                    value_summary="[0.8, 0.9]",
+                    engine_meta={"old_bound": (0.0, 0.0), "clause_groundings": ("seed",)},
+                ),
+                EvidenceNode(
+                    node_id="n:p1",
+                    node_kind=NODE_PREMISE,
+                    component="Alice",
+                    label="name",
+                    value_summary="Alice",
+                ),
+            ),
+            edges=(
+                EvidenceEdge(
+                    edge_id="e:1",
+                    from_node_id="n:p1",
+                    to_node_id="n:root",
+                    edge_kind=EDGE_SUPPORTS,
+                    engine_meta={"groundings": ("g1", "g2")},
+                ),
+            ),
+            support_kind="pyreason_provenance_v1",
+            metadata={"timesteps": 2, "anchor": ("Alice",)},
+        )
+
+        rebuilt = evidence_graph_from_dict(evidence_graph_to_dict(graph))
+
+        self.assertEqual(rebuilt, graph)
+        self.assertEqual(rebuilt.nodes[0].engine_meta["clause_groundings"], ("seed",))
+        self.assertEqual(rebuilt.metadata["anchor"], ("Alice",))
 
 
 if __name__ == "__main__":

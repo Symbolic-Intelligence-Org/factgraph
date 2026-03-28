@@ -187,5 +187,5 @@ Souffle 二进制查找顺序：
 - 当前不承诺 full native parity；Souffle first-round 只输出 partial witness，而不是完整 rule-chain / recursive proof
 - Souffle provenance helper 当前仍是 adapter-local V0：
   - 只验证 recursive chain / negation / rule-number capture
-  - 已可转换到 `audit.EvidenceGraph`，但还没有接入 runtime/audit/static 正式交付链
+  - 已可转换到 `audit.EvidenceGraph`，且 runtime export 现在会把统一 graph 写入 `audit/evidence_graphs.jsonl`
   - 不替代现有 `candidate_evidence_tree` / witness pipeline

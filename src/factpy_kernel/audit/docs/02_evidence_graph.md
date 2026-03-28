@@ -17,7 +17,6 @@
 它当前不负责：
 
 - 替代各引擎自己的 provenance carrier
-- 写入 audit package durable artifact
 - 替代 Souffle 现有 `CandidateEvidenceTree`
 - 替代 `static_ui.py` 的整页模板
 
@@ -103,20 +102,23 @@
 
 ## 6. 当前边界
 
-当前 `EvidenceGraph` 仍是内存内 DTO：
+当前 `EvidenceGraph` 已不再只是内存内 DTO：
 
-- 还没有进 `AuditQuery`
-- 还没有写入 audit package
-- 还没有接入 `static_ui.py` 的 candidate evidence page
-- Souffle converter 已在 `src/factpy_kernel/adapters/souffle/provenance.py` 实现，当前直接消费 `SouffleProofTreeV0` 并产出 tree graph；映射口径是 root=`conclusion`、`axiom`=`seed`、`derived/negation/subproof`=`premise`
-- PyReason converter 已在 `src/factpy_kernel/adapters/pyreason/provenance.py` 实现，但当前只产出 candidate-anchored timeline graph，不接 audit query / static UI
-- ProbLog converter 已在 `src/factpy_kernel/adapters/problog/provenance.py` 实现，但当前只产出 candidate-anchored call-frame tree，不接 audit query / static UI
+- `audit/evidence_graph.py` 现在提供：
+  - frozen dataclass DTO
+  - standalone HTML fragment renderer
+  - `evidence_graph_to_dict(...)` / `evidence_graph_from_dict(...)` round-trip helper
+- audit package 当前可选写出 `audit/evidence_graphs.jsonl`
+  - 每行 `{candidate_id, evidence_graph}`
+  - 当前由 runtime export 在 export-time materialize：
+    - `souffle`：从 `provenance_trees.jsonl` 的 proof tree 重建
+    - `pyreason`：从 `ProvenanceEnvelope.payload` 的 event log 转换
+    - `problog`：从 `ProvenanceEnvelope.payload` 的 proof trace 转换
+- `AuditQuery.get_candidate_evidence_graph(...)` 会读取 durable graph
+- `static_ui.py` 的 candidate evidence page 现在优先渲染 durable `EvidenceGraph`，并仅对旧 package 保留 Souffle provenance-tree fallback
 
-当前已确认的静态页插入 seam 是：
+当前仍保持的边界：
 
-- `src/factpy_kernel/audit/static_ui.py`
-  - `_render_candidate_evidence_page(...)` 内部的 `provenance_block`
-
-也就是说，Step 4 已冻结 renderer contract；Step 6 再把这个 fragment 接到 candidate evidence page。
-
-也就是说，当前实现已经冻结共享表示层与 standalone fragment renderer contract，但还没有冻结 page integration contract 或 package contract。
+- runtime live `explain-tree` / `explain-summary` / `explain-narrative` / `explain-nl` 仍不直接支持 `pyreason_provenance_v1` / `problog_provenance_v1`
+- `EvidenceGraph` 仍不替代 engine-native provenance carrier；durable package 只是写 converter 结果，不抹平 engine truth
+- candidate evidence page 仍保留既有 Souffle provenance tree section；`EvidenceGraph` 是新增统一 explain block，不替换旧 tree viewer

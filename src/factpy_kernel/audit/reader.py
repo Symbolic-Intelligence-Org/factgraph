@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .authoring_events import load_authoring_apply_events
+from .evidence_graph import EvidenceGraph, evidence_graph_from_dict
 
 
 class AuditReadError(Exception):
@@ -29,6 +30,7 @@ class AuditPackageData:
     certainty_summaries: dict[str, dict[str, Any]]
     provenance_trees: dict[str, dict[str, Any]]
     provenance_statuses: dict[str, dict[str, Any]]
+    evidence_graphs: dict[str, EvidenceGraph]
     assertion_annotations: list[dict[str, Any]]
 
 
@@ -66,6 +68,7 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
         certainty_summaries=_read_certainty_summaries(root, audit_files),
         provenance_trees=_read_provenance_trees(root, audit_files),
         provenance_statuses=_read_provenance_statuses(root, audit_files),
+        evidence_graphs=_read_evidence_graphs(root, audit_files),
         assertion_annotations=_read_optional_jsonl(root, audit_files, "assertion_annotations"),
     )
 
@@ -97,6 +100,7 @@ def _read_manifest_audit_files(manifest: dict[str, Any]) -> dict[str, str]:
         "certainty_summaries",
         "provenance_trees",
         "provenance_statuses",
+        "evidence_graphs",
         "assertion_annotations",
     ):
         value = audit_files.get(key)
@@ -165,6 +169,23 @@ def _read_provenance_statuses(root: Path, mapping: dict[str, str]) -> dict[str, 
         status_row = {key: value for key, value in row.items() if key != "candidate_id"}
         if status_row:
             result[candidate_id] = status_row
+    return result
+
+
+def _read_evidence_graphs(root: Path, mapping: dict[str, str]) -> dict[str, EvidenceGraph]:
+    rows = _read_optional_jsonl(root, mapping, "evidence_graphs")
+    result: dict[str, EvidenceGraph] = {}
+    for row in rows:
+        candidate_id = row.get("candidate_id")
+        evidence_graph = row.get("evidence_graph")
+        if not isinstance(candidate_id, str) or not candidate_id:
+            continue
+        if not isinstance(evidence_graph, dict):
+            continue
+        try:
+            result[candidate_id] = evidence_graph_from_dict(evidence_graph)
+        except ValueError as exc:
+            raise AuditReadError(f"invalid evidence_graph for candidate {candidate_id}: {exc}") from exc
     return result
 
 

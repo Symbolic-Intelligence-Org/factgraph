@@ -7,7 +7,7 @@
 - `src/factpy_kernel/audit/docs/01_overview.md`
   - audit 模块职责、公共入口、审计工作流、与 runtime/registry 的边界。
 - `src/factpy_kernel/audit/docs/02_evidence_graph.md`
-  - audit 层统一 explainability DTO 与 standalone renderer：`EvidenceGraph` 的角色、最小数据模型、冻结枚举、HTML fragment renderer 与当前边界。
+  - audit 层统一 explainability DTO 与 standalone renderer：`EvidenceGraph` 的角色、最小数据模型、JSON round-trip helper、`evidence_graphs.jsonl` package contract、HTML fragment renderer 与当前边界。
 
 ## 使用约定
 
