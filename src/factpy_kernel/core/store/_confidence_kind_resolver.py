@@ -46,7 +46,9 @@ def check_certainty_artifact_eligibility(
     if edge.child_support_digest is None:
         return None
     child = child_artifact_lookup(edge.child_support_digest)
-    if child is not None and len(child.rule_ref_edges) > 0:
+    if child is None:
+        return None
+    if len(child.rule_ref_edges) > 0:
         return None
     return edge
 

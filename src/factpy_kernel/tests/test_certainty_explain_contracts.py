@@ -17,7 +17,16 @@ from factpy_kernel.core.derivation.candidates import make_candidate
 from factpy_kernel.core.evidence.write_protocol import WriteProtocolError
 from factpy_kernel.core.store._candidate_evidence_tree_narrative import render_candidate_evidence_tree_narrative
 from factpy_kernel.core.store._candidate_evidence_tree_nl import render_candidate_evidence_tree_nl_explain
-from factpy_kernel.core.store._support import ENGINE_NO_WITNESS_KIND, compute_support_digest, support_artifact_from_dict
+from factpy_kernel.core.store._confidence_kind_resolver import check_certainty_artifact_eligibility
+from factpy_kernel.core.store._support import (
+    ENGINE_NO_WITNESS_KIND,
+    PredWitness,
+    RuleRefEdge,
+    SupportArtifact,
+    compute_support_digest,
+    normalize_binding_items,
+    support_artifact_from_dict,
+)
 from factpy_kernel.sdk import SDKStore
 from factpy_kernel.service._certainty_service import _lookup_condition_weights_for_candidate
 from factpy_kernel.service.runtime_v1 import (
@@ -2062,6 +2071,67 @@ class CertaintyExplainContractsTests(unittest.TestCase):
             finally:
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
+
+
+    # ── F-CORE-3: check_certainty_artifact_eligibility child guard ──────
+
+    def _make_minimal_artifact(
+        self,
+        rule_ref_edges: tuple[RuleRefEdge, ...] = (),
+    ) -> SupportArtifact:
+        return SupportArtifact(
+            kind="native_binding_v1",
+            root_result_kind="fact",
+            binding_items=normalize_binding_items({"$e": "e:test"}),
+            pred_witnesses=(
+                PredWitness(pred_atom_key="b0.a0:test:f", asrt_ids=("asrt-1",)),
+            ),
+            rule_ref_edges=rule_ref_edges,
+        )
+
+    def test_certainty_eligibility_missing_child_artifact(self) -> None:
+        """child_support_digest present but lookup returns None → ineligible."""
+        edge = RuleRefEdge(
+            ruleref_atom_key="b0.rr0:q.child",
+            rule_ref_id="q.child",
+            rule_ref_version="v1",
+            child_support_digest="sha256:" + "a" * 64,
+        )
+        parent = self._make_minimal_artifact(rule_ref_edges=(edge,))
+        result = check_certainty_artifact_eligibility(parent, lambda _: None)
+        self.assertIsNone(result)
+
+    def test_certainty_eligibility_leaf_child(self) -> None:
+        """child exists with no rule_ref_edges → eligible."""
+        edge = RuleRefEdge(
+            ruleref_atom_key="b0.rr0:q.child",
+            rule_ref_id="q.child",
+            rule_ref_version="v1",
+            child_support_digest="sha256:" + "b" * 64,
+        )
+        parent = self._make_minimal_artifact(rule_ref_edges=(edge,))
+        leaf_child = self._make_minimal_artifact(rule_ref_edges=())
+        result = check_certainty_artifact_eligibility(parent, lambda _: leaf_child)
+        self.assertIs(result, edge)
+
+    def test_certainty_eligibility_non_leaf_child(self) -> None:
+        """child exists with rule_ref_edges → ineligible."""
+        grandchild_edge = RuleRefEdge(
+            ruleref_atom_key="b0.rr0:q.grandchild",
+            rule_ref_id="q.grandchild",
+            rule_ref_version="v1",
+            child_support_digest="sha256:" + "c" * 64,
+        )
+        edge = RuleRefEdge(
+            ruleref_atom_key="b0.rr0:q.child",
+            rule_ref_id="q.child",
+            rule_ref_version="v1",
+            child_support_digest="sha256:" + "d" * 64,
+        )
+        parent = self._make_minimal_artifact(rule_ref_edges=(edge,))
+        non_leaf_child = self._make_minimal_artifact(rule_ref_edges=(grandchild_edge,))
+        result = check_certainty_artifact_eligibility(parent, lambda _: non_leaf_child)
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

@@ -537,13 +537,9 @@ plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 
 已修复：`_remember_candidate_support()` 在重注册路径中新增 digest 比对，同一 `candidate_id` + 不同 `support_digest` 会抛 `ValueError`，与 `_remember_support_artifact()` 和 `_remember_provenance_envelope()` 的 collision 模式一致。同一 `candidate_id` + 相同 `support_digest` 保持幂等。
 
-### F-CORE-3 `check_certainty_artifact_eligibility` 缺失 child artifact 通过检查（严重：中）
+### ~~F-CORE-3 `check_certainty_artifact_eligibility` 缺失 child artifact 通过检查（严重：中）~~ — RESOLVED
 
-当 `child_artifact_lookup()` 返回 `None`（child artifact 未加载或不存在）时，eligibility 检查仍然通过。原因是 line 49 的条件 `child is not None and len(child.rule_ref_edges) > 0`：child 为 `None` 时整个表达式为 `False`，不触发 reject。
-
-- 位置：`core/store/_confidence_kind_resolver.py:48-50`
-- 实验验证：`check_certainty_artifact_eligibility(artifact, lambda _: None)` 返回 `RuleRefEdge`，eligible=True
-- 影响：在 sidecar 未就绪或 artifact 延迟加载场景下，可能错误标记 `confidence_kind="certainty"`
+已修复：拆 compound condition `child is not None and len(child.rule_ref_edges) > 0` 为两个独立 guard。`child_artifact_lookup()` 返回 `None` 时，`check_certainty_artifact_eligibility()` 直接返回 `None`（ineligible），不再落到 `return edge`。
 
 ### F-CORE-4 Certainty 物化与 confidence_kind 路由的诊断盲区（严重：低）
 
