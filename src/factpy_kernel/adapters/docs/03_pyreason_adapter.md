@@ -1,7 +1,7 @@
 # PyReason Adapter（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/pyreason`
-- 最后更新：2026-03-28
+- 最后更新：2026-03-29
 - 状态：execution-surface V1（engine_options: timesteps）+ bounded materialization L3b + runtime provenance explain + EvidenceGraph audit/static delivery
 
 ## 1. 概述
@@ -201,6 +201,16 @@ result = run_pyreason(
 - `run_pyreason(...)` 本身仍是底层 helper；`Store.evaluate(mode="pyreason")` 通过 `engine_eval.py` 在外层完成 WHERE→PyReason 编译和 CandidateSet 组装
 - `derived_session` 可以直接接到 `accept_pyreason_session(...)`
 
+### 5B.3 Thread Safety
+
+`run_pyreason(...)` 在所有 PyReason 全局状态操作（`pr.reset()` 到最终 `pr.reset()`）期间持有模块级 `threading.Lock`（`_PYREASON_LOCK`）。因为 `import pyreason as pr` 是进程全局单例，lock 确保并发调用被串行化。
+
+清理合约：
+
+- `pr.reset()` 在 `finally` 块中执行，保证即使 `pr.reason()` 或任何中间调用抛出异常也能完成状态清理
+- `build_pyreason_graph()`（纯 NetworkX 操作）在 lock 之前执行
+- Lock 是不可重入的（`threading.Lock`，不是 `RLock`），重入调用意味着 bug
+
 ## 5C. Shared Execution Surface
 
 当前共享执行链路如下：
@@ -366,3 +376,44 @@ v0 / v1 约束：
 - 真实 execution-surface operator path 仍受外部 `pyreason` / `numba` / `llvmlite` 环境兼容性限制；当前本机组合 `numba==0.64.0`、`llvmlite==0.46.0` 未通过验证
 - `PyReasonTraceEventV0` 字段未冻结
 - `pyreason_trace_to_evidence_graph(...)` 当前只建立同一 fact/edge 的 `updates` 链；cross-fact causal edges deferred
+
+## 8. Known Issues（2026-03-29 walkthrough 确认）
+
+### ~~F-PR-1 PyReason 全局状态无线程安全保护（严重：高）~~ — RESOLVED
+
+已修复：`runner.py` 新增 `_PYREASON_LOCK = threading.Lock()` 并用 `with _PYREASON_LOCK:` + `try/finally` 包裹所有 `pr.*` 全局状态操作。详见 §5B.3。
+
+### F-PR-2 `_validate_bound` 不拒绝 bool（严重：中）
+
+`session._validate_bound()` 接受 `[True, True]` 并转为 `(1.0, 1.0)`，`[False, True]` 转为 `(0.0, 1.0)`。与 `rule_ext._validate_bound_pair()` 和 `write_protocol` 的 bool-guard 策略不一致。
+
+- 位置：`session.py:592-600`
+- 实验验证：`_validate_bound([True, True])` → `(1.0, 1.0)` 接受
+- 影响：类型错误被静默吞掉；与其他模块的 bool-guard 策略不一致
+
+### F-PR-3 `_resolve_shared_meta` confidence=0.0 不对称（严重：中）
+
+自动派生路径允许 `confidence=0.0`（bound `[0.0, x]` 的 lower_bound），但显式传入 `meta={"confidence": 0.0}` 被拒绝（`(0, 1]` 校验）。
+
+- 位置：`session.py:629` vs `session.py:634`
+- 实验验证：自动派生 `lower_bound=0.0` 写入 `confidence=0.0` 成功；显式 `confidence=0.0` 抛 ValueError
+- 影响：同一语义值在不同路径有不同接受行为
+
+### F-PR-4 `pred_id.split(":", 1)[1]` 假设 pred_id 含冒号（严重：低）
+
+`runner._extract_derived_facts()` 用 `pred_id.split(":", 1)[1]` 提取 field_name，假设所有 pred_id 包含 `:`。若 pred_id 不含 `:`，会抛 `IndexError`。
+
+- 位置：`runner.py:127, 132, 139`
+- 触发条件：非标准 schema_ir 的 pred_id 格式
+- 影响：当前所有 SDK 生成的 schema 都含 `:`，但未做防御性校验
+
+### F-PR-5 `persist_pyreason_annotations` 只用首条 asrt_id（严重：低）
+
+`accept.py:58` 取 `written[0]` 的 `asrt_id` 给所有 annotation templates 使用。多 fact candidate 场景下只有第一条 fact 的 annotation 正确绑定。
+
+- 位置：`accept.py:57-58`
+- 影响：当前使用场景均为单 fact derivation run，暂不触发
+
+### F-PR-6 辅助函数三处重复（严重：信息）
+
+`_pred_short_name` 在 `provenance.py`、`runner.py`、`where_compile.py` 有三份相同实现。`_parse_edge_component` 在 `provenance.py`、`runner.py` 有两份。属于 DRY 违背但无功能性风险。

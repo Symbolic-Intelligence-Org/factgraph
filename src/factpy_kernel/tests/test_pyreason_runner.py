@@ -1,14 +1,18 @@
 """Tests for PyReason runner helper."""
 from __future__ import annotations
 
+import threading
 import unittest
+from unittest.mock import MagicMock, patch
 
 from factpy_kernel.adapters.pyreason.runner import (
     PyReasonRunConfig,
     PyReasonRunResult,
+    _PYREASON_LOCK,
     _extract_derived_facts,
     _parse_edge_component,
     build_pyreason_graph,
+    run_pyreason,
 )
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
 
@@ -346,6 +350,69 @@ class RunResultShapeTests(unittest.TestCase):
         self.assertIsNone(result.trace)
         self.assertAlmostEqual(result.elapsed_seconds, 1.5)
         self.assertEqual(result.config.timesteps, 1)
+
+
+class LockAndCleanupTests(unittest.TestCase):
+    """Tests for F-PR-1: PyReason global state isolation and exception cleanup."""
+
+    def _make_mock_pr(self) -> MagicMock:
+        mock_pr = MagicMock()
+        mock_interp = MagicMock()
+        mock_interp.get_dict.return_value = {}
+        mock_pr.reason.return_value = mock_interp
+        mock_pr.get_rule_trace.return_value = (None, None)
+        return mock_pr
+
+    def _make_session(self) -> PyReasonSession:
+        session = PyReasonSession(_test_schema_ir())
+        session._write_node_fact_internal("user:name", "Alice", "Alice")
+        return session
+
+    def test_pyreason_lock_is_threading_lock(self) -> None:
+        self.assertIsInstance(_PYREASON_LOCK, type(threading.Lock()))
+
+    def test_lock_held_during_reason(self) -> None:
+        """Verify _PYREASON_LOCK is held while pr.reason() executes."""
+        lock_was_held: list[bool] = []
+        mock_pr = self._make_mock_pr()
+        mock_interp = MagicMock()
+        mock_interp.get_dict.return_value = {}
+
+        def reason_side_effect(**kwargs: object) -> MagicMock:
+            lock_was_held.append(_PYREASON_LOCK.locked())
+            return mock_interp
+
+        mock_pr.reason.side_effect = reason_side_effect
+
+        with patch.dict("sys.modules", {"pyreason": mock_pr}):
+            run_pyreason(self._make_session(), config=PyReasonRunConfig(atom_trace=False))
+
+        self.assertEqual(lock_was_held, [True])
+
+    def test_reset_called_on_exception(self) -> None:
+        """pr.reset() must be called in finally even when pr.reason() throws."""
+        mock_pr = self._make_mock_pr()
+        mock_pr.reason.side_effect = RuntimeError("engine failure")
+
+        with patch.dict("sys.modules", {"pyreason": mock_pr}):
+            with self.assertRaises(RuntimeError):
+                run_pyreason(self._make_session(), config=PyReasonRunConfig(atom_trace=False))
+
+        # pr.reset() should have been called twice:
+        # once before try (initial cleanup), once in finally (exception cleanup)
+        reset_calls = [c for c in mock_pr.method_calls if c[0] == "reset"]
+        self.assertEqual(len(reset_calls), 2)
+
+    def test_lock_released_after_exception(self) -> None:
+        """Lock must be released even when pr.reason() throws."""
+        mock_pr = self._make_mock_pr()
+        mock_pr.reason.side_effect = RuntimeError("engine failure")
+
+        with patch.dict("sys.modules", {"pyreason": mock_pr}):
+            with self.assertRaises(RuntimeError):
+                run_pyreason(self._make_session(), config=PyReasonRunConfig(atom_trace=False))
+
+        self.assertFalse(_PYREASON_LOCK.locked())
 
 
 if __name__ == "__main__":

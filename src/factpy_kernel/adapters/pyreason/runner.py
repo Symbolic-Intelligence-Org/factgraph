@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import struct
+import threading
 import time
 import warnings
 from dataclasses import dataclass
@@ -19,6 +20,8 @@ from factpy_kernel.adapters.pyreason.rule_ext import (
 )
 from factpy_kernel.adapters.pyreason.session import PyReasonSession
 from factpy_kernel.sdk.dsl.rule import Rule
+
+_PYREASON_LOCK = threading.Lock()
 
 
 @dataclass
@@ -394,27 +397,30 @@ def run_pyreason(
     start = time.monotonic()
 
     graph = build_pyreason_graph(session, schema_ir=session._schema_ir)
-    pr.reset()
-    pr.load_graph(graph)
+    with _PYREASON_LOCK:
+        pr.reset()
+        try:
+            pr.load_graph(graph)
 
-    for body_str, name_str in all_rules:
-        pr.add_rule(pr.Rule(body_str, name_str))
+            for body_str, name_str in all_rules:
+                pr.add_rule(pr.Rule(body_str, name_str))
 
-    for fact_text, name_str, start_time, end_time in all_facts:
-        pr.add_fact(pr.Fact(fact_text, name_str, start_time, end_time))
+            for fact_text, name_str, start_time, end_time in all_facts:
+                pr.add_fact(pr.Fact(fact_text, name_str, start_time, end_time))
 
-    pr.settings.atom_trace = config.atom_trace
-    interpretation = pr.reason(timesteps=config.timesteps)
+            pr.settings.atom_trace = config.atom_trace
+            interpretation = pr.reason(timesteps=config.timesteps)
 
-    trace: PyReasonTraceV0 | None = None
-    trace_dict: dict[str, Any] | None = None
-    if config.atom_trace:
-        nodes_trace, edges_trace = pr.get_rule_trace(interpretation)
-        trace = parse_pyreason_trace(nodes_trace, edges_trace, timesteps=config.timesteps)
-        trace_dict = pyreason_trace_to_dict(trace)
+            trace: PyReasonTraceV0 | None = None
+            trace_dict: dict[str, Any] | None = None
+            if config.atom_trace:
+                nodes_trace, edges_trace = pr.get_rule_trace(interpretation)
+                trace = parse_pyreason_trace(nodes_trace, edges_trace, timesteps=config.timesteps)
+                trace_dict = pyreason_trace_to_dict(trace)
 
-    derived_session = _extract_derived_facts(interpretation, session._schema_ir, session)
-    pr.reset()
+            derived_session = _extract_derived_facts(interpretation, session._schema_ir, session)
+        finally:
+            pr.reset()
 
     return PyReasonRunResult(
         interpretation=interpretation,
