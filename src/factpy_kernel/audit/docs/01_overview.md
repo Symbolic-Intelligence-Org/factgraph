@@ -42,8 +42,10 @@
   - 读取 authoring apply event 日志
 - `EvidenceGraph` / `EvidenceNode` / `EvidenceEdge`
   - audit 层统一 explainability DTO
-  - 当前已支持 standalone HTML fragment renderer：`render_evidence_graph_html(...)`
-  - 当前仍不接 package / query / static UI page wiring
+  - `render_evidence_graph_html(...)` standalone HTML fragment renderer
+  - `evidence_graphs.jsonl` export in audit package (Souffle/PyReason/ProbLog)
+  - `AuditQuery.get_candidate_evidence_graph()` query-layer access
+  - static candidate evidence page renders durable `EvidenceGraph` with Souffle fallback
 
 对应模块：
 

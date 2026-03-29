@@ -717,12 +717,12 @@ with vars("u", "lang") as (u, lang):
 **Supported scope**
 
 * Rule: supports `Body(...)`, currently only for where normalization; `body_confidences` do not participate in Rule runtime evaluation.
-* Derivation: supports `Body(...)`; after compilation, `body_confidences` are extracted into a sidecar for `mode="problog"`.
+* Derivation: supports `Body(...)`; after compilation, `body_confidences` are extracted and bridged to `ProbLogRuleExt(branch_probabilities=...)` via `engine_ext` before evaluation. The legacy `body_confidences` is no longer a shared evaluate parameter.
 * Query: `Body.confidence` is unsupported and causes an error at construction time.
 * `Body.confidence` belongs to the probabilistic reasoning lane and is not the same as requirement-threshold probability.
 
-`body_confidences` pass-through path:
-`SDK Derivation/authoring payload -> compile_authoring_derivation_v1 -> sdk.evaluate -> evaluate_store -> engine(problog)`.
+`body_confidences` bridge path (legacy compatibility):
+`SDK Derivation/authoring payload -> compile -> body_confidences extracted -> bridged to ProbLogRuleExt in sdk.evaluate -> engine_ext passed to engine(problog)`.
 
 ### 6.3.1 Example of `Body` Mode Differences
 

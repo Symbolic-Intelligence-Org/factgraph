@@ -9,7 +9,7 @@ Supersedes: zhenzhili-master-design-20260321-office-hours.md
 
 ## Problem Statement
 
-PyReason first landed as an adapter-local vertical slice (schema, session, runner, accept, ledger) that **bypassed core**. It used a parallel set of containers (PyReasonRuleDef, PyReasonSession, adapter-local AcceptResult), a parallel compilation path, and a parallel accept flow. The original problem statement in this rationale was that shared `Rule.engine_ext` had not yet been implemented and an adapter-local wrapper had been built instead.
+PyReason first landed as an adapter-local vertical slice (schema, session, runner, accept, ledger) that **bypassed core**. It originally used parallel containers (including a now-removed `PyReasonRuleDef` wrapper, `PyReasonSession`, adapter-local `AcceptResult`), a parallel compilation path, and a parallel accept flow. **Update**: `Rule.engine_ext` and `Derivation.engine_ext` are now implemented; `PyReasonRuleDef` has been removed.
 
 The result is two incompatible pipelines where users must learn different APIs depending on which engine they use. This contradicts the framework's core narrative: "users write rules and get results through one interface; engine-specific capabilities are handled by adapters behind that interface."
 
@@ -31,7 +31,7 @@ A framework where you can write `Rule(where=[...], engine_ext=PyReasonRuleExt(ti
 
 2. **"Unified interface, not unified implementation" is the correct principle.** Adapters can do wildly different things internally. The constraint is: inputs and outputs conform to shared types.
 
-3. **The current shadow pipeline is a design problem, not just an implementation gap.** It's not that we "haven't wired it up yet." We built structures (PyReasonRuleDef, adapter-local AcceptResult) that are inherently incompatible with the core pipeline.
+3. **The original shadow pipeline was a design problem, not just an implementation gap.** The parallel structures (including the now-removed `PyReasonRuleDef`) were inherently incompatible with the core pipeline. **This has been resolved**: all rule definition now goes through `Rule(engine_ext=...)`.
 
 4. **engine_ext belongs on shared Rule AND Derivation.** Rule is the definition/registry object; Derivation is the evaluation subject (`sdk.evaluate(Derivation(...))`). Both need engine_ext because:
    - Rule.engine_ext: carries engine-specific rule semantics (timestep_delay) for compilation
@@ -86,7 +86,7 @@ A framework where you can write `Rule(where=[...], engine_ext=PyReasonRuleExt(ti
 - Users still learn two integration patterns (even if types match)
 - `Store.evaluate(mode="pyreason")` still requires core changes (EvaluateMode gate)
 - Protocol enforcement is runtime-only, not compile-time
-- Adapter-local wrappers (PyReasonRuleDef) would still exist alongside Rule.engine_ext
+- ~~Adapter-local wrappers (PyReasonRuleDef) would still exist alongside Rule.engine_ext~~ — **resolved**: `PyReasonRuleDef` removed, `Rule.engine_ext` is the sole entry point
 
 ### Approach C: Deferred — Stabilize Adapter-Local First
 
@@ -158,7 +158,7 @@ The first closed loop was:
 - Derivation(where=[...], mode="pyreason", engine_ext=PyReasonRuleExt(...))
 - sdk.evaluate(derivation) → engine_ext extracted → pyreason_engine_eval()
 
-Current implementation now also supports `Rule.engine_ext` as the preferred definition-time carrier for adapter-local PyReason rule compilation, while `PyReasonRuleDef` remains compatibility-only.
+`Rule.engine_ext` is now the sole definition-time carrier for PyReason rule compilation. `PyReasonRuleDef` has been removed.
 
 ### F5: EDB materialization default bounds for non-PyReason facts
 
@@ -251,7 +251,7 @@ This is the inverse of `accept_pyreason_session()`. Exact implementation depends
 ## Open Questions
 
 1. **Should `engine_ext` also go on Query?** Decision blueprint said no for v0. Confirm.
-2. **What happens to existing `PyReasonRuleDef` tests and demo?** They need migration to `Rule(..., engine_ext=...)`.
+2. ~~**What happens to existing `PyReasonRuleDef` tests and demo?**~~ **Resolved**: `PyReasonRuleDef` removed; all tests/demos migrated to `Rule(..., engine_ext=...)`.
 3. **Does the adapter-local runner (`run_pyreason()`) survive?** Yes, as an internal implementation detail of `pyreason_engine_eval()`. It's no longer user-facing.
 
 ## Success Criteria
@@ -267,7 +267,7 @@ This is the inverse of `accept_pyreason_session()`. Exact implementation depends
 
 1. **Decision blueprint update:** Revise `2026-03-27_pyreason-execution-surface-v0-decision.md` to incorporate engine_ext on shared Rule as prerequisite
 2. **EngineExtBase + Rule.engine_ext:** Add field to frozen dataclass, define base class
-3. **PyReasonRuleDef deprecation:** Migrate tests/demo to use Rule.engine_ext directly
+3. ~~**PyReasonRuleDef deprecation:**~~ **Done**: removed in `fd8cbc1`
 4. **WhereIR compiler v0:** `where_compile.py` for lowered atoms
 5. **pyreason_engine_eval():** Register as engine evaluator, wrap existing runner
 6. **Post-accept annotation hook:** Wire annotation templates to generic accept flow

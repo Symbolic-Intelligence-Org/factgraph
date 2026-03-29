@@ -61,8 +61,8 @@
 2. 用 `resolve_problog_timeout(engine_options)` 归一化运行超时
 3. 用 `resolve_problog_engine_ext(...)` 归一化 definition-time 语义：
    - 接受显式 `ProbLogRuleExt(branch_probabilities=...)`
-   - 兼容 bridge 旧的 compiled `body_confidences`
-   - 两条 lane 同时存在且不一致时 fail fast
+   - legacy `body_confidences` is bridged upstream (in `sdk/store.py` and `service/runtime_v1.py`), not inside `evaluate_problog()` itself
+   - if both explicit `engine_ext` and legacy `body_confidences` are present and inconsistent, the bridge raises ValueError
 4. 组装 rule_spec（包含 `where/head/head_vars/query_vars/engine_ext`）
 5. `export_problog(...)` 生成临时 `query.pl`
 6. `run_problog(...)` 调用 ProbLog CLI

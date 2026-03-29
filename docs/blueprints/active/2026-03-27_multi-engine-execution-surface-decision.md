@@ -151,7 +151,7 @@ Adding `engine_ext: EngineExtBase | None = None` to frozen Derivation:
 - Complete WhereIR compiler (beyond pred atoms + literals)
 - Explain path / witness capture for PyReason
 - Query.engine_ext
-- Rule.engine_ext (deferred to v1 — D8)
+- ~~Rule.engine_ext (deferred to v1 — D8)~~ — **implemented** as of `c06390e`; Rule and Derivation both carry engine_ext
 - UI / audit consumer switch to pyreason/* annotations
 - Multi-engine execution abstraction generalization
 - Rule registry integration for PyReason rules

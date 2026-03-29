@@ -81,14 +81,35 @@ src/factpy_kernel/core/
 
 - `Claim`: primary assertion row (`asrt_id`, `pred_id`, `e_ref`, `rest_terms`)
 - `ClaimArg`: row-expanded arguments (`idx`, `val_atom`, `tag`)
-- `MetaRow`: metadata rows (`kind` in `str/int/float/bool/time/json`)
+- `MetaRow`: metadata rows (`kind` in `str/int/float/bool/time/json`) — **legacy compatibility layer**
+- `AnnotationRow`: assertion-level annotation (`asrt_id`, `namespace`, `category`, `key`, `kind`, `value`, `origin`, `derivation`) — **canonical annotation carrier** (new 2026-03-26)
 - `Revokes`: revocation edge (`revoker_asrt_id -> revoked_asrt_id`)
 - `AppendResult`: atomic write result (`asrt_id`, `written`)
 
-Persistence notes:
+### 4.1 Four-Layer Data Architecture (updated 2026-03-26)
 
-- SQLite tables are the truth: `claims/claim_args/meta_rows/revokes/ingest_keys/ledger_meta`
+The Ledger's persistence now corresponds to a four-layer data architecture (see [Assertion Annotation Store Decision](../../../docs/blueprints/active/2026-03-26_assertion-annotation-store-decision.md)):
+
+| Layer | SQLite Table | Responsibility |
+|-------|-------------|----------------|
+| **Claim Store** | `claims` + `claim_args` | The fact itself: pred_id + args |
+| **Annotation Store** | `annotation_rows` | All additional semantics: source, engine truth, derived summary, operational status |
+| **Legacy Compat** | `meta_rows` | Backward-compatible layer; new data is dual-written to both annotation_rows and meta_rows |
+| **Provenance Store** | audit package JSONL | Reasoning process (proof tree / event log) |
+
+`AnnotationRow` is organized by `namespace` + `category`:
+
+- `namespace`: `shared | pyreason | problog | souffle`
+- `category`: `source | semantic | derived | operational`
+- `origin`: `observed | derived`
+
+`meta_rows` is retained as a legacy compatibility layer. Legacy consumers continue to read `meta_rows`; new consumers should read `annotation_rows`.
+
+### 4.2 Persistence Notes
+
+- SQLite tables are the truth: `claims/claim_args/meta_rows/annotation_rows/revokes/ingest_keys/ledger_meta`
 - in-memory indexes are read caches: loaded at startup and maintained after commits
+- `annotation_rows` has a `UNIQUE(asrt_id, namespace, category, key)` constraint with upsert semantics
 - both `Ledger(path=":memory:")` and `Ledger(path="...")` are supported
 
 ## 5. Key Runtime Flows
@@ -98,10 +119,20 @@ Persistence notes:
 ```mermaid
 flowchart LR
   A["write_protocol.set_field/add_field"] --> B["Ledger.append_assertion"]
+  A --> A2["_annotation_rows_for_claim (shared whitelist)"]
+  A2 --> B
   C["write_protocol.retract_by_asrt"] --> D["Ledger.append_revocation"]
   E["write_protocol.replace_field"] --> C
   E --> A
 ```
+
+`write_protocol` now performs **dual-write**: whitelisted meta keys are projected to both `annotation_rows` (canonical) and `meta_rows` (legacy).
+
+Whitelist (`_SHARED_ANNOTATION_WHITELIST`):
+- `shared/source`: `source`, `source_loc`, `trace_id`, `approved_by`, `note`
+- `shared/derived`: `confidence` (`origin="derived"`, `derivation` from `meta["confidence_source"]`, fallback `meta:confidence`)
+
+Custom meta keys not in the whitelist continue to write only to `meta_rows`. `retract_by_asrt(...)` now dual-writes whitelisted shared meta to annotation_rows, same as `set_field(...)`.
 
 ### 5.2 Evaluate Flow
 
@@ -116,6 +147,15 @@ The shared evaluate dispatch also supports call-time `engine_options`:
 - only engine paths consume it; shared core only validates `dict | None` and forwards it
 - `mode="native"` with non-empty `engine_options` fails explicitly
 - supported keys, defaults, and normalization remain adapter-owned
+
+Definition-time engine semantics use `engine_ext`:
+
+- shared core only accepts `EngineExtBase` subclasses and forwards them; it does not interpret field meanings
+- `engine_ext` does NOT enter authoring payload / Ledger / audit artifact
+- `pyreason` currently uses `PyReasonRuleExt`
+- `problog` currently uses `ProbLogRuleExt(branch_probabilities=...)`
+  - semantics: normalized `where` OR-branch weighting
+  - legacy `body_confidences` is now only an authoring/SDK compatibility bridge, no longer a shared evaluate parameter
 
 Native `RuleRef` semantics and current boundary:
 
@@ -138,9 +178,11 @@ Evaluate now also records a lightweight candidate explain backref after candidat
     - `rule_ref_edges=[]`
   - witnesses are produced through adapter-level Datalog rewriting, not the official Soufflé provenance proof tree
   - when the same final binding has witness rows across multiple OR branches, the adapter uses `source-order wins`
-- engine candidates now explicitly write `support_kind="engine_no_witness_v1"` plus the zero-digest placeholder:
-  - this is a no-witness degraded explain state, not an artifact-missing error
-  - service `explain_ref(kind="candidate")` returns `witness_status="degraded"` for this path
+- PyReason engine candidates write `support_kind="pyreason_provenance_v1"` with a `ProvenanceEnvelope` carrier containing the full event trace
+- ProbLog engine candidates write `support_kind="problog_provenance_v1"` with a `ProvenanceEnvelope` carrier containing the parsed `--trace` proof tree
+- `ProvenanceEnvelope` is stored in `Store._provenance_envelopes` registry (session-scoped, not durably persisted to sidecar)
+- service `explain_ref(kind="candidate")` dispatches: native/Souffle → `explain_support()`, engine provenance → `explain_provenance()` returning the envelope
+- legacy `engine_no_witness_v1` remains as fallback for candidates without a provenance carrier
 - `CandidateSet` retains the narrow `confidence: float | None` field and adds an additive `confidence_kind` value-semantics tag:
   - `none`
   - `probability`
