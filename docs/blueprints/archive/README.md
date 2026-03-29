@@ -159,3 +159,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-29 | candidate-support-digest-collision | implemented | F-CORE-2 fix: `_remember_candidate_support()` now raises on same `candidate_id` with different `support_digest` while preserving idempotent same-digest re-registration |
 | 2026-03-29 | certainty-child-artifact-eligibility | implemented | F-CORE-3 fix: `check_certainty_artifact_eligibility()` now rejects missing child support artifacts instead of treating them as eligible leaf children |
 | 2026-03-29 | core-audit-batch | implemented | Batch closeout for F-CORE-4/5 and F-EG-1/3/4: certainty routing notes, EvidenceGraph cycle/duplicate checks, narrowed static UI exception handling |
+| 2026-03-29 | pyreason-adapter-batch | implemented | Batch closeout for F-PR-2/3/4/5/6: bound bool guard, `confidence=0.0` parity, safer pred name parsing, correct annotation binding, shared helper extraction |
