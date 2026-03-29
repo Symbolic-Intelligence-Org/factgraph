@@ -114,5 +114,28 @@ class ProbLogExportTests(unittest.TestCase):
         self.assertIn("problog/semantic/probability out of range", str(ctx.exception))
 
 
+class TestProbLogExportReadsSharedProbability(unittest.TestCase):
+    """ProbLog export reads shared/semantic/probability from write_protocol."""
+
+    def test_export_reads_shared_semantic_probability(self) -> None:
+        from factpy_kernel.adapters.problog.problog_export import _claim_probability
+
+        class Item(Entity):
+            item_id: str = Identity(primary_key=True)
+            label: str = Field(cardinality="single")
+
+        sdk = SDKStore([Item])
+        ref = sdk.ref(Item, item_id="x")
+        asrt_id = set_field(
+            sdk.ledger,
+            pred_id="item:label",
+            e_ref=ref,
+            rest_terms=[("string", "val")],
+            meta={"probability": 0.65},
+        )
+        prob = _claim_probability(sdk.store, asrt_id)
+        self.assertAlmostEqual(prob, 0.65)
+
+
 if __name__ == "__main__":
     unittest.main()

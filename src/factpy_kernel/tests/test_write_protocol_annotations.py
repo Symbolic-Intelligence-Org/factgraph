@@ -300,5 +300,89 @@ class TestWhitelistCoverage(unittest.TestCase):
             self.assertEqual(cat, "source", f"key={key} should be category=source")
 
 
+class TestProbabilityWriteLane(unittest.TestCase):
+    """probability is a first-class semantic key, separate from confidence."""
+
+    def test_probability_projected_as_shared_semantic(self) -> None:
+        ledger = Ledger()
+        asrt_id = set_field(
+            ledger,
+            "p:test",
+            _eref("x"),
+            [("string", "v")],
+            meta={"probability": 0.42},
+        )
+        anns = ledger.find_annotations(asrt_id=asrt_id, key="probability")
+        self.assertEqual(len(anns), 1)
+        self.assertEqual(anns[0].namespace, "shared")
+        self.assertEqual(anns[0].category, "semantic")
+        self.assertEqual(anns[0].value, 0.42)
+        self.assertEqual(anns[0].origin, "observed")
+
+    def test_probability_also_in_meta_rows(self) -> None:
+        ledger = Ledger()
+        asrt_id = set_field(
+            ledger,
+            "p:test",
+            _eref("x"),
+            [("string", "v")],
+            meta={"probability": 0.65},
+        )
+        meta = ledger.find_meta(asrt_id=asrt_id, key="probability")
+        self.assertEqual(len(meta), 1)
+        self.assertAlmostEqual(meta[0].value, 0.65)
+
+    def test_probability_auto_derives_confidence(self) -> None:
+        ledger = Ledger()
+        asrt_id = set_field(
+            ledger,
+            "p:test",
+            _eref("x"),
+            [("string", "v")],
+            meta={"probability": 0.42},
+        )
+        conf_anns = ledger.find_annotations(asrt_id=asrt_id, key="confidence")
+        self.assertEqual(len(conf_anns), 1)
+        self.assertAlmostEqual(conf_anns[0].value, 0.42)
+        self.assertEqual(conf_anns[0].category, "derived")
+
+        meta_conf = ledger.find_meta(asrt_id=asrt_id, key="confidence")
+        self.assertEqual(len(meta_conf), 1)
+        self.assertAlmostEqual(meta_conf[0].value, 0.42)
+
+    def test_explicit_confidence_not_overwritten_by_probability(self) -> None:
+        ledger = Ledger()
+        asrt_id = set_field(
+            ledger,
+            "p:test",
+            _eref("x"),
+            [("string", "v")],
+            meta={"probability": 0.42, "confidence": 0.9},
+        )
+        conf_anns = ledger.find_annotations(asrt_id=asrt_id, key="confidence")
+        self.assertEqual(len(conf_anns), 1)
+        self.assertAlmostEqual(conf_anns[0].value, 0.9)
+
+    def test_probability_without_confidence_still_works(self) -> None:
+        ledger = Ledger()
+        asrt_id = set_field(
+            ledger,
+            "p:test",
+            _eref("x"),
+            [("string", "v")],
+            meta={"probability": 0.7, "source": "model"},
+        )
+        anns = ledger.find_annotations(asrt_id=asrt_id)
+        keys = {a.key for a in anns}
+        self.assertIn("probability", keys)
+        self.assertIn("confidence", keys)
+        self.assertIn("source", keys)
+
+    def test_probability_whitelist_category_is_semantic(self) -> None:
+        cat, origin = _SHARED_ANNOTATION_WHITELIST["probability"]
+        self.assertEqual(cat, "semantic")
+        self.assertEqual(origin, "observed")
+
+
 if __name__ == "__main__":
     unittest.main()
