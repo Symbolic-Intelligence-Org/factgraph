@@ -1,6 +1,6 @@
 # Task Blueprint: ProbLog Probability Write Lane
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-03-29
 - Last Updated: 2026-03-29
 - Related Modules:
@@ -57,10 +57,10 @@ Treat fact-level probability as a first-class write-protocol convention key:
 
 ## 7. Acceptance
 
-- [ ] `set_field(..., meta={"probability": x})` 能写出 canonical shared probability lane
-- [ ] ProbLog export 优先读取 semantic probability annotations，再回退 legacy `meta.confidence`
-- [ ] 没有越过 blueprint 明示的边界
-- [ ] 受影响模块 docs 已同步
+- [x] `set_field(..., meta={"probability": x})` 能写出 canonical shared probability lane
+- [x] ProbLog export 优先读取 semantic probability annotations，再回退 legacy `meta.confidence`
+- [x] 没有越过 blueprint 明示的边界
+- [x] 受影响模块 docs 已同步
 
 ## 8. Implementation Plan
 
@@ -78,9 +78,14 @@ Treat fact-level probability as a first-class write-protocol convention key:
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
-
 - 最终落地结果：
+  - `write_protocol` 现已接受 `meta["probability"]` 作为一等 convention key，并双写为 `shared/semantic/probability` 与 `meta.probability`
+  - 当用户未显式提供 `confidence` 时，`write_protocol` 会自动派生 `confidence = probability`，继续保留 shared/meta compatibility projection
+  - ProbLog export 的 fact-level probability 读取顺序已更新为 `problog/semantic/probability` → `shared/semantic/probability` → `meta.confidence` → `1.0`
+  - 针对 write lane 与 export fallback 的测试已补齐，并通过 full regression（580 tests, 0 failures）
 - 与 blueprint 不同的地方：
+  - 无实质偏离；实现保持在既定 write-lane + export-priority 范围内
 - 为什么会有这些调整：
+  - 无额外调整
 - 归档说明：
+  - 本文件与 audit 已归档到 `docs/blueprints/archive/`

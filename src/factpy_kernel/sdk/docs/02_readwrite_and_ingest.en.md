@@ -248,7 +248,7 @@ The Annotation Store is a persistence layer independent of `meta_rows`, storing 
 
 ### Write Paths
 
-1. **Shared path (automatic)**: `write_protocol.set_field()` projects whitelisted meta keys (source, analyst, confidence, etc.) into `annotation_rows`
+1. **Shared path (automatic)**: `write_protocol.set_field()` projects whitelisted meta keys (for example `source`, `confidence`, and `probability`) into `annotation_rows`
 2. **PyReason path**: `persist_pyreason_annotations(ledger, run_id, store, accept_result)` writes `pyreason/semantic/bound_lower`, `bound_upper`, etc. post-accept
 3. **ProbLog path**: `persist_problog_annotations(ledger, run_id, store, accept_result)` writes `problog/semantic/probability` post-accept
 
@@ -260,10 +260,19 @@ The Annotation Store is a persistence layer independent of `meta_rows`, storing 
 
 ### Relationship to meta_rows
 
-`meta_rows` is now a legacy compatibility layer. New engine semantics are written exclusively to the Annotation Store. `confidence` is retained in `meta_rows` as a compatibility projection, but its authoritative source is the `shared/derived/confidence` annotation.
+`meta_rows` is now a legacy compatibility layer. Canonical consumers should read the Annotation Store, while some shared compatibility projections are still retained in `meta_rows`. For example, `confidence` remains available there as a compatibility projection, but its authoritative source is the `shared/derived/confidence` annotation.
 
 ProbLog note:
 
+- `meta={"probability": 0.42}` is now the canonical user-authored fact probability input
+- that write produces:
+  - `shared/semantic/probability`
+  - `meta.probability`
+- if `confidence` is not explicitly provided, the write protocol derives both `shared/derived/confidence` and `meta.confidence`
 - for accepted ProbLog facts, `problog/semantic/probability` is the canonical engine-native semantic lane
 - `meta.confidence` may still exist, but only as a legacy compatibility projection
-- ProbLog export now prefers `problog/semantic/probability` and falls back to `meta.confidence` only when the canonical annotation is absent
+- ProbLog export now reads in this order:
+  1. `problog/semantic/probability`
+  2. `shared/semantic/probability`
+  3. `meta.confidence`
+  4. default `1.0`

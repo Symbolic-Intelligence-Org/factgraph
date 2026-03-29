@@ -248,7 +248,7 @@ Annotation Store 是独立于 `meta_rows` 的持久化层，存储事实的引�
 
 ### 写入路径
 
-1. **共享路径（自动）**：`write_protocol.set_field()` 会把白名单 meta key（source、analyst、confidence 等）同步投影到 `annotation_rows`
+1. **共享路径（自动）**：`write_protocol.set_field()` 会把白名单 meta key（如 `source`、`confidence`、`probability`）同步投影到 `annotation_rows`
 2. **PyReason 路径**：`persist_pyreason_annotations(ledger, run_id, store, accept_result)` 在 accept 后写入 `pyreason/semantic/bound_lower`、`bound_upper` 等
 3. **ProbLog 路径**：`persist_problog_annotations(ledger, run_id, store, accept_result)` 在 accept 后写入 `problog/semantic/probability`
 
@@ -260,10 +260,19 @@ Annotation Store 是独立于 `meta_rows` 的持久化层，存储事实的引�
 
 ### 与 meta_rows 的关系
 
-`meta_rows` 已退化为 legacy compatibility layer。新的引擎语义只写 Annotation Store。`confidence` 在 `meta_rows` 中作为兼容投影保留，但其权威来源是 `shared/derived/confidence` annotation。
+`meta_rows` 已退化为 legacy compatibility layer。canonical consumer 应读取 Annotation Store；同时，部分共享兼容投影仍会保留在 `meta_rows`。例如 `confidence` 仍作为兼容投影保留，其权威来源是 `shared/derived/confidence` annotation。
 
 ProbLog 补充：
 
+- `meta={"probability": 0.42}` 现在是 canonical user-authored fact probability 输入
+- 该写入会产生：
+  - `shared/semantic/probability`
+  - `meta.probability`
+- 若未显式提供 `confidence`，write protocol 会自动派生 `shared/derived/confidence` 与 `meta.confidence`
 - 对 accepted ProbLog facts，`problog/semantic/probability` 是 canonical engine-native semantic lane
 - `meta.confidence` 仍可能存在，但只作为 legacy compatibility 投影
-- ProbLog export 当前会优先读取 `problog/semantic/probability`，仅在缺失时 fallback 到 `meta.confidence`
+- ProbLog export 当前读取顺序为：
+  1. `problog/semantic/probability`
+  2. `shared/semantic/probability`
+  3. `meta.confidence`
+  4. 默认 `1.0`

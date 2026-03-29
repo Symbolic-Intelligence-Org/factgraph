@@ -119,6 +119,10 @@ semantic-delivery 补充：
 - shared compatibility lane:
   - `accept` 仍会把 `candidate.confidence` 写入 `meta.confidence`
   - `confidence_kind="probability"` 也继续保留在 meta
+- shared user-authored fact lane:
+  - `set_field(..., meta={"probability": 0.42})` 现在会写入 `shared/semantic/probability`
+  - 同时保留 `meta.probability`
+  - 若未显式提供 `confidence`，`write_protocol` 会自动派生 `meta.confidence=0.42` 与 `shared/derived/confidence`
 - engine-native semantic lane:
   - `persist_problog_annotations(...)` 会把 accepted fact candidate 的概率写成 `problog/semantic/probability`
   - L2 已完成的 audit export / reader / static annotation panel 会自动消费该 annotation
@@ -130,7 +134,8 @@ semantic-delivery 补充：
 - 每条 claim 概率：
   - 默认 `1.0`
   - 优先从 `problog/semantic/probability` 读取（canonical lane）
-  - 若 canonical annotation 缺失，则 fallback 到 `meta.confidence`（legacy compatibility lane）
+  - 若 engine-native annotation 缺失，则读取 `shared/semantic/probability`（canonical user-authored lane）
+  - 若以上两条 semantic lane 都缺失，则 fallback 到 `meta.confidence`（legacy compatibility lane）
 - where 分支概率当前由 `ProbLogRuleExt.branch_probabilities` 承载
   - `branch_probabilities[i]` 对应 normalized `where` OR branch `i`
   - `None` 等价于所有分支 `1.0`

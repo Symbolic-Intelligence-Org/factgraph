@@ -153,3 +153,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-28 | design-branch-closeout | implemented | Final branch closeout: durable `EvidenceGraph` audit delivery, `PyReasonRuleDef` removal, explicit deferred-backlog closure, and archive inventory sync |
 | 2026-03-29 | problog-rule-ext-branch-probabilities | implemented | ProbLog branch weighting moved from shared `body_confidences` routing into typed `ProbLogRuleExt`, with SDK/runtime bridge and shared-core signature cleanup |
 | 2026-03-29 | problog-fact-probability-canonical-lane | implemented | ProbLog export now prefers `problog/semantic/probability` for fact-level probability and only falls back to `meta.confidence` for legacy data |
+| 2026-03-29 | problog-probability-write-lane | implemented | `probability` as first-class `write_protocol` key: `shared/semantic/probability` annotation, auto-derives confidence, ProbLog export reads shared lane |

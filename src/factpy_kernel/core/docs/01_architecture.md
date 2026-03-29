@@ -1,7 +1,7 @@
 # Core 架构总览（factpy_kernel）
 
 - 适用范围：`src/factpy_kernel/core`
-- 最后更新：2026-03-26
+- 最后更新：2026-03-29
 - 代码基线：`Store.evaluate` 支持 `native|souffle|problog|pyreason`；`Ledger` 为 SQLite write-through cache + `annotation_rows`（Annotation Store）；`ProjectorAudit` 为 v2 结构
 - 目标读者：需要理解 core 语义边界、关键入口与扩展点的开发者
 
@@ -131,6 +131,21 @@ flowchart LR
 白名单（`_SHARED_ANNOTATION_WHITELIST`）：
 - `shared/source`：`source`, `source_loc`, `trace_id`, `approved_by`, `note`
 - `shared/derived`：`confidence`（`origin="derived"`，`derivation` 来自 `meta["confidence_source"]`，缺省回退 `meta:confidence`）
+- `shared/semantic`：`probability`（`origin="observed"`；用于用户写入的 fact-level probability canonical lane）
+
+兼容性补充：
+
+- `meta={"probability": 0.42}` 会同时写入：
+  - `shared/semantic/probability`
+  - `meta.probability`
+- 若用户未显式提供 `confidence`，`write_protocol` 会自动派生 `confidence = probability`，继续双写到：
+  - `shared/derived/confidence`
+  - `meta.confidence`
+- 对 ProbLog fact export，adapter 当前读取优先级是：
+  1. `problog/semantic/probability`
+  2. `shared/semantic/probability`
+  3. `meta.confidence`
+  4. 默认 `1.0`
 
 未在白名单中的自定义 meta key 继续只写 `meta_rows`。`retract_by_asrt(...)` 现在与 `set_field(...)` 一样，对传入的白名单 meta 做 shared annotation 双写；未传 meta 时仍不会生成 annotation。
 

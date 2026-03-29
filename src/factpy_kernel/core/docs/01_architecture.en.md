@@ -1,7 +1,7 @@
 # Core Architecture Overview (factpy_kernel)
 
 - Scope: `src/factpy_kernel/core`
-- Last updated: 2026-03-28
+- Last updated: 2026-03-29
 - Code baseline: `Store.evaluate` supports `native|souffle|problog|pyreason`; `Ledger` is a SQLite write-through cache + `annotation_rows` (Annotation Store); `ProjectorAudit` is v2
 - Audience: developers who need to understand core semantic boundaries, key entrypoints, and extension points
 
@@ -131,6 +131,21 @@ flowchart LR
 Whitelist (`_SHARED_ANNOTATION_WHITELIST`):
 - `shared/source`: `source`, `source_loc`, `trace_id`, `approved_by`, `note`
 - `shared/derived`: `confidence` (`origin="derived"`, `derivation` from `meta["confidence_source"]`, fallback `meta:confidence`)
+- `shared/semantic`: `probability` (`origin="observed"`; canonical lane for user-authored fact-level probability)
+
+Compatibility notes:
+
+- `meta={"probability": 0.42}` now writes both:
+  - `shared/semantic/probability`
+  - `meta.probability`
+- if the user does not explicitly provide `confidence`, `write_protocol` derives `confidence = probability` and continues to dual-write it to:
+  - `shared/derived/confidence`
+  - `meta.confidence`
+- for ProbLog fact export, the current adapter read priority is:
+  1. `problog/semantic/probability`
+  2. `shared/semantic/probability`
+  3. `meta.confidence`
+  4. default `1.0`
 
 Custom meta keys not in the whitelist continue to write only to `meta_rows`. `retract_by_asrt(...)` now dual-writes whitelisted shared meta to annotation_rows, same as `set_field(...)`.
 
