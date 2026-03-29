@@ -32,6 +32,7 @@ _CONVENTION_META_KEYS = {
     "source_loc",
     "trace_id",
     "confidence",
+    "probability",
     "approved_by",
     "note",
 }
@@ -61,6 +62,7 @@ _KEY_KIND_MAP = {
     "trace_id": "str",
     "confidence": "float",
     "confidence_source": "str",
+    "probability": "float",
     "approved_by": "str",
     "accepted_by": "str",
     "note": "str",
@@ -98,6 +100,7 @@ _SHARED_ANNOTATION_WHITELIST: dict[str, tuple[str, str]] = {
     "approved_by": ("source", "observed"),
     "note": ("source", "observed"),
     "confidence": ("derived", "derived"),
+    "probability": ("semantic", "observed"),
 }
 
 __all__ = [
@@ -255,7 +258,14 @@ def _normalize_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
             raise WriteProtocolError("meta keys must be non-empty strings")
         if key in _SYSTEM_MANAGED_META_KEYS:
             raise WriteProtocolError(f"meta[{key}] is reserved and system-managed")
-    return dict(meta)
+    result = dict(meta)
+    probability = result.get("probability")
+    if isinstance(probability, (int, float)) and not isinstance(probability, bool):
+        normalized_probability = float(probability)
+        result["probability"] = normalized_probability
+        if "confidence" not in result:
+            result["confidence"] = normalized_probability
+    return result
 
 
 def _compute_ingest_key(
@@ -425,9 +435,9 @@ def _validate_meta_value_for_kind(key: str, kind: str, value: Any) -> None:
     if kind == "float":
         if isinstance(value, bool) or not isinstance(value, float):
             raise WriteProtocolError(f"meta[{key}] must be float")
-        if key == "confidence":
+        if key in {"confidence", "probability"}:
             if value <= 0.0 or value > 1.0:
-                raise WriteProtocolError("meta[confidence] must be within (0,1]")
+                raise WriteProtocolError(f"meta[{key}] must be within (0,1]")
         return
     if kind == "bool":
         if not isinstance(value, bool):

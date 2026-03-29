@@ -123,6 +123,28 @@ def _claim_probability(store: Store, asrt_id: str) -> float:
                 f"problog/semantic/probability must be numeric for asrt_id={asrt_id}"
             )
 
+    shared_annotations = store.ledger.find_annotations(
+        asrt_id=asrt_id,
+        namespace="shared",
+        category="semantic",
+        key="probability",
+    )
+    if shared_annotations:
+        for row in reversed(shared_annotations):
+            value = row.value
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                prob = float(value)
+                if prob <= 0.0 or prob > 1.0:
+                    raise ProbLogExportError(
+                        f"shared/semantic/probability out of range for asrt_id={asrt_id}: {prob}"
+                    )
+                return prob
+            raise ProbLogExportError(
+                f"shared/semantic/probability must be numeric for asrt_id={asrt_id}"
+            )
+
     candidates = store.ledger.find_meta(asrt_id=asrt_id, key="confidence")
     if not candidates:
         return 1.0
