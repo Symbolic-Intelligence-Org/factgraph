@@ -119,6 +119,35 @@ class AuditEvidenceGraphRenderTests(unittest.TestCase):
         self.assertIn("spread_rule", html)
         self.assertIn("ROOT", html)
         self.assertIn("data-component='Justin' data-timestep='1'", html)
+        # F-EG-2: edge annotations must be visible in timeline
+        self.assertIn("evidence-timeline-edge-note", html)
+        self.assertIn("updates", html)  # edge_kind
+        self.assertIn("converged_rule", html)  # rule_label
+        self.assertIn("from popular", html)  # source node label
+
+    def test_timeline_renderer_no_edges_produces_no_edge_notes(self) -> None:
+        """F-EG-2: timeline with no edges must not produce edge-note divs."""
+        graph = EvidenceGraph(
+            graph_id="eg:no-edges",
+            engine="test",
+            root_node_id="n:a",
+            nodes=(
+                EvidenceNode(
+                    node_id="n:a",
+                    node_kind=NODE_CONCLUSION,
+                    component="X",
+                    label="fact",
+                    value_summary="v",
+                    timestamp=0,
+                ),
+            ),
+            edges=(),
+            support_kind="test",
+            layout_hint=LAYOUT_TIMELINE,
+        )
+        html = render_evidence_graph_html(graph)
+        self.assertIn("evidence-graph-timeline", html)
+        self.assertNotIn("evidence-timeline-edge-note", html)
 
     def test_renderer_dispatch_rejects_unknown_layout(self) -> None:
         class BadGraph:

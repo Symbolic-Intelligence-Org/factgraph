@@ -302,6 +302,12 @@ def _render_timeline_layout(graph: EvidenceGraph) -> str:
             )
         )
 
+    # F-EG-2: build edge index for timeline card annotations
+    node_by_id = {node.node_id: node for node in graph.nodes}
+    incoming_edges: dict[str, list[EvidenceEdge]] = {}
+    for edge in graph.edges:
+        incoming_edges.setdefault(edge.to_node_id, []).append(edge)
+
     grid_columns = f"180px repeat({len(timestamps)}, minmax(180px, 1fr))"
     grid_parts: list[str] = [
         (
@@ -335,7 +341,15 @@ def _render_timeline_layout(graph: EvidenceGraph) -> str:
             "</div>"
         )
         for timestamp in timestamps:
-            cards = "".join(_render_timeline_card(node, graph.root_node_id) for node in nodes_by_cell.get((component, timestamp), []))
+            cards = "".join(
+                _render_timeline_card(
+                    node,
+                    graph.root_node_id,
+                    incoming_edges=incoming_edges.get(node.node_id, []),
+                    node_by_id=node_by_id,
+                )
+                for node in nodes_by_cell.get((component, timestamp), [])
+            )
             empty_cell = "<div style='color:var(--color-muted,#6b6b6b);font-size:.8rem'>&nbsp;</div>"
             grid_parts.append(
                 "<div class='evidence-timeline-cell' "
@@ -357,7 +371,13 @@ def _render_timeline_layout(graph: EvidenceGraph) -> str:
     )
 
 
-def _render_timeline_card(node: EvidenceNode, root_node_id: str) -> str:
+def _render_timeline_card(
+    node: EvidenceNode,
+    root_node_id: str,
+    *,
+    incoming_edges: list[EvidenceEdge] | tuple[()] = (),
+    node_by_id: Mapping[str, EvidenceNode] | None = None,
+) -> str:
     border_color, _header_color, background = _node_palette(node.node_kind)
     occurred_due_to = node.engine_meta.get("occurred_due_to")
     rule_line = ""
@@ -380,6 +400,23 @@ def _render_timeline_card(node: EvidenceNode, root_node_id: str) -> str:
             "<span style='display:inline-block;padding:1px 7px;border-radius:999px;background:#ece4d6;"
             "color:#6b4f1d;font-size:.7rem;font-weight:700;letter-spacing:.03em'>ROOT</span>"
         )
+    # F-EG-2: render incoming edge annotations
+    edge_notes = ""
+    for edge in incoming_edges:
+        parts = [edge.edge_kind]
+        if edge.rule_label:
+            parts.append(edge.rule_label)
+        source_label = ""
+        if node_by_id and edge.from_node_id in node_by_id:
+            source_label = f" from {node_by_id[edge.from_node_id].label}"
+        parts_text = escape(" \u00b7 ".join(parts))
+        source_text = escape(source_label)
+        edge_notes += (
+            "<div class='evidence-timeline-edge-note' "
+            f"style='font-size:.72rem;color:var(--color-muted,#6b6b6b);margin-top:4px'>"
+            f"\u2190 {parts_text}{source_text}"
+            "</div>"
+        )
     return (
         "<div class='evidence-timeline-card' "
         f"data-node-id='{escape(node.node_id, quote=True)}' data-node-kind='{escape(node.node_kind, quote=True)}' "
@@ -392,6 +429,7 @@ def _render_timeline_card(node: EvidenceNode, root_node_id: str) -> str:
         f"{timestamp_line}"
         f"{rule_line}"
         f"{_node_kind_badge(node.node_kind)}"
+        f"{edge_notes}"
         "</div>"
     )
 

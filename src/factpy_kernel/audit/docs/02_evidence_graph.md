@@ -129,11 +129,9 @@
 
 已修复：`EvidenceGraph.__post_init__` 在端点引用校验之后增加 DFS 环检测。含有环的图在构造时即 raise `ValueError("cycle detected in EvidenceGraph involving node ...")`。渲染期 `if node_id in ancestry` 截断保留为双重防御。
 
-### F-EG-2 Timeline renderer 不渲染 edges（严重：低）
+### ~~F-EG-2 Timeline renderer 不渲染 edges（严重：低）~~ — RESOLVED
 
-Timeline renderer 只展示 node cards 在 timestep × component grid 中的分布，不可视化 edges。如果 converter 产出的 `edge_kind="updates"` 有重要语义（如 PyReason intra-fact update chain），timeline 视觉上看不到 edge 关系。
-
-- 位置：`evidence_graph.py:250-335`
+已修复：`_render_timeline_card` 接收 `incoming_edges` 和 `node_by_id` 参数，在每个 card 底部渲染 incoming edge 注释（`← {edge_kind} · {rule_label} from {source_label}`）。无 edge 时不产出 edge-note div。
 
 ### ~~F-EG-3 `evidence_graphs.jsonl` 重复 candidate_id 静默覆盖（严重：低）~~ — RESOLVED
 
