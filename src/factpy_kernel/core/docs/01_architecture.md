@@ -533,13 +533,9 @@ plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 
 已修复：`replace_field()` 新增 `_preflight_new_assertion()` 预校验，在 `retract_by_asrt()` 之前运行 `set_field()` 的所有 validation 步骤。校验失败时旧断言保持 active，不被 revoke。
 
-### F-CORE-2 `_remember_candidate_support` 重注册不校验 digest（严重：中）
+### ~~F-CORE-2 `_remember_candidate_support` 重注册不校验 digest（严重：中）~~ — RESOLVED
 
-`Store._remember_candidate_support()` 对已存在的 `candidate_id` 使用 `setdefault` 保留首次注册值，但**不校验 `support_digest` 是否一致**。同一 candidate_id 的后续 evaluate 若产生不同 support_digest，差异被静默忽略。
-
-- 位置：`core/store/runtime.py:175-178`
-- 对比：`_remember_support_artifact()` (line 115-116) 会在 digest collision 时 raise
-- 触发条件：对同一 Store 实例多次 evaluate 产生相同 candidate_id 但不同 support artifact
+已修复：`_remember_candidate_support()` 在重注册路径中新增 digest 比对，同一 `candidate_id` + 不同 `support_digest` 会抛 `ValueError`，与 `_remember_support_artifact()` 和 `_remember_provenance_envelope()` 的 collision 模式一致。同一 `candidate_id` + 相同 `support_digest` 保持幂等。
 
 ### F-CORE-3 `check_certainty_artifact_eligibility` 缺失 child artifact 通过检查（严重：中）
 

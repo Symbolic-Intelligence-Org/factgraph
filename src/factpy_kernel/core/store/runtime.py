@@ -173,6 +173,12 @@ class Store:
         if not isinstance(confidence_kind, str) or not confidence_kind:
             raise ValueError("confidence_kind must be non-empty string")
         if candidate_id in self._candidate_support_index:
+            existing_digest = self._candidate_support_index[candidate_id]
+            if existing_digest != support_digest:
+                raise ValueError(
+                    f"candidate_id {candidate_id!r} already registered with "
+                    f"different support_digest"
+                )
             self._candidate_support_kind_index.setdefault(candidate_id, support_kind)
             self._candidate_confidence_kind_index.setdefault(candidate_id, confidence_kind)
             return

@@ -1940,3 +1940,84 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
+
+    # ── F-CORE-2: _remember_candidate_support digest collision ────────
+
+    def test_remember_candidate_support_first_registration(self) -> None:
+        """Fresh candidate_id registers normally in all three indices."""
+        open_resp = open_runtime_session({"schema_ir": _schema_ir()})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            session = _require_session(session_id)
+            digest = "sha256:" + "a" * 64
+            session.store._remember_candidate_support(
+                "cand-fresh", digest, "native_binding_v1",
+                confidence_kind="certainty",
+            )
+            self.assertEqual(
+                session.store.get_candidate_support_digest("cand-fresh"),
+                digest,
+            )
+            self.assertEqual(
+                session.store.get_candidate_support_kind("cand-fresh"),
+                "native_binding_v1",
+            )
+            self.assertEqual(
+                session.store.get_candidate_confidence_kind("cand-fresh"),
+                "certainty",
+            )
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_remember_candidate_support_idempotent_same_digest(self) -> None:
+        """Same candidate_id + same digest re-registers without error."""
+        open_resp = open_runtime_session({"schema_ir": _schema_ir()})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            session = _require_session(session_id)
+            digest = "sha256:" + "b" * 64
+            session.store._remember_candidate_support(
+                "cand-idem", digest, "native_binding_v1",
+                confidence_kind="certainty",
+            )
+            # Second call — same digest — must not raise
+            session.store._remember_candidate_support(
+                "cand-idem", digest, "native_binding_v1",
+                confidence_kind="certainty",
+            )
+            self.assertEqual(
+                session.store.get_candidate_support_digest("cand-idem"),
+                digest,
+            )
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
+
+    def test_remember_candidate_support_raises_on_different_digest(self) -> None:
+        """Same candidate_id + different digest raises ValueError."""
+        open_resp = open_runtime_session({"schema_ir": _schema_ir()})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            session = _require_session(session_id)
+            digest_a = "sha256:" + "c" * 64
+            digest_b = "sha256:" + "d" * 64
+            session.store._remember_candidate_support(
+                "cand-collision", digest_a, "native_binding_v1",
+            )
+            with self.assertRaises(ValueError) as ctx:
+                session.store._remember_candidate_support(
+                    "cand-collision", digest_b, "native_binding_v1",
+                )
+            self.assertIn("already registered with different support_digest", str(ctx.exception))
+            # Original digest preserved
+            self.assertEqual(
+                session.store.get_candidate_support_digest("cand-collision"),
+                digest_a,
+            )
+        finally:
+            close_runtime_session(session_id)
+            reset_runtime_sessions_for_tests()
