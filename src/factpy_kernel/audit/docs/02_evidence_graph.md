@@ -122,3 +122,30 @@
 - runtime live `explain-tree` / `explain-summary` / `explain-narrative` / `explain-nl` 仍不直接支持 `pyreason_provenance_v1` / `problog_provenance_v1`
 - `EvidenceGraph` 仍不替代 engine-native provenance carrier；durable package 只是写 converter 结果，不抹平 engine truth
 - candidate evidence page 仍保留既有 Souffle provenance tree section；`EvidenceGraph` 是新增统一 explain block，不替换旧 tree viewer
+
+## 7. Known Issues（2026-03-29 walkthrough 确认）
+
+### F-EG-1 构造时无环检测（严重：低）
+
+`EvidenceGraph.__post_init__` 校验 node/edge uniqueness 与端点引用，但不检测是否存在环。环检测仅在 tree renderer 渲染阶段做 `if node_id in ancestry` 防御性截断。如果 consumer 直接遍历 `edges` 而非使用 renderer，可能遇到无限递归。
+
+- 位置：`evidence_graph.py:72-93`（构造校验）、`evidence_graph.py:204`（渲染期截断）
+- 影响：当前所有 converter（Souffle/PyReason/ProbLog）产出的图均为无环；仅影响手动构造的 graph
+
+### F-EG-2 Timeline renderer 不渲染 edges（严重：低）
+
+Timeline renderer 只展示 node cards 在 timestep × component grid 中的分布，不可视化 edges。如果 converter 产出的 `edge_kind="updates"` 有重要语义（如 PyReason intra-fact update chain），timeline 视觉上看不到 edge 关系。
+
+- 位置：`evidence_graph.py:250-335`
+
+### F-EG-3 `evidence_graphs.jsonl` 重复 candidate_id 静默覆盖（严重：低）
+
+`reader._read_evidence_graphs()` 用 dict 赋值读取 JSONL，相同 `candidate_id` 的多行会 last-wins，无 warning。
+
+- 位置：`reader.py:186`
+
+### F-EG-4 `static_ui._try_build_evidence_graph_from_provenance` 裸 Exception 捕获（严重：低）
+
+该函数用 `except Exception: return None` 吞掉所有错误（含 `ImportError`、`AttributeError` 等非预期异常），使 fallback 路径的诊断困难。
+
+- 位置：`static_ui.py:948`

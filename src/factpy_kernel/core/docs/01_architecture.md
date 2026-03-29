@@ -525,6 +525,48 @@ plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 - 不扩张 `CandidateSet`、SDK、service 的稳定接口
 - `tools/benchmarks/workload_*_reference.py` 继续作为 oracle；`core/annotation/*` 作为独立 prototype 实现
 
+## 8.2 Known Issues（2026-03-29 walkthrough 确认）
+
+以下问题均经代码验证确认。标为 **finding** 而非 **correct behavior**。
+
+### F-CORE-1 `replace_field` 非原子（严重：中）
+
+`write_protocol.replace_field()` 内部先 `retract_by_asrt()` 再 `set_field()`。若 `set_field` 抛异常（例如 meta 校验失败），旧断言已被 revoke 但无替换写入。Ledger 是 append-only，revoke 不可回退。
+
+- 位置：`core/evidence/write_protocol.py:225-226`
+- 触发条件：`replace_field(meta={"confidence": "invalid"})` 等 meta 校验失败场景
+- 影响：旧事实丢失，无新事实补偿
+
+### F-CORE-2 `_remember_candidate_support` 重注册不校验 digest（严重：中）
+
+`Store._remember_candidate_support()` 对已存在的 `candidate_id` 使用 `setdefault` 保留首次注册值，但**不校验 `support_digest` 是否一致**。同一 candidate_id 的后续 evaluate 若产生不同 support_digest，差异被静默忽略。
+
+- 位置：`core/store/runtime.py:175-178`
+- 对比：`_remember_support_artifact()` (line 115-116) 会在 digest collision 时 raise
+- 触发条件：对同一 Store 实例多次 evaluate 产生相同 candidate_id 但不同 support artifact
+
+### F-CORE-3 `check_certainty_artifact_eligibility` 缺失 child artifact 通过检查（严重：中）
+
+当 `child_artifact_lookup()` 返回 `None`（child artifact 未加载或不存在）时，eligibility 检查仍然通过。原因是 line 49 的条件 `child is not None and len(child.rule_ref_edges) > 0`：child 为 `None` 时整个表达式为 `False`，不触发 reject。
+
+- 位置：`core/store/_confidence_kind_resolver.py:48-50`
+- 实验验证：`check_certainty_artifact_eligibility(artifact, lambda _: None)` 返回 `RuleRefEdge`，eligible=True
+- 影响：在 sidecar 未就绪或 artifact 延迟加载场景下，可能错误标记 `confidence_kind="certainty"`
+
+### F-CORE-4 Certainty 物化与 confidence_kind 路由的诊断盲区（严重：低）
+
+`_certainty_materializer.materialize_certainty_summary()` 有 4 个 `return None` 路径，`CertaintyConfidenceKindResolver.resolve()` 有 4 个 `return "none"` 路径。调用侧无法区分"不适用"与"数据异常"。
+
+- 位置：`_certainty_materializer.py:88-104`、`_confidence_kind_resolver.py:60-78`
+- 影响：debug 困难；不影响正确性但增加排查成本
+
+### F-CORE-5 `probability=0.0` 不可表达（严重：低）
+
+`write_protocol._validate_meta_value_for_kind()` 校验 confidence/probability 值域为 `(0, 1]`，零值被拒绝。在概率语义中 `P=0.0`（不可能事件）是合法值。
+
+- 位置：`core/evidence/write_protocol.py` validation logic
+- 影响：无法表达 "某事实概率为零" 的语义；当前是刻意的设计选择但未在文档中说明理由
+
 ## 9. 必须维持的不变量
 
 1. `Store.__init__` 必须先 `ensure_schema_ir(...)`

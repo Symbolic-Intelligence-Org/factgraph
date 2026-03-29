@@ -204,3 +204,38 @@ ProbLog 当前对 shared evaluate surface 公开的 run-time 选项只有一个�
   - `ProbLogRuleExt(branch_probabilities=...)`
   - 只表达 OR-branch weighting，不表达 fact probability、candidate probability 或 annotation persistence
 - `problog_trace_to_evidence_graph(...)` 当前是 best-effort candidate anchoring；当同一 candidate 对应多个 synthetic answer frame 时，只会选最接近的一棵 call subtree
+
+## 9. Known Issues（2026-03-29 walkthrough 确认）
+
+### F-PL-1 所有 candidates 共享同一 trace_dict（严重：中）
+
+`_attach_problog_provenance()` 把同一 `trace_dict` 赋给本次 evaluate run 产出的**所有** candidates。每个 candidate 的 `ProvenanceEnvelope.payload` 包含了整个 run 的完整 trace，而非仅属于该 candidate 的子集。
+
+- 位置：`engine_eval.py:162-192`
+- 影响：provenance 数据冗余；`problog_trace_to_evidence_graph()` 通过 root anchoring 做 best-effort 裁剪，但存储层仍为冗余
+
+### F-PL-2 `_split_result_line` rsplit 冒号分隔可能误切引号内容（严重：低）
+
+当 ProbLog output 中 goal 表达式含冒号（如 URN）且使用 colon-separated format 时，`rsplit(":", 1)` 可能在错误位置分割。tab-separated format 优先匹配不受影响。
+
+- 位置：`problog_import.py:177-181`
+- 触发条件：ProbLog goal 表达式中含 `:` 且输出使用 colon separator（非 tab separator）
+- 影响：当前测试均使用 tab separator，实际触发概率很低
+
+### F-PL-3 `persist_problog_annotations` 只用首条 asrt_id（严重：低）
+
+与 F-PR-5 相同模式。`accept.py:40` 取 `written[0]` 的 `asrt_id`。
+
+- 位置：`accept.py:37-42`
+- 影响：同 F-PR-5
+
+### F-PL-4 `_claim_probability` bool-only meta.confidence raises 而非 fallback（严重：低）
+
+当 `meta.confidence` 存在但所有值均为 `bool` 类型时，priority chain 会抛 `ProbLogExportError` 而非 fallback 到默认 `1.0`。文档未提及此边界行为。
+
+- 位置：`problog_export.py:148-161`
+- 影响：数据质量问题（bool confidence）会导致 export 失败而非安全降级
+
+### F-PL-5 `_split_top_level_args` 重复实现（严重：信息）
+
+`problog_import.py` 与 `provenance.py` 各含一份完全相同的 `_split_top_level_args` 实现。属于 DRY 违背。
