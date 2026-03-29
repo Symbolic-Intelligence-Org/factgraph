@@ -261,3 +261,9 @@ Annotation Store 是独立于 `meta_rows` 的持久化层，存储事实的引�
 ### 与 meta_rows 的关系
 
 `meta_rows` 已退化为 legacy compatibility layer。新的引擎语义只写 Annotation Store。`confidence` 在 `meta_rows` 中作为兼容投影保留，但其权威来源是 `shared/derived/confidence` annotation。
+
+ProbLog 补充：
+
+- 对 accepted ProbLog facts，`problog/semantic/probability` 是 canonical engine-native semantic lane
+- `meta.confidence` 仍可能存在，但只作为 legacy compatibility 投影
+- ProbLog export 当前会优先读取 `problog/semantic/probability`，仅在缺失时 fallback 到 `meta.confidence`

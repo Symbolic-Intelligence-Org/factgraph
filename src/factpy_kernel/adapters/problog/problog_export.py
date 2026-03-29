@@ -87,6 +87,8 @@ def export_problog(store: Store, rule_spec: dict[str, Any], out_path: Path) -> N
     path = Path(out_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8", newline="\n")
+
+
 def _normalize_where_bodies(where: list[Any]) -> list[list[Any]]:
     if not where:
         raise ProbLogExportError("where must be non-empty list")
@@ -99,6 +101,28 @@ def _normalize_where_bodies(where: list[Any]) -> list[list[Any]]:
 
 
 def _claim_probability(store: Store, asrt_id: str) -> float:
+    annotations = store.ledger.find_annotations(
+        asrt_id=asrt_id,
+        namespace="problog",
+        category="semantic",
+        key="probability",
+    )
+    if annotations:
+        for row in reversed(annotations):
+            value = row.value
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                prob = float(value)
+                if prob <= 0.0 or prob > 1.0:
+                    raise ProbLogExportError(
+                        f"problog/semantic/probability out of range for asrt_id={asrt_id}: {prob}"
+                    )
+                return prob
+            raise ProbLogExportError(
+                f"problog/semantic/probability must be numeric for asrt_id={asrt_id}"
+            )
+
     candidates = store.ledger.find_meta(asrt_id=asrt_id, key="confidence")
     if not candidates:
         return 1.0

@@ -261,3 +261,9 @@ The Annotation Store is a persistence layer independent of `meta_rows`, storing 
 ### Relationship to meta_rows
 
 `meta_rows` is now a legacy compatibility layer. New engine semantics are written exclusively to the Annotation Store. `confidence` is retained in `meta_rows` as a compatibility projection, but its authoritative source is the `shared/derived/confidence` annotation.
+
+ProbLog note:
+
+- for accepted ProbLog facts, `problog/semantic/probability` is the canonical engine-native semantic lane
+- `meta.confidence` may still exist, but only as a legacy compatibility projection
+- ProbLog export now prefers `problog/semantic/probability` and falls back to `meta.confidence` only when the canonical annotation is absent

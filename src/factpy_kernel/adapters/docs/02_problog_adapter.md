@@ -122,13 +122,15 @@ semantic-delivery 补充：
 - engine-native semantic lane:
   - `persist_problog_annotations(...)` 会把 accepted fact candidate 的概率写成 `problog/semantic/probability`
   - L2 已完成的 audit export / reader / static annotation panel 会自动消费该 annotation
+  - ProbLog export 现在也会优先读取这条 annotation 作为 fact-level probability canonical source
 
 ## 5. 导出口径（`problog_export.py`）
 
 - EDB 来源：ledger 当前 active claims
 - 每条 claim 概率：
   - 默认 `1.0`
-  - 可从 `meta.confidence` 读取
+  - 优先从 `problog/semantic/probability` 读取（canonical lane）
+  - 若 canonical annotation 缺失，则 fallback 到 `meta.confidence`（legacy compatibility lane）
 - where 分支概率当前由 `ProbLogRuleExt.branch_probabilities` 承载
   - `branch_probabilities[i]` 对应 normalized `where` OR branch `i`
   - `None` 等价于所有分支 `1.0`
