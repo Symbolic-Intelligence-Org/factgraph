@@ -37,9 +37,15 @@ def persist_problog_annotations(
     written = getattr(accept_result, "written_assertions", [])
     if not isinstance(written, list) or not written:
         return 0
-    first_written = written[0]
-    asrt_id = first_written.get("asrt_id", "") if isinstance(first_written, dict) else ""
-    if not isinstance(asrt_id, str) or not asrt_id or asrt_id == "<dry_run>":
+    # Build index -> asrt_id mapping from written assertions (F-PL-3)
+    asrt_id_by_index: dict[int, str] = {}
+    for idx, entry in enumerate(written):
+        if not isinstance(entry, dict):
+            continue
+        aid = entry.get("asrt_id", "")
+        if isinstance(aid, str) and aid and aid != "<dry_run>":
+            asrt_id_by_index[idx] = aid
+    if not asrt_id_by_index:
         return 0
 
     templates = run_pending.pop(candidate_id, [])
@@ -48,20 +54,26 @@ def persist_problog_annotations(
     if not isinstance(templates, list) or not templates:
         return 0
 
-    rows = [
-        AnnotationRow(
-            asrt_id=asrt_id,
-            namespace=str(template["namespace"]),
-            category=str(template["category"]),
-            key=str(template["key"]),
-            kind=str(template["kind"]),
-            value=template["value"],
-            origin=str(template["origin"]),
-            derivation=template.get("derivation"),
+    rows: list[AnnotationRow] = []
+    for template in templates:
+        if not isinstance(template, dict) or template.get("namespace") != "problog":
+            continue
+        fact_index = template.get("fact_index", 0)
+        asrt_id = asrt_id_by_index.get(fact_index if isinstance(fact_index, int) else 0)
+        if asrt_id is None:
+            continue
+        rows.append(
+            AnnotationRow(
+                asrt_id=asrt_id,
+                namespace=str(template["namespace"]),
+                category=str(template["category"]),
+                key=str(template["key"]),
+                kind=str(template["kind"]),
+                value=template["value"],
+                origin=str(template["origin"]),
+                derivation=template.get("derivation"),
+            )
         )
-        for template in templates
-        if isinstance(template, dict) and template.get("namespace") == "problog"
-    ]
     if not rows:
         return 0
     ledger.append_annotations(rows)

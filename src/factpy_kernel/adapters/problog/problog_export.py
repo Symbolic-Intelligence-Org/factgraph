@@ -158,7 +158,7 @@ def _claim_probability(store: Store, asrt_id: str) -> float:
             if prob <= 0.0 or prob > 1.0:
                 raise ProbLogExportError(f"meta.confidence out of range for asrt_id={asrt_id}: {prob}")
             return prob
-    raise ProbLogExportError(f"meta.confidence must be numeric for asrt_id={asrt_id}")
+    return 1.0  # F-PL-4: all meta.confidence values are bool; fallback to default
 
 
 def _claim_value_term(rest_terms: list[tuple[str, Any]]) -> str:

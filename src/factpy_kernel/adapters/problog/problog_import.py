@@ -4,6 +4,7 @@ from dataclasses import replace
 import re
 from typing import Any
 
+from factpy_kernel.adapters.problog._parsing import _split_top_level_args
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.store import builders as store_builders
 from factpy_kernel.core.store.ledger import Ledger
@@ -175,6 +176,8 @@ def _split_result_line(line: str) -> tuple[str, str] | None:
             lhs_text = lhs_text[:-1].rstrip()
         return lhs_text, rhs.strip()
     if ":" in line:
+        # F-PL-2: rsplit at rightmost colon; safe because _FLOAT_RE guard
+        # rejects any split where rhs is not a valid float literal
         lhs, rhs = line.rsplit(":", 1)
         rhs_trimmed = rhs.strip()
         if rhs_trimmed and _FLOAT_RE.fullmatch(rhs_trimmed):
@@ -198,52 +201,6 @@ def _parse_predicate_expr(expr: str) -> tuple[str, list[str]]:
     if args_text == "":
         return name, []
     return name, _split_top_level_args(args_text)
-
-
-def _split_top_level_args(args_text: str) -> list[str]:
-    args: list[str] = []
-    start = 0
-    depth = 0
-    in_single = False
-    in_double = False
-    i = 0
-    while i < len(args_text):
-        ch = args_text[i]
-        if in_single:
-            if ch == "'" and i + 1 < len(args_text) and args_text[i + 1] == "'":
-                i += 2
-                continue
-            if ch == "'":
-                in_single = False
-            i += 1
-            continue
-        if in_double:
-            if ch == '"':
-                in_double = False
-            i += 1
-            continue
-        if ch == "'":
-            in_single = True
-            i += 1
-            continue
-        if ch == '"':
-            in_double = True
-            i += 1
-            continue
-        if ch in "([{":
-            depth += 1
-            i += 1
-            continue
-        if ch in ")]}":
-            depth = max(0, depth - 1)
-            i += 1
-            continue
-        if ch == "," and depth == 0:
-            args.append(args_text[start:i].strip())
-            start = i + 1
-        i += 1
-    args.append(args_text[start:].strip())
-    return args
 
 
 def _parse_probability(text: str) -> float:

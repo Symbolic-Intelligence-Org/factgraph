@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import replace
 import tempfile
 from pathlib import Path
@@ -178,7 +179,7 @@ def _attach_problog_provenance(
             candidate_id=candidate.candidate_id,
             engine="problog",
             payload_type="proof_trace",
-            payload=trace_dict,
+            payload=copy.deepcopy(trace_dict),
         )
         support_digest = compute_provenance_digest(envelope)
         store._remember_provenance_envelope(support_digest, envelope)

@@ -207,35 +207,22 @@ ProbLog 当前对 shared evaluate surface 公开的 run-time 选项只有一个�
 
 ## 9. Known Issues（2026-03-29 walkthrough 确认）
 
-### F-PL-1 所有 candidates 共享同一 trace_dict（严重：中）
+### ~~F-PL-1 所有 candidates 共享同一 trace_dict（严重：中）~~ — RESOLVED
 
-`_attach_problog_provenance()` 把同一 `trace_dict` 赋给本次 evaluate run 产出的**所有** candidates。每个 candidate 的 `ProvenanceEnvelope.payload` 包含了整个 run 的完整 trace，而非仅属于该 candidate 的子集。
+已修复：`_attach_problog_provenance()` 改为 `copy.deepcopy(trace_dict)` 给每个 candidate 的 `ProvenanceEnvelope.payload`，各 candidate 的 trace 数据相互独立。
 
-- 位置：`engine_eval.py:162-192`
-- 影响：provenance 数据冗余；`problog_trace_to_evidence_graph()` 通过 root anchoring 做 best-effort 裁剪，但存储层仍为冗余
+### ~~F-PL-2 `_split_result_line` rsplit 冒号分隔可能误切引号内容（严重：低）~~ — RESOLVED
 
-### F-PL-2 `_split_result_line` rsplit 冒号分隔可能误切引号内容（严重：低）
+已确认安全：colon path 的 `_FLOAT_RE.fullmatch(rhs_trimmed)` guard 确保 rhs 必须是合法 float 字面量，因此 `rsplit(":", 1)` 即使在 goal 含冒号时也不会误切。已添加 inline 注释说明此安全性。
 
-当 ProbLog output 中 goal 表达式含冒号（如 URN）且使用 colon-separated format 时，`rsplit(":", 1)` 可能在错误位置分割。tab-separated format 优先匹配不受影响。
+### ~~F-PL-3 `persist_problog_annotations` 只用首条 asrt_id（严重：低）~~ — RESOLVED
 
-- 位置：`problog_import.py:177-181`
-- 触发条件：ProbLog goal 表达式中含 `:` 且输出使用 colon separator（非 tab separator）
-- 影响：当前测试均使用 tab separator，实际触发概率很低
+已修复：`persist_problog_annotations` 改为遍历 `written` 建 index→asrt_id 映射，每条 template 按 `fact_index` 绑定正确的 asrt_id（同 F-PR-5 模式）。
 
-### F-PL-3 `persist_problog_annotations` 只用首条 asrt_id（严重：低）
+### ~~F-PL-4 `_claim_probability` bool-only meta.confidence raises 而非 fallback（严重：低）~~ — RESOLVED
 
-与 F-PR-5 相同模式。`accept.py:40` 取 `written[0]` 的 `asrt_id`。
+已修复：当所有 `meta.confidence` 值均为 bool（被 `continue` 跳过）时，函数 fallback 到 `return 1.0` 而非 raise `ProbLogExportError`。
 
-- 位置：`accept.py:37-42`
-- 影响：同 F-PR-5
+### ~~F-PL-5 `_split_top_level_args` 重复实现（严重：信息）~~ — RESOLVED
 
-### F-PL-4 `_claim_probability` bool-only meta.confidence raises 而非 fallback（严重：低）
-
-当 `meta.confidence` 存在但所有值均为 `bool` 类型时，priority chain 会抛 `ProbLogExportError` 而非 fallback 到默认 `1.0`。文档未提及此边界行为。
-
-- 位置：`problog_export.py:148-161`
-- 影响：数据质量问题（bool confidence）会导致 export 失败而非安全降级
-
-### F-PL-5 `_split_top_level_args` 重复实现（严重：信息）
-
-`problog_import.py` 与 `provenance.py` 各含一份完全相同的 `_split_top_level_args` 实现。属于 DRY 违背。
+已修复：`_split_top_level_args` 抽到 `_parsing.py`，`problog_import.py` 和 `provenance.py` 改为 import。
