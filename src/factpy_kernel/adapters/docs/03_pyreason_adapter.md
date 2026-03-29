@@ -383,37 +383,22 @@ v0 / v1 约束：
 
 已修复：`runner.py` 新增 `_PYREASON_LOCK = threading.Lock()` 并用 `with _PYREASON_LOCK:` + `try/finally` 包裹所有 `pr.*` 全局状态操作。详见 §5B.3。
 
-### F-PR-2 `_validate_bound` 不拒绝 bool（严重：中）
+### ~~F-PR-2 `_validate_bound` 不拒绝 bool（严重：中）~~ — RESOLVED
 
-`session._validate_bound()` 接受 `[True, True]` 并转为 `(1.0, 1.0)`，`[False, True]` 转为 `(0.0, 1.0)`。与 `rule_ext._validate_bound_pair()` 和 `write_protocol` 的 bool-guard 策略不一致。
+已修复：`_validate_bound` 在 `float()` 转换前加 `if any(isinstance(v, bool) for v in bound)` guard，bool 值现在 raise ValueError。
 
-- 位置：`session.py:592-600`
-- 实验验证：`_validate_bound([True, True])` → `(1.0, 1.0)` 接受
-- 影响：类型错误被静默吞掉；与其他模块的 bool-guard 策略不一致
+### ~~F-PR-3 `_resolve_shared_meta` confidence=0.0 不对称（严重：中）~~ — RESOLVED
 
-### F-PR-3 `_resolve_shared_meta` confidence=0.0 不对称（严重：中）
+已修复：显式 confidence 校验范围从 `(0, 1]` 改为 `[0, 1]`，与自动派生路径对齐。
 
-自动派生路径允许 `confidence=0.0`（bound `[0.0, x]` 的 lower_bound），但显式传入 `meta={"confidence": 0.0}` 被拒绝（`(0, 1]` 校验）。
+### ~~F-PR-4 `pred_id.split(":", 1)[1]` 假设 pred_id 含冒号（严重：低）~~ — RESOLVED
 
-- 位置：`session.py:629` vs `session.py:634`
-- 实验验证：自动派生 `lower_bound=0.0` 写入 `confidence=0.0` 成功；显式 `confidence=0.0` 抛 ValueError
-- 影响：同一语义值在不同路径有不同接受行为
+已修复：3 处 `split(":",1)[1]` 改用 `_pred_short_name()`（来自 `_helpers.py`），无冒号时返回原值。
 
-### F-PR-4 `pred_id.split(":", 1)[1]` 假设 pred_id 含冒号（严重：低）
+### ~~F-PR-5 `persist_pyreason_annotations` 只用首条 asrt_id（严重：低）~~ — RESOLVED
 
-`runner._extract_derived_facts()` 用 `pred_id.split(":", 1)[1]` 提取 field_name，假设所有 pred_id 包含 `:`。若 pred_id 不含 `:`，会抛 `IndexError`。
+已修复：`persist_pyreason_annotations` 改为遍历 `written` 建 index→asrt_id 映射，每条 template 按 `fact_index` 绑定正确的 asrt_id。
 
-- 位置：`runner.py:127, 132, 139`
-- 触发条件：非标准 schema_ir 的 pred_id 格式
-- 影响：当前所有 SDK 生成的 schema 都含 `:`，但未做防御性校验
+### ~~F-PR-6 辅助函数三处重复（严重：信息）~~ — RESOLVED
 
-### F-PR-5 `persist_pyreason_annotations` 只用首条 asrt_id（严重：低）
-
-`accept.py:58` 取 `written[0]` 的 `asrt_id` 给所有 annotation templates 使用。多 fact candidate 场景下只有第一条 fact 的 annotation 正确绑定。
-
-- 位置：`accept.py:57-58`
-- 影响：当前使用场景均为单 fact derivation run，暂不触发
-
-### F-PR-6 辅助函数三处重复（严重：信息）
-
-`_pred_short_name` 在 `provenance.py`、`runner.py`、`where_compile.py` 有三份相同实现。`_parse_edge_component` 在 `provenance.py`、`runner.py` 有两份。属于 DRY 违背但无功能性风险。
+已修复：`_pred_short_name` 和 `_parse_edge_component` 抽到 `_helpers.py`，`provenance.py`、`runner.py`、`where_compile.py` 改为 import。

@@ -509,5 +509,95 @@ class AnnotationTemplateTests(unittest.TestCase):
         self.assertGreaterEqual(len(edge_templates), 4)
 
 
+    # --- F-PR-2: _validate_bound bool guard ---
+
+    def test_validate_bound_rejects_bool_values(self) -> None:
+        """F-PR-2: _validate_bound must reject booleans in bound tuple."""
+        from factpy_kernel.adapters.pyreason.session import _validate_bound
+
+        with self.assertRaises(ValueError) as ctx:
+            _validate_bound([True, 0.5])
+        self.assertIn("bool", str(ctx.exception))
+
+        with self.assertRaises(ValueError):
+            _validate_bound([False, True])
+
+    # --- F-PR-3: _resolve_shared_meta confidence=0.0 ---
+
+    def test_resolve_shared_meta_accepts_confidence_zero(self) -> None:
+        """F-PR-3: explicit confidence=0.0 must not raise."""
+        from factpy_kernel.adapters.pyreason.session import _resolve_shared_meta
+
+        result = _resolve_shared_meta({"confidence": 0.0}, lower_bound=0.5)
+        self.assertEqual(result["confidence"], 0.0)
+
+    # --- F-PR-4: _pred_short_name fallback ---
+
+    def test_pred_short_name_no_colon_returns_original(self) -> None:
+        """F-PR-4: pred_id without colon must return as-is."""
+        from factpy_kernel.adapters.pyreason._helpers import _pred_short_name
+
+        self.assertEqual(_pred_short_name("noprefix"), "noprefix")
+        self.assertEqual(_pred_short_name("has:colon"), "colon")
+        self.assertEqual(_pred_short_name("a:b:c"), "b:c")
+
+    # --- F-PR-5: persist_pyreason_annotations multi-fact ---
+
+    def test_persist_pyreason_annotations_multi_fact_index(self) -> None:
+        """F-PR-5: annotations must bind to correct asrt_id by fact_index."""
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from factpy_kernel.adapters.pyreason.accept import persist_pyreason_annotations
+        from factpy_kernel.core.store.ledger import Ledger
+
+        ledger = MagicMock(spec=Ledger)
+        store = SimpleNamespace(
+            _engine_pending_annotations={
+                "run-1": [
+                    {
+                        "namespace": "pyreason",
+                        "category": "derived",
+                        "key": "k0",
+                        "kind": "str",
+                        "value": "v0",
+                        "origin": "derived",
+                        "derivation": "pyreason_run",
+                        "fact_kind": "node",
+                        "fact_index": 0,
+                    },
+                    {
+                        "namespace": "pyreason",
+                        "category": "derived",
+                        "key": "k1",
+                        "kind": "str",
+                        "value": "v1",
+                        "origin": "derived",
+                        "derivation": "pyreason_run",
+                        "fact_kind": "node",
+                        "fact_index": 1,
+                    },
+                ],
+            }
+        )
+        accept_result = SimpleNamespace(
+            written_assertions=[
+                {"asrt_id": "asrt-aaa", "pred_id": "p:x"},
+                {"asrt_id": "asrt-bbb", "pred_id": "p:y"},
+            ]
+        )
+        count = persist_pyreason_annotations(ledger, "run-1", store, accept_result)
+        self.assertEqual(count, 2)
+        ledger.append_annotations.assert_called_once()
+        rows = ledger.append_annotations.call_args[0][0]
+        # Verify correct binding: fact_index=0 → asrt-aaa, fact_index=1 → asrt-bbb
+        idx0_rows = [r for r in rows if r.key == "k0"]
+        idx1_rows = [r for r in rows if r.key == "k1"]
+        self.assertEqual(len(idx0_rows), 1)
+        self.assertEqual(len(idx1_rows), 1)
+        self.assertEqual(idx0_rows[0].asrt_id, "asrt-aaa")
+        self.assertEqual(idx1_rows[0].asrt_id, "asrt-bbb")
+
+
 if __name__ == "__main__":
     unittest.main()

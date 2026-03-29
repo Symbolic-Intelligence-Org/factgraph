@@ -9,6 +9,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Any
 
+from factpy_kernel.adapters.pyreason._helpers import _parse_edge_component, _pred_short_name
 from factpy_kernel.adapters.pyreason.provenance import (
     PyReasonTraceV0,
     parse_pyreason_trace,
@@ -127,19 +128,19 @@ def _extract_derived_facts(
     """Extract facts derived by reasoning into a new session."""
     input_node_keys: set[tuple[str, str]] = set()
     for fact in input_session.node_facts:
-        field_name = str(fact["pred_id"]).split(":", 1)[1]
+        field_name = _pred_short_name(str(fact["pred_id"]))
         input_node_keys.add((str(fact["node_ref"]), field_name))
 
     input_edge_keys: set[tuple[str, str, str]] = set()
     for fact in input_session.edge_facts:
-        field_name = str(fact["pred_id"]).split(":", 1)[1]
+        field_name = _pred_short_name(str(fact["pred_id"]))
         input_edge_keys.add((str(fact["from_ref"]), str(fact["to_ref"]), field_name))
 
     pred_lookup: dict[str, str] = {}
     rel_preds: set[str] = set()
     for pred in schema_ir.get("predicates", []):
         if isinstance(pred, dict) and isinstance(pred.get("pred_id"), str):
-            field_name = pred["pred_id"].split(":", 1)[1]
+            field_name = _pred_short_name(pred["pred_id"])
             pred_lookup[field_name] = pred["pred_id"]
             if pred.get("relationship_type"):
                 rel_preds.add(pred["pred_id"])
@@ -198,30 +199,11 @@ def _extract_derived_facts(
     return derived
 
 
-def _parse_edge_component(component: str) -> tuple[str, str] | None:
-    """Parse PyReason edge component names to ``(from_ref, to_ref)``."""
-    if component.startswith("(") and component.endswith(")"):
-        inner = component[1:-1]
-        parts = [part.strip() for part in inner.split(",")]
-        if len(parts) == 2:
-            return (parts[0], parts[1])
-    if "-" in component:
-        parts = component.split("-", 1)
-        if len(parts) == 2:
-            return (parts[0], parts[1])
-    return None
-
-
 def _format_fact_text_with_bound(atom: str, bound: tuple[float, float] | list[float]) -> str:
     """Render a typed fact as PyReason fact text with an explicit interval."""
     lo = float(bound[0])
     hi = float(bound[1])
     return f"{atom} : [{lo}, {hi}]"
-
-
-def _pred_short_name(pred_id: str) -> str:
-    parts = pred_id.split(":", 1)
-    return parts[1] if len(parts) > 1 else pred_id
 
 
 def _normalize_bound(bound: tuple[float, float] | list[float]) -> tuple[float, float]:

@@ -591,6 +591,8 @@ class PyReasonSession:
 
 def _validate_bound(bound: tuple[float, float] | list[float]) -> tuple[float, float]:
     if isinstance(bound, (list, tuple)) and len(bound) == 2:
+        if any(isinstance(v, bool) for v in bound):
+            raise ValueError(f"bound values must be float, got bool in {bound!r}")
         lo, hi = float(bound[0]), float(bound[1])
         if not (0.0 <= lo <= 1.0) or not (0.0 <= hi <= 1.0):
             raise ValueError(f"bound values must be in [0, 1], got [{lo}, {hi}]")
@@ -631,8 +633,8 @@ def _resolve_shared_meta(meta: dict[str, Any] | None, *, lower_bound: float) -> 
         if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
             raise ValueError("meta['confidence'] must be float when provided")
         normalized = float(confidence)
-        if not (0.0 < normalized <= 1.0):
-            raise ValueError("meta['confidence'] must be in (0, 1]")
+        if not (0.0 <= normalized <= 1.0):
+            raise ValueError("meta['confidence'] must be in [0, 1]")
         resolved["confidence"] = normalized
     if "confidence_source" not in resolved:
         resolved["confidence_source"] = "meta:confidence" if confidence is not None else "pyreason:lower_bound"

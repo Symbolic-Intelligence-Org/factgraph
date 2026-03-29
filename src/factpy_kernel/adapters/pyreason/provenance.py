@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Mapping
 
+from factpy_kernel.adapters.pyreason._helpers import _parse_edge_component, _pred_short_name
 from factpy_kernel.audit.evidence_graph import (
     EDGE_UPDATES,
     LAYOUT_TIMELINE,
@@ -371,19 +372,6 @@ def _normalize_component_key(event: PyReasonTraceEventV0) -> str:
     return f"{parsed[0]}->{parsed[1]}"
 
 
-def _parse_edge_component(component: str) -> tuple[str, str] | None:
-    if component.startswith("(") and component.endswith(")"):
-        inner = component[1:-1]
-        parts = [part.strip() for part in inner.split(",")]
-        if len(parts) == 2:
-            return (parts[0], parts[1])
-    if "-" in component:
-        parts = component.split("-", 1)
-        if len(parts) == 2:
-            return (parts[0], parts[1])
-    return None
-
-
 def _format_bound_summary(bound: tuple[float, float]) -> str:
     return f"[{float(bound[0])}, {float(bound[1])}]"
 
@@ -391,11 +379,6 @@ def _format_bound_summary(bound: tuple[float, float]) -> str:
 def _is_seed_event(event: PyReasonTraceEventV0) -> bool:
     marker = event.occurred_due_to.strip().lower()
     return "fact" in marker or "seed" in marker
-
-
-def _pred_short_name(pred_id: str) -> str:
-    parts = pred_id.split(":", 1)
-    return parts[1] if len(parts) > 1 else pred_id
 
 
 __all__ = [

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from factpy_kernel.adapters.pyreason._helpers import _pred_short_name
 from factpy_kernel.adapters.pyreason.rule_ext import (
     _normalize_body_predicate_bounds,
     _validate_bound_pair,
@@ -210,11 +211,6 @@ def _validate_term(term: Any) -> None:
     raise PyReasonWhereCompileError(
         f"Unsupported term type for PyReason v0: {type(term).__name__}"
     )
-
-
-def _pred_short_name(pred_id: str) -> str:
-    parts = pred_id.split(":", 1)
-    return parts[1] if len(parts) > 1 else pred_id
 
 
 def _clean_var(token: str) -> str:
