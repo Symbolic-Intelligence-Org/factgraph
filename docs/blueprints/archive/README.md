@@ -161,3 +161,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-29 | core-audit-batch | implemented | Batch closeout for F-CORE-4/5 and F-EG-1/3/4: certainty routing notes, EvidenceGraph cycle/duplicate checks, narrowed static UI exception handling |
 | 2026-03-29 | pyreason-adapter-batch | implemented | Batch closeout for F-PR-2/3/4/5/6: bound bool guard, `confidence=0.0` parity, safer pred name parsing, correct annotation binding, shared helper extraction |
 | 2026-03-29 | problog-adapter-batch | implemented | Batch closeout for F-PL-1/2/3/4/5: per-candidate trace payload copies, safer result parsing notes, correct annotation binding, bool-confidence fallback, shared parsing extraction |
+| 2026-03-30 | evidence-graph-timeline-edges | implemented | F-EG-2 fix: timeline layout now surfaces incoming edge annotations on cards so EvidenceGraph edges remain visible outside tree layout |
