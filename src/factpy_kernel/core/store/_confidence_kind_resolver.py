@@ -67,14 +67,14 @@ class CertaintyConfidenceKindResolver:
     ) -> str:
         artifact = artifact_lookup(support_digest)
         if artifact is None:
-            return "none"
+            return "none"  # F-CORE-4: support artifact not found
         edge = check_certainty_artifact_eligibility(artifact, artifact_lookup)
         if edge is None:
-            return "none"
+            return "none"  # F-CORE-4: eligibility check failed
         payload = self._reader.read_rule_spec(edge.rule_ref_id, edge.rule_ref_version)
         if not isinstance(payload, dict):
-            return "none"
+            return "none"  # F-CORE-4: rule_spec not found or not dict
         condition_weights = payload.get("condition_weights")
         if not isinstance(condition_weights, dict) or not condition_weights:
-            return "none"
+            return "none"  # F-CORE-4: no condition_weights in rule_spec
         return "certainty"

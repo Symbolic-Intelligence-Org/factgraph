@@ -10,16 +10,16 @@ from .runtime import Store
 def extract_single_referenced_support_tree(tree_dict: dict[str, Any]) -> dict[str, Any] | None:
     root = tree_dict.get("root")
     if not isinstance(root, dict):
-        return None
+        return None  # F-CORE-4: tree has no valid root dict
     referenced_support_nodes = _collect_referenced_support_nodes(root)
     if len(referenced_support_nodes) != 1:
-        return None
+        return None  # F-CORE-4: need exactly 1 referenced_support node
     referenced_support = referenced_support_nodes[0]
     if _node_has_nested_referenced_support(
         referenced_support,
         inside_referenced_support=False,
     ):
-        return None
+        return None  # F-CORE-4: nested referenced_support not eligible
     return {
         "kind": tree_dict.get("kind", "candidate_evidence_tree"),
         "root": referenced_support,
@@ -89,10 +89,10 @@ def materialize_certainty_summary(
 ) -> dict[str, Any] | None:
     confidence_kind = store.get_candidate_confidence_kind(candidate_id)
     if confidence_kind != "certainty":
-        return None
+        return None  # F-CORE-4: candidate not routed to certainty
     certainty_tree = extract_single_referenced_support_tree(tree_dict)
     if condition_weights is None or certainty_tree is None:
-        return None
+        return None  # F-CORE-4: missing condition_weights or tree extraction failed
     raw = derive_certainty_summary(
         certainty_tree,
         condition_weights,
@@ -100,5 +100,5 @@ def materialize_certainty_summary(
         aggregation=aggregation,
     )
     if raw is None:
-        return None
+        return None  # F-CORE-4: derive_certainty_summary returned None
     return certainty_summary_to_dict(raw)

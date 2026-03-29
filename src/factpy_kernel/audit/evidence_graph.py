@@ -92,6 +92,28 @@ class EvidenceGraph:
             if edge.to_node_id not in node_id_set:
                 raise ValueError(f"edge to_node_id '{edge.to_node_id}' not in nodes")
 
+        # F-EG-1: cycle detection via DFS from root
+        adjacency: dict[str, list[str]] = {nid: [] for nid in node_id_set}
+        for edge in self.edges:
+            adjacency[edge.to_node_id].append(edge.from_node_id)
+
+        visited: set[str] = set()
+        path: set[str] = set()
+
+        def _dfs(nid: str) -> None:
+            if nid in path:
+                raise ValueError(f"cycle detected in EvidenceGraph involving node '{nid}'")
+            if nid in visited:
+                return
+            visited.add(nid)
+            path.add(nid)
+            for child in adjacency.get(nid, []):
+                _dfs(child)
+            path.discard(nid)
+
+        for nid in node_id_set:
+            _dfs(nid)
+
 
 def render_evidence_graph_html(graph: EvidenceGraph) -> str:
     """Render an EvidenceGraph as a standalone HTML fragment."""

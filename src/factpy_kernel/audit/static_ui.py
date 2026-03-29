@@ -945,7 +945,7 @@ def _try_build_evidence_graph_from_provenance(
 
         tree_v0 = souffle_proof_tree_from_dict(provenance_tree)
         return souffle_proof_tree_to_evidence_graph(tree_v0, candidate_id=candidate_id)
-    except Exception:
+    except (ValueError, KeyError, TypeError):
         return None
 
 

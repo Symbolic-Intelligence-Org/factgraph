@@ -541,19 +541,13 @@ plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 
 已修复：拆 compound condition `child is not None and len(child.rule_ref_edges) > 0` 为两个独立 guard。`child_artifact_lookup()` 返回 `None` 时，`check_certainty_artifact_eligibility()` 直接返回 `None`（ineligible），不再落到 `return edge`。
 
-### F-CORE-4 Certainty 物化与 confidence_kind 路由的诊断盲区（严重：低）
+### ~~F-CORE-4 Certainty 物化与 confidence_kind 路由的诊断盲区（严重：低）~~ — RESOLVED
 
-`_certainty_materializer.materialize_certainty_summary()` 有 4 个 `return None` 路径，`CertaintyConfidenceKindResolver.resolve()` 有 4 个 `return "none"` 路径。调用侧无法区分"不适用"与"数据异常"。
+已修复：为 `_certainty_materializer.py` 的 6 个 `return None` 路径和 `_confidence_kind_resolver.py` 的 4 个 `return "none"` 路径添加 `# F-CORE-4:` inline 诊断注释，标明各路径的拒绝原因。
 
-- 位置：`_certainty_materializer.py:88-104`、`_confidence_kind_resolver.py:60-78`
-- 影响：debug 困难；不影响正确性但增加排查成本
+### ~~F-CORE-5 `probability=0.0` 不可表达（严重：低）~~ — RESOLVED (docs-only)
 
-### F-CORE-5 `probability=0.0` 不可表达（严重：低）
-
-`write_protocol._validate_meta_value_for_kind()` 校验 confidence/probability 值域为 `(0, 1]`，零值被拒绝。在概率语义中 `P=0.0`（不可能事件）是合法值。
-
-- 位置：`core/evidence/write_protocol.py` validation logic
-- 影响：无法表达 "某事实概率为零" 的语义；当前是刻意的设计选择但未在文档中说明理由
+设计决策已明确记录：`confidence`/`probability` 的校验值域 `(0, 1]`（排除零）是刻意设计。零概率事实（"某事不可能发生"）在 append-only ledger 中没有合理语义——如果某事实概率为零，它不应被写入 ledger。需要表达"不适用"或"已撤销"的语义应使用 `retract` 机制而非 `probability=0.0`。
 
 ## 9. 必须维持的不变量
 

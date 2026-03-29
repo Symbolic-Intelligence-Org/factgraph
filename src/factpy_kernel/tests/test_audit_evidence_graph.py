@@ -197,5 +197,80 @@ class AuditEvidenceGraphTests(unittest.TestCase):
         self.assertEqual(rebuilt.metadata["anchor"], ("Alice",))
 
 
+    # --- F-EG-1: cycle detection ---
+
+    def test_cycle_detection_raises_on_cyclic_graph(self) -> None:
+        """F-EG-1: __post_init__ must reject graphs containing cycles."""
+        with self.assertRaises(ValueError) as ctx:
+            EvidenceGraph(
+                graph_id="eg:cycle",
+                engine="test",
+                root_node_id="n:a",
+                nodes=(
+                    EvidenceNode(node_id="n:a", node_kind=NODE_CONCLUSION, component="x", label="A", value_summary="v"),
+                    EvidenceNode(node_id="n:b", node_kind=NODE_PREMISE, component="x", label="B", value_summary="v"),
+                ),
+                edges=(
+                    EvidenceEdge(edge_id="e:1", from_node_id="n:b", to_node_id="n:a", edge_kind=EDGE_SUPPORTS),
+                    EvidenceEdge(edge_id="e:2", from_node_id="n:a", to_node_id="n:b", edge_kind=EDGE_SUPPORTS),
+                ),
+                support_kind="test",
+            )
+        self.assertIn("cycle detected", str(ctx.exception))
+
+    def test_acyclic_graph_passes_validation(self) -> None:
+        """F-EG-1: a valid DAG must pass cycle detection without error."""
+        graph = EvidenceGraph(
+            graph_id="eg:dag",
+            engine="test",
+            root_node_id="n:root",
+            nodes=(
+                EvidenceNode(node_id="n:root", node_kind=NODE_CONCLUSION, component="x", label="R", value_summary="v"),
+                EvidenceNode(node_id="n:c1", node_kind=NODE_PREMISE, component="x", label="C1", value_summary="v"),
+                EvidenceNode(node_id="n:c2", node_kind=NODE_PREMISE, component="x", label="C2", value_summary="v"),
+            ),
+            edges=(
+                EvidenceEdge(edge_id="e:1", from_node_id="n:c1", to_node_id="n:root", edge_kind=EDGE_SUPPORTS),
+                EvidenceEdge(edge_id="e:2", from_node_id="n:c2", to_node_id="n:root", edge_kind=EDGE_SUPPORTS),
+            ),
+            support_kind="test",
+        )
+        self.assertEqual(len(graph.nodes), 3)
+
+    # --- F-EG-3: duplicate candidate_id in reader ---
+
+    def test_read_evidence_graphs_rejects_duplicate_candidate_id(self) -> None:
+        """F-EG-3: duplicate candidate_id in evidence_graphs.jsonl must raise."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        from factpy_kernel.audit.reader import AuditReadError, _read_evidence_graphs
+
+        graph_dict = evidence_graph_to_dict(
+            EvidenceGraph(
+                graph_id="eg:dup",
+                engine="test",
+                root_node_id="n:root",
+                nodes=(
+                    EvidenceNode(node_id="n:root", node_kind=NODE_CONCLUSION, component="x", label="L", value_summary="v"),
+                ),
+                edges=(),
+                support_kind="test",
+            )
+        )
+        rows = [
+            {"candidate_id": "cand-1", "evidence_graph": graph_dict},
+            {"candidate_id": "cand-1", "evidence_graph": graph_dict},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            jsonl_path = Path(tmp) / "evidence_graphs.jsonl"
+            jsonl_path.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+            mapping = {"evidence_graphs": "evidence_graphs.jsonl"}
+            with self.assertRaises(AuditReadError) as ctx:
+                _read_evidence_graphs(Path(tmp), mapping)
+            self.assertIn("duplicate candidate_id", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

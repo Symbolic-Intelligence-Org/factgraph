@@ -125,12 +125,9 @@
 
 ## 7. Known Issues（2026-03-29 walkthrough 确认）
 
-### F-EG-1 构造时无环检测（严重：低）
+### ~~F-EG-1 构造时无环检测（严重：低）~~ — RESOLVED
 
-`EvidenceGraph.__post_init__` 校验 node/edge uniqueness 与端点引用，但不检测是否存在环。环检测仅在 tree renderer 渲染阶段做 `if node_id in ancestry` 防御性截断。如果 consumer 直接遍历 `edges` 而非使用 renderer，可能遇到无限递归。
-
-- 位置：`evidence_graph.py:72-93`（构造校验）、`evidence_graph.py:204`（渲染期截断）
-- 影响：当前所有 converter（Souffle/PyReason/ProbLog）产出的图均为无环；仅影响手动构造的 graph
+已修复：`EvidenceGraph.__post_init__` 在端点引用校验之后增加 DFS 环检测。含有环的图在构造时即 raise `ValueError("cycle detected in EvidenceGraph involving node ...")`。渲染期 `if node_id in ancestry` 截断保留为双重防御。
 
 ### F-EG-2 Timeline renderer 不渲染 edges（严重：低）
 
@@ -138,14 +135,10 @@ Timeline renderer 只展示 node cards 在 timestep × component grid 中的分�
 
 - 位置：`evidence_graph.py:250-335`
 
-### F-EG-3 `evidence_graphs.jsonl` 重复 candidate_id 静默覆盖（严重：低）
+### ~~F-EG-3 `evidence_graphs.jsonl` 重复 candidate_id 静默覆盖（严重：低）~~ — RESOLVED
 
-`reader._read_evidence_graphs()` 用 dict 赋值读取 JSONL，相同 `candidate_id` 的多行会 last-wins，无 warning。
+已修复：`reader._read_evidence_graphs()` 在赋值前检查 `candidate_id in result`，重复时 raise `AuditReadError("duplicate candidate_id in evidence_graphs: ...")`。
 
-- 位置：`reader.py:186`
+### ~~F-EG-4 `static_ui._try_build_evidence_graph_from_provenance` 裸 Exception 捕获（严重：低）~~ — RESOLVED
 
-### F-EG-4 `static_ui._try_build_evidence_graph_from_provenance` 裸 Exception 捕获（严重：低）
-
-该函数用 `except Exception: return None` 吞掉所有错误（含 `ImportError`、`AttributeError` 等非预期异常），使 fallback 路径的诊断困难。
-
-- 位置：`static_ui.py:948`
+已修复：`except Exception:` 收窄为 `except (ValueError, KeyError, TypeError):`，覆盖 `souffle_proof_tree_from_dict` 和 `souffle_proof_tree_to_evidence_graph` 的已知失败模式。`ImportError`、`AttributeError` 等非预期异常将正常传播。

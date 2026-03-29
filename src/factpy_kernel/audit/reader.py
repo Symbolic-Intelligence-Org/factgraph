@@ -182,6 +182,8 @@ def _read_evidence_graphs(root: Path, mapping: dict[str, str]) -> dict[str, Evid
             continue
         if not isinstance(evidence_graph, dict):
             continue
+        if candidate_id in result:
+            raise AuditReadError(f"duplicate candidate_id in evidence_graphs: {candidate_id}")
         try:
             result[candidate_id] = evidence_graph_from_dict(evidence_graph)
         except ValueError as exc:
