@@ -529,13 +529,9 @@ plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 
 以下问题均经代码验证确认。标为 **finding** 而非 **correct behavior**。
 
-### F-CORE-1 `replace_field` 非原子（严重：中）
+### ~~F-CORE-1 `replace_field` 非原子（严重：中）~~ — RESOLVED
 
-`write_protocol.replace_field()` 内部先 `retract_by_asrt()` 再 `set_field()`。若 `set_field` 抛异常（例如 meta 校验失败），旧断言已被 revoke 但无替换写入。Ledger 是 append-only，revoke 不可回退。
-
-- 位置：`core/evidence/write_protocol.py:225-226`
-- 触发条件：`replace_field(meta={"confidence": "invalid"})` 等 meta 校验失败场景
-- 影响：旧事实丢失，无新事实补偿
+已修复：`replace_field()` 新增 `_preflight_new_assertion()` 预校验，在 `retract_by_asrt()` 之前运行 `set_field()` 的所有 validation 步骤。校验失败时旧断言保持 active，不被 revoke。
 
 ### F-CORE-2 `_remember_candidate_support` 重注册不校验 digest（严重：中）
 

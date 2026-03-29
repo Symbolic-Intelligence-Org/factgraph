@@ -216,7 +216,7 @@ def replace_field(
     meta: dict[str, Any] | None = None,
 ) -> tuple[str | None, str]:
     _validate_write_inputs(ledger, pred_id, e_ref, old_rest_terms)
-    _validate_write_inputs(ledger, pred_id, e_ref, new_rest_terms)
+    _preflight_new_assertion(ledger, pred_id, e_ref, new_rest_terms, meta)
 
     old_asrt_id = _find_active_matching_claim(ledger, pred_id, e_ref, old_rest_terms)
     if old_asrt_id is None:
@@ -454,6 +454,21 @@ def _validate_meta_value_for_kind(key: str, kind: str, value: Any) -> None:
             raise WriteProtocolError(f"meta[{key}] must be JSON-serializable") from exc
         return
     raise WriteProtocolError(f"unsupported mapped meta kind for {key}: {kind}")
+
+
+def _preflight_new_assertion(
+    ledger: Ledger,
+    pred_id: str,
+    e_ref: str,
+    rest_terms: list[tuple[str, Any]],
+    meta: dict[str, Any] | None,
+) -> None:
+    """Dry-run set_field validation. Raises before any DB writes."""
+    _validate_write_inputs(ledger, pred_id, e_ref, rest_terms)
+    meta_dict = _normalize_meta(meta)
+    ingest_key = _compute_ingest_key(pred_id, e_ref, rest_terms, meta_dict)
+    _meta_rows_for_claim("_preflight_", meta_dict, ingest_key, 0)
+    _annotation_rows_for_claim("_preflight_", meta_dict)
 
 
 def _find_active_matching_claim(

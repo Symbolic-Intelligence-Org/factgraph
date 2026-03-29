@@ -9,6 +9,7 @@ from __future__ import annotations
 import unittest
 
 from factpy_kernel.core.evidence.write_protocol import (
+    WriteProtocolError,
     _SHARED_ANNOTATION_WHITELIST,
     add_field,
     replace_field,
@@ -382,6 +383,79 @@ class TestProbabilityWriteLane(unittest.TestCase):
         cat, origin = _SHARED_ANNOTATION_WHITELIST["probability"]
         self.assertEqual(cat, "semantic")
         self.assertEqual(origin, "observed")
+
+
+class TestReplaceFieldAtomicity(unittest.TestCase):
+    """F-CORE-1: replace_field must not revoke old assertion if new assertion validation fails."""
+
+    def _setup_existing(self) -> tuple[Ledger, str]:
+        ledger = Ledger()
+        asrt_id = set_field(
+            ledger,
+            "user:name",
+            _eref("alice"),
+            [("string", "Alice")],
+            meta={"source": "initial"},
+        )
+        return ledger, asrt_id
+
+    def test_invalid_meta_preserves_old_assertion(self) -> None:
+        """confidence='bad' should raise before revoking the old assertion."""
+        ledger, old_asrt_id = self._setup_existing()
+
+        with self.assertRaises(WriteProtocolError):
+            replace_field(
+                ledger,
+                "user:name",
+                _eref("alice"),
+                old_rest_terms=[("string", "Alice")],
+                new_rest_terms=[("string", "Alice Updated")],
+                meta={"confidence": "bad"},
+            )
+
+        # Old assertion must still be active (not revoked).
+        self.assertIsNone(ledger.find_revoker(old_asrt_id))
+        self.assertFalse(ledger.has_active_revocation(old_asrt_id))
+
+    def test_invalid_probability_preserves_old_assertion(self) -> None:
+        """probability=2.0 should raise before revoking the old assertion."""
+        ledger, old_asrt_id = self._setup_existing()
+
+        with self.assertRaises(WriteProtocolError):
+            replace_field(
+                ledger,
+                "user:name",
+                _eref("alice"),
+                old_rest_terms=[("string", "Alice")],
+                new_rest_terms=[("string", "Alice Updated")],
+                meta={"probability": 2.0},
+            )
+
+        self.assertIsNone(ledger.find_revoker(old_asrt_id))
+        self.assertFalse(ledger.has_active_revocation(old_asrt_id))
+
+    def test_valid_replacement_still_works(self) -> None:
+        """Happy path regression: valid replace should revoke old and create new."""
+        ledger, old_asrt_id = self._setup_existing()
+
+        revoker_id, new_id = replace_field(
+            ledger,
+            "user:name",
+            _eref("alice"),
+            old_rest_terms=[("string", "Alice")],
+            new_rest_terms=[("string", "Alice Updated")],
+            meta={"source": "correction"},
+        )
+
+        # Old assertion must be revoked.
+        self.assertIsNotNone(revoker_id)
+        self.assertTrue(ledger.has_active_revocation(old_asrt_id))
+
+        # New assertion must exist with correct annotations.
+        new_annos = ledger.find_annotations(asrt_id=new_id)
+        source_annos = [a for a in new_annos if a.key == "source"]
+        self.assertEqual(len(source_annos), 1)
+        self.assertEqual(source_annos[0].value, "correction")
 
 
 if __name__ == "__main__":
