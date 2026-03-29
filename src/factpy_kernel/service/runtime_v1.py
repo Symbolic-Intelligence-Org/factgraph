@@ -11,6 +11,7 @@ from time import time_ns
 from typing import Any
 from uuid import uuid4
 
+from factpy_kernel.adapters.problog.rule_ext import resolve_problog_engine_ext
 from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
 from factpy_kernel.authoring.registry_fs import FileAuthoringRegistry
 from factpy_kernel.authoring.derivation_compile import (
@@ -777,6 +778,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             certainty_resolver = CertaintyConfidenceKindResolver(
                 FileAuthoringRegistry(registry_root),
             )
+        runtime_engine_ext = _resolve_runtime_derivation_engine_ext(compiled)
         candidates = session.store.evaluate(
             derivation_id=compiled["derivation_id"],
             version=compiled["version"],
@@ -785,9 +787,9 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             where=list(compiled["where"]),
             mode=compiled["mode"],
             head=compiled.get("head"),
-            body_confidences=compiled.get("body_confidences"),
             registry=active_registry,
             confidence_kind_resolver=certainty_resolver,
+            engine_ext=runtime_engine_ext,
         )
         _cache_derivation_recipe(
             session,
@@ -813,6 +815,16 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="derivation_evaluate")
         return error_response([err])
+
+
+def _resolve_runtime_derivation_engine_ext(compiled: dict[str, Any]) -> object | None:
+    if compiled.get("mode") != "problog":
+        return compiled.get("engine_ext")
+    return resolve_problog_engine_ext(
+        where=compiled.get("where"),
+        engine_ext=compiled.get("engine_ext"),
+        legacy_body_confidences=compiled.get("body_confidences"),
+    )
 
 
 def accept_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:

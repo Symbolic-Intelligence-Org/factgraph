@@ -11,6 +11,7 @@ from factpy_kernel.adapters.problog.problog_engine import run_problog
 from factpy_kernel.adapters.problog.problog_export import export_problog
 from factpy_kernel.adapters.problog.problog_import import parse_problog_output
 from factpy_kernel.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
+from factpy_kernel.adapters.problog.rule_ext import resolve_problog_engine_ext
 from factpy_kernel.adapters.souffle.where_compile import extract_where_variables
 from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.rules.where_eval import WhereValidationError
@@ -33,14 +34,15 @@ def evaluate_problog(
     where: list[Any],
     mode: str = "problog",
     head: dict[str, Any] | None = None,
-    body_confidences: list[float] | None = None,
     engine_ext: EngineExtBase | None = None,
     engine_options: dict[str, Any] | None = None,
 ) -> list[CandidateSet]:
     """Evaluate a derivation through the ProbLog adapter."""
     del mode
-    if engine_ext is not None:
-        raise ValueError("ProbLog does not support engine_ext")
+    resolved_engine_ext = resolve_problog_engine_ext(
+        where=where,
+        engine_ext=engine_ext,
+    )
 
     timeout = resolve_problog_timeout(engine_options)
     where_variables = extract_where_variables(where)
@@ -82,7 +84,7 @@ def evaluate_problog(
         "head_vars": list(head_vars),
         "where": where,
         "head": head,
-        "body_confidences": body_confidences,
+        "engine_ext": resolved_engine_ext,
         "query_vars": where_variables,
         "query_pred": "answer",
     }

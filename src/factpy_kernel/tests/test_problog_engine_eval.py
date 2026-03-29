@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import factpy_kernel.adapters.problog  # noqa: F401
 from factpy_kernel.adapters.problog.engine_eval import evaluate_problog
+from factpy_kernel.adapters.problog.rule_ext import ProbLogRuleExt
 from factpy_kernel.core.store._support import PROBLOG_PROVENANCE_KIND
 from factpy_kernel.core.store.runtime import get_engine_evaluator
 from factpy_kernel.core.store.types import EngineExtBase
@@ -123,13 +124,81 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         self.assertIn("positive int", str(ctx.exception))
 
-    def test_engine_ext_is_rejected(self) -> None:
+    def test_non_problog_engine_ext_is_rejected(self) -> None:
         sdk = self._make_sdk()
 
         with self.assertRaises(ValueError) as ctx:
             sdk.evaluate(self._make_derivation(engine_ext=DummyProbLogExt()))
 
-        self.assertIn("does not support engine_ext", str(ctx.exception))
+        self.assertIn("ProbLog engine_ext must be ProbLogRuleExt", str(ctx.exception))
+
+    @patch("factpy_kernel.adapters.problog.engine_eval.run_problog")
+    def test_problog_rule_ext_is_accepted_and_drives_export(self, mock_run) -> None:
+        sdk = self._make_sdk()
+        seen: dict[str, str] = {}
+
+        def _fake_run(pl_path, *, timeout, trace):
+            seen["program"] = pl_path.read_text(encoding="utf-8")
+            return self._mock_output(sdk)
+
+        mock_run.side_effect = _fake_run
+
+        candidates = sdk.evaluate(
+            self._make_derivation(
+                engine_ext=ProbLogRuleExt(branch_probabilities=(0.5,))
+            )
+        )
+
+        self.assertEqual(len(candidates), 1)
+        self.assertIn("0.5::rule_body_0", seen["program"])
+
+    @patch("factpy_kernel.adapters.problog.engine_eval.run_problog")
+    def test_legacy_body_confidences_are_bridged_to_engine_ext(self, mock_run) -> None:
+        sdk = self._make_sdk()
+        compiled = sdk._compile_derivation_input(self._make_derivation())[0]
+        compiled["body_confidences"] = [0.25]
+        seen: dict[str, str] = {}
+
+        def _fake_run(pl_path, *, timeout, trace):
+            seen["program"] = pl_path.read_text(encoding="utf-8")
+            return self._mock_output(sdk)
+
+        mock_run.side_effect = _fake_run
+
+        candidates = sdk.evaluate(compiled)
+
+        self.assertEqual(len(candidates), 1)
+        self.assertIn("0.25::rule_body_0", seen["program"])
+
+    def test_conflicting_body_confidences_and_engine_ext_raise(self) -> None:
+        sdk = self._make_sdk()
+        compiled = sdk._compile_derivation_input(self._make_derivation())[0]
+        compiled["body_confidences"] = [0.25]
+        compiled["engine_ext"] = ProbLogRuleExt(branch_probabilities=(0.5,))
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.evaluate(compiled)
+
+        self.assertIn("Conflicting ProbLog branch probabilities", str(ctx.exception))
+
+    @patch("factpy_kernel.adapters.problog.engine_eval.run_problog")
+    def test_matching_body_confidences_and_engine_ext_are_allowed(self, mock_run) -> None:
+        sdk = self._make_sdk()
+        compiled = sdk._compile_derivation_input(self._make_derivation())[0]
+        compiled["body_confidences"] = [0.25]
+        compiled["engine_ext"] = ProbLogRuleExt(branch_probabilities=(0.25,))
+        seen: dict[str, str] = {}
+
+        def _fake_run(pl_path, *, timeout, trace):
+            seen["program"] = pl_path.read_text(encoding="utf-8")
+            return self._mock_output(sdk)
+
+        mock_run.side_effect = _fake_run
+
+        candidates = sdk.evaluate(compiled)
+
+        self.assertEqual(len(candidates), 1)
+        self.assertIn("0.25::rule_body_0", seen["program"])
 
 
 if __name__ == "__main__":

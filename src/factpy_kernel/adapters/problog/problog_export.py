@@ -5,6 +5,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+from factpy_kernel.adapters.problog.rule_ext import (
+    ProbLogRuleExt,
+    materialize_problog_branch_probabilities,
+)
 from factpy_kernel.adapters.souffle.where_compile import extract_where_variables
 from factpy_kernel.core.store.runtime import Store
 
@@ -26,9 +30,16 @@ def export_problog(store: Store, rule_spec: dict[str, Any], out_path: Path) -> N
     if not isinstance(where, list) or not where:
         raise ProbLogExportError("rule_spec.where must be non-empty list")
     bodies = _normalize_where_bodies(where)
-
-    raw_body_confidences = rule_spec.get("body_confidences")
-    body_confidences = _normalize_body_confidences(raw_body_confidences, branch_count=len(bodies))
+    engine_ext = rule_spec.get("engine_ext")
+    if engine_ext is not None and not isinstance(engine_ext, ProbLogRuleExt):
+        raise ProbLogExportError(f"rule_spec.engine_ext must be ProbLogRuleExt, got {type(engine_ext).__name__}")
+    try:
+        branch_probabilities = materialize_problog_branch_probabilities(
+            where=where,
+            engine_ext=engine_ext,
+        )
+    except ValueError as exc:
+        raise ProbLogExportError(str(exc)) from exc
 
     try:
         query_vars = extract_where_variables(where)
@@ -65,7 +76,7 @@ def export_problog(store: Store, rule_spec: dict[str, Any], out_path: Path) -> N
     for idx, body in enumerate(bodies):
         branch_head = _predicate_call(f"rule_body_{idx}", query_vars)
         compiled_body = _compile_body(body)
-        lines.append(f"{_format_probability(body_confidences[idx])}::{branch_head} :- {compiled_body}.")
+        lines.append(f"{_format_probability(branch_probabilities[idx])}::{branch_head} :- {compiled_body}.")
 
     answer_head = _predicate_call("answer", query_vars)
     for idx in range(len(bodies)):
@@ -76,27 +87,6 @@ def export_problog(store: Store, rule_spec: dict[str, Any], out_path: Path) -> N
     path = Path(out_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8", newline="\n")
-
-
-def _normalize_body_confidences(raw: Any, *, branch_count: int) -> list[float]:
-    if branch_count <= 0:
-        raise ProbLogExportError("where must contain at least one branch")
-    if raw is None:
-        return [1.0] * branch_count
-    if not isinstance(raw, list) or len(raw) != branch_count:
-        raise ProbLogExportError("body_confidences length must match where branch count")
-
-    out: list[float] = []
-    for idx, value in enumerate(raw):
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ProbLogExportError(f"body_confidences[{idx}] must be float in (0,1]")
-        prob = float(value)
-        if prob <= 0.0 or prob > 1.0:
-            raise ProbLogExportError(f"body_confidences[{idx}] must be within (0,1]")
-        out.append(prob)
-    return out
-
-
 def _normalize_where_bodies(where: list[Any]) -> list[list[Any]]:
     if not where:
         raise ProbLogExportError("where must be non-empty list")

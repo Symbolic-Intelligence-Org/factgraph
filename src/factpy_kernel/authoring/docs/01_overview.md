@@ -1,7 +1,7 @@
 # Authoring 模块总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/authoring`
-- 最后更新：2026-03-20
+- 最后更新：2026-03-29
 - 目标读者：需要理解 schema/rule/derivation 预检、发布、registry 工作流的开发者
 
 ## 1. 模块职责
@@ -140,6 +140,10 @@ derivation_payload = {
 - 用户语法不再支持 `materialize_as` / `id_policy`；若输入包含这两个字段，compile 直接报错。
 - schema compile 为所有 `Entity` 自动生成 `<T>:exists` predicate，不再依赖 `is_record` 作为行为开关。
 - no-head（`target + head_vars`）仍保留为 fact-only 兼容路径。
+- ProbLog branch probability 当前仍允许通过 authoring payload `body_confidences` 或 SDK `Body(confidence=...)` 进入 compile 产物
+  - 这是 compatibility lane，不是新的 shared runtime contract
+  - `engine_ext` 仍不进入 authoring payload
+  - 执行前由 SDK/runtime bridge 成 `ProbLogRuleExt(branch_probabilities=...)`
 
 ### 5.1 最小输入示例（authoring payload）
 

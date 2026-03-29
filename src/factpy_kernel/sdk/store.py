@@ -543,6 +543,13 @@ class SDKStore:
             compiled.get("body_confidences"),
             path="$.body_confidences",
         )
+        resolved_engine_ext = _resolve_engine_ext_for_evaluate_plan(
+            mode=resolved_mode,
+            where=compiled.get("where"),
+            compiled_engine_ext=compiled.get("engine_ext"),
+            explicit_engine_ext=engine_ext,
+            legacy_body_confidences=body_confidences,
+        )
         return evaluate_store(
             self._store,
             derivation_id=compiled["derivation_id"],
@@ -552,10 +559,9 @@ class SDKStore:
             where=list(compiled["where"]),
             mode=resolved_mode,
             head=compiled.get("head"),
-            body_confidences=body_confidences,
             engine_evaluate=self._store.evaluate_engine,
             registry=registry,
-            engine_ext=engine_ext,
+            engine_ext=resolved_engine_ext,
             engine_options=engine_options,
         )
 
@@ -1310,6 +1316,30 @@ def _validate_body_confidences_arity(*, where: Any, body_confidences: list[float
             "body_confidences length must match where branch count",
             path="$.body_confidences",
         )
+
+
+def _resolve_engine_ext_for_evaluate_plan(
+    *,
+    mode: Any,
+    where: Any,
+    compiled_engine_ext: object | None,
+    explicit_engine_ext: object | None,
+    legacy_body_confidences: list[float] | None,
+) -> object | None:
+    if explicit_engine_ext is not None and compiled_engine_ext is not None and explicit_engine_ext != compiled_engine_ext:
+        raise ValueError("Conflicting engine_ext between explicit derivation and compiled plan")
+
+    selected_engine_ext = explicit_engine_ext if explicit_engine_ext is not None else compiled_engine_ext
+    if mode != "problog":
+        return selected_engine_ext
+
+    from factpy_kernel.adapters.problog.rule_ext import resolve_problog_engine_ext
+
+    return resolve_problog_engine_ext(
+        where=where,
+        engine_ext=selected_engine_ext,
+        legacy_body_confidences=legacy_body_confidences,
+    )
 
 
 def _with_candidate_run_id(candidates: list[CandidateSet], *, run_id: str) -> list[CandidateSet]:

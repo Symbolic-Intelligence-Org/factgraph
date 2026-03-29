@@ -16,3 +16,6 @@
   - schema DSL 走 `Entity.Meta`
   - rule / derivation DSL 走顶层参数
   - 这些字段属于 authoring 资产元数据，不参与 runtime 语义
+- 当前 derivation authoring 仍保留少量 compatibility compile lane：
+  - 例如 ProbLog 的 `body_confidences`
+  - 这类字段可进入 compile 产物，但不等于 shared runtime contract；执行前可能会被 bridge 到 typed `engine_ext`

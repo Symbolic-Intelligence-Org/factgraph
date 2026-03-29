@@ -1,7 +1,7 @@
 # ProbLog Adapter 总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/adapters/problog`
-- 最后更新：2026-03-28
+- 最后更新：2026-03-29
 - 目标读者：需要理解 ProbLog 导出、执行、结果回读链路的开发者
 
 ## 1. 模块职责
@@ -32,6 +32,10 @@
   - `evaluate_problog(...)`
   - `resolve_problog_timeout(...)`：shared `engine_options` 归一化
   - `_remember_pending_probability_annotations(...)`
+- `rule_ext.py`
+  - `ProbLogRuleExt`
+  - `resolve_problog_engine_ext(...)`
+  - branch probability normalization / bridge helpers
 - `provenance.py`
   - `ProbLogTraceV0` / `ProbLogTraceEventV0` / `parse_problog_trace(...)` / `problog_trace_to_evidence_graph(...)`
 - `problog_export.py`
@@ -55,18 +59,22 @@
 
 1. 校验目标和变量绑定（entity head / fact head）
 2. 用 `resolve_problog_timeout(engine_options)` 归一化运行超时
-3. 组装 rule_spec（包含 `where/head/head_vars/query_vars/body_confidences`）
-4. `export_problog(...)` 生成临时 `query.pl`
-5. `run_problog(...)` 调用 ProbLog CLI
-6. `parse_problog_output(...)` 解析结果并映射为 `CandidateSet`
-7. `parse_problog_trace(...)` 把同一份 `--trace` 输出解析成 adapter-local proof trace
-8. 将推导概率写入 `candidate.confidence`，并标注 `candidate.confidence_kind="probability"`
-9. 若 trace 非空，则把每个 candidate 升级成：
+3. 用 `resolve_problog_engine_ext(...)` 归一化 definition-time 语义：
+   - 接受显式 `ProbLogRuleExt(branch_probabilities=...)`
+   - 兼容 bridge 旧的 compiled `body_confidences`
+   - 两条 lane 同时存在且不一致时 fail fast
+4. 组装 rule_spec（包含 `where/head/head_vars/query_vars/engine_ext`）
+5. `export_problog(...)` 生成临时 `query.pl`
+6. `run_problog(...)` 调用 ProbLog CLI
+7. `parse_problog_output(...)` 解析结果并映射为 `CandidateSet`
+8. `parse_problog_trace(...)` 把同一份 `--trace` 输出解析成 adapter-local proof trace
+9. 将推导概率写入 `candidate.confidence`，并标注 `candidate.confidence_kind="probability"`
+10. 若 trace 非空，则把每个 candidate 升级成：
    - `support_kind="problog_provenance_v1"`
    - `support_digest=<ProvenanceEnvelope digest>`
    - runtime `explain_ref(kind="candidate")` 可直接读回 `payload_type="proof_trace"` 的 provenance envelope
-10. `evaluate_problog(...)` 把待持久化的 `problog/semantic/probability` 模板缓存到 store pending state
-11. caller 在 `accept` 后调用 `persist_problog_annotations(...)`，将真实 `asrt_id` 绑定到 Annotation Store
+11. `evaluate_problog(...)` 把待持久化的 `problog/semantic/probability` 模板缓存到 store pending state
+12. caller 在 `accept` 后调用 `persist_problog_annotations(...)`，将真实 `asrt_id` 绑定到 Annotation Store
 
 explainability 补充：
 
@@ -121,7 +129,11 @@ semantic-delivery 补充：
 - 每条 claim 概率：
   - 默认 `1.0`
   - 可从 `meta.confidence` 读取
-- where 分支可配置 `body_confidences`（分支概率）
+- where 分支概率当前由 `ProbLogRuleExt.branch_probabilities` 承载
+  - `branch_probabilities[i]` 对应 normalized `where` OR branch `i`
+  - `None` 等价于所有分支 `1.0`
+  - 值域保持 `(0, 1]`
+- 旧的 authoring/compiled `body_confidences` 仍可出现，但只作为 SDK/runtime bridge 输入；adapter/export 本身只消费 typed `engine_ext`
 - 输出程序包含：
   - `edb_fact(...)` 事实
   - `rule_body_i` 分支规则
@@ -180,5 +192,8 @@ ProbLog 当前对 shared evaluate surface 公开的 run-time 选项只有一个�
 - `pred` 原子当前只支持 1/2 元参数映射
 - 主要服务 derivation query 执行，不覆盖 Deontic 规范执行
 - 当前只承诺 runtime `explain_ref(kind="candidate")` flat provenance envelope；不会自动生成 candidate evidence tree / summary / narrative / NL
-- 当前不提供 ProbLog session API 或 `engine_ext`；shared runtime options 当前只开放 `timeout`
+- 当前不提供 ProbLog session API；shared runtime options 当前只开放 `timeout`
+- definition-time ProbLog engine 扩展当前只开放一个最小 contract：
+  - `ProbLogRuleExt(branch_probabilities=...)`
+  - 只表达 OR-branch weighting，不表达 fact probability、candidate probability 或 annotation persistence
 - `problog_trace_to_evidence_graph(...)` 当前是 best-effort candidate anchoring；当同一 candidate 对应多个 synthetic answer frame 时，只会选最接近的一棵 call subtree

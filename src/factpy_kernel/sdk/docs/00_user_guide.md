@@ -730,13 +730,19 @@ with vars("u", "lang") as (u, lang):
 - 裸 list 写法保留，编译后 `body_confidences=None`，行为与之前一致。
 
 **支持范围**
-- Rule：支持 `Body(...)`，当前仅用于 where 归一化，`body_confidences` 不参与 Rule 运行时求值。
-- Derivation：支持 `Body(...)`，编译后提取 `body_confidences` sidecar，供 `mode="problog"` 消费。
+- Rule：支持 `Body(...)`，当前仅用于 where 归一化；`Body.confidence` 不直接变成 Rule runtime 参数。
+- Derivation：支持 `Body(...)`；编译阶段仍会提取兼容字段 `body_confidences`，但 `sdk.evaluate(..., mode="problog")` 会在执行前把它 bridge 成 `ProbLogRuleExt(branch_probabilities=...)`。
 - Query：`Body.confidence` 不支持，构造期报错。
 - `Body.confidence` 属于 probabilistic reasoning lane，不等同于 requirement threshold probability。
 
-`body_confidences` 透传链路：
-`SDK Derivation/authoring payload -> compile_authoring_derivation_v1 -> sdk.evaluate -> evaluate_store -> engine(problog)`。
+当前推荐语义 carrier：
+
+- definition-time：`Derivation.engine_ext=ProbLogRuleExt(branch_probabilities=...)`
+- compatibility authoring lane：`Body(confidence=...)` / authoring payload `body_confidences`
+- SDK evaluate bridge：compat lane -> `ProbLogRuleExt`
+
+compatibility bridge 链路：
+`SDK Derivation/authoring payload -> compile_authoring_derivation_v1 -> compiled body_confidences -> sdk.evaluate bridge -> engine_ext -> engine(problog)`。
 
 ### 6.3.1 `Body` 的模式差异示例
 
@@ -754,11 +760,11 @@ with vars("u", "lang") as (u, lang):
         head=User.name(lang="zh", name=lang),
     )
 
-# native：忽略 body_confidences（与裸 list 行为一致）
+# native：不会消费 branch probabilities（与裸 list 行为一致）
 cands_native = sdk.evaluate(drv, mode="native")
 print(cands_native[0].confidence)  # None
 
-# problog：消费 body_confidences，返回概率
+# problog：SDK 会先把 Body.confidence bridge 成 ProbLogRuleExt，再返回概率
 import factpy_kernel.adapters.problog
 cands_prob = sdk.evaluate(drv, mode="problog")
 print(cands_prob[0].confidence)    # float，例如 0.86
@@ -880,10 +886,35 @@ persist_pyreason_annotations(sdk.ledger, cands[0].run_id, sdk.store, result)
 # → pyreason/semantic/bound_lower, bound_upper 等写入 Annotation Store
 ```
 
+### 6.4.2 ProbLog 使用示例
+
+```python
+import factpy_kernel.adapters.problog  # 注册 "problog"
+from factpy_kernel.adapters.problog.rule_ext import ProbLogRuleExt
+
+drv = Derivation(
+    id="drv.speaks",
+    version="v1",
+    where=[
+        [Pred("user:lang_pref", u, lang)],
+        [Pred("user:lang_model", u, lang)],
+    ],
+    target="user:speaks",
+    head_vars=[u, lang],
+    mode="problog",
+    engine_ext=ProbLogRuleExt(branch_probabilities=(0.9, 0.6)),
+)
+
+cands = sdk.evaluate(drv, engine_options={"timeout": 15})
+print(cands[0].confidence)  # float probability
+```
+
 **关键区分**：
 - `engine_ext`：定义期引擎语义 carrier；共享类型上可挂在 `Rule.engine_ext` 或 `Derivation.engine_ext`，编译时伴随但不序列化
 - `engine_options`：运行时参数，call-time only，`mode="native"` 拒绝非空 options
 - 语义 annotation：accept 后需显式调用 `persist_pyreason_annotations()` 或 `persist_problog_annotations()` 完成持久化
+- ProbLog 的 definition-time contract 当前是 `ProbLogRuleExt.branch_probabilities`
+  - `Body(confidence=...)` / `body_confidences` 仍可用，但只是 bridge 输入，不再是 shared evaluate 参数
 
 **稳定合约**
 - `sdk.evaluate(...)` 产出候选，不写 ledger；`sdk.accept(...)` 才写 ledger。

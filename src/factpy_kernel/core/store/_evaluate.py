@@ -19,7 +19,6 @@ from factpy_kernel.core.derivation.candidates import CandidateSet
 from factpy_kernel.core.rules.where_eval import WhereValidationError
 from factpy_kernel.core.store import builders
 from factpy_kernel.core.store.types import (
-    BodyConfidencesIR,
     EngineExtBase,
     EngineEvaluatorFn,
     EngineOptionsIR,
@@ -41,7 +40,6 @@ def evaluate_store(
     where: WhereIR,
     mode: EvaluateMode = "native",
     head: HeadSpecIR | None = None,
-    body_confidences: BodyConfidencesIR = None,
     engine_evaluate: EngineEvaluatorFn,
     registry: Any | None = None,
     confidence_kind_resolver: Any | None = None,
@@ -76,8 +74,6 @@ def evaluate_store(
                 "where": where,
                 "head": head,
             }
-            if mode == "problog":
-                engine_kwargs["body_confidences"] = body_confidences
             if engine_ext is not None:
                 engine_kwargs["engine_ext"] = engine_ext
             if engine_options is not None:
@@ -122,8 +118,6 @@ def evaluate_store(
             "where": where,
             "head": head,
         }
-        if mode == "problog":
-            engine_kwargs["body_confidences"] = body_confidences
         if engine_ext is not None:
             engine_kwargs["engine_ext"] = engine_ext
         if engine_options is not None:

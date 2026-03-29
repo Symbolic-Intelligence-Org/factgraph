@@ -23,7 +23,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-03-28
+最后更新：2026-03-29
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
@@ -151,3 +151,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-28 | examples-sdk-schema-cleanup | implemented | Examples and notebooks refreshed to current SDK/schema usage and low-signal legacy scaffolding removed |
 | 2026-03-28 | evidence-graph-unified-explain | implemented | Unified `EvidenceGraph` DTO + converters + renderer + candidate-page integration landed across Souffle/PyReason/ProbLog |
 | 2026-03-28 | design-branch-closeout | implemented | Final branch closeout: durable `EvidenceGraph` audit delivery, `PyReasonRuleDef` removal, explicit deferred-backlog closure, and archive inventory sync |
+| 2026-03-29 | problog-rule-ext-branch-probabilities | implemented | ProbLog branch weighting moved from shared `body_confidences` routing into typed `ProbLogRuleExt`, with SDK/runtime bridge and shared-core signature cleanup |

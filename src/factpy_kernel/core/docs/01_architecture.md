@@ -148,6 +148,15 @@ flowchart LR
 - `mode="native"` + 非空 `engine_options` 会显式报错
 - 支持哪些 key、默认值与归一化方式，都由对应 adapter 负责
 
+definition-time 引擎语义则统一走 `engine_ext`：
+
+- shared core 只承认 `EngineExtBase` 子类并负责转发，不解释字段含义
+- `engine_ext` 不进入 authoring payload / Ledger / audit artifact
+- `pyreason` 当前用 `PyReasonRuleExt`
+- `problog` 当前用 `ProbLogRuleExt(branch_probabilities=...)`
+  - 语义是 normalized `where` OR-branch weighting
+  - 旧的 `body_confidences` 只剩 authoring/SDK/runtime compatibility bridge，不再是 shared evaluate 参数
+
 native `RuleRef` 语义的当前边界：
 
 - plain `rules.where_eval.evaluate_where(...)` 仍只负责无 registry 的基础 where 求值，不单独承诺 `RuleRef`

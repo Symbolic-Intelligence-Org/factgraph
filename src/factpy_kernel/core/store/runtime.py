@@ -29,7 +29,6 @@ from factpy_kernel.core.store.queries import conflicts as store_conflicts
 from factpy_kernel.core.store.queries import explain_fact as store_explain_fact
 from factpy_kernel.core.store.queries import resolve_mapping as store_resolve_mapping
 from factpy_kernel.core.store.types import (
-    BodyConfidencesIR,
     EngineExtBase,
     EngineEvaluatorFn,
     EngineOptionsIR,
@@ -249,7 +248,6 @@ class Store:
         where: WhereIR,
         mode: EvaluateMode = "native",
         head: HeadSpecIR | None = None,
-        body_confidences: BodyConfidencesIR = None,
         registry: "RuleRegistry | None" = None,
         confidence_kind_resolver: Any | None = None,
         engine_ext: EngineExtBase | None = None,
@@ -264,7 +262,6 @@ class Store:
             where=where,
             mode=mode,
             head=head,
-            body_confidences=body_confidences,
             engine_evaluate=self.evaluate_engine,
             registry=registry,
             confidence_kind_resolver=confidence_kind_resolver,
@@ -281,7 +278,6 @@ class Store:
         where: WhereIR,
         mode: str = "souffle",
         head: HeadSpecIR | None = None,
-        body_confidences: list[float] | None = None,
         engine_ext: EngineExtBase | None = None,
         engine_options: EngineOptionsIR = None,
     ) -> list[CandidateSet]:
@@ -303,8 +299,6 @@ class Store:
             "where": where,
             "head": head,
         }
-        if mode == "problog":
-            call_kwargs["body_confidences"] = body_confidences
         if engine_ext is not None:
             call_kwargs["engine_ext"] = engine_ext
         if engine_options is not None:
