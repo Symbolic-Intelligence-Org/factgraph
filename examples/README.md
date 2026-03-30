@@ -1,6 +1,6 @@
 # Examples Index
 
-7 notebooks covering the full SDK capability set, ordered for progressive learning.
+6 notebooks covering the full SDK capability set, ordered for progressive learning.
 
 ## Learning Path
 
@@ -8,18 +8,30 @@
 |---|----------|---------|--------|--------|
 | 01 | `01_sdk_basics.ipynb` | — | general | Entity/Schema/Store/CRUD/Batch/Edit/Ingest |
 | 02 | `02_rules_and_derivations.ipynb` | — (native) | general | Rule DSL / Query / Derivation / Accept / Registry |
-| 03 | `03_certainty_and_evidence_tree.ipynb` | — | general | condition_weights / confidence / evidence tree / explain |
 | 04 | `04_ecss_souffle_compliance.ipynb` | **Souffle** | **ECSS** | compliance rules / proof tree / audit package / static site |
 | 05 | `05_dora_pyreason_propagation.ipynb` | **PyReason** | **DORA** | boolean propagation / temporal reasoning / adapter-local session |
 | 06 | `06_problog_probabilistic.ipynb` | **ProbLog** | general | probabilistic reasoning / ProbLogRuleExt / persist_annotations |
-| 07 | `07_evidence_graph_multi_engine.ipynb` | multi | general | EvidenceGraph IR / tree + timeline layout / architecture |
+| 07 | `07_evidence_graph_multi_engine.ipynb` | **all three** | general | **Evidence tree + certainty + probability + timeline + cross-engine** |
+
+## Notebook 07 — Flagship Demo
+
+Notebook 07 is the comprehensive three-engine demo. It covers:
+- Evidence tree node hierarchy (candidate_result → support → witness → assertion)
+- Certainty propagation (condition_weights + confidence → bottleneck vs additive)
+- ProbLog proof tree (proof_goal / proof_leaf + probability pipeline)
+- PyReason timeline (chains + events + bounds)
+- Cross-engine data flow (accepted facts from one engine feed the next)
+- Full explain pipeline for each engine: tree/timeline → summary → narrative → NL
+
+ProbLog and PyReason sections use mocked runners; the entire framework pipeline is real.
 
 ## Prerequisites
 
-- Notebooks 01–03 and 07 require only `factpy_kernel` (no external engines).
+- Notebooks 01–02 require only `factpy_kernel` (no external engines).
 - Notebook 04 (Souffle): requires `souffle` CLI on PATH.
 - Notebook 05 (PyReason): requires `pyreason==3.0.0` on Python 3.10. Graceful fallback if not installed.
 - Notebook 06 (ProbLog): requires `problog` CLI. Graceful fallback if not installed.
+- Notebook 07: uses mocked runners — runs without external engines.
 
 ## Conventions
 
