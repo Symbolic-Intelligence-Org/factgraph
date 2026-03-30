@@ -1,6 +1,6 @@
 # Architecture Decision Blueprint: factpy Architectural Pivot v2
 
-- Status: scoped
+- Status: landed
 - Type: architectural-decision (guides child blueprints, not directly actionable)
 - Created: 2026-03-22
 - Last Updated: 2026-03-22
