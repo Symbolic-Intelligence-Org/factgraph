@@ -1,55 +1,35 @@
 # Examples Index
 
-本目录放的是示例、notebook 和少量导出产物。它们用于演示当前能力，但**不是**模块实现真相；实现真相仍以 `src/factpy_kernel/*/docs/` 为准。
+7 notebooks covering the full SDK capability set, ordered for progressive learning.
 
-维护约定：
+## Learning Path
 
-- 同时存在 `.py` 和 `.ipynb` 时，优先把 `.py` 当作行为基线，再同步 notebook。
-- PyReason notebook 若报 `No module named 'pyreason'`，先在 notebook 里检查 `sys.executable`，确认 kernel 指向装有 `pyreason` 的环境。
-- `*.html` 导出产物不是主编辑入口，优先通过对应 demo 重新生成。
+| # | Notebook | Adapter | Domain | Covers |
+|---|----------|---------|--------|--------|
+| 01 | `01_sdk_basics.ipynb` | — | general | Entity/Schema/Store/CRUD/Batch/Edit/Ingest |
+| 02 | `02_rules_and_derivations.ipynb` | — (native) | general | Rule DSL / Query / Derivation / Accept / Registry |
+| 03 | `03_certainty_and_evidence_tree.ipynb` | — | general | condition_weights / confidence / evidence tree / explain |
+| 04 | `04_ecss_souffle_compliance.ipynb` | **Souffle** | **ECSS** | compliance rules / proof tree / audit package / static site |
+| 05 | `05_dora_pyreason_propagation.ipynb` | **PyReason** | **DORA** | boolean propagation / temporal reasoning / adapter-local session |
+| 06 | `06_problog_probabilistic.ipynb` | **ProbLog** | general | probabilistic reasoning / ProbLogRuleExt / persist_annotations |
+| 07 | `07_evidence_graph_multi_engine.ipynb` | multi | general | EvidenceGraph IR / tree + timeline layout / architecture |
 
-## 当前示例状态
+## Prerequisites
 
-- `examples/example_full.py`
-  - 当前 SDK 的完整 walkthrough。已在 2026-03-28 重写到现行 API：`single|multi` cardinality、显式 derivation accept、无 `pred_id` override、无 `Meta.is_record`。
-- `examples/factpy_example.ipynb`
-  - 大而全的 notebook 参考。当前未发现与现行 SDK 表面明显冲突的问题。
-- `examples/certainty_evidence_tree.ipynb`
-  - certainty / evidence tree 高阶解释链路示例。当前保留。
+- Notebooks 01–03 and 07 require only `factpy_kernel` (no external engines).
+- Notebook 04 (Souffle): requires `souffle` CLI on PATH.
+- Notebook 05 (PyReason): requires `pyreason==3.0.0` on Python 3.10. Graceful fallback if not installed.
+- Notebook 06 (ProbLog): requires `problog` CLI. Graceful fallback if not installed.
 
-- `examples/esa_demo.py`
-  - ECSS + Souffle 的完整审计 bundle demo。已移除示例层 `schema_ir` raw predicate 注入，改为显式 `Entity` 声明承载 `ecss:*` schema。
-- `examples/ecss_compliance_demo.ipynb`
-  - `esa_demo.py` 的 notebook 版本。已同步去掉 `extend_schema_ir_with_ecss_*` hack。
-- `examples/ecss_pyreason_demo.py`
-  - ECSS + PyReason boolean/topology propagation demo。当前仍把 uncertainty 当作旁路展示；虽然 adapter 现在支持用显式 body threshold 让 bounded seed 参与 rule matching，但 repo 口径仍不把 PyReason 表述成 fuzzy payload-transport 引擎。
-- `examples/ecss_pyreason_demo.ipynb`
-  - notebook 版本。代码路径保留；输出是否可运行取决于 Jupyter kernel 环境。
+## Conventions
 
-- `examples/dora_demo.py`
-  - DORA + Souffle 审计 demo。当前保留。
-- `examples/dora_compliance_demo.ipynb`
-  - `dora_demo.py` notebook 版本。当前保留。
-- `examples/dora_demo_standalone.html`
-  - DORA demo 导出的静态 HTML 产物，不是主要维护入口。
-- `examples/dora_pyreason_demo.py`
-  - DORA + PyReason boolean supply-chain propagation demo。当前把 severity/readiness 区间作为旁路审计信息展示，不作为 PyReason propagation payload。
-- `examples/dora_pyreason_demo.ipynb`
-  - notebook 版本。当前保留。
+- Implementation truth lives in `src/factpy_kernel/*/docs/`, not here.
+- Notebooks are the canonical examples — no `.py` file pairs.
+- `archive/` contains historical spike/reference files (not user-facing).
 
-- `examples/multi_engine_evaluate_demo.py`
-  - shared evaluate surface demo。已去掉 relationship `owner_type` 手工补丁；当前口径是先 `compile_schema_from_classes([...Entity, Relationship])`，再把 `schema_ir` 交给 `SDKStore([Entity...], schema_ir=...)`。
-- `examples/multi_engine_evaluate_demo.ipynb`
-  - notebook 版本，已同步同一修正。
-- `examples/pyreason_integration_demo.py`
-  - adapter-local 的 PyReason 端到端集成示例。当前保留。
-- `examples/pyreason_spike.py`
-  - 更低层的 standalone spike，用来说明 PyReason provenance 事件日志形态；不是推荐产品 surface，但保留作为历史和适配层参考。
-- `examples/souffle_provenance_v0_demo.py`
-  - Souffle proof JSON 的极小解析示例，当前保留。
+## Archive
 
-## 本轮重构重点
-
-- 清理示例层 `schema_ir` 篡改，避免绕过 `Entity` / `Field` 声明模型。
-- 消除 relationship `owner_type` 手补逻辑，让示例直接依赖编译器输出。
-- 把 `example_full.py` 从旧版 API 演示更新到当前 SDK 文档口径。
+`archive/` contains files preserved for historical reference:
+- `pyreason_spike.py` — standalone PyReason provenance event log exploration
+- `souffle_provenance_v0_demo.py` — minimal Souffle proof JSON parsing
+- `pyreason_integration_demo.py` — adapter-local PyReason E2E (superseded by 05)
