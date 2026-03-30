@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from factpy_kernel.core.store._support import _DEGRADED_SUPPORT_KINDS
+from factpy_kernel.core.store._support import PROBLOG_PROVENANCE_KIND, _DEGRADED_SUPPORT_KINDS
 
 
 class CandidateEvidenceTreeSummaryError(ValueError):
@@ -23,6 +23,8 @@ _ROLE_BY_NODE_KIND = {
     "candidate_result": "structural",
     "support_section": "structural",
     "rule_ref_section": "structural",
+    "proof_goal": "proof",
+    "proof_leaf": "proof",
     "predicate_witness_group": "witness",
     "assertion_fact": "witness",
     "non_fact_check": "constraint",
@@ -58,19 +60,32 @@ def summarize_candidate_evidence_tree_dict(tree: dict[str, Any]) -> dict[str, An
     recursive_depth = 0
     unresolved_reasons: set[str] = set()
     boundary_reasons: set[str] = set()
+    proof_goal_count = 0
+    proof_leaf_count = 0
+    root_engine_meta = root.get("engine_meta")
+    problog_probability = _optional_probability(root_engine_meta, path="tree.root.engine_meta")
 
     def walk(node: Mapping[str, Any], *, depth: int) -> None:
         nonlocal witness_assertion_count, rule_ref_count, recursive_depth
+        nonlocal proof_goal_count, proof_leaf_count
 
         node_kind = _require_non_empty_str(node.get("node_kind"), path="tree.node.node_kind")
         role = _ROLE_BY_NODE_KIND.get(node_kind)
         if role is None:
             raise CandidateEvidenceTreeSummaryError(f"unsupported tree node_kind: {node_kind}")
+        if role not in node_count_by_role:
+            node_count_by_role[role] = 0
         node_count_by_role[role] += 1
 
         next_depth = depth
         if node_kind == "assertion_fact":
             witness_assertion_count += 1
+        elif node_kind == "proof_goal":
+            proof_goal_count += 1
+            next_depth = depth + 1
+            recursive_depth = max(recursive_depth, next_depth)
+        elif node_kind == "proof_leaf":
+            proof_leaf_count += 1
         elif node_kind == "rule_ref":
             rule_ref_count += 1
         elif node_kind == "referenced_support":
@@ -93,7 +108,7 @@ def summarize_candidate_evidence_tree_dict(tree: dict[str, Any]) -> dict[str, An
 
     walk(root, depth=0)
 
-    return {
+    summary = {
         "candidate_id": candidate_id,
         "support_kind": support_kind,
         "is_degraded": support_kind in _DEGRADED_SUPPORT_KINDS,
@@ -107,12 +122,35 @@ def summarize_candidate_evidence_tree_dict(tree: dict[str, Any]) -> dict[str, An
         "unresolved_reasons": sorted(unresolved_reasons),
         "boundary_reasons": sorted(boundary_reasons),
     }
+    if support_kind == PROBLOG_PROVENANCE_KIND or "proof" in node_count_by_role:
+        summary["node_count_by_role"] = {
+            **summary["node_count_by_role"],
+            "proof": int(node_count_by_role.get("proof", 0)),
+        }
+        summary["proof_goal_count"] = proof_goal_count
+        summary["proof_leaf_count"] = proof_leaf_count
+    if problog_probability is not None:
+        summary["problog_probability"] = problog_probability
+    return summary
 
 
 def _require_non_empty_str(value: Any, *, path: str) -> str:
     if not isinstance(value, str) or not value:
         raise CandidateEvidenceTreeSummaryError(f"{path} must be non-empty string")
     return value
+
+
+def _optional_probability(value: Any, *, path: str) -> float | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise CandidateEvidenceTreeSummaryError(f"{path} must be object when present")
+    probability = value.get("probability")
+    if probability is None:
+        return None
+    if isinstance(probability, bool) or not isinstance(probability, (int, float)):
+        raise CandidateEvidenceTreeSummaryError(f"{path}.probability must be number when present")
+    return float(probability)
 
 
 __all__ = [

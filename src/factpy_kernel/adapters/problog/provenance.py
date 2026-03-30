@@ -297,6 +297,78 @@ def problog_trace_to_evidence_graph(
     )
 
 
+def problog_trace_to_candidate_evidence_tree(
+    trace: ProbLogTraceV0,
+    *,
+    candidate_id: str,
+    candidate_payload: Mapping[str, Any],
+    support_digest: str,
+    support_kind: str = PROBLOG_PROVENANCE_KIND,
+) -> dict[str, Any]:
+    """Convert a ProbLog proof trace into CandidateEvidenceTree."""
+    if not isinstance(candidate_id, str) or not candidate_id:
+        raise ValueError("candidate_id must be non-empty string")
+    if not isinstance(support_digest, str) or not support_digest:
+        raise ValueError("support_digest must be non-empty string")
+    if not trace.events:
+        raise ValueError("ProbLog trace has no events")
+
+    candidate_info = _resolve_candidate_info(candidate_payload)
+    frames = _build_call_frames(trace)
+    if not frames:
+        raise ValueError("ProbLog trace has no call frames")
+
+    root_frame_id, matched_answer = _select_root_frame(
+        trace=trace,
+        frames=frames,
+        candidate_label=candidate_info["label"],
+        candidate_term_counter=candidate_info["term_counter"],
+    )
+    if root_frame_id is None:
+        raise ValueError("candidate anchor not found in ProbLog trace")
+
+    visible_frame_ids = _collect_visible_frames(frames, root_frame_id)
+    node_id_by_frame_id = {
+        frame_id: f"problog:{candidate_id}:frame:{idx}"
+        for idx, frame_id in enumerate(visible_frame_ids, start=1)
+    }
+    support_children = _build_visible_tree_nodes(
+        frames=frames,
+        frame_id=root_frame_id,
+        node_id_by_frame_id=node_id_by_frame_id,
+    )
+    root_node: dict[str, Any] = {
+        "node_id": f"cand:{candidate_id}",
+        "node_kind": "candidate_result",
+        "title": f"Candidate {candidate_id}",
+        "root_result_kind": "fact",
+        "binding": _candidate_binding_from_payload(candidate_payload),
+        "rule_refs": [],
+        "rule_ref_edges": [],
+        "children": [
+            {
+                "node_id": f"support:{candidate_id}",
+                "node_kind": "support_section",
+                "title": "Support",
+                "children": support_children,
+            }
+        ],
+    }
+    if matched_answer is not None:
+        root_node["engine_meta"] = {
+            "engine": "problog",
+            "probability": matched_answer.probability,
+        }
+
+    return {
+        "kind": "candidate_evidence_tree",
+        "candidate_id": candidate_id,
+        "support_digest": support_digest,
+        "support_kind": support_kind,
+        "root": root_node,
+    }
+
+
 def _normalize_depth(indent: str) -> int:
     if not indent:
         return 0
@@ -526,6 +598,98 @@ def _collect_frame_subtree(
     return order
 
 
+def _collect_visible_frames(
+    frames: Mapping[str, _ProbLogCallFrame],
+    root_frame_id: str,
+) -> list[str]:
+    order: list[str] = []
+
+    def _walk(frame_id: str) -> None:
+        frame = frames[frame_id]
+        goal_name, _goal_args = _parse_goal_expr(frame.call_event.goal)
+        synthetic = _is_synthetic_goal_name(goal_name)
+        if not synthetic:
+            order.append(frame_id)
+        for child_frame_id in frame.child_frame_ids:
+            _walk(child_frame_id)
+
+    _walk(root_frame_id)
+    return order
+
+
+def _build_visible_tree_nodes(
+    *,
+    frames: Mapping[str, _ProbLogCallFrame],
+    frame_id: str,
+    node_id_by_frame_id: Mapping[str, str],
+) -> list[dict[str, Any]]:
+    frame = frames[frame_id]
+    goal_name, goal_args = _parse_goal_expr(frame.call_event.goal)
+    if _is_synthetic_goal_name(goal_name):
+        nodes: list[dict[str, Any]] = []
+        for child_frame_id in frame.child_frame_ids:
+            nodes.extend(
+                _build_visible_tree_nodes(
+                    frames=frames,
+                    frame_id=child_frame_id,
+                    node_id_by_frame_id=node_id_by_frame_id,
+                )
+            )
+        return nodes
+
+    child_nodes: list[dict[str, Any]] = []
+    for child_frame_id in frame.child_frame_ids:
+        child_nodes.extend(
+            _build_visible_tree_nodes(
+                frames=frames,
+                frame_id=child_frame_id,
+                node_id_by_frame_id=node_id_by_frame_id,
+            )
+        )
+
+    node_id = node_id_by_frame_id[frame_id]
+    normalized_goal_args = [_normalize_goal_token(arg) for arg in goal_args]
+    if frame.fail_event is not None and not child_nodes:
+        return [
+            {
+                "node_id": node_id,
+                "node_kind": "non_fact_check",
+                "title": f"ProbLog goal {goal_name}",
+                "step_key": frame.frame_id,
+                "check_kind": goal_name,
+                "status": "fail",
+                "details": {
+                    "goal": frame.call_event.goal,
+                    "goal_args": normalized_goal_args,
+                },
+                "children": [],
+            }
+        ]
+
+    base_node = {
+        "node_id": node_id,
+        "title": f"Proof {goal_name}",
+        "pred_id": goal_name,
+        "goal": frame.call_event.goal,
+        "goal_args": normalized_goal_args,
+    }
+    if child_nodes:
+        return [
+            {
+                **base_node,
+                "node_kind": "proof_goal",
+                "children": child_nodes,
+            }
+        ]
+    return [
+        {
+            **base_node,
+            "node_kind": "proof_leaf",
+            "children": [],
+        }
+    ]
+
+
 def _parse_goal_expr(expr: str) -> tuple[str, tuple[str, ...]]:
     text = expr.strip()
     if not text:
@@ -601,6 +765,22 @@ def _pred_short_name(pred_id: str) -> str:
     return parts[1] if len(parts) > 1 else pred_id
 
 
+def _candidate_binding_from_payload(candidate_payload: Mapping[str, Any]) -> dict[str, Any]:
+    terms = candidate_payload.get("terms")
+    if not isinstance(terms, list):
+        raise ValueError("candidate_payload.terms must be list")
+    binding: dict[str, Any] = {}
+    for idx, term in enumerate(terms):
+        if not isinstance(term, Mapping):
+            continue
+        kind = term.get("kind")
+        if kind in {"entity_ref", "literal"}:
+            binding[f"arg_{idx}"] = term.get("value")
+        elif kind == "candidate_ref":
+            binding[f"arg_{idx}"] = term.get("candidate_key")
+    return binding
+
+
 __all__ = [
     "ProbLogAnswerV0",
     "ProbLogProvenanceError",
@@ -608,6 +788,7 @@ __all__ = [
     "ProbLogTraceV0",
     "parse_problog_trace",
     "problog_trace_from_dict",
+    "problog_trace_to_candidate_evidence_tree",
     "problog_trace_to_evidence_graph",
     "problog_trace_to_dict",
 ]

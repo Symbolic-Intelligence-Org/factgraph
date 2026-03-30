@@ -1017,6 +1017,8 @@ _NODE_HUMAN_LABEL = {
     "referenced_support": ("\U0001f50d", "Child Proof", "Proof from a child rule that was referenced"),
     "unresolved_support": ("\u274c", "Unresolved", "Evidence that could not be resolved"),
     "recursion_boundary": ("\U0001f504", "Recursion Limit", "Proof chain stopped to prevent infinite loops"),
+    "proof_goal": ("\U0001f9e0", "Proof Goal", "An intermediate ProbLog proof goal with child subgoals"),
+    "proof_leaf": ("\U0001f9fe", "Proof Leaf", "A terminal ProbLog proof leaf without linked ledger assertion"),
     "predicate_witness_group": ("\U0001f4ca", "Fact Match", "Facts that matched this condition in the rule"),
     "non_fact_check": ("\u2705", "Constraint Check", "A structural constraint that was verified"),
     "assertion_fact": ("\U0001f4c4", "Witness Fact", "An actual data fact used as evidence"),
@@ -1027,6 +1029,8 @@ _NODE_KIND_ROLE = {
     "support_section": "structural",
     "rule_ref_section": "structural",
     "degraded_support": "degraded",
+    "proof_goal": "proof",
+    "proof_leaf": "proof",
     "rule_ref": "rule-chain",
     "referenced_support": "rule-chain",
     "unresolved_support": "terminal",
@@ -1098,6 +1102,9 @@ def _render_candidate_evidence_node(node: dict[str, Any], *, assertion_href_pref
         rk = node.get("root_result_kind")
         if rk:
             props.append(_node_prop("Result type", str(rk)))
+        engine_meta = node.get("engine_meta")
+        if isinstance(engine_meta, dict) and engine_meta.get("probability") is not None:
+            props.append(_node_prop("Probability", str(engine_meta.get("probability"))))
     elif node_kind == "support_section":
         props.append(_node_prop("Evidence items", str(len(node.get("children", [])))))
     elif node_kind == "rule_ref_section":
@@ -1105,6 +1112,18 @@ def _render_candidate_evidence_node(node: dict[str, Any], *, assertion_href_pref
     elif node_kind == "degraded_support":
         props.append(_node_prop("Support kind", str(node.get("support_kind"))))
         props.append(_node_prop("Status", str(node.get("witness_status"))))
+    elif node_kind == "proof_goal":
+        props.append(_node_prop("Predicate", str(node.get("pred_id", ""))))
+        goal_args = node.get("goal_args")
+        if isinstance(goal_args, list) and goal_args:
+            props.append(_node_prop("Goal args", ", ".join(str(arg) for arg in goal_args)))
+        props.append(_node_prop("Subgoals", str(len(node.get("children", [])))))
+    elif node_kind == "proof_leaf":
+        props.append(_node_prop("Predicate", str(node.get("pred_id", ""))))
+        goal_args = node.get("goal_args")
+        if isinstance(goal_args, list) and goal_args:
+            props.append(_node_prop("Goal args", ", ".join(str(arg) for arg in goal_args)))
+        props.append(_node_prop("Detail", "Logical proof leaf (no ledger assertion link)"))
     elif node_kind == "rule_ref":
         rid = node.get("rule_ref_id", "")
         ver = node.get("rule_ref_version", "")
@@ -1443,6 +1462,14 @@ def _render_candidate_evidence_narrative_block(narrative: dict[str, Any] | None)
     )
 
     certainty_html = _render_certainty_visual(narrative)
+    probability_html = (
+        "<h3>\U0001f4af Probability</h3>"
+        "<p style=\'color:var(--color-muted);font-size:.85rem;margin:0 0 4px\'>"
+        "ProbLog probability carried through the explain pipeline:</p>"
+        f"{_line_list(narrative.get('probability_lines'))}"
+        if isinstance(narrative.get("probability_lines"), list) and narrative.get("probability_lines")
+        else ""
+    )
 
     return (
         "<div class=\'narrative-section\'>"
@@ -1463,6 +1490,7 @@ def _render_candidate_evidence_narrative_block(narrative: dict[str, Any] | None)
         "<h3>\U0001f50d Drill-Down</h3>"
         "<p style=\'color:var(--color-muted);font-size:.85rem;margin:0 0 4px\'>How to explore the evidence tree in more detail:</p>"
         f"{_line_list(narrative.get('drilldown_lines'))}"
+        f"{probability_html}"
         "</div>"
         f"{certainty_html}"
     )
@@ -2394,6 +2422,7 @@ def _html_page(*, title: str, body: str) -> str:
         ".tree-node>.node-children{padding:0 0 0 20px}"
         ".node-kind-structural>.node-header{background:var(--color-structural)}"
         ".node-kind-witness>.node-header{background:var(--color-witness)}"
+        ".node-kind-proof>.node-header{background:var(--color-rule-chain)}"
         ".node-kind-constraint>.node-header{background:var(--color-constraint)}"
         ".node-kind-rule-chain>.node-header{background:var(--color-rule-chain)}"
         ".node-kind-terminal>.node-header{background:var(--color-terminal)}"

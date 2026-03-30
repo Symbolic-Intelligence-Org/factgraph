@@ -167,7 +167,7 @@ class EngineProvenanceSurfaceTests(unittest.TestCase):
 
             tree_resp = explain_runtime_tree(session_id, {"kind": "candidate", "id": candidate["candidate_id"]})
             self.assertFalse(tree_resp["ok"])
-            self.assertEqual(tree_resp["errors"][0]["kind"], "runtime_explain_not_supported")
+            self.assertEqual(tree_resp["errors"][0]["kind"], "explain_not_supported")
         finally:
             close_runtime_session(session_id)
 

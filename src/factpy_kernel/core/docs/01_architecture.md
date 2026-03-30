@@ -221,7 +221,7 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - `candidate_result`
     - `support_section`
     - optional `rule_ref_section`
-    - `predicate_witness_group` / `non_fact_check` / `assertion_fact` / `rule_ref` / `degraded_support`
+    - `predicate_witness_group` / `non_fact_check` / `assertion_fact` / `proof_goal` / `proof_leaf` / `rule_ref` / `degraded_support`
     - recursive child layer:
       - `referenced_support`
       - `unresolved_support`
@@ -229,6 +229,7 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
   - 这仍是 candidate-first consumer surface，不是 full engine parity、graph UI、或更细 provenance contract
   - `node_kind` 是 carrier-level provenance-role taxonomy（冻结 contract）：
     - **structural**：`candidate_result`, `support_section`, `rule_ref_section` — 纯结构容器，不自身承载来源语义
+    - **proof**：`proof_goal`, `proof_leaf` — engine-native logical proof frame / terminal，不等价于 ledger assertion witness
     - **witness**：`predicate_witness_group`, `assertion_fact` — 直接见证 ledger 中的事实
     - **constraint**：`non_fact_check` — 非事实约束检查（eq/ne/gt/not/ruleref/...）
     - **rule_chain**：`rule_ref`, `referenced_support` — 规则引用及递归证明展开
@@ -280,14 +281,21 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - `Store.explain_support(...)` 可直接回放 flat support
     - `candidate_evidence_tree` 可继续复用既有 native tree builder
     - audit/static 对 `souffle_witness_v1` 仍 deferred，当前不承诺离线消费
-  - `{"pyreason_provenance_v1", "problog_provenance_v1"}` 走 `Store.explain_provenance(...)`：
-    - 当前只承诺 runtime `explain_ref(kind="candidate")` flat surface
+  - `pyreason_provenance_v1` 继续走 `Store.explain_provenance(...)`：
+    - runtime `explain_ref(kind="candidate")` 返回 engine-native provenance envelope
     - 不强制转成 `SupportArtifact`
-    - `candidate_evidence_tree` / summary / narrative / NL / runtime candidate HTML 当前都不支持这两类 support kind
+    - `candidate_evidence_tree` / summary / narrative / NL / runtime candidate HTML 仍不支持该 kind
+    - runtime 现在改走独立 `CandidateProvenanceTimeline` / summary / narrative surface
+  - `problog_provenance_v1` 也继续以 `Store.explain_provenance(...)` 作为 canonical raw surface：
+    - runtime `explain_ref(kind="candidate")` 仍返回 engine-native provenance envelope
+    - 不强制转成 `SupportArtifact`
+    - 但当 candidate payload 可从 accepted claim / ledger 回溯时，runtime 现在允许把 trace 投影成 `candidate_evidence_tree`
+      - 同一条投影链继续支持 summary / narrative / NL / runtime candidate HTML
+      - pre-accept candidate 或 payload 不可回溯时，tree family 统一降级为 `explain_not_supported`
   - 在 raw tree 之上，candidate explain 现在也已有 deterministic derived layers：
     - `candidate_evidence_tree_summary`
       - 由 `store._candidate_evidence_tree_summary` 从 raw tree 纯派生
-      - first-round 为 provenance-role-first 的 12 字段 core set：
+      - first-round 基础仍是 provenance-role-first 的 12 字段 core set：
         - `candidate_id`
         - `support_kind`
         - `is_degraded`
@@ -300,6 +308,12 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
         - `has_boundary`
         - `unresolved_reasons`
         - `boundary_reasons`
+      - 当 raw tree 含 proof nodes（或 `support_kind="problog_provenance_v1"`）时，summary 还允许附加：
+        - `node_count_by_role.proof`
+        - `proof_goal_count`
+        - `proof_leaf_count`
+      - 当 `tree.root.engine_meta.probability` 可用时，summary 还允许附加：
+        - `problog_probability`
     - `candidate_evidence_tree_narrative`
       - 由 `store._candidate_evidence_tree_narrative` 从 summary 纯派生；runtime certainty lane 可选再附加 additive certainty section
       - 基础 shape：
@@ -309,13 +323,15 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
         - `rule_chain_lines`
         - `terminal_lines`
         - `drilldown_lines`
+      - ProbLog tree 当前还允许附加可选 `probability_lines`
       - runtime first-round 还允许附加可选 `certainty_lines`
     - `candidate_evidence_tree_nl_explain`
       - 由 `store._candidate_evidence_tree_nl` 只从 summary + narrative 纯派生
       - 基础 shape：
         - `headline`
         - `paragraphs`
-      - runtime candidate narrative 含 `certainty_lines` 时，NL 允许追加第 5 段 certainty paragraph
+      - runtime candidate narrative 含 `probability_lines` 时，NL 允许追加 probability paragraph
+      - runtime candidate narrative 含 `certainty_lines` 时，NL 允许再追加 certainty paragraph
     - service runtime `explain-summary(kind="candidate")` 现在还可附加 response-level `certainty_summary`：
       - 不属于 core 12 字段 summary set
       - 只在 `Store.get_candidate_confidence_kind(candidate_id) == "certainty"` 时尝试派生
@@ -325,7 +341,7 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
       - 多 rule、nested referenced_support、unresolved child support、或 registry 链路缺失时统一降级为 `null`
       - runtime `explain-narrative(kind="candidate")` 与 `explain-nl(kind="candidate")` 现在复用同一 certainty derivation helper：
         - narrative 仅在 certainty 可派生时附加 `certainty_lines`
-        - NL 仅在 narrative 含 `certainty_lines` 时追加 certainty paragraph
+        - NL 仅在 narrative 含 `certainty_lines` 时追加 certainty paragraph；这与 ProbLog 的 optional probability paragraph 正交
       - audit / static 也消费同一 certainty delivery：
         - `export_package` 在 export time 通过 `materialize_certainty_summary` 预计算，写入 `certainty_summaries.jsonl`
         - `AuditQuery.get_candidate_evidence_tree_narrative` 传入物化 certainty_summary，产出含 `certainty_lines` 的 narrative

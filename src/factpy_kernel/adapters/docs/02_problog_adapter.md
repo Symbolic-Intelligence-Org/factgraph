@@ -82,12 +82,26 @@ explainability 补充：
   - `support_kind="problog_provenance_v1"`
   - `support_digest=<ProvenanceEnvelope digest>`
   - runtime `explain_ref(kind="candidate")` 返回 engine-native provenance envelope
-- 当前不会把这条 provenance 强制转成 `SupportArtifact` 或 candidate evidence tree：
-  - `explain-tree`
-  - `explain-summary`
-  - `explain-narrative`
-  - `explain-nl`
-  仍不支持 `problog_provenance_v1`
+- 当前不会把这条 provenance 强制转成 `SupportArtifact`
+- 但 runtime 现在允许把可锚定的 ProbLog trace 投影成 `candidate_evidence_tree`：
+  - builder：`problog_trace_to_candidate_evidence_tree(...)`
+  - tree family 支持：
+    - `explain-tree`
+    - `explain-summary`
+    - `explain-narrative`
+    - `explain-nl`
+    - `GET /evidence/candidate/{candidate_id}`
+  - 该投影当前要求 candidate payload 可从 accepted claim / ledger 回溯
+    - pre-accept candidate 或 payload 不可恢复时，tree family 返回 `explain_not_supported`
+- ProbLog tree contract 当前不复用 witness leaf 语义：
+  - 非叶子 logical frame → `proof_goal`
+  - 终端 logical leaf → `proof_leaf`
+  - `proof_leaf` 不携带 `asrt_id`，也不链接 assertion detail page
+- 当 trace answer 概率可用时：
+  - raw tree root 会写入 `root.engine_meta.probability`
+  - summary 追加 `problog_probability`
+  - narrative 追加 `probability_lines`
+  - NL 再派生 probability paragraph
 - 若 future engine path 没有 trace，则仍会回落到：
   - `support_kind="engine_no_witness_v1"`
   - `support_digest="sha256:000...0"`

@@ -39,6 +39,12 @@ def render_candidate_evidence_tree_nl_explain(
             narrative.get("certainty_lines"),
             path="narrative.certainty_lines",
         )
+    probability_lines: list[str] | None = None
+    if narrative.get("probability_lines") is not None:
+        probability_lines = _require_string_list(
+            narrative.get("probability_lines"),
+            path="narrative.probability_lines",
+        )
 
     headline = (
         f"Candidate {candidate_id} has degraded support kind {support_kind}."
@@ -54,6 +60,8 @@ def render_candidate_evidence_tree_nl_explain(
         f"Rule-chain summary: {_join_sentences(rule_chain_lines)}",
         f"Terminal and drill-down summary: {_join_sentences(terminal_lines + drilldown_lines)}",
     ]
+    if probability_lines:
+        paragraphs.append(f"Probability assessment: {_join_sentences(probability_lines)}")
     if certainty_lines:
         certainty_text = f"Certainty summary: {_join_sentences(certainty_lines)}"
         bottleneck_sentence = _build_bottleneck_sentence(narrative.get("certainty_bottleneck"))

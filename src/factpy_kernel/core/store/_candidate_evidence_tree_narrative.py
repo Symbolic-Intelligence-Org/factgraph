@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from factpy_kernel.core.annotation import ConditionImpact, rank_certainty_conditions
+from factpy_kernel.core.store._support import PROBLOG_PROVENANCE_KIND
 
 
 class CandidateEvidenceTreeNarrativeError(ValueError):
@@ -54,6 +55,24 @@ def render_candidate_evidence_tree_narrative(
         summary.get("boundary_reasons"),
         path="summary.boundary_reasons",
     )
+    proof_goal_count = _optional_non_negative_int(
+        summary.get("proof_goal_count"),
+        path="summary.proof_goal_count",
+    )
+    proof_leaf_count = _optional_non_negative_int(
+        summary.get("proof_leaf_count"),
+        path="summary.proof_leaf_count",
+    )
+    problog_probability = _optional_number(
+        summary.get("problog_probability"),
+        path="summary.problog_probability",
+    )
+    is_problog = (
+        support_kind == PROBLOG_PROVENANCE_KIND
+        or proof_goal_count is not None
+        or proof_leaf_count is not None
+        or problog_probability is not None
+    )
 
     total_nodes = sum(node_count_by_role.values())
     headline = (
@@ -65,7 +84,10 @@ def render_candidate_evidence_tree_narrative(
     overview_lines = [
         f"Root result kind: {root_result_kind if root_result_kind is not None else '-'}.",
         "Role counts: "
-        + ", ".join(f"{role}={node_count_by_role[role]}" for role in _ROLE_ORDER)
+        + ", ".join(
+            f"{role}={node_count_by_role[role]}"
+            for role in (_ROLE_ORDER + (("proof",) if "proof" in node_count_by_role or is_problog else ()))
+        )
         + ".",
         f"Recursive depth: {recursive_depth}.",
     ]
@@ -75,6 +97,12 @@ def render_candidate_evidence_tree_narrative(
             "No witness assertions or constraint checks are available because this candidate uses degraded support."
         ]
         rule_chain_lines = ["No recursive rule-chain proof is available for degraded support."]
+    elif is_problog:
+        evidence_lines = [
+            "ProbLog proof tree: "
+            f"{proof_goal_count or 0} intermediate goals, {proof_leaf_count or 0} leaf facts."
+        ]
+        rule_chain_lines = [f"Proof depth: {recursive_depth}."]
     else:
         evidence_lines = [
             f"Witness assertions: {witness_assertion_count}.",
@@ -106,6 +134,11 @@ def render_candidate_evidence_tree_narrative(
             "Open the raw tree below to inspect the degraded support envelope.",
             "This candidate does not expose native witness assertions or recursive child proof.",
         ]
+    elif is_problog:
+        drilldown_lines = [
+            "Open proof goal nodes to inspect recursive subgoals.",
+            "Proof leaf nodes are logical terminals and do not link to ledger assertions.",
+        ]
     else:
         drilldown_lines = [
             (
@@ -128,6 +161,8 @@ def render_candidate_evidence_tree_narrative(
         "terminal_lines": terminal_lines,
         "drilldown_lines": drilldown_lines,
     }
+    if problog_probability is not None:
+        narrative["probability_lines"] = [f"ProbLog probability: {_format_probability(problog_probability)}."]
     if certainty_summary is not None:
         certainty_lines, certainty_bottleneck = _build_certainty_section(certainty_summary)
         narrative["certainty_lines"] = certainty_lines
@@ -229,12 +264,22 @@ def _require_non_negative_int(value: Any, *, path: str) -> int:
     return value
 
 
+def _optional_non_negative_int(value: Any, *, path: str) -> int | None:
+    if value is None:
+        return None
+    return _require_non_negative_int(value, path=path)
+
+
 def _optional_number(value: Any, *, path: str) -> float | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise CandidateEvidenceTreeNarrativeError(f"{path} must be number or null")
     return float(value)
+
+
+def _format_probability(value: float) -> str:
+    return f"{float(value):.12g}"
 
 
 def _require_bool(value: Any, *, path: str) -> bool:
@@ -263,6 +308,11 @@ def _require_role_counts(value: Any, *, path: str) -> dict[str, int]:
         if not isinstance(count, int) or count < 0:
             raise CandidateEvidenceTreeNarrativeError(f"{path}.{role} must be non-negative int")
         out[role] = count
+    proof_count = value.get("proof")
+    if proof_count is not None:
+        if not isinstance(proof_count, int) or proof_count < 0:
+            raise CandidateEvidenceTreeNarrativeError(f"{path}.proof must be non-negative int")
+        out["proof"] = proof_count
     return out
 
 
