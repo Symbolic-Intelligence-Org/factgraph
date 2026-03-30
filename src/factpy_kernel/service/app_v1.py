@@ -28,6 +28,9 @@ from factpy_kernel.service.runtime_v1 import (
     explain_runtime_rule_trace,
     explain_runtime_summary,
     explain_runtime_support,
+    explain_runtime_timeline,
+    explain_runtime_timeline_narrative,
+    explain_runtime_timeline_summary,
     export_runtime_package,
     get_runtime_view,
     get_runtime_session,
@@ -152,6 +155,21 @@ def post_runtime_explain_support(session_id: str, payload: dict[str, Any] = Body
 @app.post("/v1/runtime/sessions/{session_id}/queries/explain-rule-trace")
 def post_runtime_explain_rule_trace(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return explain_runtime_rule_trace(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/queries/explain-timeline")
+def post_runtime_explain_timeline(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return explain_runtime_timeline(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/queries/explain-timeline-summary")
+def post_runtime_explain_timeline_summary(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return explain_runtime_timeline_summary(session_id, payload)
+
+
+@app.post("/v1/runtime/sessions/{session_id}/queries/explain-timeline-narrative")
+def post_runtime_explain_timeline_narrative(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return explain_runtime_timeline_narrative(session_id, payload)
 
 
 @app.get("/v1/runtime/sessions/{session_id}/evidence/candidate/{candidate_id}")

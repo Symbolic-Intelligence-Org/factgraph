@@ -356,11 +356,16 @@
     - 响应仍为 `ok=true`
     - `explain.support` 携带 flat support payload
     - 当前不额外写 `witness_status`
-  - 若 `support_kind in {"pyreason_provenance_v1", "problog_provenance_v1"}`，service 会回放 `Store.explain_provenance(...)`：
+  - 若 `support_kind="pyreason_provenance_v1"`，service 会回放 `Store.explain_provenance(...)`：
     - 响应仍为 `ok=true`
     - `explain.support_kind` 保留当前 kind
     - `explain.provenance` 携带 engine-native `ProvenanceEnvelope`
     - 当前不把 envelope 强制转成 `SupportArtifact` 或 candidate evidence tree
+  - 若 `support_kind="problog_provenance_v1"`，service 也会回放 `Store.explain_provenance(...)`：
+    - 响应仍为 `ok=true`
+    - `explain.support_kind` 保留当前 kind
+    - `explain.provenance` 携带 engine-native `ProvenanceEnvelope`
+    - 这不替代后续 `explain-tree` / summary / narrative / NL 的 ProbLog 投影路径；flat `explain` 仍是 canonical raw provenance surface
   - 若 `support_kind="engine_no_witness_v1"`（legacy `"none"` 读回也按同类处理），则该 candidate 表示 engine no-witness 降级路径：
     - 响应仍为 `ok=true`
     - `explain.support_kind="engine_no_witness_v1"`（或 legacy `"none"`）
@@ -428,7 +433,18 @@
     - `support_kind in {"native_binding_v1", "souffle_witness_v1"}`
   - engine degraded
     - `support_kind in {"engine_no_witness_v1", "none"}`
-- `support_kind in {"pyreason_provenance_v1", "problog_provenance_v1"}` 当前不会自动渲染成 tree：
+- runtime 现在还支持第三类 candidate tree：
+  - projected ProbLog proof
+    - `support_kind="problog_provenance_v1"`
+    - 仅当 candidate payload 可从 accepted claim / ledger 回溯时可用
+    - 同一支持矩阵适用于：
+      - `explain-tree`
+      - `explain-summary`
+      - `explain-narrative`
+      - `explain-nl`
+      - `GET /evidence/candidate/{candidate_id}`
+    - pre-accept candidate 或 payload 不可回溯时，tree family 返回 `explain_not_supported`
+- `support_kind="pyreason_provenance_v1"` 当前仍不会自动渲染成 tree：
   - `explain-tree`
   - `explain-summary`
   - `explain-narrative`
@@ -441,6 +457,8 @@
     - `support_section`
     - optional `rule_ref_section`
   - support section children：
+    - `proof_goal`
+    - `proof_leaf`
     - `predicate_witness_group`
     - `non_fact_check`
     - `degraded_support`
@@ -516,11 +534,16 @@
 - 当前 tree 相比最初 v1 引入了 section layer；这是已接受的、范围受控的 shape change，而不是纯 additive enrichment。
 - `node_kind` 是 carrier-level provenance-role taxonomy（冻结 contract），consumer 可直接基于 `node_kind` 做渲染/分类决策：
   - **structural**：`candidate_result`, `support_section`, `rule_ref_section` — 纯结构容器
+  - **proof**：`proof_goal`, `proof_leaf` — engine-native logical proof frame / terminal，不等价于 ledger assertion witness
   - **witness**：`predicate_witness_group`, `assertion_fact` — 直接见证 ledger 事实
   - **constraint**：`non_fact_check` — 非事实约束检查
   - **rule_chain**：`rule_ref`, `referenced_support` — 规则引用及递归证明
   - **terminal**：`unresolved_support`, `recursion_boundary` — 遍历终止或证据不可用
   - **degraded**：`degraded_support` — Engine 路径无 witness artifact
+- 当 projected ProbLog tree 可用时：
+  - root `candidate_result` 还可附加 `engine_meta.probability`
+  - `proof_goal` 暴露 goal-level predicate / args / child subgoal 数
+  - `proof_leaf` 只表示 logical terminal，不携带 `asrt_id`，也不链接 assertion detail page
 - first-round 不新增 `source_kind` / `provenance_kind` 字段；`node_kind` 本身即为 provenance-role carrier
 - `rule_ref` node_kind 同时用于 legacy flat 和 structured edge；consumer 通过 `ruleref_atom_key` 字段有无区分
 - deeper assertion-origin taxonomy（direct write / derivation accept / import）deferred
@@ -530,6 +553,8 @@
 - `shape`
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
+- `runtime_explain_not_supported`
+- `explain_not_supported`
 
 ## 5. `POST /v1/runtime/sessions/{session_id}/queries/explain-summary`
 
@@ -605,9 +630,15 @@
   - `has_boundary`
   - `unresolved_reasons`
   - `boundary_reasons`
+- 当 candidate tree 含 proof nodes（或 `support_kind="problog_provenance_v1"`）时，summary 还允许附加：
+  - `node_count_by_role.proof`
+  - `proof_goal_count`
+  - `proof_leaf_count`
+- 当 projected ProbLog tree root 暴露 `engine_meta.probability` 时，summary 还允许附加：
+  - `problog_probability`
 - `candidate` summary 响应当前还允许附加 response-level sibling `certainty_summary`（**certainty v1 contract frozen** — 语义改动必须经 blueprint）：
   - 不嵌入 `summary` dict
-  - 不改变 12 字段 core set
+  - 不改变上述基础 12 字段 core set
   - `confidence_kind != "certainty"` 时固定为 `null`
   - `confidence_kind == "certainty"` 时，service 会尝试：
     - 从 `candidate_id` 回取 `confidence_kind`
@@ -633,6 +664,7 @@
   - `"additive"` — 按归一化权重加和各条件贡献
   - 不传时使用默认 `"bottleneck"`，完全向后兼容
 - `candidate` summary 不新增 `node_count_by_kind`、`witness_predicate_ids`、`constraint_check_kinds`；这些仍属于 deferred enhancement。
+- `problog_probability` 属于 summary dict 内的 engine-derived scalar，不走 response-level sibling。
 - `witness_assertion_ids` 是跨全部 invocations 的 `pred_witnesses.asrt_ids` flat 去重结果。
 - `predicate_witness_groups` 采用 flat semantic-key grouping：
   - grouping key = 从 raw `pred_atom_key` 派生出的 `pred_id`
@@ -654,6 +686,8 @@
 - `shape`
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
+- `runtime_explain_not_supported`
+- `explain_not_supported`
 
 ## 6. `POST /v1/runtime/sessions/{session_id}/queries/explain-narrative`
 
@@ -717,13 +751,16 @@
   - `predicate_lines`
   - `non_fact_check_lines`
   - `drilldown_lines`
-- `candidate_evidence_tree_narrative` 固定为 6 个字段：
+- `candidate_evidence_tree_narrative` 固定为 6 个基础字段：
   - `headline`
   - `overview_lines`
   - `evidence_lines`
   - `rule_chain_lines`
   - `terminal_lines`
   - `drilldown_lines`
+- projected ProbLog tree narrative 还可附加可选 `probability_lines`：
+  - 不改变上述 6 个基础字段
+  - 用于显式传递概率信息到 NL
 - 当 candidate certainty lane 可派生时，runtime narrative 还可附加 additive `certainty_lines`：
   - 不改变上述 6 个基础字段
   - 首行显式标注 scope：`Certainty (eligible child-proof subtree): ...`
@@ -742,6 +779,8 @@
 - `shape`
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
+- `runtime_explain_not_supported`
+- `explain_not_supported`
 
 ## 7. `POST /v1/runtime/sessions/{session_id}/queries/explain-nl`
 
@@ -788,22 +827,31 @@
   - `rule_run_narrative`
   - `render_rule_run_nl_explain(..., locale="en")`
 - `candidate` 调用链为：
-  - canonical raw tree
-  - `candidate_evidence_tree_summary`
-  - optional additive `certainty_summary`
-  - `candidate_evidence_tree_narrative`
-  - `render_candidate_evidence_tree_nl_explain(..., locale="en")`
+  - PyReason candidate：
+    - `explain-timeline`
+    - `candidate_provenance_timeline_summary`
+    - `candidate_provenance_timeline_narrative`
+    - `render_candidate_provenance_timeline_nl_explain(..., locale="en")`
+  - 其余 candidate：
+    - canonical raw tree
+    - `candidate_evidence_tree_summary`
+    - optional additive `certainty_summary`
+    - `candidate_evidence_tree_narrative`
+    - `render_candidate_evidence_tree_nl_explain(..., locale="en")`
 - candidate NL 默认仍是 4 段：
   - overview
   - evidence
   - rule-chain
   - terminal + drill-down
-- 当 candidate narrative 含 `certainty_lines` 时，NL 追加第 5 段：
+- 当 candidate narrative 含 `probability_lines` 时，NL 追加 probability paragraph：
+  - `Probability assessment: ...`
+  - 该段只复述 narrative 的 probability lines，不新增计算语义
+- 当 candidate narrative 含 `certainty_lines` 时，NL 再追加 certainty paragraph：
   - `Certainty summary: ...`
   - 该段只复述 narrative 的 certainty lines，不新增计算语义
 - `queries/explain-nl` 的 candidate 请求也支持可选 `override_registry_root`：
   - registry root 解析语义与 `queries/explain-summary` / `queries/explain-narrative` 一致
-  - 只影响第 5 段 certainty paragraph 是否可派生；基础 4 段不受影响
+  - 只影响 certainty paragraph 是否可派生；基础 4 段与可选 probability paragraph 不受影响
 - `candidate` 调用链为：
   - canonical raw tree
   - `candidate_evidence_tree_summary`
@@ -824,6 +872,8 @@
 - `shape`
 - `runtime_session_not_found`
 - `runtime_explain_not_found`
+- `runtime_explain_not_supported`
+- `explain_not_supported`
 
 ## 7A. `GET /v1/runtime/sessions/{session_id}/evidence/...`
 
@@ -843,6 +893,9 @@
 
 - candidate page 复用既有 candidate tree renderer：
   - runtime 直接组出 `tree + narrative`
+  - accepted ProbLog candidate 现在也走这条路径；proof nodes 由同一 renderer 渲染
+  - `proof_leaf` 不链接 assertion detail page
+  - PyReason candidate page 仍不支持
 - rule-trace page 复用既有 rule-trace detail renderer：
   - runtime 直接组出 `detail payload + narrative`
   - assertion detail lookup 继续从当前 session ledger 读取
@@ -1464,7 +1517,197 @@
 - `runtime_session_not_found`
 - `view_list`
 
-## 19. `POST /v1/runtime/sessions/{session_id}/packages/export`
+## 19. `POST /v1/runtime/sessions/{session_id}/queries/explain-timeline`
+
+请求：
+
+```json
+{
+  "kind": "candidate",
+  "id": "cand_v2:abc123"
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "candidate_id": "cand_v2:abc123"
+  },
+  "kind": "candidate_provenance_timeline",
+  "timeline": {
+    "kind": "candidate_provenance_timeline",
+    "candidate_id": "cand_v2:abc123",
+    "engine": "pyreason",
+    "timesteps": 3,
+    "chains": [
+      {
+        "component_type": "node",
+        "component": "PAYMENTS_GATEWAY",
+        "label": "at_risk_signal",
+        "events": [
+          {
+            "time": 1,
+            "fixpoint_op": 2,
+            "old_bound": [0.0, 1.0],
+            "new_bound": [1.0, 1.0],
+            "occurred_due_to": "vendor_risk_propagation",
+            "groundings": ["[ACME_CLOUD]", "[(PAYMENTS_GATEWAY, ACME_CLOUD)]"]
+          }
+        ]
+      }
+    ],
+    "root_chain_key": ["node", "PAYMENTS_GATEWAY", "at_risk_signal"]
+  }
+}
+```
+
+说明：
+
+- 这是 PyReason candidate 的 runtime timeline explain surface。只接受 `{kind:"candidate", id}`。
+- 只对 `support_kind="pyreason_provenance_v1"` 的 candidate 返回 timeline。
+- 对 native/souffle/problog candidate 调这个端点返回 `runtime_explain_not_supported`。
+- 这个端点 **不改、不替代** 现有 `explain-tree` / `explain-summary` / `explain-narrative` / `explain-nl` 的行为：
+  - `explain-tree` 对 pyreason 仍返回 `runtime_explain_not_supported`
+  - `explain-summary` / `explain-narrative` / `explain-nl` 现在会在候选分支 early dispatch 到 timeline family
+- `timeline` DTO shape：
+  - `kind`: 固定为 `"candidate_provenance_timeline"`
+  - `candidate_id`: candidate identifier
+  - `engine`: 固定为 `"pyreason"`
+  - `timesteps`: 推理总步数
+  - `chains`: 按 `(component_type, component, label)` 字典序排列的 propagation chain 列表
+  - `root_chain_key`: `[component_type, component, label]` 三元组，标识 candidate payload 对应的 root chain
+- 每个 chain 包含：
+  - `component_type`: `"node"` 或 `"edge"`
+  - `component`: 实体标识
+  - `label`: predicate label
+  - `events`: 按 `(time, fixpoint_op)` 排序的 bound 更新事件列表
+- 每个 event 包含：
+  - `time`: 时间步
+  - `fixpoint_op`: 定点运算序号
+  - `old_bound`: `[lower, upper]` 旧区间
+  - `new_bound`: `[lower, upper]` 新区间
+  - `occurred_due_to`: 触发规则或 `"seed_fact"`
+  - `groundings`: 子句 grounding 的原始文本列表（不透明调试信息，不稳定锚点）
+- `groundings` 是从 PyReason carrier 原样回显的文本；不应解释为稳定的 body-atom dependency edge。跨 chain 因果关系不在 v1 scope 内。
+- 已 accept 的 pyreason candidate 可返回 timeline；未 accept 的 candidate 因当前 store 没有持久化 candidate payload 索引，可能落到 `runtime_explain_not_found`。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+- `runtime_explain_not_supported`
+
+## 20. `POST /v1/runtime/sessions/{session_id}/queries/explain-timeline-summary`
+
+请求：
+
+```json
+{
+  "kind": "candidate",
+  "id": "cand_v2:abc123"
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "candidate_id": "cand_v2:abc123"
+  },
+  "kind": "candidate_provenance_timeline_summary",
+  "summary": {
+    "explain_kind": "timeline",
+    "timesteps": 3,
+    "chain_count": 2,
+    "total_event_count": 5,
+    "root_chain_key": ["node", "PAYMENTS_GATEWAY", "at_risk_signal"],
+    "root_chain_final_bound": [1.0, 1.0]
+  }
+}
+```
+
+说明：
+
+- 这是 PyReason candidate 的 timeline summary surface，建立在 `explain-timeline` 之上。
+- 只对 `support_kind="pyreason_provenance_v1"` 的 candidate 返回；其余返回 `runtime_explain_not_supported`。
+- summary 是纯派生：所有字段都从 timeline DTO 计算得出，不直接下探 raw carrier。
+- `summary` DTO shape 固定为 6 个字段：
+  - `explain_kind`: 固定为 `"timeline"`
+  - `timesteps`: 推理总步数
+  - `chain_count`: chain 总数
+  - `total_event_count`: 所有 chain 的事件总数
+  - `root_chain_key`: root chain 的 `[component_type, component, label]`
+  - `root_chain_final_bound`: root chain 最后一个事件的 `new_bound`
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+- `runtime_explain_not_supported`
+
+## 21. `POST /v1/runtime/sessions/{session_id}/queries/explain-timeline-narrative`
+
+请求：
+
+```json
+{
+  "kind": "candidate",
+  "id": "cand_v2:abc123"
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "candidate_id": "cand_v2:abc123"
+  },
+  "kind": "candidate_provenance_timeline_narrative",
+  "narrative": {
+    "headline": "PyReason timeline: 2 propagation chains across 3 timesteps.",
+    "propagation_lines": [
+      "at_risk_signal on PAYMENTS_GATEWAY: [0.0,1.0] → [1.0,1.0] at t=1 (vendor_risk_propagation)"
+    ],
+    "root_line": "Root chain: at_risk_signal on PAYMENTS_GATEWAY final bound [1.0, 1.0]."
+  }
+}
+```
+
+说明：
+
+- 这是 PyReason candidate 的 timeline narrative surface，建立在 `explain-timeline` 之上。
+- 只对 `support_kind="pyreason_provenance_v1"` 的 candidate 返回；其余返回 `runtime_explain_not_supported`。
+- narrative 是纯派生：所有字段都从 timeline DTO 计算得出，不直接下探 raw carrier。
+- `narrative` DTO shape 固定为 3 个字段：
+  - `headline`: 概要行，包含 chain 数和 timestep 数
+  - `propagation_lines`: 每条描述一个 chain 内的事件（chain-local，不推断跨 chain 因果）
+  - `root_line`: 描述 root chain 的最终 bound 状态
+- narrative 保持 chain-local 描述原则：每条 propagation line 只描述一个 chain 内部的 bound 变化，不从 groundings 推断跨 chain 的因果关系。
+- `explain_runtime_nl(kind="candidate")` 现在对 PyReason candidate 做 early dispatch：
+  - 检测 `support_kind == "pyreason_provenance_v1"`
+  - 走 timeline → summary → narrative → NL 管线
+  - 返回 `kind="candidate_provenance_timeline_nl_explain"`
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+- `runtime_explain_not_supported`
+
+## 22. `POST /v1/runtime/sessions/{session_id}/packages/export`
 
 请求：
 
@@ -1524,6 +1767,8 @@
   `provenance_trees.jsonl` 导出 runtime export-time replay 的 Souffle proof tree dict（每行 `{candidate_id, provenance_tree}`）；缺少 recipe、query export 失败、Souffle explain 失败或无法匹配 output row 的 candidate 会被静默跳过，不影响整个 package export。
   `provenance_statuses.jsonl` 导出同一轮 replay 的 per-candidate status rows（含 `engine`、`truncated`、可选 `reason`）；它让离线 audit consumer 能区分“有 provenance”、“没有 provenance”以及“为什么没有”，而不是把所有缺失都折叠成静默空白。
   `evidence_graphs.jsonl` 导出统一 explain DTO（每行 `{candidate_id, evidence_graph}`）；当前来源包括 Souffle proof tree replay、PyReason provenance envelope event log、以及 ProbLog provenance envelope proof trace。旧 package 没有这个文件时，static UI 仍会对 Souffle 保留基于 `provenance_trees.jsonl` 的 fallback。
+  - `audit/provenance_timelines.jsonl`（可选 — 当 accepted candidate 的 `support_kind="pyreason_provenance_v1"` 且 provenance envelope 可在 export-time 转换为 `CandidateProvenanceTimeline` 时写入）
+  `provenance_timelines.jsonl` 导出 PyReason candidate 的高保真 timeline DTO（每行 `{candidate_id, provenance_timeline}`）；这是 `AuditQuery.get_candidate_provenance_timeline()` 的 durable 数据源。non-pyreason candidate 不写入此文件。
 
 错误 kinds：
 

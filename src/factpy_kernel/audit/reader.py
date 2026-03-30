@@ -32,6 +32,7 @@ class AuditPackageData:
     provenance_statuses: dict[str, dict[str, Any]]
     evidence_graphs: dict[str, EvidenceGraph]
     assertion_annotations: list[dict[str, Any]]
+    provenance_timelines: dict[str, dict[str, Any]]
 
 
 def load_audit_package(package_dir: str | Path) -> AuditPackageData:
@@ -70,6 +71,7 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
         provenance_statuses=_read_provenance_statuses(root, audit_files),
         evidence_graphs=_read_evidence_graphs(root, audit_files),
         assertion_annotations=_read_optional_jsonl(root, audit_files, "assertion_annotations"),
+        provenance_timelines=_read_provenance_timelines(root, audit_files),
     )
 
 
@@ -102,6 +104,7 @@ def _read_manifest_audit_files(manifest: dict[str, Any]) -> dict[str, str]:
         "provenance_statuses",
         "evidence_graphs",
         "assertion_annotations",
+        "provenance_timelines",
     ):
         value = audit_files.get(key)
         if isinstance(value, str) and value:
@@ -188,6 +191,21 @@ def _read_evidence_graphs(root: Path, mapping: dict[str, str]) -> dict[str, Evid
             result[candidate_id] = evidence_graph_from_dict(evidence_graph)
         except ValueError as exc:
             raise AuditReadError(f"invalid evidence_graph for candidate {candidate_id}: {exc}") from exc
+    return result
+
+
+def _read_provenance_timelines(root: Path, mapping: dict[str, str]) -> dict[str, dict[str, Any]]:
+    rows = _read_optional_jsonl(root, mapping, "provenance_timelines")
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        candidate_id = row.get("candidate_id")
+        provenance_timeline = row.get("provenance_timeline")
+        if (
+            isinstance(candidate_id, str)
+            and candidate_id
+            and isinstance(provenance_timeline, dict)
+        ):
+            result[candidate_id] = provenance_timeline
     return result
 
 

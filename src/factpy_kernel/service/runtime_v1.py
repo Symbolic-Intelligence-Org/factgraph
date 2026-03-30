@@ -47,6 +47,7 @@ from factpy_kernel.core.store._support import (
     _DEGRADED_SUPPORT_KINDS,
     _PROVENANCE_BEARING_SUPPORT_KINDS,
     _WITNESS_BEARING_SUPPORT_KINDS,
+    PYREASON_PROVENANCE_KIND,
     SOUFFLE_WITNESS_KIND,
 )
 from factpy_kernel.core.store._confidence_kind_resolver import CertaintyConfidenceKindResolver
@@ -363,6 +364,21 @@ def explain_runtime_summary(session_id: str, dto: dict[str, Any]) -> dict[str, A
                 summary=_get_rule_run_summary(session, id_),
             )
         if kind == "candidate":
+            support_kind = session.store.get_candidate_support_kind(id_)
+            if support_kind == PYREASON_PROVENANCE_KIND:
+                timeline_resp = _explain_timeline_candidate(session, id_)
+                timeline = timeline_resp.get("timeline")
+                if timeline is not None:
+                    from factpy_kernel.core.store._candidate_provenance_timeline import (
+                        summarize_candidate_provenance_timeline,
+                    )
+
+                    tl_summary = summarize_candidate_provenance_timeline(timeline)
+                    return ok_response(
+                        meta={"candidate_id": id_},
+                        kind="candidate_provenance_timeline_summary",
+                        summary=tl_summary,
+                    )
             registry_root = _resolve_rule_registry_root(session, dto)
             aggregation = dto.get("certainty_aggregation", "bottleneck")
             tree = _get_candidate_tree(session, id_)
@@ -404,6 +420,21 @@ def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str,
                 narrative=_get_rule_run_narrative(session, id_),
             )
         if kind == "candidate":
+            support_kind = session.store.get_candidate_support_kind(id_)
+            if support_kind == PYREASON_PROVENANCE_KIND:
+                timeline_resp = _explain_timeline_candidate(session, id_)
+                timeline = timeline_resp.get("timeline")
+                if timeline is not None:
+                    from factpy_kernel.core.store._candidate_provenance_timeline import (
+                        render_candidate_provenance_timeline_narrative,
+                    )
+
+                    tl_narrative = render_candidate_provenance_timeline_narrative(timeline)
+                    return ok_response(
+                        meta={"candidate_id": id_},
+                        kind="candidate_provenance_timeline_narrative",
+                        narrative=tl_narrative,
+                    )
             registry_root = _resolve_rule_registry_root(session, dto)
             aggregation = dto.get("certainty_aggregation", "bottleneck")
             tree = _get_candidate_tree(session, id_)
@@ -449,6 +480,28 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
                 explain_nl=render_rule_run_nl_explain(summary, narrative, locale="en"),
             )
         if kind == "candidate":
+            support_kind = session.store.get_candidate_support_kind(id_)
+            if support_kind == PYREASON_PROVENANCE_KIND:
+                timeline_resp = _explain_timeline_candidate(session, id_)
+                timeline = timeline_resp.get("timeline")
+                if timeline is not None:
+                    from factpy_kernel.core.store._candidate_provenance_timeline import (
+                        render_candidate_provenance_timeline_narrative,
+                        render_candidate_provenance_timeline_nl_explain,
+                        summarize_candidate_provenance_timeline,
+                    )
+
+                    tl_summary = summarize_candidate_provenance_timeline(timeline)
+                    tl_narrative = render_candidate_provenance_timeline_narrative(timeline)
+                    return ok_response(
+                        meta={"candidate_id": id_},
+                        kind="candidate_provenance_timeline_nl_explain",
+                        explain_nl=render_candidate_provenance_timeline_nl_explain(
+                            tl_summary,
+                            tl_narrative,
+                            locale="en",
+                        ),
+                    )
             registry_root = _resolve_rule_registry_root(session, dto)
             aggregation = dto.get("certainty_aggregation", "bottleneck")
             tree = _get_candidate_tree(session, id_)
@@ -477,6 +530,156 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_explain_nl")
         return error_response([err])
+
+
+# --- NEW: PyReason timeline explain endpoints ---
+# Blueprint: 2026-03-30_pyreason-runtime-explain-timeline.md (D-PT4)
+
+
+def explain_runtime_timeline(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    """Return CandidateProvenanceTimeline for pyreason candidates."""
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        kind = dto.get("kind")
+        if kind != "candidate":
+            raise facade_error(
+                f"unsupported explain_timeline kind: {kind!r}",
+                kind="shape",
+                path="$.kind",
+            )
+        candidate_id = _require_non_empty_str(dto.get("id"), path="$.id")
+        return _explain_timeline_candidate(session, candidate_id)
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_timeline")
+        return error_response([err])
+
+
+def explain_runtime_timeline_summary(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    """Return timeline summary for pyreason candidates."""
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        kind = dto.get("kind")
+        if kind != "candidate":
+            raise facade_error(
+                f"unsupported explain_timeline_summary kind: {kind!r}",
+                kind="shape",
+                path="$.kind",
+            )
+        candidate_id = _require_non_empty_str(dto.get("id"), path="$.id")
+        timeline_resp = _explain_timeline_candidate(session, candidate_id)
+        timeline = timeline_resp.get("timeline")
+        if timeline is None:
+            raise facade_error("timeline not available", kind="explain_timeline")
+        from factpy_kernel.core.store._candidate_provenance_timeline import (
+            summarize_candidate_provenance_timeline,
+        )
+
+        summary = summarize_candidate_provenance_timeline(timeline)
+        return ok_response(
+            kind="candidate_provenance_timeline_summary",
+            summary=summary,
+        )
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_timeline_summary")
+        return error_response([err])
+
+
+def explain_runtime_timeline_narrative(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    """Return timeline narrative for pyreason candidates."""
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        kind = dto.get("kind")
+        if kind != "candidate":
+            raise facade_error(
+                f"unsupported explain_timeline_narrative kind: {kind!r}",
+                kind="shape",
+                path="$.kind",
+            )
+        candidate_id = _require_non_empty_str(dto.get("id"), path="$.id")
+        timeline_resp = _explain_timeline_candidate(session, candidate_id)
+        timeline = timeline_resp.get("timeline")
+        if timeline is None:
+            raise facade_error("timeline not available", kind="explain_timeline")
+        from factpy_kernel.core.store._candidate_provenance_timeline import (
+            render_candidate_provenance_timeline_narrative,
+        )
+
+        narrative = render_candidate_provenance_timeline_narrative(timeline)
+        return ok_response(
+            kind="candidate_provenance_timeline_narrative",
+            narrative=narrative,
+        )
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_timeline_narrative")
+        return error_response([err])
+
+
+def _explain_timeline_candidate(session: Any, candidate_id: str) -> dict[str, Any]:
+    """Internal helper: build timeline for a pyreason candidate."""
+    from factpy_kernel.adapters.pyreason.provenance import pyreason_trace_from_dict
+    from factpy_kernel.core.store._candidate_provenance_timeline import (
+        build_candidate_provenance_timeline,
+    )
+    from factpy_kernel.core.store._support import PYREASON_PROVENANCE_KIND
+
+    support_digest = session.store.get_candidate_support_digest(candidate_id)
+    if support_digest is None:
+        raise _runtime_explain_not_found(
+            handle_kind="candidate_id",
+            handle_value=candidate_id,
+            path="$.id",
+        )
+    support_kind = session.store.get_candidate_support_kind(candidate_id)
+    if support_kind is None:
+        raise _runtime_explain_not_found(
+            handle_kind="candidate_id",
+            handle_value=candidate_id,
+            path="$.id",
+        )
+    if support_kind != PYREASON_PROVENANCE_KIND:
+        raise facade_error(
+            f"explain-timeline requires pyreason_provenance_v1, got {support_kind}",
+            kind="explain_not_supported",
+        )
+
+    provenance = session.store.explain_provenance(support_digest)
+    if not isinstance(provenance, dict):
+        raise _runtime_explain_not_found(
+            handle_kind="support_digest",
+            handle_value=support_digest,
+            path="$.id",
+        )
+    if provenance.get("engine") != "pyreason":
+        raise facade_error(
+            "explain-timeline requires pyreason provenance envelope",
+            kind="explain_not_supported",
+        )
+    payload = provenance.get("payload")
+    if not isinstance(payload, dict):
+        raise facade_error("invalid pyreason provenance payload", kind="explain_timeline")
+
+    candidate_payload = _candidate_payload_for_candidate_id(session, candidate_id)
+    if candidate_payload is None:
+        raise facade_error(
+            f"candidate payload not available for explain-timeline: {candidate_id}",
+            kind="explain_not_supported",
+        )
+
+    timeline = build_candidate_provenance_timeline(
+        candidate_id=candidate_id,
+        trace=pyreason_trace_from_dict(payload),
+        candidate_payload=candidate_payload,
+    )
+    return ok_response(
+        kind="candidate_provenance_timeline",
+        timeline=timeline,
+    )
 
 
 def explain_runtime_support(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
@@ -873,6 +1076,7 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
         provenance_map: dict[str, dict[str, Any]] | None = None
         provenance_status_map: dict[str, dict[str, Any]] | None = None
         evidence_graph_map: dict[str, dict[str, Any]] | None = None
+        provenance_timeline_map: dict[str, dict[str, Any]] | None = None
         if package_kind == "audit" and session.registry_root is not None:
             certainty_map = _compute_all_certainty_summaries(
                 session.store,
@@ -885,6 +1089,7 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
                 session,
                 provenance_trees=provenance_map,
             )
+            provenance_timeline_map = _materialize_provenance_timelines(session)
         export_package(
             session.store,
             out_dir,
@@ -894,6 +1099,7 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
             provenance_trees=provenance_map,
             provenance_statuses=provenance_status_map,
             evidence_graphs=evidence_graph_map,
+            provenance_timelines=provenance_timeline_map,
         )
         return ok_response(
             package={
@@ -1038,6 +1244,12 @@ def _runtime_explain_not_supported(*, candidate_id: str, support_kind: str) -> E
 
 
 def _get_candidate_tree(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
+    from factpy_kernel.adapters.problog.provenance import (
+        problog_trace_from_dict,
+        problog_trace_to_candidate_evidence_tree,
+    )
+    from factpy_kernel.core.store._support import PROBLOG_PROVENANCE_KIND
+
     support_digest = session.store.get_candidate_support_digest(candidate_id)
     if support_digest is None:
         raise _runtime_explain_not_found(
@@ -1056,6 +1268,41 @@ def _get_candidate_tree(session: RuntimeSession, candidate_id: str) -> dict[str,
         if support_kind in _DEGRADED_SUPPORT_KINDS:
             return build_degraded_candidate_evidence_tree(
                 candidate_id=candidate_id,
+                support_digest=support_digest,
+                support_kind=support_kind,
+            )
+        if support_kind == PROBLOG_PROVENANCE_KIND:
+            provenance = session.store.explain_provenance(support_digest)
+            if not isinstance(provenance, dict):
+                raise _runtime_explain_not_found(
+                    handle_kind="support_digest",
+                    handle_value=support_digest,
+                    path="$.id",
+                )
+            if provenance.get("engine") != "problog":
+                raise facade_error(
+                    "invalid problog provenance envelope for candidate explain-tree",
+                    kind="runtime",
+                    path="$.id",
+                )
+            payload = provenance.get("payload")
+            if not isinstance(payload, dict):
+                raise facade_error(
+                    "problog provenance payload must be object",
+                    kind="runtime",
+                    path="$.id",
+                )
+            candidate_payload = _candidate_payload_for_candidate_id(session, candidate_id)
+            if candidate_payload is None:
+                raise facade_error(
+                    f"candidate payload not available for explain-tree: {candidate_id}",
+                    kind="explain_not_supported",
+                    path="$.id",
+                )
+            return problog_trace_to_candidate_evidence_tree(
+                problog_trace_from_dict(payload),
+                candidate_id=candidate_id,
+                candidate_payload=candidate_payload,
                 support_digest=support_digest,
                 support_kind=support_kind,
             )
@@ -1537,6 +1784,45 @@ def _materialize_evidence_graphs(
     return graphs
 
 
+def _materialize_provenance_timelines(
+    session: RuntimeSession,
+) -> dict[str, dict[str, Any]]:
+    """Materialize additive audit-package CandidateProvenanceTimeline rows where possible."""
+    from factpy_kernel.adapters.pyreason.provenance import pyreason_trace_from_dict
+    from factpy_kernel.core.store._candidate_provenance_timeline import (
+        build_candidate_provenance_timeline,
+    )
+    from factpy_kernel.core.store._support import PYREASON_PROVENANCE_KIND
+
+    timelines: dict[str, dict[str, Any]] = {}
+    for row in _accepted_candidate_claim_rows(session):
+        candidate_id = row["candidate_id"]
+        support_kind = row.get("support_kind")
+        if support_kind != PYREASON_PROVENANCE_KIND:
+            continue
+        support_digest = row.get("support_digest")
+        if not isinstance(support_digest, str) or not support_digest:
+            continue
+
+        try:
+            provenance = session.store.explain_provenance(support_digest)
+            if not isinstance(provenance, dict):
+                continue
+            payload = provenance.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            candidate_payload = _candidate_payload_from_claim(row["claim"])
+            timelines[candidate_id] = build_candidate_provenance_timeline(
+                candidate_id=candidate_id,
+                trace=pyreason_trace_from_dict(payload),
+                candidate_payload=candidate_payload,
+            )
+        except Exception:
+            continue
+
+    return timelines
+
+
 def _accepted_candidate_provenance_rows(session: RuntimeSession) -> list[dict[str, Any]]:
     return [
         {
@@ -1594,6 +1880,17 @@ def _candidate_payload_from_claim(claim: Claim) -> dict[str, Any]:
         "pred_id": claim.pred_id,
         "terms": terms,
     }
+
+
+def _candidate_payload_for_candidate_id(
+    session: RuntimeSession,
+    candidate_id: str,
+) -> dict[str, Any] | None:
+    for claim in sorted(session.store.ledger.claims, key=lambda item: item.asrt_id):
+        if _candidate_meta_str(session, claim.asrt_id, "candidate_id") != candidate_id:
+            continue
+        return _candidate_payload_from_claim(claim)
+    return None
 
 
 def _candidate_binding_for_recipe(

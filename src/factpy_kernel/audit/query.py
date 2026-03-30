@@ -169,6 +169,26 @@ class AuditQuery:
             raise AuditQueryError("candidate_id must be non-empty string")
         return self.package.evidence_graphs.get(candidate_id)
 
+    def get_candidate_provenance_timeline(self, candidate_id: str) -> dict[str, Any] | None:
+        """Return CandidateProvenanceTimeline for a pyreason candidate, or None."""
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise AuditQueryError("candidate_id must be non-empty string")
+        return self.package.provenance_timelines.get(candidate_id)
+
+    def get_candidate_timeline_summary(self, candidate_id: str) -> dict[str, Any] | None:
+        """Return timeline summary for a pyreason candidate, or None."""
+        timeline = self.get_candidate_provenance_timeline(candidate_id)
+        if timeline is None:
+            return None
+        from factpy_kernel.core.store._candidate_provenance_timeline import (
+            summarize_candidate_provenance_timeline,
+        )
+
+        try:
+            return summarize_candidate_provenance_timeline(timeline)
+        except ValueError as exc:
+            raise AuditQueryError(str(exc)) from exc
+
     def list_candidates_with_provenance(self) -> list[dict[str, Any]]:
         """Return unique candidate rows that have materialized provenance trees."""
         result: list[dict[str, Any]] = []
