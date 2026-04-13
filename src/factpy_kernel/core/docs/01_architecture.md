@@ -1,7 +1,7 @@
 # Core 架构总览（factpy_kernel）
 
 - 适用范围：`src/factpy_kernel/core`
-- 最后更新：2026-03-29
+- 最后更新：2026-04-11
 - 代码基线：`Store.evaluate` 支持 `native|souffle|problog|pyreason`；`Ledger` 为 SQLite write-through cache + `annotation_rows`（Annotation Store）；`ProjectorAudit` 为 v2 结构
 - 目标读者：需要理解 core 语义边界、关键入口与扩展点的开发者
 
@@ -109,8 +109,14 @@ Ledger 的持久化表现在对应四层数据架构（详见 [Assertion Annotat
 
 - SQLite 表为真相：`claims/claim_args/meta_rows/annotation_rows/revokes/ingest_keys/ledger_meta`
 - 内存索引为读缓存：启动加载 + 提交后写透维护
+- file-backed `Ledger` 现在使用 thread-local SQLite connections（`check_same_thread=True`）而不是单共享连接
+- 写路径统一通过 `_write_session() -> (conn, post_commit_hooks)`：
+  - 先执行 SQLite write + COMMIT
+  - 再在释放 `RLock` 之前执行内存索引 hooks
+- public 读 API 与 writer 共享同一把 `RLock`，保证 reader 看不到“SQLite 已提交但内存索引未更新”的窗口
 - `annotation_rows` 具有 `UNIQUE(asrt_id, namespace, category, key)` 约束，支持 upsert 语义
 - `Ledger(path=":memory:")` 与 `Ledger(path="...")` 均可用
+- `Ledger(path=":memory:")` 继续只承诺单线程语义；跨线程访问会告警，不是生产配置
 
 ## 5. 关键运行链路
 
@@ -315,7 +321,8 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
       - 当 `tree.root.engine_meta.probability` 可用时，summary 还允许附加：
         - `problog_probability`
     - `candidate_evidence_tree_narrative`
-      - 由 `store._candidate_evidence_tree_narrative` 从 summary 纯派生；runtime certainty lane 可选再附加 additive certainty section
+      - 由 `store._candidate_evidence_tree_narrative` 从 summary 派生；runtime certainty lane 可选再附加 additive certainty section
+      - **Contract Fork D-EED1**：函数签名支持可选 `tree` 参数；当 `tree` 不为 None 时，会额外扫描 `assertion_fact` 节点的 `fact_meta.source`，生成 `source_lines`；不传 `tree` 时行为与之前完全一致
       - 基础 shape：
         - `headline`
         - `overview_lines`
@@ -325,13 +332,15 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
         - `drilldown_lines`
       - ProbLog tree 当前还允许附加可选 `probability_lines`
       - runtime first-round 还允许附加可选 `certainty_lines`
+      - 当 `assertion_fact` 节点含 `fact_meta.source` 时，还允许附加可选 `source_lines`
     - `candidate_evidence_tree_nl_explain`
-      - 由 `store._candidate_evidence_tree_nl` 只从 summary + narrative 纯派生
+      - 由 `store._candidate_evidence_tree_nl` 从 summary + narrative 派生
       - 基础 shape：
         - `headline`
         - `paragraphs`
       - runtime candidate narrative 含 `probability_lines` 时，NL 允许追加 probability paragraph
       - runtime candidate narrative 含 `certainty_lines` 时，NL 允许再追加 certainty paragraph
+      - runtime candidate narrative 含 `source_lines` 时，NL 允许再追加 fact sources paragraph
     - service runtime `explain-summary(kind="candidate")` 现在还可附加 response-level `certainty_summary`：
       - 不属于 core 12 字段 summary set
       - 只在 `Store.get_candidate_confidence_kind(candidate_id) == "certainty"` 时尝试派生
@@ -365,6 +374,18 @@ evaluate 结束后现在会登记一层轻量 candidate explain backref：
     - audit：summary + narrative
     - static：narrative block
     - audit/static 第一轮不单独交付 candidate NL DTO
+  - **Blueprint D-EED Phase 2：explain-steps 端点（flat step list）**
+    - `POST /v1/runtime/sessions/{session_id}/queries/explain-steps` 新增逐步路径端点
+    - 返回 `kind="candidate_evidence_steps"`，`steps` 字段为有序 flat list
+    - 三引擎统一 DTO schema；dispatch 在 `service/runtime_v1.explain_runtime_steps()`：
+      - `native / souffle / problog` → `store._candidate_evidence_tree_steps.build_candidate_evidence_steps(tree)`：DFS post-order 遍历 tree；step_kind：`fact_check / rule_apply / conclusion / proof_leaf_check / proof_goal_derive`
+      - `pyreason` → `store._candidate_provenance_timeline.build_candidate_provenance_steps(timeline)`：按时间排序事件；step_kind：`bound_seed / bound_update / convergence`
+    - `rule_apply` steps 在 witness-bearing tree 上还可附加 `detail.rule_ref_ids: list[str]`
+      - 数据来自同一 `support_section` 对应 support artifact 的 `rule_ref_edges[*].rule_ref_id`，无 `rule_ref_edges` 时退回 legacy `rule_refs`
+      - 当 `detail.rule_ref_ids` 非空时，description 用规则名文本：`Rule <id>: ...` / `Rules [a, b]: ...`
+      - 当为空时保持降级文本：`Support group satisfied: N condition(s) met`
+    - 每个 step 携带 `detail.depth` + `detail.parent_node_ref` 作为 D-EED3 层级提示
+    - Phase 2 不新增 audit / static delivery；`render_evidence_steps_html()` 为预留 helper
 
 ```mermaid
 flowchart LR

@@ -355,6 +355,110 @@ def render_candidate_provenance_timeline_nl_explain(
     return {"headline": headline, "paragraphs": paragraphs}
 
 
+def build_candidate_provenance_steps(timeline: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Build a flat, time-ordered list of steps from a candidate_provenance_timeline dict.
+    Seed events -> bound_seed; rule-update events -> bound_update.
+    A synthetic convergence step is appended at the end.
+    """
+    chains = timeline.get("chains", [])
+    if not isinstance(chains, list):
+        raise ValueError("timeline.chains must be list")
+
+    def _fmt_bound(b: Any) -> str:
+        if isinstance(b, (list, tuple)) and len(b) == 2:
+            return f"[{b[0]:.3f}, {b[1]:.3f}]"
+        return str(b)
+
+    all_events: list[tuple[int, int, dict[str, Any], dict[str, Any]]] = []
+    for chain_idx, chain in enumerate(chains):
+        if not isinstance(chain, Mapping):
+            continue
+        for event in chain.get("events", []):
+            if not isinstance(event, Mapping):
+                continue
+            all_events.append((int(event.get("time", 0)), chain_idx, dict(event), dict(chain)))
+
+    all_events.sort(key=lambda x: (x[0], x[1]))
+
+    steps: list[dict[str, Any]] = []
+    for step_num, (time, _chain_idx, event, chain) in enumerate(all_events, start=1):
+        component = str(chain.get("component", ""))
+        component_type = str(chain.get("component_type", ""))
+        label = str(chain.get("label", ""))
+        trigger = str(event.get("trigger", ""))
+        old_bound = event.get("old_bound", [0.0, 0.0])
+        new_bound = event.get("new_bound", [0.0, 0.0])
+        groundings = event.get("groundings", [])
+
+        is_seed = trigger == "seed_fact"
+        step_kind = "bound_seed" if is_seed else "bound_update"
+        old_str = _fmt_bound(old_bound)
+        new_str = _fmt_bound(new_bound)
+
+        if is_seed:
+            description = f"t={time}: {component}.{label} initialized to {new_str}"
+        else:
+            description = f"t={time}: {component}.{label} updated {old_str} -> {new_str} by {trigger}"
+
+        node_ref = f"{component_type}/{component}/{label}"
+        steps.append(
+            {
+                "step_num": step_num,
+                "step_kind": step_kind,
+                "description": description,
+                "node_ref": node_ref,
+                "detail": {
+                    "depth": 0,
+                    "parent_node_ref": None,
+                    "time": time,
+                    "component": component,
+                    "component_type": component_type,
+                    "label": label,
+                    "trigger": trigger,
+                    "old_bound": old_bound,
+                    "new_bound": new_bound,
+                    "groundings": groundings,
+                },
+            }
+        )
+
+    if steps:
+        n_chains = len([c for c in chains if isinstance(c, Mapping)])
+        timesteps = timeline.get("timesteps", 0)
+        conv_num = len(steps) + 1
+        final_bounds = []
+        for chain in chains:
+            if not isinstance(chain, Mapping):
+                continue
+            evts = chain.get("events", [])
+            if evts and isinstance(evts[-1], Mapping):
+                nb = evts[-1].get("new_bound", [])
+                comp = chain.get("component", "")
+                lbl = chain.get("label", "")
+                final_bounds.append(f"{comp}.{lbl}={_fmt_bound(nb)}")
+        bound_summary = "; ".join(final_bounds) if final_bounds else "-"
+        steps.append(
+            {
+                "step_num": conv_num,
+                "step_kind": "convergence",
+                "description": (
+                    f"Converged after {timesteps} timestep(s) across {n_chains} chain(s). "
+                    f"Final bounds: {bound_summary}"
+                ),
+                "node_ref": None,
+                "detail": {
+                    "depth": 0,
+                    "parent_node_ref": None,
+                    "timesteps": timesteps,
+                    "chain_count": n_chains,
+                },
+            }
+        )
+
+    return steps
+
+
 # ---------------------------------------------------------------------------
 # Helpers (reused logic from pyreason adapter)
 # ---------------------------------------------------------------------------
@@ -408,6 +512,7 @@ __all__ = [
     "CandidateProvenanceTimeline",
     "TimelineChain",
     "TimelineEvent",
+    "build_candidate_provenance_steps",
     "build_candidate_provenance_timeline",
     "render_candidate_provenance_timeline_narrative",
     "render_candidate_provenance_timeline_nl_explain",

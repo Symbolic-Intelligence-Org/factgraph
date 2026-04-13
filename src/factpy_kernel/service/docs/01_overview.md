@@ -1,7 +1,7 @@
 # Service 模块总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/service`
-- 最后更新：2026-03-21
+- 最后更新：2026-04-11
 - 目标读者：需要通过 HTTP 对接 runtime / registry 的前后端开发者
 
 ## 1. 模块职责
@@ -11,6 +11,7 @@
 它负责：
 
 - FastAPI `app_v1`
+- `/v1/...` API key 认证层（`X-FactPy-API-Key`）
 - runtime session 管理
 - facts 写入 / 查询
 - rule validate / compile-preview
@@ -56,6 +57,15 @@
   - rules facade 与 registry 只读接口。
 
 ## 4. 当前路由（v1）
+
+### 4.0 认证边界
+
+- 所有 `/v1/...` 路由默认都要求 `X-FactPy-API-Key`。
+- 若 `FACTPY_KERNEL_AUTH_DISABLED=true`，本地开发可显式跳过认证。
+- 认证失败会在 route handler 之前返回：
+  - `HTTP 401`：缺失或错误 key
+  - `HTTP 503`：认证启用但未配置 `FACTPY_KERNEL_API_KEYS`
+- 只有通过认证后，service 才继续沿用各 DTO 文档里的 `HTTP 200` envelope 合同。
 
 ### 4.1 rules
 
@@ -191,3 +201,4 @@
 
 - 当前仅暴露单条 derivation `accept`，尚未暴露 `accept_many` HTTP 接口
 - 错误 envelope 当前统一走 `{ok, errors, meta}`；未捕获异常由 `app_v1` 全局 exception handler 统一包装
+- `HttpRuntimeAPI` 这类 HTTP 调用方若访问启用认证的 kernel，需要自行提供 API key header；`LocalRuntimeAPI` 不经过 HTTP 认证层

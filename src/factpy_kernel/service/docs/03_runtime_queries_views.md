@@ -29,7 +29,10 @@
 
 ## 通用约定
 
-- 所有端点都返回 `HTTP 200` JSON envelope。
+- 所有 `/v1/...` runtime query/view/derivation 端点默认都要求 `X-FactPy-API-Key`。
+- 缺失或错误 key 返回 `HTTP 401`，且不会进入 JSON envelope。
+- 认证启用但未配置 `FACTPY_KERNEL_API_KEYS` 时返回 `HTTP 503`，且不会进入 JSON envelope。
+- 只有通过认证后，应用层成功/失败才继续使用 `HTTP 200` JSON envelope。
 - 成功：`ok=true`，失败：`ok=false` 且 `errors[]` 非空。
 - `session_id` 一律走 path parameter。
 - tuple 在 JSON 中统一序列化为 list。
@@ -90,12 +93,20 @@
 - `rule` 必须是结构化对象；传 string 或其他非 object 值时返回 `shape` error。
 - `override_registry_root` 可选；未提供时默认复用 session 绑定的 `registry_root`。
 - 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供。
+- `run` 使用的 active registry 现在是 evaluate-time merge：
+  - 先加载 filesystem registry（若 `override_registry_root` / session `registry_root` 可用）
+  - 再追加当前 session 的 `ephemeral_rules`
+  - 若 `(rule_id, version)` 冲突，filesystem rule 优先，ephemeral rule 静默跳过
+- 因此即使 `registry_root` 缺失，只要 session 已注册了匹配的 ephemeral rule，`ruleref(...)` 仍可在 native rule path 上解析成功。
 - `capture_trace` 可选，默认 `false`；当为 `true` 时 service 会调用 traced sibling helper，并在 `result.trace.rule_run_id` 返回 trace handle。
 - 若 session 没有配置 `artifact_store_root`，该 handle 仍是 session-scoped。
 - 若 session 配置了共享的 `artifact_store_root`，后续 session 可继续用该 handle 做 explain readback。
 - `capture_trace=false` 时响应保持旧 shape，不返回 `trace`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。
-- 其他 rule 编译或执行失败会落入统一 `runtime` error。
+- 其他 rule 编译或执行失败默认仍落入统一 `runtime` error；但常见 agent-facing 失败现在会在 `errors[0].details` 中追加稳定字段：
+  - unknown predicate：`error_code="unknown_predicate"` + `missing_pred_id` + `remediation_hint`
+  - unknown RuleRef：`error_code="unknown_rule_ref"` + `missing_rule_ref` + `remediation_hint`
+  - RuleRef target not exposed：`error_code="rule_not_expose"` + `rule_ref_id` + `remediation_hint`
 
 错误 kinds：
 
@@ -744,14 +755,15 @@
 - `candidate` narrative 调用链为：
   - canonical raw tree
   - `candidate_evidence_tree_summary`
-  - `render_candidate_evidence_tree_narrative(..., locale="en")`
+  - `render_candidate_evidence_tree_narrative(summary, tree=tree, locale="en")`
+  - **Contract Fork D-EED1**：`tree` 参数可选，传入时额外扫描 `assertion_fact` 节点的 `fact_meta.source`；不传时行为与之前完全一致
 - `rule_run_narrative` 继续固定为 5 个字段：
   - `headline`
   - `overview_lines`
   - `predicate_lines`
   - `non_fact_check_lines`
   - `drilldown_lines`
-- `candidate_evidence_tree_narrative` 固定为 6 个基础字段：
+- `candidate_evidence_tree_narrative` 基础 6 字段：
   - `headline`
   - `overview_lines`
   - `evidence_lines`
@@ -766,7 +778,11 @@
   - 首行显式标注 scope：`Certainty (eligible child-proof subtree): ...`
   - 后续每行对应一个 condition，保持 atom position order，不做排序
   - 无 certainty_summary 时不返回该 key
-- 这些字段都只从对应 summary 纯派生，不直接下探 raw carrier。
+- 当 `assertion_fact` 节点含 `fact_meta.source` 时，runtime narrative 还可附加 `source_lines`：
+  - 不改变上述 6 个基础字段
+  - 每行格式：`{pred_id}({e_ref}) — from '{source}'[ (approved by {approved_by})]`
+  - 无 source meta 时不返回该 key
+- narrative 的字段来自 summary（聚合层）及可选的 tree 下探（fact_meta 层）；不直接下探 raw engine carrier。
 - 对 degraded candidate，narrative 也必须生成非空降级说明，而不是返回空段。
 - 第一轮故意不把 narrative 打包进 `explain-summary`；bundled delivery 若需要，后续另行评估。
 - `queries/explain-narrative` 的 candidate 请求也支持可选 `override_registry_root`：
@@ -875,7 +891,87 @@
 - `runtime_explain_not_supported`
 - `explain_not_supported`
 
-## 7A. `GET /v1/runtime/sessions/{session_id}/evidence/...`
+## 7A. `POST /v1/runtime/sessions/{session_id}/queries/explain-steps`
+
+请求：
+
+```json
+{
+  "kind": "candidate",
+  "id": "cand_v2:123"
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {
+    "candidate_id": "cand_v2:123"
+  },
+  "kind": "candidate_evidence_steps",
+  "candidate_id": "cand_v2:123",
+  "engine": "native_binding_v1",
+  "steps": [
+    {
+      "step_num": 1,
+      "step_kind": "fact_check",
+      "description": "Fact expert:publication(entity:alice) = 12 ✓",
+      "node_ref": "asrt_123",
+      "detail": {
+        "depth": 2,
+        "parent_node_ref": "support:cand_v2:123",
+        "pred_id": "expert:publication",
+        "e_ref": "entity:alice",
+        "claim_args": [{"idx": 0, "tag": "int", "val": "12"}]
+      }
+    },
+    {
+      "step_num": 2,
+      "step_kind": "rule_apply",
+      "description": "Rule q.expert_has_recent_pub@v1: 1 condition(s) met",
+      "node_ref": "support:cand_v2:123",
+      "detail": {
+        "depth": 1,
+        "parent_node_ref": "cand:cand_v2:123",
+        "witness_count": 1,
+        "rule_ref_ids": ["q.expert_has_recent_pub@v1"]
+      }
+    }
+  ]
+}
+```
+
+说明：
+
+- 当前只支持 `{kind:"candidate", id}`
+- `engine` 当前直通 `support_kind`，例如：
+  - `native_binding_v1`
+  - `souffle_witness_v1`
+  - `problog_provenance_v1`
+  - `pyreason_provenance_v1`
+- dispatch：
+  - `native / souffle / problog`：从 `candidate_evidence_tree` 生成 DFS post-order flat steps
+  - `pyreason`：从 `candidate_provenance_timeline` 生成按时间排序的 flat steps
+- `native / souffle` 路径中的 `rule_apply` step 可带 `detail.rule_ref_ids`
+  - 来源于同一 `support_section` 对应 support artifact 的 rule refs
+  - 单规则：`Rule <id>: N condition(s) met`
+  - 多规则：`Rules [a, b]: N condition(s) met`
+  - 无规则：降级为 `Support group satisfied: N condition(s) met`
+- ProbLog / PyReason 不生成 `rule_apply.detail.rule_ref_ids`
+- 第一轮不单独交付 audit/static steps DTO；runtime 返回是当前唯一 canonical delivery
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime_explain_not_found`
+- `runtime_explain_not_supported`
+- `explain_not_supported`
+
+## 7B. `GET /v1/runtime/sessions/{session_id}/evidence/...`
 
 当前 runtime 也提供 session-bound live proof-entry permalink：
 
@@ -990,14 +1086,24 @@
   - runtime `explain` / `explain-tree` 会把它视为 witness-bearing support
 - `override_registry_root` 可选；未提供时默认复用 session 绑定的 `registry_root`。
 - 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供。
+- native `mode="native"` derivation 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：
+  - 若已有 filesystem registry，ephemeral rules 在其后 merge
+  - 若 `registry_root is None` 但 session 有 ephemeral rules，service 会临时创建一个空 `RuleRegistry()` 并注入
+- 若两边重名，filesystem rule 优先
+- 该 merge 只对 native + `ruleref(...)` 路径承诺生效；Souffle / ProbLog / PyReason 模式不消费 session-scoped ephemeral rules。
 - native derivation where 若使用字符串 `RuleRef("rule_id", version)`，必须通过：
   - `override_registry_root`
   - legacy `registry_root`
   - 或 session-level `registry_root`
+  - 或当前 session 已注册的 matching ephemeral rule
   提供显式 registry context；否则运行时会 fail fast。
 - native derivation support 当前可记录 direct `rule_refs`，因此后续 `explain-support` / `explain-tree` 可能看到 minimal `rule_ref` 节点；这还不是递归 child proof。
 - native derivation support 现在会优先记录 structured `rule_ref_edges`，因此后续 `explain-support` / `explain-tree` 已可沿 `child_support_digest` 继续展开 first-round recursive proof。
 - direct `rule_refs` 继续保留为兼容摘要字段；child row proof 复用既有 native `SupportArtifact` readback，而不是发明第二套 handle。
+- evaluate 失败时，常见 agent-facing恢复分支会在 `errors[0].details` 中追加稳定字段：
+  - unknown RuleRef：`error_code="unknown_rule_ref"` + `missing_rule_ref` + `remediation_hint="register_referenced_rule_first_or_check_fs_registry"`
+  - RuleRef target not exposed：`error_code="rule_not_expose"` + `rule_ref_id` + `remediation_hint="add_expose_true_to_rule_definition"`
+  - unknown predicate：`error_code="unknown_predicate"` + `missing_pred_id` + `remediation_hint="verify_pred_id_via_GET_sessions_schema"`
 - native derivation support 现已在 capture 阶段应用 winning-branch narrowing：
   - `pred_witnesses`
   - `non_fact_steps`

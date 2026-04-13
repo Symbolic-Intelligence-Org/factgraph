@@ -254,6 +254,7 @@ def _remember_candidate_support_backrefs(
                 support_digest,
                 support_kind,
                 confidence_kind=candidate.confidence_kind,
+                target_pred_id=candidate.target,
             )
             continue
         if support_kind not in _WITNESS_BEARING_SUPPORT_KINDS:
@@ -267,4 +268,5 @@ def _remember_candidate_support_backrefs(
             support_digest,
             support_kind,
             confidence_kind=candidate.confidence_kind,
+            target_pred_id=candidate.target,
         )

@@ -25,7 +25,7 @@ from factpy_kernel.core.evidence.write_protocol import add_field, retract_by_asr
 from factpy_kernel.core.mapping.canon import MappingConflictError, MappingResolution
 from factpy_kernel.core.rules._trace_nl import render_rule_run_nl_explain
 from factpy_kernel.core.rules._trace_narrative import render_rule_run_narrative
-from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule, run_rule_with_trace
+from factpy_kernel.core.rules.rule_ir import RuleCompileError, RuleRegistry, RuleSpec, run_rule, run_rule_with_trace
 from factpy_kernel.core.rules._trace import summarize_rule_trace_artifact_dict
 from factpy_kernel.core.schema.schema_ir import schema_digest
 from factpy_kernel.core.store import builders
@@ -109,6 +109,7 @@ class RuntimeSession:
     opened_at_ns: int
     views: dict[str, ViewSpec]
     derivation_recipes: dict[str, RuntimeDerivationRecipe] = field(default_factory=dict)
+    ephemeral_rules: list[RuleSpec] = field(default_factory=list)
 
 
 class _RuntimeSessionManager:
@@ -196,6 +197,19 @@ def get_runtime_session(session_id: str) -> dict[str, Any]:
     try:
         session = _require_session(session_id)
         return ok_response(session=_session_to_dict(session))
+    except Exception as exc:
+        return error_response([exception_to_error(exc)])
+
+
+def get_runtime_session_schema(session_id: str) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        return ok_response(
+            result={
+                "schema_digest": session.schema_digest,
+                "schema_ir": session.store.schema_ir,
+            }
+        )
     except Exception as exc:
         return error_response([exception_to_error(exc)])
 
@@ -452,6 +466,7 @@ def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str,
                 narrative=_render_candidate_tree_narrative_from_summary(
                     summary,
                     certainty_summary=certainty_summary,
+                    tree=tree,
                 ),
             )
         raise facade_error(
@@ -516,6 +531,7 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
             narrative = _render_candidate_tree_narrative_from_summary(
                 summary,
                 certainty_summary=certainty_summary,
+                tree=tree,
             )
             return ok_response(
                 meta={"candidate_id": id_},
@@ -529,6 +545,56 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_explain_nl")
+        return error_response([err])
+
+
+def explain_runtime_steps(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    """Return ordered explain-steps for a candidate (all engines)."""
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        kind = dto.get("kind")
+        if kind != "candidate":
+            raise facade_error(
+                f"unsupported explain_steps kind: {kind!r}",
+                kind="shape",
+                path="$.kind",
+            )
+        candidate_id = _require_non_empty_str(dto.get("id"), path="$.id")
+        support_kind = session.store.get_candidate_support_kind(candidate_id)
+
+        if support_kind == PYREASON_PROVENANCE_KIND:
+            from factpy_kernel.core.store._candidate_provenance_timeline import (
+                build_candidate_provenance_steps,
+            )
+
+            timeline_resp = _explain_timeline_candidate(session, candidate_id)
+            timeline = timeline_resp.get("timeline")
+            if timeline is None:
+                raise facade_error(
+                    "no timeline available for pyreason candidate",
+                    kind="not_found",
+                    path="$.id",
+                )
+            steps = build_candidate_provenance_steps(timeline)
+        else:
+            from factpy_kernel.core.store._candidate_evidence_tree_steps import (
+                build_candidate_evidence_steps,
+            )
+
+            tree = _get_candidate_tree(session, candidate_id)
+            steps = build_candidate_evidence_steps(tree)
+
+        return ok_response(
+            meta={"candidate_id": candidate_id},
+            kind="candidate_evidence_steps",
+            candidate_id=candidate_id,
+            engine=support_kind,
+            steps=steps,
+        )
+    except Exception as exc:
+        err = _runtime_exception_to_error(exc, default_kind="query_explain_steps")
         return error_response([err])
 
 
@@ -922,6 +988,7 @@ def run_runtime_rule(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
         registry_root = _resolve_rule_registry_root(session, dto)
         if registry_root is not None:
             _load_registered_rules(active_registry, registry_root)
+        _apply_ephemeral_rules(active_registry, session)
         rule_spec = RuleSpec(
             rule_id=compiled["rule_id"],
             version=compiled["version"],
@@ -955,7 +1022,9 @@ def run_runtime_rule(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
             }
         )
     except Exception as exc:
-        return error_response([exception_to_error(exc)])
+        err = exception_to_error(exc)
+        err = _enrich_runtime_error_for_agent(err, exc)
+        return error_response([err])
 
 
 def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
@@ -981,6 +1050,10 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             certainty_resolver = CertaintyConfidenceKindResolver(
                 FileAuthoringRegistry(registry_root),
             )
+        if session.ephemeral_rules:
+            if active_registry is None:
+                active_registry = RuleRegistry()
+            _apply_ephemeral_rules(active_registry, session)
         runtime_engine_ext = _resolve_runtime_derivation_engine_ext(compiled)
         candidates = session.store.evaluate(
             derivation_id=compiled["derivation_id"],
@@ -1017,6 +1090,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="derivation_evaluate")
+        err = _enrich_runtime_error_for_agent(err, exc)
         return error_response([err])
 
 
@@ -1108,6 +1182,180 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
                 "manifest_path": str(Path(out_dir) / "manifest.json"),
             }
         )
+    except Exception as exc:
+        err = exception_to_error(exc)
+        err = _enrich_runtime_error_for_agent(err, exc)
+        return error_response([err])
+
+
+def register_ephemeral_rule(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        if not isinstance(dto, dict):
+            raise facade_error("dto must be object", kind="shape", path="$")
+        raw_rule = dto.get("rule")
+        if not isinstance(raw_rule, dict):
+            raise facade_error("rule must be object", kind="shape", path="$.rule")
+        normalized_rule = dict(raw_rule)
+        if "where" in normalized_rule:
+            normalized_rule["where"] = _json_where_to_ir(normalized_rule["where"])
+        compiled = compile_authoring_rule_v1(normalized_rule, schema_ir=session.store.schema_ir)
+        unknown_preds = _validate_ephemeral_rule_preds(
+            compiled["where"],
+            session.store.schema_ir,
+        )
+        if unknown_preds:
+            raise facade_error(
+                f"unknown predicate in rule where: {unknown_preds[0]}",
+                kind="rule_ast_validate",
+                path="$.rule.where",
+                details={
+                    "error_code": "unknown_predicate",
+                    "missing_pred_id": unknown_preds[0],
+                    "remediation_hint": "verify_pred_id_via_GET_sessions_schema",
+                },
+            )
+        rs = RuleSpec(
+            rule_id=str(compiled["rule_id"]),
+            version=str(compiled.get("version", "v1")),
+            select_vars=list(compiled["select_vars"]),
+            where=list(compiled["where"]),
+            expose=bool(compiled.get("expose", False)),
+        )
+        key = (rs.rule_id, rs.version)
+        existing_idx = next(
+            (i for i, r in enumerate(session.ephemeral_rules) if (r.rule_id, r.version) == key),
+            None,
+        )
+        if existing_idx is not None:
+            session.ephemeral_rules[existing_idx] = rs
+            reg_status = "replaced"
+        else:
+            session.ephemeral_rules.append(rs)
+            reg_status = "registered"
+        return ok_response(
+            result={
+                "rule_id": rs.rule_id,
+                "version": rs.version,
+                "status": reg_status,
+                "total_ephemeral": len(session.ephemeral_rules),
+            }
+        )
+    except Exception as exc:
+        return error_response([exception_to_error(exc)])
+
+
+def list_ephemeral_rules(session_id: str) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        return ok_response(
+            result={
+                "ephemeral_rules": [
+                    {"rule_id": rs.rule_id, "version": rs.version}
+                    for rs in session.ephemeral_rules
+                ],
+                "total": len(session.ephemeral_rules),
+            }
+        )
+    except Exception as exc:
+        return error_response([exception_to_error(exc)])
+
+
+def get_runtime_session_rules(
+    session_id: str,
+    include_spec: bool = False,
+) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        rule_map: dict[tuple[str, str], dict[str, Any]] = {}
+        fs_count = 0
+
+        if session.registry_root is not None:
+            file_registry = FileAuthoringRegistry(Path(session.registry_root))
+            for rule_id in file_registry.list_rule_ids():
+                for version_row in file_registry.list_rule_versions(rule_id):
+                    version = version_row.get("version")
+                    if not isinstance(version, str) or not version:
+                        continue
+                    entry: dict[str, Any] = {
+                        "rule_id": rule_id,
+                        "version": version,
+                        "source": "fs",
+                    }
+                    if include_spec:
+                        payload = file_registry.read_rule_spec(rule_id, version)
+                        if isinstance(payload, dict):
+                            entry["select_vars"] = payload.get("select_vars", [])
+                            entry["where"] = payload.get("where", [])
+                            entry["expose"] = bool(payload.get("expose", False))
+                    rule_map[(rule_id, version)] = entry
+                    fs_count += 1
+
+        ephemeral_count = 0
+        for rs in session.ephemeral_rules:
+            key = (rs.rule_id, rs.version)
+            if key in rule_map:
+                rule_map[key]["source"] = "ephemeral_shadowed_by_fs"
+                continue
+            entry: dict[str, Any] = {
+                "rule_id": rs.rule_id,
+                "version": rs.version,
+                "source": "ephemeral",
+            }
+            if include_spec:
+                entry["select_vars"] = list(rs.select_vars)
+                entry["where"] = list(rs.where)
+                entry["expose"] = rs.expose
+            rule_map[key] = entry
+            ephemeral_count += 1
+
+        return ok_response(
+            result={
+                "rules": list(rule_map.values()),
+                "total": len(rule_map),
+                "fs_count": fs_count,
+                "ephemeral_count": ephemeral_count,
+            }
+        )
+    except Exception as exc:
+        return error_response([exception_to_error(exc)])
+
+
+def list_runtime_candidates(
+    session_id: str,
+    pred_id_filter: str | None = None,
+) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        candidates: list[dict[str, Any]] = []
+        for candidate_id in session.store.list_candidate_ids():
+            pred_id = session.store.get_candidate_pred_id(candidate_id) or ""
+            if pred_id_filter is not None and pred_id != pred_id_filter:
+                continue
+            candidates.append(
+                {
+                    "candidate_id": candidate_id,
+                    "pred_id": pred_id,
+                    "support_kind": session.store.get_candidate_support_kind(candidate_id) or "",
+                    "confidence_kind": session.store.get_candidate_confidence_kind(candidate_id) or "none",
+                }
+            )
+        return ok_response(
+            result={
+                "candidates": candidates,
+                "total": len(candidates),
+            }
+        )
+    except Exception as exc:
+        return error_response([exception_to_error(exc)])
+
+
+def clear_ephemeral_rules(session_id: str) -> dict[str, Any]:
+    try:
+        session = _require_session(session_id)
+        count = len(session.ephemeral_rules)
+        session.ephemeral_rules.clear()
+        return ok_response(result={"cleared": count})
     except Exception as exc:
         return error_response([exception_to_error(exc)])
 
@@ -1223,6 +1471,38 @@ def _runtime_exception_to_error(exc: Exception, *, default_kind: str) -> dict[st
         else:
             err["kind"] = default_kind
     return err
+
+
+def _enrich_runtime_error_for_agent(err: dict[str, Any], exc: Exception) -> dict[str, Any]:
+    """Add stable agent-facing fields without changing the top-level kind."""
+    msg = str(exc)
+    extra: dict[str, Any] = {}
+    if "unknown predicate in where:" in msg:
+        pred_id = msg.split("unknown predicate in where:", 1)[-1].strip()
+        extra = {
+            "error_code": "unknown_predicate",
+            "missing_pred_id": pred_id,
+            "remediation_hint": "verify_pred_id_via_GET_sessions_schema",
+        }
+    elif "unknown RuleRef:" in msg:
+        ref = msg.split("unknown RuleRef:", 1)[-1].strip()
+        extra = {
+            "error_code": "unknown_rule_ref",
+            "missing_rule_ref": ref,
+            "remediation_hint": "register_referenced_rule_first_or_check_fs_registry",
+        }
+    elif "RuleRef target must be expose=True:" in msg:
+        ref = msg.split("RuleRef target must be expose=True:", 1)[-1].strip()
+        extra = {
+            "error_code": "rule_not_expose",
+            "rule_ref_id": ref,
+            "remediation_hint": "add_expose_true_to_rule_definition",
+        }
+    if not extra:
+        return err
+    enriched = dict(err)
+    enriched["details"] = {**(err.get("details") or {}), **extra}
+    return enriched
 
 
 def _runtime_explain_not_found(*, handle_kind: str, handle_value: str, path: str) -> Exception:
@@ -1458,7 +1738,11 @@ def _get_candidate_tree_summary(session: RuntimeSession, candidate_id: str) -> d
 
 
 def _get_candidate_tree_narrative(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
-    return _render_candidate_tree_narrative_from_summary(_get_candidate_tree_summary(session, candidate_id))
+    tree = _get_candidate_tree(session, candidate_id)
+    return _render_candidate_tree_narrative_from_summary(
+        _get_candidate_tree_summary(session, candidate_id),
+        tree=tree,
+    )
 
 
 def _render_rule_run_narrative_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
@@ -1469,10 +1753,12 @@ def _render_candidate_tree_narrative_from_summary(
     summary: dict[str, Any],
     *,
     certainty_summary: dict[str, Any] | None = None,
+    tree: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return render_candidate_evidence_tree_narrative(
         summary,
         certainty_summary=certainty_summary,
+        tree=tree,
         locale="en",
     )
 
@@ -1957,6 +2243,14 @@ def _runtime_assertion_detail_for_tree(ledger: Ledger, asrt_id: str) -> dict[str
             result["confidence"] = float(confidence_rows[0].value)
         except (TypeError, ValueError):
             pass
+    _FACT_META_STR_KEYS = ("source", "source_loc", "approved_by", "trace_id", "note")
+    flat_meta: dict[str, str] = {}
+    for _key in _FACT_META_STR_KEYS:
+        _rows = ledger.find_meta(asrt_id=asrt_id, key=_key, kind="str")
+        if _rows:
+            flat_meta[_key] = str(_rows[0].value)
+    if flat_meta:
+        result["flat_meta"] = flat_meta
     return result
 
 
@@ -2019,6 +2313,45 @@ def _load_registered_rules(registry: RuleRegistry, root_dir: str) -> None:
                     expose=bool(payload.get("expose", False)),
                 )
             )
+
+
+def _apply_ephemeral_rules(registry: RuleRegistry, session: RuntimeSession) -> None:
+    """Merge session ephemeral rules into an active registry.
+
+    FS rule wins on (rule_id, version) collision - duplicate silently skipped.
+    """
+    for rs in session.ephemeral_rules:
+        try:
+            registry.register(rs)
+        except RuleCompileError:
+            pass
+
+
+def _validate_ephemeral_rule_preds(
+    compiled_where: list[Any],
+    schema_ir: dict[str, Any],
+) -> list[str]:
+    """Return unknown pred_ids referenced by pred-atoms in compiled where IR."""
+    predicates = schema_ir.get("predicates", [])
+    known = {
+        pred.get("pred_id")
+        for pred in predicates
+        if isinstance(pred, dict) and isinstance(pred.get("pred_id"), str)
+    }
+    unknown: list[str] = []
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, (tuple, list)) and node:
+            if node[0] == "pred" and len(node) >= 2:
+                pred_id = node[1]
+                if isinstance(pred_id, str) and pred_id not in known and pred_id not in unknown:
+                    unknown.append(pred_id)
+            else:
+                for child in node:
+                    _walk(child)
+
+    _walk(compiled_where)
+    return unknown
 
 
 def _json_where_to_ir(where_json: Any) -> Any:

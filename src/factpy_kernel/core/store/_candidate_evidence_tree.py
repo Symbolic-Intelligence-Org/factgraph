@@ -115,6 +115,7 @@ def _build_support_sections(
     rule_refs = _normalize_strings(support.get("rule_refs", []), label="support.rule_refs")
     rule_ref_edges = _normalize_rule_ref_edges(support.get("rule_ref_edges", []), label="support.rule_ref_edges")
     root_result_kind = _require_non_empty_str(support.get("root_result_kind"), label="support.root_result_kind")
+    rule_ref_ids = _collect_rule_ref_ids(rule_ref_edges=rule_ref_edges, rule_refs=rule_refs)
 
     support_children: list[dict[str, Any]] = []
     for witness in pred_witnesses:
@@ -127,6 +128,7 @@ def _build_support_sections(
             "node_id": f"support:{node_key}",
             "node_kind": "support_section",
             "title": "Support",
+            "rule_ref_ids": rule_ref_ids,
             "children": support_children,
         }
     ]
@@ -207,6 +209,58 @@ def _build_non_fact_check(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _collect_rule_ref_ids(*, rule_ref_edges: Sequence[Mapping[str, Any]], rule_refs: Sequence[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for edge in rule_ref_edges:
+        rule_ref_id = edge.get("rule_ref_id")
+        if not isinstance(rule_ref_id, str) or not rule_ref_id or rule_ref_id in seen:
+            continue
+        seen.add(rule_ref_id)
+        out.append(rule_ref_id)
+    if out:
+        return out
+    for rule_ref_id in rule_refs:
+        if rule_ref_id in seen:
+            continue
+        seen.add(rule_ref_id)
+        out.append(rule_ref_id)
+    return out
+
+
+_FACT_META_STR_KEYS = frozenset(("source", "source_loc", "approved_by", "trace_id", "note"))
+
+
+def _extract_fact_meta(detail: Mapping[str, Any]) -> dict[str, Any] | None:
+    """
+    Normalizes fact_meta from two possible shapes:
+    - Runtime path: detail["flat_meta"] = {key: value} (flat dict from _runtime_assertion_detail_for_tree)
+    - Audit path: detail["meta"] = {"str": [{key, value, ...}, ...]} (kind-grouped rows)
+    Returns a flat dict with only relevant non-None values, or None if nothing found.
+    """
+    flat_meta = detail.get("flat_meta")
+    if isinstance(flat_meta, Mapping) and flat_meta:
+        out = {k: v for k, v in flat_meta.items() if k in _FACT_META_STR_KEYS and v is not None}
+        return out if out else None
+
+    raw_meta = detail.get("meta")
+    if not isinstance(raw_meta, Mapping):
+        return None
+    str_rows = raw_meta.get("str")
+    if not isinstance(str_rows, list) or not str_rows:
+        return None
+
+    out: dict[str, Any] = {}
+    for row in str_rows:
+        if not isinstance(row, Mapping):
+            continue
+        key = row.get("key")
+        value = row.get("value")
+        if isinstance(key, str) and key in _FACT_META_STR_KEYS and value is not None:
+            out[key] = str(value)
+    return out if out else None
+
+
 def _build_assertion_leaf(asrt_id: str, *, assertion_lookup: AssertionDetailLookup) -> dict[str, Any]:
     detail = assertion_lookup(asrt_id)
     if not isinstance(detail, Mapping):
@@ -230,6 +284,9 @@ def _build_assertion_leaf(asrt_id: str, *, assertion_lookup: AssertionDetailLook
     confidence = detail.get("confidence")
     if confidence is not None:
         node["confidence"] = confidence
+    fact_meta = _extract_fact_meta(detail)
+    if fact_meta is not None:
+        node["fact_meta"] = fact_meta
     return node
 
 

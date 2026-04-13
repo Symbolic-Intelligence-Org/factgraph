@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -684,6 +685,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
             )
             support_section, rule_ref_section = tree["root"]["children"]
             self.assertEqual(support_section["title"], "Support")
+            self.assertEqual(support_section["rule_ref_ids"], ["q.child_rule_a", "q.child_rule_b"])
             self.assertEqual(rule_ref_section["title"], "Rule References")
             self.assertEqual(
                 [row.get("node_kind") for row in rule_ref_section["children"]],
@@ -1776,31 +1778,32 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                 {route.path for route in app.routes},
             )
 
-            with TestClient(app) as client:
-                candidate_http = client.post(
-                    f"/v1/runtime/sessions/{session_id}/queries/explain",
-                    json={"kind": "candidate", "id": candidate_id},
-                )
-                self.assertEqual(candidate_http.status_code, 200)
-                self.assertTrue(candidate_http.json()["ok"])
-                self.assertEqual(candidate_http.json()["kind"], "candidate")
+            with patch.dict(os.environ, {"FACTPY_KERNEL_AUTH_DISABLED": "true"}, clear=False):
+                with TestClient(app) as client:
+                    candidate_http = client.post(
+                        f"/v1/runtime/sessions/{session_id}/queries/explain",
+                        json={"kind": "candidate", "id": candidate_id},
+                    )
+                    self.assertEqual(candidate_http.status_code, 200)
+                    self.assertTrue(candidate_http.json()["ok"])
+                    self.assertEqual(candidate_http.json()["kind"], "candidate")
 
-                candidate_tree_http = client.post(
-                    f"/v1/runtime/sessions/{session_id}/queries/explain-tree",
-                    json={"kind": "candidate", "id": candidate_id},
-                )
-                self.assertEqual(candidate_tree_http.status_code, 200)
-                self.assertTrue(candidate_tree_http.json()["ok"])
-                self.assertEqual(candidate_tree_http.json()["kind"], "candidate_evidence_tree")
-                self.assertIn("tree", candidate_tree_http.json())
+                    candidate_tree_http = client.post(
+                        f"/v1/runtime/sessions/{session_id}/queries/explain-tree",
+                        json={"kind": "candidate", "id": candidate_id},
+                    )
+                    self.assertEqual(candidate_tree_http.status_code, 200)
+                    self.assertTrue(candidate_tree_http.json()["ok"])
+                    self.assertEqual(candidate_tree_http.json()["kind"], "candidate_evidence_tree")
+                    self.assertIn("tree", candidate_tree_http.json())
 
-                assertion_http = client.post(
-                    f"/v1/runtime/sessions/{session_id}/queries/explain",
-                    json={"kind": "assertion", "id": asrt_id},
-                )
-                self.assertEqual(assertion_http.status_code, 200)
-                self.assertTrue(assertion_http.json()["ok"])
-                self.assertEqual(assertion_http.json()["kind"], "assertion")
+                    assertion_http = client.post(
+                        f"/v1/runtime/sessions/{session_id}/queries/explain",
+                        json={"kind": "assertion", "id": asrt_id},
+                    )
+                    self.assertEqual(assertion_http.status_code, 200)
+                    self.assertTrue(assertion_http.json()["ok"])
+                    self.assertEqual(assertion_http.json()["kind"], "assertion")
 
                 rule_run_http = client.post(
                     f"/v1/runtime/sessions/{session_id}/queries/explain",

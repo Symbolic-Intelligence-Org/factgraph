@@ -136,14 +136,19 @@ class AuditQuery:
             raise AuditQueryError(str(exc)) from exc
 
     def get_candidate_evidence_tree_narrative(self, candidate_id: str) -> dict[str, Any] | None:
-        summary = self.get_candidate_evidence_tree_summary(candidate_id)
-        if summary is None:
+        tree = self.get_candidate_evidence_tree(candidate_id)
+        if tree is None:
             return None
+        try:
+            summary = summarize_candidate_evidence_tree_dict(tree)
+        except ValueError as exc:
+            raise AuditQueryError(str(exc)) from exc
         certainty_summary = self.get_candidate_certainty_summary(candidate_id)
         try:
             return render_candidate_evidence_tree_narrative(
                 summary,
                 certainty_summary=certainty_summary,
+                tree=tree,
                 locale="en",
             )
         except ValueError as exc:

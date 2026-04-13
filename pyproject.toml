@@ -12,6 +12,9 @@ dependencies = ["pydantic>=2", "diskcache>=5"]
 
 [project.optional-dependencies]
 service = ["fastapi>=0.110,<1", "uvicorn>=0.29,<1", "httpx>=0.27,<1"]
+documents = ["pymupdf>=1.24", "pymupdf4llm>=0.0.17", "python-docx>=1.1"]
+extraction = ["instructor>=1.6", "litellm>=1.50"]
+observability = ["langfuse>=2.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

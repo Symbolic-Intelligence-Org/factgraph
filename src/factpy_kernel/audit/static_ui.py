@@ -1177,6 +1177,22 @@ def _render_candidate_evidence_node(node: dict[str, Any], *, assertion_href_pref
             f"<div class=\'prop\'><span class=\'prop-key\'>Detail</span>"
             f"<span class=\'prop-val\'><a href=\'{escape(href, quote=True)}\'>View assertion \u2192</a></span></div>"
         )
+        fact_meta = node.get("fact_meta")
+        if isinstance(fact_meta, dict):
+            source = fact_meta.get("source")
+            if source:
+                source_loc = fact_meta.get("source_loc") or ""
+                approved_by = fact_meta.get("approved_by") or ""
+                tooltip = source
+                if source_loc:
+                    tooltip += f" [{source_loc}]"
+                if approved_by:
+                    tooltip += f" (by {approved_by})"
+                props.append(
+                    f"<div class='prop'><span class='prop-key'>Source</span>"
+                    f"<span class='prop-val' title='{escape(tooltip, quote=True)}'>"
+                    f"{escape(source)}</span></div>"
+                )
 
     children = [child for child in node.get("children", []) if isinstance(child, dict)]
     child_html = "".join(
@@ -2468,3 +2484,45 @@ def _metric_card(label: str, value: Any, copy: str) -> str:
         f"<span class='metric-card-copy'>{escape(copy)}</span>"
         "</div>"
     )
+
+
+def render_evidence_steps_html(steps: list[dict[str, Any]]) -> str:
+    """
+    Render an ordered list of explain-steps as an HTML <ol> element.
+    Each step shows step_num, description, and an optional detail link.
+    Depth hint from detail.depth is used for indentation.
+    """
+    from html import escape as _escape
+
+    if not steps:
+        return "<ol class='evidence-steps'><li class='step-empty'>No steps available.</li></ol>"
+
+    items: list[str] = []
+    for step in steps:
+        step_num = step.get("step_num", "?")
+        step_kind = str(step.get("step_kind", ""))
+        description = str(step.get("description", ""))
+        node_ref = step.get("node_ref")
+        detail = step.get("detail") or {}
+        depth = int(detail.get("depth", 0)) if isinstance(detail, dict) else 0
+
+        indent_style = f"margin-left:{depth * 1.5}rem" if depth > 0 else ""
+        style_attr = f" style='{indent_style}'" if indent_style else ""
+
+        detail_html = ""
+        if node_ref:
+            detail_html = (
+                f" <a class='step-detail-link' "
+                f"href='/evidence/{_escape(str(node_ref), quote=True)}'>"
+                f"detail &rarr;</a>"
+            )
+
+        items.append(
+            f"<li class='step step-{_escape(step_kind)}'{style_attr}>"
+            f"<span class='step-num'>{step_num}</span>"
+            f"<span class='step-desc'>{_escape(description)}</span>"
+            f"{detail_html}"
+            f"</li>"
+        )
+
+    return "<ol class='evidence-steps'>" + "".join(items) + "</ol>"

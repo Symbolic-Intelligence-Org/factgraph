@@ -25,6 +25,7 @@ def render_candidate_evidence_tree_narrative(
     summary: dict[str, Any],
     *,
     certainty_summary: dict[str, Any] | None = None,
+    tree: dict[str, Any] | None = None,
     locale: str = "en",
 ) -> dict[str, Any]:
     if not isinstance(summary, Mapping):
@@ -168,6 +169,10 @@ def render_candidate_evidence_tree_narrative(
         narrative["certainty_lines"] = certainty_lines
         if certainty_bottleneck is not None:
             narrative["certainty_bottleneck"] = certainty_bottleneck
+    if tree is not None:
+        source_lines = _collect_source_lines(tree)
+        if source_lines:
+            narrative["source_lines"] = source_lines
     return narrative
 
 
@@ -297,6 +302,36 @@ def _require_string_list(value: Any, *, path: str) -> list[str]:
             raise CandidateEvidenceTreeNarrativeError(f"{path} must be list[str]")
         out.append(item)
     return out
+
+
+def _collect_source_lines(tree: Any) -> list[str]:
+    """DFS scan of the evidence tree for assertion_fact nodes with fact_meta.source.
+    The tree argument is the full candidate_evidence_tree wrapper dict (with a 'root' key).
+    """
+    lines: list[str] = []
+    root = tree.get("root") if isinstance(tree, Mapping) else None
+    _collect_source_lines_node(root if root is not None else tree, lines)
+    return lines
+
+
+def _collect_source_lines_node(node: Any, lines: list[str]) -> None:
+    if not isinstance(node, Mapping):
+        return
+    if node.get("node_kind") == "assertion_fact":
+        fact_meta = node.get("fact_meta")
+        if isinstance(fact_meta, Mapping):
+            source = fact_meta.get("source")
+            if source:
+                pred_id = node.get("pred_id", "")
+                e_ref = node.get("e_ref", "")
+                label = f"{pred_id}({e_ref})" if pred_id else str(node.get("asrt_id", ""))
+                approved_by = fact_meta.get("approved_by")
+                line = f"{label} - from '{source}'"
+                if approved_by:
+                    line += f" (approved by {approved_by})"
+                lines.append(line)
+    for child in node.get("children", []):
+        _collect_source_lines_node(child, lines)
 
 
 def _require_role_counts(value: Any, *, path: str) -> dict[str, int]:

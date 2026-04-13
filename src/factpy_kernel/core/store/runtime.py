@@ -84,6 +84,7 @@ class Store:
         self._candidate_support_index: dict[str, str] = {}
         self._candidate_support_kind_index: dict[str, str] = {}
         self._candidate_confidence_kind_index: dict[str, str] = {}
+        self._candidate_pred_index: dict[str, str] = {}
         self._rule_trace_artifacts: dict[str, RuleTraceArtifact] = {}
         if engine_evaluator is not None:
             self._engine_overrides["souffle"] = engine_evaluator
@@ -163,6 +164,7 @@ class Store:
         support_kind: str,
         *,
         confidence_kind: str = "none",
+        target_pred_id: str = "",
     ) -> None:
         if not isinstance(candidate_id, str) or not candidate_id:
             raise ValueError("candidate_id must be non-empty string")
@@ -172,6 +174,8 @@ class Store:
             raise ValueError("support_kind must be non-empty string")
         if not isinstance(confidence_kind, str) or not confidence_kind:
             raise ValueError("confidence_kind must be non-empty string")
+        if not isinstance(target_pred_id, str):
+            raise ValueError("target_pred_id must be string")
         if candidate_id in self._candidate_support_index:
             existing_digest = self._candidate_support_index[candidate_id]
             if existing_digest != support_digest:
@@ -181,10 +185,12 @@ class Store:
                 )
             self._candidate_support_kind_index.setdefault(candidate_id, support_kind)
             self._candidate_confidence_kind_index.setdefault(candidate_id, confidence_kind)
+            self._candidate_pred_index.setdefault(candidate_id, target_pred_id)
             return
         self._candidate_support_index[candidate_id] = support_digest
         self._candidate_support_kind_index[candidate_id] = support_kind
         self._candidate_confidence_kind_index[candidate_id] = confidence_kind
+        self._candidate_pred_index[candidate_id] = target_pred_id
 
     def _lookup_candidate_support(
         self,
@@ -399,6 +405,9 @@ class Store:
 
     def get_candidate_confidence_kind(self, candidate_id: str) -> str | None:
         return self._lookup_candidate_confidence_kind(candidate_id)
+
+    def get_candidate_pred_id(self, candidate_id: str) -> str | None:
+        return self._candidate_pred_index.get(candidate_id)
 
     def list_candidate_ids(self) -> list[str]:
         return sorted(self._candidate_support_index.keys())

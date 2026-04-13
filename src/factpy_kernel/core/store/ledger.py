@@ -3,11 +3,13 @@ from __future__ import annotations
 import base64
 import json
 import sqlite3
+import threading
 import uuid
+import warnings
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator, Literal
+from typing import Any, Callable, Iterator, Literal
 
 
 META_KINDS = {"str", "int", "float", "bool", "time", "json"}
@@ -262,26 +264,28 @@ class Ledger:
             Path(path_str).parent.mkdir(parents=True, exist_ok=True)
 
         self._path = path_str
+        self._memory_mode = path_str == ":memory:"
+        self._closed = False
+        self._owner_thread_id = threading.get_ident()
+        self._memory_warning_emitted = False
+        self._local = threading.local()
+        self._write_lock = threading.RLock()
+        self._connections_lock = threading.Lock()
+        self._all_connections: list[sqlite3.Connection] = []
+        self._memory_conn: sqlite3.Connection | None = None
         self._reset_indexes()
-        self._conn = sqlite3.connect(
-            path_str,
-            check_same_thread=False,
-            isolation_level=None,
-        )
-        self._conn.row_factory = sqlite3.Row
-        if path_str == ":memory:":
-            self._conn.execute("PRAGMA journal_mode = MEMORY")
-        else:
-            self._conn.execute("PRAGMA journal_mode = WAL")
-        self._conn.execute("PRAGMA foreign_keys = OFF")
-        self._conn.executescript(_DDL)
-        self._load_from_db()
+        main_conn = self._get_connection()
+        self._init_schema(main_conn)
+        self._load_from_db_via(main_conn)
 
     def __deepcopy__(self, memo: dict[int, Any]) -> Ledger:
         clone = Ledger()
-        self._conn.backup(clone._conn)
+        with self._write_lock:
+            source_conn = self._get_connection()
+            target_conn = clone._get_connection()
+            source_conn.backup(target_conn)
         clone._reset_indexes()
-        clone._load_from_db()
+        clone._load_from_db_via(clone._get_connection())
         memo[id(self)] = clone
         return clone
 
@@ -290,15 +294,71 @@ class Ledger:
             self.close()
 
     @contextmanager
-    def _transaction(self) -> Iterator[None]:
-        self._conn.execute("BEGIN IMMEDIATE")
-        try:
-            yield
-        except Exception:
-            self._conn.execute("ROLLBACK")
-            raise
+    def _write_session(self) -> Iterator[tuple[sqlite3.Connection, list[Callable[[], None]]]]:
+        with self._write_lock:
+            conn = self._get_connection()
+            post_commit: list[Callable[[], None]] = []
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield conn, post_commit
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+            else:
+                conn.execute("COMMIT")
+                for hook in post_commit:
+                    hook()
+
+    def _open_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(
+            self._path,
+            check_same_thread=True,
+            isolation_level=None,
+        )
+        conn.row_factory = sqlite3.Row
+        if self._memory_mode:
+            conn.execute("PRAGMA journal_mode = MEMORY")
         else:
-            self._conn.execute("COMMIT")
+            conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("PRAGMA busy_timeout = 5000")
+        return conn
+
+    def _register_connection(self, conn: sqlite3.Connection) -> sqlite3.Connection:
+        with self._connections_lock:
+            if self._closed:
+                with suppress(Exception):
+                    conn.close()
+                raise RuntimeError("Ledger was closed during connection acquisition")
+            self._all_connections.append(conn)
+        return conn
+
+    def _get_connection(self) -> sqlite3.Connection:
+        self._ensure_open()
+        if self._memory_mode:
+            if threading.get_ident() != self._owner_thread_id and not self._memory_warning_emitted:
+                warnings.warn(
+                    "memory ledger is single-threaded; do not use from multiple threads",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                self._memory_warning_emitted = True
+            if self._memory_conn is None:
+                self._memory_conn = self._register_connection(self._open_connection())
+            return self._memory_conn
+
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = self._register_connection(self._open_connection())
+            self._local.conn = conn
+        return conn
+
+    def _init_schema(self, conn: sqlite3.Connection) -> None:
+        conn.executescript(_DDL)
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("Ledger is closed")
 
     def append_assertion(
         self,
@@ -367,25 +427,27 @@ class Ledger:
         if actual_annotation_rows:
             _validate_annotation_rows(actual_annotation_rows)
 
-        with self._transaction():
-            self._insert_claim(actual_claim, effective_asrt_id)
-            self._insert_claim_args(actual_claim_args, effective_asrt_id)
-            self._insert_meta_rows(actual_meta_rows, effective_asrt_id)
+        with self._write_session() as (conn, post_commit):
+            self._insert_claim(conn, actual_claim, effective_asrt_id)
+            self._insert_claim_args(conn, actual_claim_args, effective_asrt_id)
+            self._insert_meta_rows(conn, actual_meta_rows, effective_asrt_id)
             if actual_annotation_rows:
-                self._insert_annotation_rows(actual_annotation_rows)
+                self._insert_annotation_rows(conn, actual_annotation_rows)
             if idempotency is not None:
-                self._conn.execute(
+                conn.execute(
                     "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, 'assertion')",
                     (idempotency.ingest_key, effective_asrt_id),
                 )
+            def _apply_assertion_indexes() -> None:
+                self._idx_add_claim(actual_claim)
+                self._idx_add_claim_args(actual_claim_args)
+                self._idx_add_meta(actual_meta_rows)
+                if actual_annotation_rows:
+                    self._idx_add_annotation(actual_annotation_rows)
+                if idempotency is not None:
+                    self._ingest_keys[idempotency.ingest_key] = (effective_asrt_id, "assertion")
 
-        self._idx_add_claim(actual_claim)
-        self._idx_add_claim_args(actual_claim_args)
-        self._idx_add_meta(actual_meta_rows)
-        if actual_annotation_rows:
-            self._idx_add_annotation(actual_annotation_rows)
-        if idempotency is not None:
-            self._ingest_keys[idempotency.ingest_key] = (effective_asrt_id, "assertion")
+            post_commit.append(_apply_assertion_indexes)
         return AppendResult(asrt_id=effective_asrt_id, written=True)
 
     def append_revocation(
@@ -427,22 +489,24 @@ class Ledger:
             for row in meta_rows
         ]
 
-        with self._transaction():
-            self._conn.execute(
+        with self._write_session() as (conn, post_commit):
+            conn.execute(
                 "INSERT INTO revokes (revoker_asrt_id, revoked_asrt_id) VALUES (?, ?)",
                 (effective_revoker_id, revokes.revoked_asrt_id),
             )
-            self._insert_meta_rows(actual_meta_rows, effective_revoker_id)
+            self._insert_meta_rows(conn, actual_meta_rows, effective_revoker_id)
             if idempotency is not None:
-                self._conn.execute(
+                conn.execute(
                     "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, 'revocation')",
                     (idempotency.ingest_key, effective_revoker_id),
                 )
+            def _apply_revocation_indexes() -> None:
+                self._idx_add_revoke(actual_revokes)
+                self._idx_add_meta(actual_meta_rows)
+                if idempotency is not None:
+                    self._ingest_keys[idempotency.ingest_key] = (effective_revoker_id, "revocation")
 
-        self._idx_add_revoke(actual_revokes)
-        self._idx_add_meta(actual_meta_rows)
-        if idempotency is not None:
-            self._ingest_keys[idempotency.ingest_key] = (effective_revoker_id, "revocation")
+            post_commit.append(_apply_revocation_indexes)
         return AppendResult(asrt_id=effective_revoker_id, written=True)
 
     def append_claim(self, claim: Claim) -> None:
@@ -459,9 +523,9 @@ class Ledger:
             e_ref=claim.e_ref,
             rest_terms=normalized_terms,
         )
-        with self._transaction():
-            self._insert_claim(actual_claim, claim.asrt_id)
-        self._idx_add_claim(actual_claim)
+        with self._write_session() as (conn, post_commit):
+            self._insert_claim(conn, actual_claim, claim.asrt_id)
+            post_commit.append(lambda: self._idx_add_claim(actual_claim))
 
     def append_claim_args(self, rows: list[ClaimArg]) -> None:
         """
@@ -477,12 +541,12 @@ class Ledger:
             ClaimArg(asrt_id=row.asrt_id, idx=row.idx, val_atom=row.val_atom, tag=row.tag)
             for row in rows
         ]
-        with self._transaction():
-            self._conn.executemany(
+        with self._write_session() as (conn, post_commit):
+            conn.executemany(
                 "INSERT INTO claim_args (asrt_id, idx, val_atom, tag) VALUES (?, ?, ?, ?)",
                 [(row.asrt_id, row.idx, _enc(row.val_atom), row.tag) for row in actual_rows],
             )
-        self._idx_add_claim_args(actual_rows)
+            post_commit.append(lambda: self._idx_add_claim_args(actual_rows))
 
     def append_meta(self, rows: list[MetaRow]) -> None:
         """
@@ -498,12 +562,12 @@ class Ledger:
             MetaRow(asrt_id=row.asrt_id, key=row.key, kind=row.kind, value=row.value)
             for row in rows
         ]
-        with self._transaction():
-            self._conn.executemany(
+        with self._write_session() as (conn, post_commit):
+            conn.executemany(
                 "INSERT INTO meta_rows (asrt_id, key, kind, value) VALUES (?, ?, ?, ?)",
                 [(row.asrt_id, row.key, row.kind, _enc(row.value)) for row in actual_rows],
             )
-        self._idx_add_meta(actual_rows)
+            post_commit.append(lambda: self._idx_add_meta(actual_rows))
 
     def append_annotations(self, rows: list[AnnotationRow]) -> None:
         _validate_annotation_rows(rows)
@@ -523,9 +587,9 @@ class Ledger:
             )
             for row in rows
         ]
-        with self._transaction():
-            self._insert_annotation_rows(actual_rows)
-        self._idx_add_annotation(actual_rows)
+        with self._write_session() as (conn, post_commit):
+            self._insert_annotation_rows(conn, actual_rows)
+            post_commit.append(lambda: self._idx_add_annotation(actual_rows))
 
     def append_revokes(self, row: Revokes) -> None:
         """
@@ -538,24 +602,28 @@ class Ledger:
             revoker_asrt_id=row.revoker_asrt_id,
             revoked_asrt_id=row.revoked_asrt_id,
         )
-        with self._transaction():
-            self._conn.execute(
+        with self._write_session() as (conn, post_commit):
+            conn.execute(
                 "INSERT INTO revokes (revoker_asrt_id, revoked_asrt_id) VALUES (?, ?)",
                 (row.revoker_asrt_id, row.revoked_asrt_id),
             )
-        self._idx_add_revoke(actual_row)
+            post_commit.append(lambda: self._idx_add_revoke(actual_row))
 
     def get_claim(self, asrt_id: str) -> Claim | None:
-        return self._claim_by_asrt_id.get(asrt_id)
+        with self._write_lock:
+            self._ensure_open()
+            return self._claim_by_asrt_id.get(asrt_id)
 
     def find_claims(self, pred_id: str | None = None, e_ref: str | None = None) -> list[Claim]:
-        if pred_id is not None and e_ref is not None:
-            return list(self._claims_by_pred_e_ref.get((pred_id, e_ref), []))
-        if pred_id is not None:
-            return list(self._claims_by_pred_id.get(pred_id, []))
-        if e_ref is not None:
-            return list(self._claims_by_e_ref.get(e_ref, []))
-        return list(self._claims)
+        with self._write_lock:
+            self._ensure_open()
+            if pred_id is not None and e_ref is not None:
+                return list(self._claims_by_pred_e_ref.get((pred_id, e_ref), []))
+            if pred_id is not None:
+                return list(self._claims_by_pred_id.get(pred_id, []))
+            if e_ref is not None:
+                return list(self._claims_by_e_ref.get(e_ref, []))
+            return list(self._claims)
 
     def find_claim_args(
         self,
@@ -563,12 +631,14 @@ class Ledger:
         idx: int | None = None,
         tag: str | None = None,
     ) -> list[ClaimArg]:
-        rows = self._claim_args_by_asrt_id.get(asrt_id, []) if asrt_id is not None else self._claim_args
-        if idx is not None:
-            rows = [row for row in rows if row.idx == idx]
-        if tag is not None:
-            rows = [row for row in rows if row.tag == tag]
-        return list(rows)
+        with self._write_lock:
+            self._ensure_open()
+            rows = self._claim_args_by_asrt_id.get(asrt_id, []) if asrt_id is not None else self._claim_args
+            if idx is not None:
+                rows = [row for row in rows if row.idx == idx]
+            if tag is not None:
+                rows = [row for row in rows if row.tag == tag]
+            return list(rows)
 
     def find_meta(
         self,
@@ -576,23 +646,25 @@ class Ledger:
         key: str | None = None,
         kind: str | None = None,
     ) -> list[MetaRow]:
-        if asrt_id is not None:
-            if key is not None and kind is not None:
-                return list(self._meta_by_asrt_id_key_kind.get((asrt_id, key, kind), []))
+        with self._write_lock:
+            self._ensure_open()
+            if asrt_id is not None:
+                if key is not None and kind is not None:
+                    return list(self._meta_by_asrt_id_key_kind.get((asrt_id, key, kind), []))
+                if key is not None:
+                    return list(self._meta_by_asrt_id_key.get((asrt_id, key), []))
+                rows = self._meta_by_asrt_id.get(asrt_id, [])
+                if kind is not None:
+                    rows = [row for row in rows if row.kind == kind]
+                return list(rows)
             if key is not None:
-                return list(self._meta_by_asrt_id_key.get((asrt_id, key), []))
-            rows = self._meta_by_asrt_id.get(asrt_id, [])
+                rows = self._meta_by_key.get(key, [])
+                if kind is not None:
+                    rows = [row for row in rows if row.kind == kind]
+                return list(rows)
             if kind is not None:
-                rows = [row for row in rows if row.kind == kind]
-            return list(rows)
-        if key is not None:
-            rows = self._meta_by_key.get(key, [])
-            if kind is not None:
-                rows = [row for row in rows if row.kind == kind]
-            return list(rows)
-        if kind is not None:
-            return list(self._meta_by_kind.get(kind, []))
-        return list(self._meta_rows_data)
+                return list(self._meta_by_kind.get(kind, []))
+            return list(self._meta_rows_data)
 
     def find_annotations(
         self,
@@ -601,47 +673,61 @@ class Ledger:
         category: str | None = None,
         key: str | None = None,
     ) -> list[AnnotationRow]:
-        if asrt_id is not None:
-            rows = self._anno_by_asrt_id.get(asrt_id, [])
-        elif namespace is not None and category is not None:
-            rows = self._anno_by_ns_cat.get((namespace, category), [])
-        elif key is not None:
-            rows = self._anno_by_key.get(key, [])
-        else:
-            rows = self._annotation_rows_data
+        with self._write_lock:
+            self._ensure_open()
+            if asrt_id is not None:
+                rows = self._anno_by_asrt_id.get(asrt_id, [])
+            elif namespace is not None and category is not None:
+                rows = self._anno_by_ns_cat.get((namespace, category), [])
+            elif key is not None:
+                rows = self._anno_by_key.get(key, [])
+            else:
+                rows = self._annotation_rows_data
 
-        result = rows
-        if asrt_id is not None:
-            result = [row for row in result if row.asrt_id == asrt_id]
-        if namespace is not None:
-            result = [row for row in result if row.namespace == namespace]
-        if category is not None:
-            result = [row for row in result if row.category == category]
-        if key is not None:
-            result = [row for row in result if row.key == key]
-        return list(result)
+            result = rows
+            if asrt_id is not None:
+                result = [row for row in result if row.asrt_id == asrt_id]
+            if namespace is not None:
+                result = [row for row in result if row.namespace == namespace]
+            if category is not None:
+                result = [row for row in result if row.category == category]
+            if key is not None:
+                result = [row for row in result if row.key == key]
+            return list(result)
 
     def has_active_revocation(self, revoked_asrt_id: str) -> bool:
-        return revoked_asrt_id in self._revoked_asrt_ids
+        with self._write_lock:
+            self._ensure_open()
+            return revoked_asrt_id in self._revoked_asrt_ids
 
     def find_revoker(self, revoked_asrt_id: str) -> str | None:
-        return self._first_revoker_by_revoked_asrt_id.get(revoked_asrt_id)
+        with self._write_lock:
+            self._ensure_open()
+            return self._first_revoker_by_revoked_asrt_id.get(revoked_asrt_id)
 
     @property
     def claims(self) -> list[Claim]:
-        return list(self._claims)
+        with self._write_lock:
+            self._ensure_open()
+            return list(self._claims)
 
     @property
     def claim_args(self) -> list[ClaimArg]:
-        return list(self._claim_args)
+        with self._write_lock:
+            self._ensure_open()
+            return list(self._claim_args)
 
     @property
     def meta_rows(self) -> list[MetaRow]:
-        return list(self._meta_rows_data)
+        with self._write_lock:
+            self._ensure_open()
+            return list(self._meta_rows_data)
 
     @property
     def annotation_rows(self) -> list[AnnotationRow]:
-        return list(self._annotation_rows_data)
+        with self._write_lock:
+            self._ensure_open()
+            return list(self._annotation_rows_data)
 
     @property
     def _meta_rows(self) -> _MetaRowsProxy:
@@ -653,29 +739,45 @@ class Ledger:
 
     @property
     def revokes(self) -> list[Revokes]:
-        return list(self._revokes_data)
+        with self._write_lock:
+            self._ensure_open()
+            return list(self._revokes_data)
 
     def rebuild_indexes(self) -> None:
         """No-op for API compatibility; write-through cache updates eagerly."""
 
     def close(self) -> None:
-        with suppress(Exception):
-            self._conn.close()
+        with self._write_lock:
+            with self._connections_lock:
+                if self._closed:
+                    return
+                self._closed = True
+                self._all_connections.clear()
+
+        current_conn = getattr(self._local, "conn", None)
+        if current_conn is not None:
+            with suppress(Exception):
+                current_conn.close()
+            with suppress(Exception):
+                delattr(self._local, "conn")
+        self._memory_conn = None
 
     def get_ledger_meta(self, key: str) -> str | None:
         """Return the stored ledger_meta value for key, or None when absent."""
-        row = self._conn.execute(
-            "SELECT value FROM ledger_meta WHERE key = ?",
-            (key,),
-        ).fetchone()
-        return str(row["value"]) if row is not None else None
+        with self._write_lock:
+            row = self._get_connection().execute(
+                "SELECT value FROM ledger_meta WHERE key = ?",
+                (key,),
+            ).fetchone()
+            return str(row["value"]) if row is not None else None
 
     def set_ledger_meta(self, key: str, value: str) -> None:
         """Insert a ledger_meta value when key is absent; existing values are preserved."""
-        self._conn.execute(
-            "INSERT OR IGNORE INTO ledger_meta (key, value) VALUES (?, ?)",
-            (key, value),
-        )
+        with self._write_session() as (conn, _post_commit):
+            conn.execute(
+                "INSERT OR IGNORE INTO ledger_meta (key, value) VALUES (?, ?)",
+                (key, value),
+            )
 
     def _force_replace_meta_rows(self, rows: list[MetaRow]) -> None:
         _validate_meta_rows(rows)
@@ -683,15 +785,18 @@ class Ledger:
             MetaRow(asrt_id=row.asrt_id, key=row.key, kind=row.kind, value=row.value)
             for row in rows
         ]
-        with self._transaction():
-            self._conn.execute("DELETE FROM meta_rows")
+        with self._write_session() as (conn, post_commit):
+            conn.execute("DELETE FROM meta_rows")
             if actual_rows:
-                self._conn.executemany(
+                conn.executemany(
                     "INSERT INTO meta_rows (asrt_id, key, kind, value) VALUES (?, ?, ?, ?)",
                     [(row.asrt_id, row.key, row.kind, _enc(row.value)) for row in actual_rows],
                 )
-        self._clear_meta_indexes()
-        self._idx_add_meta(actual_rows)
+            def _apply_meta_replace() -> None:
+                self._clear_meta_indexes()
+                self._idx_add_meta(actual_rows)
+
+            post_commit.append(_apply_meta_replace)
 
     def _reset_indexes(self) -> None:
         self._claims: list[Claim] = []
@@ -808,27 +913,27 @@ class Ledger:
         self._revoked_asrt_ids.add(row.revoked_asrt_id)
         self._first_revoker_by_revoked_asrt_id.setdefault(row.revoked_asrt_id, row.revoker_asrt_id)
 
-    def _load_from_db(self) -> None:
+    def _load_from_db_via(self, conn: sqlite3.Connection) -> None:
         self._reset_indexes()
 
-        for row in self._conn.execute(
+        for row in conn.execute(
             "SELECT asrt_id, pred_id, e_ref, rest_terms FROM claims ORDER BY seq"
         ).fetchall():
             self._idx_add_claim(_row_to_claim(row))
 
-        for row in self._conn.execute(
+        for row in conn.execute(
             "SELECT asrt_id, idx, val_atom, tag FROM claim_args ORDER BY id"
         ).fetchall():
             self._idx_add_claim_args(
                 [ClaimArg(row["asrt_id"], row["idx"], _dec(row["val_atom"]), row["tag"])]
             )
 
-        for row in self._conn.execute(
+        for row in conn.execute(
             "SELECT asrt_id, key, kind, value FROM meta_rows ORDER BY id"
         ).fetchall():
             self._idx_add_meta([MetaRow(row["asrt_id"], row["key"], row["kind"], _dec(row["value"]))])
 
-        for row in self._conn.execute(
+        for row in conn.execute(
             "SELECT asrt_id, namespace, category, key, kind, value, origin, derivation"
             " FROM annotation_rows ORDER BY id"
         ).fetchall():
@@ -847,75 +952,81 @@ class Ledger:
                 ]
             )
 
-        for row in self._conn.execute(
+        for row in conn.execute(
             "SELECT revoker_asrt_id, revoked_asrt_id FROM revokes ORDER BY id"
         ).fetchall():
             self._idx_add_revoke(Revokes(row["revoker_asrt_id"], row["revoked_asrt_id"]))
 
-        for row in self._conn.execute(
+        for row in conn.execute(
             "SELECT ingest_key, asrt_id, kind FROM ingest_keys ORDER BY ingest_key"
         ).fetchall():
             self._ingest_keys[str(row["ingest_key"])] = (str(row["asrt_id"]), str(row["kind"]))
 
+    def _load_from_db(self) -> None:
+        self._load_from_db_via(self._get_connection())
+
     def _is_known_asrt_id(self, asrt_id: str) -> bool:
-        return asrt_id in self._claim_by_asrt_id or asrt_id in self._revoker_asrt_ids
+        with self._write_lock:
+            return asrt_id in self._claim_by_asrt_id or asrt_id in self._revoker_asrt_ids
 
     def _find_ingest_key(self, ingest_key: str) -> str | None:
-        entry = self._ingest_keys.get(ingest_key)
-        if entry is not None:
-            asrt_id, kind = entry
-            if kind == "assertion":
-                if asrt_id in self._claim_by_asrt_id and not self.has_active_revocation(asrt_id):
+        with self._write_lock:
+            entry = self._ingest_keys.get(ingest_key)
+            if entry is not None:
+                asrt_id, kind = entry
+                if kind == "assertion":
+                    if asrt_id in self._claim_by_asrt_id and not self.has_active_revocation(asrt_id):
+                        return asrt_id
+                elif kind == "revocation" and asrt_id in self._revoker_asrt_ids:
                     return asrt_id
-            elif kind == "revocation" and asrt_id in self._revoker_asrt_ids:
-                return asrt_id
 
-        for asrt_id in self._meta_ingest_key_asrt_ids.get(ingest_key, []):
-            if asrt_id in self._claim_by_asrt_id:
-                if self.has_active_revocation(asrt_id):
-                    continue
-                self._backfill_ingest_key(ingest_key, asrt_id, "assertion")
-                return asrt_id
-            if asrt_id in self._revoker_asrt_ids:
-                self._backfill_ingest_key(ingest_key, asrt_id, "revocation")
-                return asrt_id
+            for asrt_id in self._meta_ingest_key_asrt_ids.get(ingest_key, []):
+                if asrt_id in self._claim_by_asrt_id:
+                    if self.has_active_revocation(asrt_id):
+                        continue
+                    self._backfill_ingest_key(ingest_key, asrt_id, "assertion")
+                    return asrt_id
+                if asrt_id in self._revoker_asrt_ids:
+                    self._backfill_ingest_key(ingest_key, asrt_id, "revocation")
+                    return asrt_id
         return None
 
     def _backfill_ingest_key(self, ingest_key: str, asrt_id: str, kind: str) -> None:
         try:
-            self._conn.execute(
-                "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, ?)",
-                (ingest_key, asrt_id, kind),
-            )
+            with self._write_session() as (conn, post_commit):
+                conn.execute(
+                    "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, ?)",
+                    (ingest_key, asrt_id, kind),
+                )
+                post_commit.append(lambda: self._ingest_keys.__setitem__(ingest_key, (asrt_id, kind)))
         except Exception:
             return
-        self._ingest_keys[ingest_key] = (asrt_id, kind)
 
-    def _insert_claim(self, claim: Claim, asrt_id: str) -> None:
+    def _insert_claim(self, conn: sqlite3.Connection, claim: Claim, asrt_id: str) -> None:
         _validate_claim_identity(asrt_id=asrt_id, pred_id=claim.pred_id, e_ref=claim.e_ref)
         normalized = [_normalize_term(term) for term in claim.rest_terms]
         try:
-            self._conn.execute(
+            conn.execute(
                 "INSERT INTO claims (asrt_id, pred_id, e_ref, rest_terms) VALUES (?, ?, ?, ?)",
                 (asrt_id, claim.pred_id, claim.e_ref, _enc_rest_terms(normalized)),
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"duplicate asrt_id: {asrt_id}") from exc
 
-    def _insert_claim_args(self, rows: list[ClaimArg], asrt_id: str) -> None:
-        self._conn.executemany(
+    def _insert_claim_args(self, conn: sqlite3.Connection, rows: list[ClaimArg], asrt_id: str) -> None:
+        conn.executemany(
             "INSERT INTO claim_args (asrt_id, idx, val_atom, tag) VALUES (?, ?, ?, ?)",
             [(asrt_id, row.idx, _enc(row.val_atom), row.tag) for row in rows],
         )
 
-    def _insert_meta_rows(self, rows: list[MetaRow], asrt_id: str) -> None:
-        self._conn.executemany(
+    def _insert_meta_rows(self, conn: sqlite3.Connection, rows: list[MetaRow], asrt_id: str) -> None:
+        conn.executemany(
             "INSERT INTO meta_rows (asrt_id, key, kind, value) VALUES (?, ?, ?, ?)",
             [(asrt_id, row.key, row.kind, _enc(row.value)) for row in rows],
         )
 
-    def _insert_annotation_rows(self, rows: list[AnnotationRow]) -> None:
-        self._conn.executemany(
+    def _insert_annotation_rows(self, conn: sqlite3.Connection, rows: list[AnnotationRow]) -> None:
+        conn.executemany(
             "INSERT OR REPLACE INTO annotation_rows"
             " (asrt_id, namespace, category, key, kind, value, origin, derivation)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

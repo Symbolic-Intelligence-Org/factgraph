@@ -15,7 +15,10 @@
 
 ## 通用约定
 
-- 所有端点都返回 `HTTP 200` JSON envelope。
+- 所有 `/v1/...` rules / registry 端点默认都要求 `X-FactPy-API-Key`。
+- 缺失或错误 key 返回 `HTTP 401`，且不会进入 JSON envelope。
+- 认证启用但未配置 `FACTPY_KERNEL_API_KEYS` 时返回 `HTTP 503`，且不会进入 JSON envelope。
+- 只有通过认证后，应用层成功/失败才继续使用 `HTTP 200` JSON envelope。
 - 成功：`ok=true`，失败：`ok=false` 且 `errors[]` 非空。
 - rules 端点不依赖 runtime session。
 - registry 端点也不依赖 runtime session；它们直接访问 `root_dir` 指向的 registry 文件系统。

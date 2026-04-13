@@ -4,17 +4,26 @@
 
 - `POST /v1/runtime/sessions/open`
 - `GET /v1/runtime/sessions/{session_id}`
+- `GET /v1/runtime/sessions/{session_id}/schema`
 - `DELETE /v1/runtime/sessions/{session_id}`
+- `POST /v1/runtime/sessions/{session_id}/ephemeral-rules`
+- `GET /v1/runtime/sessions/{session_id}/ephemeral-rules`
+- `DELETE /v1/runtime/sessions/{session_id}/ephemeral-rules`
+- `GET /v1/runtime/sessions/{session_id}/rules`
+- `GET /v1/runtime/sessions/{session_id}/candidates`
 - `POST /v1/runtime/sessions/{session_id}/writes/set`
 - `POST /v1/runtime/sessions/{session_id}/writes/add`
 - `POST /v1/runtime/sessions/{session_id}/writes/retract`
 - `GET /v1/runtime/sessions/{session_id}/claims`
 
-本文记录 service v1 的 runtime session / write / claims DTO 契约。rule、derivation、views、query、package、registry 端点不在本文范围内。
+本文记录 service v1 的 runtime session / session-scoped ephemeral rule / session inventory / write / claims DTO 契约。rule、derivation、views、query、package、registry 端点不在本文范围内。
 
 ## 通用约定
 
-- 所有端点都返回 `HTTP 200` JSON envelope。
+- 所有 `/v1/...` runtime session 端点默认都要求 `X-FactPy-API-Key`。
+- 缺失或错误 key 返回 `HTTP 401`，且不会进入 JSON envelope。
+- 认证启用但未配置 `FACTPY_KERNEL_API_KEYS` 时返回 `HTTP 503`，且不会进入 JSON envelope。
+- 只有通过认证后，应用层成功/失败才继续使用 `HTTP 200` JSON envelope。
 - 成功：`ok=true`，失败：`ok=false` 且 `errors[]` 非空。
 - `session_id` 一律走 path parameter。
 - `entity_ref`（如 `idref_v1:...`）直接按普通字符串透传，不额外包装。
@@ -181,6 +190,39 @@
 说明：
 
 - 关闭 session 会从进程内 session manager 中移除该 session，并关闭对应 ledger 句柄。
+- session-scoped `ephemeral_rules` 只存在于进程内 `RuntimeSession`；关闭 session 时也一并丢弃，不写入 ledger / sidecar / audit package。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+
+## 3A. `GET /v1/runtime/sessions/{session_id}/schema`
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {},
+  "result": {
+    "schema_digest": "sha256:abc",
+    "schema_ir": {
+      "schema_ir_version": "v1",
+      "entities": [],
+      "predicates": []
+    }
+  }
+}
+```
+
+说明：
+
+- 该 endpoint 返回当前 session 绑定的完整 `schema_ir`，用于 readback / agentic schema discovery。
+- `schema_digest` 与 `GET /sessions/{session_id}` 返回的 digest 相同；`schema_ir` 是其完整内容。
+- 返回的是 session 打开时绑定的 schema 快照，不会单独做过滤、裁剪或 predicate 查询。
+- `GET /sessions/{session_id}` 继续保持轻量 summary，不追加 `schema_ir`。
 
 错误 kinds：
 
@@ -360,6 +402,226 @@ Query 参数：
 - `claim_args` 是把 `rest_terms` 拆成 position-aware row 的读模型，只有 `include_args=true` 时返回。
 - `meta_rows` 只有 `include_meta=true` 时返回。
 - `view-facts.view.facts` 返回投影后的扁平 tuple/list；`claims.rest_terms` 则保留原始类型标签，更适合调试写入协议和原始断言。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+
+## 8. `POST /v1/runtime/sessions/{session_id}/ephemeral-rules`
+
+请求：
+
+```json
+{
+  "rule": {
+    "rule_id": "q_country_rows",
+    "version": "1.0.0",
+    "select": ["$e", "$c"],
+    "where": [["pred", "person:country", ["$e", "$c"]]],
+    "expose": true
+  }
+}
+```
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {},
+  "result": {
+    "rule_id": "q_country_rows",
+    "version": "1.0.0",
+    "status": "registered",
+    "total_ephemeral": 1
+  }
+}
+```
+
+说明：
+
+- `rule` 必须是结构化 authored rule object；DTO 规范化、`where` JSON→IR 转换与 `rules/run` 共用同一编译链。
+- 返回 `result.status`：
+  - 首次注册：`"registered"`
+  - 同一 session 内相同 `(rule_id, version)` 再注册：`"replaced"`；新 rule body 会替换旧条目，`total_ephemeral` 不增长
+- 注册成功后，rule 只挂在当前 `RuntimeSession.ephemeral_rules`，不会写入 filesystem registry、ledger、sidecar 或 audit package。
+- session 内 duplicate 语义固定为 **upsert replace**；filesystem collision 语义固定为 **FS rule 优先**：
+  - 评估时先加载 filesystem registry（若有）
+  - 再 merge `ephemeral_rules`
+  - 若 `(rule_id, version)` 冲突，ephemeral rule 被静默忽略，不覆盖 FS rule，也不返回 500
+- 注册时会对 compiled `where` 中的 `pred` atoms 做 schema 存在性校验：
+  - 若 `pred_id` 不在当前 session schema 中，注册直接失败
+  - 错误返回 `kind="rule_ast_validate"`，并在 `details` 中补：
+    - `error_code="unknown_predicate"`
+    - `missing_pred_id`
+    - `remediation_hint="verify_pred_id_via_GET_sessions_schema"`
+- 当前只承诺 native rule evaluation 使用这组 rules；Souffle / ProbLog / PyReason 不消费 session-scoped ephemeral registry。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+- `runtime`
+- `rule_ast_validate`
+
+## 9. `GET /v1/runtime/sessions/{session_id}/ephemeral-rules`
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {},
+  "result": {
+    "ephemeral_rules": [
+      {
+        "rule_id": "q_country_rows",
+        "version": "1.0.0"
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+说明：
+
+- 只返回当前 session 内存中的 ephemeral rule inventory。
+- 不回读 filesystem registry，也不返回完整 rule body。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+
+## 10. `DELETE /v1/runtime/sessions/{session_id}/ephemeral-rules`
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {},
+  "result": {
+    "cleared": 1
+  }
+}
+```
+
+说明：
+
+- 该操作只清空当前 session 的 `ephemeral_rules` 列表。
+- 清空后，后续 `rules/run` / native `derivations/evaluate` 不再看到这些临时规则。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+
+## 10A. `GET /v1/runtime/sessions/{session_id}/rules`
+
+Query 参数：
+
+- `include_spec`：可选，默认 `false`
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {},
+  "result": {
+    "rules": [
+      {
+        "rule_id": "q_country_rows",
+        "version": "1.0.0",
+        "source": "fs"
+      },
+      {
+        "rule_id": "q_runtime_probe",
+        "version": "1.0.0",
+        "source": "ephemeral"
+      }
+    ],
+    "total": 2,
+    "fs_count": 1,
+    "ephemeral_count": 1
+  }
+}
+```
+
+`include_spec=true` 时每条 rule 还会补：
+
+```json
+{
+  "select_vars": ["$e", "$c"],
+  "where": [["pred", "person:country", ["$e", "$c"]]],
+  "expose": true
+}
+```
+
+说明：
+
+- 返回的是当前 session 的 effective rule inventory：
+  - filesystem registry rules（若 `registry_root` 非空）
+  - `RuntimeSession.ephemeral_rules`
+- `source` 取值：
+  - `"fs"`：来自 filesystem registry
+  - `"ephemeral"`：来自当前 session 的临时规则
+  - `"ephemeral_shadowed_by_fs"`：相同 `(rule_id, version)` 同时存在于 session ephemeral 与 filesystem registry；effective 行为仍以 FS rule 为准，因此列表中只出现一次，并显式标记 shadowed 状态
+- `include_spec=false` 只返回 inventory summary，适合 agent/session readback。
+- `include_spec=true` 额外返回规则 body；FS rule body 来自 `FileAuthoringRegistry.read_rule_spec(...)`，ephemeral body 来自当前 session 内存中的 `RuleSpec`。
+- 该 endpoint 不改变 `GET /ephemeral-rules` 的响应结构；后者仍只返回最小 `{rule_id, version}` 列表。
+
+错误 kinds：
+
+- `shape`
+- `runtime_session_not_found`
+
+## 10B. `GET /v1/runtime/sessions/{session_id}/candidates`
+
+Query 参数：
+
+- `pred_id`：可选；提供时只返回 `pred_id` 精确匹配的 candidates
+
+成功响应：
+
+```json
+{
+  "ok": true,
+  "errors": [],
+  "meta": {},
+  "result": {
+    "candidates": [
+      {
+        "candidate_id": "cand_v2:abc",
+        "pred_id": "person:country",
+        "support_kind": "native_binding_v1",
+        "confidence_kind": "none"
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+说明：
+
+- 返回的是当前 session store 中已登记的 candidate handles，适合长循环 / 中断恢复后的 candidate rediscovery。
+- 每条只返回 v1 可稳定读取的 store-level metadata：
+  - `candidate_id`
+  - `pred_id`
+  - `support_kind`
+  - `confidence_kind`
+- `pred_id` 来自 store 在 candidate remember 路径上维护的 `_candidate_pred_index`。
+- v1 **不返回 accepted 状态**：
+  - accepted / revoked 等状态目前属于 ledger 层信息
+  - 该 endpoint 刻意保持 store-scoped inventory，不做跨层查询
 
 错误 kinds：
 
