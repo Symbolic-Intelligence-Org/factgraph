@@ -13,6 +13,8 @@
 
 - [architecture_principles.md](/Users/zhenzhili/hnsm-backend/docs/architecture_principles.md)
   - 项目的稳定设计哲学、系统边界和长期方向。
+- [SECURITY.md](/Users/zhenzhili/hnsm-backend/docs/SECURITY.md)
+  - 本地 secret handling、kernel API key 认证约定与密钥轮换 checklist。
 - [blueprints/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/README.md)
   - 任务蓝图工作流、状态机、模板与标准归档 / reconstructed 归档规则。
 - [module_docs_convention.md](/Users/zhenzhili/hnsm-backend/docs/module_docs_convention.md)
@@ -40,6 +42,14 @@
 - [src/factpy_kernel/adapters/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/adapters/docs/README.md)
 - [src/factpy_kernel/audit/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/audit/docs/README.md)
   - audit package 查询/静态展示，以及 `EvidenceGraph` 统一 explainability DTO 的当前实现文档。
+- [src/factpy_kernel/agent/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/docs/README.md)
+  - agent 控制面、draft/checkpoint、candidate payload cache、read-first review loop、Layer 3A 结构化最小写入、W2a 精确撤回、Layer 4A/4B 规则 authoring + 保守引擎路由，以及 Layer 4C1-4C3 文档提取/去重链路的当前实现文档。
+- [src/factpy_kernel/agent/documents/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/documents/docs/README.md)
+  - agent Layer 4C1/4C2 document surface：deterministic staging、segment provenance、bundle review/approval carrier，以及 merged provenance carrier 的当前实现文档。
+- [src/factpy_kernel/agent/extraction/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/extraction/docs/README.md)
+  - agent Layer 4C3 extraction surface：single-segment / batch LLM extraction、schema-constrained response model、deterministic validation、batch metrics，以及 single-document entity resolution 的当前实现文档。
+- [src/factpy_kernel/agent/observability/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/observability/docs/README.md)
+  - agent extraction 三层的 Langfuse 最小 observability：tracer 抽象、NoOp fallback、可选 Langfuse backend 与稳定字段边界。
 
 ## 工作流摘要
 

@@ -23,7 +23,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-03-29
+最后更新：2026-04-11
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
@@ -162,6 +162,30 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-29 | pyreason-adapter-batch | implemented | Batch closeout for F-PR-2/3/4/5/6: bound bool guard, `confidence=0.0` parity, safer pred name parsing, correct annotation binding, shared helper extraction |
 | 2026-03-29 | problog-adapter-batch | implemented | Batch closeout for F-PL-1/2/3/4/5: per-candidate trace payload copies, safer result parsing notes, correct annotation binding, bool-confidence fallback, shared parsing extraction |
 | 2026-03-30 | evidence-graph-timeline-edges | implemented | F-EG-2 fix: timeline layout now surfaces incoming edge annotations on cards so EvidenceGraph edges remain visible outside tree layout |
+| 2026-03-31 | evidence-explain-depth | implemented | Phase 1: fact_meta 嵌入 assertion_fact + source_lines narrative/NL/HTML；Phase 2: explain-steps 端点（三引擎 flat step list）+ render_evidence_steps_html helper；709 tests green |
+| 2026-03-31 | 07-explain-steps-demo | implemented | 07 notebook：加 explain_runtime_steps import + source meta for Alice + §2.5/§3.4/§4.3 steps cells + source provenance cells；34→41 cells | Phase 1: fact_meta 嵌入 assertion_fact + source_lines narrative/NL/HTML；Phase 2: explain-steps 端点（三引擎 flat step list）+ render_evidence_steps_html helper；709 tests green |
+| 2026-03-31 | rule-label-in-steps | implemented | `support_section.rule_ref_ids` 注入到 evidence tree；`rule_apply` steps 现在输出 `detail.rule_ref_ids` 并使用规则名描述；715 tests green |
+| 2026-03-31 | ephemeral-rule-authoring | implemented | `RuntimeSession.ephemeral_rules` + register/list/clear handlers/routes + native evaluate-time registry merge；FS 优先 skip；`evaluate -> accept -> explain-steps` 端到端覆盖；731 tests green |
+| 2026-03-31 | llm-integration-surface | implemented | 母蓝图收口：Milestone A（named rule_apply）+ Milestone B（session-scoped ephemeral rules）均关闭；G2 保留为可选增强，G3 继续 deferred |
+| 2026-03-31 | runtime-session-schema-readback | implemented | 新增 `GET /v1/runtime/sessions/{session_id}/schema`，返回 `schema_digest + schema_ir`；`GET /sessions/{id}` 保持轻量；735 tests green |
+| 2026-04-01 | ephemeral-rule-hardening | implemented | D1 upsert replace、D2 register-time unknown predicate fail、D3 stable `details.error_code/remediation_hint`；`run/evaluate` 错误更适合 agent 恢复；743 tests green |
+| 2026-04-01 | session-agent-inventory | implemented | 新增 `GET /sessions/{id}/rules` 与 `GET /sessions/{id}/candidates`；session 级 rule inventory + candidate rediscovery readback 落地；754 tests green |
+| 2026-04-09 | agent-layer1-control-plane-mvp | implemented | 新建 `src/factpy_kernel/agent/` Layer 1 控制面：AgentSession/DraftManager/CandidatePayloadCache/KGReadTools/ExplainTools/recovery/framework skeleton；771 tests green |
+| 2026-04-09 | agent-layer2-read-first-agent | implemented | RuntimeAPI evaluate/accept 扩展 + EvaluateTools + ReadReviewOrchestrator + 16-tool registry；evaluate→cache→review→accept loop 落地；783 tests green |
+| 2026-04-10 | agent-layer3a-structured-write | implemented | RuntimeAPI write_fact 扩展 + WriteTools + ReadReviewOrchestrator structured commit methods + 20-tool registry；confirmed FactDraft → write → committed/checkpoint 落地；795 tests green |
+| 2026-04-10 | agent-w2a-exact-retract | implemented | RuntimeAPI retract_fact 扩展 + WriteTools/ReadReviewOrchestrator exact retract 路径 + 22-tool registry；preview→confirm→retract→checkpoint 落地；807 tests green |
+| 2026-04-10 | agent-layer4a-native-rule-authoring | implemented | `RuleTools` + orchestrator rule flow + 27-tool registry；validate/compile-preview → ephemeral register → native evaluate → steps review → accept 落地 |
+| 2026-04-10 | agent-layer4b-conservative-engine-routing | implemented | `EngineRoutingAdvisor` + `RuleSpec.routing_hint` + orchestrator routing wrapper + 31-tool registry；non-native recommendation 不注册 ephemeral，native override 继续走 Layer 4A；825 tests green |
+| 2026-04-10 | agent-layer4c1-document-staging | implemented | 新增 `agent/documents/` 子包 + deterministic staging DTO/parsers/clarity + orchestrator facade + 33-tool registry；4C1 文档 staging 与 runtime 完全解耦；852 tests green |
+| 2026-04-10 | agent-layer4c2-draft-bundle-review | implemented | `DraftBundle` / `BundleManager` / `FactDraftSpec` + checkpoint 三元组 + orchestrator bundle review/commit + 39-tool registry；document fact draft 的 batch review/approval 落地；867 tests green |
+| 2026-04-10 | agent-layer4c3a-single-segment-extraction | implemented | 新增 `agent/extraction/` 子包 + single-segment LLM extraction + deterministic validation + orchestrator convenience path + 41-tool registry；`DocumentSegment -> FactDraftSpec[] -> bundle` 路径落地；884 tests green |
+| 2026-04-10 | agent-layer4c3b-batch-extraction | implemented | `BatchExtractor` + batch metrics / errors + orchestrator batch convenience path + 43-tool registry；单文档 multi-segment extraction → bundle 聚合链路落地；898 tests green |
+| 2026-04-10 | agent-layer4c3c-entity-resolution | implemented | `EntityResolver` + merged provenance carrier + orchestrator resolve/bundle convenience path + 45-tool registry；单文档 extraction 去重合并与 multi-segment provenance 保留落地；911 tests green |
+| 2026-04-10 | agent-langfuse-minimal-observability | implemented | 新增 `agent/observability/` 子包 + extraction 三层 Langfuse/no-op tracer hook；默认零开销、依赖感知降级、稳定字段 trace；911+ tests green |
+| 2026-04-11 | kernel-p0-production-readiness | implemented | H-01 API key auth、H-02 ledger thread-local SQLite + post-commit hooks + shared read lock、H-03 secret hygiene templates/docs/scripts；942 tests green |
+| 2026-04-11 | kernel-extraction-response-model-openai-strict-fix | implemented | 4C3-a strict-schema blocker fix：`entity_identity` / `field_values` 改为 typed entry sub-models，validation 正规化回 canonical shapes，新增 OpenAI strict-schema guard tests；959 tests green，B3 real extraction 离开 `Invalid schema` |
+| 2026-04-11 | agent-extraction-prompt-schema-alignment-fix | implemented | 4C3-a prompt/schema alignment fix：predicate schema summary 改为 `subject=... field_values=[...]`、predicate arg positional fallback、system prompt 明确 `entity_identity`/`field_values` contract、length mismatch detail 丰富化；967 tests green，B3 rerun 首次产出 valid specs |
+| 2026-04-11 | agent-extraction-prompt-residual-patterns-fix | implemented | 4C3-a prompt examples fix：新增两组 WRONG/RIGHT examples 直接打掉 residual `subject leakage` / `multi-entry overpacking` 模式；972 tests green，B3 combined valid rate 57%→76% |
 | 2026-03-22 | ecss-domain-validation-and-souffle-provenance-poc | implemented | ECSS domain validation POC with Souffle provenance integration |
 | 2026-03-26 | assertion-annotation-store-decision | decision-closed | Froze annotation data model: AnnotationRow schema, shared/adapter namespaces, confidence_kind routing, meta normalization |
 | 2026-03-27 | engine-options-runtime-dispatch-decision | decision-closed | Froze engine_options runtime dispatch: timeout/timesteps normalization, per-engine option validation |
