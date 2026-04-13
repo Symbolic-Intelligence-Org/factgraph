@@ -1,0 +1,143 @@
+{
+  "_template_version": "2026-04-11",
+  "_note": "Fill in all fields. Use null for N/A. Boolean fields use true/false. Copy this to run_records/<timestamp>_<sample_id>.json and fill during each run.",
+
+  "sample_id": "short_01_pdf",
+  "run_id": "b3_<timestamp>",
+  "run_started_at": "2026-04-11T10:00:00Z",
+  "run_finished_at": "2026-04-11T10:00:42Z",
+  "run_duration_ms": 42000,
+  "dry_run": false,
+
+  "sample": {
+    "path": "samples/short/short_01_pdf.pdf",
+    "doc_type": "pdf",
+    "length_class": "short",
+    "domain": "regulation",
+    "byte_size": 12345,
+    "expected_result": "success"
+  },
+
+  "config": {
+    "extraction_model": "gpt-4o-mini",
+    "max_batch_size": 100,
+    "min_confidence": 0.0,
+    "max_text_chars": 4000,
+    "enable_dedupe": true,
+    "langfuse_enabled": true
+  },
+
+  "staging": {
+    "success": true,
+    "parser_name": "pymupdf",
+    "parser_version": "0.1.0",
+    "doc_id": "abc123...",
+    "total_segments": 8,
+    "total_chars": 5432,
+    "high_clarity_count": 5,
+    "avg_structural_clarity": 0.62,
+    "pattern_type_distribution": {
+      "if_then": 4,
+      "entity_relation": 1,
+      "definition": 1,
+      "narrative": 2
+    },
+    "error_kind": null,
+    "error_message": null
+  },
+
+  "extraction": {
+    "total_segments": 8,
+    "success_segment_count": 7,
+    "error_segment_count": 1,
+    "total_proposal_count": 23,
+    "total_valid_count": 18,
+    "total_rejection_count": 5,
+    "batch_duration_ms": 18500,
+    "batch_cap_reached": false,
+    "per_segment_error_breakdown": {
+      "llm_unavailable": 0,
+      "llm_timeout": 0,
+      "instructor_retry_exhausted": 0,
+      "config_invalid": 0,
+      "dependency_missing": 0,
+      "unexpected": 0,
+      "batch_cap_reached": 0
+    },
+    "rejection_breakdown": {
+      "schema_entity_type_unknown": 1,
+      "schema_pred_id_unknown": 2,
+      "schema_field_type_mismatch": 0,
+      "scope_entity_type_denied": 0,
+      "scope_pred_id_denied": 0,
+      "scope_min_confidence": 1,
+      "scope_max_batch_size": 0,
+      "spec_construction_failure": 1
+    }
+  },
+
+  "resolution": {
+    "input_spec_count": 18,
+    "output_spec_count": 15,
+    "merge_count": 3,
+    "unique_entity_count": 10,
+    "unique_fact_count": 15,
+    "resolution_duration_ms": 12,
+    "merge_events_sample": [
+      {
+        "fact_key_repr": "entity(Person:alice)/has_role",
+        "primary_segment_id": "abc1_00002",
+        "merged_segment_id": "abc1_00005"
+      }
+    ]
+  },
+
+  "bundle": {
+    "bundle_created": true,
+    "bundle_id": "bundle_xxx",
+    "draft_count": 15,
+    "committed_count": 14,
+    "failed_count": 1,
+    "failed_breakdown": {
+      "shape": 0,
+      "runtime": 1,
+      "runtime_session_not_found": 0
+    }
+  },
+
+  "review": {
+    "reviewed": true,
+    "reviewed_by": "<human_reviewer_name>",
+    "reviewed_at": "2026-04-11T11:30:00Z",
+    "reviewed_count": 15,
+    "approved_count": 12,
+    "rejected_count": 3,
+    "human_approval_rate": 0.8,
+    "review_notes": "Two rejected due to over-general predicate mapping; one rejected due to wrong entity identity."
+  },
+
+  "outcome": {
+    "expected_result": "success",
+    "actual_result": "success",
+    "matches_expectation": true,
+    "deviation_notes": null
+  },
+
+  "langfuse": {
+    "trace_ids": {
+      "extraction_single_segment": ["trace_xxx1", "trace_xxx2"],
+      "extraction_batch": "trace_batch_xxx",
+      "extraction_resolution": "trace_resolution_xxx"
+    }
+  },
+
+  "observed_issues": [
+    {
+      "issue_id": "P-01",
+      "category": "schema",
+      "severity": "P2",
+      "description": "LLM tried to use pred_id 'has_obligation' which does not exist in schema; closest match is 'must_comply_with'.",
+      "evidence_ref": "langfuse:trace_xxx1"
+    }
+  ]
+}

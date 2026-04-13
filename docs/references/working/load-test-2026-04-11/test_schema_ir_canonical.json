@@ -1,0 +1,48 @@
+{
+  "schema_ir_version": "v1",
+  "entities": [
+    {
+      "entity_type": "Document",
+      "identity_fields": [
+        {"name": "title", "type_domain": "string"}
+      ],
+      "arg_specs": [
+        {"field_name": "title", "type_domain": "string", "cardinality": "single"}
+      ]
+    },
+    {
+      "entity_type": "Module",
+      "identity_fields": [
+        {"name": "module_name", "type_domain": "string"}
+      ],
+      "arg_specs": [
+        {"field_name": "module_name", "type_domain": "string", "cardinality": "single"}
+      ]
+    }
+  ],
+  "predicates": [
+    {
+      "pred_id": "document:mentions",
+      "relationship_type": "true",
+      "arg_specs": [
+        {"name": "arg0", "type_domain": "entity_ref"},
+        {"name": "arg1", "type_domain": "string"}
+      ]
+    },
+    {
+      "pred_id": "module:description",
+      "relationship_type": "true",
+      "arg_specs": [
+        {"name": "arg0", "type_domain": "entity_ref"},
+        {"name": "arg1", "type_domain": "string"}
+      ]
+    }
+  ],
+  "projection": {},
+  "protocol_version": {
+    "idref_v1": "1.0",
+    "tup_v1": "1.0",
+    "export_v1": "1.0"
+  },
+  "generated_at": "2026-04-11T00:00:00Z"
+}
