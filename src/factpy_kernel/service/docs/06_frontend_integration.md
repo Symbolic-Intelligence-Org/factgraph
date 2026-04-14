@@ -54,7 +54,30 @@ interface ErrorEntry {
 
 OpenAPI spec 把这两种响应作为 `UnauthorizedError` / `AuthNotConfiguredError` 可复用 response component,挂在每个 operation 上。
 
-### 0.4 HTTP 状态码速查
+### 0.4 当前 spec 的精度边界(重要)
+
+`docs/api/openapi.yaml` 是**路由 / 认证 / envelope 覆盖完整**,但**不是字段级强类型完备**:
+
+| 维度 | 状态 |
+|---|---|
+| 48 个 operation 全部可发现 | ✅ |
+| 每个 op 标注 `ApiKeyAuth` + 401 + 503 | ✅ |
+| `Envelope` / `Error` / `ExtractionResult` / `WriteRequest` 精确 schema | ✅ |
+| **~40 个 op 的 request / response 仍是 `type: object`** | ⚠️ |
+
+**这意味着**:
+
+- 用 `openapi-typescript` 等工具生成 TS 类型时,~40 个 op 会拿到 `Record<string, unknown>` — 能发请求,但没强类型
+- Swagger UI "try it out" 对这些 op 会给一个空 JSON 编辑器,需要照 `02_runtime_sessions.md` / `03_runtime_queries_views.md` / `04_rules_registry.md` 里的 DTO 形状手拼 body
+- **精确字段级契约现阶段在中文 DTO 文档里**,不在 yaml 里
+
+**为什么不一上来就补全**:48 个 op 全部手写精确 schema(~3000 行 yaml 增量)或给 handler 加 pydantic response model(大范围代码改造 + 可能碰 1023 tests)都是独立的大项工作,ROI 要看真实消费者卡在哪。当前策略是**等前端真实使用反馈**后按用量优先级增量补齐。
+
+**如果你是前端**,建议现在走混合模式:
+- 拿 yaml 拉路由清单 + envelope 类型 + extraction 端点类型
+- 其它 op 的 request/response 照 `02/03/04_*.md` 手拼 interface
+
+### 0.5 HTTP 状态码速查
 
 | 状态码 | 什么时候 | body 形状 |
 |---|---|---|

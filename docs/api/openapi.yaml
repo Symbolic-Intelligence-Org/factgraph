@@ -25,6 +25,16 @@ info:
     Per-endpoint DTO narratives: `service/docs/02_runtime_sessions.md` /
     `03_runtime_queries_views.md` / `04_rules_registry.md` / `05_extraction.md`.
 
+    **Current precision boundary.** This spec is **route / auth / envelope complete**
+    — every `/v1/*` operation is listed with `ApiKeyAuth` + 401 + 503 refs, and the
+    `Envelope` / `Error` / `ExtractionResult` / `WriteRequest` schemas are precise.
+    However, **~40 of the 48 operations still describe their request / response
+    payload as a generic `type: object`**; precise field-level shape for those lives
+    in the DTO narratives above. A schema-first consumer (e.g. `openapi-typescript`
+    auto-gen, Swagger UI "try it out") will get `Record<string, unknown>` for those
+    endpoints. Full field-level schemas are a known follow-up and will be added
+    incrementally when real consumers need them; do not assume completeness here.
+
 servers:
   - url: http://localhost:8000
     description: Local development
