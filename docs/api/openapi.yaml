@@ -1,0 +1,1072 @@
+openapi: 3.0.3
+info:
+  title: factpy-kernel service API
+  version: v1
+  description: |
+    HTTP facade for factpy-kernel:
+    - Runtime session lifecycle, fact writes, queries, views, rules/derivations, package export
+    - Rules authoring validation and compile preview
+    - Registry read-only access
+    - LLM document extraction
+
+    **Envelope contract.** Most `/v1/*` operations return `HTTP 200` with a JSON envelope
+    (`ok`, `errors`, `meta`, ...). Application-layer failures are signalled via
+    `ok=false` + non-empty `errors[]`. Exception: `POST /v1/extraction/documents`
+    maps validation errors to `HTTP 422` and pipeline errors to `HTTP 500`.
+
+    **Authentication.** All `/v1/*` operations require header `X-FactPy-API-Key`.
+    `HTTP 401` = missing or invalid key. `HTTP 503` = server-side
+    `FACTPY_KERNEL_API_KEYS` not configured. These two responses are listed on every
+    operation and use the shared `UnauthorizedError` / `AuthNotConfiguredError`
+    response components. Set `FACTPY_KERNEL_AUTH_DISABLED=true` to skip auth for
+    local development.
+
+    Human-readable integration guide: `src/factpy_kernel/service/docs/06_frontend_integration.md`.
+    Per-endpoint DTO narratives: `service/docs/02_runtime_sessions.md` /
+    `03_runtime_queries_views.md` / `04_rules_registry.md` / `05_extraction.md`.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+tags:
+  - name: rules
+    description: Rule authoring validation + compile preview + profile listing.
+  - name: runtime-session
+    description: Runtime session lifecycle + schema readback + claims readback.
+  - name: runtime-writes
+    description: Fact writes against an open runtime session.
+  - name: runtime-ephemeral-rules
+    description: Session-scoped ephemeral rule registry (not persisted to filesystem).
+  - name: runtime-inventory
+    description: Session-level read-only inventory (rules, candidates).
+  - name: runtime-queries
+    description: Runtime queries over claims, views, explain, conflicts.
+  - name: runtime-views
+    description: Runtime view lifecycle.
+  - name: runtime-evidence
+    description: Runtime evidence artefact readback (candidate / rule-trace).
+  - name: runtime-exec
+    description: Rule run, derivation evaluate/accept, package export.
+  - name: registry
+    description: Registry read-only access.
+  - name: extraction
+    description: LLM document extraction.
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+
+  # ── rules ─────────────────────────────────────────────────────────────
+  /v1/rules/validate:
+    post:
+      tags: [rules]
+      summary: Validate an authored rule DSL payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/rules/compile-preview:
+    post:
+      tags: [rules]
+      summary: Compile-preview an authored rule to inspect the compiled artifact.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/profiles:
+    get:
+      tags: [rules]
+      summary: List available rule compilation profiles.
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  # ── runtime session lifecycle ─────────────────────────────────────────
+  /v1/runtime/sessions/open:
+    post:
+      tags: [runtime-session]
+      summary: Open a runtime session bound to a schema IR (or registry root).
+      description: |
+        Exactly one of `schema_ir` or `registry_root` must be provided.
+        See `service/docs/02_runtime_sessions.md` §1 for the full DTO.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                schema_ir: { type: object }
+                registry_root: { type: string }
+                ledger_path: { type: string }
+                artifact_store_root: { type: string }
+      responses:
+        "200":
+          description: Session opened or failed with envelope ok=false.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpenSessionEnvelope" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [runtime-session]
+      summary: Get a session summary.
+      responses:
+        "200":
+          description: Session summary envelope.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionSummaryEnvelope" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+    delete:
+      tags: [runtime-session]
+      summary: Close an open runtime session.
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/schema:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [runtime-session]
+      summary: Return the full schema_ir bound to the session.
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/claims:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - in: query
+        name: pred_id
+        schema: { type: string }
+      - in: query
+        name: e_ref
+        schema: { type: string }
+      - in: query
+        name: include_meta
+        schema: { type: boolean, default: false }
+      - in: query
+        name: include_args
+        schema: { type: boolean, default: false }
+      - in: query
+        name: limit
+        schema: { type: integer, minimum: 0 }
+    get:
+      tags: [runtime-session]
+      summary: Read claims (raw assertions) for the session.
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  # ── writes ─────────────────────────────────────────────────────────────
+  /v1/runtime/sessions/{session_id}/writes/set:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-writes]
+      summary: Write a single-valued fact (set-semantics).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WriteRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/writes/add:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-writes]
+      summary: Append to a multi-valued fact (add-semantics).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WriteRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/writes/retract:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-writes]
+      summary: Retract a prior assertion by id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asrt_id]
+              properties:
+                asrt_id: { type: string }
+                meta: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  # ── ephemeral rules (session-scoped) + inventory ──────────────────────
+  /v1/runtime/sessions/{session_id}/ephemeral-rules:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-ephemeral-rules]
+      summary: Register a session-scoped ephemeral rule.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rule]
+              properties:
+                rule: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+    get:
+      tags: [runtime-ephemeral-rules]
+      summary: List ephemeral rule inventory for the session.
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+    delete:
+      tags: [runtime-ephemeral-rules]
+      summary: Clear all ephemeral rules for the session.
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/rules:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - in: query
+        name: include_spec
+        schema: { type: boolean, default: false }
+    get:
+      tags: [runtime-inventory]
+      summary: Return the effective rule inventory (fs + ephemeral).
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/candidates:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - in: query
+        name: pred_id
+        schema: { type: string }
+    get:
+      tags: [runtime-inventory]
+      summary: Return registered candidate handles for the session.
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  # ── queries ────────────────────────────────────────────────────────────
+  /v1/runtime/sessions/{session_id}/queries/view-facts:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Execute a view and return its projected facts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                view_name: { type: string }
+                view: { type: object }
+                include_projector_audit: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/resolve-mapping:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Resolve an identity mapping expression.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/conflicts:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return conflicts detected in the ledger.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-fact:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Explain why a fact is asserted (fact-level explain).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Explain a candidate result (raw carrier).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-tree:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return the evidence tree for a candidate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-support:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return support-layer witnesses for a candidate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-summary:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return a structured explain summary for a candidate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-narrative:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return a narrative-layer explain (string paragraphs).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-nl:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return a natural-language explain rendering.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-steps:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return the ordered derivation steps for a candidate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-timeline:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return the PyReason-style timeline for a candidate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-timeline-summary:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return a structured summary of a timeline explain.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-timeline-narrative:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return a narrative rendering of a timeline explain.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/queries/explain-rule-trace:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-queries]
+      summary: Return a rule run's step-wise trace.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  # ── views ──────────────────────────────────────────────────────────────
+  /v1/runtime/sessions/{session_id}/views/create:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-views]
+      summary: Create a named runtime view.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/views/update:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-views]
+      summary: Update an existing runtime view.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/views/delete:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-views]
+      summary: Delete a named runtime view.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/views/get:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-views]
+      summary: Get one named view's definition.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/views:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [runtime-views]
+      summary: List all views registered on the session.
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  # ── evidence ───────────────────────────────────────────────────────────
+  /v1/runtime/sessions/{session_id}/evidence/candidate/{candidate_id}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - in: path
+        name: candidate_id
+        required: true
+        schema: { type: string }
+    get:
+      tags: [runtime-evidence]
+      summary: Read a stored candidate evidence artefact.
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/evidence/rule-trace/{rule_run_id}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - in: path
+        name: rule_run_id
+        required: true
+        schema: { type: string }
+    get:
+      tags: [runtime-evidence]
+      summary: Read a stored rule-run trace artefact.
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  # ── rule / derivation / package ────────────────────────────────────────
+  /v1/runtime/sessions/{session_id}/rules/run:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-exec]
+      summary: Execute a named rule against the session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/derivations/evaluate:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-exec]
+      summary: Evaluate a derivation and return a CandidateSet.
+      description: |
+        Returns `CandidateSet` v2 structure (candidates with `candidate_id`,
+        `candidate_key`, `candidate_kind`). See `02_runtime_sessions.md` §5.2
+        for request/response shape and `derivations/accept` handshake.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/derivations/accept:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-exec]
+      summary: Accept a derivation candidate returned by evaluate.
+      description: |
+        Client must echo the full candidate payload (do not trim `terms` / identity fields).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [candidate]
+              properties:
+                candidate: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/runtime/sessions/{session_id}/packages/export:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [runtime-exec]
+      summary: Export an audit package for the session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  # ── registry (read-only) ───────────────────────────────────────────────
+  /v1/registry/manifest:
+    post:
+      tags: [registry]
+      summary: Read the manifest for a registry root.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [root_dir]
+              properties:
+                root_dir: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/registry/schema/read:
+    post:
+      tags: [registry]
+      summary: Read the schema IR from a registry root.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/registry/assets/list:
+    post:
+      tags: [registry]
+      summary: List registered assets in a registry root.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/registry/rules/read:
+    post:
+      tags: [registry]
+      summary: Read one rule spec from a registry root.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  /v1/registry/derivations/read:
+    post:
+      tags: [registry]
+      summary: Read one derivation spec from a registry root.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { $ref: "#/components/responses/Envelope200" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+  # ── extraction ─────────────────────────────────────────────────────────
+  /v1/extraction/documents:
+    post:
+      tags: [extraction]
+      summary: Upload a document and return extracted structured facts.
+      description: |
+        `multipart/form-data` request. Returns HTTP 200 on success, HTTP 422 on
+        request validation failure (malformed options JSON / missing schema_ir),
+        HTTP 500 on pipeline failure (staging / extraction / resolution).
+        Full DTO contract: `service/docs/05_extraction.md`.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, options]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Document file to extract (PDF / DOCX / MD / TXT).
+                options:
+                  type: string
+                  description: |
+                    JSON-encoded object. Required field `schema_ir` (non-empty
+                    object, compiled via `compile_schema_from_classes`).
+                    Optional: `model`, `entity_descriptions`, `enable_gleaning`,
+                    `enable_alias_merge`, `max_batch_size`, `require_source`.
+      responses:
+        "200":
+          description: Extraction succeeded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtractionResultEnvelope" }
+        "422":
+          description: Request validation failed (bad options / missing schema_ir).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "500":
+          description: Extraction pipeline failed (staging / extraction / resolution).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-FactPy-API-Key
+      description: |
+        Static API key configured server-side via `FACTPY_KERNEL_API_KEYS`.
+        Set `FACTPY_KERNEL_AUTH_DISABLED=true` to skip auth for local dev.
+
+  parameters:
+    SessionId:
+      in: path
+      name: session_id
+      required: true
+      schema: { type: string }
+      description: Runtime session id returned from `POST /v1/runtime/sessions/open`.
+
+  responses:
+    Envelope200:
+      description: Application-layer success or failure;failure is signalled by `ok=false` + non-empty `errors[]`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Envelope" }
+
+    UnauthorizedError:
+      description: |
+        Auth failure — `X-FactPy-API-Key` is missing or does not match a key
+        listed in `FACTPY_KERNEL_API_KEYS`. Body is a short FastAPI detail shape
+        (NOT the application envelope), e.g. `{"detail": "Invalid or missing API key"}`.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail: { type: string }
+
+    AuthNotConfiguredError:
+      description: |
+        Auth is enabled but `FACTPY_KERNEL_API_KEYS` is not configured on the
+        server. Body is a short FastAPI detail shape, e.g.
+        `{"detail": "API authentication not configured"}`.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail: { type: string }
+
+  schemas:
+    Envelope:
+      type: object
+      required: [ok, errors, meta]
+      properties:
+        ok: { type: boolean }
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/Error" }
+        meta: { type: object, additionalProperties: true }
+      additionalProperties: true
+      description: Standard JSON envelope. Operation-specific payload keys (e.g. `session`, `write`, `result`, `claims`) sit alongside `ok` / `errors` / `meta`.
+
+    Error:
+      type: object
+      required: [kind, path]
+      properties:
+        kind:
+          type: string
+          description: Error category (e.g. `shape`, `validation`, `runtime`, `extraction`).
+        path:
+          type: string
+          description: JSON-pointer-like path into the request where the error originated, or `$` when global.
+        details:
+          type: object
+          additionalProperties: true
+
+    ErrorEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            ok:
+              type: boolean
+              enum: [false]
+
+    WriteRequest:
+      type: object
+      required: [pred_id, e_ref, rest_terms]
+      properties:
+        pred_id: { type: string }
+        e_ref:
+          type: string
+          description: Entity reference (e.g. `idref_v1:Person:source_id=u1`).
+        rest_terms:
+          type: array
+          description: Typed fact payload.`[[type_domain, value], ...]`.
+          items:
+            type: array
+            nullable: true
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        meta:
+          type: object
+          additionalProperties: true
+
+    OpenSessionEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            session:
+              type: object
+              properties:
+                session_id: { type: string }
+                ledger_path: { type: string, nullable: true }
+                registry_root: { type: string, nullable: true }
+                schema_digest: { type: string }
+                opened_at_ns: { type: integer }
+                counts:
+                  type: object
+                  properties:
+                    claims: { type: integer }
+                    claim_args: { type: integer }
+                    meta_rows: { type: integer }
+                    revokes: { type: integer }
+
+    SessionSummaryEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            session:
+              type: object
+              properties:
+                session_id: { type: string }
+                ledger_path: { type: string, nullable: true }
+                registry_root: { type: string, nullable: true }
+                schema_digest: { type: string }
+                opened_at_ns: { type: integer }
+                counts:
+                  type: object
+
+    ExtractionResult:
+      type: object
+      properties:
+        doc_name: { type: string }
+        doc_id: { type: string }
+        model: { type: string }
+        staging_segments: { type: integer }
+        gleaning_segments_reexamined: { type: integer }
+        entities:
+          type: array
+          items: { $ref: "#/components/schemas/ExtractionEntity" }
+        facts:
+          type: array
+          items: { $ref: "#/components/schemas/FactDraftSpec" }
+        metrics:
+          type: object
+          properties:
+            total_segments: { type: integer }
+            success_segment_count: { type: integer }
+            error_segment_count: { type: integer }
+            total_proposal_count: { type: integer }
+            total_valid_count: { type: integer }
+            total_rejection_count: { type: integer }
+            batch_duration_ms: { type: integer }
+        merge_events:
+          type: array
+          items: { $ref: "#/components/schemas/MergeEvent" }
+
+    ExtractionEntity:
+      type: object
+      properties:
+        entity_type: { type: string }
+        identity:
+          type: object
+          additionalProperties: true
+        fact_count: { type: integer }
+
+    FactDraftSpec:
+      type: object
+      properties:
+        entity_type: { type: string }
+        entity_identity:
+          type: object
+          additionalProperties: true
+        pred_id: { type: string }
+        field_values:
+          type: array
+          items:
+            type: array
+            description: "[type_domain, value]"
+            nullable: true
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+        confidence:
+          type: number
+          nullable: true
+
+    MergeEvent:
+      type: object
+      properties:
+        fact_key_repr: { type: string }
+        primary_segment_id: { type: string }
+        merged_segment_id: { type: string }
+        entity_type: { type: string }
+        pred_id: { type: string }
+        alias_merge: { type: boolean }
+
+    ExtractionResultEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            result: { $ref: "#/components/schemas/ExtractionResult" }

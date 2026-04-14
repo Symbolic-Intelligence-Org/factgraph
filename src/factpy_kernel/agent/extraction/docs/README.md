@@ -2,6 +2,11 @@
 
 本目录记录 `src/factpy_kernel/agent/extraction` 的当前实现口径，覆盖 Layer 4C3-a 的 single-segment LLM extraction、Layer 4C3-b 的 batch extraction orchestration、Layer 4C3-c 的单文档 entity resolution，以及三层 extraction hook 的最小 observability 集成点。
 
+## 文档入口
+
+- [README.md](./README.md)（本文件）—— 实现口径：Scope / Responsibilities / Non-responsibilities / Limitations。
+- [USAGE.md](./USAGE.md) —— 产品使用者手册：`extract_document()` 最小示例、参数语义、返回值、常见失败诊断、已知限制。HTTP 端点契约见 [../../../service/docs/05_extraction.md](../../../service/docs/05_extraction.md)。
+
 ## Scope
 
 - `ExtractionConfig`

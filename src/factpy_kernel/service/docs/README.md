@@ -20,6 +20,10 @@
   - runtime query、views、rule/derivation 执行、package export 的 DTO 契约。
 - `src/factpy_kernel/service/docs/04_rules_registry.md`
   - rules facade 与 registry 只读接口的 DTO 契约。
+- `src/factpy_kernel/service/docs/05_extraction.md`
+  - `POST /v1/extraction/documents` 的 DTO 契约;请求 / 200 / 422 / 500 envelope 与 curl 示例。
+- `src/factpy_kernel/service/docs/06_frontend_integration.md`
+  - 前端/BFF 集成指南;envelope 解包模板、典型调用链路、HTTP 状态码速查表、机读 spec (`docs/api/openapi.yaml`) 使用指引。
 
 ## 使用约定
 

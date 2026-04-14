@@ -48,6 +48,14 @@
   - agent Layer 4C1/4C2 document surface：deterministic staging、segment provenance、bundle review/approval carrier，以及 merged provenance carrier 的当前实现文档。
 - [src/factpy_kernel/agent/extraction/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/extraction/docs/README.md)
   - agent Layer 4C3 extraction surface：single-segment / batch LLM extraction、schema-constrained response model、deterministic validation、batch metrics，以及 single-document entity resolution 的当前实现文档。
+- [src/factpy_kernel/agent/extraction/docs/USAGE.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/extraction/docs/USAGE.md)
+  - `extract_document()` Python 产品 API 使用手册：最小示例、参数语义、返回值结构、常见失败诊断、已知限制与模型推荐。
+- [src/factpy_kernel/service/docs/05_extraction.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/service/docs/05_extraction.md)
+  - `POST /v1/extraction/documents` 的 DTO 契约：请求 / 200 / 422 / 500 envelope 与 curl 示例。
+- [src/factpy_kernel/service/docs/06_frontend_integration.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/service/docs/06_frontend_integration.md)
+  - 前端/BFF 集成指南；envelope 解包、典型调用链路、HTTP 状态码速查表。
+- [docs/api/openapi.yaml](/Users/zhenzhili/hnsm-backend/docs/api/openapi.yaml)
+  - HTTP API 机读契约（OpenAPI 3.0，48 个 operation 全覆盖）；漂移守卫 `scripts/export_openapi.py`。
 - [src/factpy_kernel/agent/observability/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/observability/docs/README.md)
   - agent extraction 三层的 Langfuse 最小 observability：tracer 抽象、NoOp fallback、可选 Langfuse backend 与稳定字段边界。
 

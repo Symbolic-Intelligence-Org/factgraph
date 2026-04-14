@@ -1,8 +1,10 @@
 # Service 模块总览（factpy_kernel）
 
 - 范围：`src/factpy_kernel/service`
-- 最后更新：2026-04-11
+- 最后更新：2026-04-14
 - 目标读者：需要通过 HTTP 对接 runtime / registry 的前后端开发者
+
+前端 / 机读 API 参考：[`06_frontend_integration.md`](./06_frontend_integration.md)（集成指南）+ [`../../../../docs/api/openapi.yaml`](../../../../docs/api/openapi.yaml)（OpenAPI 3.0 机读契约，48 个 operation 全覆盖；漂移守卫：`scripts/export_openapi.py`）。
 
 ## 1. 模块职责
 
@@ -38,6 +40,8 @@
   - runtime session、facts 写入/查询、views、rule/derivation 执行、package 导出
 - `registry_v1.py`
   - registry 只读接口
+- `extraction_v1.py`
+  - LLM 文档抽取 handler:`extract_document_endpoint(...)`
 - `_common.py`
   - `ok/error` envelope 与错误转换
 - `_certainty_service.py`
@@ -55,6 +59,10 @@
   - runtime query、views、rule/derivation 执行、package export。
 - `04_rules_registry.md`
   - rules facade 与 registry 只读接口。
+- `05_extraction.md`
+  - `POST /v1/extraction/documents` DTO 契约。
+- `06_frontend_integration.md`
+  - 前端/BFF 集成指南；envelope 解包模板、典型调用链路、HTTP 状态码速查表、机读 spec 使用指引。
 
 ## 4. 当前路由（v1）
 
@@ -112,6 +120,12 @@
 - `POST /v1/registry/assets/list`
 - `POST /v1/registry/rules/read`
 - `POST /v1/registry/derivations/read`
+
+### 4.7 extraction
+
+- `POST /v1/extraction/documents`
+
+详细 DTO 契约见 `05_extraction.md`。请求是 `multipart/form-data`(`file` + `options` JSON);成功返回 `HTTP 200` envelope,参数校验失败返回 `HTTP 422`,抽取管道失败返回 `HTTP 500`。
 
 ## 5. 典型运行链路
 
