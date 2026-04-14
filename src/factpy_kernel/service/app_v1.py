@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json as _json
 import logging
 from typing import Any
 
-from fastapi import Body, Depends, FastAPI, Query
+from fastapi import Body, Depends, FastAPI, File, Form, Query, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from factpy_kernel.service._common import error_response
 from factpy_kernel.service.registry_v1 import (
     list_registry_assets,
     read_registry_derivation,
@@ -55,6 +57,7 @@ from factpy_kernel.service.runtime_v1 import (
     write_runtime_fact,
 )
 from factpy_kernel.service.auth import require_api_key
+from factpy_kernel.service.extraction_v1 import extract_document_endpoint as _extract_handler
 
 logger = logging.getLogger(__name__)
 
@@ -315,6 +318,34 @@ def post_registry_read_rule(payload: dict[str, Any] = Body(...)) -> dict[str, An
 @app.post("/v1/registry/derivations/read", dependencies=AUTH_DEPENDENCIES)
 def post_registry_read_derivation(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return read_registry_derivation(payload)
+
+
+@app.post("/v1/extraction/documents", dependencies=AUTH_DEPENDENCIES)
+async def post_extract_document(
+    file: UploadFile = File(...),
+    options: str = Form(...),
+):
+    try:
+        options_dict = _json.loads(options)
+    except (ValueError, TypeError) as exc:
+        return JSONResponse(
+            status_code=422,
+            content=error_response(
+                [
+                    {
+                        "kind": "validation",
+                        "path": "options",
+                        "details": {"message": f"options is not valid JSON: {exc}"},
+                    }
+                ]
+            ),
+        )
+    file_bytes = await file.read()
+    return _extract_handler(
+        file_bytes=file_bytes,
+        doc_name=file.filename or "unknown",
+        options=options_dict,
+    )
 
 
 @app.exception_handler(Exception)

@@ -82,6 +82,7 @@ class _FakeExtractionAgent(ExtractionAgent):
         config=None,
         prior_entity_context="",
         source_doc_name=None,
+        entity_descriptions=None,
     ):
         self.calls.append(segment.segment_id)
         self.context_args.append(prior_entity_context)

@@ -46,6 +46,7 @@ class BatchExtractor:
         scope: AgentScope,
         batch_config: BatchExtractionConfig | None = None,
         source_doc_name: str | None = None,
+        entity_descriptions: dict[str, str] | None = None,
     ) -> BatchExtractionResult | BatchExtractionError:
         effective_config = batch_config or self._batch_config
         preflight_error = _validate_preflight(
@@ -96,6 +97,7 @@ class BatchExtractor:
                     config=effective_config.extraction_config,
                     prior_entity_context=prior_entity_context,
                     source_doc_name=source_doc_name,
+                    entity_descriptions=entity_descriptions,
                 )
                 if isinstance(result, ExtractionResult):
                     remaining = max(0, scope.max_batch_size - accumulated_valid_count)
@@ -174,6 +176,7 @@ class BatchExtractor:
                         config=effective_config.extraction_config,
                         prior_entity_context=gleaning_context,
                         source_doc_name=source_doc_name,
+                        entity_descriptions=entity_descriptions,
                     )
                 except Exception:
                     gleaning_count += 1

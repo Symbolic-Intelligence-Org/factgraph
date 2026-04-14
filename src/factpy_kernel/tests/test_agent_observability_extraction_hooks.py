@@ -143,6 +143,7 @@ class _FakeExtractionAgent(ExtractionAgent):
         config=None,
         prior_entity_context="",
         source_doc_name=None,
+        entity_descriptions=None,
     ):
         outcome = self._outcomes[segment.segment_id]
         if isinstance(outcome, Exception):

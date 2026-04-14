@@ -106,5 +106,42 @@ class AgentLayer4C3aValidationTests(unittest.TestCase):
         self.assertEqual(rejection.reason, "scope_min_confidence")
 
 
+class FieldTagFallbackTests(unittest.TestCase):
+    """Tests for TF-02/TF-03: tag fallback when LLM writes arg name instead of type_domain."""
+
+    def test_tag_matching_arg_name_is_accepted_and_normalized(self) -> None:
+        """When tag == arg_spec.name (not type_domain), validator should accept and normalize."""
+        from factpy_kernel.agent.extraction.validation import _validate_field_types
+        from factpy_kernel.tests._test_helpers import _schema_ir
+
+        schema_ir = _schema_ir()
+        pred = next(p for p in schema_ir["predicates"] if len(p.get("arg_specs", [])) >= 2)
+        pred_id = pred["pred_id"]
+        rest_spec = pred["arg_specs"][1]
+        arg_name = rest_spec["name"]
+        type_domain = rest_spec["type_domain"]
+
+        field_values = [(arg_name, "test_value")]
+        error = _validate_field_types(schema_ir, pred_id, field_values)
+
+        self.assertIsNone(error, f"Expected acceptance but got: {error}")
+        self.assertEqual(field_values[0][0], type_domain)
+
+    def test_tag_neither_type_domain_nor_arg_name_is_rejected(self) -> None:
+        """When tag is neither type_domain nor arg name, validator should reject."""
+        from factpy_kernel.agent.extraction.validation import _validate_field_types
+        from factpy_kernel.tests._test_helpers import _schema_ir
+
+        schema_ir = _schema_ir()
+        pred = next(p for p in schema_ir["predicates"] if len(p.get("arg_specs", [])) >= 2)
+        pred_id = pred["pred_id"]
+
+        field_values = [("completely_wrong_tag", "test_value")]
+        error = _validate_field_types(schema_ir, pred_id, field_values)
+
+        self.assertIsNotNone(error)
+        self.assertIn("does not match expected type_domain", error)
+
+
 if __name__ == "__main__":
     unittest.main()

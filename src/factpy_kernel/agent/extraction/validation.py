@@ -195,10 +195,17 @@ def _validate_field_types(
             f"field_values length mismatch for pred_id '{pred_id}': "
             f"got {len(field_values)}, expected {len(rest_specs)}"
         )
-    for (tag, value), spec in zip(field_values, rest_specs, strict=True):
+    for idx, ((tag, value), spec) in enumerate(zip(field_values, rest_specs, strict=True)):
         type_domain = spec.get("type_domain", "")
         if tag != type_domain:
-            return f"field tag '{tag}' does not match expected type_domain '{type_domain}'"
+            # Fallback: some models (e.g. Mistral) write arg name instead of type_domain.
+            # If tag matches the arg spec's name, silently correct to type_domain.
+            arg_name = spec.get("name", "")
+            if tag == arg_name and type_domain:
+                field_values[idx] = (type_domain, value)
+                tag = type_domain
+            else:
+                return f"field tag '{tag}' does not match expected type_domain '{type_domain}'"
         error = _validate_type_domain(type_domain, value, field_name=str(spec.get('name', 'field')))
         if error is not None:
             return error

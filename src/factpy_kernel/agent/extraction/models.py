@@ -12,7 +12,7 @@ from .metrics import BatchExtractionMetrics
 class ExtractionConfig:
     """LLM extraction call configuration."""
 
-    model: str = "gpt-4o-mini"
+    model: str = "gpt-4.1"
     max_retries: int = 2
     temperature: float = 0.0
     max_tokens: int | None = None

@@ -40,6 +40,7 @@ class ExtractionAgent:
         config: ExtractionConfig | None = None,
         prior_entity_context: str = "",
         source_doc_name: str | None = None,
+        entity_descriptions: dict[str, str] | None = None,
     ) -> ExtractionResult | ExtractionError:
         if not isinstance(segment, DocumentSegment):
             raise AgentContractError("segment must be DocumentSegment")
@@ -87,7 +88,10 @@ class ExtractionAgent:
                 ),
             )
 
-        schema_summary = build_schema_summary(schema_ir)
+        schema_summary = build_schema_summary(
+            schema_ir,
+            entity_descriptions=entity_descriptions,
+        )
         raw_text_for_llm = truncate_prompt_text(
             segment.raw_text,
             max_text_chars=effective_config.max_text_chars,
@@ -102,7 +106,10 @@ class ExtractionAgent:
 
         if self._llm_client is None:
             try:
-                llm_client = build_default_llm_client()
+                llm_client, effective_model_name = build_default_llm_client(
+                    effective_config.model
+                )
+                timeout_supported = effective_model_name == effective_config.model
             except ImportError as exc:
                 return self._return_result(
                     segment,
@@ -114,18 +121,24 @@ class ExtractionAgent:
                 )
         else:
             llm_client = self._llm_client
+            effective_model_name = effective_config.model
+            timeout_supported = True
 
         started_ns = perf_counter_ns()
         try:
-            response = llm_client.chat.completions.create(
-                model=effective_config.model,
+            create_kwargs = dict(
+                model=effective_model_name,
                 response_model=response_model,
                 messages=messages,
                 max_retries=effective_config.max_retries,
                 temperature=effective_config.temperature,
                 max_tokens=effective_config.max_tokens,
-                timeout=effective_config.timeout_seconds,
             )
+            # Instructor's Mistral native client forwards to mistralai.Chat.complete(),
+            # which does not accept a timeout kwarg.
+            if timeout_supported:
+                create_kwargs["timeout"] = effective_config.timeout_seconds
+            response = llm_client.chat.completions.create(**create_kwargs)
         except TimeoutError as exc:
             return self._return_result(
                 segment,

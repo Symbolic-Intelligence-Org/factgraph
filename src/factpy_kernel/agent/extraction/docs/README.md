@@ -10,12 +10,14 @@
 - `SegmentMetric` / `BatchExtractionMetrics`
 - `ResolutionConfig` / `ResolutionResult` / `ResolutionError` / `ResolutionStats`
 - `MergeEvent`
+- `ExtractionDocumentResult` / `ExtractionDocumentError`
 - 动态 `build_response_model(schema_ir)` 约束模型
 - prompt 构造：schema summary + segment user prompt
 - `validate_proposal(...)`
 - `ExtractionAgent.extract_from_segment(...)`
 - `BatchExtractor.extract_batch(...)`
 - `EntityResolver.resolve_batch(...)`
+- `extract_document(...)`
 - 三层 observability hook：single-segment / batch / resolution
 
 ## Responsibilities
@@ -32,6 +34,12 @@
 - `ResolutionConfig.enable_alias_merge` 默认关闭；开启后，resolver 会在 exact dedupe 之前先做一层保守 alias canonicalization：仅对同 `entity_type`、单字符串 identity field、且较短 token 集是较长 token 集子集的 entity key 生效
 - alias canonicalization 的 canonical key 采用 first-seen 规则；若命中 alias，结果中的 `FactDraftSpec.entity_identity` 会被重写为 canonical key
 - `MergeEvent.alias_merge` 区分 exact duplicate merge 与 alias canonicalization 触发的 merge event
+- `ExtractionConfig.model` 默认值为 `gpt-4.1`
+- `extract_document(...)` 提供产品级入口：在一个函数内完成 schema compile → staging → batch extraction → resolution
+- `extract_document(...)` 对 `model` / `temperature` / `timeout_seconds` 采用 call-time 优先级链：显式 scalar > `extraction_config` > env > hardcoded default，并支持 `FACTPY_EXTRACTION_MODEL` / `FACTPY_EXTRACTION_TEMPERATURE` / `FACTPY_EXTRACTION_TIMEOUT`
+- `extract_document(...)` 自动从 compiled `schema_ir` 推导 `allowed_entity_types` / `allowed_pred_ids`，默认启用 `enable_gleaning=True`、`enable_alias_merge=True`，并使用产品安全默认值 `max_batch_size=1000` / `require_source=True`
+- `extract_document(...)` 始终向 batch path 透传 `source_doc_name=doc_name`，避免 prompt 回退到 opaque `doc_id` hash；若 caller 传 `entity_descriptions`，也会继续透传到 schema summary
+- `extract_document(...)` 成功时返回 `ExtractionDocumentResult`，其中 `entities` 是按 `(entity_type, entity_identity)` 聚合后的去重 census，`facts` 是 resolved specs，`merge_events` 直接暴露 resolver merge 结果
 - 在 single-segment / batch / resolution 三层产出稳定 trace 字段，默认由 `NoOpTracer` 吞掉，可选由 Langfuse backend 消费
 - 通过动态 `Literal[...]` response model 将 `entity_type` / `pred_id` 约束到当前 schema
 - 在 OpenAI strict-compatible response model 中，把 `entity_identity` / `field_values` 表达为私有 typed entry 列表；`validate_proposal(...)` 再将其规范化回 `dict[str, Any]` / `list[tuple[str, Any]]`
@@ -67,6 +75,8 @@
 - observability 默认 no-op；只有显式注入 tracer 时才发 trace
 - observability 不上传 raw_text、entity_identity、field_values 或 rejection detail
 - 依赖检查局部化在 extraction 模块内，不扩展 agent skeleton 的 global optional probe
+- `extract_document(...)` 自身不吞掉 stage failures；staging / extraction / resolution 任一失败都会 raise `ExtractionDocumentError(stage, detail, message)`
+- 由于 resolver 当前拒绝空输入，若上游 extraction 产生 0 valid specs，`extract_document(...)` 会以 `stage=\"resolution\"` 抛出 `ExtractionDocumentError`，而不是返回空成功结果
 - `provenance.raw_text` 保存完整 `segment.raw_text`；prompt text 可能被 `max_text_chars` 截断
 - 大 schema 只做 deterministic summary truncation，不做智能筛选
 - `entity_descriptions` 完全由 caller 提供，默认关闭；未提供时 schema summary 的输出格式与早期实现保持兼容

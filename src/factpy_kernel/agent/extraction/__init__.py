@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from .api import (
+    ExtractionDocumentError,
+    ExtractionDocumentResult,
+    extract_document,
+    extract_document_from_ir,
+)
 from .batch import BatchExtractor
 from .extractor import ExtractionAgent
 from .llm import build_response_model
@@ -30,6 +36,8 @@ __all__ = [
     "BatchExtractionMetrics",
     "BatchExtractionResult",
     "BatchExtractor",
+    "ExtractionDocumentError",
+    "ExtractionDocumentResult",
     "ExtractionAgent",
     "ExtractionConfig",
     "ExtractionError",
@@ -45,6 +53,8 @@ __all__ = [
     "build_messages",
     "build_response_model",
     "build_schema_summary",
+    "extract_document",
+    "extract_document_from_ir",
     "truncate_prompt_text",
     "validate_proposal",
 ]

@@ -57,7 +57,10 @@ def build_response_model(schema_ir: dict[str, Any]) -> type[BaseModel]:
             list[llm_field_value],
             Field(..., description="Predicate field entries (tag, value)"),
         ),
-        confidence=(float | None, Field(None, ge=0.0, le=1.0, description="LLM self-assessed confidence")),
+        confidence=(
+            float | None,
+            Field(None, description="LLM self-assessed confidence (0.0-1.0)"),
+        ),
         llm_note=(str | None, Field(None, description="Optional reasoning note")),
     )
     return create_model(
@@ -69,9 +72,39 @@ def build_response_model(schema_ir: dict[str, Any]) -> type[BaseModel]:
     )
 
 
-def build_default_llm_client() -> Any:
-    """Build the default Instructor-over-LiteLLM client."""
+def build_default_llm_client(model: str = "") -> tuple[Any, str]:
+    """Build the default Instructor client + normalized model name.
+
+    For mistral/ models: uses Mistral native SDK with MISTRAL_STRUCTURED_OUTPUTS
+    mode (bypasses litellm adapter's parallel tool calling bug).
+    For all other models: uses Instructor-over-LiteLLM.
+
+    Returns (client, normalized_model) where normalized_model is the
+    provider-native model identifier to pass to client.create(model=...).
+    """
+    import os
 
     instructor = import_module("instructor")
+
+    if model.startswith("mistral/"):
+        bare_model = model[len("mistral/"):]
+        api_key = os.environ.get("MISTRAL_API_KEY")
+        if not api_key:
+            litellm = import_module("litellm")
+            return instructor.from_litellm(litellm.completion), model
+        try:
+            mistralai = import_module("mistralai")
+            from instructor import Mode
+
+            mistral_client = mistralai.Mistral(api_key=api_key)
+            client = instructor.from_mistral(
+                mistral_client,
+                mode=Mode.MISTRAL_STRUCTURED_OUTPUTS,
+            )
+            return client, bare_model
+        except ImportError:
+            litellm = import_module("litellm")
+            return instructor.from_litellm(litellm.completion), model
+
     litellm = import_module("litellm")
-    return instructor.from_litellm(litellm.completion)
+    return instructor.from_litellm(litellm.completion), model

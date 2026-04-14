@@ -135,6 +135,26 @@ class AgentLayer4C3aExtractorTests(unittest.TestCase):
         )
         self.assertEqual(result.error_kind, "config_invalid")
 
+    def test_native_mistral_path_omits_timeout_and_uses_normalized_model(self) -> None:
+        def _behavior(kwargs):
+            self.assertEqual(kwargs["model"], "mistral-small-latest")
+            self.assertNotIn("timeout", kwargs)
+            response_model = kwargs["response_model"]
+            return response_model(proposals=[])
+
+        agent = ExtractionAgent(config=ExtractionConfig(model="mistral/mistral-small-latest"))
+        with patch(
+            "factpy_kernel.agent.extraction.extractor.build_default_llm_client",
+            return_value=(_FakeClient(_behavior), "mistral-small-latest"),
+        ):
+            result = agent.extract_from_segment(
+                segment=_segment(),
+                schema_ir=_schema_ir(),
+                scope=AgentScope(agent_id="agent-l4c3a"),
+            )
+        self.assertEqual(result.total_proposals, 0)
+        self.assertEqual(len(result.valid_specs), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
