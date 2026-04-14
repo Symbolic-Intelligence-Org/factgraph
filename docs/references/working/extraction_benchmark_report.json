@@ -1,0 +1,306 @@
+[
+  {
+    "model": "gpt-4o-mini",
+    "tier": "Tier 1 — lightweight",
+    "total_proposals": 6,
+    "valid_specs": 6,
+    "rejections": 0,
+    "gleaning_reexamined": 3,
+    "aggregated_specs": 6,
+    "resolved_specs": 6,
+    "merge_events": 0,
+    "alias_merges": 0,
+    "unique_entities": 3,
+    "duration_ms": 26038,
+    "facts": [
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "ingest"
+        },
+        "value": "data-infra team"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "ingest"
+        },
+        "value": "reads incoming JSON events from Kafka, validates their schema, and writes them to object storage."
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "resolve"
+        },
+        "value": "Alice"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "resolve"
+        },
+        "value": "performs entity resolution across ingested records using exact and fuzzy matching."
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "serve"
+        },
+        "value": "platform team"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "serve"
+        },
+        "value": "exposes a gRPC API that returns resolved entity snapshots to external clients."
+      }
+    ],
+    "recall_hits": 6,
+    "recall_total": 8,
+    "precision": 1.0,
+    "recall": 0.75,
+    "entity_coverage": 0.75,
+    "error": null
+  },
+  {
+    "model": "gpt-4o",
+    "tier": "Tier 2 — mid-range",
+    "total_proposals": 13,
+    "valid_specs": 7,
+    "rejections": 6,
+    "gleaning_reexamined": 2,
+    "aggregated_specs": 7,
+    "resolved_specs": 7,
+    "merge_events": 0,
+    "alias_merges": 0,
+    "unique_entities": 4,
+    "duration_ms": 13756,
+    "facts": [
+      {
+        "entity_type": "Document",
+        "pred_id": "document:summary",
+        "identity": {
+          "title": "README.md"
+        },
+        "value": "Project Alpha is a distributed data processing pipeline composed of several cooperating modules."
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "ingest"
+        },
+        "value": "reads incoming JSON events from Kafka, validates their schema, and writes them to object storage"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "ingest"
+        },
+        "value": "data-infra team"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "resolve"
+        },
+        "value": "performs entity resolution across ingested records using exact and fuzzy matching"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "resolve"
+        },
+        "value": "Alice"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "serve"
+        },
+        "value": "exposes a gRPC API that returns resolved entity snapshots to external clients"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "serve"
+        },
+        "value": "platform team"
+      }
+    ],
+    "recall_hits": 7,
+    "recall_total": 8,
+    "precision": 0.5384615384615384,
+    "recall": 0.875,
+    "entity_coverage": 1.0,
+    "error": null
+  },
+  {
+    "model": "gpt-4.1-mini",
+    "tier": "Tier 3 — latest lightweight",
+    "total_proposals": 9,
+    "valid_specs": 7,
+    "rejections": 2,
+    "gleaning_reexamined": 2,
+    "aggregated_specs": 7,
+    "resolved_specs": 7,
+    "merge_events": 0,
+    "alias_merges": 0,
+    "unique_entities": 4,
+    "duration_ms": 10296,
+    "facts": [
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "Project Alpha"
+        },
+        "value": "is a distributed data processing pipeline composed of several cooperating modules"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "ingest"
+        },
+        "value": "data-infra team"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "ingest"
+        },
+        "value": "reads incoming JSON events from Kafka, validates their schema, and writes them to object storage"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "resolve"
+        },
+        "value": "Alice"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "resolve"
+        },
+        "value": "performs entity resolution across ingested records using exact and fuzzy matching"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "serve"
+        },
+        "value": "platform team"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "serve"
+        },
+        "value": "exposes a gRPC API that returns resolved entity snapshots to external clients"
+      }
+    ],
+    "recall_hits": 6,
+    "recall_total": 8,
+    "precision": 0.7777777777777778,
+    "recall": 0.75,
+    "entity_coverage": 1.0,
+    "error": null
+  },
+  {
+    "model": "gpt-4.1",
+    "tier": "Tier 4 — flagship",
+    "total_proposals": 17,
+    "valid_specs": 7,
+    "rejections": 10,
+    "gleaning_reexamined": 2,
+    "aggregated_specs": 7,
+    "resolved_specs": 7,
+    "merge_events": 0,
+    "alias_merges": 0,
+    "unique_entities": 4,
+    "duration_ms": 19593,
+    "facts": [
+      {
+        "entity_type": "Document",
+        "pred_id": "document:summary",
+        "identity": {
+          "title": "README.md"
+        },
+        "value": "Project Alpha is a distributed data processing pipeline composed of several cooperating modules."
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "ingest"
+        },
+        "value": "data-infra team"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "ingest"
+        },
+        "value": "reads incoming JSON events from Kafka, validates their schema, and writes them to object storage"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "resolve"
+        },
+        "value": "Alice"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "resolve"
+        },
+        "value": "performs entity resolution across ingested records using exact and fuzzy matching"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:owner",
+        "identity": {
+          "name": "serve"
+        },
+        "value": "platform team"
+      },
+      {
+        "entity_type": "Module",
+        "pred_id": "module:description",
+        "identity": {
+          "name": "serve"
+        },
+        "value": "exposes a gRPC API that returns resolved entity snapshots to external clients"
+      }
+    ],
+    "recall_hits": 7,
+    "recall_total": 8,
+    "precision": 0.4117647058823529,
+    "recall": 0.875,
+    "entity_coverage": 1.0,
+    "error": null
+  }
+]
