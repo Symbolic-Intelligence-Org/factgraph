@@ -9,6 +9,8 @@ Two capabilities:
 1. **Append-only fact store + deterministic reasoning** (core + adapters for Soufflé / ProbLog / PyReason).
 2. **LLM document extraction pipeline** (`agent/extraction`) — extract structured entities + facts from PDF / DOCX / Markdown / TXT.
 
+> **Scope boundary.** The LLM pipeline only extracts **facts** (entity + predicate + field_values). It does **NOT** extract rules. Rules must be authored by humans via the authoring layer (`POST /v1/rules/validate` / `compile-preview` / session `ephemeral-rules`) — this is a deliberate choice of the auditable-reasoning positioning; non-deterministic LLM output is not trusted to decide which rules run. If you expect "read a regulation → auto-generate Datalog rules", the current system does **not** do that, nor is it on any active or archived blueprint.
+
 This README only covers **how to use it**. For architecture principles see [docs/architecture_principles.md](docs/architecture_principles.md), for the docs index see [docs/README.md](docs/README.md), for the contributor workflow see [AGENTS.md](AGENTS.md). Internal module docs are primarily in Chinese.
 
 ## Three paths — I want to …

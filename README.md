@@ -9,6 +9,8 @@
 1. **append-only fact store + deterministic reasoning**(core + adapters to Soufflé / ProbLog / PyReason)
 2. **LLM 文档抽取管道**(agent/extraction):从 PDF / DOCX / Markdown / TXT 抽结构化 entities + facts
 
+> **能力边界**:LLM 管道只抽取**事实**(entity + predicate + field_values),**不抽取规则**。规则只能通过 authoring 层人工编写(`POST /v1/rules/validate` / `compile-preview` / session `ephemeral-rules`)——这是 auditable reasoning 定位的故意设计,非 LLM 确定性决定"哪条规则能跑"。如果你期待"读一份监管文档 → 自动生成 Datalog 规则",当前系统**不做**,也不在任何 active/archived 蓝图里。
+
 本 README 只覆盖**如何使用**;架构原则见 [docs/architecture_principles.md](docs/architecture_principles.md),文档索引见 [docs/README.md](docs/README.md),工作流见 [AGENTS.md](AGENTS.md)。
 
 ## 三岔路:我想……
