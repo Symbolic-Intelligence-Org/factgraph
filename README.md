@@ -21,6 +21,7 @@
 
 ```bash
 pip install -e ".[extraction,documents]"
+pip install jupyter        # jupyter 不在 extras 里,单独装一次
 jupyter notebook examples/09_dora_document_extraction.ipynb
 ```
 
@@ -80,6 +81,15 @@ curl -X POST http://localhost:8000/v1/extraction/documents \
 
 ## 安装
 
+### Prerequisites
+
+- Python ≥ 3.10
+- `git`
+- `jupyter`(Path A 要用,单独 `pip install jupyter`,不在 extras 里)
+- **至少一个 LLM provider key**(Path A/B/C 都需要)—— 见下面"环境变量"表格有申请入口
+
+### Extras
+
 | 需求 | extras |
 |---|---|
 | 只用 core(append-only store + native rules) | `pip install -e .` |
@@ -87,21 +97,19 @@ curl -X POST http://localhost:8000/v1/extraction/documents \
 | HTTP 服务 | `pip install -e ".[service,extraction,documents]"` |
 | Langfuse observability | `pip install -e ".[observability]"` |
 
-Python ≥ 3.10。
-
 ## 环境变量
 
 | 变量 | 必填 | 说明 |
 |---|---|---|
-| `MISTRAL_API_KEY` | `*` | Mistral provider(默认推荐)。带 `mistral/` 前缀的 model 会自动走原生 SDK |
-| `OPENAI_API_KEY` | `*` | OpenAI provider(GPT-4.1 / GPT-4.1-mini) |
-| `FACTPY_KERNEL_API_KEYS` | 服务端必填 | 逗号分隔的 server-side 允许密钥;未配置 → 所有认证端点 503 |
+| `MISTRAL_API_KEY` | `*` | Mistral provider(**默认推荐**,免费 tier 无需信用卡)。申请:[console.mistral.ai](https://console.mistral.ai) → 注册 → API Keys → Create new key。带 `mistral/` 前缀的 model 会自动走原生 SDK。 |
+| `OPENAI_API_KEY` | `*` | OpenAI provider(GPT-4.1 / GPT-4.1-mini)。申请:[platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| `FACTPY_KERNEL_API_KEYS` | 服务端必填 | 逗号分隔的 server-side 允许密钥(**你自己定**,不是第三方 provider 的);未配置 → 所有认证端点 503。客户端在 `X-FactPy-API-Key` header 里回传其中任一。 |
 | `FACTPY_KERNEL_AUTH_DISABLED` | 否 | `true` 时跳过 API key 检查(仅限本地开发) |
 | `FACTPY_EXTRACTION_MODEL` | 否 | 全局默认 model,优先级低于显式传参。默认 `gpt-4.1` |
 | `FACTPY_EXTRACTION_TEMPERATURE` | 否 | 默认 `0.0` |
 | `FACTPY_EXTRACTION_TIMEOUT` | 否 | 秒;默认 `30.0` |
 
-`*` = `MISTRAL_API_KEY` / `OPENAI_API_KEY` 至少要提供一个(取决于你用哪个 model)。
+`*` = `MISTRAL_API_KEY` / `OPENAI_API_KEY` 至少要提供一个(取决于你用哪个 model)。两个都是**第三方 LLM provider 的 key**,注册在各自官网申请,不在本项目内配置。
 
 ## 已验证的 LLM 模型
 
@@ -145,6 +153,23 @@ PYTHONPATH=src python -m unittest discover -s src/factpy_kernel/tests -p "test_*
 ```
 
 当前基线:1023 tests。
+
+## 📚 进一步探索
+
+本 README 只覆盖"入门 + 三岔路"。想更深入 5 个高频方向:
+
+| 你想 | 去哪 |
+|---|---|
+| 看 8 个 notebook 的完整学习路径(SDK → 规则 → 合规 → 概率 → 多引擎 → agent 端到端) | [examples/README.md](examples/README.md) |
+| 了解 agent 层超出 extraction 的能力(session, bundle review/commit, rule routing, read-review orchestrator) | [src/factpy_kernel/agent/docs/README.md](src/factpy_kernel/agent/docs/README.md) + [examples/08_agent_document_workflow.ipynb](examples/08_agent_document_workflow.ipynb) |
+| 只用 core 做纯 auditable reasoning,不碰 LLM | [src/factpy_kernel/core/docs/01_architecture.md](src/factpy_kernel/core/docs/01_architecture.md) |
+| SDK(Entity / Field / Store / CRUD / Batch)完整参考 | [src/factpy_kernel/sdk/docs/04_api_surface.md](src/factpy_kernel/sdk/docs/04_api_surface.md) |
+| **所有模块 docs 的总索引**(adapters / authoring / audit / application / service 等都在这里) | [docs/README.md](docs/README.md) |
+
+其它入口:
+- [docs/architecture_principles.md](docs/architecture_principles.md) — 项目哲学与长期边界
+- [AGENTS.md](AGENTS.md) — 贡献者工作流(blueprint-driven)
+- [docs/blueprints/archive/](docs/blueprints/archive/) — 历史决策的 rationale(不是当前真相)
 
 ## 许可与安全
 

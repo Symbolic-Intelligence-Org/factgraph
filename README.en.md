@@ -21,6 +21,7 @@ Open the notebook:
 
 ```bash
 pip install -e ".[extraction,documents]"
+pip install jupyter        # jupyter is not in any extras — install once
 jupyter notebook examples/09_dora_document_extraction.ipynb
 ```
 
@@ -80,6 +81,15 @@ All `/v1/*` routes overview: [src/factpy_kernel/service/docs/01_overview.md](src
 
 ## Install
 
+### Prerequisites
+
+- Python ≥ 3.10
+- `git`
+- `jupyter` (required for Path A; install once via `pip install jupyter` — not included in any extras)
+- **At least one LLM provider key** (needed for all three paths A/B/C) — see the "Environment variables" table below for signup links.
+
+### Extras
+
 | Need | Extras |
 |---|---|
 | Core only (append-only store + native rules) | `pip install -e .` |
@@ -87,21 +97,19 @@ All `/v1/*` routes overview: [src/factpy_kernel/service/docs/01_overview.md](src
 | HTTP service | `pip install -e ".[service,extraction,documents]"` |
 | Langfuse observability | `pip install -e ".[observability]"` |
 
-Python ≥ 3.10.
-
 ## Environment variables
 
 | Variable | Required | Description |
 |---|---|---|
-| `MISTRAL_API_KEY` | `*` | Mistral provider (default recommendation). Models with the `mistral/` prefix automatically use the native SDK. |
-| `OPENAI_API_KEY` | `*` | OpenAI provider (GPT-4.1 / GPT-4.1-mini). |
-| `FACTPY_KERNEL_API_KEYS` | Required server-side | Comma-separated list of accepted server-side API keys. Missing → every authenticated endpoint returns 503. |
+| `MISTRAL_API_KEY` | `*` | Mistral provider (**default recommendation**, free tier does not require a credit card). Sign up: [console.mistral.ai](https://console.mistral.ai) → register → API Keys → Create new key. Models with the `mistral/` prefix automatically use the native SDK. |
+| `OPENAI_API_KEY` | `*` | OpenAI provider (GPT-4.1 / GPT-4.1-mini). Sign up: [platform.openai.com/api-keys](https://platform.openai.com/api-keys). |
+| `FACTPY_KERNEL_API_KEYS` | Required server-side | Comma-separated list of accepted server-side API keys (**you pick these**, unrelated to any third-party provider key). Missing → every authenticated endpoint returns 503. Clients echo one of these in the `X-FactPy-API-Key` header. |
 | `FACTPY_KERNEL_AUTH_DISABLED` | No | Set to `true` to skip API key checks (local development only). |
 | `FACTPY_EXTRACTION_MODEL` | No | Global default model; lower priority than explicit arguments. Default: `gpt-4.1`. |
 | `FACTPY_EXTRACTION_TEMPERATURE` | No | Default: `0.0`. |
 | `FACTPY_EXTRACTION_TIMEOUT` | No | Seconds. Default: `30.0`. |
 
-`*` = at least one of `MISTRAL_API_KEY` / `OPENAI_API_KEY` must be set (depending on which model you use).
+`*` = at least one of `MISTRAL_API_KEY` / `OPENAI_API_KEY` must be set (depending on which model you use). Both are **third-party LLM provider keys** — you sign up on their respective sites, not in this project.
 
 ## Verified LLM models
 
@@ -145,6 +153,23 @@ PYTHONPATH=src python -m unittest discover -s src/factpy_kernel/tests -p "test_*
 ```
 
 Current baseline: 1023 tests.
+
+## 📚 Deeper dive
+
+This README covers "onboarding + three paths" only. Five common next directions:
+
+| You want | Go to |
+|---|---|
+| The full 8-notebook learning path (SDK → rules → compliance → probabilistic → multi-engine → agent end-to-end) | [examples/README.md](examples/README.md) |
+| Agent-layer capabilities beyond extraction (session, bundle review/commit, rule routing, read-review orchestrator) | [src/factpy_kernel/agent/docs/README.md](src/factpy_kernel/agent/docs/README.md) + [examples/08_agent_document_workflow.ipynb](examples/08_agent_document_workflow.ipynb) |
+| Use core for pure auditable reasoning without LLMs | [src/factpy_kernel/core/docs/01_architecture.md](src/factpy_kernel/core/docs/01_architecture.md) |
+| SDK complete reference (Entity / Field / Store / CRUD / Batch) | [src/factpy_kernel/sdk/docs/04_api_surface.md](src/factpy_kernel/sdk/docs/04_api_surface.md) |
+| **Master index of all module docs** (adapters / authoring / audit / application / service, etc.) | [docs/README.md](docs/README.md) |
+
+Other pointers:
+- [docs/architecture_principles.md](docs/architecture_principles.md) — project philosophy and long-term boundaries
+- [AGENTS.md](AGENTS.md) — contributor workflow (blueprint-driven)
+- [docs/blueprints/archive/](docs/blueprints/archive/) — historical decision rationale (not current truth)
 
 ## License & security
 
