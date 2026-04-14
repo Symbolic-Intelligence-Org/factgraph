@@ -4,6 +4,7 @@
 !/*/
 # Keep required root files.
 !/README.md
+!/README.en.md
 !/AGENTS.md
 !/pyproject.toml
 !/.gitignore

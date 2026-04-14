@@ -2,6 +2,8 @@
 
 **Auditable reasoning framework with LLM document extraction.**
 
+> 🌏 语言: **中文** | [English](README.en.md)
+
 两层能力:
 
 1. **append-only fact store + deterministic reasoning**(core + adapters to Soufflé / ProbLog / PyReason)
