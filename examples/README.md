@@ -16,6 +16,12 @@ Notebook `08` was added later as the agent-layer flagship and is the only notebo
 | 06 | `06_problog_probabilistic.ipynb` | **ProbLog** | general | probabilistic reasoning / ProbLogRuleExt / persist annotations |
 | 07 | `07_evidence_graph_multi_engine.ipynb` | **all three** | general | **evidence tree + certainty + probability + timeline + cross-engine comparison** |
 | 08 | `08_agent_document_workflow.ipynb` | **real OpenAI LLM** | agent | **Agent layer end-to-end: 4C1 staging / 4C3a–c extraction + resolve / 4C2 bundle review + commit / real SQLite ledger** |
+| 09 | `09_dora_document_extraction.ipynb` | **real Mistral / OpenAI LLM** | **DORA** | `extract_document()` product API: schema compile → staging → batch extraction + gleaning → alias merge, one function call end-to-end |
+
+Companion CLI script (no notebook runtime):
+
+- `dora_pdf_extract.py` — run `extract_document()` against a real regulatory PDF from the command line; writes a JSON result file next to the input
+- `dora_schema_ir.json` — pre-compiled schema IR that notebook 09 and the CLI script share
 
 ## Notebook 07 — Flagship Demo
 
