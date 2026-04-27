@@ -11,11 +11,11 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from factpy_kernel.core.evidence.write_protocol import set_field
-from factpy_kernel.core.mapping.canon import resolve_mapping_predicate
-from factpy_kernel.core.policy.chosen import compute_chosen_for_predicate
-from factpy_kernel.core.store.api import Store
-from factpy_kernel.core.view.projector import project_view_facts
+from kernel.core.evidence.write_protocol import set_field
+from kernel.core.mapping.canon import resolve_mapping_predicate
+from kernel.core.policy.chosen import compute_chosen_for_predicate
+from kernel.core.store.api import Store
+from kernel.core.view.projector import project_view_facts
 
 
 def main() -> None:

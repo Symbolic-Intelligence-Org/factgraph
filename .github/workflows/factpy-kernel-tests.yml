@@ -21,32 +21,35 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install package
+      - name: Install package (all extras)
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
+          pip install -e ".[extraction,documents,service,observability]"
 
-      - name: Test (where AST gate on)
-        run: python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'
+      - name: Test (where AST gate on, 5 dirs)
+        run: |
+          python -m unittest discover -s src/kernel/tests -p 'test_*.py'
+          python -m unittest discover -s src/agent/tests -p 'test_*.py'
+          python -m unittest discover -s src/service/tests -p 'test_*.py'
+          python -m unittest discover -s src/domains/ecss/tests -p 'test_*.py'
+          python -m unittest discover -s tools/benchmarks/tests -p 'test_*.py'
 
-      - name: Test (where AST gate off compatibility)
-        run: FACTPY_WHERE_AST_VALIDATE=0 python -m unittest discover -s src/factpy_kernel/tests -p 'test_*.py'
+      - name: Test (where AST gate off compatibility, 5 dirs)
+        env:
+          FACTPY_WHERE_AST_VALIDATE: "0"
+        run: |
+          python -m unittest discover -s src/kernel/tests -p 'test_*.py'
+          python -m unittest discover -s src/agent/tests -p 'test_*.py'
+          python -m unittest discover -s src/service/tests -p 'test_*.py'
+          python -m unittest discover -s src/domains/ecss/tests -p 'test_*.py'
+          python -m unittest discover -s tools/benchmarks/tests -p 'test_*.py'
 
       - name: Test (strict profile smoke)
         run: |
-          if find src/factpy_kernel/tests -maxdepth 1 -type f -name 'test_*strict*.py' | grep -q .; then
-            python -m unittest discover -s src/factpy_kernel/tests -p 'test_*strict*.py'
+          if find src/kernel/tests src/agent/tests src/service/tests src/domains/ecss/tests tools/benchmarks/tests -maxdepth 1 -type f -name 'test_*strict*.py' 2>/dev/null | grep -q .; then
+            for d in src/kernel/tests src/agent/tests src/service/tests src/domains/ecss/tests tools/benchmarks/tests; do
+              python -m unittest discover -s "$d" -p 'test_*strict*.py'
+            done
           else
-            echo "No strict profile smoke tests found under src/factpy_kernel/tests; skipping."
-          fi
-
-      - name: Install service extra
-        run: pip install -e ".[service]"
-
-      - name: Test (service routes)
-        run: |
-          if [ -f src/factpy_kernel/tests/test_service_v1_routes.py ]; then
-            python -m unittest -q src.factpy_kernel.tests.test_service_v1_routes
-          else
-            echo "No service route tests found under src/factpy_kernel/tests; skipping."
+            echo "No strict profile smoke tests found across the 5 test directories; skipping."
           fi

@@ -2,7 +2,7 @@
 
 ## 角色
 
-本文档定义 `src/factpy_kernel/*/docs/` 下各模块文档的**最小结构要求**和**写作约定**。
+本文档定义 `src/<package>/**/docs/`(`<package>` ∈ {kernel, agent, service, domains})下各模块文档的**最小结构要求**和**写作约定**。
 
 它不是：
 
@@ -23,7 +23,7 @@
 用一到两句话说明：这个模块覆盖哪些代码路径，从哪里到哪里。
 
 示例：
-> 本文档覆盖 `src/factpy_kernel/core` 的语义内核，包括 ledger、evidence、policy、view、rules、derivation、mapping。
+> 本文档覆盖 `src/kernel/core` 的语义内核，包括 ledger、evidence、policy、view、rules、derivation、mapping。
 
 ### 2. 当前职责（Responsibilities）
 
@@ -64,8 +64,8 @@
 可以是目录路径、具体文件名，或关键测试文件列表。
 
 示例：
-> - `src/factpy_kernel/tests/test_core_ledger.py`
-> - `src/factpy_kernel/tests/test_derivation_accept.py`
+> - `src/kernel/tests/test_protocol_v1.py`
+> - `src/kernel/tests/test_annotation_store.py`
 > - 集成测试：`tests/integration/test_store_evaluate.py`
 
 ### 6. 相关历史蓝图（Related Historical Blueprints）
@@ -98,11 +98,11 @@
 ```markdown
 # <Module Name> 文档
 
-- 适用范围：`src/factpy_kernel/<module>`
+- 适用范围：`src/<package>/<module>`(`<package>` ∈ {kernel, agent, service, domains})
 - 最后更新：YYYY-MM-DD
 - 目标读者：<一句话描述读者场景>
 
-本目录记录 `src/factpy_kernel/<module>` 的当前实现口径。
+本目录记录 `src/<package>/<module>` 的当前实现口径。
 
 ## 范围
 

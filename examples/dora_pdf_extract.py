@@ -20,14 +20,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from factpy_kernel.sdk import Entity, Field, Identity
-from factpy_kernel.sdk.compile import compile_schema_from_classes
-from factpy_kernel.agent.documents import DocumentStaging, StagingError
-from factpy_kernel.agent.session import AgentScope
-from factpy_kernel.agent.extraction.batch import BatchExtractor
-from factpy_kernel.agent.extraction.extractor import ExtractionAgent
-from factpy_kernel.agent.extraction.models import BatchExtractionConfig, BatchExtractionError, ExtractionConfig
-from factpy_kernel.agent.extraction.resolution import EntityResolver, ResolutionConfig, ResolutionError
+from kernel.sdk import Entity, Field, Identity
+from kernel.sdk.compile import compile_schema_from_classes
+from agent.documents import DocumentStaging, StagingError
+from agent.session import AgentScope
+from agent.extraction.batch import BatchExtractor
+from agent.extraction.extractor import ExtractionAgent
+from agent.extraction.models import BatchExtractionConfig, BatchExtractionError, ExtractionConfig
+from agent.extraction.resolution import EntityResolver, ResolutionConfig, ResolutionError
 
 
 class Regulation(Entity):

@@ -22,9 +22,9 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 
-from factpy_kernel.sdk import Entity, Field, Identity
-from factpy_kernel.agent.extraction import extract_document, ExtractionDocumentError
-from factpy_kernel.agent.extraction.models import ExtractionConfig
+from kernel.sdk import Entity, Field, Identity
+from agent.extraction import extract_document, ExtractionDocumentError
+from agent.extraction.models import ExtractionConfig
 
 DATASET_DIR = _REPO_ROOT / "tools" / "datasets" / "re_docred"
 SAMPLE_PATH = DATASET_DIR / "dev_sample_10.json"

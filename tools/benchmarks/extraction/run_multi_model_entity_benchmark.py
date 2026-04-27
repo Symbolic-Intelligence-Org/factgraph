@@ -25,9 +25,9 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 
-from factpy_kernel.sdk import Entity, Field, Identity, compile_schema_from_classes
-from factpy_kernel.agent.extraction import extract_document, ExtractionDocumentError
-from factpy_kernel.agent.extraction.models import ExtractionConfig
+from kernel.sdk import Entity, Field, Identity, compile_schema_from_classes
+from agent.extraction import extract_document, ExtractionDocumentError
+from agent.extraction.models import ExtractionConfig
 
 # ── Paths ──
 DATASET_DIR = _REPO_ROOT / "tools" / "datasets" / "re_docred"

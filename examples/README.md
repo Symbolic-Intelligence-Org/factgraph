@@ -37,12 +37,12 @@ ProbLog and PyReason sections use mocked runners; the entire framework pipeline 
 
 ## Prerequisites
 
-- Notebooks 01–02 require only `factpy_kernel` (no external engines).
+- Notebooks 01–02 require only `kernel` (no external engines).
 - Notebook 04 (Souffle): requires `souffle` CLI on PATH.
 - Notebook 05 (PyReason): requires `pyreason==3.0.0` on Python 3.10. Graceful fallback if not installed.
 - Notebook 06 (ProbLog): requires `problog` CLI. Graceful fallback if not installed.
 - Notebook 07: uses mocked ProbLog / PyReason runners and therefore runs without external engine installs.
-- Notebook 08 (Agent layer): requires `OPENAI_API_KEY` environment variable and a Jupyter kernel that has `factpy_kernel` installed with its extraction extras. The cleanest way to set that up is to activate the kernel's Python environment and run, from the repo root:
+- Notebook 08 (Agent layer): requires `OPENAI_API_KEY` environment variable and a Jupyter kernel that has `kernel` installed with its extraction extras. The cleanest way to set that up is to activate the kernel's Python environment and run, from the repo root:
 
       pip install -e '.[extraction]'
 
@@ -50,7 +50,7 @@ ProbLog and PyReason sections use mocked runners; the entire framework pipeline 
 
 ## Conventions
 
-- Implementation truth lives in `src/factpy_kernel/*/docs/`, not here.
+- Implementation truth lives in `src/<package>/**/docs/` (kernel / agent / service / domains), not here.
 - Notebooks are the canonical examples — no `.py` file pairs.
 - `archive/` contains historical spike/reference files (not user-facing).
 

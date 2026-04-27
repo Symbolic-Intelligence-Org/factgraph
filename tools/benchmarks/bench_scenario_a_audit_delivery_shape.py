@@ -13,13 +13,13 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from factpy_kernel.adapters.souffle.package import ExportOptions, export_package
-from factpy_kernel.audit.static_ui import render_audit_static_site
-from factpy_kernel.core.evidence.write_protocol import set_field
-from factpy_kernel.core.protocol.idref_v1 import encode_idref_v1
-from factpy_kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule_with_trace
-from factpy_kernel.core.store import Store
-from factpy_kernel.ecss import (
+from kernel.adapters.souffle.package import ExportOptions, export_package
+from service.static_ui import render_audit_static_site
+from kernel.core.evidence.write_protocol import set_field
+from kernel.core.protocol.idref_v1 import encode_idref_v1
+from kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule_with_trace
+from kernel.core.store import Store
+from kernel.ecss import (
     ECSS_COLLISION_PROBABILITY_PPM_PRED_ID,
     ECSS_COLLISION_PROBABILITY_THRESHOLD_PPM_PRED_ID,
     ECSS_DISPOSAL_SUCCESS_PROBABILITY_PPM_PRED_ID,
@@ -30,7 +30,7 @@ from factpy_kernel.ecss import (
     extend_schema_ir_with_ecss_temporal_predicates,
     extend_schema_ir_with_ecss_uncertainty_predicates,
 )
-from factpy_kernel.sdk import Entity, Identity, compile_schema_from_classes
+from kernel.sdk import Entity, Identity, compile_schema_from_classes
 
 
 class Assessment(Entity):

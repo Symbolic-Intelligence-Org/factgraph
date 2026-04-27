@@ -52,7 +52,7 @@
 
 ## 当前系统边界
 
-- 当前实现真相以 `src/factpy_kernel/*/docs/` 为准。
+- 当前实现真相以 `src/<package>/**/docs/` 为准(`<package>` ∈ {kernel, agent, service, domains})。
 - `memory/` 承载 operational memory，不承担当前实现真相。
 - `docs/blueprints/active/` 只放正在推进的任务蓝图。
 - `docs/blueprints/archive/` 放按新流程归档的蓝图。

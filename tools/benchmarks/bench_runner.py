@@ -18,9 +18,9 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from factpy_kernel.adapters.problog.problog_engine import ProbLogEngineError, run_problog
-from factpy_kernel.adapters.souffle.runner import find_souffle_binary
-from factpy_kernel.core.annotation import (
+from kernel.adapters.problog.problog_engine import ProbLogEngineError, run_problog
+from kernel.adapters.souffle.runner import find_souffle_binary
+from kernel.core.annotation import (
     build_direct_evidence_candidates_proto,
     build_max_evidence_provenance,
     build_min_max_provenance_entries,

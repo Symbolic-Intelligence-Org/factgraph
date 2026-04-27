@@ -2,7 +2,7 @@
 """Re-DocRED subset harness v1 — entity identification evaluation.
 
 SCOPE LIMITATION: This is NOT relation extraction evaluation.
-The current factpy_kernel extract_document() extracts entity attributes
+The current agent.extraction extract_document() extracts entity attributes
 (name, description), not entity-to-entity relation triples.
 Results measure entity discovery / grounding quality only and CANNOT be
 compared to Re-DocRED relation extraction SOTA.
@@ -34,9 +34,9 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 
-from factpy_kernel.sdk import Entity, Field, Identity, compile_schema_from_classes
-from factpy_kernel.agent.extraction import extract_document, ExtractionDocumentError
-from factpy_kernel.agent.extraction.models import ExtractionConfig
+from kernel.sdk import Entity, Field, Identity, compile_schema_from_classes
+from agent.extraction import extract_document, ExtractionDocumentError
+from agent.extraction.models import ExtractionConfig
 
 # ── Paths ──
 DATASET_DIR = _REPO_ROOT / "tools" / "datasets" / "re_docred"

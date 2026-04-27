@@ -34,29 +34,29 @@
 
 以下模块目录中的 `docs/` 才是对应实现的当前真相：
 
-- [src/factpy_kernel/core/docs/01_architecture.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/core/docs/01_architecture.md)
-- [src/factpy_kernel/application/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/application/docs/README.md)
-- [src/factpy_kernel/service/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/service/docs/README.md)
-- [src/factpy_kernel/sdk/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/sdk/docs/README.md)
-- [src/factpy_kernel/authoring/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/authoring/docs/README.md)
-- [src/factpy_kernel/adapters/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/adapters/docs/README.md)
-- [src/factpy_kernel/audit/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/audit/docs/README.md)
+- [src/kernel/core/docs/01_architecture.md](/Users/zhenzhili/hnsm-backend/src/kernel/core/docs/01_architecture.md)
+- [src/kernel/application/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/application/docs/README.md)
+- [src/service/docs/README.md](/Users/zhenzhili/hnsm-backend/src/service/docs/README.md)
+- [src/kernel/sdk/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/sdk/docs/README.md)
+- [src/kernel/authoring/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/authoring/docs/README.md)
+- [src/kernel/adapters/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/adapters/docs/README.md)
+- [src/kernel/audit/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/audit/docs/README.md)
   - audit package 查询/静态展示，以及 `EvidenceGraph` 统一 explainability DTO 的当前实现文档。
-- [src/factpy_kernel/agent/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/docs/README.md)
+- [src/agent/docs/README.md](/Users/zhenzhili/hnsm-backend/src/agent/docs/README.md)
   - agent 控制面、draft/checkpoint、candidate payload cache、read-first review loop、Layer 3A 结构化最小写入、W2a 精确撤回、Layer 4A/4B 规则 authoring + 保守引擎路由，以及 Layer 4C1-4C3 文档提取/去重链路的当前实现文档。
-- [src/factpy_kernel/agent/documents/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/documents/docs/README.md)
+- [src/agent/documents/docs/README.md](/Users/zhenzhili/hnsm-backend/src/agent/documents/docs/README.md)
   - agent Layer 4C1/4C2 document surface：deterministic staging、segment provenance、bundle review/approval carrier，以及 merged provenance carrier 的当前实现文档。
-- [src/factpy_kernel/agent/extraction/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/extraction/docs/README.md)
+- [src/agent/extraction/docs/README.md](/Users/zhenzhili/hnsm-backend/src/agent/extraction/docs/README.md)
   - agent Layer 4C3 extraction surface：single-segment / batch LLM extraction、schema-constrained response model、deterministic validation、batch metrics，以及 single-document entity resolution 的当前实现文档。
-- [src/factpy_kernel/agent/extraction/docs/USAGE.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/extraction/docs/USAGE.md)
+- [src/agent/extraction/docs/USAGE.md](/Users/zhenzhili/hnsm-backend/src/agent/extraction/docs/USAGE.md)
   - `extract_document()` Python 产品 API 使用手册：最小示例、参数语义、返回值结构、常见失败诊断、已知限制与模型推荐。
-- [src/factpy_kernel/service/docs/05_extraction.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/service/docs/05_extraction.md)
+- [src/agent/service/docs/05_extraction.md](/Users/zhenzhili/hnsm-backend/src/agent/service/docs/05_extraction.md)
   - `POST /v1/extraction/documents` 的 DTO 契约：请求 / 200 / 422 / 500 envelope 与 curl 示例。
-- [src/factpy_kernel/service/docs/06_frontend_integration.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/service/docs/06_frontend_integration.md)
+- [src/service/docs/06_frontend_integration.md](/Users/zhenzhili/hnsm-backend/src/service/docs/06_frontend_integration.md)
   - 前端/BFF 集成指南；envelope 解包、典型调用链路、HTTP 状态码速查表。
-- [docs/api/openapi.yaml](/Users/zhenzhili/hnsm-backend/docs/api/openapi.yaml)
-  - HTTP API 机读契约（OpenAPI 3.0，48 个 operation 全覆盖）；漂移守卫 `scripts/export_openapi.py`。
-- [src/factpy_kernel/agent/observability/docs/README.md](/Users/zhenzhili/hnsm-backend/src/factpy_kernel/agent/observability/docs/README.md)
+- `docs/api/openapi.yaml` — **归属待定**(deferred to OS-prep)
+  - namespace split 后 service 拆出 kernel,extraction 路由迁至 agent.service,原 yaml 不再与单一 live FastAPI spec 一致;归属决定(kernel-only / agent-only / composed)与重新生成方式见 OS-prep blueprint。漂移守卫 `scripts/export_openapi.py` 同此降级。
+- [src/agent/observability/docs/README.md](/Users/zhenzhili/hnsm-backend/src/agent/observability/docs/README.md)
   - agent extraction 三层的 Langfuse 最小 observability：tracer 抽象、NoOp fallback、可选 Langfuse backend 与稳定字段边界。
 
 ## 工作流摘要
