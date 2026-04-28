@@ -193,4 +193,6 @@ PYTHONPATH=src python -m unittest discover -s tools/benchmarks/tests -p "test_*.
 
 ## 许可与安全
 
+本项目以 Apache License 2.0 发布,见 [LICENSE](LICENSE)。
+
 Secret 处理、API key 轮换见 [docs/SECURITY.md](docs/SECURITY.md)。

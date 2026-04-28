@@ -15,6 +15,12 @@
   - 项目的稳定设计哲学、系统边界和长期方向。
 - [SECURITY.md](/Users/zhenzhili/hnsm-backend/docs/SECURITY.md)
   - 本地 secret handling、kernel API key 认证约定与密钥轮换 checklist。
+- [../LICENSE](/Users/zhenzhili/hnsm-backend/LICENSE)
+  - 项目代码的 Apache License 2.0 文本。
+- [../CONTRIBUTING.md](/Users/zhenzhili/hnsm-backend/CONTRIBUTING.md)
+  - 贡献者工作流、开发环境、测试基线、质量检查与安全入口。
+- [../CODE_OF_CONDUCT.md](/Users/zhenzhili/hnsm-backend/CODE_OF_CONDUCT.md)
+  - 仓库协作行为准则。
 - [blueprints/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/README.md)
   - 任务蓝图工作流、状态机、模板与标准归档 / reconstructed 归档规则。
 - [module_docs_convention.md](/Users/zhenzhili/hnsm-backend/docs/module_docs_convention.md)
