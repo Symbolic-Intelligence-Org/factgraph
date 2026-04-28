@@ -80,6 +80,7 @@ tools/
 **优先级 1:OS-prep release close-out**
 
 - v0.1 RC verification:已完成,verdict = `conditional pass`(`bf652a1`,2026-04-28)。dist artifact 已清除,release-day 时重新 build。
+- release-surface cleanup:新建 draft blueprint;当前结论是 wheel-RC ready 不等于 repo/source publish ready。公开源码面必须先 scope projection mechanism / allowlist / denylist / sdist policy,不能把 private monorepo 原样公开。
 - #4 package name:默认锁 `factpy-kernel`;2026-04-28 exact-name check 当前可用,但 publish time 仍需重跑并通过首次 upload / trusted publishing 完成 reservation
 - #8 CI gate follow-up:`src/kernel` Ruff 已 blocking;service/tools Ruff(62 errors)与 mypy(`src/kernel`:385 errors / 73 files,tests 占 280)仍需逐步清 baseline 后升 blocking
 - release validation:按 README 的 kernel-only install path 和 `test_wheel_kernel_only_packaging.py` 做 wheel inspection
