@@ -16,6 +16,7 @@
 | 2026-04-28 | decision phase | Pass 2:A+E+F+G+H+I+J owner/compat scoped | 按用户指示执行 A,继续逐项 scope §5.2。实测确认:`SDKStore.export_package/run_package` 只是 adapter wrapper,service/runtime 直接调 adapter;`_SDKViewsManager` 是 SDKStore-local in-memory named-view manager;`SDKRegistry` 是 authoring-adjacent SDK facade,无现成 `RegistryProtocol`;service/agent production SDK import 仅 extraction 的 `compile_schema_from_classes` authoring helper。Blueprint 新增 §5.2.2,把 A/E/F/G/H/I/J 标成 scoped,并补 §7/§8 acceptance/plan。无生产代码改动。 |
 | 2026-04-28 | implementation branch | Shape audit pass 1:B+C+D file shape scoped | 在 `runtime-authority-cleanup` branch 上只读核验 `sdk/query_runtime.py` / `sdk/ingest.py` / `sdk/store.py` / `sdk/batch.py` / `sdk/facade.py` 与 `application/protocol/*`。Blueprint 新增 §5.2.3,明确 commit 1 是 application contract pure add:`protocol/query.py` + `query_runtime.py`,`protocol/ingest.py` + `ingest_runtime.py`,`protocol/derivation.py` + `derivation_runtime.py`,以及 narrow exports。结论:复用既有 entity read/write/schema/common DTO;SDK adapter 切换留 commit 2;不得把 SDK `QueryPlan` / `ReturnContractEntry` / `Field` descriptor / `Derivation` DSL object 带入 application protocol。 |
 | 2026-04-28 | implementation phase | Commit 3:service/agent boundary guard + audit close | service/agent SDK imports 实测:13 Python import lines / 9 Python files excluding markdown;plus 1 markdown example。production 仅 1 行 authoring helper(`src/agent/extraction/api.py:compile_schema_from_classes`),其余 12 行在 tests。新增 `test_sdk_consumer_boundary.py` 守护 production allowlist;§5.2 I 升为 Scoped+verified。out-of-scope consumers(`domains/ecss/sdk_helpers.py`,`kernel/adapters/pyreason/*`)记录 Decision 13。 |
+| 2026-04-28 | implemented | Commit 4:docs alignment + status implemented | application docs 升级为 canonical Python runtime authority;SDK docs 改为 product surface / adapter framing;`docs/architecture_principles.md` 加 Layer authority;`memory/current.md` 更新 1093-test baseline。Blueprint status `scoped` -> `implemented`;§10 Outcome / Deviations 填写完成。OS-prep #2/#7/#11 wait-for-cleanup-implementation gate 已解,但 OS-prep blueprint 不在本 commit 修改。 |
 
 ## Decision Notes
 
@@ -179,6 +180,34 @@
 - `src/domains/ecss/sdk_helpers.py` production-imports `SDKStore` / `SDKStoreError` and uses SDKStore as a domain ergonomic facade while performing writes through core write protocol. This is outside §5.2 I, which is limited to service / agent consumers, and remains consistent with the audit-delivery contract boundary.
 - `src/kernel/adapters/pyreason/runner.py` and `src/kernel/adapters/pyreason/rule_ext.py` production-import SDK DSL types(`Rule`, `LogicVar`, `HeadCall`, `PredAtom`, `Pred`). These DSL classes are currently sole-owned by SDK; the adapter coupling is a primitive-contract issue, not a service / agent runtime authority issue.
 - Disposition:do not fix in this cleanup blueprint. Record as a future K(primitive contract traps) hook, likely solved by moving lower-level DSL primitives to core/authoring or by introducing a runtime protocol that adapters can consume without importing SDK product-surface modules.
+
+### Decision 14 — implementation complete and close-out facts
+
+- Commit chain implemented:
+  - commit 1:application protocol / executor surface pure add(query / ingest / derivation)
+  - commit 2a:application parity fixes(no SDK changes)
+  - commit 2b:derivation SDK adapter switch + batch delegate test rewrite
+  - commit 2c:query SDK adapter switch + SDK query policy tests
+  - commit 2d:ingest SDK adapter switch with identity-cache fallback
+  - commit 3:service/agent SDK production import boundary guard
+  - commit 4:docs alignment + blueprint implemented status
+- Outcome snapshot:
+  - application:15 files / 3385 LOC / 29 public symbols
+  - `sdk/query_runtime.py`:357 -> 297 lines after adapter rewrite and dead-code removal
+  - `sdk/ingest.py`:598 -> 797 lines due application delegate + identity-cache fallback + legacy fallback
+  - validation baseline:1093 tests across 5 segments
+- Deviations intentionally accepted:
+  - SDK god file physical split deferred;runtime delegation completed,but `sdk/store.py` / `sdk/batch.py` / `sdk/facade.py` remain large outward facade files
+  - full exception hierarchy rewrite deferred;application uses DTO/error shape for runtime paths and SDK product-domain errors remain SDK-owned
+  - CI import-boundary gate deferred to OS-prep #8;unittest/pre-flight guard exists in `test_sdk_consumer_boundary.py`
+- K primitive-contract traps remain deferred:
+  - Query id/version asymmetry
+  - where validation timing differences
+  - Derivation head/target/head_vars normalization
+  - PyReason adapter coupling to SDK DSL primitives
+- OS-prep unblock signal:
+  - Runtime-authority implementation no longer blocks OS-prep #2 PyPI policy, #7 OpenAPI yaml or #11 README OS framing.
+  - OS-prep files are intentionally not modified in this commit;unblock should be recorded by a separate OS-prep patch.
 
 ### 执行约束(继承自 namespace-split blueprint)
 

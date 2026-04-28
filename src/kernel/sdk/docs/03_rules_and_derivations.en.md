@@ -2,6 +2,8 @@
 
 Scope: `src/kernel/sdk/dsl` + `SDKStore.run/evaluate/accept`
 
+Runtime authority note: SDK retains Rule / Query / Derivation DSLs, authoring validation, lowering, and outward compatibility; Query runtime and compiled Derivation evaluate/accept orchestration now delegate to `kernel.application`.
+
 ## 1. `vars(...)`
 
 Supported:
@@ -181,6 +183,7 @@ cands = sdk.evaluate(drv, mode="native")
 ```
 
 - `mode`: `native` (default) / `souffle` / `problog` / `pyreason`.
+- SDK lowers `Derivation` DSL objects into compiled plans, then delegates orchestration to application `evaluate_derivation_plans(...)`; SDK remains responsible for mode alias rejection, registry sugar, and outward compatibility.
 - Legacy names `python` / `engine` fail with explicit rename hints.
 - `souffle` / `problog` / `pyreason` require registered adapters (for example `import kernel.adapters.souffle`, `import kernel.adapters.problog`, `import kernel.adapters.pyreason`).
 - `sdk.evaluate(..., view=...)` is not supported; inference always uses the full active assertion set.

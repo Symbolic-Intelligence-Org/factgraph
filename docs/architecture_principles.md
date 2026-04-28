@@ -23,9 +23,18 @@
 
 - `core` 负责运行时语义内核。
 - `authoring` 负责编译、预检、registry 工作流。
-- `application` 负责 core 之上的中性运行层。
+- `application` 负责 core 之上的 canonical Python runtime authority。
 - `service` 负责前端/BFF 形态的 HTTP 交付面。
 - `sdk` 负责 Python authoring 与 facade 体验。
+
+### 2.1 Layer authority
+
+- 新 runtime 能力默认进入 `core` 或 `application`,不直接塞回 SDK god files。
+- `application` 拥有 runtime-normalized DTO 与 executor surface,例如 read/write/query/ingest/compiled derivation evaluate/accept。
+- `sdk` 拥有 product surface:Python schema/DSL authoring、`SDKStore` facade、snapshot/editor/batch outward objects、compatibility aliases 与用户可见错误。
+- SDK 可以调用 application,但 application 不 import SDK。
+- service / agent production runtime code 不应新增 SDK runtime imports；确有 authoring/ergonomic 例外时必须显式登记并说明理由。
+- 若需要把 SDK DSL primitive 下沉给 adapter 或 domain 使用,应通过单独 primitive-contract blueprint 处理,不要在运行时迁移中偷渡。
 
 ### 3. 当前实现真相必须贴近模块
 

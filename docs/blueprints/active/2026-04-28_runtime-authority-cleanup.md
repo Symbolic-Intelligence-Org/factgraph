@@ -1,6 +1,6 @@
 # Task Blueprint: Runtime Authority Cleanup (sdk ↔ application)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-04-28
 - Last Updated: 2026-04-28
 - Related Modules:
@@ -274,29 +274,29 @@ namespace split(2026-04-27 commit `81c6f77`)把 4 个 packages 边界划清,但 
 
 ## 7. Acceptance
 
-Decision phase pass 1(B+C+D)与 pass 2(A/E/F/G/H/I/J)已具体化以下 acceptance。K 仍作为 primitive contract design constraint,不在本 blueprint 实现 primitive semantics cleanup。
+Decision phase pass 1(B+C+D)与 pass 2(A/E/F/G/H/I/J)已收口。K 仍作为 primitive contract design constraint,不在本 blueprint 实现 primitive semantics cleanup。
 
-- [ ] application API surface 设计文档落地(canonical runtime contract),明确 query / ingest / derivation runtime 不返回 SDK facade types
-- [ ] Query runtime contract 落地:application 新增 SDK-independent query request/result DTO + executor;SDK `Query` adapter 保留现有 outward `dict` / `EntitySnapshot` / `instance` 行为
-- [ ] Ingest runtime contract 落地:application 新增 normalized ingest request/result DTO + executor;SDK `ingest(...)` 不再通过 `sdk.set` / `sdk.add` / `sdk.retract` 闭环写入
-- [ ] Derivation runtime contract 落地:application 接管 compiled derivation evaluate / accept orchestration;SDK 只保留 DSL lowering、keyword sugar 与 outward compatibility
-- [ ] Derivation contract 至少覆盖 3 类 fixture:single-head via `target=`,multi-head via `head=[HeadCall, HeadCall]`,以及 `_heads` 私有 normalization 的 outward 行为;multi-head 当前缺 regression coverage,需新增 fixture
-- [ ] Implementation shape follows §5.2.3:commit 1 只新增 application protocol / executor surface + narrow exports,不切 SDK god files
-- [ ] sdk/batch.py / sdk/store.py / sdk/facade.py 拆分完成,god file 行数显著下降(目标:无单文件 > 800 行)
-- [ ] application 接收 runtime impl(具体模块清单视 scoping 决议)
-- [ ] sdk 改成 thin facade,公开 API 形态稳定(为 OS v0.1 contract 准备)
-- [ ] error ownership 三档落地:SDK/product-domain errors 留 SDK;runtime-visible errors 有 application owner 或 DTO shape;SDK aliases/re-exports 不制造第二 authority
-- [ ] `SDKRegistry` 留 SDK;application runtime contracts 不接 `SDKRegistry` object,只接 compiled/runtime-normalized inputs
-- [ ] `SDKStore.export_package(...)` / `SDKStore.run_package(...)` 若保留,文档标明其 compatibility/advanced status;canonical owner 仍是 adapter/service delivery surface
-- [ ] `_SDKViewsManager` 留 SDK;application 只接 `ViewSpec` / normalized view value,不拥有 named-view registry
-- [x] service / agent production SDK imports 实测仅 1 行(`src/agent/extraction/api.py:compile_schema_from_classes`,authoring helper);由 `src/kernel/tests/test_sdk_consumer_boundary.py` allowlist 守护,不得新增 SDK runtime import
-- [ ] delegation tests 重新评估并 rewrite(语义从 hidden delegation → explicit facade pattern);`test_sdk_batch_application_delegate.py` 不再断言 `_application_*` 私有字段,改测 outward 行为
-- [ ] SDK top-level `__all__` 只暴露 product surface / compatibility aliases,不得 re-export application internals
-- [ ] kernel docs 同步:application docs 升级为 canonical runtime;sdk docs 重写为 ergonomic surface
-- [ ] import-boundary validation 落地:application 不 import `kernel.sdk.*`,并有 CI / pre-flight grep 守住 Trap 6 扫描项
-- [ ] SDK public import smoke 通过:`python -c "from kernel.sdk import *"`
-- [ ] 1023 tests 全绿,且不降低 SDK / application path coverage
-- [ ] OS-prep #2 PyPI policy / #11 README OS 形态可在新 runtime authority framing 下继续收口
+- [x] application API surface 设计文档落地(canonical runtime contract),明确 query / ingest / derivation runtime 不返回 SDK facade types。
+- [x] Query runtime contract 落地:application 新增 SDK-independent query request/result DTO + executor;SDK `Query` adapter 保留现有 outward `dict` / `EntitySnapshot` / `instance` 行为(commit 2c)。
+- [x] Ingest runtime contract 落地:application 新增 normalized ingest request/result DTO + executor;SDK `ingest(...)` 对 cache-resolvable set/add/retract 委托 application,cache miss 保守 fallback(commit 2d)。
+- [x] Derivation runtime contract 落地:application 接管 compiled derivation evaluate / accept orchestration;SDK 保留 DSL lowering、keyword sugar 与 outward compatibility(commit 2b)。
+- [x] Derivation contract 覆盖 single-head / multi-head shared run_id / `_heads` normalization outward 行为;新增 application parity tests 与 SDK outward tests(commit 2a/2b)。
+- [x] Implementation shape follows §5.2.3:commit 1 只新增 application protocol / executor surface + narrow exports,不切 SDK god files。
+- [ ] sdk/batch.py / sdk/store.py / sdk/facade.py 物理拆分与行数下降未达成;本轮改为 runtime delegation 收口,见 §10 Deviations。
+- [x] application 接收 runtime impl:query / ingest / compiled derivation evaluate/accept / existing read-write planner 均有 application executor。
+- [x] SDK 改成 product facade / adapter,公开 API 形态稳定;`from kernel.sdk import *` smoke 通过。
+- [ ] error ownership 完整迁移未达成;application runtime 使用 DTO/error shape,SDK product-domain errors 保留,见 §10 Deviations。
+- [x] `SDKRegistry` 留 SDK;application runtime contracts 不接 `SDKRegistry` object,只接 compiled/runtime-normalized inputs。
+- [x] `SDKStore.export_package(...)` / `SDKStore.run_package(...)` canonical owner 保持 adapter/service delivery surface;SDK wrappers 仍是 compatibility convenience,docs 中不声明为 application runtime authority。
+- [x] `_SDKViewsManager` 留 SDK;application 只接 `ViewSpec` / normalized view value,不拥有 named-view registry。
+- [x] service / agent production SDK imports 实测仅 1 行(`src/agent/extraction/api.py:compile_schema_from_classes`,authoring helper);由 `src/kernel/tests/test_sdk_consumer_boundary.py` allowlist 守护。
+- [x] delegation tests 重新评估并 rewrite:`test_sdk_batch_application_delegate.py` 不再断言 `_application_*` 私有字段,改测 outward 行为(commit 2b)。
+- [x] SDK top-level `__all__` 只暴露 product surface / compatibility aliases,未 re-export application internals。
+- [x] kernel docs 同步:application docs 升级为 canonical runtime;sdk docs 重写为 product surface / adapter。
+- [ ] import-boundary validation 部分落地:unittest guard 已有;CI import-boundary gate 留 OS-prep #8,见 §10 Deviations。
+- [x] SDK public import smoke 通过:`python -c "from kernel.sdk import *; from kernel.application import *"`。
+- [x] tests 全绿:1093 tests across 5 segments。
+- [x] OS-prep #2 PyPI policy / #7 OpenAPI yaml / #11 README OS 形态可在 new runtime authority framing 下继续收口;不在本 blueprint 修改 OS-prep 文件。
 
 ## 8. Implementation Plan
 
@@ -334,9 +334,58 @@ Decision phase pass 1(B+C+D)明确首批 docs 更新目标;consumer migration(I)
 
 ## 10. Outcome / Deviations
 
-(完成后填写)
+Status moved to `implemented` on 2026-04-28. Blueprint remains under `active/`; archive is deferred until the OS v0.1 path finishes using this cleanup as input.
 
-- 最终落地结果:
-- 与 blueprint 不同的地方:
-- 为什么会有这些调整:
-- 归档说明:
+### 最终落地结果
+
+- `kernel.application` is now the canonical Python runtime authority for:
+  - entity read/hydration
+  - entity write planning/apply
+  - SDK-independent query runtime
+  - normalized ingest runtime
+  - compiled derivation evaluate/accept orchestration
+- `kernel.sdk` remains the Python product surface:
+  - schema / DSL authoring
+  - `SDKStore` facade
+  - snapshot/editor/batch outward objects
+  - user-facing compatibility errors and result objects
+- SDK adapters now delegate runtime paths to application:
+  - commit 2b:derivation evaluate adapter
+  - commit 2c:query adapter
+  - commit 2d:ingest adapter with identity-cache fallback
+  - existing read/write delegates retained and documented
+- service/agent production SDK import surface is guarded:
+  - current allowlist contains only `src/agent/extraction/api.py:compile_schema_from_classes`
+  - `src/kernel/tests/test_sdk_consumer_boundary.py` prevents new production SDK runtime imports
+- Docs updated:
+  - application docs now describe canonical runtime authority
+  - SDK docs now describe product surface / adapter role
+  - `docs/architecture_principles.md` records layer authority as durable guidance
+  - `memory/current.md` updated for session continuity
+
+Completion snapshot:
+
+- application:15 files / 3385 LOC / 29 public symbols
+- SDK runtime file changes:
+  - `sdk/query_runtime.py`:357 -> 297 lines after adapter rewrite and dead-code removal
+  - `sdk/ingest.py`:598 -> 797 lines after application delegate + cache/legacy fallback
+  - `sdk/store.py` / `sdk/batch.py` / `sdk/facade.py` remain large outward facade files
+- validation baseline:1093 tests across 5 segments
+
+### 与 blueprint 不同的地方
+
+- **God file physical split deferred**:the original acceptance wanted `sdk/store.py` / `sdk/batch.py` / `sdk/facade.py` line-count reduction and no file over 800 LOC. Implementation completed runtime delegation without physically splitting these outward facade files. Large-file cleanup remains future internal-quality work, not runtime-authority scope.
+- **Error hierarchy migration partial**:application runtime paths use DTO/error shapes for query / ingest / derivation; SDK product-domain errors(`SDKError` / `SDKSchemaError` / `SDKStoreError` / `SDKRegistryError` / `SDKDSLError`) remain SDK-owned. Full exception hierarchy rewrite is deferred.
+- **Import-boundary enforcement partial**:pre-flight/test guard landed in `test_sdk_consumer_boundary.py`; CI-level import-boundary gate is deferred to OS-prep #8 quality gates.
+- **K primitive-contract traps deferred**:Query id/version asymmetry,where validation timing,Derivation head/target/head_vars normalization,PyReason adapter SDK DSL coupling all remain future primitive-contract work.
+
+### 为什么会有这些调整
+
+- Code survey showed the high-value cleanup was completing partial migration, not mechanically shrinking SDK files.
+- SDK facade objects are still the correct outward product surface, so line-count refactors would have added churn without changing runtime authority.
+- Full exception hierarchy and primitive DSL ownership are broader public-contract changes; forcing them into this cleanup would expand scope beyond OS-prep unblock needs.
+
+### 后续解锁
+
+- OS-prep #2 PyPI policy, #7 OpenAPI yaml and #11 README OS framing are no longer blocked on runtime-authority implementation.
+- Runtime-authority cleanup does not modify OS-prep blueprint files; OS-prep unblock should be recorded in a separate OS-prep patch.

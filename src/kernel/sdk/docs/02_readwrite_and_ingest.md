@@ -2,6 +2,8 @@
 
 范围：`store.py`、`facade.py`、`batch.py`、`ingest.py`
 
+Runtime authority note:SDK 保留读写 facade、descriptor parsing、diagnostics 与 outward result shape；可表达为 application protocol 的 read/write/ingest 路径委托给 `kernel.application` executor。
+
 ## 1. 写入口选择
 
 | 场景 | 推荐 API | 说明 |
@@ -192,6 +194,7 @@ with sdk.edit(User, user_id="u1", locale="zh") as user:
 - SDK 先预检全量 item，诊断路径使用 `items[i].*`。
 - 任一 `severity="error"` => 整批不写（collect-and-stop）。
 - warning 不阻塞写入。
+- 预检通过后,cache-resolvable `set/add/retract` item 会委托 application `apply_ingest_request(...)`；target 或 entity_ref value 无法从 SDK identity cache 还原时保守回退 legacy 写入路径。
 
 ### 7.3 meta 语义
 
