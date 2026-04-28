@@ -4,6 +4,11 @@ Commit 1 scope: entity-slot return + scalar field return only.
 Aggregate / advanced row format are intentionally not implemented — unsupported
 return slots raise QueryRuntimeError("QUERY_UNSUPPORTED_SLOT") rather than
 silently degrading.
+
+Commit 2a parity:
+- Slot-level expected ``entity_type`` enables on_type_mismatch policy enforcement
+- on_missing / on_type_mismatch literals support {"error", "skip", "null"}
+- entity_view errors during hydrate are translated through the configured policies
 """
 from __future__ import annotations
 
@@ -13,7 +18,7 @@ from kernel.core.rules.ruleref_substrate import evaluate_native_where
 from kernel.core.store.runtime import Store
 from kernel.core.view.projector import project_view_facts
 
-from .entity_view import hydrate_entity
+from .entity_view import EntityViewError, hydrate_entity
 from .protocol import (
     EntitySnapshotDTO,
     ErrorDTO,
@@ -66,7 +71,8 @@ def execute_query(
     a runtime-normalized where_ir from authoring DSL.
 
     Return slots are resolved per row:
-    - kind="entity": var binding -> EntitySnapshotDTO via hydrate_entity
+    - kind="entity": var binding -> EntitySnapshotDTO via hydrate_entity, with optional
+      slot.entity_type type-mismatch enforcement
     - kind="scalar": var binding -> FieldValue (literal / EntityRef pass-through)
     - other kinds: raises QueryRuntimeError(code="QUERY_UNSUPPORTED_SLOT")
     """
@@ -110,7 +116,7 @@ def _build_row(
     skip_row = False
     for slot in return_contract.slots:
         try:
-            resolved, missing = _resolve_slot(
+            resolved, outcome = _resolve_slot(
                 slot,
                 binding,
                 store=store,
@@ -119,21 +125,37 @@ def _build_row(
             )
         except QueryRuntimeError as exc:
             return None, exc.to_error_dto()
-        if missing:
-            if request.on_missing == "error":
-                return None, ErrorDTO(
-                    code="QUERY_MISSING_BINDING",
-                    message=f"binding missing for var {slot.var!r} in slot {slot.alias!r}",
-                    path=("return_contract", "slots", slot.alias),
-                    details={"var": slot.var},
-                )
-            if request.on_missing == "skip":
-                skip_row = True
-                break
-            # include_null
-            row[slot.alias] = None
+
+        if outcome == "ok":
+            row[slot.alias] = resolved
             continue
-        row[slot.alias] = resolved
+
+        policy = request.on_type_mismatch if outcome == "type_mismatch" else request.on_missing
+        decision_path = ("return_contract", "slots", slot.alias)
+        if policy == "error":
+            error_code = (
+                "QUERY_TYPE_MISMATCH" if outcome == "type_mismatch" else "QUERY_MISSING_BINDING"
+            )
+            message = (
+                f"slot {slot.alias!r} type mismatch (expected entity_type={slot.entity_type!r})"
+                if outcome == "type_mismatch"
+                else f"slot {slot.alias!r} missing binding for var {slot.var!r}"
+            )
+            details: dict[str, Any] = {"var": slot.var}
+            if outcome == "type_mismatch":
+                details["expected_entity_type"] = slot.entity_type
+            return None, ErrorDTO(
+                code=error_code,
+                message=message,
+                path=decision_path,
+                details=details,
+            )
+        if policy == "skip":
+            skip_row = True
+            break
+        # policy == "null"
+        row[slot.alias] = None
+
     if skip_row:
         return None, None
     return row, None
@@ -146,7 +168,8 @@ def _resolve_slot(
     store: Store,
     index: SchemaIndex,
     request: QueryRuntimeRequest,
-) -> tuple[QueryRowValue, bool]:
+) -> tuple[QueryRowValue, str]:
+    """Return (resolved_value, outcome) where outcome ∈ {"ok", "missing", "type_mismatch"}."""
     if slot.kind == "entity":
         return _resolve_entity_slot(slot, binding, store=store, index=index)
     if slot.kind == "scalar":
@@ -165,30 +188,51 @@ def _resolve_entity_slot(
     *,
     store: Store,
     index: SchemaIndex,
-) -> tuple[EntitySnapshotDTO | None, bool]:
+) -> tuple[EntitySnapshotDTO | None, str]:
     e_ref_value = binding.get(slot.var)
     if e_ref_value is None:
-        return None, True
-    snapshot = hydrate_entity(
-        e_ref=str(e_ref_value),
-        store=store,
-        index=index,
-        include_assertions=False,
-        include_history=False,
-    )
+        return None, "missing"
+    if not isinstance(e_ref_value, str):
+        return None, "type_mismatch"
+    if slot.entity_type is not None:
+        ref_entity_type = _entity_type_from_ref(e_ref_value)
+        if ref_entity_type is None or ref_entity_type != slot.entity_type:
+            return None, "type_mismatch"
+    try:
+        snapshot = hydrate_entity(
+            e_ref=e_ref_value,
+            store=store,
+            index=index,
+            include_assertions=False,
+            include_history=False,
+        )
+    except EntityViewError:
+        return None, "missing"
     if snapshot is None:
-        return None, True
-    return snapshot, False
+        return None, "missing"
+    return snapshot, "ok"
 
 
 def _resolve_scalar_slot(
     slot: QueryReturnSlot,
     binding: dict[str, Any],
-) -> tuple[QueryRowValue, bool]:
+) -> tuple[QueryRowValue, str]:
     value = binding.get(slot.var)
     if value is None:
-        return None, True
-    return value, False
+        return None, "missing"
+    return value, "ok"
+
+
+def _entity_type_from_ref(value: str) -> str | None:
+    if not value.startswith("idref_v1:"):
+        return None
+    parts = value.split(":", 2)
+    if len(parts) != 3:
+        return None
+    _, entity_type, digest = parts
+    if not entity_type or not digest:
+        return None
+    return entity_type
 
 
 __all__ = [

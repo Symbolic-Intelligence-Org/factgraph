@@ -9,13 +9,20 @@ accept_many output without wrapping them in application-specific DTOs.
 - accept_derivation_candidate_sets passes through to
   kernel.core.derivation.accept.accept_many_candidate_sets.
 
-Body confidence handling, multi-head shared run_id propagation, and engine_ext
-construction are intentionally not wired here. SDK adapters (commit 2) are
-expected to provide engine-specific options via the existing core APIs while
-authoring lowering / payload normalization stays on the SDK side.
+Commit 2a parity:
+- ``CompiledDerivationPlan.head_spec`` (HeadSpecIR dict) is forwarded as the
+  ``head=`` payload to ``evaluate_store`` when set; in that case ``len(heads) == 1``
+  and ``heads[0]`` provides ``target_pred_id`` / ``head_var_names``.
+- ``CompiledDerivationPlan.engine_ext`` (``EngineExtBase``) is forwarded.
+- Multi-plan ``run_id`` is propagated by rebuilding each ``CandidateSet`` with the
+  shared ``run_id`` via ``dataclasses.replace``.
+- ``DerivationAcceptRequest`` exposes the legitimate ``AcceptOptions`` fields
+  (``approved_by``/``note``/``dry_run``/``identity_override``); ``idempotent_duplicate_ok``
+  remains an ``accept_many`` flag and is intentionally not part of ``AcceptOptions``.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from kernel.core.derivation.accept import (
@@ -77,6 +84,8 @@ def evaluate_derivation_plans(
         candidate_sets.extend(
             _evaluate_plan(plan, request=request, store=store, registry=registry)
         )
+    if request.run_id is not None and len(request.plans) > 1:
+        candidate_sets = _attach_run_id(candidate_sets, run_id=request.run_id)
     return candidate_sets
 
 
@@ -88,6 +97,27 @@ def _evaluate_plan(
     registry: Any | None,
 ) -> list[CandidateSet]:
     engine_options = dict(plan.engine_options) if plan.engine_options else None
+    if plan.head_spec is not None:
+        # Single-head call with the HeadSpecIR forwarded; heads tuple length 1 invariant
+        # is enforced at CompiledDerivationPlan __post_init__.
+        primary = plan.heads[0]
+        return list(
+            evaluate_store(
+                store,
+                derivation_id=plan.derivation_id,
+                version=plan.version,
+                target_pred_id=primary.target_pred_id,
+                head_vars=list(primary.head_var_names),
+                where=list(plan.body_ir),
+                mode=request.engine,
+                head=dict(plan.head_spec),
+                engine_evaluate=store.evaluate_engine,
+                registry=registry,
+                engine_ext=plan.engine_ext,
+                engine_options=engine_options,
+            )
+        )
+
     results: list[CandidateSet] = []
     for head in plan.heads:
         head_results = evaluate_store(
@@ -100,10 +130,15 @@ def _evaluate_plan(
             mode=request.engine,
             engine_evaluate=store.evaluate_engine,
             registry=registry,
+            engine_ext=plan.engine_ext,
             engine_options=engine_options,
         )
         results.extend(head_results)
     return results
+
+
+def _attach_run_id(candidates: list[CandidateSet], *, run_id: str) -> list[CandidateSet]:
+    return [replace(candidate, run_id=run_id) for candidate in candidates]
 
 
 def accept_derivation_candidate_set(
@@ -116,11 +151,21 @@ def accept_derivation_candidate_set(
 ) -> AcceptResult:
     """Accept a single CandidateSet against the store ledger.
 
-    Thin wrapper over kernel.core.derivation.accept.accept_candidate_set; SDK
-    adapters keep responsibility for resolved_candidate_refs, schema/policy digest
-    tokens, and schema_ir provisioning.
+    Thin wrapper over kernel.core.derivation.accept.accept_candidate_set. Only the
+    fields supported by core ``AcceptOptions`` are forwarded; ``idempotent_duplicate_ok``
+    is intentionally NOT part of ``AcceptOptions`` and applies only to the
+    ``accept_many`` flow.
     """
-    options = AcceptOptions(idempotent_duplicate_ok=accept_request.idempotent_duplicate_ok)
+    options = AcceptOptions(
+        approved_by=accept_request.approved_by,
+        note=accept_request.note,
+        dry_run=accept_request.dry_run,
+        identity_override=(
+            dict(accept_request.identity_override)
+            if accept_request.identity_override is not None
+            else None
+        ),
+    )
     return accept_candidate_set(
         store.ledger,
         candidate_set,

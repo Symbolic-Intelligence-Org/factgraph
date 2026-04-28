@@ -121,5 +121,187 @@ class QueryRuntimeErrorTests(unittest.TestCase):
         self.assertEqual(dto.details, {"var": "$p"})
 
 
+class QueryReturnSlotEntityTypeValidationTests(unittest.TestCase):
+    """Commit 2a Q1: slot-level expected entity_type."""
+
+    def test_entity_slot_accepts_entity_type(self) -> None:
+        slot = QueryReturnSlot(alias="p", kind="entity", var="$p", entity_type="Person")
+        self.assertEqual(slot.entity_type, "Person")
+
+    def test_entity_slot_without_entity_type_is_allowed(self) -> None:
+        slot = QueryReturnSlot(alias="p", kind="entity", var="$p")
+        self.assertIsNone(slot.entity_type)
+
+    def test_scalar_slot_must_not_set_entity_type(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            QueryReturnSlot(
+                alias="n",
+                kind="scalar",
+                var="$n",
+                field_path=FieldPath(entity_type="Person", field_name="nickname"),
+                entity_type="Person",
+            )
+
+    def test_entity_type_empty_string_rejected(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            QueryReturnSlot(alias="p", kind="entity", var="$p", entity_type="")
+
+
+class QueryRequestPolicyLiteralTests(unittest.TestCase):
+    """Commit 2a Q2/Q3: on_missing/on_type_mismatch literal extension."""
+
+    def _basic_contract(self) -> QueryReturnContract:
+        return QueryReturnContract(slots=(QueryReturnSlot(alias="p", kind="entity", var="$p"),))
+
+    def test_on_missing_supports_null(self) -> None:
+        request = QueryRuntimeRequest(
+            entity_type="Person",
+            where_ir=[],
+            return_contract=self._basic_contract(),
+            on_missing="null",
+        )
+        self.assertEqual(request.on_missing, "null")
+
+    def test_on_type_mismatch_supports_null(self) -> None:
+        request = QueryRuntimeRequest(
+            entity_type="Person",
+            where_ir=[],
+            return_contract=self._basic_contract(),
+            on_type_mismatch="null",
+        )
+        self.assertEqual(request.on_type_mismatch, "null")
+
+    def test_on_missing_rejects_unknown_literal(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            QueryRuntimeRequest(
+                entity_type="Person",
+                where_ir=[],
+                return_contract=self._basic_contract(),
+                on_missing="abort",  # type: ignore[arg-type]
+            )
+
+    def test_on_type_mismatch_rejects_include_null_legacy(self) -> None:
+        # commit 2a renamed include_null -> null; verify legacy literal is rejected
+        with self.assertRaises(ProtocolShapeError):
+            QueryRuntimeRequest(
+                entity_type="Person",
+                where_ir=[],
+                return_contract=self._basic_contract(),
+                on_missing="include_null",  # type: ignore[arg-type]
+            )
+
+
+class QueryTypeMismatchPolicyTests(unittest.TestCase):
+    """Commit 2a Q2/Q3: on_type_mismatch policy enforcement against entity_type."""
+
+    def _seed_two_persons(self) -> tuple[Store, object, str, str]:
+        from kernel.application import (
+            entity_info,
+            field_predicate,
+            resolve_selector,
+        )
+        from kernel.application.protocol import EntitySelector
+        from kernel.core.evidence.write_protocol import set_field
+
+        schema_ir = compile_schema_from_classes([Person])
+        store = Store(schema_ir)
+        index = build_schema_index(schema_ir)
+        info = entity_info(index, "Person")
+
+        ref_a = resolve_selector(EntitySelector(entity_type="Person", identity={"name": "alice"}), index=index)
+        ref_b = resolve_selector(EntitySelector(entity_type="Person", identity={"name": "bob"}), index=index)
+        for ref in (ref_a, ref_b):
+            encoded = ref.encoded_ref or ""
+            set_field(store.ledger, info.exists_predicate_id, encoded, [])
+            set_field(
+                store.ledger,
+                info.identity_predicates["name"].pred_id,
+                encoded,
+                [("string", ref.identity["name"])],
+            )
+            set_field(
+                store.ledger,
+                field_predicate(index, "Person", "nickname").pred_id,
+                encoded,
+                [("string", ref.identity["name"] + "-nick")],
+            )
+        return store, index, ref_a.encoded_ref or "", ref_b.encoded_ref or ""
+
+    def _build_request(
+        self,
+        *,
+        entity_type: str | None,
+        on_type_mismatch: str = "error",
+        info_pred: str,
+    ) -> QueryRuntimeRequest:
+        slot = QueryReturnSlot(alias="p", kind="entity", var="$p", entity_type=entity_type)
+        contract = QueryReturnContract(slots=(slot,))
+        return QueryRuntimeRequest(
+            entity_type="Person",
+            where_ir=[("pred", info_pred, ["$p"])],
+            return_contract=contract,
+            on_type_mismatch=on_type_mismatch,  # type: ignore[arg-type]
+        )
+
+    def test_matching_entity_type_returns_rows(self) -> None:
+        from kernel.application import entity_info, execute_query
+
+        store, index, _, _ = self._seed_two_persons()
+        info = entity_info(index, "Person")
+        request = self._build_request(
+            entity_type="Person",
+            on_type_mismatch="error",
+            info_pred=info.exists_predicate_id,
+        )
+        response = execute_query(request, store=store, index=index)
+        self.assertEqual(response.errors, ())
+        self.assertGreater(len(response.rows), 0)
+
+    def test_mismatched_entity_type_with_error_policy_yields_error_dto(self) -> None:
+        from kernel.application import entity_info, execute_query
+
+        store, index, _, _ = self._seed_two_persons()
+        info = entity_info(index, "Person")
+        request = self._build_request(
+            entity_type="Wombat",
+            on_type_mismatch="error",
+            info_pred=info.exists_predicate_id,
+        )
+        response = execute_query(request, store=store, index=index)
+        self.assertEqual(response.rows, ())
+        self.assertEqual(len(response.errors), 1)
+        self.assertEqual(response.errors[0].code, "QUERY_TYPE_MISMATCH")
+
+    def test_mismatched_entity_type_with_skip_policy_drops_rows(self) -> None:
+        from kernel.application import entity_info, execute_query
+
+        store, index, _, _ = self._seed_two_persons()
+        info = entity_info(index, "Person")
+        request = self._build_request(
+            entity_type="Wombat",
+            on_type_mismatch="skip",
+            info_pred=info.exists_predicate_id,
+        )
+        response = execute_query(request, store=store, index=index)
+        self.assertEqual(response.errors, ())
+        self.assertEqual(response.rows, ())
+
+    def test_mismatched_entity_type_with_null_policy_yields_null_alias(self) -> None:
+        from kernel.application import entity_info, execute_query
+
+        store, index, _, _ = self._seed_two_persons()
+        info = entity_info(index, "Person")
+        request = self._build_request(
+            entity_type="Wombat",
+            on_type_mismatch="null",
+            info_pred=info.exists_predicate_id,
+        )
+        response = execute_query(request, store=store, index=index)
+        self.assertEqual(response.errors, ())
+        self.assertGreater(len(response.rows), 0)
+        for row in response.rows:
+            self.assertIsNone(row["p"])
+
+
 if __name__ == "__main__":
     unittest.main()

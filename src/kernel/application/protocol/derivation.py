@@ -3,9 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from kernel.core.store.types import EngineExtBase
+
 from .common import (
     JSONValue,
     ProtocolShapeError,
+    _require_bool,
     _require_literal,
     _require_non_empty_str,
     _require_optional_non_empty_str,
@@ -34,6 +37,8 @@ class CompiledDerivationPlan:
     body_ir: list[Any]
     heads: tuple[CompiledHeadCall, ...]
     body_confidence: float | None = None
+    head_spec: dict[str, Any] | None = None
+    engine_ext: EngineExtBase | None = None
     engine_options: dict[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -49,6 +54,16 @@ class CompiledDerivationPlan:
                 raise ProtocolShapeError("body_confidence must be number or None")
             if not (0.0 <= float(self.body_confidence) <= 1.0):
                 raise ProtocolShapeError("body_confidence must be in [0, 1]")
+        if self.head_spec is not None:
+            if not isinstance(self.head_spec, dict):
+                raise ProtocolShapeError("head_spec must be dict[str, Any] or None")
+            if len(self.heads) != 1:
+                raise ProtocolShapeError(
+                    "head_spec is only supported when len(heads) == 1; "
+                    "multi-head plans must be expressed via the heads tuple or via separate plans"
+                )
+        if self.engine_ext is not None and not isinstance(self.engine_ext, EngineExtBase):
+            raise ProtocolShapeError("engine_ext must be EngineExtBase or None")
         object.__setattr__(
             self,
             "engine_options",
@@ -78,6 +93,10 @@ class DerivationEvaluateRequest:
 class DerivationAcceptRequest:
     accept_mode: Literal["atomic", "best_effort"] = "best_effort"
     idempotent_duplicate_ok: bool = True
+    approved_by: str | None = None
+    note: str | None = None
+    dry_run: bool = False
+    identity_override: dict[str, Any] | None = None
     meta: dict[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -86,8 +105,12 @@ class DerivationAcceptRequest:
             field_name="accept_mode",
             allowed=("atomic", "best_effort"),
         )
-        if not isinstance(self.idempotent_duplicate_ok, bool):
-            raise ProtocolShapeError("idempotent_duplicate_ok must be bool")
+        _require_bool(self.idempotent_duplicate_ok, field_name="idempotent_duplicate_ok")
+        _require_optional_non_empty_str(self.approved_by, field_name="approved_by")
+        _require_optional_non_empty_str(self.note, field_name="note")
+        _require_bool(self.dry_run, field_name="dry_run")
+        if self.identity_override is not None and not isinstance(self.identity_override, dict):
+            raise ProtocolShapeError("identity_override must be dict or None")
         object.__setattr__(self, "meta", _validate_json_mapping(self.meta, field_name="meta"))
 
 

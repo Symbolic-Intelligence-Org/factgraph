@@ -24,18 +24,26 @@ class QueryReturnSlot:
     kind: Literal["entity", "scalar"]
     var: str
     field_path: FieldPath | None = None
+    entity_type: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.alias, field_name="alias")
         _require_literal(self.kind, field_name="kind", allowed=("entity", "scalar"))
         _require_non_empty_str(self.var, field_name="var")
-        if self.kind == "entity" and self.field_path is not None:
-            raise ProtocolShapeError("field_path must be None when kind='entity'")
+        if self.kind == "entity":
+            if self.field_path is not None:
+                raise ProtocolShapeError("field_path must be None when kind='entity'")
         if self.kind == "scalar":
             if self.field_path is None:
                 raise ProtocolShapeError("field_path is required when kind='scalar'")
             if not isinstance(self.field_path, FieldPath):
                 raise ProtocolShapeError("field_path must be FieldPath when kind='scalar'")
+            if self.entity_type is not None:
+                raise ProtocolShapeError("entity_type must be None when kind='scalar'")
+        if self.entity_type is not None and not isinstance(self.entity_type, str):
+            raise ProtocolShapeError("entity_type must be str or None")
+        if isinstance(self.entity_type, str) and not self.entity_type:
+            raise ProtocolShapeError("entity_type must be non-empty when provided")
 
 
 @dataclass(frozen=True)
@@ -58,8 +66,8 @@ class QueryRuntimeRequest:
     entity_type: str
     where_ir: WhereIR
     return_contract: QueryReturnContract
-    on_missing: Literal["skip", "error", "include_null"] = "skip"
-    on_type_mismatch: Literal["error", "skip"] = "error"
+    on_missing: Literal["skip", "error", "null"] = "skip"
+    on_type_mismatch: Literal["error", "skip", "null"] = "error"
     query_id: str | None = None
     version: str | None = None
 
@@ -72,12 +80,12 @@ class QueryRuntimeRequest:
         _require_literal(
             self.on_missing,
             field_name="on_missing",
-            allowed=("skip", "error", "include_null"),
+            allowed=("skip", "error", "null"),
         )
         _require_literal(
             self.on_type_mismatch,
             field_name="on_type_mismatch",
-            allowed=("error", "skip"),
+            allowed=("error", "skip", "null"),
         )
         _require_optional_non_empty_str(self.query_id, field_name="query_id")
         _require_optional_non_empty_str(self.version, field_name="version")
