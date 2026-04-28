@@ -1,12 +1,12 @@
 # Audit 模块总览（kernel）
 
 - 范围：`src/kernel/audit`
-- 最后更新：2026-03-28
-- 目标读者：需要消费 audit package、做离线审计查询或静态展示的开发者
+- 最后更新：2026-04-28
+- 目标读者：需要消费 audit package、做离线审计查询或构建 audit DTO 的开发者
 
 ## 1. 模块职责
 
-`audit` 是 **审计消费层**。它读取已经导出的 audit package，并提供查询、DTO 和静态站点渲染能力。
+`audit` 是 **审计消费层**。它读取已经导出的 audit package，并提供查询、DTO 与 evidence graph 消费能力。
 
 它主要负责：
 
@@ -15,7 +15,6 @@
 - requirement-scoped compliance matrix 查询
 - authoring apply events 查询
 - 审计 DTO 构建
-- 静态审计页面生成
 - 跨引擎 explainability 的共享表示层（in-memory DTO）
 
 它不负责：
@@ -24,6 +23,8 @@
 - registry 资产版本管理
 - package 导出
 - engine-native provenance 生成
+- 完整静态站点渲染（属于 `service.static_ui`）
+- ECSS compliance row assembly 语义（属于 `domains.ecss.compliance`）
 
 ## 2. 当前公共入口
 
@@ -33,11 +34,6 @@
   - 结构化查询入口
   - 当前也提供 rule trace artifact 的离线查询
   - 当前也提供 witness-bearing candidate evidence tree 的离线查询
-- `extend_schema_ir_with_ecss_vcd_predicates(...)`
-  - 为 `ECSS-M-ST-10` 风格 requirement/compliance facts 提供最小 predicate schema helper
-  - 当前由 `kernel.ecss.vcd` 拥有，`audit` 侧仅保留兼容 re-export
-- `render_audit_static_site(...)`
-  - 生成静态审计站点
 - `load_authoring_apply_events(...)`
   - 读取 authoring apply event 日志
 - `EvidenceGraph` / `EvidenceNode` / `EvidenceEdge`
@@ -52,11 +48,16 @@
 - `reader.py`
 - `query.py`
 - `dto.py`
-- `static_ui.py`
 - `authoring_events.py`
 - `assertions.py`
-- `compliance.py`
 - `evidence_graph.py`
+
+相关 contract 文档：
+
+- `src/kernel/audit/docs/03_audit_package_contract.md`
+  - audit package 文件、reader/query 派生面、最小 provenance carrier mapping
+- `src/service/docs/05_audit_static_site_contract.md`
+  - rendered static site、`site_manifest.json`、`ui_index.json` 的交付 contract
 
 ## 3. 典型工作流
 
@@ -88,7 +89,7 @@
 
 ### 3.3 Requirement / Compliance Matrix
 
-当 audit package 中包含 requirement-scoped assertions 时，当前 `audit` 层可以离线组装 ECSS VCD / compliance matrix：
+当 audit package 中包含 requirement-scoped assertions 时，`AuditQuery` 提供离线 ECSS VCD / compliance matrix 查询入口。row assembly 语义由 `domains.ecss.compliance` 拥有，`audit` 侧只负责加载 package、构建 assertion index，并通过 lazy import 暴露 query convenience：
 
 1. 在写入侧使用 requirement/compliance predicates，例如：
    - `ecss:requirement`
@@ -102,11 +103,13 @@
    - `build_compliance_matrix_dto(...)`
 4. query 实现会下探到 package 内已有的 assertion/fact 文件，而不是只消费 JSONL audit ledgers
 
-### 3.4 静态审计页面
+### 3.4 静态审计页面（service owner）
 
 1. 准备 `AuditPackageData`
-2. 调用 `render_audit_static_site(...)`
+2. 调用 `service.static_ui.render_audit_static_site(package_dir, out_dir)`
 3. 输出静态 HTML/资源
+
+完整静态站点渲染不属于 `kernel.audit` 模块。`service.static_ui` 消费 `kernel.audit` reader/query/DTO 与 domain-backed compliance rows，并负责 `site_manifest.json` / `ui_index.json` 等 rendered-site contract。
 
 当前静态站点的 page filenames / hrefs 使用 filesystem-safe reversible slug，而不是原始 percent-encoded id。
 这样生成的站点可直接通过常见静态文件服务器浏览，不依赖服务器对 `%xx` 路径的特殊处理。
@@ -211,8 +214,9 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 - `authoring`
   - audit 可消费 package 中携带的 authoring apply events，但不直接管理 registry
 - `ecss`
-  - requirement/compliance predicates 的 canonical preset owner 在 `kernel.ecss.vcd`
-  - audit 复用这组 shared constants/helper，但 matrix row 组装仍留在 `audit`
+  - requirement/compliance predicates 的 canonical preset owner 在 `domains.ecss.vcd`
+  - ECSS compliance row assembly owner 在 `domains.ecss.compliance`
+  - audit 通过 lazy import 暴露 `AuditQuery.list_compliance_matrix(...)`,但不拥有 ECSS row semantics
 - `explainability`
   - compliance matrix 只负责 requirement-level delivery；更细的 assertion/support 证据下钻仍由 assertion detail / explainability substrate 承担
   - rule trace static delivery 只消费 package 内已有 `RuleTraceArtifact`，不新增 live explain endpoint
@@ -224,11 +228,11 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 - 没有直接把 live runtime store 映射成 audit query 的入口
 - 审计能力依赖导出的 package 是否完整包含所需 ledger / decision / authoring event 信息
 - requirement/compliance matrix 当前是 offline-query-first 形态，不提供 live service endpoint
-- static UI 当前同时支持：
+- `service.static_ui` 当前同时支持：
   - `rule_run_id` proof-entry page
   - witness-bearing candidate evidence tree page
-- 但仍不支持 graph UI、salience breakdown 或更细 provenance contract
-- static UI 对 compliance matrix 的支持当前仍是单页总览，不包含 per-requirement detail page 或额外搜索 facet
+- 但仍不支持 interactive graph UI、salience breakdown 或更细 provenance contract
+- `service.static_ui` 对 compliance matrix 的支持当前仍是单页总览，不包含 per-requirement detail page 或额外搜索 facet
 - live permalink 若由 runtime service 提供，当前也只是对既有 rule-trace / candidate page renderers 的在线复用；audit export 仍是 durable shareable surface
 
 ## 6. Audit Package Artifact Files
@@ -261,44 +265,44 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 
 这些文件当前是全量导出，不做引用子集裁剪；它们的职责是让离线 audit consumer 能读取 explain carrier，而不是提供 online durable readback。
 
-当前 `audit.reader` / `AuditQuery` / static UI 已统一消费 `rule_trace_artifacts.jsonl`：
+当前 `audit.reader` / `AuditQuery` / `service.static_ui` 已统一消费 `rule_trace_artifacts.jsonl`：
 
 - reader 读取 JSONL rows（旧 package 若没有该文件则返回空集）
 - query 可按 `rule_run_id` 离线查询
 - query / dto 也可从同一份 raw rows 派生 `rule_run_summary`
 - query / dto 也可从同一份 summary surface 继续派生 `rule_run_narrative`
-- static site 可把 `rule_run_id` 渲染成可分享 proof-entry page，并通过 audit narrative DTO 在页面顶部附加 deterministic rule-run narrative
+- `service.static_ui` 可把 `rule_run_id` 渲染成可分享 proof-entry page，并通过 audit narrative DTO 在页面顶部附加 deterministic rule-run narrative
 
-当前 `audit.reader` / `AuditQuery` / static UI 也已统一消费 `support_artifacts.jsonl`：
+当前 `audit.reader` / `AuditQuery` / `service.static_ui` 也已统一消费 `support_artifacts.jsonl`：
 
 - reader 读取 JSONL rows（旧 package 若没有该文件则返回空集）
 - query 可按 `candidate_id -> support_digest` 离线重建 witness-bearing candidate evidence tree（当前包括 `native_binding_v1` 与 `souffle_witness_v1`）
 - query 会优先消费 `SupportArtifact.rule_ref_edges`，并按 `child_support_digest` 继续离线解引用 child support artifact；若 package 只有 legacy `rule_refs`，则保持 minimal fallback tree
 - dto 可直接返回与 runtime 同构的 `candidate_evidence_tree`
-- static site 可把 `candidate_id` 渲染成 recursive sectioned tree page，并继续下钻到既有 assertion detail 页面
+- `service.static_ui` 可把 `candidate_id` 渲染成 recursive sectioned tree page，并继续下钻到既有 assertion detail 页面
 
-当前 `audit.reader` / `AuditQuery` / static UI 也已统一消费 `certainty_summaries.jsonl`：
+当前 `audit.reader` / `AuditQuery` / `service.static_ui` 也已统一消费 `certainty_summaries.jsonl`：
 
 - reader 读取 JSONL rows → 解析为 `{candidate_id: certainty_summary_dict}` mapping（旧 package 若没有该文件则返回空 dict）
 - query 可按 `candidate_id` 查询物化的 certainty_summary
 - query 的 `get_candidate_evidence_tree_narrative(candidate_id)` 会将物化的 certainty_summary 传入 narrative renderer，产出含 additive `certainty_lines` 的 narrative
-- static site candidate evidence page 在 narrative block 末尾渲染 certainty section（当 certainty_lines 存在时）
+- `service.static_ui` candidate evidence page 在 narrative block 末尾渲染 certainty section（当 certainty_lines 存在时）
 - certainty_summary 在 export time 由 runtime service 预计算（通过 core `materialize_certainty_summary` helper），audit 侧不做 query-time 计算（因为 `condition_weights` 离线不可用）
 
-当前 `audit.reader` / `AuditQuery` / static UI 也已统一消费 `provenance_trees.jsonl`：
+当前 `audit.reader` / `AuditQuery` / `service.static_ui` 也已统一消费 `provenance_trees.jsonl`：
 
 - reader 读取 JSONL rows → 解析为 `{candidate_id: provenance_tree_dict}` mapping（旧 package 若没有该文件则返回空 dict）
 - query 可按 `candidate_id` 查询物化的 engine-native provenance tree
-- static site candidate evidence page 在 certainty section 后渲染 additive `Engine Provenance` section（当 provenance_tree 存在时）
+- `service.static_ui` candidate evidence page 在 certainty section 后渲染 additive `Engine Provenance` section（当 provenance_tree 存在时）
 - provenance_tree 在 export time 由 runtime service 通过 query-bearing Souffle package replay 物化；audit 侧不做 query-time Souffle 执行
 
-当前 `audit.reader` / `AuditQuery` / static UI 也已统一消费 `provenance_statuses.jsonl`：
+当前 `audit.reader` / `AuditQuery` / `service.static_ui` 也已统一消费 `provenance_statuses.jsonl`：
 
 - reader 读取 JSONL rows → 解析为 `{candidate_id: provenance_status_dict}` mapping（旧 package 若没有该文件则返回空 dict）
 - query 可按 `candidate_id` 查询单个 provenance status，也可做 package-level coverage summary
 - `list_candidates_with_provenance()` / `list_candidates_without_provenance()` / `summarize_provenance_coverage()` 都按唯一 `candidate_id` 统计，而不是按 `candidate_ledger` 原始行数统计
-- static site candidate evidence page 会渲染 provenance availability badge；当 `truncated=true` 时追加 depth-truncation warning
-- static site landing page 会在 package 含 `provenance_statuses.jsonl` 时显示 provenance coverage / truncated proof metric cards
+- `service.static_ui` candidate evidence page 会渲染 provenance availability badge；当 `truncated=true` 时追加 depth-truncation warning
+- `service.static_ui` landing page 会在 package 含 `provenance_statuses.jsonl` 时显示 provenance coverage / truncated proof metric cards
 
 当前不会新增 `rule_trace_summary` 专用 artifact 文件；summary 是 read/query 层的纯派生面，不是新的 durable package contract。
 当前也不会新增 `candidate_evidence_tree` 专用 artifact 文件；candidate tree 同样是 read/query 层的纯派生面，不是新的 durable package contract。

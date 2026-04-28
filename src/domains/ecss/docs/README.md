@@ -1,31 +1,33 @@
 # FactPy ECSS 文档
 
-- 适用范围：`src/kernel/ecss`
-- 最后更新：2026-03-18
+- 适用范围：`src/domains/ecss`
+- 最后更新：2026-04-28
 - 目标读者：需要复用 ECSS domain preset、但不想把写侧或读侧逻辑混在一起的开发者。
 
-本目录记录 `src/kernel/ecss` 的当前实现口径。
+本目录记录 `src/domains/ecss` 的当前实现口径。
 
 ## 范围
 
-覆盖 `src/kernel/ecss` 下的 shared ECSS helpers，当前包括：
+覆盖 `src/domains/ecss` 下的 shared ECSS helpers，当前包括：
 
 - `ECSS-M-ST-10` 风格 VCD/compliance predicate preset
 - `Scenario A` 第一轮 `T1` temporal predicate preset（deadline/window/interval relation 的 shared schema owner）
 - `Scenario A` 第一轮 uncertainty predicate preset（threshold-bearing probability lane 的 shared schema owner）
+- requirement/compliance matrix row assembly
 
 ## 当前职责
 
-- 维护 ECSS VCD predicate 常量与 schema preset 定义 -> `kernel.ecss.vcd`
+- 维护 ECSS VCD predicate 常量与 schema preset 定义 -> `domains.ecss.vcd`
 - 提供 `schema_ir` 扩展 helper -> `extend_schema_ir_with_ecss_vcd_predicates(...)`
-- 维护 ECSS temporal predicate 常量与 schema preset 定义 -> `kernel.ecss.temporal`
+- 维护 ECSS temporal predicate 常量与 schema preset 定义 -> `domains.ecss.temporal`
 - 提供 `schema_ir` 扩展 helper -> `extend_schema_ir_with_ecss_temporal_predicates(...)`
-- 维护 ECSS uncertainty predicate 常量与 schema preset 定义 -> `kernel.ecss.uncertainty`
+- 维护 ECSS uncertainty predicate 常量与 schema preset 定义 -> `domains.ecss.uncertainty`
 - 提供 `schema_ir` 扩展 helper -> `extend_schema_ir_with_ecss_uncertainty_predicates(...)`
+- 维护 ECSS compliance matrix row assembly -> `domains.ecss.compliance`
 
 ## 不负责什么
 
-- 不负责 audit package 查询、matrix 组装或静态页面渲染（属于 `audit`）
+- 不负责 audit package 读取、query/DTO 或静态页面渲染（分别属于 `kernel.audit` 与 `service.static_ui`）
 - 不负责 runtime facts 写入工作流或 HTTP surface（属于 `sdk` / `service`）
 - 不负责 schema DSL 编译、registry publish/apply（属于 `authoring`）
 - 不负责标准原文核实、领域本体、通用 runtime temporal semantics 或 uncertainty semantics
@@ -35,7 +37,7 @@
 - 当前只提供一个很窄的 VCD/compliance preset、一个第一轮 Scenario A temporal preset、以及一个第一轮 Scenario A uncertainty preset；还没有更广的 ECSS/ESSB preset 集合
 - preset 目前是手写 schema predicate dict，不是 `Entity` class/DSL sugar
 - 示例代码如果只是为了走当前 SDK 声明路径，优先在 demo 本地显式声明承载 schema 的 `Entity`，而不是在示例层直接用 `extend_schema_ir_with_ecss_*` 篡改已有 `schema_ir`
-- `audit` 仍 re-export `extend_schema_ir_with_ecss_vcd_predicates(...)` 以保持既有调用兼容，但 canonical owner 已迁到本模块
+- `kernel.audit` 通过 lazy import 暴露 compliance matrix query convenience，但 canonical row assembly owner 在本模块
 
 ## 相关测试入口
 
@@ -51,5 +53,5 @@
 
 ## 当前文档
 
-- `src/kernel/ecss/docs/01_overview.md`
+- `src/domains/ecss/docs/01_overview.md`
   - shared ECSS preset 的公共入口、模块边界与当前限制。

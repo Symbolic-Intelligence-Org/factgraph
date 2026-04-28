@@ -1,7 +1,7 @@
 # EvidenceGraph（audit）
 
 - 范围：`src/kernel/audit/evidence_graph.py`
-- 最后更新：2026-03-28
+- 最后更新：2026-04-28
 - 目标读者：需要在 audit 层实现跨引擎 explainability consumer 的开发者
 
 ## 1. 角色
@@ -18,7 +18,7 @@
 
 - 替代各引擎自己的 provenance carrier
 - 替代 Souffle 现有 `CandidateEvidenceTree`
-- 替代 `static_ui.py` 的整页模板
+- 替代 `service.static_ui` 的整页模板
 
 ## 2. 当前数据模型
 
@@ -98,7 +98,7 @@
     - 行 = component
     - cell = stacked event cards
 
-当前 renderer 产出的是 **standalone HTML fragment**，不是整页 HTML。它的设计目标是后续被 `static_ui.py` 的 candidate evidence page 直接嵌入。
+当前 renderer 产出的是 **standalone HTML fragment**，不是整页 HTML。它的设计目标是后续被 `service.static_ui` 的 candidate evidence page 直接嵌入。
 
 ## 6. 当前边界
 
@@ -115,7 +115,7 @@
     - `pyreason`：从 `ProvenanceEnvelope.payload` 的 event log 转换
     - `problog`：从 `ProvenanceEnvelope.payload` 的 proof trace 转换
 - `AuditQuery.get_candidate_evidence_graph(...)` 会读取 durable graph
-- `static_ui.py` 的 candidate evidence page 现在优先渲染 durable `EvidenceGraph`，并仅对旧 package 保留 Souffle provenance-tree fallback
+- `service.static_ui` 的 candidate evidence page 现在优先渲染 durable `EvidenceGraph`，并仅对旧 package 保留 Souffle provenance-tree fallback
 
 当前仍保持的边界：
 

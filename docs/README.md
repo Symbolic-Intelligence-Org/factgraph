@@ -37,11 +37,14 @@
 - [src/kernel/core/docs/01_architecture.md](/Users/zhenzhili/hnsm-backend/src/kernel/core/docs/01_architecture.md)
 - [src/kernel/application/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/application/docs/README.md)
 - [src/service/docs/README.md](/Users/zhenzhili/hnsm-backend/src/service/docs/README.md)
+  - service HTTP surface 与 audit static site delivery contract 的当前实现文档。
 - [src/kernel/sdk/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/sdk/docs/README.md)
 - [src/kernel/authoring/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/authoring/docs/README.md)
 - [src/kernel/adapters/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/adapters/docs/README.md)
 - [src/kernel/audit/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/audit/docs/README.md)
-  - audit package 查询/静态展示，以及 `EvidenceGraph` 统一 explainability DTO 的当前实现文档。
+  - audit package 读取/查询/DTO、EvidenceGraph 统一 explainability DTO，以及 audit package contract 的当前实现文档。
+- [src/domains/ecss/docs/README.md](/Users/zhenzhili/hnsm-backend/src/domains/ecss/docs/README.md)
+  - ECSS domain preset、compliance row assembly、写侧 helper 边界的当前实现文档。
 - [src/agent/docs/README.md](/Users/zhenzhili/hnsm-backend/src/agent/docs/README.md)
   - agent 控制面、draft/checkpoint、candidate payload cache、read-first review loop、Layer 3A 结构化最小写入、W2a 精确撤回、Layer 4A/4B 规则 authoring + 保守引擎路由，以及 Layer 4C1-4C3 文档提取/去重链路的当前实现文档。
 - [src/agent/documents/docs/README.md](/Users/zhenzhili/hnsm-backend/src/agent/documents/docs/README.md)

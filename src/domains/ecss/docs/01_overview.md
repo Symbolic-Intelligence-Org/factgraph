@@ -1,7 +1,7 @@
-# ECSS 模块总览（kernel）
+# ECSS 模块总览（domains）
 
-- 范围：`src/kernel/ecss`
-- 最后更新：2026-03-18
+- 范围：`src/domains/ecss`
+- 最后更新：2026-04-28
 - 目标读者：需要在 `authoring` / `sdk` / `audit` 之间共享 ECSS preset 的开发者
 
 ## 1. 模块职责
@@ -17,10 +17,12 @@
 - ECSS uncertainty predicate 常量
 - ECSS uncertainty schema preset 定义
 - `schema_ir` 扩展 helper
+- requirement/compliance matrix row assembly
 
 它不负责：
 
-- audit matrix row 组装
+- audit package 读取或 query/DTO
+- 静态审计站点渲染
 - runtime 写入协议
 - registry publish/apply 工作流
 - live service endpoint
@@ -50,12 +52,15 @@
 - `ECSS_UNCERTAINTY_PRED_IDS`
 - `ecss_uncertainty_predicates(...)`
 - `extend_schema_ir_with_ecss_uncertainty_predicates(...)`
+- `AuditComplianceError`
+- `build_compliance_matrix_rows(...)`
 
 对应模块：
 
 - `vcd.py`
 - `temporal.py`
 - `uncertainty.py`
+- `compliance.py`
 
 ## 3. 典型工作流
 
@@ -68,7 +73,8 @@
 ### 3.2 被其他层消费
 
 - `audit`
-  - 复用同一组 predicate ID 与 schema helper，继续做 compliance matrix query / DTO / static UI
+  - `kernel.audit` 读取 audit package、构建 assertion index，并通过 lazy import 暴露 compliance matrix query / DTO convenience
+  - `service.static_ui` 消费 query/DTO 输出渲染静态页面
 - `sdk`
   - 在 `domains.ecss.sdk_helpers` 子模块里提供更贴近写侧的 convenience wrapper
 - `authoring`
@@ -96,7 +102,9 @@
 ## 4. 与其他层的边界
 
 - `audit`
-  - `audit` 是 requirement/compliance matrix 的消费层；matrix row 组装逻辑仍留在 `audit.compliance`
+  - `kernel.audit` 是 requirement/compliance matrix 的 package/query 消费层；matrix row assembly 语义属于 `domains.ecss.compliance`
+- `service`
+  - `service.static_ui` 负责 rendered static site，不拥有 ECSS row semantics
 - `sdk`
   - `sdk` 提供更友好的 authoring helper，但不应重新声明 canonical preset
 - `authoring`

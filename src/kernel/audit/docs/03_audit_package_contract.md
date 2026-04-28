@@ -1,0 +1,101 @@
+# Audit Package Contract
+
+- Scope: `src/kernel/audit`
+- Last updated: 2026-04-28
+- Owner: `kernel.audit` reader / query / DTO surface
+
+`kernel.audit` consumes exported audit packages. It does not export packages, render the full static site, query live runtime state, or own domain-specific ECSS row semantics.
+
+## 1. Package Root
+
+An audit package is a directory with:
+
+- `manifest.json`
+- `manifest.package_kind == "audit"`
+- `manifest.paths.audit_files`, an object mapping logical audit file names to package-relative paths
+- optional `outputs/run_manifest.json`
+
+`load_audit_package(package_dir)` validates this shape and returns `AuditPackageData`.
+
+## 2. Required Audit Files
+
+The reader currently requires these `manifest.paths.audit_files` entries:
+
+| Key | Current path convention | Consumer role |
+|---|---|---|
+| `run_ledger` | `audit/run_ledger.jsonl` | run list and run detail DTOs |
+| `candidate_ledger` | `audit/candidate_ledger.jsonl` | candidate lists, evidence tree lookup, provenance coverage |
+| `accept_write_ledger` | `audit/accept_write_ledger.jsonl` | accepted write detail and run/decision linkage |
+| `accept_failed` | `audit/accept_failed.jsonl` | failure list and timeline entries |
+| `decision_log` | `audit/decision_log.jsonl` | decision detail and run timeline |
+| `mapping_resolution` | `audit/mapping_resolution.json` | predicate mapping inspection |
+
+Missing required files are hard read errors. JSONL rows must be JSON objects.
+
+## 3. Optional Audit Files
+
+Optional files are backward-compatible. If absent from the manifest or missing on disk, the reader returns an empty list or empty mapping.
+
+| Key | Row shape | Reader field |
+|---|---|---|
+| `support_artifacts` | `SupportArtifact` JSON-friendly row keyed by `support_digest` | `support_artifacts` |
+| `rule_trace_artifacts` | `RuleTraceArtifact` JSON-friendly row keyed by `rule_run_id` | `rule_trace_artifacts` |
+| `certainty_summaries` | `{candidate_id, certainty_summary}` | `certainty_summaries` |
+| `provenance_trees` | `{candidate_id, provenance_tree}` | `provenance_trees` |
+| `provenance_statuses` | `{candidate_id, status, engine?, truncated?, reason?}` | `provenance_statuses` |
+| `evidence_graphs` | `{candidate_id, evidence_graph}` | `evidence_graphs` |
+| `assertion_annotations` | annotation rows for assertion detail panels | `assertion_annotations` |
+| `provenance_timelines` | `{candidate_id, provenance_timeline}` | `provenance_timelines` |
+
+`evidence_graphs` is stricter than most optional files: duplicate `candidate_id` rows are read errors because they would make the durable graph lookup ambiguous.
+
+## 4. Query-Derived Surfaces
+
+The following are not separate durable package files today. They are derived by `AuditQuery` / DTO helpers from package files:
+
+- `rule_run_summary`
+- `rule_run_narrative`
+- `candidate_evidence_tree`
+- `candidate_evidence_tree_summary`
+- `candidate_evidence_tree_narrative`
+- provenance coverage summary
+- authoring apply run summary/detail
+
+This distinction matters for compatibility: old packages can still load when optional durable files are absent, but derived surfaces may return empty results or raise a query/DTO error if their required source carrier is unavailable.
+
+## 5. Domain-Specific Compliance
+
+`AuditQuery.list_compliance_matrix(...)` is a convenience query over an audit package, but ECSS row assembly is owned by `domains.ecss.compliance`.
+
+The audit layer:
+
+- loads assertion facts and metadata
+- exposes the query entrypoint
+- wraps domain errors as `AuditQueryError`
+
+The ECSS domain layer:
+
+- owns ECSS compliance predicate constants through `domains.ecss.vcd`
+- owns requirement/compliance row assembly in `domains.ecss.compliance`
+- defines ECSS-specific validation rules such as required `ingested_at` metadata
+
+## 6. Minimum Provenance Mapping
+
+The current package does not claim full PROV conformance. The minimum responsibility mapping is:
+
+| Role | Current carriers |
+|---|---|
+| Entity | assertion rows, candidate rows, exported reports/static pages, `EvidenceGraph` nodes |
+| Activity | run ledger rows, decision log rows, accept write rows, authoring apply events, package export |
+| Agent | metadata such as `approved_by`, service/operator identifiers, authoring apply actors when present |
+| Bundle | audit package root, run bundle from `AuditQuery.get_run_bundle(...)`, rendered static site root |
+| Provenance of provenance | `provenance_statuses`, `evidence_graphs`, `provenance_timelines`, `support_artifacts`, `rule_trace_artifacts` |
+
+Future provenance work should add fields or mappings explicitly rather than relying on page text or ad hoc payload conventions.
+
+## 7. Ownership Boundary
+
+- `kernel.audit`: package read/query/DTO/evidence graph consumer contracts
+- `service.static_ui`: full static HTML site rendering and rendered site manifest/index contracts
+- `domains.ecss.compliance`: ECSS compliance row semantics
+- `adapters` / runtime service: package export and optional provenance materialization
