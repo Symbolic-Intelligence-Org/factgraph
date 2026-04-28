@@ -134,4 +134,4 @@ Then update existing overview/README docs to point to the new contract docs and 
 - 为什么会有这些调整:
   - The stale wording was not a module list entry, but it could still imply the old audit-local static UI ownership.
 - 归档说明:
-  - Left active for local review because this pass is uncommitted/untracked; archive after user approval or commit.
+  - Per the v0.1 archive policy:archive after actual v0.1 publish + short stability window. The four `implemented` blueprints under `docs/blueprints/active/`(OS-prep readiness,runtime-authority cleanup,audit-delivery contract,RC verification)are bundled together for archive after the same gate.

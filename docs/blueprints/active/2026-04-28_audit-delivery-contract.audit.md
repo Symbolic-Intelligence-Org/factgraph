@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-04-28 | draft | Blueprint created | Created as a separate docs-only blueprint to avoid folding audit delivery/product contract work into runtime-authority cleanup. Trigger: follow-up review found audit docs still claiming static-site and old ECSS compliance ownership after namespace split. |
 | 2026-04-28 | draft → scoped | Scope frozen | Scope limited to documentation truth correction and delivery contract documentation. No code behavior changes, no static UI redesign, no package exporter changes, no full PROV implementation, and no branch/commit in this local pass. |
-| 2026-04-28 | scoped → implemented | Docs pass completed locally | Added audit package and static site contract docs; corrected audit/service/ECSS/root docs; kept active because this local pass is not committed or archived yet. |
+| 2026-04-28 | scoped → implemented | Docs pass completed locally | Added audit package and static site contract docs; corrected audit/service/ECSS/root docs; kept active per the v0.1 archive policy:archive after actual v0.1 publish + short stability window(bundled with the other three v0.1 `implemented` blueprints). |
 
 ## Decision Notes
 
