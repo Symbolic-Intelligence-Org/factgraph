@@ -10,7 +10,7 @@
 - 当前最新工作:OS-prep #2/#11/#12 implementation pass 已落地到本地分支;v0.1 OSS surface = kernel-only,PyPI metadata 只暴露 kernel package,README 已 kernel-first
 - 当前测试基线:1097 tests 全绿,3 skips(5 段:kernel 685 skipped 1 / agent 255 skipped 2 / service 42 / domains/ecss 99 / benchmarks 16)
 - runtime cleanup blueprint:[2026-04-28_runtime-authority-cleanup.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-04-28_runtime-authority-cleanup.md),status `implemented`,暂不归档
-- OS-prep blueprint 仍 active/scoped;用户明确 OSS v0.1 仅包含 kernel 主体,所以 #1/#2/#3/#7/#11/#12 已按 kernel-only surface 收口。剩余 release-coupled 工作主要是 #4 publish-time package name reservation/check 与 staged CI gate 后续提升。
+- OS-prep blueprint 仍 active/scoped;用户明确 OSS v0.1 仅包含 kernel 主体,所以 #1/#2/#3/#4/#7/#11/#12 已按 kernel-only surface 收口。#4 默认名锁为 `factpy-kernel`,但真实 PyPI reservation 仍需 release day upload / trusted publishing。剩余 release-coupled 工作主要是 staged CI gate 后续提升与发布当天检查。
 
 ## 当前 namespace
 
@@ -78,7 +78,7 @@ tools/
 
 **优先级 1:OS-prep release close-out**
 
-- #4 final package-name reservation/check:publish time 再确认 `factpy-kernel` 可用
+- #4 package name:默认锁 `factpy-kernel`;2026-04-28 exact-name check 当前可用,但 publish time 仍需重跑并通过首次 upload / trusted publishing 完成 reservation
 - #8 CI gate follow-up:broad ruff/mypy/coverage staged checks 仍需逐步清 baseline 后升 blocking
 - release validation:按 README 的 kernel-only install path 和 `test_wheel_kernel_only_packaging.py` 做 wheel inspection
 - #2/#11/#12 已落地:package discovery `kernel*` only;README kernel-first;`AuditQuery.list_compliance_matrix(...)` 缺少 `domains.ecss` 时抛 `AuditOptionalDomainError`
