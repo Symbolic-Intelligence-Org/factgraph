@@ -138,7 +138,15 @@ def _evaluate_plan(
 
 
 def _attach_run_id(candidates: list[CandidateSet], *, run_id: str) -> list[CandidateSet]:
-    return [replace(candidate, run_id=run_id) for candidate in candidates]
+    return [
+        replace(
+            candidate,
+            run_id=run_id,
+            payload=dict(candidate.payload),
+            candidate_id="",
+        )
+        for candidate in candidates
+    ]
 
 
 def accept_derivation_candidate_set(

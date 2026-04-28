@@ -302,6 +302,30 @@ class QueryTypeMismatchPolicyTests(unittest.TestCase):
         for row in response.rows:
             self.assertIsNone(row["p"])
 
+    def test_unknown_entity_type_hydrate_error_uses_missing_policy(self) -> None:
+        from kernel.application import entity_info, execute_query
+        from kernel.core.evidence.write_protocol import set_field
+
+        store, index, _, _ = self._seed_two_persons()
+        info = entity_info(index, "Person")
+        unknown_ref = "idref_v1:Wombat:abcdef"
+        set_field(store.ledger, info.exists_predicate_id, unknown_ref, [])
+        request = self._build_request(
+            entity_type=None,
+            on_type_mismatch="error",
+            info_pred=info.exists_predicate_id,
+        )
+        request = QueryRuntimeRequest(
+            entity_type=request.entity_type,
+            where_ir=request.where_ir,
+            return_contract=request.return_contract,
+            on_missing="null",
+            on_type_mismatch=request.on_type_mismatch,
+        )
+        response = execute_query(request, store=store, index=index)
+        self.assertEqual(response.errors, ())
+        self.assertTrue(any(row["p"] is None for row in response.rows))
+
 
 if __name__ == "__main__":
     unittest.main()

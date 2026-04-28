@@ -197,6 +197,8 @@ class RunIdPropagationTests(unittest.TestCase):
         before = [_make_candidate(run_id="orig-1"), _make_candidate(run_id="orig-2")]
         after = _attach_run_id(before, run_id="shared-rid")
         self.assertEqual([c.run_id for c in after], ["shared-rid", "shared-rid"])
+        self.assertNotEqual(before[0].candidate_id, after[0].candidate_id)
+        self.assertTrue(after[0].candidate_id.startswith("cand_v2:"))
         # Other fields preserved
         self.assertEqual(before[0].target, after[0].target)
         self.assertEqual(before[0].key_tuple_digest, after[0].key_tuple_digest)

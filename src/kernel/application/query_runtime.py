@@ -31,7 +31,7 @@ from .protocol.query import (
     QueryRuntimeRequest,
     QueryRuntimeResponse,
 )
-from .schema_runtime import SchemaIndex
+from .schema_runtime import SchemaIndex, SchemaResolutionError
 
 
 class QueryRuntimeError(ValueError):
@@ -206,7 +206,7 @@ def _resolve_entity_slot(
             include_assertions=False,
             include_history=False,
         )
-    except EntityViewError:
+    except (EntityViewError, SchemaResolutionError):
         return None, "missing"
     if snapshot is None:
         return None, "missing"
