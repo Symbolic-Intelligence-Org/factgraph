@@ -17,7 +17,6 @@ from kernel.application.protocol import (
 )
 from kernel.application.schema_runtime import encode_entity_ref as encode_app_entity_ref
 from kernel.core.policy.active import is_active
-from kernel.core.view.projector import project_view_facts
 
 from .errors import (
     CardinalityError,
