@@ -15,6 +15,7 @@
 | 2026-04-28 | decision phase (v4 patch) | Round 2 cross-check corrections applied | 采纳交叉核验的 Tier 1+2 high-value corrections,并做本地复核:application public symbols 仍为 21(不改);cleanup framing 改成 complete partial migration;补 `batch.py` / `facade.py` / `store.py` partial migration inventory;扩大 Trap 6 grep;修正 service/agent import 数字为 13 import lines / 9 files excluding markdown,production 仅 `compile_schema_from_classes`;G/J 与 OS-prep #2/#11 关系收紧;commit plan 改为 4-commit squashable stack。拒绝/弱化 3 个误判:不加横切 logging/metrics/deprecation 分类;不改 application symbol count;不写 OS-prep 全量 auto-unhold。 |
 | 2026-04-28 | decision phase | Pass 2:A+E+F+G+H+I+J owner/compat scoped | 按用户指示执行 A,继续逐项 scope §5.2。实测确认:`SDKStore.export_package/run_package` 只是 adapter wrapper,service/runtime 直接调 adapter;`_SDKViewsManager` 是 SDKStore-local in-memory named-view manager;`SDKRegistry` 是 authoring-adjacent SDK facade,无现成 `RegistryProtocol`;service/agent production SDK import 仅 extraction 的 `compile_schema_from_classes` authoring helper。Blueprint 新增 §5.2.2,把 A/E/F/G/H/I/J 标成 scoped,并补 §7/§8 acceptance/plan。无生产代码改动。 |
 | 2026-04-28 | implementation branch | Shape audit pass 1:B+C+D file shape scoped | 在 `runtime-authority-cleanup` branch 上只读核验 `sdk/query_runtime.py` / `sdk/ingest.py` / `sdk/store.py` / `sdk/batch.py` / `sdk/facade.py` 与 `application/protocol/*`。Blueprint 新增 §5.2.3,明确 commit 1 是 application contract pure add:`protocol/query.py` + `query_runtime.py`,`protocol/ingest.py` + `ingest_runtime.py`,`protocol/derivation.py` + `derivation_runtime.py`,以及 narrow exports。结论:复用既有 entity read/write/schema/common DTO;SDK adapter 切换留 commit 2;不得把 SDK `QueryPlan` / `ReturnContractEntry` / `Field` descriptor / `Derivation` DSL object 带入 application protocol。 |
+| 2026-04-28 | implementation phase | Commit 3:service/agent boundary guard + audit close | service/agent SDK imports 实测:13 Python import lines / 9 Python files excluding markdown;plus 1 markdown example。production 仅 1 行 authoring helper(`src/agent/extraction/api.py:compile_schema_from_classes`),其余 12 行在 tests。新增 `test_sdk_consumer_boundary.py` 守护 production allowlist;§5.2 I 升为 Scoped+verified。out-of-scope consumers(`domains/ecss/sdk_helpers.py`,`kernel/adapters/pyreason/*`)记录 Decision 13。 |
 
 ## Decision Notes
 
@@ -172,6 +173,12 @@
 - E(errors) 已有三档归属,但实现期仍需逐类选择 alias vs subclass vs DTO error mapping,不得改变 outward error code 字符串
 - §5.3 推荐起步顺序已调整为 B+C+D contract design → A 拆分 → I import reaffirm → E errors → J+G compatibility → F+H灰区
 - Acceptance(§7)/ Implementation Plan(§8)/ Docs To Update(§9)已填 pass 1 + pass 2 首批内容;后续 implementation phase 再填 Outcome / Deviations
+
+### Decision 13 — out-of-scope SDK consumers after §5.2 I close
+
+- `src/domains/ecss/sdk_helpers.py` production-imports `SDKStore` / `SDKStoreError` and uses SDKStore as a domain ergonomic facade while performing writes through core write protocol. This is outside §5.2 I, which is limited to service / agent consumers, and remains consistent with the audit-delivery contract boundary.
+- `src/kernel/adapters/pyreason/runner.py` and `src/kernel/adapters/pyreason/rule_ext.py` production-import SDK DSL types(`Rule`, `LogicVar`, `HeadCall`, `PredAtom`, `Pred`). These DSL classes are currently sole-owned by SDK; the adapter coupling is a primitive-contract issue, not a service / agent runtime authority issue.
+- Disposition:do not fix in this cleanup blueprint. Record as a future K(primitive contract traps) hook, likely solved by moving lower-level DSL primitives to core/authoring or by introducing a runtime protocol that adapters can consume without importing SDK product-surface modules.
 
 ### 执行约束(继承自 namespace-split blueprint)
 

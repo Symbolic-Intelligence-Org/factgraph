@@ -140,7 +140,7 @@ namespace split(2026-04-27 commit `81c6f77`)把 4 个 packages 边界划清,但 
 | F | Registry owner | `SDKRegistry` 当前在 sdk;`RegistryProtocol` 抽象接口归属;接入面 | **Scoped:见 §5.2.2**;`SDKRegistry` 留 sdk;本 cleanup 不新增 `RegistryProtocol`。application contract 接 compiled runtime inputs,不是 SDK registry object |
 | G | Package export / run owner | `export_package` / `run_package` runtime owner;service / tools 调用面 | **Scoped:见 §5.2.2**;adapter/service delivery owner 保持现状;SDKStore wrappers 是 compatibility convenience,不作为 canonical runtime authority |
 | H | Views owner | `_SDKViewsManager` 是否升级到 application | **Scoped:见 §5.2.2**;留 sdk(in-memory named-view facade);`ViewSpec` 值对象继续来自 core,application 可接 normalized view value 但不拥有 named-view registry |
-| I | service / agent 依赖切换 | service / agent 内每个 `from kernel.sdk` 的去向;envelope 契约是否受影响。实测:排除 1 个 markdown example 后为 13 import lines / 9 files,其中 production 仅 `src/agent/extraction/api.py` 的 `compile_schema_from_classes`,其余 12 行是 tests | **Scoped:见 §5.2.2**;现状大致已对;runtime ops 走 application,ergonomic / authoring 形态走 sdk。I 预计是 reaffirm + 个别小调(~1-2h 手工),不是大迁移 |
+| I | service / agent 依赖切换 | service / agent 内每个 `from kernel.sdk` 的去向;envelope 契约是否受影响。实测:13 Python import lines / 9 Python files excluding markdown;plus 1 markdown example。production 仅 `src/agent/extraction/api.py` 的 `compile_schema_from_classes`,其余 12 行是 tests | **Scoped + verified**(commit 3 boundary guard);runtime ops 不得新增 SDK production import;当前唯一 production import 是 authoring helper。域外 SDK consumers(`domains/ecss/sdk_helpers.py`,`kernel/adapters/pyreason/*`)超 §5.2 I scope,见 audit Decision 13 |
 | J | Compatibility strategy(SDK 旧 import paths) | 保留 re-export 的范围 + deprecate 周期;OS v0.1 publish 前是否清干净 | **Scoped:见 §5.2.2**;SDK top-level exports 保留 product surface;不 re-export application internals。迁出的用户可见 runtime errors 可通过 SDK aliases 兼容;export/run wrappers 与 G 同期标注 stable/deprecated |
 | K | Rule / Query / Derivation primitive contract traps | K.1 Query 缺 id / version(asymmetry vs Rule / Derivation);K.2 where validation 时机不一致(Rule / Derivation lazy,Query eager);K.3 Derivation 三个 head 字段(head / target / head_vars + `_heads` 私有) | 仅作 application runtime contract 设计**约束**记录;除非 query / evaluate 迁移必须触碰,实现留给后续 primitive-contract blueprint |
 
@@ -175,7 +175,7 @@ namespace split(2026-04-27 commit `81c6f77`)把 4 个 packages 边界划清,但 
 | F Registry | `SDKRegistry` 留 SDK,作为 authoring-adjacent product facade over `kernel.authoring.FileAuthoringRegistry`。本 cleanup 不新增 `RegistryProtocol`。application runtime contract 接 compiled rule/derivation/query inputs 或 core `RuleRegistry`,不接 `SDKRegistry` object。若未来 service/application 都需要 registry abstraction,另开 authoring/registry blueprint。 | 当前 `SDKRegistry` 主要包装 authoring publish/apply/read APIs,并把 SDK `Rule` / `Derivation` payload 编译成 authoring specs;没有现成 `RegistryProtocol`。强行抽 protocol 会扩大 scope。 | 不迁 `SDKRegistry`;不抽新 protocol;不改 registry storage format。 |
 | G Package export / run | `export_package` / `run_package` canonical owner 保持 adapter/service delivery surface:adapter `kernel.adapters.souffle.package.export_package`,runner `kernel.adapters.souffle.runner.run_package`,service `export_runtime_package`。`SDKStore.export_package(...)` / `SDKStore.run_package(...)` 保留 compatibility convenience,但不作为 application runtime authority。J 决议时决定它们在 v0.1 README/API surface 中标 stable、advanced compatibility,还是 deprecate。 | `SDKStore` 当前只是薄 wrapper:`export_package(self._store, ...)` / `run_package(...)`;service/runtime 直接调用 adapter export/run。把它们迁 application 会混淆 runtime authority 与 package delivery。 | 不改 exporter / runner 行为;不更名 output dirs;不把 audit/static delivery塞进 application。 |
 | H Views | `_SDKViewsManager` 留 SDK。`ViewSpec` 作为 core value object 继续可被 application read/evaluate contracts 接收,但 named-view registry(`sdk.views.create/update/delete/list`)不升级到 application。 | `_SDKViewsManager` 是 SDKStore-local in-memory name registry;不持久化,也不是跨 consumer runtime seam。 | 不新增 application views registry;不改变 view semantics。 |
-| I service / agent imports | production runtime code 不再新增 SDK runtime imports。当前 production 仅 `src/agent/extraction/api.py` 使用 `compile_schema_from_classes`,属 authoring helper,允许保留。service production 应保持 0 个 `kernel.sdk` runtime imports;service/agent tests 可继续用 SDK fixtures,但新 runtime-facing tests 优先覆盖 application path。 | 实测排除 markdown example 后 13 import lines / 9 files,production 1 行 authoring helper + 12 行 tests。consumer migration 不是主工作量。 | 不为测试纯度重写所有 fixtures;不迁 extraction schema authoring helper。 |
+| I service / agent imports | production runtime code 不再新增 SDK runtime imports。当前 production 仅 `src/agent/extraction/api.py` 使用 `compile_schema_from_classes`,属 authoring helper,允许保留并登记在 boundary guard allowlist。service production 应保持 0 个 `kernel.sdk` runtime imports;service/agent tests 可继续用 SDK fixtures,但新 runtime-facing tests 优先覆盖 application path。 | 实测为 13 Python import lines / 9 Python files excluding markdown;plus 1 markdown example。production 1 行 authoring helper + 12 行 tests。commit 3 新增 `test_sdk_consumer_boundary.py` 守护 production allowlist。consumer migration 不是主工作量。 | 不为测试纯度重写所有 fixtures;不迁 extraction schema authoring helper;不把域外 consumers(domains/ecss,pyreason adapter)纳入 §5.2 I。 |
 | J Compatibility | `kernel.sdk.__all__` 继续表达 SDK product surface,保留 `Entity` / `Field` / `Identity` / `Relationship` / DSL / `SDKStore` / `SDKRegistry` / outward errors / ingest result。不得从 SDK re-export application internals。迁入 application 的用户可见 runtime errors 可用 SDK aliases 保持 import 兼容,并在 docs 中标明 canonical owner。G 的 export/run wrappers 若保留,需在 OS-prep #11 README/API docs 中明确 stable vs advanced compatibility vs deprecated。 | v0.1 不承诺 stable,但 OS publish 会让 top-level imports 形成事实 contract;J 要防止 application internal DTO 被 SDK 当便利出口重新暴露。 | 不在本 cleanup 设计完整 deprecation policy;不删除现有 public imports,除非实现期发现从未文档化且无测试依赖。 |
 
 **Pass 2 共同边界**:
@@ -235,7 +235,7 @@ namespace split(2026-04-27 commit `81c6f77`)把 4 个 packages 边界划清,但 
 
 1. **B + C + D contract design**(canonical query / ingest / derivation contract)—— 基于 §5.2.1 已落地的 contract shape recap 与 partial migration inventory(~1,800 LOC 边界面:`query_runtime.py 357` + `store.py`/`facade.py` boundary slices + `application/protocol` 629),不依赖 god file 内部业务逻辑;先勾出 application 公开 API 形态,后续拆分有 target;K.1 / K.2 / K.3 作为输入约束。预估 4-6h design pass,不是 2-4h small audit
 2. **A(SDKStore / batch / facade 拆分)**—— 基于 B + C + D 的 contract design,逐文件 dissect SDK god files;含 delegation tests 重写
-3. **I(service / agent 依赖切换)**—— A 完成后,external consumers 改 import(以 §4 列出的 `rg` 清单为 evidence)
+3. **I(service / agent 依赖切换)**—— A 完成后,external consumers 改 import(以 §4 列出的 `rg` 清单为 evidence)。commit 3 实测无 production runtime migration 需求,并以 `test_sdk_consumer_boundary.py` 守住唯一 authoring-helper allowlist
 4. **E(errors 体系归属)**—— A + I 完成后,runtime error class 与 SDK re-export 范围明朗
 5. **J + G(publish-facing compatibility)**—— 决定 SDK 旧 import paths、package export / run helpers 是否保留、是否 deprecate、哪些路径标 stable
 6. **F + H(灰区)**—— 按 pre-scoping default 收口,或在 cleanup 完成后单独评估
@@ -289,8 +289,7 @@ Decision phase pass 1(B+C+D)与 pass 2(A/E/F/G/H/I/J)已具体化以下 acceptan
 - [ ] `SDKRegistry` 留 SDK;application runtime contracts 不接 `SDKRegistry` object,只接 compiled/runtime-normalized inputs
 - [ ] `SDKStore.export_package(...)` / `SDKStore.run_package(...)` 若保留,文档标明其 compatibility/advanced status;canonical owner 仍是 adapter/service delivery surface
 - [ ] `_SDKViewsManager` 留 SDK;application 只接 `ViewSpec` / normalized view value,不拥有 named-view registry
-- [ ] service 内 import 全部走 application(runtime ops);grep 实证:`rg "from kernel.sdk|import kernel.sdk" src/service` 输出仅限 tests/ergonomic 场景
-- [ ] agent 同上;production 允许 `compile_schema_from_classes` 这类 authoring helper,但不得新增 SDK runtime import
+- [x] service / agent production SDK imports 实测仅 1 行(`src/agent/extraction/api.py:compile_schema_from_classes`,authoring helper);由 `src/kernel/tests/test_sdk_consumer_boundary.py` allowlist 守护,不得新增 SDK runtime import
 - [ ] delegation tests 重新评估并 rewrite(语义从 hidden delegation → explicit facade pattern);`test_sdk_batch_application_delegate.py` 不再断言 `_application_*` 私有字段,改测 outward 行为
 - [ ] SDK top-level `__all__` 只暴露 product surface / compatibility aliases,不得 re-export application internals
 - [ ] kernel docs 同步:application docs 升级为 canonical runtime;sdk docs 重写为 ergonomic surface
@@ -316,7 +315,7 @@ Decision phase pass 1(B+C+D)与 pass 2(A/E/F/G/H/I/J)把 contract-first 顺序�
 10. **Commit / PR mode**:用 4-commit squashable stack,而不是一个巨型 atomic commit:
    - commit 1:application contract / protocol surface
    - commit 2:pure refactor split with stable public API;用 `python -c "from kernel.sdk import *"` + import-graph diff 验证无 outward break
-   - commit 3:consumer migration(service / agent / tests)
+   - commit 3:consumer boundary guard(service / agent production import allowlist) + audit close
    - commit 4:docs + validation cleanup
 
 ## 9. Docs To Update
