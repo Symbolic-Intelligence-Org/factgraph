@@ -7,7 +7,7 @@
 **Runtime-authority cleanup 已 implemented**:`kernel.application` 已扶正为 canonical Python runtime authority,`kernel.sdk` 保持 Python product surface / authoring DSL / outward facade。
 
 - 当前分支:`oss-prep-v0.1`
-- 当前最新工作:OS-prep v0.1 readiness blueprint 已 implemented;v0.1 OSS surface = kernel-only,PyPI metadata 只暴露 kernel package,README 已 kernel-first,`src/kernel` Ruff 已 blocking
+- 当前最新工作:OS-prep v0.1 readiness blueprint 已 implemented;新建 v0.1 release-candidate verification blueprint(draft,no-publish)。v0.1 OSS surface = kernel-only,PyPI metadata 只暴露 kernel package,README 已 kernel-first,`src/kernel` Ruff 已 blocking
 - 当前测试基线:1097 tests 全绿,3 skips(5 段:kernel 685 skipped 1 / agent 255 skipped 2 / service 42 / domains/ecss 99 / benchmarks 16)
 - runtime cleanup blueprint:[2026-04-28_runtime-authority-cleanup.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-04-28_runtime-authority-cleanup.md),status `implemented`,暂不归档
 - OS-prep blueprint 仍在 active,但 status 已 implemented。用户明确 OSS v0.1 仅包含 kernel 主体,所以 #1/#2/#3/#4/#7/#11/#12 已按 kernel-only surface 收口。#4 默认名锁为 `factpy-kernel`,但真实 PyPI reservation 仍需 release day upload / trusted publishing。剩余工作主要是 release-day checklist 与 staged CI gate 后续提升。
@@ -72,12 +72,14 @@ tools/
 
 - Runtime-authority cleanup:implemented,留在 active,暂不 archive。
 - OS-prep v0.1:implemented,仍留 active;#2 packaging hardening / #11 README / #12 optional-domain handling / #8 kernel Ruff gate 已落地。
+- v0.1 release-candidate verification:draft;用于判定代码和 wheel artifact 是否可进入 release-day workflow,不发布、不 tag、不 reserve PyPI name。
 - 早期 active 蓝图仍需后续 triage,不要把 memory 当成当前实现真相。
 
 ## 下一步方向
 
 **优先级 1:OS-prep release close-out**
 
+- v0.1 RC verification:先跑 no-publish wheel build/inspect/clean install/README quickstart/audit optional-domain smoke,再给 pass/conditional pass/block verdict
 - #4 package name:默认锁 `factpy-kernel`;2026-04-28 exact-name check 当前可用,但 publish time 仍需重跑并通过首次 upload / trusted publishing 完成 reservation
 - #8 CI gate follow-up:`src/kernel` Ruff 已 blocking;service/tools Ruff(62 errors)与 mypy(`src/kernel`:385 errors / 73 files,tests 占 280)仍需逐步清 baseline 后升 blocking
 - release validation:按 README 的 kernel-only install path 和 `test_wheel_kernel_only_packaging.py` 做 wheel inspection
