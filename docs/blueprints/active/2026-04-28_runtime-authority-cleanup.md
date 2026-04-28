@@ -185,6 +185,50 @@ namespace split(2026-04-27 commit `81c6f77`)把 4 个 packages 边界划清,但 
 - I 的 production import acceptance 用 `rg "from kernel\\.sdk|import kernel\\.sdk" src/service src/agent` 复核;允许项必须逐条解释为 authoring/ergonomic,不是 runtime authority。
 - 任何 re-export / alias 都必须有 owner 注释或 docs 说明,防止用户把 compatibility path 误读成 canonical owner。
 
+#### 5.2.3 Implementation shape audit pass 1:B + C + D file shape(scoped)
+
+本轮在 `runtime-authority-cleanup` branch 上只读核验 B(Query) / C(Ingest) / D(Derivation) 相关代码,不改生产代码。结论:implementation phase 的 commit 1 应是 **application contract pure add / narrow export update**,不是从 SDK god files 里搬逻辑。commit 2 以后再把 SDK adapter 切到这些 contracts。
+
+**已存在可复用 application protocol inventory**:
+
+- `src/kernel/application/protocol/entity_read.py`:已有 `EntitySnapshotDTO` / `FieldAssertionsDTO` / `AssertionRecordDTO` / `EntityReadRequest` / `EntityReadResponse`;query entity-slot result 必须复用这些 DTO,不得返回 SDK `EntitySnapshot` / `FieldAssertions`
+- `src/kernel/application/protocol/entity_write.py`:已有 `EntityWriteCommand` / `FieldMutation` / `EntityWritePlan` / `EntityWriteResult`;ingest normalized write path 应复用 write-plan primitives,避免发明第二套 write DTO
+- `src/kernel/application/protocol/schema_runtime.py`:已有 `EntitySelector` / `EntityRef` / `FieldPath`;query / ingest target refs 与 field refs 应落到这些 application value shapes
+- `src/kernel/application/protocol/common.py`:已有 `JSONValue` / `ProtocolShapeError` / `ErrorDTO` / `WarningDTO`;新增 protocol DTO 沿用这一层的 validation / diagnostics 风格
+
+**Commit 1 候选文件集合**(pure add + explicit exports):
+
+| Area | Candidate files | Commit 1 只做 |
+|---|---|---|
+| Query | `src/kernel/application/protocol/query.py`;`src/kernel/application/query_runtime.py` | 定义 SDK-independent `QueryRuntimeRequest` / row result DTO / executor skeleton。request 接 `where_ir`、return slot contract、missing/type-mismatch policy、optional query id/version;entity result slot 使用 `EntitySnapshotDTO`。不接 SDK `QueryPlan` / `ReturnContractEntry` / `Query` DSL。 |
+| Ingest | `src/kernel/application/protocol/ingest.py`;`src/kernel/application/ingest_runtime.py` | 定义 normalized ingest request/result DTO 与 bulk executor seam。`set` / `add` item 复用 `FieldPath` + encoded target ref + application value/meta;`retract` item 使用 assertion id;执行侧复用 `plan_write_command` / `apply_write_plan`。SDK descriptor parsing 不进入 application。 |
+| Derivation | `src/kernel/application/protocol/derivation.py`;`src/kernel/application/derivation_runtime.py` | 定义 compiled derivation plan request shape 与 evaluate/accept orchestration seam。plan shape 必须保留 `head` 与 `target_pred_id/head_vars` 两条路径,并支持 multi-head plan list。SDK `Derivation` object / authoring payload lowering 不进入 application。 |
+| Exports | `src/kernel/application/protocol/__init__.py`;`src/kernel/application/__init__.py` | 只导出稳定的 application runtime protocol / executor symbols;不得把 SDK compatibility aliases 或 outward facade types 重新暴露出来。 |
+
+**Query shape audit**:
+
+- 当前 `sdk/query_runtime.py` 在 executor 内部做 `lower_query_rule_ast_to_ir(...)`,再调用 `project_view_facts(...)` / `evaluate_native_where(...)` / hydrate。application contract 应接已经 runtime-normalized 的 `where_ir`;SDK adapter 或 future neutral authoring lowerer 负责从 SDK `Query` / `QueryPlan` 产出 `where_ir`。
+- 当前 hydrate result 是 SDK `EntitySnapshot` / `FieldAssertions`;application executor 应改为 `EntitySnapshotDTO` / `FieldAssertionsDTO`,SDK adapter 再映射回 outward `EntitySnapshot`、dict row 或 `return_mode="instance"`。
+- `query_id` / `version` 只作为 optional contract slots 预留;不在本 blueprint 修 K.1 的 primitive identity 语义。
+
+**Ingest shape audit**:
+
+- 当前 `sdk/ingest.py` 的 validation / coercion 仍依赖 SDK `Field` descriptor、`sdk._schema_pred_for_field(...)`、`sdk._rest_terms_for_field(...)`;这些属于 SDK adapter,不应进入 application。
+- 当前写入闭环直接调用 `sdk.retract(...)` / `sdk.set(...)` / `sdk.add(...)`;application ingest executor 应接 normalized items,并在 application 内部落到 existing entity-write plan/apply path。
+- result 需要保留现有 `written` / `skipped` / `duplicate` / warnings / diagnostics / collect-and-stop outward semantics;SDK `IngestResult` 可以继续作为 adapter result。
+
+**Derivation shape audit**:
+
+- 当前 `SDKStore.evaluate(...)` 混合了 SDK authoring payload lowering、mode/engine options sugar、compiled plan orchestration、multi-head shared `run_id`、core `evaluate_store(...)` 调用。application 只接 compiled plan(s),不接 SDK DSL object。
+- application derivation runtime 应拥有 compiled plan orchestration、multi-plan shared run id、body confidence validation、core `evaluate_store(...)` / `Store.accept(...)` / `Store.accept_many(...)` 调用;SDK 保留 `view` / `temporal_view` rejection、keyword sugar 与 outward compatibility wrapper。
+- multi-head regression coverage 仍需新增:single-head via `target=`,multi-head via `head=[HeadCall, HeadCall]`,以及 `_heads` 私有 normalization outward 行为。
+
+**Implementation constraints from this shape audit**:
+
+- commit 1 不修改 `sdk/store.py` / `sdk/query_runtime.py` / `sdk/ingest.py` / `sdk/batch.py` / `sdk/facade.py`,除非仅为 import smoke 暴露 application symbols 所需的 narrow export update
+- commit 2 才切 SDK adapter,且必须保持 `python -c "from kernel.sdk import *"` 与现有 SDK outward tests 语义
+- 若 implementation 发现 query / ingest 必须复用 SDK-only DSL type,先回到 blueprint/audit 更新 scope,不得把 SDK type 直接带进 application protocol
+
 ### 5.3 推荐起步顺序(scoping 时讨论)
 
 > v2 patch(2026-04-28):letters 重映射后调整顺序;原则不变 — design contracts before splitting,split before consumer migration,errors / compat 收尾,灰区最后。
@@ -237,6 +281,7 @@ Decision phase pass 1(B+C+D)与 pass 2(A/E/F/G/H/I/J)已具体化以下 acceptan
 - [ ] Ingest runtime contract 落地:application 新增 normalized ingest request/result DTO + executor;SDK `ingest(...)` 不再通过 `sdk.set` / `sdk.add` / `sdk.retract` 闭环写入
 - [ ] Derivation runtime contract 落地:application 接管 compiled derivation evaluate / accept orchestration;SDK 只保留 DSL lowering、keyword sugar 与 outward compatibility
 - [ ] Derivation contract 至少覆盖 3 类 fixture:single-head via `target=`,multi-head via `head=[HeadCall, HeadCall]`,以及 `_heads` 私有 normalization 的 outward 行为;multi-head 当前缺 regression coverage,需新增 fixture
+- [ ] Implementation shape follows §5.2.3:commit 1 只新增 application protocol / executor surface + narrow exports,不切 SDK god files
 - [ ] sdk/batch.py / sdk/store.py / sdk/facade.py 拆分完成,god file 行数显著下降(目标:无单文件 > 800 行)
 - [ ] application 接收 runtime impl(具体模块清单视 scoping 决议)
 - [ ] sdk 改成 thin facade,公开 API 形态稳定(为 OS v0.1 contract 准备)

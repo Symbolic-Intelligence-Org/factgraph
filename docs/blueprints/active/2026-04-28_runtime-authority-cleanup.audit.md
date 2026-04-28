@@ -14,6 +14,7 @@
 | 2026-04-28 | decision phase | Pass 1:B+C+D contract design scoped | 按 §5.3 推荐顺序先收口 B(Query) / C(Ingest) / D(Derivation evaluate/accept) contract。结论:application 接收 runtime-normalized payload,不接 SDK DSL / facade objects;SDK 保留 ergonomic surface 与 compatibility adapter。Blueprint 新增 §5.2.1,把 §5.2 表格 B/C/D 标成 scoped,并把 §7 Acceptance / §8 Implementation Plan / §9 Docs To Update 的 B+C+D 首批内容具体化。仍只动本地 untracked blueprint/audit 文件,不改代码,不 stage,不 commit。 |
 | 2026-04-28 | decision phase (v4 patch) | Round 2 cross-check corrections applied | 采纳交叉核验的 Tier 1+2 high-value corrections,并做本地复核:application public symbols 仍为 21(不改);cleanup framing 改成 complete partial migration;补 `batch.py` / `facade.py` / `store.py` partial migration inventory;扩大 Trap 6 grep;修正 service/agent import 数字为 13 import lines / 9 files excluding markdown,production 仅 `compile_schema_from_classes`;G/J 与 OS-prep #2/#11 关系收紧;commit plan 改为 4-commit squashable stack。拒绝/弱化 3 个误判:不加横切 logging/metrics/deprecation 分类;不改 application symbol count;不写 OS-prep 全量 auto-unhold。 |
 | 2026-04-28 | decision phase | Pass 2:A+E+F+G+H+I+J owner/compat scoped | 按用户指示执行 A,继续逐项 scope §5.2。实测确认:`SDKStore.export_package/run_package` 只是 adapter wrapper,service/runtime 直接调 adapter;`_SDKViewsManager` 是 SDKStore-local in-memory named-view manager;`SDKRegistry` 是 authoring-adjacent SDK facade,无现成 `RegistryProtocol`;service/agent production SDK import 仅 extraction 的 `compile_schema_from_classes` authoring helper。Blueprint 新增 §5.2.2,把 A/E/F/G/H/I/J 标成 scoped,并补 §7/§8 acceptance/plan。无生产代码改动。 |
+| 2026-04-28 | implementation branch | Shape audit pass 1:B+C+D file shape scoped | 在 `runtime-authority-cleanup` branch 上只读核验 `sdk/query_runtime.py` / `sdk/ingest.py` / `sdk/store.py` / `sdk/batch.py` / `sdk/facade.py` 与 `application/protocol/*`。Blueprint 新增 §5.2.3,明确 commit 1 是 application contract pure add:`protocol/query.py` + `query_runtime.py`,`protocol/ingest.py` + `ingest_runtime.py`,`protocol/derivation.py` + `derivation_runtime.py`,以及 narrow exports。结论:复用既有 entity read/write/schema/common DTO;SDK adapter 切换留 commit 2;不得把 SDK `QueryPlan` / `ReturnContractEntry` / `Field` descriptor / `Derivation` DSL object 带入 application protocol。 |
 
 ## Decision Notes
 
@@ -148,6 +149,21 @@
    **J Compatibility**
    - **Why**:OS publish makes top-level SDK imports a practical contract even if v0.1 is not stable.
    - **Decision**:`kernel.sdk.__all__` remains product-surface only,plus explicit compatibility aliases for user-visible errors if needed. Do not re-export application internals from SDK. Document canonical owner when aliases exist.
+
+9. **Implementation branch shape audit pass 1:B+C+D file shape**
+
+   在进入生产代码前,先把实际 file shape 与 commit boundary 写回 blueprint,避免把 commit 1 做成半迁移半重构。
+
+   **Code evidence**:
+   - `application/protocol/entity_read.py` / `entity_write.py` / `schema_runtime.py` / `common.py` 已提供 read/write/ref/diagnostics primitives,新增 query / ingest / derivation protocol 必须复用这些基础 DTO。
+   - `sdk/query_runtime.py` 当前 executor 接 SDK `QueryPlan` / `ReturnContractEntry`,并返回 SDK `EntitySnapshot` / `FieldAssertions`;application query contract 必须只接 `where_ir` 与 SDK-independent return-slot shape。
+   - `sdk/ingest.py` 当前 validation/coercion 绑定 SDK `Field` descriptor,写入闭环走 `sdk.set/add/retract`;application ingest contract 只能接 normalized items,SDK descriptor parsing 留 adapter。
+   - `SDKStore.evaluate(...)` 当前混合 SDK lowering 与 compiled plan orchestration;application derivation runtime 只接 compiled plans,SDK `Derivation` DSL / keyword sugar 留 adapter。
+
+   **Decision**:
+   - commit 1 只新增 application protocol / executor surface + narrow exports,不切 SDK god files。
+   - commit 2 再切 SDK adapters,并用 `python -c "from kernel.sdk import *"` 与 outward behavior tests 证明 public API 稳定。
+   - 若 implementation 发现 application protocol 必须接 SDK-only type,先更新 blueprint/audit,不得以 convenience 为由突破 runtime authority boundary。
 
 ### 未决问题(scoping 时讨论)
 
