@@ -7,10 +7,10 @@
 **Runtime-authority cleanup 已 implemented**:`kernel.application` 已扶正为 canonical Python runtime authority,`kernel.sdk` 保持 Python product surface / authoring DSL / outward facade。
 
 - 当前分支:`oss-prep-v0.1`
-- 当前最新工作:runtime-authority cleanup 已 merge 回 OS-prep baseline;OS-prep scope correction 记录 v0.1 OSS surface = kernel-only
-- 当前测试基线:1093 tests 全绿(5 段:kernel 681 / agent 255 skipped 2 / service 42 / domains/ecss 99 / benchmarks 16)
+- 当前最新工作:OS-prep #2/#11/#12 implementation pass 已落地到本地分支;v0.1 OSS surface = kernel-only,PyPI metadata 只暴露 kernel package,README 已 kernel-first
+- 当前测试基线:1097 tests 全绿,3 skips(5 段:kernel 685 skipped 1 / agent 255 skipped 2 / service 42 / domains/ecss 99 / benchmarks 16)
 - runtime cleanup blueprint:[2026-04-28_runtime-authority-cleanup.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-04-28_runtime-authority-cleanup.md),status `implemented`,暂不归档
-- OS-prep blueprint 仍 active/scoped;用户明确 OSS v0.1 仅包含 kernel 主体,所以 #1/#3/#7 已按 kernel-only surface 修正;#2 PyPI policy / #11 README OS framing / #12 optional-domain handling 可继续单独收口
+- OS-prep blueprint 仍 active/scoped;用户明确 OSS v0.1 仅包含 kernel 主体,所以 #1/#2/#3/#7/#11/#12 已按 kernel-only surface 收口。剩余 release-coupled 工作主要是 #4 publish-time package name reservation/check 与 staged CI gate 后续提升。
 
 ## 当前 namespace
 
@@ -71,16 +71,17 @@ tools/
 ## 当前 active 蓝图状态
 
 - Runtime-authority cleanup:implemented,留在 active,暂不 archive。
-- OS-prep v0.1:scoped,已修正 OSS surface = kernel-only;下一步可继续 #2 PyPI policy / #11 README OS framing / #12 optional-domain handling。
+- OS-prep v0.1:scoped,已修正 OSS surface = kernel-only;#2 packaging hardening / #11 README / #12 optional-domain handling 已落地。
 - 早期 active 蓝图仍需后续 triage,不要把 memory 当成当前实现真相。
 
 ## 下一步方向
 
-**优先级 1:OS-prep second unhold**
+**优先级 1:OS-prep release close-out**
 
-- #2 PyPI policy:决定 immediate / deferred / cadence-based,并把 `pyproject.toml` package discovery 收紧到 `kernel*` only;PyMuPDF / PyMuPDF4LLM 属 private agent surface,不得进入 kernel-only wheel metadata
-- #11 README OS framing:改成 kernel-first external reader narrative;agent/service/domains 只能作为 private/future monorepo context
-- #12 optional-domain handling:`AuditQuery.list_compliance_matrix(...)` 内部 owner split 仍成立,但 domains 不进 kernel-only wheel;需决定 hide / optional / private docs 处理
+- #4 final package-name reservation/check:publish time 再确认 `factpy-kernel` 可用
+- #8 CI gate follow-up:broad ruff/mypy/coverage staged checks 仍需逐步清 baseline 后升 blocking
+- release validation:按 README 的 kernel-only install path 和 `test_wheel_kernel_only_packaging.py` 做 wheel inspection
+- #2/#11/#12 已落地:package discovery `kernel*` only;README kernel-first;`AuditQuery.list_compliance_matrix(...)` 缺少 `domains.ecss` 时抛 `AuditOptionalDomainError`
 - #7 OpenAPI yaml 已因 kernel-only OSS surface closed: v0.1 不发布 HTTP/OpenAPI artifact
 
 **优先级 2:primitive-contract follow-up**
