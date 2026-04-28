@@ -995,11 +995,11 @@ def _schema_identity_fields(
         if not isinstance(identity_fields, list):
             return []
         out: list[tuple[str, str]] = []
-        for field in identity_fields:
-            if not isinstance(field, dict):
+        for identity_field in identity_fields:
+            if not isinstance(identity_field, dict):
                 continue
-            name = field.get("name")
-            tag = field.get("type_domain")
+            name = identity_field.get("name")
+            tag = identity_field.get("type_domain")
             if isinstance(name, str) and name and isinstance(tag, str) and tag:
                 out.append((name, tag))
         return out

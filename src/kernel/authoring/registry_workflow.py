@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """
 High-level authoring entrypoints for registry-backed workflow/session operations.
 
 This groups the registry filesystem backend together with publish/apply/session
 helpers so callers can stay on a smaller module surface.
 """
+
+from __future__ import annotations
 
 from .apply_execute import (
     AuthoringApplyExecuteError,

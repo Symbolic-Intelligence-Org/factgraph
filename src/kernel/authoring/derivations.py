@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 """
 High-level authoring entrypoints for derivation parsing, compilation, and preview.
 """
+
+from __future__ import annotations
 
 from .preflight import (
     derivation_dry_run_preview,

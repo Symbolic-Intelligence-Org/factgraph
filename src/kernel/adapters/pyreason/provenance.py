@@ -11,7 +11,7 @@ Key difference from Souffle provenance:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import Any, Mapping
 
 from kernel.adapters.pyreason._helpers import _parse_edge_component, _pred_short_name
 from kernel.audit.evidence_graph import (
@@ -25,10 +25,6 @@ from kernel.audit.evidence_graph import (
     EvidenceNode,
 )
 from kernel.core.store._support import PYREASON_PROVENANCE_KIND
-
-if TYPE_CHECKING:
-    import pandas as pd
-
 
 @dataclass(frozen=True)
 class PyReasonTraceEventV0:

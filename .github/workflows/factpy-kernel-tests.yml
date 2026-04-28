@@ -26,14 +26,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements/dev.txt
 
-      - name: Ruff (application runtime gate)
+      - name: Ruff (kernel gate)
         run: |
-          python -m ruff check src/kernel/application
+          python -m ruff check src/kernel
 
-      - name: Ruff (kernel/service/tools audit)
+      - name: Ruff (service/tools audit)
         continue-on-error: true
         run: |
-          python -m ruff check src/kernel src/service tools
+          python -m ruff check src/service tools
 
       - name: Mypy (kernel/service audit)
         continue-on-error: true
