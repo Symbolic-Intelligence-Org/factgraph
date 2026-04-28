@@ -6,11 +6,11 @@
 
 **Runtime-authority cleanup 已 implemented**:`kernel.application` 已扶正为 canonical Python runtime authority,`kernel.sdk` 保持 Python product surface / authoring DSL / outward facade。
 
-- 当前分支:`runtime-authority-cleanup`
-- 当前最新工作:runtime-authority cleanup docs/status close-out(commit 4)
+- 当前分支:`oss-prep-v0.1`
+- 当前最新工作:runtime-authority cleanup 已 merge 回 OS-prep baseline;OS-prep scope correction 记录 v0.1 OSS surface = kernel-only
 - 当前测试基线:1093 tests 全绿(5 段:kernel 681 / agent 255 skipped 2 / service 42 / domains/ecss 99 / benchmarks 16)
 - runtime cleanup blueprint:[2026-04-28_runtime-authority-cleanup.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-04-28_runtime-authority-cleanup.md),status `implemented`,暂不归档
-- OS-prep blueprint 仍 active/scoped;runtime cleanup implemented 后,OS-prep 未 scoped 的 #2 PyPI policy / #7 OpenAPI yaml / #11 README OS framing 可继续单独收口
+- OS-prep blueprint 仍 active/scoped;用户明确 OSS v0.1 仅包含 kernel 主体,所以 #1/#3/#7 已按 kernel-only surface 修正;#2 PyPI policy / #11 README OS framing / #12 optional-domain handling 可继续单独收口
 
 ## 当前 namespace
 
@@ -71,17 +71,17 @@ tools/
 ## 当前 active 蓝图状态
 
 - Runtime-authority cleanup:implemented,留在 active,暂不 archive。
-- OS-prep v0.1:scoped,下一步可继续 #2 PyPI policy / #7 OpenAPI yaml / #11 README OS framing。
+- OS-prep v0.1:scoped,已修正 OSS surface = kernel-only;下一步可继续 #2 PyPI policy / #11 README OS framing / #12 optional-domain handling。
 - 早期 active 蓝图仍需后续 triage,不要把 memory 当成当前实现真相。
 
 ## 下一步方向
 
 **优先级 1:OS-prep second unhold**
 
-- #2 PyPI policy:必须处理 PyMuPDF / PyMuPDF4LLM AGPL/commercial dual license 对 `documents` extra 的影响
-- #7 OpenAPI yaml:cleanup implementation gate 已解除,可重新决定 route/export contract
-- #11 README OS framing:可按 application runtime authority + SDK product surface 更新公开叙述
-- #5 LICENSE / #8 CI gates / #10 CONTRIBUTING 等可继续独立推进
+- #2 PyPI policy:决定 immediate / deferred / cadence-based,并把 `pyproject.toml` package discovery 收紧到 `kernel*` only;PyMuPDF / PyMuPDF4LLM 属 private agent surface,不得进入 kernel-only wheel metadata
+- #11 README OS framing:改成 kernel-first external reader narrative;agent/service/domains 只能作为 private/future monorepo context
+- #12 optional-domain handling:`AuditQuery.list_compliance_matrix(...)` 内部 owner split 仍成立,但 domains 不进 kernel-only wheel;需决定 hide / optional / private docs 处理
+- #7 OpenAPI yaml 已因 kernel-only OSS surface closed: v0.1 不发布 HTTP/OpenAPI artifact
 
 **优先级 2:primitive-contract follow-up**
 
