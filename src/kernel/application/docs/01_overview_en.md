@@ -1,211 +1,140 @@
 # Overview of the Application Module (`kernel`)
 
-* Scope: `src/kernel/application`
-* Last updated: 2026-03-10
-* Target readers: developers who need to understand the middle layer of the entity-centric runtime, the SDK delegation boundary, and the subsequent service integration entry points
+- Scope: `src/kernel/application`
+- Last updated: 2026-04-28
+- Target readers: developers who need to understand Python runtime authority, SDK adapter boundaries, and service/agent consumer constraints
 
 ## 1. Module Responsibilities
 
-`application` is a **neutral runtime layer above core**.
+`application` is the canonical Python runtime authority above `core`. It owns runtime-normalized entity read/write, query, ingest, and compiled derivation evaluate/accept operations, expressed as SDK-independent protocol DTOs and executors.
 
-It is responsible for extracting the entity-centric runtime mechanisms that were previously scattered across the SDK facade into a set of shared capabilities, so that:
+It is responsible for:
 
-* `sdk` can continue to provide the Python authoring / facade experience
-* `service` can directly depend on neutral read/write/query/projection capabilities
+- application protocol DTOs and error/warning DTO shapes
+- schema runtime indexing, selector/ref resolution, and field/type lookup
+- entity hydration / read requests
+- entity write planning / apply
+- query runtime request/result execution
+- normalized ingest request/result execution
+- compiled derivation evaluate / accept orchestration
 
-It is currently responsible for:
+It is not responsible for:
 
-* protocol DTOs
-* schema runtime indexing and selector/ref resolution
-* entity hydration / read requests
-* entity write planning / apply
-* read/write delegation handoff points for the SDK facade
+- the Python facade shape of `SDKStore` / `SDKBatchTx` / `EntitySnapshot` / `EntityEditor`
+- SDK `Field` descriptors, metaclasses, DSL sugar, or `Query` / `Derivation` authoring objects
+- HTTP routes, sessions, or registry delivery
+- package export/run delivery surfaces
+- the named view registry (`sdk.views`)
 
-It is currently not responsible for:
+## 2. Module Structure
 
-* replacing the Python facade surface of `SDKStore` / `SDKBatchTx`
-* HTTP / session / registry routing
-* the complete implementation of graph projection / relationship family / binding
-* unified middle-layer handling for query lowering/runtime hydration
+- `protocol/`
+  - `common.py`: `ErrorDTO` / `WarningDTO` / JSON value validation
+  - `schema_runtime.py`: `EntitySelector` / `EntityRef` / `FieldPath`
+  - `entity_read.py`: read request/response, snapshot, field value/assertion DTOs
+  - `entity_write.py`: write command/plan/result DTOs
+  - `query.py`: `QueryRuntimeRequest` / `QueryRuntimeResponse` / return contract
+  - `ingest.py`: normalized ingest item/request/result DTOs
+  - `derivation.py`: compiled derivation evaluate/accept request DTOs
+- `schema_runtime.py`
+  - schema index, identity materialization, ref encoding, field/type lookup
+- `entity_view.py`
+  - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
+- `entity_write.py`
+  - `plan_write_command(...)`, `apply_write_plan(...)`
+- `query_runtime.py`
+  - `execute_query(...)`
+- `ingest_runtime.py`
+  - `apply_ingest_request(...)`
+- `derivation_runtime.py`
+  - `evaluate_derivation_plans(...)`, `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
 
-## 2. Current Module Structure
+## 3. Public Runtime Surface
 
-* `protocol/`
+`src/kernel/application/__init__.py` currently exports 29 public symbols. The main executor entry points are:
 
-  * canonical DTOs for the application layer
-* `schema_runtime.py`
+- `execute_read_request(...)`
+- `hydrate_entity(...)`
+- `hydrate_entities(...)`
+- `plan_write_command(...)`
+- `apply_write_plan(...)`
+- `execute_query(...)`
+- `apply_ingest_request(...)`
+- `evaluate_derivation_plans(...)`
+- `accept_derivation_candidate_set(...)`
+- `accept_derivation_candidate_sets(...)`
 
-  * `SchemaIndex`, field types, selector/ref resolution
-* `entity_view.py`
+The main schema/runtime helpers are:
 
-  * entity hydration, `execute_read_request(...)`
-* `entity_write.py`
-
-  * write planning, `apply_write_plan(...)`
-* `__init__.py`
-
-  * currently exported middle-layer entry points
-
-## 3. Currently Implemented Capabilities
-
-### 3.1 protocol
-
-Currently defined:
-
-* common DTOs
-* schema runtime DTOs
-* entity read DTOs
-* entity write DTOs
-
-Boundaries:
-
-* uses `dataclass(frozen=True)`
-* the protocol layer only accepts JSON-safe values and structured `EntityRef` / `EntitySelector`
-* does not bring SDK descriptor / metaclass semantics into the middle layer
-
-### 3.2 schema runtime
-
-Currently implemented:
-
-* `build_schema_index(...)`
-* `resolve_selector(...)`
-* `materialize_identity(...)`
-* `field_predicate(...)`
-* `field_value_type(...)`
-* `encode_entity_ref(...)`
-* `entity_type_from_ref(...)`
-
-It provides a unified schema runtime index for the read/write path, no longer relying on the internal indices of `SDKStore`.
-
-### 3.3 entity view
-
-Currently implemented:
-
-* `hydrate_entity(...)`
-* `hydrate_entities(...)`
-* `execute_read_request(...)`
-
-Implementation approach:
-
-* based on `Store + Ledger + project_view_facts(...)`
-* restores canonical identity from identity predicates
-* outputs `EntitySnapshotDTO`, current field values, and assertions/history
-
-### 3.4 entity write
-
-Currently implemented:
-
-* `plan_write_command(...)`
-* `apply_write_plan(...)`
-
-Current capabilities include:
-
-* target selector resolution
-* dependency entity ref resolution
-* `set/add/retract` planning
-* `record_exists` / identity materialization
-* single-target application-level apply
+- `build_schema_index(...)`
+- `resolve_selector(...)`
+- `materialize_identity(...)`
+- `encode_entity_ref(...)`
+- `entity_info(...)`
+- `field_predicate(...)`
+- `field_value_type(...)`
+- `entity_type_from_ref(...)`
 
 ## 4. Relationship with Other Layers
 
-* `core`
+- `core`
+  - owns low-level ledger/store/rule/evidence primitives.
+  - application composes these primitives into stable Python runtime contracts.
+- `sdk`
+  - owns product surface, authoring DSL, Python ergonomics, facade objects, and compatibility aliases.
+  - adapts SDK outward types into application DTOs and maps application results back to SDK outward types.
+- `service` / `agent`
+  - must not add production SDK runtime imports.
+  - the current allowed production SDK import is the agent extraction authoring helper `compile_schema_from_classes`.
+- `adapters` / `domains`
+  - some out-of-scope SDK consumers remain, such as PyReason adapter DSL coupling and ECSS SDK helpers. These are tracked as future primitive-contract or domain-facade work.
 
-  * `application` directly depends on lower-level primitives such as `Store`, `Ledger`, `projector`, and the write protocol
-* `sdk`
+## 5. SDK Adapter Status
 
-  * the SDK facade has already begun delegating to `application`
-  * the SDK remains responsible for facade compatibility and Python ergonomics
-* `service`
+Current SDK runtime delegation:
 
-  * in the future, it should depend directly on `application` rather than on `SDKStore`
-* `frontend`
+- `sdk.get(...)` / `sdk.find(...)` use application read/hydration DTOs.
+- `SDKBatchTx.preview()` and `BatchPlan.apply()` delegate to application write planning/apply when staged operations can be represented by application protocol.
+- `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
+- `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
+- `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
 
-  * does not depend directly on `application`
-  * should obtain capabilities through `service` DTOs
+SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
-## 5. Current SDK Delegation Status
+## 6. Conservative Boundaries
 
-### 5.1 Read side
+- Application protocol does not accept SDK-only types.
+- Query lowering and authoring validation remain SDK responsibilities.
+- Ingest descriptor parsing, item precheck diagnostics, and user-facing `IngestResult` remain SDK responsibilities.
+- Batch export/replay and wire plan compatibility remain SDK responsibilities.
+- `sdk.set(...)` / `sdk.add(...)` / `sdk.retract(...)` remain low-level SDK convenience methods.
+- Application write planning is single-target; multi-root atomic batch remains expressed by SDK batch staging.
+- Full exception hierarchy migration is deferred. Query/ingest/derivation runtime paths use application DTO error shapes while SDK product-domain errors remain SDK-owned.
 
-The SDK currently delegates the following read capabilities to `application`:
+## 7. Test Entry Points
 
-* `sdk_get(...)`
-* `sdk_find(...)`
-* `_build_snapshot(...)`
-
-Compatibility strategy:
-
-* the outward shape of the SDK remains unchanged
-* the `entity_ref` field is still presented as an encoded ref string
-* `FieldAssertions` / `AssertionRecord` still retain SDK facade types
-* filtering semantics are still conservatively retained in the SDK adaptation layer
-
-### 5.2 Write side
-
-The SDK currently delegates the following main batch-write path to `application`:
-
-* `SDKBatchTx.preview()`
-* `BatchPlan.apply()`
-
-The current strategy is conservative delegation:
-
-* when the entire batch of staged writes can be expressed by the application protocol, it goes through the application planner/apply path
-* otherwise, the entire batch falls back to the legacy batch path
-
-## 6. Current Conservative Boundaries
-
-The following boundaries are still retained and are intentionally not crossed by the current implementation:
-
-* SDK batch delegation to `application` only happens when the entire batch of staged writes can be expressed by the application protocol
-* if the batch contains raw `entity_ref` tokens, `bytes`, non-JSON-safe meta, or values that the application planner cannot represent stably, the entire batch falls back to legacy
-* `BatchPlan.ops` / `export()` / `to_json()` / `WireBatchPlan.apply()` retain legacy semantics
-* `entity_write.py` currently uses single-target `EntityWriteCommand` as the canonical planner and does not directly express multi-root atomic batch
-* temporal read/write has not yet been unified at the application layer
-
-## 7. Currently Unfinished Parts
-
-The following capabilities have not yet been implemented in the `application` layer:
-
-* `query_view.py`
-* `authoring_normalize.py`
-* `graph_projection.py`
-* `binding.py`
-
-This means that the current “core migration objective” has already been validated as complete, but the subsequent phases of the Blueprint have not yet been implemented.
-
-## 8. Current Test Entry Points
-
-The following command can be used for core regression:
+Core application and SDK adapter coverage is included in the kernel test segment:
 
 ```bash
-PYTHONPATH=src python -m unittest \
-  kernel.tests.test_application_protocol \
-  kernel.tests.test_application_schema_runtime \
-  kernel.tests.test_application_entity_view \
-  kernel.tests.test_application_entity_write \
-  kernel.tests.test_sdk_facade_application_delegate \
-  kernel.tests.test_sdk_batch_application_delegate \
-  kernel.tests.test_phase3_contracts_v1
+python -m unittest discover -s src/kernel/tests -p 'test_*.py'
 ```
 
-These tests cover:
+Key focused tests:
 
-* application protocol / schema runtime / read / write
-* SDK read delegation
-* SDK batch write delegation
-* post-migration facade compatibility
+- `test_application_schema_runtime.py`
+- `test_application_entity_view.py`
+- `test_application_entity_write.py`
+- `test_application_query_runtime.py`
+- `test_application_ingest_runtime.py`
+- `test_application_derivation_runtime.py`
+- `test_sdk_facade_application_delegate.py`
+- `test_sdk_batch_application_delegate.py`
+- `test_sdk_query_policies.py`
+- `test_sdk_ingest_application_delegate.py`
+- `test_sdk_consumer_boundary.py`
 
-## 9. Related Documents
+## 8. Related Documents
 
-* [blueprints/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/README.md)
-
-  * task blueprint workflow, state machine, and archive rules
-* [application_projection_blueprint.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/application_projection_blueprint.md)
-
-  * historical architecture blueprint, migration phases, and later planning
-* [application_protocol_spec.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/application_protocol_spec.md)
-
-  * historical application protocol draft
-* [frontend_entity_ui_design.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/frontend_entity_ui_design.md)
-
-  * historical entity/rule UI target expression for graph projection
+- [runtime-authority cleanup blueprint](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-04-28_runtime-authority-cleanup.md)
+- [docs/architecture_principles.md](/Users/zhenzhili/hnsm-backend/docs/architecture_principles.md)
+- [src/kernel/sdk/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/sdk/docs/README.md)

@@ -6,6 +6,12 @@ import warnings
 from typing import Any
 from uuid import UUID, uuid4
 
+from kernel.application.derivation_runtime import evaluate_derivation_plans
+from kernel.application.protocol import (
+    CompiledDerivationPlan,
+    CompiledHeadCall,
+    DerivationEvaluateRequest,
+)
 from kernel.application.schema_runtime import build_schema_index
 from kernel.authoring.derivations import compile_authoring_derivation_v1
 from kernel.authoring.rules import compile_authoring_rule_v1
@@ -16,7 +22,6 @@ from kernel.core.schema.schema_ir import schema_digest
 from kernel.adapters.souffle.package import ExportOptions, export_package
 from kernel.core.protocol.idref_v1 import encode_idref_v1
 from kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
-from kernel.core.store._evaluate import evaluate_store
 from kernel.core.store._artifact_sidecar import FileArtifactSidecar
 from kernel.adapters.souffle.runner import run_package
 from kernel.core.store.runtime import Store
@@ -31,7 +36,7 @@ from .error_codes import (
     INVALID_ROW_FORMAT,
     QUERY_INVALID_ROW_FORMAT,
 )
-from .errors import SDKSchemaError, SDKStoreError
+from .errors import SDKStoreError
 from .query_lower import QueryPlan, lower_query
 from .query_runtime import execute_query_plan
 from .schema import Entity, Field
@@ -507,62 +512,30 @@ class SDKStore:
         engine_ext: object | None = None,
         engine_options: dict[str, Any] | None = None,
     ) -> list[CandidateSet]:
-        if len(compiled_plans) == 1:
-            return self._evaluate_single_derivation_plan(
-                compiled_plans[0],
-                mode=mode,
-                registry=registry,
-                engine_ext=engine_ext,
-                engine_options=engine_options,
-            )
-
-        shared_run_id = self._derive_shared_run_id(compiled_plans[0]["derivation_id"])
-        merged: list[CandidateSet] = []
-        for plan in compiled_plans:
-            plan_candidates = self._evaluate_single_derivation_plan(
-                plan,
-                mode=mode,
-                registry=registry,
-                engine_ext=engine_ext,
-                engine_options=engine_options,
-            )
-            merged.extend(_with_candidate_run_id(plan_candidates, run_id=shared_run_id))
-        return merged
-
-    def _evaluate_single_derivation_plan(
-        self,
-        compiled: dict[str, Any],
-        *,
-        mode: str | None,
-        registry: RuleRegistry | None,
-        engine_ext: object | None = None,
-        engine_options: dict[str, Any] | None = None,
-    ) -> list[CandidateSet]:
-        resolved_mode = mode if mode is not None else compiled.get("mode", "native")
-        body_confidences = _coerce_body_confidences(
-            compiled.get("body_confidences"),
-            path="$.body_confidences",
+        if not compiled_plans:
+            return []
+        resolved_mode = _resolve_compiled_derivation_mode(compiled_plans, explicit_mode=mode)
+        request = DerivationEvaluateRequest(
+            plans=tuple(
+                _compiled_derivation_plan_to_application(
+                    compiled,
+                    mode=resolved_mode,
+                    explicit_engine_ext=engine_ext,
+                    engine_options=engine_options,
+                )
+                for compiled in compiled_plans
+            ),
+            run_id=(
+                self._derive_shared_run_id(compiled_plans[0]["derivation_id"])
+                if len(compiled_plans) > 1
+                else None
+            ),
+            engine=resolved_mode,
         )
-        resolved_engine_ext = _resolve_engine_ext_for_evaluate_plan(
-            mode=resolved_mode,
-            where=compiled.get("where"),
-            compiled_engine_ext=compiled.get("engine_ext"),
-            explicit_engine_ext=engine_ext,
-            legacy_body_confidences=body_confidences,
-        )
-        return evaluate_store(
-            self._store,
-            derivation_id=compiled["derivation_id"],
-            version=compiled["version"],
-            target_pred_id=compiled["target_pred_id"],
-            head_vars=list(compiled["head_vars"]),
-            where=list(compiled["where"]),
-            mode=resolved_mode,
-            head=compiled.get("head"),
-            engine_evaluate=self._store.evaluate_engine,
+        return evaluate_derivation_plans(
+            request,
+            store=self._store,
             registry=registry,
-            engine_ext=resolved_engine_ext,
-            engine_options=engine_options,
         )
 
     @staticmethod
@@ -1307,6 +1280,59 @@ def _coerce_body_confidences(raw_value: Any, *, path: str) -> list[float] | None
     return out
 
 
+def _resolve_compiled_derivation_mode(
+    compiled_plans: list[dict[str, Any]],
+    *,
+    explicit_mode: str | None,
+) -> str:
+    if explicit_mode is not None:
+        return explicit_mode
+    modes = {
+        str(compiled.get("mode", "native"))
+        for compiled in compiled_plans
+    }
+    if len(modes) != 1:
+        raise SDKStoreError(
+            "compiled derivation plans must use the same mode unless evaluate(mode=...) is provided",
+            path="$.mode",
+        )
+    return next(iter(modes))
+
+
+def _compiled_derivation_plan_to_application(
+    compiled: dict[str, Any],
+    *,
+    mode: str,
+    explicit_engine_ext: object | None,
+    engine_options: dict[str, Any] | None,
+) -> CompiledDerivationPlan:
+    body_confidences = _coerce_body_confidences(
+        compiled.get("body_confidences"),
+        path="$.body_confidences",
+    )
+    resolved_engine_ext = _resolve_engine_ext_for_evaluate_plan(
+        mode=mode,
+        where=compiled.get("where"),
+        compiled_engine_ext=compiled.get("engine_ext"),
+        explicit_engine_ext=explicit_engine_ext,
+        legacy_body_confidences=body_confidences,
+    )
+    return CompiledDerivationPlan(
+        derivation_id=compiled["derivation_id"],
+        version=compiled["version"],
+        body_ir=list(compiled["where"]),
+        heads=(
+            CompiledHeadCall(
+                target_pred_id=compiled["target_pred_id"],
+                head_var_names=tuple(compiled["head_vars"]),
+            ),
+        ),
+        head_spec=compiled.get("head"),
+        engine_ext=resolved_engine_ext,
+        engine_options=dict(engine_options or {}),
+    )
+
+
 def _validate_body_confidences_arity(*, where: Any, body_confidences: list[float]) -> None:
     branch_count = 1
     if isinstance(where, list) and where and all(isinstance(item, list) for item in where):
@@ -1340,31 +1366,6 @@ def _resolve_engine_ext_for_evaluate_plan(
         engine_ext=selected_engine_ext,
         legacy_body_confidences=legacy_body_confidences,
     )
-
-
-def _with_candidate_run_id(candidates: list[CandidateSet], *, run_id: str) -> list[CandidateSet]:
-    rewritten: list[CandidateSet] = []
-    for candidate in candidates:
-        rewritten.append(
-            CandidateSet(
-                derivation_id=candidate.derivation_id,
-                derivation_version=candidate.derivation_version,
-                run_id=run_id,
-                target=candidate.target,
-                key_tuple_digest=candidate.key_tuple_digest,
-                tup_digest=candidate.tup_digest,
-                payload=dict(candidate.payload),
-                support_digest=candidate.support_digest,
-                support_kind=candidate.support_kind,
-                generated_at=candidate.generated_at,
-                state=candidate.state,
-                confidence=candidate.confidence,
-                confidence_kind=candidate.confidence_kind,
-                candidate_key=candidate.candidate_key,
-                candidate_kind=candidate.candidate_kind,
-            )
-        )
-    return rewritten
 
 
 def _resolve_row_format(*, call_site: Any, store_default: Any, env_var: Any) -> str:

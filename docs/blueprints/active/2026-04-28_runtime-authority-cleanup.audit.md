@@ -14,6 +14,9 @@
 | 2026-04-28 | decision phase | Pass 1:B+C+D contract design scoped | 按 §5.3 推荐顺序先收口 B(Query) / C(Ingest) / D(Derivation evaluate/accept) contract。结论:application 接收 runtime-normalized payload,不接 SDK DSL / facade objects;SDK 保留 ergonomic surface 与 compatibility adapter。Blueprint 新增 §5.2.1,把 §5.2 表格 B/C/D 标成 scoped,并把 §7 Acceptance / §8 Implementation Plan / §9 Docs To Update 的 B+C+D 首批内容具体化。仍只动本地 untracked blueprint/audit 文件,不改代码,不 stage,不 commit。 |
 | 2026-04-28 | decision phase (v4 patch) | Round 2 cross-check corrections applied | 采纳交叉核验的 Tier 1+2 high-value corrections,并做本地复核:application public symbols 仍为 21(不改);cleanup framing 改成 complete partial migration;补 `batch.py` / `facade.py` / `store.py` partial migration inventory;扩大 Trap 6 grep;修正 service/agent import 数字为 13 import lines / 9 files excluding markdown,production 仅 `compile_schema_from_classes`;G/J 与 OS-prep #2/#11 关系收紧;commit plan 改为 4-commit squashable stack。拒绝/弱化 3 个误判:不加横切 logging/metrics/deprecation 分类;不改 application symbol count;不写 OS-prep 全量 auto-unhold。 |
 | 2026-04-28 | decision phase | Pass 2:A+E+F+G+H+I+J owner/compat scoped | 按用户指示执行 A,继续逐项 scope §5.2。实测确认:`SDKStore.export_package/run_package` 只是 adapter wrapper,service/runtime 直接调 adapter;`_SDKViewsManager` 是 SDKStore-local in-memory named-view manager;`SDKRegistry` 是 authoring-adjacent SDK facade,无现成 `RegistryProtocol`;service/agent production SDK import 仅 extraction 的 `compile_schema_from_classes` authoring helper。Blueprint 新增 §5.2.2,把 A/E/F/G/H/I/J 标成 scoped,并补 §7/§8 acceptance/plan。无生产代码改动。 |
+| 2026-04-28 | implementation branch | Shape audit pass 1:B+C+D file shape scoped | 在 `runtime-authority-cleanup` branch 上只读核验 `sdk/query_runtime.py` / `sdk/ingest.py` / `sdk/store.py` / `sdk/batch.py` / `sdk/facade.py` 与 `application/protocol/*`。Blueprint 新增 §5.2.3,明确 commit 1 是 application contract pure add:`protocol/query.py` + `query_runtime.py`,`protocol/ingest.py` + `ingest_runtime.py`,`protocol/derivation.py` + `derivation_runtime.py`,以及 narrow exports。结论:复用既有 entity read/write/schema/common DTO;SDK adapter 切换留 commit 2;不得把 SDK `QueryPlan` / `ReturnContractEntry` / `Field` descriptor / `Derivation` DSL object 带入 application protocol。 |
+| 2026-04-28 | implementation phase | Commit 3:service/agent boundary guard + audit close | service/agent SDK imports 实测:13 Python import lines / 9 Python files excluding markdown;plus 1 markdown example。production 仅 1 行 authoring helper(`src/agent/extraction/api.py:compile_schema_from_classes`),其余 12 行在 tests。新增 `test_sdk_consumer_boundary.py` 守护 production allowlist;§5.2 I 升为 Scoped+verified。out-of-scope consumers(`domains/ecss/sdk_helpers.py`,`kernel/adapters/pyreason/*`)记录 Decision 13。 |
+| 2026-04-28 | implemented | Commit 4:docs alignment + status implemented | application docs 升级为 canonical Python runtime authority;SDK docs 改为 product surface / adapter framing;`docs/architecture_principles.md` 加 Layer authority;`memory/current.md` 更新 1093-test baseline。Blueprint status `scoped` -> `implemented`;§10 Outcome / Deviations 填写完成。OS-prep #2/#7/#11 wait-for-cleanup-implementation gate 已解,但 OS-prep blueprint 不在本 commit 修改。 |
 
 ## Decision Notes
 
@@ -149,6 +152,21 @@
    - **Why**:OS publish makes top-level SDK imports a practical contract even if v0.1 is not stable.
    - **Decision**:`kernel.sdk.__all__` remains product-surface only,plus explicit compatibility aliases for user-visible errors if needed. Do not re-export application internals from SDK. Document canonical owner when aliases exist.
 
+9. **Implementation branch shape audit pass 1:B+C+D file shape**
+
+   在进入生产代码前,先把实际 file shape 与 commit boundary 写回 blueprint,避免把 commit 1 做成半迁移半重构。
+
+   **Code evidence**:
+   - `application/protocol/entity_read.py` / `entity_write.py` / `schema_runtime.py` / `common.py` 已提供 read/write/ref/diagnostics primitives,新增 query / ingest / derivation protocol 必须复用这些基础 DTO。
+   - `sdk/query_runtime.py` 当前 executor 接 SDK `QueryPlan` / `ReturnContractEntry`,并返回 SDK `EntitySnapshot` / `FieldAssertions`;application query contract 必须只接 `where_ir` 与 SDK-independent return-slot shape。
+   - `sdk/ingest.py` 当前 validation/coercion 绑定 SDK `Field` descriptor,写入闭环走 `sdk.set/add/retract`;application ingest contract 只能接 normalized items,SDK descriptor parsing 留 adapter。
+   - `SDKStore.evaluate(...)` 当前混合 SDK lowering 与 compiled plan orchestration;application derivation runtime 只接 compiled plans,SDK `Derivation` DSL / keyword sugar 留 adapter。
+
+   **Decision**:
+   - commit 1 只新增 application protocol / executor surface + narrow exports,不切 SDK god files。
+   - commit 2 再切 SDK adapters,并用 `python -c "from kernel.sdk import *"` 与 outward behavior tests 证明 public API 稳定。
+   - 若 implementation 发现 application protocol 必须接 SDK-only type,先更新 blueprint/audit,不得以 convenience 为由突破 runtime authority boundary。
+
 ### 未决问题(scoping 时讨论)
 
 - §5.2 A-J 已完成 scoped pass;K 已作为 B+D 的设计约束记录,实现留后续 primitive-contract blueprint
@@ -156,6 +174,40 @@
 - E(errors) 已有三档归属,但实现期仍需逐类选择 alias vs subclass vs DTO error mapping,不得改变 outward error code 字符串
 - §5.3 推荐起步顺序已调整为 B+C+D contract design → A 拆分 → I import reaffirm → E errors → J+G compatibility → F+H灰区
 - Acceptance(§7)/ Implementation Plan(§8)/ Docs To Update(§9)已填 pass 1 + pass 2 首批内容;后续 implementation phase 再填 Outcome / Deviations
+
+### Decision 13 — out-of-scope SDK consumers after §5.2 I close
+
+- `src/domains/ecss/sdk_helpers.py` production-imports `SDKStore` / `SDKStoreError` and uses SDKStore as a domain ergonomic facade while performing writes through core write protocol. This is outside §5.2 I, which is limited to service / agent consumers, and remains consistent with the audit-delivery contract boundary.
+- `src/kernel/adapters/pyreason/runner.py` and `src/kernel/adapters/pyreason/rule_ext.py` production-import SDK DSL types(`Rule`, `LogicVar`, `HeadCall`, `PredAtom`, `Pred`). These DSL classes are currently sole-owned by SDK; the adapter coupling is a primitive-contract issue, not a service / agent runtime authority issue.
+- Disposition:do not fix in this cleanup blueprint. Record as a future K(primitive contract traps) hook, likely solved by moving lower-level DSL primitives to core/authoring or by introducing a runtime protocol that adapters can consume without importing SDK product-surface modules.
+
+### Decision 14 — implementation complete and close-out facts
+
+- Commit chain implemented:
+  - commit 1:application protocol / executor surface pure add(query / ingest / derivation)
+  - commit 2a:application parity fixes(no SDK changes)
+  - commit 2b:derivation SDK adapter switch + batch delegate test rewrite
+  - commit 2c:query SDK adapter switch + SDK query policy tests
+  - commit 2d:ingest SDK adapter switch with identity-cache fallback
+  - commit 3:service/agent SDK production import boundary guard
+  - commit 4:docs alignment + blueprint implemented status
+- Outcome snapshot:
+  - application:15 files / 3385 LOC / 29 public symbols
+  - `sdk/query_runtime.py`:357 -> 297 lines after adapter rewrite and dead-code removal
+  - `sdk/ingest.py`:598 -> 797 lines due application delegate + identity-cache fallback + legacy fallback
+  - validation baseline:1093 tests across 5 segments
+- Deviations intentionally accepted:
+  - SDK god file physical split deferred;runtime delegation completed,but `sdk/store.py` / `sdk/batch.py` / `sdk/facade.py` remain large outward facade files
+  - full exception hierarchy rewrite deferred;application uses DTO/error shape for runtime paths and SDK product-domain errors remain SDK-owned
+  - CI import-boundary gate deferred to OS-prep #8;unittest/pre-flight guard exists in `test_sdk_consumer_boundary.py`
+- K primitive-contract traps remain deferred:
+  - Query id/version asymmetry
+  - where validation timing differences
+  - Derivation head/target/head_vars normalization
+  - PyReason adapter coupling to SDK DSL primitives
+- OS-prep unblock signal:
+  - Runtime-authority implementation no longer blocks OS-prep #2 PyPI policy, #7 OpenAPI yaml or #11 README OS framing.
+  - OS-prep files are intentionally not modified in this commit;unblock should be recorded by a separate OS-prep patch.
 
 ### 执行约束(继承自 namespace-split blueprint)
 

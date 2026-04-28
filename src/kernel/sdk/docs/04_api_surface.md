@@ -1,6 +1,6 @@
 # SDK API Surface 索引（当前实现）
 
-本页对齐 `kernel/sdk/__init__.py` 的公开导出与核心类方法。
+本页对齐 `kernel/sdk/__init__.py` 的公开导出与核心类方法。SDK API surface 是 Python product surface；query / ingest / compiled derivation 等 runtime execution 由 `kernel.application` 承接,SDK 负责 outward adapter 与兼容形态。
 
 ## 1. 顶层导出（`from kernel.sdk import ...`）
 
@@ -75,6 +75,7 @@
 - `run_package(...)`
 
 关键边界：
+- `SDKStore` 是用户入口和 facade 聚合器,不是 canonical runtime authority。runtime-normalized query / ingest / compiled derivation orchestration 已委托到 `kernel.application`。
 - `from_schema_classes(...)` / `schema_preflight_from_classes(...)` 的 `classes` 校验错误抛 `SDKSchemaError`（`SDKStore(...)` 构造器路径对应为 `SDKStoreError`）。
 - `SDKStore.__init__(..., artifact_store_root=None)` 与 `from_schema_classes(..., artifact_store_root=None)` 都支持 sidecar-backed explain artifact readback；若已显式传入 `store=...`，构造器上的 `artifact_store_root` 会被忽略。
 - `run(...)` 支持 Rule/Query，不支持 Derivation。
@@ -145,12 +146,14 @@
 ### 6.1 Query
 
 - `sdk.run(Query(...)) -> list[dict]`（默认）或 `list[EntitySnapshot|None]`（`row_format="instance"` 且 head 仅单个 `Entity(var)`）
+- SDK 保留 `Query` DSL lowering 与 outward row formatting; application `execute_query(...)` 执行 runtime-normalized request。
 - `on_missing` / `on_type_mismatch`: `error|skip|null`
 - Query field head 只支持 schema 的 `single` 字段
 
 ### 6.2 Derivation
 
 - `sdk.evaluate(Derivation(...), mode="native|souffle|problog|pyreason") -> list[CandidateSet]`
+- SDK 保留 `Derivation` DSL lowering、mode sugar 与 compatibility checks; application `evaluate_derivation_plans(...)` 执行 compiled plan orchestration。
 - 旧名 `python|engine` 传入会明确报错并提示新名称
 - `head` 形态决定 candidate kind
 - `head=[...]` 支持 evaluate 展平输出

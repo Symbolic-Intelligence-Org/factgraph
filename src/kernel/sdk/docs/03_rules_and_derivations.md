@@ -2,6 +2,8 @@
 
 范围：`src/kernel/sdk/dsl` + `SDKStore.run/evaluate/accept`
 
+Runtime authority note:SDK 保留 Rule / Query / Derivation DSL、authoring validation、lowering 与 outward compatibility；Query runtime 与 compiled Derivation evaluate/accept orchestration 已委托给 `kernel.application`。
+
 ## 1. `vars(...)`
 
 支持：
@@ -198,6 +200,7 @@ cands = sdk.evaluate(drv, mode="native", registry=registry)
 ```
 
 - `mode`：`native`（默认）/ `souffle` / `problog` / `pyreason`。
+- SDK 将 `Derivation` DSL lower 成 compiled plan 后,交由 application `evaluate_derivation_plans(...)` 执行 orchestration；SDK 继续负责 mode alias rejection、registry sugar 与 outward compatibility。
 - 旧名 `python` / `engine` 会明确报错，并提示新名称。
 - `souffle` / `problog` / `pyreason` 路径依赖已注册后端（例如 `import kernel.adapters.souffle`、`import kernel.adapters.problog`、`import kernel.adapters.pyreason`）。
 - `sdk.evaluate(..., view=...)` 不支持；推理始终基于完整 active 断言集。

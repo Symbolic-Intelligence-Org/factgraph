@@ -1,6 +1,6 @@
 # SDK API Surface Index (Current Implementation)
 
-This page tracks the public exports in `kernel/sdk/__init__.py` and the main class APIs.
+This page tracks the public exports in `kernel/sdk/__init__.py` and the main class APIs. The SDK API surface is the Python product surface; runtime execution for query / ingest / compiled derivation paths is delegated to `kernel.application`, while SDK preserves outward adapters and compatibility shapes.
 
 ## 1. Top-Level Exports (`from kernel.sdk import ...`)
 
@@ -75,6 +75,7 @@ Additional note:
 - `run_package(...)`
 
 Key boundaries:
+- `SDKStore` is the user entry point and facade aggregator, not the canonical runtime authority. Runtime-normalized query / ingest / compiled derivation orchestration now delegates to `kernel.application`.
 - `from_schema_classes(...)` / `schema_preflight_from_classes(...)` class-validation failures raise `SDKSchemaError` (`SDKStore(...)` constructor-path checks raise `SDKStoreError`).
 - `SDKStore.__init__(..., artifact_store_root=None)` and `from_schema_classes(..., artifact_store_root=None)` both support sidecar-backed explain artifact readback; if a fully constructed `store=...` is already supplied, the constructor-level `artifact_store_root` is ignored.
 - `run(...)` supports Rule/Query and rejects Derivation.
@@ -145,12 +146,14 @@ Additional note:
 ### 6.1 Query
 
 - `sdk.run(Query(...)) -> list[dict]` (default) or `list[EntitySnapshot|None]` (`row_format="instance"` with single `Entity(var)` head)
+- SDK retains `Query` DSL lowering and outward row formatting; application `execute_query(...)` executes the runtime-normalized request.
 - `on_missing` / `on_type_mismatch`: `error|skip|null`
 - Query field head supports only schema `single` fields
 
 ### 6.2 Derivation
 
 - `sdk.evaluate(Derivation(...), mode="native|souffle|problog|pyreason") -> list[CandidateSet]`
+- SDK retains `Derivation` DSL lowering, mode sugar, and compatibility checks; application `evaluate_derivation_plans(...)` executes compiled plan orchestration.
 - Passing legacy `python|engine` raises explicit rename errors
 - `head` shape determines candidate kind
 - `head=[...]` is supported in evaluate (flattened output)
