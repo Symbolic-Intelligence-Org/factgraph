@@ -65,13 +65,16 @@ This distinction matters for compatibility: old packages can still load when opt
 
 ## 5. Domain-Specific Compliance
 
-`AuditQuery.list_compliance_matrix(...)` is a convenience query over an audit package, but ECSS row assembly is owned by `domains.ecss.compliance`.
+`AuditQuery.list_compliance_matrix(...)` is a compatibility convenience query over an audit package, but ECSS row assembly is owned by `domains.ecss.compliance`.
+
+In the kernel-only v0.1 wheel, `domains.ecss` is not part of the installed package set. Calling this convenience without the optional domain package raises `AuditOptionalDomainError` with an actionable message. Kernel consumers should treat this surface as domain-backed and optional, not as a guaranteed kernel-only contract.
 
 The audit layer:
 
 - loads assertion facts and metadata
 - exposes the query entrypoint
 - wraps domain errors as `AuditQueryError`
+- reports missing optional domain ownership as `AuditOptionalDomainError`
 
 The ECSS domain layer:
 

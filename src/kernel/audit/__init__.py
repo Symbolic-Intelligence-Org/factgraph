@@ -41,7 +41,7 @@ from .dto import (
     build_run_detail_dto,
     build_run_list_dto,
 )
-from .query import AuditQuery, AuditQueryError
+from .query import AuditOptionalDomainError, AuditQuery, AuditQueryError
 from .reader import AuditPackageData, AuditReadError, load_audit_package
 
 # Note: ECSS-specific symbols (AuditComplianceError, ECSS_*, build_compliance_matrix_rows,
@@ -76,6 +76,7 @@ __all__ = [
     "render_evidence_graph_html",
     "AuditQuery",
     "AuditQueryError",
+    "AuditOptionalDomainError",
     "AuditDTOError",
     "build_authoring_apply_run_list_dto",
     "build_authoring_apply_run_detail_dto",

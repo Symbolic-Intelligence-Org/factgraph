@@ -78,7 +78,7 @@
    - `get_candidate_certainty_summary(candidate_id)`
    - `list_decisions(...)`
    - `list_failures(...)`
-   - `list_compliance_matrix(...)`
+   - `list_compliance_matrix(...)`（ECSS/domain-backed optional convenience）
    - `list_rule_traces(...)`
    - `get_rule_trace(rule_run_id)`
    - `list_rule_trace_summaries(...)`
@@ -89,7 +89,9 @@
 
 ### 3.3 Requirement / Compliance Matrix
 
-当 audit package 中包含 requirement-scoped assertions 时，`AuditQuery` 提供离线 ECSS VCD / compliance matrix 查询入口。row assembly 语义由 `domains.ecss.compliance` 拥有，`audit` 侧只负责加载 package、构建 assertion index，并通过 lazy import 暴露 query convenience：
+当 audit package 中包含 requirement-scoped assertions 时，`AuditQuery` 提供离线 ECSS VCD / compliance matrix 查询入口。row assembly 语义由 `domains.ecss.compliance` 拥有，`audit` 侧只负责加载 package、构建 assertion index，并通过 lazy import 暴露 query convenience。
+
+在 kernel-only v0.1 wheel 中，`domains.ecss` 不属于安装内容。此入口保留为 monorepo / optional-domain compatibility surface；如果缺少 `domains.ecss`，调用会抛出 `AuditOptionalDomainError`，而不是把 `domains` 当成 kernel 的必备依赖：
 
 1. 在写入侧使用 requirement/compliance predicates，例如：
    - `ecss:requirement`
@@ -216,7 +218,7 @@ candidate NL explain 当前不在 audit first-round scope；静态页只消费 n
 - `ecss`
   - requirement/compliance predicates 的 canonical preset owner 在 `domains.ecss.vcd`
   - ECSS compliance row assembly owner 在 `domains.ecss.compliance`
-  - audit 通过 lazy import 暴露 `AuditQuery.list_compliance_matrix(...)`,但不拥有 ECSS row semantics
+  - audit 通过 lazy import 暴露 `AuditQuery.list_compliance_matrix(...)`,但不拥有 ECSS row semantics；kernel-only wheel 缺少 `domains.ecss` 时该入口抛出 `AuditOptionalDomainError`
 - `explainability`
   - compliance matrix 只负责 requirement-level delivery；更细的 assertion/support 证据下钻仍由 assertion detail / explainability substrate 承担
   - rule trace static delivery 只消费 package 内已有 `RuleTraceArtifact`，不新增 live explain endpoint
