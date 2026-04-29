@@ -1,8 +1,8 @@
 # Task Blueprint: Release Surface Cleanup
 
-- Status: draft
+- Status: scoped
 - Created: 2026-04-28
-- Last Updated: 2026-04-28
+- Last Updated: 2026-04-29
 - Related Modules:
   - `pyproject.toml`
   - `README.md`
@@ -54,8 +54,8 @@ If the full monorepo is made public, these files are exposed regardless of wheel
 
 - Do not publish to PyPI.
 - Do not tag a release.
-- Do not create or push a public repository until the projection decision is scoped.
-- Do not delete monorepo-private source content as part of the draft phase.
+- Do not create or push a public repository until projection verification passes and the user explicitly authorizes repo creation / push.
+- Do not delete monorepo-private source content as part of this projection work.
 - Do not rewrite agent/service/domain code.
 - Do not archive the implemented v0.1 blueprints before actual publish + stability window.
 - Do not make v1.0 stable API promises.
@@ -84,8 +84,8 @@ Rough tracked top-level counts from `git ls-files`:
 | `memory/` | 25 | exclude |
 | `src/service/` | 21 | exclude |
 | `src/domains/` | 15 | exclude |
-| `samples/` | 12 | undecided; audit for generic kernel-only usefulness |
-| `examples/` | 11 | undecided; keep only kernel-only examples after smoke |
+| `samples/` | 12 | exclude from initial projection; optional future add-back after verification |
+| `examples/` | 11 | exclude from initial projection; optional future add-back after import/link/smoke verification |
 | `.claude/` | 3 | exclude |
 | `AGENTS.md` / scoped `AGENTS.md` files | 3 | exclude |
 | `.tmp_backend_preview/` | 2 | exclude |
@@ -108,7 +108,7 @@ Note: shell text output can quote filenames with non-ASCII characters; implement
 
 ## 5. Proposed Shape
 
-This blueprint must scope these decisions before implementation:
+This blueprint is scoped around an allowlist-only public projection. The private monorepo remains the source of truth; the public source release is a generated kernel-only projection.
 
 ### 5.1 Projection mechanism
 
@@ -121,11 +121,18 @@ Candidates:
 | C | `git filter-repo` / history rewrite into public repo | Preserves selected file history | Higher risk of accidental history leakage; more operational complexity |
 | D | `git subtree split` of `src/kernel` plus hand-added release files | Keeps some history and simple split mechanics | Does not naturally include root docs/metadata/examples; still needs pruning |
 
-Pre-scoping default: **B feeding A** - create a sanitized orphan/projection snapshot from the private monorepo, then push that snapshot to a separate public `factpy-kernel` repository. Do not make the private monorepo public.
+**Scoped decision**:use **B feeding A**, implemented as a staging-directory projection, then seed a separate public repository.
+
+- Target public repository identity: `Symbolic-Intelligence-Org/factpy-kernel`.
+- The private monorepo must not be made public as-is.
+- Implementation should generate a sanitized projection directory from the private monorepo.
+- The projection directory may be committed as an orphan audit snapshot if useful, but the public release shape is the separate `factpy-kernel` repository.
+- This blueprint does not create the public repository or push to it; those remain explicit release-day / repo-creation actions.
+- `git filter-repo` and history-preserving approaches are rejected for v0.1 because the history-leakage risk is not worth the benefit.
 
 ### 5.2 Public source allowlist
 
-Initial allowlist candidate:
+**Scoped decision**:the projection is default-deny. A file may appear in the public source only if it matches the allowlist below and passes the denylist gates in §5.3.
 
 - `pyproject.toml`
 - `README.md`
@@ -141,13 +148,17 @@ Initial allowlist candidate:
   - exclude `__pycache__/` and generated files
 - selected public docs:
   - `docs/SECURITY.md`
-  - `docs/architecture_principles.md` only if scrubbed for public references
-- selected `examples/` only if they are kernel-only and pass from the projected repo
-- selected `samples/` only if they are generic and useful for kernel examples
+  - `docs/architecture_principles.md` only after scrub/link review
+- no `examples/` in the initial v0.1 projection
+- no `samples/` in the initial v0.1 projection
+
+Implementation may later add back `examples/01_sdk_basics.ipynb`, `examples/02_rules_and_derivations.ipynb`, and `examples/README.md` only if they pass explicit import grep, link checks, and projection-local smoke. That add-back is optional; v0.1 can ship without examples.
 
 ### 5.3 Source denylist hard gates
 
-Projected public source must contain **zero** entries matching:
+**Scoped decision**:the primary hard gate is allowlist-only. Any projected path that does not match §5.2 fails.
+
+The denylist below is an additional diagnostic gate. Projected public source must contain **zero** entries matching:
 
 - `.claude/**`
 - `AGENTS.md`
@@ -165,22 +176,38 @@ Projected public source must contain **zero** entries matching:
 - `.tmp_backend_preview/**`
 - `.gitmodules`
 - `requirements/dev.txt`
+- `scripts/**`
 - `**/__pycache__/**`
 - `*.pyc`
-- benchmark results, run records, local previews, generated `dist/` / `build/`
+- `dist/**`
+- `build/**`
+- `*.egg-info/**`
+- `archive/**`
+- `out/**`
+- `*_demo_output/**`
+- `test.ipynb`
+- `context.md`
+- `关于mvp的思考.md`
+- `best_conf.csv`
+- `path_conf.csv`
+- benchmark results, run records, local previews, and generated artifacts
 
 ### 5.4 Examples and samples policy
 
-Pre-scoping default:
+**Scoped decision**:the initial public projection excludes all `examples/` and `samples/`.
 
-- Exclude all `examples/` from the first projected source snapshot unless each retained example is verified kernel-only.
-- Exclude `examples/08_agent_document_workflow.ipynb`, `examples/09_dora_document_extraction.ipynb`, `examples/dora_pdf_extract.py`, and any ECSS/domain/agent/service examples.
-- Consider adding back only:
+- Explicitly excluded from v0.1 projection:
+  - `examples/08_agent_document_workflow.ipynb`
+  - `examples/09_dora_document_extraction.ipynb`
+  - `examples/dora_pdf_extract.py`
+  - ECSS/domain/agent/service examples
+  - all `samples/*.csv`
+- Optional add-back candidates after separate verification:
   - `examples/01_sdk_basics.ipynb`
   - `examples/02_rules_and_derivations.ipynb`
   - `examples/README.md`
-  after projection-local smoke.
-- Keep `samples/` only if README/examples need them and contents are generic.
+
+Add-back verification must inspect notebook imports for `agent`, `service`, `domains`, third-party private deps, and monorepo-only paths before inclusion.
 
 ### 5.5 Sdist policy
 
@@ -192,14 +219,35 @@ Candidates:
 | B | v0.1 uploads sdist only from sanitized projection and verifies denylist |
 | C | v0.1 uploads both wheel and sdist, but both are built from sanitized projection |
 
-Pre-scoping default: **A or B**, not monorepo sdist. If an sdist is uploaded, it must be generated from the sanitized projection and pass the same denylist gates as the public source repository.
+**Scoped decision**:v0.1 publishes **wheel only**. No sdist upload.
+
+- Any accidental sdist artifact during release-surface implementation must be deleted and not uploaded.
+- If sdist is added in a later release, it must be generated from the sanitized projection and pass the same allowlist/denylist gates as the public source repository.
+- Implementation should consider `[tool.setuptools] include-package-data = false` if it reduces accidental data-file inclusion without breaking wheel contents.
 
 ### 5.6 Public docs policy
 
 - Public docs should explain the kernel package and API surface, not the private blueprint workflow.
-- Module docs under `src/kernel/*/docs/` may be retained if they do not link to private-only docs.
-- Root `docs/architecture_principles.md` may be retained after link/content review.
+- Module docs under `src/kernel/*/docs/` may be retained only after link/content review.
+- Root `docs/architecture_principles.md` may be retained only after scrub/link review.
+- `docs/SECURITY.md` may be retained if it is externally readable and does not reference private workflow.
 - `docs/blueprints/**`, `docs/blueprint_history/**`, `docs/references/**`, and `memory/**` are internal and excluded.
+
+Scrub/link review requirements:
+
+- `README.md` and `README.en.md` must not link to excluded paths.
+- `src/kernel/**/docs/**` must not link to `docs/blueprints`, `docs/blueprint_history`, `docs/references`, `memory`, `.claude`, `AGENTS.md`, `src/agent`, `src/service`, `src/domains`, `third_party`, or `tools`.
+- `docs/architecture_principles.md` must remove or rewrite references to private workflow, blueprint history, memory, or monorepo-only package surfaces before inclusion.
+
+### 5.7 Projection workflow form
+
+**Scoped decision**:implement a private projection script in the monorepo.
+
+- Preferred path: `scripts/project_release_surface.sh`.
+- The script is private tooling and must not be included in the projected public repository.
+- The script should write to a staging directory outside the repository or under a generated ignored directory.
+- The script should emit a manifest of projected files for review.
+- The script should fail on any path outside §5.2 or any denylisted match in §5.3.
 
 ## 6. Boundaries And Invariants
 
@@ -210,30 +258,43 @@ Pre-scoping default: **A or B**, not monorepo sdist. If an sdist is uploaded, it
 - The release projection must be reproducible from the private monorepo.
 - The projected source and built artifact verification must be automated enough to re-run on release day.
 - Public README claims must match files actually present in the public source projection.
+- Default-deny is the security posture:missing allowlist entry means not projected.
+- Public repository creation / push requires explicit user authorization after projection verification.
 
 ## 7. Acceptance
 
-- [ ] Projection mechanism is scoped.
-- [ ] Public source allowlist is scoped.
-- [ ] Source denylist gates are scoped and executable.
-- [ ] sdist policy is scoped.
-- [ ] `examples/` and `samples/` keep/drop decisions are scoped.
+- [x] Projection mechanism is scoped:staging-directory projection feeding separate public `Symbolic-Intelligence-Org/factpy-kernel`.
+- [x] Public source allowlist is scoped and default-deny.
+- [x] Source denylist gates are scoped and executable.
+- [x] sdist policy is scoped:wheel-only for v0.1.
+- [x] `examples/` and `samples/` keep/drop decisions are scoped:initial projection excludes both.
+- [x] Projection workflow form is scoped:private script, excluded from public projection.
+- [x] Public docs scrub scope is scoped.
 - [ ] Projected public source contains no denylisted paths.
 - [ ] Projected public source can build the `factpy-kernel` wheel.
 - [ ] Projected public source README quickstart passes in a clean environment.
-- [ ] If sdist is enabled, sdist contents pass denylist verification.
+- [ ] No sdist is generated or uploaded for v0.1.
 - [ ] No publish, tag, or public repo push happens until explicit release-day authorization.
+
+Verification command anchors to implement:
+
+- Projection manifest check:compare generated manifest against the §5.2 allowlist; any non-allowlisted path fails.
+- Denylist check:`find "$PROJECTION_DIR" ...` or equivalent script logic must return zero matches for §5.3 denylist globs.
+- Link check:`README.md`, `README.en.md`, `src/kernel/**/docs/**`, and retained public docs must not reference excluded paths.
+- Wheel check:inside the projection, run `python -m build --wheel` and repeat the RC wheel content / metadata inspection.
+- Smoke check:install the projected wheel into a clean virtualenv and run the README quickstart.
+- Sdist check:there must be no uploaded sdist for v0.1; if a local sdist is produced during testing, inspect and delete it before release.
 
 ## 8. Implementation Plan
 
 1. Recompute source-surface evidence using `git ls-files -z` and record authoritative counts.
-2. Scope projection mechanism and public repository shape.
-3. Scope allowlist / denylist, including `examples/`, `samples/`, `.github/`, and public docs.
-4. Scope sdist policy.
-5. Implement a reproducible projection workflow in a private-script or documented command sequence.
+2. Implement private projection script (`scripts/project_release_surface.sh`) with allowlist-only behavior.
+3. Add denylist/default-deny verification in the script.
+4. Generate a projection manifest and inspect it.
+5. Scrub public docs and README links for projection compatibility.
 6. Build and inspect the projected source tree.
 7. Build wheel from projection and re-run the RC hard gates against the projection.
-8. If sdist is enabled, build and inspect sdist from projection.
+8. Confirm no sdist is uploaded for v0.1.
 9. Update README/docs if public projection removes paths currently referenced by docs.
 10. Fill §10 Outcome / Deviations and append audit decisions.
 

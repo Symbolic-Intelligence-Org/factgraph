@@ -7,6 +7,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-04-28 | draft | Blueprint created | Created after confirming that v0.1 is wheel-RC ready but not repo/source publish ready. The private monorepo tracks `.claude`, `memory`, blueprint/audit history, agent/service/domain packages, third-party code, tools, and other materials outside the kernel-only OSS surface. |
+| 2026-04-29 | scoped | Projection policy scoped | Locked staging-directory projection to separate public `Symbolic-Intelligence-Org/factpy-kernel`, default-deny allowlist, wheel-only v0.1 sdist policy, no examples/samples in initial projection, private projection script, and public docs scrub scope. |
 
 ## Decision Notes
 
@@ -16,6 +17,26 @@
    - **Impact**:No GitHub/source publishing should proceed until projection, allowlist, denylist, and sdist policy are scoped and verified.
 
 2. **Private monorepo should not be made public as-is**
-   - **Decision**:The draft assumes a sanitized public projection is required.
+   - **Decision**:A sanitized public projection is required.
    - **Why**:Tracked source includes operational memory, Claude workflow files, internal blueprints, agent/service/domain code, third-party/vendor material, and benchmark artifacts.
    - **Impact**:Implementation should favor a separate public `factpy-kernel` projection over making the private monorepo public.
+
+3. **Projection mechanism locked**
+   - **Decision**:Use a staging-directory projection generated from the private monorepo, then seed a separate public `Symbolic-Intelligence-Org/factpy-kernel` repository. The public shape is not the private monorepo and not a history-preserving filter-repo split.
+   - **Why**:A clean projection minimizes accidental exposure of private workflow/history while keeping the monorepo as the development source of truth.
+   - **Impact**:No public repository push or creation is authorized by this blueprint alone; projection verification must pass first.
+
+4. **Default-deny public source surface**
+   - **Decision**:Projection is allowlist-only. Denylist globs remain as a diagnostic safety net, but any path outside the explicit allowlist fails.
+   - **Why**:The tracked repository has too many internal categories for denylist-only filtering to be reliable.
+   - **Impact**:`examples/` and `samples/` are excluded from the initial v0.1 projection. They may be added later only after kernel-only import/link/smoke verification.
+
+5. **v0.1 sdist policy**
+   - **Decision**:v0.1 is wheel-only; no sdist upload.
+   - **Why**:The current wheel has been verified as kernel-only, while source distribution needs a separate sanitized projection to avoid monorepo leakage.
+   - **Impact**:Release-day workflow must not upload a `.tar.gz` sdist for v0.1. Future sdist support must build from the sanitized projection and pass the same gates.
+
+6. **Projection workflow form**
+   - **Decision**:Use private monorepo script tooling, preferably `scripts/project_release_surface.sh`, to generate the staging directory and manifest.
+   - **Why**:A script is more repeatable than a hand-written command sequence and can become a CI/release-day gate.
+   - **Impact**:The script itself is private tooling and must not be included in the projected public repository.
