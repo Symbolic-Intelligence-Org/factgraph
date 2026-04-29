@@ -56,7 +56,7 @@
 
 - `src/kernel/audit/docs/03_audit_package_contract.md`
   - audit package 文件、reader/query 派生面、最小 provenance carrier mapping
-- `src/service/docs/05_audit_static_site_contract.md`
+- delivery-layer static site contract
   - rendered static site、`site_manifest.json`、`ui_index.json` 的交付 contract
 
 ## 3. 典型工作流

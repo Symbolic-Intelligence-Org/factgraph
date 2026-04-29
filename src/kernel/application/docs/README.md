@@ -14,4 +14,3 @@
 - 本目录文档以当前实现行为为准，不是独立设计草案。
 - 新增或调整 `application` 公共入口时，应同步更新本目录文档与对应测试。
 - application protocol 不接收 SDK facade objects、SDK `Field` descriptors 或 SDK DSL objects；SDK 负责把 ergonomic 输入 lower/adapter 成 application runtime DTO。
-- 历史架构背景与任务蓝图流程见 [docs/blueprints/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/README.md) 与 [runtime-authority cleanup blueprint](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-04-28_runtime-authority-cleanup.md)。

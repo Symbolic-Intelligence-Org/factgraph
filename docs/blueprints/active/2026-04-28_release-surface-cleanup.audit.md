@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-04-28 | draft | Blueprint created | Created after confirming that v0.1 is wheel-RC ready but not repo/source publish ready. The private monorepo tracks `.claude`, `memory`, blueprint/audit history, agent/service/domain packages, third-party code, tools, and other materials outside the kernel-only OSS surface. |
 | 2026-04-29 | scoped | Projection policy scoped | Locked staging-directory projection to separate public `Symbolic-Intelligence-Org/factpy-kernel`, default-deny allowlist, wheel-only v0.1 sdist policy, no examples/samples in initial projection, private projection script, and public docs scrub scope. |
+| 2026-04-29 | implemented | Projection workflow implemented and verified | Added `scripts/project_release_surface.sh` + static allowlist, scrubbed public README/docs, set `include-package-data = false`, generated a 261-file projection, built the projected wheel, verified wheel contents/metadata, and ran clean-venv README quickstart. No public repo push, no tag, no upload, no sdist. |
 
 ## Decision Notes
 
@@ -40,3 +41,16 @@
    - **Decision**:Use private monorepo script tooling, preferably `scripts/project_release_surface.sh`, to generate the staging directory and manifest.
    - **Why**:A script is more repeatable than a hand-written command sequence and can become a CI/release-day gate.
    - **Impact**:The script itself is private tooling and must not be included in the projected public repository.
+
+7. **Implementation verification**
+   - **Decision**:Mark the release-surface cleanup blueprint implemented after projection and wheel verification passed.
+   - **Evidence**:
+     - `scripts/project_release_surface.sh` passed and emitted `/tmp/factpy_kernel_projection.manifest`.
+     - Projection manifest count:261 files.
+     - Projection-built wheel:`factpy_kernel-0.1.0-py3-none-any.whl`.
+     - Wheel entries:161 total,156 `kernel/` entries,0 denylisted entries.
+     - Metadata:runtime deps `pydantic>=2`, `diskcache>=5`, only `[dev]` extra, no private extras, no PyMuPDF / PyMuPDF4LLM.
+     - Clean venv install succeeded;README quickstart printed `Alice`.
+     - Projection `dist/` contained only the wheel, no sdist.
+   - **Why**:The public source projection now has an executable, repeatable gate instead of relying on manual pruning.
+   - **Impact**:Release-day workflow may use the projection script as the source-surface gate before creating/pushing the public repository. Actual public repo creation, PyPI upload, tag, and release remain explicitly out of scope for this implementation pass.

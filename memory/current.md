@@ -7,7 +7,7 @@
 **Runtime-authority cleanup 已 implemented**:`kernel.application` 已扶正为 canonical Python runtime authority,`kernel.sdk` 保持 Python product surface / authoring DSL / outward facade。
 
 - 当前分支:`oss-prep-v0.1`
-- 当前最新工作:release-surface cleanup blueprint 已 scoped。OS-prep v0.1 readiness 与 RC verification 已 implemented,但 wheel-RC ready 不等于 repo/source publish ready;公开源码面必须通过 sanitized projection 验证后才能进入 release-day public repo / upload flow。
+- 当前最新工作:release-surface cleanup blueprint 已 implemented。OS-prep v0.1 readiness、RC verification、source projection gate 均已完成;公开源码面现在通过 sanitized projection script 验证,但仍未创建 public repo、未 upload、未 tag。
 - 当前测试基线:1097 tests 全绿,3 skips(5 段:kernel 685 skipped 1 / agent 255 skipped 2 / service 42 / domains/ecss 99 / benchmarks 16)
 - runtime cleanup blueprint:[2026-04-28_runtime-authority-cleanup.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-04-28_runtime-authority-cleanup.md),status `implemented`,暂不归档
 - OS-prep blueprint 仍在 active,但 status 已 implemented。用户明确 OSS v0.1 仅包含 kernel 主体,所以 #1/#2/#3/#4/#7/#11/#12 已按 kernel-only surface 收口。#4 默认名锁为 `factpy-kernel`,但真实 PyPI reservation 仍需 release day upload / trusted publishing。剩余工作主要是 release-day checklist 与 staged CI gate 后续提升。
@@ -80,7 +80,7 @@ tools/
 **优先级 1:OS-prep release close-out**
 
 - v0.1 RC verification:已完成,verdict = `conditional pass`(`bf652a1`,2026-04-28)。dist artifact 已清除,release-day 时重新 build。
-- release-surface cleanup:blueprint 已 scoped。锁定 staging-directory projection -> separate public `Symbolic-Intelligence-Org/factpy-kernel`,default-deny allowlist,wheel-only v0.1(no sdist),初始 projection 不带 examples/samples,用 private script 生成并验证；private monorepo 不能原样公开。
+- release-surface cleanup:implemented。`scripts/project_release_surface.sh` + `scripts/release_surface_allowlist.txt` 生成 261-file sanitized projection,projection-built wheel 161 entries / 156 `kernel/` / 0 deny hits,clean venv quickstart 输出 `Alice`;v0.1 仍 wheel-only(no sdist),未 public repo push / 未 upload / 未 tag。
 - #4 package name:默认锁 `factpy-kernel`;2026-04-28 exact-name check 当前可用,但 publish time 仍需重跑并通过首次 upload / trusted publishing 完成 reservation
 - #8 CI gate follow-up:`src/kernel` Ruff 已 blocking;service/tools Ruff(62 errors)与 mypy(`src/kernel`:385 errors / 73 files,tests 占 280)仍需逐步清 baseline 后升 blocking
 - release validation:按 README 的 kernel-only install path 和 `test_wheel_kernel_only_packaging.py` 做 wheel inspection

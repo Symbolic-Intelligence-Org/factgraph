@@ -1,6 +1,6 @@
 # Task Blueprint: Release Surface Cleanup
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-04-28
 - Last Updated: 2026-04-29
 - Related Modules:
@@ -270,11 +270,11 @@ Scrub/link review requirements:
 - [x] `examples/` and `samples/` keep/drop decisions are scoped:initial projection excludes both.
 - [x] Projection workflow form is scoped:private script, excluded from public projection.
 - [x] Public docs scrub scope is scoped.
-- [ ] Projected public source contains no denylisted paths.
-- [ ] Projected public source can build the `factpy-kernel` wheel.
-- [ ] Projected public source README quickstart passes in a clean environment.
-- [ ] No sdist is generated or uploaded for v0.1.
-- [ ] No publish, tag, or public repo push happens until explicit release-day authorization.
+- [x] Projected public source contains no denylisted paths(`scripts/project_release_surface.sh` generated 261-file projection and passed allowlist / denylist / link gates).
+- [x] Projected public source can build the `factpy-kernel` wheel(`python -m build --wheel` from `/tmp/factpy_kernel_projection`).
+- [x] Projected public source README quickstart passes in a clean environment(clean venv install + quickstart output `Alice`).
+- [x] No sdist is generated or uploaded for v0.1(projection `dist/` contains only `factpy_kernel-0.1.0-py3-none-any.whl`).
+- [x] No publish, tag, or public repo push happens until explicit release-day authorization(no public repo push, no tag, no upload in this pass).
 
 Verification command anchors to implement:
 
@@ -310,14 +310,44 @@ Verification command anchors to implement:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+Status moved to `implemented` on 2026-04-29. Blueprint remains under `active/`; archive stays gated on actual v0.1 publish + short stability window, together with OS-prep readiness, runtime-authority cleanup, audit-delivery contract, and RC verification.
 
 - Final projection mechanism:
+  - Private monorepo script `scripts/project_release_surface.sh`.
+  - Default staging directory:`/tmp/factpy_kernel_projection`.
+  - Manifest emitted at `/tmp/factpy_kernel_projection.manifest`.
+  - Target public repository identity remains `Symbolic-Intelligence-Org/factpy-kernel`, but this pass did not create or push that repository.
 - Final allowlist:
+  - `scripts/release_surface_allowlist.txt`.
+  - Root release files:README, README.en, LICENSE, CONTRIBUTING, CODE_OF_CONDUCT, pyproject, `.gitignore`, kernel workflow, SECURITY, architecture principles.
+  - `src/kernel/**` except `src/kernel/AGENTS.md`, generated caches, and bytecode.
+  - No `examples/` or `samples/` in the initial projection.
 - Final denylist:
+  - Enforced in `scripts/project_release_surface.sh` as diagnostic gate on top of allowlist-only projection.
+  - Covers `.claude`, `AGENTS.md`, `memory`, blueprints/history/references, agent/service/domains, third_party, tools, generated artifacts, local keep-local outputs, and bytecode/cache paths.
 - Final sdist policy:
+  - v0.1 is wheel-only.
+  - `pyproject.toml` now sets `[tool.setuptools] include-package-data = false`.
+  - No sdist was built or uploaded in this pass.
 - Projection verification result:
-- Wheel/sdist verification result:
+  - `scripts/project_release_surface.sh` passed.
+  - Projection manifest contains 261 files.
+  - Link/private-path scrub gate passed for README, public docs, and `src/kernel/**/*.md`.
+- Wheel verification result:
+  - Projection-built wheel:`factpy_kernel-0.1.0-py3-none-any.whl`.
+  - Wheel entries:161 total / 156 `kernel/` entries.
+  - Bad entries:0 for `agent/`, `service/`, `domains/`, `kernel/tests/`, `docs/`, `memory/`, `third_party/`, `tools/`, `.claude/`, or `AGENTS.md`.
+  - Metadata exposes only runtime deps(`pydantic`, `diskcache`) and `[dev]` extra;no private extras or AGPL parser dependencies.
+- Smoke verification result:
+  - Clean venv install succeeded with runtime deps.
+  - README quickstart printed `Alice`.
 - Public README/docs adjustments:
+  - Root README / README.en removed monorepo-only install/test paths and internal workflow links.
+  - `docs/architecture_principles.md` removed private workflow / memory / blueprint-history details.
+  - Kernel module docs removed private blueprint, service path, and benchmark/tool references that would break projection.
 - Deviations from draft:
+  - `examples/` and `samples/` were excluded entirely for v0.1 instead of adding back candidate examples.
+  - Build verification required network access for isolated build dependencies and clean venv runtime dependencies.
+  - Setuptools emitted deprecation warnings for table-style `project.license` and license classifiers;not a v0.1 blocker, but should be cleaned before the 2027 deprecation deadline.
 - Archive note:
+  - Do not archive until actual v0.1 publish + short stability window.

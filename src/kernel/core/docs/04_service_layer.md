@@ -1,6 +1,6 @@
 # Service 层现状核验（kernel）
 
-- 范围：`src/service`
+- 范围：HTTP/BFF delivery layer
 - 核验日期：2026-03-10
 - 结论：仓库内已具备可直接对接前端的 `FastAPI` 服务层，覆盖 rules、runtime session、view 管理、derivation、registry 读取与 package export。
 

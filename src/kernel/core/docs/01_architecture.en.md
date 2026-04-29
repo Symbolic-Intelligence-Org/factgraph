@@ -12,7 +12,7 @@ This document describes only the `core` semantic kernel. It does not cover imple
 - `src/kernel/adapters` (engine adapters and export)
 - `src/kernel/sdk` (higher-level Python API)
 - `src/kernel/authoring` (compile and workflow)
-- `src/service` (HTTP/BFF routes and DTOs)
+- HTTP/BFF delivery layer (routes and DTOs)
 
 Additional boundary notes:
 
@@ -88,7 +88,7 @@ src/kernel/core/
 
 ### 4.1 Four-Layer Data Architecture (updated 2026-03-26)
 
-The Ledger's persistence now corresponds to a four-layer data architecture (see [Assertion Annotation Store Decision](../../../docs/blueprints/active/2026-03-26_assertion-annotation-store-decision.md)):
+The Ledger's persistence now corresponds to a four-layer data architecture:
 
 | Layer | SQLite Table | Responsibility |
 |-------|-------------|----------------|
@@ -509,7 +509,7 @@ Other annotation capabilities (`_min_max.py`, `_evidence.py`) remain in prototyp
 
 - first-round only covers the benchmark-validated `Workload A + C` annotation capabilities
 - does not expand the stable interfaces of `CandidateSet`, SDK, or service
-- `tools/benchmarks/workload_*_reference.py` continues to serve as the oracle; `core/annotation/*` remains an independent prototype implementation
+- external benchmark/reference harnesses continue to serve as the oracle; `core/annotation/*` remains an independent prototype implementation
 
 ## 9. Invariants That Must Hold
 

@@ -9,7 +9,7 @@
 
 本目录承载 `Souffle annotation kernel prototype` 的内部语义能力。
 
-当前目标不是提供稳定 public API，而是把上一轮 benchmark spike 中已证明有价值的 annotation 逻辑，从 `tools/benchmarks` 中拆出一个可维护的内部实现落点。
+当前目标不是提供稳定 public API，而是把已验证有价值的 annotation 逻辑沉淀为可维护的内部实现落点。
 
 ## 2. 当前能力
 
@@ -55,7 +55,7 @@
 
 ## 3. 与 Benchmark 的关系
 
-- `tools/benchmarks/workload_*_reference.py`
+- 外部 benchmark/reference harness
   - 继续作为 oracle / golden 参考实现
 - `src/kernel/core/annotation/*`
   - 作为新的 prototype 实现
