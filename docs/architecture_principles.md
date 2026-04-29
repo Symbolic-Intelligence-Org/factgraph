@@ -36,6 +36,15 @@
 - service / agent production runtime code 不应新增 SDK runtime imports；确有 authoring/ergonomic 例外时必须显式登记并说明理由。
 - 若需要把 SDK DSL primitive 下沉给 adapter 或 domain 使用,应通过单独 primitive-contract blueprint 处理,不要在运行时迁移中偷渡。
 
+### 2.2 Release surface governance
+
+- 私有 monorepo 是 development source of truth。蓝图、audit trail、memory、agent/service/domain、tooling、benchmarks、third-party working material 都留在私有仓库管理。
+- 公开 `factpy-kernel` 仓库是由私有 monorepo 生成的 projection artifact,不是日常开发源头。不要在 public repo 直接反向开发 feature；必要修复应先回到私有 monorepo,再重新投影。
+- v0.1 public source surface 必须通过 `scripts/project_release_surface.sh` 和 `scripts/release_surface_allowlist.txt` 生成。默认拒绝是发布面安全姿态:未进入 allowlist 的文件不公开。
+- public source projection 不应包含 `.claude/`、`AGENTS.md`、`memory/`、`docs/blueprints/`、`docs/blueprint_history/`、`docs/references/`、`src/agent/`、`src/service/`、`src/domains/`、`third_party/`、`tools/`、examples/samples 或本地输出。
+- PyPI wheel 应从 verified projection tree 构建,而不是从私有 monorepo root 直接发布。v0.1 不上传 sdist；未来若恢复 sdist,必须从同一个 sanitized projection 生成并通过相同 allowlist/denylist/link/smoke gates。
+- release tag 和公开 release notes 属于 public projection repo。私有 monorepo 中 implemented blueprints 的归档应等实际 publish 完成并经过短期稳定窗口后再做。
+
 ### 3. 当前实现真相必须贴近模块
 
 - 当前行为、约束、兼容面、已完成迁移范围，应记录在模块自己的 `docs/` 目录中。

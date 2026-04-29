@@ -345,6 +345,11 @@ Status moved to `implemented` on 2026-04-29. Blueprint remains under `active/`; 
   - Root README / README.en removed monorepo-only install/test paths and internal workflow links.
   - `docs/architecture_principles.md` removed private workflow / memory / blueprint-history details.
   - Kernel module docs removed private blueprint, service path, and benchmark/tool references that would break projection.
+- Long-term management model:
+  - Recorded in `docs/architecture_principles.md` under "Release surface governance".
+  - Private monorepo remains the development source of truth.
+  - Public `factpy-kernel` repository is a generated projection artifact, not the day-to-day development branch.
+  - PyPI wheel / public source release should be built from the verified projection tree.
 - Deviations from draft:
   - `examples/` and `samples/` were excluded entirely for v0.1 instead of adding back candidate examples.
   - Build verification required network access for isolated build dependencies and clean venv runtime dependencies.

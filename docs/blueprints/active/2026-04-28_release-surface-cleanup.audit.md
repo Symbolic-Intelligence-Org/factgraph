@@ -9,6 +9,7 @@
 | 2026-04-28 | draft | Blueprint created | Created after confirming that v0.1 is wheel-RC ready but not repo/source publish ready. The private monorepo tracks `.claude`, `memory`, blueprint/audit history, agent/service/domain packages, third-party code, tools, and other materials outside the kernel-only OSS surface. |
 | 2026-04-29 | scoped | Projection policy scoped | Locked staging-directory projection to separate public `Symbolic-Intelligence-Org/factpy-kernel`, default-deny allowlist, wheel-only v0.1 sdist policy, no examples/samples in initial projection, private projection script, and public docs scrub scope. |
 | 2026-04-29 | implemented | Projection workflow implemented and verified | Added `scripts/project_release_surface.sh` + static allowlist, scrubbed public README/docs, set `include-package-data = false`, generated a 261-file projection, built the projected wheel, verified wheel contents/metadata, and ran clean-venv README quickstart. No public repo push, no tag, no upload, no sdist. |
+| 2026-04-29 | post-implementation docs | Release management model promoted to architecture principles | Added durable "Release surface governance" rules to `docs/architecture_principles.md`:private monorepo remains source of truth, public `factpy-kernel` is a generated projection artifact, public releases build from verified projection, and archive stays gated on publish + short stability window. |
 
 ## Decision Notes
 
@@ -54,3 +55,8 @@
      - Projection `dist/` contained only the wheel, no sdist.
    - **Why**:The public source projection now has an executable, repeatable gate instead of relying on manual pruning.
    - **Impact**:Release-day workflow may use the projection script as the source-surface gate before creating/pushing the public repository. Actual public repo creation, PyPI upload, tag, and release remain explicitly out of scope for this implementation pass.
+
+8. **Release management model belongs in durable architecture docs**
+   - **Decision**:Record the long-term management model in `docs/architecture_principles.md`, not only in this blueprint/audit trail.
+   - **Why**:The blueprint will remain an implementation record and later be archived; the private-monorepo/public-projection split is a durable operating rule for future releases.
+   - **Impact**:Future release work should treat the private monorepo as source of truth, regenerate public source from the projection script/allowlist, avoid direct public-repo feature development, and build PyPI artifacts from the verified projection tree.
