@@ -1,8 +1,8 @@
 # Examples Index
 
 Current public notebook set for the SDK, explain, and agent surfaces.
-Historical numbering is preserved; there is no standalone public `03` notebook in the current set.
-Its certainty / evidence-tree deep-dive content is now folded into notebooks `04` and `07`.
+Notebook `03` is the minimal bridge from SDK derivations to evidence-tree review.
+The larger certainty / evidence-tree deep-dive content remains in notebooks `04` and `07`.
 Notebook `08` was added later as the agent-layer flagship and is the only notebook that performs real LLM calls.
 
 ## Learning Path
@@ -11,6 +11,7 @@ Notebook `08` was added later as the agent-layer flagship and is the only notebo
 |---|----------|---------|--------|--------|
 | 01 | `01_sdk_basics.ipynb` | — | general | Entity / Schema / Store / CRUD / Batch / Edit / Ingest |
 | 02 | `02_rules_and_derivations.ipynb` | — (native) | general | Rule DSL / Query / Derivation / Accept / Registry |
+| 03 | `03_dora_minimal_evidence_tree.ipynb` | — (native) | **DORA** | **source-backed definitions -> candidate finding -> evidence tree / summary / narrative / HTML** |
 | 04 | `04_ecss_souffle_compliance.ipynb` | **Souffle** | **ECSS** | compliance rules / certainty / audit package / static site / proof tree |
 | 05 | `05_dora_pyreason_propagation.ipynb` | **PyReason** | **DORA** | boolean propagation / temporal reasoning / adapter-local session |
 | 06 | `06_problog_probabilistic.ipynb` | **ProbLog** | general | probabilistic reasoning / ProbLogRuleExt / persist annotations |
@@ -22,6 +23,16 @@ Companion CLI script (no notebook runtime):
 
 - `dora_pdf_extract.py` — run `extract_document()` against a real regulatory PDF from the command line; writes a JSON result file next to the input
 - `dora_schema_ir.json` — pre-compiled schema IR that notebook 09 and the CLI script share
+
+## Notebook 03 — Minimal Evidence Tree Demo
+
+Notebook 03 is the meeting-friendly evidence-tree entry point. It uses public DORA / EUR-Lex source anchors, derives one narrow review finding with the native engine, and then shows:
+- the candidate result under review
+- the `RuleRef` branch that forms the rule chain
+- the source-backed assertion leaves
+- deterministic summary / narrative / HTML views over the same tree
+
+It does not make a real-entity compliance decision and does not require external engines, API keys, LLMs, or network access at runtime.
 
 ## Notebook 07 — Flagship Demo
 
@@ -38,6 +49,7 @@ ProbLog and PyReason sections use mocked runners; the entire framework pipeline 
 ## Prerequisites
 
 - Notebooks 01–02 require only `kernel` (no external engines).
+- Notebook 03 requires only `kernel` (no external engines, network calls, or LLM calls).
 - Notebook 04 (Souffle): requires `souffle` CLI on PATH.
 - Notebook 05 (PyReason): requires `pyreason==3.0.0` on Python 3.10. Graceful fallback if not installed.
 - Notebook 06 (ProbLog): requires `problog` CLI. Graceful fallback if not installed.
