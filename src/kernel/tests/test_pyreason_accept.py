@@ -13,7 +13,7 @@ from kernel.sdk.schema import Entity, Field, Identity, Relationship
 
 
 class User(Entity):
-    user_id: str = Identity()
+    user_id: str = Identity(primary_key=True)
     name: str = Field(cardinality="single")
     popular: str = Field(cardinality="single")
 

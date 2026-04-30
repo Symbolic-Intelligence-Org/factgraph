@@ -26,7 +26,7 @@ class User(Entity):
 
 
 class Session(Entity):
-    session_id: str = Identity(default_factory="uuid4")
+    session_id: str = Identity(primary_key=True, default_factory="uuid4")
     user: User = Field(cardinality="single")
 
 

@@ -15,6 +15,7 @@ from kernel.application.protocol import (
     ProtocolShapeError,
 )
 from kernel.core.derivation.candidates import CandidateSet
+from kernel.core.evidence.write_protocol import add_field, set_field
 
 from .errors import SDKStoreError
 
@@ -336,9 +337,11 @@ def _legacy_ingest_set_or_add(
     value = item.value
     if value is _MISSING:
         raise SDKStoreError(f"{path}.value is required for {kind}")
+    schema_pred = sdk._schema_pred_for_field(field)
+    rest_terms = sdk._rest_terms_for_field(schema_pred, value=value)
     if kind == "set":
-        return sdk.set(field, e_ref, value, meta=item.meta)
-    return sdk.add(field, e_ref, value, meta=item.meta)
+        return set_field(sdk.store.ledger, schema_pred["pred_id"], e_ref, rest_terms, item.meta)
+    return add_field(sdk.store.ledger, schema_pred["pred_id"], e_ref, rest_terms, item.meta)
 
 
 _MISSING = object()

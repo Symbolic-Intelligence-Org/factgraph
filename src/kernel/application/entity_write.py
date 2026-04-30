@@ -192,6 +192,20 @@ def _plan_dependencies_and_mutations(
 
         effective_meta = _merge_meta(command.command_meta, mutation.meta)
         if mutation.op in {"set", "add"}:
+            expected_cardinality = "single" if mutation.op == "set" else "multi"
+            if pred_info.cardinality != expected_cardinality:
+                raise EntityWriteError(
+                    f"op={mutation.op!r} requires cardinality={expected_cardinality!r} field; "
+                    f"{mutation.field.entity_type}.{mutation.field.field_name} has cardinality={pred_info.cardinality!r}",
+                    code="FIELD_CARDINALITY_MISMATCH",
+                    path=("mutations", str(idx), "op"),
+                    details={
+                        "entity_type": mutation.field.entity_type,
+                        "field_name": mutation.field.field_name,
+                        "op": mutation.op,
+                        "cardinality": pred_info.cardinality,
+                    },
+                )
             resolved_value = _resolve_mutation_value(
                 mutation,
                 mutation_index=idx,

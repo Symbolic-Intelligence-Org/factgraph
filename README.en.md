@@ -94,7 +94,7 @@ Kernel regression:
 PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
 ```
 
-Current branch baseline:1097 tests,3 skips.
+Current kernel suite baseline: 704 tests, 1 skip.
 
 ## License And Security
 
