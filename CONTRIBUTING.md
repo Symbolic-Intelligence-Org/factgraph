@@ -15,34 +15,28 @@ Tiny typo fixes, comment-only edits, and clearly local test fixes may skip a blu
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install -e ".[extraction,documents,service,observability,dev]"
+python -m pip install -e ".[dev]"
 ```
-
-The `documents` extra includes PyMuPDF-based parsing dependencies. Review their upstream license terms before redistributing a build that enables document parsing by default.
 
 ## Test Baseline
 
-Run the five test segments from the repository root:
+Run the kernel test suite from the repository root:
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
-PYTHONPATH=src python -m unittest discover -s src/agent/tests -p "test_*.py"
-PYTHONPATH=src python -m unittest discover -s src/service/tests -p "test_*.py"
-PYTHONPATH=src python -m unittest discover -s src/domains/ecss/tests -p "test_*.py"
-PYTHONPATH=src python -m unittest discover -s tools/benchmarks/tests -p "test_*.py"
 ```
+
+Current baseline: 709 tests, 1 skip.
 
 ## Quality Checks
 
-The current OSS-prep baseline stages quality tooling before making all checks blocking:
-
 ```bash
 python -m ruff check src/kernel/application
-python -m ruff check src/kernel src/service tools
-python -m mypy src/kernel src/service
+python -m ruff check src/kernel
+python -m mypy src/kernel
 ```
 
-Only the narrow application ruff check is expected to be clean today. Broader ruff and mypy output is tracked as audit/report input until follow-up cleanup work makes those checks blocking.
+Only the narrow `kernel.application` ruff check is expected to be clean today. Broader kernel ruff and mypy output is tracked as audit/report input until follow-up cleanup work makes those checks blocking.
 
 ## Pull Request Expectations
 
