@@ -807,6 +807,7 @@ rows = sdk.run(q)   # 默认返回 list[dict]
 - Query head 形态不满足 instance 约束，或 Query 使用非法 `row_format`，都会抛 `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`。
 - 合法 head 形态：`Entity(var)`、`[Entity(var1), ...]`、`Entity.field(...)`。
 - Query 构造期执行 alias 冲突校验（抛 `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`）和 where 变量绑定校验（抛 `SDKDSLError(code="QUERY_UNBOUND_VAR")`）。
+- where 中推荐使用字段 sugar 表达 schema field 条件，例如 `u.name == name`、`u.tag == "admin"`。这会 lowering 到对应 predicate（`user:name` / `user:tag`），`single` 与 `multi` 字段都支持。`Pred("...")` 是低层显式 predicate escape hatch，用于非 schema field predicate、temporal / uncertainty predicate 或调试迁移场景。
 - entity head 列返回 `EntitySnapshot`；field 投影列返回标量值。
 - `Query.where` 不支持 `Body.confidence`；传入时编译报错。
 - `sdk.run(query, view=...)` 不支持（抛 `SDKStoreError`）。

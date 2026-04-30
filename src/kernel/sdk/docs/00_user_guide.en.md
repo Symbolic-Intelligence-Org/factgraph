@@ -788,6 +788,7 @@ rows = sdk.run(q)   # default return type is list[dict]
 * If the Query head shape does not satisfy instance constraints, or if Query uses an invalid `row_format`, `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")` is raised.
 * Valid head forms: `Entity(var)`, `[Entity(var1), ...]`, `Entity.field(...)`.
 * Query performs alias conflict validation at construction time (raising `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`) and where-variable binding validation (raising `SDKDSLError(code="QUERY_UNBOUND_VAR")`).
+* Prefer field sugar for schema-field conditions in `where`, such as `u.name == name` and `u.tag == "admin"`. This lowers to the corresponding predicates (`user:name` / `user:tag`), and both `single` and `multi` fields are supported. `Pred("...")` is the low-level explicit-predicate escape hatch for non-schema-field predicates, temporal / uncertainty predicates, or debugging and migration cases.
 * Entity head columns return `EntitySnapshot`; field projection columns return scalar values.
 * `Query.where` does not support `Body.confidence`; passing it causes a compile-time error.
 * `sdk.run(query, view=...)` is unsupported (raises `SDKStoreError`).

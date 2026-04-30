@@ -59,6 +59,7 @@ rows = sdk.run(rule, row_format="dict")
 支持：
 - 实体存在 sugar：`LivesIn(li)`
 - 路径等值 sugar：`li.user == u`、`li.country == c`
+- 字段谓词 sugar：`u.name == nm`、`u.tag == "vip"`（lowering 到对应 schema predicate，如 `user:name` / `user:tag`）
 - 属性间比较：`u1.user_id == u2.user_id`
 - 显式谓词：`Pred("user:tag", u, "vip")`
 - 规则引用：`RuleRef(...)(...)`
@@ -87,6 +88,31 @@ where = [
 - `Body.confidence` 取值必须在 `(0,1]`；且只要任一分支设置 confidence，所有 `Body` 分支都必须设置。
 - Query 不支持 `Body.confidence`（`confidence!=None` 会报错）。
 - 字符串 DSL 不支持（`sdk.run("...")` / `sdk.evaluate("...")` 均不支持）。
+
+### 3.1 字段 sugar vs `Pred(...)`
+
+对 schema field 的 where 条件,推荐优先使用字段 sugar:
+
+```python
+where=[User(u), u.name == nm, u.tag == "vip"]
+```
+
+这会 lowering 到对应 predicate:
+
+```python
+Pred("user:name", u, nm)
+Pred("user:tag", u, "vip")
+```
+
+`single` 与 `multi` 字段都支持这种 field-to-value 写法。`multi` 字段的语义是 membership:只要存在一条并列事实 `user:tag(u, "vip")`,条件即成立。
+
+`Pred(...)` 是低层显式谓词 escape hatch,适用于:
+
+- schema field 之外的自定义 predicate
+- temporal / uncertainty / adapter-specific predicate
+- 需要直接写 predicate id 的迁移或调试场景
+
+不要把上面的 field-to-value sugar 与属性间比较混淆。`u1.user_id == u2.user_id` 走 cross-coordinate `attr_eq` lowering,当前只允许同实体类型、同字段、且字段是 `primary_key`。
 
 ## 4. RuleRef 与依赖注册
 
