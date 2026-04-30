@@ -1,14 +1,14 @@
 # Current Operational Memory
 
-最后更新:2026-04-29
+最后更新:2026-04-30
 
 ## 当前阶段
 
-**Runtime-authority cleanup 已 implemented**:`kernel.application` 已扶正为 canonical Python runtime authority,`kernel.sdk` 保持 Python product surface / authoring DSL / outward facade。
+**v0.1 onboarding hardening 已 implemented + merged + pushed**:`oss-prep-v0.1` 现在包含 release-surface cleanup 与 onboarding hardening。`kernel.application` 是 canonical Python runtime authority,`kernel.sdk` 保持 Python product surface / authoring DSL / outward facade。
 
 - 当前分支:`oss-prep-v0.1`
-- 当前最新工作:release-surface cleanup blueprint 已 implemented。OS-prep v0.1 readiness、RC verification、source projection gate 均已完成;公开源码面现在通过 sanitized projection script 验证,长期管理方式已写入 `docs/architecture_principles.md`;但仍未创建 public repo、未 upload、未 tag。
-- 当前测试基线:1097 tests 全绿,3 skips(5 段:kernel 685 skipped 1 / agent 255 skipped 2 / service 42 / domains/ecss 99 / benchmarks 16)
+- 当前最新工作:v0.1 onboarding hardening blueprint 已 implemented,并通过 `--no-ff` merge 进入 `oss-prep-v0.1`。merge commit:`962f087`;hardening reference branch:`v0.1-onboarding-hardening` @ `62e68a1`。OS-prep v0.1 readiness、RC verification、source projection gate、onboarding hardening 均已完成;公开源码面通过 sanitized projection script 验证,长期管理方式已写入 `docs/architecture_principles.md`;但仍未创建 public repo、未 upload、未 tag。
+- 当前 kernel release 基线:709 tests OK / 1 skip;`python -m ruff check src/kernel` clean;`scripts/project_release_surface.sh` 通过(261 projected files)。历史 5 段基线在 hardening 前为 1097 tests / 3 skips;hardening close-out 未重跑 agent/service/domains/benchmarks 全段。
 - runtime cleanup blueprint:[2026-04-28_runtime-authority-cleanup.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-04-28_runtime-authority-cleanup.md),status `implemented`,暂不归档
 - OS-prep blueprint 仍在 active,但 status 已 implemented。用户明确 OSS v0.1 仅包含 kernel 主体,所以 #1/#2/#3/#4/#7/#11/#12 已按 kernel-only surface 收口。#4 默认名锁为 `factpy-kernel`,但真实 PyPI reservation 仍需 release day upload / trusted publishing。剩余工作主要是 release-day checklist 与 staged CI gate 后续提升。
 
@@ -73,12 +73,14 @@ tools/
 - Runtime-authority cleanup:implemented,留在 active,暂不 archive。
 - OS-prep v0.1:implemented,仍留 active;#2 packaging hardening / #11 README / #12 optional-domain handling / #8 kernel Ruff gate 已落地。
 - v0.1 release-candidate verification:implemented;verdict = `conditional pass`(`bf652a1`)。Hard gate 1.2 由 `e9dd311` inline fix(`src/kernel/tests/__init__.py`)解决。post-fix repository state 后续 RC 跑可期 `pass`。留 active,等真实 publish + 短期稳定窗口后归档。
+- v0.1 onboarding hardening:implemented;已合入并 push 到 `origin/oss-prep-v0.1`(`962f087`)。落地内容包括 `Identity(primary_key=True)` 强制规则、application write cardinality、SDK `set/add` application write-plan adapter、D7 user journey probe、SDK error/repr polish、kernel-only docs boundary polish。留 active,等真实 publish + 短期稳定窗口后与其他 v0.1 蓝图一起归档。
 - 早期 active 蓝图仍需后续 triage,不要把 memory 当成当前实现真相。
 
 ## 下一步方向
 
 **优先级 1:OS-prep release close-out**
 
+- v0.1 onboarding hardening:已完成并 push。当前 release-onboarding path 已由 `test_v01_onboarding_journey.py` 锁定:`ref → set/add → get → query → evaluate(native) → accept → export audit package`。`SDKStore.set/add` 现在走 application write-plan,会 materialize identity / exists;unmanaged e_ref 会抛 `SDKStoreError(code="UNRESOLVABLE_E_REF")`;set→multi / add→single 会抛 `CardinalityError`;Entity 必须至少有一个 `Identity(primary_key=True)`。
 - v0.1 RC verification:已完成,verdict = `conditional pass`(`bf652a1`,2026-04-28)。dist artifact 已清除,release-day 时重新 build。
 - release-surface cleanup:implemented。`scripts/project_release_surface.sh` + `scripts/release_surface_allowlist.txt` 生成 261-file sanitized projection,projection-built wheel 161 entries / 156 `kernel/` / 0 deny hits,clean venv quickstart 输出 `Alice`;v0.1 仍 wheel-only(no sdist),未 public repo push / 未 upload / 未 tag。
 - release management model:私有 monorepo 是 source of truth;public `factpy-kernel` repo 是 projection artifact,不反向开发;PyPI wheel / public source release 从 verified projection tree 构建。长期规则见 `docs/architecture_principles.md` 的 `Release surface governance`。
@@ -117,3 +119,4 @@ tools/
 5. [src/kernel/application/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/application/docs/README.md)
 6. [src/kernel/sdk/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/sdk/docs/README.md)
 7. [docs/blueprints/active/2026-04-27_oss-prep-v0.1.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-04-27_oss-prep-v0.1.md)
+8. [docs/blueprints/active/2026-04-29_v0.1-onboarding-hardening.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/active/2026-04-29_v0.1-onboarding-hardening.md)
