@@ -6,18 +6,25 @@ import warnings
 from typing import Any
 from uuid import UUID, uuid4
 
+from kernel.application import apply_write_plan, plan_write_command
 from kernel.application.derivation_runtime import evaluate_derivation_plans
 from kernel.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     DerivationEvaluateRequest,
+    EntityRef as AppEntityRef,
+    EntitySelector as AppEntitySelector,
+    EntityWriteCommand,
+    ErrorDTO,
+    FieldMutation,
+    FieldPath,
 )
-from kernel.application.schema_runtime import build_schema_index
+from kernel.application.schema_runtime import build_schema_index, entity_type_from_ref
 from kernel.authoring.derivations import compile_authoring_derivation_v1
 from kernel.authoring.rules import compile_authoring_rule_v1
 from kernel.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
 from kernel.core.derivation.candidates import CandidateSet
-from kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
+from kernel.core.evidence.write_protocol import retract_by_asrt
 from kernel.core.schema.schema_ir import schema_digest
 from kernel.adapters.souffle.package import ExportOptions, export_package
 from kernel.core.protocol.idref_v1 import encode_idref_v1
@@ -36,7 +43,7 @@ from .error_codes import (
     INVALID_ROW_FORMAT,
     QUERY_INVALID_ROW_FORMAT,
 )
-from .errors import SDKStoreError
+from .errors import CardinalityError, EntityNotFoundError, SDKStoreError
 from .query_lower import QueryPlan, lower_query
 from .query_runtime import execute_query_plan
 from .schema import Entity, Field
@@ -274,12 +281,7 @@ class SDKStore:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
-        pred = self._schema_pred_for_field(field)
-        owner_type = pred.get("owner_type")
-        if isinstance(owner_type, str) and owner_type:
-            self._ensure_identity_predicates_for_ref(owner_type=owner_type, e_ref=e_ref)
-        rest_terms = self._rest_terms_for_field(pred, value=value)
-        return set_field(self._store.ledger, pred["pred_id"], e_ref, rest_terms, meta)
+        return self._apply_field_mutation(op="set", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def add(
         self,
@@ -289,12 +291,111 @@ class SDKStore:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
+        return self._apply_field_mutation(op="add", field=field, e_ref=e_ref, value=value, meta=meta)
+
+    def _apply_field_mutation(
+        self,
+        *,
+        op: str,
+        field: Field,
+        e_ref: str,
+        value: Any,
+        meta: dict[str, Any] | None,
+    ) -> str:
         pred = self._schema_pred_for_field(field)
         owner_type = pred.get("owner_type")
-        if isinstance(owner_type, str) and owner_type:
-            self._ensure_identity_predicates_for_ref(owner_type=owner_type, e_ref=e_ref)
-        rest_terms = self._rest_terms_for_field(pred, value=value)
-        return add_field(self._store.ledger, pred["pred_id"], e_ref, rest_terms, meta)
+        if not isinstance(owner_type, str) or not owner_type:
+            raise SDKStoreError(f"field has no owner_type: {pred.get('pred_id')!r}")
+        field_name = pred.get("py_field_name")
+        if not isinstance(field_name, str) or not field_name:
+            raise SDKStoreError(f"field has no py_field_name: {pred.get('pred_id')!r}")
+
+        target_identity = self._identity_values_by_e_ref.get(e_ref)
+        if not isinstance(target_identity, dict) or not target_identity:
+            raise SDKStoreError(
+                f"e_ref is not managed by this SDKStore: {e_ref!r}; "
+                f"call sdk.ref({owner_type}, **identity_kwargs) to obtain a managed e_ref",
+                code="UNRESOLVABLE_E_REF",
+            )
+
+        write_value = self._build_application_write_value(pred=pred, value=value)
+
+        command = EntityWriteCommand(
+            target=AppEntitySelector(
+                entity_type=owner_type,
+                identity=dict(target_identity),
+            ),
+            mutations=(
+                FieldMutation(
+                    op=op,
+                    field=FieldPath(entity_type=owner_type, field_name=field_name),
+                    value=write_value,
+                    meta=dict(meta) if meta else {},
+                ),
+            ),
+            create_if_missing=True,
+            include_dependencies=True,
+        )
+
+        plan = plan_write_command(command, store=self._store, index=self._application_schema_index)
+        if not plan.can_apply:
+            self._raise_from_application_error(plan.errors[0], op=op)
+
+        result = apply_write_plan(plan, store=self._store, index=self._application_schema_index)
+        if result.errors:
+            self._raise_from_application_error(result.errors[0], op=op)
+
+        if not result.applied:
+            raise SDKStoreError(f"{op} produced no applied operations")
+        last = result.applied[-1]
+        if last.assertion_id is None:
+            raise SDKStoreError(f"{op} returned no assertion id")
+        return last.assertion_id
+
+    def _build_application_write_value(self, *, pred: dict[str, Any], value: Any) -> Any:
+        arg_specs = pred.get("arg_specs", [])
+        if not isinstance(arg_specs, list) or len(arg_specs) < 2:
+            raise SDKStoreError("schema predicate arg_specs invalid")
+        value_spec = arg_specs[1] if isinstance(arg_specs[1], dict) else {}
+        value_tag = value_spec.get("type_domain")
+
+        if value_tag == "entity_ref":
+            if not isinstance(value, str):
+                raise SDKStoreError(f"entity_ref field expects e_ref string, got {type(value).__name__}")
+            value_entity_type = entity_type_from_ref(value)
+            if not isinstance(value_entity_type, str) or not value_entity_type:
+                raise SDKStoreError(f"entity_ref value is not a canonical idref_v1 token: {value!r}")
+            value_identity = self._identity_values_by_e_ref.get(value)
+            if not isinstance(value_identity, dict) or not value_identity:
+                raise SDKStoreError(
+                    f"value e_ref is not managed by this SDKStore: {value!r}; "
+                    f"call sdk.ref({value_entity_type}, **identity_kwargs) for the value entity first",
+                    code="UNRESOLVABLE_E_REF",
+                )
+            return AppEntityRef(
+                entity_type=value_entity_type,
+                identity=dict(value_identity),
+                encoded_ref=value,
+            )
+
+        return _coerce_sdk_value_to_tag(value_tag or "", value)
+
+    def _raise_from_application_error(self, err: ErrorDTO, *, op: str) -> None:
+        if err.code == "FIELD_CARDINALITY_MISMATCH":
+            raise CardinalityError(
+                err.message,
+                field_name=err.details.get("field_name"),
+                actual_cardinality=err.details.get("cardinality"),
+                operation=op,
+                code=err.code,
+            )
+        if err.code == "ENTITY_NOT_FOUND":
+            raise EntityNotFoundError(
+                err.message,
+                entity_type=err.details.get("entity_type"),
+                code=err.code,
+            )
+        raise SDKStoreError(err.message, code=err.code)
 
     def retract(self, asrt_id: str, *, meta: dict[str, Any] | None = None) -> str | None:
         return retract_by_asrt(self._store.ledger, asrt_id, meta)
@@ -794,44 +895,6 @@ class SDKStore:
         if not isinstance(value_tag, str):
             raise SDKStoreError("value type_domain missing")
         return [(value_tag, _coerce_sdk_value_to_tag(value_tag, value))]
-
-    def _ensure_identity_predicates_for_ref(self, *, owner_type: str, e_ref: str) -> None:
-        identity_values = self._identity_values_by_e_ref.get(e_ref)
-        if not isinstance(identity_values, dict) or not identity_values:
-            return
-        for pred in self._schema_ir.get("predicates", []):
-            if not isinstance(pred, dict):
-                continue
-            if pred.get("owner_type") != owner_type:
-                continue
-            if pred.get("is_identity_field") is not True:
-                continue
-            pred_id = pred.get("pred_id")
-            field_name = pred.get("py_field_name")
-            arg_specs = pred.get("arg_specs")
-            if not isinstance(pred_id, str) or not pred_id:
-                continue
-            if not isinstance(field_name, str) or field_name not in identity_values:
-                continue
-            if not isinstance(arg_specs, list) or len(arg_specs) != 2:
-                raise SDKStoreError(f"identity predicate arg_specs invalid for {pred_id}")
-            value_spec = arg_specs[1] if isinstance(arg_specs[1], dict) else None
-            type_domain = value_spec.get("type_domain") if isinstance(value_spec, dict) else None
-            if not isinstance(type_domain, str) or not type_domain:
-                raise SDKStoreError(f"identity predicate value type_domain invalid for {pred_id}")
-            try:
-                set_field(
-                    self._store.ledger,
-                    pred_id,
-                    e_ref,
-                    [(type_domain, identity_values[field_name])],
-                    None,
-                )
-            except Exception as exc:
-                raise SDKStoreError(
-                    f"failed to materialize identity predicate for {owner_type}.{field_name}: {exc}"
-                ) from exc
-
 
 def _normalize_view_name(name: Any) -> str:
     if not isinstance(name, str) or not name.strip():
