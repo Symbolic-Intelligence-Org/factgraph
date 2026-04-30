@@ -15,7 +15,7 @@ These notebooks use only the default `kernel` package surface.
 |---|----------|---------|--------|--------|
 | 01 | `01_sdk_basics.ipynb` | — | general | Entity / Schema / Store / CRUD / Batch / Edit / Ingest |
 | 02 | `02_rules_and_derivations.ipynb` | — (native) | general | Rule DSL / Query / Derivation / Accept / Registry |
-| 10 | `10_v01_onboarding_journey.ipynb` | — (native) | general | end-to-end v0.1 journey: ref -> set/add -> get -> query -> derive/accept -> audit package |
+| 10 | `10_v01_onboarding_journey.ipynb` | — (native) | general | end-to-end v0.1 journey: ref -> set/add -> get -> query -> derive/accept -> export/read audit package + evidence tree |
 
 ## Kernel Optional-Engine Examples
 
