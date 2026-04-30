@@ -112,7 +112,7 @@ class User(Entity):
 
 `Identity` 定位一条事实，`Field` 承载这条事实的值。读取侧有限度的对称：快照的**值访问**（`snap.lang`、`snap.name`）对两者一致；但 `snap.assertions.lang` 不可用——`assertions` 命名空间只覆盖 `Field` 字段，不覆盖 `Identity` 字段。写入侧区别：对 `Identity` 字段调用 `.set()` / `.add()` 会抛异常。
 
-**稳定合约**：每个 `Entity` 至少需要一个 `Identity`，否则类定义时报 `SDKSchemaError`。
+**稳定合约**：每个 `Entity` 至少需要一个 `Identity(primary_key=True)`，否则类定义时报 `SDKSchemaError`。secondary `Identity()`（例如坐标维度 `locale`、`lang`）允许同时存在。
 
 **当前行为**
 - `entity_type` 直接由类名推导，不需要单独声明 `schema_id`。

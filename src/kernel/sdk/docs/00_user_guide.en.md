@@ -113,7 +113,7 @@ class User(Entity):
 
 `Identity` locates a fact, while `Field` carries that fact’s value. On the read side, there is limited symmetry: snapshot **value access** (`snap.lang`, `snap.name`) is consistent for both; however, `snap.assertions.lang` is unavailable — the `assertions` namespace only covers `Field` fields, not `Identity` fields. On the write side, the distinction is explicit: calling `.set()` / `.add()` on an `Identity` field raises an exception.
 
-**Stable contract**: every `Entity` must define at least one `Identity`, otherwise `SDKSchemaError` is raised at class definition time.
+**Stable contract**: every `Entity` must define at least one `Identity(primary_key=True)`, otherwise `SDKSchemaError` is raised at class definition time. Secondary `Identity()` fields (e.g. coordinate dimensions like `locale`, `lang`) are allowed alongside the primary.
 
 **Current behavior**
 

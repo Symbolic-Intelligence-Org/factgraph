@@ -18,14 +18,14 @@ from kernel.sdk.schema import Entity, Field, Identity, Relationship
 
 
 class User(Entity):
-    user_id: str = Identity()
+    user_id: str = Identity(primary_key=True)
     name: str = Field(cardinality="single")
     tag: str = Field(cardinality="single")
     popular: str = Field(cardinality="single")
 
 
 class Pet(Entity):
-    pet_id: str = Identity()
+    pet_id: str = Identity(primary_key=True)
     species: str = Field(cardinality="single")
 
 
