@@ -1462,30 +1462,49 @@ where=[
 
 ---
 
-## 13. ECSS VCD Helpers (Submodule)
+## 13. Optional-Domain Bundle Helper Pattern
 
-ECSS VCD helpers are exposed through a submodule rather than `kernel.sdk.__init__`:
+The v0.1 kernel-only wheel does not ship domain bundles directly. ECSS compliance, industry scoring, internal review models, and similar domain layers should be provided as separate packages or monorepo companions. They can still follow the same helper pattern: the domain package owns its schema preset or entity definitions, exposes small functions, and calls only public `kernel.sdk` APIs internally.
+
+A minimal helper can look like this:
 
 ```python
-from kernel.sdk import SDKStore, compile_schema_from_classes
-from domains.ecss.sdk_helpers import apply_ecss_vcd_schema, write_ecss_requirement_bundle
+from kernel.sdk import Entity, Field, Identity, SDKStore
 
-schema_ir = apply_ecss_vcd_schema(compile_schema_from_classes([User]))
-sdk = SDKStore([User], schema_ir=schema_ir)
 
-write_ecss_requirement_bundle(
+class ReviewNote(Entity):
+    note_id: str = Identity(primary_key=True)
+    target_ref: str = Field(cardinality="single")
+    reviewer: str = Field(cardinality="single")
+    decision: str = Field(cardinality="single")
+
+
+def write_review_note(
+    sdk: SDKStore,
+    *,
+    note_id: str,
+    target_ref: str,
+    reviewer: str,
+    decision: str,
+) -> str:
+    note_ref = sdk.ref(ReviewNote, note_id=note_id)
+    sdk.set(ReviewNote.target_ref, note_ref, target_ref)
+    sdk.set(ReviewNote.reviewer, note_ref, reviewer)
+    return sdk.set(ReviewNote.decision, note_ref, decision)
+
+
+sdk = SDKStore([ReviewNote])
+write_review_note(
     sdk,
-    req_id="REQ-001",
-    title="Battery test evidence",
-    standard_ref="ECSS-M-ST-10/5.1",
-    status="closed",
-    verification_methods=["Analysis", "Test"],
-    rid_links=["RID-007"],
-    review_milestone="CDR",
+    note_id="review-001",
+    target_ref="idref_v1:User:example",
+    reviewer="alice",
+    decision="approved",
 )
 ```
 
 Notes:
 
-* The helpers reuse the shared preset owned by `kernel.ecss.vcd`; the SDK layer is not the canonical predicate owner.
-* These preset predicates do not have matching `Entity` descriptors, so the helper uses a dedicated SDK convenience wrapper instead of `sdk.batch()` field handles.
+* A domain package may provide functions such as `apply_<domain>_schema(...)`, but that function belongs to the domain package, not to the top-level `kernel.sdk` API.
+* Helpers should wrap public entrypoints such as `sdk.ref`, `sdk.set`, and `sdk.add`; they should not write the ledger directly.
+* If a helper depends on a package outside the v0.1 wheel, primary user documentation must label it as optional-domain capability rather than kernel-only default behavior.

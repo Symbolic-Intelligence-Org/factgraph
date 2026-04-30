@@ -94,7 +94,7 @@ kernel 回归:
 PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
 ```
 
-当前 branch 基线:1097 tests,3 skips。
+当前 kernel suite 基线:704 tests, 1 skip。
 
 ## 许可证与安全
 

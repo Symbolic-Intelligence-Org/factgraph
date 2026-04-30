@@ -1495,30 +1495,49 @@ where=[
 
 ---
 
-## 13. ECSS VCD helper（子模块）
+## 13. 可选 domain bundle helper 模式
 
-ECSS VCD preset 不在 `kernel.sdk.__init__` 顶层导出，而是走子模块：
+v0.1 kernel-only wheel 不直接发布 domain bundle。ECSS 合规、行业评分、团队内部审查模型等 domain 层应作为独立包或 monorepo companion 提供。它们可以复用同一个 helper 模式：domain 包拥有自己的 schema preset 或实体定义,对外暴露小函数,内部只调用 `kernel.sdk` 的公开 API。
+
+一个最小 helper 可以这样写：
 
 ```python
-from kernel.sdk import SDKStore, compile_schema_from_classes
-from domains.ecss.sdk_helpers import apply_ecss_vcd_schema, write_ecss_requirement_bundle
+from kernel.sdk import Entity, Field, Identity, SDKStore
 
-schema_ir = apply_ecss_vcd_schema(compile_schema_from_classes([User]))
-sdk = SDKStore([User], schema_ir=schema_ir)
 
-write_ecss_requirement_bundle(
+class ReviewNote(Entity):
+    note_id: str = Identity(primary_key=True)
+    target_ref: str = Field(cardinality="single")
+    reviewer: str = Field(cardinality="single")
+    decision: str = Field(cardinality="single")
+
+
+def write_review_note(
+    sdk: SDKStore,
+    *,
+    note_id: str,
+    target_ref: str,
+    reviewer: str,
+    decision: str,
+) -> str:
+    note_ref = sdk.ref(ReviewNote, note_id=note_id)
+    sdk.set(ReviewNote.target_ref, note_ref, target_ref)
+    sdk.set(ReviewNote.reviewer, note_ref, reviewer)
+    return sdk.set(ReviewNote.decision, note_ref, decision)
+
+
+sdk = SDKStore([ReviewNote])
+write_review_note(
     sdk,
-    req_id="REQ-001",
-    title="Battery test evidence",
-    standard_ref="ECSS-M-ST-10/5.1",
-    status="closed",
-    verification_methods=["Analysis", "Test"],
-    rid_links=["RID-007"],
-    review_milestone="CDR",
+    note_id="review-001",
+    target_ref="idref_v1:User:example",
+    reviewer="alice",
+    decision="approved",
 )
 ```
 
 说明：
 
-- 这组 helper 复用 `kernel.ecss.vcd` 的 shared preset，不在 SDK 层重新定义 canonical predicates。
-- 因为这些 preset predicates 没有对应 `Entity` descriptor，helper 直接走 SDK convenience wrapper，而不是 `sdk.batch()` 字段句柄。
+- domain 包可以提供 `apply_<domain>_schema(...)` 这类 preset 函数,但该函数属于 domain 包,不是 `kernel.sdk` 的顶层 API。
+- helper 应封装 `sdk.ref` / `sdk.set` / `sdk.add` 等公开入口,不要直接写 ledger。
+- 如果 helper 依赖 v0.1 wheel 之外的 package,主用户文档必须把它标为 optional-domain 能力,而不是 kernel-only 默认能力。
