@@ -1,7 +1,7 @@
 # EvidenceGraph（audit）
 
 - 范围：`src/kernel/audit/evidence_graph.py`
-- 最后更新：2026-04-28
+- 最后更新：2026-04-30
 - 目标读者：需要在 audit 层实现跨引擎 explainability consumer 的开发者
 
 ## 1. 角色
@@ -114,11 +114,13 @@
     - `souffle`：从 `provenance_trees.jsonl` 的 proof tree 重建
     - `pyreason`：从 `ProvenanceEnvelope.payload` 的 event log 转换
     - `problog`：从 `ProvenanceEnvelope.payload` 的 proof trace 转换
+  - `native` derivation 不产生 `EvidenceGraph`；native candidate 的 reader-side explain surface 是 candidate evidence tree / summary / narrative DTO
 - `AuditQuery.get_candidate_evidence_graph(...)` 会读取 durable graph
 - `service.static_ui` 的 candidate evidence page 现在优先渲染 durable `EvidenceGraph`，并仅对旧 package 保留 Souffle provenance-tree fallback
 
 当前仍保持的边界：
 
+- `EvidenceGraph` 是 engine-bound adapter provenance artifact，不是所有 candidate 都必然拥有的 explain surface
 - runtime live `explain-tree` / `explain-summary` / `explain-narrative` / `explain-nl` 仍不直接支持 `pyreason_provenance_v1` / `problog_provenance_v1`
 - `EvidenceGraph` 仍不替代 engine-native provenance carrier；durable package 只是写 converter 结果，不抹平 engine truth
 - candidate evidence page 仍保留既有 Souffle provenance tree section；`EvidenceGraph` 是新增统一 explain block，不替换旧 tree viewer
