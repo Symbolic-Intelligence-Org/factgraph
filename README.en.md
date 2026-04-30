@@ -54,6 +54,15 @@ print(snapshot.name)  # Alice
 
 `kernel.sdk` is the user-facing Python product surface. Runtime authority lives in `kernel.application`; the SDK adapts ergonomic APIs, schema/DSL authoring, snapshots, batches, editors, and compatibility errors into the application runtime contract.
 
+## Choose Your Layer
+
+| Scenario | Recommended entry | Why |
+|---|---|---|
+| Human-authored Python product code defining `Entity` / `Field` and running queries or derivations | `kernel.sdk` | Provides descriptors, DSL sugar, snapshots, batches, editors, and user-facing exceptions |
+| Automation process / HTTP bridge / wire protocol receiving JSON-like requests | `kernel.application` protocol + executor | Accepts SDK-independent DTOs and does not require SDK `Field` descriptors or Python DSL objects |
+| Lowest-level ledger / evidence / rule primitives | `kernel.core` | Intended for runtime implementers, not as the normal user entrypoint |
+| Reading an exported audit package | `kernel.audit` | Offline reader/query/DTO/evidence consumer surface |
+
 ## Kernel Surface
 
 | Area | Entry | Notes |
@@ -94,7 +103,7 @@ Kernel regression:
 PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
 ```
 
-Current kernel suite baseline: 704 tests, 1 skip.
+Current kernel suite baseline: 709 tests, 1 skip.
 
 ## License And Security
 

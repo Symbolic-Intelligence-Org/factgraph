@@ -1542,3 +1542,45 @@ write_review_note(
 - domain 包可以提供 `apply_<domain>_schema(...)` 这类 preset 函数,但该函数属于 domain 包,不是 `kernel.sdk` 的顶层 API。
 - helper 应封装 `sdk.ref` / `sdk.set` / `sdk.add` 等公开入口,不要直接写 ledger。
 - 如果 helper 依赖 v0.1 wheel 之外的 package,主用户文档必须把它标为 optional-domain 能力,而不是 kernel-only 默认能力。
+
+---
+
+## 14. 何时下探到 Layer 2(`kernel.application`)
+
+绝大多数 Python 用户应停留在 `kernel.sdk`:它提供 `Entity` / `Field` descriptors、DSL sugar、snapshot、batch、editor 与 SDK 异常体系。
+
+当调用方不是人手写 Python schema / DSL,而是 automation 或 wire bridge 时,可以下探到 `kernel.application`:
+
+| 场景 | 为什么不用 SDK facade |
+|----|----|
+| LLM / agent 产出 JSON-like ingest payload | 调用方没有 SDK `Field` descriptor,只有 `entity_type` / `field_name` / identity 值 |
+| HTTP / RPC server 接收跨进程 request | 需要稳定 DTO 和 error shape,而不是 Python DSL object |
+| 批量 ingest 需要 `collect_mode="collect"` | application `IngestRequest` 可以把多项错误收集成 DTO |
+| 迁移 / replay / bridge adapter | 输入已经是 string-keyed contract,不需要再构造 `Entity` class |
+
+最小形态如下;实际 host 进程负责持有 `store` 与 `SchemaIndex`:
+
+```python
+from kernel.application import apply_ingest_request
+from kernel.application.protocol import (
+    EntitySelector,
+    FieldPath,
+    IngestRequest,
+    IngestSetItem,
+)
+
+request = IngestRequest(
+    items=(
+        IngestSetItem(
+            target=EntitySelector(entity_type="User", identity={"user_id": "u-1"}),
+            field=FieldPath(entity_type="User", field_name="name"),
+            value="Alice",
+        ),
+    ),
+    collect_mode="collect",
+)
+
+result = apply_ingest_request(request, store=store, index=schema_index)
+```
+
+Layer 2 的 contract 是 SDK-independent:不要传 SDK `Field` descriptor、`EntitySnapshot`、`Query` 或 `Derivation` object。SDK 的职责正是把这些 ergonomic outward objects lower / adapter 成 application DTO。

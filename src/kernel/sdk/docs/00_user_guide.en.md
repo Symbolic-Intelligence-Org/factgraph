@@ -1509,3 +1509,45 @@ Notes:
 * A domain package may provide functions such as `apply_<domain>_schema(...)`, but that function belongs to the domain package, not to the top-level `kernel.sdk` API.
 * Helpers should wrap public entrypoints such as `sdk.ref`, `sdk.set`, and `sdk.add`; they should not write the ledger directly.
 * If a helper depends on a package outside the v0.1 wheel, primary user documentation must label it as optional-domain capability rather than kernel-only default behavior.
+
+---
+
+## 14. When To Drop Down To Layer 2 (`kernel.application`)
+
+Most Python users should stay in `kernel.sdk`: it provides `Entity` / `Field` descriptors, DSL sugar, snapshots, batches, editors, and the SDK exception hierarchy.
+
+Drop down to `kernel.application` when the caller is automation or a wire bridge rather than a human writing Python schema / DSL:
+
+| Scenario | Why not use the SDK facade |
+| -------- | -------------------------- |
+| LLM / agent produces JSON-like ingest payloads | the caller has `entity_type` / `field_name` / identity values, not SDK `Field` descriptors |
+| HTTP / RPC server receives cross-process requests | the boundary needs stable DTOs and error shapes, not Python DSL objects |
+| batch ingest needs `collect_mode="collect"` | application `IngestRequest` can collect per-item errors as DTOs |
+| migration / replay / bridge adapter | the input is already a string-keyed contract, so constructing `Entity` classes again is unnecessary |
+
+The minimal shape looks like this; the hosting process owns `store` and `SchemaIndex`:
+
+```python
+from kernel.application import apply_ingest_request
+from kernel.application.protocol import (
+    EntitySelector,
+    FieldPath,
+    IngestRequest,
+    IngestSetItem,
+)
+
+request = IngestRequest(
+    items=(
+        IngestSetItem(
+            target=EntitySelector(entity_type="User", identity={"user_id": "u-1"}),
+            field=FieldPath(entity_type="User", field_name="name"),
+            value="Alice",
+        ),
+    ),
+    collect_mode="collect",
+)
+
+result = apply_ingest_request(request, store=store, index=schema_index)
+```
+
+Layer 2 is SDK-independent by contract: do not pass SDK `Field` descriptors, `EntitySnapshot`, `Query`, or `Derivation` objects. The SDK's job is to lower / adapt those ergonomic outward objects into application DTOs.

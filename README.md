@@ -54,6 +54,15 @@ print(snapshot.name)  # Alice
 
 `kernel.sdk` 是面向用户的 Python product surface。运行时权威在 `kernel.application`;SDK 负责把 ergonomic API、schema/DSL authoring、snapshot/batch/editor 等 outward objects adapter 到 application runtime contract。
 
+## 选择使用层
+
+| 场景 | 推荐入口 | 原因 |
+|---|---|---|
+| 人写 Python product code、定义 `Entity` / `Field`、跑 query / derivation | `kernel.sdk` | 提供 descriptors、DSL sugar、snapshot、batch、editor 与用户友好的异常 |
+| automation process / HTTP bridge / wire protocol,需要接收 JSON-like request | `kernel.application` protocol + executor | 接收 SDK-independent DTO,不要求调用方持有 SDK `Field` descriptor 或 Python DSL object |
+| 需要最低层 ledger / evidence / rule primitive | `kernel.core` | 适合 runtime implementer,不是普通用户入口 |
+| 读取已导出的 audit package | `kernel.audit` | 离线 reader/query/DTO/evidence consumer surface |
+
 ## Kernel Surface
 
 | Area | Entry | Notes |
@@ -94,7 +103,7 @@ kernel 回归:
 PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
 ```
 
-当前 kernel suite 基线:704 tests, 1 skip。
+当前 kernel suite 基线:709 tests, 1 skip。
 
 ## 许可证与安全
 

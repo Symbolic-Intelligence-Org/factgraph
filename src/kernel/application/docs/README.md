@@ -2,6 +2,12 @@
 
 本目录记录 `src/kernel/application` 的当前实现口径。`application` 是 `core` 之上的 canonical Python runtime authority；`sdk` 负责 Python product surface、DSL authoring 和 outward facade compatibility。
 
+> **Audience note**
+>
+> 如果你是在写普通 Python product code,并希望用 `Entity` / `Field` / `Identity` classes、Query DSL、snapshot、batch 或 user-facing exceptions,优先阅读 `src/kernel/sdk/docs/` 并从 `kernel.sdk` 开始。
+>
+> 本目录面向 integration / automation / pipeline / RPC bridge 作者:调用方可能只拥有 JSON-like payload、schema identity 字符串、field path 和 error DTO,不应依赖 SDK descriptor 或 Python DSL object。这里记录的是 SDK 之下的 Layer 2 runtime contract。
+
 ## 当前文档
 
 - `src/kernel/application/docs/01_overview.md`
