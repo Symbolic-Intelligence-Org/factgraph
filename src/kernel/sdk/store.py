@@ -129,6 +129,9 @@ class SDKStore:
         self._env_row_format = os.environ.get("FACTPY_ROW_FORMAT")
         self._index_schema()
 
+    def __repr__(self) -> str:
+        return f"SDKStore(entities={len(self._classes)}, schema={self._schema_digest!r})"
+
     @classmethod
     def from_schema_classes(
         cls,
