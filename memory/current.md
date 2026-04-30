@@ -51,9 +51,9 @@ tools/
 
 完成后 application snapshot:
 
-- 15 files / 3385 LOC
+- 15 files / 3399 LOC
 - `kernel.application.__all__`:29 symbols
-- SDK runtime files:query adapter shrank(`query_runtime.py` 357 -> 297),ingest grew to 797 due cache/fallback adapter;`store.py` / `batch.py` / `facade.py` 仍为 large facade files,物理拆分 deferred
+- SDK runtime files:query adapter shrank(`query_runtime.py` 357 -> 297),ingest grew to 800 due cache/fallback adapter plus hardening fallback reroute;`store.py` / `batch.py` / `facade.py` 仍为 large facade files,物理拆分 deferred
 
 ## 已验证的对外接口
 
@@ -72,6 +72,7 @@ tools/
 
 - Runtime-authority cleanup:implemented,留在 active,暂不 archive。
 - OS-prep v0.1:implemented,仍留 active;#2 packaging hardening / #11 README / #12 optional-domain handling / #8 kernel Ruff gate 已落地。
+- Audit-delivery contract:implemented,仍留 active;`kernel.audit` query package / `service.static_ui` rendered static site / `domains.ecss.compliance` row assembly 三方交付边界已拆清。
 - v0.1 release-candidate verification:implemented;verdict = `conditional pass`(`bf652a1`)。Hard gate 1.2 由 `e9dd311` inline fix(`src/kernel/tests/__init__.py`)解决。post-fix repository state 后续 RC 跑可期 `pass`。留 active,等真实 publish + 短期稳定窗口后归档。
 - v0.1 onboarding hardening:implemented;已合入并 push 到 `origin/oss-prep-v0.1`(`962f087`)。落地内容包括 `Identity(primary_key=True)` 强制规则、application write cardinality、SDK `set/add` application write-plan adapter、D7 user journey probe、SDK error/repr polish、kernel-only docs boundary polish。留 active,等真实 publish + 短期稳定窗口后与其他 v0.1 蓝图一起归档。
 - 早期 active 蓝图仍需后续 triage,不要把 memory 当成当前实现真相。
