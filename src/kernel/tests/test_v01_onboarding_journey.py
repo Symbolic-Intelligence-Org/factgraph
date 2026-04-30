@@ -55,7 +55,7 @@ class V01OnboardingJourneyTests(unittest.TestCase):
         with sdk_vars("u", "name") as (u, name):
             q = Query(
                 head=[User(u), User.name(value=name)],
-                where=[User(u), Pred("user:name", u, name)],
+                where=[User(u), u.name == name],
             )
         rows = sdk.run(q)
         self.assertEqual(len(rows), 1)
@@ -65,7 +65,7 @@ class V01OnboardingJourneyTests(unittest.TestCase):
             derivation = Derivation(
                 id="journey.derived_tag",
                 version="1.0.0",
-                where=[User(u), u.locale == loc, Pred("user:tag", u, "admin"), derived == "audited"],
+                where=[User(u), u.locale == loc, u.tag == "admin", derived == "audited"],
                 head=User.tag(locale=loc, tag=derived),
             )
 
@@ -76,7 +76,7 @@ class V01OnboardingJourneyTests(unittest.TestCase):
         with sdk_vars("u") as (u,):
             derived_query = Query(
                 head=User(u),
-                where=[Pred("user:tag", u, "audited")],
+                where=[User(u), u.tag == "audited"],
             )
         derived_rows = sdk.run(derived_query)
         self.assertEqual(len(derived_rows), 1)
