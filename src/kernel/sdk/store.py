@@ -6,17 +6,29 @@ import warnings
 from typing import Any
 from uuid import UUID, uuid4
 
-from kernel.application.schema_runtime import build_schema_index
+from kernel.application import apply_write_plan, plan_write_command
+from kernel.application.derivation_runtime import evaluate_derivation_plans
+from kernel.application.protocol import (
+    CompiledDerivationPlan,
+    CompiledHeadCall,
+    DerivationEvaluateRequest,
+    EntityRef as AppEntityRef,
+    EntitySelector as AppEntitySelector,
+    EntityWriteCommand,
+    ErrorDTO,
+    FieldMutation,
+    FieldPath,
+)
+from kernel.application.schema_runtime import build_schema_index, entity_type_from_ref
 from kernel.authoring.derivations import compile_authoring_derivation_v1
 from kernel.authoring.rules import compile_authoring_rule_v1
 from kernel.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
 from kernel.core.derivation.candidates import CandidateSet
-from kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
+from kernel.core.evidence.write_protocol import retract_by_asrt
 from kernel.core.schema.schema_ir import schema_digest
 from kernel.adapters.souffle.package import ExportOptions, export_package
 from kernel.core.protocol.idref_v1 import encode_idref_v1
 from kernel.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
-from kernel.core.store._evaluate import evaluate_store
 from kernel.core.store._artifact_sidecar import FileArtifactSidecar
 from kernel.adapters.souffle.runner import run_package
 from kernel.core.store.runtime import Store
@@ -31,7 +43,7 @@ from .error_codes import (
     INVALID_ROW_FORMAT,
     QUERY_INVALID_ROW_FORMAT,
 )
-from .errors import SDKSchemaError, SDKStoreError
+from .errors import CardinalityError, EntityNotFoundError, SDKStoreError
 from .query_lower import QueryPlan, lower_query
 from .query_runtime import execute_query_plan
 from .schema import Entity, Field
@@ -117,6 +129,9 @@ class SDKStore:
         self._env_row_format = os.environ.get("FACTPY_ROW_FORMAT")
         self._index_schema()
 
+    def __repr__(self) -> str:
+        return f"SDKStore(entities={len(self._classes)}, schema={self._schema_digest!r})"
+
     @classmethod
     def from_schema_classes(
         cls,
@@ -176,6 +191,26 @@ class SDKStore:
         return SDKBatchTx(self, meta=meta)
 
     def get(self, entity_cls: type[Entity], **identity_kwargs: Any):
+        """Return an ``EntitySnapshot`` for the entity identified by kwargs.
+
+        Reads the active (chosen) view of the entity. The snapshot is
+        read-only; attribute assignment raises ``FrozenSnapshotError``.
+
+        Args:
+            entity_cls: An ``Entity`` subclass registered with this
+                SDKStore.
+            **identity_kwargs: Identity field values identifying the
+                entity.
+
+        Returns:
+            An ``EntitySnapshot`` exposing each declared field as an
+            attribute, or ``None`` if the entity is not visible (no
+            ``<T>:exists`` assertion in the active view).
+
+        Raises:
+            SDKStoreError: if ``entity_cls`` was not registered with this
+                SDKStore, or if identity kwargs are malformed.
+        """
         from .facade import sdk_get
 
         return sdk_get(self, entity_cls, **identity_kwargs)
@@ -235,6 +270,30 @@ class SDKStore:
         return sdk_validate_provenance(self, obj, standard=standard)
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
+        """Return a managed e_ref string for the entity identified by kwargs.
+
+        Records the supplied identity into this SDKStore's local cache so
+        that ``sdk.set`` / ``sdk.add`` can later resolve the e_ref into a
+        full ``EntitySelector`` for the application write-plan. Does NOT
+        write to the ledger; ``ref`` is only an in-memory registration.
+
+        Args:
+            entity_cls: An ``Entity`` subclass passed to this SDKStore in
+                the ``classes=[...]`` constructor arg.
+            **identity_values: Identity field values. All declared identity
+                fields must be supplied unless they have ``default=`` or
+                ``default_factory=``.
+
+        Returns:
+            A canonical ``idref_v1:<entity_type>:<digest>`` token. The same
+            identity inputs always produce the same e_ref (deterministic
+            encoding).
+
+        Raises:
+            SDKStoreError: if ``entity_cls`` was not registered with this
+                SDKStore, if extra identity kwargs are passed, or if a
+                required identity field has no value and no default.
+        """
         spec = self._entity_spec_by_class.get(entity_cls)
         if spec is None:
             raise SDKStoreError(f"unknown Entity class: {getattr(entity_cls, '__name__', entity_cls)!r}")
@@ -269,12 +328,39 @@ class SDKStore:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
-        pred = self._schema_pred_for_field(field)
-        owner_type = pred.get("owner_type")
-        if isinstance(owner_type, str) and owner_type:
-            self._ensure_identity_predicates_for_ref(owner_type=owner_type, e_ref=e_ref)
-        rest_terms = self._rest_terms_for_field(pred, value=value)
-        return set_field(self._store.ledger, pred["pred_id"], e_ref, rest_terms, meta)
+        """Append a ``set`` assertion writing ``value`` to a single-cardinality field.
+
+        The write is routed through ``kernel.application``'s write-plan adapter:
+        the first time an entity is written, identity predicates and
+        ``<T>:exists`` are auto-materialized so that subsequent ``sdk.get`` /
+        ``sdk.run`` / derivation calls see the entity. ``set`` produces a new
+        assertion (the ledger is append-only); the chosen view reflects the
+        latest assertion.
+
+        Args:
+            field: A ``Field`` descriptor obtained from an Entity class
+                (e.g. ``User.name``). Must reference a ``cardinality="single"``
+                field.
+            e_ref: A managed e_ref string returned by ``sdk.ref(EntityCls, ...)``.
+                Externally-constructed strings are rejected.
+            value: The value to write. Type is constrained by the field's
+                declared ``type_domain`` (str / int / bool / entity_ref / ...).
+                For ``entity_ref`` fields, pass another managed e_ref string.
+            meta: Optional metadata dict attached to the assertion.
+
+        Returns:
+            The assertion id (str) of the field-mutation write. Auto-materialized
+            identity / exists assertion ids are not returned.
+
+        Raises:
+            SDKStoreError: ``code="UNRESOLVABLE_E_REF"`` if ``e_ref`` (or an
+                entity_ref ``value``) was not produced by ``sdk.ref``.
+            CardinalityError: ``code="FIELD_CARDINALITY_MISMATCH"`` if ``field``
+                is multi-cardinality (use ``sdk.add`` instead).
+            SDKStoreError: ``code="FIELD_VALUE_TYPE_MISMATCH"`` if ``value``
+                does not match the field's declared type domain.
+        """
+        return self._apply_field_mutation(op="set", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def add(
         self,
@@ -284,14 +370,159 @@ class SDKStore:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
+        """Append an ``add`` assertion adding ``value`` to a multi-cardinality field.
+
+        Unlike ``set``, ``add`` is the multi-set accumulator: each call appends
+        a new value to the field's value set without replacing prior writes.
+        The entity is auto-materialized on first write (see ``set`` docstring
+        for materialization details).
+
+        Args:
+            field: A ``Field`` descriptor obtained from an Entity class
+                (e.g. ``User.tag``). Must reference a ``cardinality="multi"``
+                field.
+            e_ref: A managed e_ref string returned by ``sdk.ref(EntityCls, ...)``.
+            value: The value to add. Type is constrained by the field's
+                declared ``type_domain``. For ``entity_ref`` fields, pass
+                another managed e_ref string.
+            meta: Optional metadata dict attached to the assertion.
+
+        Returns:
+            The assertion id (str) of the field-mutation write.
+
+        Raises:
+            SDKStoreError: ``code="UNRESOLVABLE_E_REF"`` if ``e_ref`` (or an
+                entity_ref ``value``) was not produced by ``sdk.ref``.
+            CardinalityError: ``code="FIELD_CARDINALITY_MISMATCH"`` if ``field``
+                is single-cardinality (use ``sdk.set`` instead).
+            SDKStoreError: ``code="FIELD_VALUE_TYPE_MISMATCH"`` if ``value``
+                does not match the field's declared type domain.
+        """
+        return self._apply_field_mutation(op="add", field=field, e_ref=e_ref, value=value, meta=meta)
+
+    def _apply_field_mutation(
+        self,
+        *,
+        op: str,
+        field: Field,
+        e_ref: str,
+        value: Any,
+        meta: dict[str, Any] | None,
+    ) -> str:
         pred = self._schema_pred_for_field(field)
         owner_type = pred.get("owner_type")
-        if isinstance(owner_type, str) and owner_type:
-            self._ensure_identity_predicates_for_ref(owner_type=owner_type, e_ref=e_ref)
-        rest_terms = self._rest_terms_for_field(pred, value=value)
-        return add_field(self._store.ledger, pred["pred_id"], e_ref, rest_terms, meta)
+        if not isinstance(owner_type, str) or not owner_type:
+            raise SDKStoreError(f"field has no owner_type: {pred.get('pred_id')!r}")
+        field_name = pred.get("py_field_name")
+        if not isinstance(field_name, str) or not field_name:
+            raise SDKStoreError(f"field has no py_field_name: {pred.get('pred_id')!r}")
+
+        target_identity = self._identity_values_by_e_ref.get(e_ref)
+        if not isinstance(target_identity, dict) or not target_identity:
+            raise SDKStoreError(
+                f"e_ref is not managed by this SDKStore: {e_ref!r}; "
+                f"call sdk.ref({owner_type}, **identity_kwargs) to obtain a managed e_ref",
+                code="UNRESOLVABLE_E_REF",
+            )
+
+        write_value = self._build_application_write_value(pred=pred, value=value)
+
+        command = EntityWriteCommand(
+            target=AppEntitySelector(
+                entity_type=owner_type,
+                identity=dict(target_identity),
+            ),
+            mutations=(
+                FieldMutation(
+                    op=op,
+                    field=FieldPath(entity_type=owner_type, field_name=field_name),
+                    value=write_value,
+                    meta=dict(meta) if meta else {},
+                ),
+            ),
+            create_if_missing=True,
+            include_dependencies=True,
+        )
+
+        plan = plan_write_command(command, store=self._store, index=self._application_schema_index)
+        if not plan.can_apply:
+            self._raise_from_application_error(plan.errors[0], op=op)
+
+        result = apply_write_plan(plan, store=self._store, index=self._application_schema_index)
+        if result.errors:
+            self._raise_from_application_error(result.errors[0], op=op)
+
+        if not result.applied:
+            raise SDKStoreError(f"{op} produced no applied operations")
+        last = result.applied[-1]
+        if last.assertion_id is None:
+            raise SDKStoreError(f"{op} returned no assertion id")
+        return last.assertion_id
+
+    def _build_application_write_value(self, *, pred: dict[str, Any], value: Any) -> Any:
+        arg_specs = pred.get("arg_specs", [])
+        if not isinstance(arg_specs, list) or len(arg_specs) < 2:
+            raise SDKStoreError("schema predicate arg_specs invalid")
+        value_spec = arg_specs[1] if isinstance(arg_specs[1], dict) else {}
+        value_tag = value_spec.get("type_domain")
+
+        if value_tag == "entity_ref":
+            if not isinstance(value, str):
+                raise SDKStoreError(f"entity_ref field expects e_ref string, got {type(value).__name__}")
+            value_entity_type = entity_type_from_ref(value)
+            if not isinstance(value_entity_type, str) or not value_entity_type:
+                raise SDKStoreError(f"entity_ref value is not a canonical idref_v1 token: {value!r}")
+            value_identity = self._identity_values_by_e_ref.get(value)
+            if not isinstance(value_identity, dict) or not value_identity:
+                raise SDKStoreError(
+                    f"value e_ref is not managed by this SDKStore: {value!r}; "
+                    f"call sdk.ref({value_entity_type}, **identity_kwargs) for the value entity first",
+                    code="UNRESOLVABLE_E_REF",
+                )
+            return AppEntityRef(
+                entity_type=value_entity_type,
+                identity=dict(value_identity),
+                encoded_ref=value,
+            )
+
+        return _coerce_sdk_value_to_tag(value_tag or "", value)
+
+    def _raise_from_application_error(self, err: ErrorDTO, *, op: str) -> None:
+        if err.code == "FIELD_CARDINALITY_MISMATCH":
+            raise CardinalityError(
+                err.message,
+                field_name=err.details.get("field_name"),
+                actual_cardinality=err.details.get("cardinality"),
+                operation=op,
+                code=err.code,
+            )
+        if err.code == "ENTITY_NOT_FOUND":
+            raise EntityNotFoundError(
+                err.message,
+                entity_type=err.details.get("entity_type"),
+                code=err.code,
+            )
+        raise SDKStoreError(err.message, code=err.code)
 
     def retract(self, asrt_id: str, *, meta: dict[str, Any] | None = None) -> str | None:
+        """Append a retraction assertion that supersedes a prior assertion.
+
+        ``retract`` is append-only: the original assertion is preserved in
+        the ledger; the retraction marks it as no longer authoritative for
+        the chosen view. The retraction itself is recorded as a new
+        assertion.
+
+        Args:
+            asrt_id: The assertion id to retract (e.g. a value previously
+                returned by ``sdk.set`` / ``sdk.add``).
+            meta: Optional metadata dict attached to the retraction
+                assertion.
+
+        Returns:
+            The assertion id (str) of the retraction record, or ``None`` if
+            no retraction was emitted (e.g. the target assertion is already
+            retracted).
+        """
         return retract_by_asrt(self._store.ledger, asrt_id, meta)
 
     def run(
@@ -507,62 +738,30 @@ class SDKStore:
         engine_ext: object | None = None,
         engine_options: dict[str, Any] | None = None,
     ) -> list[CandidateSet]:
-        if len(compiled_plans) == 1:
-            return self._evaluate_single_derivation_plan(
-                compiled_plans[0],
-                mode=mode,
-                registry=registry,
-                engine_ext=engine_ext,
-                engine_options=engine_options,
-            )
-
-        shared_run_id = self._derive_shared_run_id(compiled_plans[0]["derivation_id"])
-        merged: list[CandidateSet] = []
-        for plan in compiled_plans:
-            plan_candidates = self._evaluate_single_derivation_plan(
-                plan,
-                mode=mode,
-                registry=registry,
-                engine_ext=engine_ext,
-                engine_options=engine_options,
-            )
-            merged.extend(_with_candidate_run_id(plan_candidates, run_id=shared_run_id))
-        return merged
-
-    def _evaluate_single_derivation_plan(
-        self,
-        compiled: dict[str, Any],
-        *,
-        mode: str | None,
-        registry: RuleRegistry | None,
-        engine_ext: object | None = None,
-        engine_options: dict[str, Any] | None = None,
-    ) -> list[CandidateSet]:
-        resolved_mode = mode if mode is not None else compiled.get("mode", "native")
-        body_confidences = _coerce_body_confidences(
-            compiled.get("body_confidences"),
-            path="$.body_confidences",
+        if not compiled_plans:
+            return []
+        resolved_mode = _resolve_compiled_derivation_mode(compiled_plans, explicit_mode=mode)
+        request = DerivationEvaluateRequest(
+            plans=tuple(
+                _compiled_derivation_plan_to_application(
+                    compiled,
+                    mode=resolved_mode,
+                    explicit_engine_ext=engine_ext,
+                    engine_options=engine_options,
+                )
+                for compiled in compiled_plans
+            ),
+            run_id=(
+                self._derive_shared_run_id(compiled_plans[0]["derivation_id"])
+                if len(compiled_plans) > 1
+                else None
+            ),
+            engine=resolved_mode,
         )
-        resolved_engine_ext = _resolve_engine_ext_for_evaluate_plan(
-            mode=resolved_mode,
-            where=compiled.get("where"),
-            compiled_engine_ext=compiled.get("engine_ext"),
-            explicit_engine_ext=engine_ext,
-            legacy_body_confidences=body_confidences,
-        )
-        return evaluate_store(
-            self._store,
-            derivation_id=compiled["derivation_id"],
-            version=compiled["version"],
-            target_pred_id=compiled["target_pred_id"],
-            head_vars=list(compiled["head_vars"]),
-            where=list(compiled["where"]),
-            mode=resolved_mode,
-            head=compiled.get("head"),
-            engine_evaluate=self._store.evaluate_engine,
+        return evaluate_derivation_plans(
+            request,
+            store=self._store,
             registry=registry,
-            engine_ext=resolved_engine_ext,
-            engine_options=engine_options,
         )
 
     @staticmethod
@@ -821,44 +1020,6 @@ class SDKStore:
         if not isinstance(value_tag, str):
             raise SDKStoreError("value type_domain missing")
         return [(value_tag, _coerce_sdk_value_to_tag(value_tag, value))]
-
-    def _ensure_identity_predicates_for_ref(self, *, owner_type: str, e_ref: str) -> None:
-        identity_values = self._identity_values_by_e_ref.get(e_ref)
-        if not isinstance(identity_values, dict) or not identity_values:
-            return
-        for pred in self._schema_ir.get("predicates", []):
-            if not isinstance(pred, dict):
-                continue
-            if pred.get("owner_type") != owner_type:
-                continue
-            if pred.get("is_identity_field") is not True:
-                continue
-            pred_id = pred.get("pred_id")
-            field_name = pred.get("py_field_name")
-            arg_specs = pred.get("arg_specs")
-            if not isinstance(pred_id, str) or not pred_id:
-                continue
-            if not isinstance(field_name, str) or field_name not in identity_values:
-                continue
-            if not isinstance(arg_specs, list) or len(arg_specs) != 2:
-                raise SDKStoreError(f"identity predicate arg_specs invalid for {pred_id}")
-            value_spec = arg_specs[1] if isinstance(arg_specs[1], dict) else None
-            type_domain = value_spec.get("type_domain") if isinstance(value_spec, dict) else None
-            if not isinstance(type_domain, str) or not type_domain:
-                raise SDKStoreError(f"identity predicate value type_domain invalid for {pred_id}")
-            try:
-                set_field(
-                    self._store.ledger,
-                    pred_id,
-                    e_ref,
-                    [(type_domain, identity_values[field_name])],
-                    None,
-                )
-            except Exception as exc:
-                raise SDKStoreError(
-                    f"failed to materialize identity predicate for {owner_type}.{field_name}: {exc}"
-                ) from exc
-
 
 def _normalize_view_name(name: Any) -> str:
     if not isinstance(name, str) or not name.strip():
@@ -1307,6 +1468,59 @@ def _coerce_body_confidences(raw_value: Any, *, path: str) -> list[float] | None
     return out
 
 
+def _resolve_compiled_derivation_mode(
+    compiled_plans: list[dict[str, Any]],
+    *,
+    explicit_mode: str | None,
+) -> str:
+    if explicit_mode is not None:
+        return explicit_mode
+    modes = {
+        str(compiled.get("mode", "native"))
+        for compiled in compiled_plans
+    }
+    if len(modes) != 1:
+        raise SDKStoreError(
+            "compiled derivation plans must use the same mode unless evaluate(mode=...) is provided",
+            path="$.mode",
+        )
+    return next(iter(modes))
+
+
+def _compiled_derivation_plan_to_application(
+    compiled: dict[str, Any],
+    *,
+    mode: str,
+    explicit_engine_ext: object | None,
+    engine_options: dict[str, Any] | None,
+) -> CompiledDerivationPlan:
+    body_confidences = _coerce_body_confidences(
+        compiled.get("body_confidences"),
+        path="$.body_confidences",
+    )
+    resolved_engine_ext = _resolve_engine_ext_for_evaluate_plan(
+        mode=mode,
+        where=compiled.get("where"),
+        compiled_engine_ext=compiled.get("engine_ext"),
+        explicit_engine_ext=explicit_engine_ext,
+        legacy_body_confidences=body_confidences,
+    )
+    return CompiledDerivationPlan(
+        derivation_id=compiled["derivation_id"],
+        version=compiled["version"],
+        body_ir=list(compiled["where"]),
+        heads=(
+            CompiledHeadCall(
+                target_pred_id=compiled["target_pred_id"],
+                head_var_names=tuple(compiled["head_vars"]),
+            ),
+        ),
+        head_spec=compiled.get("head"),
+        engine_ext=resolved_engine_ext,
+        engine_options=dict(engine_options or {}),
+    )
+
+
 def _validate_body_confidences_arity(*, where: Any, body_confidences: list[float]) -> None:
     branch_count = 1
     if isinstance(where, list) and where and all(isinstance(item, list) for item in where):
@@ -1340,31 +1554,6 @@ def _resolve_engine_ext_for_evaluate_plan(
         engine_ext=selected_engine_ext,
         legacy_body_confidences=legacy_body_confidences,
     )
-
-
-def _with_candidate_run_id(candidates: list[CandidateSet], *, run_id: str) -> list[CandidateSet]:
-    rewritten: list[CandidateSet] = []
-    for candidate in candidates:
-        rewritten.append(
-            CandidateSet(
-                derivation_id=candidate.derivation_id,
-                derivation_version=candidate.derivation_version,
-                run_id=run_id,
-                target=candidate.target,
-                key_tuple_digest=candidate.key_tuple_digest,
-                tup_digest=candidate.tup_digest,
-                payload=dict(candidate.payload),
-                support_digest=candidate.support_digest,
-                support_kind=candidate.support_kind,
-                generated_at=candidate.generated_at,
-                state=candidate.state,
-                confidence=candidate.confidence,
-                confidence_kind=candidate.confidence_kind,
-                candidate_key=candidate.candidate_key,
-                candidate_kind=candidate.candidate_kind,
-            )
-        )
-    return rewritten
 
 
 def _resolve_row_format(*, call_site: Any, store_default: Any, env_var: Any) -> str:

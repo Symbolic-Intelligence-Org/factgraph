@@ -113,7 +113,7 @@ class User(Entity):
 
 `Identity` locates a fact, while `Field` carries that fact’s value. On the read side, there is limited symmetry: snapshot **value access** (`snap.lang`, `snap.name`) is consistent for both; however, `snap.assertions.lang` is unavailable — the `assertions` namespace only covers `Field` fields, not `Identity` fields. On the write side, the distinction is explicit: calling `.set()` / `.add()` on an `Identity` field raises an exception.
 
-**Stable contract**: every `Entity` must define at least one `Identity`, otherwise `SDKSchemaError` is raised at class definition time.
+**Stable contract**: every `Entity` must define at least one `Identity(primary_key=True)`, otherwise `SDKSchemaError` is raised at class definition time. Secondary `Identity()` fields (e.g. coordinate dimensions like `locale`, `lang`) are allowed alongside the primary.
 
 **Current behavior**
 
@@ -788,6 +788,7 @@ rows = sdk.run(q)   # default return type is list[dict]
 * If the Query head shape does not satisfy instance constraints, or if Query uses an invalid `row_format`, `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")` is raised.
 * Valid head forms: `Entity(var)`, `[Entity(var1), ...]`, `Entity.field(...)`.
 * Query performs alias conflict validation at construction time (raising `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`) and where-variable binding validation (raising `SDKDSLError(code="QUERY_UNBOUND_VAR")`).
+* Prefer field sugar for schema-field conditions in `where`, such as `u.name == name` and `u.tag == "admin"`. This lowers to the corresponding predicates (`user:name` / `user:tag`), and both `single` and `multi` fields are supported. `Pred("...")` is the low-level explicit-predicate escape hatch for non-schema-field predicates, temporal / uncertainty predicates, or debugging and migration cases.
 * Entity head columns return `EntitySnapshot`; field projection columns return scalar values.
 * `Query.where` does not support `Body.confidence`; passing it causes a compile-time error.
 * `sdk.run(query, view=...)` is unsupported (raises `SDKStoreError`).
@@ -1462,30 +1463,91 @@ where=[
 
 ---
 
-## 13. ECSS VCD Helpers (Submodule)
+## 13. Optional-Domain Bundle Helper Pattern
 
-ECSS VCD helpers are exposed through a submodule rather than `kernel.sdk.__init__`:
+The v0.1 kernel-only wheel does not ship domain bundles directly. ECSS compliance, industry scoring, internal review models, and similar domain layers should be provided as separate packages or monorepo companions. They can still follow the same helper pattern: the domain package owns its schema preset or entity definitions, exposes small functions, and calls only public `kernel.sdk` APIs internally.
+
+A minimal helper can look like this:
 
 ```python
-from kernel.sdk import SDKStore, compile_schema_from_classes
-from domains.ecss.sdk_helpers import apply_ecss_vcd_schema, write_ecss_requirement_bundle
+from kernel.sdk import Entity, Field, Identity, SDKStore
 
-schema_ir = apply_ecss_vcd_schema(compile_schema_from_classes([User]))
-sdk = SDKStore([User], schema_ir=schema_ir)
 
-write_ecss_requirement_bundle(
+class ReviewNote(Entity):
+    note_id: str = Identity(primary_key=True)
+    target_ref: str = Field(cardinality="single")
+    reviewer: str = Field(cardinality="single")
+    decision: str = Field(cardinality="single")
+
+
+def write_review_note(
+    sdk: SDKStore,
+    *,
+    note_id: str,
+    target_ref: str,
+    reviewer: str,
+    decision: str,
+) -> str:
+    note_ref = sdk.ref(ReviewNote, note_id=note_id)
+    sdk.set(ReviewNote.target_ref, note_ref, target_ref)
+    sdk.set(ReviewNote.reviewer, note_ref, reviewer)
+    return sdk.set(ReviewNote.decision, note_ref, decision)
+
+
+sdk = SDKStore([ReviewNote])
+write_review_note(
     sdk,
-    req_id="REQ-001",
-    title="Battery test evidence",
-    standard_ref="ECSS-M-ST-10/5.1",
-    status="closed",
-    verification_methods=["Analysis", "Test"],
-    rid_links=["RID-007"],
-    review_milestone="CDR",
+    note_id="review-001",
+    target_ref="idref_v1:User:example",
+    reviewer="alice",
+    decision="approved",
 )
 ```
 
 Notes:
 
-* The helpers reuse the shared preset owned by `kernel.ecss.vcd`; the SDK layer is not the canonical predicate owner.
-* These preset predicates do not have matching `Entity` descriptors, so the helper uses a dedicated SDK convenience wrapper instead of `sdk.batch()` field handles.
+* A domain package may provide functions such as `apply_<domain>_schema(...)`, but that function belongs to the domain package, not to the top-level `kernel.sdk` API.
+* Helpers should wrap public entrypoints such as `sdk.ref`, `sdk.set`, and `sdk.add`; they should not write the ledger directly.
+* If a helper depends on a package outside the v0.1 wheel, primary user documentation must label it as optional-domain capability rather than kernel-only default behavior.
+
+---
+
+## 14. When To Drop Down To Layer 2 (`kernel.application`)
+
+Most Python users should stay in `kernel.sdk`: it provides `Entity` / `Field` descriptors, DSL sugar, snapshots, batches, editors, and the SDK exception hierarchy.
+
+Drop down to `kernel.application` when the caller is automation or a wire bridge rather than a human writing Python schema / DSL:
+
+| Scenario | Why not use the SDK facade |
+| -------- | -------------------------- |
+| LLM / agent produces JSON-like ingest payloads | the caller has `entity_type` / `field_name` / identity values, not SDK `Field` descriptors |
+| HTTP / RPC server receives cross-process requests | the boundary needs stable DTOs and error shapes, not Python DSL objects |
+| batch ingest needs `collect_mode="collect"` | application `IngestRequest` can collect per-item errors as DTOs |
+| migration / replay / bridge adapter | the input is already a string-keyed contract, so constructing `Entity` classes again is unnecessary |
+
+The minimal shape looks like this; the hosting process owns `store` and `SchemaIndex`:
+
+```python
+from kernel.application import apply_ingest_request
+from kernel.application.protocol import (
+    EntitySelector,
+    FieldPath,
+    IngestRequest,
+    IngestSetItem,
+)
+
+request = IngestRequest(
+    items=(
+        IngestSetItem(
+            target=EntitySelector(entity_type="User", identity={"user_id": "u-1"}),
+            field=FieldPath(entity_type="User", field_name="name"),
+            value="Alice",
+        ),
+    ),
+    collect_mode="collect",
+)
+
+result = apply_ingest_request(request, store=store, index=schema_index)
+```
+
+Layer 2 is SDK-independent by contract: do not pass SDK `Field` descriptors, `EntitySnapshot`, `Query`, or `Derivation` objects. The SDK's job is to lower / adapt those ergonomic outward objects into application DTOs.

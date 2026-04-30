@@ -29,6 +29,29 @@ class AuditQueryError(Exception):
     pass
 
 
+class AuditOptionalDomainError(AuditQueryError):
+    pass
+
+
+_ECSS_COMPLIANCE_OPTIONAL_DOMAIN_MESSAGE = (
+    "AuditQuery.list_compliance_matrix requires the optional domains.ecss package. "
+    "The factpy-kernel v0.1 wheel is kernel-only and does not include domains; "
+    "use the monorepo/domain package, or call domains.ecss.compliance."
+    "build_compliance_matrix_rows when that domain package is installed."
+)
+
+
+def _load_ecss_compliance_helpers() -> tuple[type[Exception], Any]:
+    try:
+        from domains.ecss.compliance import AuditComplianceError, build_compliance_matrix_rows
+    except ModuleNotFoundError as exc:
+        missing_name = exc.name or ""
+        if missing_name == "domains" or missing_name.startswith("domains."):
+            raise AuditOptionalDomainError(_ECSS_COMPLIANCE_OPTIONAL_DOMAIN_MESSAGE) from exc
+        raise
+    return AuditComplianceError, build_compliance_matrix_rows
+
+
 @dataclass(frozen=True)
 class AuditQuery:
     package: AuditPackageData
@@ -416,7 +439,7 @@ class AuditQuery:
 
         # Lazy import: ECSS compliance lives in domains.ecss after the namespace split;
         # importing here avoids kernel.audit needing domains at module load time.
-        from domains.ecss.compliance import AuditComplianceError, build_compliance_matrix_rows
+        AuditComplianceError, build_compliance_matrix_rows = _load_ecss_compliance_helpers()
 
         try:
             assertion_index = load_assertion_index(self.package)

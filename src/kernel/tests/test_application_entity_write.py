@@ -223,5 +223,130 @@ class ApplicationEntityWriteTests(unittest.TestCase):
         self.assertEqual(snapshot.fields["tag"].value, ())
 
 
+class ApplicationEntityWriteCardinalityTests(unittest.TestCase):
+    def test_set_on_multi_cardinality_field_raises_mismatch(self) -> None:
+        store, index = _build_store()
+
+        plan = plan_write_command(
+            EntityWriteCommand(
+                target=EntitySelector(
+                    entity_type="User",
+                    identity={"name": "alice"},
+                    allow_identity_defaults=True,
+                ),
+                mutations=(
+                    FieldMutation(
+                        op="set",
+                        field=FieldPath(entity_type="User", field_name="tag"),
+                        value="admin",
+                    ),
+                ),
+                create_if_missing=True,
+            ),
+            store=store,
+            index=index,
+        )
+
+        self.assertFalse(plan.can_apply)
+        self.assertEqual(len(plan.errors), 1)
+        err = plan.errors[0]
+        self.assertEqual(err.code, "FIELD_CARDINALITY_MISMATCH")
+        self.assertEqual(err.path, ("mutations", "0", "op"))
+        self.assertEqual(err.details.get("op"), "set")
+        self.assertEqual(err.details.get("cardinality"), "multi")
+        self.assertEqual(err.details.get("field_name"), "tag")
+
+    def test_add_on_single_cardinality_field_raises_mismatch(self) -> None:
+        store, index = _build_store()
+        country_ref = resolve_selector(
+            EntitySelector(entity_type="Country", identity={"code": "DE"}),
+            index=index,
+        )
+
+        plan = plan_write_command(
+            EntityWriteCommand(
+                target=EntitySelector(
+                    entity_type="User",
+                    identity={"name": "alice"},
+                    allow_identity_defaults=True,
+                ),
+                mutations=(
+                    FieldMutation(
+                        op="add",
+                        field=FieldPath(entity_type="User", field_name="lives_in"),
+                        value=country_ref,
+                    ),
+                ),
+                create_if_missing=True,
+            ),
+            store=store,
+            index=index,
+        )
+
+        self.assertFalse(plan.can_apply)
+        self.assertEqual(len(plan.errors), 1)
+        err = plan.errors[0]
+        self.assertEqual(err.code, "FIELD_CARDINALITY_MISMATCH")
+        self.assertEqual(err.details.get("op"), "add")
+        self.assertEqual(err.details.get("cardinality"), "single")
+        self.assertEqual(err.details.get("field_name"), "lives_in")
+
+    def test_set_on_single_field_passes(self) -> None:
+        store, index = _build_store()
+        country_ref = resolve_selector(
+            EntitySelector(entity_type="Country", identity={"code": "DE"}),
+            index=index,
+        )
+
+        plan = plan_write_command(
+            EntityWriteCommand(
+                target=EntitySelector(
+                    entity_type="User",
+                    identity={"name": "alice"},
+                    allow_identity_defaults=True,
+                ),
+                mutations=(
+                    FieldMutation(
+                        op="set",
+                        field=FieldPath(entity_type="User", field_name="lives_in"),
+                        value=country_ref,
+                    ),
+                ),
+                create_if_missing=True,
+            ),
+            store=store,
+            index=index,
+        )
+
+        self.assertTrue(plan.can_apply)
+        self.assertEqual(plan.errors, ())
+
+    def test_add_on_multi_field_passes(self) -> None:
+        store, index = _build_store()
+
+        plan = plan_write_command(
+            EntityWriteCommand(
+                target=EntitySelector(
+                    entity_type="User",
+                    identity={"name": "alice"},
+                    allow_identity_defaults=True,
+                ),
+                mutations=(
+                    FieldMutation(
+                        op="add",
+                        field=FieldPath(entity_type="User", field_name="tag"),
+                        value="admin",
+                    ),
+                ),
+                create_if_missing=True,
+            ),
+            store=store,
+            index=index,
+        )
+
+        self.assertTrue(plan.can_apply)
+        self.assertEqual(plan.errors, ())
+
+
 if __name__ == "__main__":
     unittest.main()

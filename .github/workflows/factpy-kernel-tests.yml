@@ -21,12 +21,28 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install package (all extras)
+      - name: Install kernel package and monorepo dev dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[extraction,documents,service,observability]"
+          python -m pip install -r requirements/dev.txt
+
+      - name: Ruff (kernel gate)
+        run: |
+          python -m ruff check src/kernel
+
+      - name: Ruff (service/tools audit)
+        continue-on-error: true
+        run: |
+          python -m ruff check src/service tools
+
+      - name: Mypy (kernel/service audit)
+        continue-on-error: true
+        run: |
+          python -m mypy src/kernel src/service
 
       - name: Test (where AST gate on, 5 dirs)
+        env:
+          PYTHONPATH: src
         run: |
           python -m unittest discover -s src/kernel/tests -p 'test_*.py'
           python -m unittest discover -s src/agent/tests -p 'test_*.py'
@@ -37,6 +53,7 @@ jobs:
       - name: Test (where AST gate off compatibility, 5 dirs)
         env:
           FACTPY_WHERE_AST_VALIDATE: "0"
+          PYTHONPATH: src
         run: |
           python -m unittest discover -s src/kernel/tests -p 'test_*.py'
           python -m unittest discover -s src/agent/tests -p 'test_*.py'
@@ -45,6 +62,8 @@ jobs:
           python -m unittest discover -s tools/benchmarks/tests -p 'test_*.py'
 
       - name: Test (strict profile smoke)
+        env:
+          PYTHONPATH: src
         run: |
           if find src/kernel/tests src/agent/tests src/service/tests src/domains/ecss/tests tools/benchmarks/tests -maxdepth 1 -type f -name 'test_*strict*.py' 2>/dev/null | grep -q .; then
             for d in src/kernel/tests src/agent/tests src/service/tests src/domains/ecss/tests tools/benchmarks/tests; do
@@ -53,3 +72,12 @@ jobs:
           else
             echo "No strict profile smoke tests found across the 5 test directories; skipping."
           fi
+
+      - name: Coverage report (kernel/service, non-threshold)
+        continue-on-error: true
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m coverage run -m unittest discover -s src/kernel/tests -p 'test_*.py'
+          python -m coverage run --append -m unittest discover -s src/service/tests -p 'test_*.py'
+          python -m coverage report

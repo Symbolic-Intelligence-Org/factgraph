@@ -1,29 +1,41 @@
 # SDK Alignment Matrix (Current Implementation)
 
-Updated: 2026-03-03  
+Updated: 2026-04-28
 Scope: `src/kernel/sdk`
 
-## 1. Capability Matrix
+## 1. Layer Ownership
 
-| Capability | Status | Current Behavior |
+| Layer | Current Responsibility |
+| --- | --- |
+| `kernel.application` | canonical Python runtime authority; owns read/write/query/ingest/compiled derivation runtime DTOs and executors |
+| `kernel.sdk` | Python product surface; owns schema/DSL authoring, `SDKStore` facade, snapshot/editor/batch outward objects, compatibility errors |
+| `kernel.core` | low-level ledger/store/rules/evidence semantics |
+| `service` / `agent` | delivery / product consumers; production runtime code must not add SDK runtime imports |
+
+## 2. Capability Matrix
+
+| Capability | Status | Current Behavior / Owner |
 | --- | --- | --- |
-| Schema declarations (`Entity/Identity/Field`) | Implemented | `Field.cardinality` supports only `single|multi`; `Identity(primary_key=...)` is active |
-| Schema compile/preflight helpers | Implemented | `build_authoring_schema_from_classes` / `compile_schema_from_classes` / `schema_preflight_from_classes` |
-| Low-level writes (`ref/set/add/retract`) | Implemented | Direct ledger writes with SDK-side type checks |
-| Batch staging (`sdk.batch()`) | Implemented | `preview/commit`, dependency closure, wire plan export/replay; context manager does not auto-commit/rollback |
-| Read/write facade (`get/find/edit`) | Implemented | Snapshot is read-only; editor allows field writes only |
-| Assertion read views | Implemented | `active` / `history` / `.at(t)` / `.version(v)` |
-| Ingest / provenance | Implemented | `sdk.ingest(...)`, `sdk.validate_provenance(...)` |
-| Audit queries (`explain_fact/conflicts`) | Implemented | Active-assertion diagnostics; output includes `chosen_asrt_id` (possibly `None`) |
-| Rule DSL + `sdk.run(rule)` | Implemented | Object DSL supported; `row_format` applies only to Rule path (precedence: call-site > store default > env var > `"dict"`) |
-| Query DSL + `sdk.run(query)` | Implemented | Default `list[dict]`; `row_format="instance"` returns instance rows for single `Entity(var)` head |
-| Derivation + `sdk.evaluate/accept` | Implemented | `head` shape infers fact/entity candidate kind; multi-head evaluate is flattened |
-| Registry (`SDKRegistry`) | Implemented | Complete schema/rule/derivation register + read surface |
+| Schema declarations (`Entity/Identity/Field`) | Implemented | SDK authoring surface |
+| Schema compile/preflight helpers | Implemented | SDK authoring helpers; `compile_schema_from_classes` may be used as an authoring import |
+| Low-level writes (`ref/set/add/retract`) | Implemented | SDK convenience API; direct ledger writes retained for outward compatibility |
+| Batch staging (`sdk.batch()`) | Implemented | SDK owns staging/wire/facade; application owns write planning/apply when operations fit application protocol |
+| Read/write facade (`get/find/edit`) | Implemented | SDK owns snapshot/editor outward shape; application owns read DTO hydration/write planner |
+| Assertion read views | Implemented | SDK facade shape |
+| Ingest / provenance | Implemented | SDK owns descriptor parsing, diagnostics, and outward `IngestResult`; application owns normalized ingest executor for cache-resolvable items |
+| Audit queries (`explain_fact/conflicts`) | Implemented | SDK facade over audit/core read helpers |
+| Rule DSL + `sdk.run(rule)` | Implemented | SDK owns DSL/lowering; core/application execute runtime-normalized pieces |
+| Query DSL + `sdk.run(query)` | Implemented | SDK owns `Query` DSL and outward row shape; application owns query runtime executor |
+| Derivation + `sdk.evaluate/accept` | Implemented | SDK owns DSL sugar and compatibility; application owns compiled derivation evaluate/accept orchestration |
+| Registry (`SDKRegistry`) | Implemented | SDK authoring-adjacent facade; application contracts do not accept `SDKRegistry` objects |
 
-## 2. Hard Boundaries (Current Semantics)
+## 3. Hard Boundaries (Current Semantics)
 
 | Topic | Current Behavior |
 | --- | --- |
+| SDK product surface | `kernel.sdk.__all__` exposes SDK user-facing surface / compatibility aliases only, not application internals |
+| Application protocol | Does not accept SDK facade objects, SDK `Field` descriptors, or SDK DSL objects |
+| service / agent imports | Production SDK imports are guarded by `test_sdk_consumer_boundary.py`; the only current allowlist entry is the agent extraction authoring helper `compile_schema_from_classes` |
 | Legacy field semantics | `functional/temporal/dims/fact_key` are removed |
 | `vars()` runtime unpack | `with vars() as (a,b)` is unsupported; named/factory forms are supported |
 | String DSL | `sdk.run("...")` / `sdk.evaluate("...")` are unsupported |
@@ -41,7 +53,7 @@ Scope: `src/kernel/sdk`
 | Query head constraints | Only `Entity(var)` or `Entity.field(...)`; field projection supports only `single` fields |
 | Registry vs multi-head | `evaluate` supports multi-head; `register_derivation(...)` is still single-head-oriented |
 
-## 3. Deferred Items
+## 4. Deferred Items
 
 | Item | Status |
 | --- | --- |
@@ -50,3 +62,5 @@ Scope: `src/kernel/sdk`
 | Formal typed ingest schema (TypedDict/dataclass) | Deferred |
 | Temporal write semantics in Rule/Derivation head (`valid_from/valid_to/version`) | Deferred |
 | Native multi-head publishing semantics in Registry | Deferred |
+| Physical SDK god-file split (`store.py` / `batch.py` / `facade.py`) | Deferred; this cleanup completed runtime delegation, not line-count reduction |
+| Full exception hierarchy migration | Deferred; application runtime uses DTO error shapes, while SDK product-domain errors remain SDK-owned |

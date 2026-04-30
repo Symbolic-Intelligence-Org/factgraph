@@ -2,13 +2,13 @@
 
 ## 角色
 
-本文档记录项目中相对稳定的设计哲学、系统边界和长期维护规则。
+本文档记录 `factpy-kernel` 中相对稳定的设计哲学、系统边界和长期维护规则。
 
 它不是：
 
 - 单个任务的实现草案
 - 当前代码行为的逐项说明
-- 历史蓝图的替代品
+- 详细变更记录的替代品
 
 当前代码行为仍以各模块 `docs/` 为准。
 
@@ -23,9 +23,27 @@
 
 - `core` 负责运行时语义内核。
 - `authoring` 负责编译、预检、registry 工作流。
-- `application` 负责 core 之上的中性运行层。
+- `application` 负责 core 之上的 canonical Python runtime authority。
 - `service` 负责前端/BFF 形态的 HTTP 交付面。
 - `sdk` 负责 Python authoring 与 facade 体验。
+
+### 2.1 Layer authority
+
+- 新 runtime 能力默认进入 `core` 或 `application`,不直接塞回 SDK god files。
+- `application` 拥有 runtime-normalized DTO 与 executor surface,例如 read/write/query/ingest/compiled derivation evaluate/accept。
+- `sdk` 拥有 product surface:Python schema/DSL authoring、`SDKStore` facade、snapshot/editor/batch outward objects、compatibility aliases 与用户可见错误。
+- SDK 可以调用 application,但 application 不 import SDK。
+- service / agent production runtime code 不应新增 SDK runtime imports；确有 authoring/ergonomic 例外时必须显式登记并说明理由。
+- 若需要把 SDK DSL primitive 下沉给 adapter 或 domain 使用,应通过单独 primitive-contract blueprint 处理,不要在运行时迁移中偷渡。
+
+### 2.2 Release surface governance
+
+- 私有 monorepo 是 development source of truth。蓝图、audit trail、memory、agent/service/domain、tooling、benchmarks、third-party working material 都留在私有仓库管理。
+- 公开 `factpy-kernel` 仓库是由私有 monorepo 生成的 projection artifact,不是日常开发源头。不要在 public repo 直接反向开发 feature；必要修复应先回到私有 monorepo,再重新投影。
+- v0.1 public source surface 必须通过 `scripts/project_release_surface.sh` 和 `scripts/release_surface_allowlist.txt` 生成。默认拒绝是发布面安全姿态:未进入 allowlist 的文件不公开。
+- public source projection 不应包含内部工作流、操作记忆、蓝图/audit 历史、工作参考材料、非 kernel 包、第三方工作树、内部工具、示例草稿、样本数据或本地输出。
+- PyPI wheel 应从 verified projection tree 构建,而不是从私有 monorepo root 直接发布。v0.1 不上传 sdist；未来若恢复 sdist,必须从同一个 sanitized projection 生成并通过相同 allowlist/denylist/link/smoke gates。
+- release tag 和公开 release notes 属于 public projection repo。私有 monorepo 中 implemented blueprints 的归档应等实际 publish 完成并经过短期稳定窗口后再做。
 
 ### 3. 当前实现真相必须贴近模块
 
@@ -38,29 +56,24 @@
 - 蓝图在实现过程中用于防止范围漂移。
 - 任务结束后，蓝图应归档为 rationale，不能继续充当当前实现说明。
 
-### 5. 历史文档保留上下文，不伪装成现状
+### 5. 设计背景不伪装成现状
 
-- `docs/blueprint_history/` 保存历史阶段讨论、旧设计和未完成方向。
-- 若历史内容仍有价值，应提炼到原则文档、当前模块 docs 或新任务蓝图中，而不是直接重写旧文档。
-- 若需要把历史蓝图桥接到新归档区，应创建显式标注的 reconstructed archive 条目，并保留 `Historical Source` 与可验证 provenance。
+- 历史设计材料可以提供背景，但不能替代当前代码、模块文档或公开 API contract。
+- 若历史内容仍有价值，应提炼到原则文档或当前模块 docs，而不是让读者去追溯内部工作记录。
 
-### 6. Operational Memory 不等于当前真相
+### 6. 当前真相应贴近代码
 
-- `memory/` 用于 session continuity、handoff 和当前工作记忆。
-- `memory/` 不应承担当前实现真相、稳定原则或 active blueprint 约束。
-- 当 memory 中的结论变成 durable boundary，应迁回 blueprint、模块 docs 或原则文档。
+- 当前行为应记录在靠近实现的模块 docs 中。
+- 稳定原则应记录在本文件或公开模块 docs 中。
+- 临时工作记录、个人笔记和内部实现日志不应成为公开 contract。
 
 ## 当前系统边界
 
-- 当前实现真相以 `src/<package>/**/docs/` 为准(`<package>` ∈ {kernel, agent, service, domains})。
-- `memory/` 承载 operational memory，不承担当前实现真相。
-- `docs/blueprints/active/` 只放正在推进的任务蓝图。
-- `docs/blueprints/archive/` 放按新流程归档的蓝图。
-- `docs/blueprint_history/` 保留历史遗留蓝图，不承担新的活动任务。
+- 当前实现真相以 `src/kernel/**/docs/` 为准。
+- root README 面向安装与快速开始。
+- 模块 docs 面向当前实现边界、公共入口和兼容面。
 
 ## 长期方向
 
-- 让蓝图成为任务收口、多轮生成和文档同步的标准入口。
 - 让模块 docs 成为稳定、贴近代码、可在 review 中维护的当前真相。
-- 让历史蓝图继续承担设计 rationale，而不是与代码竞争权威性。
 - 逐步把关键架构原则从历史讨论中抽出，减少重复争论。

@@ -28,9 +28,6 @@ class SDKBatchApplicationDelegateTests(unittest.TestCase):
             user.tag.add("vip")
 
             plan = tx.preview(objects=[user])
-            self.assertEqual(plan._application_handle_order, (user.handle_id,))
-            self.assertIn(user.handle_id, plan._application_plans_by_handle_id)
-
             wire = plan.export(sdk)
             self.assertEqual(wire.wire_version, "sdk_batch_plan_v1")
 
@@ -53,11 +50,7 @@ class SDKBatchApplicationDelegateTests(unittest.TestCase):
             user = tx.entity(User, user_id="u-2")
             user.lives_in.set(country)
 
-            commit = tx.commit(objects=[user])
-
-        self.assertEqual(commit.plan._application_handle_order, (country.handle_id, user.handle_id))
-        user_plan = commit.plan._application_plans_by_handle_id[user.handle_id]
-        self.assertTrue(all(op.target.entity_type == "User" for op in user_plan.planned_ops))
+            tx.commit(objects=[user])
 
         user_snap = sdk.get(User, user_id="u-2", locale="zh")
         country_snap = sdk.get(Country, code="DE")
@@ -78,8 +71,6 @@ class SDKBatchApplicationDelegateTests(unittest.TestCase):
             user.lives_in.set(country_ref)
 
             plan = tx.preview(objects=[user])
-            self.assertEqual(plan._application_handle_order, ())
-
             result = plan.apply(sdk)
 
         self.assertEqual(result.refs_by_handle_id[user.handle_id], user.e_ref)

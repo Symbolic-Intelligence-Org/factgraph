@@ -144,6 +144,10 @@ class EntityMeta(type):
 
         if not identity_fields:
             raise SDKSchemaError(f"Entity '{name}' must declare at least one Identity field")
+        if not any(member.primary_key for _, member, _ in identity_fields):
+            raise SDKSchemaError(
+                f"Entity '{name}' must declare at least one Identity(primary_key=True) field"
+            )
 
         declaration_fields = _extract_entity_declaration_fields(getattr(cls, "Meta", None))
         description = declaration_fields.pop("description", None)

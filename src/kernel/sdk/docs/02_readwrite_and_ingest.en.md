@@ -2,6 +2,8 @@
 
 Scope: `store.py`, `facade.py`, `batch.py`, `ingest.py`
 
+Runtime authority note: SDK retains read/write facades, descriptor parsing, diagnostics, and outward result shapes; read/write/ingest paths expressible as application protocol delegate to `kernel.application` executors.
+
 ## 1. Choosing a Write Entry
 
 | Scenario | Recommended API | Notes |
@@ -192,6 +194,7 @@ Boundaries:
 - SDK pre-validates all items with `items[i].*` paths.
 - Any `severity="error"` triggers collect-and-stop (whole batch is not written).
 - Warnings do not block writes.
+- After precheck, cache-resolvable `set/add/retract` items delegate to application `apply_ingest_request(...)`; when the target or entity_ref value cannot be recovered from the SDK identity cache, SDK conservatively falls back to the legacy write path.
 
 ### 7.3 Meta behavior
 

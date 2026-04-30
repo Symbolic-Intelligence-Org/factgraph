@@ -112,7 +112,7 @@ class User(Entity):
 
 `Identity` 定位一条事实，`Field` 承载这条事实的值。读取侧有限度的对称：快照的**值访问**（`snap.lang`、`snap.name`）对两者一致；但 `snap.assertions.lang` 不可用——`assertions` 命名空间只覆盖 `Field` 字段，不覆盖 `Identity` 字段。写入侧区别：对 `Identity` 字段调用 `.set()` / `.add()` 会抛异常。
 
-**稳定合约**：每个 `Entity` 至少需要一个 `Identity`，否则类定义时报 `SDKSchemaError`。
+**稳定合约**：每个 `Entity` 至少需要一个 `Identity(primary_key=True)`，否则类定义时报 `SDKSchemaError`。secondary `Identity()`（例如坐标维度 `locale`、`lang`）允许同时存在。
 
 **当前行为**
 - `entity_type` 直接由类名推导，不需要单独声明 `schema_id`。
@@ -807,6 +807,7 @@ rows = sdk.run(q)   # 默认返回 list[dict]
 - Query head 形态不满足 instance 约束，或 Query 使用非法 `row_format`，都会抛 `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`。
 - 合法 head 形态：`Entity(var)`、`[Entity(var1), ...]`、`Entity.field(...)`。
 - Query 构造期执行 alias 冲突校验（抛 `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`）和 where 变量绑定校验（抛 `SDKDSLError(code="QUERY_UNBOUND_VAR")`）。
+- where 中推荐使用字段 sugar 表达 schema field 条件，例如 `u.name == name`、`u.tag == "admin"`。这会 lowering 到对应 predicate（`user:name` / `user:tag`），`single` 与 `multi` 字段都支持。`Pred("...")` 是低层显式 predicate escape hatch，用于非 schema field predicate、temporal / uncertainty predicate 或调试迁移场景。
 - entity head 列返回 `EntitySnapshot`；field 投影列返回标量值。
 - `Query.where` 不支持 `Body.confidence`；传入时编译报错。
 - `sdk.run(query, view=...)` 不支持（抛 `SDKStoreError`）。
@@ -1495,30 +1496,91 @@ where=[
 
 ---
 
-## 13. ECSS VCD helper（子模块）
+## 13. 可选 domain bundle helper 模式
 
-ECSS VCD preset 不在 `kernel.sdk.__init__` 顶层导出，而是走子模块：
+v0.1 kernel-only wheel 不直接发布 domain bundle。ECSS 合规、行业评分、团队内部审查模型等 domain 层应作为独立包或 monorepo companion 提供。它们可以复用同一个 helper 模式：domain 包拥有自己的 schema preset 或实体定义,对外暴露小函数,内部只调用 `kernel.sdk` 的公开 API。
+
+一个最小 helper 可以这样写：
 
 ```python
-from kernel.sdk import SDKStore, compile_schema_from_classes
-from domains.ecss.sdk_helpers import apply_ecss_vcd_schema, write_ecss_requirement_bundle
+from kernel.sdk import Entity, Field, Identity, SDKStore
 
-schema_ir = apply_ecss_vcd_schema(compile_schema_from_classes([User]))
-sdk = SDKStore([User], schema_ir=schema_ir)
 
-write_ecss_requirement_bundle(
+class ReviewNote(Entity):
+    note_id: str = Identity(primary_key=True)
+    target_ref: str = Field(cardinality="single")
+    reviewer: str = Field(cardinality="single")
+    decision: str = Field(cardinality="single")
+
+
+def write_review_note(
+    sdk: SDKStore,
+    *,
+    note_id: str,
+    target_ref: str,
+    reviewer: str,
+    decision: str,
+) -> str:
+    note_ref = sdk.ref(ReviewNote, note_id=note_id)
+    sdk.set(ReviewNote.target_ref, note_ref, target_ref)
+    sdk.set(ReviewNote.reviewer, note_ref, reviewer)
+    return sdk.set(ReviewNote.decision, note_ref, decision)
+
+
+sdk = SDKStore([ReviewNote])
+write_review_note(
     sdk,
-    req_id="REQ-001",
-    title="Battery test evidence",
-    standard_ref="ECSS-M-ST-10/5.1",
-    status="closed",
-    verification_methods=["Analysis", "Test"],
-    rid_links=["RID-007"],
-    review_milestone="CDR",
+    note_id="review-001",
+    target_ref="idref_v1:User:example",
+    reviewer="alice",
+    decision="approved",
 )
 ```
 
 说明：
 
-- 这组 helper 复用 `kernel.ecss.vcd` 的 shared preset，不在 SDK 层重新定义 canonical predicates。
-- 因为这些 preset predicates 没有对应 `Entity` descriptor，helper 直接走 SDK convenience wrapper，而不是 `sdk.batch()` 字段句柄。
+- domain 包可以提供 `apply_<domain>_schema(...)` 这类 preset 函数,但该函数属于 domain 包,不是 `kernel.sdk` 的顶层 API。
+- helper 应封装 `sdk.ref` / `sdk.set` / `sdk.add` 等公开入口,不要直接写 ledger。
+- 如果 helper 依赖 v0.1 wheel 之外的 package,主用户文档必须把它标为 optional-domain 能力,而不是 kernel-only 默认能力。
+
+---
+
+## 14. 何时下探到 Layer 2(`kernel.application`)
+
+绝大多数 Python 用户应停留在 `kernel.sdk`:它提供 `Entity` / `Field` descriptors、DSL sugar、snapshot、batch、editor 与 SDK 异常体系。
+
+当调用方不是人手写 Python schema / DSL,而是 automation 或 wire bridge 时,可以下探到 `kernel.application`:
+
+| 场景 | 为什么不用 SDK facade |
+|----|----|
+| LLM / agent 产出 JSON-like ingest payload | 调用方没有 SDK `Field` descriptor,只有 `entity_type` / `field_name` / identity 值 |
+| HTTP / RPC server 接收跨进程 request | 需要稳定 DTO 和 error shape,而不是 Python DSL object |
+| 批量 ingest 需要 `collect_mode="collect"` | application `IngestRequest` 可以把多项错误收集成 DTO |
+| 迁移 / replay / bridge adapter | 输入已经是 string-keyed contract,不需要再构造 `Entity` class |
+
+最小形态如下;实际 host 进程负责持有 `store` 与 `SchemaIndex`:
+
+```python
+from kernel.application import apply_ingest_request
+from kernel.application.protocol import (
+    EntitySelector,
+    FieldPath,
+    IngestRequest,
+    IngestSetItem,
+)
+
+request = IngestRequest(
+    items=(
+        IngestSetItem(
+            target=EntitySelector(entity_type="User", identity={"user_id": "u-1"}),
+            field=FieldPath(entity_type="User", field_name="name"),
+            value="Alice",
+        ),
+    ),
+    collect_mode="collect",
+)
+
+result = apply_ingest_request(request, store=store, index=schema_index)
+```
+
+Layer 2 的 contract 是 SDK-independent:不要传 SDK `Field` descriptor、`EntitySnapshot`、`Query` 或 `Derivation` object。SDK 的职责正是把这些 ergonomic outward objects lower / adapter 成 application DTO。

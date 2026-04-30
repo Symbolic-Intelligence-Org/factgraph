@@ -168,7 +168,6 @@ def build_authoring_session_from_dsl_inputs_safe_dto(
         "rule_preflight": None,
         "derivation_preview": None,
     }
-    base_order: list[str] = []
     can_build_store = (store is not None) or (parsed_schema is not None)
     try:
         if parsed_schema is not None or (parsed_rule is not None and can_build_store) or (parsed_derivation is not None and can_build_store):
@@ -194,7 +193,6 @@ def build_authoring_session_from_dsl_inputs_safe_dto(
             )
             for key in base_sections:
                 base_sections[key] = base_session["sections"].get(key)
-            base_order = list(base_session.get("order", []))
     except AuthoringSessionError:
         pass
 

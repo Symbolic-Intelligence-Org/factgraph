@@ -18,7 +18,6 @@ from kernel.authoring.diagnostic_codes import (
     build_diagnostics_contract_meta_v1,
 )
 from kernel.authoring.publish import (
-    AuthoringPublishError,
     build_authoring_apply_dry_run_result_dto,
     build_authoring_publish_plan_dto,
 )

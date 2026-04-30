@@ -2,6 +2,8 @@
 
 Scope: `src/kernel/sdk/dsl` + `SDKStore.run/evaluate/accept`
 
+Runtime authority note: SDK retains Rule / Query / Derivation DSLs, authoring validation, lowering, and outward compatibility; Query runtime and compiled Derivation evaluate/accept orchestration now delegate to `kernel.application`.
+
 ## 1. `vars(...)`
 
 Supported:
@@ -51,6 +53,7 @@ Stable contract:
 Supported:
 - entity-exists sugar: `LivesIn(li)`
 - path equality sugar: `li.user == u`, `li.country == c`
+- field predicate sugar: `u.name == nm`, `u.tag == "vip"` (lowered to schema predicates such as `user:name` / `user:tag`)
 - attr-vs-attr comparison: `u1.user_id == u2.user_id`
 - explicit predicate atom: `Pred("user:tag", u, "vip")`
 - rule reference: `RuleRef(...)(...)`
@@ -79,6 +82,31 @@ Limits:
 - `Body.confidence` must be in `(0,1]`; if any branch sets confidence, all `Body` branches must set it.
 - Query does not support `Body.confidence` (`confidence!=None` fails fast).
 - string DSL is unsupported (`sdk.run("...")`, `sdk.evaluate("...")`).
+
+### 3.1 Field Sugar vs `Pred(...)`
+
+For schema-field conditions in `where`, prefer field sugar:
+
+```python
+where=[User(u), u.name == nm, u.tag == "vip"]
+```
+
+This lowers to the corresponding predicates:
+
+```python
+Pred("user:name", u, nm)
+Pred("user:tag", u, "vip")
+```
+
+Both `single` and `multi` fields support this field-to-value form. For `multi` fields, the semantics are membership: the condition is true when a parallel fact such as `user:tag(u, "vip")` exists.
+
+`Pred(...)` is the low-level explicit-predicate escape hatch. Use it for:
+
+- custom predicates outside schema fields
+- temporal / uncertainty / adapter-specific predicates
+- migrations or debugging where spelling the predicate id directly matters
+
+Do not confuse field-to-value sugar with attr-vs-attr comparison. `u1.user_id == u2.user_id` follows cross-coordinate `attr_eq` lowering and currently only allows the same entity type, the same field, and a `primary_key` field.
 
 ## 4. RuleRef and Dependency Registration
 
@@ -181,6 +209,7 @@ cands = sdk.evaluate(drv, mode="native")
 ```
 
 - `mode`: `native` (default) / `souffle` / `problog` / `pyreason`.
+- SDK lowers `Derivation` DSL objects into compiled plans, then delegates orchestration to application `evaluate_derivation_plans(...)`; SDK remains responsible for mode alias rejection, registry sugar, and outward compatibility.
 - Legacy names `python` / `engine` fail with explicit rename hints.
 - `souffle` / `problog` / `pyreason` require registered adapters (for example `import kernel.adapters.souffle`, `import kernel.adapters.problog`, `import kernel.adapters.pyreason`).
 - `sdk.evaluate(..., view=...)` is not supported; inference always uses the full active assertion set.

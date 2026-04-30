@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 """
 High-level authoring entrypoints for rule parsing, compilation, and preflight.
 """
+
+from __future__ import annotations
 
 from .preflight import rule_preflight, rule_preflight_authoring, AuthoringPreflightError
 from .rule_compile import AuthoringRuleCompileError, compile_authoring_rule_v1

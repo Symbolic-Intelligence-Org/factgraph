@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import unittest
-from typing import Any
 
 from kernel.sdk import Entity, Identity, Field, Relationship
 from kernel.sdk.compile import compile_schema_from_classes, build_authoring_schema_from_classes

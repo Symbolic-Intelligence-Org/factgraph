@@ -14,7 +14,6 @@ from service.static_ui import _slug_id, render_audit_static_site
 from kernel.authoring import FileAuthoringRegistry
 from kernel.core.annotation import derive_certainty_summary
 from kernel.core.derivation.candidates import make_candidate
-from kernel.core.evidence.write_protocol import WriteProtocolError
 from kernel.core.store._candidate_evidence_tree_narrative import render_candidate_evidence_tree_narrative
 from kernel.core.store._candidate_evidence_tree_nl import render_candidate_evidence_tree_nl_explain
 from kernel.core.store._confidence_kind_resolver import check_certainty_artifact_eligibility
@@ -27,7 +26,7 @@ from kernel.core.store._support import (
     normalize_binding_items,
     support_artifact_from_dict,
 )
-from kernel.sdk import SDKStore
+from kernel.sdk import SDKStore, SDKStoreError
 from service._certainty_service import _lookup_condition_weights_for_candidate
 from service.runtime_v1 import (
     accept_runtime_derivation,
@@ -419,13 +418,15 @@ class CertaintyExplainContractsTests(unittest.TestCase):
         sdk = SDKStore([User])
         ref = sdk.ref(User, user_id="u-conf", locale="zh")
 
-        with self.assertRaises(WriteProtocolError) as ctx_int:
+        with self.assertRaises(SDKStoreError) as ctx_int:
             sdk.set(User.name, ref, "Alice", meta={"confidence": 1})
         self.assertIn("meta[confidence] must be float", str(ctx_int.exception))
+        self.assertEqual(ctx_int.exception.code, "WRITE_APPLY_FAILED")
 
-        with self.assertRaises(WriteProtocolError) as ctx_range:
+        with self.assertRaises(SDKStoreError) as ctx_range:
             sdk.set(User.name, ref, "Alice", meta={"confidence": 1.5})
         self.assertIn("within (0,1]", str(ctx_range.exception))
+        self.assertEqual(ctx_range.exception.code, "WRITE_APPLY_FAILED")
 
     def test_candidate_confidence_kind_defaults_validates_and_preserves_identity(self) -> None:
         base = make_candidate(

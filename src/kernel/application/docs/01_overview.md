@@ -1,198 +1,139 @@
-# Application 模块总览（kernel）
+# Application 模块总览(kernel)
 
-- 范围：`src/kernel/application`
-- 最后更新：2026-03-10
-- 目标读者：需要理解 entity-centric runtime 中层、SDK 委托边界与后续 service 集成入口的开发者
+- 范围:`src/kernel/application`
+- 最后更新:2026-04-28
+- 目标读者:需要理解 Python runtime authority、SDK adapter 边界与 service/agent consumer 约束的开发者
 
 ## 1. 模块职责
 
-`application` 是 **core 之上的中性运行层**。
+`application` 是 `core` 之上的 canonical Python runtime authority。它承接实体读写、query、ingest、compiled derivation evaluate/accept 这类 runtime-normalized 操作，并把它们表达成 SDK-independent protocol DTO 与 executor。
 
-它负责把原本散落在 SDK facade 中的 entity-centric runtime 机制抽取成一组可共享能力，让：
+它负责:
 
-- `sdk` 继续提供 Python authoring / facade 体验
-- `service` 直接依赖中性 read/write/query/projection 能力
-
-它当前负责：
-
-- protocol DTO
-- schema runtime 索引与 selector/ref 解析
+- application protocol DTO 与 error/warning DTO shape
+- schema runtime index、selector/ref 解析、field type 查询
 - entity hydration / read request
 - entity write planning / apply
-- SDK facade 的读写委托承接点
+- query runtime request/result execution
+- normalized ingest request/result execution
+- compiled derivation evaluate / accept orchestration
 
-它当前不负责：
+它不负责:
 
-- 替代 `SDKStore` / `SDKBatchTx` 的 Python facade 外观
-- HTTP / session / registry 路由
-- graph projection / relationship family / binding 的完整实现
-- query lowering/runtime hydration 的中层统一
+- `SDKStore` / `SDKBatchTx` / `EntitySnapshot` / `EntityEditor` 的 Python facade 外观
+- SDK `Field` descriptor、metaclass、DSL sugar、`Query` / `Derivation` authoring object
+- HTTP routes、session、registry delivery
+- package export/run delivery surface
+- named view registry(`sdk.views`)
 
-## 2. 当前模块结构
+## 2. 模块结构
 
 - `protocol/`
-  - application 层 canonical DTO
+  - `common.py`: `ErrorDTO` / `WarningDTO` / JSON value validation
+  - `schema_runtime.py`: `EntitySelector` / `EntityRef` / `FieldPath`
+  - `entity_read.py`: read request/response, snapshot, field value/assertion DTOs
+  - `entity_write.py`: write command/plan/result DTOs
+  - `query.py`: `QueryRuntimeRequest` / `QueryRuntimeResponse` / return contract
+  - `ingest.py`: normalized ingest item/request/result DTOs
+  - `derivation.py`: compiled derivation evaluate/accept request DTOs
 - `schema_runtime.py`
-  - `SchemaIndex`、field type、selector/ref 解析
+  - schema index, identity materialization, ref encoding, field/type lookup
 - `entity_view.py`
-  - entity hydration、`execute_read_request(...)`
+  - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`
-  - write planning、`apply_write_plan(...)`
-- `__init__.py`
-  - 当前对外导出的中层入口
+  - `plan_write_command(...)`, `apply_write_plan(...)`
+- `query_runtime.py`
+  - `execute_query(...)`
+- `ingest_runtime.py`
+  - `apply_ingest_request(...)`
+- `derivation_runtime.py`
+  - `evaluate_derivation_plans(...)`, `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
 
-## 3. 当前已落地能力
+## 3. Public Runtime Surface
 
-### 3.1 protocol
+`src/kernel/application/__init__.py` currently exports 29 public symbols. The main executor entry points are:
 
-当前已定义：
+- `execute_read_request(...)`
+- `hydrate_entity(...)`
+- `hydrate_entities(...)`
+- `plan_write_command(...)`
+- `apply_write_plan(...)`
+- `execute_query(...)`
+- `apply_ingest_request(...)`
+- `evaluate_derivation_plans(...)`
+- `accept_derivation_candidate_set(...)`
+- `accept_derivation_candidate_sets(...)`
 
-- common DTO
-- schema runtime DTO
-- entity read DTO
-- entity write DTO
-
-边界：
-
-- 使用 `dataclass(frozen=True)`
-- 协议层只接受 JSON-safe 值与结构化 `EntityRef` / `EntitySelector`
-- 不把 SDK descriptor / metaclass 语义带入中层
-
-### 3.2 schema runtime
-
-当前已落地：
+The main schema/runtime helpers are:
 
 - `build_schema_index(...)`
 - `resolve_selector(...)`
 - `materialize_identity(...)`
+- `encode_entity_ref(...)`
+- `entity_info(...)`
 - `field_predicate(...)`
 - `field_value_type(...)`
-- `encode_entity_ref(...)`
 - `entity_type_from_ref(...)`
-
-它为 read/write path 提供统一的 schema 运行时索引，而不再依赖 `SDKStore` 内部索引。
-
-### 3.3 entity view
-
-当前已落地：
-
-- `hydrate_entity(...)`
-- `hydrate_entities(...)`
-- `execute_read_request(...)`
-
-实现方式：
-
-- 基于 `Store + Ledger + project_view_facts(...)`
-- 从 identity predicates 恢复 canonical identity
-- 输出 `EntitySnapshotDTO`、字段当前值与 assertions/history
-
-### 3.4 entity write
-
-当前已落地：
-
-- `plan_write_command(...)`
-- `apply_write_plan(...)`
-
-当前能力包括：
-
-- target selector 解析
-- dependency entity ref 解析
-- `set/add/retract` planning
-- `record_exists` / identity materialization
-- 单目标 application-level apply
 
 ## 4. 与其他层的关系
 
 - `core`
-  - `application` 直接依赖 `Store`、`Ledger`、`projector`、write protocol 等底层原语
+  - owns low-level ledger/store/rule/evidence primitives.
+  - application composes these primitives into stable Python runtime contracts.
 - `sdk`
-  - SDK facade 已开始委托 `application`
-  - SDK 负责外观兼容与 Python ergonomics
-- `service`
-  - 未来应直接依赖 `application`，而不是依赖 `SDKStore`
-- `frontend`
-  - 不直接依赖 `application`
-  - 应通过 `service` DTO 获取能力
+  - owns product surface, authoring DSL, Python ergonomics, facade objects and compatibility aliases.
+  - adapts SDK outward types into application DTOs and maps application results back to SDK outward types.
+- `service` / `agent`
+  - must not add production SDK runtime imports.
+  - current allowed production SDK import is the agent extraction authoring helper `compile_schema_from_classes`.
+- `adapters` / `domains`
+  - some out-of-scope SDK consumers still exist, such as PyReason adapter DSL coupling and ECSS SDK helpers. These are tracked as future primitive-contract or domain-facade work.
 
-## 5. 当前 SDK 委托状态
+## 5. SDK Adapter Status
 
-### 5.1 读侧
+Current SDK runtime delegation:
 
-SDK 当前已把以下读能力委托到 `application`：
+- `sdk.get(...)` / `sdk.find(...)` use application read/hydration DTOs.
+- `SDKBatchTx.preview()` and `BatchPlan.apply()` delegate to application write planning/apply when the staged operations can be represented by application protocol.
+- `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
+- `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
+- `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
 
-- `sdk_get(...)`
-- `sdk_find(...)`
-- `_build_snapshot(...)`
+SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
-兼容策略：
+## 6. 保守边界
 
-- SDK outward shape 保持不变
-- `entity_ref` 字段仍表现为 encoded ref 字符串
-- `FieldAssertions` / `AssertionRecord` 仍保持 SDK facade 类型
-- 过滤语义仍保守保留在 SDK 适配层
+- Application protocol does not accept SDK-only types.
+- Query lowering and authoring validation remain SDK responsibilities.
+- Ingest descriptor parsing, item precheck diagnostics and user-facing `IngestResult` remain SDK responsibilities.
+- Batch export/replay and wire plan compatibility remain SDK responsibilities.
+- `sdk.set(...)` / `sdk.add(...)` / `sdk.retract(...)` remain low-level SDK convenience methods.
+- Application write planning is single-target; multi-root atomic batch remains expressed by SDK batch staging.
+- Full exception hierarchy migration is deferred. Query/ingest/derivation runtime paths use application DTO error shapes while SDK product-domain errors remain SDK-owned.
 
-### 5.2 写侧
+## 7. 测试入口
 
-SDK 当前已把以下批写主路径委托到 `application`：
-
-- `SDKBatchTx.preview()`
-- `BatchPlan.apply()`
-
-当前策略是保守委托：
-
-- 当整批 staged writes 都可表达为 application protocol 时，走 application planner/apply
-- 否则整批回退到 legacy batch 路径
-
-## 6. 当前保守边界
-
-以下边界仍然保留，属于当前实现刻意不跨越的部分：
-
-- SDK batch 只有在整批 staged writes 都能被 application 协议表达时才委托 application
-- 如果批中存在 raw `entity_ref` token、`bytes`、非 JSON-safe meta，或 application planner 无法稳定表示的值，整批回退到 legacy
-- `BatchPlan.ops` / `export()` / `to_json()` / `WireBatchPlan.apply()` 保持 legacy 语义
-- `entity_write.py` 当前以单目标 `EntityWriteCommand` 为 canonical planner，不直接表达 multi-root atomic batch
-- temporal read/write 还没有在 application 层统一收口
-
-## 7. 当前未完成部分
-
-以下能力仍未在 `application` 层落地：
-
-- `query_view.py`
-- `authoring_normalize.py`
-- `graph_projection.py`
-- `binding.py`
-
-这意味着当前“核心迁移目标”已验证完成，但 Blueprint 的后续阶段仍未实施完成。
-
-## 8. 当前测试入口
-
-核心回归可用以下命令：
+Core application and SDK adapter coverage is included in the kernel test segment:
 
 ```bash
-PYTHONPATH=src python -m unittest \
-  kernel.tests.test_application_protocol \
-  kernel.tests.test_application_schema_runtime \
-  kernel.tests.test_application_entity_view \
-  kernel.tests.test_application_entity_write \
-  kernel.tests.test_sdk_facade_application_delegate \
-  kernel.tests.test_sdk_batch_application_delegate \
-  kernel.tests.test_phase3_contracts_v1
+python -m unittest discover -s src/kernel/tests -p 'test_*.py'
 ```
 
-这些测试覆盖：
+Key focused tests:
 
-- application protocol / schema runtime / read / write
-- SDK read delegation
-- SDK batch write delegation
-- 迁移后的 facade compatibility
+- `test_application_schema_runtime.py`
+- `test_application_entity_view.py`
+- `test_application_entity_write.py`
+- `test_application_query_runtime.py`
+- `test_application_ingest_runtime.py`
+- `test_application_derivation_runtime.py`
+- `test_sdk_facade_application_delegate.py`
+- `test_sdk_batch_application_delegate.py`
+- `test_sdk_query_policies.py`
+- `test_sdk_ingest_application_delegate.py`
+- `test_sdk_consumer_boundary.py`
 
-## 9. 相关文档
+## 8. 相关文档
 
-- [blueprints/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/README.md)
-  - 任务蓝图工作流、状态机与归档规则
-- [application_projection_blueprint.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/application_projection_blueprint.md)
-  - application 中层的历史架构蓝图、迁移阶段与后续规划
-- [application_protocol_spec.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/application_protocol_spec.md)
-  - application protocol 的历史协议草案
-- [frontend_entity_ui_design.md](/Users/zhenzhili/hnsm-backend/docs/blueprint_history/frontend_entity_ui_design.md)
-  - 实体/规则 UI 与 graph projection 的历史目标表达
+- [docs/architecture_principles.md](/Users/zhenzhili/hnsm-backend/docs/architecture_principles.md)
+- [src/kernel/sdk/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/sdk/docs/README.md)

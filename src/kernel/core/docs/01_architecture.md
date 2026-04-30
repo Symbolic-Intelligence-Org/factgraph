@@ -12,7 +12,7 @@
 - `src/kernel/adapters`（引擎适配与导出）
 - `src/kernel/sdk`（上层 Python API）
 - `src/kernel/authoring`（编译与工作流）
-- `src/service`（HTTP/BFF 路由与 DTO）
+- HTTP/BFF delivery layer（路由与 DTO）
 
 补充边界：
 
@@ -88,7 +88,7 @@ src/kernel/core/
 
 ### 4.1 四层数据架构（updated 2026-03-26）
 
-Ledger 的持久化表现在对应四层数据架构（详见 [Assertion Annotation Store Decision](../../../docs/blueprints/active/2026-03-26_assertion-annotation-store-decision.md)）：
+Ledger 的持久化表现在对应四层数据架构：
 
 | 层 | SQLite 表 | 职责 |
 |----|----------|------|
@@ -560,7 +560,7 @@ plain `rules.where_eval.evaluate_where(...)` 在执行前仍会尝试：
 
 - 第一轮只承接 benchmark 已验证的 `Workload A + C` annotation 能力
 - 不扩张 `CandidateSet`、SDK、service 的稳定接口
-- `tools/benchmarks/workload_*_reference.py` 继续作为 oracle；`core/annotation/*` 作为独立 prototype 实现
+- 外部 benchmark/reference harness 继续作为 oracle；`core/annotation/*` 作为独立 prototype 实现
 
 ## 8.2 Known Issues（2026-03-29 walkthrough 确认）
 

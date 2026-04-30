@@ -107,7 +107,7 @@ class TestAppendAssertionWithAnnotations(unittest.TestCase):
         """Annotations should use the effective asrt_id, not the placeholder."""
         ledger = Ledger()
         anno = _anno(asrt_id="placeholder")
-        result = ledger.append_assertion(
+        ledger.append_assertion(
             claim=Claim(asrt_id="", pred_id="p", e_ref="e", rest_terms=[]),
             claim_args=[],
             meta_rows=[],
