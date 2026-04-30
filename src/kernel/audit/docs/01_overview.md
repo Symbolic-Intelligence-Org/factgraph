@@ -6,6 +6,16 @@
 
 ## 1. 模块职责
 
+> **Boundary — v0.1 kernel-only wheel**
+>
+> 本文描述 `kernel.audit` 如何与下游 consumer 集成。下列模块会在文中被引用,但**不属于 v0.1 kernel-only wheel**:
+>
+> - `service.static_ui` — 完整 audit static-site rendering(monorepo / future deliverable)
+> - `domains.ecss.compliance` — ECSS row assembly + compliance matrix(optional domain bundle)
+> - `domains.ecss.vcd` — ECSS VCD predicate preset(optional domain bundle)
+>
+> kernel-only install 中直接调用这些模块会触发 `ModuleNotFoundError`。`AuditQuery.list_compliance_matrix(...)` 会抛 `AuditOptionalDomainError`,给出可操作信号,而不是让用户撞到裸 import failure。
+
 `audit` 是 **审计消费层**。它读取已经导出的 audit package，并提供查询、DTO 与 evidence graph 消费能力。
 
 它主要负责：
