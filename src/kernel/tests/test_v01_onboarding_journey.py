@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 
 from kernel.adapters.souffle.package import ExportOptions
-from kernel.sdk import Derivation, Entity, Field, Identity, Pred, Query, SDKStore, vars as sdk_vars
+from kernel.sdk import Derivation, Entity, Field, Identity, Query, SDKStore, vars as sdk_vars
 
 
 class Country(Entity):

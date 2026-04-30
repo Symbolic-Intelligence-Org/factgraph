@@ -191,6 +191,26 @@ class SDKStore:
         return SDKBatchTx(self, meta=meta)
 
     def get(self, entity_cls: type[Entity], **identity_kwargs: Any):
+        """Return an ``EntitySnapshot`` for the entity identified by kwargs.
+
+        Reads the active (chosen) view of the entity. The snapshot is
+        read-only; attribute assignment raises ``FrozenSnapshotError``.
+
+        Args:
+            entity_cls: An ``Entity`` subclass registered with this
+                SDKStore.
+            **identity_kwargs: Identity field values identifying the
+                entity.
+
+        Returns:
+            An ``EntitySnapshot`` exposing each declared field as an
+            attribute, or ``None`` if the entity is not visible (no
+            ``<T>:exists`` assertion in the active view).
+
+        Raises:
+            SDKStoreError: if ``entity_cls`` was not registered with this
+                SDKStore, or if identity kwargs are malformed.
+        """
         from .facade import sdk_get
 
         return sdk_get(self, entity_cls, **identity_kwargs)
@@ -250,6 +270,30 @@ class SDKStore:
         return sdk_validate_provenance(self, obj, standard=standard)
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
+        """Return a managed e_ref string for the entity identified by kwargs.
+
+        Records the supplied identity into this SDKStore's local cache so
+        that ``sdk.set`` / ``sdk.add`` can later resolve the e_ref into a
+        full ``EntitySelector`` for the application write-plan. Does NOT
+        write to the ledger; ``ref`` is only an in-memory registration.
+
+        Args:
+            entity_cls: An ``Entity`` subclass passed to this SDKStore in
+                the ``classes=[...]`` constructor arg.
+            **identity_values: Identity field values. All declared identity
+                fields must be supplied unless they have ``default=`` or
+                ``default_factory=``.
+
+        Returns:
+            A canonical ``idref_v1:<entity_type>:<digest>`` token. The same
+            identity inputs always produce the same e_ref (deterministic
+            encoding).
+
+        Raises:
+            SDKStoreError: if ``entity_cls`` was not registered with this
+                SDKStore, if extra identity kwargs are passed, or if a
+                required identity field has no value and no default.
+        """
         spec = self._entity_spec_by_class.get(entity_cls)
         if spec is None:
             raise SDKStoreError(f"unknown Entity class: {getattr(entity_cls, '__name__', entity_cls)!r}")
@@ -284,6 +328,38 @@ class SDKStore:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
+        """Append a ``set`` assertion writing ``value`` to a single-cardinality field.
+
+        The write is routed through ``kernel.application``'s write-plan adapter:
+        the first time an entity is written, identity predicates and
+        ``<T>:exists`` are auto-materialized so that subsequent ``sdk.get`` /
+        ``sdk.run`` / derivation calls see the entity. ``set`` produces a new
+        assertion (the ledger is append-only); the chosen view reflects the
+        latest assertion.
+
+        Args:
+            field: A ``Field`` descriptor obtained from an Entity class
+                (e.g. ``User.name``). Must reference a ``cardinality="single"``
+                field.
+            e_ref: A managed e_ref string returned by ``sdk.ref(EntityCls, ...)``.
+                Externally-constructed strings are rejected.
+            value: The value to write. Type is constrained by the field's
+                declared ``type_domain`` (str / int / bool / entity_ref / ...).
+                For ``entity_ref`` fields, pass another managed e_ref string.
+            meta: Optional metadata dict attached to the assertion.
+
+        Returns:
+            The assertion id (str) of the field-mutation write. Auto-materialized
+            identity / exists assertion ids are not returned.
+
+        Raises:
+            SDKStoreError: ``code="UNRESOLVABLE_E_REF"`` if ``e_ref`` (or an
+                entity_ref ``value``) was not produced by ``sdk.ref``.
+            CardinalityError: ``code="FIELD_CARDINALITY_MISMATCH"`` if ``field``
+                is multi-cardinality (use ``sdk.add`` instead).
+            SDKStoreError: ``code="FIELD_VALUE_TYPE_MISMATCH"`` if ``value``
+                does not match the field's declared type domain.
+        """
         return self._apply_field_mutation(op="set", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def add(
@@ -294,6 +370,34 @@ class SDKStore:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
+        """Append an ``add`` assertion adding ``value`` to a multi-cardinality field.
+
+        Unlike ``set``, ``add`` is the multi-set accumulator: each call appends
+        a new value to the field's value set without replacing prior writes.
+        The entity is auto-materialized on first write (see ``set`` docstring
+        for materialization details).
+
+        Args:
+            field: A ``Field`` descriptor obtained from an Entity class
+                (e.g. ``User.tag``). Must reference a ``cardinality="multi"``
+                field.
+            e_ref: A managed e_ref string returned by ``sdk.ref(EntityCls, ...)``.
+            value: The value to add. Type is constrained by the field's
+                declared ``type_domain``. For ``entity_ref`` fields, pass
+                another managed e_ref string.
+            meta: Optional metadata dict attached to the assertion.
+
+        Returns:
+            The assertion id (str) of the field-mutation write.
+
+        Raises:
+            SDKStoreError: ``code="UNRESOLVABLE_E_REF"`` if ``e_ref`` (or an
+                entity_ref ``value``) was not produced by ``sdk.ref``.
+            CardinalityError: ``code="FIELD_CARDINALITY_MISMATCH"`` if ``field``
+                is single-cardinality (use ``sdk.set`` instead).
+            SDKStoreError: ``code="FIELD_VALUE_TYPE_MISMATCH"`` if ``value``
+                does not match the field's declared type domain.
+        """
         return self._apply_field_mutation(op="add", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def _apply_field_mutation(
@@ -401,6 +505,24 @@ class SDKStore:
         raise SDKStoreError(err.message, code=err.code)
 
     def retract(self, asrt_id: str, *, meta: dict[str, Any] | None = None) -> str | None:
+        """Append a retraction assertion that supersedes a prior assertion.
+
+        ``retract`` is append-only: the original assertion is preserved in
+        the ledger; the retraction marks it as no longer authoritative for
+        the chosen view. The retraction itself is recorded as a new
+        assertion.
+
+        Args:
+            asrt_id: The assertion id to retract (e.g. a value previously
+                returned by ``sdk.set`` / ``sdk.add``).
+            meta: Optional metadata dict attached to the retraction
+                assertion.
+
+        Returns:
+            The assertion id (str) of the retraction record, or ``None`` if
+            no retraction was emitted (e.g. the target assertion is already
+            retracted).
+        """
         return retract_by_asrt(self._store.ledger, asrt_id, meta)
 
     def run(
