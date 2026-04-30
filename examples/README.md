@@ -15,6 +15,7 @@ These notebooks use only the default `kernel` package surface.
 |---|----------|---------|--------|--------|
 | 01 | `01_sdk_basics.ipynb` | — | general | Entity / Schema / Store / CRUD / Batch / Edit / Ingest |
 | 02 | `02_rules_and_derivations.ipynb` | — (native) | general | Rule DSL / Query / Derivation / Accept / Registry |
+| 10 | `10_v01_onboarding_journey.ipynb` | — (native) | general | end-to-end v0.1 journey: ref -> set/add -> get -> query -> derive/accept -> audit package |
 
 ## Kernel Optional-Engine Examples
 
@@ -68,7 +69,7 @@ ProbLog and PyReason sections use mocked runners; the framework pipeline is real
 
 ## Prerequisites
 
-- Notebooks 01-02 require only `kernel` (no external engines).
+- Notebooks 01-02 and 10 require only `kernel` (no external engines).
 - Notebook 03 requires monorepo delivery helpers outside the v0.1 kernel-only wheel.
 - Notebook 04 (Souffle): requires `domains.ecss`, `service.static_ui`, and `souffle` CLI on PATH.
 - Notebook 05 (PyReason): requires `pyreason==3.0.0` on Python 3.10. Graceful fallback if not installed.
