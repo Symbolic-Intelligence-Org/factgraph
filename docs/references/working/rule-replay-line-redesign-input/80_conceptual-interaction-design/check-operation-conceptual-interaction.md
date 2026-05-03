@@ -1,6 +1,6 @@
 # Check Operation: Conceptual + Interaction Design
 
-- **Status:** draft
+- **Status:** discussed
 - **Authority:** source-of-truth for Check operation conceptual + interaction design until cited by blueprint
 - **Created:** 2026-05-03
 - **关联 baseline section:** `70_codebase-baseline-2026-05-03.md` §P0-1 + §P0-2 + §P0-3
@@ -23,7 +23,7 @@ Baseline P0-3 揭示:Check 是 P0 三个 capability 中最 ready-to-go 的 — c
 
 ---
 
-## 1. 概念定义(待讨论)
+## 1. 概念定义
 
 > **必须先回答这层,否则 §2 交互定义没法定。**
 
@@ -42,46 +42,74 @@ Check 在 B'' framing("rule operable + evidence read-only")的位置是什么?
 | **C. evaluate 的旁路** | Check 跳过 evaluate_store,直接调 `_branch_satisfies` primitives,不产 candidates | 复用 `find_winning_branch_index` / `_branch_satisfies` / `_atom_satisfies` | 不通过 candidate 通道;evidence-bearing(可选 SupportArtifact)仍 read-only |
 | **D. 新顶层动作** | Check 与 evaluate 平级,独立 capability | 自成 substrate | 与 B'' 完全平行 |
 
-### 1.3 待回答
+### 1.3 决议
 
-- **选哪个?为什么?** — 用户需要的语义是什么(input bundle 用户原话:"结果不合要求可以重新改变条件、facts,重新得到新的合规的结果";Check 的角色是这条链条中的哪一环?)
-- **选定后,与 B'' 的连接如何具体表达?** — 不仅 high-level "符合 rule operable"够,要落到具体的"evaluate 不可变 / candidate 不可变 / evidence 不可变"哪一项?
+**Check 是 evaluate 的 verify-given 对偶** — evaluate 给定规则问"哪些 binding 满足?",Check 给定 binding 问"这一个满足吗?"。两者按同一套 8 类 atom 语义,方向相反(enumerate-side vs verify-side)。
+
+接受两类 binding 输入(per Discussion §6.4):
+- **complete binding:** 验证一个完整结果是否满足规则
+- **partial binding:** 验证是否存在某个完整结果扩展用户给的部分绑定 — 实现是完整 evaluate body → final bindings → subset match;**不是** initial-env injection(违反 baseline §3.2 invariant 的那种 envs=[user_binding] 起步),**不是**局部重算
+
+implementation strategy 按引擎选(归 §3.5):
+- native:用 `_branch_satisfies` primitives 直接判
+- souffle / problog / pyreason:走 evaluate-then-match,用户 binding 与产出 candidates subset-match
+
+**与 B'' invariant("rule operable + evidence read-only")的具体连接:**
+- rule operable:Check 不修改 rule;rule body 是 lowered WhereIR(只读)
+- candidate read-only:Check 不提交 candidate;non-native 路径下若依赖 evaluate-then-match 的 candidate,也是 evaluation-derived read-only 视图
+- evidence read-only:Check 输出的 EvidenceEnvelope 全部从现有 SupportArtifact / ProvenanceEnvelope 派生,不构造新 evidence
+
+**Source:** Discussion §6.1(scenario)+ §6.2(framing 修正)+ §6.4(partial binding 接受)+ §6.5(verify-given dual 概念稳定)+ §6.6(lift)
 
 ---
 
-## 2. 交互定义(待讨论)
+## 2. 交互定义
 
 > **概念定义后才能定。** 这层回答"消费者给什么、拿什么"。
 
-### 2.1 最小输入 set(待讨论)
+### 2.1 最小输入 set
 
-从 baseline §P0-3 的 `_branch_satisfies` 参数集倒推,core 必需 5 项:`branch / binding / witness_facts / view_facts / resolution_by_key`。
+application 层从 user 接受:
 
-application 层应**派生**它们,不直接暴露。可能的最小用户输入:
+- **rule reference**(具体 DTO 形态留给 blueprint;此处只讨论消费者概念 — 可能是 CompiledDerivationPlan 或更轻 plan-like)
+- **binding**(可 complete 可 partial,per §1.3;user-facing 形态留 blueprint 决定;application 内部归一到 `BindingItems` 语义一致的 sorted tuple-of-pairs)
+- **engine:** `Literal["native", "souffle", "problog", "pyreason"]`(per §3.5)
+- **不**含 facts overlay(per §3.1)
 
-- rule/derivation plan-like input(具体 DTO 形态留给 blueprint;此处只讨论消费者概念)
-- `binding: ?(形态待决,见下)`
-- `engine: Literal[...]?`(看 §3.5 决议)
-- `(optional)facts overlay?`(看 §3.1 决议)
+application 层从这些派生 core 必需的 5 项(`branch / binding / witness_facts / view_facts / resolution_by_key`),core primitives 不暴露给 user。
 
-待决:
-- binding 形态:`dict[str, value]` 还是 `tuple[tuple[str, value], ...]`(后者与 `BindingItems` typedef 一致)?
-- 是否需要 `query_id` / `version` 类的 idempotency / replay 字段?
+**留 blueprint 决定的细节(不在本 doc):**
+- binding 字段类型 `tuple[tuple[str, value], ...]` typedef vs `dict[str, value]`(倾向 tuple,与 baseline §P0-3 `BindingItems` 一致)
+- 是否需要 `query_id` / `version` 类 idempotency / replay 字段
+- engine_options 字段(若需要,留 engine extension surface topic 决议)
 
-### 2.2 最小输出 set(待讨论)
+**Source:** Discussion §6.1 / §6.4(partial binding)/ §6.5 / §6.6;baseline §P0-3
 
-从 baseline §P0-3 已知的可能字段:
+### 2.2 最小输出 set
 
-- `satisfied: bool`(最小)
-- + status(从 status vocabulary 取,见 §3.3)
-- + reason(哪个 atom failed,需 §3.8 改 short-circuit 逻辑)
-- + winning_branch_index(OR-of-AND 时,见 §3.6)
-- + SupportArtifact(完整证据,evidence-bearing)
-- + errors / warnings(consistent with existing application pattern)
+**三层 layered output**(detailed 见 §3.2):
 
-待决:
-- 哪些必有?哪些可选?
-- partial / streaming 需求?(若批量 check 多 binding,如何返结果)
+1. **Layer 1 — Core result(总有):**
+   - `status: Literal["passed", "failed", "unsupported", "invalid_request"]`(per §3.3)
+   - `requested_binding`(回显)
+   - `matched_count: int`
+   - `matched_binding: BindingItems | None`(只 status=passed 时有;partial binding 命中多个时取 primary)
+   - `errors / warnings`(consistent with existing application pattern)
+
+2. **Layer 2 — EvidenceEnvelope(passed 时,Layer 1 的子字段):**
+   - common envelope:`engine` / `support_kind` / `support_digest` / `branch_index` 等共同 metadata
+   - `native_payload`:engine-specific 形态(SupportArtifact / PyReasonTimeline / ProbLogProofGraph / ...);**不抹平**(per §6.5)
+   - `branch_atom_projection: BranchAtomProjection | None`(子字段,见 Layer 3)
+
+3. **Layer 3 — branch/atom projection(EvidenceEnvelope 的子字段,opt-in;MVP 是否含 — 见 §4 未决项):**
+   - `projection_status: Literal["available", "partial", "unsupported"]`(per §3.3)
+   - `branches[]`(可遍历)+ 每 branch 的 `atoms[]`(可遍历)
+   - 每 atom 字段:`locator`(`b0.a2` 形式) / `atom_kind` / `status`(satisfied / satisfied_by_absence / ...)/ `grounded_terms` / `witnesses` / `asrt_ids` / `details`
+   - **MVP 仅 `passed` 时可靠**;`failed` 时不假装给 per-atom 失败状态(per §6.4.B.1)
+
+**留 blueprint 决定的细节:** 具体 dataclass 命名 / engine-native payload union typing 形态 / partial-streaming 需求(若批量 check 多 binding 在未来扩);Layer 3 是否纳入 MVP(见 §4 未决项)。
+
+**Source:** Discussion §6.1 → §6.5 累积 + §6.6 lift
 
 ---
 
@@ -96,15 +124,20 @@ application 层应**派生**它们,不直接暴露。可能的最小用户输入
 - **B.** binding + 事实集 overlay:事实集是 overlay(进一步触发 fact-overlay 设计)
 - **C.** binding + 事实集替换:完全替换 store 视图
 
-**决议:** _待讨论_  
-**Source:** _待补_
+**决议:** **A** — 仅 binding;view_facts / witness_facts 从当前 store 读时点投影
+**Source:** Discussion §6.1 — scenario "一组已提交事实"显式排除 overlay/replace
 
 ### 3.2 output 最小 set
 
 仅 boolean / + reason / + winning_branch_index / + SupportArtifact?这决定 Check 是 lightweight verify 还是 full evidence-bearing。
 
-**决议:** _待讨论_  
-**Source:** _待补_
+**决议:** **三层 layered output**(详细形态见 §2.2)
+- Layer 1 Core result 必有(status + requested_binding + matched_count + matched_binding-if-passed + errors/warnings)
+- Layer 2 EvidenceEnvelope 在 passed 时有(common envelope + engine-native payload)— **不**抹平 engine 特化能力
+- Layer 3 BranchAtomProjection 是 Layer 2 子字段,opt-in;MVP 是否纳入仍 open(见 §4)
+- **不**含 reason / fail localization on failed(per §3.8)
+
+**Source:** Discussion §6.1 + §6.4 + §6.5(三层模型 + projection 独立 enum 修正);§6.5 user 直接给的 final 提议
 
 ### 3.3 status 词汇与现有 support_kind 关系
 
@@ -113,8 +146,16 @@ Check 的 status 词汇(input bundle 提到:`derived` / `failed_check` / `below_
 - **B.** 与 `SupportArtifact.kind`(`native_binding_v1` 等)mapping
 - **C.** 与 `_DEGRADED_SUPPORT_KINDS` / `_WITNESS_BEARING_SUPPORT_KINDS` / `_PROVENANCE_BEARING_SUPPORT_KINDS` 三个分类 set 对齐
 
-**决议:** _待讨论_  
-**Source:** _待补_
+**决议:** **A** — 两个**独立** application Literal,不与 core support_kind 混
+
+| Enum | 字段 | 取值 |
+|---|---|---|
+| Top-level outcome | `CheckResult.status` | `passed` / `failed` / `unsupported` / `invalid_request` |
+| Projection 能力 | `BranchAtomProjection.projection_status` | `available` / `partial` / `unsupported` |
+
+注意:`EvidenceEnvelope.support_kind` 是 string convention(已有 6 known constants + 3 frozenset 分类,baseline §P0-3 现成),**不属** Check application Literal — 它是 SupportArtifact 透传的 metadata。
+
+**Source:** Discussion §6.4(passed/failed/unsupported/invalid_request 词集);§6.5(`projection_status` 与 `status` 必须分离 — 避免把"能否投影"与"evidence 是否存在"混为一谈,大动脉级别 correction)
 
 ### 3.4 ruleref 的输入语义
 
@@ -128,12 +169,34 @@ Check 处理 ruleref atom 时,`rule_ref_resolutions`:
 ### 3.5 engine 边界
 
 4 engines 中,native 已有 primitives;非 native engine 有自己 provenance(`SupportArtifact` vs `ProvenanceEnvelope`)。
-- **A.** Check MVP 仅 native;非 native 返 status `unsupported`
-- **B.** Check 镜像同样 4-engine Literal,非 native 走 evaluate-then-match 退化路径
-- **C.** Check 完全不暴露 engine(implicit `native`)
 
-**决议:** _待讨论_  
-**Source:** _待补_
+**决议:** 两个正交 sub-decision 都 resolved:
+
+#### sub-decision 1: Check decision semantics
+
+**B with boundary** — multi-engine via evaluate-then-match:
+- native:用 `_branch_satisfies` primitives 直接判
+- souffle / problog / pyreason:engine 跑 evaluate(经 evaluate_store dispatch),用户 binding 与产出 candidates subset-match
+
+**能力边界(non-native engine 不假装 native-style 完整 check):**
+
+| Engine | head-only binding | body-only / mixed binding |
+|---|---|---|
+| native | passed / failed | passed / failed |
+| souffle | passed / failed | passed / failed(SupportArtifact 有 b{branch}.a{atom} 可投影) |
+| problog / pyreason | passed / failed(via candidate payload 比对) | **`status=unsupported`**(engine 不暴露 body-only final bindings) |
+
+纪律:Check 不假装 body-only binding 在 problog/pyreason 下能 verify;明确返 `unsupported`,不返 `failed`(后者会让用户误以为是数据问题而非能力边界)。
+
+#### sub-decision 2: Check evidence shape
+
+**Engine-native first + optional projection**(per §6.5 三层 evidence 模型):
+- common envelope(engine + support_kind + support_digest)— 共同 metadata
+- engine-native payload — 各自保真,**不抹平**(native: SupportArtifact / pyreason: timeline / problog: proof graph)
+- optional branch/atom projection — 带独立 `projection_status`(per §3.3)
+- **`projection_status` 描述 projection,不描述 evidence**;非 native engine 即使 projection unavailable,evidence 本身仍在
+
+**Source:** Discussion §6.2(initial multi-engine 倾向)+ §6.4(MVP 边界 first attempt)+ §6.5(engine-native first 修正,大动脉级别)+ §6.6(decision semantics B + 能力边界)
 
 ### 3.6 OR-of-AND 多 branch 都满足时的语义
 
@@ -152,8 +215,15 @@ Check 处理 ruleref atom 时,`rule_ref_resolutions`:
 - **B.** 区分 "false because unsatisfied"(`failed_check`)vs "false because binding incomplete"(`unknown`)
 - **C.** 不完整 binding 直接 raise `BindingShapeError`(认为是 caller bug)
 
-**决议:** _待讨论_  
-**Source:** _待补_
+**决议:** **resolved — 由 partial binding 语义自然消解,不需要 `unknown` 状态**
+
+partial binding 是合法输入(per §1.3),语义是 subset match(完整 evaluate body → final bindings → 用户 binding 是否被某 final binding 包含)。所以原本的"不完整 binding"问题分裂为两类:
+- **partial binding 但确实没有 final binding 扩展它** → `status=failed`(matched_count=0)
+- **binding 形状本身违法**(非法变量名 / 类型不对等)→ `status=invalid_request`
+
+不再需要 `unknown` 区分 unsatisfied vs incomplete — 后者根本不存在(partial 是合法,不算 incomplete)。
+
+**Source:** Discussion §6.4(user 反驳 §6.3 的"reject partial binding"倾向,引入 partial binding subset match 语义);§6.6(lift)
 
 ### 3.8 fail localization 的成本-收益
 
@@ -162,14 +232,26 @@ Check 处理 ruleref atom 时,`rule_ref_resolutions`:
 - **B.** application 层包装:call primitives 多次定位(N atoms 时 N calls,O(N²) 单 binding cost)
 - **C.** 改 core `_branch_satisfies` 返 `(bool, failing_atom_index | None)`(侵入修改,但成本 O(N))
 
-**决议:** _待讨论_  
-**Source:** _待补_
+**决议:** **A** — 不给 fail localization on `failed`
+
+理由(per user §6.4.B.1):"MVP 里 walkable view 最自然只在 `passed` 时完整可靠。`failed` 时如果没有 diagnostic evaluator,不应假装能给每个 atom 的失败状态。"
+
+evidence walkable view(Layer 3,见 §3.2)在 `passed` 时给完整 per-atom 信息;`failed` 时只给 Layer 1 core result(status + matched_count=0 + errors)。
+
+未来若要 diagnostic-quality fail localization(reason / first-failing-atom 等),应作为独立 capability(可能命名 `Diagnose` 或 `Explain`),不并入 Check。
+
+**Source:** Discussion §6.4.B.1(user 显式约束 walkable view 仅在 passed 时可靠);§6.6(lift)
 
 ---
 
 ## 4. 未决项(讨论中累积)
 
-(空)
+| 项 | 说明 |
+|---|---|
+| §3.4 ruleref resolution 归属 | caller 预解析(Check stateless)/ Check 自解析(需要 registry)— 本轮未触及,需后续单独讨论 |
+| §3.6 OR-of-AND 多 branch 命中语义 | partial binding 让多 branch 命中更频繁;返 primary `branch_index` + `branches` list / 加 `ambiguous` 信号 / 其他 — 需明确 |
+| MVP 是否纳入 Layer 3(walkable evidence view) | 决定 Check 定位是 lightweight verifier(MVP 只 Layer 1+2)还是 evidence-bearing 操作(MVP 含 Layer 3) |
+| Engine extension surface architecture | 起独立 venue topic(候选名 `engine-extension-surface-architecture.md`);包含 engine-native payload DTO 形态 / engine_options 字段 / 各 engine payload schema 归属等 broader question |
 
 ---
 
@@ -630,3 +712,39 @@ User 的明确警告:**"当前 rule 使用一套 meta 机制强行统一了它�
 - §3.4 ruleref resolution 归属
 
 **下一步:** user verify §6.5.E 的修正(§2.2 / §3.2 / §3.3 / §3.5);确认 engine extension surface 起独立 venue topic;表态 §3.5 sub-decision 1 倾向。
+
+### 6.6 (2026-05-03) Iteration 6: verification + §3.5 sub-decision 1 final + lift to formal sections
+
+**User verification(5/5):**
+
+1. ✅ §6.5 三层 evidence 模型 — 包括 BranchAtomProjection 是 EvidenceEnvelope 子字段,不是 CheckResult 顶层
+2. ✅ 两个独立 enum(`status` + `projection_status`)
+3. ✅ 同意起独立 venue topic 解决 engine extension surface architecture
+4. ✅ 派生 3 question 推到 broader topic
+5. ✅ §3.5 sub-decision 1 选 **B(multi-engine via evaluate-then-match)**
+
+**§3.5 sub-decision 1 的能力边界(user 显式补充):**
+
+> "non-native evaluate-then-match 只能匹配 adapter/candidate payload 可表达的 binding。若用户请求 body-only binding,而该 engine 不暴露 final bindings,就应该返回该 engine 下的 `unsupported` / `partial`,不能伪装成完整 native-style check。"
+
+具体含义:
+
+| Engine | head-only binding(用户只给 head 变量) | body-only / mixed binding(含 body-only 变量) |
+|---|---|---|
+| native | passed / failed(用 _branch_satisfies)+ available projection | passed / failed(用 _branch_satisfies)+ available projection |
+| souffle | passed / failed(SupportArtifact 有 b{branch}.a{atom} 可投影)+ available projection | passed / failed(同 native)+ available projection |
+| problog / pyreason | passed / failed(via candidate payload 比对)+ partial 或 unsupported projection | **`status=unsupported`(engine 不暴露 body-only bindings)** + 不进入 projection 层 |
+
+**纪律:** Check 不假装 body-only binding 在 problog/pyreason 下能 verify;明确返 `unsupported`,而不是返 `failed`(后者会让用户误以为是数据问题而不是能力边界)。
+
+**本轮决议:** §3.5 两个 sub-decision 都 resolved:
+- decision semantics:**B with boundary**(per 上表)
+- evidence shape:**three-layer engine-respectful**(per §6.5)
+
+**Lift 行动:** §6.1-§6.5 累积的 resolved 决议本轮一次性 lift 到 §1 / §2 / §3 各 section 的"决议"行;§6 log 保留作 trace。Status 从 `draft` 升级到 `discussed`(因仍有 §3.4 / §3.6 / MVP walkable view inclusion 三项 open)。
+
+**剩余 open(待后续讨论):**
+- §3.4 ruleref resolution 归属(caller 预解析 / Check 自解析)
+- §3.6 OR-of-AND 多 branch 命中语义(partial binding 让多 branch 命中更频繁)
+- MVP 是否带 walkable evidence view(Layer 3 是否进 MVP;决定 Check 定位 lightweight 还是 evidence-bearing)
+- engine extension surface architecture(独立 venue topic,候选 `engine-extension-surface-architecture.md`)
