@@ -1,6 +1,105 @@
 # Current Operational Memory
 
-最后更新:2026-04-30
+最后更新:2026-05-03(redesign base 启动)
+
+## 当前阶段(2026-05-03 — REDESIGN BASE)
+
+**本分支 `v0.1-redesign-2026-05-03` 是 active development 起点**,从 `master`(`8af9da9`)起,clean baseline:
+- src 代码:pre-rule-replay 状态(无 `kernel.sdk.replay*`、无 `kernel.authoring.module_ir`、无 `disabled_locators` threading)
+- memory + docs:master 状态(`v0.1 onboarding hardening implemented + merged` 时刻)
+
+### 为什么有这个分支(2026-05-03 RESET 决定)
+
+2026-05-01..02 共 ~42 小时窗口内试做了 v0.1.x rule-replay 设计实验(v0.1.1 rule-replay + v0.1.2 module-IR + v0.1.3 disable-condition + v0.1.4 abandoned param-override),但架构 review 发现 substrate 整体落 SDK,违反 application-first;Decision 1 当时提的 strangler migration 在"无真用户反馈信号"前提下不成立 —— preview line 按定义没承诺界面,可推倒。**作初步试错放弃,redesign 基于经验重起**。详细论证见 design-discussion 引用。
+
+### Frozen design probe references(do NOT touch,可 git-access)
+
+旧 work 全部保留为可访问参考,**不删不动**:
+
+| 资源 | 位置 | 角色 |
+|---|---|---|
+| `v0.1.1-evidence-tree-operational-overlay` 分支 | @ `50f2f81`(含 reset note + 全部 v0.1.x impl + design 材料) | rollup;design probe 顶峰 |
+| `v0.1.2-rule-module-ir` 分支 | @ `2557e3c` | 设计实验 |
+| `v0.1.3-disable-condition` 分支 | @ `bc0ad3e` | 设计实验 |
+| `v0.1.4-param-override` 分支 | @ `835c32b` | abandoned negative-result |
+| `v0.1.1-preview` tag | @ `b7c9169` | preview 试做 tag |
+| `v0.1.2-preview` tag | @ `98474a1` | preview 试做 tag |
+| `v0.1.3-preview` tag | @ rollup merge HEAD | preview 试做 tag |
+
+**Reference bundles**(在 rollup 分支上,通过 git access):
+- `docs/references/working/rule-replay/`(B'/B'' 设计讨论历史)
+- `docs/references/working/evidence-vision/`(L0-L11 能力分层)
+- `docs/references/working/design-landscape/`(架构 drift 分析)
+- `docs/references/working/design-discussion-2026-05-02/`(A 方向讨论 + Decision 1 历史 framing)
+
+**Archived blueprints**(在 rollup 分支上,通过 git access):
+- `docs/blueprints/archive/2026-05-01_rule-replay-with-evidence-diff.md`
+- `docs/blueprints/archive/2026-05-02_v0.1.2-rule-module-ir.md`
+- `docs/blueprints/archive/2026-05-02_v0.1.3-disable-condition.md`
+- `docs/blueprints/archive/2026-05-02_v0.1.4-param-override.md`(abandoned)
+
+**Git access 老 impl 范例:**
+```
+git show v0.1.1-evidence-tree-operational-overlay:src/kernel/sdk/replay.py
+git show v0.1.1-evidence-tree-operational-overlay:src/kernel/authoring/module_ir.py
+git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/evidence-vision/evidence-vision-synthesis-2026-05-02.md
+```
+
+### 新 hard constraint(replaces 之前的 strangler migration)
+
+每一个新 capability 必须:
+1. 第一步在 `kernel/application/protocol/` 加 DTO
+2. 第二步在 `kernel/application/<runtime>.py` 加纯函数 `(request, store) -> result`
+3. 第三步(可选)SDK shell wrapper,**绝不带 substrate**
+4. **不允许新 substrate 长在 `kernel/sdk/`**
+5. Step 0 spike 必须明确回答:"这个 capability 的 application DTO 形状是什么?" — 答不出 → 不 scope
+
+详见 `~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/project_application_first_runtime_authority.md`(在 reset 后已更新)。
+
+### 已学经验保留作 redesign 输入
+
+不重读 v0.1.x 代码也已学会的:
+- B'' pivot(rule operable + evidence read-only)的设计正确性 — 仍生效
+- candidate_key vs candidate_id(cross-run identity)— 用 `candidate_key`
+- ConditionModule.atom 必须递归 immutable(`feedback_invariant_defense_in_depth.md`)
+- Locator stability invariant — disable / replace 时 `b{branch}.a{atom}` 不位移
+- macOS+zsh+BSD-sed 5 个执行陷阱(`feedback_refactor_execution_traps.md`)
+- 4 类 "param" 语义不可合并(v0.1.4 abandonment 教训)
+- L0-L11 evidence 能力分层是会议室 taxonomy,实施时 L4/L5 可能合并 / L7 必须降级 / L9 不应在 kernel
+- Application 是设计中心(`derivation_runtime.evaluate_derivation_plans()` 是 canonical executor)
+- Filter CandidateSet 不可靠(head_vars 投影 + dedupe 丢失 body-only var)
+- 不 inject initial env(`where_eval` 每 branch `envs=[{}]` 起)
+- failed_atom_locator 不是 native evaluator 的自然产物
+
+### Release branch invariant(继续生效)
+
+- `v0.1-oss-prep` @ `f5ade36` 是唯一 release base,**冻结**,无显式 publish 决策不动
+- `master` 同样冻结,无显式决策不动
+- 本 redesign 分支也是 internal preview line,不向 release base 流入
+
+### 启动阅读顺序(新 session 用)
+
+1. 本文件
+2. 新 hard constraint:`~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/project_application_first_runtime_authority.md`
+3. Release branch invariant:`~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/project_release_branch_invariants.md`
+4. 想看 design probe 历史 / 设计 framing(B''pivot 等)→ `git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/...`
+5. AGENTS.md + docs/blueprints/AGENTS.md
+6. docs/architecture_principles.md(four-layer data architecture + layer split + release governance)
+7. src/kernel/application/docs/README.md(canonical runtime authority)
+8. src/kernel/sdk/docs/README.md(product surface,**不再背 substrate**)
+
+### 下一步方向
+
+未定。等用户决定:
+- 继续走 design discussion(直接选某个方向起 application-first capability)
+- 或先走 strategic pause,等真用户反馈
+- 任何方向必须满足新 hard constraint
+
+---
+
+## 历史 (pre-2026-05-03 RESET) — master 时刻状态,作历史参考
+
+下方内容是 reset 前 master 分支的 memory 状态,描述 v0.1 onboarding hardening 完成后的形势。redesign 不依赖这段,但保留作 framing 历史:
 
 ## 当前阶段
 
