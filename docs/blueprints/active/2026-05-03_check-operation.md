@@ -49,6 +49,7 @@ This directly addresses the "boolean compliance check for a specific binding" ne
 - No fail localization, first-failing-atom diagnostics, Diagnose/Explain operation, or why-not board.
 - No implemented branch/atom walkable projection; `branch_atom_projection` remains reserved and `None`.
 - No engine extension surface architecture design beyond the minimum contract needed for Check.
+- No in-Check caching of RuleRef resolutions or evidence envelopes. If future caching is needed, it belongs behind registry/runtime authority and its key must include rule identity/version plus registry snapshot/generation.
 - No persistent audit JSONL replay/check event storage.
 - No new SDK substrate. Any SDK method must delegate to application runtime.
 - No release-base, `v0.1-oss-prep`, or `master` merge/publish action.
@@ -136,13 +137,16 @@ Step 0 may revise file names / DTO names. The layer placement is not negotiable:
 
 - [ ] Step 0 freezes the Protocol Contract before status moves from `draft` to `scoped`.
 - [ ] Check protocol DTO(s) live under `kernel.application.protocol`.
+- [ ] CheckRequest DTO schema rejects `store`, `registry`, and precomputed `rule_ref_resolutions` fields.
 - [ ] Check runtime lives under `kernel.application` and takes dependencies via explicit side-channel parameters.
 - [ ] Complete native binding pass/fail behavior is covered by tests.
 - [ ] Partial native binding pass/fail and multi-match behavior are covered by tests.
 - [ ] Tests prove partial binding is not evaluated by directly calling `_branch_satisfies` on the partial input.
 - [ ] Deterministic primary selection is covered by tests, including OR branch order.
 - [ ] RuleRef with/without registry behavior is covered by tests.
+- [ ] Invalid binding shape (for example illegal variable name or wrong binding container type) maps to `status="invalid_request"`.
 - [ ] Native evidence envelope is inspectable / serializable and preserves support metadata.
+- [ ] EvidenceEnvelope round-trips engine-native payload without flattening away engine-specific fields.
 - [ ] Non-native representability boundary is covered by tests for at least the scoped engine set.
 - [ ] `branch_atom_projection=None` is tested as "projection not implemented", not "evidence degraded".
 - [ ] Affected application docs are updated.
@@ -173,6 +177,10 @@ Step 0 may revise file names / DTO names. The layer placement is not negotiable:
      - RuleRef resolution and failure behavior
      - non-native representability rule for the scoped engine set
    - Freeze runtime failure mapping and test matrix.
+   - Freeze drift-prevention mechanisms:
+     - review topic doc §7.1-§7.6 one by one
+     - record each prevention/detection decision in the audit log
+     - include explicit anti-regression tests for every trap kept in scope
    - Update audit with final Step 0 decisions.
 
 2. **Step 1 — Protocol DTO(s)**
