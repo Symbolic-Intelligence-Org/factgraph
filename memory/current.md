@@ -83,11 +83,12 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 1. 本文件
 2. 新 hard constraint:`~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/project_application_first_runtime_authority.md`
 3. Release branch invariant:`~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/project_release_branch_invariants.md`
-4. 想看 design probe 历史 / 设计 framing(B''pivot 等)→ `git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/...`
+4. **设计材料 consolidation**(in-tree,无需 git show 翻 rollup):**[docs/references/working/rule-replay-line-redesign-input/README.md](/Users/zhenzhili/hnsm-backend/docs/references/working/rule-replay-line-redesign-input/README.md)** —— 用户原始 brainstorm + B'/B'' 设计历史 + L0-L11 能力分层 + drift 分析 + A 段讨论 + 4 个 abandoned blueprint + lessons learned
 5. AGENTS.md + docs/blueprints/AGENTS.md
 6. docs/architecture_principles.md(four-layer data architecture + layer split + release governance)
 7. src/kernel/application/docs/README.md(canonical runtime authority)
 8. src/kernel/sdk/docs/README.md(product surface,**不再背 substrate**)
+9. (可选,深度回溯老 impl)`git show v0.1.1-evidence-tree-operational-overlay:src/kernel/sdk/replay.py` 等
 
 ### 下一步方向
 
