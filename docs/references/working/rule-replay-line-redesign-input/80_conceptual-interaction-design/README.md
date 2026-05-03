@@ -41,4 +41,6 @@ blueprints(docs/blueprints/active/)       ← 落地代码,引用以上三方
 
 ## 当前 topic 列表
 
-(空 — 第一个 topic 在第一个 capability 进入概念 + 交互讨论时新增)
+| Topic | Status | 关联 baseline | 关联 input bundle | 起步原因 |
+|---|---|---|---|---|
+| `check-operation-conceptual-interaction.md` | draft | §P0-1 + §P0-2 + §P0-3 | `40_*` A 段 + `00_*` 命题 4 + `10_*/operational-...md` §"Check" | baseline P0-3 揭示 Check 是 P0 三个 capability 中最 ready-to-go(core primitives 已存在),需先收敛概念 + 交互 |
