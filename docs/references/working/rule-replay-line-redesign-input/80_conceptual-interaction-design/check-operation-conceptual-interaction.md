@@ -1,14 +1,14 @@
 # Check Operation: Conceptual + Interaction Design
 
-- **Status:** resolved (conceptual + interaction; protocol contract still belongs to blueprint Step 0)
-- **Authority:** source-of-truth for Check operation conceptual + interaction design until cited by blueprint
+- **Status:** cited (conceptual + interaction resolved; cited by active blueprint; protocol contract still belongs to blueprint Step 0)
+- **Authority:** cited source for Check operation conceptual + interaction decisions; the active blueprint owns protocol contract and implementation scope.
 - **Created:** 2026-05-03
 - **关联 baseline section:** `70_codebase-baseline-2026-05-03.md` §P0-1 + §P0-2 + §P0-3
 - **关联 design input:**
   - `40_design-discussion-A-with-decision-1.md` 的 A 段(round 1+2 + 锁定 shape)
   - `00_brainstorm-original.md` 命题 4("要支持 boolean check 一个具体 binding 是否符合规则")
   - `10_design-history-bprime-bdoubleprime/operational-evidence-tree-rule-replay-design-2026-05-01.md` §"Check"
-- **关联 blueprint:** 暂无(blueprint 在本 doc 进入 `resolved` 后由 `docs/blueprints/active/` 起)
+- **关联 blueprint:** [docs/blueprints/active/2026-05-03_check-operation.md](../../../../blueprints/active/2026-05-03_check-operation.md)
 - **形态:** 这是一个 resolved conceptual / interaction reference。§1-§5 是当前决议;§6 是历史 discussion trace。若 §6 早期 iteration 与 §1-§5 冲突,以 §1-§5 为准。**不写任何具体 file/class 命名**(那是 blueprint 阶段)。本 doc 足以启动 draft blueprint,但 scoped implementation 前仍需在 blueprint Step 0 冻结 protocol contract。
 
 ---
@@ -333,11 +333,11 @@ Check topic 内部所有 open items 已 resolved(per §6.9);以下两项是 **Ch
   - replay/persistence non-decision:Check MVP result identity / snapshot semantics / audit persistence either explicitly out of scope or explicitly defined
   - drift-prevention(per §7):每条 §7.1-§7.6 trap 对应 Step 0 prevention/detection 决议(banned call assertions / DTO field rejection / round-trip tests)
   - test matrix:complete pass/fail,partial multi-match,deterministic primary,OR branch order,invalid binding,RuleRef with/without registry,native evidence envelope,non-native supported/unsupported boundary,**§7 trap 反测试**(banned partial-to-primitive call / opaque payload rejection / None ≠ degraded / DTO 拒 registry 字段)
-- **blueprint 起步指引:** 在 `docs/blueprints/active/YYYY-MM-DD_check-operation.md` 创建,§4 Current Context cite:
+- **blueprint linkage:** active blueprint [2026-05-03_check-operation.md](../../../../blueprints/active/2026-05-03_check-operation.md) cites:
   - 本 doc(80_/check-operation-conceptual-interaction.md)— 概念 + 交互决议
   - baseline §P0-1 / §P0-2 / §P0-3 — 现有代码 anchor
 - **不进入 blueprint 的内容:** 本 doc §6 Discussion log 的"候选讨论 + iteration 过程"(只有最终决议进 blueprint;过程留在本 doc 作为决议 source 的 audit trail)
-- **transition 到 `cited` 状态:** 当 blueprint 在 §4 Current Context 实际引用本 doc 时,Status 改 `resolved → cited`
+- **transition 到 `cited` 状态:** completed 2026-05-03 when active blueprint [2026-05-03_check-operation.md](../../../../blueprints/active/2026-05-03_check-operation.md) cited this doc.
 
 ---
 
