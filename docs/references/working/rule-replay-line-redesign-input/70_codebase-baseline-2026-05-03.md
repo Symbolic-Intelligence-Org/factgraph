@@ -440,9 +440,11 @@ baseline 不回答,留给 conceptual + interaction venue:
 
 #### Structural observations
 
-- **Per-binding 满足性 primitives 已存在,Check 不需新写算法:** `_branch_satisfies` + `_atom_satisfies` + `_ground_terms` 已是"给定 binding 逐 atom 验证"的完整实现。Check capability 只需 application-level 包装,**core 不需新增算法**。
-- **evaluate path 与 check path 是 mirror 关系,语义对偶:** `_eval_*_atom` 是 enumerate-and-bind(产 envs);`_atom_satisfies` 是 verify-given(返 bool)。两套各 8 类 atom,完整对偶。redesign Check **不应**在 evaluate 层加 check 路径,直接复用 check primitives。
-- **`ruleref` 在 evaluate 与 check 路径的处理方式不同:** evaluate 路径下 `ruleref` 在调 `evaluate_where` 前被 `_rewrite_where_rule_refs` rewrite;check 路径下 `_atom_satisfies` 直接处理 `ruleref`(因为 binding 已是 evaluate 完的结果,resolution 也已计算)。任何 Check 实现处理 ruleref 必须先确保 `rule_ref_resolutions` 预解析(由 caller 提供给 `find_winning_branch_index`)。
+> **Post-topic correction(2026-05-03):** `80_conceptual-interaction-design/check-operation-conceptual-interaction.md` has resolved the conceptual layer. The bullets below are code inventory,not final Check design. In particular, direct primitives are safe only for native complete-binding verification; native partial binding and non-native engines require enumerate/evaluate-then-match semantics.
+
+- **Per-binding 满足性 primitives 已存在,但不是完整 Check 算法:** `_branch_satisfies` + `_atom_satisfies` + `_ground_terms` 已是"给定完整 binding 逐 atom 验证"的完整实现。它们适合 native complete binding。对 partial binding,直接把用户 partial binding 传入 primitive 会因 `_ground_terms` 缺变量而 silent false;Check 必须先枚举完整 final bindings 再 subset-match。
+- **evaluate path 与 check path 是 mirror 关系,但 Check 会混合两种路径:** `_eval_*_atom` 是 enumerate-and-bind(产 envs);`_atom_satisfies` 是 verify-given(返 bool)。complete binding 可以走 verify primitive;partial binding / non-native payload matching 必须走 evaluate/enumerate 后再 match。redesign Check 不应把概念简化成"只包 `_branch_satisfies`"。
+- **`ruleref` 在 evaluate 与 check 路径的处理方式不同:** evaluate 路径下 `ruleref` 在调 `evaluate_where` 前被 `_rewrite_where_rule_refs` rewrite;check 路径下 `_atom_satisfies` 直接处理 `ruleref`。Check topic 已决议为 application runtime 接 `registry` side-channel 自行解析;不要让 caller 传 precomputed `rule_ref_resolutions`,那会引入 stale resolution 的一致性边界。
 - **`witness_facts` vs `view_facts` 的语义不同,但可互转:** `view_facts: dict[pred_id, list[tuple]]`(无 asrt_id),`witness_facts: dict[pred_id, list[ProjectedFact]]`(有 asrt_id)。`_pred_atom_satisfies` 用 witness_facts;`_not_atom_satisfies` 用 view_facts(`_view_facts_from_witness_facts` 转换)。Check 若要复用 support-capture primitives 并产 evidence,**必须传 witness_facts**;若只做 bare boolean,理论上可走 view_facts + evaluate path,但那会丢 asrt_id / SupportArtifact 桥。
 - **`SupportArtifact.kind` 是 `str`(非 Literal),但有 6 known constant + 3 set 分类:** 比 `CandidateSet.state` 的纯 free-form 更结构化,但仍非 enum。新 capability 引入新 kind:
   - 复用 `"native_binding_v1"` 当生成完整 SupportArtifact 时
@@ -465,16 +467,16 @@ baseline 不回答,留给 conceptual + interaction venue:
 
 #### Open conceptual + interaction questions
 
-baseline 不回答,留给 conceptual + interaction venue:
+baseline 不回答,留给 conceptual + interaction venue。**Resolved by** `80_conceptual-interaction-design/check-operation-conceptual-interaction.md` (2026-05-03);保留本列表作为 original baseline inventory,不要把它当 unresolved design work:
 
-- **Check 接口的 input 边界:** 用户提供 "binding" 还是 "事实集 + binding"?如果只 binding,view_facts/witness_facts 从当前 store 投影(读时点);如果 binding + 事实集,事实集是 overlay(进一步触发 fact-overlay 设计)还是替换?
-- **Check 输出的最小 set:** 仅 boolean(satisfied / not satisfied)?加 reason(哪个 atom failed)?加 winning_branch_index?加 SupportArtifact?这决定 Check 是 lightweight verify 还是 full evidence-bearing。
-- **status 词汇与现有 support_kind 关系:** Check 的 status 词汇(input bundle 提到 `derived/failed_check/below_threshold/temporally_unsatisfied/unknown/unsupported`)是独立词汇,还是与 `SupportArtifact.kind` 或 `_DEGRADED_SUPPORT_KINDS` 等映射?
-- **ruleref 的输入语义:** Check 处理 ruleref atom 时,`rule_ref_resolutions` 是 caller 预先解析(传入)还是 Check 自己解析(需要 registry)?后者意味着 Check 不能完全 stateless。
-- **engine 边界 for Check:** 4 engines 中,native 已有 primitives;非 native engine 有自己 provenance(SupportArtifact vs ProvenanceEnvelope)。Check MVP 是否仅 native?非 native 怎么 check 给定 binding(可能 unsupported / 退化为 evaluate-then-match)?
-- **OR-of-AND 多 branch 都满足时的语义:** `find_winning_branch_index` 返第一个满足的;Check 是否需要"列出所有满足 branches"或"明确 branch ambiguity"?
-- **不完整 binding 的语义:** 现 primitive 是"silent false"(`_ground_terms` 返 None → atom false → branch false)。Check 是否要在 application 层区分 "false because unsatisfied" vs "false because binding incomplete"(对应 input bundle status `failed_check` vs `unknown`)?
-- **fail localization 的成本-收益:** `_branch_satisfies` 当前任一 atom false 即 short-circuit 返 false。若 Check 要给"first failing atom"信息,要修改 short-circuit 逻辑(返 atom_index 而非 bool)。这是侵入性修改 vs 在 application 层包装(call primitives 多次定位)的取舍。
+- **Check 接口的 input 边界:** resolved as binding-only;view_facts/witness_facts 从 current store read projection 派生;no fact overlay / replacement in Check.
+- **Check 输出的最小 set:** resolved as three layers:core result + EvidenceEnvelope + reserved `branch_atom_projection=None` slot;no failed-atom localization.
+- **status 词汇与现有 support_kind 关系:** resolved as independent application status (`passed / failed / unsupported / invalid_request`) plus separate future projection status;do not map to `support_kind`.
+- **ruleref 的输入语义:** resolved as runtime side-channel registry;DTO stays intent-only;caller must not pass precomputed resolutions.
+- **engine 边界 for Check:** resolved as multi-engine with boundaries;native complete direct primitives,native partial enumerate-then-match,non-native evaluate-then-match only for payload / engine-output-representable bindings(including Souffle;otherwise `unsupported`).
+- **OR-of-AND 多 branch 都满足时的语义:** resolved as deterministic primary-only;`matched_count` counts matches;no `ambiguous` status / branch topology in Layer 1.
+- **不完整 binding 的语义:** resolved by legal partial binding semantics;no `unknown`;bad shape is `invalid_request`,no match is `failed`.
+- **fail localization 的成本-收益:** resolved out of MVP;no first-failing-atom reason on `failed`.
 
 #### Existing tests
 

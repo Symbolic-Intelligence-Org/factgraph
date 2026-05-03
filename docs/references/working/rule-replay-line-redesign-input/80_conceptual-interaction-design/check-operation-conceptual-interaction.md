@@ -1,6 +1,6 @@
 # Check Operation: Conceptual + Interaction Design
 
-- **Status:** discussed
+- **Status:** resolved (conceptual + interaction; protocol contract still belongs to blueprint Step 0)
 - **Authority:** source-of-truth for Check operation conceptual + interaction design until cited by blueprint
 - **Created:** 2026-05-03
 - **关联 baseline section:** `70_codebase-baseline-2026-05-03.md` §P0-1 + §P0-2 + §P0-3
@@ -9,7 +9,7 @@
   - `00_brainstorm-original.md` 命题 4("要支持 boolean check 一个具体 binding 是否符合规则")
   - `10_design-history-bprime-bdoubleprime/operational-evidence-tree-rule-replay-design-2026-05-01.md` §"Check"
 - **关联 blueprint:** 暂无(blueprint 在本 doc 进入 `resolved` 后由 `docs/blueprints/active/` 起)
-- **形态:** 这是一个**讨论 scaffold**,不是 finished concept。各 section 在讨论中累积内容;每项决议必须带 source(回引 baseline / input bundle / 讨论中明确达成共识的论据)。**不写任何具体 file/class 命名**(那是 blueprint 阶段)。
+- **形态:** 这是一个 resolved conceptual / interaction reference。§1-§5 是当前决议;§6 是历史 discussion trace。若 §6 早期 iteration 与 §1-§5 冲突,以 §1-§5 为准。**不写任何具体 file/class 命名**(那是 blueprint 阶段)。本 doc 足以启动 draft blueprint,但 scoped implementation 前仍需在 blueprint Step 0 冻结 protocol contract。
 
 ---
 
@@ -17,7 +17,7 @@
 
 Baseline P0-3 揭示:Check 是 P0 三个 capability 中最 ready-to-go 的 — core primitives(`_branch_satisfies` / `_atom_satisfies` / `_ground_terms`)已存在,evaluate / check 是 8-atom mirror,application 层只需薄包装。
 
-但 application DTO 形态 — 输入是什么、输出是什么、status 词汇怎么定 — **完全 open**。这些必须在概念 + 交互层面收敛后才能决定具体代码。
+起草时 application DTO 形态 — 输入是什么、输出是什么、status 词汇怎么定 — **完全 open**。本 doc 现在记录这些问题的 resolved conceptual / interaction 决议,供后续 blueprint 直接 cite。
 
 本 doc 的任务:把"Check 概念上是什么 / 消费者怎么交互"讨论到 `resolved` 状态,让 blueprint 可以直接 cite。
 
@@ -50,14 +50,15 @@ Check 在 B'' framing("rule operable + evidence read-only")的位置是什么?
 - **complete binding:** 验证一个完整结果是否满足规则
 - **partial binding:** 验证是否存在某个完整结果扩展用户给的部分绑定 — 实现是完整 evaluate body → final bindings → subset match;**不是** initial-env injection(违反 baseline §3.2 invariant 的那种 envs=[user_binding] 起步),**不是**局部重算
 
-implementation strategy 按引擎选(归 §3.5):
-- native:用 `_branch_satisfies` primitives 直接判
-- souffle / problog / pyreason:走 evaluate-then-match,用户 binding 与产出 candidates subset-match
+implementation strategy 按引擎 + binding 完整度选(归 §3.5):
+- native complete binding:可用 `_branch_satisfies` primitives 直接验证
+- native partial binding:**必须**先枚举完整 final bindings,再 subset-match;选定 primary full binding 后,用该 full binding 构造 evidence。**禁止**直接把用户 partial binding 传给 `_branch_satisfies`,否则缺失变量会被 `_ground_terms` 当 false,造成 silent wrong `failed`
+- souffle / problog / pyreason:走 evaluate-then-match,用户 binding 与产出 candidates / engine payload 可表达的 binding subset-match
 
 **与 B'' invariant("rule operable + evidence read-only")的具体连接:**
 - rule operable:Check 不修改 rule;rule body 是 lowered WhereIR(只读)
 - candidate read-only:Check 不提交 candidate;non-native 路径下若依赖 evaluate-then-match 的 candidate,也是 evaluation-derived read-only 视图
-- evidence read-only:Check 输出的 EvidenceEnvelope 全部从现有 SupportArtifact / ProvenanceEnvelope 派生,不构造新 evidence
+- evidence read-only:Check 不提交 facts / candidates / assertions;可以且应为本次 Check 生成 derived SupportArtifact / EvidenceEnvelope。这里的 "read-only" 约束是"不改变系统事实或候选状态",不是"禁止构造本次结果的 evidence view"
 
 **Source:** Discussion §6.1(scenario)+ §6.2(framing 修正)+ §6.4(partial binding 接受)+ §6.5(verify-given dual 概念稳定)+ §6.6(lift)
 
@@ -96,24 +97,28 @@ application 层从这些派生 core 必需的 5 项(`branch / binding / witness_
    - `matched_binding: BindingItems | None`(只 status=passed 时有;partial binding 命中多个时取 primary)
    - `errors / warnings`(consistent with existing application pattern)
 
-2. **Layer 2 — EvidenceEnvelope(passed 时,Layer 1 的子字段):**
+2. **Layer 2 — EvidenceEnvelope(Check result 的 optional evidence field,status=passed 时有):**
    - common envelope:`engine` / `support_kind` / `support_digest` / `branch_index` 等共同 metadata
-   - `native_payload`:engine-specific 形态(SupportArtifact / PyReasonTimeline / ProbLogProofGraph / ...);**不抹平**(per §6.5)
-   - `branch_atom_projection: BranchAtomProjection | None`(子字段,见 Layer 3)
+   - `native_payload`:engine-specific 形态(SupportArtifact / PyReasonTimeline / ProbLogProofGraph / ...);**不抹平**(per §6.5);**必须 inspectable / serializable,不能是 opaque blob**(per §6.9)
+   - `branch_atom_projection: BranchAtomProjection | None`(子字段,见 Layer 3;MVP 总是 `None`)
 
-3. **Layer 3 — branch/atom projection(EvidenceEnvelope 的子字段,opt-in;MVP 是否含 — 见 §4 未决项):**
-   - `projection_status: Literal["available", "partial", "unsupported"]`(per §3.3)
-   - `branches[]`(可遍历)+ 每 branch 的 `atoms[]`(可遍历)
-   - 每 atom 字段:`locator`(`b0.a2` 形式) / `atom_kind` / `status`(satisfied / satisfied_by_absence / ...)/ `grounded_terms` / `witnesses` / `asrt_ids` / `details`
-   - **MVP 仅 `passed` 时可靠**;`failed` 时不假装给 per-atom 失败状态(per §6.4.B.1)
+3. **Layer 3 — branch/atom projection(EvidenceEnvelope 的子字段;MVP=None,deferred 到独立 venue):**
+   - **MVP 决议(per §6.9):** 字段 reserved(在 protocol 里保留),MVP 总是 `None`;walkable interface 不在 Check MVP 实施
+   - **`None` 语义:** "projection 未实现",**不是** "evidence 未提供 / degraded"(evidence 通过 Layer 2 native_payload 仍完整可获取)
+   - 字段形态(deferred 实施 / 协议 reserved):
+     - `projection_status: Literal["available", "partial", "unsupported"]`(per §3.3)
+     - `branches[]`(可遍历)+ 每 branch 的 `atoms[]`(可遍历)
+     - 每 atom 字段:`locator`(`b0.a2` 形式) / `atom_kind` / `status`(satisfied / satisfied_by_absence / ...)/ `grounded_terms` / `witnesses` / `asrt_ids` / `details`
+   - **后续启用条件(per §6.9):** 第二个 consumer 出现时(如 Diagnose / Explain / evidence UI / per-frame diff capability),在跨 capability 共享 venue topic 决定 walkable 形态,然后回填到 Check
+   - 启用后**仅 `passed` 时可靠**约束保留(per §6.4.B.1):`failed` 时不假装给 per-atom 失败状态
 
-**留 blueprint 决定的细节:** 具体 dataclass 命名 / engine-native payload union typing 形态 / partial-streaming 需求(若批量 check 多 binding 在未来扩);Layer 3 是否纳入 MVP(见 §4 未决项)。
+**留 blueprint 决定的细节:** 具体 dataclass 命名 / engine-native payload union typing 形态 / partial-streaming 需求(若批量 check 多 binding 在未来扩)。Layer 3 MVP 已决议为 reserved slot + `None`(per §6.9);具体 shared projection shape 留后续 venue。Status-by-field nullable matrix 必须在 blueprint Step 0 冻结,不由本 conceptual doc 代替。
 
 **Source:** Discussion §6.1 → §6.5 累积 + §6.6 lift
 
 ---
 
-## 3. 边界决议(8 项 open questions,从 baseline §P0-3 抽出)
+## 3. 边界决议(8 项,从 baseline §P0-3 抽出)
 
 > 按依赖顺序排,后面的 question 依赖前面的决议。
 
@@ -133,8 +138,8 @@ application 层从这些派生 core 必需的 5 项(`branch / binding / witness_
 
 **决议:** **三层 layered output**(详细形态见 §2.2)
 - Layer 1 Core result 必有(status + requested_binding + matched_count + matched_binding-if-passed + errors/warnings)
-- Layer 2 EvidenceEnvelope 在 passed 时有(common envelope + engine-native payload)— **不**抹平 engine 特化能力
-- Layer 3 BranchAtomProjection 是 Layer 2 子字段,opt-in;MVP 是否纳入仍 open(见 §4)
+- Layer 2 EvidenceEnvelope 在 passed 时有(common envelope + engine-native payload)— **不**抹平 engine 特化能力;**必须 inspectable / serializable**(per §6.9)
+- Layer 3 BranchAtomProjection 是 Layer 2 子字段,**MVP=None**(per §6.9 — slot reserved,实施 deferred 到独立 venue/共享 capability;`None` **不**解读为 evidence degraded)
 - **不**含 reason / fail localization on failed(per §3.8)
 
 **Source:** Discussion §6.1 + §6.4 + §6.5(三层模型 + projection 独立 enum 修正);§6.5 user 直接给的 final 提议
@@ -154,6 +159,8 @@ Check 的 status 词汇(input bundle 提到:`derived` / `failed_check` / `below_
 | Projection 能力 | `BranchAtomProjection.projection_status` | `available` / `partial` / `unsupported` |
 
 注意:`EvidenceEnvelope.support_kind` 是 string convention(已有 6 known constants + 3 frozenset 分类,baseline §P0-3 现成),**不属** Check application Literal — 它是 SupportArtifact 透传的 metadata。
+
+**Runtime failure mapping:** `unsupported` 表示已知 capability boundary;`invalid_request` 表示 caller/request shape 错误。Engine/runtime unexpected failures **不**应被压进这两个 status。MVP 应沿用 existing application runtime error propagation(异常/上层错误通道),并在 blueprint Step 0 明确测试这一边界。
 
 **Source:** Discussion §6.4(passed/failed/unsupported/invalid_request 词集);§6.5(`projection_status` 与 `status` 必须分离 — 避免把"能否投影"与"evidence 是否存在"混为一谈,大动脉级别 correction)
 
@@ -192,19 +199,22 @@ Check 处理 ruleref atom 时,`rule_ref_resolutions`:
 
 #### sub-decision 1: Check decision semantics
 
-**B with boundary** — multi-engine via evaluate-then-match:
-- native:用 `_branch_satisfies` primitives 直接判
-- souffle / problog / pyreason:engine 跑 evaluate(经 evaluate_store dispatch),用户 binding 与产出 candidates subset-match
+**B with boundary** — multi-engine via evaluate-then-match / primitive-check hybrid:
+- native complete binding:用 `_branch_satisfies` primitives 直接判
+- native partial binding:先枚举完整 final bindings,再 subset-match;primary full binding 选定后用该 full binding 构造 evidence
+- souffle / problog / pyreason:engine 跑 evaluate(经 evaluate_store dispatch),用户 binding 与产出 candidates / engine payload 可表达的 binding subset-match
 
 **能力边界(non-native engine 不假装 native-style 完整 check):**
 
-| Engine | head-only binding | body-only / mixed binding |
+| Engine | payload-representable head binding | body-only / mixed / payload-nonrepresentable binding |
 |---|---|---|
 | native | passed / failed | passed / failed |
-| souffle | passed / failed | passed / failed(SupportArtifact 有 b{branch}.a{atom} 可投影) |
+| souffle | passed / failed | passed / failed **only if** engine output/support artifact exposes enough binding information;otherwise `unsupported` |
 | problog / pyreason | passed / failed(via candidate payload 比对) | **`status=unsupported`**(engine 不暴露 body-only final bindings) |
 
 纪律:Check 不假装 body-only binding 在 problog/pyreason 下能 verify;明确返 `unsupported`,不返 `failed`(后者会让用户误以为是数据问题而非能力边界)。
+
+Blueprint Step 0 必须冻结 "requested binding → candidate payload / engine output" 的映射规则(尤其 multi-head / entity target / variable 同时出现在 head 与 body 的情况)。**Representability gates all non-native Check**,包括 Souffle;如果无法证明 user binding 可由 engine candidate payload / support output 表达,该 engine 下应返 `unsupported`,不能猜测。
 
 #### sub-decision 2: Check evidence shape
 
@@ -289,21 +299,43 @@ evidence walkable view(Layer 3,见 §3.2)在 `passed` 时给完整 per-atom 信�
 
 ---
 
-## 4. 未决项(讨论中累积)
+## 4. 未决项(Check topic 外,不阻塞 resolution)
+
+Check topic 内部所有 open items 已 resolved(per §6.9);以下两项是 **Check topic 之外** 的相关 broader question:
 
 | 项 | 说明 |
 |---|---|
-| MVP 是否纳入 Layer 3(walkable evidence view) | **Check topic 内 last open item** — 决定 Check 定位是 lightweight verifier(MVP 只 Layer 1+2)还是 evidence-bearing 操作(MVP 含 Layer 3) |
-| Engine extension surface architecture | 起独立 venue topic(候选名 `engine-extension-surface-architecture.md`);包含 engine-native payload DTO 形态 / engine_options 字段 / 各 engine payload schema 归属等 broader question — **不阻塞** Check topic resolution |
+| Engine extension surface architecture | 起独立 venue topic(候选名 `engine-extension-surface-architecture.md`);包含 engine-native payload DTO 形态 / engine_options 字段 / 各 engine payload schema 归属等 broader question |
+| Shared evidence projection venue/capability | 由 Layer 3 deferral 引入(per §6.9);待第二个 consumer(Diagnose / Explain / evidence UI / per-frame diff)出现时启,决定 walkable 形态,回填到 Check Layer 3 |
 
 ---
 
 ## 5. 与 baseline / blueprint 对接说明
 
+**本 doc 已进入 `resolved` 状态(2026-05-03)。** 所有 conceptual + interaction 决议落地;draft blueprint 可在 `docs/blueprints/active/` 起。进入 `scoped` implementation 前,blueprint 必须先冻结 protocol contract,不能把本 doc 的概念层字段直接当最终 DTO。
+
 - **baseline § 已 cite:** §P0-1(application substrate template)+ §P0-2(evaluate flow + status vocabulary 归属)+ §P0-3(check primitives + ruleref + witness 区分)
-- **resolved 后回填的 baseline anchor:** §P0-3 的 8 项 "Open conceptual + interaction questions" → 在本 doc resolved 后,baseline §P0-3 对应段落改成"已由 80_/check-operation-... 决议为 X(详见 topic doc §3.X)"
-- **blueprint 起步条件:** 本 doc 至少 §1 概念定义 + §2 交互定义 + §3 全部 8 项决议 进入 `resolved`,blueprint 在 `docs/blueprints/active/` 起,§4 Current Context cite 本 doc + baseline §P0-1/P0-2/P0-3
-- **不进入 blueprint 的内容:** 本 doc 的"候选讨论"过程(只有最终决议进 blueprint;过程留在本 doc 作为决议的 source)
+- **resolved 后待回填的 baseline anchor:** baseline §P0-3 的 "Open conceptual + interaction questions" 8 项 → 后续 baseline 维护时,§P0-3 对应段落改成"已由 80_/check-operation-conceptual-interaction.md 决议为 X(详见 topic doc §3.X)"形式的 cross-reference
+- **draft blueprint 起步条件已满足:**
+  - §1 概念定义 ✓(verify-given dual)
+  - §2 交互定义 ✓(三层 output;binding 接 complete + partial)
+  - §3 全部 8 项 ✓(§3.1 仅 binding / §3.2 三层 / §3.3 两 enum / §3.4 B' side-channel registry / §3.5 B' multi-engine + engine-native first / §3.6 A' deterministic primary / §3.7 partial binding 自然消解 / §3.8 不给 fail localization on failed)
+  - §4 内部项 ✓(MVP Layer 3 = A' reserve slot)
+- **scoped implementation 前必须冻结的 Protocol Contract(由 blueprint Step 0 完成):**
+  - request DTO:rule reference shape / binding wire shape / engine field / engine_options 是否存在 / query or run identity 是否存在
+  - response DTO:status-by-field nullable matrix / errors-warnings convention / EvidenceEnvelope field name and nesting
+  - engine-native payload contract:minimum inspectable + serializable shape;typed union vs JSON-compatible envelope;schema ownership
+  - native partial algorithm:final-binding enumeration + subset-match + primary selection + evidence construction from primary full binding
+  - non-native matching contract:BindingItems → candidate payload mapping;payload-nonrepresentable request → `unsupported`
+  - ruleref failure contract:missing registry / partial resolution / unresolved child rule exact `invalid_request` details
+  - runtime failure contract:unexpected engine/runtime errors propagate through runtime error channel,not `unsupported` / `invalid_request`
+  - replay/persistence non-decision:Check MVP result identity / snapshot semantics / audit persistence either explicitly out of scope or explicitly defined
+  - test matrix:complete pass/fail,partial multi-match,deterministic primary,OR branch order,invalid binding,RuleRef with/without registry,native evidence envelope,non-native supported/unsupported boundary
+- **blueprint 起步指引:** 在 `docs/blueprints/active/YYYY-MM-DD_check-operation.md` 创建,§4 Current Context cite:
+  - 本 doc(80_/check-operation-conceptual-interaction.md)— 概念 + 交互决议
+  - baseline §P0-1 / §P0-2 / §P0-3 — 现有代码 anchor
+- **不进入 blueprint 的内容:** 本 doc §6 Discussion log 的"候选讨论 + iteration 过程"(只有最终决议进 blueprint;过程留在本 doc 作为决议 source 的 audit trail)
+- **transition 到 `cited` 状态:** 当 blueprint 在 §4 Current Context 实际引用本 doc 时,Status 改 `resolved → cited`
 
 ---
 
@@ -883,3 +915,81 @@ native + non-native 都走同一 application runtime boundary(都接 `registry` 
 **剩余 open(本轮后):**
 - MVP 是否纳入 Layer 3 walkable view(**Check topic 内 last open item**)
 - engine extension surface architecture(独立 venue topic)
+
+### 6.9 (2026-05-03) MVP Layer 3 inclusion — A' refined to "reserve slot + require inspectable native payload"
+
+**User refinement on A:**
+
+> "我选 A: MVP 不含 Layer 3, 但我会把它说成 A': reserve the slot, require native payload inspectability"
+>
+> "MVP Check does not implement BranchAtomProjection, but EvidenceEnvelope must expose common metadata and engine-native payload in an inspectable/serializable form. branch_atom_projection=None means 'projection not implemented', not 'evidence unavailable'."
+
+**关键 refinement:** 我之前的 A 没明确"`None` 是否意味 evidence 缺失"。user 锁定:**`None` projection 是"投影未实现",不是"evidence degraded"** — 这个 semantic boundary 必须显式声明,否则后续 reader 容易误读。
+
+**MVP 实施约束(per A'):**
+1. `EvidenceEnvelope.branch_atom_projection` 字段在 protocol 里**保留**(reserve slot)
+2. MVP 该字段总是 `None`
+3. EvidenceEnvelope.common metadata + native_payload **必须**以 inspectable / serializable 形式 expose
+4. native_payload **不能**是 opaque blob — 要保证 user 能 inspect / serialize 拿到 engine-native evidence 完整信息
+5. 后续 from `None` to populated 是 backward-compatible(additive,只增字段值不改形态)
+
+**B 的更深反驳(user 给的 stronger 论据):**
+
+我之前反 B 是"MVP 范围最小化 + ergonomics 不是核心";user 给的更深论据:
+
+1. **Walkable projection 是跨 capability 共享抽象** — 不只服务 Check,还服务 Diagnose / Explain / evidence UI / per-frame diff。在 Check MVP 内定死形态,**又会犯"single capability 先占公用抽象"的错**(v0.1.2 ConditionModule 教训重演)
+2. **Layer 3 把 Check 从 verifier 拉向 evidence explorer** — Check 的最小用户价值是"binding 是否通过 + 通过时给 evidence envelope";walkable evidence 是 better UX,**不是 Check 成立的必要条件**
+3. **engine-respectful evidence 刚刚锁定,不宜立刻再压一层统一投影** — PyReason / ProbLog 核心价值在 native payload;Layer 3 MVP 上很容易"为了 walkable 强行压平 engine 特性",违背 §6.5 决议
+4. **None → populated 向后兼容** — 先保留 slot,等独立 venue 或第二个 consumer 出现时填;比先做错 walkable schema 再迁移成本低
+
+**Architectural pattern(generic-applicable,带进未来 capability 讨论):**
+
+> **"Reserve slot, defer cross-capability abstraction to shared venue"** — 任何"看起来是 cross-capability 共享但 first 出现于某个 capability"的抽象,**应在该 capability MVP 留 slot,不实施;等第二个 consumer 出现时在共享 venue 决定形态**。这避免 "single capability 先占公用抽象" trap。
+
+**本轮决议:** **A'** — MVP reserves `branch_atom_projection` but leaves it `None`. Check MVP 是 Layer 1 + Layer 2。Layer 3 walkable evidence deferred 到 shared evidence projection venue/capability。EvidenceEnvelope 通过 common metadata + engine-native payload 仍是 evidence-bearing;`None` projection **不应**解读为 degraded evidence。
+
+**Status transition:** **discussed → resolved**。Check topic 内部所有 open items 关闭(§1 概念 / §2 交互 / §3.1-§3.8 八项边界 / §4 内部 last item)。
+
+**剩余(不阻塞 Check resolution,在外部 venue):**
+- engine extension surface architecture(独立 venue topic;包含 engine-native payload schema / engine_options 等 broader question)
+- shared evidence projection venue/capability(由 Layer 3 deferral 引入;待第二个 consumer 出现时启)
+
+### 6.10 (2026-05-03) Blind review corrections before blueprint
+
+**Blind-review method:** three reviewers were given only the bundle README,baseline 70_,venue README,and this topic doc. They reconstructed the design and looked for contradictions without conversation history.
+
+**Result:** reviewers reconstructed the core Check design correctly,including verify-given dual,partial binding subset-match,engine-native evidence first,side-channel registry,deterministic primary,and Layer 3 reserved slot. However,they found several implementation-risk ambiguities. This section records the corrections lifted into §1-§5 and baseline §P0-3.
+
+**Corrections applied:**
+
+1. **Native partial binding contradiction fixed.** Earlier formal text said native uses `_branch_satisfies` directly,while partial binding semantics require final-binding enumeration + subset match. Final decision now says:
+   - native complete binding may use `_branch_satisfies`
+   - native partial binding must enumerate full final bindings first,subset-match,choose primary,then build evidence from that full binding
+   - passing user partial binding directly to `_branch_satisfies` is forbidden because `_ground_terms` missing vars produce silent false
+2. **Evidence read-only wording fixed.** "Read-only evidence" now means no facts / candidates / assertions are committed. Generating a derived SupportArtifact / EvidenceEnvelope for the Check result is allowed and expected.
+3. **Baseline stale guidance patched.** Baseline §P0-3 now explicitly says direct primitives are only one ingredient,not the whole Check algorithm;its original eight conceptual questions are marked resolved by this topic doc.
+4. **Blueprint readiness clarified.** This topic is resolved only at conceptual + interaction level. A draft blueprint may start,but before moving to scoped implementation the blueprint must freeze a concrete Protocol Contract(status-by-field matrix,request shape,response shape,engine payload contract,partial algorithm,ruleref failure contract,runtime error mapping,and test matrix).
+5. **Engine matching boundary tightened.** Non-native "head-only" is now phrased as payload-representable binding. If the requested binding cannot be proven representable from candidate payload/engine output,the result is `unsupported`,not guessed `failed`.
+6. **Runtime failure semantics clarified.** Unexpected engine/runtime failures are not `unsupported` and not `invalid_request`;they follow the application runtime error channel. `unsupported` is a known capability boundary;`invalid_request` is caller/request shape.
+
+**Remaining work intentionally left to blueprint Step 0:**
+- exact DTO / class names and file placement
+- rule reference wire shape
+- binding wire shape(`dict` vs tuple-of-pairs)
+- `query_id` / run identity / replayability non-decision
+- exact engine-native payload schema ownership
+- status-by-field nullable matrix
+- concrete test matrix
+
+### 6.11 (2026-05-03) Second blind validation — pass,with non-native representability tightening
+
+**Second blind validation:** after §6.10 corrections,two fresh reviewers read only the same four docs. Both confirmed:
+
+- native partial binding rule is now clear:enumerate full bindings,do not call `_branch_satisfies` on partial input
+- evidence read-only now clearly permits derived EvidenceEnvelope generation
+- topic is conceptually resolved,while concrete protocol contract remains blueprint Step 0 work
+- baseline §P0-3 no longer misleads authors into direct-primitive-only Check
+
+**Remaining non-blocking caution:** one reviewer flagged Souffle body-only/mixed support wording as too absolute. The formal §3.5 table is now tightened: **representability gates all non-native Check**,including Souffle. If engine candidate payload / support output cannot prove the requested binding,return `unsupported`;do not guess `failed`.
+
+**Final verdict:** no conceptual blocker remains for starting a **draft** Check blueprint. The blueprint must still run a Step 0 contract-freezing gate before `scoped` implementation,with special attention to protocol contract,non-native representability,runtime failure mapping,and tests.
