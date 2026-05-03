@@ -21,20 +21,27 @@
 
 不需要立刻读 bundle 内的所有材料。只在 redesign 实操要触及具体话题(Check 怎么做?fact overlay 怎么做?evidence layering 怎么做?)时再深入。
 
+> **本 bundle 三个层(2026-05-03 reset 后稳定):**
+> - **左半边(design input)**:`00_` / `10_` / `20_` / `30_` / `40_` / `50_` / `60_` — 历史 + 设计 + 经验
+> - **右半边(current code baseline)**:`70_codebase-baseline-...md` — reset 后的代码现状
+> - **桥(conceptual + interaction)**:`80_conceptual-interaction-design/` — 概念 + 交互设计讨论 venue,topic-by-topic 在这里收敛
+
 ### 如果你要 redesign 某个具体 capability
 
-按 capability 找入口:
+按 capability 找入口(每行先读 design input,再读 baseline 对应 section,**最后**到 80_ 起 topic 讨论):
 
-| 如果你在做 | 先读 | 再读 |
+| 如果你在做 | 先读 design input | 再读 baseline section(70_) |
 |---|---|---|
-| **Check operation** (boolean 合规判定) | `40_design-discussion-A-with-decision-1.md` 的 A 段(round 1+2 + 锁定 shape) | `00_brainstorm-original.md` 命题 4 + `10_design-history-bprime-bdoubleprime/operational-evidence-tree-rule-replay-design-2026-05-01.md` §"Check" |
-| **Fact-level overlay** | `40_design-discussion-A-with-decision-1.md` 的 H 段 placeholder | `10_design-history-bprime-bdoubleprime/evidence-tree-proof-recheck-ideas-2026-04-30.md` §6.4 `FactValueOverride` |
-| **EvaluationOverlay 多 action 容器** | `40_design-discussion-A-with-decision-1.md` 的 B 段 placeholder | `10_design-history-bprime-bdoubleprime/evidence-tree-proof-recheck-ideas-2026-04-30.md` §6 整章 |
-| **ProofFrameRechecker 局部诊断器** | `40_design-discussion-A-with-decision-1.md` 的 C 段 placeholder | `10_design-history-bprime-bdoubleprime/evidence-tree-proof-recheck-ideas-2026-04-30.md` §5 整章 |
-| **Status vocabulary + 最小因果识别** | `40_design-discussion-A-with-decision-1.md` 的 D 段 placeholder | `10_design-history-bprime-bdoubleprime/operational-evidence-tree-rule-replay-design-2026-05-01.md` §"Status Vocabulary" + §"Evidence Comparison" |
-| **Lazy why-not / candidate universe** | `40_design-discussion-A-with-decision-1.md` 的 E 段 placeholder | `10_design-history-bprime-bdoubleprime/operational-evidence-tree-rule-replay-design-2026-05-01.md` §"Lazy Why-Not Trace" |
-| **shared_id / library identity** | `40_design-discussion-A-with-decision-1.md` 的 F 段 placeholder | `10_design-history-bprime-bdoubleprime/operational-evidence-tree-rule-replay-design-2026-05-01.md` §"Condition Ids And Shared Identity" |
-| **Add-condition + binding planner** | `40_design-discussion-A-with-decision-1.md` 的 G 段 placeholder | `10_design-history-bprime-bdoubleprime/operational-evidence-tree-rule-replay-design-2026-05-01.md` §"Adding Conditions And New Variables" |
+| **Check operation** (boolean 合规判定) | `40_design-discussion-A-with-decision-1.md` 的 A 段(round 1+2 + 锁定 shape) + `00_brainstorm-original.md` 命题 4 + `10_*/operational-...md` §"Check" | `70_*` §P0-1 + §P0-2 + §P0-3(待填) |
+| **Fact-level overlay** | `40_*` 的 H 段 placeholder + `10_*/evidence-tree-proof-recheck-ideas-...md` §6.4 `FactValueOverride` | `70_*` §P1-1(待填) |
+| **EvaluationOverlay 多 action 容器** | `40_*` 的 B 段 placeholder + `10_*/evidence-tree-proof-recheck-ideas-...md` §6 整章 | `70_*` §P0-2 |
+| **ProofFrameRechecker 局部诊断器** | `40_*` 的 C 段 placeholder + `10_*/evidence-tree-proof-recheck-ideas-...md` §5 整章 | `70_*` §P0-2 + §P0-3(待填) |
+| **Status vocabulary + 最小因果识别** | `40_*` 的 D 段 placeholder + `10_*/operational-...md` §"Status Vocabulary" + §"Evidence Comparison" | `70_*` §P0-2 + §P1-2(待填) |
+| **Lazy why-not / candidate universe** | `40_*` 的 E 段 placeholder + `10_*/operational-...md` §"Lazy Why-Not Trace" | `70_*` §P2(待填) |
+| **shared_id / library identity** | `40_*` 的 F 段 placeholder + `10_*/operational-...md` §"Condition Ids And Shared Identity" | `70_*` §P2(待填) |
+| **Add-condition + binding planner** | `40_*` 的 G 段 placeholder + `10_*/operational-...md` §"Adding Conditions And New Variables" | `70_*` §P2(待填) |
+
+读完左右两边、回答 baseline 的 "Open conceptual + interaction questions" 时,在 `80_conceptual-interaction-design/` 起新 topic doc。
 
 ### 如果你是设计 reviewer,要做 strategic 决策
 
@@ -74,7 +81,10 @@ rule-replay-line-redesign-input/
 │   ├── 2026-05-02_v0.1.3-disable-condition.audit.md
 │   ├── 2026-05-02_v0.1.4-param-override.md                      # v0.1.4 abandoned (Step 0 negative-result)
 │   └── 2026-05-02_v0.1.4-param-override.audit.md
-└── 60_lessons-learned.md                                        # 经验小结 + 指向 cross-session memory
+├── 60_lessons-learned.md                                        # 经验小结 + 指向 cross-session memory
+├── 70_codebase-baseline-2026-05-03.md                           # 当前代码 baseline(redesign 右半边;Phase 1 inventory + Phase 2 capability 填入中)
+└── 80_conceptual-interaction-design/                            # 概念 + 交互 设计讨论 venue(桥接 baseline + design history)
+    └── README.md                                                # venue 目的 + topic doc 命名/结构/lifecycle
 ```
 
 ## 关键 reset 后 framing 调整(读这些材料前必看)
