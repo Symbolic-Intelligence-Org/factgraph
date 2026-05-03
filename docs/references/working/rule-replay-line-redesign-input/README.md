@@ -32,10 +32,10 @@
 
 | 如果你在做 | 先读 design input | 再读 baseline section(70_) |
 |---|---|---|
-| **Check operation** (boolean 合规判定) | `40_design-discussion-A-with-decision-1.md` 的 A 段(round 1+2 + 锁定 shape) + `00_brainstorm-original.md` 命题 4 + `10_*/operational-...md` §"Check" | `70_*` §P0-1 + §P0-2 + §P0-3(待填) |
+| **Check operation** (boolean 合规判定) | `40_design-discussion-A-with-decision-1.md` 的 A 段(round 1+2 + 锁定 shape) + `00_brainstorm-original.md` 命题 4 + `10_*/operational-...md` §"Check" | `70_*` §P0-1 + §P0-2 + §P0-3 |
 | **Fact-level overlay** | `40_*` 的 H 段 placeholder + `10_*/evidence-tree-proof-recheck-ideas-...md` §6.4 `FactValueOverride` | `70_*` §P1-1(待填) |
 | **EvaluationOverlay 多 action 容器** | `40_*` 的 B 段 placeholder + `10_*/evidence-tree-proof-recheck-ideas-...md` §6 整章 | `70_*` §P0-2 |
-| **ProofFrameRechecker 局部诊断器** | `40_*` 的 C 段 placeholder + `10_*/evidence-tree-proof-recheck-ideas-...md` §5 整章 | `70_*` §P0-2 + §P0-3(待填) |
+| **ProofFrameRechecker 局部诊断器** | `40_*` 的 C 段 placeholder + `10_*/evidence-tree-proof-recheck-ideas-...md` §5 整章 | `70_*` §P0-2 + §P0-3 |
 | **Status vocabulary + 最小因果识别** | `40_*` 的 D 段 placeholder + `10_*/operational-...md` §"Status Vocabulary" + §"Evidence Comparison" | `70_*` §P0-2 + §P1-2(待填) |
 | **Lazy why-not / candidate universe** | `40_*` 的 E 段 placeholder + `10_*/operational-...md` §"Lazy Why-Not Trace" | `70_*` §P2(待填) |
 | **shared_id / library identity** | `40_*` 的 F 段 placeholder + `10_*/operational-...md` §"Condition Ids And Shared Identity" | `70_*` §P2(待填) |

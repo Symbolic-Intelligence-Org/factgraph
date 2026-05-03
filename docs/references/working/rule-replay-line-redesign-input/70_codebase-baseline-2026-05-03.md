@@ -356,12 +356,137 @@ baseline 不回答,留给 conceptual + interaction venue:
 
 ### P0-3 Check operation hook(final bindings + support capture)
 
-- **Current state:** _Phase 2 待填_
-- **Structural observations:** _Phase 2 待填_
-- **Integration anchors:** _Phase 2 待填_
-- **Open conceptual + interaction questions:** _Phase 2 待填_
-- **Existing tests:** _待识别(可能在 test_engine_provenance_surface.py / test_candidate_evidence_steps.py 中)_
-- **Files to read in Phase 2:** `where_eval.py` 完整 / `_support_capture.py` 完整 / `_support.py`(BindingSupportCapture class)
+#### Current state
+
+**两层 evaluate 入口(`where_eval.py` + `ruleref_substrate.py`):**
+
+1. `evaluate_where(view_facts, where) -> list[dict[str, Any]]`(`where_eval.py:22`)— bare 版本:
+   - 只看 view_facts;不支持 `ruleref` atom;返 raw binding list
+   - 内部:`_normalize_where` 切 branches → `_eval_body` per branch(envs `[{}]` 起步,sequential 按 atom 顺序绑定)
+2. `evaluate_native_where(view_facts, where, *, registry, witness_facts, remember_support_artifact) -> NativeWhereEvaluation`(`ruleref_substrate.py:32`)— rich 版本:
+   - 接 `registry`(ruleref 解析)+ `witness_facts`(support 构建)+ `remember_support_artifact` callback
+   - 含 `ruleref` 时:`_rewrite_where_rule_refs` 把 ruleref atom 替换为 pseudo pred + view_facts overlay,再调 `evaluate_where`
+   - 返 `NativeWhereEvaluation(bindings, rule_refs, rule_ref_resolutions)`(frozen DC)
+   - **`_evaluate.py:_evaluate_where_over_view_with_support` 调的就是这个版本** — Check capability 若复用 evaluate path,入口在这里
+
+**WHERE 形态(`_normalize_where`,where_eval.py:81):**
+- 1-level AND:`[atom, atom, ...]`
+- 2-level OR-of-AND:`[[atom, ...], [atom, ...]]`
+- 其他 → `WhereValidationError("where must be one-level AND or two-level OR-of-AND")`
+
+**Atom 类型(`_validate_atom`,where_eval.py:102 — 8 类):**
+
+| kind | shape | 备注 |
+|---|---|---|
+| `pred` | `("pred", pred_id, [terms...])` | 3-tuple |
+| `eq` / `ne` | `("eq", lhs, rhs)` | 双向变量绑定 / 过滤 |
+| `in` | `("in", var, [values...])` | var 必须先 bound |
+| `gt`/`ge`/`lt`/`le` | `(kind, lhs, rhs)` | 至少一边变量;int/time only |
+| `add`/`sub` | `(kind, z, x, y)` | z = x ± y;output is var |
+| `neg` | `("neg", z, x)` | z = -x |
+| `addc`/`mulc` | `(kind, z, x, c)` | c 必须 literal |
+| `not` | `("not", [pred_atoms...])` | sub-body 形态 AND 或 OR-of-AND |
+
+**`ruleref` atom 不在 `_validate_atom`** — 它是 4-tuple `("ruleref", rule_id, version, [terms...])`,只在 `evaluate_native_where` rewrite path 处理(rewrite 后落到 `evaluate_where` 时已不见 ruleref)。但 **support-capture check path(`_atom_satisfies`)直接处理 ruleref**(:276),通过 caller 传入的 `resolution_by_key` 查 pre-computed resolution。
+
+**初始环境(input bundle §3.2 invariant 的 source-of-truth):**
+- `where_eval.py:165` `envs: list[dict[str, Any]] = [{}]`
+- 变量由 atom 顺序自然绑定;不能 inject `envs=[user_binding]` 来"过滤前进"
+
+**Per-binding 满足性 primitives(`_support_capture.py`,Check capability 的最近现成 hook):**
+
+| 函数 | 签名要点 | 用途 |
+|---|---|---|
+| `find_winning_branch_index(*, where, binding, witness_facts, rule_ref_resolutions) -> int` (:145) | OR-of-AND 时找到 binding 满足的 branch | 没满足 → `WhereValidationError("no satisfying branch for final binding")` |
+| `_branch_satisfies(*, branch_index, branch, binding, witness_facts, view_facts, resolution_by_key) -> bool` (:240) | 循环 atom,任一 false → false | branch-level pure verify |
+| `_atom_satisfies(...)` (:263) | 8 类 atom 分流(包含 `ruleref`) | per-atom binding-level check,**无 env mutation** |
+| `_pred_atom_satisfies` (:299) | `_ground_terms` + tuple-in-witness_facts check | 用 witness_facts(asrt_id 级) |
+| `_ruleref_atom_satisfies` (:314) | `resolution_by_key` 查 + `_ground_terms` + row_supports 精确匹配 | resolution 必须 caller 预解析 |
+| `_eq/in/ne/cmp/arith_atom_satisfies` | 纯 binding-level filter | 无 view_facts 依赖 |
+| `_not_atom_satisfies` (:413) | re-run `_exists_not_body`,binding 作起始 env | 用 view_facts(从 witness_facts 转换) |
+| `build_support_artifact_for_binding(...)` (:29) | 生成完整 SupportArtifact | `kind="native_binding_v1"` hardcoded |
+| `derive_rule_ref_edges_for_binding(...)` (:94) | per-binding ruleref edge 抽取 | feed 给 `build_support_artifact_for_binding` |
+| `_ground_terms(terms, binding, *, error_message)` (:431) | 把变量替换为 binding 中的值 | **任一变量不在 binding → 返 None**(grounded 失败 ≠ 异常) |
+
+**Support artifact 数据契约(`_support.py`,5 frozen DC):**
+
+| DC | 字段 | 备注 |
+|---|---|---|
+| `BindingSupportCapture` (:129) | `binding_items` + `support_digest` + `support_kind` | 轻封装,evaluate→accept 桥 |
+| `SupportArtifact` (:96) | `kind` + `root_result_kind: Literal["fact","entity","row"]` + `binding_items` + `pred_witnesses` + `non_fact_steps` + `rule_refs` + `rule_ref_edges` | 完整证据 |
+| `PredWitness` (:35) | `pred_atom_key`(`b{branch}.a{atom}:{pred_id}`)+ `asrt_ids` | 与 ledger 的 hard link |
+| `NonFactStep` (:47) | `step_key`(`b{branch}.a{atom}:{kind}`)+ `kind` + `status` + `details` | non-pred atom 描述 |
+| `RuleRefEdge` (:65) | `ruleref_atom_key` + `rule_ref_id` + `rule_ref_version` + (`child_support_digest` ∨ `unresolved_reason`) | 任一必填 |
+| `ProjectedFact` (:23) | `asrt_id` + `fact_tuple` | witness_facts 的 row |
+| `ProvenanceEnvelope` (:147) | engine-derived(souffle/problog/pyreason)provenance | 独立于 native binding path |
+
+**Support kind 词汇(constants):**
+
+- `"native_binding_v1"`(`build_support_artifact_for_binding` hardcoded)
+- `SOUFFLE_WITNESS_KIND = "souffle_witness_v1"`
+- `ENGINE_NO_WITNESS_KIND = "engine_no_witness_v1"`
+- `PYREASON_PROVENANCE_KIND = "pyreason_provenance_v1"`
+- `PROBLOG_PROVENANCE_KIND = "problog_provenance_v1"`
+- 字面 `"none"`
+- 三个分类 frozenset:
+  - `_DEGRADED_SUPPORT_KINDS = {"none", "engine_no_witness_v1"}`
+  - `_WITNESS_BEARING_SUPPORT_KINDS = {"native_binding_v1", "souffle_witness_v1"}`
+  - `_PROVENANCE_BEARING_SUPPORT_KINDS = {"pyreason_provenance_v1", "problog_provenance_v1"}`
+
+**Identity:**
+- `compute_support_digest(artifact)`(_support.py:311)— deterministic,基于 JSON canonical + sha256
+- 同 artifact 两次构造必同 digest(类似 `candidate_key` 的角色,但用于 SupportArtifact)
+- `BindingItems = tuple[tuple[str, Any], ...]`(sorted 强制),`normalize_binding_items` 是规范器
+
+#### Structural observations
+
+- **Per-binding 满足性 primitives 已存在,Check 不需新写算法:** `_branch_satisfies` + `_atom_satisfies` + `_ground_terms` 已是"给定 binding 逐 atom 验证"的完整实现。Check capability 只需 application-level 包装,**core 不需新增算法**。
+- **evaluate path 与 check path 是 mirror 关系,语义对偶:** `_eval_*_atom` 是 enumerate-and-bind(产 envs);`_atom_satisfies` 是 verify-given(返 bool)。两套各 8 类 atom,完整对偶。redesign Check **不应**在 evaluate 层加 check 路径,直接复用 check primitives。
+- **`ruleref` 在 evaluate 与 check 路径的处理方式不同:** evaluate 路径下 `ruleref` 在调 `evaluate_where` 前被 `_rewrite_where_rule_refs` rewrite;check 路径下 `_atom_satisfies` 直接处理 `ruleref`(因为 binding 已是 evaluate 完的结果,resolution 也已计算)。任何 Check 实现处理 ruleref 必须先确保 `rule_ref_resolutions` 预解析(由 caller 提供给 `find_winning_branch_index`)。
+- **`witness_facts` vs `view_facts` 的语义不同,但可互转:** `view_facts: dict[pred_id, list[tuple]]`(无 asrt_id),`witness_facts: dict[pred_id, list[ProjectedFact]]`(有 asrt_id)。`_pred_atom_satisfies` 用 witness_facts;`_not_atom_satisfies` 用 view_facts(`_view_facts_from_witness_facts` 转换)。Check 若要复用 support-capture primitives 并产 evidence,**必须传 witness_facts**;若只做 bare boolean,理论上可走 view_facts + evaluate path,但那会丢 asrt_id / SupportArtifact 桥。
+- **`SupportArtifact.kind` 是 `str`(非 Literal),但有 6 known constant + 3 set 分类:** 比 `CandidateSet.state` 的纯 free-form 更结构化,但仍非 enum。新 capability 引入新 kind:
+  - 复用 `"native_binding_v1"` 当生成完整 SupportArtifact 时
+  - 新 kind(如 `"native_check_v1"`)当生成轻量 capture
+  - 必须同步评估是否纳入 `_WITNESS_BEARING_SUPPORT_KINDS` / `_PROVENANCE_BEARING_SUPPORT_KINDS` 之一
+- **Variables 形态硬约束:** `_is_var(value)` = `isinstance(value, str) and len(value) > 1 and value.startswith("$")`(where_eval.py:796)。**所有变量名必须 `$` 前缀**;application DTO 表达"变量"按此 convention,**不能**在 application 层重定义。
+- **WhereIR 严格分层:** `_normalize_where` / `_normalize_where_branches` / `_normalize_not_body` 都验证 `tuple` vs `list` 严格分离;混合 → `WhereValidationError`。application DTO 表达 where 必须 normalize 到这两种形态之一。
+- **`WhereValidationError` 是 core 层共享 error:** evaluate / capture / check 三处共用。新 capability application 层错误(extends `ValueError`)与 core 层 `WhereValidationError`(extends `Exception`)边界要分明,不能混用。
+- **不完整 binding 在 `_ground_terms` 是"返 None 而非异常":** `_ground_terms` 任一变量不在 binding → 返 None,然后 `_pred_atom_satisfies` 返 False,`_branch_satisfies` 返 False。这是"silent false"语义,**不区分** "binding 完整但 unsatisfied" vs "binding 不完整 grounded 失败"。
+
+#### Integration anchors
+
+- **Check 的 evaluate 入口选择:** 现有 `evaluate_native_where` 已是 evaluate primitives 的最小拼装(bindings + resolutions + 可选 witness_facts)。Check 实现要决定是否复用此入口(与 `_evaluate.py` 一致)或更轻量(只 `evaluate_where` 后自行处理 ruleref)。
+- **Check 的 binding 输入归一化:** binding 在 core 是 `dict[str, Any]`(unsorted, mutable);在 support 层规范成 `BindingItems = tuple[tuple[str, Any], ...]`(sorted, immutable)。任何"用户提供 binding"接口要在 application 层归一化;可复用 `normalize_binding_items` 的规则,但是否直接 import core support typedef 要由 blueprint 决定。
+- **`_branch_satisfies` 的参数集是 Check 的最小 input set:** `branch / binding / witness_facts / view_facts / resolution_by_key`。Check executor 必须能从 application input 派生这 5 项才能复用 primitive。
+- **`SupportArtifact.binding_items` 与 `BindingSupportCapture.binding_items` 共享 `BindingItems` typedef:** 两边 sorted-normalized。redesign 任何"binding-bearing" 结果 DTO 必须保持同样 sorted-normalized 语义,确保 round-trip 稳定。
+- **`compute_support_digest(artifact)` 是 cross-run identity 安全:** deterministic,可作为"同 binding 同结果"的指纹(类似 `candidate_key` 的角色,但 scoped 到 support artifact)。
+- **`witness_facts` 注入需走 `project_view_facts_with_witness(store.ledger, store.schema_ir)`:** 不能从 store 直接拿。任何调 Check primitives 的 capability 必须先做此投影,不能旁路。
+- **Engine support 在 native 路径全功能,非 native 走 ProvenanceEnvelope:** native 有 `_branch_satisfies`/SupportArtifact 全套;souffle/problog/pyreason 的 binding-level 验证不在 `_atom_satisfies` 范围内(它们的 evaluate 直接由 engine adapter 完成)。Check 的 engine 边界与 evaluate 边界**不必同**。
+
+#### Open conceptual + interaction questions
+
+baseline 不回答,留给 conceptual + interaction venue:
+
+- **Check 接口的 input 边界:** 用户提供 "binding" 还是 "事实集 + binding"?如果只 binding,view_facts/witness_facts 从当前 store 投影(读时点);如果 binding + 事实集,事实集是 overlay(进一步触发 fact-overlay 设计)还是替换?
+- **Check 输出的最小 set:** 仅 boolean(satisfied / not satisfied)?加 reason(哪个 atom failed)?加 winning_branch_index?加 SupportArtifact?这决定 Check 是 lightweight verify 还是 full evidence-bearing。
+- **status 词汇与现有 support_kind 关系:** Check 的 status 词汇(input bundle 提到 `derived/failed_check/below_threshold/temporally_unsatisfied/unknown/unsupported`)是独立词汇,还是与 `SupportArtifact.kind` 或 `_DEGRADED_SUPPORT_KINDS` 等映射?
+- **ruleref 的输入语义:** Check 处理 ruleref atom 时,`rule_ref_resolutions` 是 caller 预先解析(传入)还是 Check 自己解析(需要 registry)?后者意味着 Check 不能完全 stateless。
+- **engine 边界 for Check:** 4 engines 中,native 已有 primitives;非 native engine 有自己 provenance(SupportArtifact vs ProvenanceEnvelope)。Check MVP 是否仅 native?非 native 怎么 check 给定 binding(可能 unsupported / 退化为 evaluate-then-match)?
+- **OR-of-AND 多 branch 都满足时的语义:** `find_winning_branch_index` 返第一个满足的;Check 是否需要"列出所有满足 branches"或"明确 branch ambiguity"?
+- **不完整 binding 的语义:** 现 primitive 是"silent false"(`_ground_terms` 返 None → atom false → branch false)。Check 是否要在 application 层区分 "false because unsatisfied" vs "false because binding incomplete"(对应 input bundle status `failed_check` vs `unknown`)?
+- **fail localization 的成本-收益:** `_branch_satisfies` 当前任一 atom false 即 short-circuit 返 false。若 Check 要给"first failing atom"信息,要修改 short-circuit 逻辑(返 atom_index 而非 bool)。这是侵入性修改 vs 在 application 层包装(call primitives 多次定位)的取舍。
+
+#### Existing tests
+
+- **没有直接 unit test** 覆盖 `BindingSupportCapture` / `build_support_artifact_for_binding` / `find_winning_branch_index` / `_branch_satisfies`(internal helpers,通过上层间接 exercised)
+- 间接覆盖(Check 测试 pattern 参考):
+  - `test_candidate_evidence_steps.py`(per-binding evidence steps,**最接近 Check 语义**)
+  - `test_application_derivation_runtime.py`(evaluate path 完整端到端)
+  - `test_certainty_explain_contracts.py`(SupportArtifact 在 certainty 解释路径)
+  - `test_core_annotation_certainty.py`(annotation + binding 交汇)
+  - `test_souffle_partial_witness_v1.py`(non-native engine 的 witness 形态)
+- engine boundary 相关:
+  - `test_pyreason_engine_eval.py` / `test_souffle_witness_where_compile_v1.py`
 
 ### P1-1 Fact read path(facts → where_eval / store view)
 
