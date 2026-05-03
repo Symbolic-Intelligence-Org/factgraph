@@ -163,8 +163,26 @@ Check 处理 ruleref atom 时,`rule_ref_resolutions`:
 - **A.** caller 预先解析(传入 Check)— Check 完全 stateless
 - **B.** Check 自己解析(需要 registry)— Check 不能完全 stateless
 
-**决议:** _待讨论_  
-**Source:** _待补_
+**决议:** **B'** — application runtime 接 `registry` side-channel 自己解析;**不**在 `CheckRequest` DTO 里带 registry
+
+具体形态:
+
+| 边界 | 形态 |
+|---|---|
+| DTO `CheckRequest` | intent-only(rule/plan + binding + engine 等);**不**含 registry / store |
+| Runtime function | `check_..._runtime(request, *, store, registry)` — side-channel,与 `evaluate_derivation_plans(request, *, store, registry)` 模式一致 |
+
+**行为:**
+- 规则含 `ruleref` 但 `registry is None` 或无法解析 → `status="invalid_request"`(不让底层 primitive 泄出不清晰异常)
+- 规则不含 `ruleref` → registry 可为 `None`
+
+**为什么不 A:** A 的真正问题不是"多一步",而是 precomputed `rule_ref_resolutions` 是**新的一致性边界** — caller 可能传入与当前 rule version / registry / 时点不匹配的 resolutions,产生 **silent wrong result**(比"forgot registry → loud error"更隐蔽危险)。application-first 原则下,application runtime 应该是 resolution 的权威入口,不该把一致性责任外包给 caller。
+
+**Caching:** MVP 不做。未来若做,应在 registry/runtime 内部,key 至少含 rule identity/version + registry snapshot/generation;**不**把 cache/resolution object 暴露成用户协议字段。
+
+**与 §3.5 sub-decision 1 对齐:** native + non-native 都走同一 runtime boundary(都接 `registry` side-channel),不分裂。
+
+**Source:** Discussion §6.7 — user 把 B 精确到 B'(side-channel,不在 DTO);user 给的 "precomputed resolutions 是一致性边界" 论据
 
 ### 3.5 engine 边界
 
@@ -205,8 +223,35 @@ Check 处理 ruleref atom 时,`rule_ref_resolutions`:
 - **B.** 列出所有满足 branches
 - **C.** 明确 branch ambiguity 信号(如 status `ambiguous`)
 
-**决议:** _待讨论_  
-**Source:** _待补_
+**决议:** **A'** — primary-only with deterministic source-order selection
+
+**核心规则:** Check 在至少一个 matched full binding 存在时返 `status="passed"`。`matched_count` 报告满足 requested binding 的 full bindings 总数。`matched_binding` 与 EvidenceEnvelope.`branch_index` 仅指代 deterministic primary match。多 branch 命中**不是** `ambiguous` status,**不**扩展 Layer 1/2。完整 enumeration 属 Evaluate / Diagnose / Layer 3 territory,**不**属 Check MVP。
+
+#### 约束 1:Primary 必须 stable-sorted deterministic,不是 runtime 偶遇
+
+| Engine | Primary 排序规则 |
+|---|---|
+| native / souffle | branch source order;同 branch 内按 binding materialization order |
+| problog / pyreason | 按 candidate payload deterministic order;若 adapter 不保证 → application 层按 `candidate_key` 或 payload canonical order 兜底排序 |
+| partial binding 下 | `matched_binding` 与 `branch_index` **必须**来自同一个 primary matched result(同一完成,不能 split) |
+
+理由:replay / cross-run 比对的稳定性依赖此(否则同 input 不同 run 可能给不同 primary)。
+
+#### 约束 2:Layer 1 只表达数量,不表达 topology
+
+- 保留 `matched_count`
+- **不**加 `branch_indices` / `branches_matched_count` / `ambiguous` 字段
+- 多 branch 命中是 OR 规则的**正常**语义,不是异常状态
+
+**为什么不 B:** B 会把 Check 从 verifier 推向 enumerator — 一旦返 per-binding/per-branch list,用户会要分页 / 排序 / 所有 evidence envelopes / 跨 engine parity,这就变成 Evaluate API 的第二套形态,Check 失去 distinctness。
+
+**为什么不 C:** `ambiguous` 不应进入 `status` enum。`status` 维度是 outcome / capability / error(`passed` / `failed` / `unsupported` / `invalid_request`);多 branch 命中不是第四种 truth outcome,只是 `passed` 的内部结构,不该升级到 outcome 层。
+
+**未来扩展口子(不污染当前 Layer 1/2):**
+- 如 MVP 含 Layer 3 walkable view → Layer 3 只展示 primary evidence
+- 未来 `all_matches` / diagnostic view 可能作为独立 capability(如 `Diagnose` / `Explain`),不并入 Check
+
+**Source:** Discussion §6.8 — user 的 A' refinement(deterministic primary + Layer 1 不含 topology);两条强约束(stable sort + count-only)
 
 ### 3.7 不完整 binding 的语义
 
@@ -248,10 +293,8 @@ evidence walkable view(Layer 3,见 §3.2)在 `passed` 时给完整 per-atom 信�
 
 | 项 | 说明 |
 |---|---|
-| §3.4 ruleref resolution 归属 | caller 预解析(Check stateless)/ Check 自解析(需要 registry)— 本轮未触及,需后续单独讨论 |
-| §3.6 OR-of-AND 多 branch 命中语义 | partial binding 让多 branch 命中更频繁;返 primary `branch_index` + `branches` list / 加 `ambiguous` 信号 / 其他 — 需明确 |
-| MVP 是否纳入 Layer 3(walkable evidence view) | 决定 Check 定位是 lightweight verifier(MVP 只 Layer 1+2)还是 evidence-bearing 操作(MVP 含 Layer 3) |
-| Engine extension surface architecture | 起独立 venue topic(候选名 `engine-extension-surface-architecture.md`);包含 engine-native payload DTO 形态 / engine_options 字段 / 各 engine payload schema 归属等 broader question |
+| MVP 是否纳入 Layer 3(walkable evidence view) | **Check topic 内 last open item** — 决定 Check 定位是 lightweight verifier(MVP 只 Layer 1+2)还是 evidence-bearing 操作(MVP 含 Layer 3) |
+| Engine extension surface architecture | 起独立 venue topic(候选名 `engine-extension-surface-architecture.md`);包含 engine-native payload DTO 形态 / engine_options 字段 / 各 engine payload schema 归属等 broader question — **不阻塞** Check topic resolution |
 
 ---
 
@@ -748,3 +791,95 @@ User 的明确警告:**"当前 rule 使用一套 meta 机制强行统一了它�
 - §3.6 OR-of-AND 多 branch 命中语义(partial binding 让多 branch 命中更频繁)
 - MVP 是否带 walkable evidence view(Layer 3 是否进 MVP;决定 Check 定位 lightweight 还是 evidence-bearing)
 - engine extension surface architecture(独立 venue topic,候选 `engine-extension-surface-architecture.md`)
+
+### 6.7 (2026-05-03) §3.4 ruleref resolution — B' refined to "side-channel registry"
+
+**User refinement(B → B'):**
+
+> "我选 B,但要把措辞精确成 B': application runtime 接 `registry` side-channel,不是 Check protocol DTO 里带 registry。"
+>
+> "我反对 A 的主要原因不是'多一步麻烦',而是 precomputed resolution 是一个新一致性边界:调用方可能传入与当前 rule/version/registry 不匹配的 resolutions。那会制造比'忘传 registry'更隐蔽的错误。既然 application runtime 已经是权威入口,让它负责解析更符合 application-first 的方向。"
+
+**关键澄清:** 我之前的 B 没明确"registry 在 DTO 里 vs runtime side-channel"。user 把这个区分锁定:
+
+| | 形态 |
+|---|---|
+| DTO `CheckRequest` | intent-only:rule/plan + binding + engine 等;**不**含 registry / store |
+| Runtime function | `check_..._runtime(request, *, store, registry)` — side-channel,与 `evaluate_derivation_plans(request, *, store, registry)` 模式一致 |
+
+**A 的真正问题(user 给的更深论据):**
+
+precomputed `rule_ref_resolutions` 是**新的一致性边界**。caller 可能传入与当前 rule version / registry / 时点不匹配的 resolutions,产生 **silent wrong result** — 这比"forgot registry → loud error"更隐蔽危险。application-first 原则下,application runtime 应该是 resolution 的权威入口,不该把一致性责任外包给 caller。
+
+**Caching 原则(per user):**
+
+MVP **不做**。未来若做:
+- 在 registry/runtime 内部做(不在 application protocol 边界)
+- key 至少含 rule identity/version + registry snapshot/generation 等
+- **永远不**把 cache/resolution object 暴露成用户要管理的协议字段
+
+**与 §3.5 sub-decision 1 对齐:**
+
+native + non-native 都走同一 application runtime boundary(都接 `registry` side-channel)。不会出现"native 要 pre-computed resolutions / non-native 要 registry"的双形态分裂。
+
+**本轮决议:** §3.4 resolved as **B'**(side-channel registry,DTO intent-only)。Lift 见 §3.4 section。
+
+**剩余 open(本轮后):**
+- §3.6 OR-of-AND 多 branch 命中语义
+- MVP 是否纳入 Layer 3 walkable view
+- engine extension surface architecture(独立 venue topic)
+
+### 6.8 (2026-05-03) §3.6 OR-of-AND multi-branch — A' refined to "deterministic primary-only"
+
+**User refinement on §3.6 = A:**
+
+> "我选 A': primary-only, source-order deterministic, no ambiguous status"
+
+**两条 user 补充约束(避免实施时滑向不稳定语义):**
+
+**1. Primary 必须 stable-sorted deterministic,不是 runtime 偶然最先拿到的:**
+
+| Engine | Primary 排序规则 |
+|---|---|
+| native / souffle | branch source order;同 branch 内按 binding materialization order |
+| problog / pyreason | 按 candidate payload deterministic order;若 adapter 不保证 → application 层按 `candidate_key` 或 payload canonical order 兜底排序 |
+| partial binding 下 | `matched_binding` 与 `branch_index` **必须**来自同一个 primary matched result(同一完成,不能 split) |
+
+**2. Layer 1 只表达数量,不表达 topology:**
+
+- 保留 `matched_count`
+- **不**加 `branch_indices` / `branches_matched_count` / `ambiguous` 等"多 branch"字段
+- 理由:`ambiguous` 会把"多满足路径"误包装成异常,但它是 OR 规则的**正常**语义
+
+**B 的更深反驳(user 给的 stronger 论据):**
+
+我之前反 B 是"API 简单"理由;user 给的更深论据:**B 会把 Check 从 verifier 推向 enumerator**。一旦返 per-binding/per-branch list,用户自然要求:
+- 完整分页(pagination)
+- 排序(sorting)
+- 所有 evidence envelopes(per-completion evidence)
+- 跨 engine parity(各 engine 的 list 形态一致)
+
+这就变成 **Evaluate API 的第二套形态** — Check 不再 distinct,与 Evaluate 重叠混乱。
+
+**C 的更深反驳:**
+
+我之前反 C 是"加 API 表面";user 给的论据:`ambiguous` **不应**进入 `status` enum,因为:
+- `status` 当前维度是 **outcome / capability / error**(`passed` / `failed` / `unsupported` / `invalid_request`)
+- 多 branch 命中**不是**第四种 truth outcome
+- 它只是 `passed` 的**内部结构**(passed via multiple paths)
+- 把内部结构升级到 status enum 会污染 outcome 维度的纯粹性
+
+**未来扩展路径(不污染当前 Layer 1/2):**
+
+- 如 MVP 决定含 Layer 3 walkable view → Layer 3 只展示 primary evidence
+- 未来扩展提供 `all_matches` 或 diagnostic view(可能作为独立 capability `Diagnose` / `Explain`),**不**并入 Check
+
+**Architectural patterns(generic-applicable,带进未来 capability 讨论):**
+1. **Determinism via stable sort** — 任何"primary 选取"的 API 必须显式定 sort key,否则 replay/diff 不稳定
+2. **Layer minimization / Outcome 维度纯粹性** — `status` 类 enum 是 outcome/capability/error 维度,不能被内部结构(如 multi-branch topology)污染
+
+**本轮决议:** §3.6 resolved as **A'**(deterministic primary-only,Layer 1 不含 topology)。Lift 见 §3.6 section。
+
+**剩余 open(本轮后):**
+- MVP 是否纳入 Layer 3 walkable view(**Check topic 内 last open item**)
+- engine extension surface architecture(独立 venue topic)
