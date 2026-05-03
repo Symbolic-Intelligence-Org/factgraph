@@ -14,17 +14,18 @@
 
 ### Frozen design probe references(do NOT touch,可 git-access)
 
-旧 work 全部保留为可访问参考,**不删不动**:
+**唯一保留分支:** `v0.1.1-evidence-tree-operational-overlay` rollup,含 v0.1.1+v0.1.2+v0.1.3 全部 implemented impl + v0.1.4 abandoned blueprint + 全部 design 材料。
+
+v0.1.2-rule-module-ir / v0.1.3-disable-condition / v0.1.4-param-override 单独分支已**删除**(local + remote,2026-05-03):
+- v0.1.2 + v0.1.3 全部 commits 在 rollup `--no-ff` merge 历史里(无内容损失)
+- v0.1.4 abandoned blueprint 在删分支前已 cherry 入 rollup `docs/blueprints/archive/`(commit `1f9eac9`)
 
 | 资源 | 位置 | 角色 |
 |---|---|---|
-| `v0.1.1-evidence-tree-operational-overlay` 分支 | @ `50f2f81`(含 reset note + 全部 v0.1.x impl + design 材料) | rollup;design probe 顶峰 |
-| `v0.1.2-rule-module-ir` 分支 | @ `2557e3c` | 设计实验 |
-| `v0.1.3-disable-condition` 分支 | @ `bc0ad3e` | 设计实验 |
-| `v0.1.4-param-override` 分支 | @ `835c32b` | abandoned negative-result |
-| `v0.1.1-preview` tag | @ `b7c9169` | preview 试做 tag |
-| `v0.1.2-preview` tag | @ `98474a1` | preview 试做 tag |
-| `v0.1.3-preview` tag | @ rollup merge HEAD | preview 试做 tag |
+| `v0.1.1-evidence-tree-operational-overlay` 分支 | @ `d5c14a3` | **唯一 design probe rollup**(含全部 v0.1.x impl + design 材料 + v0.1.4 archived blueprint) |
+| `v0.1.1-preview` tag | @ `b7c9169` | preview 试做 tag(rollup 历史里) |
+| `v0.1.2-preview` tag | @ `98474a1` | preview 试做 tag(rollup 历史里) |
+| `v0.1.3-preview` tag | @ rollup merge HEAD | preview 试做 tag(rollup 历史里) |
 
 **Reference bundles**(在 rollup 分支上,通过 git access):
 - `docs/references/working/rule-replay/`(B'/B'' 设计讨论历史)
