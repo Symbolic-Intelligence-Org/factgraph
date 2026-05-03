@@ -15,7 +15,7 @@
 
 ## 0. Why this topic exists
 
-Baseline P0-3 揭示:Check 是 P0 三个 capability 中最 ready-to-go 的 — core primitives(`_branch_satisfies` / `_atom_satisfies` / `_ground_terms`)已存在,evaluate / check 是 8-atom mirror,application 层只需薄包装。
+Baseline P0-3 揭示:Check 是 P0 三个 capability 中最 ready-to-go 的 — core primitives(`_branch_satisfies` / `_atom_satisfies` / `_ground_terms`)已存在,evaluate / check 是 8-atom mirror,application 层可以薄包装现有能力。注意:这不等于 direct-primitive-only;partial binding 与 non-native engine 仍需按 §1.3 / §3.5 的 enumerate/evaluate-then-match 路径处理。
 
 起草时 application DTO 形态 — 输入是什么、输出是什么、status 词汇怎么定 — **完全 open**。本 doc 现在记录这些问题的 resolved conceptual / interaction 决议,供后续 blueprint 直接 cite。
 
@@ -322,15 +322,17 @@ Check topic 内部所有 open items 已 resolved(per §6.9);以下两项是 **Ch
   - §3 全部 8 项 ✓(§3.1 仅 binding / §3.2 三层 / §3.3 两 enum / §3.4 B' side-channel registry / §3.5 B' multi-engine + engine-native first / §3.6 A' deterministic primary / §3.7 partial binding 自然消解 / §3.8 不给 fail localization on failed)
   - §4 内部项 ✓(MVP Layer 3 = A' reserve slot)
 - **scoped implementation 前必须冻结的 Protocol Contract(由 blueprint Step 0 完成):**
-  - request DTO:rule reference shape / binding wire shape / engine field / engine_options 是否存在 / query or run identity 是否存在
+  - request DTO:rule reference shape / binding wire shape(含 sort key + canonical encoding,partial 与 complete 等价)/ engine field / engine_options 是否存在 / query or run identity 是否存在
   - response DTO:status-by-field nullable matrix / errors-warnings convention / EvidenceEnvelope field name and nesting
-  - engine-native payload contract:minimum inspectable + serializable shape;typed union vs JSON-compatible envelope;schema ownership
-  - native partial algorithm:final-binding enumeration + subset-match + primary selection + evidence construction from primary full binding
-  - non-native matching contract:BindingItems → candidate payload mapping;payload-nonrepresentable request → `unsupported`
+  - engine-native payload contract:minimum inspectable + serializable shape;typed union vs JSON-compatible envelope;schema ownership;每 engine round-trip serialize/deserialize 测试
+  - native partial algorithm:final-binding enumeration + subset-match + primary selection + evidence construction from primary full binding;banned-call assertion 防 `_branch_satisfies(partial)`(per §7.1)
+  - non-native matching contract:BindingItems → candidate payload mapping;**representability test 的具体 predicate**(payload-nonrepresentable 必须可程序化判定,不能猜测);payload-nonrepresentable request → `unsupported`
+  - non-native primary tiebreaker:problog/pyreason adapter 不保证 ordering 时,application 层用 `candidate_key` 或 payload canonical sort 兜底(per §3.6 约束 1);Step 0 必须明确兜底 sort 的具体 key
   - ruleref failure contract:missing registry / partial resolution / unresolved child rule exact `invalid_request` details
   - runtime failure contract:unexpected engine/runtime errors propagate through runtime error channel,not `unsupported` / `invalid_request`
   - replay/persistence non-decision:Check MVP result identity / snapshot semantics / audit persistence either explicitly out of scope or explicitly defined
-  - test matrix:complete pass/fail,partial multi-match,deterministic primary,OR branch order,invalid binding,RuleRef with/without registry,native evidence envelope,non-native supported/unsupported boundary
+  - drift-prevention(per §7):每条 §7.1-§7.6 trap 对应 Step 0 prevention/detection 决议(banned call assertions / DTO field rejection / round-trip tests)
+  - test matrix:complete pass/fail,partial multi-match,deterministic primary,OR branch order,invalid binding,RuleRef with/without registry,native evidence envelope,non-native supported/unsupported boundary,**§7 trap 反测试**(banned partial-to-primitive call / opaque payload rejection / None ≠ degraded / DTO 拒 registry 字段)
 - **blueprint 起步指引:** 在 `docs/blueprints/active/YYYY-MM-DD_check-operation.md` 创建,§4 Current Context cite:
   - 本 doc(80_/check-operation-conceptual-interaction.md)— 概念 + 交互决议
   - baseline §P0-1 / §P0-2 / §P0-3 — 现有代码 anchor
@@ -993,3 +995,62 @@ native + non-native 都走同一 application runtime boundary(都接 `registry` 
 **Remaining non-blocking caution:** one reviewer flagged Souffle body-only/mixed support wording as too absolute. The formal §3.5 table is now tightened: **representability gates all non-native Check**,including Souffle. If engine candidate payload / support output cannot prove the requested binding,return `unsupported`;do not guess `failed`.
 
 **Final verdict:** no conceptual blocker remains for starting a **draft** Check blueprint. The blueprint must still run a Step 0 contract-freezing gate before `scoped` implementation,with special attention to protocol contract,non-native representability,runtime failure mapping,and tests.
+
+---
+
+## 7. Drift risks / implementation traps(blind validation 抓出 — 防止设计被误读)
+
+本节由三轮 blind validation 抓出的高风险误读模式整理(§6.10 / §6.11 user 双盲 + 本轮 fresh blueprint Step 0 author 模拟 + cross-doc consistency auditor)。每条都对应 §1-§5 已有决议,但 reviewer 反映这些点容易在 Step 0 / impl 时滑回错误方向。**Step 0 author 应在 protocol contract 冻结前逐条 cross-check**,并把 banned-call 类的禁止 pattern 落成 assertion test。
+
+### 7.1 NEVER 把 partial binding 直接喂给 `_branch_satisfies`
+
+- **Trap:** 看到 partial binding 输入,直觉是"调 `_branch_satisfies(branch, binding=user_partial, ...)`"或"`envs=[user_partial]` 起步"
+- **为什么错:** baseline §P0-3 揭示 `_ground_terms` 对未绑定变量返 None,触发 silent false → atom False → branch False → 整体 wrong `failed`。这是 silent-wrong-result 类 bug,无 loud failure
+- **正确做法(per §1.3 + §3.5):** Native partial binding **必须**先 enumerate 完整 final bindings,再用用户 partial binding 做 subset match;选定 primary full binding 后,**用该 full binding 构造 evidence**(不是用 partial)
+- **Step 0 obligation:** 写明禁用 call pattern;加 banned-call assertion test
+
+### 7.2 NEVER 把 engine-native payload 设计成 opaque blob 或强行抹平
+
+- **Trap A(opaque):** 把 `native_payload` 类型为 `bytes` 或不可 inspect 的 wrapped object
+- **Trap B(flatten):** 为了 "uniform DTO" 把 PyReason temporal / ProbLog probability 压成 SupportArtifact-like 形态
+- **为什么错:** §6.5 称 flatten 为"切到大动脉" — engine 各自核心能力(temporal reasoning / probability proof)在被压平的 payload 里丢失;opaque 同样违反 §6.9 "must be inspectable / serializable"
+- **正确做法(per §2.2 + §6.5 + §6.9):** native_payload 按 engine 各自保真;**必须** inspectable / serializable;具体 typing(typed union / JSON-compatible envelope)留 Step 0 决,但**不能**牺牲 engine 特性
+- **Step 0 obligation:** typed union vs envelope 的选择必须证明每 engine 的核心 evidence 不丢失;每 engine 加 round-trip serialize/deserialize 测试
+
+### 7.3 NEVER 把 `branch_atom_projection=None` 解读为 "evidence missing / degraded"
+
+- **Trap:** 看到 `None`,误以为 "evidence 不可用" / "engine 不支持"。可能后果:
+  - 把 non-native engine 的 passed 结果错误降级
+  - 在 status 上添加 "degraded" 等不存在的 outcome
+  - 调用方弹出 "evidence unavailable" 误导信号
+- **为什么错(per §6.9):** `branch_atom_projection` MVP **总是 None**(slot reserved,不实施);`None` 含义是 "projection 未实现",**不是** "evidence 未提供"。Evidence 通过 Layer 2 native_payload 仍**完整**可获取
+- **正确做法:** UI / consumer 看到 `branch_atom_projection=None` 时应继续读 `native_payload`(passed 时总是有);**不**展示 "evidence missing" 信号
+- **Step 0 obligation:** 在文档/test 里显式声明 "None ≠ degraded" 语义;加一个 test:passed 结果 + branch_atom_projection=None + native_payload 非空 应被识别为 fully evidence-bearing
+
+### 7.4 NEVER 把 `registry` 加到 `CheckRequest` DTO
+
+- **Trap:** 看到 Check 需要 registry(处理 ruleref),直觉是"那就在 request DTO 里加 registry 字段"
+- **为什么错(per §3.4):** registry 是 application runtime side-channel(与 store 同级);若放进 DTO,caller 可能传入 stale / mismatched registry 与当前 rule version,产生 silent wrong result。`CheckRequest` 必须保持 intent-only
+- **正确做法:** runtime function `check_..._runtime(request, *, store, registry)` 接 registry;DTO 只表达 user intent
+- **Step 0 obligation:** request DTO schema 显式禁 registry 字段(写到 schema doc/test 里);runtime function signature 必须有 registry side-channel,与 `evaluate_derivation_plans(request, *, store, registry)` 模式一致
+
+### 7.5 §6 是 historical trace,不是 current contract;§1-§5 始终 wins
+
+- **Trap:** Implementer 读 §6.X iteration 早期内容(如 §6.1 的 `satisfied` field、§6.3 的 two-side walkable interface、§6.4 的 `degraded` projection_status)以为是 current contract
+- **正确做法:** §1-§5 是 single source of truth for current decisions;§6 仅作 audit trail。如 §6 与 §1-§5 矛盾,以 §1-§5 为准(per doc 顶部 "形态" 规则)
+- **特别提醒:** §3.5 Souffle 行(post-§6.11 representability tightening)**取代** §6.6 早期的 "Souffle 同 native passed/failed" 表述 — Step 0 应从 §3.5 拷贝 Souffle 契约,**不**从 §6.X
+- **Step 0 obligation:** Step 0 sketch 不引用 §6.X 任一段;只引用 §1-§5。引用 §6.X 仅在 audit / 决议追溯时使用
+
+### 7.6 表面看似"工程优化"但实际破坏 invariant 的 anti-patterns
+
+整理几个容易被误判为优化的反模式(全部禁):
+
+- **"为了 cache resolution 在 CheckRequest 加 resolutions 字段"** — 违反 §3.4 / 7.4;caching 应在 registry/runtime 内部
+- **"为了 simplify API 把 EvidenceEnvelope common metadata 摊平进 Core result 字段"** — 违反 §2.2 三层结构;EvidenceEnvelope 是 Check result 的 optional evidence field,BranchAtomProjection 是 EvidenceEnvelope 子字段。保持这个嵌套是有意设计(便于 Layer 3 deferred 添加)
+- **"为了 uniform 把 problog/pyreason 强行投到 branch/atom view"** — 违反 §6.5 engine-respectful;应返 projection_status="partial" 或 "unsupported"
+- **"为了 helpful 在 status=failed 加 first_failing_atom 字段"** — 违反 §3.8;fail localization 是独立 capability(Diagnose/Explain),不在 Check
+- **"为了 batch 在 CheckRequest 加 bindings: list 字段"** — 违反 §6.8 (Check 是 verifier 不是 enumerator);批量 check 是后续 capability,不在 MVP
+
+### 7.7 Step 0 cross-check checklist(由 blind validation 推导)
+
+Blueprint Step 0 author 在 freeze protocol contract 前,应针对每条 §7.1-§7.6 写一行 explicit "我们的 Step 0 决议如何 prevent / detect 这条 trap"。如某条无 prevention,Step 0 不能进入 `scoped`。

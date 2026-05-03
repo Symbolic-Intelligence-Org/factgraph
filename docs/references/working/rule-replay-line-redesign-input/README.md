@@ -32,7 +32,7 @@
 
 | 如果你在做 | 先读 design input | 再读 baseline section(70_) |
 |---|---|---|
-| **Check operation** (boolean 合规判定) | `40_design-discussion-A-with-decision-1.md` 的 A 段(round 1+2 + 锁定 shape) + `00_brainstorm-original.md` 命题 4 + `10_*/operational-...md` §"Check" | `70_*` §P0-1 + §P0-2 + §P0-3 |
+| **Check operation** (boolean 合规判定) | `40_design-discussion-A-with-decision-1.md` 的 A 段(round 1+2 + 锁定 shape) + `00_brainstorm-original.md` 命题 4 + `10_*/operational-...md` §"Check" | `70_*` §P0-1 + §P0-2 + §P0-3 + **`80_/check-operation-conceptual-interaction.md`(resolved 2026-05-03,authoritative input for blueprint;cite 此 doc + baseline 即可起 draft blueprint)** |
 | **Fact-level overlay** | `40_*` 的 H 段 placeholder + `10_*/evidence-tree-proof-recheck-ideas-...md` §6.4 `FactValueOverride` | `70_*` §P1-1(待填) |
 | **EvaluationOverlay 多 action 容器** | `40_*` 的 B 段 placeholder + `10_*/evidence-tree-proof-recheck-ideas-...md` §6 整章 | `70_*` §P0-2 |
 | **ProofFrameRechecker 局部诊断器** | `40_*` 的 C 段 placeholder + `10_*/evidence-tree-proof-recheck-ideas-...md` §5 整章 | `70_*` §P0-2 + §P0-3 |

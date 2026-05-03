@@ -465,9 +465,9 @@ baseline 不回答,留给 conceptual + interaction venue:
 - **`witness_facts` 注入需走 `project_view_facts_with_witness(store.ledger, store.schema_ir)`:** 不能从 store 直接拿。任何调 Check primitives 的 capability 必须先做此投影,不能旁路。
 - **Engine support 在 native 路径全功能,非 native 走 ProvenanceEnvelope:** native 有 `_branch_satisfies`/SupportArtifact 全套;souffle/problog/pyreason 的 binding-level 验证不在 `_atom_satisfies` 范围内(它们的 evaluate 直接由 engine adapter 完成)。Check 的 engine 边界与 evaluate 边界**不必同**。
 
-#### Open conceptual + interaction questions
+#### Conceptual + interaction questions(已 resolved)
 
-baseline 不回答,留给 conceptual + interaction venue。**Resolved by** `80_conceptual-interaction-design/check-operation-conceptual-interaction.md` (2026-05-03);保留本列表作为 original baseline inventory,不要把它当 unresolved design work:
+**Status:** **resolved** by `80_conceptual-interaction-design/check-operation-conceptual-interaction.md` (2026-05-03)。本列表保留作为 original baseline inventory,**不再是 open design work**;每项标 baseline 当时提的 question 与 topic doc 给出的 resolved 决议(细节见 topic doc §1-§3 与对应 §6.X discussion log):
 
 - **Check 接口的 input 边界:** resolved as binding-only;view_facts/witness_facts 从 current store read projection 派生;no fact overlay / replacement in Check.
 - **Check 输出的最小 set:** resolved as three layers:core result + EvidenceEnvelope + reserved `branch_atom_projection=None` slot;no failed-atom localization.
