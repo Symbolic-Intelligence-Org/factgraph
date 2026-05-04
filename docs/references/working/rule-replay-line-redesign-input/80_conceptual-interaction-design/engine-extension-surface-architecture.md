@@ -514,6 +514,8 @@ For new capabilities, or for any future change that adopts this §6.3 resolution
 
 Exact status names remain capability-owned. §3.4 only commits the architectural boundary: evidence lookup miss is not proof of non-satisfaction and not a degraded projection.
 
+Tracked follow-up: any future change to Check's lookup-to-`None` paths in `derivation_check_runtime.py` re-enters this §6.3 decision and should replace MVP silent-skip behavior with observable warning / error signaling before claiming conformance.
+
 #### Ownership Boundary
 
 | Layer | Owns | Does Not Own |
