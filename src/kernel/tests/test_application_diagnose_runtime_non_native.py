@@ -733,6 +733,58 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
         self.assertEqual(result.failure_kind, "no_candidate")
         self.assertNotEqual(result.failure_kind, "atom_localized")
 
+    def test_problog_never_returns_failure_kind_atom_localized(self) -> None:
+        # §7-Diagnose-5 problog parity: mirror the souffle / pyreason
+        # explicit anti-regression assertions so problog is named-covered
+        # under the §7-Diagnose-5 gate alongside its sibling engines.
+        store, request = self._build_request("problog", binding=(("$p", "person-99"),))
+        candidate = _make_provenance_candidate(engine="problog")
+        envelope = _make_provenance_envelope(engine="problog")
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[candidate],
+        ), patch(
+            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            return_value=envelope,
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_kind, "no_candidate")
+        self.assertNotEqual(result.failure_kind, "atom_localized")
+
+    def test_pyreason_unsupported_when_lookup_miss_only(self) -> None:
+        # §7-Diagnose-6 pyreason single-candidate-miss parity: pyreason's
+        # standalone lookup-miss case was previously covered only transitively
+        # via the multi-candidate `lookup_miss_outranks_no_candidate` test.
+        # This explicit single-candidate test mirrors souffle / problog
+        # equivalents so all three non-native engines have named coverage of
+        # the §7-Diagnose-6 evidence-miss observability gate.
+        store, request = self._build_request("pyreason", binding=(("$p", "person-1"),))
+        candidate = _make_provenance_candidate(engine="pyreason")
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[candidate],
+        ), patch(
+            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            return_value=None,
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "unsupported")
+        self.assertIsNone(result.failure_kind)
+        self.assertIsNone(result.matched_binding)
+        self.assertIsNone(result.diagnostic_payload)
+        self.assertEqual(len(result.errors), 1)
+        error = result.errors[0]
+        self.assertEqual(error.code, "EVIDENCE_LOOKUP_MISS")
+        self.assertEqual(error.details["engine"], "pyreason")
+        self.assertEqual(error.details["support_kind"], "pyreason_provenance_v1")
+        self.assertEqual(error.details["support_digest"], candidate.support_digest)
+        self.assertEqual(error.details["candidate_key"], candidate.candidate_key)
+
 
 if __name__ == "__main__":
     unittest.main()
