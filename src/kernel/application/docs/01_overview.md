@@ -1,7 +1,7 @@
 # Application 模块总览(kernel)
 
 - 范围:`src/kernel/application`
-- 最后更新:2026-04-28
+- 最后更新:2026-05-04
 - 目标读者:需要理解 Python runtime authority、SDK adapter 边界与 service/agent consumer 约束的开发者
 
 ## 1. 模块职责
@@ -36,6 +36,7 @@
   - `query.py`: `QueryRuntimeRequest` / `QueryRuntimeResponse` / return contract
   - `ingest.py`: normalized ingest item/request/result DTOs
   - `derivation.py`: compiled derivation evaluate/accept request DTOs
+  - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
 - `entity_view.py`
@@ -127,6 +128,7 @@ Key focused tests:
 - `test_application_query_runtime.py`
 - `test_application_ingest_runtime.py`
 - `test_application_derivation_runtime.py`
+- `test_application_check_protocol.py`
 - `test_sdk_facade_application_delegate.py`
 - `test_sdk_batch_application_delegate.py`
 - `test_sdk_query_policies.py`

@@ -156,22 +156,22 @@ Layer placement is not negotiable: substrate starts in `kernel.application`.
 ## 7. Acceptance
 
 - [x] Step 0 freezes the Protocol Contract before status moves from `draft` to `scoped`.
-- [ ] Check protocol DTO(s) live under `kernel.application.protocol`.
-- [ ] CheckRequest DTO schema rejects `store`, `registry`, and precomputed `rule_ref_resolutions` fields.
-- [ ] CheckRequest rejects multi-head plans with `ProtocolShapeError`.
+- [x] Check protocol DTO(s) live under `kernel.application.protocol`.
+- [x] CheckRequest DTO schema rejects `store`, `registry`, and precomputed `rule_ref_resolutions` fields.
+- [x] CheckRequest rejects multi-head plans with `ProtocolShapeError`.
 - [ ] Check runtime lives under `kernel.application` and takes dependencies via explicit side-channel parameters.
 - [ ] Complete native binding pass/fail behavior is covered by tests.
 - [ ] Partial native binding pass/fail and multi-match behavior are covered by tests.
 - [ ] Tests prove partial binding is not evaluated by directly calling `_branch_satisfies` on the partial input.
 - [ ] Deterministic primary selection is covered by tests, including OR branch order.
 - [ ] RuleRef with/without registry behavior is covered by tests.
-- [ ] Malformed CheckRequest DTO shape (wrong container type, $-prefix violation, missing required field, malformed BindingItems structure) raises `ProtocolShapeError` at DTO construction; **not** converted to `status="invalid_request"` (per existing `application.protocol.common` convention).
+- [x] Malformed CheckRequest DTO shape (wrong container type, $-prefix violation, missing required field, malformed BindingItems structure) raises `ProtocolShapeError` at DTO construction; **not** converted to `status="invalid_request"` (per existing `application.protocol.common` convention).
 - [ ] Semantically invalid but well-shaped request (unknown variable in rule body or RuleRef without registry) maps to `status="invalid_request"` with `errors` populated.
-- [ ] Native evidence envelope is inspectable / serializable and preserves support metadata.
-- [ ] EvidenceEnvelope round-trips engine-native payload without flattening away engine-specific fields.
+- [x] Native evidence envelope is inspectable / serializable and preserves support metadata.
+- [x] EvidenceEnvelope round-trips engine-native payload without flattening away engine-specific fields.
 - [ ] Non-native representability boundary is covered by tests for at least the scoped engine set.
-- [ ] `branch_atom_projection=None` is tested as "projection not implemented", not "evidence degraded".
-- [ ] Affected application docs are updated.
+- [x] `branch_atom_projection=None` is tested as "projection not implemented", not "evidence degraded".
+- [x] Affected application docs are updated.
 - [ ] If an SDK shell is added, SDK docs/tests prove it is a delegate and not a substrate.
 - [ ] No release-base / publish / projection action is performed.
 

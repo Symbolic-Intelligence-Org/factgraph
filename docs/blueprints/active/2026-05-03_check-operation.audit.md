@@ -13,6 +13,7 @@
 | 2026-05-03 | draft | Step 0.C algorithms + drift prevention freeze | All 8 sub-decisions captured with corrections (C1 unified native via evaluate_native_where; C3 native bypasses extract_match_binding seam; C4 explicit primary sort; C6 request-level representability precheck distinguishes unsupported from failed; C8 test wording refined for TypeError vs ProtocolShapeError + serialize round-trip). Headline freeze: final-result matching only; representability at request level distinguishes unsupported from failed; evidence built only for passed primary. Proceeding to Step 0.D lift + finalize. |
 | 2026-05-04 | draft → scoped | Step 0.D lift complete | Blueprint §5 / §8 lifted from Step 0.B/C audit decisions. Protocol contract is now scoped; implementation can begin without re-litigating concept or DTO semantics. |
 | 2026-05-04 | scoped | Step 1 immediate multi-head policy locked | CheckRequest rejects multi-head plans at DTO construction with ProtocolShapeError. Multi-head remains evaluate orchestration input, not Check input. |
+| 2026-05-04 | scoped | Step 1 protocol DTOs implemented | Added `kernel.application.protocol.derivation_check` with CheckRequest, CheckResult, EvidenceEnvelope, and CheckStatus; exported protocol symbols; added focused protocol tests and synced application docs. Runtime implementation remains pending. |
 
 ## Decision Notes
 

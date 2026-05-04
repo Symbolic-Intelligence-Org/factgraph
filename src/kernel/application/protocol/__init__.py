@@ -7,6 +7,7 @@ from .derivation import (
     DerivationAcceptRequest,
     DerivationEvaluateRequest,
 )
+from .derivation_check import CheckRequest, CheckResult, CheckStatus, EvidenceEnvelope
 from .entity_read import (
     AssertionRecordDTO,
     EntityReadRequest,
@@ -47,6 +48,9 @@ from .schema_runtime import EntityRef, EntitySelector, FieldPath, IdentityValue,
 __all__ = [
     "AppliedOpResultDTO",
     "AssertionRecordDTO",
+    "CheckRequest",
+    "CheckResult",
+    "CheckStatus",
     "CompiledDerivationPlan",
     "CompiledHeadCall",
     "DerivationAcceptRequest",
@@ -60,6 +64,7 @@ __all__ = [
     "EntityWritePlan",
     "EntityWriteResult",
     "ErrorDTO",
+    "EvidenceEnvelope",
     "FieldAssertionsDTO",
     "FieldFilterValue",
     "FieldMutation",
