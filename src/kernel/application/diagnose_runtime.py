@@ -1,15 +1,16 @@
 """Application-layer Diagnose runtime executor.
 
 Native Diagnose supports pass / fail classification, native atom-localization,
-and semantic invalid_request prechecks. Non-native engines are currently
-represented through the §8 Step 4 request-level representability gate; actual
-souffle / problog / pyreason dispatch lands in §8 Step 5-6.
+and semantic invalid_request prechecks. Souffle dispatch lands in §8 Step 5
+(evaluate-then-classify with three-bucket logic + lookup-miss precedence per
+audit C4 + §6.3 Decision #5). ProbLog / PyReason dispatch is §8 Step 6.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
+from kernel.core.derivation.candidates import CandidateSet
 from kernel.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from kernel.core.rules.ruleref_substrate import evaluate_native_where
 from kernel.core.rules.where_eval import (
@@ -27,7 +28,11 @@ from kernel.core.rules.where_eval import (
     _vars_in_not_bodies,
     _where_ast_gate_enabled,
 )
-from kernel.core.store._support import BindingItems, normalize_binding_items
+from kernel.core.store._support import (
+    BindingItems,
+    SupportArtifact,
+    normalize_binding_items,
+)
 from kernel.core.store._support_capture import find_winning_branch_index
 from kernel.core.store.runtime import Store
 from kernel.core.view.projector import (
@@ -35,7 +40,14 @@ from kernel.core.view.projector import (
     project_view_facts_with_witness,
 )
 
-from .protocol import DiagnoseAtomLocator, DiagnoseRequest, DiagnoseResult, ErrorDTO
+from .derivation_runtime import evaluate_derivation_plans
+from .protocol import (
+    DerivationEvaluateRequest,
+    DiagnoseAtomLocator,
+    DiagnoseRequest,
+    DiagnoseResult,
+    ErrorDTO,
+)
 
 
 class DiagnoseRuntimeError(ValueError):
@@ -82,11 +94,13 @@ def diagnose_derivation_binding(
     if representability_errors:
         return _diagnose_unsupported(request, errors=representability_errors)
 
-    if request.engine != "native":
-        raise NotImplementedError(
-            "Diagnose non-native dispatch is scoped for §8 Step 4-6"
-        )
-    return _diagnose_native(request, store=store, registry=registry)
+    if request.engine == "native":
+        return _diagnose_native(request, store=store, registry=registry)
+    if request.engine == "souffle":
+        return _diagnose_souffle(request, store=store, registry=registry)
+    raise NotImplementedError(
+        "Diagnose problog / pyreason dispatch is scoped for §8 Step 6"
+    )
 
 
 def _diagnose_native(
@@ -470,6 +484,176 @@ def _diagnose_ruleref_preflight(
                 )
             )
     return tuple(errors)
+
+
+def _diagnose_souffle(
+    request: DiagnoseRequest,
+    *,
+    store: Store,
+    registry: RuleRegistry | None,
+) -> DiagnoseResult:
+    """Souffle Diagnose dispatch via three-bucket classification (audit C4).
+
+    Algorithm:
+
+    - Delegate evaluate to ``evaluate_derivation_plans`` in souffle mode.
+    - For each candidate, look up its ``SupportArtifact`` from the store via
+      the typed internal API. Three buckets per candidate:
+      - **lookup-miss**: artifact lookup returned ``None`` (engine advertised
+        ``souffle_witness_v1`` support but no payload was retrievable).
+      - **match**: artifact present and ``binding_items`` subset-matches
+        ``request.binding``.
+      - **no-match**: artifact present but binding does not subset-match.
+    - Result classification (precedence-ordered):
+      - match bucket non-empty → ``status="passed"`` (primary by Check 0.C C4
+        sort: ``(branch_index, binding_items, candidate_key)``)
+      - match empty AND lookup-miss bucket non-empty → ``status="unsupported"``
+        with ``EVIDENCE_LOOKUP_MISS`` errors (one per missing candidate)
+      - all buckets accounted, no match, no lookup-miss → ``status="failed"``
+        with ``failure_kind="no_candidate"``
+
+    **Lookup-miss outranks no_candidate** per §6.3 Decision #5: evidence-miss
+    is an observable contract problem, never silent-skipped (Diagnose's
+    independent §6.3 binding is what motivates Q1 Sibling — see audit Q1
+    supersede note).
+
+    Diagnose-side helpers (``_lookup_support_artifact``,
+    ``_derive_branch_index_from_artifact``, ``_parse_branch_index``) are local
+    copies of Check's per Q1 Sibling D11 invariant; deferred refactor per
+    topic §1.3 + §6.2 wave-ordering second-consumer rule.
+    """
+    eval_request = DerivationEvaluateRequest(
+        plans=(request.plan,),
+        engine="souffle",
+    )
+    candidates = evaluate_derivation_plans(
+        eval_request, store=store, registry=registry
+    )
+
+    matches: list[tuple[CandidateSet, SupportArtifact, dict[str, Any]]] = []
+    lookup_miss: list[CandidateSet] = []
+    for candidate in candidates:
+        artifact = _lookup_support_artifact(store, candidate.support_digest)
+        if artifact is None:
+            lookup_miss.append(candidate)
+            continue
+        binding_dict = dict(artifact.binding_items)
+        if _diagnose_binding_matches(binding_dict, request.binding):
+            matches.append((candidate, artifact, binding_dict))
+
+    if matches:
+        def _sort_key(
+            item: tuple[CandidateSet, SupportArtifact, dict[str, Any]],
+        ) -> tuple[Any, ...]:
+            candidate, artifact, binding = item
+            branch_index = _derive_branch_index_from_artifact(artifact)
+            branch_key = (
+                (0, branch_index) if branch_index is not None else (1, 0)
+            )
+            return (
+                branch_key,
+                normalize_binding_items(binding),
+                candidate.candidate_key,
+            )
+
+        matches.sort(key=_sort_key)
+        _primary_candidate, _primary_artifact, primary_binding = matches[0]
+        return DiagnoseResult(
+            status="passed",
+            requested_binding=request.binding,
+            matched_count=len(matches),
+            matched_binding=normalize_binding_items(primary_binding),
+            failure_kind=None,
+            diagnostic_payload=None,
+            errors=(),
+            warnings=(),
+        )
+
+    if lookup_miss:
+        errors = tuple(
+            ErrorDTO(
+                code="EVIDENCE_LOOKUP_MISS",
+                message=(
+                    f"souffle candidate advertised support_kind="
+                    f"{candidate.support_kind!r} but lookup returned None"
+                ),
+                path=("candidates",),
+                details={
+                    "engine": "souffle",
+                    "support_kind": candidate.support_kind,
+                    "support_digest": candidate.support_digest,
+                    "candidate_key": candidate.candidate_key,
+                },
+            )
+            for candidate in lookup_miss
+        )
+        return _diagnose_unsupported(request, errors=errors)
+
+    return DiagnoseResult(
+        status="failed",
+        requested_binding=request.binding,
+        matched_count=0,
+        matched_binding=None,
+        failure_kind="no_candidate",
+        diagnostic_payload=None,
+        errors=(),
+        warnings=(),
+    )
+
+
+def _lookup_support_artifact(store: Store, digest: str) -> SupportArtifact | None:
+    """Diagnose's own typed support-artifact lookup (Q1 Sibling D11 invariant).
+
+    Mirrors Check's ``_lookup_support_artifact`` without importing Check
+    runtime helpers; uses ``Store._lookup_support_artifact`` typed internal API
+    per audit §6.3 ownership boundary.
+    """
+    return store._lookup_support_artifact(digest)
+
+
+def _derive_branch_index_from_artifact(artifact: SupportArtifact) -> int | None:
+    """Extract branch_index from a SupportArtifact's atom-key prefixes.
+
+    Mirror of Check's helper per Q1 Sibling. Souffle artifacts encode branch
+    indices via ``b{n}.a{m}:...`` on ``pred_witnesses`` and ``non_fact_steps``;
+    return the integer if all keys agree, ``None`` otherwise.
+    """
+    branch_indices: set[int] = set()
+    for witness in artifact.pred_witnesses:
+        parsed = _parse_branch_index(witness.pred_atom_key)
+        if parsed is not None:
+            branch_indices.add(parsed)
+    for step in artifact.non_fact_steps:
+        parsed = _parse_branch_index(step.step_key)
+        if parsed is not None:
+            branch_indices.add(parsed)
+    if len(branch_indices) == 1:
+        return next(iter(branch_indices))
+    return None
+
+
+def _parse_branch_index(key: str) -> int | None:
+    """Parse ``b{n}.a{m}:...`` into the ``{n}`` integer (Diagnose's local copy)."""
+    if not isinstance(key, str) or not key.startswith("b"):
+        return None
+    try:
+        dot_pos = key.index(".")
+    except ValueError:
+        return None
+    if dot_pos <= 1:
+        return None
+    if dot_pos + 1 >= len(key) or key[dot_pos + 1] != "a":
+        return None
+    colon_pos = key.find(":", dot_pos + 2)
+    if colon_pos == -1:
+        return None
+    atom_index_text = key[dot_pos + 2 : colon_pos]
+    if not atom_index_text.isdigit():
+        return None
+    try:
+        return int(key[1:dot_pos])
+    except ValueError:
+        return None
 
 
 __all__ = [
