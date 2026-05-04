@@ -1,6 +1,6 @@
 # Current Operational Memory
 
-最后更新:2026-05-04(Check shipped + engine-extension Wave 1 closed through `44eefab`;Diagnose §8 Step 1 protocol DTOs at `ceb54bb`;Step 2 native MVP at `bf9abf6`;handoff baseline 见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
+最后更新:2026-05-04(Check shipped + engine-extension Wave 1 closed through `44eefab`;Diagnose §8 Step 3 native hardening at `7092bdf`;handoff baseline 见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
 
 ## 当前阶段(2026-05-03 — REDESIGN BASE)
 
@@ -92,7 +92,7 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 
 ### 下一步方向(2026-05-04 起)
 
-详情见 [`session_handoffs/2026-05-04.md`](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md) §10,但该 handoff 写于 §6.2 前;当前 continuation 已到 `bf9abf6`。摘要:
+详情见 [`session_handoffs/2026-05-04.md`](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md) §10,但该 handoff 写于 §6.2 前;当前 continuation 已到 `7092bdf`。摘要:
 
 - engine-extension-surface topic Wave 1 已 closed:
   - §6.2 strategic framing:`1f084f8`
@@ -107,7 +107,8 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - Diagnose Step 0.D lift complete + blueprint moved `draft → scoped`:`e1dc6d4`
 - Diagnose §8 Step 1 protocol DTOs complete:`ceb54bb`
 - Diagnose §8 Step 2 native runtime MVP complete:`bf9abf6`
-- Next natural action:Diagnose §8 Step 3 native hardening(RuleRef happy-path, deterministic primary hardening, §7-Diagnose-4 anti-regression expansion)
+- Diagnose §8 Step 3 native hardening complete:`7092bdf`
+- Next natural action:Diagnose §8 Step 4 non-native representability gate(D10 for souffle/problog/pyreason + §7-Diagnose-5)
 - baseline P1/P2 仍待填,但应随 Diagnose source pass 从 consumer angle 补,不单独 abstract inventory
 
 任何新工作必须满足 application-first hard constraint(per `project_application_first_runtime_authority.md`)+ release branch invariants(per `project_release_branch_invariants.md`)。
@@ -162,8 +163,9 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - 0.D lift:§5 Proposed Shape covers D1-D12 + C1-C8 + Q1 supersede + D8.note;§7 Acceptance contains 7 §7-Diagnose anti-regression gates;§8 has 8 ordered implementation steps
 - §8 Step 1 complete:`src/kernel/application/protocol/derivation_diagnose.py` + `src/kernel/tests/test_application_diagnose_protocol.py`;42 protocol tests landed,§7-Diagnose-1/2/7 partly enforced at DTO layer
 - §8 Step 2 complete:`src/kernel/application/diagnose_runtime.py` + `src/kernel/tests/test_application_diagnose_runtime_native.py`;native MVP covers pass,atom-localized fail,no_candidate fallback,unknown var / RuleRef invalid_request preflight,branch-aware primary,`_extend_env_with_atom` enumeration primitive;non-native intentionally left for §8 Step 4-6
-- Verification at Step 2 checkpoint:`python -m unittest discover -s src/kernel/tests` => 835 OK / 1 skip;`python -m ruff check src/kernel` => all checks passed
-- Next:§8 Step 3 native hardening(RuleRef happy-path coverage + deterministic primary expansion + §7-Diagnose-4 anti-regression class)
+- §8 Step 3 complete:`7092bdf`;fixed native localizer to keep the candidate frontier instead of collapsing to a single primary env after each atom;added RuleRef happy-path test;added §7-Diagnose-4 anti-regression that failed localization does not call support-capture `_atom_satisfies`
+- Verification at Step 3 checkpoint:`python -m unittest discover -s src/kernel/tests` => 838 OK / 1 skip;`python -m ruff check src/kernel` => all checks passed
+- Next:§8 Step 4 non-native representability gate(D10: native/souffle/problog/pyreason table,non-native `atom_localized` unsupported before evaluate;§7-Diagnose-5)
 
 **Branch state** `v0.1-redesign-2026-05-03`:ahead origin ≈23 commits before handoff commit / ≈24 after handoff commit,**NOT pushed**。At handoff authoring the only dirty files are `memory/session_handoffs/2026-05-04.md` and `memory/current.md`;after committing handoff,expect clean working tree。release base sacred 不动。
 
