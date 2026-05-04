@@ -1,8 +1,8 @@
 # Task Blueprint: Check Operation
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-03
-- Last Updated: 2026-05-03
+- Last Updated: 2026-05-04
 - Related Modules:
   - `src/kernel/application/protocol/`
   - `src/kernel/application/`
@@ -34,10 +34,10 @@ This directly addresses the "boolean compliance check for a specific binding" ne
   - Check is evaluate's verify-given dual.
   - Inputs are rule/plan + complete or partial binding + engine; no fact overlay.
   - Runtime dependencies such as `store` and `registry` are side-channel parameters, not request fields.
-  - Native complete binding may use `_branch_satisfies`; native partial binding must enumerate full bindings before subset matching.
+  - Native Check uses final-result matching from `evaluate_native_where(...)`; direct `_branch_satisfies` is not the MVP contract.
   - Evidence is read-only in the system-state sense: Check may produce a derived EvidenceEnvelope, but must not commit facts, candidates, or assertions.
   - `branch_atom_projection` is a reserved slot and remains `None` in MVP.
-- Freeze a concrete Protocol Contract during Step 0 before moving to `scoped`.
+- Preserve the concrete Protocol Contract frozen during Step 0.
 - Add targeted application protocol/runtime tests for the frozen contract.
 - Add SDK delegation only if explicitly kept in scope after Step 0; SDK must remain a thin shell.
 
@@ -81,8 +81,8 @@ Baseline §P0-3 identifies the core anchors:
 
 Post-topic correction in baseline §P0-3 is binding for this blueprint:
 
-- Direct primitives are safe only for native complete-binding verification.
-- Native partial binding requires final-binding enumeration + subset match.
+- Direct `_branch_satisfies` primitives are a possible future no-RuleRef fast path, not the MVP contract.
+- Native Check requires final-binding enumeration + subset match for both complete and partial binding.
 - Non-native engines require evaluate-then-match only where requested bindings are representable by candidate payload / engine output.
 
 ### Resolved conceptual contract
@@ -99,27 +99,46 @@ Resolved constraints include:
 
 ## 5. Proposed Shape
 
-This blueprint has a mandatory contract-freezing Step 0.
-
-The likely landing shape is:
+Step 0 froze the MVP protocol contract. Audit log Step 0.B / Step 0.C is the
+source of truth for field semantics, algorithms, and drift-prevention tests.
+Implementation may refine class/function names but must not change this
+contract without updating the blueprint and audit first.
 
 - `src/kernel/application/protocol/derivation_check.py`
-  - request DTO
-  - result DTO
-  - evidence envelope DTO or equivalent JSON-compatible envelope
-  - status literals / validation helpers if needed
+  - `CheckRequest`-style frozen DTO:
+    - single `CompiledDerivationPlan`
+    - `binding: BindingItems` with Check-specific `$`-prefixed variable validation
+    - required `engine: Literal["native", "souffle", "problog", "pyreason"]`
+    - no request-level `engine_options`, identity/query/run fields, store, registry, or precomputed RuleRef resolutions
+  - `CheckResult`-style frozen DTO:
+    - `status: Literal["passed", "failed", "unsupported", "invalid_request"]`
+    - normalized `requested_binding: BindingItems`
+    - `matched_count: int | None`
+    - `matched_binding: BindingItems | None`
+    - `evidence_envelope: EvidenceEnvelope | None`
+    - `errors: tuple[ErrorDTO, ...]`
+    - `warnings: tuple[WarningDTO, ...]`
+  - `EvidenceEnvelope`-style frozen DTO:
+    - `engine`
+    - `support_kind`
+    - `support_digest`
+    - `branch_index: int | None`
+    - `engine_payload: SupportArtifact | ProvenanceEnvelope`
+    - `branch_atom_projection: None = None`
 - `src/kernel/application/derivation_check_runtime.py`
-  - pure runtime function, likely:
+  - pure runtime function, expected shape:
     - `check_derivation_binding(request, *, store, registry=None) -> CheckResult`
+  - native path uses final-result matching from `evaluate_native_where(...)`
+  - non-native path uses request-level representability precheck and then `evaluate_derivation_plans(...)`
   - uses application/current-store projection APIs, not SDK state
 - `src/kernel/application/__init__.py` and `src/kernel/application/protocol/__init__.py`
-  - exports only after Step 0 freezes names
+  - exports added in the same change as the protocol/runtime implementation
 - tests under `src/kernel/tests/`
   - protocol shape tests
   - runtime behavior tests
   - SDK delegate tests only if SDK shell is in scope
 
-Step 0 may revise file names / DTO names. The layer placement is not negotiable: substrate starts in `kernel.application`.
+Layer placement is not negotiable: substrate starts in `kernel.application`.
 
 ## 6. Boundaries And Invariants
 
@@ -135,7 +154,7 @@ Step 0 may revise file names / DTO names. The layer placement is not negotiable:
 
 ## 7. Acceptance
 
-- [ ] Step 0 freezes the Protocol Contract before status moves from `draft` to `scoped`.
+- [x] Step 0 freezes the Protocol Contract before status moves from `draft` to `scoped`.
 - [ ] Check protocol DTO(s) live under `kernel.application.protocol`.
 - [ ] CheckRequest DTO schema rejects `store`, `registry`, and precomputed `rule_ref_resolutions` fields.
 - [ ] Check runtime lives under `kernel.application` and takes dependencies via explicit side-channel parameters.
@@ -144,7 +163,8 @@ Step 0 may revise file names / DTO names. The layer placement is not negotiable:
 - [ ] Tests prove partial binding is not evaluated by directly calling `_branch_satisfies` on the partial input.
 - [ ] Deterministic primary selection is covered by tests, including OR branch order.
 - [ ] RuleRef with/without registry behavior is covered by tests.
-- [ ] Invalid binding shape (for example illegal variable name or wrong binding container type) maps to `status="invalid_request"`.
+- [ ] Malformed CheckRequest DTO shape (wrong container type, $-prefix violation, missing required field, malformed BindingItems structure) raises `ProtocolShapeError` at DTO construction; **not** converted to `status="invalid_request"` (per existing `application.protocol.common` convention).
+- [ ] Semantically invalid but well-shaped request (unknown variable in rule body, RuleRef without registry, multi-head plan if rejected per Step 0.C decision) maps to `status="invalid_request"` with `errors` populated.
 - [ ] Native evidence envelope is inspectable / serializable and preserves support metadata.
 - [ ] EvidenceEnvelope round-trips engine-native payload without flattening away engine-specific fields.
 - [ ] Non-native representability boundary is covered by tests for at least the scoped engine set.
@@ -155,50 +175,42 @@ Step 0 may revise file names / DTO names. The layer placement is not negotiable:
 
 ## 8. Implementation Plan
 
-1. **Step 0 — Source-backed Protocol Contract spike (draft gate)**
-   - Read current `kernel.application` protocol/runtime patterns.
-   - Read current native candidate/evidence construction path.
-   - Freeze request DTO shape:
-     - rule reference shape
-     - binding wire shape and normalization
-     - engine field
-     - optional identity/query/run fields, or explicit non-decision
-     - engine_options decision
-   - Freeze result DTO shape:
-     - status-by-field nullable matrix
-     - errors/warnings convention
-     - EvidenceEnvelope field name and nesting
-     - native_payload inspectable/serializable contract
-     - `branch_atom_projection=None` reserved slot
-   - Freeze algorithms:
-     - native complete path
-     - native partial enumeration + subset-match path
-     - deterministic primary sort key
-     - RuleRef resolution and failure behavior
-     - non-native representability rule for the scoped engine set
-   - Freeze runtime failure mapping and test matrix.
-   - Freeze drift-prevention mechanisms:
-     - review topic doc §7.1-§7.6 one by one
-     - record each prevention/detection decision in the audit log
-     - include explicit anti-regression tests for every trap kept in scope
-   - Update audit with final Step 0 decisions.
+1. **Step 0 — Source-backed Protocol Contract spike (complete)**
+   - Contract is frozen in audit log Step 0.A / Step 0.B / Step 0.C.
+   - Blueprint status moved from `draft` to `scoped` after Step 0.D lift.
 
 2. **Step 1 — Protocol DTO(s)**
-   - Add protocol module(s) and exports.
-   - Add protocol shape / validation tests.
+   - Add `derivation_check` protocol module and exports.
+   - Add request/result/envelope DTOs per §5.
+   - Validate `$`-prefixed binding keys and malformed DTO shape via existing `ProtocolShapeError` conventions.
+   - Add protocol shape / validation tests, including rejection of `store`, `registry`, and precomputed RuleRef resolutions in the request surface.
 
 3. **Step 2 — Native runtime MVP**
-   - Implement application runtime for native complete + partial Check.
-   - Build derived EvidenceEnvelope from selected primary full binding.
+   - Implement native Check through unified `evaluate_native_where(...)` final-binding flow.
+   - Treat complete binding as exact subset-match; treat partial binding as subset-match over enumerated final bindings.
+   - Build derived EvidenceEnvelope only for the selected `passed` primary full binding.
    - Add native runtime tests.
 
 4. **Step 3 — RuleRef and deterministic primary hardening**
-   - Add RuleRef tests and exact invalid_request details.
+   - Add RuleRef tests and `invalid_request` details:
+     - `REGISTRY_REQUIRED`
+     - `RULE_REF_UNRESOLVABLE`
+     - `RULE_REF_VERSION_MISMATCH` only when source-stable
+     - `RULE_REF_CYCLE`
+   - Add explicit deterministic primary sorting:
+     - native / souffle: `(branch_index, binding_items, candidate_key_or_empty)`
+     - problog / pyreason: `(candidate_key, binding_items)`
    - Add multi-branch/multi-match deterministic tests.
 
 5. **Step 4 — Scoped engine boundary**
-   - Implement non-native behavior only for the engine set frozen by Step 0.
-   - If representability cannot be proven for an engine/binding shape, return `unsupported`.
+   - Implement Option IV representability-gated multi-engine behavior.
+   - Perform request-level representability precheck before non-native evaluation.
+   - Delegate representable non-native requests through `evaluate_derivation_plans(...)`.
+   - Implement per-engine match extraction:
+     - native bypasses extraction and uses final bindings directly
+     - souffle uses `SupportArtifact.binding_items`
+     - problog / pyreason use `plan.heads[0].head_var_names + CandidateSet.payload` for head-only bindings
+   - Return `unsupported` only when the question is not representable for the engine/output shape; return `failed` when it is representable and no match exists.
    - Add tests for supported and unsupported boundaries.
 
 6. **Step 5 — Optional SDK delegate**

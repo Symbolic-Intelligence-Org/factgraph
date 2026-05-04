@@ -10,6 +10,7 @@
   - `10_design-history-bprime-bdoubleprime/operational-evidence-tree-rule-replay-design-2026-05-01.md` §"Check"
 - **关联 blueprint:** [docs/blueprints/active/2026-05-03_check-operation.md](../../../../blueprints/active/2026-05-03_check-operation.md)
 - **形态:** 这是一个 resolved conceptual / interaction reference。§1-§5 是当前决议;§6 是历史 discussion trace。若 §6 早期 iteration 与 §1-§5 冲突,以 §1-§5 为准。**不写任何具体 file/class 命名**(那是 blueprint 阶段)。本 doc 足以启动 draft blueprint,但 scoped implementation 前仍需在 blueprint Step 0 冻结 protocol contract。
+- **Step 0.B post-cited supersede(2026-05-03):** `EvidenceEnvelope.native_payload` 字段重命名为 `engine_payload`,reason:"native_payload" 易被误读为"仅 engine=native 时使用",而该字段实际承载所有 engine 的 engine-specific payload。**§1-§5 + §7 已应用此 rename**;§6 历史 entries 保留原名 `native_payload`(per "§1-§5 wins over §6" rule + audit trail discipline)。详见 blueprint `2026-05-03_check-operation.audit.md` Step 0.B Decision Notes。
 
 ---
 
@@ -99,12 +100,12 @@ application 层从这些派生 core 必需的 5 项(`branch / binding / witness_
 
 2. **Layer 2 — EvidenceEnvelope(Check result 的 optional evidence field,status=passed 时有):**
    - common envelope:`engine` / `support_kind` / `support_digest` / `branch_index` 等共同 metadata
-   - `native_payload`:engine-specific 形态(SupportArtifact / PyReasonTimeline / ProbLogProofGraph / ...);**不抹平**(per §6.5);**必须 inspectable / serializable,不能是 opaque blob**(per §6.9)
+   - `engine_payload`:engine-specific 形态(SupportArtifact / PyReasonTimeline / ProbLogProofGraph / ...);**不抹平**(per §6.5);**必须 inspectable / serializable,不能是 opaque blob**(per §6.9)。**字段名 post-Step 0.B rename**(原 `native_payload`,见顶部 supersede 注)
    - `branch_atom_projection: BranchAtomProjection | None`(子字段,见 Layer 3;MVP 总是 `None`)
 
 3. **Layer 3 — branch/atom projection(EvidenceEnvelope 的子字段;MVP=None,deferred 到独立 venue):**
    - **MVP 决议(per §6.9):** 字段 reserved(在 protocol 里保留),MVP 总是 `None`;walkable interface 不在 Check MVP 实施
-   - **`None` 语义:** "projection 未实现",**不是** "evidence 未提供 / degraded"(evidence 通过 Layer 2 native_payload 仍完整可获取)
+   - **`None` 语义:** "projection 未实现",**不是** "evidence 未提供 / degraded"(evidence 通过 Layer 2 `engine_payload` 仍完整可获取)
    - 字段形态(deferred 实施 / 协议 reserved):
      - `projection_status: Literal["available", "partial", "unsupported"]`(per §3.3)
      - `branches[]`(可遍历)+ 每 branch 的 `atoms[]`(可遍历)
@@ -1011,10 +1012,10 @@ native + non-native 都走同一 application runtime boundary(都接 `registry` 
 
 ### 7.2 NEVER 把 engine-native payload 设计成 opaque blob 或强行抹平
 
-- **Trap A(opaque):** 把 `native_payload` 类型为 `bytes` 或不可 inspect 的 wrapped object
+- **Trap A(opaque):** 把 `engine_payload` 类型为 `bytes` 或不可 inspect 的 wrapped object
 - **Trap B(flatten):** 为了 "uniform DTO" 把 PyReason temporal / ProbLog probability 压成 SupportArtifact-like 形态
 - **为什么错:** §6.5 称 flatten 为"切到大动脉" — engine 各自核心能力(temporal reasoning / probability proof)在被压平的 payload 里丢失;opaque 同样违反 §6.9 "must be inspectable / serializable"
-- **正确做法(per §2.2 + §6.5 + §6.9):** native_payload 按 engine 各自保真;**必须** inspectable / serializable;具体 typing(typed union / JSON-compatible envelope)留 Step 0 决,但**不能**牺牲 engine 特性
+- **正确做法(per §2.2 + §6.5 + §6.9):** `engine_payload` 按 engine 各自保真;**必须** inspectable / serializable;具体 typing(typed union / JSON-compatible envelope)留 Step 0 决,但**不能**牺牲 engine 特性
 - **Step 0 obligation:** typed union vs envelope 的选择必须证明每 engine 的核心 evidence 不丢失;每 engine 加 round-trip serialize/deserialize 测试
 
 ### 7.3 NEVER 把 `branch_atom_projection=None` 解读为 "evidence missing / degraded"
@@ -1023,9 +1024,9 @@ native + non-native 都走同一 application runtime boundary(都接 `registry` 
   - 把 non-native engine 的 passed 结果错误降级
   - 在 status 上添加 "degraded" 等不存在的 outcome
   - 调用方弹出 "evidence unavailable" 误导信号
-- **为什么错(per §6.9):** `branch_atom_projection` MVP **总是 None**(slot reserved,不实施);`None` 含义是 "projection 未实现",**不是** "evidence 未提供"。Evidence 通过 Layer 2 native_payload 仍**完整**可获取
-- **正确做法:** UI / consumer 看到 `branch_atom_projection=None` 时应继续读 `native_payload`(passed 时总是有);**不**展示 "evidence missing" 信号
-- **Step 0 obligation:** 在文档/test 里显式声明 "None ≠ degraded" 语义;加一个 test:passed 结果 + branch_atom_projection=None + native_payload 非空 应被识别为 fully evidence-bearing
+- **为什么错(per §6.9):** `branch_atom_projection` MVP **总是 None**(slot reserved,不实施);`None` 含义是 "projection 未实现",**不是** "evidence 未提供"。Evidence 通过 Layer 2 `engine_payload` 仍**完整**可获取
+- **正确做法:** UI / consumer 看到 `branch_atom_projection=None` 时应继续读 `engine_payload`(passed 时总是有);**不**展示 "evidence missing" 信号
+- **Step 0 obligation:** 在文档/test 里显式声明 "None ≠ degraded" 语义;加一个 test:passed 结果 + branch_atom_projection=None + `engine_payload` 非空 应被识别为 fully evidence-bearing
 
 ### 7.4 NEVER 把 `registry` 加到 `CheckRequest` DTO
 
