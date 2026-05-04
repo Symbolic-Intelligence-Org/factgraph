@@ -1,6 +1,6 @@
 # Current Operational Memory
 
-最后更新:2026-05-04(Check shipped + engine-extension Wave 1 closed through `44eefab`;Diagnose §8 Step 6 problog/pyreason dispatch at `267b0a7`;handoff baseline 见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
+最后更新:2026-05-04(Check shipped + engine-extension Wave 1 closed through `44eefab`;Diagnose implemented through Step 8 close-out;handoff baseline 见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
 
 ## 当前阶段(2026-05-03 — REDESIGN BASE)
 
@@ -92,7 +92,7 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 
 ### 下一步方向(2026-05-04 起)
 
-详情见 [`session_handoffs/2026-05-04.md`](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md) §10,但该 handoff 写于 §6.2 前;当前 continuation 已到 `267b0a7`。摘要:
+详情见 [`session_handoffs/2026-05-04.md`](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md) §10,但该 handoff 写于 §6.2 前;当前 continuation 已到 Diagnose Step 8 close-out。摘要:
 
 - engine-extension-surface topic Wave 1 已 closed:
   - §6.2 strategic framing:`1f084f8`
@@ -111,7 +111,9 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - Diagnose §8 Step 4 non-native representability gate complete:`b011757`
 - Diagnose §8 Step 5 souffle dispatch complete:`8a6c449`
 - Diagnose §8 Step 6 problog/pyreason dispatch complete:`267b0a7`
-- Next natural action:Diagnose §8 Step 7 drift-prevention test pass(remaining §7-Diagnose-1/2/3/7 explicit gates + full Sibling banned-symbol/static invariant)
+- Diagnose §8 Step 7 drift-prevention test pass complete:`86351bc`
+- Diagnose §8 Step 8 close-out complete;blueprint status `scoped → implemented`
+- Next natural action:archive Diagnose blueprint(active → archive) if not already archived;then next topic likely engine-extension §6.6 or follow-up decided by user
 - baseline P1/P2 仍待填,但应随 Diagnose source pass 从 consumer angle 补,不单独 abstract inventory
 
 任何新工作必须满足 application-first hard constraint(per `project_application_first_runtime_authority.md`)+ release branch invariants(per `project_release_branch_invariants.md`)。
@@ -170,9 +172,10 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - §8 Step 4 complete:`b011757`;added Diagnose-owned `_request_diagnostic_representability_precheck` (no Check helper import) and non-native representability tests. `problog`/`pyreason` return `unsupported` before dispatch for entity-targeted plans and body-only requested variables; `souffle` remains representable for body-only/head-only bindings and is left to Step 5 dispatch. Unsupported representability results carry `failure_kind=None` / `diagnostic_payload=None`, partially enforcing §7-Diagnose-5 until actual non-native dispatch lands.
 - §8 Step 5 complete:`8a6c449`;added `_diagnose_souffle` with evaluate → `SupportArtifact` lookup → match / lookup-miss / no-match buckets; lookup-miss outranks `no_candidate`, match wins over lookup-miss; primary sort follows Check C4 `(branch_index, binding_items, candidate_key)`; §7-Diagnose-5/6 souffle-path tests landed. Diagnose result still does not expose branch_index; branch sort is internal deterministic primary selection only.
 - §8 Step 6 complete:`267b0a7`;added `_diagnose_problog_pyreason` with evaluate → `ProvenanceEnvelope` lookup → match / lookup-miss / no-match buckets; binding extraction uses head-var payload-term positional alignment and skips `candidate_ref` terms; lookup-miss surfaces `EVIDENCE_LOOKUP_MISS`; primary sort `(candidate_key, binding_items)`. ProbLog/PyReason tests cover pass, failed.no_candidate, zero candidates, lookup-miss-only, lookup-miss outranks no-match, match wins over lookup-miss, primary sort, and non-atom-localized invariant.
-- Verification at Step 6 checkpoint:`python -m unittest discover -s src/kernel/tests` => 861 OK / 1 skip;`python -m ruff check src/kernel` => all checks passed
-- Step 8 close-out refinements to remember:Step 3 frontier bug fix means C2 "first deterministic extension" needs Outcome / Deviations clarification;Step 4 souffle representability is request-gate-vs-dispatch-layer split;Step 5 branch_index sort is internal-only because `DiagnoseResult` exposes `matched_binding`, not branch_index.
-- Next:§8 Step 7 drift-prevention test pass(land remaining explicit §7-Diagnose-1 / §7-Diagnose-2 / §7-Diagnose-3 / §7-Diagnose-7 tests; verify all 7 gates; no Check import/helper usage)
+- §8 Step 7 complete:`86351bc`;added `src/kernel/tests/test_application_diagnose_sibling_invariant.py` AST static checks for Q1 Sibling no-Check-call invariant;added problog / pyreason parity tests for §7-Diagnose-5/6. All seven §7-Diagnose gates now have explicit named coverage.
+- §8 Step 8 complete;application docs list Diagnose;blueprint §10 Outcome / Deviations filled;conformance audit recorded;status `implemented`. Step 8 refinements recorded:Step 3 candidate frontier,Step 4 souffle request-gate vs dispatch-layer representability,Step 5 branch_index ordering internal-only.
+- Verification at Step 8 checkpoint:`python -m unittest discover -s src/kernel/tests` => 866 OK / 1 skip;`python -m ruff check src/kernel` => all checks passed
+- Next:archive `docs/blueprints/active/2026-05-04_diagnose-operation.md` + audit into `docs/blueprints/archive/` and update archive inventory.
 
 **Branch state** `v0.1-redesign-2026-05-03`:ahead origin ≈23 commits before handoff commit / ≈24 after handoff commit,**NOT pushed**。At handoff authoring the only dirty files are `memory/session_handoffs/2026-05-04.md` and `memory/current.md`;after committing handoff,expect clean working tree。release base sacred 不动。
 

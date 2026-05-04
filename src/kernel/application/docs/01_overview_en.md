@@ -18,6 +18,7 @@ It is responsible for:
 - normalized ingest request/result execution
 - compiled derivation evaluate / accept orchestration
 - explicit-binding derivation Check (`passed` / `failed` / `unsupported` / `invalid_request`)
+- explicit-binding derivation Diagnose (`passed` / `failed.no_candidate` / `failed.atom_localized` / `unsupported` / `invalid_request`)
 
 It is not responsible for:
 
@@ -38,6 +39,7 @@ It is not responsible for:
   - `ingest.py`: normalized ingest item/request/result DTOs
   - `derivation.py`: compiled derivation evaluate/accept request DTOs
   - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`)
+  - `derivation_diagnose.py`: explicit-binding Diagnose protocol DTOs (`DiagnoseRequest` / `DiagnoseResult` / `DiagnoseAtomLocator`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
 - `entity_view.py`
@@ -52,10 +54,12 @@ It is not responsible for:
   - `evaluate_derivation_plans(...)`, `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
 - `derivation_check_runtime.py`
   - `check_derivation_binding(...)`: verifies a complete or partial binding against a single compiled derivation plan; native/souffle/problog/pyreason are handled through representability-gated final-result matching.
+- `diagnose_runtime.py`
+  - `diagnose_derivation_binding(...)`: diagnoses a complete or partial binding against a single compiled derivation plan; native can localize the failed atom, while souffle/problog/pyreason return coarse pass/fail/unsupported classifications through evidence-aware dispatch.
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 31 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 33 public symbols. The main executor entry points are:
 
 - `execute_read_request(...)`
 - `hydrate_entity(...)`
@@ -66,6 +70,7 @@ It is not responsible for:
 - `apply_ingest_request(...)`
 - `evaluate_derivation_plans(...)`
 - `check_derivation_binding(...)`
+- `diagnose_derivation_binding(...)`
 - `accept_derivation_candidate_set(...)`
 - `accept_derivation_candidate_sets(...)`
 
@@ -103,7 +108,7 @@ Current SDK runtime delegation:
 - `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
 - `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
 - `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
-- Check is currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`.
+- Check and Diagnose are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)` or `diagnose_derivation_binding(...)`.
 
 SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
@@ -135,6 +140,10 @@ Key focused tests:
 - `test_application_derivation_runtime.py`
 - `test_application_check_protocol.py`
 - `test_application_check_runtime.py`
+- `test_application_diagnose_protocol.py`
+- `test_application_diagnose_runtime_native.py`
+- `test_application_diagnose_runtime_non_native.py`
+- `test_application_diagnose_sibling_invariant.py`
 - `test_sdk_facade_application_delegate.py`
 - `test_sdk_batch_application_delegate.py`
 - `test_sdk_query_policies.py`

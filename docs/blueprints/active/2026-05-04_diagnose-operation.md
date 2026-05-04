@@ -1,6 +1,6 @@
 # Task Blueprint: Diagnose Operation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-04
 - Last Updated: 2026-05-04
 - Related Modules:
@@ -199,32 +199,32 @@ Step 0.A audit recorded **Q1 = Hybrid** (Diagnose calls `check_derivation_bindin
 
 Each gate maps to a concrete D-decision and gets a focused test class entry:
 
-- [ ] **§7-Diagnose-1** (D5 evidence-unavailable as `unsupported`, NOT `failed`): test that engine-output with lookup-miss yields `status="unsupported"` with `EVIDENCE_LOOKUP_MISS` code; never `status="failed"` with a hypothetical `failure_kind="evidence_unavailable"`
-- [ ] **§7-Diagnose-2** (D8 / D8.note `DiagnoseAtomLocator` NOT in `EvidenceEnvelope` Union): test that `EvidenceEnvelope.engine_payload` Union members are exactly `{SupportArtifact, ProvenanceEnvelope}`; `DiagnoseAtomLocator` lives only on `DiagnoseResult.diagnostic_payload`
-- [ ] **§7-Diagnose-3** (Q1 Sibling no-Check-call invariant): static check that the Diagnose runtime module never imports `check_derivation_binding`, `derivation_check_runtime`, or any private helper from Check (`_binding_matches`, `_request_representability_precheck`, `_ruleref_preflight`); banned-symbol list maintained alongside the test
-- [ ] **§7-Diagnose-4** (C2 native atom-localizer correctness): test cases verifying first-failed-atom is correctly identified for representative branches; explicitly tests that no successful atom is reported as failed; explicitly tests that `_atom_satisfies` is NOT called directly (silent-false trap avoidance per `_ground_terms` returning `None` on missing var)
-- [ ] **§7-Diagnose-5** (D10 non-native `atom_localized` never fires): test that souffle / problog / pyreason responses never include `failure_kind="atom_localized"` regardless of input shape
-- [ ] **§7-Diagnose-6** (D12 evidence-miss observable, never silent-skip): test that an adapter-advertised `support_kind` with `None` lookup surfaces `EVIDENCE_LOOKUP_MISS` error in `DiagnoseResult.errors`, never silent-discards the candidate
-- [ ] **§7-Diagnose-7** (status enum invariance, D5): type-level invariant test that `DiagnoseResult.status` Literal contains exactly the 4 Check values (`passed`, `failed`, `unsupported`, `invalid_request`) and no 5th value
+- [x] **§7-Diagnose-1** (D5 evidence-unavailable as `unsupported`, NOT `failed`): test that engine-output with lookup-miss yields `status="unsupported"` with `EVIDENCE_LOOKUP_MISS` code; never `status="failed"` with a hypothetical `failure_kind="evidence_unavailable"`
+- [x] **§7-Diagnose-2** (D8 / D8.note `DiagnoseAtomLocator` NOT in `EvidenceEnvelope` Union): test that `EvidenceEnvelope.engine_payload` Union members are exactly `{SupportArtifact, ProvenanceEnvelope}`; `DiagnoseAtomLocator` lives only on `DiagnoseResult.diagnostic_payload`
+- [x] **§7-Diagnose-3** (Q1 Sibling no-Check-call invariant): static check that the Diagnose runtime module never imports `check_derivation_binding`, `derivation_check_runtime`, or any private helper from Check (`_binding_matches`, `_request_representability_precheck`, `_ruleref_preflight`); banned-symbol list maintained alongside the test
+- [x] **§7-Diagnose-4** (C2 native atom-localizer correctness): test cases verifying first-failed-atom is correctly identified for representative branches; explicitly tests that no successful atom is reported as failed; explicitly tests that `_atom_satisfies` is NOT called directly (silent-false trap avoidance per `_ground_terms` returning `None` on missing var)
+- [x] **§7-Diagnose-5** (D10 non-native `atom_localized` never fires): test that souffle / problog / pyreason responses never include `failure_kind="atom_localized"` regardless of input shape
+- [x] **§7-Diagnose-6** (D12 evidence-miss observable, never silent-skip): test that an adapter-advertised `support_kind` with `None` lookup surfaces `EVIDENCE_LOOKUP_MISS` error in `DiagnoseResult.errors`, never silent-discards the candidate
+- [x] **§7-Diagnose-7** (status enum invariance, D5): type-level invariant test that `DiagnoseResult.status` Literal contains exactly the 4 Check values (`passed`, `failed`, `unsupported`, `invalid_request`) and no 5th value
 
 ### 7.3 Layer placement (application-first)
 
-- [ ] Protocol DTOs (`DiagnoseRequest`, `DiagnoseResult`, `DiagnoseAtomLocator`) live in `kernel.application.protocol/`
-- [ ] Runtime function `diagnose_derivation_binding` and helpers live in `kernel.application/`
-- [ ] No SDK substrate; SDK shell only added if explicitly scoped in a follow-up
-- [ ] Diagnose runtime takes runtime dependencies (`store`, `registry`) through side-channel kwargs, not DTO fields
+- [x] Protocol DTOs (`DiagnoseRequest`, `DiagnoseResult`, `DiagnoseAtomLocator`) live in `kernel.application.protocol/`
+- [x] Runtime function `diagnose_derivation_binding` and helpers live in `kernel.application/`
+- [x] No SDK substrate; SDK shell only added if explicitly scoped in a follow-up
+- [x] Diagnose runtime takes runtime dependencies (`store`, `registry`) through side-channel kwargs, not DTO fields
 
 ### 7.4 Code health
 
-- [ ] Tests cover protocol shape, status semantics, nullable matrix per D6, evidence-miss observability, per-engine representability boundaries
-- [ ] `python -m ruff check src/kernel` clean
-- [ ] Full kernel test suite green (target: prior baseline + ~50 new Diagnose tests, mirroring Check's volume)
+- [x] Tests cover protocol shape, status semantics, nullable matrix per D6, evidence-miss observability, per-engine representability boundaries
+- [x] `python -m ruff check src/kernel` clean
+- [x] Full kernel test suite green (target: prior baseline + ~50 new Diagnose tests, mirroring Check's volume)
 
 ### 7.5 Cross-doc updates
 
-- [ ] Engine-extension topic doc updated only if Diagnose promotes §3.6 from `deferred` (otherwise topic doc untouched per Step 0 commitment)
-- [ ] Application module docs (`src/kernel/application/docs/01_overview.md` + `_en.md`) updated to list Diagnose runtime
-- [ ] Conformance audit confirms implementation aligns with §5 frozen contract; documented in close-out
+- [x] Engine-extension topic doc updated only if Diagnose promotes §3.6 from `deferred` (otherwise topic doc untouched per Step 0 commitment)
+- [x] Application module docs (`src/kernel/application/docs/01_overview.md` + `_en.md`) updated to list Diagnose runtime
+- [x] Conformance audit confirms implementation aligns with §5 frozen contract; documented in close-out
 
 ## 8. Implementation Plan
 
@@ -267,4 +267,37 @@ Expected if implementation proceeds:
 
 ## 10. Outcome / Deviations
 
-Task is in draft. Outcome is pending Step 0 and implementation.
+Implemented on 2026-05-04 through §8 Step 8.
+
+Shipped application-first Diagnose capability:
+
+- Protocol DTOs: `src/kernel/application/protocol/derivation_diagnose.py`
+  - `DiagnoseRequest`
+  - `DiagnoseResult`
+  - `DiagnoseAtomLocator`
+  - `DiagnoseStatus`, `DiagnoseFailureKind`, `DiagnoseEngine`
+- Runtime: `src/kernel/application/diagnose_runtime.py`
+  - public entry `diagnose_derivation_binding(request, *, store, registry=None)`
+  - native pass/fail classification plus atom-localized failure payload
+  - souffle evaluate-then-classify via `SupportArtifact.binding_items`
+  - problog/pyreason evaluate-then-classify via head-var payload-term alignment
+  - evidence lookup miss surfaces as `status="unsupported"` with `EVIDENCE_LOOKUP_MISS`
+- Tests:
+  - protocol shape and nullable matrix
+  - native runtime and atom localization
+  - non-native representability gates
+  - souffle/problog/pyreason dispatch
+  - all seven §7-Diagnose anti-regression gates, including Q1 Sibling static banned-symbol coverage
+
+Verification at close-out:
+
+- `PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"` → `866 OK / 1 skip`
+- `python -m ruff check src/kernel` → clean
+
+No SDK shell was added. Diagnose is exposed at the application layer only; any future SDK entrypoint must remain a thin delegate to `diagnose_derivation_binding(...)`.
+
+Conformance audit found no material drift from §5 frozen contract. Three implementation-surfaced refinements are recorded for future readers:
+
+- Step 3 native localizer: `_localize_failed_atom` must keep the candidate frontier across atoms. The earlier C2 shorthand "first deterministic extension" is insufficient for multi-candidate paths; the implemented frontier behavior is the correct refinement and is regression-tested.
+- Step 4 souffle representability: request-level representability gates mirror Check by allowing souffle through; souffle evidence availability / match representability is resolved in dispatch. This clarifies D10's layer placement rather than changing the D10 table.
+- Step 5 deterministic primary: Diagnose does not expose branch_index on `DiagnoseResult`; branch-index-aware ordering for souffle remains an internal deterministic primary-selection rule for choosing `matched_binding`.

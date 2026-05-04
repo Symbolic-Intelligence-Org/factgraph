@@ -12,6 +12,7 @@
 | 2026-05-04 | draft | Step 0.B DTO contract freeze (with Q1 revision) | Q1 revised from **Hybrid → Sibling**: Hybrid would inherit Check's silent-skip on lookup-miss for non-native engines, violating Diagnose's independent §6.3 Decision #5 binding. 12 sub-decisions D1–D12 frozen across 5 deliverables: Request DTO (D1–D4), Result DTO (D5–D7), Evidence/Payload (D8–D9), Representability (D10–D11), Evidence-miss semantics (D12). Evidence-unavailable maps to `status="unsupported"` per §6.3 line 513 endorsement (NOT broader-than-Check `failed`, NOT a 5th status). Blueprint remains `draft` pending Step 0.C algorithm freeze + 0.D lift. |
 | 2026-05-04 | draft | Step 0.C algorithm + drift-prevention freeze | C1–C8 frozen: C1 native algorithm two-phase dispatch (pass/fail classification + atom localization on failed); C2 atom-localizer walk semantics (deliberate initial-env injection, NOT a §7.1 violation because pass/fail already classified); C3 deterministic primary failure selection (most-progressed branch, tie-break by branch_index ascending); C4 non-native algorithm with evidence-miss precedence over no_candidate; C5 RuleRef preflight as Diagnose's own copy; C6 runtime failure propagation (mirror Check C7); C7 §7-Diagnose-1 through §7-Diagnose-7 anti-regression mapping; C8 concrete function decomposition. Blueprint remains `draft` pending Step 0.D lift. |
 | 2026-05-04 | draft → scoped | Step 0.D lift complete | Step 0.B/0.C decisions lifted into blueprint §5 (Proposed Shape now contains 8 sub-sections: concept, request DTO, result DTO + nullable matrix, DiagnoseAtomLocator, per-engine representability table, algorithm overview, engine-extension conformance commitments, Q1 supersede record), §7 (Acceptance restructured into 5 sub-sections: Step 0 closure, §7-Diagnose-1–§7-Diagnose-7 anti-regression gates, layer placement, code health, cross-doc updates), §8 (Implementation Plan extended into 8 ordered steps from protocol DTOs through close-out). Blueprint status `draft → scoped`. The Step 0 gate closes here; implementation can begin. |
+| 2026-05-04 | scoped → implemented | Step 8 close-out complete | Diagnose implementation completed through Step 1-7 and close-out docs. Application docs updated; §7 acceptance gates all checked; verification `866 OK / 1 skip` and `python -m ruff check src/kernel` clean. Conformance audit found no material drift from §5 frozen contract. Implementation-surfaced refinements recorded in §10: native localizer frontier, souffle request-gate vs dispatch-layer representability, and branch_index ordering as internal-only primary selection. |
 
 ## Decision Notes
 
@@ -319,3 +320,19 @@
   **Status transition:** `draft → scoped`. Step 0 gate closed. Any future change to the §5 contract, §7 acceptance gates, or §8 plan requires a new audit entry + blueprint update before code changes (per Check 0.D precedent).
 
   Implementation begins at §8 Step 1 (protocol DTOs); no code written yet.
+
+- 2026-05-04 (Step 8) — **Close-out conformance audit.** Implementation aligns with the §5 frozen contract:
+  - D1-D4 request DTO contract holds: `DiagnoseRequest(plan, binding, engine)` only; `store` / `registry` stay runtime side channels; engine literal remains required.
+  - D5-D7 result status / nullable matrix / errors contract holds: top-level statuses remain exactly `passed`, `failed`, `unsupported`, `invalid_request`; lookup-miss routes to `unsupported` with `EVIDENCE_LOOKUP_MISS`; `failure_kind` remains only `no_candidate` / `atom_localized`.
+  - D8-D9 payload placement holds: `DiagnoseAtomLocator` lives only on `DiagnoseResult.diagnostic_payload`; `EvidenceEnvelope.engine_payload` remains `SupportArtifact | ProvenanceEnvelope`.
+  - D10-D12 engine boundaries hold: native atom-localizes; souffle/problog/pyreason stay coarse-only; evidence lookup miss is observable and never silent-skipped in Diagnose.
+  - C1-C3 native algorithm holds, with the implementation-surfaced refinement that `_localize_failed_atom` preserves a candidate frontier rather than collapsing to a single first deterministic extension after every atom. This is a correctness refinement to C2 wording and is covered by Step 3 frontier regression tests.
+  - C4 non-native algorithm holds for souffle/problog/pyreason: evaluate → typed lookup → match / lookup-miss / no-match buckets; match wins first, lookup-miss outranks `no_candidate`.
+  - C5-C6 runtime behavior holds: Diagnose owns RuleRef preflight; runtime/adapter failures propagate rather than being wrapped into result statuses.
+  - C7 all seven anti-regression gates have explicit named coverage, including the AST static §7-Diagnose-3 Q1 Sibling banned-symbol test.
+  - C8 placement holds: public runtime is `kernel.application.diagnose_runtime.diagnose_derivation_binding`; no SDK substrate or SDK shell was added.
+
+  **No material drift found.** Three implementation-surfaced refinements were carried into blueprint §10 Outcome / Deviations:
+  1. native localizer candidate frontier;
+  2. souffle representability split between request gate and dispatch layer;
+  3. souffle branch_index primary ordering is internal-only because `DiagnoseResult` exposes `matched_binding`, not branch_index.
