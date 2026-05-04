@@ -40,6 +40,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from kernel.core.derivation.candidates import CandidateSet
 from kernel.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from kernel.core.rules.ruleref_substrate import evaluate_native_where
 from kernel.core.rules.where_eval import (
@@ -49,6 +50,7 @@ from kernel.core.rules.where_eval import (
 )
 from kernel.core.store._support import (
     BindingItems,
+    SupportArtifact,
     compute_support_digest,
     normalize_binding_items,
 )
@@ -63,9 +65,11 @@ from kernel.core.view.projector import (
     project_view_facts_with_witness,
 )
 
+from .derivation_runtime import evaluate_derivation_plans
 from .protocol import (
     CheckRequest,
     CheckResult,
+    DerivationEvaluateRequest,
     ErrorDTO,
     EvidenceEnvelope,
 )
@@ -249,13 +253,12 @@ def _non_native_check(
     store: Store,
     registry: RuleRegistry | None,
 ) -> CheckResult:
-    """Representability-gated non-native staging.
+    """Representability-gated non-native dispatch.
 
-    Step 4.1 lands request-level representability precheck only. If the
-    question is representable for the requested engine/output shape, the
-    evaluate-then-match implementation comes in Step 4.2 / Step 4.3.
+    Step 4.1 lands the request-level representability precheck. Step 4.2 wires
+    Souffle through evaluate-then-match against witness-bearing SupportArtifact.
+    Step 4.3 will land ProbLog / PyReason via ProvenanceEnvelope.
     """
-    del store, registry  # Step 4.1 only decides whether the question is askable.
     errors = _request_representability_precheck(request)
     if errors:
         return CheckResult(
@@ -267,9 +270,154 @@ def _non_native_check(
             errors=errors,
             warnings=(),
         )
+
+    if request.engine == "souffle":
+        return _souffle_check(request, store=store, registry=registry)
+
     raise NotImplementedError(
-        f"Evaluate-then-match for engine={request.engine!r} comes in Step 4.2/4.3"
+        f"Evaluate-then-match for engine={request.engine!r} comes in Step 4.3"
     )
+
+
+def _souffle_check(
+    request: CheckRequest,
+    *,
+    store: Store,
+    registry: RuleRegistry | None,
+) -> CheckResult:
+    """Souffle Check via evaluate-then-match against witness-bearing SupportArtifact.
+
+    Algorithm (per audit log Step 0.C C3 / C4 / C6):
+
+    - Delegate evaluate to ``evaluate_derivation_plans`` in souffle mode.
+    - For each candidate, look up its ``SupportArtifact`` from store; the artifact's
+      ``binding_items`` carries the full query binding.
+    - Subset-match each candidate's full binding against the requested binding.
+    - Primary key = ``(branch_index, binding_items, candidate_key)`` (per C4).
+    - EvidenceEnvelope reuses the candidate's ``support_kind`` + ``support_digest``
+      and embeds the typed ``SupportArtifact`` as ``engine_payload`` (per
+      Step 0.B B9 + B10; ``branch_atom_projection`` stays None).
+
+    Candidates without a retrievable artifact are skipped silently in MVP — they
+    cannot be matched representably without binding data, so they neither pass
+    nor fail the user's request.
+    """
+    eval_request = DerivationEvaluateRequest(
+        plans=(request.plan,),
+        engine="souffle",
+    )
+    candidates = evaluate_derivation_plans(
+        eval_request, store=store, registry=registry
+    )
+
+    matches: list[tuple[CandidateSet, SupportArtifact, dict[str, Any]]] = []
+    for candidate in candidates:
+        artifact = _lookup_support_artifact(store, candidate.support_digest)
+        if artifact is None:
+            continue
+        binding_dict = dict(artifact.binding_items)
+        if _binding_matches(binding_dict, request.binding):
+            matches.append((candidate, artifact, binding_dict))
+
+    if not matches:
+        return CheckResult(
+            status="failed",
+            requested_binding=request.binding,
+            matched_count=0,
+            matched_binding=None,
+            evidence_envelope=None,
+            errors=(),
+            warnings=(),
+        )
+
+    def _sort_key(item: tuple[CandidateSet, SupportArtifact, dict[str, Any]]) -> tuple[Any, ...]:
+        candidate, artifact, binding = item
+        branch_index = _derive_branch_index_from_artifact(artifact)
+        # Known branch_index participates in source-order sorting. If the artifact
+        # does not expose a parseable branch index, fall back to binding/candidate
+        # ordering behind known-branch candidates.
+        branch_key = (0, branch_index) if branch_index is not None else (1, 0)
+        return (branch_key, normalize_binding_items(binding), candidate.candidate_key)
+
+    matches.sort(key=_sort_key)
+    primary_candidate, primary_artifact, primary_binding = matches[0]
+    primary_branch_index = _derive_branch_index_from_artifact(primary_artifact)
+
+    envelope = EvidenceEnvelope(
+        engine="souffle",
+        support_kind=primary_artifact.kind,
+        support_digest=primary_candidate.support_digest,
+        branch_index=primary_branch_index,
+        engine_payload=primary_artifact,
+        branch_atom_projection=None,
+    )
+
+    return CheckResult(
+        status="passed",
+        requested_binding=request.binding,
+        matched_count=len(matches),
+        matched_binding=normalize_binding_items(primary_binding),
+        evidence_envelope=envelope,
+        errors=(),
+        warnings=(),
+    )
+
+
+def _lookup_support_artifact(store: Store, digest: str) -> SupportArtifact | None:
+    """Get the typed SupportArtifact behind a candidate's support_digest.
+
+    Uses ``Store._lookup_support_artifact`` (typed internal API) instead of
+    ``Store.explain_support`` (public consumer API that returns a rendered dict).
+    Check runtime composes the typed artifact directly into ``EvidenceEnvelope``;
+    consumers can serialize via ``explain_support`` themselves if needed.
+    """
+    return store._lookup_support_artifact(digest)
+
+
+def _derive_branch_index_from_artifact(artifact: SupportArtifact) -> int | None:
+    """Extract the branch_index from a SupportArtifact via b{n}.a{m}: prefix on atom keys.
+
+    Per audit log Step 0.C C4: souffle ``branch_index`` is derived from the
+    artifact's atom keys (which encode ``b{branch}.a{atom}:...``). Returns the
+    integer if all keys agree on a branch number; returns None if there are no
+    keys to parse or if keys disagree (defensive fallback for sort).
+    """
+    branch_indices: set[int] = set()
+    for witness in artifact.pred_witnesses:
+        parsed = _parse_branch_index(witness.pred_atom_key)
+        if parsed is not None:
+            branch_indices.add(parsed)
+    for step in artifact.non_fact_steps:
+        parsed = _parse_branch_index(step.step_key)
+        if parsed is not None:
+            branch_indices.add(parsed)
+    if len(branch_indices) == 1:
+        return next(iter(branch_indices))
+    return None
+
+
+def _parse_branch_index(key: str) -> int | None:
+    """Parse 'b{n}.a{m}:...' into the {n} integer, or None if not parseable."""
+    if not isinstance(key, str) or not key.startswith("b"):
+        return None
+    try:
+        dot_pos = key.index(".")
+    except ValueError:
+        return None
+    if dot_pos <= 1:
+        return None
+    if dot_pos + 1 >= len(key) or key[dot_pos + 1] != "a":
+        return None
+    colon_pos = key.find(":", dot_pos + 2)
+    if colon_pos == -1:
+        return None
+    atom_index_text = key[dot_pos + 2 : colon_pos]
+    if not atom_index_text.isdigit():
+        return None
+    try:
+        return int(key[1:dot_pos])
+    except ValueError:
+        return None
 
 
 def _request_representability_precheck(request: CheckRequest) -> tuple[ErrorDTO, ...]:
@@ -297,7 +445,14 @@ def _request_representability_precheck(request: CheckRequest) -> tuple[ErrorDTO,
             )
         )
 
-    head_vars = set(request.plan.heads[0].head_var_names)
+    # Per `resolve_head_ref` convention in core/store/_builders.py:
+    # head_var_names entries are variable references only when $-prefixed;
+    # bare names are literal head args and cannot match a requested binding.
+    head_vars = {
+        name
+        for name in request.plan.heads[0].head_var_names
+        if isinstance(name, str) and name.startswith("$") and len(name) > 1
+    }
     requested_vars = {key for key, _ in request.binding}
     body_only_vars = sorted(requested_vars - head_vars)
     if body_only_vars:

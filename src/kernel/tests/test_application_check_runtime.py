@@ -593,13 +593,6 @@ class NonNativeStagingTests(unittest.TestCase):
         selected_plan = plan or _build_plan(body, exists_pred)
         return CheckRequest(plan=selected_plan, binding=binding, engine=engine)  # type: ignore[arg-type]
 
-    def test_souffle_representable_request_reaches_staging_not_implemented(self) -> None:
-        store, _ = _build_store()
-        request = self._request("souffle", binding=(("$body_only", "x"),))
-
-        with self.assertRaises(NotImplementedError):
-            check_derivation_binding(request, store=store)
-
     def test_problog_and_pyreason_head_only_binding_reach_staging(self) -> None:
         store, _ = _build_store()
         for engine in ("problog", "pyreason"):
@@ -657,6 +650,287 @@ class CheckRuntimeErrorTests(unittest.TestCase):
         self.assertEqual(dto.code, "CHECK_INTERNAL_ERROR")
         self.assertEqual(dto.path, ("primary",))
         self.assertEqual(dto.details, {"key": "value"})
+
+
+def _make_souffle_candidate(
+    *,
+    candidate_key: str = "candk_v2:souffle-test",
+    support_digest: str = "sha256:" + ("a" * 64),
+    target: str = "Person:exists",
+) -> Any:
+    """Step 4.2 fixture: minimal CandidateSet shaped like a Souffle output."""
+    from kernel.core.derivation.candidates import CandidateSet
+
+    key_digest = "sha256:" + ("0" * 64)
+    return CandidateSet(
+        derivation_id="check-test",
+        derivation_version="1.0",
+        run_id="souffle-run",
+        target=target,
+        key_tuple_digest=key_digest,
+        tup_digest=None,
+        payload={"terms": []},
+        support_digest=support_digest,
+        support_kind="souffle_witness_v1",
+        generated_at=0,
+        state="generated",
+        candidate_key=candidate_key,
+    )
+
+
+def _make_support_artifact(
+    *,
+    binding_items: tuple[tuple[str, Any], ...] = (),
+    pred_witness_keys: tuple[str, ...] = ("b0.a0:Person:exists",),
+    kind: str = "souffle_witness_v1",
+) -> Any:
+    """Step 4.2 fixture: minimal SupportArtifact for souffle path mocking."""
+    from kernel.core.store._support import PredWitness, SupportArtifact
+
+    return SupportArtifact(
+        kind=kind,
+        root_result_kind="fact",
+        binding_items=binding_items,
+        pred_witnesses=tuple(
+            sorted(
+                (PredWitness(pred_atom_key=key, asrt_ids=()) for key in pred_witness_keys),
+                key=lambda row: row.pred_atom_key,
+            )
+        ),
+    )
+
+
+class SouffleCheckTests(unittest.TestCase):
+    """Step 4.2: Souffle Check via evaluate-then-match against SupportArtifact.
+
+    These tests mock ``evaluate_derivation_plans`` and ``_lookup_support_artifact``
+    (the typed internal API used by the runtime) so they exercise the Check
+    runtime contract without requiring the souffle binary to be installed.
+    """
+
+    def _build_request(self, binding: tuple[tuple[str, Any], ...]) -> tuple[
+        CheckRequest, Store, Any
+    ]:
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        plan = _build_plan(body, exists_pred)
+        request = CheckRequest(plan=plan, binding=binding, engine="souffle")
+        return request, store, index
+
+    def test_souffle_passes_with_matched_candidate(self) -> None:
+        request, store, _ = self._build_request(binding=(("$p", "person-1"),))
+        candidate = _make_souffle_candidate()
+        artifact = _make_support_artifact(
+            binding_items=(("$p", "person-1"),),
+            pred_witness_keys=("b0.a0:Person:exists",),
+        )
+        with patch(
+            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            return_value=[candidate],
+        ), patch(
+            "kernel.application.derivation_check_runtime._lookup_support_artifact",
+            return_value=artifact,
+        ):
+            result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.matched_count, 1)
+        self.assertIsNotNone(result.evidence_envelope)
+        envelope = result.evidence_envelope
+        assert envelope is not None
+        self.assertEqual(envelope.engine, "souffle")
+        self.assertEqual(envelope.support_kind, "souffle_witness_v1")
+        self.assertEqual(envelope.branch_index, 0)
+        self.assertIs(envelope.engine_payload, artifact)
+        self.assertIsNone(envelope.branch_atom_projection)
+
+    def test_souffle_fails_with_no_matching_candidate(self) -> None:
+        request, store, _ = self._build_request(binding=(("$p", "person-99"),))
+        candidate = _make_souffle_candidate()
+        artifact = _make_support_artifact(binding_items=(("$p", "person-1"),))
+        with patch(
+            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            return_value=[candidate],
+        ), patch(
+            "kernel.application.derivation_check_runtime._lookup_support_artifact",
+            return_value=artifact,
+        ):
+            result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.matched_count, 0)
+        self.assertIsNone(result.matched_binding)
+        self.assertIsNone(result.evidence_envelope)
+
+    def test_souffle_fails_with_zero_candidates(self) -> None:
+        """Per audit log Step 0.C C6: zero candidates is failed (representable but no result),
+        NOT unsupported."""
+        request, store, _ = self._build_request(binding=(("$p", "person-1"),))
+        with patch(
+            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            return_value=[],
+        ):
+            result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.matched_count, 0)
+
+    def test_souffle_skips_candidate_without_retrievable_artifact(self) -> None:
+        """Candidate whose SupportArtifact lookup returns None is silently skipped."""
+        request, store, _ = self._build_request(binding=(("$p", "person-1"),))
+        good_candidate = _make_souffle_candidate(
+            candidate_key="candk_v2:good",
+            support_digest="sha256:" + ("a" * 64),
+        )
+        bad_candidate = _make_souffle_candidate(
+            candidate_key="candk_v2:bad",
+            support_digest="sha256:" + ("b" * 64),
+        )
+        good_artifact = _make_support_artifact(binding_items=(("$p", "person-1"),))
+
+        def _lookup(_store: Store, digest: str) -> Any:
+            if digest == good_candidate.support_digest:
+                return good_artifact
+            return None
+
+        with patch(
+            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            return_value=[bad_candidate, good_candidate],
+        ), patch(
+            "kernel.application.derivation_check_runtime._lookup_support_artifact",
+            side_effect=_lookup,
+        ):
+            result = check_derivation_binding(request, store=store)
+
+        # bad_candidate skipped; good_candidate matches.
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.matched_count, 1)
+
+    def test_souffle_multi_match_primary_by_lowest_branch_index(self) -> None:
+        """Per Step 0.C C4: souffle primary key = (branch_index, binding_items, candidate_key)."""
+        request, store, _ = self._build_request(binding=(("$p", "person-1"),))
+        higher_branch_cand = _make_souffle_candidate(
+            candidate_key="candk_v2:higher",
+            support_digest="sha256:" + ("1" * 64),
+        )
+        lower_branch_cand = _make_souffle_candidate(
+            candidate_key="candk_v2:lower",
+            support_digest="sha256:" + ("2" * 64),
+        )
+        higher_artifact = _make_support_artifact(
+            binding_items=(("$p", "person-1"),),
+            pred_witness_keys=("b3.a0:Person:exists",),
+        )
+        lower_artifact = _make_support_artifact(
+            binding_items=(("$p", "person-1"),),
+            pred_witness_keys=("b1.a0:Person:exists",),
+        )
+
+        def _lookup(_store: Store, digest: str) -> Any:
+            if digest == higher_branch_cand.support_digest:
+                return higher_artifact
+            return lower_artifact
+
+        with patch(
+            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            return_value=[higher_branch_cand, lower_branch_cand],
+        ), patch(
+            "kernel.application.derivation_check_runtime._lookup_support_artifact",
+            side_effect=_lookup,
+        ):
+            result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.matched_count, 2)
+        envelope = result.evidence_envelope
+        assert envelope is not None
+        # Lower branch_index wins primary.
+        self.assertEqual(envelope.branch_index, 1)
+
+
+class SouffleHelperUnitTests(unittest.TestCase):
+    """Unit-level tests for Step 4.2 souffle helpers."""
+
+    def test_parse_branch_index_basic(self) -> None:
+        from kernel.application.derivation_check_runtime import _parse_branch_index
+
+        self.assertEqual(_parse_branch_index("b0.a1:Person:exists"), 0)
+        self.assertEqual(_parse_branch_index("b12.a3:eq"), 12)
+
+    def test_parse_branch_index_returns_none_on_garbage(self) -> None:
+        from kernel.application.derivation_check_runtime import _parse_branch_index
+
+        self.assertIsNone(_parse_branch_index(""))
+        self.assertIsNone(_parse_branch_index("not-a-key"))
+        self.assertIsNone(_parse_branch_index("a0.b1:..."))  # leading 'a' not 'b'
+        self.assertIsNone(_parse_branch_index("bX.a1:..."))  # non-int branch
+        self.assertIsNone(_parse_branch_index("b0"))  # no dot
+        self.assertIsNone(_parse_branch_index("b0.x1:..."))  # no atom marker
+        self.assertIsNone(_parse_branch_index("b0.aX:..."))  # non-int atom
+        self.assertIsNone(_parse_branch_index("b0.a1"))  # no suffix separator
+
+    def test_derive_branch_index_returns_none_when_inconsistent(self) -> None:
+        """Defensive fallback: if pred_witnesses span multiple branches, return None."""
+        from kernel.application.derivation_check_runtime import (
+            _derive_branch_index_from_artifact,
+        )
+
+        artifact = _make_support_artifact(
+            binding_items=(("$p", "x"),),
+            pred_witness_keys=("b0.a0:p", "b1.a0:q"),  # two branches
+        )
+        self.assertIsNone(_derive_branch_index_from_artifact(artifact))
+
+    def test_derive_branch_index_from_pred_atom_keys(self) -> None:
+        from kernel.application.derivation_check_runtime import (
+            _derive_branch_index_from_artifact,
+        )
+
+        artifact = _make_support_artifact(
+            binding_items=(("$p", "x"),),
+            pred_witness_keys=("b2.a0:p", "b2.a1:q"),  # both branch 2
+        )
+        self.assertEqual(_derive_branch_index_from_artifact(artifact), 2)
+
+
+class PrecheckHeadVarNormalizationTests(unittest.TestCase):
+    """Step 4.2 fix: head_var_names without $-prefix are literals (per resolve_head_ref),
+    not variable references; precheck must filter them out so non-native engines don't
+    over-flag body_only_variables."""
+
+    def test_problog_with_dollar_prefixed_head_var_does_not_overflag(self) -> None:
+        """head_var_names=('$p',) + binding $p → not flagged as body_only."""
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        plan = _build_plan(body, exists_pred, head_var_names=("$p",))
+        request = CheckRequest(
+            plan=plan,
+            binding=(("$p", "person-1"),),
+            engine="problog",
+        )
+        # Should reach the (still-staging) NotImplementedError for problog,
+        # not return unsupported with BINDING_NOT_REPRESENTABLE.
+        with self.assertRaises(NotImplementedError):
+            check_derivation_binding(request, store=store)
+
+    def test_problog_with_bare_head_var_treats_as_literal_so_var_is_body_only(self) -> None:
+        """head_var_names=('p',) literal + binding $p → flagged body_only (correct).
+
+        Per `resolve_head_ref` convention in core/store/_builders.py: bare names are
+        literal head args. They cannot match a requested binding variable.
+        """
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        plan = _build_plan(body, exists_pred, head_var_names=("p",))  # bare literal
+        request = CheckRequest(
+            plan=plan,
+            binding=(("$p", "person-1"),),
+            engine="problog",
+        )
+        result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "unsupported")
+        self.assertEqual(result.errors[0].code, "BINDING_NOT_REPRESENTABLE")
+        self.assertIn("$p", result.errors[0].details["body_only_variables"])
 
 
 if __name__ == "__main__":
