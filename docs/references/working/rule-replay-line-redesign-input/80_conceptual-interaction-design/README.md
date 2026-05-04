@@ -36,13 +36,13 @@
 input bundle 左半边(10/20/30/40/50/60)  ← design history + landscape + lessons
 baseline 右半边(70)                       ← current code state + open questions
 conceptual + interaction venue(80,本目录)← 桥接两边,回答"概念 + 交互"
-blueprints(docs/blueprints/active/)       ← 落地代码,引用以上三方
+blueprints(docs/blueprints/active|archive/)← 落地代码,引用以上三方;完成后归档
 ```
 
 ## 当前 topic 列表
 
 | Topic | Status | 关联 baseline | 关联 input bundle | 起步原因 |
 |---|---|---|---|---|
-| `check-operation-conceptual-interaction.md` | **cited** by active blueprint(2026-05-03) | §P0-1 + §P0-2 + §P0-3 | `40_*` A 段 + `00_*` 命题 4 + `10_*/operational-...md` §"Check" | baseline P0-3 揭示 Check 是 P0 三个 capability 中最 ready-to-go(core primitives 已存在),需先收敛概念 + 交互;scoped implementation 前仍需 blueprint Step 0 冻结 protocol contract |
+| `check-operation-conceptual-interaction.md` | **cited** by archived implemented blueprint(2026-05-03) | §P0-1 + §P0-2 + §P0-3 | `40_*` A 段 + `00_*` 命题 4 + `10_*/operational-...md` §"Check" | baseline P0-3 揭示 Check 是 P0 三个 capability 中最 ready-to-go(core primitives 已存在),需先收敛概念 + 交互;scoped implementation 前仍需 blueprint Step 0 冻结 protocol contract |
 | `engine-extension-surface-architecture.md`(候选名,未起) | not started | TBD | TBD | 由 check-operation §6.5 / §6.9 引入;包含 engine-native payload DTO 形态 / engine_options / 各 engine payload schema 归属等 broader question |
 | `shared-evidence-projection-venue.md`(候选名,未起) | not started | TBD | TBD | 由 check-operation §6.9 Layer 3 deferral 引入;待第二个 consumer(Diagnose / Explain / UI / per-frame diff)出现时启 |

@@ -23,7 +23,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-04-11
+最后更新：2026-05-03
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
@@ -192,3 +192,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-27 | multi-engine-execution-surface-decision | decision-closed | Froze multi-engine execution surface: shared evaluate() entry, mode-based dispatch, CandidateSet normalization |
 | 2026-03-27 | multi-engine-execution-surface-design-rationale | decision-closed | Design rationale companion for multi-engine execution surface decision |
 | 2026-03-27 | value-carrying-semantics-v1-decision | decision-closed | Froze value-carrying semantics: bounded numeric predicates, PyReason interval model, existence vs value distinction |
+| 2026-05-03 | check-operation | implemented | Application-first Check operation; native via `evaluate_native_where` + non-native via evaluate-then-match (souffle SupportArtifact / problog+pyreason ProvenanceEnvelope); Option IV representability gate; `branch_atom_projection=None` reserved slot; first capability shipped on `v0.1-redesign-2026-05-03`; 73 focused + 782 total tests green |
