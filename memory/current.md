@@ -1,6 +1,29 @@
 # Current Operational Memory
 
-最后更新:2026-05-04(Check shipped + engine-extension Wave 1 closed through `44eefab`;Diagnose implemented through Step 8 close-out;handoff baseline 见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
+最后更新:2026-05-04(`v0.1-redesign-2026-05-03` pushed/frozen at `422ffcf`;new branch `v0.1-engine-capability-declaration-2026-05-04`;engine-extension §6.6 resolves §3.6 as working hypothesis)
+
+## 当前阶段(2026-05-04 — ENGINE CAPABILITY DECLARATION PHASE)
+
+**当前分支:** `v0.1-engine-capability-declaration-2026-05-04`,从 pushed/frozen `v0.1-redesign-2026-05-03` @ `422ffcf` 切出。
+
+### 已完成 checkpoint
+
+- `v0.1-redesign-2026-05-03` 已 push 到 `origin/v0.1-redesign-2026-05-03` @ `422ffcf`;作为 Check + Diagnose shipped reference 保持冻结。
+- Check operation shipped + archived.
+- Diagnose operation shipped + archived.
+- Engine-extension Wave 1 closed through §6.5.
+- 本分支首个工作:engine-extension topic §6.6,将 §3.6 Engine Capability Declaration 从 deferred 推进为 **resolved as working hypothesis**:
+  - locally-hardcoded per-capability gates remain default;
+  - no declarative capability schema / registry / DSL / matrix now;
+  - migration triggers:third capability, observed drift, new engine, consumer discovery need, explicit user/API request.
+
+### 下一步自然动作
+
+- Commit §6.6 topic-doc update + memory sync.
+- Then choose next phase:
+  - third application capability(Explain / Why-not etc.) to test migration triggers;
+  - baseline P1/P2 fill;
+  - push this new branch checkpoint if desired.
 
 ## 当前阶段(2026-05-03 — REDESIGN BASE)
 
@@ -113,7 +136,7 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - Diagnose §8 Step 6 problog/pyreason dispatch complete:`267b0a7`
 - Diagnose §8 Step 7 drift-prevention test pass complete:`86351bc`
 - Diagnose §8 Step 8 close-out complete;blueprint status `scoped → implemented`
-- Next natural action:archive Diagnose blueprint(active → archive) if not already archived;then next topic likely engine-extension §6.6 or follow-up decided by user
+- Diagnose archived;next topic selected as engine-extension §6.6 on new branch.
 - baseline P1/P2 仍待填,但应随 Diagnose source pass 从 consumer angle 补,不单独 abstract inventory
 
 任何新工作必须满足 application-first hard constraint(per `project_application_first_runtime_authority.md`)+ release branch invariants(per `project_release_branch_invariants.md`)。
@@ -162,7 +185,7 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - 0.B Q1 supersede:Hybrid → Sibling. Diagnose owns dispatch/representability/evidence lookup and does **not** call `check_derivation_binding(...)`,because Hybrid would launder Check's grandfathered non-native lookup-miss silent-skip into Diagnose
 - 0.B status contract:reuse Check 4 statuses;`failure_kind` only for `failed.no_candidate` / `failed.atom_localized`;evidence lookup miss maps to `status="unsupported"` with `ErrorDTO(code="EVIDENCE_LOOKUP_MISS")`
 - 0.B payload contract:`DiagnoseAtomLocator(branch_index, failed_atom_index, attempted_binding)` is Diagnose-owned capability-output,not an engine-native payload;§6.5 is not engaged and `EvidenceEnvelope.engine_payload` remains unchanged
-- 0.B representability:locally hardcoded per engine;native atom-localized,non-native coarse-only;§3.6 pressure confirmed but topic state remains deferred pending a separate post-ship §6.6 decision
+- 0.B representability:locally hardcoded per engine;native atom-localized,non-native coarse-only;§3.6 pressure confirmed. Post-ship §6.6 later resolved §3.6 as locally-hardcoded working hypothesis with migration triggers.
 - 0.C algorithm:Sibling dispatch;native two-phase pass/fail then atom-localization;native localizer uses `_extend_env_with_atom` enumeration primitive to avoid `_ground_terms` silent-false at atom-index layer;non-native three-bucket classification(match / lookup-miss / no-match) with lookup-miss precedence
 - 0.C drift prevention:§7-Diagnose-1..7 frozen,including evidence-miss-as-unsupported,no `DiagnoseAtomLocator` in `EvidenceEnvelope`,no Check-call/import invariant,non-native never atom-localized,status enum exact 4 values
 - 0.D lift:§5 Proposed Shape covers D1-D12 + C1-C8 + Q1 supersede + D8.note;§7 Acceptance contains 7 §7-Diagnose anti-regression gates;§8 has 8 ordered implementation steps
@@ -175,9 +198,9 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - §8 Step 7 complete:`86351bc`;added `src/kernel/tests/test_application_diagnose_sibling_invariant.py` AST static checks for Q1 Sibling no-Check-call invariant;added problog / pyreason parity tests for §7-Diagnose-5/6. All seven §7-Diagnose gates now have explicit named coverage.
 - §8 Step 8 complete;application docs list Diagnose;blueprint §10 Outcome / Deviations filled;conformance audit recorded;status `implemented`;blueprint archived to `docs/blueprints/archive/`. Step 8 refinements recorded:Step 3 candidate frontier,Step 4 souffle request-gate vs dispatch-layer representability,Step 5 branch_index ordering internal-only.
 - Verification at Step 8 checkpoint:`python -m unittest discover -s src/kernel/tests` => 866 OK / 1 skip;`python -m ruff check src/kernel` => all checks passed
-- Next natural action:post-ship direction is user decision; likely engine-extension §6.6 capability declaration round or another bounded application capability. Release base / master still untouched and branch not pushed.
+- Post-ship direction selected:engine-extension §6.6 capability declaration round on `v0.1-engine-capability-declaration-2026-05-04`. Release base / master still untouched.
 
-**Branch state** `v0.1-redesign-2026-05-03`:ahead origin ≈23 commits before handoff commit / ≈24 after handoff commit,**NOT pushed**。At handoff authoring the only dirty files are `memory/session_handoffs/2026-05-04.md` and `memory/current.md`;after committing handoff,expect clean working tree。release base sacred 不动。
+**Branch state** `v0.1-redesign-2026-05-03`:pushed to `origin/v0.1-redesign-2026-05-03` @ `422ffcf` and treated as frozen reference. Current work continues on `v0.1-engine-capability-declaration-2026-05-04`;release base sacred 不动。
 
 ---
 

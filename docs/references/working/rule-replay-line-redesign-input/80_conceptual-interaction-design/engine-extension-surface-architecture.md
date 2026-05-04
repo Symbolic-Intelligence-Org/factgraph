@@ -195,7 +195,7 @@ Open questions:
 - Should a capability ask "can you answer this request?" through an engine capability interface rather than local hardcoded checks?
 - How do temporal/probabilistic capabilities express richer support without being flattened?
 
-Decision: unresolved.
+Decision: resolved as a working hypothesis in §6.6. Capability support remains locally hardcoded per capability by default; declarative engine capability metadata requires a later migration trigger.
 
 ---
 
@@ -203,7 +203,7 @@ Decision: unresolved.
 
 - Whether the ASP/custom Datalog scenario in §6.1 should become the primary reference scenario or remain one example among several.
 - Whether this topic should aim for full resolution or only reusable guardrails.
-- Whether the next consumer should be Diagnose / Explain / per-frame diff / another capability.
+- Which future consumer should provide the next migration trigger after Check + Diagnose.
 - Whether engine-extension architecture should remain a reference convention or eventually become its own blueprint.
 
 ---
@@ -222,7 +222,7 @@ Future work should **not** cite this topic as current behavior until its relevan
 
 Potential future consumers:
 
-- Diagnose / failed-check explanation
+- Explain / Why-not
 - per-frame proof diff
 - shared branch/atom evidence projection
 - audit JSONL replay persistence
@@ -427,6 +427,8 @@ Three §1.3 rules govern this framing:
 - Whether §3.2 commit will be pure principle or include any concrete option name.
 
 Subsequent §6.X rounds carry those decisions individually.
+
+Post-§6.6 note: §3.6 later moved from "deferred" to "resolved as a working hypothesis" after Diagnose shipped as the second application capability. §6.2 remains as the historical wave-ordering rationale.
 
 #### Cross-References
 
@@ -681,7 +683,7 @@ This table is not a commitment to implement any candidate. It is a migration men
 §3.1 also does not resolve §3.6 capability declaration:
 
 - typed payloads do not tell a capability whether an engine can answer a request;
-- capability support remains local / hardcoded until a second consumer grounds a declarative shape.
+- capability support is resolved separately in §6.6 as a locally-hardcoded working hypothesis with explicit escalation triggers.
 
 #### Decision
 
@@ -702,7 +704,153 @@ This round does **not**:
 - change `EvidenceEnvelope.engine_payload`;
 - add a new payload base class, protocol, registry, or JSON envelope;
 - decide a public wire format for engine payloads;
-- decide §3.6 engine capability declaration;
+- introduce a declarative engine capability system;
 - decide §3.3 package / directory architecture;
 - require future engines to fit `SupportArtifact` or `ProvenanceEnvelope`;
 - start a shared branch/atom projection design.
+
+### 6.6 (2026-05-04) Resolve §3.6 — Engine Capability Declaration (Working Hypothesis)
+
+This round re-enters §3.6 after Diagnose shipped. It acknowledges that the §6.2 deferral trigger has fired, but it does **not** promote a declarative capability system yet.
+
+The decision mirrors §6.5's pattern: resolve the question as a working hypothesis, keep the current local shape as the default, and record concrete migration triggers.
+
+#### Trigger Acknowledgment
+
+§6.2 deferred §3.6 until "Diagnose / Explain / Why-not provides the second concrete pressure that grounds a declarative capability shape." Diagnose now exists as the second application capability after Check:
+
+- Check asks whether a requested binding satisfies a rule.
+- Diagnose asks why a requested binding passes, fails, is unsupported, or is invalid.
+- Both capabilities need per-engine representability / support boundaries before dispatch.
+- Both capabilities now carry their own local gates:
+  - Check: `_request_representability_precheck(...)`
+  - Diagnose: `_request_diagnostic_representability_precheck(...)`
+
+Diagnose's audit intentionally did not promote §3.6 during Diagnose Step 0. It recorded the pressure and left the topic-state decision for this post-ship round.
+
+#### Pressure Inventory
+
+Diagnose adds real pressure beyond Check's original representability gate:
+
+| Dimension | Check | Diagnose |
+|---|---|---|
+| Binding extractability | Needed for pass/fail verification | Needed for pass/fail classification |
+| Entity-target support | Non-native MVP can be unsupported | Non-native MVP can be unsupported |
+| Body-only variable support | Engine/capability specific | Engine/capability specific |
+| Evidence lookup miss | Check MVP grandfathered silent-skip, future changes bound by §6.3 | Must surface `EVIDENCE_LOOKUP_MISS` as `unsupported` |
+| Atom-level localization | Not in Check scope | Native only |
+| Branch-level diagnostic location | Not exposed | Native only; non-native coarse |
+| Coarse-only fallback | Not applicable | Souffle / ProbLog / PyReason |
+
+This confirms that capability support is not a single per-engine boolean. It is shaped by:
+
+- capability question (`Check` vs `Diagnose`);
+- request shape (head vars, body-only vars, entity-targeted heads);
+- evidence payload availability;
+- diagnostic granularity requested or implied by the capability.
+
+#### Candidate Outcomes Considered
+
+| Option | Decision Shape | Rejected / Chosen Rationale |
+|---|---|---|
+| A. Promote §3.6 to now-ready | Open a follow-up round to define declarative schema / DSL / registry / query API | Rejected for now. The trigger fired, but two consumers do not yet ground the shape of a durable declarative system. A full schema now would likely be taxonomy-first. |
+| B. Resolve as working hypothesis | Keep local per-capability gates as default; define migration triggers | **Chosen.** This acknowledges Diagnose's pressure while avoiding premature abstraction. It mirrors §6.5's typed-Union working-hypothesis pattern. |
+| C. Split sub-questions | Promote a dimension catalog but defer schema / registry | Rejected for now. A partial taxonomy risks looking authoritative before a third capability reveals which dimensions matter. |
+
+#### Decision: Locally Hardcoded Per-Capability Gates Are The Working Hypothesis
+
+§3.6 is resolved as a working hypothesis:
+
+1. A capability owns its support / representability gate locally.
+2. The gate can be hardcoded in the application runtime when that is the clearest expression of the capability's contract.
+3. The gate should run before dispatch when a request is not representable at all.
+4. Dispatch may still surface support / evidence unavailability when representability depends on actual candidate payloads or typed evidence lookup.
+5. No shared engine capability declaration schema, registry, DSL, or query API is introduced now.
+
+This means Check and Diagnose remain intentionally parallel:
+
+- Check keeps `_request_representability_precheck(...)`.
+- Diagnose keeps `_request_diagnostic_representability_precheck(...)`.
+- Diagnose's Q1 Sibling invariant stays intact: it does not call Check or import Check helpers.
+- Duplication is acceptable while there are only two concrete consumers and the dimensions are still small.
+
+#### Why This Is Not Ignoring The Trigger
+
+The §6.2 trigger had two parts:
+
+1. a second concrete capability creates pressure;
+2. that pressure grounds a declarative capability shape.
+
+Diagnose satisfies (1). It only partially satisfies (2). It demonstrates that engine capability support is multi-dimensional and capability-specific, but it does not yet determine the right durable representation.
+
+A declarative form would need to choose answers to questions such as:
+
+- Is capability support declared per engine, per adapter, per payload kind, per plan, per candidate, or per capability/request pair?
+- Are dimensions named centrally (`supports_body_bindings`, `supports_atom_localization`) or capability-owned?
+- Does the declaration answer "can evaluate", "can match requested binding", "can provide evidence", or "can explain"?
+- Does a capability query the declaration before evaluation, after candidate production, or both?
+
+Check + Diagnose show these questions are real. They do not yet answer them cleanly enough to justify a shared abstraction.
+
+#### Migration Triggers
+
+Re-open §3.6, or open a follow-up §6.7 declarative-shape round, when at least one concrete trigger appears:
+
+1. **Third capability trigger:** a third application capability (`Explain`, `Why-not`, fact overlay, or similar) adds another local engine-support gate and makes the Check / Diagnose duplication pattern harder to reason about.
+2. **Observed drift trigger:** two capability gates disagree accidentally, for example one silently rejects a shape another treats as `unsupported`, or one skips missing evidence that another surfaces.
+3. **New engine trigger:** an engine outside `{native, souffle, problog, pyreason}` lands and requires the same capability dimensions to be repeated across multiple runtime files.
+4. **Consumer discovery trigger:** a real caller needs to inspect capability support before constructing a request, rather than learning only through `unsupported` results.
+5. **User/API request trigger:** product requirements ask for an explicit "what can this engine answer?" surface.
+
+Until one of these triggers appears, the working hypothesis remains local gates plus tests.
+
+#### Required Discipline For Local Gates
+
+Local gates are allowed only with guardrails:
+
+- They must live in `kernel.application`, not `kernel.sdk`.
+- Request DTOs remain intent-only; do not put precomputed capability declarations, stores, registries, or caches into request DTOs.
+- Each gate must be covered by tests for supported, unsupported, and invalid-request paths.
+- Evidence lookup miss must follow §6.3: observable contract problem, not silent semantic failure.
+- When a local gate copies a pattern from another capability, it must still be owned by the new capability and tested as such.
+
+This preserves application-first discipline without prematurely introducing a capability registry.
+
+#### Implications For Existing Code
+
+No code changes follow from this §6.6 decision:
+
+- Check's `_request_representability_precheck(...)` remains as implemented.
+- Diagnose's `_request_diagnostic_representability_precheck(...)` remains as implemented.
+- No shared helper is extracted from Check + Diagnose.
+- No engine capability matrix is added to core, application, SDK, or adapters.
+- §3.6 moves from "deferred" to "resolved as working hypothesis"; it does not become an implementation blueprint.
+
+#### Relationship To Other §3 Questions
+
+- §3.4 remains the minimum adapter contract. It says evidence references must be truthful and lookup misses observable.
+- §3.1 remains the engine-native payload working hypothesis. Payload typing does not answer capability support.
+- §3.2 remains plan-level engine options by default. Request-level options are not capability declarations.
+- §3.3 package / directory architecture remains unresolved.
+- §3.5 onboarding workflow remains derived later; it should cite §6.6 only as "capability gates are local until a migration trigger fires."
+
+#### Decision
+
+§3.6 is resolved as follows:
+
+1. Engine capability declaration remains local and capability-owned by default.
+2. Locally hardcoded gates are the sanctioned working hypothesis for Check / Diagnose-like application capabilities.
+3. Declarative capability metadata is deferred until a migration trigger appears.
+4. The next escalation should define a declarative shape only if the trigger provides enough concrete dimensions to avoid taxonomy-first design.
+5. No current code, DTO, package layout, or test expectation changes by this resolution.
+
+#### Non-Decisions
+
+This round does **not**:
+
+- define a declarative engine capability schema;
+- add a registry, DSL, protocol, matrix, or query API for engine capabilities;
+- extract a shared helper between Check and Diagnose;
+- change Check or Diagnose runtime behavior;
+- promote §3.3 package architecture or §3.5 onboarding workflow;
+- decide Explain / Why-not / fact overlay scope.
