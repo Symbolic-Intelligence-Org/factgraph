@@ -10,6 +10,10 @@ from .derivation_runtime import (
     accept_derivation_candidate_sets,
     evaluate_derivation_plans,
 )
+from .diagnose_runtime import (
+    DiagnoseRuntimeError,
+    diagnose_derivation_binding,
+)
 from .entity_view import (
     EntityViewError,
     execute_read_request,
@@ -49,6 +53,7 @@ from .schema_runtime import (
 __all__ = [
     "CheckRuntimeError",
     "DerivationRuntimeError",
+    "DiagnoseRuntimeError",
     "EntityTypeInfo",
     "EntityViewError",
     "EntityWriteError",
@@ -65,6 +70,7 @@ __all__ = [
     "apply_write_plan",
     "build_schema_index",
     "check_derivation_binding",
+    "diagnose_derivation_binding",
     "encode_entity_ref",
     "entity_info",
     "entity_type_from_ref",
