@@ -100,7 +100,7 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
   - §3.4 Check evidence-miss follow-up trace:`2c13470`
   - §6.4 §3.2 engine options placement light commit:`24bd22b`
   - §6.5 §3.1 typed payload working hypothesis / migration triggers:`44eefab`
-- Diagnose operation Step 0 draft blueprint opened:`docs/blueprints/active/2026-05-04_diagnose-operation.md` + audit (`9b69178`)
+- Diagnose operation Step 0 draft blueprint opened:`docs/blueprints/active/2026-05-04_diagnose-operation.md` + audit (`9b69178`);after Step 8 archive path is `docs/blueprints/archive/2026-05-04_diagnose-operation.md`
 - Diagnose Step 0.A source pass complete + conformance-aligned audit:`5aa261d`
 - Diagnose Step 0.B DTO contract frozen:`e90835a`
 - Diagnose Step 0.C algorithm + drift-prevention frozen:`815192d`
@@ -151,10 +151,10 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - §6.5 resolved §3.1 payload DTO shape as typed-Union working hypothesis:`44eefab`
 - Wave 1 closed; still unresolved/deferred:§3.3 package architecture,§3.5 onboarding workflow,§3.6 capability declaration
 
-**Diagnose operation Step 0 closed**(Status:`scoped`):
+**Diagnose operation shipped + archived**(Status:`archived`):
 
-- Blueprint:`docs/blueprints/active/2026-05-04_diagnose-operation.md`
-- Audit:`docs/blueprints/active/2026-05-04_diagnose-operation.audit.md`
+- Blueprint:`docs/blueprints/archive/2026-05-04_diagnose-operation.md`
+- Audit:`docs/blueprints/archive/2026-05-04_diagnose-operation.audit.md`
 - Commit:`9b69178`
 - Step 0.A complete:`5aa261d`;Step 0.B frozen:`e90835a`;Step 0.C frozen:`815192d`
 - Step 0.D lift complete:`e1dc6d4`;blueprint §5 / §7 / §8 now carry the frozen contract / acceptance / ordered implementation plan
@@ -173,9 +173,9 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - §8 Step 5 complete:`8a6c449`;added `_diagnose_souffle` with evaluate → `SupportArtifact` lookup → match / lookup-miss / no-match buckets; lookup-miss outranks `no_candidate`, match wins over lookup-miss; primary sort follows Check C4 `(branch_index, binding_items, candidate_key)`; §7-Diagnose-5/6 souffle-path tests landed. Diagnose result still does not expose branch_index; branch sort is internal deterministic primary selection only.
 - §8 Step 6 complete:`267b0a7`;added `_diagnose_problog_pyreason` with evaluate → `ProvenanceEnvelope` lookup → match / lookup-miss / no-match buckets; binding extraction uses head-var payload-term positional alignment and skips `candidate_ref` terms; lookup-miss surfaces `EVIDENCE_LOOKUP_MISS`; primary sort `(candidate_key, binding_items)`. ProbLog/PyReason tests cover pass, failed.no_candidate, zero candidates, lookup-miss-only, lookup-miss outranks no-match, match wins over lookup-miss, primary sort, and non-atom-localized invariant.
 - §8 Step 7 complete:`86351bc`;added `src/kernel/tests/test_application_diagnose_sibling_invariant.py` AST static checks for Q1 Sibling no-Check-call invariant;added problog / pyreason parity tests for §7-Diagnose-5/6. All seven §7-Diagnose gates now have explicit named coverage.
-- §8 Step 8 complete;application docs list Diagnose;blueprint §10 Outcome / Deviations filled;conformance audit recorded;status `implemented`. Step 8 refinements recorded:Step 3 candidate frontier,Step 4 souffle request-gate vs dispatch-layer representability,Step 5 branch_index ordering internal-only.
+- §8 Step 8 complete;application docs list Diagnose;blueprint §10 Outcome / Deviations filled;conformance audit recorded;status `implemented`;blueprint archived to `docs/blueprints/archive/`. Step 8 refinements recorded:Step 3 candidate frontier,Step 4 souffle request-gate vs dispatch-layer representability,Step 5 branch_index ordering internal-only.
 - Verification at Step 8 checkpoint:`python -m unittest discover -s src/kernel/tests` => 866 OK / 1 skip;`python -m ruff check src/kernel` => all checks passed
-- Next:archive `docs/blueprints/active/2026-05-04_diagnose-operation.md` + audit into `docs/blueprints/archive/` and update archive inventory.
+- Next natural action:post-ship direction is user decision; likely engine-extension §6.6 capability declaration round or another bounded application capability. Release base / master still untouched and branch not pushed.
 
 **Branch state** `v0.1-redesign-2026-05-03`:ahead origin ≈23 commits before handoff commit / ≈24 after handoff commit,**NOT pushed**。At handoff authoring the only dirty files are `memory/session_handoffs/2026-05-04.md` and `memory/current.md`;after committing handoff,expect clean working tree。release base sacred 不动。
 
