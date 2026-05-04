@@ -131,7 +131,7 @@ Open questions:
 - If yes, how do request-level options compose with plan-level options?
 - Which options are engine configuration versus capability interaction?
 
-Decision: unresolved. §6.2 marks this as now-ready for a later light commit, but §6.3 does not resolve engine options placement.
+Decision: resolved lightly in §6.4. Engine options remain plan-level by default; request-level engine options require the §6.4 promotion criterion and are not added for symmetry.
 
 ### 3.3 Package / Directory Architecture
 
@@ -548,3 +548,68 @@ This round does **not**:
 - decide §3.2 engine options placement;
 - move adapter code or create `kernel.engines.*`;
 - write a new engine onboarding checklist.
+
+### 6.4 (2026-05-04) Resolve §3.2 — Engine Options Placement (Light Commit)
+
+This round resolves §3.2 lightly. It locks the architectural principle for engine options placement without enumerating any specific options or extending current data shapes.
+
+It does **not** introduce a request-level `engine_options` field on any capability DTO, change `CompiledDerivationPlan.engine_options`, or define option semantics for any specific engine.
+
+#### Current State
+
+- `CompiledDerivationPlan.engine_options` exists and is honored by `evaluate_derivation_plans(...)` and downstream adapters.
+- Check intentionally added no request-level `engine_options`; `CheckRequest` carries no engine knobs at all (per Check audit Step 0.B B5).
+- Adapters consume plan-level options as needed; application capabilities do not surface them as first-class DTO fields.
+
+#### Default Posture
+
+Engine options live at plan level as the default. Concretely:
+
+- A new application capability does **not** add request-level `engine_options` for symmetry with the plan.
+- A capability that delegates to evaluate honors plan-level options through the existing executor seam; it does not reinterpret them.
+- "Capability needs no request-level options" is the assumed answer until the promotion criterion below is met.
+
+#### Promotion Criterion
+
+A capability may add a request-level engine option only when **all** of the following hold:
+
+1. The option changes the capability's answer shape or coverage, not the underlying evaluator's plan-level semantics.
+2. The option cannot be expressed as a different `CompiledDerivationPlan`, because it concerns the capability's interaction with the same plan, not a different plan.
+3. A concrete consumer (capability + scenario) demonstrates the option is needed; speculative or symmetry-driven additions do not qualify.
+
+If any of (1)-(3) is unclear or speculative, the capability stays at "plan-level only" until those concerns are resolved.
+
+#### Two-Level Model And Composition Rule (Forward Hypothesis)
+
+§6.1.5 ASP demo hinted at a two-level model:
+
+- **Plan-level (stable):** options that determine the compiled plan's evaluation semantics, e.g., solver mode, optimization strategy, max answer sets when those affect what counts as a candidate.
+- **Request-level (interaction):** options that adjust *how* a single capability call answers, without changing what counts as a valid candidate, e.g., a future Diagnose explanation depth, an Explain proof verbosity, a Why-not exhaustiveness toggle.
+
+The assumed composition rule, the day a capability earns request-level options:
+
+- Plan-level options are authoritative for evaluator semantics.
+- Request-level options layer on top for capability interaction; they cannot redefine evaluator semantics.
+- Conflicts between the two levels surface explicitly: the capability runtime classifies the request as `invalid_request` with an explicit error code, or normalizes through documented rules.
+
+This two-level model and composition rule are **working hypotheses**. They are not committed to any DTO, code path, or convention by this light commit. They become convention only when the first concrete capability triggers §3.2 promotion.
+
+#### Decision
+
+§3.2 is resolved as a light commit:
+
+1. Engine options remain at plan level by default; capability DTOs do not carry symmetric `engine_options` fields.
+2. The promotion criterion above governs when a capability earns request-level options.
+3. The two-level model and composition rule are working hypotheses; they will be committed to convention only when triggered by a concrete capability.
+4. No current data shape, evaluator API, or capability DTO is changed by this resolution.
+
+#### Non-Decisions
+
+This round does **not**:
+
+- enumerate specific engine option names;
+- change `CompiledDerivationPlan.engine_options` shape, validation, or semantics;
+- add `engine_options` to `CheckRequest`, `DerivationEvaluateRequest`, or any other capability DTO;
+- define option composition rules in code or types;
+- decide whether engine options eventually become a typed system or remain a string-keyed dict;
+- preempt §3.1 typed payload decisions; engine options and engine payloads are independent typing questions.
