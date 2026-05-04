@@ -1,4 +1,4 @@
-"""Non-native Diagnose runtime tests (§8 Step 4 representability gate + Step 5 souffle dispatch)."""
+"""Non-native Diagnose runtime tests (§8 Step 4 gate + Step 5-6 dispatch)."""
 from __future__ import annotations
 
 import unittest
@@ -147,12 +147,6 @@ class NonNativeRepresentabilityGateTests(unittest.TestCase):
         self.assertIsNone(result.failure_kind)
         self.assertIsNone(result.diagnostic_payload)
 
-    def test_problog_head_only_binding_is_representable_for_later_dispatch(self) -> None:
-        store, request = self._request("problog", binding=(("$p", "person-1"),))
-
-        with self.assertRaises(NotImplementedError):
-            diagnose_derivation_binding(request, store=store)
-
     def test_pyreason_bare_head_var_treats_requested_var_as_body_only(self) -> None:
         store, request = self._request(
             "pyreason",
@@ -190,6 +184,56 @@ def _make_souffle_candidate(
         generated_at=0,
         state="generated",
         candidate_key=candidate_key,
+    )
+
+
+def _make_provenance_candidate(
+    *,
+    engine: str = "problog",
+    candidate_key: str = "candk_v2:diagnose-provenance-test",
+    support_digest: str = "sha256:" + ("b" * 64),
+    target: str = "Person:exists",
+    terms: list[Any] | None = None,
+) -> Any:
+    """Step 6 fixture: minimal CandidateSet shaped like ProbLog/PyReason output."""
+    from kernel.core.derivation.candidates import CandidateSet
+
+    key_digest = "sha256:" + ("0" * 64)
+    support_kind = f"{engine}_provenance_v1"
+    payload_terms = (
+        [{"kind": "entity_ref", "value": "person-1"}]
+        if terms is None
+        else terms
+    )
+    return CandidateSet(
+        derivation_id="diagnose-provenance-test",
+        derivation_version="1.0",
+        run_id=f"{engine}-run",
+        target=target,
+        key_tuple_digest=key_digest,
+        tup_digest=None,
+        payload={"terms": payload_terms},
+        support_digest=support_digest,
+        support_kind=support_kind,
+        generated_at=0,
+        state="generated",
+        candidate_key=candidate_key,
+    )
+
+
+def _make_provenance_envelope(
+    *,
+    engine: str = "problog",
+    candidate_id: str = "cand_v2:diagnose-provenance-test",
+) -> Any:
+    """Step 6 fixture: minimal ProvenanceEnvelope for provenance path mocking."""
+    from kernel.core.store._support import ProvenanceEnvelope
+
+    return ProvenanceEnvelope(
+        candidate_id=candidate_id,
+        engine=engine,
+        payload_type=f"{engine}_proof_graph_v1",
+        payload={"nodes": [], "edges": []},
     )
 
 
@@ -449,6 +493,245 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
         self.assertEqual(result.status, "failed")
         self.assertNotEqual(result.failure_kind, "atom_localized")
         self.assertEqual(result.failure_kind, "no_candidate")
+
+
+class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
+    """§8 Step 6: ProbLog / PyReason dispatch via provenance-envelope buckets."""
+
+    def _build_request(
+        self,
+        engine: str,
+        binding: tuple[tuple[str, Any], ...] = (("$p", "person-1"),),
+        head_var_names: tuple[str, ...] = ("$p",),
+    ) -> tuple[Store, DiagnoseRequest]:
+        store, index = _build_store()
+        body, target = _exists_age_body(index)
+        plan = _build_plan(body, target, head_var_names=head_var_names)
+        request = DiagnoseRequest(plan=plan, binding=binding, engine=engine)  # type: ignore[arg-type]
+        return store, request
+
+    def test_problog_passed_with_head_var_payload_match(self) -> None:
+        store, request = self._build_request("problog", binding=(("$p", "person-1"),))
+        candidate = _make_provenance_candidate(engine="problog")
+        envelope = _make_provenance_envelope(engine="problog")
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[candidate],
+        ), patch(
+            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            return_value=envelope,
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.matched_count, 1)
+        self.assertEqual(result.matched_binding, (("$p", "person-1"),))
+        self.assertIsNone(result.failure_kind)
+        self.assertIsNone(result.diagnostic_payload)
+
+    def test_pyreason_passed_with_literal_term_payload_match(self) -> None:
+        store, request = self._build_request(
+            "pyreason",
+            binding=(("$age", 25),),
+            head_var_names=("$age",),
+        )
+        candidate = _make_provenance_candidate(
+            engine="pyreason",
+            terms=[{"kind": "literal", "tag": "int", "value": 25}],
+        )
+        envelope = _make_provenance_envelope(engine="pyreason")
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[candidate],
+        ), patch(
+            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            return_value=envelope,
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.matched_binding, (("$age", 25),))
+        self.assertEqual(result.matched_count, 1)
+
+    def test_problog_failed_no_candidate_when_payload_does_not_match(self) -> None:
+        store, request = self._build_request("problog", binding=(("$p", "person-99"),))
+        candidate = _make_provenance_candidate(engine="problog")
+        envelope = _make_provenance_envelope(engine="problog")
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[candidate],
+        ), patch(
+            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            return_value=envelope,
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_kind, "no_candidate")
+        self.assertEqual(result.matched_count, 0)
+        self.assertIsNone(result.matched_binding)
+        self.assertIsNone(result.diagnostic_payload)
+        self.assertEqual(result.errors, ())
+
+    def test_pyreason_failed_no_candidate_when_evaluator_returns_zero(self) -> None:
+        store, request = self._build_request("pyreason", binding=(("$p", "person-1"),))
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[],
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_kind, "no_candidate")
+        self.assertEqual(result.matched_count, 0)
+
+    def test_problog_unsupported_when_lookup_miss_only(self) -> None:
+        store, request = self._build_request("problog", binding=(("$p", "person-1"),))
+        candidate = _make_provenance_candidate(engine="problog")
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[candidate],
+        ), patch(
+            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            return_value=None,
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "unsupported")
+        self.assertIsNone(result.failure_kind)
+        self.assertIsNone(result.matched_binding)
+        self.assertIsNone(result.diagnostic_payload)
+        self.assertEqual(len(result.errors), 1)
+        error = result.errors[0]
+        self.assertEqual(error.code, "EVIDENCE_LOOKUP_MISS")
+        self.assertEqual(error.details["engine"], "problog")
+        self.assertEqual(error.details["support_kind"], "problog_provenance_v1")
+        self.assertEqual(error.details["support_digest"], candidate.support_digest)
+        self.assertEqual(error.details["candidate_key"], candidate.candidate_key)
+
+    def test_pyreason_lookup_miss_outranks_no_candidate(self) -> None:
+        store, request = self._build_request("pyreason", binding=(("$p", "person-99"),))
+        no_match_cand = _make_provenance_candidate(
+            engine="pyreason",
+            candidate_key="candk_v2:no-match",
+            support_digest="sha256:" + ("3" * 64),
+            terms=[{"kind": "entity_ref", "value": "person-1"}],
+        )
+        miss_cand = _make_provenance_candidate(
+            engine="pyreason",
+            candidate_key="candk_v2:miss",
+            support_digest="sha256:" + ("4" * 64),
+            terms=[{"kind": "entity_ref", "value": "person-2"}],
+        )
+        envelope = _make_provenance_envelope(engine="pyreason")
+
+        def _lookup(_store: Store, digest: str) -> Any:
+            if digest == no_match_cand.support_digest:
+                return envelope
+            return None
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[no_match_cand, miss_cand],
+        ), patch(
+            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            side_effect=_lookup,
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "unsupported")
+        self.assertIsNone(result.failure_kind)
+        self.assertEqual(len(result.errors), 1)
+        self.assertEqual(result.errors[0].code, "EVIDENCE_LOOKUP_MISS")
+        self.assertEqual(
+            result.errors[0].details["candidate_key"], miss_cand.candidate_key
+        )
+
+    def test_problog_match_wins_over_lookup_miss(self) -> None:
+        store, request = self._build_request("problog", binding=(("$p", "person-1"),))
+        match_cand = _make_provenance_candidate(
+            engine="problog",
+            candidate_key="candk_v2:match",
+            support_digest="sha256:" + ("5" * 64),
+            terms=[{"kind": "entity_ref", "value": "person-1"}],
+        )
+        miss_cand = _make_provenance_candidate(
+            engine="problog",
+            candidate_key="candk_v2:miss",
+            support_digest="sha256:" + ("6" * 64),
+            terms=[{"kind": "entity_ref", "value": "person-2"}],
+        )
+        envelope = _make_provenance_envelope(engine="problog")
+
+        def _lookup(_store: Store, digest: str) -> Any:
+            if digest == match_cand.support_digest:
+                return envelope
+            return None
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[match_cand, miss_cand],
+        ), patch(
+            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            side_effect=_lookup,
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.matched_count, 1)
+        self.assertEqual(result.errors, ())
+
+    def test_problog_multi_match_primary_by_candidate_key_then_binding(self) -> None:
+        store, request = self._build_request("problog", binding=())
+        later_cand = _make_provenance_candidate(
+            engine="problog",
+            candidate_key="candk_v2:z-later",
+            support_digest="sha256:" + ("7" * 64),
+            terms=[{"kind": "entity_ref", "value": "person-z"}],
+        )
+        earlier_cand = _make_provenance_candidate(
+            engine="problog",
+            candidate_key="candk_v2:a-earlier",
+            support_digest="sha256:" + ("8" * 64),
+            terms=[{"kind": "entity_ref", "value": "person-a"}],
+        )
+        envelope = _make_provenance_envelope(engine="problog")
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[later_cand, earlier_cand],
+        ), patch(
+            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            return_value=envelope,
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.matched_count, 2)
+        self.assertEqual(result.matched_binding, (("$p", "person-a"),))
+
+    def test_pyreason_never_returns_failure_kind_atom_localized(self) -> None:
+        store, request = self._build_request("pyreason", binding=(("$p", "person-99"),))
+        candidate = _make_provenance_candidate(engine="pyreason")
+        envelope = _make_provenance_envelope(engine="pyreason")
+
+        with patch(
+            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            return_value=[candidate],
+        ), patch(
+            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            return_value=envelope,
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_kind, "no_candidate")
+        self.assertNotEqual(result.failure_kind, "atom_localized")
 
 
 if __name__ == "__main__":

@@ -3,7 +3,8 @@
 Native Diagnose supports pass / fail classification, native atom-localization,
 and semantic invalid_request prechecks. Souffle dispatch lands in §8 Step 5
 (evaluate-then-classify with three-bucket logic + lookup-miss precedence per
-audit C4 + §6.3 Decision #5). ProbLog / PyReason dispatch is §8 Step 6.
+audit C4 + §6.3 Decision #5). ProbLog / PyReason dispatch lands in §8 Step 6
+with the same C4 bucket precedence over provenance envelopes.
 """
 from __future__ import annotations
 
@@ -30,6 +31,7 @@ from kernel.core.rules.where_eval import (
 )
 from kernel.core.store._support import (
     BindingItems,
+    ProvenanceEnvelope,
     SupportArtifact,
     normalize_binding_items,
 )
@@ -83,6 +85,9 @@ class _FailedAtomCandidate:
     attempted_env: dict[str, Any]
 
 
+_UNREPRESENTABLE_TERM = object()
+
+
 def diagnose_derivation_binding(
     request: DiagnoseRequest,
     *,
@@ -98,8 +103,16 @@ def diagnose_derivation_binding(
         return _diagnose_native(request, store=store, registry=registry)
     if request.engine == "souffle":
         return _diagnose_souffle(request, store=store, registry=registry)
-    raise NotImplementedError(
-        "Diagnose problog / pyreason dispatch is scoped for §8 Step 6"
+    if request.engine in {"problog", "pyreason"}:
+        return _diagnose_problog_pyreason(
+            request,
+            store=store,
+            registry=registry,
+        )
+    raise DiagnoseRuntimeError(
+        f"unknown Diagnose engine: {request.engine}",
+        code="DIAGNOSE_INTERNAL_UNKNOWN_ENGINE",
+        details={"engine": request.engine},
     )
 
 
@@ -609,6 +622,143 @@ def _lookup_support_artifact(store: Store, digest: str) -> SupportArtifact | Non
     per audit §6.3 ownership boundary.
     """
     return store._lookup_support_artifact(digest)
+
+
+def _diagnose_problog_pyreason(
+    request: DiagnoseRequest,
+    *,
+    store: Store,
+    registry: RuleRegistry | None,
+) -> DiagnoseResult:
+    """ProbLog / PyReason Diagnose via C4 three-bucket provenance classification.
+
+    Representability has already been gated at the request level: only
+    head-carried variables reach this path. Diagnose extracts match bindings by
+    positional alignment between ``plan.heads[0].head_var_names`` and
+    ``candidate.payload["terms"]``. Missing provenance envelopes are observable
+    ``unsupported`` results with ``EVIDENCE_LOOKUP_MISS``; this is the deliberate
+    Diagnose divergence from Check's grandfathered silent-skip path.
+    """
+    eval_request = DerivationEvaluateRequest(
+        plans=(request.plan,),
+        engine=request.engine,
+    )
+    candidates = evaluate_derivation_plans(
+        eval_request, store=store, registry=registry
+    )
+
+    matches: list[tuple[CandidateSet, ProvenanceEnvelope, dict[str, Any]]] = []
+    lookup_miss: list[CandidateSet] = []
+    for candidate in candidates:
+        envelope = _lookup_provenance_envelope(store, candidate.support_digest)
+        if envelope is None:
+            lookup_miss.append(candidate)
+            continue
+        binding_dict = _extract_head_var_binding(
+            candidate=candidate,
+            plan=request.plan,
+        )
+        if _diagnose_binding_matches(binding_dict, request.binding):
+            matches.append((candidate, envelope, binding_dict))
+
+    if matches:
+        def _sort_key(
+            item: tuple[CandidateSet, ProvenanceEnvelope, dict[str, Any]],
+        ) -> tuple[Any, ...]:
+            candidate, _envelope, binding = item
+            return (candidate.candidate_key, normalize_binding_items(binding))
+
+        matches.sort(key=_sort_key)
+        _primary_candidate, _primary_envelope, primary_binding = matches[0]
+        return DiagnoseResult(
+            status="passed",
+            requested_binding=request.binding,
+            matched_count=len(matches),
+            matched_binding=normalize_binding_items(primary_binding),
+            failure_kind=None,
+            diagnostic_payload=None,
+            errors=(),
+            warnings=(),
+        )
+
+    if lookup_miss:
+        errors = tuple(
+            ErrorDTO(
+                code="EVIDENCE_LOOKUP_MISS",
+                message=(
+                    f"{request.engine} candidate advertised support_kind="
+                    f"{candidate.support_kind!r} but lookup returned None"
+                ),
+                path=("candidates",),
+                details={
+                    "engine": request.engine,
+                    "support_kind": candidate.support_kind,
+                    "support_digest": candidate.support_digest,
+                    "candidate_key": candidate.candidate_key,
+                },
+            )
+            for candidate in lookup_miss
+        )
+        return _diagnose_unsupported(request, errors=errors)
+
+    return DiagnoseResult(
+        status="failed",
+        requested_binding=request.binding,
+        matched_count=0,
+        matched_binding=None,
+        failure_kind="no_candidate",
+        diagnostic_payload=None,
+        errors=(),
+        warnings=(),
+    )
+
+
+def _lookup_provenance_envelope(
+    store: Store,
+    digest: str,
+) -> ProvenanceEnvelope | None:
+    """Diagnose's own typed provenance lookup (Q1 Sibling D11 invariant)."""
+    return store._lookup_provenance_envelope(digest)
+
+
+def _extract_head_var_binding(
+    *,
+    candidate: CandidateSet,
+    plan: Any,
+) -> dict[str, Any]:
+    """Extract var → value mapping from a candidate via head-var alignment."""
+    head_vars = plan.heads[0].head_var_names
+    payload = candidate.payload
+    if not isinstance(payload, dict):
+        return {}
+    terms = payload.get("terms")
+    if not isinstance(terms, list) or len(terms) != len(head_vars):
+        return {}
+
+    binding: dict[str, Any] = {}
+    for var_name, term in zip(head_vars, terms):
+        if not (
+            isinstance(var_name, str)
+            and var_name.startswith("$")
+            and len(var_name) > 1
+        ):
+            continue
+        value = _extract_term_value(term)
+        if value is _UNREPRESENTABLE_TERM:
+            continue
+        binding[var_name] = value
+    return binding
+
+
+def _extract_term_value(term: Any) -> Any:
+    if isinstance(term, dict):
+        kind = term.get("kind")
+        if kind == "candidate_ref":
+            return _UNREPRESENTABLE_TERM
+        return term.get("value")
+    if isinstance(term, tuple) and len(term) == 2:
+        return term[1]
+    return None
 
 
 def _derive_branch_index_from_artifact(artifact: SupportArtifact) -> int | None:
