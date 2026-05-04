@@ -9,6 +9,7 @@
 | 2026-05-04 | draft | Blueprint created | Opened as the second application capability candidate after Check. Purpose is Step 0 only: freeze Diagnose DTO / algorithm / engine boundary before any implementation. |
 | 2026-05-04 | draft | Step 0.A source pass opened | Initial anchors recorded from Check protocol/runtime, archived Check blueprint/audit, application common protocol DTOs, baseline P0-3 support artifacts, and engine-extension §6.3 / §6.4 / §6.5. |
 | 2026-05-04 | draft | Step 0.A source pass complete | Native primitives + Check runtime fully mapped; Explore-agent reported non-native failure surfaces (souffle / problog / pyreason); cross-engine diagnostic asymmetry confirmed (steeper than Check's); Q1 stance **Hybrid**; Q2–Q5 preliminary stances recorded; **§3.6 second-consumer pressure confirmed but MVP keeps §3.6 deferred** per topic §6.2 wave ordering. Blueprint remains `draft`; no implementation until Step 0.B / 0.C / 0.D complete. |
+| 2026-05-04 | draft | Step 0.B DTO contract freeze (with Q1 revision) | Q1 revised from **Hybrid → Sibling**: Hybrid would inherit Check's silent-skip on lookup-miss for non-native engines, violating Diagnose's independent §6.3 Decision #5 binding. 12 sub-decisions D1–D12 frozen across 5 deliverables: Request DTO (D1–D4), Result DTO (D5–D7), Evidence/Payload (D8–D9), Representability (D10–D11), Evidence-miss semantics (D12). Evidence-unavailable maps to `status="unsupported"` per §6.3 line 513 endorsement (NOT broader-than-Check `failed`, NOT a 5th status). Blueprint remains `draft` pending Step 0.C algorithm freeze + 0.D lift. |
 
 ## Decision Notes
 
@@ -72,3 +73,92 @@
   4. per-engine representability table grounding `_request_diagnostic_representability_precheck` (working name) shape and location
   5. evidence-unavailable status semantics per §6.3 observability rule
   Blueprint stays `draft` until Step 0.D lifts these decisions into §5 / §7 / §8 and moves status to `scoped`.
+
+- 2026-05-04 (Step 0.B) — **Q1 supersede: Hybrid → Sibling.** Step 0.A audit's **"Step 0.A pivotal decisions" bullet** recorded **Q1 = Hybrid** as one of two pivotal architectural decisions (with Q4 = native atom-level + non-native coarse-only). Step 0.B sketch surfaced an architectural tension: Hybrid causes Diagnose to call `check_derivation_binding(...)` internally; Check internally silent-skips lookup-miss on non-native engines (`derivation_check_runtime.py:325` `_souffle_check`, `:473` `_problog_pyreason_check` — `if envelope_payload is None: continue`); therefore Diagnose-via-Hybrid would launder Check's grandfathered silent-skip into Diagnose's behavior, violating Diagnose's independent §6.3 Decision #5 binding (per Step 0.A Engine-extension conformance commitments §6.3 sub-bullet). **Q1 = Hybrid is superseded by Q1 = Sibling:** Diagnose owns its full dispatch (representability gate, evaluator dispatch, typed lookup, primary selection, evidence-miss detection); Diagnose does **NOT** call `check_derivation_binding(...)` internally. Duplication with Check's representability gate and RuleRef preflight is accepted as MVP cost; deferral grounding is recorded at D11 (per topic §1.3 working discipline: locally hardcoded stays until §3.6 promotes to declarative form OR a third capability surfaces shared-helper pressure). The Step 0.A entries about Q1 Hybrid (the "extra native eval pass on `failed`" cost analysis, Hybrid-specific framing) are factually stale per this supersede; they remain in the audit as 0.A history but are not the current contract.
+
+- 2026-05-04 (Step 0.B) — **D1 — Request DTO single-plan only.** `DiagnoseRequest` carries a single `CompiledDerivationPlan`. Multi-plan rejection at DTO post_init (Python `TypeError` on unexpected kwargs is the anti-regression gate). Multi-plan is evaluate orchestration's responsibility, not Diagnose's. Mirrors Check 0.B B1.
+
+- 2026-05-04 (Step 0.B) — **D2 — Binding shape.** Binding wire = `BindingItems` typedef from `core/store/_support` (sorted tuple, immutable). DTO post_init validator: `$`-prefix variable name, duplicate-impossible. Mirrors Check 0.B unchanged.
+
+- 2026-05-04 (Step 0.B) — **D3 — Engine literal required.** `engine: Literal["native", "souffle", "problog", "pyreason"]` required field, no default. Mirrors Check 0.B B3.
+
+- 2026-05-04 (Step 0.B) — **D4 — No `diagnostic_mode` field in MVP.** Engine determines diagnostic depth: native → atom-localized; non-native → coarse-only. Reasoning is **Diagnose-side, not §6.4-derived**: §6.4 promotion criterion governs `engine_options` placement only, and §6.4 text does not define what counts as engine option vs capability-interaction field (per Step 0.A §6.4 conformance commitment). A `diagnostic_mode` field on `DiagnoseRequest` would be a capability-interaction field outside §6.4's scope. Diagnose 0.B independently chooses to omit `diagnostic_mode` because MVP has no concrete consumer scenario where user wants explicitly coarse-on-native; engine asymmetry already determines the result shape. v1+ may add `diagnostic_mode` if user-controllable depth becomes needed.
+
+- 2026-05-04 (Step 0.B) — **D5 — Status enum + `failure_kind` field; evidence-unavailable placement.** Status enum stays Check's 4 values verbatim: `passed` / `failed` / `unsupported` / `invalid_request`. New orthogonal field `failure_kind: Literal["no_candidate", "atom_localized"] | None`; populated only when `status = "failed"`, None otherwise.
+
+  **Critical decision (per user 0.B-altitude caution):** evidence-unavailable maps to `status = "unsupported"`. Per §6.3 line 513: *"If missing evidence prevents the capability from answering the request, the result should be classified as unsupported / evidence-unavailable rather than semantic `failed`."* Three concrete options were considered; two are explicitly rejected:
+
+  - **Rejected — Option α: Diagnose `status="failed"` broader than Check's `failed`.** Would require adding `failure_kind="evidence_unavailable"` enum value with `matched_count=None`. Rejected because §6.3 line 513 explicitly says evidence-miss is *"unsupported / evidence-unavailable rather than semantic `failed`"*; broadening `failed` would silently disagree with Check's `failed` semantics (*"evaluated, no semantic match"*) and create cross-capability interface drift.
+  - **Rejected — Option β: Add a 5th top-level status (e.g., `evidence_unavailable`).** Would extend the status enum from 4 to 5 values. Rejected because §6.3 line 513 endorses `unsupported`; extending the enum diverges from Check's interface without semantic gain (caller learns the specific case via `errors` either way).
+  - **Chosen — Option γ: `status="unsupported"`.** Reuses Check's existing 4-value status enum (interface consistent), §6.3 explicitly endorses, caller learns evidence-miss specifically via `errors` (`EVIDENCE_LOOKUP_MISS` code).
+
+  Implication: Diagnose `status = "failed"` is **NOT broader** than Check's `failed` — both mean *"evaluated, no semantic match."* Evidence-availability problems route to `status = "unsupported"` (alongside Check's pre-existing representability-unsupported case).
+
+- 2026-05-04 (Step 0.B) — **D6 — Result DTO nullable matrix.**
+
+  | status | failure_kind | matched_count | matched_binding | diagnostic_payload | errors |
+  |---|---|:---:|:---:|:---:|:---:|
+  | `passed` | None | ≥1 | populated | None | empty |
+  | `failed` | `no_candidate` | 0 | None | None | empty |
+  | `failed` | `atom_localized` | 0 | None | populated | empty |
+  | `unsupported` | None | None | None | None | required |
+  | `invalid_request` | None | None | None | None | required |
+
+  `unsupported` covers both Check's pre-existing unsupported-by-representability AND Diagnose's evidence-unavailable case (errors carry the specific code: `BINDING_NOT_REPRESENTABLE` / `ENTITY_TARGET_NOT_REPRESENTABLE` / `EVIDENCE_LOOKUP_MISS`). `requested_binding` echoes normalized `BindingItems` when DTO construction succeeds.
+
+- 2026-05-04 (Step 0.B) — **D7 — Errors and warnings reuse.** `ErrorDTO` / `WarningDTO` from `application.protocol.common` (mirrors Check 0.B B7). Error codes are descriptive SCREAMING_SNAKE_CASE, no `DIAGNOSE_` prefix (mirrors Check). Code inventory:
+  - **`EVIDENCE_LOOKUP_MISS`** (new — §6.3 evidence-unavailable case under `status = "unsupported"`)
+  - Reused from Check: `BINDING_NOT_REPRESENTABLE`, `ENTITY_TARGET_NOT_REPRESENTABLE`, `UNKNOWN_VARIABLE_IN_BINDING`, `REGISTRY_REQUIRED`, `RULE_REF_UNRESOLVABLE`, `MULTI_HEAD_PLAN_NOT_SUPPORTED`
+
+- 2026-05-04 (Step 0.B) — **D8 — `DiagnoseAtomLocator` typed payload class.** New frozen dataclass for the native atom-localized failure case: `DiagnoseAtomLocator(branch_index: int, failed_atom_index: int, attempted_binding: BindingItems)`. 3 required fields, all populated when present. Lives in `kernel.application.protocol/` (concrete filename decided at 0.D lift). **Top-level atom only** in MVP — when failed atom is `not(...)` or compound, `failed_atom_index` points at the top-level atom in `branch[i]`; nested-atom path tracking is deferred to v1+. **DiagnoseAtomLocator is a capability-output payload** (Diagnose-owned, computed by Diagnose runtime from native primitives), **not an engine-native payload**. The `EvidenceEnvelope.engine_payload` typed Union (`SupportArtifact | ProvenanceEnvelope`) is **unchanged** by this addition (per D9); DiagnoseAtomLocator lives in a separate Diagnose-owned slot. Therefore §6.5 (which governs engine-native payload typing) is **not engaged** — see D8.note below for §6.5 scope clarification.
+
+- 2026-05-04 (Step 0.B) — **D8.note — §6.5 scope clarification (refines 0.A §6.5 conformance commitment).** Step 0.A audit's §6.5 conformance commitment described Diagnose as widening the typed Union to 3 members under §6.5 working hypothesis (with conjunctive criterion analysis (a) met / (b) not met). On 0.B re-examination during conformance review, that framing was imprecise: **§6.5 governs the engine-native payload typing for `EvidenceEnvelope.engine_payload`** (per topic §6.5 lines 642–648: *"in-process payload shape"*, *"Engine-native payloads must stay inspectable"*). Members of that Union (`SupportArtifact`, `ProvenanceEnvelope`) are produced **by engine adapters** as proof artifacts. DiagnoseAtomLocator is produced by **Diagnose runtime** from native primitives, not by an engine adapter — it is **capability-output payload**, outside §6.5 scope. The §6.5 trigger analysis (criterion (a) AND (b)) was therefore not applicable; §6.5 working hypothesis is preserved trivially because Diagnose does not modify the engine_payload Union. The 0.A §6.5 conformance entry remains as audit history; its "widening to 3 members" wording is **superseded by this 0.B clarification**. Going forward, §6.5 is engaged only when a new engine-native payload kind is added (i.e., when an adapter starts producing a new proof artifact type).
+
+- 2026-05-04 (Step 0.B) — **D9 — `diagnostic_payload` field placement on `DiagnoseResult`.** Direct field `diagnostic_payload: DiagnoseAtomLocator | None` on `DiagnoseResult`. Populated only when `status = "failed"` AND `failure_kind = "atom_localized"`; None otherwise. **`DiagnoseResult` does NOT reuse Check's `EvidenceEnvelope`** (per Round 2 Check archive integrity preservation; Check's `EvidenceEnvelope` shape unchanged). **`DiagnoseResult` does NOT carry Check's evidence_envelope on `passed`** — this is an **independent UX decision** (not just a Sibling consequence): Diagnose's primary value is the diagnostic answer for failed / unsupported cases; on `passed`, `matched_binding` is sufficient and a caller wanting Check's evidence_envelope can independently call Check. Bundling Check's `EvidenceEnvelope` into `DiagnoseResult` would (a) duplicate retrieval work for callers using both capabilities, and (b) couple `DiagnoseResult` shape to Check's evidence model so future Check evidence-shape evolution would drag Diagnose along. `DiagnoseResult` final field set:
+  - `status: Literal["passed", "failed", "unsupported", "invalid_request"]`
+  - `requested_binding: BindingItems`
+  - `matched_binding: BindingItems | None` (populated on `passed`)
+  - `matched_count: int | None`
+  - `failure_kind: Literal["no_candidate", "atom_localized"] | None`
+  - `diagnostic_payload: DiagnoseAtomLocator | None`
+  - `errors: tuple[ErrorDTO, ...]`
+  - `warnings: tuple[WarningDTO, ...]`
+
+- 2026-05-04 (Step 0.B) — **D10 — Per-engine representability table (locally hardcoded).**
+
+  | Engine | passed | failed.no_candidate | failed.atom_localized | unsupported.representability | unsupported.evidence_unavailable | invalid_request |
+  |---|:-:|:-:|:-:|:-:|:-:|:-:|
+  | native | ✓ | ✓ | ✓ | n/a | rare | ✓ |
+  | souffle | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
+  | problog | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
+  | pyreason | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
+
+  Per-cell rationale (engine mechanism + code-path citations) is recorded at the **Step 0.A "Cross-engine diagnostic asymmetry" bullet** (q.v.) — it is 0.A-altitude evidence, not re-emitted at 0.B. Representability rules are **locally hardcoded** in Diagnose runtime, not declarative — §3.6 declarative capability matrix remains deferred per topic state.
+
+- 2026-05-04 (Step 0.B) — **D11 — Diagnose runtime dispatch invariants** (0.B altitude — concrete function decomposition + signatures decided at 0.C). Per Q1 Sibling supersede, only the dispatch invariants are committed at 0.B:
+
+  - **Sibling invariant:** Diagnose does NOT call `check_derivation_binding(...)` — primary classification path is Diagnose's own
+  - **Per-engine dispatch:** Diagnose has engine-specific entry points (one per engine in `{native, souffle, problog, pyreason}`); concrete function decomposition + signatures + names decided at 0.C
+  - **Representability gate:** Diagnose owns its own request-level representability gate per D10 table; gate function shape and name decided at 0.C
+  - **Typed lookup:** Diagnose calls `Store._lookup_support_artifact(...)` / `Store._lookup_provenance_envelope(...)` directly (typed internal API; mirrors Check's pattern but Diagnose owns its call site, not via shared helper)
+  - **Module location:** Diagnose runtime in `kernel.application/` (filename decided at 0.D lift); no SDK shell
+
+  Code-level duplication with Check's representability gate and RuleRef preflight is **deferred per topic §1.3** — locally hardcoded per-capability stays until §3.6 promotes to declarative form OR a third capability surfaces shared-helper pressure (per topic §1.3 "if a question requires a second consumer to answer responsibly, mark it deferred"). Not because Check did it first, but because §3.6 is currently in `deferred` topic state and Diagnose alone lacks a second consumer to ground a shared helper extraction.
+
+- 2026-05-04 (Step 0.B) — **D12 — Evidence-miss observability semantics.** When the engine returns `CandidateSet` with `support_kind` advertising evidence-bearing payload (e.g., `souffle_witness_v1`, `problog_provenance_v1`, `pyreason_provenance_v1`) but `Store._lookup_support_artifact(...)` / `Store._lookup_provenance_envelope(...)` returns None, Diagnose:
+  1. Classifies result with `status = "unsupported"` (per D5; **NOT** `status = "failed"` per §6.3 *"not semantic failure"*)
+  2. Sets `failure_kind = None` (failure_kind only fires under `failed`)
+  3. Attaches `ErrorDTO(code="EVIDENCE_LOOKUP_MISS", details={"support_kind": ..., "support_digest": ..., "candidate_key": ...})` to `errors`
+  4. Optionally attaches `WarningDTO` if multiple candidates share the missing-evidence pattern (signals adapter contract problem worth surfacing)
+
+  This applies uniformly to native + souffle + problog + pyreason; no engine is grandfathered. §6.3 follow-up trace at line 517 binds Check the moment Check's silent-skip path is touched, but that's Check's future obligation; Diagnose is independently bound now per §6.3 Non-Decisions ("does not change Check's current silent-skip MVP behavior" only protects Check, not new capabilities).
+
+- 2026-05-04 (Step 0.B) — **Step 0.C entry point.** Step 0.C should freeze:
+  1. Native algorithm: per-branch failed-atom selection rule when multiple branches partially satisfy (deterministic primary)
+  2. Non-native algorithm: candidate enumeration → typed lookup → match → primary selection (mirroring Check 0.C C3 where applicable, but Diagnose owns its copy per Sibling pattern)
+  3. RuleRef preflight: same pattern as Check's `_ruleref_preflight(...)` — Diagnose owns its own copy, no shared helper extraction in MVP
+  4. Drift-prevention §7-style mapping: anti-regression test design for D5 evidence-unavailable-as-unsupported, D8 DiagnoseAtomLocator shape immutability, D9 no-EvidenceEnvelope-reuse, D11 Sibling no-Check-call invariant
+  5. Runtime failure mapping: adapter exceptions / evaluator-not-registered → propagate (mirror Check 0.C C7), NOT wrapped into status enum
+  6. Concrete dispatch function decomposition: signatures and names for the per-engine entry points (working names from 0.A: `_diagnose_native`, `_diagnose_souffle`, `_diagnose_problog_pyreason`) and the representability gate (`_request_diagnostic_representability_precheck` working name); 0.B D11 only commits dispatch invariants, not specific signatures
+
+  Blueprint stays `draft` until 0.D lift completes.
