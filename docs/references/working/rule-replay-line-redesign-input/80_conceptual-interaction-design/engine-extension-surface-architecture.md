@@ -366,3 +366,81 @@ This scenario does **not** decide:
 - to implement branch/atom projection for ASP.
 
 It only gives the topic a concrete reference case for future discussion.
+
+### 6.2 (2026-05-04) Strategic Framing — Readiness And Wave Ordering
+
+This round does **not** resolve any specific §3 question. It catalogs the six §3 questions by readiness so that subsequent §6.X rounds resolve in the right order without any single round silently committing decisions that belong to other questions. Per topic §1.3, "if a question requires a second consumer to answer responsibly, mark it deferred instead of forcing premature convention."
+
+§6.1 surfaced concrete tensions across all six questions through a single ASP onboarding scenario. That demo is enough to triage readiness, but not enough to resolve the questions individually. Resolution happens one question at a time starting from §6.3.
+
+#### Readiness Matrix
+
+| § | Question | Readiness | Action this topic | Reason |
+|---|---|---|---|---|
+| 3.4 | Engine adapter contract obligation | **Now-ready** | Resolved formally in §6.3 | §6.1.4 directly surfaces what an evaluator must produce / store / signal when artifact is missing. Decidable independently of §3.1 / §3.6 because the contract is about evaluator output shape, not payload typing |
+| 3.2 | Engine options placement | **Now-ready, light commit** | Light commit only; no exhaustive option taxonomy | §6.1.5 hints at a two-level model (plan vs request). Check already chose "no request-level"; we can lock the principle without enumerating options |
+| 3.1 | Engine-native payload DTO shape | **Working hypothesis** | Keep typed Union as MVP; document migration criterion; do **not** introduce ABC / protocol / registry now | §6.1.1 shows the union widens but does not break. Protocol / registry alternatives all create new abstractions that need a second consumer (or third engine) to validate |
+| 3.3 | Package / directory architecture | **Light convention or defer** | At most: state where new engine code lands today; do not move existing code | No concrete pressure from any current capability. ASP demo can register through `kernel.adapters.*` without rename |
+| 3.6 | Engine capability declaration | **Defer** | No decision this topic | Requires a second consumer (Diagnose / Explain / Why-not) to validate the declarative shape. Hardcoded Check rules plus future-capability rules are both needed before a declarative form is grounded |
+| 3.5 | New engine onboarding workflow | **Derive later** | No procedure template this topic | Workflow falls out of §3.1 / §3.2 / §3.4 once those settle. Writing it earlier is template-first taxonomy, banned by §1.3 |
+
+#### Wave Ordering
+
+**Wave 1 (independent, resolved or hypothesized in this topic):**
+
+1. **§3.4 engine adapter contract** — resolved in §6.3.
+2. **§3.2 engine options placement** — light commit, follows §3.4.
+3. **§3.1 engine-native payload DTO shape** — working hypothesis lock, follows §3.2.
+
+Independence claim: resolving §3.4 first does not retroactively constrain §3.2 or §3.1, because §3.4 governs evaluator output obligations while §3.2 governs request/plan composition and §3.1 governs typed payload extensibility. Pressure between them only appears if a future engine introduces a payload kind that demands changes simultaneously to all three; that pressure is recorded but not preempted.
+
+**Wave 2 (light or deferred):**
+
+4. **§3.3 package / directory architecture** — light-convention round if pressure exists by then; otherwise deferred until first concrete rename / move requirement.
+5. **§3.6 engine capability declaration** — explicitly deferred until a second consumer (Diagnose / Explain / Why-not) appears.
+6. **§3.5 new engine onboarding workflow** — derived from Wave 1 once §3.4 / §3.2 / §3.1 are at their committed states.
+
+Wave 2 may slide entirely past this topic. That is acceptable per §1.3: a topic is allowed to resolve only the questions whose pressure has been concretely surfaced.
+
+#### Discipline Check
+
+Three §1.3 rules govern this framing:
+
+- **Don't flatten.** Marking §3.1 as "working hypothesis" instead of "resolve now" prevents typed Union from being either over-committed or replaced by a premature abstraction without a second consumer.
+- **Don't taxonomy-first.** Refusing to write §3.5 onboarding workflow before §3.4 / §3.2 / §3.1 settle keeps the workflow derived rather than prescribed.
+- **Defer when a question needs a second consumer.** §3.6 stays deferred until Diagnose / Explain / Why-not provides the second concrete pressure that grounds a declarative capability shape.
+
+#### What This Round Decides Vs Does Not Decide
+
+**Decides (this round):**
+
+- Wave ordering: §3.4 → §3.2 → §3.1, then §3.3 / §3.6 / §3.5.
+- §3.6 stays deferred this topic.
+- §3.5 is derived from Wave 1, not written first.
+- §3.1 stays at "working hypothesis" until at least one of: a second engine outside `{native, souffle, problog, pyreason}` lands in tree, or a second capability surfaces a payload-typing requirement Check did not have.
+
+**Does not decide:**
+
+- Any specific answer to §3.1 – §3.6.
+- Whether §3.3 will eventually receive a light convention or stay deferred entirely.
+- Whether §3.4 obligation will be store-side, runtime-side, or adapter-side.
+- Whether §3.2 commit will be pure principle or include any concrete option name.
+
+Subsequent §6.X rounds carry those decisions individually.
+
+#### Cross-References
+
+- §3.4 obligation pressure: §6.1.4 (artifact-writing convention; missing-artifact policy).
+- §3.2 placement pressure: §6.1.5 (`engine_options` two-level model hint).
+- §3.1 union pressure: §6.1.1 (every new engine widens unions; protocol / registry alternatives carry their own abstraction risk).
+- §3.6 deferral basis: topic §1.3 second-consumer rule plus §6.1.2 / §6.1.5 (representability is per-capability, not per-engine; declarative form needs a second capability to ground).
+- §3.5 derivation basis: §1.3 anti-taxonomy rule; workflow content depends on §3.4 evaluator obligation + §3.2 options model + §3.1 payload typing.
+
+#### Non-Decisions
+
+This framing round does **not**:
+
+- resolve any §3 question;
+- commit §6.4+ to specific question numbers (only §6.3 is committed to §3.4);
+- change Check operation behavior, package layout, or any current code;
+- foreclose later promotion of §3.6 / §3.3 to "now-ready" if a concrete second consumer surfaces inside this topic's lifetime.
