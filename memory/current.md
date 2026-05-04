@@ -1,6 +1,6 @@
 # Current Operational Memory
 
-最后更新:2026-05-04(Check shipped + engine-extension Wave 1 closed through `44eefab`;Diagnose Step 0.B frozen at `e90835a`;handoff baseline 见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
+最后更新:2026-05-04(Check shipped + engine-extension Wave 1 closed through `44eefab`;Diagnose Step 0.C frozen at `815192d`;handoff baseline 见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
 
 ## 当前阶段(2026-05-03 — REDESIGN BASE)
 
@@ -103,7 +103,8 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - Diagnose operation Step 0 draft blueprint opened:`docs/blueprints/active/2026-05-04_diagnose-operation.md` + audit (`9b69178`)
 - Diagnose Step 0.A source pass complete + conformance-aligned audit:`5aa261d`
 - Diagnose Step 0.B DTO contract frozen:`e90835a`
-- Next natural action:fresh-context Diagnose Step 0.C algorithm freeze; no implementation until Step 0.D lifts into blueprint and moves `draft → scoped`
+- Diagnose Step 0.C algorithm + drift-prevention frozen:`815192d`
+- Next natural action:fresh-context Diagnose Step 0.D lift into blueprint §5/§7/§8 and move `draft → scoped`; no implementation until Step 0.D commits
 - baseline P1/P2 仍待填,但应随 Diagnose source pass 从 consumer angle 补,不单独 abstract inventory
 
 任何新工作必须满足 application-first hard constraint(per `project_application_first_runtime_authority.md`)+ release branch invariants(per `project_release_branch_invariants.md`)。
@@ -146,13 +147,15 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - Blueprint:`docs/blueprints/active/2026-05-04_diagnose-operation.md`
 - Audit:`docs/blueprints/active/2026-05-04_diagnose-operation.audit.md`
 - Commit:`9b69178`
-- Step 0.A complete:`5aa261d`;Step 0.B frozen:`e90835a`
+- Step 0.A complete:`5aa261d`;Step 0.B frozen:`e90835a`;Step 0.C frozen:`815192d`
 - Scope:Step 0 only;source-backed DTO / algorithm / engine-boundary freeze before any code;blueprint remains `draft`
 - 0.B Q1 supersede:Hybrid → Sibling. Diagnose owns dispatch/representability/evidence lookup and does **not** call `check_derivation_binding(...)`,because Hybrid would launder Check's grandfathered non-native lookup-miss silent-skip into Diagnose
 - 0.B status contract:reuse Check 4 statuses;`failure_kind` only for `failed.no_candidate` / `failed.atom_localized`;evidence lookup miss maps to `status="unsupported"` with `ErrorDTO(code="EVIDENCE_LOOKUP_MISS")`
 - 0.B payload contract:`DiagnoseAtomLocator(branch_index, failed_atom_index, attempted_binding)` is Diagnose-owned capability-output,not an engine-native payload;§6.5 is not engaged and `EvidenceEnvelope.engine_payload` remains unchanged
 - 0.B representability:locally hardcoded per engine;native atom-localized,non-native coarse-only;§3.6 pressure confirmed but topic state remains deferred pending a separate post-ship §6.6 decision
-- Next:Step 0.C freezes native algorithm,non-native algorithm,RuleRef preflight,runtime failure mapping,drift-prevention tests,and concrete dispatch function decomposition
+- 0.C algorithm:Sibling dispatch;native two-phase pass/fail then atom-localization;native localizer uses `_extend_env_with_atom` enumeration primitive to avoid `_ground_terms` silent-false at atom-index layer;non-native three-bucket classification(match / lookup-miss / no-match) with lookup-miss precedence
+- 0.C drift prevention:§7-Diagnose-1..7 frozen,including evidence-miss-as-unsupported,no `DiagnoseAtomLocator` in `EvidenceEnvelope`,no Check-call/import invariant,non-native never atom-localized,status enum exact 4 values
+- Next:Step 0.D lift D1-D12 + C1-C8 into blueprint §5/§7/§8,then status `draft → scoped`;implementation starts only after that
 
 **Branch state** `v0.1-redesign-2026-05-03`:ahead origin ≈23 commits before handoff commit / ≈24 after handoff commit,**NOT pushed**。At handoff authoring the only dirty files are `memory/session_handoffs/2026-05-04.md` and `memory/current.md`;after committing handoff,expect clean working tree。release base sacred 不动。
 
