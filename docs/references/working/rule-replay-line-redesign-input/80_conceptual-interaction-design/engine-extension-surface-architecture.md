@@ -115,7 +115,7 @@ Candidate directions:
 | C. JSON-compatible envelope | `{engine, payload_type, payload}` | serialization-friendly | weak typing, easy semantic compression |
 | D. Hybrid | typed in-process payload + explicit render/serialize function | preserves types and wire compatibility | more moving parts |
 
-Decision: unresolved. §6.2 keeps typed Union as the working hypothesis and defines migration criteria; no `EnginePayload` / protocol / registry abstraction is introduced by this topic yet.
+Decision: resolved as a working hypothesis in §6.5. Typed Union remains the default in-process shape; migration requires a concrete trigger and does not happen preemptively.
 
 ### 3.2 Engine Options Placement
 
@@ -613,3 +613,96 @@ This round does **not**:
 - define option composition rules in code or types;
 - decide whether engine options eventually become a typed system or remain a string-keyed dict;
 - preempt §3.1 typed payload decisions; engine options and engine payloads are independent typing questions.
+
+### 6.5 (2026-05-04) Resolve §3.1 — Engine-Native Payload DTO Shape (Working Hypothesis)
+
+This round closes Wave 1 by resolving §3.1 as a working hypothesis, not as a permanent payload abstraction.
+
+The decision is intentionally conservative: keep the current typed Union shape for in-process application DTOs until a concrete engine or capability proves it is too narrow. Do not introduce `EnginePayload`, a registry, or a JSON envelope only because Check currently has a two-type union.
+
+#### Current State
+
+Check's `EvidenceEnvelope` carries engine-native payloads directly:
+
+```python
+engine_payload: SupportArtifact | ProvenanceEnvelope
+```
+
+That shape is deliberately typed and deliberately not flattened:
+
+- native / souffle preserve `SupportArtifact`;
+- problog / pyreason preserve `ProvenanceEnvelope`;
+- `branch_atom_projection=None` remains projection-not-implemented, not evidence missing;
+- application runtime code can use typed internal store lookups without serializing through public explain dicts.
+
+This has one clear cost: every new engine-native payload type can widen the union.
+
+#### Default Posture
+
+Typed Union remains the default in-process payload shape. Concretely:
+
+- A new application capability may reuse `SupportArtifact | ProvenanceEnvelope` when its evidence needs match Check's current payload kinds.
+- A new engine with a genuinely new proof payload may widen the union at the capability boundary if that is still the simplest honest representation.
+- Engine-native payloads must stay inspectable and typed in process; they must not be compressed into lowest-common-denominator dicts to avoid widening a type annotation.
+
+This default is a local Python application-runtime posture, not a wire-format decision. Public rendering / serialization can still happen through explicit render functions or explain APIs.
+
+#### Migration Triggers
+
+Move away from plain typed Union only when at least one concrete trigger appears:
+
+1. **Second engine trigger:** an engine outside `{native, souffle, problog, pyreason}` lands in tree with a distinct proof payload type, and widening per-capability unions creates real duplication or ambiguity.
+2. **Second capability trigger:** a capability beyond Check (for example Diagnose / Explain / Why-not) needs to consume engine payloads in a way Check did not, and local typed unions no longer express the shared contract clearly.
+3. **Serialization trigger:** a real boundary requires stable payload type tags or parse/render registration that cannot be served by the existing typed in-process objects plus explicit serializers.
+
+If none of these triggers is present, keep typed Union. "A future engine might exist" or "protocols are cleaner" is not enough.
+
+#### Candidate Migration Shapes
+
+If a trigger appears, the migration candidates remain the §3.1 candidates:
+
+| Candidate | When It Becomes Plausible | Guardrail |
+|---|---|---|
+| Typed Union with one more type | One new payload type, one or two direct consumers | Keep if widening is still clearer than abstraction |
+| `EnginePayload` protocol / ABC | Multiple payload types need common in-process behavior | Do not force semantic flattening into the protocol |
+| Registry keyed by `engine + payload_type` | Render / parse / capability dispatch becomes repetitive | Registry entries must preserve engine-native payload semantics |
+| JSON-compatible envelope | Wire boundary becomes the dominant consumer | Keep typed in-process payloads or explicit parse/render helpers behind it |
+| Hybrid | Both typed in-process use and stable wire rendering are real | More moving parts must pay for themselves with concrete reuse |
+
+This table is not a commitment to implement any candidate. It is a migration menu once a trigger exists.
+
+#### Relationship To §3.4 And §3.6
+
+§3.1 payload typing is independent from §3.4 adapter obligations:
+
+- §3.4 says evidence-bearing candidates must point to truthful retrievable payloads.
+- §3.1 says how application DTOs carry those payloads once retrieved.
+
+§3.1 also does not resolve §3.6 capability declaration:
+
+- typed payloads do not tell a capability whether an engine can answer a request;
+- capability support remains local / hardcoded until a second consumer grounds a declarative shape.
+
+#### Decision
+
+§3.1 is resolved as a working hypothesis:
+
+1. Keep typed Union as the default in-process application DTO shape.
+2. Preserve engine-native payloads; do not flatten them to avoid union widening.
+3. Introduce `EnginePayload`, a payload registry, or JSON envelope only after one of the migration triggers appears.
+4. Treat migration shape selection as a future design decision, not part of this topic's Wave 1 closure.
+5. No current DTO, serializer, store lookup, or Check behavior changes by this resolution.
+
+Wave 1 is now closed: §3.4 has a minimum adapter contract, §3.2 has plan-level default and promotion criteria, and §3.1 has a typed-payload working hypothesis with explicit revisit triggers.
+
+#### Non-Decisions
+
+This round does **not**:
+
+- change `EvidenceEnvelope.engine_payload`;
+- add a new payload base class, protocol, registry, or JSON envelope;
+- decide a public wire format for engine payloads;
+- decide §3.6 engine capability declaration;
+- decide §3.3 package / directory architecture;
+- require future engines to fit `SupportArtifact` or `ProvenanceEnvelope`;
+- start a shared branch/atom projection design.
