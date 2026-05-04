@@ -1,6 +1,6 @@
 # Current Operational Memory
 
-最后更新:2026-05-04(Check shipped + engine-extension Wave 1 closed through `44eefab`;Diagnose Step 0 blueprint opened at `9b69178`;handoff baseline 见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
+最后更新:2026-05-04(Check shipped + engine-extension Wave 1 closed through `44eefab`;Diagnose Step 0.B frozen at `e90835a`;handoff baseline 见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
 
 ## 当前阶段(2026-05-03 — REDESIGN BASE)
 
@@ -92,7 +92,7 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 
 ### 下一步方向(2026-05-04 起)
 
-详情见 [`session_handoffs/2026-05-04.md`](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md) §10,但该 handoff 写于 §6.2 前;当前 continuation 已到 `9b69178`。摘要:
+详情见 [`session_handoffs/2026-05-04.md`](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md) §10,但该 handoff 写于 §6.2 前;当前 continuation 已到 `e90835a`。摘要:
 
 - engine-extension-surface topic Wave 1 已 closed:
   - §6.2 strategic framing:`1f084f8`
@@ -101,7 +101,9 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
   - §6.4 §3.2 engine options placement light commit:`24bd22b`
   - §6.5 §3.1 typed payload working hypothesis / migration triggers:`44eefab`
 - Diagnose operation Step 0 draft blueprint opened:`docs/blueprints/active/2026-05-04_diagnose-operation.md` + audit (`9b69178`)
-- Next natural action: continue Diagnose Step 0.A source pass, then Step 0.B DTO freeze; no implementation until blueprint moves `draft → scoped`
+- Diagnose Step 0.A source pass complete + conformance-aligned audit:`5aa261d`
+- Diagnose Step 0.B DTO contract frozen:`e90835a`
+- Next natural action:fresh-context Diagnose Step 0.C algorithm freeze; no implementation until Step 0.D lifts into blueprint and moves `draft → scoped`
 - baseline P1/P2 仍待填,但应随 Diagnose source pass 从 consumer angle 补,不单独 abstract inventory
 
 任何新工作必须满足 application-first hard constraint(per `project_application_first_runtime_authority.md`)+ release branch invariants(per `project_release_branch_invariants.md`)。
@@ -144,9 +146,13 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 - Blueprint:`docs/blueprints/active/2026-05-04_diagnose-operation.md`
 - Audit:`docs/blueprints/active/2026-05-04_diagnose-operation.audit.md`
 - Commit:`9b69178`
-- Scope:Step 0 only;source-backed DTO / algorithm / engine-boundary freeze before any code
-- Initial positioning:application sibling to Check;bounded diagnostic classification,not full Explain / Why-not / UI projection / fact overlay
-- Key open question:does Diagnose create enough second-consumer pressure to promote engine-extension §3.6 capability declaration,or can MVP stay locally hardcoded like Check?
+- Step 0.A complete:`5aa261d`;Step 0.B frozen:`e90835a`
+- Scope:Step 0 only;source-backed DTO / algorithm / engine-boundary freeze before any code;blueprint remains `draft`
+- 0.B Q1 supersede:Hybrid → Sibling. Diagnose owns dispatch/representability/evidence lookup and does **not** call `check_derivation_binding(...)`,because Hybrid would launder Check's grandfathered non-native lookup-miss silent-skip into Diagnose
+- 0.B status contract:reuse Check 4 statuses;`failure_kind` only for `failed.no_candidate` / `failed.atom_localized`;evidence lookup miss maps to `status="unsupported"` with `ErrorDTO(code="EVIDENCE_LOOKUP_MISS")`
+- 0.B payload contract:`DiagnoseAtomLocator(branch_index, failed_atom_index, attempted_binding)` is Diagnose-owned capability-output,not an engine-native payload;§6.5 is not engaged and `EvidenceEnvelope.engine_payload` remains unchanged
+- 0.B representability:locally hardcoded per engine;native atom-localized,non-native coarse-only;§3.6 pressure confirmed but topic state remains deferred pending a separate post-ship §6.6 decision
+- Next:Step 0.C freezes native algorithm,non-native algorithm,RuleRef preflight,runtime failure mapping,drift-prevention tests,and concrete dispatch function decomposition
 
 **Branch state** `v0.1-redesign-2026-05-03`:ahead origin ≈23 commits before handoff commit / ≈24 after handoff commit,**NOT pushed**。At handoff authoring the only dirty files are `memory/session_handoffs/2026-05-04.md` and `memory/current.md`;after committing handoff,expect clean working tree。release base sacred 不动。
 
