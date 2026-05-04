@@ -593,14 +593,6 @@ class NonNativeStagingTests(unittest.TestCase):
         selected_plan = plan or _build_plan(body, exists_pred)
         return CheckRequest(plan=selected_plan, binding=binding, engine=engine)  # type: ignore[arg-type]
 
-    def test_problog_and_pyreason_head_only_binding_reach_staging(self) -> None:
-        store, _ = _build_store()
-        for engine in ("problog", "pyreason"):
-            with self.subTest(engine=engine):
-                request = self._request(engine, binding=(("$p", "person-1"),))
-                with self.assertRaises(NotImplementedError):
-                    check_derivation_binding(request, store=store)
-
     def test_problog_body_only_binding_returns_unsupported_before_evaluate(self) -> None:
         store, _ = _build_store()
         request = self._request("problog", binding=(("$age", 25),))
@@ -898,7 +890,11 @@ class PrecheckHeadVarNormalizationTests(unittest.TestCase):
     over-flag body_only_variables."""
 
     def test_problog_with_dollar_prefixed_head_var_does_not_overflag(self) -> None:
-        """head_var_names=('$p',) + binding $p → not flagged as body_only."""
+        """head_var_names=('$p',) + binding $p → not flagged as body_only.
+
+        Should reach evaluate (Step 4.3 path); with mocked-empty candidates,
+        result is `failed` (representable, evaluated, no match), NOT `unsupported`.
+        """
         store, index = _build_store()
         body, exists_pred = _exists_body(index)
         plan = _build_plan(body, exists_pred, head_var_names=("$p",))
@@ -907,10 +903,15 @@ class PrecheckHeadVarNormalizationTests(unittest.TestCase):
             binding=(("$p", "person-1"),),
             engine="problog",
         )
-        # Should reach the (still-staging) NotImplementedError for problog,
-        # not return unsupported with BINDING_NOT_REPRESENTABLE.
-        with self.assertRaises(NotImplementedError):
-            check_derivation_binding(request, store=store)
+        with patch(
+            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            return_value=[],
+        ):
+            result = check_derivation_binding(request, store=store)
+        # Critical: representable + no match = failed (per Step 0.C C6),
+        # NOT unsupported (the request was answerable).
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.matched_count, 0)
 
     def test_problog_with_bare_head_var_treats_as_literal_so_var_is_body_only(self) -> None:
         """head_var_names=('p',) literal + binding $p → flagged body_only (correct).
@@ -931,6 +932,307 @@ class PrecheckHeadVarNormalizationTests(unittest.TestCase):
         self.assertEqual(result.status, "unsupported")
         self.assertEqual(result.errors[0].code, "BINDING_NOT_REPRESENTABLE")
         self.assertIn("$p", result.errors[0].details["body_only_variables"])
+
+
+def _make_provenance_candidate(
+    *,
+    engine: str,
+    candidate_key: str = "candk_v2:prov-test",
+    support_digest: str | None = None,
+    target: str = "Person:exists",
+    terms: list[Any] | None = None,
+) -> Any:
+    """Step 4.3 fixture: minimal CandidateSet for ProbLog/PyReason path."""
+    from kernel.core.derivation.candidates import CandidateSet
+
+    support_kind = f"{engine}_provenance_v1"
+    digest = support_digest or "sha256:" + ("c" * 64)
+    return CandidateSet(
+        derivation_id="check-test",
+        derivation_version="1.0",
+        run_id=f"{engine}-run",
+        target=target,
+        key_tuple_digest="sha256:" + ("0" * 64),
+        tup_digest=None,
+        payload={"terms": terms or []},
+        support_digest=digest,
+        support_kind=support_kind,
+        generated_at=0,
+        state="generated",
+        candidate_key=candidate_key,
+    )
+
+
+def _make_provenance_envelope(
+    *,
+    candidate_id: str = "cand_v2:prov-test",
+    engine: str = "problog",
+    payload_type: str | None = None,
+    payload: dict[str, Any] | None = None,
+) -> Any:
+    """Step 4.3 fixture: minimal ProvenanceEnvelope."""
+    from kernel.core.store._support import ProvenanceEnvelope
+
+    return ProvenanceEnvelope(
+        candidate_id=candidate_id,
+        engine=engine,
+        payload_type=payload_type or f"{engine}_provenance_v1",
+        payload=payload or {"trace": "stub"},
+    )
+
+
+class ProblogPyreasonCheckTests(unittest.TestCase):
+    """Step 4.3: ProbLog / PyReason Check via evaluate-then-match against ProvenanceEnvelope.
+
+    Mocks ``evaluate_derivation_plans`` and ``_lookup_provenance_envelope`` so tests
+    exercise the Check runtime contract without requiring problog/pyreason adapter
+    binaries. Per Step 0.C C3: representability is gated to head vars (body-only
+    requests are already filtered by precheck and never reach this path).
+    """
+
+    def _build_request(
+        self,
+        *,
+        engine: str,
+        binding: tuple[tuple[str, Any], ...],
+    ) -> tuple[CheckRequest, Store]:
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        plan = _build_plan(body, exists_pred, head_var_names=("$p",))
+        request = CheckRequest(
+            plan=plan,
+            binding=binding,
+            engine=engine,  # type: ignore[arg-type]
+        )
+        return request, store
+
+    def test_problog_passes_with_matched_candidate(self) -> None:
+        for engine in ("problog", "pyreason"):
+            with self.subTest(engine=engine):
+                request, store = self._build_request(
+                    engine=engine, binding=(("$p", "person-1"),)
+                )
+                candidate = _make_provenance_candidate(
+                    engine=engine,
+                    terms=[{"kind": "entity_ref", "value": "person-1"}],
+                )
+                envelope_payload = _make_provenance_envelope(engine=engine)
+                with patch(
+                    "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+                    return_value=[candidate],
+                ), patch(
+                    "kernel.application.derivation_check_runtime._lookup_provenance_envelope",
+                    return_value=envelope_payload,
+                ):
+                    result = check_derivation_binding(request, store=store)
+
+                self.assertEqual(result.status, "passed")
+                self.assertEqual(result.matched_count, 1)
+                env = result.evidence_envelope
+                assert env is not None
+                self.assertEqual(env.engine, engine)
+                self.assertEqual(env.support_kind, f"{engine}_provenance_v1")
+                # Per C4: ProbLog/PyReason carry no per-branch concept.
+                self.assertIsNone(env.branch_index)
+                self.assertIs(env.engine_payload, envelope_payload)
+                self.assertIsNone(env.branch_atom_projection)
+
+    def test_problog_fails_with_no_matching_candidate(self) -> None:
+        request, store = self._build_request(
+            engine="problog", binding=(("$p", "person-99"),)
+        )
+        candidate = _make_provenance_candidate(
+            engine="problog",
+            terms=[{"kind": "entity_ref", "value": "person-1"}],
+        )
+        envelope_payload = _make_provenance_envelope(engine="problog")
+        with patch(
+            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            return_value=[candidate],
+        ), patch(
+            "kernel.application.derivation_check_runtime._lookup_provenance_envelope",
+            return_value=envelope_payload,
+        ):
+            result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.matched_count, 0)
+        self.assertIsNone(result.evidence_envelope)
+
+    def test_problog_fails_with_zero_candidates(self) -> None:
+        """Per Step 0.C C6: representable + zero candidates = failed (not unsupported)."""
+        request, store = self._build_request(
+            engine="problog", binding=(("$p", "person-1"),)
+        )
+        with patch(
+            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            return_value=[],
+        ):
+            result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.matched_count, 0)
+
+    def test_problog_skips_candidate_without_provenance(self) -> None:
+        request, store = self._build_request(
+            engine="problog", binding=(("$p", "person-1"),)
+        )
+        good_candidate = _make_provenance_candidate(
+            engine="problog",
+            candidate_key="candk_v2:good",
+            support_digest="sha256:" + ("a" * 64),
+            terms=[{"kind": "entity_ref", "value": "person-1"}],
+        )
+        bad_candidate = _make_provenance_candidate(
+            engine="problog",
+            candidate_key="candk_v2:bad",
+            support_digest="sha256:" + ("b" * 64),
+            terms=[{"kind": "entity_ref", "value": "person-1"}],
+        )
+        good_envelope = _make_provenance_envelope(engine="problog")
+
+        def _lookup(_store: Store, digest: str) -> Any:
+            if digest == good_candidate.support_digest:
+                return good_envelope
+            return None
+
+        with patch(
+            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            return_value=[bad_candidate, good_candidate],
+        ), patch(
+            "kernel.application.derivation_check_runtime._lookup_provenance_envelope",
+            side_effect=_lookup,
+        ):
+            result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.matched_count, 1)
+
+    def test_problog_multi_match_primary_by_candidate_key(self) -> None:
+        """Per Step 0.C C4: ProbLog/PyReason primary key = (candidate_key, binding_items)."""
+        request, store = self._build_request(
+            engine="problog", binding=(("$p", "person-1"),)
+        )
+        candidate_b = _make_provenance_candidate(
+            engine="problog",
+            candidate_key="candk_v2:beta",  # lex > alpha
+            support_digest="sha256:" + ("1" * 64),
+            terms=[{"kind": "entity_ref", "value": "person-1"}],
+        )
+        candidate_a = _make_provenance_candidate(
+            engine="problog",
+            candidate_key="candk_v2:alpha",  # lex first
+            support_digest="sha256:" + ("2" * 64),
+            terms=[{"kind": "entity_ref", "value": "person-1"}],
+        )
+        envelope_payload = _make_provenance_envelope(engine="problog")
+        with patch(
+            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            return_value=[candidate_b, candidate_a],
+        ), patch(
+            "kernel.application.derivation_check_runtime._lookup_provenance_envelope",
+            return_value=envelope_payload,
+        ):
+            result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.matched_count, 2)
+        env = result.evidence_envelope
+        assert env is not None
+        # alpha sorts before beta lexically; primary support_digest must be alpha's.
+        self.assertEqual(env.support_digest, candidate_a.support_digest)
+
+
+class ProvenanceExtractionUnitTests(unittest.TestCase):
+    """Step 4.3 helper unit tests: term-value extraction + head_var alignment."""
+
+    def test_extract_term_value_from_dict_entity_ref(self) -> None:
+        from kernel.application.derivation_check_runtime import _extract_term_value
+
+        self.assertEqual(
+            _extract_term_value({"kind": "entity_ref", "value": "person-1"}),
+            "person-1",
+        )
+
+    def test_extract_term_value_from_dict_literal(self) -> None:
+        from kernel.application.derivation_check_runtime import _extract_term_value
+
+        self.assertEqual(
+            _extract_term_value({"kind": "literal", "tag": "string", "value": "hello"}),
+            "hello",
+        )
+        self.assertEqual(
+            _extract_term_value({"kind": "literal", "tag": "int", "value": 42}),
+            42,
+        )
+
+    def test_extract_term_value_from_tuple(self) -> None:
+        from kernel.application.derivation_check_runtime import _extract_term_value
+
+        self.assertEqual(_extract_term_value(("string", "hello")), "hello")
+        self.assertEqual(_extract_term_value(("int", 42)), 42)
+
+    def test_extract_term_value_marks_candidate_ref_unrepresentable(self) -> None:
+        from kernel.application.derivation_check_runtime import (
+            _extract_term_value,
+            _UNREPRESENTABLE_TERM,
+        )
+
+        self.assertIs(
+            _extract_term_value({"kind": "candidate_ref", "candidate_key": "candk_v2:x"}),
+            _UNREPRESENTABLE_TERM,
+        )
+
+    def test_extract_head_var_binding_aligns_by_position(self) -> None:
+        from kernel.application.derivation_check_runtime import _extract_head_var_binding
+
+        candidate = _make_provenance_candidate(
+            engine="problog",
+            terms=[
+                {"kind": "entity_ref", "value": "person-1"},
+                {"kind": "literal", "tag": "int", "value": 25},
+            ],
+        )
+        # plan with two head_vars: $p (var) + literal "age_role" (bare literal)
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        plan = _build_plan(body, exists_pred, head_var_names=("$p", "age_role"))
+        binding = _extract_head_var_binding(candidate=candidate, plan=plan)
+
+        self.assertEqual(binding, {"$p": "person-1"})  # bare "age_role" filtered
+        self.assertNotIn("age_role", binding)
+
+    def test_extract_head_var_binding_skips_candidate_ref_term(self) -> None:
+        from kernel.application.derivation_check_runtime import _extract_head_var_binding
+
+        candidate = _make_provenance_candidate(
+            engine="problog",
+            terms=[
+                {"kind": "candidate_ref", "candidate_key": "candk_v2:x"},
+                {"kind": "literal", "tag": "int", "value": 25},
+            ],
+        )
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        plan = _build_plan(body, exists_pred, head_var_names=("$p", "$age"))
+        binding = _extract_head_var_binding(candidate=candidate, plan=plan)
+
+        self.assertEqual(binding, {"$age": 25})
+        self.assertNotIn("$p", binding)
+
+    def test_extract_head_var_binding_returns_empty_on_shape_mismatch(self) -> None:
+        from kernel.application.derivation_check_runtime import _extract_head_var_binding
+
+        # 2 head_vars, only 1 term → mismatch
+        candidate = _make_provenance_candidate(
+            engine="problog",
+            terms=[{"kind": "entity_ref", "value": "person-1"}],
+        )
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        plan = _build_plan(body, exists_pred, head_var_names=("$p", "$q"))
+        binding = _extract_head_var_binding(candidate=candidate, plan=plan)
+
+        self.assertEqual(binding, {})
 
 
 if __name__ == "__main__":

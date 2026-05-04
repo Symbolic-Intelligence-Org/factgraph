@@ -50,6 +50,7 @@ from kernel.core.rules.where_eval import (
 )
 from kernel.core.store._support import (
     BindingItems,
+    ProvenanceEnvelope,
     SupportArtifact,
     compute_support_digest,
     normalize_binding_items,
@@ -73,6 +74,8 @@ from .protocol import (
     ErrorDTO,
     EvidenceEnvelope,
 )
+
+_UNREPRESENTABLE_TERM = object()
 
 
 class CheckRuntimeError(ValueError):
@@ -274,8 +277,13 @@ def _non_native_check(
     if request.engine == "souffle":
         return _souffle_check(request, store=store, registry=registry)
 
-    raise NotImplementedError(
-        f"Evaluate-then-match for engine={request.engine!r} comes in Step 4.3"
+    if request.engine in {"problog", "pyreason"}:
+        return _problog_pyreason_check(request, store=store, registry=registry)
+
+    raise CheckRuntimeError(
+        f"unrecognized engine {request.engine!r}",
+        code="CHECK_INTERNAL_UNKNOWN_ENGINE",
+        details={"engine": request.engine},
     )
 
 
@@ -418,6 +426,165 @@ def _parse_branch_index(key: str) -> int | None:
         return int(key[1:dot_pos])
     except ValueError:
         return None
+
+
+def _problog_pyreason_check(
+    request: CheckRequest,
+    *,
+    store: Store,
+    registry: RuleRegistry | None,
+) -> CheckResult:
+    """ProbLog / PyReason Check via evaluate-then-match against ProvenanceEnvelope.
+
+    Algorithm (per audit log Step 0.C C3 / C4 / C6):
+
+    - Delegate evaluate to ``evaluate_derivation_plans`` in the requested engine mode.
+    - For each candidate, look up its ``ProvenanceEnvelope`` from store; engine-native
+      provenance is preserved as-is in ``EvidenceEnvelope.engine_payload`` (per §6.5
+      engine-respectful evidence; not flattened into branch/atom view).
+    - Extract the candidate's head-var binding via positional alignment between
+      ``plan.heads[0].head_var_names`` and ``candidate.payload['terms']``. Bare
+      (non-$-prefixed) head args are literals (per ``resolve_head_ref`` convention)
+      and contribute no binding entry.
+    - Subset-match each extracted binding against the requested binding.
+    - Primary key = ``(candidate_key, binding_items)`` (per C4; ProbLog/PyReason have
+      no per-branch concept so ``branch_index`` stays None).
+
+    Representability has already been gated at the request level by
+    ``_request_representability_precheck`` (only-head-var requests reach here).
+    Candidates whose provenance lookup returns None are silently skipped (mirrors
+    Souffle path behavior — they cannot be matched representably).
+
+    No provenance-fallback extractor is attempted in MVP (per audit log Step 0.C
+    C3); that work belongs to the engine-extension-surface topic.
+    """
+    eval_request = DerivationEvaluateRequest(
+        plans=(request.plan,),
+        engine=request.engine,  # type: ignore[arg-type]
+    )
+    candidates = evaluate_derivation_plans(
+        eval_request, store=store, registry=registry
+    )
+
+    matches: list[tuple[CandidateSet, ProvenanceEnvelope, dict[str, Any]]] = []
+    for candidate in candidates:
+        envelope_payload = _lookup_provenance_envelope(store, candidate.support_digest)
+        if envelope_payload is None:
+            continue
+        binding_dict = _extract_head_var_binding(
+            candidate=candidate, plan=request.plan
+        )
+        if _binding_matches(binding_dict, request.binding):
+            matches.append((candidate, envelope_payload, binding_dict))
+
+    if not matches:
+        return CheckResult(
+            status="failed",
+            requested_binding=request.binding,
+            matched_count=0,
+            matched_binding=None,
+            evidence_envelope=None,
+            errors=(),
+            warnings=(),
+        )
+
+    def _sort_key(
+        item: tuple[CandidateSet, ProvenanceEnvelope, dict[str, Any]],
+    ) -> tuple[Any, ...]:
+        candidate, _envelope, binding = item
+        # Per C4: ProbLog/PyReason primary key is (candidate_key, binding_items).
+        # No branch_index participation.
+        return (candidate.candidate_key, normalize_binding_items(binding))
+
+    matches.sort(key=_sort_key)
+    primary_candidate, primary_envelope, primary_binding = matches[0]
+
+    envelope = EvidenceEnvelope(
+        engine=request.engine,
+        support_kind=primary_candidate.support_kind,
+        support_digest=primary_candidate.support_digest,
+        branch_index=None,  # ProbLog/PyReason: no per-branch concept
+        engine_payload=primary_envelope,
+        branch_atom_projection=None,
+    )
+
+    return CheckResult(
+        status="passed",
+        requested_binding=request.binding,
+        matched_count=len(matches),
+        matched_binding=normalize_binding_items(primary_binding),
+        evidence_envelope=envelope,
+        errors=(),
+        warnings=(),
+    )
+
+
+def _lookup_provenance_envelope(
+    store: Store, digest: str
+) -> ProvenanceEnvelope | None:
+    """Get the typed ProvenanceEnvelope behind a candidate's support_digest.
+
+    Uses ``Store._lookup_provenance_envelope`` (typed internal API) instead of
+    ``Store.explain_provenance`` (public consumer API that returns a rendered dict).
+    Check runtime composes the typed envelope directly into ``EvidenceEnvelope``;
+    consumers can serialize via ``explain_provenance`` themselves if needed.
+    """
+    return store._lookup_provenance_envelope(digest)
+
+
+def _extract_head_var_binding(
+    *, candidate: CandidateSet, plan: Any
+) -> dict[str, Any]:
+    """Extract var → value mapping from a candidate via head_var_names alignment.
+
+    Per audit log Step 0.C C3: ProbLog/PyReason representability is bounded to
+    head vars carried in ``candidate.payload['terms']``. This helper walks the
+    positional alignment between ``plan.heads[0].head_var_names`` and the term
+    list, producing a binding dict only for $-prefixed head vars (per
+    ``resolve_head_ref`` convention; bare names are literals).
+
+    Returns an empty dict on shape mismatch (length disagreement); the matching
+    logic then falls through to "no match" naturally.
+    """
+    head_vars = plan.heads[0].head_var_names
+    payload = candidate.payload
+    if not isinstance(payload, dict):
+        return {}
+    terms = payload.get("terms")
+    if not isinstance(terms, list) or len(terms) != len(head_vars):
+        return {}
+    binding: dict[str, Any] = {}
+    for var_name, term in zip(head_vars, terms):
+        if not (
+            isinstance(var_name, str)
+            and var_name.startswith("$")
+            and len(var_name) > 1
+        ):
+            continue
+        value = _extract_term_value(term)
+        if value is _UNREPRESENTABLE_TERM:
+            continue
+        binding[var_name] = value
+    return binding
+
+
+def _extract_term_value(term: Any) -> Any:
+    """Extract the underlying value from a candidate payload term.
+
+    Term shapes (per ``_normalize_term_for_content`` in core/derivation/candidates.py):
+    - ``{"kind": "entity_ref", "value": str}``
+    - ``{"kind": "literal", "tag": str, "value": Any}``
+    - ``{"kind": "candidate_ref", ...}`` (unrepresentable for MVP Check)
+    - ``(tag, value)`` tuple (legacy form)
+    """
+    if isinstance(term, dict):
+        kind = term.get("kind")
+        if kind == "candidate_ref":
+            return _UNREPRESENTABLE_TERM
+        return term.get("value")
+    if isinstance(term, tuple) and len(term) == 2:
+        return term[1]
+    return None
 
 
 def _request_representability_precheck(request: CheckRequest) -> tuple[ErrorDTO, ...]:
