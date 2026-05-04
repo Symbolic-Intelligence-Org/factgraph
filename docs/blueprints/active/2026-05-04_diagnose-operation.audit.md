@@ -10,6 +10,7 @@
 | 2026-05-04 | draft | Step 0.A source pass opened | Initial anchors recorded from Check protocol/runtime, archived Check blueprint/audit, application common protocol DTOs, baseline P0-3 support artifacts, and engine-extension §6.3 / §6.4 / §6.5. |
 | 2026-05-04 | draft | Step 0.A source pass complete | Native primitives + Check runtime fully mapped; Explore-agent reported non-native failure surfaces (souffle / problog / pyreason); cross-engine diagnostic asymmetry confirmed (steeper than Check's); Q1 stance **Hybrid**; Q2–Q5 preliminary stances recorded; **§3.6 second-consumer pressure confirmed but MVP keeps §3.6 deferred** per topic §6.2 wave ordering. Blueprint remains `draft`; no implementation until Step 0.B / 0.C / 0.D complete. |
 | 2026-05-04 | draft | Step 0.B DTO contract freeze (with Q1 revision) | Q1 revised from **Hybrid → Sibling**: Hybrid would inherit Check's silent-skip on lookup-miss for non-native engines, violating Diagnose's independent §6.3 Decision #5 binding. 12 sub-decisions D1–D12 frozen across 5 deliverables: Request DTO (D1–D4), Result DTO (D5–D7), Evidence/Payload (D8–D9), Representability (D10–D11), Evidence-miss semantics (D12). Evidence-unavailable maps to `status="unsupported"` per §6.3 line 513 endorsement (NOT broader-than-Check `failed`, NOT a 5th status). Blueprint remains `draft` pending Step 0.C algorithm freeze + 0.D lift. |
+| 2026-05-04 | draft | Step 0.C algorithm + drift-prevention freeze | C1–C8 frozen: C1 native algorithm two-phase dispatch (pass/fail classification + atom localization on failed); C2 atom-localizer walk semantics (deliberate initial-env injection, NOT a §7.1 violation because pass/fail already classified); C3 deterministic primary failure selection (most-progressed branch, tie-break by branch_index ascending); C4 non-native algorithm with evidence-miss precedence over no_candidate; C5 RuleRef preflight as Diagnose's own copy; C6 runtime failure propagation (mirror Check C7); C7 §7-Diagnose-1 through §7-Diagnose-7 anti-regression mapping; C8 concrete function decomposition. Blueprint remains `draft` pending Step 0.D lift. |
 
 ## Decision Notes
 
@@ -162,3 +163,146 @@
   6. Concrete dispatch function decomposition: signatures and names for the per-engine entry points (working names from 0.A: `_diagnose_native`, `_diagnose_souffle`, `_diagnose_problog_pyreason`) and the representability gate (`_request_diagnostic_representability_precheck` working name); 0.B D11 only commits dispatch invariants, not specific signatures
 
   Blueprint stays `draft` until 0.D lift completes.
+
+- 2026-05-04 (Step 0.C) — **C1 — Native algorithm dispatch flow.** Per Q1 Sibling supersede, Diagnose native dispatch follows two phases:
+
+  **Phase 1 — Pass / fail classification (mirrors Check native):**
+  - Call `evaluate_native_where(view_facts, body, registry=registry, witness_facts=witness_facts, remember_support_artifact=...)` once
+  - Subset-match each returned final binding against `request.binding`
+  - On match: `status="passed"`, build `matched_binding` from primary; primary selection sort key `(branch_index, binding_items)` mirrors Check 0.C C4 native sort
+  - On no match: proceed to Phase 2
+
+  **Phase 2 — Atom localization (only on failed):**
+  - Call `_localize_failed_atom(body, requested_binding, witness_facts, view_facts, rule_ref_resolutions)`
+  - Return shape:
+    - `DiagnoseAtomLocator` non-None → `status="failed"`, `failure_kind="atom_localized"`, `diagnostic_payload=locator`
+    - None → `status="failed"`, `failure_kind="no_candidate"`, `diagnostic_payload=None`
+
+  Diagnose pays Phase 2 cost only on failed cases. Native does not produce evidence-unavailable (D10 cell = "rare"); if in-process artifact write fails, the runtime error propagates per C6 rather than wrapping into `unsupported`.
+
+- 2026-05-04 (Step 0.C) — **C2 — Native atom-localizer walk semantics.** `_localize_failed_atom` walks each branch with user's `requested_binding` as initial env (NOT `envs=[{}]` like Check's enumerate path). This is **deliberate initial-env injection for Diagnose** and is **NOT** a Check §7.1 trap violation:
+
+  - Check §7.1 trap was: passing user partial to `_branch_satisfies` directly → silent-false on incomplete bindings → wrong pass/fail classification (a binding might be unsatisfiable for grounding reasons, not for semantic reasons)
+  - Diagnose's case is: user partial is provably non-extending (Phase 1 already classified `failed`); goal is to localize WHERE in body_ir the partial fails to extend, not to classify pass/fail
+  - Initial-env injection here is the correct primitive — silent-false trap does not apply at the **result-status** level because pass/fail is already classified by Phase 1
+
+  **Atom-extension primitive (committed; addresses §7.1 risk at the atom-index level).** The atom-localizer **MUST NOT** call `_atom_satisfies` directly with `current_env` — `_ground_terms` returns `None` on missing var, which would silent-false any atom whose vars are not yet bound and produce the **wrong `failed_atom_index`**. Diagnose owns its own atom-extension helper (working name `_extend_env_with_atom`) that **explicitly enumerates** possible extensions for `(atom, current_env, view_facts, witness_facts, rule_ref_resolutions)` and returns `list[dict[str, Any]]`:
+  - Empty list (no extensions exist) → atom semantically fails here; record candidate failure point
+  - Non-empty list → one or more possible extensions; pick the **first deterministic** extension (extensions sorted by `(sorted(env.items()))` lex order) and continue
+
+  This avoids the §7.1 silent-false trap at the atom-index level: "var not yet bound" is handled by **enumeration** (which may yield extensions), not by `_ground_terms` returning `None` (which would falsely classify the atom as failed).
+
+  **Atom traversal order (committed: canonical body-source-order).** The localizer iterates atoms in **body-source order** via `for atom_index, atom in enumerate(branch)`. This order is determined by `branch_index` and source layout in `plan.body_ir`, **independent** of how `evaluate_native_where` traverses atoms internally. Reported `failed_atom_index` is the source-order index in `branch[i]`. (This decouples C3's `atoms_satisfied` count from any future change in evaluator atom-traversal order — see C3 determinism note.)
+
+  **Per-branch walk:**
+  - Filter out branches whose vars are disjoint from user's partial vars (cannot localize because user's bindings don't constrain anything in this branch)
+  - For remaining branches: walk atoms in source order; for each atom, call `_extend_env_with_atom(atom, current_env, ...)`:
+    - Empty result → record `(atoms_satisfied, branch_index, current_env_at_failure, failed_atom_index)`
+    - Non-empty → extend `current_env` to the first deterministic extension and continue
+  - First atom whose extension returns empty → candidate failure point
+
+  **Edge case:** if no branch produces a candidate failure point (all branches' vars disjoint from user partial, or all branches extend cleanly through the source-order walk), `_localize_failed_atom` returns `None` → fallback to `failure_kind="no_candidate"`.
+
+- 2026-05-04 (Step 0.C) — **C3 — Native primary failure selection (deterministic).** Among branches with candidate failure points, primary selection sort key:
+
+  `sort key = (-atoms_satisfied, branch_index)`
+
+  - **Most-progressed first** (`-atoms_satisfied`): the branch closest to satisfying user's partial is most diagnostically useful. A branch where atom 4 of 5 fails is more informative than a branch where atom 1 of 5 fails.
+  - **Lowest branch_index breaks ties**: deterministic; mirrors Check 0.C C4 pattern (`branch_index` ascending).
+
+  `attempted_binding` field on `DiagnoseAtomLocator` carries the env state at the moment of failure (sorted, normalized to `BindingItems`). It includes user's original requested_binding plus any extensions accumulated during the walk before the failed atom.
+
+  **Determinism source.** C3's sort key relies on (a) C2's body-source-order walk and (b) `_extend_env_with_atom`'s deterministic enumeration (sorted extensions, first picked). Both are independent of `evaluate_native_where`'s internal atom-traversal order. Test fragility risk thereby contained: if `evaluate_native_where` changes traversal tomorrow, `atoms_satisfied` per branch is unaffected because the localizer walks body-source-order via Diagnose's own primitive.
+
+- 2026-05-04 (Step 0.C) — **C4 — Non-native algorithm (souffle / problog / pyreason).** Per Q1 Sibling, Diagnose has its own non-native dispatch (Diagnose does NOT call Check):
+
+  1. Run `evaluate_derivation_plans(DerivationEvaluateRequest(plans=(plan,), engine=engine), store=store, registry=registry)` to get candidates
+  2. For each candidate, look up evidence:
+     - souffle → `Store._lookup_support_artifact(candidate.support_digest)`
+     - problog / pyreason → `Store._lookup_provenance_envelope(candidate.support_digest)`
+  3. **Three-bucket classification per candidate:**
+     - **Lookup-miss bucket:** lookup returned `None` → record candidate's `support_kind`, `support_digest`, `candidate_key` for `EVIDENCE_LOOKUP_MISS` error
+     - **Match bucket:** lookup returned, extracted binding subset-matches `request.binding`
+       - souffle binding extraction: `SupportArtifact.binding_items`
+       - problog / pyreason binding extraction: head-var positional alignment from `candidate.payload["terms"]` (mirrors Check `_extract_head_var_binding`)
+     - **No-match bucket:** lookup returned, extracted binding does NOT subset-match
+
+  **Result classification rule (precedence-ordered):**
+  - **Match bucket non-empty** → `status="passed"`, primary selection per Check 0.C C4 (souffle: `(branch_index, binding_items, candidate_key)`; problog/pyreason: `(candidate_key, binding_items)`)
+  - **Match bucket empty AND lookup-miss bucket non-empty** → `status="unsupported"` (per D5/D12), `EVIDENCE_LOOKUP_MISS` errors per missing candidate, optional warning if pattern affects ≥2 candidates
+  - **All buckets accounted, match empty, lookup-miss empty** → `status="failed"`, `failure_kind="no_candidate"`
+
+  **Why precedence — lookup-miss outranks no_candidate:** evidence-miss is a contract problem (per §6.3 Decision #5); silently demoting it to `no_candidate` would launder Check-style silent-skip into Diagnose, violating the Q1 Sibling rationale.
+
+  Non-native `failure_kind="atom_localized"` never fires per D10 representability table.
+
+- 2026-05-04 (Step 0.C) — **C5 — RuleRef preflight (Diagnose's own copy).** Diagnose owns `_diagnose_ruleref_preflight(body, registry)` mirroring Check's `_ruleref_preflight(...)` (Diagnose does NOT import Check's preflight per Q1 Sibling):
+
+  - Scan body for `("ruleref", rule_id, version, terms)` atoms
+  - If ruleref present and `registry is None`: `REGISTRY_REQUIRED` error → `status="invalid_request"`
+  - For each ruleref: `registry.resolve(rule_id, version)`; on `RuleCompileError`: `RULE_REF_UNRESOLVABLE` error with `details["reason"]` from exception → `status="invalid_request"`
+  - Cycles / version-mismatch are NOT classified at preflight (mirror Check 0.C C5 softening); native eval surfaces them as runtime errors per C6
+
+  Code-level duplication with Check's `_ruleref_preflight` is accepted per Q1 Sibling (D11 invariant); deferred refactor grounded in **two distinct topic rules**: (i) §1.3 anti-flatten / anti-taxonomy / "don't create abstraction only because Check needed local seam once" + (ii) §6.2 wave-ordering second-consumer rule (per topic §6.2 line 411, §3.6 deferral basis). Locally hardcoded stays until **either** §3.6 promotes (engine capability declaration) **or** a third capability surfaces concrete shared-helper pressure (per §6.2 second-consumer trigger). The earlier 0.B D11 phrasing combined these two rules into a single "§1.3" citation; this is precise but compressed — the substantive grounding is the same.
+
+- 2026-05-04 (Step 0.C) — **C6 — Runtime failure mapping** (mirrors Check 0.C C7):
+
+  - **Adapter exceptions during `evaluate_derivation_plans(...)`** → propagate (NOT wrapped into status enum)
+  - **Evaluator-not-registered** for engine → propagate as `KeyError` / `ValueError` from `Store.evaluate_engine` (NOT wrapped)
+  - **Engine binary unavailable** → propagate from adapter (NOT wrapped)
+  - **DTO post_init failure** (e.g., `$`-prefix violation, multi-plan, unexpected kwargs) → `ProtocolShapeError` at construction time
+  - **Diagnose-internal invariant violations** (e.g., atom-localizer detects unparseable atom kind) → `DiagnoseRuntimeError(code, path, details)` — narrow class for cases the runtime cannot meaningfully convert into `DiagnoseResult`; mirrors Check's `CheckRuntimeError`
+
+  **Cycles / version-mismatch in RuleRef resolution:** not classified at preflight (per C5); native eval may raise `WhereValidationError` or similar; Diagnose lets these propagate as runtime errors (does NOT wrap into `unsupported` or `invalid_request`).
+
+- 2026-05-04 (Step 0.C) — **C7 — Drift prevention §7-Diagnose mapping.** Each high-risk decision gets an anti-regression test class entry:
+
+  - **§7-Diagnose-1 (D5 evidence-unavailable as `unsupported`, NOT `failed`):** test that engine-output with lookup-miss yields `status="unsupported"` with `EVIDENCE_LOOKUP_MISS` code; the audit forbids `status="failed"` with a hypothetical `failure_kind="evidence_unavailable"` enum value (which doesn't exist in the chosen enum)
+  - **§7-Diagnose-2 (D8 / D8.note `DiagnoseAtomLocator` NOT in `EvidenceEnvelope` Union):** test that `EvidenceEnvelope.engine_payload` Union members are exactly `{SupportArtifact, ProvenanceEnvelope}`; `DiagnoseAtomLocator` lives only on `DiagnoseResult.diagnostic_payload`
+  - **§7-Diagnose-3 (Q1 Sibling no-Check-call invariant):** static check (test-time assertion; concrete mechanism — AST walk / import-graph / `sys.modules` inspection — chosen at implementation time) that the Diagnose runtime module never imports `check_derivation_binding`, `derivation_check_runtime`, **or any private helper from the Check runtime module** (e.g., `_binding_matches`, `_request_representability_precheck`, `_ruleref_preflight`); banned-symbol list maintained alongside the test, extended when new Check internals appear
+  - **§7-Diagnose-4 (C2 native atom-localizer correctness):** test cases verifying first-failed-atom is correctly identified for representative branches; explicitly tests that no successful atom is reported as failed
+  - **§7-Diagnose-5 (D10 non-native `atom_localized` never fires):** test that `souffle` / `problog` / `pyreason` responses never include `failure_kind="atom_localized"` regardless of input shape
+  - **§7-Diagnose-6 (D12 evidence-miss observable, never silent-skip):** test that an adapter-advertised `support_kind` with `None` lookup surfaces `EVIDENCE_LOOKUP_MISS` error in `DiagnoseResult.errors`, never silent-discards the candidate
+  - **§7-Diagnose-7 (status enum invariance, D5):** **type-level invariant test** that `DiagnoseResult.status` Literal contains exactly the 4 Check values — `passed`, `failed`, `unsupported`, `invalid_request` — and no 5th value. Distinct from §7-Diagnose-1 which is a runtime-routing test: §7-Diagnose-1 verifies *behavior* (evidence-miss input routes to `unsupported`); §7-Diagnose-7 verifies *type structure* (Literal exact members). Both kept because they catch different drift modes (logic drift vs type drift).
+
+  Anti-regression test class structure mirrors Check archive's `AntiRegressionTests`.
+
+- 2026-05-04 (Step 0.C) — **C8 — Function decomposition shape** (per 0.B Step 0.C entry-point list item 6; **names + module path + role only — concrete signatures with parameter / return types decided at implementation time per Check 0.C altitude precedent**). The 0.B item 6 wording asked for "signatures and names"; on 0.C re-examination, parameter / return types are implementation-altitude. 0.C commits names + roles; types emerge with the code.
+
+  **Public entry:**
+  - `diagnose_derivation_binding` — public entry; takes `request` plus side-channel `store` and optional `registry`; returns `DiagnoseResult`
+
+  **Private gates and preflight:**
+  - `_request_diagnostic_representability_precheck` — D10 table check; runs first; returns error tuple if non-native request not representable
+  - `_diagnose_ruleref_preflight` — C5 logic; scans body for ruleref atoms; returns error tuple per registry / resolution failures
+
+  **Per-engine dispatchers:**
+  - `_diagnose_native` — C1 + C2 + C3 (Phase 1 + Phase 2 + primary selection)
+  - `_diagnose_souffle` — C4 + souffle binding extraction (`SupportArtifact.binding_items`)
+  - `_diagnose_problog_pyreason` — C4 + payload-term head-var alignment
+
+  **Algorithm helpers:**
+  - `_localize_failed_atom` — C2 walk; returns `DiagnoseAtomLocator | None`
+  - `_extend_env_with_atom` — C2 atom-extension primitive (sibling to evaluate_where's per-atom logic; explicitly enumerates extensions; handles "var not yet bound" by enumeration, not by `_ground_terms` returning `None`)
+  - `_classify_non_native_buckets` — C4 three-bucket split (lookup-miss / match / no-match) per candidate
+
+  **Binding extraction helpers:**
+  - `_extract_souffle_binding` — souffle-specific (`SupportArtifact.binding_items`)
+  - `_extract_payload_term_binding` — problog / pyreason (head-var positional alignment per Check `_extract_head_var_binding` precedent)
+
+  **Result construction helpers (Diagnose-side copies per Q1 Sibling):**
+  - `_diagnose_binding_matches` — subset-match predicate (Diagnose's copy; mirrors Check `_binding_matches` per Q1 Sibling D11 invariant)
+  - `_diagnose_invalid_request` — `DiagnoseResult` factory for `status="invalid_request"` paths (mirrors Check `_invalid_request` factory)
+
+  **Narrow exception:**
+  - `DiagnoseRuntimeError(ValueError)` mirroring `CheckRuntimeError`
+
+  All in `kernel.application/diagnose_runtime.py`; concrete parameter / return types + LOC-level decomposition decided at implementation time.
+
+- 2026-05-04 (Step 0.C) — **Step 0.D entry point.** Step 0.D should:
+  1. Lift Step 0.B/0.C decisions into blueprint §5 Proposed Shape (frozen request/result DTO contract; algorithm overview per engine; representability table; evidence-miss semantics)
+  2. Lift drift-prevention §7-Diagnose-1 through §7-Diagnose-7 into blueprint §7 Acceptance (each as a testable anti-regression gate)
+  3. Lift implementation steps into blueprint §8 Implementation Plan (per-engine dispatch + helpers + tests, ordered for incremental commits)
+  4. Move blueprint status `draft → scoped`
+
+  After 0.D, implementation can begin without re-litigating concept, DTO shape, or algorithm. The Step 0 gate closes when 0.D commits.
