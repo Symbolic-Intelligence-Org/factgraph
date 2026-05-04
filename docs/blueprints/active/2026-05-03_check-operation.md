@@ -169,7 +169,7 @@ Layer placement is not negotiable: substrate starts in `kernel.application`.
 - [x] Semantically invalid but well-shaped request (unknown variable in rule body or RuleRef without registry) maps to `status="invalid_request"` with `errors` populated.
 - [x] Native evidence envelope is inspectable / serializable and preserves support metadata.
 - [x] EvidenceEnvelope round-trips engine-native payload without flattening away engine-specific fields.
-- [ ] Non-native representability boundary is covered by tests for at least the scoped engine set.
+- [x] Non-native representability boundary is covered by tests for at least the scoped engine set.
 - [x] `branch_atom_projection=None` is tested as "projection not implemented", not "evidence degraded".
 - [x] Affected application docs are updated.
 - [ ] If an SDK shell is added, SDK docs/tests prove it is a delegate and not a substrate.

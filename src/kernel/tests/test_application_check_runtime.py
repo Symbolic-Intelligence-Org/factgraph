@@ -13,7 +13,8 @@ Covers (per blueprint Step 2 plan + Step 0.B/0.C contract):
     fully evidence-bearing (None != degraded)
   * unexpected runtime exception propagates loudly (does not collapse
     into status)
-- Non-native staging: souffle/problog/pyreason raise NotImplementedError.
+- Non-native staging: request-level representability gate; representable
+  requests raise NotImplementedError until evaluate-then-match lands.
 """
 from __future__ import annotations
 
@@ -94,7 +95,7 @@ def _seed_person(
 def _build_plan(
     body_ir: list[Any],
     target_pred_id: str,
-    head_var_names: tuple[str, ...] = ("p",),
+    head_var_names: tuple[str, ...] = ("$p",),
 ) -> CompiledDerivationPlan:
     return CompiledDerivationPlan(
         derivation_id="check-test",
@@ -580,19 +581,68 @@ class AntiRegressionTests(unittest.TestCase):
 
 
 class NonNativeStagingTests(unittest.TestCase):
-    def _request(self, engine: str) -> CheckRequest:
+    def _request(
+        self,
+        engine: str,
+        *,
+        binding: tuple[tuple[str, object], ...] = (),
+        plan: CompiledDerivationPlan | None = None,
+    ) -> CheckRequest:
         store, index = _build_store()
         body, exists_pred = _exists_body(index)
-        plan = _build_plan(body, exists_pred)
-        return CheckRequest(plan=plan, binding=(), engine=engine)  # type: ignore[arg-type]
+        selected_plan = plan or _build_plan(body, exists_pred)
+        return CheckRequest(plan=selected_plan, binding=binding, engine=engine)  # type: ignore[arg-type]
 
-    def test_non_native_engines_raise_not_implemented(self) -> None:
+    def test_souffle_representable_request_reaches_staging_not_implemented(self) -> None:
         store, _ = _build_store()
-        for engine in ("souffle", "problog", "pyreason"):
+        request = self._request("souffle", binding=(("$body_only", "x"),))
+
+        with self.assertRaises(NotImplementedError):
+            check_derivation_binding(request, store=store)
+
+    def test_problog_and_pyreason_head_only_binding_reach_staging(self) -> None:
+        store, _ = _build_store()
+        for engine in ("problog", "pyreason"):
             with self.subTest(engine=engine):
-                request = self._request(engine)
+                request = self._request(engine, binding=(("$p", "person-1"),))
                 with self.assertRaises(NotImplementedError):
                     check_derivation_binding(request, store=store)
+
+    def test_problog_body_only_binding_returns_unsupported_before_evaluate(self) -> None:
+        store, _ = _build_store()
+        request = self._request("problog", binding=(("$age", 25),))
+
+        result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "unsupported")
+        self.assertIsNone(result.matched_count)
+        self.assertEqual(result.errors[0].code, "BINDING_NOT_REPRESENTABLE")
+        self.assertEqual(result.errors[0].details["body_only_variables"], ["$age"])
+
+    def test_pyreason_body_only_binding_returns_unsupported_before_evaluate(self) -> None:
+        store, _ = _build_store()
+        request = self._request("pyreason", binding=(("$age", 25),))
+
+        result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "unsupported")
+        self.assertEqual(result.errors[0].code, "BINDING_NOT_REPRESENTABLE")
+
+    def test_problog_entity_target_plan_returns_unsupported_before_evaluate(self) -> None:
+        store, index = _build_store()
+        body, _ = _exists_body(index)
+        plan = _build_plan(body, "Person")
+        object.__setattr__(
+            plan,
+            "head_spec",
+            {"callee_kind": "entity_type", "entity_type": "Person"},
+        )
+        request = self._request("problog", plan=plan)
+
+        result = check_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "unsupported")
+        self.assertEqual(result.errors[0].code, "ENTITY_TARGET_NOT_REPRESENTABLE")
 
 
 class CheckRuntimeErrorTests(unittest.TestCase):

@@ -1,8 +1,9 @@
 """Application-layer Check runtime executor.
 
-Step 2 scope: native engine only. Non-native engines raise ``NotImplementedError``
-until Step 4 lands the request-level representability precheck plus
-evaluate-then-match path.
+Step 4.1 scope: native engine plus non-native request-level representability
+precheck. Non-native requests that are not askable return ``unsupported``;
+representable non-native requests still raise ``NotImplementedError`` until
+Step 4.2 / Step 4.3 land evaluate-then-match.
 
 Algorithm (per audit log Step 0.C C1+C2 unified):
 
@@ -28,8 +29,9 @@ Errors / status mapping:
   per Step 0.B B2) -- runtime never converts shape errors to status.
 - Semantic invalid (unknown variable, missing/unresolvable registry)
   -> ``CheckResult(status="invalid_request")`` with errors populated.
-- Engine not yet implemented -> ``NotImplementedError`` (loud staging,
-  per topic doc §7 outcome purity).
+- Non-native engine representability failure -> ``status="unsupported"``;
+  representable-but-not-yet-implemented -> ``NotImplementedError`` (loud
+  staging, per topic doc §7 outcome purity).
 - Runtime / engine / internal failures propagate as-is (engine adapter
   errors, projection failures). Narrow ``CheckRuntimeError`` is provided
   for cases the runtime cannot meaningfully convert into a CheckResult.
@@ -109,17 +111,26 @@ def check_derivation_binding(
 ) -> CheckResult:
     """Verify whether the requested binding satisfies the rule.
 
-    Step 2 scope: native engine only. Other engines raise
-    ``NotImplementedError``; the request-level representability precheck plus
-    evaluate-then-match path for non-native engines lands in Step 4.
+    Native runs fully. Non-native engines run request-level representability
+    precheck; representable requests raise ``NotImplementedError`` until
+    Step 4.2 / Step 4.3 land evaluate-then-match.
 
     See blueprint ``2026-05-03_check-operation.md`` and audit log
     Step 0.B / Step 0.C for the full contract.
     """
     if request.engine != "native":
-        raise NotImplementedError(
-            f"Non-native engine support comes in Step 4; got engine={request.engine!r}"
-        )
+        return _non_native_check(request, store=store, registry=registry)
+
+    return _native_check(request, store=store, registry=registry)
+
+
+def _native_check(
+    request: CheckRequest,
+    *,
+    store: Store,
+    registry: RuleRegistry | None,
+) -> CheckResult:
+    """Native Check implementation via final-result matching."""
 
     body = list(request.plan.body_ir)
 
@@ -230,6 +241,82 @@ def check_derivation_binding(
         errors=(),
         warnings=(),
     )
+
+
+def _non_native_check(
+    request: CheckRequest,
+    *,
+    store: Store,
+    registry: RuleRegistry | None,
+) -> CheckResult:
+    """Representability-gated non-native staging.
+
+    Step 4.1 lands request-level representability precheck only. If the
+    question is representable for the requested engine/output shape, the
+    evaluate-then-match implementation comes in Step 4.2 / Step 4.3.
+    """
+    del store, registry  # Step 4.1 only decides whether the question is askable.
+    errors = _request_representability_precheck(request)
+    if errors:
+        return CheckResult(
+            status="unsupported",
+            requested_binding=request.binding,
+            matched_count=None,
+            matched_binding=None,
+            evidence_envelope=None,
+            errors=errors,
+            warnings=(),
+        )
+    raise NotImplementedError(
+        f"Evaluate-then-match for engine={request.engine!r} comes in Step 4.2/4.3"
+    )
+
+
+def _request_representability_precheck(request: CheckRequest) -> tuple[ErrorDTO, ...]:
+    """Return errors when a non-native Check request cannot be represented.
+
+    Per Step 0.C C6 this is a request-level check, not a result-level check.
+    Unsupported means "cannot ask this question", before any adapter evaluate
+    call is made.
+    """
+    if request.engine in {"native", "souffle"}:
+        return ()
+
+    errors: list[ErrorDTO] = []
+    head_spec = request.plan.head_spec
+    if isinstance(head_spec, dict) and head_spec.get("callee_kind") == "entity_type":
+        errors.append(
+            ErrorDTO(
+                code="ENTITY_TARGET_NOT_REPRESENTABLE",
+                message=(
+                    f"engine={request.engine!r} Check does not support "
+                    "entity-targeted plans in MVP"
+                ),
+                path=("plan", "head_spec"),
+                details={"engine": request.engine},
+            )
+        )
+
+    head_vars = set(request.plan.heads[0].head_var_names)
+    requested_vars = {key for key, _ in request.binding}
+    body_only_vars = sorted(requested_vars - head_vars)
+    if body_only_vars:
+        errors.append(
+            ErrorDTO(
+                code="BINDING_NOT_REPRESENTABLE",
+                message=(
+                    f"engine={request.engine!r} Check can only match requested "
+                    "variables carried in the candidate head payload"
+                ),
+                path=("binding",),
+                details={
+                    "engine": request.engine,
+                    "body_only_variables": body_only_vars,
+                },
+            )
+        )
+
+    return tuple(errors)
 
 
 def _binding_matches(final_binding: dict[str, Any], requested: BindingItems) -> bool:
