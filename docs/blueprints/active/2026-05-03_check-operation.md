@@ -159,14 +159,14 @@ Layer placement is not negotiable: substrate starts in `kernel.application`.
 - [x] Check protocol DTO(s) live under `kernel.application.protocol`.
 - [x] CheckRequest DTO schema rejects `store`, `registry`, and precomputed `rule_ref_resolutions` fields.
 - [x] CheckRequest rejects multi-head plans with `ProtocolShapeError`.
-- [ ] Check runtime lives under `kernel.application` and takes dependencies via explicit side-channel parameters.
-- [ ] Complete native binding pass/fail behavior is covered by tests.
-- [ ] Partial native binding pass/fail and multi-match behavior are covered by tests.
-- [ ] Tests prove partial binding is not evaluated by directly calling `_branch_satisfies` on the partial input.
-- [ ] Deterministic primary selection is covered by tests, including OR branch order.
-- [ ] RuleRef with/without registry behavior is covered by tests.
+- [x] Check runtime lives under `kernel.application` and takes dependencies via explicit side-channel parameters.
+- [x] Complete native binding pass/fail behavior is covered by tests.
+- [x] Partial native binding pass/fail and multi-match behavior is covered by tests.
+- [x] Tests prove partial binding is resolved via final-result matching and support evidence is built from the full primary binding.
+- [x] Deterministic primary selection is covered by tests, including OR branch order.
+- [x] RuleRef with/without registry behavior is covered by tests.
 - [x] Malformed CheckRequest DTO shape (wrong container type, $-prefix violation, missing required field, malformed BindingItems structure) raises `ProtocolShapeError` at DTO construction; **not** converted to `status="invalid_request"` (per existing `application.protocol.common` convention).
-- [ ] Semantically invalid but well-shaped request (unknown variable in rule body or RuleRef without registry) maps to `status="invalid_request"` with `errors` populated.
+- [x] Semantically invalid but well-shaped request (unknown variable in rule body or RuleRef without registry) maps to `status="invalid_request"` with `errors` populated.
 - [x] Native evidence envelope is inspectable / serializable and preserves support metadata.
 - [x] EvidenceEnvelope round-trips engine-native payload without flattening away engine-specific fields.
 - [ ] Non-native representability boundary is covered by tests for at least the scoped engine set.

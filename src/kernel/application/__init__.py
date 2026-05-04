@@ -1,5 +1,9 @@
 """Application-layer modules built on top of core runtime primitives."""
 
+from .derivation_check_runtime import (
+    CheckRuntimeError,
+    check_derivation_binding,
+)
 from .derivation_runtime import (
     DerivationRuntimeError,
     accept_derivation_candidate_set,
@@ -43,6 +47,7 @@ from .schema_runtime import (
 )
 
 __all__ = [
+    "CheckRuntimeError",
     "DerivationRuntimeError",
     "EntityTypeInfo",
     "EntityViewError",
@@ -59,6 +64,7 @@ __all__ = [
     "apply_ingest_request",
     "apply_write_plan",
     "build_schema_index",
+    "check_derivation_binding",
     "encode_entity_ref",
     "entity_info",
     "entity_type_from_ref",

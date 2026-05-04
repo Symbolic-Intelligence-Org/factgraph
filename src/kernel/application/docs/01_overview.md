@@ -52,7 +52,7 @@
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 29 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 31 public symbols. The main executor entry points are:
 
 - `execute_read_request(...)`
 - `hydrate_entity(...)`
@@ -62,6 +62,7 @@
 - `execute_query(...)`
 - `apply_ingest_request(...)`
 - `evaluate_derivation_plans(...)`
+- `check_derivation_binding(...)`
 - `accept_derivation_candidate_set(...)`
 - `accept_derivation_candidate_sets(...)`
 
