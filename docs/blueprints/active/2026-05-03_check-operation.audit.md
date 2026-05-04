@@ -15,6 +15,7 @@
 | 2026-05-04 | scoped | Step 1 immediate multi-head policy locked | CheckRequest rejects multi-head plans at DTO construction with ProtocolShapeError. Multi-head remains evaluate orchestration input, not Check input. |
 | 2026-05-04 | scoped | Step 1 protocol DTOs implemented | Added `kernel.application.protocol.derivation_check` with CheckRequest, CheckResult, EvidenceEnvelope, and CheckStatus; exported protocol symbols; added focused protocol tests and synced application docs. Runtime implementation remains pending. |
 | 2026-05-04 | scoped | Step 2 native runtime implemented | Added `kernel.application.derivation_check_runtime` with native-only `check_derivation_binding`. Complete and partial bindings both use final-result matching via `evaluate_native_where`; primary selection is deterministic by `(branch_index, binding_items)`; EvidenceEnvelope is built from the full primary binding and stored for `explain_support`. RuleRef preflight covers missing/unresolvable registry without parsing exception text. Non-native engines raise `NotImplementedError` as staging. Added 22 runtime tests; kernel baseline 753 OK / 1 skip and ruff clean. |
+| 2026-05-04 | scoped | Step 3 native hardening complete | Added RuleRef happy-path coverage with valid registry, repeated RuleRef preflight dedupe, OR-branch RuleRef preflight, and deterministic primary semantic check for partial multi-match selecting lowest binding_items. Runtime test count is now 26; no runtime code changes. |
 
 ## Decision Notes
 

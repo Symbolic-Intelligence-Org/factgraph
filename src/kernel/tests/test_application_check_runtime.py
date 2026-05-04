@@ -37,9 +37,9 @@ from kernel.application.protocol import (
     EntitySelector,
 )
 from kernel.core.evidence.write_protocol import set_field
-from kernel.core.rules.rule_ir import RuleRegistry
+from kernel.core.rules.rule_ir import RuleRegistry, RuleSpec
 from kernel.core.store import Store
-from kernel.core.store._support import SupportArtifact
+from kernel.core.store._support import SupportArtifact, normalize_binding_items
 from kernel.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
@@ -123,6 +123,16 @@ def _exists_plus_age_body(index: Any) -> tuple[list[Any], str]:
         ("pred", age_pred, ["$p", "$age"]),
     ]
     return body, info.exists_predicate_id
+
+
+class _CountingRuleRegistry(RuleRegistry):
+    def __init__(self) -> None:
+        super().__init__()
+        self.resolve_calls: list[tuple[str, str]] = []
+
+    def resolve(self, rule_id: str, version: str) -> RuleSpec:
+        self.resolve_calls.append((rule_id, version))
+        return super().resolve(rule_id, version)
 
 
 class NativeHappyPathTests(unittest.TestCase):
@@ -298,6 +308,71 @@ class SemanticInvalidRequestTests(unittest.TestCase):
         self.assertEqual(unresolvable.details["version"], "1.0")
         self.assertIn("reason", unresolvable.details)
 
+    def test_ruleref_preflight_dedupes_repeated_keys(self) -> None:
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        body_with_duplicate_refs = body + [
+            ("ruleref", "missing_rule", "1.0", ["$p"]),
+            ("ruleref", "missing_rule", "1.0", ["$p"]),
+        ]
+        plan = _build_plan(body_with_duplicate_refs, exists_pred)
+        registry = _CountingRuleRegistry()
+        request = CheckRequest(plan=plan, binding=(), engine="native")
+
+        result = check_derivation_binding(request, store=store, registry=registry)
+
+        self.assertEqual(result.status, "invalid_request")
+        self.assertEqual(registry.resolve_calls, [("missing_rule", "1.0")])
+        self.assertEqual(
+            [err.code for err in result.errors],
+            ["RULE_REF_UNRESOLVABLE"],
+        )
+
+    def test_ruleref_inside_or_branch_preflight_requires_registry(self) -> None:
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        body_with_or_ref: list[Any] = [
+            body,
+            [("ruleref", "child_rule", "1.0", ["$p"])],
+        ]
+        plan = _build_plan(body_with_or_ref, exists_pred)
+        request = CheckRequest(plan=plan, binding=(), engine="native")
+
+        result = check_derivation_binding(request, store=store, registry=None)
+
+        self.assertEqual(result.status, "invalid_request")
+        self.assertEqual(result.errors[0].code, "REGISTRY_REQUIRED")
+
+    def test_ruleref_with_valid_registry_passes(self) -> None:
+        store, index = _build_store()
+        encoded = _seed_person(store, index, "alice", 25, "us")
+        child_body, exists_pred = _exists_body(index)
+        registry = RuleRegistry()
+        registry.register(
+            RuleSpec(
+                rule_id="person.exists",
+                version="1.0",
+                select_vars=["$p"],
+                where=child_body,
+                expose=True,
+            )
+        )
+        parent_body: list[Any] = [("ruleref", "person.exists", "1.0", ["$p"])]
+        plan = _build_plan(parent_body, exists_pred)
+        request = CheckRequest(plan=plan, binding=(("$p", encoded),), engine="native")
+
+        result = check_derivation_binding(request, store=store, registry=registry)
+
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.matched_count, 1)
+        envelope = result.evidence_envelope
+        assert envelope is not None
+        artifact = envelope.engine_payload
+        self.assertIsInstance(artifact, SupportArtifact)
+        assert isinstance(artifact, SupportArtifact)
+        self.assertEqual(artifact.rule_refs, ("person.exists",))
+        self.assertEqual(len(artifact.rule_ref_edges), 1)
+
 
 class EvidenceEnvelopeShapeTests(unittest.TestCase):
     def _passed_result(self) -> CheckResult:
@@ -374,6 +449,29 @@ class DeterministicPrimaryTests(unittest.TestCase):
         }
 
         self.assertEqual(len(primaries), 1)
+
+    def test_partial_multi_match_primary_is_lowest_binding_items(self) -> None:
+        store, index = _build_store()
+        encoded_alice = _seed_person(store, index, "alice", 25, "us")
+        encoded_bob = _seed_person(store, index, "bob", 25, "eu")
+        encoded_carol = _seed_person(store, index, "carol", 25, "ap")
+        body, exists_pred = _exists_plus_age_body(index)
+        plan = _build_plan(body, exists_pred)
+        request = CheckRequest(
+            plan=plan,
+            binding=(("$age", 25),),
+            engine="native",
+        )
+
+        result = check_derivation_binding(request, store=store)
+
+        expected_primary = min(
+            normalize_binding_items({"$age": 25, "$p": encoded})
+            for encoded in (encoded_alice, encoded_bob, encoded_carol)
+        )
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.matched_count, 3)
+        self.assertEqual(result.matched_binding, expected_primary)
 
     def test_or_of_and_multi_branch_primary_lowest_branch_index(self) -> None:
         store, index = _build_store()
