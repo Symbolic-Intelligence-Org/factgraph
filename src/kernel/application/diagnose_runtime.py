@@ -1,8 +1,9 @@
 """Application-layer Diagnose runtime executor.
 
-Step 2 scope is native MVP only: pass / fail classification, native
-atom-localization, and semantic invalid_request prechecks. Non-native engines are
-intentionally left for the later §8 Step 4-6 implementation steps.
+Native Diagnose supports pass / fail classification, native atom-localization,
+and semantic invalid_request prechecks. Non-native engines are currently
+represented through the §8 Step 4 request-level representability gate; actual
+souffle / problog / pyreason dispatch lands in §8 Step 5-6.
 """
 from __future__ import annotations
 
@@ -77,6 +78,10 @@ def diagnose_derivation_binding(
     registry: RuleRegistry | None = None,
 ) -> DiagnoseResult:
     """Diagnose why a requested binding does or does not satisfy a derivation plan."""
+    representability_errors = _request_diagnostic_representability_precheck(request)
+    if representability_errors:
+        return _diagnose_unsupported(request, errors=representability_errors)
+
     if request.engine != "native":
         raise NotImplementedError(
             "Diagnose non-native dispatch is scoped for §8 Step 4-6"
@@ -303,6 +308,76 @@ def _diagnose_invalid_request(
         errors=errors,
         warnings=(),
     )
+
+
+def _diagnose_unsupported(
+    request: DiagnoseRequest, *, errors: tuple[ErrorDTO, ...]
+) -> DiagnoseResult:
+    return DiagnoseResult(
+        status="unsupported",
+        requested_binding=request.binding,
+        matched_count=None,
+        matched_binding=None,
+        failure_kind=None,
+        diagnostic_payload=None,
+        errors=errors,
+        warnings=(),
+    )
+
+
+def _request_diagnostic_representability_precheck(
+    request: DiagnoseRequest,
+) -> tuple[ErrorDTO, ...]:
+    """Return errors when a non-native Diagnose request is not representable.
+
+    This is Diagnose-owned per Q1 Sibling. It intentionally mirrors Check's
+    current representability policy without importing Check runtime helpers.
+    """
+    if request.engine in {"native", "souffle"}:
+        return ()
+
+    errors: list[ErrorDTO] = []
+    head_spec = request.plan.head_spec
+    if isinstance(head_spec, dict) and head_spec.get("callee_kind") == "entity_type":
+        errors.append(
+            ErrorDTO(
+                code="ENTITY_TARGET_NOT_REPRESENTABLE",
+                message=(
+                    f"engine={request.engine!r} Diagnose does not support "
+                    "entity-targeted plans in MVP"
+                ),
+                path=("plan", "head_spec"),
+                details={"engine": request.engine},
+            )
+        )
+
+    # Per `resolve_head_ref` convention in core/store/_builders.py:
+    # head_var_names entries are variable references only when $-prefixed;
+    # bare names are literal head args and cannot match a requested binding.
+    head_vars = {
+        name
+        for name in request.plan.heads[0].head_var_names
+        if isinstance(name, str) and name.startswith("$") and len(name) > 1
+    }
+    requested_vars = {key for key, _ in request.binding}
+    body_only_vars = sorted(requested_vars - head_vars)
+    if body_only_vars:
+        errors.append(
+            ErrorDTO(
+                code="BINDING_NOT_REPRESENTABLE",
+                message=(
+                    f"engine={request.engine!r} Diagnose can only match requested "
+                    "variables carried in the candidate head payload"
+                ),
+                path=("binding",),
+                details={
+                    "engine": request.engine,
+                    "body_only_variables": body_only_vars,
+                },
+            )
+        )
+
+    return tuple(errors)
 
 
 def _all_body_vars(body: list[Any]) -> set[str]:
