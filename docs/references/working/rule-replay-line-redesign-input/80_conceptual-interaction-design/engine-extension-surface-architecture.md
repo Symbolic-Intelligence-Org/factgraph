@@ -201,7 +201,7 @@ Decision: unresolved.
 
 ## 4. Unresolved Items
 
-- First concrete scenario to analyze.
+- Whether the ASP/custom Datalog scenario in §6.1 should become the primary reference scenario or remain one example among several.
 - Whether this topic should aim for full resolution or only reusable guardrails.
 - Whether the next consumer should be Diagnose / Explain / per-frame diff / another capability.
 - Whether engine-extension architecture should remain a reference convention or eventually become its own blueprint.
@@ -232,11 +232,137 @@ Potential future consumers:
 
 ## 6. Discussion Log
 
-### 6.1 (pending) First Scenario
+### 6.1 (2026-05-04) Scenario Demo — Add An ASP / Custom Datalog Engine
 
-Pending user-provided scenario. Good candidates:
+This is a paper demo, not an implementation plan. It exists to make the six open questions concrete.
 
-- "Add a new engine" walkthrough.
-- "Diagnose capability wants to reuse engine evidence" walkthrough.
-- "A UI wants to render engine-specific evidence without flattening" walkthrough.
+#### Scenario
 
+A developer wants to add an engine named `asp`:
+
+- It evaluates the same compiled derivation plans as other engines.
+- It can return multiple stable models / answer sets.
+- Its native proof payload is not a branch/atom evidence tree; it is closer to an answer-set proof summary:
+
+```python
+AspProofPayload(
+    answer_set_id="as:01",
+    selected_atoms=(...),
+    justification_graph={...},
+    solver_stats={...},
+)
+```
+
+The developer wants `asp` to participate in:
+
+- `evaluate_derivation_plans(...)`
+- Check operation
+- a future Diagnose / Explain capability
+- future UI rendering that can show ASP-native proof details without flattening them into native-style support frames
+
+#### Desired Developer Experience
+
+The ideal onboarding should answer:
+
+1. **Where do I put my evaluator?**
+   - Current baseline answer: register an engine evaluator through `Store.register_engine_evaluator(...)`.
+   - Open architecture question: whether additional engine extension code stays near `kernel.adapters.asp` or moves to a future `kernel.engines.asp`.
+
+2. **What must my evaluator return?**
+   - It must return normalized `CandidateSet` objects compatible with application evaluate.
+   - It must provide enough binding information for capabilities that need final-result matching.
+   - It should store typed proof/provenance payloads somewhere the application runtime can retrieve.
+
+3. **What is my engine-native payload type?**
+   - Candidate A: widen `EvidenceEnvelope.engine_payload` to include `AspProofPayload`.
+   - Candidate B: make `AspProofPayload` implement a future `EnginePayload` protocol.
+   - Candidate C: render it into a JSON envelope.
+   - The demo immediately exposes the tension in §3.1: typed Python ergonomics versus extension friction.
+
+4. **How does Check know whether a request is representable?**
+   - For head-only binding, `CandidateSet.payload["terms"]` may be enough, as in ProbLog / PyReason.
+   - For body-only binding, `asp` must either expose final bindings or declare the request unsupported.
+   - If an ASP answer set can prove a body variable only inside a solver-specific proof graph, Check should not guess. It needs an explicit extraction capability or a declared unsupported boundary.
+
+5. **How does Diagnose reuse the same engine work without copying Check glue?**
+   - Check only needs "does requested binding match an engine result?"
+   - Diagnose may need "why did this binding fail / which constraints ruled it out?"
+   - If both capabilities need ASP proof extraction, a local Check-only helper is insufficient. This is where §3.4(adapter contract) and §3.6(capability declaration) become real.
+
+6. **What does UI render?**
+   - Common wrapper:
+     - engine=`"asp"`
+     - support_kind or payload_type identifies ASP proof flavor
+     - digest/ref for lookup
+   - Native payload:
+     - `AspProofPayload`, not flattened into `SupportArtifact`
+   - Optional projection:
+     - only if a separate shared evidence projection capability can map answer-set proof pieces to branch/atom-ish views without lying
+
+#### Minimal Demo Flow
+
+```text
+1. Compile derivation plan
+2. Register asp evaluator
+3. Evaluate:
+   DerivationEvaluateRequest(engine="asp", plans=(plan,))
+   -> list[CandidateSet]
+   -> store remembers AspProofPayload under support_digest / provenance_digest equivalent
+
+4. Check:
+   CheckRequest(plan=plan, binding=(("$doc", "d-1"),), engine="asp")
+   -> request-level representability gate:
+      - if "$doc" is available from candidate payload terms: evaluate-then-match
+      - if requested var exists only inside ASP proof internals: unsupported unless ASP declares safe extractor
+   -> CheckResult(status="passed" | "failed" | "unsupported")
+   -> EvidenceEnvelope(engine="asp", engine_payload=AspProofPayload, branch_atom_projection=None)
+
+5. Future Diagnose:
+   DiagnoseRequest(..., engine="asp")
+   -> asks engine capability layer for diagnostic support
+   -> may consume AspProofPayload directly
+   -> must not pretend ASP proof is a native SupportArtifact unless a projection layer explicitly supports that mapping
+```
+
+#### What This Demo Teaches
+
+**1. A fifth engine immediately stresses typed union.**
+
+Check's `SupportArtifact | ProvenanceEnvelope` union is acceptable for MVP, but the ASP demo makes the extension cost visible. Every new engine that has a distinct proof type either widens every consumer union or pushes the system toward an engine payload protocol / registry.
+
+**2. Representability is not just per engine; it is per capability + request shape.**
+
+For Check, head-variable matching might be representable from candidate payload. For Diagnose, the same engine may need a different extractor. A static "asp supports Check" boolean is too coarse.
+
+**3. Engine-native payload preservation is non-negotiable.**
+
+ASP answer-set proofs are not SupportArtifacts. Flattening them would repeat the PyReason/ProbLog mistake identified in Check §6.5.
+
+**4. Adapter contract needs an explicit artifact/provenance obligation.**
+
+If `asp` returns CandidateSet but stores no retrievable proof payload, Check can still pass/fail for head bindings, but evidence-bearing results degrade at the application boundary. The current "silent skip when artifact missing" Check behavior is tolerable for MVP tests, but a real engine onboarding story needs a clearer obligation or warning policy.
+
+**5. `engine_options` placement becomes concrete.**
+
+ASP may need options like solver mode, optimization strategy, or max answer sets. Some options belong in the compiled plan; others may be per-request interaction knobs. The demo shows why §3.2 cannot be answered abstractly.
+
+#### Questions Promoted By The Demo
+
+- Should engine payload extensibility be type-driven (`EnginePayload` protocol) or registry-driven (`engine + payload_type -> renderer/parser`)?
+- Should engine evaluators return typed evidence payloads directly, or only store them by digest?
+- Should capability-specific representability be declared through a common interface?
+- Should missing engine-native payload be a warning, runtime error, or simply a non-match for Check?
+- Should engine options have a two-level model: plan-level stable options plus request-level interaction options?
+
+#### Non-Decisions
+
+This scenario does **not** decide:
+
+- to add an ASP engine;
+- to create `kernel.engines.*`;
+- to replace `kernel.adapters.*`;
+- to define `EnginePayload`;
+- to change Check's current `EvidenceEnvelope` type;
+- to implement branch/atom projection for ASP.
+
+It only gives the topic a concrete reference case for future discussion.
