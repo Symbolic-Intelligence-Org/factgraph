@@ -1,9 +1,14 @@
 """Application-layer Check runtime executor.
 
-Step 4.1 scope: native engine plus non-native request-level representability
-precheck. Non-native requests that are not askable return ``unsupported``;
-representable non-native requests still raise ``NotImplementedError`` until
-Step 4.2 / Step 4.3 land evaluate-then-match.
+All scoped engines are implemented through representability-gated final-result
+matching:
+
+- native enumerates final bindings via ``evaluate_native_where(...)``;
+- souffle delegates through ``evaluate_derivation_plans(...)`` and matches
+  witness-bearing ``SupportArtifact.binding_items``;
+- problog / pyreason delegate through ``evaluate_derivation_plans(...)`` and
+  match only payload-representable head-variable bindings carried by
+  ``CandidateSet.payload["terms"]``.
 
 Algorithm (per audit log Step 0.C C1+C2 unified):
 
@@ -30,8 +35,7 @@ Errors / status mapping:
 - Semantic invalid (unknown variable, missing/unresolvable registry)
   -> ``CheckResult(status="invalid_request")`` with errors populated.
 - Non-native engine representability failure -> ``status="unsupported"``;
-  representable-but-not-yet-implemented -> ``NotImplementedError`` (loud
-  staging, per topic doc §7 outcome purity).
+  representable requests use evaluate-then-match.
 - Runtime / engine / internal failures propagate as-is (engine adapter
   errors, projection failures). Narrow ``CheckRuntimeError`` is provided
   for cases the runtime cannot meaningfully convert into a CheckResult.
@@ -118,9 +122,11 @@ def check_derivation_binding(
 ) -> CheckResult:
     """Verify whether the requested binding satisfies the rule.
 
-    Native runs fully. Non-native engines run request-level representability
-    precheck; representable requests raise ``NotImplementedError`` until
-    Step 4.2 / Step 4.3 land evaluate-then-match.
+    Native, souffle, problog, and pyreason all run through final-result
+    matching. Non-native engines first apply a request-level representability
+    precheck; non-representable questions return ``unsupported`` before
+    evaluation, while representable questions delegate to the existing
+    derivation evaluation runtime and match the engine output.
 
     See blueprint ``2026-05-03_check-operation.md`` and audit log
     Step 0.B / Step 0.C for the full contract.
@@ -256,12 +262,7 @@ def _non_native_check(
     store: Store,
     registry: RuleRegistry | None,
 ) -> CheckResult:
-    """Representability-gated non-native dispatch.
-
-    Step 4.1 lands the request-level representability precheck. Step 4.2 wires
-    Souffle through evaluate-then-match against witness-bearing SupportArtifact.
-    Step 4.3 will land ProbLog / PyReason via ProvenanceEnvelope.
-    """
+    """Representability-gated non-native evaluate-then-match dispatch."""
     errors = _request_representability_precheck(request)
     if errors:
         return CheckResult(

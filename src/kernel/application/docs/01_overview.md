@@ -17,6 +17,7 @@
 - query runtime request/result execution
 - normalized ingest request/result execution
 - compiled derivation evaluate / accept orchestration
+- explicit-binding derivation Check (`passed` / `failed` / `unsupported` / `invalid_request`)
 
 它不负责:
 
@@ -49,6 +50,8 @@
   - `apply_ingest_request(...)`
 - `derivation_runtime.py`
   - `evaluate_derivation_plans(...)`, `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
+- `derivation_check_runtime.py`
+  - `check_derivation_binding(...)`: verify a complete or partial binding against a single compiled derivation plan; native/souffle/problog/pyreason are handled through representability-gated final-result matching.
 
 ## 3. Public Runtime Surface
 
@@ -100,6 +103,7 @@ Current SDK runtime delegation:
 - `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
 - `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
 - `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
+- Check is currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`.
 
 SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
@@ -130,6 +134,7 @@ Key focused tests:
 - `test_application_ingest_runtime.py`
 - `test_application_derivation_runtime.py`
 - `test_application_check_protocol.py`
+- `test_application_check_runtime.py`
 - `test_sdk_facade_application_delegate.py`
 - `test_sdk_batch_application_delegate.py`
 - `test_sdk_query_policies.py`

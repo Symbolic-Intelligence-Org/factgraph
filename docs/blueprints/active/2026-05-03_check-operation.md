@@ -1,6 +1,6 @@
 # Task Blueprint: Check Operation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-03
 - Last Updated: 2026-05-04
 - Related Modules:
@@ -172,8 +172,8 @@ Layer placement is not negotiable: substrate starts in `kernel.application`.
 - [x] Non-native representability boundary is covered by tests for at least the scoped engine set.
 - [x] `branch_atom_projection=None` is tested as "projection not implemented", not "evidence degraded".
 - [x] Affected application docs are updated.
-- [ ] If an SDK shell is added, SDK docs/tests prove it is a delegate and not a substrate.
-- [ ] No release-base / publish / projection action is performed.
+- [x] No SDK shell was added; Check remains application-first in this MVP.
+- [x] No release-base / publish / projection action is performed.
 
 ## 8. Implementation Plan
 
@@ -236,9 +236,44 @@ Layer placement is not negotiable: substrate starts in `kernel.application`.
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
+Implemented on 2026-05-04.
 
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+### Final landed result
+
+- Application protocol:
+  - `kernel.application.protocol.CheckRequest`
+  - `kernel.application.protocol.CheckResult`
+  - `kernel.application.protocol.EvidenceEnvelope`
+  - `kernel.application.protocol.CheckStatus`
+- Application runtime:
+  - `kernel.application.check_derivation_binding(request, *, store, registry=None) -> CheckResult`
+  - `kernel.application.CheckRuntimeError`
+- Engine behavior:
+  - native: final-result matching through `evaluate_native_where(...)`
+  - souffle: evaluate-then-match through `evaluate_derivation_plans(...)` + typed `SupportArtifact`
+  - problog / pyreason: evaluate-then-match through `evaluate_derivation_plans(...)` + typed `ProvenanceEnvelope`
+- Result semantics:
+  - `passed`: representable and at least one full binding matched
+  - `failed`: representable and evaluated, but no binding matched
+  - `unsupported`: request cannot be represented by the selected engine/output shape
+  - `invalid_request`: well-shaped request with semantic invalidity, such as unknown binding variable or missing RuleRef registry
+- Tests:
+  - Check protocol tests: 22 cases
+  - Check runtime tests: 51 cases
+  - Final verified baseline: 782 kernel tests OK / 1 skip; `ruff check src/kernel` clean
+
+### Deviations and implementation refinements
+
+- **Step 4 split into 4.1 / 4.2 / 4.3.** The blueprint had one scoped-engine step; implementation split it into representability gate, souffle, and problog/pyreason sub-rounds. This reduced review risk and kept each engine path independently testable.
+- **Step 5 SDK delegate skipped.** The SDK shell was optional and not kept in scope after Step 0. The MVP intentionally exposes Check through `kernel.application` only; a future SDK entrypoint must be a thin delegate and should be driven by user-facing ergonomics work.
+- **Typed internal evidence lookup.** Check runtime uses `Store._lookup_support_artifact(...)` and `Store._lookup_provenance_envelope(...)` instead of public `explain_support(...)` / `explain_provenance(...)` dict rendering. Check is application-internal runtime code and `EvidenceEnvelope.engine_payload` requires typed `SupportArtifact | ProvenanceEnvelope` objects.
+- **`candidate_ref` terms are unrepresentable, not `None`.** ProbLog/PyReason head-var extraction uses an internal sentinel for `candidate_ref` payload terms and omits those variables from extracted bindings. This avoids polluting a binding with a false `None` value.
+- **`head_var_names` variable convention locked to `$` prefix.** Non-native representability precheck and head-var extraction only treat `$`-prefixed head names as variables; bare names are literal head arguments per `resolve_head_ref` convention.
+
+### Why deviations were accepted
+
+All deviations preserve the scoped contract. They narrow ambiguity discovered during implementation, keep application-first layering intact, and avoid premature SDK or projection abstractions. No release-base, publish, or projection action was performed.
+
+### Archive plan
+
+The blueprint can move to `docs/blueprints/archive/` with its audit log after this close-out commit. The reference topic remains in `docs/references/working/rule-replay-line-redesign-input/80_conceptual-interaction-design/` as cited design input, not current implementation truth.
