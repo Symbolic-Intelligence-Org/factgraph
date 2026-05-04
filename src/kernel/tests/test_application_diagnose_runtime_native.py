@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import unittest
 from typing import Any
+from unittest.mock import patch
 
 from kernel.application import (
     build_schema_index,
@@ -18,7 +19,7 @@ from kernel.application.protocol import (
     EntitySelector,
 )
 from kernel.core.evidence.write_protocol import set_field
-from kernel.core.rules.rule_ir import RuleRegistry
+from kernel.core.rules.rule_ir import RuleRegistry, RuleSpec
 from kernel.core.store import Store
 from kernel.sdk import Entity, Field, Identity, compile_schema_from_classes
 
@@ -211,6 +212,32 @@ class NativeAtomLocalizationTests(unittest.TestCase):
         self.assertEqual(locator.branch_index, 1)
         self.assertEqual(locator.failed_atom_index, 2)
 
+    def test_localizer_keeps_candidate_frontier_instead_of_single_primary_path(self) -> None:
+        store, index = _build_store()
+        _seed_person(store, index, "alice", 25, "us")
+        _seed_person(store, index, "bob", 25, "eu")
+        info = entity_info(index, "Person")
+        age_pred = field_predicate(index, "Person", "age").pred_id
+        region_pred = field_predicate(index, "Person", "region").pred_id
+        body: list[Any] = [
+            ("pred", info.exists_predicate_id, ["$p"]),
+            ("pred", region_pred, ["$p", "eu"]),
+            ("pred", age_pred, ["$p", "$age"]),
+            ("eq", "$age", 99),
+        ]
+        request = DiagnoseRequest(
+            plan=_build_plan(body, info.exists_predicate_id),
+            binding=(),
+            engine="native",
+        )
+
+        result = diagnose_derivation_binding(request, store=store)
+
+        locator = result.diagnostic_payload
+        assert locator is not None
+        self.assertEqual(locator.failed_atom_index, 3)
+        self.assertIn(("$age", 25), locator.attempted_binding)
+
     def test_no_candidate_fallback_when_localizer_has_no_branch_candidate(self) -> None:
         store, index = _build_store()
         body, target = _exists_body(index)
@@ -273,6 +300,35 @@ class NativeInvalidRequestTests(unittest.TestCase):
         self.assertEqual(result.errors[0].code, "RULE_REF_UNRESOLVABLE")
 
 
+class NativeRuleRefHappyPathTests(unittest.TestCase):
+    def test_ruleref_with_valid_registry_passes(self) -> None:
+        store, index = _build_store()
+        encoded = _seed_person(store, index, "alice", 25, "us")
+        child_body, target = _exists_body(index)
+        registry = RuleRegistry()
+        registry.register(
+            RuleSpec(
+                rule_id="person.exists",
+                version="1.0",
+                select_vars=["$p"],
+                where=child_body,
+                expose=True,
+            )
+        )
+        parent_body: list[Any] = [("ruleref", "person.exists", "1.0", ["$p"])]
+        request = DiagnoseRequest(
+            plan=_build_plan(parent_body, target),
+            binding=(("$p", encoded),),
+            engine="native",
+        )
+
+        result = diagnose_derivation_binding(request, store=store, registry=registry)
+
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.matched_count, 1)
+        self.assertEqual(result.matched_binding, (("$p", encoded),))
+
+
 class NativeAtomExtensionPrimitiveTests(unittest.TestCase):
     def test_extend_env_with_atom_enumerates_new_variable(self) -> None:
         from kernel.application.diagnose_runtime import _extend_env_with_atom
@@ -309,6 +365,29 @@ class NativeAtomExtensionPrimitiveTests(unittest.TestCase):
         )
 
         self.assertEqual(extensions, [])
+
+
+class DiagnoseSevenFourAntiRegressionTests(unittest.TestCase):
+    def test_failed_atom_localization_does_not_call_support_capture_atom_satisfies(
+        self,
+    ) -> None:
+        store, index = _build_store()
+        encoded = _seed_person(store, index, "alice", 25, "us")
+        body, target = _exists_age_region_body(index)
+        request = DiagnoseRequest(
+            plan=_build_plan(body, target),
+            binding=(("$p", encoded), ("$region", "eu")),
+            engine="native",
+        )
+
+        with patch(
+            "kernel.core.store._support_capture._atom_satisfies",
+            side_effect=AssertionError("_atom_satisfies must not be used by Diagnose localization"),
+        ):
+            result = diagnose_derivation_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_kind, "atom_localized")
 
 
 if __name__ == "__main__":

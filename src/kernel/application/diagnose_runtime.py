@@ -200,21 +200,23 @@ def _localize_failed_atom(
         branch_vars = set(_vars_in_atoms(branch))
         if requested_vars and branch_vars.isdisjoint(requested_vars):
             continue
-        env = dict(requested_env)
+        envs = [dict(requested_env)]
         atoms_satisfied = 0
         for atom_index, atom in enumerate(branch):
-            next_envs = _extend_env_with_atom(view_facts, env, atom)
+            next_envs: list[dict[str, Any]] = []
+            for env in envs:
+                next_envs.extend(_extend_env_with_atom(view_facts, env, atom))
             if not next_envs:
                 candidates.append(
                     _FailedAtomCandidate(
                         branch_index=branch_index,
                         failed_atom_index=atom_index,
                         atoms_satisfied=atoms_satisfied,
-                        attempted_env=dict(env),
+                        attempted_env=_primary_env(envs),
                     )
                 )
                 break
-            env = _primary_env(next_envs)
+            envs = _dedupe_envs(next_envs)
             atoms_satisfied += 1
 
     if not candidates:
@@ -270,6 +272,13 @@ def _extend_env_with_atom(
 
 def _primary_env(envs: list[dict[str, Any]]) -> dict[str, Any]:
     return sorted(envs, key=_env_sort_key)[0]
+
+
+def _dedupe_envs(envs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[tuple[tuple[str, str], ...], dict[str, Any]] = {}
+    for env in envs:
+        deduped.setdefault(_env_sort_key(env), dict(env))
+    return [deduped[key] for key in sorted(deduped)]
 
 
 def _env_sort_key(env: dict[str, Any]) -> tuple[tuple[str, str], ...]:
