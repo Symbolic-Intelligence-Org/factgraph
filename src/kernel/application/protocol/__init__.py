@@ -8,6 +8,14 @@ from .derivation import (
     DerivationEvaluateRequest,
 )
 from .derivation_check import CheckRequest, CheckResult, CheckStatus, EvidenceEnvelope
+from .derivation_diagnose import (
+    DiagnoseAtomLocator,
+    DiagnoseEngine,
+    DiagnoseFailureKind,
+    DiagnoseRequest,
+    DiagnoseResult,
+    DiagnoseStatus,
+)
 from .entity_read import (
     AssertionRecordDTO,
     EntityReadRequest,
@@ -55,6 +63,12 @@ __all__ = [
     "CompiledHeadCall",
     "DerivationAcceptRequest",
     "DerivationEvaluateRequest",
+    "DiagnoseAtomLocator",
+    "DiagnoseEngine",
+    "DiagnoseFailureKind",
+    "DiagnoseRequest",
+    "DiagnoseResult",
+    "DiagnoseStatus",
     "EntityReadRequest",
     "EntityReadResponse",
     "EntityRef",
