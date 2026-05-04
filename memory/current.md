@@ -1,6 +1,6 @@
 # Current Operational Memory
 
-最后更新:2026-05-03(redesign base 启动)
+最后更新:2026-05-04(Check shipped + engine-extension-surface topic opened;详情见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
 
 ## 当前阶段(2026-05-03 — REDESIGN BASE)
 
@@ -90,12 +90,47 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 8. src/kernel/sdk/docs/README.md(product surface,**不再背 substrate**)
 9. (可选,深度回溯老 impl)`git show v0.1.1-evidence-tree-operational-overlay:src/kernel/sdk/replay.py` 等
 
-### 下一步方向
+### 下一步方向(2026-05-04 起)
 
-未定。等用户决定:
-- 继续走 design discussion(直接选某个方向起 application-first capability)
-- 或先走 strategic pause,等真用户反馈
-- 任何方向必须满足新 hard constraint
+详情见 [`session_handoffs/2026-05-04.md`](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md) §10。摘要:
+
+- engine-extension-surface topic §6.2 strategic framing 待用户从 A/B/C 选 entry path
+- baseline P1/P2 仍待填(P0 已完成,Check 已 ship 不依赖 P1/P2)
+- 第二个 application capability 候选未定(Fact overlay / Diagnose / Explain / Why-not 都是候选)
+
+任何新工作必须满足 application-first hard constraint(per `project_application_first_runtime_authority.md`)+ release branch invariants(per `project_release_branch_invariants.md`)。
+
+---
+
+## 2026-05-04 update — Check shipped + engine-extension-surface topic opened
+
+**Check operation 完整闭环 end-to-end(2026-05-04 完成):**
+
+- Topic doc `cited`:`docs/references/working/rule-replay-line-redesign-input/80_conceptual-interaction-design/check-operation-conceptual-interaction.md`
+- Blueprint archived:`docs/blueprints/archive/2026-05-03_check-operation.md` + audit
+- Code:`src/kernel/application/protocol/derivation_check.py`(166 LOC, DTOs)+ `src/kernel/application/derivation_check_runtime.py`(795 LOC, runtime + per-engine paths)
+- Tests:73 focused(22 protocol + 51 runtime),782 total kernel green + 1 skip
+- 4 engines 全 covered:native (via `evaluate_native_where`)+ souffle (SupportArtifact path)+ problog/pyreason (ProvenanceEnvelope path)— Option IV representability-gated multi-engine
+- Application-first hard constraint **100% 落实**;SDK shell 显式 skip per `feedback_narrow_public_api`
+
+**Memory 新增** `~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/project_check_operation_shipped.md` — Check archive 作为 reference template for future application capabilities
+
+**Process patterns validated** (use as templates,详见 handoff §6):
+- 4-sub-round Step 0(.A source pass / .B DTO freeze / .C algorithm freeze / .D lift)
+- 3-round blind validation(by independent subagents reading only docs)
+- §7 drift prevention(每 trap mapped to anti-regression test)
+- Conformance audit before `scoped → implemented`
+- Archive sequence(`git mv` + inventory + topic doc cross-ref rewire)
+
+**engine-extension-surface-architecture topic opened**(Status: `draft`):
+
+- 新 venue topic doc:`docs/references/working/rule-replay-line-redesign-input/80_conceptual-interaction-design/engine-extension-surface-architecture.md`
+- §6.1 ASP scenario demo committed(paper demo of adding 5th engine)
+- 6 §3 core questions unresolved(典型 cross-capability architectural concerns)
+- Topic discipline §1.3:不 flatten engine 差异;不预 commit 抽象;defer if 需要 second consumer
+- §6.2 strategic framing 待用户决定 entry path(A/B/C);**re-confirm with user before writing**
+
+**Branch state** `v0.1-redesign-2026-05-03`:ahead origin ≈23 commits before handoff commit / ≈24 after handoff commit,**NOT pushed**。At handoff authoring the only dirty files are `memory/session_handoffs/2026-05-04.md` and `memory/current.md`;after committing handoff,expect clean working tree。release base sacred 不动。
 
 ---
 
