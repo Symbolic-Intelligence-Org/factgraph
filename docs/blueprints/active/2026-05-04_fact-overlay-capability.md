@@ -114,6 +114,118 @@ Step 0.A is source-pass-only. The current working shape is deliberately not froz
 - Native overlay should start from the narrow seam between `project_view_facts_with_witness(...)` and `evaluate_native_where(...)`, not from Store mutation or plan mutation.
 - Non-native engines are presumed `unsupported` for MVP unless Step 0.B finds a source-backed uniform injection point.
 
+### Step 0.B proposal (draft for review)
+
+This section proposes the Step 0.B freeze. It remains draft until accepted in the audit.
+
+#### 5.1 Capability shape
+
+The first Fact Overlay capability is **Overlay Check**:
+
+`FactOverlayCheckRequest(plan, binding, overlay, engine) -> FactOverlayCheckResult`
+
+Overlay Evaluate remains out of scope. The capability answers "under these temporary fact overrides, does this requested binding pass, and how does that differ from the current committed-fact baseline?"
+
+#### 5.2 Ledger anchor and runtime composition
+
+Chosen anchor: **DTO override list + narrow projection-merge shim**.
+
+Runtime composition: **Sibling**, with narrow reuse/extraction of Check-private pure helpers allowed. Overlay Check does not call `check_derivation_binding(...)`. It owns its request/result DTOs, projection merge, baseline/overlay evaluation flow, and unsupported semantics. Shared helper extraction is allowed only for overlay-agnostic binding matching and body-var preflight.
+
+Helper extraction destination: new application-internal shared module, expected shape `kernel.application._derivation_match_helpers`. Check and Overlay Check may import only the extracted binding-match and body-var preflight helpers from that module. Overlay Check must not import `derivation_check_runtime.py` or Check protocol result/envelope DTOs. Deterministic primary selection is not extracted; Overlay Check may import existing core helpers (`find_winning_branch_index` and `normalize_binding_items`) and compose its local sort key. This helper extraction is a prerequisite refactor before Overlay Check implementation, not part of the Overlay runtime itself.
+
+The native seam is:
+
+`project_view_facts_with_witness(...) -> apply_fact_overlay_projection(...) -> evaluate_native_where(...)`
+
+No Store proxy and no pre-compile plan patch are used in MVP.
+
+#### 5.3 Overlay action DTO
+
+MVP supports only `FactValueOverride`.
+
+Proposed fields:
+
+| Field | Purpose |
+|---|---|
+| `asrt_id: str` | The currently active/selected assertion row being overridden for this evaluation |
+| `pred_id: str` | Defensive predicate guard |
+| `e_ref: str` | Defensive entity guard |
+| `old_fact_tuple: tuple[Any, ...]` | Defensive stale-snapshot guard; must equal the current projected fact tuple |
+| `new_fact_tuple: tuple[Any, ...]` | Replacement projected fact tuple for this evaluation |
+| `note: str | None` | Optional caller context; not persisted |
+
+Request overlay field: `overlay: tuple[FactValueOverride, ...]`. Empty overlay is rejected with `invalid_request` and `ErrorDTO(code="EMPTY_OVERLAY_NOT_PERMITTED")`; callers with no override should use Check.
+
+Target semantics: **active selected assertion replacement only**. The target `asrt_id` must be active and selected by current view projection. The override replaces that projected row for this evaluation only. It does not support non-selected stale witnesses, predicate-wide replacement, `replace_all`, `add_alongside`, or add-fact semantics in MVP.
+
+Tuple semantics: `old_fact_tuple` and `new_fact_tuple` are full projected predicate argument tuples matching `ProjectedFact.fact_tuple`; `kernel.core.view.projector.build_args_for_claim(...)` builds this as `(claim.e_ref, *val_atoms)`, so `e_ref == fact_tuple[0]`. They must preserve arity. `pred_id` and `e_ref` are defensive guards; `e_ref` must match position 0 of both old and new tuples. Overlay Check cannot use `new_fact_tuple` to migrate the fact to a different entity binding or predicate shape.
+
+Multiple overrides are simultaneous. Duplicate `asrt_id` overrides or conflicting replacement tuples are invalid.
+
+#### 5.4 Artifact and evidence policy
+
+Overlay execution must not write the ledger and must not leave hypothetical artifacts or indexes in live `Store` caches. The live-store banned write surface is: `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, and `_remember_rule_trace_artifact`.
+
+MVP does not expose overlay-derived engine-native artifacts to callers. `FactOverlayCheckResult` carries lightweight phase summaries, not `EvidenceEnvelope`. Therefore §6.5 is not re-opened. A future decision to expose overlay-derived `SupportArtifact` / `ProvenanceEnvelope` through `EvidenceEnvelope.engine_payload` is a §6.5 trigger.
+
+#### 5.5 Result DTO policy
+
+Overlay Check uses encapsulated before/after semantics. It runs the current committed-fact baseline and the overlay-applied check in one capability call. Both phases return lightweight Check-like summaries without evidence payloads.
+
+Proposed result shape:
+
+| Field | Type / meaning |
+|---|---|
+| `status` | `Literal["passed", "failed", "unsupported", "invalid_request"]`; for completed native runs, equals `after.status` |
+| `requested_binding` | normalized `BindingItems` echo |
+| `before` | `OverlayCheckPhase | None` |
+| `after` | `OverlayCheckPhase | None` |
+| `diff` | `OverlayCheckDiff | None` |
+| `errors` | `tuple[ErrorDTO, ...]` |
+| `warnings` | `tuple[WarningDTO, ...]` |
+
+`OverlayCheckPhase` carries `status`, `matched_count`, and `matched_binding`. `OverlayCheckDiff` carries status/match deltas only; it does not carry engine-native proof artifacts. `OverlayCheckDiff` field schema is pinned in Step 0.C; Step 0.B constrains it to status and match-count/binding deltas only.
+
+Nullable matrix:
+
+| result status | before | after | diff | errors |
+|---|---|---|---|---|
+| `passed` | populated | populated, status=`passed` | populated | empty |
+| `failed` | populated | populated, status=`failed` | populated | empty |
+| `unsupported` | None | None | None | required |
+| `invalid_request` | None | None | None | required |
+
+Preflight invalid/unsupported cases occur before baseline execution, so they do not return a partial `before` phase.
+
+#### 5.6 Engine support gate
+
+MVP support is native-only:
+
+| Engine | Overlay Check support | Result |
+|---|---|---|
+| `native` | supported via projection merge | `passed` / `failed` / `invalid_request` |
+| `souffle` | unsupported; requires regenerated exported facts and adapter pipeline changes | `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED` |
+| `problog` | unsupported; requires rebuilt weighted-fact program | `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED` |
+| `pyreason` | unsupported; requires graph-state / temporal input patching | `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED` |
+
+This gate is self-contained and capability-owned; §6.6 still stands. No §6.7 declarative capability round is required before MVP implementation.
+
+#### 5.7 Step 0.C anti-regression inventory
+
+Step 0.C must map these gates to tests before implementation:
+
+- no ledger write or append/retract/accept call;
+- no hypothetical artifact or index left in live `Store` caches; explicitly ban `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, and `_remember_rule_trace_artifact`;
+- no `EvidenceEnvelope.engine_payload` use for overlay-derived artifacts;
+- no `check_derivation_binding(...)` delegation or Check runtime laundering;
+- AST/static Sibling guard: Overlay Check runtime must not import `derivation_check_runtime`, `check_derivation_binding`, Check result/envelope DTOs, or Check private helpers directly; only the shared `_derivation_match_helpers` module's binding-match/body-var helpers are allowed;
+- non-native engines always return `ENGINE_OVERLAY_NOT_SUPPORTED`;
+- stale `old_fact_tuple` or non-active/non-selected `asrt_id` returns `invalid_request`;
+- empty overlay returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`;
+- tuple arity/entity guard violations return `invalid_request`;
+- request DTO remains intent-only: no store, registry, precomputed projections, or caches.
+
 ## 6. Boundaries And Invariants
 
 - **Application-first:** protocol DTOs live under `kernel.application.protocol`; runtime lives under `kernel.application`.
