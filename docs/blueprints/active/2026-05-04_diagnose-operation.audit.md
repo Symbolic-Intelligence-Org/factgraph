@@ -11,6 +11,7 @@
 | 2026-05-04 | draft | Step 0.A source pass complete | Native primitives + Check runtime fully mapped; Explore-agent reported non-native failure surfaces (souffle / problog / pyreason); cross-engine diagnostic asymmetry confirmed (steeper than Check's); Q1 stance **Hybrid**; Q2–Q5 preliminary stances recorded; **§3.6 second-consumer pressure confirmed but MVP keeps §3.6 deferred** per topic §6.2 wave ordering. Blueprint remains `draft`; no implementation until Step 0.B / 0.C / 0.D complete. |
 | 2026-05-04 | draft | Step 0.B DTO contract freeze (with Q1 revision) | Q1 revised from **Hybrid → Sibling**: Hybrid would inherit Check's silent-skip on lookup-miss for non-native engines, violating Diagnose's independent §6.3 Decision #5 binding. 12 sub-decisions D1–D12 frozen across 5 deliverables: Request DTO (D1–D4), Result DTO (D5–D7), Evidence/Payload (D8–D9), Representability (D10–D11), Evidence-miss semantics (D12). Evidence-unavailable maps to `status="unsupported"` per §6.3 line 513 endorsement (NOT broader-than-Check `failed`, NOT a 5th status). Blueprint remains `draft` pending Step 0.C algorithm freeze + 0.D lift. |
 | 2026-05-04 | draft | Step 0.C algorithm + drift-prevention freeze | C1–C8 frozen: C1 native algorithm two-phase dispatch (pass/fail classification + atom localization on failed); C2 atom-localizer walk semantics (deliberate initial-env injection, NOT a §7.1 violation because pass/fail already classified); C3 deterministic primary failure selection (most-progressed branch, tie-break by branch_index ascending); C4 non-native algorithm with evidence-miss precedence over no_candidate; C5 RuleRef preflight as Diagnose's own copy; C6 runtime failure propagation (mirror Check C7); C7 §7-Diagnose-1 through §7-Diagnose-7 anti-regression mapping; C8 concrete function decomposition. Blueprint remains `draft` pending Step 0.D lift. |
+| 2026-05-04 | draft → scoped | Step 0.D lift complete | Step 0.B/0.C decisions lifted into blueprint §5 (Proposed Shape now contains 8 sub-sections: concept, request DTO, result DTO + nullable matrix, DiagnoseAtomLocator, per-engine representability table, algorithm overview, engine-extension conformance commitments, Q1 supersede record), §7 (Acceptance restructured into 5 sub-sections: Step 0 closure, §7-Diagnose-1–§7-Diagnose-7 anti-regression gates, layer placement, code health, cross-doc updates), §8 (Implementation Plan extended into 8 ordered steps from protocol DTOs through close-out). Blueprint status `draft → scoped`. The Step 0 gate closes here; implementation can begin. |
 
 ## Decision Notes
 
@@ -306,3 +307,15 @@
   4. Move blueprint status `draft → scoped`
 
   After 0.D, implementation can begin without re-litigating concept, DTO shape, or algorithm. The Step 0 gate closes when 0.D commits.
+
+- 2026-05-04 (Step 0.D) — **Step 0.D lift complete; status `draft → scoped`.** Blueprint sections §5 / §7 / §8 lifted from Step 0.B (D1–D12) and Step 0.C (C1–C8) decisions:
+
+  - **§5 Proposed Shape** now carries the frozen contract in 8 sub-sections (concept, request DTO, result DTO + nullable matrix, DiagnoseAtomLocator, per-engine representability table, algorithm overview, engine-extension conformance commitments, Q1 supersede record). §5 is the single canonical contract reference for implementation; audit Decision Notes retain the design trace.
+  - **§7 Acceptance** restructured into 5 sub-sections: Step 0 closure (paperwork; 0.A/0.B/0.C/0.D checked), §7-Diagnose-1–§7-Diagnose-7 anti-regression gates (mapped to D-decisions per C7), layer placement (application-first), code health (tests + ruff), cross-doc updates (engine-extension topic untouched unless §3.6 promoted; application docs synced; conformance audit at close-out).
+  - **§8 Implementation Plan** extended into 8 ordered implementation steps (Step 1 protocol DTOs → Step 2 native MVP → Step 3 native hardening → Step 4 non-native gate → Step 5 souffle → Step 6 problog/pyreason → Step 7 drift-prevention tests → Step 8 close-out + status transition). Step 0 phases retained in §8 for traceability.
+
+  **Cross-consistency check (post-lift):** §5 contract references each D-decision and C-decision; §7 anti-regression gates map each high-risk D-decision to a testable assertion; §8 implementation steps reference both decisions and gates. No D-decision or C-decision was dropped during lift; the Q1 supersede + §6.5 scope clarification (D8.note) are explicitly recorded in §5.7 and §5.8.
+
+  **Status transition:** `draft → scoped`. Step 0 gate closed. Any future change to the §5 contract, §7 acceptance gates, or §8 plan requires a new audit entry + blueprint update before code changes (per Check 0.D precedent).
+
+  Implementation begins at §8 Step 1 (protocol DTOs); no code written yet.
