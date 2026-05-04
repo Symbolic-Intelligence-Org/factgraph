@@ -115,7 +115,7 @@ Candidate directions:
 | C. JSON-compatible envelope | `{engine, payload_type, payload}` | serialization-friendly | weak typing, easy semantic compression |
 | D. Hybrid | typed in-process payload + explicit render/serialize function | preserves types and wire compatibility | more moving parts |
 
-Decision: unresolved.
+Decision: unresolved. §6.2 keeps typed Union as the working hypothesis and defines migration criteria; no `EnginePayload` / protocol / registry abstraction is introduced by this topic yet.
 
 ### 3.2 Engine Options Placement
 
@@ -131,7 +131,7 @@ Open questions:
 - If yes, how do request-level options compose with plan-level options?
 - Which options are engine configuration versus capability interaction?
 
-Decision: unresolved.
+Decision: unresolved. §6.2 marks this as now-ready for a later light commit, but §6.3 does not resolve engine options placement.
 
 ### 3.3 Package / Directory Architecture
 
@@ -146,7 +146,7 @@ Open questions:
 - Should there be `kernel.engines.*` as a new extension layer?
 - If both exist, what is the difference between adapter, engine extension, and application integration?
 
-Decision: unresolved.
+Decision: unresolved. §6.2 leaves this as light convention or defer; §6.3 does not decide package / directory architecture.
 
 ### 3.4 Engine Adapter Contract
 
@@ -163,7 +163,7 @@ Open questions:
 - How should missing artifacts be surfaced: skip, warning, runtime error, or degraded projection?
 - Which part of the contract belongs to core store, application runtime, or adapter package?
 
-Decision: unresolved.
+Decision: resolved in §6.3 as a minimum evaluator contract: result shape, evidence reference truthfulness, binding extractability, and observable evidence availability. The resolution does not introduce a new engine abstraction or change Check behavior by itself.
 
 ### 3.5 New Engine Onboarding Workflow
 
@@ -444,3 +444,105 @@ This framing round does **not**:
 - commit §6.4+ to specific question numbers (only §6.3 is committed to §3.4);
 - change Check operation behavior, package layout, or any current code;
 - foreclose later promotion of §3.6 / §3.3 to "now-ready" if a concrete second consumer surfaces inside this topic's lifetime.
+
+### 6.3 (2026-05-04) Resolve §3.4 — Minimum Engine Adapter Contract
+
+This round resolves §3.4 only. It defines the minimum contract an engine evaluator must satisfy for application capabilities to consume its output responsibly.
+
+It does **not** define a new `EnginePayload` abstraction, capability declaration system, package layout, or onboarding workflow. Those remain governed by §6.2 wave ordering.
+
+#### Contract Layers
+
+The engine adapter contract has four layers:
+
+| Layer | Obligation | Owner | Consumer |
+|---|---|---|---|
+| Result shape | Return normalized `CandidateSet` objects compatible with application evaluate | adapter | `evaluate_derivation_plans`, accept path, post-evaluate capabilities |
+| Evidence reference | Make `support_kind` + `support_digest` truthful about whether retrievable evidence exists | adapter + store | Check / Diagnose / Explain / audit readback |
+| Binding extractability | Expose enough final-result binding information for a capability's request shape, or let the capability return `unsupported` | adapter output shape + application runtime | Check-like verify-given operations |
+| Evidence availability policy | Surface missing evidence as an observable contract problem, not as silent semantic failure or fake degraded evidence | application runtime | capability result DTO |
+
+The contract is intentionally layered. An engine can participate in evaluate with only the result-shape layer. Evidence-bearing capabilities impose the evidence-reference and binding-extractability layers. A future Diagnose / Explain capability may impose additional extraction obligations, but those are not part of §3.4.
+
+#### 1. Result Shape Is Mandatory For Evaluation
+
+Any registered evaluator must return `list[CandidateSet]` where each candidate is normalized enough for existing application evaluate and accept paths:
+
+- `candidate_kind` remains one of the existing core-supported kinds unless a separate core change explicitly adds another kind.
+- `payload` follows the shape expected for that candidate kind.
+- `candidate_key` / `candidate_id` semantics remain deterministic and run-scoped as currently defined by core.
+- `support_kind` and `support_digest` must be internally consistent with the evidence-reference layer below.
+
+This keeps `Store.register_engine_evaluator(...)` as the current extension point. The contract does not require application code to import adapter modules.
+
+#### 2. Evidence Reference Must Be Truthful
+
+An evaluator has two valid evidence postures:
+
+1. **Evidence-bearing.** The candidate's `support_kind` declares a retrievable support / provenance payload, and `support_digest` resolves through the corresponding typed store lookup.
+2. **Explicit no-witness.** The candidate uses an explicit no-witness / degraded support kind such as `engine_no_witness_v1` or legacy `"none"`, making the absence of evidence intentional rather than accidental.
+
+Invalid posture:
+
+- A candidate advertises an evidence-bearing `support_kind` and non-placeholder digest, but the store cannot retrieve the corresponding typed payload.
+
+That invalid posture is a contract violation at the application boundary. It must not be normalized into `branch_atom_projection=None`, because `None` in Check's envelope means "projection intentionally not supplied", not "engine evidence is missing." It must not be flattened into a fake `SupportArtifact`.
+
+#### 3. Binding Extractability Is Capability-Specific
+
+An engine does not have to expose every possible variable binding for every capability. It does have to make the boundary explicit.
+
+For Check-like operations, a requested binding is representable only when the application runtime can extract the relevant final-result values from one of these sources:
+
+- native / support artifact binding rows, e.g. `SupportArtifact.binding_items`;
+- candidate head payload positional alignment, e.g. `candidate.payload["terms"]` aligned to `$`-prefixed `head_var_names`;
+- a future explicit extractor introduced by a later capability or engine extension decision.
+
+If none of those sources can answer the requested binding shape, the capability returns `unsupported`. It must not infer body-only variables from opaque engine proof internals unless a later extractor contract explicitly says that is valid.
+
+This preserves Check's representability-gated pattern without promoting Check's local helpers into a global capability declaration system.
+
+#### 4. Missing Evidence Must Be Observable
+
+Current Check MVP silently skips candidates whose typed support / provenance lookup returns `None`. That behavior was acceptable as a narrow MVP implementation detail, but it is not the future adapter contract.
+
+For new capabilities, or for any future change that adopts this §6.3 resolution, missing evidence must be observable:
+
+- If an evidence-bearing candidate cannot be dereferenced, the application runtime should attach a warning or error in the capability's own DTO vocabulary.
+- If a capability requires evidence to produce a `passed` / explanatory result, it must not return that result with empty or fabricated evidence.
+- If missing evidence prevents the capability from answering the request, the result should be classified as unsupported / evidence-unavailable rather than semantic `failed`.
+
+Exact status names remain capability-owned. §3.4 only commits the architectural boundary: evidence lookup miss is not proof of non-satisfaction and not a degraded projection.
+
+#### Ownership Boundary
+
+| Layer | Owns | Does Not Own |
+|---|---|---|
+| Core store | evaluator registration; typed remember / lookup registries; digest collision invariants | capability status vocabulary; per-engine semantic policy |
+| Adapter | producing normalized candidates; writing evidence-bearing payloads when it advertises them; using explicit no-witness kinds when it cannot provide evidence | deciding Check / Diagnose / Explain status semantics |
+| Application runtime | request representability gates; selecting typed lookup path; surfacing missing evidence through capability DTOs | importing adapter internals; inventing engine proof structure; flattening native payloads |
+
+This keeps the application layer as the coordination point without turning it into an engine-specific implementation layer.
+
+#### Decision
+
+§3.4 is resolved as follows:
+
+1. The evaluator contract remains `register_engine_evaluator(...) -> list[CandidateSet]`.
+2. Evidence-bearing candidates must have truthful `support_kind` + `support_digest` references to typed store payloads.
+3. Engines without evidence must say so explicitly through no-witness / degraded support kinds.
+4. Binding extractability is per capability and per request shape; unsupported is the correct answer when the binding source is not available.
+5. Evidence lookup miss is an observable contract problem, not semantic failure and not degraded projection.
+6. Core / adapter / application ownership stays split as above; no new `kernel.engines.*` or `EnginePayload` abstraction is introduced by this decision.
+
+#### Non-Decisions
+
+This round does **not**:
+
+- change Check's current silent-skip MVP behavior;
+- define new error codes for Check or any future capability;
+- introduce an engine capability declaration matrix;
+- decide §3.1 payload typing beyond preserving current typed payloads;
+- decide §3.2 engine options placement;
+- move adapter code or create `kernel.engines.*`;
+- write a new engine onboarding checklist.
