@@ -11,9 +11,10 @@
 | 2026-05-04 | draft | Step 0.A addendum recorded | Review added a fourth narrow projection-merge anchor, sharpened native/non-native boundaries, and set the Step 0.B freeze order plus §6.6 falsifiability test. |
 | 2026-05-04 | draft | Step 0.A artifact exposure addendum recorded | Review split internal artifact cache side effects from caller-visible overlay artifact exposure. Step 0.B must choose no exposure, capability-owned exposure, or explicit §6.5 re-open before using `EvidenceEnvelope.engine_payload`. |
 | 2026-05-04 | draft | Round 1 review addendum recorded | Three read-only reviewers reported PASS on engine-extension triggers, and missing Step 0.B freeze coverage for Check runtime anchors, Hybrid/Sibling composition, nullable matrix, drift-prevention gates, and active projected fact semantics. |
-| 2026-05-04 | draft | Step 0.B proposal drafted | Complete nine-part freeze proposal drafted for review: projection-merge anchor, Sibling composition, Overlay Check shape, before/after result DTO, no artifact exposure, active-selected fact override semantics, native-only support gate, §6.6 still standing, and Step 0.C anti-regression inventory. |
+| 2026-05-04 | draft | Step 0.B proposal drafted | Complete nine-part freeze proposal drafted for review: projection-merge anchor, Sibling composition, Overlay Check shape, before/after result DTO, no artifact exposure, active-visible fact override semantics, native-only support gate, §6.6 still standing, and Step 0.C anti-regression inventory. |
 | 2026-05-04 | draft | Step 0.B proposal hardening recorded | Review tightened helper extraction destination, Sibling static guard, concrete overlay field type, empty-overlay policy, and full projected tuple semantics. |
 | 2026-05-05 | draft | Step 0.B grounding pass recorded | Grounding corrected helper extraction scope (primary selection stays local), enumerated the four live `Store._remember_*` cache/index write methods, and pinned projected fact tuple position 0 to `e_ref`. |
+| 2026-05-05 | draft | Step 0.B review blocker resolved | Review identified chosen-policy regrouping risk in post-projection replacement. Proposal now defines projected-row replacement semantics and rejects changes to schema `group_key_indexes` positions. |
 
 ## Decision Notes
 
@@ -33,7 +34,7 @@
   - `src/kernel/application/protocol/derivation.py` — current `DerivationEvaluateRequest` fields (`plans`, `run_id`, `engine`) and no overlay field.
   - `src/kernel/application/derivation_runtime.py` — `evaluate_derivation_plans(request, *, store, registry=None)` pass-through executor.
   - `src/kernel/core/store/_evaluate.py` — `evaluate_store(...)` engine dispatch; native path projects `store.ledger`, non-native path calls adapters through `store.evaluate_engine`.
-  - `src/kernel/core/view/projector.py` — `project_view_facts(...)` and `project_view_facts_with_witness(...)` selected-claim projection.
+  - `src/kernel/core/view/projector.py` — `project_view_facts(...)` and `project_view_facts_with_witness(...)` visible-row projection.
   - `src/kernel/core/store/runtime.py` — `Store` owns the concrete `ledger`, engine evaluator dispatch, and in-memory support/provenance artifact caches.
   - `src/kernel/core/store/ledger.py` — append-only ledger with explicit write sessions and append/revocation APIs.
 
@@ -87,7 +88,7 @@
   - active projected value override for `(pred_id, e_ref)`;
   - multi-cardinality predicate behavior (`replace_all` vs `add_alongside`-style effects).
 
-  Current projection first filters active claims, then applies single-cardinality chosen policy, then emits `ProjectedFact(asrt_id, fact_tuple)`. Step 0.B must freeze whether Fact Overlay modifies only the old witness row for this evaluation, the active projected value for the entity/predicate, or a constrained subset such as active selected assertion only. This decision must happen before `FactValueOverride` fields freeze.
+  Current projection first filters active claims, then applies single-cardinality chosen policy, then emits `ProjectedFact(asrt_id, fact_tuple)`. Step 0.B must freeze whether Fact Overlay modifies only the old witness row for this evaluation, the active projected value for the entity/predicate, or a constrained subset such as active visible projected row only. This decision must happen before `FactValueOverride` fields freeze.
 
 - 2026-05-04 (Step 0.A addendum) — **`old_value` defensive field pressure.** Step 0.B must explicitly decide whether `FactValueOverride` carries an expected old value / old tuple. Carrying it would reject stale caller-side scenarios when the ledger changed between read and overlay request. Omitting it would keep the DTO thinner but treats caller-side concept drift as out of scope. This is a DTO-freeze decision, not implementation detail.
 
@@ -141,9 +142,9 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
 
 - 2026-05-04 (Step 0.B proposal) — **D5 Artifact exposure channel.** MVP exposes no overlay-derived engine-native artifacts to callers. `FactOverlayCheckResult` carries `OverlayCheckPhase` and `OverlayCheckDiff` only. `EvidenceEnvelope.engine_payload` is not used. §6.5 remains untouched; a future decision to expose overlay-derived `SupportArtifact` / `ProvenanceEnvelope` through `EvidenceEnvelope` is a §6.5 trigger.
 
-- 2026-05-04 (Step 0.B proposal) — **D6 `FactValueOverride` fields and target semantics.** MVP supports `FactValueOverride(asrt_id, pred_id, e_ref, old_fact_tuple, new_fact_tuple, note=None)`. Semantics: **active selected assertion replacement only**. The target `asrt_id` must be active and selected in current view projection, `old_fact_tuple` must match the current projected tuple, and `new_fact_tuple` replaces that projected row for this evaluation only.
+- 2026-05-04 (Step 0.B proposal) — **D6 `FactValueOverride` fields and target semantics.** MVP supports `FactValueOverride(asrt_id, pred_id, e_ref, old_fact_tuple, new_fact_tuple, note=None)`. Semantics: **active visible projected-row replacement only**. The target `asrt_id` must be active and visible in current view projection, `old_fact_tuple` must match the current projected tuple, and `new_fact_tuple` replaces that projected row after chosen projection for this evaluation only. It does **not** mean "pretend the ledger assertion changed before chosen policy ran."
 
-  `old_fact_tuple` and `new_fact_tuple` are full projected predicate argument tuples matching `ProjectedFact.fact_tuple`; `kernel.core.view.projector.build_args_for_claim(...)` builds this as `(claim.e_ref, *val_atoms)`, so `e_ref == fact_tuple[0]`. They must preserve arity. `pred_id` and `e_ref` are defensive guards; `e_ref` must match position 0 of both old and new tuples. Overlay Check cannot use `new_fact_tuple` to migrate the fact to a different entity binding or predicate shape. No non-selected stale witness override, predicate-wide replacement, `replace_all`, `add_alongside`, add-fact, RuleDisable, parameter override, or condition override.
+  `old_fact_tuple` and `new_fact_tuple` are full projected predicate argument tuples matching `ProjectedFact.fact_tuple`; `kernel.core.view.projector.build_args_for_claim(...)` builds this as `(claim.e_ref, *val_atoms)`, so `e_ref == fact_tuple[0]`. They must preserve arity. `pred_id` and `e_ref` are defensive guards; `e_ref` must match position 0 of both old and new tuples. Overlay Check cannot use `new_fact_tuple` to migrate the fact to a different entity binding or predicate shape. `new_fact_tuple` must also preserve every schema `group_key_indexes` position from `old_fact_tuple`, because this capability replaces a projected row after chosen policy and does not rerun chosen regrouping. No non-visible stale witness override, predicate-wide replacement, `replace_all`, `add_alongside`, add-fact, RuleDisable, parameter override, or condition override.
 
 - 2026-05-04 (Step 0.B proposal) — **D7 Engine support gate and unsupported semantics.** MVP is native-only. `souffle`, `problog`, and `pyreason` return `status="unsupported"` with `ErrorDTO(code="ENGINE_OVERLAY_NOT_SUPPORTED")`. Rationale is source-backed and engine-specific: Souffle needs regenerated facts/export pipeline, ProbLog needs rebuilt weighted-fact program, and PyReason needs graph-state / temporal input patching. No adapter is invoked for unsupported engines.
 
@@ -156,7 +157,8 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
   - no `check_derivation_binding(...)` delegation;
   - AST/static Sibling guard: Overlay Check runtime must not import `derivation_check_runtime`, `check_derivation_binding`, Check result/envelope DTOs, or Check private helpers directly; only the shared `_derivation_match_helpers` module's binding-match/body-var helpers are allowed;
   - non-native engines never dispatch and always return `ENGINE_OVERLAY_NOT_SUPPORTED`;
-  - stale `old_fact_tuple` / inactive / non-selected `asrt_id` returns `invalid_request`;
+  - stale `old_fact_tuple` / inactive / non-visible `asrt_id` returns `invalid_request`;
   - empty overlay returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`;
   - tuple arity/entity guard violations return `invalid_request`;
+  - group-key position changes return `invalid_request`;
   - request DTO remains intent-only: no `store`, `registry`, precomputed projection, or cache fields.

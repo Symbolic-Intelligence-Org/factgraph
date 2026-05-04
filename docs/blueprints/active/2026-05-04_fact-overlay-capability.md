@@ -148,7 +148,7 @@ Proposed fields:
 
 | Field | Purpose |
 |---|---|
-| `asrt_id: str` | The currently active/selected assertion row being overridden for this evaluation |
+| `asrt_id: str` | The active visible projected assertion row being overridden for this evaluation |
 | `pred_id: str` | Defensive predicate guard |
 | `e_ref: str` | Defensive entity guard |
 | `old_fact_tuple: tuple[Any, ...]` | Defensive stale-snapshot guard; must equal the current projected fact tuple |
@@ -157,9 +157,11 @@ Proposed fields:
 
 Request overlay field: `overlay: tuple[FactValueOverride, ...]`. Empty overlay is rejected with `invalid_request` and `ErrorDTO(code="EMPTY_OVERLAY_NOT_PERMITTED")`; callers with no override should use Check.
 
-Target semantics: **active selected assertion replacement only**. The target `asrt_id` must be active and selected by current view projection. The override replaces that projected row for this evaluation only. It does not support non-selected stale witnesses, predicate-wide replacement, `replace_all`, `add_alongside`, or add-fact semantics in MVP.
+Target semantics: **active visible projected-row replacement only**. The target `asrt_id` must be active and visible in current view projection. The override replaces that projected row after chosen projection for this evaluation only; it does **not** mean "pretend the ledger assertion changed before chosen policy ran." It does not support non-visible stale witnesses, predicate-wide replacement, `replace_all`, `add_alongside`, or add-fact semantics in MVP.
 
 Tuple semantics: `old_fact_tuple` and `new_fact_tuple` are full projected predicate argument tuples matching `ProjectedFact.fact_tuple`; `kernel.core.view.projector.build_args_for_claim(...)` builds this as `(claim.e_ref, *val_atoms)`, so `e_ref == fact_tuple[0]`. They must preserve arity. `pred_id` and `e_ref` are defensive guards; `e_ref` must match position 0 of both old and new tuples. Overlay Check cannot use `new_fact_tuple` to migrate the fact to a different entity binding or predicate shape.
+
+Chosen-policy guard: `new_fact_tuple` must preserve all schema `group_key_indexes` positions from `old_fact_tuple`. Because overlay applies after projection, changing group-key terms would bypass chosen-policy regrouping and is invalid in MVP.
 
 Multiple overrides are simultaneous. Duplicate `asrt_id` overrides or conflicting replacement tuples are invalid.
 
@@ -221,9 +223,10 @@ Step 0.C must map these gates to tests before implementation:
 - no `check_derivation_binding(...)` delegation or Check runtime laundering;
 - AST/static Sibling guard: Overlay Check runtime must not import `derivation_check_runtime`, `check_derivation_binding`, Check result/envelope DTOs, or Check private helpers directly; only the shared `_derivation_match_helpers` module's binding-match/body-var helpers are allowed;
 - non-native engines always return `ENGINE_OVERLAY_NOT_SUPPORTED`;
-- stale `old_fact_tuple` or non-active/non-selected `asrt_id` returns `invalid_request`;
+- stale `old_fact_tuple` or non-active/non-visible `asrt_id` returns `invalid_request`;
 - empty overlay returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`;
 - tuple arity/entity guard violations return `invalid_request`;
+- group-key position changes return `invalid_request`;
 - request DTO remains intent-only: no store, registry, precomputed projections, or caches.
 
 ## 6. Boundaries And Invariants
