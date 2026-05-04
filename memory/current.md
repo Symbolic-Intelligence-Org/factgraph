@@ -1,6 +1,6 @@
 # Current Operational Memory
 
-最后更新:2026-05-04(Check shipped + engine-extension-surface topic opened;详情见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
+最后更新:2026-05-04(Check shipped + engine-extension-surface §6.2/§6.3 landed through `2c13470`;handoff baseline 见 [session_handoffs/2026-05-04.md](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md))
 
 ## 当前阶段(2026-05-03 — REDESIGN BASE)
 
@@ -92,9 +92,10 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 
 ### 下一步方向(2026-05-04 起)
 
-详情见 [`session_handoffs/2026-05-04.md`](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md) §10。摘要:
+详情见 [`session_handoffs/2026-05-04.md`](/Users/zhenzhili/hnsm-backend/memory/session_handoffs/2026-05-04.md) §10,但该 handoff 写于 §6.2 前;当前 continuation 已到 `2c13470`。摘要:
 
-- engine-extension-surface topic §6.2 strategic framing 待用户从 A/B/C 选 entry path
+- engine-extension-surface topic 已完成 §6.2 strategic framing (`1f084f8`)、§6.3 §3.4 minimum engine adapter contract resolution (`9c2d8e5`)、Check evidence-miss follow-up trace (`2c13470`)
+- 下一轮按 §6.2 wave ordering 进入 §6.4:resolve §3.2 engine options placement(light commit)
 - baseline P1/P2 仍待填(P0 已完成,Check 已 ship 不依赖 P1/P2)
 - 第二个 application capability 候选未定(Fact overlay / Diagnose / Explain / Why-not 都是候选)
 
@@ -126,9 +127,10 @@ git show v0.1.1-evidence-tree-operational-overlay:docs/references/working/eviden
 
 - 新 venue topic doc:`docs/references/working/rule-replay-line-redesign-input/80_conceptual-interaction-design/engine-extension-surface-architecture.md`
 - §6.1 ASP scenario demo committed(paper demo of adding 5th engine)
-- 6 §3 core questions unresolved(典型 cross-capability architectural concerns)
-- Topic discipline §1.3:不 flatten engine 差异;不预 commit 抽象;defer if 需要 second consumer
-- §6.2 strategic framing 待用户决定 entry path(A/B/C);**re-confirm with user before writing**
+- §6.2 strategic framing committed:`1f084f8`
+- §6.3 resolved §3.4 engine adapter contract:`9c2d8e5`
+- §3.4 follow-up trace committed:`2c13470` — future Check lookup→None changes must replace MVP silent-skip with observable warning/error before claiming conformance
+- Still unresolved/deferred:§3.1 payload DTO shape(working hypothesis),§3.2 engine options placement(next light commit),§3.3 package architecture,§3.5 onboarding workflow,§3.6 capability declaration
 
 **Branch state** `v0.1-redesign-2026-05-03`:ahead origin ≈23 commits before handoff commit / ≈24 after handoff commit,**NOT pushed**。At handoff authoring the only dirty files are `memory/session_handoffs/2026-05-04.md` and `memory/current.md`;after committing handoff,expect clean working tree。release base sacred 不动。
 
