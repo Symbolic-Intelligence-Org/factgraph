@@ -74,6 +74,7 @@ This blueprint is opened in `draft` for Step 0 only. No implementation may start
 
 ### Source anchors
 
+- Current `CheckRequest` / `CheckResult` have no overlay fields and Check's native runtime directly projects view facts before calling `evaluate_native_where(...)`.
 - Current `DerivationEvaluateRequest` has no overlay fields.
 - `evaluate_store(...)` has no `overlay`, `fact_override`, or `disabled_locators` argument after the reset.
 - Native evaluation projects facts from `store.ledger` through `project_view_facts_with_witness(...)`.
@@ -106,7 +107,7 @@ Step 0.A is source-pass-only. The current working shape is deliberately not froz
 ### Preliminary boundary stance
 
 - Fact overrides are simultaneous and declarative, not an ordered script.
-- Overlay action targets should be assertion-scoped first (`asrt_id`) because the old material and current projector both identify selected facts by assertion rows.
+- Overlay action target semantics must distinguish old witness `asrt_id`, active projected `(pred_id, e_ref)` value, and multi-cardinality add/replace behavior before the DTO freezes.
 - A fact overlay must not call `append_assertion`, `append_revocation`, `accept_*`, or write scenario metadata.
 - Step 0.B must decide whether support/provenance artifacts produced during an overlay run may be remembered in the live store's in-memory artifact caches, or whether overlay runs need isolated artifact capture.
 - Step 0.B must separately decide whether overlay-derived support/provenance artifacts are exposed to callers at all, and if so through a capability-owned field rather than `EvidenceEnvelope.engine_payload` unless §6.5 is explicitly re-opened.
@@ -158,12 +159,14 @@ No code implementation steps are authorized until Step 0.D.
 Step 0.B should freeze in this order:
 
 1. Ledger anchor and artifact cache policy.
-2. Leading shape: Overlay Check vs Overlay Evaluate.
-3. Result DTO before/after policy: internally run baseline+overlay and return diff, or return overlay-after only.
-4. Engine-native artifact exposure channel: no exposure, capability-owned hypothetical artifact field, or explicit §6.5 re-open before using `EvidenceEnvelope.engine_payload`.
-5. `FactValueOverride` fields, including whether `old_value` / old tuple is a defensive concurrency guard.
-6. Per-engine support gate and exact unsupported semantics.
-7. §6.6 judgment using the self-contained-gate test: if the local gate can be described in blueprint §5 in no more than a short paragraph/table without cross-adapter detail, the working hypothesis still stands; otherwise open §6.7 before implementation.
+2. Implied runtime composition: Sibling, Hybrid via Check, or narrow reuse of Check-private projection/match helpers. This must be frozen alongside the ledger anchor.
+3. Leading shape: Overlay Check vs Overlay Evaluate.
+4. Result DTO before/after policy and a per-status nullable matrix.
+5. Engine-native artifact exposure channel: no exposure, capability-owned hypothetical artifact field, or explicit §6.5 re-open before using `EvidenceEnvelope.engine_payload`.
+6. `FactValueOverride` fields, including target semantics and whether `old_value` / old tuple is a defensive concurrency guard.
+7. Per-engine support gate and exact unsupported semantics.
+8. §6.6 judgment using the self-contained-gate test: if the local gate can be described in blueprint §5 in no more than a short paragraph/table without cross-adapter detail, the working hypothesis still stands; otherwise open §6.7 before implementation.
+9. Step 0.C anti-regression gate inventory, including no ledger write, no live artifact-cache contamination if isolated capture is chosen, no `EvidenceEnvelope.engine_payload` misuse, no accidental non-native support, and no Check-delegation laundering.
 
 ## 9. Docs To Update
 

@@ -7,9 +7,10 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-04 | draft | Blueprint created | Opened as the third application capability candidate after Check and Diagnose. Purpose is Step 0 only: decide whether Fact Overlay has a stable application DTO and ledger-write boundary before implementation. |
-| 2026-05-04 | draft | Step 0.A source pass complete | Source anchors read from Check and Diagnose archives, B'' FactValueOverride material, current derivation runtime, store evaluator, projector, Store, and ledger surfaces. Three ledger boundary anchors recorded. Fallback order recorded as Overlay → Why-not → Explain. |
+| 2026-05-04 | draft | Step 0.A source pass complete | Source anchors read from Check and Diagnose archives, B'' FactValueOverride material, current derivation runtime, store evaluator, projector, Store, and ledger surfaces. Four ledger boundary anchors recorded. Fallback order recorded as Overlay → Why-not → Explain. |
 | 2026-05-04 | draft | Step 0.A addendum recorded | Review added a fourth narrow projection-merge anchor, sharpened native/non-native boundaries, and set the Step 0.B freeze order plus §6.6 falsifiability test. |
 | 2026-05-04 | draft | Step 0.A artifact exposure addendum recorded | Review split internal artifact cache side effects from caller-visible overlay artifact exposure. Step 0.B must choose no exposure, capability-owned exposure, or explicit §6.5 re-open before using `EvidenceEnvelope.engine_payload`. |
+| 2026-05-04 | draft | Round 1 review addendum recorded | Three read-only reviewers reported PASS on engine-extension triggers, and missing Step 0.B freeze coverage for Check runtime anchors, Hybrid/Sibling composition, nullable matrix, drift-prevention gates, and active projected fact semantics. |
 
 ## Decision Notes
 
@@ -24,6 +25,8 @@
   - `docs/references/working/rule-replay-line-redesign-input/40_design-discussion-A-with-decision-1.md` §1.3 / §1.4 — "FactValueOverride + Check" identified as the missing pair.
   - `docs/references/working/rule-replay-line-redesign-input/70_codebase-baseline-2026-05-03.md` §P0-1 / §P0-3 / P1 skeleton — no-overlay baseline and current fact read path anchors.
   - `docs/references/working/rule-replay-line-redesign-input/80_conceptual-interaction-design/engine-extension-surface-architecture.md` §6.6 — third capability trigger and local-gate discipline.
+  - `src/kernel/application/protocol/derivation_check.py` — `CheckRequest` / `CheckResult` have no overlay field and Check result nullable semantics are the closest lineage pattern.
+  - `src/kernel/application/derivation_check_runtime.py` — current native Check does not call `evaluate_store(...)`; it directly runs `project_view_facts(...)`, `project_view_facts_with_witness(...)`, and `evaluate_native_where(...)`.
   - `src/kernel/application/protocol/derivation.py` — current `DerivationEvaluateRequest` fields (`plans`, `run_id`, `engine`) and no overlay field.
   - `src/kernel/application/derivation_runtime.py` — `evaluate_derivation_plans(request, *, store, registry=None)` pass-through executor.
   - `src/kernel/core/store/_evaluate.py` — `evaluate_store(...)` engine dispatch; native path projects `store.ledger`, non-native path calls adapters through `store.evaluate_engine`.
@@ -52,6 +55,13 @@
 
   Step 0.B should treat "native overlay = projection-time merge" as the default hypothesis for Overlay Check. Store proxy remains a broader candidate, not the native default.
 
+- 2026-05-04 (Round 1 addendum) — **Current Check runtime anchor correction.** Overlay Check must account for Check's current native path, not just `evaluate_store(...)`. `check_derivation_binding(...)` dispatches native Check to `_native_check`, which directly projects `view_facts` / `witness_facts` and calls `evaluate_native_where(...)`. Therefore a projection-merge shim scoped only to `evaluate_store(...)` would not affect Overlay Check. Step 0.B must decide whether Overlay Check:
+  - is a **Sibling** runtime that owns its own projection merge + matching;
+  - is a **Hybrid** runtime that wraps/proxies store then delegates to `check_derivation_binding(...)`;
+  - or narrowly reuses/extracts Check-private projection / matching helpers under an explicitly scoped helper contract.
+
+  This is the Overlay counterpart to Diagnose's Q1 Hybrid/Sibling decision. If Hybrid is chosen, Step 0.B must inspect whether Check's behavior would launder any non-overlay semantics into Overlay Check; the known risk is hypothetical artifact/cache contamination rather than Diagnose's lookup-miss laundering.
+
 - 2026-05-04 (Step 0.A addendum) — **Non-native asymmetry sharpened.** Non-native engines have no uniform overlay injection point:
   - Souffle overlay means regenerating `.facts` / exported input and rerunning the Souffle pipeline.
   - ProbLog overlay means rebuilding the weighted-fact program.
@@ -68,6 +78,13 @@
   Default hypothesis: **capability-owned or no exposure**. Overlay-derived evidence is hypothetical and should not be silently mixed into Check's ledger-grounded `EvidenceEnvelope.engine_payload` channel. If Step 0.B chooses to expose native engine artifacts through `EvidenceEnvelope.engine_payload`, that is an explicit §6.5 pressure point and should re-open the engine-native payload working hypothesis before implementation.
 
 - 2026-05-04 (Step 0.A) — **Fact override action target.** Old material points at `asrt_id`, and current `project_view_facts_with_witness(...)` emits `ProjectedFact(asrt_id, fact_tuple)`. Step 0.B should start with assertion-scoped `FactValueOverride`, not predicate-wide replacement. Open fields include whether to carry `old_value` / old tuple for defensive validation, and whether `new_value` means one rest term or the full projected fact tuple.
+
+- 2026-05-04 (Round 1 addendum) — **Fact override target semantics.** Assertion-scoped `asrt_id` is a starting point, not the full semantic answer. B'' §5.6.5 and design discussion H1/H2 distinguish:
+  - old witness `asrt_id` override;
+  - active projected value override for `(pred_id, e_ref)`;
+  - multi-cardinality predicate behavior (`replace_all` vs `add_alongside`-style effects).
+
+  Current projection first filters active claims, then applies single-cardinality chosen policy, then emits `ProjectedFact(asrt_id, fact_tuple)`. Step 0.B must freeze whether Fact Overlay modifies only the old witness row for this evaluation, the active projected value for the entity/predicate, or a constrained subset such as active selected assertion only. This decision must happen before `FactValueOverride` fields freeze.
 
 - 2026-05-04 (Step 0.A addendum) — **`old_value` defensive field pressure.** Step 0.B must explicitly decide whether `FactValueOverride` carries an expected old value / old tuple. Carrying it would reject stale caller-side scenarios when the ledger changed between read and overlay request. Omitting it would keep the DTO thinner but treats caller-side concept drift as out of scope. This is a DTO-freeze decision, not implementation detail.
 
@@ -87,11 +104,13 @@
 
 - 2026-05-04 (Step 0.A) — **Step 0.B entry point.** Step 0.B must freeze in this order:
   1. ledger boundary anchor from the four options above, plus artifact cache side-effect policy;
-  2. leading request shape: Overlay Check vs Overlay Evaluate;
-  3. result DTO policy: encapsulated `before/after/diff` vs `after`-only;
-  4. engine-native artifact exposure channel: no exposure, capability-owned hypothetical field, or explicit §6.5 re-open before using `EvidenceEnvelope.engine_payload`;
-  5. `FactValueOverride` fields and validation rules, including old-value / stale-snapshot guard;
-  6. per-engine support table, local gate names, and unsupported error semantics;
-  7. §6.6 judgment: local gate still readable vs open §6.7 before implementation.
+  2. implied runtime composition: Sibling, Hybrid via Check, or narrow reuse / extraction of Check projection + match helpers;
+  3. leading request shape: Overlay Check vs Overlay Evaluate;
+  4. result DTO policy: encapsulated `before/after/diff` vs `after`-only, plus a per-status nullable matrix;
+  5. engine-native artifact exposure channel: no exposure, capability-owned hypothetical field, or explicit §6.5 re-open before using `EvidenceEnvelope.engine_payload`;
+  6. `FactValueOverride` fields and validation rules, including active-projection target semantics and old-value / stale-snapshot guard;
+  7. per-engine support table, local gate names, and unsupported error semantics;
+  8. §6.6 judgment: local gate still readable vs open §6.7 before implementation;
+  9. Step 0.C anti-regression gate inventory: no ledger write, artifact isolation/cache policy, no `EvidenceEnvelope.engine_payload` misuse, no accidental non-native support, no Check-delegation laundering, and request DTO side-channel discipline.
 
 Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 and moves status to `scoped`, or records fallback to Why-not.
