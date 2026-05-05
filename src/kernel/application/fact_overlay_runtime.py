@@ -15,6 +15,7 @@ from .protocol import (
     ErrorDTO,
     FactOverlayCheckRequest,
     FactOverlayCheckResult,
+    FactValueOverride,
     OverlayCheckDiff,
     OverlayCheckPhase,
 )
@@ -26,12 +27,7 @@ def check_fact_overlay_binding(
     store: Store,
     registry: RuleRegistry | None = None,
 ) -> FactOverlayCheckResult:
-    """Evaluate Overlay Check.
-
-    Step 3 scaffolding intentionally returns a degenerate native result:
-    ``before == after`` with an empty diff. Step 4 replaces the ``after`` phase
-    with the overlay-applied phase and builds the real diff.
-    """
+    """Evaluate Overlay Check."""
 
     if not request.overlay:
         return _invalid_request(
@@ -55,23 +51,49 @@ def check_fact_overlay_binding(
         return unsupported
 
     projected_witness = project_view_facts_with_witness(store.ledger, store.schema_ir)
-    phase = _run_native_overlay_phase(
+    override_errors = _validate_fact_value_overrides(
+        request.overlay,
         projected_witness,
-        plan_body=body,
-        binding=request.binding,
-        registry=registry,
+        store.schema_ir,
     )
-    diff = OverlayCheckDiff(
-        status_changed=False,
-        matched_count_delta=0,
-        bindings_added=(),
-        bindings_removed=(),
-    )
+    if override_errors:
+        return _invalid_request(request, errors=tuple(override_errors))
+
+    try:
+        before = _run_native_overlay_phase(
+            projected_witness,
+            plan_body=body,
+            binding=request.binding,
+            registry=registry,
+        )
+        overlay_witness = _apply_fact_overlay_projection(
+            request.overlay,
+            projected_witness,
+        )
+        after = _run_native_overlay_phase(
+            overlay_witness,
+            plan_body=body,
+            binding=request.binding,
+            registry=registry,
+        )
+        diff = _build_overlay_diff(before, after)
+    except Exception as exc:  # pragma: no cover - exercised through patched runtime tests
+        return _invalid_request(
+            request,
+            errors=(
+                ErrorDTO(
+                    code="OVERLAY_PHASE_RUNTIME_ERROR",
+                    message="Fact Overlay Check native phase execution failed",
+                    path=("runtime",),
+                    details={"exception": type(exc).__name__},
+                ),
+            ),
+        )
     return FactOverlayCheckResult(
-        status=phase.status,
+        status=after.status,
         requested_binding=request.binding,
-        before=phase,
-        after=phase,
+        before=before,
+        after=after,
         diff=diff,
         errors=(),
         warnings=(),
@@ -178,6 +200,141 @@ def _run_native_overlay_phase(
     )
 
 
+def _validate_fact_value_overrides(
+    overrides: tuple[FactValueOverride, ...],
+    projected_witness: dict[str, list[ProjectedFact]],
+    schema_ir: dict[str, Any],
+) -> list[ErrorDTO]:
+    errors: list[ErrorDTO] = []
+    visible_rows = _visible_projected_rows(projected_witness)
+    schema_predicates = _schema_predicates_by_id(schema_ir)
+    seen_asrt_ids: set[str] = set()
+
+    for index, override in enumerate(overrides):
+        path = ("overlay", str(index))
+        if override.asrt_id in seen_asrt_ids:
+            errors.append(
+                ErrorDTO(
+                    code="OVERLAY_DUPLICATE_ASRT_ID",
+                    message=f"duplicate overlay assertion id: {override.asrt_id}",
+                    path=path + ("asrt_id",),
+                    details={"asrt_id": override.asrt_id},
+                )
+            )
+        seen_asrt_ids.add(override.asrt_id)
+
+        row = visible_rows.get((override.pred_id, override.asrt_id))
+        if row is None:
+            errors.append(
+                ErrorDTO(
+                    code="OVERLAY_ASRT_ID_NOT_VISIBLE",
+                    message=(
+                        "overlay assertion id is not active and visible for the "
+                        f"requested predicate: {override.asrt_id}"
+                    ),
+                    path=path + ("asrt_id",),
+                    details={"asrt_id": override.asrt_id, "pred_id": override.pred_id},
+                )
+            )
+            continue
+
+        current_tuple = row.fact_tuple
+        if override.old_fact_tuple != current_tuple:
+            errors.append(
+                ErrorDTO(
+                    code="OVERLAY_STALE_OLD_FACT_TUPLE",
+                    message="overlay old_fact_tuple does not match the visible projected fact",
+                    path=path + ("old_fact_tuple",),
+                    details={"asrt_id": override.asrt_id, "pred_id": override.pred_id},
+                )
+            )
+
+        expected_arity = len(current_tuple)
+        if (
+            len(override.old_fact_tuple) != expected_arity
+            or len(override.new_fact_tuple) != expected_arity
+        ):
+            errors.append(
+                ErrorDTO(
+                    code="OVERLAY_TUPLE_ARITY_MISMATCH",
+                    message="overlay fact tuples must preserve projected fact arity",
+                    path=path,
+                    details={
+                        "asrt_id": override.asrt_id,
+                        "expected_arity": expected_arity,
+                        "old_arity": len(override.old_fact_tuple),
+                        "new_arity": len(override.new_fact_tuple),
+                    },
+                )
+            )
+
+        if not _e_ref_position_matches(override, current_tuple):
+            errors.append(
+                ErrorDTO(
+                    code="OVERLAY_E_REF_POSITION_MISMATCH",
+                    message="overlay e_ref must match fact_tuple[0] and the visible fact entity",
+                    path=path + ("e_ref",),
+                    details={"asrt_id": override.asrt_id, "e_ref": override.e_ref},
+                )
+            )
+
+        schema_pred = schema_predicates.get(override.pred_id)
+        if schema_pred is not None and _group_key_changed(
+            schema_pred,
+            current_tuple,
+            override.new_fact_tuple,
+        ):
+            errors.append(
+                ErrorDTO(
+                    code="OVERLAY_GROUP_KEY_CHANGED",
+                    message="overlay must not change group_key_indexes positions",
+                    path=path + ("new_fact_tuple",),
+                    details={"asrt_id": override.asrt_id, "pred_id": override.pred_id},
+                )
+            )
+
+    return errors
+
+
+def _apply_fact_overlay_projection(
+    overrides: tuple[FactValueOverride, ...],
+    projected_witness: dict[str, list[ProjectedFact]],
+) -> dict[str, list[ProjectedFact]]:
+    override_by_key = {
+        (override.pred_id, override.asrt_id): override for override in overrides
+    }
+    output: dict[str, list[ProjectedFact]] = {}
+    for pred_id, rows in projected_witness.items():
+        copied_rows: list[ProjectedFact] = []
+        for row in rows:
+            override = override_by_key.get((pred_id, row.asrt_id))
+            if override is None:
+                copied_rows.append(row)
+                continue
+            copied_rows.append(
+                ProjectedFact(
+                    asrt_id=row.asrt_id,
+                    fact_tuple=override.new_fact_tuple,
+                )
+            )
+        output[pred_id] = copied_rows
+    return output
+
+
+def _build_overlay_diff(
+    before: OverlayCheckPhase,
+    after: OverlayCheckPhase,
+) -> OverlayCheckDiff:
+    before_bindings = _phase_bindings(before)
+    after_bindings = _phase_bindings(after)
+    return OverlayCheckDiff(
+        status_changed=before.status != after.status,
+        matched_count_delta=after.matched_count - before.matched_count,
+        bindings_added=_binding_difference(after_bindings, before_bindings),
+        bindings_removed=_binding_difference(before_bindings, after_bindings),
+    )
+
+
 def _projected_witness_to_view_facts(
     projected_witness: dict[str, list[ProjectedFact]],
 ) -> dict[str, list[tuple[Any, ...]]]:
@@ -185,6 +342,75 @@ def _projected_witness_to_view_facts(
         pred_id: [row.fact_tuple for row in rows]
         for pred_id, rows in projected_witness.items()
     }
+
+
+def _visible_projected_rows(
+    projected_witness: dict[str, list[ProjectedFact]],
+) -> dict[tuple[str, str], ProjectedFact]:
+    return {
+        (pred_id, row.asrt_id): row
+        for pred_id, rows in projected_witness.items()
+        for row in rows
+    }
+
+
+def _schema_predicates_by_id(schema_ir: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    predicates = schema_ir.get("predicates")
+    if not isinstance(predicates, list):
+        return {}
+    output: dict[str, dict[str, Any]] = {}
+    for predicate in predicates:
+        if not isinstance(predicate, dict):
+            continue
+        pred_id = predicate.get("pred_id")
+        if isinstance(pred_id, str) and pred_id:
+            output[pred_id] = predicate
+    return output
+
+
+def _e_ref_position_matches(
+    override: FactValueOverride,
+    current_tuple: tuple[Any, ...],
+) -> bool:
+    if not current_tuple:
+        return False
+    if current_tuple[0] != override.e_ref:
+        return False
+    if not override.old_fact_tuple or override.old_fact_tuple[0] != override.e_ref:
+        return False
+    return bool(override.new_fact_tuple and override.new_fact_tuple[0] == override.e_ref)
+
+
+def _group_key_changed(
+    schema_pred: dict[str, Any],
+    current_tuple: tuple[Any, ...],
+    new_tuple: tuple[Any, ...],
+) -> bool:
+    group_key_indexes = schema_pred.get("group_key_indexes")
+    if not isinstance(group_key_indexes, list):
+        return False
+    for raw_index in group_key_indexes:
+        if not isinstance(raw_index, int):
+            continue
+        if raw_index < 0 or raw_index >= len(current_tuple) or raw_index >= len(new_tuple):
+            continue
+        if current_tuple[raw_index] != new_tuple[raw_index]:
+            return True
+    return False
+
+
+def _phase_bindings(phase: OverlayCheckPhase) -> tuple[BindingItems, ...]:
+    if phase.matched_binding is None:
+        return ()
+    return (phase.matched_binding,)
+
+
+def _binding_difference(
+    left: tuple[BindingItems, ...],
+    right: tuple[BindingItems, ...],
+) -> tuple[BindingItems, ...]:
+    diff = tuple(binding for binding in left if binding not in right)
+    return tuple(sorted(diff, key=repr))
 
 
 def _find_ruleref_atoms(body: list[Any]) -> list[tuple[Any, ...]]:

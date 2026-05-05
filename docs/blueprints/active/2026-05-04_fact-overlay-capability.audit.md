@@ -24,6 +24,7 @@
 | 2026-05-05 | scoped | Step 2 protocol DTOs complete | Added Fact Overlay protocol DTOs and package exports, plus focused protocol tests covering DTO shape, nullable matrix, intent-only request fields, no §6.5 typed Union expansion, no engine payload field, exact status/engine literals, full kernel unittest discover, and ruff. |
 | 2026-05-05 | scoped | Step 2 protocol review fixes complete | Review found two DTO drifts: empty overlay was incorrectly rejected at DTO construction, and `OverlayCheckPhase` allowed impossible / result-level states. DTOs and tests now align with runtime invalid-request handling and phase-only `passed` / `failed` semantics. |
 | 2026-05-05 | scoped | Step 3 native MVP scaffolding complete | Added `check_fact_overlay_binding(...)`, dispatcher preflights, non-native unsupported short-circuit, native single-phase evaluation, degenerate before/after no-change result assembly, callback pin coverage, focused runtime tests, full kernel unittest discover, and ruff. |
+| 2026-05-05 | scoped | Step 4 native double-run + override hardening complete | Replaced Step 3 degenerate result assembly with baseline + overlay-applied native phases, projection-copy overlay merge, collect-all override validation, phase-summary diff construction, phase runtime-error nullability, expanded focused runtime tests, full kernel unittest discover, and ruff. |
 
 ## Decision Notes
 
@@ -277,6 +278,16 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
 - 2026-05-05 (Implementation Step 3) — **Native MVP scaffolding complete.** Added `src/kernel/application/fact_overlay_runtime.py` with the public entry `check_fact_overlay_binding(...)`, Overlay-owned RuleRef preflight, native-only support gate, non-native `ENGINE_OVERLAY_NOT_SUPPORTED` short-circuit, and `_run_native_overlay_phase(...)`.
 
   Step 3 native result shape is intentionally **degenerate scaffolding**: the runtime executes one native phase against current committed facts, then returns `before == after` and `OverlayCheckDiff(status_changed=False, matched_count_delta=0, bindings_added=(), bindings_removed=())`. Step 4 replaces this with real baseline + overlay-applied double-run, `_apply_fact_overlay_projection(...)`, override validation, and true diff construction.
+
+- 2026-05-05 (Implementation Step 4) — **Native double-run + override validation hardening complete.** Step 4 replaced the Step 3 degenerate result path with the frozen native sequence:
+
+  `project_view_facts_with_witness(...) -> baseline phase -> _apply_fact_overlay_projection(...) -> overlay phase -> _build_overlay_diff(...)`
+
+  Override validation now runs after projection and before any native phase. It collects all detected override errors and returns `invalid_request` without calling `evaluate_native_where(...)` when validation fails. Covered validation codes are `OVERLAY_DUPLICATE_ASRT_ID`, `OVERLAY_ASRT_ID_NOT_VISIBLE`, `OVERLAY_STALE_OLD_FACT_TUPLE`, `OVERLAY_TUPLE_ARITY_MISMATCH`, `OVERLAY_E_REF_POSITION_MISMATCH`, and `OVERLAY_GROUP_KEY_CHANGED`.
+
+  `_apply_fact_overlay_projection(...)` is a pure projection-copy merger over `ProjectedFact` rows and does not mutate the baseline projected witness. `_build_overlay_diff(...)` computes status, count, added-binding, and removed-binding deltas only from `OverlayCheckPhase` summaries. Native phases still call `evaluate_native_where(..., remember_support_artifact=None)`; focused tests now assert both baseline and overlay phase calls keep the callback pinned to `None`.
+
+  Phase execution errors return `invalid_request` with `OVERLAY_PHASE_RUNTIME_ERROR` and no partial `before` / `after` / `diff`, matching C2's no-partial-phase policy. Step 5 still needs to lift the hardening coverage into the named §7-Overlay-1 through §7-Overlay-12 drift gate files/classes.
 
   Guardrails landed now:
   - `overlay=()` returns `invalid_request` / `EMPTY_OVERLAY_NOT_PERMITTED`.
