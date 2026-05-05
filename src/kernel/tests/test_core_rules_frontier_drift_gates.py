@@ -94,6 +94,20 @@ _BANNED_WRITE_CALLS = frozenset(
 )
 
 _ADAPTER_NAMES = frozenset({"souffle", "problog", "pyreason"})
+_FRONTIER_MODULES = frozenset(
+    {
+        "kernel.core.rules.frontier",
+        "frontier",
+    }
+)
+_FRONTIER_PUBLIC_SYMBOLS = frozenset(
+    {
+        "evaluate_native_where_frontier",
+        "NativeWhereFrontierEvaluation",
+        "NativeWhereFrontierFailureKind",
+        "NativeWhereFrontierRow",
+    }
+)
 
 
 def _frontier_tree() -> ast.Module:
@@ -138,6 +152,37 @@ def _call_name(node: ast.Call) -> str | None:
     if isinstance(node.func, ast.Attribute):
         return node.func.attr
     return None
+
+
+def _frontier_application_opt_in_offenders(tree: ast.AST, path: Path) -> list[tuple[str, str]]:
+    offenders: list[tuple[str, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in _FRONTIER_MODULES:
+                    offenders.append((str(path), alias.name))
+            continue
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module == "kernel.core.rules":
+                for alias in node.names:
+                    if alias.name == "frontier" or alias.name in _FRONTIER_PUBLIC_SYMBOLS:
+                        offenders.append((str(path), f"{module}.{alias.name}"))
+            elif module in _FRONTIER_MODULES:
+                for alias in node.names:
+                    if alias.name in _FRONTIER_PUBLIC_SYMBOLS:
+                        offenders.append((str(path), f"{module}.{alias.name}"))
+            continue
+        if isinstance(node, ast.Name) and (
+            node.id in _FRONTIER_PUBLIC_SYMBOLS or node.id.startswith("NativeWhereFrontier")
+        ):
+            offenders.append((str(path), node.id))
+            continue
+        if isinstance(node, ast.Attribute) and (
+            node.attr in _FRONTIER_PUBLIC_SYMBOLS or node.attr.startswith("NativeWhereFrontier")
+        ):
+            offenders.append((str(path), node.attr))
+    return offenders
 
 
 def _eligible_registry() -> RuleRegistry:
@@ -369,21 +414,28 @@ class EvaluatorFrontierBoundaryGateTests(unittest.TestCase):
         offenders: list[tuple[str, str]] = []
         for path in sorted(app_dir.glob("**/*.py")):
             tree = _parse_path(path)
-            for node in ast.walk(tree):
-                if isinstance(node, (ast.Import, ast.ImportFrom)):
-                    for alias in node.names:
-                        if alias.name in {
-                            "evaluate_native_where_frontier",
-                            "NativeWhereFrontierEvaluation",
-                            "NativeWhereFrontierRow",
-                        }:
-                            offenders.append((str(path), alias.name))
-                elif isinstance(node, ast.Name) and node.id.startswith("NativeWhereFrontier"):
-                    offenders.append((str(path), node.id))
-                elif isinstance(node, ast.Name) and node.id == "evaluate_native_where_frontier":
-                    offenders.append((str(path), node.id))
+            offenders.extend(_frontier_application_opt_in_offenders(tree, path))
 
         self.assertEqual(offenders, [])
+
+    def test_10_application_opt_in_gate_catches_module_qualified_access(self) -> None:
+        samples = [
+            "import kernel.core.rules.frontier as f\nf.evaluate_native_where_frontier({}, [])\n",
+            "from kernel.core.rules import frontier\nfrontier.evaluate_native_where_frontier({}, [])\n",
+            "from kernel.core.rules import frontier\nx: frontier.NativeWhereFrontierRow | None = None\n",
+            (
+                "from kernel.core.rules.frontier import NativeWhereFrontierRow\n"
+                "row: NativeWhereFrontierRow | None = None\n"
+            ),
+        ]
+
+        for source in samples:
+            with self.subTest(source=source):
+                offenders = _frontier_application_opt_in_offenders(
+                    ast.parse(source),
+                    Path("sample.py"),
+                )
+                self.assertGreaterEqual(len(offenders), 1)
 
 
 if __name__ == "__main__":

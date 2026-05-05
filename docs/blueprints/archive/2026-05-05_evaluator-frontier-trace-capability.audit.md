@@ -15,6 +15,7 @@
 | 2026-05-05 | scoped | Step 2 frontier algorithm complete | Replaced scaffold frontier rows with per-branch aggregate emission, RuleRef post-rewrite frontier evaluation, and success-parity coverage across native path shapes. |
 | 2026-05-05 | scoped | Step 3 drift gates complete | Added named §7-EvaluatorFrontier anti-regression tests covering surface, boundedness, parity, native-only scope, persistence, and application back-dependency gates. |
 | 2026-05-05 | scoped -> implemented | Step 4 close-out complete | Updated core rules docs, filled Outcome / Deviations, and marked all acceptance gates complete before archive. |
+| 2026-05-05 | post-ship review | Frontier review hardening | Hardened §7-EvaluatorFrontier-10 against module-qualified application opt-in; deferred shared native binding value-stability limitation to a future evaluator substrate topic. |
 
 ## Decision Notes
 
@@ -189,3 +190,10 @@ Step 3 added `src/kernel/tests/test_core_rules_frontier_drift_gates.py` as the n
 Step 4 completed the scoped deliverables without expanding scope. The public core rules docs now list `rules.frontier` and describe the native-only frontier boundary. The blueprint status is `implemented`, all §7 acceptance gates are checked, and §10 records the final behavior, verification, implementation chain, and the Step 2 helper-sharing deviation.
 
 This remains evaluator substrate only. No application capability imports the new frontier entrypoint; §7-EvaluatorFrontier-10 intentionally keeps future application use behind a new blueprint.
+
+### 2026-05-05 — Post-ship Review Follow-up
+
+Post-ship review found two non-blocking issues:
+
+- `frontier.py` duplicates the normal native evaluator's raw binding key behavior for dedupe/sort. Bindings with unhashable or mixed incomparable values can raise `TypeError`. This is inherited from `evaluate_where(...)` / `evaluate_native_where(...)`, and frontier-only repair would break the scoped success-parity contract. Defer to a future shared evaluator value-stability topic.
+- The original §7-EvaluatorFrontier-10 application opt-in gate caught direct symbol imports and bare names, but not module-qualified access such as `import kernel.core.rules.frontier as f` followed by `f.evaluate_native_where_frontier(...)`. The gate was hardened with module-path, `from kernel.core.rules import frontier`, and `ast.Attribute` detection.
