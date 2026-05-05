@@ -166,6 +166,28 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
         self.assertEqual(result.red, ())
         mocked.assert_not_called()
 
+    def test_empty_universe_with_ruleref_returns_completed_without_preflight(self) -> None:
+        store, index = _build_store()
+        body, target = _exists_age_body(index)
+        request = WhyNotUniverseRequest(
+            plan=_build_plan(
+                body + [("ruleref", "person.exists", "1.0", ["$p"])],
+                target,
+                ("$p", "$age"),
+            ),
+            candidate_universe=(),
+            engine="native",
+        )
+
+        with patch("kernel.application.why_not_runtime.evaluate_native_where") as mocked:
+            result = check_why_not_universe(request, store=store, registry=None)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.green, ())
+        self.assertEqual(result.red, ())
+        self.assertEqual(result.errors, ())
+        mocked.assert_not_called()
+
     def test_native_partitions_green_and_red_in_universe_order(self) -> None:
         store, index = _build_store()
         alice = _seed_person(store, index, "alice", 25, "us")
@@ -189,6 +211,63 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
         self.assertEqual(result.red[0].diagnostic.status, "failed")
         self.assertEqual(result.red[0].diagnostic.failure_kind, "no_candidate")
         self.assertEqual(result.red[0].diagnostic.diagnostic_granularity, "coarse")
+
+    def test_native_all_green_partition(self) -> None:
+        store, index = _build_store()
+        alice = _seed_person(store, index, "alice", 25, "us")
+        bob = _seed_person(store, index, "bob", 30, "eu")
+        body, target = _exists_age_body(index)
+        alice_binding = _binding(("$p", alice), ("$age", 25))
+        bob_binding = _binding(("$p", bob), ("$age", 30))
+        request = WhyNotUniverseRequest(
+            plan=_build_plan(body, target, ("$p", "$age")),
+            candidate_universe=(alice_binding, bob_binding),
+            engine="native",
+        )
+
+        result = check_why_not_universe(request, store=store)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.green, (alice_binding, bob_binding))
+        self.assertEqual(result.red, ())
+
+    def test_native_all_red_partition(self) -> None:
+        store, index = _build_store()
+        body, target = _exists_age_body(index)
+        missing_a = _binding(("$p", "idref_v1:Person:name:missing-a"), ("$age", 25))
+        missing_b = _binding(("$p", "idref_v1:Person:name:missing-b"), ("$age", 30))
+        request = WhyNotUniverseRequest(
+            plan=_build_plan(body, target, ("$p", "$age")),
+            candidate_universe=(missing_a, missing_b),
+            engine="native",
+        )
+
+        result = check_why_not_universe(request, store=store)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.green, ())
+        self.assertEqual(tuple(row.binding for row in result.red), (missing_a, missing_b))
+
+    def test_native_preserves_interleaved_partition_order(self) -> None:
+        store, index = _build_store()
+        alice = _seed_person(store, index, "alice", 25, "us")
+        bob = _seed_person(store, index, "bob", 30, "eu")
+        body, target = _exists_age_body(index)
+        alice_binding = _binding(("$p", alice), ("$age", 25))
+        bob_binding = _binding(("$p", bob), ("$age", 30))
+        missing_a = _binding(("$p", "idref_v1:Person:name:missing-a"), ("$age", 25))
+        missing_b = _binding(("$p", "idref_v1:Person:name:missing-b"), ("$age", 30))
+        request = WhyNotUniverseRequest(
+            plan=_build_plan(body, target, ("$p", "$age")),
+            candidate_universe=(missing_a, alice_binding, missing_b, bob_binding),
+            engine="native",
+        )
+
+        result = check_why_not_universe(request, store=store)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.green, (alice_binding, bob_binding))
+        self.assertEqual(tuple(row.binding for row in result.red), (missing_a, missing_b))
 
     def test_ruleref_without_registry_returns_invalid_request(self) -> None:
         store, index = _build_store()

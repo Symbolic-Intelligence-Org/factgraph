@@ -15,6 +15,7 @@
 | 2026-05-05 | scoped | Step 1 protocol DTOs complete | Added Why-not protocol DTOs and protocol-layer tests for request shape, finite universe validation, top-level result matrix, row diagnostics, protocol-owned DTO boundaries, and static literal invariants. |
 | 2026-05-05 | scoped | Step 1 review corrective patch | Fixed literal-head universe validation, unhashable binding duplicate checks, and the protocol ownership static test after review findings. |
 | 2026-05-05 | scoped | Step 2 runtime MVP board assembly complete | Added `check_why_not_universe(...)`, native / representable non-native head-binding extraction, green/red partitioning, top-level invalid/unsupported paths, and focused runtime tests. |
+| 2026-05-05 | scoped | Step 2 review corrective patch | Moved empty-universe handling ahead of RuleRef preflight and strengthened partition-order test coverage. |
 
 ## Decision Notes
 
@@ -144,4 +145,16 @@
   - `python -m unittest src.kernel.tests.test_application_check_protocol src.kernel.tests.test_application_check_runtime src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_diagnose_runtime_native src.kernel.tests.test_application_diagnose_runtime_non_native src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_fact_overlay_runtime_native src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime` — 300 tests OK.
   - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1021 tests OK / 1 skipped.
   - `python -m ruff check src/kernel/application/why_not_runtime.py src/kernel/application/__init__.py src/kernel/tests/test_application_why_not_runtime.py` — clean.
+  - `python -m ruff check src/kernel` — clean.
+
+- 2026-05-05 (Step 2 review corrective) — **Empty universe precedence.** Review found that the Step 2 dispatcher ran RuleRef preflight before the empty-universe branch, so a plan with `ruleref` atoms and `candidate_universe=()` returned `invalid_request` without a registry. The frozen §7-WhyNot-5 gate is intentionally unconditional: an empty explicit universe is a completed empty set query and does not require plan evaluation or RuleRef resolution. The dispatcher now returns `completed` for empty universes before RuleRef or engine preflight, and a focused test covers `ruleref + empty + no registry`.
+
+- 2026-05-05 (Step 2 review corrective) — **Partition coverage hardening.** Added runtime tests for all-green, all-red, and interleaved multi-red / multi-green native partitions. This brings Step 2 coverage closer to the §7-WhyNot-7 named gate before the later Step 4 drift-gate pass.
+
+- 2026-05-05 (Step 2 review corrective) — **Corrective verification.**
+  - `python -m unittest src.kernel.tests.test_application_why_not_runtime` — 14 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime` — 81 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_check_protocol src.kernel.tests.test_application_check_runtime src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_diagnose_runtime_native src.kernel.tests.test_application_diagnose_runtime_non_native src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_fact_overlay_runtime_native src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime` — 304 tests OK.
+  - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1025 tests OK / 1 skipped.
+  - `python -m ruff check src/kernel/application/why_not_runtime.py src/kernel/tests/test_application_why_not_runtime.py` — clean.
   - `python -m ruff check src/kernel` — clean.

@@ -63,11 +63,6 @@ def check_why_not_universe(
 ) -> WhyNotUniverseResult:
     """Assemble a red/green board for an explicit finite head-binding universe."""
 
-    body = list(request.plan.body_ir)
-    ruleref_errors = _ruleref_preflight(body, registry)
-    if ruleref_errors:
-        return _invalid_request(request, errors=ruleref_errors)
-
     if not request.candidate_universe:
         return WhyNotUniverseResult(
             status="completed",
@@ -77,6 +72,11 @@ def check_why_not_universe(
             errors=(),
             warnings=(),
         )
+
+    body = list(request.plan.body_ir)
+    ruleref_errors = _ruleref_preflight(body, registry)
+    if ruleref_errors:
+        return _invalid_request(request, errors=ruleref_errors)
 
     if request.engine == "native":
         extracted = _native_head_bindings(request, store=store, registry=registry)
