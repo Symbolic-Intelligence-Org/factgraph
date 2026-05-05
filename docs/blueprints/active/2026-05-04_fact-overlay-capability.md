@@ -140,7 +140,7 @@ Hybrid via `check_derivation_binding(...)` is rejected because Check's per-engin
 
 The native seam is:
 
-`project_view_facts_with_witness(...) -> apply_fact_overlay_projection(...) -> evaluate_native_where(...)`
+`project_view_facts_with_witness(...) -> _apply_fact_overlay_projection(...) -> evaluate_native_where(...)`
 
 No Store proxy and no pre-compile plan patch are used in MVP.
 
@@ -251,13 +251,15 @@ Dispatcher entry ordering:
 Native phase sequence:
 
 1. Build the baseline phase from the unmodified projected witness facts.
-2. Build an overlay projected witness copy with `apply_fact_overlay_projection(overrides, projected_witness_facts)`.
+2. Build an overlay projected witness copy with `_apply_fact_overlay_projection(overrides, projected_witness_facts)`.
 3. Convert each phase's projected witnesses to the `pred_id -> list[fact_tuple]` shape required by `evaluate_native_where(...)`.
 4. Run `evaluate_native_where(...)` separately for baseline and overlay phases using identical plan body, requested binding, and RuleRef resolutions.
 5. Apply `_binding_matches`-style subset matching to each phase's final bindings and build lightweight `OverlayCheckPhase` summaries.
 6. Compute `OverlayCheckDiff` only from the two phase summaries: status delta, match-count delta, and binding deltas. It never reads engine-native artifacts.
 
 Execution is sequential for MVP: baseline first, overlay second. The two phases may share the immutable original projection snapshot, but the overlay projection must be a derived copy. No phase may write into live `Store` caches or reuse mutable capture state.
+
+Phase-execution runtime errors propagate through the `errors` channel, not through partial phase population. If either baseline or overlay phase raises a runtime error, `before`, `after`, and `diff` are all `None`, even if the baseline phase had already completed.
 
 Status assembly:
 
@@ -271,7 +273,7 @@ Runtime helper decomposition is frozen at name/role altitude only:
 - `check_fact_overlay_binding(...)`: application entry point.
 - `_overlay_engine_support_preflight(...)`: dispatcher-level engine gate.
 - `_overlay_ruleref_preflight(...)`: Overlay-owned RuleRef preflight, not imported from Check.
-- `apply_fact_overlay_projection(...)`: pure projection-copy merger for `FactValueOverride`.
+- `_apply_fact_overlay_projection(...)`: pure projection-copy merger for `FactValueOverride`.
 - `_validate_fact_value_overrides(...)`: native projected-row defensive validation.
 - `_run_native_overlay_phase(...)`: native phase evaluator that returns `OverlayCheckPhase`.
 - `_build_overlay_diff(...)`: phase-summary-only diff builder.
@@ -281,8 +283,8 @@ Runtime helper decomposition is frozen at name/role altitude only:
 Step 0.D must lift these named gates into §7 Acceptance before implementation:
 
 - **§7-Overlay-1** (Sibling no-Check-call invariant): static AST/import check that Overlay Check runtime never imports `check_derivation_binding`, `derivation_check_runtime`, Check result/envelope DTOs, or Check private helpers. The allow-list is `_derivation_match_helpers` binding-match/body-var helpers plus `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`.
-- **§7-Overlay-2** (intent-only request DTO): type/field test that `FactOverlayCheckRequest` contains plan, binding, overlay, and engine only; no `store`, `registry`, precomputed projections, cache handles, or side-channel runtime objects.
-- **§7-Overlay-3** (no ledger write): runtime test that overlay execution leaves `store.ledger` unchanged and never calls append/retract/accept/scenario-persistence paths.
+- **§7-Overlay-2** (intent-only request DTO): type/field test that `FactOverlayCheckRequest` dataclass fields are exactly `plan`, `binding`, `overlay`, and `engine`; no `store`, `registry`, precomputed projection, or cache fields appear as DTO fields. `store` and optional `registry` remain runtime side-channel kwargs to `check_fact_overlay_binding(...)`, not DTO members.
+- **§7-Overlay-3** (no ledger write): runtime test that overlay execution leaves `store.ledger` byte-identical and never calls `append_assertion`, `append_revocation`, `accept_*`, or any other ledger-write entry.
 - **§7-Overlay-4** (no live cache contamination): runtime spy/monkeypatch test that overlay execution does not call `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, or `_remember_rule_trace_artifact`.
 - **§7-Overlay-5** (non-native dispatcher short-circuit): souffle, problog, and pyreason return `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED`; adapters are not invoked and `before` / `after` / `diff` are `None`.
 - **§7-Overlay-6** (empty overlay rejected): `overlay=()` returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`.
