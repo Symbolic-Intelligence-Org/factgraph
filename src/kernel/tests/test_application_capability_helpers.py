@@ -42,6 +42,11 @@ class Team(Entity):
     score: int = Field(cardinality="single")
 
 
+class Reading(Entity):
+    name: str = Identity(primary_key=True)
+    value: float = Field(cardinality="single")
+
+
 @dataclass(frozen=True)
 class SeededPerson:
     e_ref: str
@@ -50,7 +55,7 @@ class SeededPerson:
 
 
 def _build_store() -> tuple[Store, Any]:
-    schema_ir = compile_schema_from_classes([Person, Team])
+    schema_ir = compile_schema_from_classes([Person, Team, Reading])
     store = Store(schema_ir)
     index = build_schema_index(schema_ir)
     return store, index
@@ -88,6 +93,31 @@ def _seed_person(
         age_asrt_id=age_asrt_id,
         age_pred_id=age_pred_id,
     )
+
+
+def _seed_reading(
+    store: Store,
+    index: Any,
+    *,
+    name: str = "temperature",
+    value: float | str = "0x3ff8000000000000",
+) -> tuple[str, str]:
+    ref = resolve_selector(
+        EntitySelector(entity_type="Reading", identity={"name": name}),
+        index=index,
+    )
+    info = entity_info(index, "Reading")
+    encoded = ref.encoded_ref or ""
+    set_field(store.ledger, info.exists_predicate_id, encoded, [])
+    set_field(
+        store.ledger,
+        info.identity_predicates["name"].pred_id,
+        encoded,
+        [("string", name)],
+    )
+    value_pred_id = field_predicate(index, "Reading", "value").pred_id
+    set_field(store.ledger, value_pred_id, encoded, [("float64", value)])
+    return encoded, value_pred_id
 
 
 def _build_plan(index: Any) -> CompiledDerivationPlan:
@@ -156,6 +186,35 @@ class FactValueOverrideHelperTests(unittest.TestCase):
                 e_ref=alice.e_ref,
                 field=FieldPath(entity_type="Team", field_name="score"),
                 new_value=10,
+            )
+
+    def test_float64_hex_string_value_matches_write_protocol_convention(self) -> None:
+        store, index = _build_store()
+        e_ref, value_pred_id = _seed_reading(store, index)
+
+        override = build_fact_value_override(
+            store,
+            index,
+            e_ref=e_ref,
+            field=FieldPath(entity_type="Reading", field_name="value"),
+            new_value="0x40091eb851eb851f",
+        )
+
+        self.assertEqual(override.pred_id, value_pred_id)
+        self.assertEqual(override.old_fact_tuple, (e_ref, "0x3ff8000000000000"))
+        self.assertEqual(override.new_fact_tuple, (e_ref, "0x40091eb851eb851f"))
+
+    def test_float64_decimal_string_raises_helper_error(self) -> None:
+        store, index = _build_store()
+        e_ref, _value_pred_id = _seed_reading(store, index)
+
+        with self.assertRaisesRegex(CapabilityHelperError, "canonical float64 hex"):
+            build_fact_value_override(
+                store,
+                index,
+                e_ref=e_ref,
+                field=FieldPath(entity_type="Reading", field_name="value"),
+                new_value="3.14",
             )
 
 

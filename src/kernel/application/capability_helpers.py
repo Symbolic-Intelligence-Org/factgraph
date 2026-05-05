@@ -173,6 +173,8 @@ def _normalize_scalar_value(
     if scalar_domain == "float64":
         if isinstance(value, bool) or not isinstance(value, (float, str)):
             raise CapabilityHelperError(f"{field_name} expects float64 value")
+        if isinstance(value, str) and not _is_float64_hex(value):
+            raise CapabilityHelperError(f"{field_name} expects float or canonical float64 hex string")
         return value
     if scalar_domain == "time":
         if isinstance(value, bool) or not isinstance(value, int):
@@ -183,6 +185,12 @@ def _normalize_scalar_value(
             raise CapabilityHelperError(f"{field_name} expects uuid string value")
         return value.lower()
     raise CapabilityHelperError(f"{field_name} uses unsupported field domain: {scalar_domain!r}")
+
+
+def _is_float64_hex(value: str) -> bool:
+    if len(value) != 18 or not value.startswith("0x"):
+        return False
+    return all(char in "0123456789abcdef" for char in value[2:])
 
 
 __all__ = [
