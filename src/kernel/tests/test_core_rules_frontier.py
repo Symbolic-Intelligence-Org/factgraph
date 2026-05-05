@@ -12,6 +12,7 @@ from kernel.core.rules.frontier import (
     NativeWhereFrontierRow,
     evaluate_native_where_frontier,
 )
+from kernel.core.rules.rule_ir import RuleRegistry, RuleSpec
 from kernel.core.rules.ruleref_substrate import evaluate_native_where
 
 _BANNED_IMPORT_PREFIXES = (
@@ -202,6 +203,21 @@ class NativeWhereFrontierDTOTests(unittest.TestCase):
 
 
 class NativeWhereFrontierEntrypointTests(unittest.TestCase):
+    def assert_success_parity(
+        self,
+        view_facts: dict[str, list[tuple[object, ...]]],
+        where: list[object],
+        *,
+        registry: RuleRegistry | None = None,
+    ) -> NativeWhereFrontierEvaluation:
+        native = evaluate_native_where(view_facts, where, registry=registry)
+        frontier = evaluate_native_where_frontier(view_facts, where, registry=registry)
+
+        self.assertEqual(frontier.bindings, native.bindings)
+        self.assertEqual(frontier.rule_refs, native.rule_refs)
+        self.assertEqual(frontier.rule_ref_resolutions, native.rule_ref_resolutions)
+        return frontier
+
     def test_entrypoint_signature_mirrors_native_without_trace_kwargs(self) -> None:
         frontier_signature = inspect.signature(evaluate_native_where_frontier)
         native_signature = inspect.signature(evaluate_native_where)
@@ -227,13 +243,9 @@ class NativeWhereFrontierEntrypointTests(unittest.TestCase):
             ("pred", "eligible", ["$name"]),
         ]
 
-        native = evaluate_native_where(view_facts, where)
-        frontier = evaluate_native_where_frontier(view_facts, where)
+        frontier = self.assert_success_parity(view_facts, where)
 
         self.assertIsInstance(frontier, NativeWhereFrontierEvaluation)
-        self.assertEqual(frontier.bindings, native.bindings)
-        self.assertEqual(frontier.rule_refs, native.rule_refs)
-        self.assertEqual(frontier.rule_ref_resolutions, native.rule_ref_resolutions)
         self.assertEqual(frontier.frontier_rows, ())
 
     def test_entrypoint_scaffold_preserves_success_bindings_for_or_body(self) -> None:
@@ -246,11 +258,224 @@ class NativeWhereFrontierEntrypointTests(unittest.TestCase):
             [("pred", "vip", ["$name"])],
         ]
 
-        native = evaluate_native_where(view_facts, where)
-        frontier = evaluate_native_where_frontier(view_facts, where)
+        frontier = self.assert_success_parity(view_facts, where)
 
-        self.assertEqual(frontier.bindings, native.bindings)
         self.assertEqual(frontier.frontier_rows, ())
+
+    def test_entrypoint_preserves_success_bindings_for_filter_path(self) -> None:
+        view_facts = {"person": [("alice",), ("bob",)]}
+        where = [
+            ("pred", "person", ["$name"]),
+            ("in", "$name", ["alice"]),
+        ]
+
+        frontier = self.assert_success_parity(view_facts, where)
+
+        self.assertEqual(frontier.bindings, [{"$name": "alice"}])
+        self.assertEqual(frontier.frontier_rows, ())
+
+    def test_entrypoint_preserves_success_bindings_for_arithmetic_path(self) -> None:
+        view_facts = {"score": [("alice", 2), ("bob", 3)]}
+        where = [
+            ("pred", "score", ["$name", "$score"]),
+            ("addc", "$next_score", "$score", 1),
+            ("eq", "$next_score", 3),
+        ]
+
+        frontier = self.assert_success_parity(view_facts, where)
+
+        self.assertEqual(
+            frontier.bindings,
+            [{"$name": "alice", "$next_score": 3, "$score": 2}],
+        )
+        self.assertEqual(frontier.frontier_rows, ())
+
+    def test_entrypoint_preserves_success_bindings_for_not_path(self) -> None:
+        view_facts = {
+            "person": [("alice",), ("bob",)],
+            "blocked": [("alice",)],
+        }
+        where = [
+            ("pred", "person", ["$name"]),
+            ("not", [("pred", "blocked", ["$name"])]),
+        ]
+
+        frontier = self.assert_success_parity(view_facts, where)
+
+        self.assertEqual(frontier.bindings, [{"$name": "bob"}])
+        self.assertEqual(frontier.frontier_rows, ())
+
+    def test_entrypoint_preserves_success_bindings_for_ruleref_path(self) -> None:
+        view_facts = {
+            "person": [("alice",), ("bob",)],
+            "eligible": [("alice",)],
+        }
+        registry = _eligible_registry()
+        where: list[object] = [("ruleref", "person.eligible", "1.0", ["$name"])]
+
+        frontier = self.assert_success_parity(view_facts, where, registry=registry)
+
+        self.assertEqual(frontier.bindings, [{"$name": "alice"}])
+        self.assertEqual(frontier.rule_refs, ("person.eligible",))
+        self.assertEqual(frontier.frontier_rows, ())
+
+    def test_predicate_failure_emits_branch_frontier(self) -> None:
+        view_facts = {"person": []}
+        where = [("pred", "person", ["$name"])]
+
+        frontier = self.assert_success_parity(view_facts, where)
+
+        self.assertEqual(frontier.bindings, [])
+        self.assertEqual(
+            frontier.frontier_rows,
+            (
+                NativeWhereFrontierRow(
+                    branch_index=0,
+                    failed_atom_index=0,
+                    atoms_satisfied=0,
+                    frontier_count=1,
+                    failure_kind="atom_filter_empty",
+                ),
+            ),
+        )
+
+    def test_filter_failure_records_pre_atom_env_count(self) -> None:
+        view_facts = {"person": [("alice",), ("bob",)]}
+        where = [
+            ("pred", "person", ["$name"]),
+            ("eq", "$name", "carol"),
+        ]
+
+        frontier = self.assert_success_parity(view_facts, where)
+
+        self.assertEqual(frontier.bindings, [])
+        self.assertEqual(
+            frontier.frontier_rows,
+            (
+                NativeWhereFrontierRow(
+                    branch_index=0,
+                    failed_atom_index=1,
+                    atoms_satisfied=1,
+                    frontier_count=2,
+                    failure_kind="atom_filter_empty",
+                ),
+            ),
+        )
+
+    def test_not_failure_records_outer_not_atom_frontier(self) -> None:
+        view_facts = {
+            "person": [("alice",)],
+            "blocked": [("alice",)],
+        }
+        where = [
+            ("pred", "person", ["$name"]),
+            ("not", [("pred", "blocked", ["$name"])]),
+        ]
+
+        frontier = self.assert_success_parity(view_facts, where)
+
+        self.assertEqual(frontier.bindings, [])
+        self.assertEqual(
+            frontier.frontier_rows,
+            (
+                NativeWhereFrontierRow(
+                    branch_index=0,
+                    failed_atom_index=1,
+                    atoms_satisfied=1,
+                    frontier_count=1,
+                    failure_kind="atom_filter_empty",
+                ),
+            ),
+        )
+
+    def test_or_body_emits_sparse_failed_branch_rows_with_success_bindings(self) -> None:
+        view_facts = {"person": [("alice",)]}
+        where = [
+            [("pred", "person", ["$name"]), ("eq", "$name", "alice")],
+            [("pred", "person", ["$name"]), ("eq", "$name", "bob")],
+        ]
+
+        frontier = self.assert_success_parity(view_facts, where)
+
+        self.assertEqual(frontier.bindings, [{"$name": "alice"}])
+        self.assertEqual(
+            frontier.frontier_rows,
+            (
+                NativeWhereFrontierRow(
+                    branch_index=1,
+                    failed_atom_index=1,
+                    atoms_satisfied=1,
+                    frontier_count=1,
+                    failure_kind="atom_filter_empty",
+                ),
+            ),
+        )
+
+    def test_or_body_emits_at_most_one_frontier_row_per_failed_branch(self) -> None:
+        view_facts = {"person": [("alice",)]}
+        where = [
+            [
+                ("pred", "person", ["$name"]),
+                ("eq", "$name", "bob"),
+                ("eq", "$name", "carol"),
+            ],
+            [
+                ("pred", "person", ["$name"]),
+                ("eq", "$name", "dora"),
+                ("eq", "$name", "erin"),
+            ],
+        ]
+
+        frontier = self.assert_success_parity(view_facts, where)
+
+        self.assertEqual(frontier.bindings, [])
+        self.assertEqual(
+            frontier.frontier_rows,
+            (
+                NativeWhereFrontierRow(
+                    branch_index=0,
+                    failed_atom_index=1,
+                    atoms_satisfied=1,
+                    frontier_count=1,
+                    failure_kind="atom_filter_empty",
+                ),
+                NativeWhereFrontierRow(
+                    branch_index=1,
+                    failed_atom_index=1,
+                    atoms_satisfied=1,
+                    frontier_count=1,
+                    failure_kind="atom_filter_empty",
+                ),
+            ),
+        )
+
+    def test_ruleref_frontier_is_computed_after_parent_rewrite(self) -> None:
+        view_facts = {
+            "person": [("alice",), ("bob",)],
+            "eligible": [("alice",)],
+        }
+        registry = _eligible_registry()
+        where: list[object] = [
+            ("ruleref", "person.eligible", "1.0", ["$name"]),
+            ("eq", "$name", "bob"),
+        ]
+
+        frontier = self.assert_success_parity(view_facts, where, registry=registry)
+
+        self.assertEqual(frontier.bindings, [])
+        self.assertEqual(frontier.rule_refs, ("person.eligible",))
+        self.assertEqual(
+            frontier.frontier_rows,
+            (
+                NativeWhereFrontierRow(
+                    branch_index=0,
+                    failed_atom_index=1,
+                    atoms_satisfied=1,
+                    frontier_count=1,
+                    failure_kind="atom_filter_empty",
+                ),
+            ),
+        )
 
 
 class NativeWhereFrontierLayerBoundaryTests(unittest.TestCase):
@@ -277,14 +502,33 @@ class NativeWhereFrontierLayerBoundaryTests(unittest.TestCase):
         for node in ast.walk(tree):
             if isinstance(node, ast.arg):
                 parameter_names.add(node.arg)
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                class_field_names.add(node.target.id)
+            elif isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                        class_field_names.add(item.target.id)
 
         self.assertEqual(parameter_names & _BANNED_KWARGS, set())
         self.assertEqual(
             class_field_names & {"sample_binding", "details", "env", "envs", "payload"},
             set(),
         )
+
+
+def _eligible_registry() -> RuleRegistry:
+    registry = RuleRegistry()
+    registry.register(
+        RuleSpec(
+            rule_id="person.eligible",
+            version="1.0",
+            select_vars=["$name"],
+            where=[
+                ("pred", "person", ["$name"]),
+                ("pred", "eligible", ["$name"]),
+            ],
+            expose=True,
+        )
+    )
+    return registry
 
 
 if __name__ == "__main__":
