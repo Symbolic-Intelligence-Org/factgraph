@@ -17,6 +17,7 @@
 | 2026-05-05 | scoped | Step 2 runtime MVP board assembly complete | Added `check_why_not_universe(...)`, native / representable non-native head-binding extraction, green/red partitioning, top-level invalid/unsupported paths, and focused runtime tests. |
 | 2026-05-05 | scoped | Step 2 review corrective patch | Moved empty-universe handling ahead of RuleRef preflight and strengthened partition-order test coverage. |
 | 2026-05-05 | scoped | Step 3 Sibling-with-Diagnose row diagnostics complete | Replaced provisional red-row diagnostics with Diagnose runtime calls and Why-not-owned row DTO mapping. |
+| 2026-05-05 | scoped | Step 4 drift-prevention named gates complete | Added explicit §7-WhyNot-1 through §7-WhyNot-14 coverage map and sibling / no-hook / no-write invariant tests. |
 
 ## Decision Notes
 
@@ -173,5 +174,31 @@
   - `python -m unittest src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime` — 90 tests OK.
   - `python -m unittest src.kernel.tests.test_application_check_protocol src.kernel.tests.test_application_check_runtime src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_diagnose_runtime_native src.kernel.tests.test_application_diagnose_runtime_non_native src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_fact_overlay_runtime_native src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime` — 313 tests OK.
   - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1034 tests OK / 1 skipped.
+  - `python -m ruff check src/kernel` — clean.
+  - `git diff --check` — clean.
+
+- 2026-05-05 (Step 4) — **Drift-prevention named gates.** Step 4 did not add new capability behavior; it made the §7-WhyNot-1 through §7-WhyNot-14 gate coverage explicit and added missing invariant tests.
+
+  | Gate | Coverage |
+  |---|---|
+  | §7-WhyNot-1 intent-only request DTO | `test_application_why_not_protocol.py::WhyNotProtocolStaticInvariantTests.test_request_dataclass_fields_are_intent_only` |
+  | §7-WhyNot-2 no budget escape | `test_application_why_not_protocol.py::WhyNotUniverseRequestProtocolTests.test_request_rejects_side_channel_and_escape_fields` |
+  | §7-WhyNot-3 explicit finite universe | `WhyNotUniverseRequestProtocolTests` missing / extra / body-only / literal-head coverage |
+  | §7-WhyNot-4 duplicate universe guard | `WhyNotUniverseRequestProtocolTests.test_request_rejects_duplicate_universe_bindings`; duplicate invalidity is enforced at DTO construction before runtime dispatch |
+  | §7-WhyNot-5 empty universe allowed | `test_application_why_not_runtime.py::WhyNotRuntimeNativeBoardTests.test_empty_universe_returns_completed_without_evaluation`; `test_empty_universe_with_ruleref_returns_completed_without_preflight` |
+  | §7-WhyNot-6 top-level status matrix | `WhyNotProtocolStaticInvariantTests.test_status_literal_exact_members`; `WhyNotUniverseResultProtocolTests` nullable-matrix tests |
+  | §7-WhyNot-7 green/red partition | `WhyNotUniverseResultProtocolTests` partition/order tests; `WhyNotRuntimeNativeBoardTests` all-green / all-red / interleaved runtime tests |
+  | §7-WhyNot-8 protocol owns row DTOs | `test_application_why_not_sibling_invariant.py::WhyNotSiblingImportInvariantTests.test_protocol_has_no_sibling_or_payload_imports_or_annotations`; protocol static tests |
+  | §7-WhyNot-9 runtime composition boundary | `WhyNotSiblingImportInvariantTests` runtime import tests; `WhyNotRuntimeRowDiagnosticTests.test_red_rows_call_diagnose_with_same_plan_binding_engine_store_registry`; no Check import tests |
+  | §7-WhyNot-10 row diagnostic status | `WhyNotRowDiagnosticProtocolTests`; `WhyNotRuntimeRowDiagnosticTests` passed / invalid_request invariant raise tests |
+  | §7-WhyNot-11 diagnostic richness | `WhyNotRuntimeRowDiagnosticTests` atom-localized / coarse / unavailable mapping tests |
+  | §7-WhyNot-12 engine support gate | `WhyNotRuntimeNonNativeBoardTests` representable completed board, row-level unavailable, and top-level unsupported extraction tests |
+  | §7-WhyNot-13 no evaluator hook | `WhyNotEvaluatorAndWriteInvariantTests.test_runtime_evaluate_native_where_calls_do_not_request_trace_hooks`; `test_runtime_source_does_not_reference_near_miss_trace_concepts` |
+  | §7-WhyNot-14 no ledger write | `WhyNotRuntimeNativeBoardTests.test_native_why_not_leaves_ledger_byte_identical_and_does_not_write`; `WhyNotEvaluatorAndWriteInvariantTests.test_runtime_does_not_import_or_call_write_substrates` |
+
+- 2026-05-05 (Step 4) — **Verification.**
+  - `python -m unittest src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime src.kernel.tests.test_application_why_not_sibling_invariant` — 99 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_check_protocol src.kernel.tests.test_application_check_runtime src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_diagnose_runtime_native src.kernel.tests.test_application_diagnose_runtime_non_native src.kernel.tests.test_application_diagnose_sibling_invariant src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_fact_overlay_runtime_native src.kernel.tests.test_application_fact_overlay_sibling_invariant src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime src.kernel.tests.test_application_why_not_sibling_invariant` — 328 tests OK.
+  - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1043 tests OK / 1 skipped.
   - `python -m ruff check src/kernel` — clean.
   - `git diff --check` — clean.

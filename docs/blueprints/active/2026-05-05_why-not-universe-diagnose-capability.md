@@ -242,20 +242,20 @@ Invariant errors surface as `WhyNotRuntimeError` (name frozen at role altitude o
 
 Each gate maps to Step 0.C and must become focused test coverage before implementation close-out:
 
-- [ ] **§7-WhyNot-1** (intent-only request DTO): `WhyNotUniverseRequest` fields are exactly `plan`, `candidate_universe`, and `engine`.
-- [ ] **§7-WhyNot-2** (no algorithmic budget escape): request DTO has no `search_budget`, `limit`, `max_candidates`, `mode`, or `diagnostic_mode`.
-- [ ] **§7-WhyNot-3** (explicit finite universe): universe bindings must be complete head bindings; body-only variables and missing/extra head variables are invalid.
-- [ ] **§7-WhyNot-4** (duplicate universe guard): duplicate normalized universe bindings return `invalid_request`.
-- [ ] **§7-WhyNot-5** (empty universe allowed): `candidate_universe=()` returns `completed` with empty `green` and `red`.
-- [ ] **§7-WhyNot-6** (top-level status matrix): top-level statuses are exactly `completed`, `unsupported`, and `invalid_request`; unsupported / invalid results have empty `green` and `red` with required errors.
-- [ ] **§7-WhyNot-7** (green/red partition): completed results preserve requested universe order; `green` and `red` are disjoint and their union equals `requested_universe`.
-- [ ] **§7-WhyNot-8** (protocol owns row DTOs): Why-not protocol does not import or annotate fields with `DiagnoseResult`, `DiagnoseAtomLocator`, Check DTOs, `EvidenceEnvelope`, `SupportArtifact`, or `ProvenanceEnvelope`.
-- [ ] **§7-WhyNot-9** (runtime composition boundary): runtime may call Diagnose and construct Diagnose requests internally, but output mapping must produce Why-not-owned row DTOs; runtime must not call Check.
-- [ ] **§7-WhyNot-10** (row diagnostic status): row diagnostic statuses are exactly `failed` and `unsupported`; row-level `passed` / `invalid_request` Diagnose results raise a runtime invariant error.
-- [ ] **§7-WhyNot-11** (diagnostic richness): native atom-localized rows map to `diagnostic_granularity="atom_localized"` with a populated `WhyNotAtomLocator`; coarse rows use `coarse`; unsupported rows use `unavailable`.
-- [ ] **§7-WhyNot-12** (engine support gate): non-native engines can produce completed boards with coarse or unavailable red-row diagnostics when candidate binding extraction is representable; unsupported is top-level only when the board cannot be assembled.
-- [ ] **§7-WhyNot-13** (no evaluator hook): implementation does not modify or depend on new `evaluate_native_where(...)` trace / callback output.
-- [ ] **§7-WhyNot-14** (no ledger write): running Why-not does not append, revoke, accept, or persist facts / scenario state.
+- [x] **§7-WhyNot-1** (intent-only request DTO): `WhyNotUniverseRequest` fields are exactly `plan`, `candidate_universe`, and `engine`.
+- [x] **§7-WhyNot-2** (no algorithmic budget escape): request DTO has no `search_budget`, `limit`, `max_candidates`, `mode`, or `diagnostic_mode`.
+- [x] **§7-WhyNot-3** (explicit finite universe): universe bindings must be complete head bindings; body-only variables and missing/extra head variables are invalid.
+- [x] **§7-WhyNot-4** (duplicate universe guard): duplicate normalized universe bindings return `invalid_request`.
+- [x] **§7-WhyNot-5** (empty universe allowed): `candidate_universe=()` returns `completed` with empty `green` and `red`.
+- [x] **§7-WhyNot-6** (top-level status matrix): top-level statuses are exactly `completed`, `unsupported`, and `invalid_request`; unsupported / invalid results have empty `green` and `red` with required errors.
+- [x] **§7-WhyNot-7** (green/red partition): completed results preserve requested universe order; `green` and `red` are disjoint and their union equals `requested_universe`.
+- [x] **§7-WhyNot-8** (protocol owns row DTOs): Why-not protocol does not import or annotate fields with `DiagnoseResult`, `DiagnoseAtomLocator`, Check DTOs, `EvidenceEnvelope`, `SupportArtifact`, or `ProvenanceEnvelope`.
+- [x] **§7-WhyNot-9** (runtime composition boundary): runtime may call Diagnose and construct Diagnose requests internally, but output mapping must produce Why-not-owned row DTOs; runtime must not call Check.
+- [x] **§7-WhyNot-10** (row diagnostic status): row diagnostic statuses are exactly `failed` and `unsupported`; row-level `passed` / `invalid_request` Diagnose results raise a runtime invariant error.
+- [x] **§7-WhyNot-11** (diagnostic richness): native atom-localized rows map to `diagnostic_granularity="atom_localized"` with a populated `WhyNotAtomLocator`; coarse rows use `coarse`; unsupported rows use `unavailable`.
+- [x] **§7-WhyNot-12** (engine support gate): non-native engines can produce completed boards with coarse or unavailable red-row diagnostics when candidate binding extraction is representable; unsupported is top-level only when the board cannot be assembled.
+- [x] **§7-WhyNot-13** (no evaluator hook): implementation does not modify or depend on new `evaluate_native_where(...)` trace / callback output.
+- [x] **§7-WhyNot-14** (no ledger write): running Why-not does not append, revoke, accept, or persist facts / scenario state.
 
 ### 7.3 Layer Placement
 
@@ -266,10 +266,10 @@ Each gate maps to Step 0.C and must become focused test coverage before implemen
 
 ### 7.4 Code Health
 
-- [ ] Focused protocol and runtime tests cover request shape, universe validation, top-level statuses, row mapping, all §7-WhyNot gates, and engine support behavior.
-- [ ] Existing Check / Diagnose / Fact Overlay tests remain green.
-- [ ] `python -m ruff check src/kernel` clean.
-- [ ] Kernel test suite green.
+- [x] Focused protocol and runtime tests cover request shape, universe validation, top-level statuses, row mapping, all §7-WhyNot gates, and engine support behavior.
+- [x] Existing Check / Diagnose / Fact Overlay tests remain green.
+- [x] `python -m ruff check src/kernel` clean.
+- [x] Kernel test suite green.
 
 ### 7.5 Cross-doc Updates
 
@@ -294,7 +294,7 @@ Each gate maps to Step 0.C and must become focused test coverage before implemen
 
 7. **Step 3 — Sibling-with-Diagnose row diagnostics** (complete). Integrated `diagnose_derivation_binding(...)` for red rows and mapped Diagnose outputs into Why-not-owned row DTOs. Covered native atom-localized rows, coarse failed rows, row-level unsupported/unavailable rows, and runtime invariant errors for Diagnose `passed` / `invalid_request`.
 
-8. **Step 4 — Drift-prevention named gates.** Land focused tests for §7-WhyNot-1 through §7-WhyNot-14, including static AST checks for protocol ownership and runtime composition boundaries.
+8. **Step 4 — Drift-prevention named gates** (complete). Landed focused tests for §7-WhyNot-1 through §7-WhyNot-14, including static AST checks for protocol ownership, runtime composition boundaries, no evaluator hook dependency, and no ledger-write substrate.
 
 9. **Step 5 — Close-out.** Update application docs, run the scoped verification set, record conformance audit findings, fill §10 Outcome / Deviations, and move status `scoped -> implemented` if implementation matches §5 and all §7 gates pass.
 

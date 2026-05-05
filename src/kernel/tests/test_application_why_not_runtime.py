@@ -52,6 +52,10 @@ def _build_store() -> tuple[Store, Any]:
     return store, index
 
 
+def _ledger_dump(store: Store) -> bytes:
+    return "\n".join(store.ledger._get_connection().iterdump()).encode("utf-8")
+
+
 def _seed_person(
     store: Store,
     index: Any,
@@ -210,6 +214,8 @@ class _CountingRuleRegistry(RuleRegistry):
 
 
 class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
+    """§7-WhyNot-5 / 7 / 12 / 14: native board and side-effect gates."""
+
     def test_empty_universe_returns_completed_without_evaluation(self) -> None:
         store, index = _build_store()
         body, target = _exists_age_body(index)
@@ -393,8 +399,41 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
         self.assertEqual(result.red, ())
         self.assertEqual(result.errors[0].code, "CANDIDATE_BINDING_NOT_REPRESENTABLE")
 
+    def test_native_why_not_leaves_ledger_byte_identical_and_does_not_write(self) -> None:
+        """§7-WhyNot-14: Why-not execution does not write durable ledger state."""
+        store, index = _build_store()
+        alice = _seed_person(store, index, "alice", 25, "us")
+        body, target = _exists_age_region_body(index)
+        request = WhyNotUniverseRequest(
+            plan=_build_plan(body, target, ("$p", "$region")),
+            candidate_universe=(_binding(("$p", alice), ("$region", "eu")),),
+            engine="native",
+        )
+        before = _ledger_dump(store)
+
+        with (
+            patch.object(
+                store.ledger,
+                "append_assertion",
+                side_effect=AssertionError("Why-not must not append assertions"),
+            ) as append_assertion,
+            patch.object(
+                store.ledger,
+                "append_revocation",
+                side_effect=AssertionError("Why-not must not append revocations"),
+            ) as append_revocation,
+        ):
+            result = check_why_not_universe(request, store=store)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(_ledger_dump(store), before)
+        self.assertFalse(append_assertion.called)
+        self.assertFalse(append_revocation.called)
+
 
 class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
+    """§7-WhyNot-9 / 10 / 11: Diagnose mapping and invariant gates."""
+
     def test_native_red_row_maps_actual_atom_localized_diagnose(self) -> None:
         store, index = _build_store()
         alice = _seed_person(store, index, "alice", 25, "us")
@@ -629,6 +668,8 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
 
 class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
+    """§7-WhyNot-12: non-native board support and unsupported boundaries."""
+
     def test_problog_and_pyreason_partition_representable_candidate_payloads(self) -> None:
         for engine in ("problog", "pyreason"):
             with self.subTest(engine=engine):
@@ -660,6 +701,12 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
                 self.assertEqual(
                     tuple(row.binding for row in result.red),
                     (_binding(("$p", "person-2")),),
+                )
+                self.assertEqual(result.red[0].diagnostic.status, "failed")
+                self.assertEqual(result.red[0].diagnostic.failure_kind, "no_candidate")
+                self.assertEqual(
+                    result.red[0].diagnostic.diagnostic_granularity,
+                    "coarse",
                 )
 
     def test_problog_entity_target_returns_unsupported_before_dispatch(self) -> None:
@@ -727,6 +774,38 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         self.assertEqual(result.errors[0].code, "CANDIDATE_BINDING_NOT_REPRESENTABLE")
         diagnose.assert_not_called()
 
+    def test_non_native_row_level_unsupported_keeps_completed_board(self) -> None:
+        store, index = _build_store()
+        body, target = _exists_age_body(index)
+        red_binding = _binding(("$p", "person-2"))
+        error = ErrorDTO(code="ROW_DIAGNOSTIC_UNAVAILABLE", message="row unavailable")
+        request = WhyNotUniverseRequest(
+            plan=_build_plan(body, target, ("$p",)),
+            candidate_universe=(red_binding,),
+            engine="problog",
+        )
+
+        with patch(
+            "kernel.application.why_not_runtime.evaluate_derivation_plans",
+            return_value=(),
+        ), patch(
+            "kernel.application.why_not_runtime.diagnose_derivation_binding",
+            return_value=_diagnose_unsupported(red_binding, errors=(error,)),
+        ):
+            result = check_why_not_universe(request, store=store)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.errors, ())
+        self.assertEqual(result.green, ())
+        self.assertEqual(tuple(row.binding for row in result.red), (red_binding,))
+        self.assertEqual(result.red[0].diagnostic.status, "unsupported")
+        self.assertIsNone(result.red[0].diagnostic.failure_kind)
+        self.assertEqual(
+            result.red[0].diagnostic.diagnostic_granularity,
+            "unavailable",
+        )
+        self.assertEqual(result.red[0].diagnostic.errors, (error,))
+
     def test_souffle_uses_support_artifact_binding_items(self) -> None:
         store, index = _build_store()
         body, target = _exists_age_body(index)
@@ -771,6 +850,8 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
             tuple(row.binding for row in result.red),
             (_binding(("$p", "person-2")),),
         )
+        self.assertEqual(result.red[0].diagnostic.status, "failed")
+        self.assertEqual(result.red[0].diagnostic.failure_kind, "no_candidate")
 
     def test_souffle_support_lookup_miss_returns_unsupported(self) -> None:
         store, index = _build_store()
@@ -798,6 +879,8 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
 
 
 class WhyNotRuntimeBoundaryTests(unittest.TestCase):
+    """§7-WhyNot-9: runtime composition boundary smoke coverage."""
+
     def test_runtime_composes_diagnose_without_check_or_protocol_result_imports(self) -> None:
         source = Path(why_not_runtime.__file__).read_text()
         tree = ast.parse(source)
