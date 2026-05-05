@@ -18,6 +18,7 @@
 | 2026-05-05 | draft | Step 0.B Round 1 precision findings resolved | Review tightened the Sibling parity mechanism, AST allow-list, no-§6.5 DTO field claim, and `_derivation_match_helpers` pure-helper governance. |
 | 2026-05-05 | draft | Step 0.C proposal drafted | C1-C7 drafted: dispatcher preflight/status ordering, native projection-copy algorithm, unsupported short-circuit, result assembly, helper decomposition, §7-Overlay-1 through §7-Overlay-12 drift gates, and Step 0.D lift entry point. |
 | 2026-05-05 | draft | Step 0.C review precision findings resolved | Review pinned phase-runtime-error nullability, made projection merge helper private, tightened intent-only DTO wording, and made the no-ledger-write gate API-specific. |
+| 2026-05-05 | draft | Step 0.C Round 1 findings resolved | Review found `evaluate_native_where(...)` RuleRef support capture as an indirect live-cache path. Native phases now pin `remember_support_artifact=None`; D8 §6.6 is recorded as Step 0.D review discipline, not a unit-test gate. |
 
 ## Decision Notes
 
@@ -186,9 +187,11 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
 
   `project_view_facts_with_witness(...) -> _apply_fact_overlay_projection(...) -> evaluate_native_where(...) -> binding match`
 
-  Runtime first builds the baseline phase from unmodified projected witness facts. It then builds an overlay projected witness copy with `_apply_fact_overlay_projection(overrides, projected_witness_facts)`. Each phase converts projected witnesses to the `pred_id -> list[fact_tuple]` shape required by `evaluate_native_where(...)`, evaluates the same plan body / requested binding / RuleRef resolutions, and applies `_binding_matches`-style subset matching to final bindings.
+  Runtime first builds the baseline phase from unmodified projected witness facts. It then builds an overlay projected witness copy with `_apply_fact_overlay_projection(overrides, projected_witness_facts)`. Each phase converts projected witnesses to the `pred_id -> list[fact_tuple]` shape required by `evaluate_native_where(...)`, evaluates the same plan body / requested binding / RuleRef resolutions with `remember_support_artifact=None`, and applies `_binding_matches`-style subset matching to final bindings.
 
   Execution is sequential for MVP: baseline first, overlay second. The phases may share the immutable original projection snapshot, but the overlay projection must be a derived copy. No phase may write into live `Store` caches or reuse mutable capture state.
+
+  Overlay does not capture support artifacts in either phase, consistent with D5 no-exposure. The `remember_support_artifact` callback is explicitly `None` to prevent indirect live-cache writes through `evaluate_native_where(...)` RuleRef support capture.
 
   Phase-execution runtime errors propagate through the `errors` channel, not through partial phase population. If either baseline or overlay phase raises a runtime error, `before`, `after`, and `diff` are all `None`, even if the baseline phase had already completed.
 
@@ -202,14 +205,14 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
   - `_overlay_ruleref_preflight(...)`: Overlay-owned RuleRef preflight, not imported from Check;
   - `_apply_fact_overlay_projection(...)`: pure projection-copy merger for `FactValueOverride`;
   - `_validate_fact_value_overrides(...)`: native projected-row defensive validation;
-  - `_run_native_overlay_phase(...)`: native phase evaluator returning `OverlayCheckPhase`;
+  - `_run_native_overlay_phase(...)`: native phase evaluator returning `OverlayCheckPhase` and calling `evaluate_native_where(..., remember_support_artifact=None)`;
   - `_build_overlay_diff(...)`: phase-summary-only diff builder.
 
 - 2026-05-05 (Step 0.C proposal) — **C6 Drift prevention §7-Overlay mapping.** Step 0.D must lift these named gates into §7 Acceptance before implementation:
   - **§7-Overlay-1** (Sibling no-Check-call invariant): static AST/import check that Overlay Check runtime never imports `check_derivation_binding`, `derivation_check_runtime`, Check result/envelope DTOs, or Check private helpers. Allow-list: `_derivation_match_helpers` binding-match/body-var helpers plus `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`.
   - **§7-Overlay-2** (intent-only request DTO): type/field test that `FactOverlayCheckRequest` dataclass fields are exactly `plan`, `binding`, `overlay`, and `engine`; no `store`, `registry`, precomputed projection, or cache fields appear as DTO fields. `store` and optional `registry` remain runtime side-channel kwargs to `check_fact_overlay_binding(...)`, not DTO members.
   - **§7-Overlay-3** (no ledger write): runtime test that overlay execution leaves `store.ledger` byte-identical and never calls `append_assertion`, `append_revocation`, `accept_*`, or any other ledger-write entry.
-  - **§7-Overlay-4** (no live cache contamination): runtime spy/monkeypatch test that overlay execution does not call `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, or `_remember_rule_trace_artifact`.
+  - **§7-Overlay-4** (no live cache contamination): runtime spy/monkeypatch test that overlay execution does not call `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, or `_remember_rule_trace_artifact`; spy/argument inspection also confirms each `_run_native_overlay_phase(...)` call to `evaluate_native_where(...)` passes `remember_support_artifact=None`.
   - **§7-Overlay-5** (non-native dispatcher short-circuit): souffle, problog, and pyreason return `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED`; adapters are not invoked and `before` / `after` / `diff` are `None`.
   - **§7-Overlay-6** (empty overlay rejected): `overlay=()` returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`.
   - **§7-Overlay-7** (projected-row stale/visibility guards): stale `old_fact_tuple`, inactive `asrt_id`, and non-visible `asrt_id` each return `invalid_request`.
@@ -220,3 +223,5 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
   - **§7-Overlay-12** (status and nullable matrix): type/runtime test that result status contains exactly `passed`, `failed`, `unsupported`, and `invalid_request`, and that unsupported / invalid results have `before=None`, `after=None`, and `diff=None`.
 
 - 2026-05-05 (Step 0.C proposal) — **C7 Step 0.D entry point.** Step 0.D should lift Step 0.B D1-D9 and Step 0.C C1-C6 into blueprint §5, §7, and §8, mark Step 0.C complete if review closes without material changes, and move blueprint status `draft -> scoped`. Implementation remains unauthorized until that lift.
+
+  D8 (§6.6 working hypothesis still stands) is a documentation-discipline judgment, not a unit-testable gate. It is verified at Step 0.D blueprint review and re-verified at any future blueprint amendment of the §5.6 engine support table. This mirrors Diagnose's §6.6 handling: local-gate readability is editorial, not regression-tested.

@@ -253,11 +253,13 @@ Native phase sequence:
 1. Build the baseline phase from the unmodified projected witness facts.
 2. Build an overlay projected witness copy with `_apply_fact_overlay_projection(overrides, projected_witness_facts)`.
 3. Convert each phase's projected witnesses to the `pred_id -> list[fact_tuple]` shape required by `evaluate_native_where(...)`.
-4. Run `evaluate_native_where(...)` separately for baseline and overlay phases using identical plan body, requested binding, and RuleRef resolutions.
+4. Run `evaluate_native_where(...)` separately for baseline and overlay phases using identical plan body, requested binding, RuleRef resolutions, and `remember_support_artifact=None`.
 5. Apply `_binding_matches`-style subset matching to each phase's final bindings and build lightweight `OverlayCheckPhase` summaries.
 6. Compute `OverlayCheckDiff` only from the two phase summaries: status delta, match-count delta, and binding deltas. It never reads engine-native artifacts.
 
 Execution is sequential for MVP: baseline first, overlay second. The two phases may share the immutable original projection snapshot, but the overlay projection must be a derived copy. No phase may write into live `Store` caches or reuse mutable capture state.
+
+Overlay does not capture support artifacts in either phase, consistent with D5 no-exposure. The `remember_support_artifact` callback is explicitly `None` to prevent indirect live-cache writes through `evaluate_native_where(...)` RuleRef support capture.
 
 Phase-execution runtime errors propagate through the `errors` channel, not through partial phase population. If either baseline or overlay phase raises a runtime error, `before`, `after`, and `diff` are all `None`, even if the baseline phase had already completed.
 
@@ -275,7 +277,7 @@ Runtime helper decomposition is frozen at name/role altitude only:
 - `_overlay_ruleref_preflight(...)`: Overlay-owned RuleRef preflight, not imported from Check.
 - `_apply_fact_overlay_projection(...)`: pure projection-copy merger for `FactValueOverride`.
 - `_validate_fact_value_overrides(...)`: native projected-row defensive validation.
-- `_run_native_overlay_phase(...)`: native phase evaluator that returns `OverlayCheckPhase`.
+- `_run_native_overlay_phase(...)`: native phase evaluator that returns `OverlayCheckPhase` and calls `evaluate_native_where(..., remember_support_artifact=None)`.
 - `_build_overlay_diff(...)`: phase-summary-only diff builder.
 
 #### 5.9 Named anti-regression gates
@@ -285,7 +287,7 @@ Step 0.D must lift these named gates into §7 Acceptance before implementation:
 - **§7-Overlay-1** (Sibling no-Check-call invariant): static AST/import check that Overlay Check runtime never imports `check_derivation_binding`, `derivation_check_runtime`, Check result/envelope DTOs, or Check private helpers. The allow-list is `_derivation_match_helpers` binding-match/body-var helpers plus `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`.
 - **§7-Overlay-2** (intent-only request DTO): type/field test that `FactOverlayCheckRequest` dataclass fields are exactly `plan`, `binding`, `overlay`, and `engine`; no `store`, `registry`, precomputed projection, or cache fields appear as DTO fields. `store` and optional `registry` remain runtime side-channel kwargs to `check_fact_overlay_binding(...)`, not DTO members.
 - **§7-Overlay-3** (no ledger write): runtime test that overlay execution leaves `store.ledger` byte-identical and never calls `append_assertion`, `append_revocation`, `accept_*`, or any other ledger-write entry.
-- **§7-Overlay-4** (no live cache contamination): runtime spy/monkeypatch test that overlay execution does not call `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, or `_remember_rule_trace_artifact`.
+- **§7-Overlay-4** (no live cache contamination): runtime spy/monkeypatch test that overlay execution does not call `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, or `_remember_rule_trace_artifact`; spy/argument inspection also confirms each `_run_native_overlay_phase(...)` call to `evaluate_native_where(...)` passes `remember_support_artifact=None`.
 - **§7-Overlay-5** (non-native dispatcher short-circuit): souffle, problog, and pyreason return `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED`; adapters are not invoked and `before` / `after` / `diff` are `None`.
 - **§7-Overlay-6** (empty overlay rejected): `overlay=()` returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`.
 - **§7-Overlay-7** (projected-row stale/visibility guards): stale `old_fact_tuple`, inactive `asrt_id`, and non-visible `asrt_id` each return `invalid_request`.
