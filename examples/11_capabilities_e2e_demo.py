@@ -34,6 +34,9 @@ _ensure_repo_src_on_path()
 
 from kernel.application import (  # noqa: E402
     build_schema_index,
+    build_fact_value_override,
+    build_frontier_view_facts,
+    build_why_not_candidate_universe,
     check_derivation_binding,
     check_fact_overlay_binding,
     check_why_not_universe,
@@ -49,7 +52,7 @@ from kernel.application.protocol import (  # noqa: E402
     DiagnoseRequest,
     EntitySelector,
     FactOverlayCheckRequest,
-    FactValueOverride,
+    FieldPath,
     WhyNotUniverseRequest,
 )
 from kernel.core.evidence.write_protocol import set_field  # noqa: E402
@@ -250,12 +253,12 @@ def _phase_fact_overlay(fixture: DemoFixture, *, verbose: bool) -> str:
             plan=fixture.plan,
             binding=binding,
             overlay=(
-                FactValueOverride(
-                    asrt_id=alice.age_asrt_id,
-                    pred_id=alice.age_pred_id,
+                build_fact_value_override(
+                    fixture.store,
+                    fixture.index,
                     e_ref=alice.e_ref,
-                    old_fact_tuple=(alice.e_ref, 25),
-                    new_fact_tuple=(alice.e_ref, 30),
+                    field=FieldPath(entity_type="Person", field_name="age"),
+                    new_value=30,
                     note="demo overlay: Alice turns 30",
                 ),
             ),
@@ -284,7 +287,14 @@ def _phase_why_not(fixture: DemoFixture, *, verbose: bool) -> str:
 
     request = WhyNotUniverseRequest(
         plan=fixture.plan,
-        candidate_universe=(alice_30, bob_30, carol_30),
+        candidate_universe=build_why_not_candidate_universe(
+            fixture.plan,
+            (
+                {"$p": alice.e_ref, "$age": 30, "$region": "us"},
+                {"$p": bob.e_ref, "$age": 30, "$region": "eu"},
+                {"$p": carol.e_ref, "$age": 30, "$region": "us"},
+            ),
+        ),
         engine="native",
     )
     result = check_why_not_universe(request, store=fixture.store)
@@ -307,20 +317,6 @@ def _phase_why_not(fixture: DemoFixture, *, verbose: bool) -> str:
     )
     return result.status
 
-
-def _frontier_view_facts(fixture: DemoFixture) -> dict[str, list[tuple[object, ...]]]:
-    any_person = next(iter(fixture.people.values()))
-    return {
-        any_person.exists_pred_id: [(person.e_ref,) for person in fixture.people.values()],
-        any_person.age_pred_id: [
-            (person.e_ref, person.age) for person in fixture.people.values()
-        ],
-        any_person.region_pred_id: [
-            (person.e_ref, person.region) for person in fixture.people.values()
-        ],
-    }
-
-
 def _phase_frontier(fixture: DemoFixture, *, verbose: bool) -> str:
     any_person = next(iter(fixture.people.values()))
     where = [
@@ -329,7 +325,7 @@ def _phase_frontier(fixture: DemoFixture, *, verbose: bool) -> str:
         ("pred", any_person.region_pred_id, ["$p", "us"]),
     ]
 
-    result = evaluate_native_where_frontier(_frontier_view_facts(fixture), where)
+    result = evaluate_native_where_frontier(build_frontier_view_facts(fixture.store), where)
 
     assert result.bindings == [], result
     assert len(result.frontier_rows) == 1, result

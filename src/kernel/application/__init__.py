@@ -1,5 +1,11 @@
 """Application-layer modules built on top of core runtime primitives."""
 
+from .capability_helpers import (
+    CapabilityHelperError,
+    build_fact_value_override,
+    build_frontier_view_facts,
+    build_why_not_candidate_universe,
+)
 from .derivation_check_runtime import (
     CheckRuntimeError,
     check_derivation_binding,
@@ -57,6 +63,7 @@ from .why_not_runtime import (
 
 __all__ = [
     "CheckRuntimeError",
+    "CapabilityHelperError",
     "DerivationRuntimeError",
     "DiagnoseRuntimeError",
     "EntityTypeInfo",
@@ -75,6 +82,9 @@ __all__ = [
     "apply_ingest_request",
     "apply_write_plan",
     "build_schema_index",
+    "build_fact_value_override",
+    "build_frontier_view_facts",
+    "build_why_not_candidate_universe",
     "check_derivation_binding",
     "check_fact_overlay_binding",
     "check_why_not_universe",

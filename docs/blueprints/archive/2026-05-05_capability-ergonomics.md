@@ -1,9 +1,9 @@
 # Capability Ergonomics(Batch 2 of Round Story Completion Plan)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-05
 - Last Updated: 2026-05-05
-- Parent: [2026-05-05_round-story-completion-plan.md](./2026-05-05_round-story-completion-plan.md) §5.2
+- Parent: [2026-05-05_round-story-completion-plan.md](../active/2026-05-05_round-story-completion-plan.md) §5.2
 - Scope: Batch 2 — application-layer helper / normalizer only
 - Branch: `v0.1-capability-ergonomics-2026-05-05`(off `49dfc9a`)
 - Related Modules:
@@ -65,9 +65,9 @@ Add one application helper module, `src/kernel/application/capability_helpers.py
    - Accepts candidate rows as mappings keyed by head var names or sequences aligned to head var order.
    - Returns normalized `BindingItems` rows accepted by `WhyNotUniverseRequest`.
 
-3. `evaluate_store_native_where_frontier(store, where, *, registry=None, remember_support_artifact=None)`
-   - Projects `Store` into `view_facts` and delegates to `evaluate_native_where_frontier(...)`.
-   - When `registry` is provided, also projects `witness_facts` so RuleRef frontier parity remains possible.
+3. `build_frontier_view_facts(store) -> dict[str, list[tuple[Any, ...]]]`
+   - Projects `Store` into the `view_facts` shape expected by `evaluate_native_where_frontier(...)`.
+   - Does not import or call `kernel.core.rules.frontier`, preserving the evaluator/application layer-separation drift gate.
 
 Define a small `CapabilityHelperError(ValueError)` for misuse such as missing active field fact, mismatched entity type, unsupported field arity, or incomplete candidate row.
 
@@ -76,7 +76,8 @@ Define a small `CapabilityHelperError(ValueError)` for misuse such as missing ac
 - Helpers are deterministic adapters over existing DTOs/functions.
 - Helpers do not write the ledger and do not mutate the store.
 - Helpers do not import from `kernel.sdk`.
-- Helpers do not call sibling runtime functions except the frontier wrapper delegating to the evaluator-layer frontier entrypoint.
+- Helpers do not call sibling runtime functions.
+- Helpers do not import `kernel.core.rules.frontier`; the frontier helper is projection-only.
 - Existing DTO validation remains authoritative; helper validation only catches ergonomic mistakes earlier with clearer messages.
 
 ## 7. Acceptance
@@ -85,7 +86,7 @@ Define a small `CapabilityHelperError(ValueError)` for misuse such as missing ac
 - [ ] Q3 helper rejects missing active facts and entity/field mismatches with `CapabilityHelperError`.
 - [ ] Q4 helper builds a valid complete `candidate_universe` from mapping rows and sequence rows.
 - [ ] Q4 helper rejects incomplete rows before `WhyNotUniverseRequest` construction.
-- [ ] Q5 helper returns the same frontier result as manual `project_view_facts -> evaluate_native_where_frontier`.
+- [ ] Q5 helper returns the same `view_facts` as manual `project_view_facts(...)`.
 - [ ] Existing Q3/Q4/Q5 capability focused tests still pass.
 - [ ] `examples/11_capabilities_e2e_demo.py` uses the helpers without changing assertions or output semantics.
 - [ ] `src/kernel/application/docs/01_overview.md` and `_en.md` mention the helper module.
@@ -101,7 +102,7 @@ Define a small `CapabilityHelperError(ValueError)` for misuse such as missing ac
 6. Run focused tests:
    - `python -m unittest src.kernel.tests.test_application_capability_helpers`
    - `python -m unittest src.kernel.tests.test_examples_capabilities_demo`
-   - existing fact-overlay / why-not / frontier focused tests
+   - existing fact-overlay / why-not / frontier focused tests, including application-layer no-frontier-import drift gate
    - `python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py`
 
 ## 9. Docs To Update
@@ -113,9 +114,7 @@ No `docs/README.md` update expected; this is module-level API documentation, not
 
 ## 10. Outcome / Deviations
 
-任务完成后填写:
-
-- 最终落地结果:
-- 与 blueprint 不同的地方:
-- 为什么会有这些调整:
-- 归档说明:
+- 最终落地结果:added `kernel.application.capability_helpers` with `build_fact_value_override(...)`, `build_why_not_candidate_universe(...)`, and `build_frontier_view_facts(...)`;exported them from `kernel.application`;updated the capabilities E2E demo to consume the helpers;added focused helper tests;updated application module docs.
+- 与 blueprint 不同的地方:the original scoped shape briefly named `evaluate_store_native_where_frontier(...)`, but implementation narrowed Q5 to projection-only `build_frontier_view_facts(...)`.
+- 为什么会有这些调整:the existing evaluator frontier drift gate correctly forbids application-layer imports of `kernel.core.rules.frontier`;projection-only ergonomics satisfies Batch 2 while preserving layer separation.
+- 归档说明:no SDK files, protocol DTOs, status enums, or runtime algorithms changed;focused and full kernel verification passed.

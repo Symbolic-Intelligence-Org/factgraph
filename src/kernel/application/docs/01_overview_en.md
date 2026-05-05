@@ -21,6 +21,7 @@ It is responsible for:
 - explicit-binding derivation Diagnose (`passed` / `failed.no_candidate` / `failed.atom_localized` / `unsupported` / `invalid_request`)
 - explicit-binding Fact Overlay Check (`before` / `after` / `diff` under temporary fact overrides, native-only MVP)
 - explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
+- capability ergonomics helpers for Fact Overlay override construction, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
 
 It is not responsible for:
 
@@ -46,6 +47,8 @@ It is not responsible for:
   - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotRedRow` / `WhyNotRowDiagnostic` / `WhyNotAtomLocator`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
+- `capability_helpers.py`
+  - application-layer ergonomic helpers: `build_fact_value_override(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
 - `entity_view.py`
   - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`
@@ -67,7 +70,7 @@ It is not responsible for:
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 36 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 40 public symbols. The main executor entry points are:
 
 - `execute_read_request(...)`
 - `hydrate_entity(...)`
@@ -86,6 +89,9 @@ It is not responsible for:
 
 The main schema/runtime helpers are:
 
+- `build_fact_value_override(...)`
+- `build_why_not_candidate_universe(...)`
+- `build_frontier_view_facts(...)`
 - `build_schema_index(...)`
 - `resolve_selector(...)`
 - `materialize_identity(...)`
@@ -118,7 +124,7 @@ Current SDK runtime delegation:
 - `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
 - `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
 - `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
-- Check, Diagnose, Fact Overlay Check, and Why-not Universe Diagnose are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`, `diagnose_derivation_binding(...)`, `check_fact_overlay_binding(...)`, or `check_why_not_universe(...)`.
+- Check, Diagnose, Fact Overlay Check, Why-not Universe Diagnose, and the capability ergonomics helpers are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`, `diagnose_derivation_binding(...)`, `check_fact_overlay_binding(...)`, `check_why_not_universe(...)`, or the application helper functions.
 
 SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
