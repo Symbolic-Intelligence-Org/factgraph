@@ -21,6 +21,7 @@
 | 2026-05-05 | draft | Step 0.C Round 1 findings resolved | Review found `evaluate_native_where(...)` RuleRef support capture as an indirect live-cache path. Native phases now pin `remember_support_artifact=None`; D8 §6.6 is recorded as Step 0.D review discipline, not a unit-test gate. |
 | 2026-05-05 | draft → scoped | Step 0.D lift complete | Step 0.B D1-D9 and Step 0.C C1-C7 lifted into blueprint §5 / §7 / §8. Blueprint status moved `draft → scoped`; implementation authorized only through the six ordered steps and §7-Overlay-1 through §7-Overlay-12 gates. |
 | 2026-05-05 | scoped | Step 1 helper extraction complete | Moved Check's `_binding_matches` and `_all_body_vars` into `kernel.application._derivation_match_helpers`, updated Check imports, added focused helper tests, and verified helper tests, Check 73 tests, full kernel unittest discover, and ruff. |
+| 2026-05-05 | scoped | Step 2 protocol DTOs complete | Added Fact Overlay protocol DTOs and package exports, plus focused protocol tests covering DTO shape, nullable matrix, intent-only request fields, no §6.5 typed Union expansion, no engine payload field, exact status/engine literals, full kernel unittest discover, and ruff. |
 
 ## Decision Notes
 
@@ -241,4 +242,18 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
   - `python -m unittest src.kernel.tests.test_application_derivation_match_helpers` — 6 tests OK
   - `python -m unittest src.kernel.tests.test_application_check_runtime src.kernel.tests.test_application_check_protocol` — 73 tests OK
   - `python -m unittest discover -s src/kernel/tests` — 872 tests OK, 1 skipped
+  - `python -m ruff check src/kernel` — clean
+
+- 2026-05-05 (Implementation Step 2) — **Fact Overlay protocol DTOs complete.** Added `src/kernel/application/protocol/derivation_fact_overlay.py` with local Sibling protocol types: `OverlayCheckStatus`, `OverlayCheckEngine`, `FactValueOverride`, `FactOverlayCheckRequest`, `OverlayCheckPhase`, `OverlayCheckDiff`, and `FactOverlayCheckResult`. Exported the DTOs from `kernel.application.protocol`.
+
+  Protocol behavior landed:
+  - `FactOverlayCheckRequest` remains intent-only (`plan`, `binding`, `overlay`, `engine`) and rejects empty overlay.
+  - `OverlayCheckPhase.matched_count` is a non-null non-negative `int`.
+  - `OverlayCheckDiff` is delta-only: `status_changed`, signed `matched_count_delta`, `bindings_added`, and `bindings_removed`.
+  - `FactOverlayCheckResult` enforces the frozen nullable matrix for `passed`, `failed`, `unsupported`, and `invalid_request`.
+  - DTO module does not import `EvidenceEnvelope`, `SupportArtifact`, or `ProvenanceEnvelope`, and result DTO has no engine payload / evidence field.
+
+  Verification:
+  - `python -m unittest src.kernel.tests.test_application_fact_overlay_protocol` — 38 tests OK
+  - `python -m unittest discover -s src/kernel/tests` — 910 tests OK, 1 skipped
   - `python -m ruff check src/kernel` — clean

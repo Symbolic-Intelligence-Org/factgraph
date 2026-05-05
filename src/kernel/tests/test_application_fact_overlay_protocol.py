@@ -1,0 +1,397 @@
+"""Fact Overlay protocol shape tests (blueprint §7.2 + §8 Step 2)."""
+
+from __future__ import annotations
+
+import dataclasses
+import typing
+import unittest
+from dataclasses import FrozenInstanceError
+
+from kernel.application import protocol as protocol_pkg
+from kernel.application.protocol import (
+    CompiledDerivationPlan,
+    CompiledHeadCall,
+    ErrorDTO,
+    FactOverlayCheckRequest,
+    FactOverlayCheckResult,
+    FactValueOverride,
+    OverlayCheckDiff,
+    OverlayCheckEngine,
+    OverlayCheckPhase,
+    OverlayCheckStatus,
+    ProtocolShapeError,
+)
+from kernel.application.protocol import derivation_fact_overlay as overlay_protocol
+
+
+def _head(target: str = "doc:eligible", vars_: tuple[str, ...] = ("$doc",)) -> CompiledHeadCall:
+    return CompiledHeadCall(target_pred_id=target, head_var_names=vars_)
+
+
+def _plan(*, heads: tuple[CompiledHeadCall, ...] | None = None) -> CompiledDerivationPlan:
+    return CompiledDerivationPlan(
+        derivation_id="drv.overlay",
+        version="1.0",
+        body_ir=[("pred", "doc:risk", ["$doc", "$risk"]), ("eq", "$risk", "high")],
+        heads=heads if heads is not None else (_head(),),
+    )
+
+
+def _binding() -> tuple[tuple[str, object], ...]:
+    return (("$doc", "d-1"), ("$risk", "high"))
+
+
+def _partial_binding() -> tuple[tuple[str, object], ...]:
+    return (("$doc", "d-1"),)
+
+
+def _override(**kwargs: object) -> FactValueOverride:
+    fields = {
+        "asrt_id": "asrt-1",
+        "pred_id": "doc:risk",
+        "e_ref": "doc-1",
+        "old_fact_tuple": ("doc-1", "low"),
+        "new_fact_tuple": ("doc-1", "high"),
+    }
+    fields.update(kwargs)
+    return FactValueOverride(**fields)  # type: ignore[arg-type]
+
+
+_DEFAULT_MATCHED_BINDING = object()
+
+
+def _phase(
+    *,
+    status: OverlayCheckStatus = "passed",
+    matched_count: int = 1,
+    matched_binding: object = _DEFAULT_MATCHED_BINDING,
+) -> OverlayCheckPhase:
+    return OverlayCheckPhase(
+        status=status,
+        matched_count=matched_count,
+        matched_binding=(
+            _binding() if matched_binding is _DEFAULT_MATCHED_BINDING else matched_binding
+        ),  # type: ignore[arg-type]
+    )
+
+
+def _diff(**kwargs: object) -> OverlayCheckDiff:
+    fields = {
+        "status_changed": False,
+        "matched_count_delta": 0,
+        "bindings_added": (),
+        "bindings_removed": (),
+    }
+    fields.update(kwargs)
+    return OverlayCheckDiff(**fields)  # type: ignore[arg-type]
+
+
+def _error(code: str = "ENGINE_OVERLAY_NOT_SUPPORTED") -> ErrorDTO:
+    return ErrorDTO(code=code, message="overlay unsupported")
+
+
+class FactValueOverrideProtocolTests(unittest.TestCase):
+    def test_override_construction_defaults_note(self) -> None:
+        override = _override()
+        self.assertEqual(override.asrt_id, "asrt-1")
+        self.assertEqual(override.old_fact_tuple, ("doc-1", "low"))
+        self.assertIsNone(override.note)
+
+    def test_override_accepts_note(self) -> None:
+        self.assertEqual(_override(note="caller context").note, "caller context")
+
+    def test_override_is_frozen(self) -> None:
+        override = _override()
+        with self.assertRaises(FrozenInstanceError):
+            override.asrt_id = "other"  # type: ignore[misc]
+
+    def test_override_requires_non_empty_ids(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _override(asrt_id="")
+        with self.assertRaises(ProtocolShapeError):
+            _override(pred_id="")
+        with self.assertRaises(ProtocolShapeError):
+            _override(e_ref="")
+
+    def test_override_requires_fact_tuples(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _override(old_fact_tuple=["doc-1", "low"])
+        with self.assertRaises(ProtocolShapeError):
+            _override(new_fact_tuple=["doc-1", "high"])
+
+    def test_override_rejects_non_string_note(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _override(note=123)
+
+
+class FactOverlayCheckRequestProtocolTests(unittest.TestCase):
+    def test_request_construction(self) -> None:
+        request = FactOverlayCheckRequest(
+            plan=_plan(),
+            binding=_binding(),
+            overlay=(_override(),),
+            engine="native",
+        )
+        self.assertEqual(request.binding, _binding())
+        self.assertEqual(request.overlay, (_override(),))
+
+    def test_request_is_frozen(self) -> None:
+        request = FactOverlayCheckRequest(
+            plan=_plan(),
+            binding=_binding(),
+            overlay=(_override(),),
+            engine="native",
+        )
+        with self.assertRaises(FrozenInstanceError):
+            request.engine = "souffle"  # type: ignore[misc]
+
+    def test_request_rejects_empty_overlay(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            FactOverlayCheckRequest(
+                plan=_plan(),
+                binding=_binding(),
+                overlay=(),
+                engine="native",
+            )
+
+    def test_request_rejects_invalid_engine(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            FactOverlayCheckRequest(
+                plan=_plan(),
+                binding=_binding(),
+                overlay=(_override(),),
+                engine="lambda",  # type: ignore[arg-type]
+            )
+
+    def test_request_rejects_multi_head_plan(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            FactOverlayCheckRequest(
+                plan=_plan(heads=(_head("doc:a"), _head("doc:b"))),
+                binding=_binding(),
+                overlay=(_override(),),
+                engine="native",
+            )
+
+    def test_request_rejects_runtime_side_channel_fields(self) -> None:
+        for field_name in ("store", "registry", "projection", "cache"):
+            with self.subTest(field_name=field_name):
+                with self.assertRaises(TypeError):
+                    FactOverlayCheckRequest(
+                        plan=_plan(),
+                        binding=_binding(),
+                        overlay=(_override(),),
+                        engine="native",
+                        **{field_name: object()},
+                    )
+
+
+class OverlayCheckPhaseProtocolTests(unittest.TestCase):
+    def test_phase_construction(self) -> None:
+        phase = _phase()
+        self.assertEqual(phase.status, "passed")
+        self.assertEqual(phase.matched_count, 1)
+        self.assertEqual(phase.matched_binding, _binding())
+
+    def test_phase_accepts_no_matched_binding(self) -> None:
+        phase = _phase(status="failed", matched_count=0, matched_binding=None)
+        self.assertIsNone(phase.matched_binding)
+
+    def test_phase_rejects_negative_or_bool_matched_count(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _phase(matched_count=-1)
+        with self.assertRaises(ProtocolShapeError):
+            _phase(matched_count=True)  # type: ignore[arg-type]
+
+    def test_phase_rejects_invalid_status(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _phase(status="maybe")  # type: ignore[arg-type]
+
+    def test_phase_is_frozen(self) -> None:
+        phase = _phase()
+        with self.assertRaises(FrozenInstanceError):
+            phase.matched_count = 2  # type: ignore[misc]
+
+
+class OverlayCheckDiffProtocolTests(unittest.TestCase):
+    def test_diff_construction(self) -> None:
+        diff = _diff(
+            status_changed=True,
+            matched_count_delta=-1,
+            bindings_added=(_binding(),),
+            bindings_removed=(_partial_binding(),),
+        )
+        self.assertTrue(diff.status_changed)
+        self.assertEqual(diff.matched_count_delta, -1)
+        self.assertEqual(diff.bindings_added, (_binding(),))
+
+    def test_diff_is_frozen(self) -> None:
+        diff = _diff()
+        with self.assertRaises(FrozenInstanceError):
+            diff.status_changed = True  # type: ignore[misc]
+
+    def test_diff_requires_bool_status_changed(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _diff(status_changed=1)
+
+    def test_diff_requires_signed_int_delta(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _diff(matched_count_delta=True)
+        with self.assertRaises(ProtocolShapeError):
+            _diff(matched_count_delta="1")
+
+    def test_diff_requires_tuple_binding_collections(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _diff(bindings_added=[_binding()])
+        with self.assertRaises(ProtocolShapeError):
+            _diff(bindings_removed=[_binding()])
+
+    def test_diff_normalizes_nested_binding_items(self) -> None:
+        diff = _diff(bindings_added=((("$risk", "high"), ("$doc", "d-1")),))
+        self.assertEqual(diff.bindings_added, (_binding(),))
+
+
+class FactOverlayCheckResultProtocolTests(unittest.TestCase):
+    def test_passed_nullable_matrix(self) -> None:
+        result = FactOverlayCheckResult(
+            status="passed",
+            requested_binding=_partial_binding(),
+            before=_phase(status="failed", matched_count=0, matched_binding=None),
+            after=_phase(status="passed", matched_count=1),
+            diff=_diff(status_changed=True, matched_count_delta=1, bindings_added=(_binding(),)),
+        )
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.after.status, "passed")
+        self.assertEqual(result.errors, ())
+        self.assertEqual(result.warnings, ())
+
+    def test_failed_nullable_matrix(self) -> None:
+        result = FactOverlayCheckResult(
+            status="failed",
+            requested_binding=_partial_binding(),
+            before=_phase(status="passed", matched_count=1),
+            after=_phase(status="failed", matched_count=0, matched_binding=None),
+            diff=_diff(status_changed=True, matched_count_delta=-1, bindings_removed=(_binding(),)),
+        )
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.after.status, "failed")
+
+    def test_unsupported_nullable_matrix(self) -> None:
+        result = FactOverlayCheckResult(
+            status="unsupported",
+            requested_binding=_partial_binding(),
+            before=None,
+            after=None,
+            diff=None,
+            errors=(_error(),),
+        )
+        self.assertIsNone(result.before)
+        self.assertIsNone(result.after)
+        self.assertIsNone(result.diff)
+
+    def test_invalid_request_nullable_matrix(self) -> None:
+        result = FactOverlayCheckResult(
+            status="invalid_request",
+            requested_binding=_partial_binding(),
+            before=None,
+            after=None,
+            diff=None,
+            errors=(_error("EMPTY_OVERLAY_NOT_PERMITTED"),),
+        )
+        self.assertEqual(result.status, "invalid_request")
+
+    def test_passed_requires_after_status_match(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            FactOverlayCheckResult(
+                status="passed",
+                requested_binding=_partial_binding(),
+                before=_phase(status="failed", matched_count=0, matched_binding=None),
+                after=_phase(status="failed", matched_count=0, matched_binding=None),
+                diff=_diff(),
+            )
+
+    def test_passed_rejects_errors(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            FactOverlayCheckResult(
+                status="passed",
+                requested_binding=_partial_binding(),
+                before=_phase(),
+                after=_phase(),
+                diff=_diff(),
+                errors=(_error(),),
+            )
+
+    def test_unsupported_rejects_partial_phase_population(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            FactOverlayCheckResult(
+                status="unsupported",
+                requested_binding=_partial_binding(),
+                before=_phase(),
+                after=None,
+                diff=None,
+                errors=(_error(),),
+            )
+
+    def test_unsupported_requires_errors(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            FactOverlayCheckResult(
+                status="unsupported",
+                requested_binding=_partial_binding(),
+                before=None,
+                after=None,
+                diff=None,
+            )
+
+    def test_result_is_frozen(self) -> None:
+        result = FactOverlayCheckResult(
+            status="unsupported",
+            requested_binding=_partial_binding(),
+            before=None,
+            after=None,
+            diff=None,
+            errors=(_error(),),
+        )
+        with self.assertRaises(FrozenInstanceError):
+            result.status = "failed"  # type: ignore[misc]
+
+
+class FactOverlayProtocolStaticInvariantTests(unittest.TestCase):
+    def test_status_literal_exact_members(self) -> None:
+        self.assertEqual(
+            set(typing.get_args(OverlayCheckStatus)),
+            {"passed", "failed", "unsupported", "invalid_request"},
+        )
+
+    def test_engine_literal_exact_members(self) -> None:
+        self.assertEqual(
+            set(typing.get_args(OverlayCheckEngine)),
+            {"native", "souffle", "problog", "pyreason"},
+        )
+
+    def test_request_dataclass_fields_are_intent_only(self) -> None:
+        self.assertEqual(
+            [field.name for field in dataclasses.fields(FactOverlayCheckRequest)],
+            ["plan", "binding", "overlay", "engine"],
+        )
+
+    def test_result_has_no_engine_payload_or_evidence_fields(self) -> None:
+        result_fields = {field.name for field in dataclasses.fields(FactOverlayCheckResult)}
+        self.assertNotIn("evidence_envelope", result_fields)
+        self.assertNotIn("engine_payload", result_fields)
+        self.assertNotIn("support_artifact", result_fields)
+        self.assertNotIn("provenance_envelope", result_fields)
+
+    def test_phase_and_diff_do_not_import_engine_payload_types(self) -> None:
+        self.assertFalse(hasattr(overlay_protocol, "EvidenceEnvelope"))
+        self.assertFalse(hasattr(overlay_protocol, "SupportArtifact"))
+        self.assertFalse(hasattr(overlay_protocol, "ProvenanceEnvelope"))
+
+    def test_protocol_package_exports_overlay_dtos(self) -> None:
+        self.assertIs(protocol_pkg.FactOverlayCheckRequest, FactOverlayCheckRequest)
+        self.assertIs(protocol_pkg.FactOverlayCheckResult, FactOverlayCheckResult)
+        self.assertIs(protocol_pkg.FactValueOverride, FactValueOverride)
+        self.assertIs(protocol_pkg.OverlayCheckPhase, OverlayCheckPhase)
+        self.assertIs(protocol_pkg.OverlayCheckDiff, OverlayCheckDiff)
+
+
+if __name__ == "__main__":
+    unittest.main()

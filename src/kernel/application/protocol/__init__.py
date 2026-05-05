@@ -16,6 +16,15 @@ from .derivation_diagnose import (
     DiagnoseResult,
     DiagnoseStatus,
 )
+from .derivation_fact_overlay import (
+    FactOverlayCheckRequest,
+    FactOverlayCheckResult,
+    FactValueOverride,
+    OverlayCheckDiff,
+    OverlayCheckEngine,
+    OverlayCheckPhase,
+    OverlayCheckStatus,
+)
 from .entity_read import (
     AssertionRecordDTO,
     EntityReadRequest,
@@ -79,6 +88,9 @@ __all__ = [
     "EntityWriteResult",
     "ErrorDTO",
     "EvidenceEnvelope",
+    "FactOverlayCheckRequest",
+    "FactOverlayCheckResult",
+    "FactValueOverride",
     "FieldAssertionsDTO",
     "FieldFilterValue",
     "FieldMutation",
@@ -93,6 +105,10 @@ __all__ = [
     "IngestRetractItem",
     "IngestSetItem",
     "JSONValue",
+    "OverlayCheckDiff",
+    "OverlayCheckEngine",
+    "OverlayCheckPhase",
+    "OverlayCheckStatus",
     "PlannedOpDTO",
     "ProtocolShapeError",
     "QueryReturnContract",
