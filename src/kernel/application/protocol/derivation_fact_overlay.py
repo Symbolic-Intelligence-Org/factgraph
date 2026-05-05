@@ -26,9 +26,11 @@ from .derivation import CompiledDerivationPlan
 OverlayCheckStatus: TypeAlias = Literal[
     "passed", "failed", "unsupported", "invalid_request"
 ]
+OverlayCheckPhaseStatus: TypeAlias = Literal["passed", "failed"]
 OverlayCheckEngine: TypeAlias = Literal["native", "souffle", "problog", "pyreason"]
 
 _OVERLAY_CHECK_STATUSES = ("passed", "failed", "unsupported", "invalid_request")
+_OVERLAY_CHECK_PHASE_STATUSES = ("passed", "failed")
 _OVERLAY_CHECK_ENGINES = ("native", "souffle", "problog", "pyreason")
 
 
@@ -125,19 +127,20 @@ class FactOverlayCheckRequest:
         overlay = _validate_tuple_items(
             self.overlay, field_name="overlay", item_type=FactValueOverride
         )
-        if not overlay:
-            raise ProtocolShapeError("overlay must contain at least one FactValueOverride")
+        object.__setattr__(self, "overlay", overlay)
         _require_literal(self.engine, field_name="engine", allowed=_OVERLAY_CHECK_ENGINES)
 
 
 @dataclass(frozen=True)
 class OverlayCheckPhase:
-    status: OverlayCheckStatus
+    status: OverlayCheckPhaseStatus
     matched_count: int
     matched_binding: BindingItems | None
 
     def __post_init__(self) -> None:
-        _require_literal(self.status, field_name="status", allowed=_OVERLAY_CHECK_STATUSES)
+        status = _require_literal(
+            self.status, field_name="status", allowed=_OVERLAY_CHECK_PHASE_STATUSES
+        )
         _validate_non_negative_int(self.matched_count, field_name="matched_count")
         if self.matched_binding is not None:
             object.__setattr__(
@@ -145,6 +148,16 @@ class OverlayCheckPhase:
                 "matched_binding",
                 _validate_binding_items(self.matched_binding, field_name="matched_binding"),
             )
+        if status == "passed":
+            if self.matched_count < 1:
+                raise ProtocolShapeError("passed OverlayCheckPhase requires matched_count >= 1")
+            if self.matched_binding is None:
+                raise ProtocolShapeError("passed OverlayCheckPhase requires matched_binding")
+            return
+        if self.matched_count != 0:
+            raise ProtocolShapeError("failed OverlayCheckPhase requires matched_count == 0")
+        if self.matched_binding is not None:
+            raise ProtocolShapeError("failed OverlayCheckPhase requires matched_binding=None")
 
 
 @dataclass(frozen=True)
@@ -235,5 +248,6 @@ __all__ = [
     "OverlayCheckDiff",
     "OverlayCheckEngine",
     "OverlayCheckPhase",
+    "OverlayCheckPhaseStatus",
     "OverlayCheckStatus",
 ]

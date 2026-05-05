@@ -18,6 +18,7 @@ from kernel.application.protocol import (
     OverlayCheckDiff,
     OverlayCheckEngine,
     OverlayCheckPhase,
+    OverlayCheckPhaseStatus,
     OverlayCheckStatus,
     ProtocolShapeError,
 )
@@ -145,14 +146,14 @@ class FactOverlayCheckRequestProtocolTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             request.engine = "souffle"  # type: ignore[misc]
 
-    def test_request_rejects_empty_overlay(self) -> None:
-        with self.assertRaises(ProtocolShapeError):
-            FactOverlayCheckRequest(
-                plan=_plan(),
-                binding=_binding(),
-                overlay=(),
-                engine="native",
-            )
+    def test_request_allows_empty_overlay_for_runtime_invalid_request(self) -> None:
+        request = FactOverlayCheckRequest(
+            plan=_plan(),
+            binding=_binding(),
+            overlay=(),
+            engine="native",
+        )
+        self.assertEqual(request.overlay, ())
 
     def test_request_rejects_invalid_engine(self) -> None:
         with self.assertRaises(ProtocolShapeError):
@@ -192,7 +193,7 @@ class OverlayCheckPhaseProtocolTests(unittest.TestCase):
         self.assertEqual(phase.matched_count, 1)
         self.assertEqual(phase.matched_binding, _binding())
 
-    def test_phase_accepts_no_matched_binding(self) -> None:
+    def test_failed_phase_accepts_no_matched_binding(self) -> None:
         phase = _phase(status="failed", matched_count=0, matched_binding=None)
         self.assertIsNone(phase.matched_binding)
 
@@ -205,6 +206,24 @@ class OverlayCheckPhaseProtocolTests(unittest.TestCase):
     def test_phase_rejects_invalid_status(self) -> None:
         with self.assertRaises(ProtocolShapeError):
             _phase(status="maybe")  # type: ignore[arg-type]
+
+    def test_phase_rejects_result_level_statuses(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _phase(status="unsupported")  # type: ignore[arg-type]
+        with self.assertRaises(ProtocolShapeError):
+            _phase(status="invalid_request")  # type: ignore[arg-type]
+
+    def test_passed_phase_requires_match(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _phase(status="passed", matched_count=0)
+        with self.assertRaises(ProtocolShapeError):
+            _phase(status="passed", matched_count=1, matched_binding=None)
+
+    def test_failed_phase_requires_no_match(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _phase(status="failed", matched_count=1, matched_binding=None)
+        with self.assertRaises(ProtocolShapeError):
+            _phase(status="failed", matched_count=0, matched_binding=_binding())
 
     def test_phase_is_frozen(self) -> None:
         phase = _phase()
@@ -367,6 +386,9 @@ class FactOverlayProtocolStaticInvariantTests(unittest.TestCase):
             {"native", "souffle", "problog", "pyreason"},
         )
 
+    def test_phase_status_literal_exact_members(self) -> None:
+        self.assertEqual(set(typing.get_args(OverlayCheckPhaseStatus)), {"passed", "failed"})
+
     def test_request_dataclass_fields_are_intent_only(self) -> None:
         self.assertEqual(
             [field.name for field in dataclasses.fields(FactOverlayCheckRequest)],
@@ -390,6 +412,7 @@ class FactOverlayProtocolStaticInvariantTests(unittest.TestCase):
         self.assertIs(protocol_pkg.FactOverlayCheckResult, FactOverlayCheckResult)
         self.assertIs(protocol_pkg.FactValueOverride, FactValueOverride)
         self.assertIs(protocol_pkg.OverlayCheckPhase, OverlayCheckPhase)
+        self.assertIs(protocol_pkg.OverlayCheckPhaseStatus, OverlayCheckPhaseStatus)
         self.assertIs(protocol_pkg.OverlayCheckDiff, OverlayCheckDiff)
 
 

@@ -23,6 +23,7 @@ from .derivation_fact_overlay import (
     OverlayCheckDiff,
     OverlayCheckEngine,
     OverlayCheckPhase,
+    OverlayCheckPhaseStatus,
     OverlayCheckStatus,
 )
 from .entity_read import (
@@ -108,6 +109,7 @@ __all__ = [
     "OverlayCheckDiff",
     "OverlayCheckEngine",
     "OverlayCheckPhase",
+    "OverlayCheckPhaseStatus",
     "OverlayCheckStatus",
     "PlannedOpDTO",
     "ProtocolShapeError",
