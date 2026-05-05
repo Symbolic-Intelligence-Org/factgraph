@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import dataclasses
+from pathlib import Path
 import typing
 import unittest
 from dataclasses import FrozenInstanceError
@@ -153,6 +155,22 @@ class WhyNotUniverseRequestProtocolTests(unittest.TestCase):
         request = WhyNotUniverseRequest(plan=_plan(), candidate_universe=(), engine="native")
         self.assertEqual(request.candidate_universe, ())
 
+    def test_request_ignores_literal_head_args_for_binding_coverage(self) -> None:
+        request = WhyNotUniverseRequest(
+            plan=_plan(head_vars=("$doc", "age_role")),
+            candidate_universe=(_binding(),),
+            engine="native",
+        )
+        self.assertEqual(request.candidate_universe, (_binding(),))
+
+    def test_request_allows_literal_only_head_with_empty_binding(self) -> None:
+        request = WhyNotUniverseRequest(
+            plan=_plan(head_vars=("age_role",)),
+            candidate_universe=((),),
+            engine="native",
+        )
+        self.assertEqual(request.candidate_universe, ((),))
+
     def test_request_rejects_non_plan(self) -> None:
         with self.assertRaises(ProtocolShapeError):
             WhyNotUniverseRequest(
@@ -193,6 +211,14 @@ class WhyNotUniverseRequestProtocolTests(unittest.TestCase):
                 engine="native",
             )
 
+    def test_request_rejects_duplicate_unhashable_universe_bindings(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            WhyNotUniverseRequest(
+                plan=_plan(),
+                candidate_universe=((("$doc", ["d-1"]),), (("$doc", ["d-1"]),)),
+                engine="native",
+            )
+
     def test_request_rejects_duplicate_binding_variables(self) -> None:
         with self.assertRaises(ProtocolShapeError):
             WhyNotUniverseRequest(
@@ -200,6 +226,22 @@ class WhyNotUniverseRequestProtocolTests(unittest.TestCase):
                 candidate_universe=((("$doc", "d-1"), ("$doc", "d-2")),),
                 engine="native",
             )
+
+    def test_request_rejects_duplicate_dollar_head_vars(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            WhyNotUniverseRequest(
+                plan=_plan(head_vars=("$doc", "$doc")),
+                candidate_universe=(_binding(),),
+                engine="native",
+            )
+
+    def test_request_accepts_unhashable_binding_values(self) -> None:
+        request = WhyNotUniverseRequest(
+            plan=_plan(),
+            candidate_universe=((("$doc", ["d-1"]),),),
+            engine="native",
+        )
+        self.assertEqual(request.candidate_universe, ((("$doc", ["d-1"]),),))
 
     def test_request_rejects_invalid_engine(self) -> None:
         with self.assertRaises(ProtocolShapeError):
@@ -375,6 +417,15 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
         self.assertEqual(result.green, (_binding("d-1"),))
         self.assertEqual(result.red[0].binding, _binding("d-2"))
 
+    def test_completed_partition_accepts_unhashable_binding_values(self) -> None:
+        result = WhyNotUniverseResult(
+            status="completed",
+            requested_universe=((("$doc", ["d-1"]),),),
+            green=((("$doc", ["d-1"]),),),
+            red=(),
+        )
+        self.assertEqual(result.green, ((("$doc", ["d-1"]),),))
+
     def test_completed_empty_universe_construction(self) -> None:
         result = WhyNotUniverseResult(
             status="completed",
@@ -436,6 +487,25 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
                 requested_universe=(_binding("d-1"),),
                 green=(),
                 red=(_red_row(_binding("d-1")), _red_row(_binding("d-1"))),
+            )
+
+    def test_completed_rejects_duplicate_unhashable_green_or_red(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            WhyNotUniverseResult(
+                status="completed",
+                requested_universe=((("$doc", ["d-1"]),),),
+                green=((("$doc", ["d-1"]),), (("$doc", ["d-1"]),)),
+                red=(),
+            )
+        with self.assertRaises(ProtocolShapeError):
+            WhyNotUniverseResult(
+                status="completed",
+                requested_universe=((("$doc", ["d-1"]),),),
+                green=(),
+                red=(
+                    _red_row((("$doc", ["d-1"]),)),
+                    _red_row((("$doc", ["d-1"]),)),
+                ),
             )
 
     def test_unsupported_nullable_matrix(self) -> None:
@@ -585,6 +655,41 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
         for name in banned_names:
             with self.subTest(name=name):
                 self.assertFalse(hasattr(why_not_protocol, name))
+
+    def test_protocol_module_has_no_banned_imports_or_annotations(self) -> None:
+        source = Path(why_not_protocol.__file__).read_text()
+        tree = ast.parse(source)
+        banned_names = {
+            "DiagnoseResult",
+            "DiagnoseAtomLocator",
+            "CheckRequest",
+            "CheckResult",
+            "EvidenceEnvelope",
+            "SupportArtifact",
+            "ProvenanceEnvelope",
+        }
+        imported_names: set[str] = set()
+        annotation_names: set[str] = set()
+
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    imported_names.add(alias.name.rsplit(".", maxsplit=1)[-1])
+                    if alias.asname:
+                        imported_names.add(alias.asname)
+                continue
+            annotation = getattr(node, "annotation", None)
+            if annotation is not None:
+                for child in ast.walk(annotation):
+                    if isinstance(child, ast.Name):
+                        annotation_names.add(child.id)
+                    elif isinstance(child, ast.Attribute):
+                        annotation_names.add(child.attr)
+                    elif isinstance(child, ast.Constant) and isinstance(child.value, str):
+                        annotation_names.update(banned for banned in banned_names if banned in child.value)
+
+        self.assertFalse(imported_names & banned_names)
+        self.assertFalse(annotation_names & banned_names)
 
     def test_why_not_atom_locator_not_evidence_engine_payload(self) -> None:
         with self.assertRaises(ProtocolShapeError):

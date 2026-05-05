@@ -13,6 +13,7 @@
 | 2026-05-05 | draft | Step 0.C algorithm and drift gates frozen | Froze dispatcher order, green/red partition algorithm, row Diagnose mapping, three-value top-level status, row diagnostic taxonomy, all-engine support gate, and fourteen §7-WhyNot drift gates. |
 | 2026-05-05 | draft → scoped | Step 0.D lift complete | Renamed blueprint from Step 0 spike to Why-not Universe Diagnose capability, lifted Step 0 decisions into §5 / §7 / §8, and authorized implementation only through the scoped plan. |
 | 2026-05-05 | scoped | Step 1 protocol DTOs complete | Added Why-not protocol DTOs and protocol-layer tests for request shape, finite universe validation, top-level result matrix, row diagnostics, protocol-owned DTO boundaries, and static literal invariants. |
+| 2026-05-05 | scoped | Step 1 review corrective patch | Fixed literal-head universe validation, unhashable binding duplicate checks, and the protocol ownership static test after review findings. |
 
 ## Decision Notes
 
@@ -117,3 +118,17 @@
   - `python -m unittest src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_why_not_protocol` — 143 tests OK.
   - `python -m ruff check src/kernel/application/protocol/derivation_why_not.py src/kernel/application/protocol/__init__.py src/kernel/tests/test_application_why_not_protocol.py` — clean.
   - `python -m pytest ...` currently exits with code `-1` and no output even for pre-existing Diagnose protocol tests; use the repository's documented `unittest` path for this step.
+
+- 2026-05-05 (Step 1 review corrective) — **Review findings resolved.** A post-commit review found three Step 1 issues:
+  1. universe validation treated bare `head_var_names` literals as required binding variables, drifting from Check / Diagnose head-binding semantics;
+  2. duplicate / partition checks used set membership over `BindingItems`, raising raw `TypeError` for unhashable binding values accepted by `normalize_binding_items`;
+  3. the §7-WhyNot-8 protocol ownership test only checked exact module attributes and could miss aliased or annotation-only banned DTO references.
+
+  The corrective patch filters head coverage to `$`-prefixed variables, uses equality-based duplicate / partition checks that work with unhashable values, and adds AST-level import / annotation scanning for banned sibling / evidence DTOs.
+
+- 2026-05-05 (Step 1 review corrective) — **Corrective verification.**
+  - `python -m unittest src.kernel.tests.test_application_why_not_protocol` — 67 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_check_protocol src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_why_not_protocol` — 173 tests OK.
+  - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1011 tests OK / 1 skipped.
+  - `python -m ruff check src/kernel/application/protocol/derivation_why_not.py src/kernel/tests/test_application_why_not_protocol.py` — clean.
+  - `python -m ruff check src/kernel` — clean.

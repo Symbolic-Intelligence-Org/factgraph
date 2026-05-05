@@ -78,30 +78,41 @@ def _validate_complete_head_universe(
     value: Any, *, field_name: str, head_var_names: tuple[str, ...]
 ) -> tuple[BindingItems, ...]:
     universe = _validate_binding_items_tuple(value, field_name=field_name)
-    head_var_set = set(head_var_names)
-    if len(head_var_set) != len(head_var_names):
+    head_vars = tuple(
+        name
+        for name in head_var_names
+        if isinstance(name, str) and name.startswith("$") and len(name) > 1
+    )
+    head_var_set = set(head_vars)
+    if len(head_var_set) != len(head_vars):
         raise ProtocolShapeError("plan head variable names must be unique")
 
-    seen_bindings: set[BindingItems] = set()
+    seen_bindings: list[BindingItems] = []
     for idx, binding in enumerate(universe):
         binding_vars = {name for name, _ in binding}
         if binding_vars != head_var_set:
             raise ProtocolShapeError(
                 f"{field_name}[{idx}] must contain exactly the plan head variables"
             )
-        if binding in seen_bindings:
+        if _binding_in(binding, seen_bindings):
             raise ProtocolShapeError(f"{field_name} must not contain duplicate bindings")
-        seen_bindings.add(binding)
+        seen_bindings.append(binding)
     return universe
 
 
-def _binding_set(value: tuple[BindingItems, ...], *, field_name: str) -> set[BindingItems]:
-    seen: set[BindingItems] = set()
+def _binding_in(binding: BindingItems, haystack: tuple[BindingItems, ...] | list[BindingItems]) -> bool:
+    return any(existing == binding for existing in haystack)
+
+
+def _validate_unique_bindings(
+    value: tuple[BindingItems, ...], *, field_name: str
+) -> tuple[BindingItems, ...]:
+    seen: list[BindingItems] = []
     for binding in value:
-        if binding in seen:
+        if _binding_in(binding, seen):
             raise ProtocolShapeError(f"{field_name} must not contain duplicate bindings")
-        seen.add(binding)
-    return seen
+        seen.append(binding)
+    return value
 
 
 def _validate_ordered_partition(
@@ -110,20 +121,35 @@ def _validate_ordered_partition(
     green: tuple[BindingItems, ...],
     red: tuple["WhyNotRedRow", ...],
 ) -> None:
-    requested_set = _binding_set(requested_universe, field_name="requested_universe")
-    green_set = _binding_set(green, field_name="green")
+    requested_universe = _validate_unique_bindings(
+        requested_universe, field_name="requested_universe"
+    )
+    green = _validate_unique_bindings(green, field_name="green")
     red_bindings = tuple(row.binding for row in red)
-    red_set = _binding_set(red_bindings, field_name="red")
+    red_bindings = _validate_unique_bindings(red_bindings, field_name="red")
 
-    if green_set & red_set:
+    if any(_binding_in(binding, red_bindings) for binding in green):
         raise ProtocolShapeError("completed WhyNotUniverseResult requires disjoint green/red")
-    if green_set | red_set != requested_set:
+    if any(not _binding_in(binding, requested_universe) for binding in green):
+        raise ProtocolShapeError(
+            "completed WhyNotUniverseResult requires green/red to cover requested_universe"
+        )
+    if any(not _binding_in(binding, requested_universe) for binding in red_bindings):
+        raise ProtocolShapeError(
+            "completed WhyNotUniverseResult requires green/red to cover requested_universe"
+        )
+    if any(
+        not _binding_in(binding, green) and not _binding_in(binding, red_bindings)
+        for binding in requested_universe
+    ):
         raise ProtocolShapeError(
             "completed WhyNotUniverseResult requires green/red to cover requested_universe"
         )
 
-    ordered_green = tuple(binding for binding in requested_universe if binding in green_set)
-    ordered_red = tuple(binding for binding in requested_universe if binding in red_set)
+    ordered_green = tuple(binding for binding in requested_universe if _binding_in(binding, green))
+    ordered_red = tuple(
+        binding for binding in requested_universe if _binding_in(binding, red_bindings)
+    )
     if green != ordered_green:
         raise ProtocolShapeError(
             "completed WhyNotUniverseResult requires green order to follow requested_universe"
