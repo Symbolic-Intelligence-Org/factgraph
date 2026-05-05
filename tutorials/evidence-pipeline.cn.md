@@ -9,7 +9,7 @@
 FactPy v0.1 的 "evidence pipeline" 是从 **用户写入 fact** 到 **capability 给出答案** 的完整数据流。整体分 6 层,自底向上:
 
 ```
-Layer 6   Application Capabilities      Check / Diagnose / Fact Overlay / Why-not / (Frontier)
+Layer 6   Capability Lines              Check / Diagnose / Fact Overlay / Why-not / (Frontier)
             ↑    capability 调
 Layer 5   Engine Adapters               souffle / problog / pyreason
             ↑                            → CandidateSet + SupportArtifact / ProvenanceEnvelope
@@ -21,6 +21,16 @@ Layer 2   Ledger                        set_field → asrt_id;追加日志不可
             ↑    写
 Layer 1   Schema & Entity               Entity / Identity / Field;compile_schema_from_classes
 ```
+
+v0.1 已 shipped 的 5 条 capability line 统一回答这 5 个问题:
+
+| # | Canonical question | 能力 |
+|---|---|---|
+| Q1 | Does this binding pass? | Check |
+| Q2 | Where does this failing binding fail? | Diagnose |
+| Q3 | What if this fact were different? | Fact Overlay Check |
+| Q4 | Given a finite candidate universe, who passes / who fails / why? | Why-not Universe Diagnose |
+| Q5 | In native evaluation, where does the where-body collapse? | Evaluator Frontier Trace |
 
 ### 关键术语速查
 
@@ -228,9 +238,9 @@ for cand in candidates:
 
 ---
 
-## 7. Layer 6 — Application Capabilities(5 shipped)
+## 7. Layer 6 — Capability Lines(4 application + 1 evaluator)
 
-### 7.1 Check —— "这个 binding 在当前 fact 下成立吗?"
+### 7.1 Check —— Q1: Does this binding pass?
 
 **何时用:** 给定一组变量值,判断规则 body 是否存在与之匹配的 final binding。
 
@@ -257,7 +267,7 @@ assert result.matched_count >= 1
 assert result.matched_binding == binding
 ```
 
-### 7.2 Diagnose —— "binding 不成立,在哪个 atom 失败?"
+### 7.2 Diagnose —— Q2: Where does this failing binding fail?
 
 **何时用:** binding 在 Check 失败时,定位第一个无法满足的 atom 及其前驱环境。
 
@@ -283,7 +293,7 @@ assert locator.failed_atom_index == 1   # age atom
 assert locator.branch_index == 0
 ```
 
-### 7.3 Fact Overlay Check —— "假设某 fact 不同,binding 会变吗?(不写 ledger)"
+### 7.3 Fact Overlay Check —— Q3: What if this fact were different?
 
 **何时用:** 不修改数据库的前提下,评估某些 fact 值改变后 binding 成立状态是否变化。
 
@@ -324,7 +334,7 @@ assert result.after.status  == "passed"
 assert result.diff.status_changed
 ```
 
-### 7.4 Why-not Universe Diagnose —— "给一组候选 binding,哪些过、哪些不过、不过的为什么"
+### 7.4 Why-not Universe Diagnose —— Q4: Given a finite candidate universe, who passes / who fails / why?
 
 **何时用:** 对显式有限的候选 binding 集合,一次性算 green/red partition + 失败行的 Diagnose 映射。
 
@@ -357,7 +367,7 @@ for row in result.red:
     assert row.diagnostic.atom_locator.failed_atom_index == 1
 ```
 
-### 7.5 Evaluator Frontier Trace —— "where body 在 native 评估时 branch 在哪一步坍塌"
+### 7.5 Evaluator Frontier Trace —— Q5: In native evaluation, where does the where-body collapse?
 
 **何时用:** evaluator 层追踪 where 子句评估轨迹,识别哪个 atom 把 envs filter 空。
 
@@ -416,6 +426,8 @@ assert row.failure_kind == "atom_filter_empty"
 
 完整 5-capability 端到端示例在 `examples/11_capabilities_e2e_demo.ipynb`(`.py` 是 smoke test target,`.ipynb` 是阅读/编辑版本)。
 
+这个示例用同一个 `Person(name, age, region)` fixture 串起 Q1-Q5。它先展示单个 binding 的判断与诊断,再展示 fact what-if、有限候选宇宙、native frontier 这三种更宽的读法。
+
 ```bash
 # 确定性 smoke run
 python examples/11_capabilities_e2e_demo.py
@@ -426,11 +438,11 @@ jupyter notebook examples/11_capabilities_e2e_demo.ipynb
 
 5 phase 简明:
 
-1. **Check** alice 真实 binding `($age=25, $region=us)` → `passed`
-2. **Diagnose** alice 假 binding `($age=99, $region=us)` → `failed.atom_localized` at age atom
-3. **Fact Overlay** alice 假设 age=30 → `before.failed → after.passed`,ledger byte-identical
-4. **Why-not** universe `[(alice,30,us), (bob,30,eu), (carol,30,us)]` → green=[bob],red=[alice 原子定位, carol 原子定位]
-5. **Frontier** where 含 `age($p, 99)` → 1 frontier row,frontier_count=3,failure_kind=atom_filter_empty
+1. **Q1 Check — Does this binding pass?** alice 真实 binding `($age=25, $region=us)` → `passed`
+2. **Q2 Diagnose — Where does this failing binding fail?** alice 假 binding `($age=99, $region=us)` → `failed.atom_localized` at age atom
+3. **Q3 Fact Overlay — What if this fact were different?** alice 假设 age=30 → `before.failed → after.passed`,ledger byte-identical
+4. **Q4 Why-not — Given a finite candidate universe, who passes / who fails / why?** universe `[(alice,30,us), (bob,30,eu), (carol,30,us)]` → green=[bob],red=[alice 原子定位, carol 原子定位]
+5. **Q5 Frontier — In native evaluation, where does the where-body collapse?** where 含 `age($p, 99)` → 1 frontier row,frontier_count=3,failure_kind=atom_filter_empty
 
 每 phase 内嵌 assertion,跑过表示 5 capability composition 在你环境上正常。
 

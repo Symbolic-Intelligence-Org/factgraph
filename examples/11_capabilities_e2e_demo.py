@@ -7,11 +7,12 @@ Run from the repository root:
 The script is intentionally assertion-bearing. It is both a readable showcase
 and a deterministic smoke target for integration drift across:
 
-- Check
-- Diagnose
-- Fact Overlay Check
-- Why-not Universe Diagnose
-- Evaluator Frontier Trace
+- Q1 Check: Does this binding pass?
+- Q2 Diagnose: Where does this failing binding fail?
+- Q3 Fact Overlay Check: What if this fact were different?
+- Q4 Why-not Universe Diagnose: Given a finite candidate universe, who passes /
+  who fails / why?
+- Q5 Evaluator Frontier Trace: In native evaluation, where does the where-body collapse?
 """
 
 from __future__ import annotations
@@ -55,6 +56,13 @@ from kernel.core.evidence.write_protocol import set_field  # noqa: E402
 from kernel.core.rules.frontier import evaluate_native_where_frontier  # noqa: E402
 from kernel.core.store import Store  # noqa: E402
 from kernel.sdk import Entity, Field, Identity, compile_schema_from_classes  # noqa: E402
+
+
+QUESTION_1 = "Does this binding pass?"
+QUESTION_2 = "Where does this failing binding fail?"
+QUESTION_3 = "What if this fact were different?"
+QUESTION_4 = "Given a finite candidate universe, who passes / who fails / why?"
+QUESTION_5 = "In native evaluation, where does the where-body collapse?"
 
 
 class Person(Entity):
@@ -199,6 +207,7 @@ def _phase_check(fixture: DemoFixture, *, verbose: bool) -> str:
     assert result.status == "passed", result
     assert result.matched_count == 1, result
     assert result.matched_binding == binding, result
+    _announce(verbose, f"Q1: {QUESTION_1}")
     _announce(verbose, "Phase 1 - Check: Alice's actual binding passes.")
     return result.status
 
@@ -222,6 +231,7 @@ def _phase_diagnose(fixture: DemoFixture, *, verbose: bool) -> str:
     assert locator is not None, result
     assert locator.branch_index == 0, locator
     assert locator.failed_atom_index == 1, locator
+    _announce(verbose, f"Q2: {QUESTION_2}")
     _announce(verbose, "Phase 2 - Diagnose: Alice age=99 fails at the age atom.")
     return result.failure_kind
 
@@ -259,6 +269,7 @@ def _phase_fact_overlay(fixture: DemoFixture, *, verbose: bool) -> str:
     assert result.after is not None and result.after.status == "passed", result
     assert result.diff is not None and result.diff.status_changed, result
     assert _ledger_dump(fixture.store) == ledger_before, "Fact Overlay must not write ledger"
+    _announce(verbose, f"Q3: {QUESTION_3}")
     _announce(verbose, "Phase 3 - Fact Overlay: Alice age override flips failed to passed.")
     return result.status
 
@@ -289,6 +300,7 @@ def _phase_why_not(fixture: DemoFixture, *, verbose: bool) -> str:
         assert locator is not None, row
         assert locator.failed_atom_index == 1, locator
 
+    _announce(verbose, f"Q4: {QUESTION_4}")
     _announce(
         verbose,
         "Phase 4 - Why-not: Bob is green; Alice and Carol are age-localized red rows.",
@@ -327,6 +339,7 @@ def _phase_frontier(fixture: DemoFixture, *, verbose: bool) -> str:
     assert row.atoms_satisfied == 1, row
     assert row.frontier_count == 3, row
     assert row.failure_kind == "atom_filter_empty", row
+    _announce(verbose, f"Q5: {QUESTION_5}")
     _announce(verbose, "Phase 5 - Frontier: age=99 collapses after 3 person candidates.")
     return row.failure_kind
 
