@@ -194,7 +194,7 @@ Top-level nullable / population matrix:
 | `unsupported` | empty | empty | required |
 | `invalid_request` | empty | empty | required |
 
-Row-level unsupported or invalid diagnostics do not make the top-level result `unsupported` / `invalid_request`; they live on the corresponding red row. Top-level non-completed statuses are reserved for request-wide failures before the board can be assembled.
+Row-level unsupported diagnostics do not make the top-level result `unsupported`; they live on the corresponding red row. Row-level `invalid_request` is not a normal Why-not result after request preflight and maps to a runtime invariant error per §5.12. Top-level non-completed statuses are reserved for request-wide failures before the board can be assembled.
 
 ### 5.8 Red Row DTO
 
@@ -205,15 +205,14 @@ Frozen row shape:
 | `binding: BindingItems` | Red universe binding |
 | `diagnostic: WhyNotRowDiagnostic` | Why-not-owned copy of the bounded Diagnose outcome for this binding |
 
-`WhyNotRowDiagnostic` is a capability-owned DTO. It copies Diagnose's stable row semantics but does **not** nest `DiagnoseResult`.
+`WhyNotRowDiagnostic` is a capability-owned DTO. It copies Diagnose's stable row semantics but does **not** nest `DiagnoseResult`. Step 0.C narrows the row shape to fields meaningful for red rows only.
 
 | Field | Meaning |
 |---|---|
-| `status: Literal["passed", "failed", "unsupported", "invalid_request"]` | Per-row diagnostic status copied from Diagnose vocabulary |
-| `matched_count: int | None` | Diagnose-compatible matched count |
-| `matched_binding: BindingItems | None` | Diagnose-compatible matched binding |
+| `status: Literal["failed", "unsupported"]` | Per-row diagnostic status; `passed` is impossible for a red row |
 | `failure_kind: Literal["no_candidate", "atom_localized"] | None` | Diagnose-compatible failure kind |
-| `diagnostic_payload: WhyNotAtomLocator | None` | Why-not-owned locator copy for native atom-localized rows |
+| `diagnostic_granularity: Literal["atom_localized", "coarse", "unavailable"]` | Row diagnostic richness |
+| `atom_locator: WhyNotAtomLocator | None` | Why-not-owned locator copy for native atom-localized rows |
 | `errors: tuple[ErrorDTO, ...]` | Per-row diagnostic errors |
 | `warnings: tuple[WarningDTO, ...]` | Per-row diagnostic warnings |
 
@@ -234,11 +233,77 @@ The selected shape keeps §6.6 local-gate discipline:
 - The green/red board can be computed for engines that can evaluate the plan and expose candidate bindings compatible with the explicit universe.
 - Red-row diagnostics inherit Diagnose semantics through mapping:
   - native can return `failed.atom_localized`;
-  - souffle / problog / pyreason can return coarse `failed.no_candidate`, `unsupported`, or `invalid_request` according to Diagnose's current representability and evidence lookup rules.
+  - souffle / problog / pyreason can return coarse `failed.no_candidate` or `unsupported` according to Diagnose's current representability and evidence lookup rules.
 - A row-level `unsupported` result does not invalidate the whole board.
 - If a plan / engine pair cannot produce comparable candidate bindings for the supplied universe, the top-level result is `unsupported` with a batch-level error.
 
 This remains short enough to describe locally. §6.7 is not opened by Step 0.B.
+
+### 5.11 Step 0.C Algorithm Freeze
+
+Dispatcher order:
+
+1. Validate the request DTO shape and universe semantics before any evaluation:
+   - plan has exactly one head;
+   - every universe binding is a complete head binding using exactly the head variable names;
+   - no duplicate bindings;
+   - no body-only variables;
+   - empty universe is valid.
+2. Run Why-not's own RuleRef preflight before engine dispatch. Request-wide RuleRef failures return top-level `invalid_request`.
+3. Evaluate the single plan once through the selected engine to compute derived candidate bindings.
+4. Extract comparable head bindings from the engine candidates. If the selected engine / plan shape cannot expose comparable head bindings, return top-level `unsupported`.
+5. Compute `green` and `red` by set intersection / difference against `candidate_universe`, preserving the request universe order in both outputs.
+6. For each red binding, call `diagnose_derivation_binding(...)` with the same plan, binding, engine, store, and registry.
+7. Map each Diagnose result into `WhyNotRowDiagnostic`.
+8. Assemble `WhyNotUniverseResult`.
+
+Green extraction uses the same head-binding semantics as Check / Diagnose:
+
+- fact targets align plan head variables to candidate payload terms;
+- entity targets are supported only when the engine candidate payload can expose the requested head binding;
+- body-only variables are never part of the universe;
+- candidate payloads that cannot represent a complete head binding make the request unsupported for that engine / plan shape.
+
+### 5.12 Step 0.C Status And Mapping Freeze
+
+Top-level status:
+
+| Status | Meaning |
+|---|---|
+| `completed` | The board was assembled; `green` / `red` partition the requested universe |
+| `unsupported` | The engine / plan cannot produce comparable candidate bindings for this board |
+| `invalid_request` | Request-wide shape, universe, or RuleRef preflight failed |
+
+Row diagnostic mapping from Diagnose:
+
+| Diagnose result | Why-not handling |
+|---|---|
+| `failed.no_candidate` | row `status="failed"`, `failure_kind="no_candidate"`, `diagnostic_granularity="coarse"`, `atom_locator=None` |
+| `failed.atom_localized` | row `status="failed"`, `failure_kind="atom_localized"`, `diagnostic_granularity="atom_localized"`, `atom_locator` populated |
+| `unsupported` | row `status="unsupported"`, `failure_kind=None`, `diagnostic_granularity="unavailable"`, errors copied |
+| `invalid_request` | runtime invariant error; Why-not already validated this binding and RuleRef shape |
+| `passed` | runtime invariant error; green extraction and Diagnose disagree |
+
+Invariant errors surface as `WhyNotRuntimeError` (name frozen at role altitude only) rather than a normal DTO result. They indicate implementation drift or inconsistent engine extraction, not user-facing unsupported semantics.
+
+### 5.13 Step 0.C Drift Gates
+
+Each gate must become focused test coverage before implementation close-out:
+
+- [ ] **§7-WhyNot-1** (intent-only request DTO): `WhyNotUniverseRequest` fields are exactly `plan`, `candidate_universe`, and `engine`.
+- [ ] **§7-WhyNot-2** (no algorithmic budget escape): request DTO has no `search_budget`, `limit`, `max_candidates`, `mode`, or `diagnostic_mode`.
+- [ ] **§7-WhyNot-3** (explicit finite universe): universe bindings must be complete head bindings; body-only variables and missing/extra head variables are invalid.
+- [ ] **§7-WhyNot-4** (duplicate universe guard): duplicate normalized universe bindings return `invalid_request`.
+- [ ] **§7-WhyNot-5** (empty universe allowed): `candidate_universe=()` returns `completed` with empty `green` and `red`.
+- [ ] **§7-WhyNot-6** (top-level status matrix): top-level statuses are exactly `completed`, `unsupported`, and `invalid_request`; unsupported / invalid results have empty `green` and `red` with required errors.
+- [ ] **§7-WhyNot-7** (green/red partition): completed results preserve requested universe order; `green` and `red` are disjoint and their union equals `requested_universe`.
+- [ ] **§7-WhyNot-8** (protocol owns row DTOs): Why-not protocol does not import or annotate fields with `DiagnoseResult`, `DiagnoseAtomLocator`, Check DTOs, `EvidenceEnvelope`, `SupportArtifact`, or `ProvenanceEnvelope`.
+- [ ] **§7-WhyNot-9** (runtime composition boundary): runtime may call Diagnose and construct Diagnose requests internally, but output mapping must produce Why-not-owned row DTOs; runtime must not call Check.
+- [ ] **§7-WhyNot-10** (row diagnostic status): row diagnostic statuses are exactly `failed` and `unsupported`; row-level `passed` / `invalid_request` Diagnose results raise a runtime invariant error.
+- [ ] **§7-WhyNot-11** (diagnostic richness): native atom-localized rows map to `diagnostic_granularity="atom_localized"` with a populated `WhyNotAtomLocator`; coarse rows use `coarse`; unsupported rows use `unavailable`.
+- [ ] **§7-WhyNot-12** (engine support gate): non-native engines can produce completed boards with coarse or unavailable red-row diagnostics when candidate binding extraction is representable; unsupported is top-level only when the board cannot be assembled.
+- [ ] **§7-WhyNot-13** (no evaluator hook): implementation does not modify or depend on new `evaluate_native_where(...)` trace / callback output.
+- [ ] **§7-WhyNot-14** (no ledger write): running Why-not does not append, revoke, accept, or persist facts / scenario state.
 
 ## 6. Boundaries And Invariants
 
@@ -256,7 +321,7 @@ This remains short enough to describe locally. §6.7 is not opened by Step 0.B.
 
 - [x] Step 0.A source pass records the current evaluator / adapter surface.
 - [x] Step 0.B decides whether the DTO is crisp, not crisp, or crisp only after reframing to carrier board / carrier plus Diagnose.
-- [ ] Step 0.C freezes either a scoped algorithm and drift gates, or records why no algorithm can be frozen.
+- [x] Step 0.C freezes either a scoped algorithm and drift gates, or records why no algorithm can be frozen.
 - [ ] Step 0.D either moves the blueprint to `scoped` for implementation, marks it `abandoned`, or supersedes it with a more accurately named blueprint.
 
 ### 7.2 Scope guard
@@ -272,7 +337,7 @@ This blueprint currently authorizes Step 0 only.
 
 1. **Step 0.A — Source pass + shape split** (drafted): read shipped capability archives, L6 / lazy why-not references, current native evaluator surface, current adapter output surfaces, and engine-extension §6.6. Record whether the old "Why-not" label hides multiple shapes.
 2. **Step 0.B — DTO crispness decision** (complete): choose Shape A-prime as Why-not Universe Diagnose; freeze request/result/red-row DTO shape; reject nested `DiagnoseResult` in favor of Why-not-owned row DTOs; leave Shape B as evaluator-architecture work.
-3. **Step 0.C — Algorithm / gate freeze or blocker:** if Step 0.B chooses a scoped shape, freeze algorithm, status matrix, payload taxonomy, and engine support gate. If not, record the blocker precisely.
+3. **Step 0.C — Algorithm / gate freeze** (complete): freeze dispatcher order, green/red computation, row Diagnose mapping, top-level status matrix, row diagnostic taxonomy, engine support gate, and §7-WhyNot drift gates.
 4. **Step 0.D — Lift / abandon / supersede:** update §5 / §7 / §8, then move status according to the Step 0 decision.
 
 ## 9. Docs To Update
