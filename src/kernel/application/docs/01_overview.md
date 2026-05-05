@@ -20,6 +20,7 @@
 - explicit-binding derivation Check (`passed` / `failed` / `unsupported` / `invalid_request`)
 - explicit-binding derivation Diagnose (`passed` / `failed.no_candidate` / `failed.atom_localized` / `unsupported` / `invalid_request`)
 - explicit-binding Fact Overlay Check (`before` / `after` / `diff` under temporary fact overrides, native-only MVP)
+- explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
 
 它不负责:
 
@@ -42,6 +43,7 @@
   - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`)
   - `derivation_diagnose.py`: explicit-binding Diagnose protocol DTOs (`DiagnoseRequest` / `DiagnoseResult` / `DiagnoseAtomLocator`)
   - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `FactValueOverride`)
+  - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotRedRow` / `WhyNotRowDiagnostic` / `WhyNotAtomLocator`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
 - `entity_view.py`
@@ -60,10 +62,12 @@
   - `diagnose_derivation_binding(...)`: diagnose a complete or partial binding against a single compiled derivation plan; native can localize the failed atom, while souffle/problog/pyreason return coarse pass/fail/unsupported classifications through evidence-aware dispatch.
 - `fact_overlay_runtime.py`
   - `check_fact_overlay_binding(...)`: check a requested binding under temporary fact overrides without writing the ledger; native runs baseline plus overlay-applied phases and returns before/after/diff summaries, while souffle/problog/pyreason return `ENGINE_OVERLAY_NOT_SUPPORTED`.
+- `why_not_runtime.py`
+  - `check_why_not_universe(...)`: assemble a red/green board for an explicit finite head-binding universe, then diagnose each red row through `diagnose_derivation_binding(...)` while returning Why-not-owned row diagnostics.
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 34 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 36 public symbols. The main executor entry points are:
 
 - `execute_read_request(...)`
 - `hydrate_entity(...)`
@@ -76,6 +80,7 @@
 - `check_derivation_binding(...)`
 - `diagnose_derivation_binding(...)`
 - `check_fact_overlay_binding(...)`
+- `check_why_not_universe(...)`
 - `accept_derivation_candidate_set(...)`
 - `accept_derivation_candidate_sets(...)`
 
@@ -113,7 +118,7 @@ Current SDK runtime delegation:
 - `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
 - `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
 - `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
-- Check, Diagnose, and Fact Overlay Check are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`, `diagnose_derivation_binding(...)`, or `check_fact_overlay_binding(...)`.
+- Check, Diagnose, Fact Overlay Check, and Why-not Universe Diagnose are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`, `diagnose_derivation_binding(...)`, `check_fact_overlay_binding(...)`, or `check_why_not_universe(...)`.
 
 SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
@@ -152,6 +157,9 @@ Key focused tests:
 - `test_application_fact_overlay_protocol.py`
 - `test_application_fact_overlay_runtime_native.py`
 - `test_application_fact_overlay_sibling_invariant.py`
+- `test_application_why_not_protocol.py`
+- `test_application_why_not_runtime.py`
+- `test_application_why_not_sibling_invariant.py`
 - `test_sdk_facade_application_delegate.py`
 - `test_sdk_batch_application_delegate.py`
 - `test_sdk_query_policies.py`

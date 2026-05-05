@@ -18,6 +18,7 @@
 | 2026-05-05 | scoped | Step 2 review corrective patch | Moved empty-universe handling ahead of RuleRef preflight and strengthened partition-order test coverage. |
 | 2026-05-05 | scoped | Step 3 Sibling-with-Diagnose row diagnostics complete | Replaced provisional red-row diagnostics with Diagnose runtime calls and Why-not-owned row DTO mapping. |
 | 2026-05-05 | scoped | Step 4 drift-prevention named gates complete | Added explicit §7-WhyNot-1 through §7-WhyNot-14 coverage map and sibling / no-hook / no-write invariant tests. |
+| 2026-05-05 | scoped → implemented | Step 5 close-out complete | Updated application docs, recorded conformance, filled outcome/deviations, and prepared archive move. |
 
 ## Decision Notes
 
@@ -202,3 +203,19 @@
   - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1043 tests OK / 1 skipped.
   - `python -m ruff check src/kernel` — clean.
   - `git diff --check` — clean.
+
+- 2026-05-05 (Step 5) — **Close-out documentation.** Updated `src/kernel/application/docs/01_overview.md` and `_en.md` to list Why-not Universe Diagnose as an application-layer capability, protocol module, runtime entry point, public export, SDK-adapter boundary, and focused test slice. No SDK shell or engine-extension topic doc change was needed because the implementation stayed within §5 and kept §6.6 local-gate discipline.
+
+- 2026-05-05 (Step 5) — **Conformance audit.** Implementation matches the frozen §5 contract:
+  - request DTO remains `WhyNotUniverseRequest(plan, candidate_universe, engine)`;
+  - result DTO remains `WhyNotUniverseResult(status, requested_universe, green, red, errors, warnings)`;
+  - red rows expose only Why-not-owned `WhyNotRowDiagnostic` and `WhyNotAtomLocator`;
+  - runtime may call Diagnose internally but does not import Check runtime/protocol DTOs and does not expose nested `DiagnoseResult`;
+  - engine support remains local and test-backed: native atom-localized rows, representable non-native completed boards, row-level unavailable diagnostics, and top-level unsupported only when board extraction cannot be assembled;
+  - no evaluator hook, no ledger write, no SDK substrate, and no release-base change were introduced.
+
+- 2026-05-05 (Step 5) — **Close-out verification.**
+  - `python -m unittest src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime src.kernel.tests.test_application_why_not_sibling_invariant` — 99 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_check_protocol src.kernel.tests.test_application_check_runtime src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_diagnose_runtime_native src.kernel.tests.test_application_diagnose_runtime_non_native src.kernel.tests.test_application_diagnose_sibling_invariant src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_fact_overlay_runtime_native src.kernel.tests.test_application_fact_overlay_sibling_invariant src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime src.kernel.tests.test_application_why_not_sibling_invariant` — 328 tests OK.
+  - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1043 tests OK / 1 skipped.
+  - `python -m ruff check src/kernel` — clean.

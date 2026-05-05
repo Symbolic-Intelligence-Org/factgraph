@@ -1,6 +1,6 @@
 # Task Blueprint: Why-not Universe Diagnose Capability
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-05
 - Last Updated: 2026-05-05
 - Related Modules:
@@ -273,9 +273,9 @@ Each gate maps to Step 0.C and must become focused test coverage before implemen
 
 ### 7.5 Cross-doc Updates
 
-- [ ] Application module docs (`src/kernel/application/docs/01_overview.md` + `_en.md`) updated to list Why-not Universe Diagnose.
-- [ ] Engine-extension topic doc updated only if implementation reopens §6.6 / §6.7; otherwise leave topic doc untouched per Step 0.
-- [ ] Conformance audit confirms implementation aligns with §5 frozen contract before status moves `scoped -> implemented`.
+- [x] Application module docs (`src/kernel/application/docs/01_overview.md` + `_en.md`) updated to list Why-not Universe Diagnose.
+- [x] Engine-extension topic doc updated only if implementation reopens §6.6 / §6.7; otherwise leave topic doc untouched per Step 0.
+- [x] Conformance audit confirms implementation aligns with §5 frozen contract before status moves `scoped -> implemented`.
 
 ## 8. Implementation Plan
 
@@ -296,7 +296,7 @@ Each gate maps to Step 0.C and must become focused test coverage before implemen
 
 8. **Step 4 — Drift-prevention named gates** (complete). Landed focused tests for §7-WhyNot-1 through §7-WhyNot-14, including static AST checks for protocol ownership, runtime composition boundaries, no evaluator hook dependency, and no ledger-write substrate.
 
-9. **Step 5 — Close-out.** Update application docs, run the scoped verification set, record conformance audit findings, fill §10 Outcome / Deviations, and move status `scoped -> implemented` if implementation matches §5 and all §7 gates pass.
+9. **Step 5 — Close-out** (complete). Updated application docs, ran the scoped verification set, recorded conformance audit findings, filled §10 Outcome / Deviations, and moved status `scoped -> implemented`.
 
 ## 9. Docs To Update
 
@@ -306,8 +306,43 @@ Each gate maps to Step 0.C and must become focused test coverage before implemen
 
 ## 10. Outcome / Deviations
 
-Task completion pending.
+Final landed result:
 
-- Final Step 0 result:
-- Deviations:
-- Archive / abandonment / supersession notes:
+- Why-not Universe Diagnose shipped as the fourth application-first capability on `v0.1-why-not-step0-2026-05-05`.
+- Runtime surface:
+  - `src/kernel/application/protocol/derivation_why_not.py`
+  - `src/kernel/application/why_not_runtime.py`
+  - public application export `check_why_not_universe(...)`
+- Capability behavior:
+  - caller supplies an explicit finite candidate universe of complete head bindings;
+  - runtime evaluates the selected engine once to compute derived head bindings;
+  - result partitions the requested universe into `green` and `red`, preserving requested order;
+  - red rows call Diagnose internally and map Diagnose results into Why-not-owned row diagnostics;
+  - native red rows can be atom-localized through `WhyNotAtomLocator`;
+  - souffle/problog/pyreason can return completed boards with coarse or unavailable row diagnostics when candidate binding extraction is representable;
+  - top-level `unsupported` is reserved for engine / plan shapes where the board itself cannot be assembled;
+  - no evaluator trace hook, no Check delegation, no SDK substrate, and no ledger write.
+- Implementation chain:
+  - Step 1 protocol DTOs: `5a6836b`
+  - Step 1 review hardening: `ad7e564`
+  - Step 2 runtime board assembly: `388cb1c`
+  - Step 2 review corrective: `2dc5831`
+  - Step 3 row diagnostics: `32f31af`
+  - Step 4 drift gates: `505320e`
+- Verification at close-out:
+  - focused Why-not tests: 99 OK (`67` protocol + `25` runtime + `7` sibling invariant)
+  - capability combo tests: 328 OK
+  - full kernel suite: 1043 OK / 1 skipped
+  - `python -m ruff check src/kernel`: clean
+
+Deviations and implementation-surfaced refinements:
+
+- **R1 — empty universe precedence.** Step 2 initially ran RuleRef preflight before `candidate_universe=()` handling, which made `ruleref + empty + no registry` return `invalid_request`. Commit `2dc5831` restored the frozen §7-WhyNot-5 behavior: empty universe is an unconditional completed empty set query and does not require RuleRef resolution.
+- **R2 — unhashable binding values.** Step 1 duplicate / partition checks initially used set membership over `BindingItems`. Commit `ad7e564` changed duplicate and partition checks to equality-based scans so list/dict values accepted by protocol normalization do not raise raw `TypeError`.
+- **R3 — literal head arguments.** Step 1 universe validation initially treated every `head_var_names` entry as a required binding variable. Commit `ad7e564` aligned Why-not with Check / Diagnose head-binding semantics by requiring only `$`-prefixed head variables.
+- **R4 — candidate payload term fallback.** Step 3 changed Why-not's candidate-payload extraction so unknown term shapes and dict terms without `value` are top-level unrepresentable candidates instead of silently becoming `None`.
+- **R5 — N+1 row diagnosis accepted for MVP.** Why-not evaluates the board once and then calls Diagnose once per red row. This is bounded by the explicit finite universe and avoids new evaluator hooks; batching or shared projection optimization is a future performance topic.
+
+Archive note:
+
+- Blueprint and audit are ready to move from `docs/blueprints/active/` to `docs/blueprints/archive/`.
