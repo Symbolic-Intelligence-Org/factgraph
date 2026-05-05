@@ -15,6 +15,7 @@
 | 2026-05-04 | draft | Step 0.B proposal hardening recorded | Review tightened helper extraction destination, Sibling static guard, concrete overlay field type, empty-overlay policy, and full projected tuple semantics. |
 | 2026-05-05 | draft | Step 0.B grounding pass recorded | Grounding corrected helper extraction scope (primary selection stays local), enumerated the four live `Store._remember_*` cache/index write methods, and pinned projected fact tuple position 0 to `e_ref`. |
 | 2026-05-05 | draft | Step 0.B review blocker resolved | Review identified chosen-policy regrouping risk in post-projection replacement. Proposal now defines projected-row replacement semantics and rejects changes to schema `group_key_indexes` positions. |
+| 2026-05-05 | draft | Step 0.B Round 1 precision findings resolved | Review tightened the Sibling parity mechanism, AST allow-list, no-§6.5 DTO field claim, and `_derivation_match_helpers` pure-helper governance. |
 
 ## Decision Notes
 
@@ -125,7 +126,11 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
 
 - 2026-05-04 (Step 0.B proposal) — **D2 Runtime composition.** Choose **Sibling**. Overlay Check does not call `check_derivation_binding(...)`. It owns its runtime flow and result DTO. Narrow reuse/extraction of Check-private pure helpers is allowed only for overlay-agnostic binding matching and body-var preflight.
 
-  Helper extraction destination is a new application-internal shared module, expected shape `kernel.application._derivation_match_helpers`. Check and Overlay Check may import only the extracted binding-match and body-var preflight helpers from that module. Overlay Check must not import `derivation_check_runtime.py` or Check protocol result/envelope DTOs. Deterministic primary selection is not extracted; Overlay Check may import existing core helpers (`find_winning_branch_index` and `normalize_binding_items`) and compose its local sort key. This small Check-internal refactor is a prerequisite before Overlay Check implementation, not part of the Overlay runtime itself. The Sibling choice avoids Hybrid cache contamination and avoids laundering Check's ledger-grounded evidence behavior into a hypothetical overlay result.
+  Helper extraction destination is a new application-internal shared module, expected shape `kernel.application._derivation_match_helpers`. Check and Overlay Check may import only the extracted binding-match and body-var preflight helpers from that module. Overlay Check must not import `derivation_check_runtime.py` or Check protocol result/envelope DTOs. Deterministic primary selection is not extracted; Overlay Check may import existing core helpers (`find_winning_branch_index` and `normalize_binding_items`) and compose its local sort key. This small Check-internal refactor is a prerequisite before Overlay Check implementation, not part of the Overlay runtime itself.
+
+  `_derivation_match_helpers` must remain a pure-helper module: no `Store`, `Registry`, global state access, evaluator dispatch, or cross-capability runtime composition. If future work needs meta-runtime behavior there, it must trigger the same class of architecture review as §6.6/§6.7 rather than silently expanding the helper module.
+
+  The Sibling choice avoids Hybrid cache contamination and avoids laundering Check's ledger-grounded evidence behavior into a hypothetical overlay result. Mechanism: Hybrid via `check_derivation_binding(...)` dispatches into Check's per-engine paths, and those paths can write evaluation artifacts into live `Store` caches through `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, and `_remember_rule_trace_artifact`. Overlay Check runs under hypothetical facts, so those live-cache writes would violate D1/D5 artifact isolation. This is the Overlay counterpart to Diagnose's Q1 rejection of Hybrid laundering.
 
 - 2026-05-04 (Step 0.B proposal) — **D3 Leading capability shape.** Choose **Overlay Check**. Overlay Evaluate stays out of scope. The request shape is `FactOverlayCheckRequest(plan, binding, overlay, engine)` with `overlay: tuple[FactValueOverride, ...]`. Empty overlay is rejected with `status="invalid_request"` and `ErrorDTO(code="EMPTY_OVERLAY_NOT_PERMITTED")`; callers with no override should use Check. The runtime side-channel remains `store` and optional `registry`; neither appears on the DTO.
 
@@ -138,9 +143,11 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
   | `unsupported` | None | None | None | required |
   | `invalid_request` | None | None | None | required |
 
-  Unsupported / invalid preflight happens before baseline execution, so there is no partial `before` phase. `OverlayCheckDiff` field schema is pinned in Step 0.C; Step 0.B constrains it to status and match-count/binding deltas only, never engine-native proof artifacts.
+  Unsupported / invalid preflight happens before baseline execution, so there is no partial `before` phase. `OverlayCheckPhase` carries only `status`, `matched_count`, and `matched_binding`; `matched_binding` is normalized `BindingItems` (`tuple[tuple[str, JSONValue], ...]`). `OverlayCheckDiff` field schema is pinned in Step 0.C; Step 0.B constrains it to status and match-count/binding deltas only, never engine-native proof artifacts.
 
 - 2026-05-04 (Step 0.B proposal) — **D5 Artifact exposure channel.** MVP exposes no overlay-derived engine-native artifacts to callers. `FactOverlayCheckResult` carries `OverlayCheckPhase` and `OverlayCheckDiff` only. `EvidenceEnvelope.engine_payload` is not used. §6.5 remains untouched; a future decision to expose overlay-derived `SupportArtifact` / `ProvenanceEnvelope` through `EvidenceEnvelope` is a §6.5 trigger.
+
+  No result DTO field may reference `EvidenceEnvelope`, `SupportArtifact`, `ProvenanceEnvelope`, or any §6.5 typed Union member. This keeps `OverlayCheckPhase` and `OverlayCheckDiff` capability-owned rather than silently expanding the engine-native artifact channel.
 
 - 2026-05-04 (Step 0.B proposal) — **D6 `FactValueOverride` fields and target semantics.** MVP supports `FactValueOverride(asrt_id, pred_id, e_ref, old_fact_tuple, new_fact_tuple, note=None)`. Semantics: **active visible projected-row replacement only**. The target `asrt_id` must be active and visible in current view projection, `old_fact_tuple` must match the current projected tuple, and `new_fact_tuple` replaces that projected row after chosen projection for this evaluation only. It does **not** mean "pretend the ledger assertion changed before chosen policy ran."
 
@@ -155,7 +162,7 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
   - no hypothetical artifact or index in live `Store` caches; explicitly ban `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, and `_remember_rule_trace_artifact`;
   - no `EvidenceEnvelope.engine_payload` use for overlay-derived artifacts;
   - no `check_derivation_binding(...)` delegation;
-  - AST/static Sibling guard: Overlay Check runtime must not import `derivation_check_runtime`, `check_derivation_binding`, Check result/envelope DTOs, or Check private helpers directly; only the shared `_derivation_match_helpers` module's binding-match/body-var helpers are allowed;
+  - AST/static Sibling guard: Overlay Check runtime must not import `derivation_check_runtime`, `check_derivation_binding`, Check result/envelope DTOs, or Check private helpers directly; only the shared `_derivation_match_helpers` module's binding-match/body-var helpers are allowed. Allowed non-Check core utility imports include `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`;
   - non-native engines never dispatch and always return `ENGINE_OVERLAY_NOT_SUPPORTED`;
   - stale `old_fact_tuple` / inactive / non-visible `asrt_id` returns `invalid_request`;
   - empty overlay returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`;

@@ -134,6 +134,10 @@ Runtime composition: **Sibling**, with narrow reuse/extraction of Check-private 
 
 Helper extraction destination: new application-internal shared module, expected shape `kernel.application._derivation_match_helpers`. Check and Overlay Check may import only the extracted binding-match and body-var preflight helpers from that module. Overlay Check must not import `derivation_check_runtime.py` or Check protocol result/envelope DTOs. Deterministic primary selection is not extracted; Overlay Check may import existing core helpers (`find_winning_branch_index` and `normalize_binding_items`) and compose its local sort key. This helper extraction is a prerequisite refactor before Overlay Check implementation, not part of the Overlay runtime itself.
 
+`_derivation_match_helpers` remains a pure-helper module: no `Store`, `Registry`, global state access, evaluator dispatch, or cross-capability runtime composition. If future work needs meta-runtime behavior there, it must trigger the same class of architecture review as §6.6/§6.7 rather than silently expanding the helper module.
+
+Hybrid via `check_derivation_binding(...)` is rejected because Check's per-engine paths can write evaluation artifacts into live `Store` caches through `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, and `_remember_rule_trace_artifact`. Overlay Check runs under hypothetical facts, so delegating through Check would risk leaving hypothetical artifacts in live caches and would launder ledger-grounded evidence behavior into an overlay result.
+
 The native seam is:
 
 `project_view_facts_with_witness(...) -> apply_fact_overlay_projection(...) -> evaluate_native_where(...)`
@@ -187,7 +191,7 @@ Proposed result shape:
 | `errors` | `tuple[ErrorDTO, ...]` |
 | `warnings` | `tuple[WarningDTO, ...]` |
 
-`OverlayCheckPhase` carries `status`, `matched_count`, and `matched_binding`. `OverlayCheckDiff` carries status/match deltas only; it does not carry engine-native proof artifacts. `OverlayCheckDiff` field schema is pinned in Step 0.C; Step 0.B constrains it to status and match-count/binding deltas only.
+`OverlayCheckPhase` carries only `status`, `matched_count`, and `matched_binding`; `matched_binding` is normalized `BindingItems` (`tuple[tuple[str, JSONValue], ...]`). `OverlayCheckDiff` carries status/match deltas only; it does not carry engine-native proof artifacts. Neither structure may reference `EvidenceEnvelope`, `SupportArtifact`, `ProvenanceEnvelope`, or any §6.5 typed Union member. `OverlayCheckDiff` field schema is pinned in Step 0.C; Step 0.B constrains it to status and match-count/binding deltas only.
 
 Nullable matrix:
 
@@ -221,7 +225,7 @@ Step 0.C must map these gates to tests before implementation:
 - no hypothetical artifact or index left in live `Store` caches; explicitly ban `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, and `_remember_rule_trace_artifact`;
 - no `EvidenceEnvelope.engine_payload` use for overlay-derived artifacts;
 - no `check_derivation_binding(...)` delegation or Check runtime laundering;
-- AST/static Sibling guard: Overlay Check runtime must not import `derivation_check_runtime`, `check_derivation_binding`, Check result/envelope DTOs, or Check private helpers directly; only the shared `_derivation_match_helpers` module's binding-match/body-var helpers are allowed;
+- AST/static Sibling guard: Overlay Check runtime must not import `derivation_check_runtime`, `check_derivation_binding`, Check result/envelope DTOs, or Check private helpers directly; only the shared `_derivation_match_helpers` module's binding-match/body-var helpers are allowed. Allowed non-Check core utility imports include `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`;
 - non-native engines always return `ENGINE_OVERLAY_NOT_SUPPORTED`;
 - stale `old_fact_tuple` or non-active/non-visible `asrt_id` returns `invalid_request`;
 - empty overlay returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`;
