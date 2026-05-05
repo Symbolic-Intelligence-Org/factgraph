@@ -1,7 +1,7 @@
 # EvaluationOverlay + Fact Scenario Core — Audit Log
 
 - Blueprint: [2026-05-05_evaluation-overlay.md](./2026-05-05_evaluation-overlay.md)
-- Parent plan: [2026-05-05_round-story-completion-plan.md](./2026-05-05_round-story-completion-plan.md) §5.3
+- Parent plan: [2026-05-05_round-story-completion-plan.md](../active/2026-05-05_round-story-completion-plan.md) §5.3
 
 ## Event Log
 
@@ -13,6 +13,7 @@
 | 2026-05-06 | scoped | Scope frozen for Step 0.A | Falsification-first framing reviewed;scope permits Step 0.A spike only, not implementation;Step 0.A must fill checklist and decomposition map before Step 0.B/implementation |
 | 2026-05-06 | scoped | Step 0.A completed | Falsification spike narrowed Batch 3 to `replace + remove`;fact-side `add` deferred because `single + add` requires chosen-policy semantics, not a projection-local row action |
 | 2026-05-06 | scoped | Step 0.B completed | Chose Shape D(`EvaluationOverlay.fact_actions: tuple[FactValueOverride | FactRemoveAction, ...]`) and compatibility Path 1(`overlay: tuple[FactValueOverride, ...] | EvaluationOverlay`);helper scope limited to application-layer remove + overlay builders |
+| 2026-05-06 | implemented | Implementation complete | Protocol/runtime/helpers/tests/docs updated for `replace + remove`;focused unittest/ruff/diff guards pass;ready for archive |
 
 ## Decision Notes
 
@@ -47,6 +48,10 @@ Step 0.A reviewed the current projected witness substrate, Fact Overlay runtime,
 Step 0.B chose the minimal narrowed shape: keep `FactValueOverride` as the replace action, add `FactRemoveAction`, and wrap both in `EvaluationOverlay.fact_actions`. A duplicate `FactReplaceAction` was rejected because it would need to remain behaviorally identical to `FactValueOverride`; typed buckets were rejected as over-structured for two row actions; a polymorphic `kind` action was rejected because nullable `new_fact_tuple` repeats the merged-parameter smell.
 
 Compatibility Path 1 was selected: widen `FactOverlayCheckRequest.overlay` to accept either legacy `tuple[FactValueOverride, ...]` or `EvaluationOverlay`. V2 request types, runtime-only magic acceptance, and request renaming were rejected as too much churn or too weak as protocol truth. Helper scope is application-only: add `build_fact_remove_action(...)` and `build_evaluation_overlay(...)`, keep `build_fact_value_override(...)`, and do not introduce SDK shell surface.
+
+### 2026-05-06 — Implementation Closeout
+
+Implementation followed Step 0.B: `FactRemoveAction` and `EvaluationOverlay` were added to application protocol, legacy `FactValueOverride` tuples remain accepted, runtime normalizes both shapes and applies replace/remove over copied projected witness rows, and application helpers gained remove-action and overlay builders. No SDK files changed. Verification: focused Fact Overlay protocol/runtime/helper unittest suite passed, ruff passed for `src/kernel` plus the capabilities demo, `git diff --stat -- src/kernel/sdk` was empty, `git diff --check` passed, and full kernel unittest ran 1111 OK / 1 skipped.
 
 ### 2026-05-06 — Date Naming Note
 

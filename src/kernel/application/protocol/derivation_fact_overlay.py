@@ -106,10 +106,55 @@ class FactValueOverride:
 
 
 @dataclass(frozen=True)
+class FactRemoveAction:
+    asrt_id: str
+    pred_id: str
+    e_ref: str
+    old_fact_tuple: tuple[Any, ...]
+    note: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(self.asrt_id, field_name="asrt_id")
+        _require_non_empty_str(self.pred_id, field_name="pred_id")
+        _require_non_empty_str(self.e_ref, field_name="e_ref")
+        _validate_fact_tuple(self.old_fact_tuple, field_name="old_fact_tuple")
+        if self.note is not None and not isinstance(self.note, str):
+            raise ProtocolShapeError("note must be str or None")
+
+
+FactOverlayAction: TypeAlias = FactValueOverride | FactRemoveAction
+
+
+def _validate_fact_actions(
+    value: Any, *, field_name: str
+) -> tuple[FactOverlayAction, ...]:
+    if not isinstance(value, tuple):
+        raise ProtocolShapeError(f"{field_name} must be tuple[FactOverlayAction, ...]")
+    for idx, item in enumerate(value):
+        if not isinstance(item, (FactValueOverride, FactRemoveAction)):
+            raise ProtocolShapeError(
+                f"{field_name}[{idx}] must be FactValueOverride or FactRemoveAction"
+            )
+    return value
+
+
+@dataclass(frozen=True)
+class EvaluationOverlay:
+    fact_actions: tuple[FactOverlayAction, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "fact_actions",
+            _validate_fact_actions(self.fact_actions, field_name="fact_actions"),
+        )
+
+
+@dataclass(frozen=True)
 class FactOverlayCheckRequest:
     plan: CompiledDerivationPlan
     binding: BindingItems
-    overlay: tuple[FactValueOverride, ...]
+    overlay: tuple[FactValueOverride, ...] | EvaluationOverlay
     engine: OverlayCheckEngine
 
     def __post_init__(self) -> None:
@@ -124,9 +169,12 @@ class FactOverlayCheckRequest:
             "binding",
             _validate_binding_items(self.binding, field_name="binding"),
         )
-        overlay = _validate_tuple_items(
-            self.overlay, field_name="overlay", item_type=FactValueOverride
-        )
+        if isinstance(self.overlay, EvaluationOverlay):
+            overlay = self.overlay
+        else:
+            overlay = _validate_tuple_items(
+                self.overlay, field_name="overlay", item_type=FactValueOverride
+            )
         object.__setattr__(self, "overlay", overlay)
         _require_literal(self.engine, field_name="engine", allowed=_OVERLAY_CHECK_ENGINES)
 
@@ -242,8 +290,11 @@ class FactOverlayCheckResult:
 
 
 __all__ = [
+    "EvaluationOverlay",
+    "FactOverlayAction",
     "FactOverlayCheckRequest",
     "FactOverlayCheckResult",
+    "FactRemoveAction",
     "FactValueOverride",
     "OverlayCheckDiff",
     "OverlayCheckEngine",

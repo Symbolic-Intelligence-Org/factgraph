@@ -18,7 +18,9 @@ from kernel.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     EntitySelector,
+    EvaluationOverlay,
     FactOverlayCheckRequest,
+    FactRemoveAction,
     FactValueOverride,
     OverlayCheckPhase,
 )
@@ -182,11 +184,20 @@ def _region_override(seeded: SeededPerson, *, new_region: str) -> FactValueOverr
     )
 
 
+def _remove_age(seeded: SeededPerson) -> FactRemoveAction:
+    return FactRemoveAction(
+        asrt_id=seeded.age_asrt_id,
+        pred_id=seeded.age_pred_id,
+        e_ref=seeded.e_ref,
+        old_fact_tuple=(seeded.e_ref, 25),
+    )
+
+
 def _request(
     *,
     plan: CompiledDerivationPlan,
     binding: tuple[tuple[str, object], ...],
-    overlay: tuple[FactValueOverride, ...],
+    overlay: tuple[FactValueOverride, ...] | EvaluationOverlay,
     engine: str = "native",
 ) -> FactOverlayCheckRequest:
     return FactOverlayCheckRequest(
@@ -321,6 +332,26 @@ class FactOverlayProjectionHelperTests(unittest.TestCase):
         self.assertEqual(result["age"][0].fact_tuple, ("person:alice", 99))
         self.assertEqual(result["region"][0].fact_tuple, ("person:alice", "ca"))
 
+    def test_apply_fact_overlay_projection_removes_matching_row(self) -> None:
+        witness = {
+            "age": [
+                ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25)),
+                ProjectedFact(asrt_id="a2", fact_tuple=("person:bob", 40)),
+            ]
+        }
+        action = FactRemoveAction(
+            asrt_id="a1",
+            pred_id="age",
+            e_ref="person:alice",
+            old_fact_tuple=("person:alice", 25),
+        )
+
+        result = _apply_fact_overlay_projection((action,), witness)
+
+        self.assertEqual(result["age"], [witness["age"][1]])
+        self.assertEqual(witness["age"][0].fact_tuple, ("person:alice", 25))
+        self.assertIsNot(result["age"], witness["age"])
+
     def test_apply_fact_overlay_projection_ignores_unmatched_override(self) -> None:
         witness = {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]}
         override = FactValueOverride(
@@ -352,6 +383,20 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
         )
 
         errors = _validate_fact_value_overrides((override,), witness, schema_ir)
+
+        self.assertEqual(errors, [])
+
+    def test_validate_fact_value_overrides_accepts_visible_matching_remove(self) -> None:
+        witness = {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]}
+        schema_ir = {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]}
+        action = FactRemoveAction(
+            asrt_id="a1",
+            pred_id="age",
+            e_ref="person:alice",
+            old_fact_tuple=("person:alice", 25),
+        )
+
+        errors = _validate_fact_value_overrides((action,), witness, schema_ir)  # type: ignore[arg-type]
 
         self.assertEqual(errors, [])
 
@@ -606,6 +651,28 @@ class FactOverlayRuntimeNativeDoubleRunTests(unittest.TestCase):
         self.assertEqual(result.before.status, "failed")
         self.assertEqual(result.after.status, "passed")
 
+    def test_native_overlay_remove_action_pass_to_fail(self) -> None:
+        store, index = _build_store()
+        seeded = _seed_person(store, index, "alice", 25, "us")
+        body, exists_pred = _exists_plus_age_body(index)
+        request = _request(
+            plan=_build_plan(body, exists_pred),
+            binding=(("$p", seeded.e_ref), ("$age", 25)),
+            overlay=EvaluationOverlay(fact_actions=(_remove_age(seeded),)),
+        )
+
+        result = check_fact_overlay_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.before.status, "passed")
+        self.assertEqual(result.after.status, "failed")
+        self.assertTrue(result.diff.status_changed)
+        self.assertEqual(result.diff.matched_count_delta, -1)
+        self.assertEqual(
+            result.diff.bindings_removed,
+            (((("$age", 25), ("$p", seeded.e_ref))),),
+        )
+
     def test_native_top_level_status_matches_after_status(self) -> None:
         store, index = _build_store()
         seeded = _seed_person(store, index, "alice", 25, "us")
@@ -679,6 +746,36 @@ class FactOverlayRuntimeNativeDoubleRunTests(unittest.TestCase):
             result = check_fact_overlay_binding(request, store=store)
 
         self.assertEqual(result.status, "passed")
+        self.assertEqual(_ledger_dump(store), before)
+        self.assertFalse(append_assertion.called)
+        self.assertFalse(append_revocation.called)
+
+    def test_native_remove_action_leaves_ledger_byte_identical_and_does_not_write(self) -> None:
+        store, index = _build_store()
+        seeded = _seed_person(store, index, "alice", 25, "us")
+        body, exists_pred = _exists_plus_age_body(index)
+        request = _request(
+            plan=_build_plan(body, exists_pred),
+            binding=(("$p", seeded.e_ref), ("$age", 25)),
+            overlay=EvaluationOverlay(fact_actions=(_remove_age(seeded),)),
+        )
+        before = _ledger_dump(store)
+
+        with (
+            patch.object(
+                store.ledger,
+                "append_assertion",
+                side_effect=AssertionError("overlay must not append assertions"),
+            ) as append_assertion,
+            patch.object(
+                store.ledger,
+                "append_revocation",
+                side_effect=AssertionError("overlay must not append revocations"),
+            ) as append_revocation,
+        ):
+            result = check_fact_overlay_binding(request, store=store)
+
+        self.assertEqual(result.status, "failed")
         self.assertEqual(_ledger_dump(store), before)
         self.assertFalse(append_assertion.called)
         self.assertFalse(append_revocation.called)

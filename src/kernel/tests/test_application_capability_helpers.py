@@ -8,6 +8,8 @@ from typing import Any
 
 from kernel.application import (
     CapabilityHelperError,
+    build_evaluation_overlay,
+    build_fact_remove_action,
     build_fact_value_override,
     build_frontier_view_facts,
     build_schema_index,
@@ -20,6 +22,8 @@ from kernel.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     EntitySelector,
+    EvaluationOverlay,
+    FactRemoveAction,
     FieldPath,
     WhyNotUniverseRequest,
 )
@@ -216,6 +220,82 @@ class FactValueOverrideHelperTests(unittest.TestCase):
                 field=FieldPath(entity_type="Reading", field_name="value"),
                 new_value="3.14",
             )
+
+
+class FactRemoveActionHelperTests(unittest.TestCase):
+    def test_builds_remove_action_from_active_single_scalar_fact(self) -> None:
+        store, index = _build_store()
+        alice = _seed_person(store, index)
+
+        action = build_fact_remove_action(
+            store,
+            index,
+            e_ref=alice.e_ref,
+            field=FieldPath(entity_type="Person", field_name="age"),
+            note="remove age",
+        )
+
+        self.assertEqual(action.asrt_id, alice.age_asrt_id)
+        self.assertEqual(action.pred_id, alice.age_pred_id)
+        self.assertEqual(action.e_ref, alice.e_ref)
+        self.assertEqual(action.old_fact_tuple, (alice.e_ref, 25))
+        self.assertEqual(action.note, "remove age")
+
+    def test_builds_remove_action_matching_current_value(self) -> None:
+        store, index = _build_store()
+        alice = _seed_person(store, index)
+
+        action = build_fact_remove_action(
+            store,
+            index,
+            e_ref=alice.e_ref,
+            field=FieldPath(entity_type="Person", field_name="age"),
+            current_value=25,
+        )
+
+        self.assertEqual(action.old_fact_tuple, (alice.e_ref, 25))
+
+    def test_remove_action_current_value_miss_raises_helper_error(self) -> None:
+        store, index = _build_store()
+        alice = _seed_person(store, index)
+
+        with self.assertRaisesRegex(CapabilityHelperError, "no matching projected fact"):
+            build_fact_remove_action(
+                store,
+                index,
+                e_ref=alice.e_ref,
+                field=FieldPath(entity_type="Person", field_name="age"),
+                current_value=30,
+            )
+
+
+class EvaluationOverlayHelperTests(unittest.TestCase):
+    def test_builds_evaluation_overlay_from_fact_actions(self) -> None:
+        store, index = _build_store()
+        alice = _seed_person(store, index)
+        override = build_fact_value_override(
+            store,
+            index,
+            e_ref=alice.e_ref,
+            field=FieldPath(entity_type="Person", field_name="age"),
+            new_value=30,
+        )
+        remove = build_fact_remove_action(
+            store,
+            index,
+            e_ref=alice.e_ref,
+            field=FieldPath(entity_type="Person", field_name="region"),
+        )
+
+        overlay = build_evaluation_overlay(override, remove)
+
+        self.assertIsInstance(overlay, EvaluationOverlay)
+        self.assertEqual(overlay.fact_actions, (override, remove))
+        self.assertIsInstance(overlay.fact_actions[1], FactRemoveAction)
+
+    def test_build_evaluation_overlay_requires_action(self) -> None:
+        with self.assertRaisesRegex(CapabilityHelperError, "requires at least one action"):
+            build_evaluation_overlay()
 
 
 class WhyNotUniverseHelperTests(unittest.TestCase):

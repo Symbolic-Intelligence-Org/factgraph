@@ -23,7 +23,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-05-05
+最后更新：2026-05-06
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
@@ -200,3 +200,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-05-05 | capabilities-e2e-demo | implemented | Deterministic assertion-bearing script composing Check, Diagnose, Fact Overlay Check, Why-not Universe Diagnose, and Evaluator Frontier Trace on one `Person` fixture; smoke test imports and runs demo; 1 demo smoke + 143 related capability tests green |
 | 2026-05-05 | canonical-round-story | implemented | Batch 1 round-story wording alignment: Q1-Q5 canonical questions now appear across demo script, notebook markdown, examples README, evidence tutorial §1/§7/§8, and a short capability decision tree; no `src/` changes; focused demo/unit/ruff checks green |
 | 2026-05-05 | capability-ergonomics | implemented | Batch 2 application-layer helpers: Fact Overlay override builder, Why-not candidate-universe normalizer, and Store-to-frontier `view_facts` projection helper; demo consumes helpers; no SDK/protocol/runtime algorithm changes; 1088 kernel tests green |
+| 2026-05-05 | evaluation-overlay | implemented | Batch 3 EvaluationOverlay core narrowed by Step 0.A to replace/remove; added `EvaluationOverlay` + `FactRemoveAction`, legacy `FactValueOverride` compatibility, projected-row remove runtime, and application-layer remove/overlay helpers; no SDK changes; full kernel 1111 OK / 1 skipped |

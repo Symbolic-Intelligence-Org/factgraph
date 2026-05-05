@@ -1,7 +1,7 @@
 # Application 模块总览(kernel)
 
 - 范围:`src/kernel/application`
-- 最后更新:2026-05-05
+- 最后更新:2026-05-06
 - 目标读者:需要理解 Python runtime authority、SDK adapter 边界与 service/agent consumer 约束的开发者
 
 ## 1. 模块职责
@@ -19,9 +19,9 @@
 - compiled derivation evaluate / accept orchestration
 - explicit-binding derivation Check (`passed` / `failed` / `unsupported` / `invalid_request`)
 - explicit-binding derivation Diagnose (`passed` / `failed.no_candidate` / `failed.atom_localized` / `unsupported` / `invalid_request`)
-- explicit-binding Fact Overlay Check (`before` / `after` / `diff` under temporary fact overrides, native-only MVP)
+- explicit-binding Fact Overlay Check (`before` / `after` / `diff` under temporary fact replace/remove overlays, native-only MVP)
 - explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
-- capability ergonomics helpers for Fact Overlay override construction, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
+- capability ergonomics helpers for Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
 
 它不负责:
 
@@ -43,12 +43,12 @@
   - `derivation.py`: compiled derivation evaluate/accept request DTOs
   - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`)
   - `derivation_diagnose.py`: explicit-binding Diagnose protocol DTOs (`DiagnoseRequest` / `DiagnoseResult` / `DiagnoseAtomLocator`)
-  - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `FactValueOverride`)
+  - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `EvaluationOverlay` / `FactValueOverride` / `FactRemoveAction`)
   - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotRedRow` / `WhyNotRowDiagnostic` / `WhyNotAtomLocator`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
 - `capability_helpers.py`
-  - application-layer ergonomic helpers: `build_fact_value_override(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
+  - application-layer ergonomic helpers: `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
 - `entity_view.py`
   - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`
@@ -64,13 +64,13 @@
 - `diagnose_runtime.py`
   - `diagnose_derivation_binding(...)`: diagnose a complete or partial binding against a single compiled derivation plan; native can localize the failed atom, while souffle/problog/pyreason return coarse pass/fail/unsupported classifications through evidence-aware dispatch.
 - `fact_overlay_runtime.py`
-  - `check_fact_overlay_binding(...)`: check a requested binding under temporary fact overrides without writing the ledger; native runs baseline plus overlay-applied phases and returns before/after/diff summaries, while souffle/problog/pyreason return `ENGINE_OVERLAY_NOT_SUPPORTED`.
+  - `check_fact_overlay_binding(...)`: check a requested binding under temporary fact replace/remove overlays without writing the ledger; native runs baseline plus overlay-applied phases and returns before/after/diff summaries, while souffle/problog/pyreason return `ENGINE_OVERLAY_NOT_SUPPORTED`.
 - `why_not_runtime.py`
   - `check_why_not_universe(...)`: assemble a red/green board for an explicit finite head-binding universe, then diagnose each red row through `diagnose_derivation_binding(...)` while returning Why-not-owned row diagnostics.
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 40 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 42 public symbols. The main executor entry points are:
 
 - `execute_read_request(...)`
 - `hydrate_entity(...)`
@@ -90,6 +90,8 @@
 The main schema/runtime helpers are:
 
 - `build_fact_value_override(...)`
+- `build_fact_remove_action(...)`
+- `build_evaluation_overlay(...)`
 - `build_why_not_candidate_universe(...)`
 - `build_frontier_view_facts(...)`
 - `build_schema_index(...)`
@@ -160,6 +162,7 @@ Key focused tests:
 - `test_application_diagnose_runtime_native.py`
 - `test_application_diagnose_runtime_non_native.py`
 - `test_application_diagnose_sibling_invariant.py`
+- `test_application_capability_helpers.py`
 - `test_application_fact_overlay_protocol.py`
 - `test_application_fact_overlay_runtime_native.py`
 - `test_application_fact_overlay_sibling_invariant.py`

@@ -12,6 +12,9 @@ from kernel.core.view.projector import project_view_facts, project_view_facts_wi
 from .protocol import (
     CompiledDerivationPlan,
     EntityRef,
+    EvaluationOverlay,
+    FactOverlayAction,
+    FactRemoveAction,
     FactValueOverride,
     FieldPath,
 )
@@ -92,6 +95,82 @@ def build_fact_value_override(
         new_fact_tuple=(e_ref, normalized_value),
         note=note,
     )
+
+
+def build_fact_remove_action(
+    store: Store,
+    index: SchemaIndex,
+    *,
+    e_ref: str,
+    field: FieldPath,
+    current_value: Any | None = None,
+    note: str | None = None,
+) -> FactRemoveAction:
+    """Build a Fact Overlay remove action from a current active field fact."""
+
+    if not isinstance(store, Store):
+        raise CapabilityHelperError("store must be Store")
+    if not isinstance(field, FieldPath):
+        raise CapabilityHelperError("field must be FieldPath")
+    if not isinstance(e_ref, str) or not e_ref:
+        raise CapabilityHelperError("e_ref must be non-empty str")
+
+    entity_type = entity_type_from_ref(e_ref)
+    if entity_type is None:
+        raise CapabilityHelperError("e_ref must be an encoded idref_v1 entity reference")
+    if entity_type != field.entity_type:
+        raise CapabilityHelperError(
+            f"field entity_type {field.entity_type!r} does not match e_ref entity_type {entity_type!r}"
+        )
+
+    field_type = field_value_type(index, field.entity_type, field.field_name)
+    if field_type.value_kind != "scalar":
+        raise CapabilityHelperError("build_fact_remove_action supports scalar fields only")
+    normalized_current = None
+    if current_value is not None:
+        normalized_current = _normalize_scalar_value(
+            field_type.scalar_domain,
+            current_value,
+            field=field,
+        )
+
+    pred_info = field_predicate(index, field.entity_type, field.field_name)
+    projected = project_view_facts_with_witness(store.ledger, store.schema_ir)
+    matches = []
+    for row in projected.get(pred_info.pred_id, []):
+        if not row.fact_tuple or row.fact_tuple[0] != e_ref:
+            continue
+        if len(row.fact_tuple) != 2:
+            raise CapabilityHelperError("field fact must have exactly one value term")
+        if normalized_current is not None and row.fact_tuple[1] != normalized_current:
+            continue
+        matches.append(row)
+
+    if not matches:
+        raise CapabilityHelperError(
+            f"no matching projected fact for {field.entity_type}.{field.field_name}"
+        )
+    if len(matches) > 1:
+        raise CapabilityHelperError(
+            f"multiple matching projected facts for {field.entity_type}.{field.field_name}"
+        )
+
+    current = matches[0]
+    return FactRemoveAction(
+        asrt_id=current.asrt_id,
+        pred_id=pred_info.pred_id,
+        e_ref=e_ref,
+        old_fact_tuple=current.fact_tuple,
+        note=note,
+    )
+
+
+def build_evaluation_overlay(*actions: FactOverlayAction) -> EvaluationOverlay:
+    """Build an EvaluationOverlay from fact overlay actions."""
+
+    if not actions:
+        raise CapabilityHelperError("build_evaluation_overlay requires at least one action")
+    return EvaluationOverlay(fact_actions=actions)
 
 
 def build_why_not_candidate_universe(
@@ -195,6 +274,8 @@ def _is_float64_hex(value: str) -> bool:
 
 __all__ = [
     "CapabilityHelperError",
+    "build_evaluation_overlay",
+    "build_fact_remove_action",
     "build_fact_value_override",
     "build_frontier_view_facts",
     "build_why_not_candidate_universe",

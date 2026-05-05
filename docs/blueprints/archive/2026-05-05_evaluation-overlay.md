@@ -1,9 +1,9 @@
 # EvaluationOverlay + Fact Scenario Core(Batch 3 of Round Story Completion Plan)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
-- Parent: [2026-05-05_round-story-completion-plan.md](./2026-05-05_round-story-completion-plan.md) §5.3
+- Parent: [2026-05-05_round-story-completion-plan.md](../active/2026-05-05_round-story-completion-plan.md) §5.3
 - Scope: Batch 3 — generic fact-side overlay container for replace/remove; native-only Fact Overlay Check compatibility path
 - Branch: `v0.1-evaluation-overlay-2026-05-05`(off `37ec62b`)
 - Related Modules:
@@ -14,7 +14,7 @@
   - `src/kernel/tests/`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [docs/blueprints/archive/2026-05-05_capability-ergonomics.md](../archive/2026-05-05_capability-ergonomics.md)
+  - [docs/blueprints/archive/2026-05-05_capability-ergonomics.md](./2026-05-05_capability-ergonomics.md)
 - Audit Log:
   - [2026-05-05_evaluation-overlay.audit.md](./2026-05-05_evaluation-overlay.audit.md)
 
@@ -255,18 +255,18 @@ Helper migration decision: ship application-layer `build_fact_remove_action(...)
 - [x] Step 0.B chooses one candidate shape from §6 and records at least one rejected reason for each other shape.
 - [x] Step 0.B chooses one compatibility path from §7 and records at least one rejected reason for each other path.
 - [x] Step 0.B decides helper migration scope for Batch 2 helpers.
-- [ ] `EvaluationOverlay` and fact action DTOs have frozen protocol tests.
-- [ ] `FactValueOverride` compatibility path remains green.
-- [ ] Runtime supports the action set chosen by Step 0.A over projected witness rows.
-- [ ] Native before/after/diff semantics remain unchanged for existing replace-only callers.
-- [ ] Each shipped action has focused native examples that affect pass/fail results.
-- [ ] Empty overlay behavior remains `invalid_request`.
-- [ ] Non-native engine behavior remains `unsupported`.
-- [ ] No ledger writes and no live Store cache writes are tested for each shipped action.
-- [ ] `src/kernel/application/docs/01_overview.md` and `_en.md` updated.
-- [ ] `python -m unittest src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_fact_overlay_runtime_native` passes.
-- [ ] `python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py` passes.
-- [ ] `git diff --stat -- src/kernel/sdk` is empty.
+- [x] `EvaluationOverlay` and fact action DTOs have frozen protocol tests.
+- [x] `FactValueOverride` compatibility path remains green.
+- [x] Runtime supports the action set chosen by Step 0.A over projected witness rows.
+- [x] Native before/after/diff semantics remain unchanged for existing replace-only callers.
+- [x] Each shipped action has focused native examples that affect pass/fail results.
+- [x] Empty overlay behavior remains `invalid_request`.
+- [x] Non-native engine behavior remains `unsupported`.
+- [x] No ledger writes and no live Store cache writes are tested for each shipped action.
+- [x] `src/kernel/application/docs/01_overview.md` and `_en.md` updated.
+- [x] `python -m unittest src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_fact_overlay_runtime_native` passes.
+- [x] `python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py` passes.
+- [x] `git diff --stat -- src/kernel/sdk` is empty.
 
 ## 11. Implementation Plan(Draft)
 
@@ -290,7 +290,7 @@ No `docs/README.md` update expected unless this batch adds a new durable top-lev
 
 任务完成后填写:
 
-- 最终落地结果:
-- 与 blueprint 不同的地方:
-- 为什么会有这些调整:
-- 归档说明:
+- 最终落地结果:新增 `EvaluationOverlay` + `FactRemoveAction`;`FactOverlayCheckRequest.overlay` 接受 legacy `tuple[FactValueOverride, ...]` 或 `EvaluationOverlay`;runtime 归一后支持 projected-row replace/remove;新增 application helpers `build_fact_remove_action(...)` 与 `build_evaluation_overlay(...)`;module docs 已更新;focused tests、ruff、SDK diff guard、full kernel unittest 通过。
+- 与 blueprint 不同的地方:Step 0.A 将原 master-plan 预期的 fact-side add 从 Batch 3 中移除,最终 action set 为 `replace + remove`。
+- 为什么会有这些调整:`single + add` 无法在不选择 reject/shadow/only-if-empty policy 的情况下得到 projection-local 语义;继续实现会重现 v0.1.4 merged semantic trap。
+- 归档说明:实现完成后移至 `docs/blueprints/archive/2026-05-05_evaluation-overlay.{md,audit.md}`,并更新 archive inventory。

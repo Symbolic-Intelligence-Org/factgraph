@@ -13,8 +13,11 @@ from kernel.core.view.projector import project_view_facts_with_witness
 from ._derivation_match_helpers import _binding_matches
 from .protocol import (
     ErrorDTO,
+    EvaluationOverlay,
+    FactOverlayAction,
     FactOverlayCheckRequest,
     FactOverlayCheckResult,
+    FactRemoveAction,
     FactValueOverride,
     OverlayCheckDiff,
     OverlayCheckPhase,
@@ -29,13 +32,14 @@ def check_fact_overlay_binding(
 ) -> FactOverlayCheckResult:
     """Evaluate Overlay Check."""
 
-    if not request.overlay:
+    overlay = _normalize_evaluation_overlay(request.overlay)
+    if not overlay.fact_actions:
         return _invalid_request(
             request,
             errors=(
                 ErrorDTO(
                     code="EMPTY_OVERLAY_NOT_PERMITTED",
-                    message="Fact Overlay Check requires at least one fact override",
+                    message="Fact Overlay Check requires at least one fact action",
                     path=("overlay",),
                 ),
             ),
@@ -51,13 +55,13 @@ def check_fact_overlay_binding(
         return unsupported
 
     projected_witness = project_view_facts_with_witness(store.ledger, store.schema_ir)
-    override_errors = _validate_fact_value_overrides(
-        request.overlay,
+    action_errors = _validate_fact_overlay_actions(
+        overlay.fact_actions,
         projected_witness,
         store.schema_ir,
     )
-    if override_errors:
-        return _invalid_request(request, errors=tuple(override_errors))
+    if action_errors:
+        return _invalid_request(request, errors=tuple(action_errors))
 
     try:
         before = _run_native_overlay_phase(
@@ -67,7 +71,7 @@ def check_fact_overlay_binding(
             registry=registry,
         )
         overlay_witness = _apply_fact_overlay_projection(
-            request.overlay,
+            overlay.fact_actions,
             projected_witness,
         )
         after = _run_native_overlay_phase(
@@ -98,6 +102,14 @@ def check_fact_overlay_binding(
         errors=(),
         warnings=(),
     )
+
+
+def _normalize_evaluation_overlay(
+    overlay: tuple[FactValueOverride, ...] | EvaluationOverlay,
+) -> EvaluationOverlay:
+    if isinstance(overlay, EvaluationOverlay):
+        return overlay
+    return EvaluationOverlay(fact_actions=overlay)
 
 
 def _overlay_engine_support_preflight(
@@ -205,54 +217,62 @@ def _validate_fact_value_overrides(
     projected_witness: dict[str, list[ProjectedFact]],
     schema_ir: dict[str, Any],
 ) -> list[ErrorDTO]:
+    return _validate_fact_overlay_actions(overrides, projected_witness, schema_ir)
+
+
+def _validate_fact_overlay_actions(
+    actions: tuple[FactOverlayAction, ...],
+    projected_witness: dict[str, list[ProjectedFact]],
+    schema_ir: dict[str, Any],
+) -> list[ErrorDTO]:
     errors: list[ErrorDTO] = []
     visible_rows = _visible_projected_rows(projected_witness)
     schema_predicates = _schema_predicates_by_id(schema_ir)
     seen_asrt_ids: set[str] = set()
 
-    for index, override in enumerate(overrides):
+    for index, action in enumerate(actions):
         path = ("overlay", str(index))
-        if override.asrt_id in seen_asrt_ids:
+        if action.asrt_id in seen_asrt_ids:
             errors.append(
                 ErrorDTO(
                     code="OVERLAY_DUPLICATE_ASRT_ID",
-                    message=f"duplicate overlay assertion id: {override.asrt_id}",
+                    message=f"duplicate overlay assertion id: {action.asrt_id}",
                     path=path + ("asrt_id",),
-                    details={"asrt_id": override.asrt_id},
+                    details={"asrt_id": action.asrt_id},
                 )
             )
-        seen_asrt_ids.add(override.asrt_id)
+        seen_asrt_ids.add(action.asrt_id)
 
-        row = visible_rows.get((override.pred_id, override.asrt_id))
+        row = visible_rows.get((action.pred_id, action.asrt_id))
         if row is None:
             errors.append(
                 ErrorDTO(
                     code="OVERLAY_ASRT_ID_NOT_VISIBLE",
                     message=(
                         "overlay assertion id is not active and visible for the "
-                        f"requested predicate: {override.asrt_id}"
+                        f"requested predicate: {action.asrt_id}"
                     ),
                     path=path + ("asrt_id",),
-                    details={"asrt_id": override.asrt_id, "pred_id": override.pred_id},
+                    details={"asrt_id": action.asrt_id, "pred_id": action.pred_id},
                 )
             )
             continue
 
         current_tuple = row.fact_tuple
-        if override.old_fact_tuple != current_tuple:
+        if action.old_fact_tuple != current_tuple:
             errors.append(
                 ErrorDTO(
                     code="OVERLAY_STALE_OLD_FACT_TUPLE",
                     message="overlay old_fact_tuple does not match the visible projected fact",
                     path=path + ("old_fact_tuple",),
-                    details={"asrt_id": override.asrt_id, "pred_id": override.pred_id},
+                    details={"asrt_id": action.asrt_id, "pred_id": action.pred_id},
                 )
             )
 
         expected_arity = len(current_tuple)
-        if (
-            len(override.old_fact_tuple) != expected_arity
-            or len(override.new_fact_tuple) != expected_arity
+        new_tuple = action.new_fact_tuple if isinstance(action, FactValueOverride) else None
+        if len(action.old_fact_tuple) != expected_arity or (
+            new_tuple is not None and len(new_tuple) != expected_arity
         ):
             errors.append(
                 ErrorDTO(
@@ -260,36 +280,36 @@ def _validate_fact_value_overrides(
                     message="overlay fact tuples must preserve projected fact arity",
                     path=path,
                     details={
-                        "asrt_id": override.asrt_id,
+                        "asrt_id": action.asrt_id,
                         "expected_arity": expected_arity,
-                        "old_arity": len(override.old_fact_tuple),
-                        "new_arity": len(override.new_fact_tuple),
+                        "old_arity": len(action.old_fact_tuple),
+                        "new_arity": len(new_tuple) if new_tuple is not None else None,
                     },
                 )
             )
 
-        if not _e_ref_position_matches(override, current_tuple):
+        if not _e_ref_position_matches(action, current_tuple):
             errors.append(
                 ErrorDTO(
                     code="OVERLAY_E_REF_POSITION_MISMATCH",
                     message="overlay e_ref must match fact_tuple[0] and the visible fact entity",
                     path=path + ("e_ref",),
-                    details={"asrt_id": override.asrt_id, "e_ref": override.e_ref},
+                    details={"asrt_id": action.asrt_id, "e_ref": action.e_ref},
                 )
             )
 
-        schema_pred = schema_predicates.get(override.pred_id)
-        if schema_pred is not None and _group_key_changed(
+        schema_pred = schema_predicates.get(action.pred_id)
+        if isinstance(action, FactValueOverride) and schema_pred is not None and _group_key_changed(
             schema_pred,
             current_tuple,
-            override.new_fact_tuple,
+            action.new_fact_tuple,
         ):
             errors.append(
                 ErrorDTO(
                     code="OVERLAY_GROUP_KEY_CHANGED",
                     message="overlay must not change group_key_indexes positions",
                     path=path + ("new_fact_tuple",),
-                    details={"asrt_id": override.asrt_id, "pred_id": override.pred_id},
+                    details={"asrt_id": action.asrt_id, "pred_id": action.pred_id},
                 )
             )
 
@@ -297,24 +317,26 @@ def _validate_fact_value_overrides(
 
 
 def _apply_fact_overlay_projection(
-    overrides: tuple[FactValueOverride, ...],
+    actions: tuple[FactOverlayAction, ...],
     projected_witness: dict[str, list[ProjectedFact]],
 ) -> dict[str, list[ProjectedFact]]:
-    override_by_key = {
-        (override.pred_id, override.asrt_id): override for override in overrides
+    action_by_key = {
+        (action.pred_id, action.asrt_id): action for action in actions
     }
     output: dict[str, list[ProjectedFact]] = {}
     for pred_id, rows in projected_witness.items():
         copied_rows: list[ProjectedFact] = []
         for row in rows:
-            override = override_by_key.get((pred_id, row.asrt_id))
-            if override is None:
+            action = action_by_key.get((pred_id, row.asrt_id))
+            if action is None:
                 copied_rows.append(row)
+                continue
+            if isinstance(action, FactRemoveAction):
                 continue
             copied_rows.append(
                 ProjectedFact(
                     asrt_id=row.asrt_id,
-                    fact_tuple=override.new_fact_tuple,
+                    fact_tuple=action.new_fact_tuple,
                 )
             )
         output[pred_id] = copied_rows
@@ -369,16 +391,18 @@ def _schema_predicates_by_id(schema_ir: dict[str, Any]) -> dict[str, dict[str, A
 
 
 def _e_ref_position_matches(
-    override: FactValueOverride,
+    action: FactOverlayAction,
     current_tuple: tuple[Any, ...],
 ) -> bool:
     if not current_tuple:
         return False
-    if current_tuple[0] != override.e_ref:
+    if current_tuple[0] != action.e_ref:
         return False
-    if not override.old_fact_tuple or override.old_fact_tuple[0] != override.e_ref:
+    if not action.old_fact_tuple or action.old_fact_tuple[0] != action.e_ref:
         return False
-    return bool(override.new_fact_tuple and override.new_fact_tuple[0] == override.e_ref)
+    if isinstance(action, FactRemoveAction):
+        return True
+    return bool(action.new_fact_tuple and action.new_fact_tuple[0] == action.e_ref)
 
 
 def _group_key_changed(

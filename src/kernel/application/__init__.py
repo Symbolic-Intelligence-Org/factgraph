@@ -2,6 +2,8 @@
 
 from .capability_helpers import (
     CapabilityHelperError,
+    build_evaluation_overlay,
+    build_fact_remove_action,
     build_fact_value_override,
     build_frontier_view_facts,
     build_why_not_candidate_universe,
@@ -81,6 +83,8 @@ __all__ = [
     "accept_derivation_candidate_sets",
     "apply_ingest_request",
     "apply_write_plan",
+    "build_evaluation_overlay",
+    "build_fact_remove_action",
     "build_schema_index",
     "build_fact_value_override",
     "build_frontier_view_facts",

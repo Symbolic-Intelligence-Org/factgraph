@@ -12,8 +12,10 @@ from kernel.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     ErrorDTO,
+    EvaluationOverlay,
     FactOverlayCheckRequest,
     FactOverlayCheckResult,
+    FactRemoveAction,
     FactValueOverride,
     OverlayCheckDiff,
     OverlayCheckEngine,
@@ -56,6 +58,17 @@ def _override(**kwargs: object) -> FactValueOverride:
     }
     fields.update(kwargs)
     return FactValueOverride(**fields)  # type: ignore[arg-type]
+
+
+def _remove(**kwargs: object) -> FactRemoveAction:
+    fields = {
+        "asrt_id": "asrt-1",
+        "pred_id": "doc:risk",
+        "e_ref": "doc-1",
+        "old_fact_tuple": ("doc-1", "low"),
+    }
+    fields.update(kwargs)
+    return FactRemoveAction(**fields)  # type: ignore[arg-type]
 
 
 _DEFAULT_MATCHED_BINDING = object()
@@ -125,6 +138,61 @@ class FactValueOverrideProtocolTests(unittest.TestCase):
             _override(note=123)
 
 
+class FactRemoveActionProtocolTests(unittest.TestCase):
+    def test_remove_construction_defaults_note(self) -> None:
+        action = _remove()
+        self.assertEqual(action.asrt_id, "asrt-1")
+        self.assertEqual(action.old_fact_tuple, ("doc-1", "low"))
+        self.assertIsNone(action.note)
+
+    def test_remove_accepts_note(self) -> None:
+        self.assertEqual(_remove(note="caller context").note, "caller context")
+
+    def test_remove_is_frozen(self) -> None:
+        action = _remove()
+        with self.assertRaises(FrozenInstanceError):
+            action.asrt_id = "other"  # type: ignore[misc]
+
+    def test_remove_requires_non_empty_ids(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _remove(asrt_id="")
+        with self.assertRaises(ProtocolShapeError):
+            _remove(pred_id="")
+        with self.assertRaises(ProtocolShapeError):
+            _remove(e_ref="")
+
+    def test_remove_requires_old_fact_tuple(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _remove(old_fact_tuple=["doc-1", "low"])
+
+    def test_remove_rejects_non_string_note(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _remove(note=123)
+
+
+class EvaluationOverlayProtocolTests(unittest.TestCase):
+    def test_overlay_accepts_replace_and_remove_actions(self) -> None:
+        overlay = EvaluationOverlay(fact_actions=(_override(), _remove()))
+        self.assertEqual(overlay.fact_actions, (_override(), _remove()))
+
+    def test_overlay_allows_empty_actions_for_runtime_invalid_request(self) -> None:
+        overlay = EvaluationOverlay(fact_actions=())
+        self.assertEqual(overlay.fact_actions, ())
+
+    def test_overlay_is_frozen(self) -> None:
+        overlay = EvaluationOverlay(fact_actions=(_override(),))
+        with self.assertRaises(FrozenInstanceError):
+            overlay.fact_actions = ()  # type: ignore[misc]
+
+    def test_overlay_rejects_non_tuple_actions(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            EvaluationOverlay(fact_actions=[_override()])  # type: ignore[arg-type]
+
+    def test_overlay_rejects_unknown_action_type(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            EvaluationOverlay(fact_actions=(object(),))  # type: ignore[arg-type]
+
+
 class FactOverlayCheckRequestProtocolTests(unittest.TestCase):
     """§7-Overlay-2 / §7-Overlay-6: intent-only request DTO shape."""
 
@@ -156,6 +224,16 @@ class FactOverlayCheckRequestProtocolTests(unittest.TestCase):
             engine="native",
         )
         self.assertEqual(request.overlay, ())
+
+    def test_request_accepts_evaluation_overlay(self) -> None:
+        overlay = EvaluationOverlay(fact_actions=(_override(), _remove()))
+        request = FactOverlayCheckRequest(
+            plan=_plan(),
+            binding=_binding(),
+            overlay=overlay,
+            engine="native",
+        )
+        self.assertEqual(request.overlay, overlay)
 
     def test_request_rejects_invalid_engine(self) -> None:
         with self.assertRaises(ProtocolShapeError):
