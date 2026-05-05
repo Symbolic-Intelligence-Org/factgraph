@@ -25,6 +25,7 @@ from .entity_write import (
     apply_write_plan,
     plan_write_command,
 )
+from .fact_overlay_runtime import check_fact_overlay_binding
 from .ingest_runtime import (
     IngestRuntimeError,
     apply_ingest_request,
@@ -70,6 +71,7 @@ __all__ = [
     "apply_write_plan",
     "build_schema_index",
     "check_derivation_binding",
+    "check_fact_overlay_binding",
     "diagnose_derivation_binding",
     "encode_entity_ref",
     "entity_info",

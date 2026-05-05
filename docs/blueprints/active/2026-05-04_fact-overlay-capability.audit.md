@@ -23,6 +23,7 @@
 | 2026-05-05 | scoped | Step 1 helper extraction complete | Moved Check's `_binding_matches` and `_all_body_vars` into `kernel.application._derivation_match_helpers`, updated Check imports, added focused helper tests, and verified helper tests, Check 73 tests, full kernel unittest discover, and ruff. |
 | 2026-05-05 | scoped | Step 2 protocol DTOs complete | Added Fact Overlay protocol DTOs and package exports, plus focused protocol tests covering DTO shape, nullable matrix, intent-only request fields, no §6.5 typed Union expansion, no engine payload field, exact status/engine literals, full kernel unittest discover, and ruff. |
 | 2026-05-05 | scoped | Step 2 protocol review fixes complete | Review found two DTO drifts: empty overlay was incorrectly rejected at DTO construction, and `OverlayCheckPhase` allowed impossible / result-level states. DTOs and tests now align with runtime invalid-request handling and phase-only `passed` / `failed` semantics. |
+| 2026-05-05 | scoped | Step 3 native MVP scaffolding complete | Added `check_fact_overlay_binding(...)`, dispatcher preflights, non-native unsupported short-circuit, native single-phase evaluation, degenerate before/after no-change result assembly, callback pin coverage, focused runtime tests, full kernel unittest discover, and ruff. |
 
 ## Decision Notes
 
@@ -271,4 +272,20 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
   Verification:
   - `python -m unittest src.kernel.tests.test_application_fact_overlay_protocol` — 42 tests OK
   - `python -m unittest discover -s src/kernel/tests` — 914 tests OK, 1 skipped
+  - `python -m ruff check src/kernel` — clean
+
+- 2026-05-05 (Implementation Step 3) — **Native MVP scaffolding complete.** Added `src/kernel/application/fact_overlay_runtime.py` with the public entry `check_fact_overlay_binding(...)`, Overlay-owned RuleRef preflight, native-only support gate, non-native `ENGINE_OVERLAY_NOT_SUPPORTED` short-circuit, and `_run_native_overlay_phase(...)`.
+
+  Step 3 native result shape is intentionally **degenerate scaffolding**: the runtime executes one native phase against current committed facts, then returns `before == after` and `OverlayCheckDiff(status_changed=False, matched_count_delta=0, bindings_added=(), bindings_removed=())`. Step 4 replaces this with real baseline + overlay-applied double-run, `_apply_fact_overlay_projection(...)`, override validation, and true diff construction.
+
+  Guardrails landed now:
+  - `overlay=()` returns `invalid_request` / `EMPTY_OVERLAY_NOT_PERMITTED`.
+  - RuleRef preflight is Overlay-owned and does not import Check runtime helpers.
+  - Non-native engines short-circuit before adapter dispatch.
+  - Native phase calls `evaluate_native_where(..., remember_support_artifact=None)`.
+
+  Verification:
+  - `python -m unittest src.kernel.tests.test_application_fact_overlay_runtime_native` — 8 tests OK
+  - `python -m unittest src.kernel.tests.test_application_fact_overlay_protocol` — 42 tests OK
+  - `python -m unittest discover -s src/kernel/tests` — 922 tests OK, 1 skipped
   - `python -m ruff check src/kernel` — clean
