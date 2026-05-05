@@ -23,7 +23,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-05-04
+最后更新：2026-05-05
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
@@ -194,3 +194,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-03-27 | value-carrying-semantics-v1-decision | decision-closed | Froze value-carrying semantics: bounded numeric predicates, PyReason interval model, existence vs value distinction |
 | 2026-05-03 | check-operation | implemented | Application-first Check operation; native via `evaluate_native_where` + non-native via evaluate-then-match (souffle SupportArtifact / problog+pyreason ProvenanceEnvelope); Option IV representability gate; `branch_atom_projection=None` reserved slot; first capability shipped on `v0.1-redesign-2026-05-03`; 73 focused + 782 total tests green |
 | 2026-05-04 | diagnose-operation | implemented | Application-first Diagnose operation; native pass/fail plus atom-localized failure payload; souffle/problog/pyreason coarse dispatch with observable `EVIDENCE_LOOKUP_MISS`; Q1 Sibling no-Check-call invariant; all 7 §7-Diagnose gates covered; 84 focused + 866 total tests green |
+| 2026-05-04 | fact-overlay-capability | implemented | Application-first Fact Overlay Check; native baseline + overlay-applied double-run over projected facts; assertion-scoped `FactValueOverride`; non-native `ENGINE_OVERLAY_NOT_SUPPORTED`; no ledger writes / no live cache contamination / Sibling no-Check-call gates; 72 focused + 944 total tests green |
