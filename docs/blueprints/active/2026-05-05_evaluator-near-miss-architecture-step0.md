@@ -64,6 +64,38 @@ Known starting points for Step 0.A:
 
 These statements must be revalidated against source during Step 0.A before any scope decision.
 
+### 4.3 Step 0.A Source Pass Findings
+
+Step 0.A revalidated the fork against current source. The result is sharper than the initial framing:
+
+| Surface | Current returned state | Failed / near-miss state found? | Step 0.A conclusion |
+|---|---|---|---|
+| Native `where_eval.evaluate_where(...)` | successful final bindings only | transient `envs` are pruned atom by atom, but rejected environments are not retained or typed | failed-frontier data exists only as control-flow state, not as a return contract |
+| Native `ruleref_substrate.evaluate_native_where(...)` | `NativeWhereEvaluation(bindings, rule_refs, rule_ref_resolutions)` | RuleRef support rows are success-side child output / support metadata | wrapper preserves success support, not failures |
+| Native store evaluation | `list[CandidateSet]` plus success support artifacts | support is built only after successful bindings | no failed support carrier |
+| Diagnose native localization | one requested binding -> optional failed atom locator | yes, but only after seeding a concrete requested binding | bounded post-failure localizer, not general evaluator near-miss |
+| Souffle adapter | query output facts, optional witness columns, `CandidateSet` list | no failed rows; witness columns identify satisfying branches only | success/witness adapter, not failed query instrumentation |
+| ProbLog adapter | query answers, probabilities, and adapter-local proof trace attached to successful candidates | trace may contain `fail` events, but they are global textual proof events, not candidate-exclusion rows | tempting but not crisp for cross-engine near-miss |
+| PyReason adapter | derived node/edge facts, candidate list, adapter-local event log | event log records bound changes, not absence of candidate derivation | success/provenance event log, not failed-candidate universe |
+| Store engine contract | engine evaluators return `list[CandidateSet]` | no trace slot or failed-candidate carrier | cross-engine E2 would require contract expansion |
+
+Source anchors:
+
+- `src/kernel/core/rules/where_eval.py`: `_eval_body(...)` starts from `envs = [{}]`, replaces `envs` after each atom, and returns `[]` immediately when a body is exhausted. Atom evaluators return only surviving envs.
+- `src/kernel/core/rules/ruleref_substrate.py`: `NativeWhereEvaluation` has only `bindings`, `rule_refs`, and `rule_ref_resolutions`.
+- `src/kernel/core/store/_evaluate.py`: native support artifacts are built only for successful `evaluation.bindings`.
+- `src/kernel/application/diagnose_runtime.py`: `_localize_failed_atom(...)` replays one requested binding through private atom evaluators and picks a single best failed atom.
+- `src/kernel/adapters/souffle/engine_eval.py`: query facts and witness rows are read from output files; witness rows require a satisfying branch.
+- `src/kernel/adapters/problog/engine_eval.py` and `src/kernel/adapters/problog/provenance.py`: ProbLog runs with `trace=True` and stores an adapter-local proof trace on successful candidates.
+- `src/kernel/adapters/pyreason/engine_eval.py` and `src/kernel/adapters/pyreason/provenance.py`: PyReason runs with `atom_trace=True` and stores an adapter-local event log on successful candidates.
+
+### 4.4 Step 0.A Preliminary Shape Read
+
+- **E1 native evaluator trace remains the only non-redundant candidate.** It is plausible only as a native return-shape extension or a separate native trace entrypoint. A callback or open-ended `trace=True` kwarg is not acceptable because it creates a hidden second contract and conflicts with the Why-not drift gate that forbids evaluator trace hooks by accident.
+- **E2 cross-engine trace is not crisp on current evidence.** Souffle has no failed query rows, ProbLog has adapter-local textual proof events, and PyReason has adapter-local bound-change events. A shared abstraction would either become opaque adapter payloads or immediately require a declarative engine-support/schema round.
+- **E3 repeated bounded probe is presumed redundant unless Step 0.B proves new evaluator-layer value.** The shipped Why-not Universe Diagnose already covers explicit finite universe plus bounded per-red-row Diagnose. E3 should not survive merely as a renamed application capability.
+- **Valid abandonment remains live.** If Step 0.B cannot name a bounded native frontier DTO that is useful beyond Diagnose's seeded atom localization, implementation should stop here and record the architecture blocker.
+
 ## 5. Proposed Shape
 
 This blueprint has no frozen implementation shape yet. Step 0 must decide among at least these possibilities:
@@ -72,13 +104,23 @@ This blueprint has no frozen implementation shape yet. Step 0 must decide among 
 
 Expose failed branch / failed atom / partial environment state from the native evaluator only. This may be crisp if the native evaluator already has a natural bounded branch frontier. It may be invalid if it requires a trace callback that changes evaluator control flow or emits unstable internal state.
 
+Step 0.A narrows E1:
+
+- acceptable direction: a typed native return-shape extension or a separate native trace entrypoint;
+- warning sign: a callback, free-form trace kwarg, mode flag, or opaque internal env dump;
+- open Step 0.B question: whether "frontier" means per-branch aggregate failure, per-partial-env failure, or seeded candidate failure. The seeded candidate variant may collapse into Diagnose unless it provides new evaluator-level value.
+
 ### 5.2 Shape E2: Cross-engine Trace Abstraction
 
 Define a common trace abstraction across native, Souffle, ProbLog, and PyReason. This is higher signal but much riskier: if each adapter has materially different failure semantics, the abstraction may become a lossy `Any` payload or a premature §6.7 trigger.
 
+Step 0.A marks E2 as currently not crisp. Existing adapter traces are success/provenance carriers, not shared failed-candidate contracts.
+
 ### 5.3 Shape E3: Repeated Bounded Probe
 
 Avoid evaluator traces by enumerating explicit candidates and running bounded probes. This is likely already covered by Why-not Universe Diagnose plus Diagnose. Step 0 should only keep this shape if it adds real evaluator-level value without reintroducing `search_budget`.
+
+Step 0.A adds a redundancy exit: if E3 cannot name genuine new value over shipped Why-not Universe Diagnose, Step 0.B should classify it as abandonment / supersession rather than scope a duplicate capability.
 
 ### 5.4 Valid Abandonment
 
@@ -95,7 +137,7 @@ If all useful shapes require open-ended search, unstable internal evaluator stat
 
 ## 7. Acceptance
 
-- [ ] Step 0.A source pass cites the native evaluator and each current adapter surface.
+- [x] Step 0.A source pass cites the native evaluator and each current adapter surface.
 - [ ] Step 0.B records a DTO crispness decision for E1 / E2 / E3 / abandon.
 - [ ] If crisp, Step 0.C freezes the evaluator boundary, status vocabulary, payload shape, and drift gates before implementation.
 - [ ] If not crisp, Step 0.C records the exact blocker and why implementation is abandoned or superseded.
