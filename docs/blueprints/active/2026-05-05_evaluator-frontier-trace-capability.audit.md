@@ -13,6 +13,7 @@
 | 2026-05-05 | draft -> scoped | Step 0.D lift complete | Renamed blueprint to Evaluator Frontier Trace Capability, lifted Step 0 decisions into authoritative §5 / §7 / §8, and authorized implementation only through the scoped plan. |
 | 2026-05-05 | scoped | Step 1 DTO and entry scaffold complete | Added isolated core rules frontier module with frozen DTOs and a parity-preserving scaffold entrypoint. |
 | 2026-05-05 | scoped | Step 2 frontier algorithm complete | Replaced scaffold frontier rows with per-branch aggregate emission, RuleRef post-rewrite frontier evaluation, and success-parity coverage across native path shapes. |
+| 2026-05-05 | scoped | Step 3 drift gates complete | Added named §7-EvaluatorFrontier anti-regression tests covering surface, boundedness, parity, native-only scope, persistence, and application back-dependency gates. |
 
 ## Decision Notes
 
@@ -164,3 +165,20 @@ The implementation instead keeps `evaluate_native_where(...)` unchanged and comp
 RuleRef handling mirrors the scoped contract: preflight, rewrite, overlay, and success-side resolution use the existing RuleRef substrate helpers. Frontier rows are then computed on the rewritten parent native body.
 
 This means parent-level RuleRef atoms can contribute to a frontier row after they have been rewritten into internal native predicates, but failed child-rule internals remain out of scope. That preserves the Step 0.C RuleRef boundary while proving success parity for RuleRef callers.
+
+### 2026-05-05 — Step 3 Gate Mapping
+
+Step 3 added `src/kernel/tests/test_core_rules_frontier_drift_gates.py` as the named anti-regression layer. The existing focused behavior tests in `test_core_rules_frontier.py` continue to prove DTO and algorithm behavior; the new file maps the §7 gates explicitly:
+
+| Gate | Test coverage |
+| --- | --- |
+| §7-EvaluatorFrontier-1 separate entrypoint | `test_1_separate_entrypoint_keeps_normal_native_surface_unchanged` |
+| §7-EvaluatorFrontier-2 no trace kwargs | `test_2_no_trace_kwargs_on_normal_or_frontier_entrypoints` |
+| §7-EvaluatorFrontier-3 layer separation | `test_3_frontier_module_imports_no_upper_layers_or_payload_dtos` |
+| §7-EvaluatorFrontier-4 bounded rows | `test_4_bounded_rows_emit_at_most_one_row_per_normalized_branch` |
+| §7-EvaluatorFrontier-5 no env dump | `test_5_frontier_rows_expose_no_env_dump_or_opaque_payload` |
+| §7-EvaluatorFrontier-6 deterministic counts | `test_6_deterministic_counts_are_pre_atom_input_counts` |
+| §7-EvaluatorFrontier-7 success parity | `test_7_success_parity_covers_native_path_shapes` plus Step 2 focused parity tests |
+| §7-EvaluatorFrontier-8 native-only scope | `test_8_frontier_scope_stays_native_only` |
+| §7-EvaluatorFrontier-9 no persistence | `test_9_frontier_evaluation_adds_no_new_persistence_callback` and `test_9_frontier_module_does_not_import_or_call_write_substrates` |
+| §7-EvaluatorFrontier-10 no application back-dependency | `test_10_application_layer_does_not_opt_into_frontier_trace` |
