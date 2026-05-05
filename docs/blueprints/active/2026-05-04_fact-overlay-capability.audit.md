@@ -26,6 +26,7 @@
 | 2026-05-05 | scoped | Step 3 native MVP scaffolding complete | Added `check_fact_overlay_binding(...)`, dispatcher preflights, non-native unsupported short-circuit, native single-phase evaluation, degenerate before/after no-change result assembly, callback pin coverage, focused runtime tests, full kernel unittest discover, and ruff. |
 | 2026-05-05 | scoped | Step 4 native double-run + override hardening complete | Replaced Step 3 degenerate result assembly with baseline + overlay-applied native phases, projection-copy overlay merge, collect-all override validation, phase-summary diff construction, phase runtime-error nullability, expanded focused runtime tests, full kernel unittest discover, and ruff. |
 | 2026-05-05 | scoped | Step 5 drift-prevention gates complete | Added §7-Overlay-1 Sibling AST invariant tests, tagged existing protocol/runtime tests with §7 gate docstrings, added no-ledger-write byte-identical and no-live-cache-contamination runtime tests, recorded the 12-gate coverage map, full kernel unittest discover, and ruff. |
+| 2026-05-05 | scoped → implemented | Step 6 close-out complete | Updated application docs, marked all §7 acceptance gates complete, filled §10 Outcome / Deviations, recorded conformance audit, and prepared archive move. Close-out verification: 72 focused Overlay tests, 944 full kernel tests / 1 skip, and ruff clean. |
 
 ## Decision Notes
 
@@ -310,6 +311,26 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
   | §7-Overlay-12 status enum / nullable matrix / diff semantics | `FactOverlayProtocolStaticInvariantTests.test_status_literal_exact_members`; `FactOverlayCheckResultProtocolTests`; `FactOverlayDiffHelperTests`; top-level-after-status runtime test | Covered |
 
   The Step 5 runtime side-effect tests strengthen two previously implicit assumptions. The ledger test compares a SQLite `iterdump()` snapshot before and after overlay execution while spying `append_assertion` and `append_revocation`. The cache test spies all four frozen live-store write methods: `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, and `_remember_rule_trace_artifact`.
+
+- 2026-05-05 (Implementation Step 6) — **Close-out conformance audit recorded.** Local conformance pass found no material mismatch between blueprint §5/§7/§8 and implementation:
+  - DTOs live in `kernel.application.protocol.derivation_fact_overlay` and remain intent-only.
+  - Runtime lives in `kernel.application.fact_overlay_runtime` and exposes `check_fact_overlay_binding(...)`.
+  - Native uses projection-copy overlay double-run and keeps `remember_support_artifact=None`.
+  - Non-native engines short-circuit before adapter dispatch.
+  - No SDK substrate was added.
+  - All §7-Overlay-1 through §7-Overlay-12 gates have explicit focused coverage recorded in the Step 5 map.
+
+  Close-out refinements:
+  - **R1:** Step 2 originally rejected empty overlay at DTO construction, which contradicted §5.3 / §7-Overlay-6 runtime `invalid_request` semantics. Commit `96a8982` corrected the layer boundary by allowing DTO construction and rejecting in runtime with `EMPTY_OVERLAY_NOT_PERMITTED`.
+  - **R2:** Step 2 originally let `OverlayCheckPhase` accept result-level statuses. Commit `96a8982` narrowed phase status to `passed | failed` and enforced phase field consistency.
+  - **R3:** Step 3's degenerate `before == after` result was planned scaffolding and was replaced in Step 4 by true baseline + overlay-applied double-run.
+
+  Verification:
+  - `python -m unittest src.kernel.tests.test_application_fact_overlay_runtime_native src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_fact_overlay_sibling_invariant` => 72 tests OK.
+  - `python -m unittest discover -s src/kernel/tests` => 944 tests OK / 1 skipped.
+  - `python -m ruff check src/kernel` => all checks passed.
+
+  Blueprint status moved `scoped -> implemented`. Archive move is the next commit.
 
   Guardrails landed now:
   - `overlay=()` returns `invalid_request` / `EMPTY_OVERLAY_NOT_PERMITTED`.

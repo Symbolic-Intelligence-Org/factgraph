@@ -1,6 +1,6 @@
 # Task Blueprint: Fact Overlay Capability
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-04
 - Last Updated: 2026-05-05
 - Related Modules:
@@ -260,38 +260,38 @@ D8 (§6.6 working hypothesis still stands) is a documentation-discipline judgmen
 
 Each gate maps to a Step 0 decision and must become focused test coverage before implementation close-out:
 
-- [ ] **§7-Overlay-1** (Sibling no-Check-call invariant): static AST/import check that Overlay Check runtime never imports `check_derivation_binding`, `derivation_check_runtime`, Check result/envelope DTOs, or Check private helpers. The allow-list is `_derivation_match_helpers` binding-match/body-var helpers plus `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`.
-- [ ] **§7-Overlay-2** (intent-only request DTO): type/field test that `FactOverlayCheckRequest` dataclass fields are exactly `plan`, `binding`, `overlay`, and `engine`; no `store`, `registry`, precomputed projection, or cache fields appear as DTO fields. `store` and optional `registry` remain runtime side-channel kwargs to `check_fact_overlay_binding(...)`, not DTO members.
-- [ ] **§7-Overlay-3** (no ledger write): runtime test that overlay execution leaves `store.ledger` byte-identical and never calls `append_assertion`, `append_revocation`, `accept_*`, or any other ledger-write entry.
-- [ ] **§7-Overlay-4** (no live cache contamination): runtime spy/monkeypatch test that overlay execution does not call `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, or `_remember_rule_trace_artifact`; spy/argument inspection also confirms each `_run_native_overlay_phase(...)` call to `evaluate_native_where(...)` passes `remember_support_artifact=None`.
-- [ ] **§7-Overlay-5** (non-native dispatcher short-circuit): souffle, problog, and pyreason return `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED`; adapters are not invoked and `before` / `after` / `diff` are `None`.
-- [ ] **§7-Overlay-6** (empty overlay rejected): `overlay=()` returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`.
-- [ ] **§7-Overlay-7** (projected-row stale/visibility guards): stale `old_fact_tuple`, inactive `asrt_id`, and non-visible `asrt_id` each return `invalid_request`.
-- [ ] **§7-Overlay-8** (tuple shape guards): tuple arity violations and `e_ref != fact_tuple[0]` return `invalid_request`.
-- [ ] **§7-Overlay-9** (chosen-policy group-key guard): any `new_fact_tuple` change to schema `group_key_indexes` positions returns `invalid_request`.
-- [ ] **§7-Overlay-10** (§6.5 non-expansion): type-level test that `OverlayCheckPhase` and `OverlayCheckDiff` fields do not reference `EvidenceEnvelope`, `SupportArtifact`, `ProvenanceEnvelope`, or any §6.5 typed Union member.
-- [ ] **§7-Overlay-11** (no engine payload field): result DTO field absence test that `FactOverlayCheckResult` has no `evidence_envelope`, `engine_payload`, support-artifact, or provenance-envelope field.
-- [ ] **§7-Overlay-12** (status and nullable matrix): type/runtime test that result status contains exactly `passed`, `failed`, `unsupported`, and `invalid_request`, and that unsupported / invalid results have `before=None`, `after=None`, and `diff=None`.
+- [x] **§7-Overlay-1** (Sibling no-Check-call invariant): static AST/import check that Overlay Check runtime never imports `check_derivation_binding`, `derivation_check_runtime`, Check result/envelope DTOs, or Check private helpers. The allow-list is `_derivation_match_helpers` binding-match/body-var helpers plus `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`.
+- [x] **§7-Overlay-2** (intent-only request DTO): type/field test that `FactOverlayCheckRequest` dataclass fields are exactly `plan`, `binding`, `overlay`, and `engine`; no `store`, `registry`, precomputed projection, or cache fields appear as DTO fields. `store` and optional `registry` remain runtime side-channel kwargs to `check_fact_overlay_binding(...)`, not DTO members.
+- [x] **§7-Overlay-3** (no ledger write): runtime test that overlay execution leaves `store.ledger` byte-identical and never calls `append_assertion`, `append_revocation`, `accept_*`, or any other ledger-write entry.
+- [x] **§7-Overlay-4** (no live cache contamination): runtime spy/monkeypatch test that overlay execution does not call `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, or `_remember_rule_trace_artifact`; spy/argument inspection also confirms each `_run_native_overlay_phase(...)` call to `evaluate_native_where(...)` passes `remember_support_artifact=None`.
+- [x] **§7-Overlay-5** (non-native dispatcher short-circuit): souffle, problog, and pyreason return `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED`; adapters are not invoked and `before` / `after` / `diff` are `None`.
+- [x] **§7-Overlay-6** (empty overlay rejected): `overlay=()` returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`.
+- [x] **§7-Overlay-7** (projected-row stale/visibility guards): stale `old_fact_tuple`, inactive `asrt_id`, and non-visible `asrt_id` each return `invalid_request`.
+- [x] **§7-Overlay-8** (tuple shape guards): tuple arity violations and `e_ref != fact_tuple[0]` return `invalid_request`.
+- [x] **§7-Overlay-9** (chosen-policy group-key guard): any `new_fact_tuple` change to schema `group_key_indexes` positions returns `invalid_request`.
+- [x] **§7-Overlay-10** (§6.5 non-expansion): type-level test that `OverlayCheckPhase` and `OverlayCheckDiff` fields do not reference `EvidenceEnvelope`, `SupportArtifact`, `ProvenanceEnvelope`, or any §6.5 typed Union member.
+- [x] **§7-Overlay-11** (no engine payload field): result DTO field absence test that `FactOverlayCheckResult` has no `evidence_envelope`, `engine_payload`, support-artifact, or provenance-envelope field.
+- [x] **§7-Overlay-12** (status and nullable matrix): type/runtime test that result status contains exactly `passed`, `failed`, `unsupported`, and `invalid_request`, and that unsupported / invalid results have `before=None`, `after=None`, and `diff=None`.
 
 ### 7.3 Layer placement
 
-- [ ] Protocol DTOs live under `kernel.application.protocol/`
-- [ ] Runtime entry lives under `kernel.application/`
-- [ ] Runtime dependencies flow through side-channel kwargs, not DTO fields
-- [ ] No SDK substrate; any SDK shell must be separately scoped after application runtime exists
+- [x] Protocol DTOs live under `kernel.application.protocol/`
+- [x] Runtime entry lives under `kernel.application/`
+- [x] Runtime dependencies flow through side-channel kwargs, not DTO fields
+- [x] No SDK substrate; any SDK shell must be separately scoped after application runtime exists
 
 ### 7.4 Code health
 
-- [ ] Tests cover protocol shape, status semantics, nullable matrix, native overlay pass/fail paths, unsupported non-native paths, invalid overlay paths, and all §7-Overlay gates.
-- [ ] Existing Check tests remain green after helper extraction.
-- [ ] `python -m ruff check src/kernel` clean.
-- [ ] Kernel test suite green.
+- [x] Tests cover protocol shape, status semantics, nullable matrix, native overlay pass/fail paths, unsupported non-native paths, invalid overlay paths, and all §7-Overlay gates.
+- [x] Existing Check tests remain green after helper extraction.
+- [x] `python -m ruff check src/kernel` clean.
+- [x] Kernel test suite green.
 
 ### 7.5 Cross-doc updates
 
-- [ ] Application module docs (`src/kernel/application/docs/01_overview.md` + `_en.md`) updated to list Overlay Check.
-- [ ] Engine-extension topic doc updated only if implementation reopens §6.6 / §6.7; otherwise leave topic doc untouched per Step 0.
-- [ ] Conformance audit confirms implementation aligns with §5 frozen contract before status moves `scoped -> implemented`.
+- [x] Application module docs (`src/kernel/application/docs/01_overview.md` + `_en.md`) updated to list Overlay Check.
+- [x] Engine-extension topic doc updated only if implementation reopens §6.6 / §6.7; otherwise leave topic doc untouched per Step 0.
+- [x] Conformance audit confirms implementation aligns with §5 frozen contract before status moves `scoped -> implemented`.
 
 ## 8. Implementation Plan
 
@@ -327,9 +327,39 @@ Expected during implementation close-out:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+Final landed result:
 
-- Final landed result:
-- With / without implementation:
-- Deviations from Step 0:
-- Archive or fallback note:
+- Fact Overlay Check shipped as the third application-first capability on `v0.1-fact-overlay-2026-05-04`.
+- Runtime surface:
+  - `src/kernel/application/protocol/derivation_fact_overlay.py`
+  - `src/kernel/application/fact_overlay_runtime.py`
+  - public application export `check_fact_overlay_binding(...)`
+- Capability behavior:
+  - native engine supported through baseline + overlay-applied double run over projected facts;
+  - result returns `before`, `after`, and phase-summary-only `diff`;
+  - overlay is assertion-scoped active visible projected-row replacement;
+  - no ledger write, no Store proxy, no SDK substrate, no Check delegation;
+  - souffle/problog/pyreason short-circuit with `ENGINE_OVERLAY_NOT_SUPPORTED`.
+- Implementation chain:
+  - Step 1 helper extraction: `8d7d7bc`
+  - Step 2 protocol DTOs: `96aea6f`
+  - Step 2 review fix: `96a8982`
+  - Step 3 native MVP scaffolding: `a7a8955`
+  - Step 4 native double-run hardening: `009efac`
+  - Step 5 drift gates: `d992cbd`
+- Verification at close-out:
+  - focused Overlay tests: 72 OK (`42` protocol + `27` runtime + `3` sibling invariant)
+  - full kernel suite: 944 OK / 1 skipped
+  - `python -m ruff check src/kernel`: clean
+
+With implementation.
+
+Deviations and implementation-surfaced refinements:
+
+- **R1 — empty overlay rejection layer.** Initial Step 2 DTO code rejected `overlay=()` in `FactOverlayCheckRequest.__post_init__`, which made the frozen runtime `invalid_request` path mechanically unreachable. Fix `96a8982` moved the rejection to runtime as `status="invalid_request"` / `EMPTY_OVERLAY_NOT_PERMITTED` while allowing DTO construction. This refines the Step 0 contract by making "rejected" explicitly runtime-level, not protocol-shape-level.
+- **R2 — phase status narrowing.** Initial Step 2 DTO code allowed `OverlayCheckPhase.status` to use the top-level four-value status literal, permitting impossible phase states such as `unsupported` / `invalid_request`. Fix `96a8982` introduced `OverlayCheckPhaseStatus = Literal["passed", "failed"]` and enforced phase consistency (`passed` requires match; `failed` requires no match). This makes explicit an invariant implied by the Step 0 nullable matrix.
+- **R3 — planned Step 3 scaffolding.** Step 3 intentionally used a degenerate `before == after` native result to land the dispatcher and callback pin path before full hardening. Step 4 replaced it with the real double-run algorithm; this was planned sequencing, not a contract deviation.
+
+Archive note:
+
+- Blueprint and audit are ready to move from `docs/blueprints/active/` to `docs/blueprints/archive/`.
