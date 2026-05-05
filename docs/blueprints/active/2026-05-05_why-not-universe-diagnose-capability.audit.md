@@ -1,6 +1,6 @@
-# Task Blueprint Audit: Why-not Step 0 Spike
+# Task Blueprint Audit: Why-not Universe Diagnose Capability
 
-- Blueprint: [2026-05-05_why-not-step0.md](./2026-05-05_why-not-step0.md)
+- Blueprint: [2026-05-05_why-not-universe-diagnose-capability.md](./2026-05-05_why-not-universe-diagnose-capability.md)
 
 ## Event Log
 
@@ -11,10 +11,11 @@
 | 2026-05-05 | draft | Step 0.A Shape A-prime addendum recorded | Added Universe-carrier plus inline Diagnose as a third candidate shape. This preserves finite-universe boundedness while returning row-level diagnostics in one application call without a new evaluator hook. |
 | 2026-05-05 | draft | Step 0.B DTO crispness decision recorded | Chose Shape A-prime as Why-not Universe Diagnose. Froze request/result/red-row DTO shape, selected Why-not-owned row diagnostics instead of nested `DiagnoseResult`, and left true near-miss Shape B outside capability scope. |
 | 2026-05-05 | draft | Step 0.C algorithm and drift gates frozen | Froze dispatcher order, green/red partition algorithm, row Diagnose mapping, three-value top-level status, row diagnostic taxonomy, all-engine support gate, and fourteen §7-WhyNot drift gates. |
+| 2026-05-05 | draft → scoped | Step 0.D lift complete | Renamed blueprint from Step 0 spike to Why-not Universe Diagnose capability, lifted Step 0 decisions into §5 / §7 / §8, and authorized implementation only through the scoped plan. |
 
 ## Decision Notes
 
-- 2026-05-05: This blueprint starts and remains in `draft`. No code implementation is authorized. The task is explicitly Step 0 only: determine whether Why-not has a crisp application DTO shape or should be abandoned / superseded.
+- 2026-05-05: This blueprint started in `draft`. No code implementation was authorized until Step 0 answered whether Why-not had a crisp application DTO shape or should be abandoned / superseded.
 
 - 2026-05-05: Branch context is `v0.1-why-not-step0-2026-05-05`, cut from `v0.1-fact-overlay-2026-05-04` at `f484367`. The existing working-tree-only `memory/current.md` modification is unrelated and intentionally not part of this blueprint.
 
@@ -89,4 +90,11 @@
 
 - 2026-05-05 (Step 0.C) — **C9 No evaluator hook.** Implementation must not modify or depend on new `evaluate_native_where(...)` trace or callback output. True near-miss / exclusion-reason work remains evaluator architecture scope.
 
-- 2026-05-05 (Step 0.C) — **C10 Drift gates.** Step 0.C lifts fourteen §7-WhyNot gates into blueprint §5.13, covering intent-only DTO shape, no budget escape fields, universe validity, duplicate guard, empty universe behavior, status matrix, partition invariant, protocol ownership, runtime composition boundary, row status constraints, diagnostic richness, engine support, no evaluator hook, and no ledger write.
+- 2026-05-05 (Step 0.C) — **C10 Drift gates.** Step 0.C lifts fourteen §7-WhyNot gates into blueprint acceptance, covering intent-only DTO shape, no budget escape fields, universe validity, duplicate guard, empty universe behavior, status matrix, partition invariant, protocol ownership, runtime composition boundary, row status constraints, diagnostic richness, engine support, no evaluator hook, and no ledger write.
+
+- 2026-05-05 (Step 0.D) — **Lift complete; status `draft -> scoped`.** Step 0 decisions now live in the canonical blueprint sections:
+  - **§5 Proposed Shape** contains the authoritative Why-not Universe Diagnose contract: capability shape, request/result/row DTOs, runtime composition, engine support gate, algorithm, and status/mapping freeze.
+  - **§7 Acceptance** contains Step 0 closure, §7-WhyNot-1 through §7-WhyNot-14 anti-regression gates, layer placement, code health, and cross-doc acceptance.
+  - **§8 Implementation Plan** contains complete Step 0 history plus five ordered implementation steps: protocol DTOs, runtime MVP board assembly, Sibling-with-Diagnose row diagnostics, drift-prevention named gates, and close-out.
+
+  The active files were renamed from `2026-05-05_why-not-step0.*` to `2026-05-05_why-not-universe-diagnose-capability.*` because the spike has selected a scoped capability. Implementation may begin, but any future change to §5 contract, §7 gates, or §8 plan requires a new audit entry before code changes.
