@@ -1,6 +1,6 @@
 # Task Blueprint: Evaluator Frontier Trace Capability
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-05
 - Last Updated: 2026-05-05
 - Related Modules:
@@ -140,18 +140,18 @@ This is native-only evaluator architecture. Souffle, ProbLog, and PyReason are o
 
 ## 7. Acceptance
 
-- [ ] **§7-EvaluatorFrontier-1** separate entrypoint: `evaluate_native_where(...)` signature and `NativeWhereEvaluation` fields remain unchanged.
-- [ ] **§7-EvaluatorFrontier-2** no trace kwargs: no `trace`, `callback`, `near_miss`, `failed_frontier`, `exclusion_reason`, `mode`, `options`, `search_budget`, or `sample_limit` parameter is added to normal evaluation.
-- [ ] **§7-EvaluatorFrontier-3** layer separation: core rules frontier DTOs do not import application, SDK, adapter, evidence payload, or candidate DTOs.
-- [ ] **§7-EvaluatorFrontier-4** bounded rows: at most one frontier row is emitted per normalized OR branch.
-- [ ] **§7-EvaluatorFrontier-5** no env dump: frontier rows do not expose env dictionaries, candidate payloads, support artifacts, provenance envelopes, or arbitrary `details`.
-- [ ] **§7-EvaluatorFrontier-6** deterministic counts: `atoms_satisfied == failed_atom_index`, and `frontier_count` is the pre-atom input env count.
-- [ ] **§7-EvaluatorFrontier-7** success parity: calling the frontier entrypoint returns the same `bindings`, `rule_refs`, and `rule_ref_resolutions` as `evaluate_native_where(...)` for the same inputs.
-- [ ] **§7-EvaluatorFrontier-8** native-only scope: no Souffle / ProbLog / PyReason adapter API or engine evaluator contract changes land in this blueprint.
-- [ ] **§7-EvaluatorFrontier-9** no persistence: frontier evaluation does not append, accept, write ledger state, or persist trace artifacts beyond existing success-side support artifact behavior.
-- [ ] **§7-EvaluatorFrontier-10** no application back-dependency: implementation does not modify Check, Diagnose, Fact Overlay, or Why-not behavior.
-- [ ] Core rules docs are updated if the new entrypoint ships.
-- [ ] Blueprint Outcome / Deviations is completed before archive.
+- [x] **§7-EvaluatorFrontier-1** separate entrypoint: `evaluate_native_where(...)` signature and `NativeWhereEvaluation` fields remain unchanged.
+- [x] **§7-EvaluatorFrontier-2** no trace kwargs: no `trace`, `callback`, `near_miss`, `failed_frontier`, `exclusion_reason`, `mode`, `options`, `search_budget`, or `sample_limit` parameter is added to normal evaluation.
+- [x] **§7-EvaluatorFrontier-3** layer separation: core rules frontier DTOs do not import application, SDK, adapter, evidence payload, or candidate DTOs.
+- [x] **§7-EvaluatorFrontier-4** bounded rows: at most one frontier row is emitted per normalized OR branch.
+- [x] **§7-EvaluatorFrontier-5** no env dump: frontier rows do not expose env dictionaries, candidate payloads, support artifacts, provenance envelopes, or arbitrary `details`.
+- [x] **§7-EvaluatorFrontier-6** deterministic counts: `atoms_satisfied == failed_atom_index`, and `frontier_count` is the pre-atom input env count.
+- [x] **§7-EvaluatorFrontier-7** success parity: calling the frontier entrypoint returns the same `bindings`, `rule_refs`, and `rule_ref_resolutions` as `evaluate_native_where(...)` for the same inputs.
+- [x] **§7-EvaluatorFrontier-8** native-only scope: no Souffle / ProbLog / PyReason adapter API or engine evaluator contract changes land in this blueprint.
+- [x] **§7-EvaluatorFrontier-9** no persistence: frontier evaluation does not append, accept, write ledger state, or persist trace artifacts beyond existing success-side support artifact behavior.
+- [x] **§7-EvaluatorFrontier-10** no application back-dependency: implementation does not modify Check, Diagnose, Fact Overlay, or Why-not behavior.
+- [x] Core rules docs are updated if the new entrypoint ships.
+- [x] Blueprint Outcome / Deviations is completed before archive.
 
 ## 8. Implementation Plan
 
@@ -179,9 +179,36 @@ This is native-only evaluator architecture. Souffle, ProbLog, and PyReason are o
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+Final landed behavior:
 
-- Final landed behavior:
-- Verification:
-- Deviations from scoped contract:
-- Archive notes:
+- `src/kernel/core/rules/frontier.py` now exposes `NativeWhereFrontierEvaluation`, `NativeWhereFrontierRow`, and `evaluate_native_where_frontier(...)`.
+- The frontier entrypoint mirrors `evaluate_native_where(...)`, keeps `bindings` / `rule_refs` / `rule_ref_resolutions` success parity, and returns sparse aggregate `frontier_rows`.
+- Failed normalized OR branches emit at most one row with `branch_index`, `failed_atom_index`, `atoms_satisfied`, `frontier_count`, and `failure_kind`.
+- RuleRef behavior mirrors native substrate preflight/rewrite/overlay; frontier is computed on the rewritten parent native body, without exposing child-rule failed internals.
+- `evaluate_native_where(...)`, shipped application capabilities, adapters, and engine evaluator contracts are unchanged.
+
+Verification:
+
+- `python -m unittest src.kernel.tests.test_core_rules_frontier src.kernel.tests.test_core_rules_frontier_drift_gates` — 36 tests passed.
+- `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1079 tests passed, 1 skipped.
+- `python -m ruff check src/kernel` — clean.
+- `git diff --check` — clean.
+
+Implementation chain:
+
+- `52e84d1 feat(rules): scaffold evaluator frontier trace`
+- `3440d54 feat(rules): add evaluator frontier algorithm`
+- `d8b51f8 test(rules): add evaluator frontier drift gates`
+- Step 4 close-out updates docs and archives this blueprint.
+
+Deviations from scoped contract:
+
+- The final algorithm uses an isolated frontier walker in `kernel.core.rules.frontier` that reuses `where_eval` private atom evaluators, rather than adding a collector parameter to `where_eval._eval_body(...)`.
+- Rationale: keeping DTO ownership in `frontier.py` avoids a `where_eval -> frontier` dependency cycle and preserves the normal evaluator surface with zero behavior change for existing callers.
+- Tradeoff: the branch walker is parallel implementation code. This is mitigated by success-parity tests across AND, OR, predicate, filter, arithmetic, `not`, and RuleRef paths, plus named §7 drift gates.
+
+Archive notes:
+
+- This shipped as native-only evaluator substrate, not an application capability.
+- It resolves the Why-not Shape B fork as a lower-layer frontier trace primitive without opening cross-engine §6.7 schema work.
+- Future application consumers must open a new scoped blueprint before importing or depending on `evaluate_native_where_frontier(...)`.

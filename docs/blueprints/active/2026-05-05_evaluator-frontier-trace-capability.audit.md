@@ -14,6 +14,7 @@
 | 2026-05-05 | scoped | Step 1 DTO and entry scaffold complete | Added isolated core rules frontier module with frozen DTOs and a parity-preserving scaffold entrypoint. |
 | 2026-05-05 | scoped | Step 2 frontier algorithm complete | Replaced scaffold frontier rows with per-branch aggregate emission, RuleRef post-rewrite frontier evaluation, and success-parity coverage across native path shapes. |
 | 2026-05-05 | scoped | Step 3 drift gates complete | Added named §7-EvaluatorFrontier anti-regression tests covering surface, boundedness, parity, native-only scope, persistence, and application back-dependency gates. |
+| 2026-05-05 | scoped -> implemented | Step 4 close-out complete | Updated core rules docs, filled Outcome / Deviations, and marked all acceptance gates complete before archive. |
 
 ## Decision Notes
 
@@ -182,3 +183,9 @@ Step 3 added `src/kernel/tests/test_core_rules_frontier_drift_gates.py` as the n
 | §7-EvaluatorFrontier-8 native-only scope | `test_8_frontier_scope_stays_native_only` |
 | §7-EvaluatorFrontier-9 no persistence | `test_9_frontier_evaluation_adds_no_new_persistence_callback` and `test_9_frontier_module_does_not_import_or_call_write_substrates` |
 | §7-EvaluatorFrontier-10 no application back-dependency | `test_10_application_layer_does_not_opt_into_frontier_trace` |
+
+### 2026-05-05 — Step 4 Close-out
+
+Step 4 completed the scoped deliverables without expanding scope. The public core rules docs now list `rules.frontier` and describe the native-only frontier boundary. The blueprint status is `implemented`, all §7 acceptance gates are checked, and §10 records the final behavior, verification, implementation chain, and the Step 2 helper-sharing deviation.
+
+This remains evaluator substrate only. No application capability imports the new frontier entrypoint; §7-EvaluatorFrontier-10 intentionally keeps future application use behind a new blueprint.

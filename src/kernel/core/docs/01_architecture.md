@@ -1,7 +1,7 @@
 # Core 架构总览（kernel）
 
 - 适用范围：`src/kernel/core`
-- 最后更新：2026-04-11
+- 最后更新：2026-05-05
 - 代码基线：`Store.evaluate` 支持 `native|souffle|problog|pyreason`；`Ledger` 为 SQLite write-through cache + `annotation_rows`（Annotation Store）；`ProjectorAudit` 为 v2 结构
 - 目标读者：需要理解 core 语义边界、关键入口与扩展点的开发者
 
@@ -53,6 +53,7 @@ src/kernel/core/
 | `rules.where_ast*` | where AST 解析与校验 | `parse_where_ir_to_ast`, `validate_where_ast` |
 | `rules.where_eval` | where 解释执行（native 路径） | `evaluate_where` |
 | `rules.ruleref_substrate` | `query + derivation` 共享 native `RuleRef` 执行 substrate | `evaluate_native_where` |
+| `rules.frontier` | native evaluator aggregate frontier trace；在不改变普通 evaluate surface 的前提下报告 failed branch locator/count | `evaluate_native_where_frontier`, `NativeWhereFrontierEvaluation`, `NativeWhereFrontierRow` |
 | `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef 执行 | `run_rule`, `run_rule_with_trace` |
 | `rules._trace` | rule runtime trace carrier、序列化与 summary derivation | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict`, `summarize_rule_trace_artifact_dict` |
 | `rules._trace_narrative` | rule-run summary 上的 deterministic narrative rendering | `render_rule_run_narrative` |
@@ -184,6 +185,15 @@ native `RuleRef` 语义的当前边界：
 - `query + derivation` 若要执行 `RuleRef`，必须经由 `rules.ruleref_substrate.evaluate_native_where(...)`
 - 当 `registry is None` 且 where 中包含 `ruleref` 时，shared substrate 会 fail fast
 - 当提供 `registry` 时，shared substrate 会先做 `allow_ruleref=True` AST 校验，再做 expose/arity 校验、cycle guard 与 per-evaluation memo，然后把 direct `RuleRef` rewrite 成 internal overlay predicates 交回 plain `evaluate_where(...)`
+
+native evaluator frontier trace 的当前边界：
+
+- `rules.frontier.evaluate_native_where_frontier(...)` 是独立入口，签名 mirror `evaluate_native_where(...)`，但返回 `NativeWhereFrontierEvaluation`
+- `bindings` / `rule_refs` / `rule_ref_resolutions` 与 `evaluate_native_where(...)` 保持 success parity
+- `frontier_rows` 是 sparse aggregate rows：每个 failed normalized OR branch 至多一行，包含 `branch_index`、`failed_atom_index`、`atoms_satisfied`、`frontier_count`、`failure_kind`
+- frontier rows 不暴露 env dict、candidate payload、support artifact、provenance envelope 或 `details`
+- RuleRef 会先按现有 substrate preflight/rewrite/overlay，再在 rewritten parent native body 上计算 frontier；child-rule failed internals 不在当前 contract 内
+- 该入口是 native-only core rules substrate；Souffle / ProbLog / PyReason adapters 与 application capabilities 不会自动 opt in
 
 evaluate 结束后现在会登记一层轻量 candidate explain backref：
 

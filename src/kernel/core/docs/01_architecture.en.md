@@ -1,7 +1,7 @@
 # Core Architecture Overview (kernel)
 
 - Scope: `src/kernel/core`
-- Last updated: 2026-03-29
+- Last updated: 2026-05-05
 - Code baseline: `Store.evaluate` supports `native|souffle|problog|pyreason`; `Ledger` is a SQLite write-through cache + `annotation_rows` (Annotation Store); `ProjectorAudit` is v2
 - Audience: developers who need to understand core semantic boundaries, key entrypoints, and extension points
 
@@ -53,6 +53,7 @@ src/kernel/core/
 | `rules.where_ast*` | where AST parsing and validation | `parse_where_ir_to_ast`, `validate_where_ast` |
 | `rules.where_eval` | where interpreter for the native path | `evaluate_where` |
 | `rules.ruleref_substrate` | shared native `RuleRef` execution substrate for `query + derivation` | `evaluate_native_where` |
+| `rules.frontier` | native evaluator aggregate frontier trace; reports failed branch locators/counts without changing the normal evaluate surface | `evaluate_native_where_frontier`, `NativeWhereFrontierEvaluation`, `NativeWhereFrontierRow` |
 | `rules.rule_ir` | RuleSpec/RuleRegistry/RuleRef execution | `run_rule`, `run_rule_with_trace` |
 | `rules._trace` | rule runtime trace carrier, serialization, and summary derivation | `RuleTraceArtifact`, `RuleRunResult`, `rule_trace_artifact_to_dict`, `summarize_rule_trace_artifact_dict` |
 | `rules._trace_narrative` | deterministic narrative rendering on top of rule-run summary | `render_rule_run_narrative` |
@@ -178,6 +179,15 @@ Native `RuleRef` semantics and current boundary:
 - `query + derivation` must go through `rules.ruleref_substrate.evaluate_native_where(...)` for native `RuleRef` execution
 - when `registry is None` and the where clause contains `ruleref`, the shared substrate fails fast
 - when a `registry` is provided, the shared substrate first does `allow_ruleref=True` AST validation, then performs target lookup, `expose=True` gate, arity checks, cycle guard, and per-evaluation memo, before rewriting direct `RuleRef` atoms into internal overlay predicates and delegating to plain `evaluate_where(...)`
+
+Current native evaluator frontier trace boundary:
+
+- `rules.frontier.evaluate_native_where_frontier(...)` is a separate entrypoint with a signature that mirrors `evaluate_native_where(...)`, but returns `NativeWhereFrontierEvaluation`
+- `bindings` / `rule_refs` / `rule_ref_resolutions` keep success parity with `evaluate_native_where(...)`
+- `frontier_rows` are sparse aggregate rows: at most one row per failed normalized OR branch, carrying `branch_index`, `failed_atom_index`, `atoms_satisfied`, `frontier_count`, and `failure_kind`
+- frontier rows do not expose env dicts, candidate payloads, support artifacts, provenance envelopes, or arbitrary `details`
+- RuleRef preflight/rewrite/overlay still uses the existing substrate first; frontier is computed on the rewritten parent native body, and failed child-rule internals are not exposed by the current contract
+- this entrypoint is native-only core rules substrate; Souffle / ProbLog / PyReason adapters and application capabilities do not automatically opt in
 
 Evaluate now also records a lightweight candidate explain backref after candidate construction:
 
