@@ -50,6 +50,10 @@ from .schema_runtime import (
     materialize_identity,
     resolve_selector,
 )
+from .why_not_runtime import (
+    WhyNotRuntimeError,
+    check_why_not_universe,
+)
 
 __all__ = [
     "CheckRuntimeError",
@@ -65,6 +69,7 @@ __all__ = [
     "QueryRuntimeError",
     "SchemaIndex",
     "SchemaResolutionError",
+    "WhyNotRuntimeError",
     "accept_derivation_candidate_set",
     "accept_derivation_candidate_sets",
     "apply_ingest_request",
@@ -72,6 +77,7 @@ __all__ = [
     "build_schema_index",
     "check_derivation_binding",
     "check_fact_overlay_binding",
+    "check_why_not_universe",
     "diagnose_derivation_binding",
     "encode_entity_ref",
     "entity_info",

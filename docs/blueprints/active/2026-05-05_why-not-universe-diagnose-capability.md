@@ -260,9 +260,9 @@ Each gate maps to Step 0.C and must become focused test coverage before implemen
 ### 7.3 Layer Placement
 
 - [x] Protocol DTOs live under `kernel.application.protocol/`.
-- [ ] Runtime entry lives under `kernel.application/`.
-- [ ] Runtime dependencies flow through side-channel kwargs, not DTO fields.
-- [ ] No SDK substrate; any SDK shell must be separately scoped after application runtime exists.
+- [x] Runtime entry lives under `kernel.application/`.
+- [x] Runtime dependencies flow through side-channel kwargs, not DTO fields.
+- [x] No SDK substrate; any SDK shell must be separately scoped after application runtime exists.
 
 ### 7.4 Code Health
 
@@ -290,7 +290,7 @@ Each gate maps to Step 0.C and must become focused test coverage before implemen
 
 5. **Step 1 — Protocol DTOs** (complete). Add `WhyNotUniverseRequest`, `WhyNotUniverseResult`, `WhyNotRedRow`, `WhyNotRowDiagnostic`, and `WhyNotAtomLocator` under `kernel.application.protocol/derivation_why_not.py`. Add protocol tests for DTO field shape, universe validation, status literals, nullable matrix, row diagnostic consistency, no budget escape fields, no nested Diagnose / Check / evidence payload DTOs, and empty-universe result construction.
 
-6. **Step 2 — Runtime MVP board assembly.** Add `check_why_not_universe(...)`, dispatcher preflight, RuleRef preflight, single-plan evaluation, comparable head-binding extraction for native and representable non-native candidates, green/red partitioning, empty-universe path, unsupported top-level path, and partition/order tests.
+6. **Step 2 — Runtime MVP board assembly** (complete). Add `check_why_not_universe(...)`, dispatcher preflight, RuleRef preflight, single-plan evaluation, comparable head-binding extraction for native and representable non-native candidates, green/red partitioning, empty-universe path, unsupported top-level path, and partition/order tests.
 
 7. **Step 3 — Sibling-with-Diagnose row diagnostics.** Integrate `diagnose_derivation_binding(...)` for red rows and map Diagnose outputs into Why-not-owned row DTOs. Cover native atom-localized rows, coarse failed rows, row-level unsupported/unavailable rows, and runtime invariant errors for Diagnose `passed` / `invalid_request`.
 

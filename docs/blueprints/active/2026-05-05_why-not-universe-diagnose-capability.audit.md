@@ -14,6 +14,7 @@
 | 2026-05-05 | draft → scoped | Step 0.D lift complete | Renamed blueprint from Step 0 spike to Why-not Universe Diagnose capability, lifted Step 0 decisions into §5 / §7 / §8, and authorized implementation only through the scoped plan. |
 | 2026-05-05 | scoped | Step 1 protocol DTOs complete | Added Why-not protocol DTOs and protocol-layer tests for request shape, finite universe validation, top-level result matrix, row diagnostics, protocol-owned DTO boundaries, and static literal invariants. |
 | 2026-05-05 | scoped | Step 1 review corrective patch | Fixed literal-head universe validation, unhashable binding duplicate checks, and the protocol ownership static test after review findings. |
+| 2026-05-05 | scoped | Step 2 runtime MVP board assembly complete | Added `check_why_not_universe(...)`, native / representable non-native head-binding extraction, green/red partitioning, top-level invalid/unsupported paths, and focused runtime tests. |
 
 ## Decision Notes
 
@@ -131,4 +132,16 @@
   - `python -m unittest src.kernel.tests.test_application_check_protocol src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_why_not_protocol` — 173 tests OK.
   - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1011 tests OK / 1 skipped.
   - `python -m ruff check src/kernel/application/protocol/derivation_why_not.py src/kernel/tests/test_application_why_not_protocol.py` — clean.
+  - `python -m ruff check src/kernel` — clean.
+
+- 2026-05-05 (Step 2) — **Runtime MVP board assembly.** Added `src/kernel/application/why_not_runtime.py` with `check_why_not_universe(request, *, store, registry=None)` and exported it from `kernel.application`. Step 2 deliberately stops before Sibling-with-Diagnose row mapping: red rows are assembled with provisional `failed / no_candidate / coarse` diagnostics so the board DTO remains valid, and Step 3 will replace these row summaries by calling `diagnose_derivation_binding(...)` and mapping Diagnose results into Why-not-owned DTOs.
+
+- 2026-05-05 (Step 2) — **Board extraction semantics.** Native board assembly evaluates the plan body through `evaluate_native_where(...)` and extracts only `$`-prefixed head variables from final bindings. Souffle assembly delegates through `evaluate_derivation_plans(...)` and extracts comparable head bindings from retrieved `SupportArtifact.binding_items`; support lookup misses return top-level `unsupported`. ProbLog / PyReason assembly delegates through `evaluate_derivation_plans(...)` and extracts comparable head bindings from candidate payload `terms`; entity-targeted plans and candidate payloads that cannot expose head variables return top-level `unsupported`. In all completed cases, `green` and `red` preserve `candidate_universe` order and partition the requested universe.
+
+- 2026-05-05 (Step 2) — **Focused verification.**
+  - `python -m unittest src.kernel.tests.test_application_why_not_runtime` — 10 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime` — 77 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_check_protocol src.kernel.tests.test_application_check_runtime src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_diagnose_runtime_native src.kernel.tests.test_application_diagnose_runtime_non_native src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_fact_overlay_runtime_native src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime` — 300 tests OK.
+  - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1021 tests OK / 1 skipped.
+  - `python -m ruff check src/kernel/application/why_not_runtime.py src/kernel/application/__init__.py src/kernel/tests/test_application_why_not_runtime.py` — clean.
   - `python -m ruff check src/kernel` — clean.
