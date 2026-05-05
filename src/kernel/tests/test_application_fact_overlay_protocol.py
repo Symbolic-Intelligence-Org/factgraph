@@ -126,6 +126,8 @@ class FactValueOverrideProtocolTests(unittest.TestCase):
 
 
 class FactOverlayCheckRequestProtocolTests(unittest.TestCase):
+    """§7-Overlay-2 / §7-Overlay-6: intent-only request DTO shape."""
+
     def test_request_construction(self) -> None:
         request = FactOverlayCheckRequest(
             plan=_plan(),
@@ -270,6 +272,8 @@ class OverlayCheckDiffProtocolTests(unittest.TestCase):
 
 
 class FactOverlayCheckResultProtocolTests(unittest.TestCase):
+    """§7-Overlay-5 / §7-Overlay-12: nullable matrix and status semantics."""
+
     def test_passed_nullable_matrix(self) -> None:
         result = FactOverlayCheckResult(
             status="passed",
@@ -374,6 +378,8 @@ class FactOverlayCheckResultProtocolTests(unittest.TestCase):
 
 
 class FactOverlayProtocolStaticInvariantTests(unittest.TestCase):
+    """§7-Overlay-2 / §7-Overlay-10 / §7-Overlay-11 / §7-Overlay-12."""
+
     def test_status_literal_exact_members(self) -> None:
         self.assertEqual(
             set(typing.get_args(OverlayCheckStatus)),

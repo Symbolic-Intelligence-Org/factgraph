@@ -197,7 +197,13 @@ def _request(
     )
 
 
+def _ledger_dump(store: Store) -> bytes:
+    return "\n".join(store.ledger._get_connection().iterdump()).encode("utf-8")
+
+
 class FactOverlayRuntimePreflightTests(unittest.TestCase):
+    """§7-Overlay-5 / §7-Overlay-6: preflight result gates."""
+
     def test_empty_overlay_returns_invalid_request(self) -> None:
         store, index = _build_store()
         body, exists_pred = _exists_body(index)
@@ -266,6 +272,8 @@ class FactOverlayRuntimePreflightTests(unittest.TestCase):
 
 
 class FactOverlayProjectionHelperTests(unittest.TestCase):
+    """§7-Overlay-7 / §7-Overlay-8: projection-copy overlay behavior."""
+
     def test_apply_fact_overlay_projection_replaces_matching_row(self) -> None:
         witness = {
             "age": [
@@ -330,6 +338,8 @@ class FactOverlayProjectionHelperTests(unittest.TestCase):
 
 
 class FactOverlayValidationHelperTests(unittest.TestCase):
+    """§7-Overlay-7 / §7-Overlay-8: override validation guards."""
+
     def test_validate_fact_value_overrides_accepts_visible_matching_override(self) -> None:
         witness = {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]}
         schema_ir = {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]}
@@ -481,6 +491,8 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
 
 
 class FactOverlayDiffHelperTests(unittest.TestCase):
+    """§7-Overlay-12: diff is derived only from phase summaries."""
+
     def test_build_overlay_diff_no_change(self) -> None:
         phase = OverlayCheckPhase(
             status="passed",
@@ -527,6 +539,8 @@ class FactOverlayDiffHelperTests(unittest.TestCase):
 
 
 class FactOverlayRuntimeNativeDoubleRunTests(unittest.TestCase):
+    """§7-Overlay-3 / §7-Overlay-4 / §7-Overlay-12: native double-run gates."""
+
     def test_native_overlay_pass_to_fail_reports_real_diff(self) -> None:
         store, index = _build_store()
         seeded = _seed_person(store, index, "alice", 25, "us")
@@ -637,6 +651,78 @@ class FactOverlayRuntimeNativeDoubleRunTests(unittest.TestCase):
         for call in calls:
             self.assertIn("remember_support_artifact", call)
             self.assertIsNone(call["remember_support_artifact"])
+
+    def test_native_overlay_leaves_ledger_byte_identical_and_does_not_write(self) -> None:
+        """§7-Overlay-3: overlay execution does not write ledger state."""
+        store, index = _build_store()
+        seeded = _seed_person(store, index, "alice", 25, "us")
+        body, exists_pred = _exists_plus_age_body(index)
+        request = _request(
+            plan=_build_plan(body, exists_pred),
+            binding=(("$p", seeded.e_ref), ("$age", 99)),
+            overlay=(_override(seeded, new_age=99),),
+        )
+        before = _ledger_dump(store)
+
+        with (
+            patch.object(
+                store.ledger,
+                "append_assertion",
+                side_effect=AssertionError("overlay must not append assertions"),
+            ) as append_assertion,
+            patch.object(
+                store.ledger,
+                "append_revocation",
+                side_effect=AssertionError("overlay must not append revocations"),
+            ) as append_revocation,
+        ):
+            result = check_fact_overlay_binding(request, store=store)
+
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(_ledger_dump(store), before)
+        self.assertFalse(append_assertion.called)
+        self.assertFalse(append_revocation.called)
+
+    def test_native_overlay_does_not_write_live_store_caches(self) -> None:
+        """§7-Overlay-4: overlay execution does not remember live cache artifacts."""
+        store, index = _build_store()
+        seeded = _seed_person(store, index, "alice", 25, "us")
+        body, exists_pred = _exists_body(index)
+        request = _request(
+            plan=_build_plan(body, exists_pred),
+            binding=(("$p", seeded.e_ref),),
+            overlay=(_override(seeded),),
+        )
+
+        with (
+            patch.object(
+                store,
+                "_remember_support_artifact",
+                side_effect=AssertionError("overlay must not remember support artifacts"),
+            ) as remember_support,
+            patch.object(
+                store,
+                "_remember_provenance_envelope",
+                side_effect=AssertionError("overlay must not remember provenance"),
+            ) as remember_provenance,
+            patch.object(
+                store,
+                "_remember_candidate_support",
+                side_effect=AssertionError("overlay must not remember candidate support"),
+            ) as remember_candidate,
+            patch.object(
+                store,
+                "_remember_rule_trace_artifact",
+                side_effect=AssertionError("overlay must not remember rule traces"),
+            ) as remember_rule_trace,
+        ):
+            result = check_fact_overlay_binding(request, store=store)
+
+        self.assertEqual(result.status, "passed")
+        self.assertFalse(remember_support.called)
+        self.assertFalse(remember_provenance.called)
+        self.assertFalse(remember_candidate.called)
+        self.assertFalse(remember_rule_trace.called)
 
     def test_native_validation_errors_return_invalid_request_before_phase_execution(self) -> None:
         store, index = _build_store()

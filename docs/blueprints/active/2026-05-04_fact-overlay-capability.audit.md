@@ -25,6 +25,7 @@
 | 2026-05-05 | scoped | Step 2 protocol review fixes complete | Review found two DTO drifts: empty overlay was incorrectly rejected at DTO construction, and `OverlayCheckPhase` allowed impossible / result-level states. DTOs and tests now align with runtime invalid-request handling and phase-only `passed` / `failed` semantics. |
 | 2026-05-05 | scoped | Step 3 native MVP scaffolding complete | Added `check_fact_overlay_binding(...)`, dispatcher preflights, non-native unsupported short-circuit, native single-phase evaluation, degenerate before/after no-change result assembly, callback pin coverage, focused runtime tests, full kernel unittest discover, and ruff. |
 | 2026-05-05 | scoped | Step 4 native double-run + override hardening complete | Replaced Step 3 degenerate result assembly with baseline + overlay-applied native phases, projection-copy overlay merge, collect-all override validation, phase-summary diff construction, phase runtime-error nullability, expanded focused runtime tests, full kernel unittest discover, and ruff. |
+| 2026-05-05 | scoped | Step 5 drift-prevention gates complete | Added §7-Overlay-1 Sibling AST invariant tests, tagged existing protocol/runtime tests with §7 gate docstrings, added no-ledger-write byte-identical and no-live-cache-contamination runtime tests, recorded the 12-gate coverage map, full kernel unittest discover, and ruff. |
 
 ## Decision Notes
 
@@ -288,6 +289,27 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
   `_apply_fact_overlay_projection(...)` is a pure projection-copy merger over `ProjectedFact` rows and does not mutate the baseline projected witness. `_build_overlay_diff(...)` computes status, count, added-binding, and removed-binding deltas only from `OverlayCheckPhase` summaries. Native phases still call `evaluate_native_where(..., remember_support_artifact=None)`; focused tests now assert both baseline and overlay phase calls keep the callback pinned to `None`.
 
   Phase execution errors return `invalid_request` with `OVERLAY_PHASE_RUNTIME_ERROR` and no partial `before` / `after` / `diff`, matching C2's no-partial-phase policy. Step 5 still needs to lift the hardening coverage into the named §7-Overlay-1 through §7-Overlay-12 drift gate files/classes.
+
+- 2026-05-05 (Implementation Step 5) — **Drift-prevention named gates complete.** Step 5 did not add new capability behavior; it made the §7-Overlay-1 through §7-Overlay-12 gate coverage explicit and added the missing AST/no-side-effect hardening tests.
+
+  Coverage map:
+
+  | Gate | Test coverage | Status |
+  |---|---|---|
+  | §7-Overlay-1 Sibling no-Check-call invariant | `test_application_fact_overlay_sibling_invariant.py::FactOverlaySiblingBannedSymbolTests` | Added |
+  | §7-Overlay-2 intent-only request DTO | `test_application_fact_overlay_protocol.py::FactOverlayCheckRequestProtocolTests`; `FactOverlayProtocolStaticInvariantTests.test_request_dataclass_fields_are_intent_only` | Covered |
+  | §7-Overlay-3 no ledger write | `test_application_fact_overlay_runtime_native.py::FactOverlayRuntimeNativeDoubleRunTests.test_native_overlay_leaves_ledger_byte_identical_and_does_not_write` | Added |
+  | §7-Overlay-4 no live cache contamination | `test_native_phase_passes_remember_support_artifact_none`; `test_native_overlay_does_not_write_live_store_caches` | Added/covered |
+  | §7-Overlay-5 non-native unsupported | `FactOverlayRuntimePreflightTests.test_non_native_engines_short_circuit_unsupported`; `FactOverlayCheckResultProtocolTests.test_unsupported_nullable_matrix` | Covered |
+  | §7-Overlay-6 empty overlay rejected | `FactOverlayRuntimePreflightTests.test_empty_overlay_returns_invalid_request`; `FactOverlayCheckRequestProtocolTests.test_request_allows_empty_overlay_for_runtime_invalid_request` | Covered |
+  | §7-Overlay-7 tuple/entity/visibility guards | `FactOverlayValidationHelperTests` stale / visibility / arity / e_ref tests; runtime invalid-before-phase test | Covered |
+  | §7-Overlay-8 group-key guard | `FactOverlayValidationHelperTests.test_validate_fact_value_overrides_rejects_group_key_change` | Covered |
+  | §7-Overlay-9 callback pin and phase runtime nullability | `test_native_phase_passes_remember_support_artifact_none`; `test_native_phase_runtime_error_returns_no_partial_phases` | Covered |
+  | §7-Overlay-10 no §6.5 Union on phase/diff | `FactOverlayProtocolStaticInvariantTests.test_phase_and_diff_do_not_import_engine_payload_types` | Covered |
+  | §7-Overlay-11 result has no engine payload field | `FactOverlayProtocolStaticInvariantTests.test_result_has_no_engine_payload_or_evidence_fields` | Covered |
+  | §7-Overlay-12 status enum / nullable matrix / diff semantics | `FactOverlayProtocolStaticInvariantTests.test_status_literal_exact_members`; `FactOverlayCheckResultProtocolTests`; `FactOverlayDiffHelperTests`; top-level-after-status runtime test | Covered |
+
+  The Step 5 runtime side-effect tests strengthen two previously implicit assumptions. The ledger test compares a SQLite `iterdump()` snapshot before and after overlay execution while spying `append_assertion` and `append_revocation`. The cache test spies all four frozen live-store write methods: `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, and `_remember_rule_trace_artifact`.
 
   Guardrails landed now:
   - `overlay=()` returns `invalid_request` / `EMPTY_OVERLAY_NOT_PERMITTED`.
