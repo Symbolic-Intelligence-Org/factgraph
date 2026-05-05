@@ -112,9 +112,32 @@ This divergence is a falsifiability item, not a minor implementation detail. Ste
 
 Batch 2 shipped `build_fact_value_override(...)`. Step 0.B must decide whether Batch 3 also ships new helpers, such as `build_fact_remove_action(...)` or `build_evaluation_overlay(...)`, or explicitly defers helper migration. The decision must not create SDK shell surface.
 
-## 6. Candidate Shapes(Draft)
+## 6. DTO Shape Decision
 
-Step 0.A narrowed the action set to `replace + remove`. Step 0.B must choose among explicit narrowed alternatives and record rejected reasons.
+Step 0.A narrowed the action set to `replace + remove`. Step 0.B chose **Shape D: reuse legacy replace DTO + new remove action**.
+
+Selected shape:
+
+```python
+@dataclass(frozen=True)
+class FactRemoveAction:
+    asrt_id: str
+    pred_id: str
+    e_ref: str
+    old_fact_tuple: tuple[Any, ...]
+    note: str | None = None
+
+@dataclass(frozen=True)
+class EvaluationOverlay:
+    fact_actions: tuple[FactValueOverride | FactRemoveAction, ...]
+```
+
+Selection rationale:
+
+- preserves `FactValueOverride` as the exact replace action already accepted by callers and tested by runtime;
+- introduces only one new action DTO for the only new crisp behavior, `remove`;
+- keeps compatibility normalization small: a legacy `tuple[FactValueOverride, ...]` can normalize to `EvaluationOverlay(fact_actions=legacy_tuple)`;
+- avoids a duplicate `FactReplaceAction` that would have to be kept behaviorally identical to `FactValueOverride`.
 
 ### Shape A — Two dataclasses + flat union
 
@@ -141,7 +164,7 @@ class EvaluationOverlay:
     fact_actions: tuple[FactReplaceAction | FactRemoveAction, ...]
 ```
 
-Trade-off: clear per-action fields and validation; flat action order is natural. Risk: still introduces a union when only two projection-local row actions ship.
+Rejected reason: clear naming, but duplicates `FactValueOverride` as `FactReplaceAction` without adding behavior.
 
 ### Shape B — Typed buckets
 
@@ -152,7 +175,7 @@ class EvaluationOverlay:
     removes: tuple[FactRemoveAction, ...] = ()
 ```
 
-Trade-off: explicit action categories and simpler per-bucket validation. Risk: action order is lost unless explicitly declared irrelevant; with only replace/remove, target-conflict rules may make order irrelevant.
+Rejected reason: buckets are over-structured for two row actions and would force a separate ordering/conflict policy.
 
 ### Shape C — Single polymorphic action
 
@@ -168,7 +191,7 @@ class FactOverlayAction:
     note: str | None = None
 ```
 
-Trade-off: compact surface. Risk: nullable `new_fact_tuple` and kind-specific validation still recreate part of the v0.1.4 merged-param smell.
+Rejected reason: nullable `new_fact_tuple` and kind-specific validation recreate part of the v0.1.4 merged-param smell.
 
 ### Shape D — Reuse legacy replace DTO + new remove action
 
@@ -178,22 +201,35 @@ class EvaluationOverlay:
     fact_actions: tuple[FactValueOverride | FactRemoveAction, ...]
 ```
 
-Trade-off: preserves current `FactValueOverride` as the replace action and keeps migration small. Risk: `FactValueOverride` remains semantically named as "override" rather than the more general "replace action".
+Selected with accepted risk: `FactValueOverride` remains semantically named as "override" rather than the more general "replace action". That is preferable to duplicate replace DTOs in Batch 3.
 
-## 7. Compatibility Paths(Draft)
+## 7. Compatibility Path Decision
 
-Step 0.B must choose one:
+Step 0.B chose **Path 1: keep `FactOverlayCheckRequest.overlay` and widen the accepted type**:
+
+```python
+overlay: tuple[FactValueOverride, ...] | EvaluationOverlay
+```
+
+Selected path rationale:
+
+- preserves the public request field name;
+- preserves existing replace-only callers;
+- makes new protocol truth explicit in the DTO annotation;
+- keeps runtime normalization local and testable.
 
 1. `FactOverlayCheckRequest.overlay: tuple[FactValueOverride, ...] | EvaluationOverlay`
-   - preserves field name; changes accepted type.
+   - selected; preserves field name and makes accepted type explicit.
 2. Add `FactOverlayCheckRequestV2(plan, binding, evaluation_overlay, engine)`
-   - keeps old DTO exact; introduces parallel DTO and migration burden.
+   - rejected; keeps old DTO exact but introduces parallel request types and migration burden.
 3. Runtime accepts both shapes while protocol annotation remains narrow
-   - avoids typing churn; risks undocumented magic and weak protocol truth.
+   - rejected; avoids typing churn but creates undocumented magic and weak protocol truth.
 4. Rename current path to `EvaluationOverlayCheckRequest` and keep old name as alias
-   - clean long-term naming; broad compatibility churn.
+   - rejected; cleaner long-term naming but too much compatibility churn for Batch 3.
 
-Rejected path by default unless Step 0 proves otherwise: adding a second optional field to `FactOverlayCheckRequest`, because it creates mutually-exclusive intent fields and weakens request minimality.
+Rejected path remains rejected: adding a second optional field to `FactOverlayCheckRequest`, because it creates mutually-exclusive intent fields and weakens request minimality.
+
+Helper migration decision: ship application-layer `build_fact_remove_action(...)` and `build_evaluation_overlay(...)`; keep `build_fact_value_override(...)` as the replace helper. Do not add `build_fact_replace_action(...)` in Batch 3, and do not create SDK shell surface.
 
 ## 8. Legacy Compatibility Requirement
 
@@ -216,9 +252,9 @@ Rejected path by default unless Step 0 proves otherwise: adding a second optiona
 - [x] Step 0.A records the falsifiability checklist conclusion for each item.
 - [x] Step 0.A records the `replace/add/remove × single/multi` decomposition map.
 - [x] Step 0.A explicitly chooses ship / narrow / suspend / abandon.
-- [ ] Step 0.B chooses one candidate shape from §6 and records at least one rejected reason for each other shape.
-- [ ] Step 0.B chooses one compatibility path from §7 and records at least one rejected reason for each other path.
-- [ ] Step 0.B decides helper migration scope for Batch 2 helpers.
+- [x] Step 0.B chooses one candidate shape from §6 and records at least one rejected reason for each other shape.
+- [x] Step 0.B chooses one compatibility path from §7 and records at least one rejected reason for each other path.
+- [x] Step 0.B decides helper migration scope for Batch 2 helpers.
 - [ ] `EvaluationOverlay` and fact action DTOs have frozen protocol tests.
 - [ ] `FactValueOverride` compatibility path remains green.
 - [ ] Runtime supports the action set chosen by Step 0.A over projected witness rows.
@@ -234,8 +270,8 @@ Rejected path by default unless Step 0 proves otherwise: adding a second optiona
 
 ## 11. Implementation Plan(Draft)
 
-1. Step 0.A: complete falsifiability checklist + decomposition map; decide ship / narrow / suspend / abandon.
-2. Step 0.B: choose candidate shape + compatibility path; record rejected alternatives.
+1. Step 0.A: complete falsifiability checklist + decomposition map; decide ship / narrow / suspend / abandon. Done: narrow to `replace + remove`.
+2. Step 0.B: choose candidate shape + compatibility path; record rejected alternatives. Done: Shape D + Path 1; helpers are `build_fact_remove_action(...)` and `build_evaluation_overlay(...)`.
 3. Protocol tests for new DTOs and `FactOverlayCheckRequest` compatibility.
 4. Runtime normalization from legacy `FactValueOverride` tuple to `EvaluationOverlay`.
 5. Projection apply function supports the action set chosen by Step 0.A with validation.

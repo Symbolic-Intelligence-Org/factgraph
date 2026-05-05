@@ -12,6 +12,7 @@
 | 2026-05-06 | draft | Remaining action-set pre-bake removed | Goals / acceptance / implementation plan now refer to the action set chosen by Step 0.A, rather than assuming replace+add+remove all ship |
 | 2026-05-06 | scoped | Scope frozen for Step 0.A | Falsification-first framing reviewed;scope permits Step 0.A spike only, not implementation;Step 0.A must fill checklist and decomposition map before Step 0.B/implementation |
 | 2026-05-06 | scoped | Step 0.A completed | Falsification spike narrowed Batch 3 to `replace + remove`;fact-side `add` deferred because `single + add` requires chosen-policy semantics, not a projection-local row action |
+| 2026-05-06 | scoped | Step 0.B completed | Chose Shape D(`EvaluationOverlay.fact_actions: tuple[FactValueOverride | FactRemoveAction, ...]`) and compatibility Path 1(`overlay: tuple[FactValueOverride, ...] | EvaluationOverlay`);helper scope limited to application-layer remove + overlay builders |
 
 ## Decision Notes
 
@@ -40,6 +41,12 @@ Final spot review verified no residual pre-bake in Goals / Acceptance / Implemen
 Step 0.A reviewed the current projected witness substrate, Fact Overlay runtime, chosen-policy projector, and existing set/add write semantics. `replace` and `remove` both close over visible projected rows: they can validate `asrt_id`, `pred_id`, `e_ref`, and `old_fact_tuple` against copied witness rows, then evaluate before/after without ledger writes or live Store cache mutation.
 
 `add` failed the crispness gate for this batch. Multi-field add has a plausible append-row meaning, but single-field add diverges into reject-on-single, shadow-current, or only-if-no-visible-row semantics. Those are product/policy choices, not implementation details. Batch 3 therefore narrows to `replace + remove`; Step 0.B may choose the DTO shape and compatibility path only for that narrowed action set.
+
+### 2026-05-06 — Step 0.B Shape And Compatibility Freeze
+
+Step 0.B chose the minimal narrowed shape: keep `FactValueOverride` as the replace action, add `FactRemoveAction`, and wrap both in `EvaluationOverlay.fact_actions`. A duplicate `FactReplaceAction` was rejected because it would need to remain behaviorally identical to `FactValueOverride`; typed buckets were rejected as over-structured for two row actions; a polymorphic `kind` action was rejected because nullable `new_fact_tuple` repeats the merged-parameter smell.
+
+Compatibility Path 1 was selected: widen `FactOverlayCheckRequest.overlay` to accept either legacy `tuple[FactValueOverride, ...]` or `EvaluationOverlay`. V2 request types, runtime-only magic acceptance, and request renaming were rejected as too much churn or too weak as protocol truth. Helper scope is application-only: add `build_fact_remove_action(...)` and `build_evaluation_overlay(...)`, keep `build_fact_value_override(...)`, and do not introduce SDK shell surface.
 
 ### 2026-05-06 — Date Naming Note
 
