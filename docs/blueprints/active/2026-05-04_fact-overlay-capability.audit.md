@@ -19,6 +19,7 @@
 | 2026-05-05 | draft | Step 0.C proposal drafted | C1-C7 drafted: dispatcher preflight/status ordering, native projection-copy algorithm, unsupported short-circuit, result assembly, helper decomposition, §7-Overlay-1 through §7-Overlay-12 drift gates, and Step 0.D lift entry point. |
 | 2026-05-05 | draft | Step 0.C review precision findings resolved | Review pinned phase-runtime-error nullability, made projection merge helper private, tightened intent-only DTO wording, and made the no-ledger-write gate API-specific. |
 | 2026-05-05 | draft | Step 0.C Round 1 findings resolved | Review found `evaluate_native_where(...)` RuleRef support capture as an indirect live-cache path. Native phases now pin `remember_support_artifact=None`; D8 §6.6 is recorded as Step 0.D review discipline, not a unit-test gate. |
+| 2026-05-05 | draft → scoped | Step 0.D lift complete | Step 0.B D1-D9 and Step 0.C C1-C7 lifted into blueprint §5 / §7 / §8. Blueprint status moved `draft → scoped`; implementation authorized only through the six ordered steps and §7-Overlay-1 through §7-Overlay-12 gates. |
 
 ## Decision Notes
 
@@ -225,3 +226,10 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
 - 2026-05-05 (Step 0.C proposal) — **C7 Step 0.D entry point.** Step 0.D should lift Step 0.B D1-D9 and Step 0.C C1-C6 into blueprint §5, §7, and §8, mark Step 0.C complete if review closes without material changes, and move blueprint status `draft -> scoped`. Implementation remains unauthorized until that lift.
 
   D8 (§6.6 working hypothesis still stands) is a documentation-discipline judgment, not a unit-testable gate. It is verified at Step 0.D blueprint review and re-verified at any future blueprint amendment of the §5.6 engine support table. This mirrors Diagnose's §6.6 handling: local-gate readability is editorial, not regression-tested.
+
+- 2026-05-05 (Step 0.D) — **Step 0.D lift complete; status `draft -> scoped`.** Step 0.B and Step 0.C decisions were lifted into the canonical blueprint sections:
+  - **§5 Proposed Shape** now contains the authoritative Overlay Check contract: capability shape, ledger anchor/runtime composition, `FactValueOverride` DTO, artifact/evidence policy, result DTO policy, engine support gate, algorithm freeze, and engine-extension conformance note.
+  - **§7 Acceptance** now contains Step 0 closure, §7-Overlay-1 through §7-Overlay-12 anti-regression gates, layer placement, code health, and cross-doc acceptance.
+  - **§8 Implementation Plan** now contains complete Step 0 history plus six ordered implementation steps: helper extraction prerequisite refactor, protocol DTOs, native MVP scaffolding, native double-run + override hardening, drift-prevention named gates, and close-out.
+
+  Cross-consistency check: every D1-D9 and C1-C7 decision has a home in §5, §7, or §8. D8 remains review-discipline only and is recorded in §5.8 rather than forced into a unit-test gate. Implementation may start, but any future change to §5 contract, §7 acceptance gates, or §8 plan requires a new audit entry before code changes.

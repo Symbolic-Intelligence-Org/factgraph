@@ -1,6 +1,6 @@
 # Task Blueprint: Fact Overlay Capability
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-04
 - Last Updated: 2026-05-05
 - Related Modules:
@@ -27,7 +27,7 @@ Check and Diagnose established two application-first capabilities on the redesig
 
 Fact Overlay is the third application capability candidate. It should test that working hypothesis while addressing the known missing half of the old workflow: users can evaluate committed facts and now Check a binding, but they still cannot ask "under this temporary fact correction, would this binding or derivation outcome change?" without writing to the ledger.
 
-This blueprint is opened in `draft` for Step 0 only. No implementation may start until Step 0 freezes an application DTO shape and the ledger-write boundary.
+This blueprint completed Step 0 and is now scoped for implementation. Implementation must follow the frozen application DTO shape, ledger boundary, algorithm, and anti-regression gates below.
 
 ## 2. Goals
 
@@ -49,7 +49,7 @@ This blueprint is opened in `draft` for Step 0 only. No implementation may start
 
 ## 3. Non-goals
 
-- No code implementation while status is `draft`.
+- No code implementation outside the scoped plan below.
 - No ledger write, retract, set/add, accept, audit commit, or persisted scenario state.
 - No mutable evidence tree API.
 - No ProofFrameRechecker or local proof-path recheck in MVP unless Step 0 proves overlay evaluation cannot stand without it.
@@ -89,36 +89,7 @@ This blueprint is opened in `draft` for Step 0 only. No implementation may start
 
 ## 5. Proposed Shape
 
-Step 0.A is source-pass-only. The current working shape is deliberately not frozen.
-
-### Candidate capability shapes
-
-1. **Overlay Check:** `FactOverlayCheckRequest(plan, binding, overlay, engine)` returning Check-like before/after status and a compact diff. This is the leading candidate because it composes the already-shipped Check operation with the missing `FactValueOverride` scenario.
-2. **Overlay Evaluate:** `FactOverlayEvaluateRequest(plans, overlay, engine)` returning after-candidates and maybe before/after comparison metadata. This is broader and may collapse into a variant of `evaluate_derivation_plans(...)` unless the result DTO is carefully application-owned.
-3. **Source-pass fallback:** if Step 0.A cannot select a ledger boundary anchor, Fact Overlay is not scoped; the next candidate is Why-not, then Explain.
-
-### Ledger boundary anchors to decide in Step 0
-
-1. **DTO-carried override list.** The request carries a normalized tuple of fact override actions. Each engine path receives and applies overrides explicitly. This keeps the DTO honest but pushes overlay mechanics into all four engine paths.
-2. **DTO override list + narrow projection-merge shim.** The request carries explicit overrides; the runtime projects current facts, merges overrides into the projected `ProjectedFact` set, and feeds the result directly to native evaluation. This is narrower than a Store proxy and may be the correct Overlay Check anchor.
-3. **Overlay-aware Store proxy.** The runtime builds an application-local read-intercept wrapper around the store so existing evaluate paths read projected overlay facts without mutating the ledger. This may be useful for broader Overlay Evaluate, but Step 0 must prove it is an application primitive and not a new general substrate.
-4. **Pre-compile patch.** The runtime derives a patched plan or compiled payload. This looks thin at the DTO layer, but fact values live in ledger/view projection, not the plan. It risks pushing data override semantics into compiler / derivation runtime and may be out of scope for fact override.
-
-### Preliminary boundary stance
-
-- Fact overrides are simultaneous and declarative, not an ordered script.
-- Overlay action target semantics must distinguish old witness `asrt_id`, active projected `(pred_id, e_ref)` value, and multi-cardinality add/replace behavior before the DTO freezes.
-- A fact overlay must not call `append_assertion`, `append_revocation`, `accept_*`, or write scenario metadata.
-- Step 0.B must decide whether support/provenance artifacts produced during an overlay run may be remembered in the live store's in-memory artifact caches, or whether overlay runs need isolated artifact capture.
-- Step 0.B must separately decide whether overlay-derived support/provenance artifacts are exposed to callers at all, and if so through a capability-owned field rather than `EvidenceEnvelope.engine_payload` unless §6.5 is explicitly re-opened.
-- Native overlay should start from the narrow seam between `project_view_facts_with_witness(...)` and `evaluate_native_where(...)`, not from Store mutation or plan mutation.
-- Non-native engines are presumed `unsupported` for MVP unless Step 0.B finds a source-backed uniform injection point.
-
-### Step 0.B proposal (draft for review)
-
-This section proposes the Step 0.B freeze. It remains draft until accepted in the audit.
-
-#### 5.1 Capability shape
+### 5.1 Capability shape
 
 The first Fact Overlay capability is **Overlay Check**:
 
@@ -126,7 +97,7 @@ The first Fact Overlay capability is **Overlay Check**:
 
 Overlay Evaluate remains out of scope. The capability answers "under these temporary fact overrides, does this requested binding pass, and how does that differ from the current committed-fact baseline?"
 
-#### 5.2 Ledger anchor and runtime composition
+### 5.2 Ledger anchor and runtime composition
 
 Chosen anchor: **DTO override list + narrow projection-merge shim**.
 
@@ -144,7 +115,7 @@ The native seam is:
 
 No Store proxy and no pre-compile plan patch are used in MVP.
 
-#### 5.3 Overlay action DTO
+### 5.3 Overlay action DTO
 
 MVP supports only `FactValueOverride`.
 
@@ -169,13 +140,13 @@ Chosen-policy guard: `new_fact_tuple` must preserve all schema `group_key_indexe
 
 Multiple overrides are simultaneous. Duplicate `asrt_id` overrides or conflicting replacement tuples are invalid.
 
-#### 5.4 Artifact and evidence policy
+### 5.4 Artifact and evidence policy
 
 Overlay execution must not write the ledger and must not leave hypothetical artifacts or indexes in live `Store` caches. The live-store banned write surface is: `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, and `_remember_rule_trace_artifact`.
 
 MVP does not expose overlay-derived engine-native artifacts to callers. `FactOverlayCheckResult` carries lightweight phase summaries, not `EvidenceEnvelope`. Therefore §6.5 is not re-opened. A future decision to expose overlay-derived `SupportArtifact` / `ProvenanceEnvelope` through `EvidenceEnvelope.engine_payload` is a §6.5 trigger.
 
-#### 5.5 Result DTO policy
+### 5.5 Result DTO policy
 
 Overlay Check uses encapsulated before/after semantics. It runs the current committed-fact baseline and the overlay-applied check in one capability call. Both phases return lightweight Check-like summaries without evidence payloads.
 
@@ -204,7 +175,7 @@ Nullable matrix:
 
 Preflight invalid/unsupported cases occur before baseline execution, so they do not return a partial `before` phase.
 
-#### 5.6 Engine support gate
+### 5.6 Engine support gate
 
 MVP support is native-only:
 
@@ -217,27 +188,7 @@ MVP support is native-only:
 
 This gate is self-contained and capability-owned; §6.6 still stands. No §6.7 declarative capability round is required before MVP implementation.
 
-#### 5.7 Step 0.C anti-regression inventory
-
-Step 0.C must map these gates to tests before implementation:
-
-- no ledger write or append/retract/accept call;
-- no hypothetical artifact or index left in live `Store` caches; explicitly ban `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, and `_remember_rule_trace_artifact`;
-- no `EvidenceEnvelope.engine_payload` use for overlay-derived artifacts;
-- no `check_derivation_binding(...)` delegation or Check runtime laundering;
-- AST/static Sibling guard: Overlay Check runtime must not import `derivation_check_runtime`, `check_derivation_binding`, Check result/envelope DTOs, or Check private helpers directly; only the shared `_derivation_match_helpers` module's binding-match/body-var helpers are allowed. Allowed non-Check core utility imports include `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`;
-- non-native engines always return `ENGINE_OVERLAY_NOT_SUPPORTED`;
-- stale `old_fact_tuple` or non-active/non-visible `asrt_id` returns `invalid_request`;
-- empty overlay returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`;
-- tuple arity/entity guard violations return `invalid_request`;
-- group-key position changes return `invalid_request`;
-- request DTO remains intent-only: no store, registry, precomputed projections, or caches.
-
-### Step 0.C proposal (draft for review)
-
-This section freezes the algorithm and named drift gates proposed by Step 0.C. It adds no new DTO or ledger-boundary decision beyond Step 0.B.
-
-#### 5.8 Algorithm freeze
+### 5.7 Algorithm freeze
 
 Dispatcher entry ordering:
 
@@ -280,22 +231,9 @@ Runtime helper decomposition is frozen at name/role altitude only:
 - `_run_native_overlay_phase(...)`: native phase evaluator that returns `OverlayCheckPhase` and calls `evaluate_native_where(..., remember_support_artifact=None)`.
 - `_build_overlay_diff(...)`: phase-summary-only diff builder.
 
-#### 5.9 Named anti-regression gates
+### 5.8 Engine-extension conformance
 
-Step 0.D must lift these named gates into §7 Acceptance before implementation:
-
-- **§7-Overlay-1** (Sibling no-Check-call invariant): static AST/import check that Overlay Check runtime never imports `check_derivation_binding`, `derivation_check_runtime`, Check result/envelope DTOs, or Check private helpers. The allow-list is `_derivation_match_helpers` binding-match/body-var helpers plus `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`.
-- **§7-Overlay-2** (intent-only request DTO): type/field test that `FactOverlayCheckRequest` dataclass fields are exactly `plan`, `binding`, `overlay`, and `engine`; no `store`, `registry`, precomputed projection, or cache fields appear as DTO fields. `store` and optional `registry` remain runtime side-channel kwargs to `check_fact_overlay_binding(...)`, not DTO members.
-- **§7-Overlay-3** (no ledger write): runtime test that overlay execution leaves `store.ledger` byte-identical and never calls `append_assertion`, `append_revocation`, `accept_*`, or any other ledger-write entry.
-- **§7-Overlay-4** (no live cache contamination): runtime spy/monkeypatch test that overlay execution does not call `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, or `_remember_rule_trace_artifact`; spy/argument inspection also confirms each `_run_native_overlay_phase(...)` call to `evaluate_native_where(...)` passes `remember_support_artifact=None`.
-- **§7-Overlay-5** (non-native dispatcher short-circuit): souffle, problog, and pyreason return `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED`; adapters are not invoked and `before` / `after` / `diff` are `None`.
-- **§7-Overlay-6** (empty overlay rejected): `overlay=()` returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`.
-- **§7-Overlay-7** (projected-row stale/visibility guards): stale `old_fact_tuple`, inactive `asrt_id`, and non-visible `asrt_id` each return `invalid_request`.
-- **§7-Overlay-8** (tuple shape guards): tuple arity violations and `e_ref != fact_tuple[0]` return `invalid_request`.
-- **§7-Overlay-9** (chosen-policy group-key guard): any `new_fact_tuple` change to schema `group_key_indexes` positions returns `invalid_request`.
-- **§7-Overlay-10** (§6.5 non-expansion): type-level test that `OverlayCheckPhase` and `OverlayCheckDiff` fields do not reference `EvidenceEnvelope`, `SupportArtifact`, `ProvenanceEnvelope`, or any §6.5 typed Union member.
-- **§7-Overlay-11** (no engine payload field): result DTO field absence test that `FactOverlayCheckResult` has no `evidence_envelope`, `engine_payload`, support-artifact, or provenance-envelope field.
-- **§7-Overlay-12** (status and nullable matrix): type/runtime test that result status contains exactly `passed`, `failed`, `unsupported`, and `invalid_request`, and that unsupported / invalid results have `before=None`, `after=None`, and `diff=None`.
+D8 (§6.6 working hypothesis still stands) is a documentation-discipline judgment, not a unit-testable gate. The local support gate is self-contained: native is supported through projection merge, while all non-native engines return the same `ENGINE_OVERLAY_NOT_SUPPORTED` result without adapter dispatch. This remains short enough to describe locally without a cross-adapter support matrix, so §6.7 is not opened before MVP implementation.
 
 ## 6. Boundaries And Invariants
 
@@ -315,45 +253,72 @@ Step 0.D must lift these named gates into §7 Acceptance before implementation:
 - [x] Step 0.A source pass recorded in the audit log
 - [x] Step 0.B freezes request / overlay action / result DTO shape
 - [x] Step 0.B freezes the ledger-write boundary anchor
-- [ ] Step 0.C freezes algorithm and engine representability boundaries
-- [ ] Step 0.D lifts Step 0 decisions into this blueprint and moves status to `scoped`, or records abandonment / fallback
+- [x] Step 0.C freezes algorithm and engine representability boundaries
+- [x] Step 0.D lifts Step 0 decisions into this blueprint and moves status to `scoped`
 
-### 7.2 Implementation acceptance (placeholder; not active while draft)
+### 7.2 §7-Overlay-N anti-regression gates
+
+Each gate maps to a Step 0 decision and must become focused test coverage before implementation close-out:
+
+- [ ] **§7-Overlay-1** (Sibling no-Check-call invariant): static AST/import check that Overlay Check runtime never imports `check_derivation_binding`, `derivation_check_runtime`, Check result/envelope DTOs, or Check private helpers. The allow-list is `_derivation_match_helpers` binding-match/body-var helpers plus `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`.
+- [ ] **§7-Overlay-2** (intent-only request DTO): type/field test that `FactOverlayCheckRequest` dataclass fields are exactly `plan`, `binding`, `overlay`, and `engine`; no `store`, `registry`, precomputed projection, or cache fields appear as DTO fields. `store` and optional `registry` remain runtime side-channel kwargs to `check_fact_overlay_binding(...)`, not DTO members.
+- [ ] **§7-Overlay-3** (no ledger write): runtime test that overlay execution leaves `store.ledger` byte-identical and never calls `append_assertion`, `append_revocation`, `accept_*`, or any other ledger-write entry.
+- [ ] **§7-Overlay-4** (no live cache contamination): runtime spy/monkeypatch test that overlay execution does not call `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, or `_remember_rule_trace_artifact`; spy/argument inspection also confirms each `_run_native_overlay_phase(...)` call to `evaluate_native_where(...)` passes `remember_support_artifact=None`.
+- [ ] **§7-Overlay-5** (non-native dispatcher short-circuit): souffle, problog, and pyreason return `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED`; adapters are not invoked and `before` / `after` / `diff` are `None`.
+- [ ] **§7-Overlay-6** (empty overlay rejected): `overlay=()` returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`.
+- [ ] **§7-Overlay-7** (projected-row stale/visibility guards): stale `old_fact_tuple`, inactive `asrt_id`, and non-visible `asrt_id` each return `invalid_request`.
+- [ ] **§7-Overlay-8** (tuple shape guards): tuple arity violations and `e_ref != fact_tuple[0]` return `invalid_request`.
+- [ ] **§7-Overlay-9** (chosen-policy group-key guard): any `new_fact_tuple` change to schema `group_key_indexes` positions returns `invalid_request`.
+- [ ] **§7-Overlay-10** (§6.5 non-expansion): type-level test that `OverlayCheckPhase` and `OverlayCheckDiff` fields do not reference `EvidenceEnvelope`, `SupportArtifact`, `ProvenanceEnvelope`, or any §6.5 typed Union member.
+- [ ] **§7-Overlay-11** (no engine payload field): result DTO field absence test that `FactOverlayCheckResult` has no `evidence_envelope`, `engine_payload`, support-artifact, or provenance-envelope field.
+- [ ] **§7-Overlay-12** (status and nullable matrix): type/runtime test that result status contains exactly `passed`, `failed`, `unsupported`, and `invalid_request`, and that unsupported / invalid results have `before=None`, `after=None`, and `diff=None`.
+
+### 7.3 Layer placement
 
 - [ ] Protocol DTOs live under `kernel.application.protocol/`
 - [ ] Runtime entry lives under `kernel.application/`
 - [ ] Runtime dependencies flow through side-channel kwargs, not DTO fields
-- [ ] Tests prove the original ledger is unchanged after overlay execution
-- [ ] Tests cover supported, unsupported, and invalid overlay paths
-- [ ] Tests cover local engine gates and any §6.6 migration decision
-- [ ] Affected module docs are updated
+- [ ] No SDK substrate; any SDK shell must be separately scoped after application runtime exists
+
+### 7.4 Code health
+
+- [ ] Tests cover protocol shape, status semantics, nullable matrix, native overlay pass/fail paths, unsupported non-native paths, invalid overlay paths, and all §7-Overlay gates.
+- [ ] Existing Check tests remain green after helper extraction.
+- [ ] `python -m ruff check src/kernel` clean.
+- [ ] Kernel test suite green.
+
+### 7.5 Cross-doc updates
+
+- [ ] Application module docs (`src/kernel/application/docs/01_overview.md` + `_en.md`) updated to list Overlay Check.
+- [ ] Engine-extension topic doc updated only if implementation reopens §6.6 / §6.7; otherwise leave topic doc untouched per Step 0.
+- [ ] Conformance audit confirms implementation aligns with §5 frozen contract before status moves `scoped -> implemented`.
 
 ## 8. Implementation Plan
 
-**Step 0 only while draft:**
+**Step 0 phases (complete; lifted into §5 / §7 above and audit Decision Notes):**
 
-1. **Step 0.A — Source pass + structural pressure inventory.** Read Check/Diagnose archives, old FactValueOverride material, current `evaluate_derivation_plans(...)`, `evaluate_store(...)`, projector, Store, and ledger surfaces. Record the four ledger boundary anchors and fallback order.
-2. **Step 0.B — DTO + ledger boundary freeze.** Decide the leading capability shape, overlay action fields, result vocabulary, artifact side-effect policy, and whether §6.6 still holds locally.
-3. **Step 0.C — Algorithm + drift-prevention freeze.** Decide per-engine support, runtime flow, and anti-regression gates.
-4. **Step 0.D — Lift or fallback.** Move to `scoped` only if DTO and ledger boundary are stable. Otherwise record fallback to Why-not, then Explain.
+1. **Step 0.A — Source pass + structural pressure inventory** (complete; audit dated `2026-05-04`)
+2. **Step 0.B — DTO + ledger boundary freeze** (complete; audit D1-D9)
+3. **Step 0.C — Algorithm + drift-prevention freeze** (complete; audit C1-C7)
+4. **Step 0.D — Lift to blueprint + scoped** (this lift)
 
-No code implementation steps are authorized until Step 0.D.
+**Implementation steps (ordered for incremental commits):**
 
-Step 0.B should freeze in this order:
+5. **Step 1 — Helper extraction prerequisite refactor.** Move `_binding_matches` and `_all_body_vars` from `derivation_check_runtime.py` to new application-internal module `kernel.application._derivation_match_helpers`. Update Check to import those helpers. Verify the Check test slice stays green before adding Overlay code.
 
-1. Ledger anchor and artifact cache policy.
-2. Implied runtime composition: Sibling, Hybrid via Check, or narrow reuse of Check-private projection/match helpers. This must be frozen alongside the ledger anchor.
-3. Leading shape: Overlay Check vs Overlay Evaluate.
-4. Result DTO before/after policy and a per-status nullable matrix.
-5. Engine-native artifact exposure channel: no exposure, capability-owned hypothetical artifact field, or explicit §6.5 re-open before using `EvidenceEnvelope.engine_payload`.
-6. `FactValueOverride` fields, including target semantics and whether `old_value` / old tuple is a defensive concurrency guard.
-7. Per-engine support gate and exact unsupported semantics.
-8. §6.6 judgment using the self-contained-gate test: if the local gate can be described in blueprint §5 in no more than a short paragraph/table without cross-adapter detail, the working hypothesis still stands; otherwise open §6.7 before implementation.
-9. Step 0.C anti-regression gate inventory, including no ledger write, no live artifact-cache contamination if isolated capture is chosen, no `EvidenceEnvelope.engine_payload` misuse, no accidental non-native support, and no Check-delegation laundering.
+6. **Step 2 — Protocol DTOs.** Add `FactOverlayCheckRequest`, `FactValueOverride`, `FactOverlayCheckResult`, `OverlayCheckPhase`, and `OverlayCheckDiff` under `kernel.application.protocol/derivation_fact_overlay.py`. Add protocol tests for field shape, status literal, nullable matrix, empty-overlay rejection, intent-only DTO fields, and no §6.5 typed Union references.
+
+7. **Step 3 — Native MVP scaffolding.** Add `check_fact_overlay_binding(...)`, dispatcher preflight ordering, `_overlay_ruleref_preflight(...)`, `_overlay_engine_support_preflight(...)`, native support, and non-native `ENGINE_OVERLAY_NOT_SUPPORTED` short-circuit. Land an end-to-end native path before full override hardening.
+
+8. **Step 4 — Native double-run + override hardening.** Implement `_apply_fact_overlay_projection(...)`, `_validate_fact_value_overrides(...)`, `_run_native_overlay_phase(...)`, and `_build_overlay_diff(...)`. Cover baseline + overlay sequencing, callback pin `remember_support_artifact=None`, `asrt_id` active/visible validation, stale `old_fact_tuple`, arity/entity guards, group-key guard, duplicate/conflicting override rejection, and phase-runtime-error nullability.
+
+9. **Step 5 — Drift-prevention named gates.** Land focused tests for §7-Overlay-1 through §7-Overlay-12 under `src/kernel/tests/test_application_fact_overlay_*.py`, with each gate represented by a named test class or clearly named test group.
+
+10. **Step 6 — Close-out.** Update application docs, run the scoped verification set, record conformance audit findings in this blueprint audit, fill §10 Outcome / Deviations, then move status `scoped -> implemented` if implementation matches §5 and all §7 gates pass.
 
 ## 9. Docs To Update
 
-Expected only if implementation proceeds:
+Expected during implementation close-out:
 
 - `src/kernel/application/docs/01_overview.md`
 - `src/kernel/application/docs/01_overview_en.md`
