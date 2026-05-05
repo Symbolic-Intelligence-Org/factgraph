@@ -70,7 +70,7 @@ The three shipped application capabilities share these properties:
 
 ## 5. Proposed Shape
 
-This section is intentionally not a frozen contract. Step 0.A found three candidate shapes:
+Step 0.A found three candidate shapes. Step 0.B chooses Shape A-prime as the crisp application-capability shape and rejects Shape B for this blueprint.
 
 ### 5.1 Shape A: Lazy candidate-universe carrier board
 
@@ -93,14 +93,14 @@ This shape is DTO-crisp if `candidate_universe` is an explicit tuple of normaliz
 
 Possible request sketch:
 
-`WhyNotUniverseDiagnoseRequest(plan, candidate_universe, engine) -> WhyNotUniverseDiagnoseResult`
+`WhyNotUniverseRequest(plan, candidate_universe, engine) -> WhyNotUniverseResult`
 
 The caller still supplies an explicit finite candidate universe. Runtime evaluates the plan to compute green bindings, computes red bindings by set difference, then runs `diagnose_derivation_binding(...)` for each red binding and inlines the bounded `DiagnoseResult` on the row.
 
 Possible result sketch:
 
 ```text
-WhyNotUniverseDiagnoseResult(
+WhyNotUniverseResult(
     status,
     requested_universe,
     green,
@@ -117,7 +117,7 @@ WhyNotRedRow(
 
 This shape is a bounded composition, not evaluator near-miss tracing. It does not need a search budget because the finite universe bounds the outer loop, and Diagnose already bounds each per-binding explanation. It is higher signal than pure Shape A because one call can return both the red carrier and the available row-level diagnostic payload.
 
-The cost is composition discipline. Step 0.B must decide whether inlining `DiagnoseResult` is acceptable Sibling-with-Diagnose composition, or whether it should copy Diagnose's status payload into a Why-not-owned row DTO to avoid nested capability DTO coupling. Either way, this shape does not require a new evaluator hook.
+The cost is composition discipline. Step 0.B decided to copy Diagnose's status payload into a Why-not-owned row DTO rather than inline `DiagnoseResult`. This avoids nested capability DTO coupling while keeping the bounded runtime composition. This shape does not require a new evaluator hook.
 
 Engine support can inherit Diagnose's current semantics: native red rows may carry atom-localized payloads; non-native red rows may return coarse failed / unsupported classifications according to Diagnose's representability and evidence-lookup rules. That keeps §6.6 local-gate discipline readable unless Step 0.B discovers nested-result coupling creates consumer-discovery pressure.
 
@@ -133,7 +133,7 @@ Step 0.A preliminary judgment: this shape is not DTO-crisp against the current r
 
 ### 5.4 Crispness Gate
 
-Step 0.B must choose one outcome:
+Step 0.B evaluated these outcomes:
 
 | Criterion | Shape A carrier board | Shape A-prime carrier + Diagnose | Shape B near-miss Why-not |
 |---|---|---|---|
@@ -142,7 +142,103 @@ Step 0.B must choose one outcome:
 | Runtime `(request, store) -> result` without new evaluator hook | Pass | Pass: evaluate for green set, run bounded Diagnose for each red binding | Fails on current source surface |
 | Engine support gate fits one paragraph/table | Probably pass, but low signal | Probably pass by inheriting Diagnose semantics per red row | Fails; native and non-native require different trace/adapter changes |
 
-Preliminary recommendation: do not scope Shape B implementation from this blueprint unless Step 0.B can prove a bounded no-new-hook algorithm. Step 0.B should choose between pure Shape A, Shape A-prime, abandonment, or supersession. If the desired product is pure Shape A only, this blueprint should be renamed or superseded as a candidate-universe carrier capability rather than called full Why-not.
+Decision: choose Shape A-prime. Do not scope Shape B implementation from this blueprint because Step 0.B did not find a bounded no-new-hook algorithm for evaluator near-miss / exclusion reasons. Pure Shape A remains a lower-signal fallback, not the selected shape.
+
+### 5.5 Step 0.B Frozen Capability Shape
+
+The selected capability is **Why-not Universe Diagnose**:
+
+`WhyNotUniverseRequest(plan, candidate_universe, engine) -> WhyNotUniverseResult`
+
+It answers: "For this explicit finite universe of possible head bindings, which bindings are derived, which are not, and what bounded Diagnose result is available for each red binding?"
+
+This is intentionally not full evaluator near-miss Why-not. It is a bounded red/green universe board with row-level diagnostics.
+
+### 5.6 Request DTO
+
+Frozen request fields:
+
+| Field | Meaning |
+|---|---|
+| `plan: CompiledDerivationPlan` | Single derivation plan; exactly one head |
+| `candidate_universe: tuple[BindingItems, ...]` | Explicit finite universe of complete head bindings |
+| `engine: Literal["native", "souffle", "problog", "pyreason"]` | Required engine; no default |
+
+Request invariants:
+
+- `candidate_universe` is a tuple of normalized `BindingItems`.
+- Each universe binding must use exactly the plan head variable names. Body-only variables are invalid in the universe.
+- Duplicate universe bindings are invalid; the board is set-like.
+- Empty universe is allowed and returns a completed empty board.
+- No `store`, `registry`, `search_budget`, `limit`, `mode`, `diagnostic_mode`, `engine_options`, `run_id`, query handle, precomputed candidates, or precomputed green set appears on the request DTO.
+- Runtime dependencies remain side-channel kwargs: `check_why_not_universe(request, *, store, registry=None)`.
+
+### 5.7 Result DTO
+
+Frozen result fields:
+
+| Field | Meaning |
+|---|---|
+| `status: Literal["completed", "unsupported", "invalid_request"]` | Batch-level status |
+| `requested_universe: tuple[BindingItems, ...]` | Normalized universe echo |
+| `green: tuple[BindingItems, ...]` | Universe bindings derived by evaluate |
+| `red: tuple[WhyNotRedRow, ...]` | Universe bindings not derived, with row-level diagnostic summaries |
+| `errors: tuple[ErrorDTO, ...]` | Batch-level errors |
+| `warnings: tuple[WarningDTO, ...]` | Batch-level warnings |
+
+Top-level nullable / population matrix:
+
+| status | green | red | errors |
+|---|---|---|---|
+| `completed` | populated or empty | populated or empty | empty |
+| `unsupported` | empty | empty | required |
+| `invalid_request` | empty | empty | required |
+
+Row-level unsupported or invalid diagnostics do not make the top-level result `unsupported` / `invalid_request`; they live on the corresponding red row. Top-level non-completed statuses are reserved for request-wide failures before the board can be assembled.
+
+### 5.8 Red Row DTO
+
+Frozen row shape:
+
+| Field | Meaning |
+|---|---|
+| `binding: BindingItems` | Red universe binding |
+| `diagnostic: WhyNotRowDiagnostic` | Why-not-owned copy of the bounded Diagnose outcome for this binding |
+
+`WhyNotRowDiagnostic` is a capability-owned DTO. It copies Diagnose's stable row semantics but does **not** nest `DiagnoseResult`.
+
+| Field | Meaning |
+|---|---|
+| `status: Literal["passed", "failed", "unsupported", "invalid_request"]` | Per-row diagnostic status copied from Diagnose vocabulary |
+| `matched_count: int | None` | Diagnose-compatible matched count |
+| `matched_binding: BindingItems | None` | Diagnose-compatible matched binding |
+| `failure_kind: Literal["no_candidate", "atom_localized"] | None` | Diagnose-compatible failure kind |
+| `diagnostic_payload: WhyNotAtomLocator | None` | Why-not-owned locator copy for native atom-localized rows |
+| `errors: tuple[ErrorDTO, ...]` | Per-row diagnostic errors |
+| `warnings: tuple[WarningDTO, ...]` | Per-row diagnostic warnings |
+
+`WhyNotAtomLocator(branch_index, failed_atom_index, attempted_binding)` copies `DiagnoseAtomLocator` semantics into the Why-not protocol. This keeps the result contract capability-owned while allowing runtime implementation to call Diagnose and map its result.
+
+### 5.9 Runtime Composition
+
+Chosen composition: **Sibling-with-Diagnose mapping**.
+
+Why-not may call `diagnose_derivation_binding(...)` for each red binding, because Shape A-prime's value is precisely bounded row-level diagnosis. However, the Why-not protocol must not expose nested `DiagnoseResult`. The runtime maps `DiagnoseResult` into `WhyNotRowDiagnostic` and maps `DiagnoseAtomLocator` into `WhyNotAtomLocator`.
+
+Why-not does not call Check. It does not import Check runtime or Check protocol DTOs. It does not add a new evaluator hook.
+
+### 5.10 Engine Support Gate
+
+The selected shape keeps §6.6 local-gate discipline:
+
+- The green/red board can be computed for engines that can evaluate the plan and expose candidate bindings compatible with the explicit universe.
+- Red-row diagnostics inherit Diagnose semantics through mapping:
+  - native can return `failed.atom_localized`;
+  - souffle / problog / pyreason can return coarse `failed.no_candidate`, `unsupported`, or `invalid_request` according to Diagnose's current representability and evidence lookup rules.
+- A row-level `unsupported` result does not invalidate the whole board.
+- If a plan / engine pair cannot produce comparable candidate bindings for the supplied universe, the top-level result is `unsupported` with a batch-level error.
+
+This remains short enough to describe locally. §6.7 is not opened by Step 0.B.
 
 ## 6. Boundaries And Invariants
 
@@ -151,6 +247,7 @@ Preliminary recommendation: do not scope Shape B implementation from this bluepr
 - **No algorithmic paper-over:** `search_budget`, `limit`, or `max_candidates` cannot make an unbounded search crisp unless Step 0 defines the natural bounded search space.
 - **No evaluator architecture by accident:** if near-miss reasons require modifying `evaluate_native_where(...)`, `where_eval`, or adapters to expose failed traces, this blueprint must stop before implementation and open a different architecture-facing task.
 - **Capability gates stay local only while readable:** if Why-not requires a cross-engine support matrix with adapter-internal details, engine-extension §6.7 is triggered.
+- **Capability-owned protocol:** Why-not may use Diagnose at runtime, but it must expose Why-not-owned result and locator DTOs rather than nested `DiagnoseResult`.
 - **No SDK substrate:** SDK may only become a future thin shell after an application runtime exists.
 
 ## 7. Acceptance
@@ -158,7 +255,7 @@ Preliminary recommendation: do not scope Shape B implementation from this bluepr
 ### 7.1 Step 0 closure
 
 - [x] Step 0.A source pass records the current evaluator / adapter surface.
-- [ ] Step 0.B decides whether the DTO is crisp, not crisp, or crisp only after reframing to carrier board / carrier plus Diagnose.
+- [x] Step 0.B decides whether the DTO is crisp, not crisp, or crisp only after reframing to carrier board / carrier plus Diagnose.
 - [ ] Step 0.C freezes either a scoped algorithm and drift gates, or records why no algorithm can be frozen.
 - [ ] Step 0.D either moves the blueprint to `scoped` for implementation, marks it `abandoned`, or supersedes it with a more accurately named blueprint.
 
@@ -174,7 +271,7 @@ Preliminary recommendation: do not scope Shape B implementation from this bluepr
 This blueprint currently authorizes Step 0 only.
 
 1. **Step 0.A — Source pass + shape split** (drafted): read shipped capability archives, L6 / lazy why-not references, current native evaluator surface, current adapter output surfaces, and engine-extension §6.6. Record whether the old "Why-not" label hides multiple shapes.
-2. **Step 0.B — DTO crispness decision:** choose one of Shape A carrier board, Shape A-prime carrier plus Diagnose, Shape B near-miss Why-not, abandonment, or supersession.
+2. **Step 0.B — DTO crispness decision** (complete): choose Shape A-prime as Why-not Universe Diagnose; freeze request/result/red-row DTO shape; reject nested `DiagnoseResult` in favor of Why-not-owned row DTOs; leave Shape B as evaluator-architecture work.
 3. **Step 0.C — Algorithm / gate freeze or blocker:** if Step 0.B chooses a scoped shape, freeze algorithm, status matrix, payload taxonomy, and engine support gate. If not, record the blocker precisely.
 4. **Step 0.D — Lift / abandon / supersede:** update §5 / §7 / §8, then move status according to the Step 0 decision.
 
