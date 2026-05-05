@@ -4,7 +4,7 @@
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Parent: [2026-05-05_round-story-completion-plan.md](./2026-05-05_round-story-completion-plan.md) §5.3
-- Scope: Batch 3 — generic fact-side overlay container; native-only Fact Overlay Check compatibility path
+- Scope: Batch 3 — generic fact-side overlay container for replace/remove; native-only Fact Overlay Check compatibility path
 - Branch: `v0.1-evaluation-overlay-2026-05-05`(off `37ec62b`)
 - Related Modules:
   - `src/kernel/application/protocol/derivation_fact_overlay.py`
@@ -23,7 +23,7 @@
 Current Fact Overlay Check supports only a tuple of `FactValueOverride` actions. That works for Q3 "What if this fact were different?", but it is not enough for Batch 3's round-story scenario needs:
 
 - no first-class scenario container for multiple fact actions;
-- no fact add/remove actions;
+- no first-class fact remove action, and no crisp fact add action after Step 0.A;
 - no reusable DTO that future Batch 4 ProofFrame and Batch 5 rule-side overlays can name as a shared input concept;
 - examples still model overlay as "single replace" even after Batch 2 helper ergonomics.
 
@@ -31,10 +31,9 @@ The danger is v0.1.4-style semantic decomposition: `replace`, `add`, and `remove
 
 ## 2. Goals
 
-- Freeze an `EvaluationOverlay` protocol shape for fact-side actions.
-- Implement the subset of fact-side actions that Step 0.A confirms as one crisp fact-action family:
+- Freeze an `EvaluationOverlay` protocol shape for the Step 0.A-confirmed fact-side action set.
+- Implement the Step 0.A-confirmed fact-side action set:
   - replace: current `FactValueOverride` semantics;
-  - add: add an overlay-local projected fact without ledger write;
   - remove: remove a visible projected fact without ledger write.
 - Keep `FactOverlayCheckRequest` compatible with current `overlay: tuple[FactValueOverride, ...]` callers while adding the new container path.
 - Preserve current capability boundary: native-only, read-only, no ledger writes, no live Store cache contamination, no SDK shell.
@@ -43,6 +42,7 @@ The danger is v0.1.4-style semantic decomposition: `replace`, `add`, and `remove
 ## 3. Non-goals
 
 - No rule-side overlay actions(disable / replace condition / add condition); those start in Batch 5.
+- No fact-side add action in this batch; Step 0.A found `single + add` would require chosen-policy semantics rather than a crisp projection-local action.
 - No `kernel.sdk` substrate or SDK shell.
 - No overlay persistence, audit JSONL, event log, or reload behavior; Batch 6 owns that.
 - No cross-engine overlay semantics; non-native remains `ENGINE_OVERLAY_NOT_SUPPORTED`.
@@ -67,62 +67,56 @@ The danger is v0.1.4-style semantic decomposition: `replace`, `add`, and `remove
 
 ### 5.1 Falsifiability Checklist
 
-Step 0.A must try to falsify the "single EvaluationOverlay fact-action family" idea before any DTO is frozen. Record a yes/no conclusion for each item:
+Step 0.A tried to falsify the "single EvaluationOverlay fact-action family" idea before any DTO was frozen. Recorded conclusion:
 
-- **Durable identity:** if `add` needs ledger identity, durable event identity, audit persistence, or reload semantics to be meaningful, it does not belong in Batch 3.
-- **Layer crossing:** if `remove` needs reverse ledger lookup beyond current projected witness rows to validate intent, it crosses out of projection-local overlay.
-- **Single vs multi decomposition:** if an action has materially different semantics across `single` and `multi` fields, it may already be multiple actions.
-- **Shared validation:** if `replace` / `add` / `remove` have three or more non-shared validation families, the union is likely a fake common DTO.
-- **Group-key behavior:** if group-key preservation cannot be expressed uniformly for projection-local actions, the family is not crisp.
-- **No-write invariant:** if any action requires `set_field`, `add_field`, `retract_by_asrt`, ledger append, or live Store cache writes, abandon or split.
+| Item | Conclusion | Notes |
+|---|---|---|
+| Durable identity | Does not falsify `replace + remove`; falsifies full `replace + add + remove` for this batch | `replace` / `remove` use visible projected `asrt_id`; `add` can be imagined as overlay-local but becomes underspecified for `single` fields before identity choice matters |
+| Layer crossing | Does not falsify `replace + remove` | `remove` can validate against current projected witness rows; it does not need reverse ledger lookup if semantics are "hide this visible projected row" |
+| Single vs multi decomposition | Falsifies full `replace + add + remove` | `replace` and `remove` have the same row-level meaning for `single` and `multi`; `single + add` diverges into reject / shadow / only-if-empty policy choices |
+| Shared validation | Does not falsify narrowed `replace + remove` | Shared families are visible row lookup, stale tuple validation, arity/e_ref validation, duplicate action target detection, and group-key stability where applicable |
+| Group-key behavior | Does not falsify narrowed `replace + remove` | `replace` must preserve group-key positions; `remove` deletes a visible row and has no new tuple to preserve; `add` would require additional arity/e_ref/group-key checks but is out of this batch |
+| No-write invariant | Does not falsify narrowed `replace + remove` | Both actions can be applied by copying projected witness rows and never calling `set_field`, `add_field`, `retract_by_asrt`, ledger append, or live Store cache writes |
 
-Step 0.A output must include a decomposition map:
+Step 0.A decomposition map:
 
 | Action | single field | multi field | Falsifies single-family? |
 |---|---|---|---|
-| replace | TBD | TBD | TBD |
-| add | TBD | TBD | TBD |
-| remove | TBD | TBD | TBD |
+| replace | Replace the currently visible selected projected row tuple; no re-run of chosen policy beyond before/after evaluation over copied witness rows | Replace the matching visible projected row tuple | No |
+| add | Diverges: reject, shadow current selected row, or only support no-visible-row case are different semantics | Append an overlay-local projected row | Yes; defer `add` from Batch 3 |
+| remove | Hide the currently visible selected projected row; do not reveal older active ledger claims that were not in the projected witness | Hide the matching visible projected row | No |
 
-If the map does not converge, valid outcomes are:
+Step 0.A decision: **narrow Batch 3 to `replace + remove`**.
 
-- abandon Batch 3;
-- suspend pending product trigger;
-- narrow Batch 3 to a smaller crisp subset, such as `replace + remove`, with audit justification.
+Rationale: the `add` row in the map fails crispness for `single` fields. Choosing "reject add on single" would ship a multi-only action under a generic fact-action name; choosing "shadow" or "only if no visible row exists" would embed chosen-policy semantics into a projection-local overlay. `replace + remove` remains crisp because both operate only on visible projected rows and never ask the overlay layer to create or persist new fact identity.
 
 ### 5.2 Action Identity Questions
 
 - `replace`: uses existing visible `asrt_id`; current `FactValueOverride` can map 1:1.
 - `remove`: uses existing visible `asrt_id`; must validate `old_fact_tuple` against current projection.
-- `add`: may or may not need an overlay-local id. Step 0 must choose one:
-  - caller supplies `overlay_asrt_id`;
-  - runtime derives deterministic `overlay:<index>`;
-  - runtime generates non-deterministic UUID-like id;
-  - no id at all; action is transient and only contributes a projected row.
-
-Decision pressure: if `add` needs durable identity to be inspectable, this likely belongs to Batch 6 persistence, not Batch 3 projection overlay.
+- `add`: deferred from Batch 3; no action identity choice is frozen. If revisited later, identity must be designed with the same `single + add` decomposition risk in view.
 
 ### 5.3 Cardinality Questions
 
 - `replace`: current validation already enforces arity and group-key stability.
 - `remove`: removing a single projected row is straightforward for `multi`; for `single`, removing the selected active row leaves no visible fact for that predicate/e_ref in the overlay.
-- `add` for `multi`: candidate meaning is append projected row.
+- `add` for `multi`: candidate meaning would be append projected row.
 - `add` for `single`: candidate meanings diverge:
   - Option A: reject add on `single`, require replace;
   - Option B: add shadows current selected row in overlay;
   - Option C: support only when no visible row exists.
 
-This divergence is a falsifiability item, not a minor implementation detail. If `single + add` cannot converge to one definition that does not depend on chosen-policy semantics, then `add` cannot share the same action family in this batch. Batch 3 must then abandon, suspend, or ship only the crisp subset.
+This divergence is a falsifiability item, not a minor implementation detail. Step 0.A found that `single + add` does not converge without chosen-policy semantics, so `add` is not in the Batch 3 action set.
 
 ### 5.4 Helper Migration Question
 
-Batch 2 shipped `build_fact_value_override(...)`. Step 0 must decide whether Batch 3 also ships new helpers, such as `build_fact_replace_action(...)`, `build_fact_remove_action(...)`, or `build_evaluation_overlay(...)`, or explicitly defers helper migration. The decision must not create SDK shell surface.
+Batch 2 shipped `build_fact_value_override(...)`. Step 0.B must decide whether Batch 3 also ships new helpers, such as `build_fact_remove_action(...)` or `build_evaluation_overlay(...)`, or explicitly defers helper migration. The decision must not create SDK shell surface.
 
 ## 6. Candidate Shapes(Draft)
 
-Step 0.B must choose among explicit alternatives and record rejected reasons.
+Step 0.A narrowed the action set to `replace + remove`. Step 0.B must choose among explicit narrowed alternatives and record rejected reasons.
 
-### Shape A — Three dataclasses + flat union
+### Shape A — Two dataclasses + flat union
 
 ```python
 @dataclass(frozen=True)
@@ -135,14 +129,6 @@ class FactReplaceAction:
     note: str | None = None
 
 @dataclass(frozen=True)
-class FactAddAction:
-    overlay_asrt_id: str
-    pred_id: str
-    e_ref: str
-    fact_tuple: tuple[Any, ...]
-    note: str | None = None
-
-@dataclass(frozen=True)
 class FactRemoveAction:
     asrt_id: str
     pred_id: str
@@ -152,10 +138,10 @@ class FactRemoveAction:
 
 @dataclass(frozen=True)
 class EvaluationOverlay:
-    fact_actions: tuple[FactReplaceAction | FactAddAction | FactRemoveAction, ...]
+    fact_actions: tuple[FactReplaceAction | FactRemoveAction, ...]
 ```
 
-Trade-off: clear per-action fields and validation; flat action order is natural. Risk: union can hide that actions are not a true family.
+Trade-off: clear per-action fields and validation; flat action order is natural. Risk: still introduces a union when only two projection-local row actions ship.
 
 ### Shape B — Typed buckets
 
@@ -163,37 +149,36 @@ Trade-off: clear per-action fields and validation; flat action order is natural.
 @dataclass(frozen=True)
 class EvaluationOverlay:
     replaces: tuple[FactReplaceAction, ...] = ()
-    adds: tuple[FactAddAction, ...] = ()
     removes: tuple[FactRemoveAction, ...] = ()
 ```
 
-Trade-off: explicit action categories and simpler per-bucket validation. Risk: action order is lost unless explicitly declared irrelevant.
+Trade-off: explicit action categories and simpler per-bucket validation. Risk: action order is lost unless explicitly declared irrelevant; with only replace/remove, target-conflict rules may make order irrelevant.
 
 ### Shape C — Single polymorphic action
 
 ```python
 @dataclass(frozen=True)
 class FactOverlayAction:
-    kind: Literal["replace", "add", "remove"]
-    asrt_id: str | None
+    kind: Literal["replace", "remove"]
+    asrt_id: str
     pred_id: str
     e_ref: str
-    old_fact_tuple: tuple[Any, ...] | None
+    old_fact_tuple: tuple[Any, ...]
     new_fact_tuple: tuple[Any, ...] | None
     note: str | None = None
 ```
 
-Trade-off: compact surface. Risk: many nullable fields and kind-specific rules recreate the v0.1.4 merged-param smell.
+Trade-off: compact surface. Risk: nullable `new_fact_tuple` and kind-specific validation still recreate part of the v0.1.4 merged-param smell.
 
-### Shape D — Narrow subset
+### Shape D — Reuse legacy replace DTO + new remove action
 
 ```python
 @dataclass(frozen=True)
 class EvaluationOverlay:
-    fact_actions: tuple[FactReplaceAction | FactRemoveAction, ...]
+    fact_actions: tuple[FactValueOverride | FactRemoveAction, ...]
 ```
 
-Trade-off: abandons or defers `add` if it fails crispness. Risk: does not fully satisfy master plan §5.3 unless audit records why `add` is not crisp.
+Trade-off: preserves current `FactValueOverride` as the replace action and keeps migration small. Risk: `FactValueOverride` remains semantically named as "override" rather than the more general "replace action".
 
 ## 7. Compatibility Paths(Draft)
 
@@ -221,19 +206,19 @@ Rejected path by default unless Step 0 proves otherwise: adding a second optiona
 - Fact Overlay Check remains native-only.
 - Overlay execution remains read-only; no `set_field`, `add_field`, `retract_by_asrt`, ledger append, or Store support/provenance cache writes.
 - Fact actions operate on projected rows, not authored SDK objects.
-- Group-key positions must not change for replace/remove; add must preserve tuple arity and e_ref position.
+- Group-key positions must not change for replace; remove has no replacement tuple and must target a visible row.
 - Non-native engines still return `unsupported`.
 - `FactValueOverride` compatibility must be covered by tests.
 - No SDK files should change.
 
 ## 10. Acceptance(Draft)
 
-- [ ] Step 0.A records the falsifiability checklist conclusion for each item.
-- [ ] Step 0.A records the `replace/add/remove × single/multi` decomposition map.
-- [ ] Step 0.A explicitly chooses ship / narrow / suspend / abandon.
+- [x] Step 0.A records the falsifiability checklist conclusion for each item.
+- [x] Step 0.A records the `replace/add/remove × single/multi` decomposition map.
+- [x] Step 0.A explicitly chooses ship / narrow / suspend / abandon.
 - [ ] Step 0.B chooses one candidate shape from §6 and records at least one rejected reason for each other shape.
 - [ ] Step 0.B chooses one compatibility path from §7 and records at least one rejected reason for each other path.
-- [ ] Step 0 decides helper migration scope for Batch 2 helpers.
+- [ ] Step 0.B decides helper migration scope for Batch 2 helpers.
 - [ ] `EvaluationOverlay` and fact action DTOs have frozen protocol tests.
 - [ ] `FactValueOverride` compatibility path remains green.
 - [ ] Runtime supports the action set chosen by Step 0.A over projected witness rows.
@@ -254,7 +239,7 @@ Rejected path by default unless Step 0 proves otherwise: adding a second optiona
 3. Protocol tests for new DTOs and `FactOverlayCheckRequest` compatibility.
 4. Runtime normalization from legacy `FactValueOverride` tuple to `EvaluationOverlay`.
 5. Projection apply function supports the action set chosen by Step 0.A with validation.
-6. Runtime tests for replace compatibility, add pass/fail, remove pass/fail, no-write/no-cache invariants.
+6. Runtime tests for replace compatibility, remove pass/fail, no-write/no-cache invariants.
 7. Docs update.
 8. Close-out: outcome, archive, inventory.
 

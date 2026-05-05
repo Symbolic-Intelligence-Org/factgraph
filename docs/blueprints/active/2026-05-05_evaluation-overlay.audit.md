@@ -11,6 +11,7 @@
 | 2026-05-06 | draft | Step 0 framing hardened | Review found confirmation bias and pre-baked DTO shape;blueprint rewritten to use falsifiability checklist, decomposition map, candidate shape alternatives, and explicit compatibility paths |
 | 2026-05-06 | draft | Remaining action-set pre-bake removed | Goals / acceptance / implementation plan now refer to the action set chosen by Step 0.A, rather than assuming replace+add+remove all ship |
 | 2026-05-06 | scoped | Scope frozen for Step 0.A | Falsification-first framing reviewed;scope permits Step 0.A spike only, not implementation;Step 0.A must fill checklist and decomposition map before Step 0.B/implementation |
+| 2026-05-06 | scoped | Step 0.A completed | Falsification spike narrowed Batch 3 to `replace + remove`;fact-side `add` deferred because `single + add` requires chosen-policy semantics, not a projection-local row action |
 
 ## Decision Notes
 
@@ -33,6 +34,12 @@ Follow-up review found the same pre-baking still present in Goals, Acceptance, a
 ### 2026-05-06 — Scoped For Step 0.A
 
 Final spot review verified no residual pre-bake in Goals / Acceptance / Implementation Plan. Scope is frozen only for Step 0.A falsification spike; no DTO or runtime implementation is authorized until Step 0.A records checklist conclusions, decomposition map, and ship/narrow/suspend/abandon decision.
+
+### 2026-05-06 — Step 0.A Narrowed Action Set
+
+Step 0.A reviewed the current projected witness substrate, Fact Overlay runtime, chosen-policy projector, and existing set/add write semantics. `replace` and `remove` both close over visible projected rows: they can validate `asrt_id`, `pred_id`, `e_ref`, and `old_fact_tuple` against copied witness rows, then evaluate before/after without ledger writes or live Store cache mutation.
+
+`add` failed the crispness gate for this batch. Multi-field add has a plausible append-row meaning, but single-field add diverges into reject-on-single, shadow-current, or only-if-no-visible-row semantics. Those are product/policy choices, not implementation details. Batch 3 therefore narrows to `replace + remove`; Step 0.B may choose the DTO shape and compatibility path only for that narrowed action set.
 
 ### 2026-05-06 — Date Naming Note
 
