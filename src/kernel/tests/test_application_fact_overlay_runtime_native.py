@@ -33,7 +33,7 @@ from kernel.sdk import Entity, Field, Identity, compile_schema_from_classes
 from kernel.application.fact_overlay_runtime import (
     _apply_fact_overlay_projection,
     _build_overlay_diff,
-    _validate_fact_value_overrides,
+    _validate_fact_overlay_actions,
 )
 
 
@@ -260,6 +260,17 @@ class FactOverlayRuntimePreflightTests(unittest.TestCase):
         self.assertEqual(result.status, "invalid_request")
         self.assertEqual(result.errors[0].code, "RULE_REF_UNRESOLVABLE")
 
+    def test_malformed_ruleref_returns_invalid_request(self) -> None:
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        plan = _build_plan(body + [("ruleref",)], exists_pred)
+        request = _request(plan=plan, binding=(), overlay=(_override(),))
+
+        result = check_fact_overlay_binding(request, store=store, registry=RuleRegistry())
+
+        self.assertEqual(result.status, "invalid_request")
+        self.assertEqual(result.errors[0].code, "RULE_REF_MALFORMED")
+
     def test_non_native_engines_short_circuit_unsupported(self) -> None:
         store, index = _build_store()
         body, exists_pred = _exists_body(index)
@@ -280,6 +291,28 @@ class FactOverlayRuntimePreflightTests(unittest.TestCase):
                 self.assertIsNone(result.after)
                 self.assertIsNone(result.diff)
                 self.assertEqual(result.errors[0].code, "ENGINE_OVERLAY_NOT_SUPPORTED")
+
+    def test_non_native_ruleref_short_circuits_before_registry_preflight(self) -> None:
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        plan = _build_plan(
+            body + [("ruleref", "person.exists", "1.0", ["$p"])],
+            exists_pred,
+        )
+
+        result = check_fact_overlay_binding(
+            _request(
+                plan=plan,
+                binding=(),
+                overlay=(_override(),),
+                engine="souffle",
+            ),
+            store=store,
+            registry=None,
+        )
+
+        self.assertEqual(result.status, "unsupported")
+        self.assertEqual(result.errors[0].code, "ENGINE_OVERLAY_NOT_SUPPORTED")
 
 
 class FactOverlayProjectionHelperTests(unittest.TestCase):
@@ -371,7 +404,7 @@ class FactOverlayProjectionHelperTests(unittest.TestCase):
 class FactOverlayValidationHelperTests(unittest.TestCase):
     """§7-Overlay-7 / §7-Overlay-8: override validation guards."""
 
-    def test_validate_fact_value_overrides_accepts_visible_matching_override(self) -> None:
+    def test_validate_fact_overlay_actions_accepts_visible_matching_override(self) -> None:
         witness = {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]}
         schema_ir = {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]}
         override = FactValueOverride(
@@ -382,11 +415,11 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
             new_fact_tuple=("person:alice", 99),
         )
 
-        errors = _validate_fact_value_overrides((override,), witness, schema_ir)
+        errors = _validate_fact_overlay_actions((override,), witness, schema_ir)
 
         self.assertEqual(errors, [])
 
-    def test_validate_fact_value_overrides_accepts_visible_matching_remove(self) -> None:
+    def test_validate_fact_overlay_actions_accepts_visible_matching_remove(self) -> None:
         witness = {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]}
         schema_ir = {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]}
         action = FactRemoveAction(
@@ -396,11 +429,11 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
             old_fact_tuple=("person:alice", 25),
         )
 
-        errors = _validate_fact_value_overrides((action,), witness, schema_ir)  # type: ignore[arg-type]
+        errors = _validate_fact_overlay_actions((action,), witness, schema_ir)
 
         self.assertEqual(errors, [])
 
-    def test_validate_fact_value_overrides_collects_duplicate_asrt_ids(self) -> None:
+    def test_validate_fact_overlay_actions_collects_duplicate_asrt_ids(self) -> None:
         witness = {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]}
         schema_ir = {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]}
         first = FactValueOverride(
@@ -418,11 +451,11 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
             new_fact_tuple=("person:alice", 100),
         )
 
-        errors = _validate_fact_value_overrides((first, second), witness, schema_ir)
+        errors = _validate_fact_overlay_actions((first, second), witness, schema_ir)
 
         self.assertIn("OVERLAY_DUPLICATE_ASRT_ID", {error.code for error in errors})
 
-    def test_validate_fact_value_overrides_rejects_non_visible_asrt_id(self) -> None:
+    def test_validate_fact_overlay_actions_rejects_non_visible_asrt_id(self) -> None:
         override = FactValueOverride(
             asrt_id="missing",
             pred_id="age",
@@ -431,7 +464,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
             new_fact_tuple=("person:alice", 99),
         )
 
-        errors = _validate_fact_value_overrides(
+        errors = _validate_fact_overlay_actions(
             (override,),
             {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]},
             {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]},
@@ -439,7 +472,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
 
         self.assertEqual([error.code for error in errors], ["OVERLAY_ASRT_ID_NOT_VISIBLE"])
 
-    def test_validate_fact_value_overrides_rejects_stale_old_fact_tuple(self) -> None:
+    def test_validate_fact_overlay_actions_rejects_stale_old_fact_tuple(self) -> None:
         override = FactValueOverride(
             asrt_id="a1",
             pred_id="age",
@@ -448,7 +481,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
             new_fact_tuple=("person:alice", 99),
         )
 
-        errors = _validate_fact_value_overrides(
+        errors = _validate_fact_overlay_actions(
             (override,),
             {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]},
             {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]},
@@ -456,7 +489,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
 
         self.assertIn("OVERLAY_STALE_OLD_FACT_TUPLE", {error.code for error in errors})
 
-    def test_validate_fact_value_overrides_rejects_tuple_arity_mismatch(self) -> None:
+    def test_validate_fact_overlay_actions_rejects_tuple_arity_mismatch(self) -> None:
         override = FactValueOverride(
             asrt_id="a1",
             pred_id="age",
@@ -465,7 +498,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
             new_fact_tuple=("person:alice", 99, "extra"),
         )
 
-        errors = _validate_fact_value_overrides(
+        errors = _validate_fact_overlay_actions(
             (override,),
             {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]},
             {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]},
@@ -473,7 +506,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
 
         self.assertIn("OVERLAY_TUPLE_ARITY_MISMATCH", {error.code for error in errors})
 
-    def test_validate_fact_value_overrides_rejects_e_ref_position_mismatch(self) -> None:
+    def test_validate_fact_overlay_actions_rejects_e_ref_position_mismatch(self) -> None:
         override = FactValueOverride(
             asrt_id="a1",
             pred_id="age",
@@ -482,7 +515,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
             new_fact_tuple=("person:bob", 99),
         )
 
-        errors = _validate_fact_value_overrides(
+        errors = _validate_fact_overlay_actions(
             (override,),
             {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]},
             {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]},
@@ -490,7 +523,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
 
         self.assertIn("OVERLAY_E_REF_POSITION_MISMATCH", {error.code for error in errors})
 
-    def test_validate_fact_value_overrides_rejects_group_key_change(self) -> None:
+    def test_validate_fact_overlay_actions_rejects_group_key_change(self) -> None:
         override = FactValueOverride(
             asrt_id="rel1",
             pred_id="friend_strength",
@@ -499,7 +532,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
             new_fact_tuple=("person:alice", "person:cara", "0.8"),
         )
 
-        errors = _validate_fact_value_overrides(
+        errors = _validate_fact_overlay_actions(
             (override,),
             {
                 "friend_strength": [
@@ -514,7 +547,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
 
         self.assertIn("OVERLAY_GROUP_KEY_CHANGED", {error.code for error in errors})
 
-    def test_validate_fact_value_overrides_collects_multiple_errors(self) -> None:
+    def test_validate_fact_overlay_actions_collects_multiple_errors(self) -> None:
         override = FactValueOverride(
             asrt_id="a1",
             pred_id="age",
@@ -523,7 +556,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
             new_fact_tuple=("person:cara", 99, "extra"),
         )
 
-        errors = _validate_fact_value_overrides(
+        errors = _validate_fact_overlay_actions(
             (override,),
             {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]},
             {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]},

@@ -46,13 +46,13 @@ def check_fact_overlay_binding(
         )
 
     body = list(request.plan.body_ir)
-    ruleref_errors = _overlay_ruleref_preflight(body, registry)
-    if ruleref_errors:
-        return _invalid_request(request, errors=ruleref_errors)
-
     unsupported = _overlay_engine_support_preflight(request)
     if unsupported is not None:
         return unsupported
+
+    ruleref_errors = _overlay_ruleref_preflight(body, registry)
+    if ruleref_errors:
+        return _invalid_request(request, errors=ruleref_errors)
 
     projected_witness = project_view_facts_with_witness(store.ledger, store.schema_ir)
     action_errors = _validate_fact_overlay_actions(
@@ -155,6 +155,16 @@ def _overlay_ruleref_preflight(
     errors: list[ErrorDTO] = []
     seen: set[tuple[str, str]] = set()
     for atom in ruleref_atoms:
+        if len(atom) < 3:
+            errors.append(
+                ErrorDTO(
+                    code="RULE_REF_MALFORMED",
+                    message="ruleref atom must include rule id and version",
+                    path=("plan", "body_ir"),
+                    details={"atom": repr(atom)},
+                )
+            )
+            continue
         rule_id = atom[1] if isinstance(atom[1], str) else None
         version = atom[2] if isinstance(atom[2], str) else None
         if rule_id is None or version is None:
@@ -210,14 +220,6 @@ def _run_native_overlay_phase(
         matched_count=len(matches),
         matched_binding=normalized[0],
     )
-
-
-def _validate_fact_value_overrides(
-    overrides: tuple[FactValueOverride, ...],
-    projected_witness: dict[str, list[ProjectedFact]],
-    schema_ir: dict[str, Any],
-) -> list[ErrorDTO]:
-    return _validate_fact_overlay_actions(overrides, projected_witness, schema_ir)
 
 
 def _validate_fact_overlay_actions(

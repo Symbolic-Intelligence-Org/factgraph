@@ -106,7 +106,11 @@ def build_fact_remove_action(
     current_value: Any | None = None,
     note: str | None = None,
 ) -> FactRemoveAction:
-    """Build a Fact Overlay remove action from a current active field fact."""
+    """Build a Fact Overlay remove action from a current active field fact.
+
+    For multi-cardinality fields, pass ``current_value`` to identify the row to
+    remove; the helper refuses ambiguous multi-row matches.
+    """
 
     if not isinstance(store, Store):
         raise CapabilityHelperError("store must be Store")
@@ -152,7 +156,8 @@ def build_fact_remove_action(
         )
     if len(matches) > 1:
         raise CapabilityHelperError(
-            f"multiple matching projected facts for {field.entity_type}.{field.field_name}"
+            f"multiple matching projected facts for {field.entity_type}.{field.field_name}; "
+            "pass current_value to disambiguate"
         )
 
     current = matches[0]

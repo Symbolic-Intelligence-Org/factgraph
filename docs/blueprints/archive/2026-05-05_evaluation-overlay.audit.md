@@ -14,6 +14,7 @@
 | 2026-05-06 | scoped | Step 0.A completed | Falsification spike narrowed Batch 3 to `replace + remove`;fact-side `add` deferred because `single + add` requires chosen-policy semantics, not a projection-local row action |
 | 2026-05-06 | scoped | Step 0.B completed | Chose Shape D(`EvaluationOverlay.fact_actions: tuple[FactValueOverride | FactRemoveAction, ...]`) and compatibility Path 1(`overlay: tuple[FactValueOverride, ...] | EvaluationOverlay`);helper scope limited to application-layer remove + overlay builders |
 | 2026-05-06 | implemented | Implementation complete | Protocol/runtime/helpers/tests/docs updated for `replace + remove`;focused unittest/ruff/diff guards pass;ready for archive |
+| 2026-05-06 | implemented | Post-review hardening | Removed legacy validation-name drift, documented remove-helper multi-row disambiguation, made non-native unsupported short-circuit before ruleref preflight, and guarded malformed ruleref atoms |
 
 ## Decision Notes
 
@@ -52,6 +53,12 @@ Compatibility Path 1 was selected: widen `FactOverlayCheckRequest.overlay` to ac
 ### 2026-05-06 — Implementation Closeout
 
 Implementation followed Step 0.B: `FactRemoveAction` and `EvaluationOverlay` were added to application protocol, legacy `FactValueOverride` tuples remain accepted, runtime normalizes both shapes and applies replace/remove over copied projected witness rows, and application helpers gained remove-action and overlay builders. No SDK files changed. Verification: focused Fact Overlay protocol/runtime/helper unittest suite passed, ruff passed for `src/kernel` plus the capabilities demo, `git diff --stat -- src/kernel/sdk` was empty, `git diff --check` passed, and full kernel unittest ran 1111 OK / 1 skipped.
+
+### 2026-05-06 — Post-Review Hardening
+
+Post-ship review found two cleanup items and two preflight risks. The old `_validate_fact_value_overrides(...)` shim was removed so tests call `_validate_fact_overlay_actions(...)` directly, and `build_fact_remove_action(...)` now documents that multi-cardinality fields require `current_value` to avoid ambiguous remove targets. Runtime preflight now returns `ENGINE_OVERLAY_NOT_SUPPORTED` for non-native engines before native-only ruleref registry validation, and malformed ruleref atoms return `RULE_REF_MALFORMED` instead of escaping as `IndexError`. Verification after hardening: focused Fact Overlay protocol/runtime/helper unittest suite ran 101 OK, ruff passed for `src/kernel` plus the capabilities demo, `git diff --stat -- src/kernel/sdk` was empty, `git diff --check` passed, and full kernel unittest ran 1113 OK / 1 skipped.
+
+One residual risk remains deferred: `OverlayCheckPhase` stores only the representative matched binding, so `OverlayCheckDiff.bindings_added/removed` remains representative rather than exhaustive when a partial/empty requested binding has multiple matches. Fixing that would require a protocol expansion, so it is not included in this hardening patch.
 
 ### 2026-05-06 — Date Naming Note
 
