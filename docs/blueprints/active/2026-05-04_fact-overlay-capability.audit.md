@@ -20,6 +20,7 @@
 | 2026-05-05 | draft | Step 0.C review precision findings resolved | Review pinned phase-runtime-error nullability, made projection merge helper private, tightened intent-only DTO wording, and made the no-ledger-write gate API-specific. |
 | 2026-05-05 | draft | Step 0.C Round 1 findings resolved | Review found `evaluate_native_where(...)` RuleRef support capture as an indirect live-cache path. Native phases now pin `remember_support_artifact=None`; D8 §6.6 is recorded as Step 0.D review discipline, not a unit-test gate. |
 | 2026-05-05 | draft → scoped | Step 0.D lift complete | Step 0.B D1-D9 and Step 0.C C1-C7 lifted into blueprint §5 / §7 / §8. Blueprint status moved `draft → scoped`; implementation authorized only through the six ordered steps and §7-Overlay-1 through §7-Overlay-12 gates. |
+| 2026-05-05 | scoped | Step 1 helper extraction complete | Moved Check's `_binding_matches` and `_all_body_vars` into `kernel.application._derivation_match_helpers`, updated Check imports, added focused helper tests, and verified helper tests, Check 73 tests, full kernel unittest discover, and ruff. |
 
 ## Decision Notes
 
@@ -233,3 +234,11 @@ Blueprint remains `draft` until Step 0.D lifts decisions into §5 / §7 / §8 an
   - **§8 Implementation Plan** now contains complete Step 0 history plus six ordered implementation steps: helper extraction prerequisite refactor, protocol DTOs, native MVP scaffolding, native double-run + override hardening, drift-prevention named gates, and close-out.
 
   Cross-consistency check: every D1-D9 and C1-C7 decision has a home in §5, §7, or §8. D8 remains review-discipline only and is recorded in §5.8 rather than forced into a unit-test gate. Implementation may start, but any future change to §5 contract, §7 acceptance gates, or §8 plan requires a new audit entry before code changes.
+
+- 2026-05-05 (Implementation Step 1) — **Helper extraction prerequisite refactor complete.** Created `src/kernel/application/_derivation_match_helpers.py` and moved Check's pure `_binding_matches(...)` and `_all_body_vars(...)` helpers there without renaming. `derivation_check_runtime.py` now imports those helpers from the shared application-internal module. Added direct unit coverage in `test_application_derivation_match_helpers.py` for subset matching, mismatch, empty requested binding, plain body vars, `not` body vars, and `ruleref` term vars.
+
+  Verification:
+  - `python -m unittest src.kernel.tests.test_application_derivation_match_helpers` — 6 tests OK
+  - `python -m unittest src.kernel.tests.test_application_check_runtime src.kernel.tests.test_application_check_protocol` — 73 tests OK
+  - `python -m unittest discover -s src/kernel/tests` — 872 tests OK, 1 skipped
+  - `python -m ruff check src/kernel` — clean
