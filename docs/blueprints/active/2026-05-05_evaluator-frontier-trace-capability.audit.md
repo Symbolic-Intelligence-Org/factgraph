@@ -11,6 +11,7 @@
 | 2026-05-05 | draft | Step 0.B crispness decision recorded | Selected native-only aggregate frontier trace as crisp enough for Step 0.C; rejected cross-engine trace and repeated probe shapes. |
 | 2026-05-05 | draft | Step 0.C contract frozen | Froze separate native entrypoint, aggregate row DTO, no sample binding, native-only gate, and 10 drift gates. |
 | 2026-05-05 | draft -> scoped | Step 0.D lift complete | Renamed blueprint to Evaluator Frontier Trace Capability, lifted Step 0 decisions into authoritative §5 / §7 / §8, and authorized implementation only through the scoped plan. |
+| 2026-05-05 | scoped | Step 1 DTO and entry scaffold complete | Added isolated core rules frontier module with frozen DTOs and a parity-preserving scaffold entrypoint. |
 
 ## Decision Notes
 
@@ -144,3 +145,9 @@ Step 0.A through 0.C produced a crisp, bounded, native-only evaluator trace cont
 - setting status to `scoped`;
 - replacing Step 0 scaffolding with authoritative contract / acceptance / implementation plan sections;
 - keeping cross-engine trace, adapter-specific failure parsing, and application capability consumers out of scope.
+
+### 2026-05-05 — Step 1 Placement And Scaffold
+
+Step 1 uses a new `kernel.core.rules.frontier` module instead of adding the frontier surface to `ruleref_substrate.py`. The physical split keeps the frontier contract easy to scan for layer-boundary drift while still allowing Step 2 to share private evaluator helpers if needed.
+
+The first entrypoint implementation delegates to `evaluate_native_where(...)` and returns identical success-side fields with `frontier_rows=()`. This keeps Step 1 limited to DTO / signature / layer scaffolding while establishing success parity early. Step 2 will replace the empty frontier row behavior for failed branches with the frozen aggregate algorithm.
