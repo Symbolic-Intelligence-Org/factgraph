@@ -110,11 +110,20 @@ Step 0.A narrows E1:
 - warning sign: a callback, free-form trace kwarg, mode flag, or opaque internal env dump;
 - open Step 0.B question: whether "frontier" means per-branch aggregate failure, per-partial-env failure, or seeded candidate failure. The seeded candidate variant may collapse into Diagnose unless it provides new evaluator-level value.
 
+Step 0.B selects E1 with a narrower contract:
+
+- **Granularity:** per-branch aggregate frontier rows, not per-partial-env dumps and not seeded candidate failure.
+- **Entrypoint:** separate native trace entrypoint, not an added kwarg on `evaluate_native_where(...)` and not a field that normal callers are expected to consume.
+- **Non-redundant value:** the trace summarizes why the unseeded native evaluation produced no rows, or fewer rows than expected, by reporting each branch's furthest satisfied atom and frontier count. Diagnose answers "why did this requested binding fail?" E1 answers "where did this rule body frontier collapse during native evaluation?"
+- **Boundedness:** rows are bounded by OR branches and atom positions. Step 0.C must decide whether any per-row sample is allowed; if allowed, it must be a fixed small representative sample, not `search_budget`.
+
 ### 5.2 Shape E2: Cross-engine Trace Abstraction
 
 Define a common trace abstraction across native, Souffle, ProbLog, and PyReason. This is higher signal but much riskier: if each adapter has materially different failure semantics, the abstraction may become a lossy `Any` payload or a premature §6.7 trigger.
 
 Step 0.A marks E2 as currently not crisp. Existing adapter traces are success/provenance carriers, not shared failed-candidate contracts.
+
+Step 0.B rejects E2 for this blueprint. ProbLog adapter-specific failure parsing may become a separate adapter-specific blueprint later, but it is not a cross-engine evaluator trace contract today.
 
 ### 5.3 Shape E3: Repeated Bounded Probe
 
@@ -122,9 +131,51 @@ Avoid evaluator traces by enumerating explicit candidates and running bounded pr
 
 Step 0.A adds a redundancy exit: if E3 cannot name genuine new value over shipped Why-not Universe Diagnose, Step 0.B should classify it as abandonment / supersession rather than scope a duplicate capability.
 
+Step 0.B rejects E3 as redundant. Any explicit-universe repeated probe belongs to shipped Why-not Universe Diagnose unless a future performance blueprint proves a batching optimization without changing semantics.
+
 ### 5.4 Valid Abandonment
 
 If all useful shapes require open-ended search, unstable internal evaluator state, adapter-specific opaque payloads, or application-layer coupling, the correct output is an abandonment note, not implementation.
+
+Step 0.B does not abandon. E1 is crisp enough to proceed to Step 0.C because the selected contract is native-only, branch/atom bounded, and separated from the existing evaluation entrypoint.
+
+### 5.5 Step 0.B Crispness Decision
+
+Decision: **continue with E1 native aggregate frontier trace**.
+
+Rejected E1 variants:
+
+| Variant | Decision | Reason |
+|---|---|---|
+| Per-partial-env dump | reject | Captures unstable internal dictionaries and can explode with join cardinality |
+| Seeded candidate failure | reject as primary shape | Collapses into Diagnose unless a later runtime needs a lower-level helper |
+| Callback / trace kwarg | reject | Hides a second contract behind normal evaluation and conflicts with drift gates |
+| `NativeWhereEvaluation` field consumed by normal callers | reject | Invites accidental dependency from shipped application capabilities |
+
+Selected E1 shape for Step 0.C:
+
+```text
+evaluate_native_where_frontier(view_facts, where, *, registry=None, witness_facts=None)
+  -> NativeWhereFrontierEvaluation
+
+NativeWhereFrontierEvaluation(
+  bindings,
+  rule_refs,
+  rule_ref_resolutions,
+  frontier_rows,
+)
+
+NativeWhereFrontierRow(
+  branch_index,
+  failed_atom_index,
+  atoms_satisfied,
+  frontier_count,
+  failure_kind,
+  sample_binding,
+)
+```
+
+Names and exact fields are provisional until Step 0.C. What is frozen by Step 0.B is the altitude: native-only, aggregate, typed, separate entrypoint, no application protocol dependency, no callback, no open-ended search budget.
 
 ## 6. Boundaries And Invariants
 
@@ -138,7 +189,7 @@ If all useful shapes require open-ended search, unstable internal evaluator stat
 ## 7. Acceptance
 
 - [x] Step 0.A source pass cites the native evaluator and each current adapter surface.
-- [ ] Step 0.B records a DTO crispness decision for E1 / E2 / E3 / abandon.
+- [x] Step 0.B records a DTO crispness decision for E1 / E2 / E3 / abandon.
 - [ ] If crisp, Step 0.C freezes the evaluator boundary, status vocabulary, payload shape, and drift gates before implementation.
 - [ ] If not crisp, Step 0.C records the exact blocker and why implementation is abandoned or superseded.
 - [ ] Step 0.D either moves this blueprint to `scoped` for a bounded implementation or closes it as abandoned / superseded.

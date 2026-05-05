@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-05-05 | draft | Blueprint created | Opened evaluator architecture Step 0 as the natural follow-up fork from Why-not Shape B deferral. |
 | 2026-05-05 | draft | Step 0.A source pass drafted | Read native evaluator, RuleRef wrapper, Store evaluation surface, Diagnose localizer, Souffle / ProbLog / PyReason adapters, and Why-not reference anchors. |
+| 2026-05-05 | draft | Step 0.B crispness decision recorded | Selected native-only aggregate frontier trace as crisp enough for Step 0.C; rejected cross-engine trace and repeated probe shapes. |
 
 ## Decision Notes
 
@@ -60,3 +61,56 @@ Conclusion: PyReason provides a success/provenance event log, not failed-candida
 E1 is the only non-redundant candidate worth carrying into Step 0.B, but only as native-only architecture and only if Step 0.B can name a bounded frontier DTO. E2 is not crisp today: Souffle, ProbLog, and PyReason expose different success/provenance carriers, not shared failed-frontier contracts. E3 is presumed redundant with shipped Why-not Universe Diagnose unless it proves genuine evaluator-layer batching or cost-model value.
 
 If E1 cannot avoid opaque env dumps, callbacks, trace mode flags, or Diagnose duplication, valid abandonment is the correct Step 0 result.
+
+### 2026-05-05 — Step 0.B Frontier Granularity
+
+Three E1 granularities were considered:
+
+1. **Per-partial-env dump.** This is the closest to the evaluator's live control flow, but it is not a crisp DTO. It would expose internal dictionaries, join cardinality, and atom evaluator details that are not stable. It also risks becoming an unbounded debug stream.
+2. **Seeded candidate failure.** This is crisp, but it is mostly Diagnose under another name. Diagnose already seeds one binding and localizes a failed atom. Moving that helper down one layer may be useful later, but it is not enough to justify an evaluator architecture blueprint by itself.
+3. **Per-branch aggregate frontier.** This is bounded by the number of OR branches and atom positions. It can report the furthest atom reached, how many environments reached that frontier, and a representative binding sample without exposing every rejected env.
+
+Decision: carry **per-branch aggregate frontier** into Step 0.C.
+
+### 2026-05-05 — Step 0.B Entrypoint Decision
+
+Two implementation-altitude options were considered:
+
+- Extending `NativeWhereEvaluation` with an optional frontier field.
+- Adding a separate native trace entrypoint.
+
+Decision: prefer a **separate native trace entrypoint** for Step 0.C. Normal `evaluate_native_where(...)` callers should keep receiving the existing evaluation result shape and should not grow accidental dependencies on frontier fields. A separate entrypoint also resolves the Why-not §7-WhyNot-13 concern: no trace/callback kwarg is added to the existing evaluator call.
+
+The separate entrypoint can still share private implementation with normal native evaluation if Step 0.C finds a clean helper split.
+
+### 2026-05-05 — Step 0.B Non-redundancy With Diagnose
+
+Diagnose answers a seeded question: "Does this requested binding pass, and if not, which atom blocks it?" The selected E1 shape answers an unseeded evaluator question: "During this native body evaluation, where did each branch frontier collapse, and how much partial work reached that frontier?"
+
+This is enough new value to continue Step 0. It is not yet enough to authorize implementation. Step 0.C must freeze exact row fields and decide whether `sample_binding` is stable enough to include.
+
+### 2026-05-05 — Step 0.B Rejected Shapes
+
+E2 cross-engine trace is rejected for this blueprint. Souffle lacks failed rows, ProbLog has adapter-local textual `fail` events, and PyReason has adapter-local bound-change events. These may justify future adapter-specific work, especially ProbLog failure parsing, but they do not form a shared evaluator trace DTO today.
+
+E3 repeated bounded probe is rejected as redundant with shipped Why-not Universe Diagnose. If a future performance topic wants to batch repeated probes, it should be framed as an optimization of existing semantics, not a new evaluator near-miss architecture.
+
+### 2026-05-05 — Step 0.B Crispness Decision
+
+Proceed to Step 0.C with native-only aggregate frontier trace:
+
+```text
+evaluate_native_where_frontier(...)
+  -> NativeWhereFrontierEvaluation(bindings, rule_refs, rule_ref_resolutions, frontier_rows)
+
+NativeWhereFrontierRow(
+  branch_index,
+  failed_atom_index,
+  atoms_satisfied,
+  frontier_count,
+  failure_kind,
+  sample_binding,
+)
+```
+
+Exact names and fields remain provisional. Step 0.B freezes only the direction: typed aggregate rows, native-only, separate entrypoint, no application DTO dependency, no callback, no mode flag, no search budget, and no `CandidateSet` pollution.
