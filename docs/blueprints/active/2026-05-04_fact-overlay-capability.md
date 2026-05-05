@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-04
-- Last Updated: 2026-05-04
+- Last Updated: 2026-05-05
 - Related Modules:
   - `src/kernel/application/protocol/`
   - `src/kernel/application/`
@@ -233,6 +233,66 @@ Step 0.C must map these gates to tests before implementation:
 - group-key position changes return `invalid_request`;
 - request DTO remains intent-only: no store, registry, precomputed projections, or caches.
 
+### Step 0.C proposal (draft for review)
+
+This section freezes the algorithm and named drift gates proposed by Step 0.C. It adds no new DTO or ledger-boundary decision beyond Step 0.B.
+
+#### 5.8 Algorithm freeze
+
+Dispatcher entry ordering:
+
+1. Normalize request-level fields and reject `overlay=()` first with `invalid_request` / `EMPTY_OVERLAY_NOT_PERMITTED`.
+2. Run Overlay Check's own RuleRef preflight before any engine dispatch. RuleRef failures return `invalid_request`.
+3. Apply the capability-owned engine support gate. Non-native engines short-circuit at dispatcher entry with `unsupported` / `ENGINE_OVERLAY_NOT_SUPPORTED`; no adapter is invoked and no baseline phase is returned.
+4. For native only, project current visible facts with witnesses using `project_view_facts_with_witness(store.ledger, store.schema_ir)`.
+5. Validate each `FactValueOverride` against that projected witness set: `asrt_id` active and visible, `old_fact_tuple` matches, tuple arity and `e_ref == fact_tuple[0]` hold, schema `group_key_indexes` positions are preserved, and there are no duplicate or conflicting overrides.
+6. Assemble `invalid_request` if any validation error was recorded; otherwise run baseline and overlay phases.
+
+Native phase sequence:
+
+1. Build the baseline phase from the unmodified projected witness facts.
+2. Build an overlay projected witness copy with `apply_fact_overlay_projection(overrides, projected_witness_facts)`.
+3. Convert each phase's projected witnesses to the `pred_id -> list[fact_tuple]` shape required by `evaluate_native_where(...)`.
+4. Run `evaluate_native_where(...)` separately for baseline and overlay phases using identical plan body, requested binding, and RuleRef resolutions.
+5. Apply `_binding_matches`-style subset matching to each phase's final bindings and build lightweight `OverlayCheckPhase` summaries.
+6. Compute `OverlayCheckDiff` only from the two phase summaries: status delta, match-count delta, and binding deltas. It never reads engine-native artifacts.
+
+Execution is sequential for MVP: baseline first, overlay second. The two phases may share the immutable original projection snapshot, but the overlay projection must be a derived copy. No phase may write into live `Store` caches or reuse mutable capture state.
+
+Status assembly:
+
+1. Request-shape and RuleRef invalids return `invalid_request` before engine support is considered.
+2. Unsupported engines return `unsupported` before native projection-dependent override validation.
+3. Native projection or override validation errors return `invalid_request`.
+4. Completed native runs set top-level `status` to `after.status`, either `passed` or `failed`.
+
+Runtime helper decomposition is frozen at name/role altitude only:
+
+- `check_fact_overlay_binding(...)`: application entry point.
+- `_overlay_engine_support_preflight(...)`: dispatcher-level engine gate.
+- `_overlay_ruleref_preflight(...)`: Overlay-owned RuleRef preflight, not imported from Check.
+- `apply_fact_overlay_projection(...)`: pure projection-copy merger for `FactValueOverride`.
+- `_validate_fact_value_overrides(...)`: native projected-row defensive validation.
+- `_run_native_overlay_phase(...)`: native phase evaluator that returns `OverlayCheckPhase`.
+- `_build_overlay_diff(...)`: phase-summary-only diff builder.
+
+#### 5.9 Named anti-regression gates
+
+Step 0.D must lift these named gates into §7 Acceptance before implementation:
+
+- **§7-Overlay-1** (Sibling no-Check-call invariant): static AST/import check that Overlay Check runtime never imports `check_derivation_binding`, `derivation_check_runtime`, Check result/envelope DTOs, or Check private helpers. The allow-list is `_derivation_match_helpers` binding-match/body-var helpers plus `kernel.core.store._support_capture.find_winning_branch_index` and `kernel.core.store._support.normalize_binding_items`.
+- **§7-Overlay-2** (intent-only request DTO): type/field test that `FactOverlayCheckRequest` contains plan, binding, overlay, and engine only; no `store`, `registry`, precomputed projections, cache handles, or side-channel runtime objects.
+- **§7-Overlay-3** (no ledger write): runtime test that overlay execution leaves `store.ledger` unchanged and never calls append/retract/accept/scenario-persistence paths.
+- **§7-Overlay-4** (no live cache contamination): runtime spy/monkeypatch test that overlay execution does not call `_remember_support_artifact`, `_remember_provenance_envelope`, `_remember_candidate_support`, or `_remember_rule_trace_artifact`.
+- **§7-Overlay-5** (non-native dispatcher short-circuit): souffle, problog, and pyreason return `unsupported` with `ENGINE_OVERLAY_NOT_SUPPORTED`; adapters are not invoked and `before` / `after` / `diff` are `None`.
+- **§7-Overlay-6** (empty overlay rejected): `overlay=()` returns `invalid_request` with `EMPTY_OVERLAY_NOT_PERMITTED`.
+- **§7-Overlay-7** (projected-row stale/visibility guards): stale `old_fact_tuple`, inactive `asrt_id`, and non-visible `asrt_id` each return `invalid_request`.
+- **§7-Overlay-8** (tuple shape guards): tuple arity violations and `e_ref != fact_tuple[0]` return `invalid_request`.
+- **§7-Overlay-9** (chosen-policy group-key guard): any `new_fact_tuple` change to schema `group_key_indexes` positions returns `invalid_request`.
+- **§7-Overlay-10** (§6.5 non-expansion): type-level test that `OverlayCheckPhase` and `OverlayCheckDiff` fields do not reference `EvidenceEnvelope`, `SupportArtifact`, `ProvenanceEnvelope`, or any §6.5 typed Union member.
+- **§7-Overlay-11** (no engine payload field): result DTO field absence test that `FactOverlayCheckResult` has no `evidence_envelope`, `engine_payload`, support-artifact, or provenance-envelope field.
+- **§7-Overlay-12** (status and nullable matrix): type/runtime test that result status contains exactly `passed`, `failed`, `unsupported`, and `invalid_request`, and that unsupported / invalid results have `before=None`, `after=None`, and `diff=None`.
+
 ## 6. Boundaries And Invariants
 
 - **Application-first:** protocol DTOs live under `kernel.application.protocol`; runtime lives under `kernel.application`.
@@ -249,8 +309,8 @@ Step 0.C must map these gates to tests before implementation:
 ### 7.1 Step 0 closure
 
 - [x] Step 0.A source pass recorded in the audit log
-- [ ] Step 0.B freezes request / overlay action / result DTO shape
-- [ ] Step 0.B freezes the ledger-write boundary anchor
+- [x] Step 0.B freezes request / overlay action / result DTO shape
+- [x] Step 0.B freezes the ledger-write boundary anchor
 - [ ] Step 0.C freezes algorithm and engine representability boundaries
 - [ ] Step 0.D lifts Step 0 decisions into this blueprint and moves status to `scoped`, or records abandonment / fallback
 
