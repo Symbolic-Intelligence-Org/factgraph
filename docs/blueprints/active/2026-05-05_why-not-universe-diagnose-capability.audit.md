@@ -16,6 +16,7 @@
 | 2026-05-05 | scoped | Step 1 review corrective patch | Fixed literal-head universe validation, unhashable binding duplicate checks, and the protocol ownership static test after review findings. |
 | 2026-05-05 | scoped | Step 2 runtime MVP board assembly complete | Added `check_why_not_universe(...)`, native / representable non-native head-binding extraction, green/red partitioning, top-level invalid/unsupported paths, and focused runtime tests. |
 | 2026-05-05 | scoped | Step 2 review corrective patch | Moved empty-universe handling ahead of RuleRef preflight and strengthened partition-order test coverage. |
+| 2026-05-05 | scoped | Step 3 Sibling-with-Diagnose row diagnostics complete | Replaced provisional red-row diagnostics with Diagnose runtime calls and Why-not-owned row DTO mapping. |
 
 ## Decision Notes
 
@@ -158,3 +159,19 @@
   - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1025 tests OK / 1 skipped.
   - `python -m ruff check src/kernel/application/why_not_runtime.py src/kernel/tests/test_application_why_not_runtime.py` — clean.
   - `python -m ruff check src/kernel` — clean.
+
+- 2026-05-05 (Step 3) — **Sibling-with-Diagnose row diagnostics.** `check_why_not_universe(...)` now calls `diagnose_derivation_binding(...)` for each red binding after the board partition is assembled. The runtime constructs `DiagnoseRequest(plan=request.plan, binding=row.binding, engine=request.engine)` internally and maps the returned Diagnose DTO into Why-not-owned row DTOs. The public Why-not protocol remains independent of Diagnose DTOs.
+
+- 2026-05-05 (Step 3) — **Mapping decisions.** Diagnose `failed / no_candidate` maps to a failed coarse Why-not row; `failed / atom_localized` copies `DiagnoseAtomLocator` fields into a new `WhyNotAtomLocator`; `unsupported` maps to row-level `unsupported` with `failure_kind=None` and `diagnostic_granularity="unavailable"`; `passed` and `invalid_request` raise `WhyNotRuntimeError` as invariant violations. Runtime imports are deliberately narrow: `diagnose_derivation_binding` and `DiagnoseRequest` are sufficient, so `DiagnoseResult` / `DiagnoseAtomLocator` are not imported into Why-not runtime.
+
+- 2026-05-05 (Step 3) — **MVP cost model.** Step 3 accepts N+1 evaluation behavior: Why-not evaluates the board once, then Diagnose may evaluate once per red row. This preserves the bounded finite-universe algorithm and avoids new evaluator hooks. Shared-view-fact or batched Diagnose optimization is a future performance topic, not part of the Step 3 contract.
+
+- 2026-05-05 (Step 3) — **Term extraction hardening.** Why-not's candidate-payload term extraction now treats unknown term shapes and dict terms without `value` as unrepresentable instead of silently mapping them to `None`. This hardens the Step 2 board extraction path without changing Diagnose's sibling-local helper in this blueprint.
+
+- 2026-05-05 (Step 3) — **Verification.**
+  - `python -m unittest src.kernel.tests.test_application_why_not_runtime` — 23 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime` — 90 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_check_protocol src.kernel.tests.test_application_check_runtime src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_diagnose_runtime_native src.kernel.tests.test_application_diagnose_runtime_non_native src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_fact_overlay_runtime_native src.kernel.tests.test_application_why_not_protocol src.kernel.tests.test_application_why_not_runtime` — 313 tests OK.
+  - `python -m unittest discover -s src/kernel/tests -p 'test_*.py'` — 1034 tests OK / 1 skipped.
+  - `python -m ruff check src/kernel` — clean.
+  - `git diff --check` — clean.

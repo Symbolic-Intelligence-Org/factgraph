@@ -1,9 +1,8 @@
 """Application-layer Why-not Universe Diagnose runtime executor.
 
-Step 2 scope is board assembly only: evaluate the selected derivation plan,
-extract comparable head bindings, and partition the explicit candidate universe
-into green and red rows. Step 3 replaces the provisional coarse red-row
-diagnostics with Sibling-with-Diagnose mapping.
+Why-not evaluates one explicit finite candidate universe into a green/red board.
+Red rows are diagnosed through Sibling-with-Diagnose runtime composition, then
+mapped back into Why-not-owned row DTOs.
 """
 from __future__ import annotations
 
@@ -17,9 +16,12 @@ from kernel.core.store.runtime import Store
 from kernel.core.view.projector import project_view_facts
 
 from .derivation_runtime import evaluate_derivation_plans
+from .diagnose_runtime import diagnose_derivation_binding
 from .protocol import (
     DerivationEvaluateRequest,
+    DiagnoseRequest,
     ErrorDTO,
+    WhyNotAtomLocator,
     WhyNotRedRow,
     WhyNotRowDiagnostic,
     WhyNotUniverseRequest,
@@ -111,7 +113,12 @@ def check_why_not_universe(
         red.append(
             WhyNotRedRow(
                 binding=binding,
-                diagnostic=_coarse_no_candidate_diagnostic(),
+                diagnostic=_diagnose_red_binding(
+                    request,
+                    binding,
+                    store=store,
+                    registry=registry,
+                ),
             )
         )
 
@@ -275,10 +282,12 @@ def _extract_term_value(term: Any) -> Any:
         kind = term.get("kind")
         if kind == "candidate_ref":
             return _UNREPRESENTABLE_TERM
-        return term.get("value")
+        if "value" not in term:
+            return _UNREPRESENTABLE_TERM
+        return term["value"]
     if isinstance(term, tuple) and len(term) == 2:
         return term[1]
-    return None
+    return _UNREPRESENTABLE_TERM
 
 
 def _head_vars(plan: Any) -> tuple[str, ...]:
@@ -304,15 +313,115 @@ def _binding_in(
     return any(existing == binding for existing in haystack)
 
 
-def _coarse_no_candidate_diagnostic() -> WhyNotRowDiagnostic:
-    return WhyNotRowDiagnostic(
-        status="failed",
-        failure_kind="no_candidate",
-        diagnostic_granularity="coarse",
-        atom_locator=None,
-        errors=(),
-        warnings=(),
+def _diagnose_red_binding(
+    request: WhyNotUniverseRequest,
+    binding: BindingItems,
+    *,
+    store: Store,
+    registry: RuleRegistry | None,
+) -> WhyNotRowDiagnostic:
+    diagnose_result = diagnose_derivation_binding(
+        DiagnoseRequest(
+            plan=request.plan,
+            binding=binding,
+            engine=request.engine,
+        ),
+        store=store,
+        registry=registry,
     )
+    if diagnose_result.status == "failed":
+        if diagnose_result.failure_kind == "no_candidate":
+            return WhyNotRowDiagnostic(
+                status="failed",
+                failure_kind="no_candidate",
+                diagnostic_granularity="coarse",
+                atom_locator=None,
+                errors=(),
+                warnings=diagnose_result.warnings,
+            )
+        if diagnose_result.failure_kind == "atom_localized":
+            locator = diagnose_result.diagnostic_payload
+            if locator is None:
+                raise WhyNotRuntimeError(
+                    "Diagnose returned atom_localized without an atom locator",
+                    code="WHY_NOT_DIAGNOSE_ATOM_LOCATOR_MISSING",
+                    details={
+                        "engine": request.engine,
+                        "binding": _binding_debug_details(binding),
+                    },
+                )
+            return WhyNotRowDiagnostic(
+                status="failed",
+                failure_kind="atom_localized",
+                diagnostic_granularity="atom_localized",
+                atom_locator=WhyNotAtomLocator(
+                    branch_index=locator.branch_index,
+                    failed_atom_index=locator.failed_atom_index,
+                    attempted_binding=locator.attempted_binding,
+                ),
+                errors=(),
+                warnings=diagnose_result.warnings,
+            )
+        raise WhyNotRuntimeError(
+            "Diagnose returned failed without a known failure_kind",
+            code="WHY_NOT_DIAGNOSE_UNKNOWN_FAILURE_KIND",
+            details={
+                "engine": request.engine,
+                "failure_kind": repr(diagnose_result.failure_kind),
+                "binding": _binding_debug_details(binding),
+            },
+        )
+
+    if diagnose_result.status == "unsupported":
+        return WhyNotRowDiagnostic(
+            status="unsupported",
+            failure_kind=None,
+            diagnostic_granularity="unavailable",
+            atom_locator=None,
+            errors=diagnose_result.errors,
+            warnings=diagnose_result.warnings,
+        )
+
+    if diagnose_result.status == "passed":
+        raise WhyNotRuntimeError(
+            "Diagnose passed a binding that Why-not classified as red",
+            code="WHY_NOT_DIAGNOSE_PASSED_RED_BINDING",
+            details={
+                "engine": request.engine,
+                "binding": _binding_debug_details(binding),
+            },
+        )
+
+    if diagnose_result.status == "invalid_request":
+        raise WhyNotRuntimeError(
+            "Diagnose returned invalid_request after Why-not request preflight",
+            code="WHY_NOT_DIAGNOSE_INVALID_REQUEST",
+            details={
+                "engine": request.engine,
+                "binding": _binding_debug_details(binding),
+                "diagnose_errors": [error.code for error in diagnose_result.errors],
+            },
+        )
+
+    raise WhyNotRuntimeError(
+        "Diagnose returned an unknown status",
+        code="WHY_NOT_DIAGNOSE_UNKNOWN_STATUS",
+        details={
+            "engine": request.engine,
+            "status": repr(diagnose_result.status),
+            "binding": _binding_debug_details(binding),
+        },
+    )
+
+
+def _binding_debug_details(binding: BindingItems) -> list[dict[str, str]]:
+    return [
+        {
+            "variable": key,
+            "value": repr(value),
+        }
+        for key, value in binding
+    ]
 
 
 def _problog_pyreason_representability_precheck(

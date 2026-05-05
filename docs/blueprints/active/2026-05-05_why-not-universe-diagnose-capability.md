@@ -292,7 +292,7 @@ Each gate maps to Step 0.C and must become focused test coverage before implemen
 
 6. **Step 2 — Runtime MVP board assembly** (complete). Add `check_why_not_universe(...)`, dispatcher preflight, RuleRef preflight, single-plan evaluation, comparable head-binding extraction for native and representable non-native candidates, green/red partitioning, empty-universe path, unsupported top-level path, and partition/order tests.
 
-7. **Step 3 — Sibling-with-Diagnose row diagnostics.** Integrate `diagnose_derivation_binding(...)` for red rows and map Diagnose outputs into Why-not-owned row DTOs. Cover native atom-localized rows, coarse failed rows, row-level unsupported/unavailable rows, and runtime invariant errors for Diagnose `passed` / `invalid_request`.
+7. **Step 3 — Sibling-with-Diagnose row diagnostics** (complete). Integrated `diagnose_derivation_binding(...)` for red rows and mapped Diagnose outputs into Why-not-owned row DTOs. Covered native atom-localized rows, coarse failed rows, row-level unsupported/unavailable rows, and runtime invariant errors for Diagnose `passed` / `invalid_request`.
 
 8. **Step 4 — Drift-prevention named gates.** Land focused tests for §7-WhyNot-1 through §7-WhyNot-14, including static AST checks for protocol ownership and runtime composition boundaries.
 

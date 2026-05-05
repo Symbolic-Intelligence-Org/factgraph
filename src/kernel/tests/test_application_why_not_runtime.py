@@ -1,11 +1,16 @@
-"""Runtime tests for Why-not Universe Diagnose Step 2 board assembly."""
+"""Runtime tests for Why-not Universe Diagnose runtime assembly and diagnostics."""
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+from types import SimpleNamespace
 import unittest
 from typing import Any
 from unittest.mock import patch
 
+import kernel.application.why_not_runtime as why_not_runtime
 from kernel.application import (
+    WhyNotRuntimeError,
     build_schema_index,
     check_why_not_universe,
     entity_info,
@@ -15,7 +20,11 @@ from kernel.application import (
 from kernel.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
+    DiagnoseAtomLocator,
+    DiagnoseResult,
     EntitySelector,
+    ErrorDTO,
+    WarningDTO,
     WhyNotUniverseRequest,
 )
 from kernel.core.derivation.candidates import CandidateSet
@@ -109,6 +118,18 @@ def _exists_age_body(index: Any) -> tuple[list[Any], str]:
     return body, info.exists_predicate_id
 
 
+def _exists_age_region_body(index: Any) -> tuple[list[Any], str]:
+    info = entity_info(index, "Person")
+    age_pred = field_predicate(index, "Person", "age").pred_id
+    region_pred = field_predicate(index, "Person", "region").pred_id
+    body: list[Any] = [
+        ("pred", info.exists_predicate_id, ["$p"]),
+        ("pred", age_pred, ["$p", "$age"]),
+        ("pred", region_pred, ["$p", "$region"]),
+    ]
+    return body, info.exists_predicate_id
+
+
 def _binding(*items: tuple[str, object]) -> tuple[tuple[str, object], ...]:
     return normalize_binding_items(tuple(items))
 
@@ -135,6 +156,46 @@ def _candidate(
         generated_at=0,
         state="generated",
         candidate_key=candidate_key,
+    )
+
+
+def _diagnose_no_candidate(
+    binding: tuple[tuple[str, object], ...],
+    *,
+    warnings: tuple[WarningDTO, ...] = (),
+) -> DiagnoseResult:
+    return DiagnoseResult(
+        status="failed",
+        requested_binding=binding,
+        matched_count=0,
+        matched_binding=None,
+        failure_kind="no_candidate",
+        diagnostic_payload=None,
+        errors=(),
+        warnings=warnings,
+    )
+
+
+def _diagnose_unsupported(
+    binding: tuple[tuple[str, object], ...],
+    *,
+    errors: tuple[ErrorDTO, ...] | None = None,
+) -> DiagnoseResult:
+    return DiagnoseResult(
+        status="unsupported",
+        requested_binding=binding,
+        matched_count=None,
+        matched_binding=None,
+        failure_kind=None,
+        diagnostic_payload=None,
+        errors=errors
+        or (
+            ErrorDTO(
+                code="ROW_DIAGNOSTIC_UNAVAILABLE",
+                message="row diagnostic unavailable",
+            ),
+        ),
+        warnings=(),
     )
 
 
@@ -209,8 +270,14 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
         self.assertEqual(result.green, (alice_binding, bob_binding))
         self.assertEqual(tuple(row.binding for row in result.red), (missing_binding,))
         self.assertEqual(result.red[0].diagnostic.status, "failed")
-        self.assertEqual(result.red[0].diagnostic.failure_kind, "no_candidate")
-        self.assertEqual(result.red[0].diagnostic.diagnostic_granularity, "coarse")
+        self.assertEqual(result.red[0].diagnostic.failure_kind, "atom_localized")
+        self.assertEqual(
+            result.red[0].diagnostic.diagnostic_granularity,
+            "atom_localized",
+        )
+        locator = result.red[0].diagnostic.atom_locator
+        assert locator is not None
+        self.assertEqual(locator.failed_atom_index, 0)
 
     def test_native_all_green_partition(self) -> None:
         store, index = _build_store()
@@ -327,6 +394,240 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
         self.assertEqual(result.errors[0].code, "CANDIDATE_BINDING_NOT_REPRESENTABLE")
 
 
+class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
+    def test_native_red_row_maps_actual_atom_localized_diagnose(self) -> None:
+        store, index = _build_store()
+        alice = _seed_person(store, index, "alice", 25, "us")
+        body, target = _exists_age_region_body(index)
+        red_binding = _binding(("$p", alice), ("$region", "eu"))
+        request = WhyNotUniverseRequest(
+            plan=_build_plan(body, target, ("$p", "$region")),
+            candidate_universe=(red_binding,),
+            engine="native",
+        )
+
+        result = check_why_not_universe(request, store=store)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.green, ())
+        self.assertEqual(tuple(row.binding for row in result.red), (red_binding,))
+        diagnostic = result.red[0].diagnostic
+        self.assertEqual(diagnostic.status, "failed")
+        self.assertEqual(diagnostic.failure_kind, "atom_localized")
+        self.assertEqual(diagnostic.diagnostic_granularity, "atom_localized")
+        locator = diagnostic.atom_locator
+        assert locator is not None
+        self.assertEqual(locator.branch_index, 0)
+        self.assertEqual(locator.failed_atom_index, 2)
+        self.assertIn(("$age", 25), locator.attempted_binding)
+
+    def test_red_rows_call_diagnose_with_same_plan_binding_engine_store_registry(self) -> None:
+        store, _index = _build_store()
+        registry = RuleRegistry()
+        first = _binding(("$p", "person-1"))
+        second = _binding(("$p", "person-2"))
+        plan = _build_plan([("eq", "$p", "person-0")], "Person:exists", ("$p",))
+        request = WhyNotUniverseRequest(
+            plan=plan,
+            candidate_universe=(first, second),
+            engine="native",
+        )
+        seen: list[tuple[Any, Store, RuleRegistry | None]] = []
+
+        def _fake_diagnose(diagnose_request: Any, *, store: Store, registry: Any) -> DiagnoseResult:
+            seen.append((diagnose_request, store, registry))
+            return _diagnose_no_candidate(diagnose_request.binding)
+
+        with (
+            patch(
+                "kernel.application.why_not_runtime.evaluate_native_where",
+                return_value=SimpleNamespace(bindings=()),
+            ),
+            patch(
+                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                side_effect=_fake_diagnose,
+            ),
+        ):
+            result = check_why_not_universe(request, store=store, registry=registry)
+
+        self.assertEqual(tuple(row.binding for row in result.red), (first, second))
+        self.assertEqual([entry[0].binding for entry in seen], [first, second])
+        self.assertTrue(all(entry[0].plan is plan for entry in seen))
+        self.assertEqual([entry[0].engine for entry in seen], ["native", "native"])
+        self.assertTrue(all(entry[1] is store for entry in seen))
+        self.assertTrue(all(entry[2] is registry for entry in seen))
+
+    def test_failed_no_candidate_diagnose_maps_to_coarse_row(self) -> None:
+        store, _index = _build_store()
+        binding = _binding(("$p", "person-1"))
+        warning = WarningDTO(code="ROW_DIAGNOSTIC_WARNING", message="row warning")
+        request = WhyNotUniverseRequest(
+            plan=_build_plan([("eq", "$p", "person-0")], "Person:exists", ("$p",)),
+            candidate_universe=(binding,),
+            engine="native",
+        )
+
+        with (
+            patch(
+                "kernel.application.why_not_runtime.evaluate_native_where",
+                return_value=SimpleNamespace(bindings=()),
+            ),
+            patch(
+                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                return_value=_diagnose_no_candidate(binding, warnings=(warning,)),
+            ),
+        ):
+            result = check_why_not_universe(request, store=store)
+
+        diagnostic = result.red[0].diagnostic
+        self.assertEqual(diagnostic.status, "failed")
+        self.assertEqual(diagnostic.failure_kind, "no_candidate")
+        self.assertEqual(diagnostic.diagnostic_granularity, "coarse")
+        self.assertIsNone(diagnostic.atom_locator)
+        self.assertEqual(diagnostic.warnings, (warning,))
+
+    def test_unsupported_diagnose_maps_to_unavailable_row(self) -> None:
+        store, _index = _build_store()
+        binding = _binding(("$p", "person-1"))
+        error = ErrorDTO(code="ROW_ENGINE_UNSUPPORTED", message="row unsupported")
+        request = WhyNotUniverseRequest(
+            plan=_build_plan([("eq", "$p", "person-0")], "Person:exists", ("$p",)),
+            candidate_universe=(binding,),
+            engine="native",
+        )
+
+        with (
+            patch(
+                "kernel.application.why_not_runtime.evaluate_native_where",
+                return_value=SimpleNamespace(bindings=()),
+            ),
+            patch(
+                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                return_value=_diagnose_unsupported(binding, errors=(error,)),
+            ),
+        ):
+            result = check_why_not_universe(request, store=store)
+
+        self.assertEqual(result.status, "completed")
+        diagnostic = result.red[0].diagnostic
+        self.assertEqual(diagnostic.status, "unsupported")
+        self.assertIsNone(diagnostic.failure_kind)
+        self.assertEqual(diagnostic.diagnostic_granularity, "unavailable")
+        self.assertIsNone(diagnostic.atom_locator)
+        self.assertEqual(diagnostic.errors, (error,))
+
+    def test_passed_diagnose_result_raises_invariant_error(self) -> None:
+        store, _index = _build_store()
+        binding = _binding(("$p", "person-1"))
+        request = WhyNotUniverseRequest(
+            plan=_build_plan([("eq", "$p", "person-0")], "Person:exists", ("$p",)),
+            candidate_universe=(binding,),
+            engine="native",
+        )
+        passed = DiagnoseResult(
+            status="passed",
+            requested_binding=binding,
+            matched_count=1,
+            matched_binding=binding,
+            failure_kind=None,
+            diagnostic_payload=None,
+            errors=(),
+            warnings=(),
+        )
+
+        with (
+            patch(
+                "kernel.application.why_not_runtime.evaluate_native_where",
+                return_value=SimpleNamespace(bindings=()),
+            ),
+            patch(
+                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                return_value=passed,
+            ),
+            self.assertRaises(WhyNotRuntimeError) as raised,
+        ):
+            check_why_not_universe(request, store=store)
+
+        self.assertEqual(raised.exception.code, "WHY_NOT_DIAGNOSE_PASSED_RED_BINDING")
+
+    def test_invalid_request_diagnose_result_raises_invariant_error(self) -> None:
+        store, _index = _build_store()
+        binding = _binding(("$p", "person-1"))
+        request = WhyNotUniverseRequest(
+            plan=_build_plan([("eq", "$p", "person-0")], "Person:exists", ("$p",)),
+            candidate_universe=(binding,),
+            engine="native",
+        )
+        invalid = DiagnoseResult(
+            status="invalid_request",
+            requested_binding=binding,
+            matched_count=None,
+            matched_binding=None,
+            failure_kind=None,
+            diagnostic_payload=None,
+            errors=(ErrorDTO(code="ROW_INVALID_REQUEST", message="row invalid"),),
+            warnings=(),
+        )
+
+        with (
+            patch(
+                "kernel.application.why_not_runtime.evaluate_native_where",
+                return_value=SimpleNamespace(bindings=()),
+            ),
+            patch(
+                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                return_value=invalid,
+            ),
+            self.assertRaises(WhyNotRuntimeError) as raised,
+        ):
+            check_why_not_universe(request, store=store)
+
+        self.assertEqual(raised.exception.code, "WHY_NOT_DIAGNOSE_INVALID_REQUEST")
+
+    def test_atom_localized_diagnose_result_copies_locator_into_why_not_dto(self) -> None:
+        store, _index = _build_store()
+        binding = _binding(("$p", "person-1"))
+        attempted = _binding(("$p", "person-1"), ("$age", 25))
+        request = WhyNotUniverseRequest(
+            plan=_build_plan([("eq", "$p", "person-0")], "Person:exists", ("$p",)),
+            candidate_universe=(binding,),
+            engine="native",
+        )
+        diagnose_result = DiagnoseResult(
+            status="failed",
+            requested_binding=binding,
+            matched_count=0,
+            matched_binding=None,
+            failure_kind="atom_localized",
+            diagnostic_payload=DiagnoseAtomLocator(
+                branch_index=3,
+                failed_atom_index=4,
+                attempted_binding=attempted,
+            ),
+            errors=(),
+            warnings=(),
+        )
+
+        with (
+            patch(
+                "kernel.application.why_not_runtime.evaluate_native_where",
+                return_value=SimpleNamespace(bindings=()),
+            ),
+            patch(
+                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                return_value=diagnose_result,
+            ),
+        ):
+            result = check_why_not_universe(request, store=store)
+
+        locator = result.red[0].diagnostic.atom_locator
+        assert locator is not None
+        self.assertEqual(locator.branch_index, 3)
+        self.assertEqual(locator.failed_atom_index, 4)
+        self.assertEqual(locator.attempted_binding, attempted)
+        self.assertIsNot(locator, diagnose_result.diagnostic_payload)
+
+
 class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
     def test_problog_and_pyreason_partition_representable_candidate_payloads(self) -> None:
         for engine in ("problog", "pyreason"):
@@ -346,6 +647,11 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
                 with patch(
                     "kernel.application.why_not_runtime.evaluate_derivation_plans",
                     return_value=(_candidate(),),
+                ), patch(
+                    "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                    side_effect=lambda diagnose_request, **_kwargs: _diagnose_no_candidate(
+                        diagnose_request.binding
+                    ),
                 ):
                     result = check_why_not_universe(request, store=store)
 
@@ -400,6 +706,27 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         self.assertEqual(result.status, "unsupported")
         self.assertEqual(result.errors[0].code, "CANDIDATE_BINDING_NOT_REPRESENTABLE")
 
+    def test_unrecognized_candidate_payload_term_returns_top_level_unsupported(self) -> None:
+        store, index = _build_store()
+        body, target = _exists_age_body(index)
+        request = WhyNotUniverseRequest(
+            plan=_build_plan(body, target, ("$p",)),
+            candidate_universe=(_binding(("$p", "person-1")),),
+            engine="problog",
+        )
+
+        with patch(
+            "kernel.application.why_not_runtime.evaluate_derivation_plans",
+            return_value=(_candidate(terms=[{"kind": "literal_without_value"}]),),
+        ), patch(
+            "kernel.application.why_not_runtime.diagnose_derivation_binding",
+        ) as diagnose:
+            result = check_why_not_universe(request, store=store)
+
+        self.assertEqual(result.status, "unsupported")
+        self.assertEqual(result.errors[0].code, "CANDIDATE_BINDING_NOT_REPRESENTABLE")
+        diagnose.assert_not_called()
+
     def test_souffle_uses_support_artifact_binding_items(self) -> None:
         store, index = _build_store()
         body, target = _exists_age_body(index)
@@ -429,6 +756,11 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
                     support_kind="souffle_witness_v1",
                     terms=[],
                 ),
+            ),
+        ), patch(
+            "kernel.application.why_not_runtime.diagnose_derivation_binding",
+            side_effect=lambda diagnose_request, **_kwargs: _diagnose_no_candidate(
+                diagnose_request.binding
             ),
         ):
             result = check_why_not_universe(request, store=store)
@@ -463,6 +795,26 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
 
         self.assertEqual(result.status, "unsupported")
         self.assertEqual(result.errors[0].code, "EVIDENCE_LOOKUP_MISS")
+
+
+class WhyNotRuntimeBoundaryTests(unittest.TestCase):
+    def test_runtime_composes_diagnose_without_check_or_protocol_result_imports(self) -> None:
+        source = Path(why_not_runtime.__file__).read_text()
+        tree = ast.parse(source)
+        imported_names: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    imported_names.add(alias.name.rsplit(".", maxsplit=1)[-1])
+                    if alias.asname:
+                        imported_names.add(alias.asname)
+
+        self.assertIn("DiagnoseRequest", imported_names)
+        self.assertIn("diagnose_derivation_binding", imported_names)
+        self.assertNotIn("check_derivation_binding", imported_names)
+        self.assertNotIn("derivation_check_runtime", imported_names)
+        self.assertNotIn("DiagnoseResult", imported_names)
+        self.assertNotIn("DiagnoseAtomLocator", imported_names)
 
 
 if __name__ == "__main__":
