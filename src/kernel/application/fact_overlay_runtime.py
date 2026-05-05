@@ -142,6 +142,27 @@ def _overlay_ruleref_preflight(
     if not ruleref_atoms:
         return ()
 
+    errors: list[ErrorDTO] = []
+    for atom in ruleref_atoms:
+        if (
+            len(atom) != 4
+            or not isinstance(atom[1], str)
+            or not atom[1]
+            or not isinstance(atom[2], str)
+            or not atom[2]
+            or not isinstance(atom[3], list)
+        ):
+            errors.append(
+                ErrorDTO(
+                    code="RULE_REF_MALFORMED",
+                    message="ruleref atom must be ('ruleref', rule_id, version, [terms...])",
+                    path=("plan", "body_ir"),
+                    details={"atom": repr(atom)},
+                )
+            )
+    if errors:
+        return tuple(errors)
+
     if registry is None:
         return (
             ErrorDTO(
@@ -152,23 +173,10 @@ def _overlay_ruleref_preflight(
             ),
         )
 
-    errors: list[ErrorDTO] = []
     seen: set[tuple[str, str]] = set()
     for atom in ruleref_atoms:
-        if len(atom) < 3:
-            errors.append(
-                ErrorDTO(
-                    code="RULE_REF_MALFORMED",
-                    message="ruleref atom must include rule id and version",
-                    path=("plan", "body_ir"),
-                    details={"atom": repr(atom)},
-                )
-            )
-            continue
-        rule_id = atom[1] if isinstance(atom[1], str) else None
-        version = atom[2] if isinstance(atom[2], str) else None
-        if rule_id is None or version is None:
-            continue
+        rule_id = atom[1]
+        version = atom[2]
         key = (rule_id, version)
         if key in seen:
             continue

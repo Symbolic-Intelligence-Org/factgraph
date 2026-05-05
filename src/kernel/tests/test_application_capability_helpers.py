@@ -27,7 +27,7 @@ from kernel.application.protocol import (
     FieldPath,
     WhyNotUniverseRequest,
 )
-from kernel.core.evidence.write_protocol import set_field
+from kernel.core.evidence.write_protocol import add_field, set_field
 from kernel.core.rules.frontier import evaluate_native_where_frontier
 from kernel.core.store import Store
 from kernel.core.store._support import normalize_binding_items
@@ -51,6 +51,11 @@ class Reading(Entity):
     value: float = Field(cardinality="single")
 
 
+class Profile(Entity):
+    name: str = Identity(primary_key=True)
+    tag: str = Field(cardinality="multi")
+
+
 @dataclass(frozen=True)
 class SeededPerson:
     e_ref: str
@@ -59,7 +64,7 @@ class SeededPerson:
 
 
 def _build_store() -> tuple[Store, Any]:
-    schema_ir = compile_schema_from_classes([Person, Team, Reading])
+    schema_ir = compile_schema_from_classes([Person, Team, Reading, Profile])
     store = Store(schema_ir)
     index = build_schema_index(schema_ir)
     return store, index
@@ -122,6 +127,33 @@ def _seed_reading(
     value_pred_id = field_predicate(index, "Reading", "value").pred_id
     set_field(store.ledger, value_pred_id, encoded, [("float64", value)])
     return encoded, value_pred_id
+
+
+def _seed_profile_tags(
+    store: Store,
+    index: Any,
+    *,
+    name: str = "alice",
+    tags: tuple[str, ...] = ("red",),
+) -> tuple[str, str, tuple[str, ...]]:
+    ref = resolve_selector(
+        EntitySelector(entity_type="Profile", identity={"name": name}),
+        index=index,
+    )
+    info = entity_info(index, "Profile")
+    encoded = ref.encoded_ref or ""
+    set_field(store.ledger, info.exists_predicate_id, encoded, [])
+    set_field(
+        store.ledger,
+        info.identity_predicates["name"].pred_id,
+        encoded,
+        [("string", name)],
+    )
+    tag_pred_id = field_predicate(index, "Profile", "tag").pred_id
+    asrt_ids = tuple(
+        add_field(store.ledger, tag_pred_id, encoded, [("string", tag)]) for tag in tags
+    )
+    return encoded, tag_pred_id, asrt_ids
 
 
 def _build_plan(index: Any) -> CompiledDerivationPlan:
@@ -266,6 +298,71 @@ class FactRemoveActionHelperTests(unittest.TestCase):
                 e_ref=alice.e_ref,
                 field=FieldPath(entity_type="Person", field_name="age"),
                 current_value=30,
+            )
+
+    def test_remove_action_multi_cardinality_requires_current_value_for_single_row(
+        self,
+    ) -> None:
+        store, index = _build_store()
+        e_ref, _tag_pred_id, _asrt_ids = _seed_profile_tags(store, index, tags=("red",))
+
+        with self.assertRaisesRegex(CapabilityHelperError, "requires current_value"):
+            build_fact_remove_action(
+                store,
+                index,
+                e_ref=e_ref,
+                field=FieldPath(entity_type="Profile", field_name="tag"),
+            )
+
+    def test_remove_action_multi_cardinality_requires_current_value_before_ambiguity(
+        self,
+    ) -> None:
+        store, index = _build_store()
+        e_ref, _tag_pred_id, _asrt_ids = _seed_profile_tags(
+            store,
+            index,
+            tags=("red", "blue"),
+        )
+
+        with self.assertRaisesRegex(CapabilityHelperError, "requires current_value"):
+            build_fact_remove_action(
+                store,
+                index,
+                e_ref=e_ref,
+                field=FieldPath(entity_type="Profile", field_name="tag"),
+            )
+
+    def test_builds_remove_action_for_multi_cardinality_matching_current_value(
+        self,
+    ) -> None:
+        store, index = _build_store()
+        e_ref, tag_pred_id, asrt_ids = _seed_profile_tags(store, index, tags=("red", "blue"))
+
+        action = build_fact_remove_action(
+            store,
+            index,
+            e_ref=e_ref,
+            field=FieldPath(entity_type="Profile", field_name="tag"),
+            current_value="blue",
+        )
+
+        self.assertEqual(action.asrt_id, asrt_ids[1])
+        self.assertEqual(action.pred_id, tag_pred_id)
+        self.assertEqual(action.old_fact_tuple, (e_ref, "blue"))
+
+    def test_remove_action_multi_cardinality_current_value_miss_raises_helper_error(
+        self,
+    ) -> None:
+        store, index = _build_store()
+        e_ref, _tag_pred_id, _asrt_ids = _seed_profile_tags(store, index, tags=("red",))
+
+        with self.assertRaisesRegex(CapabilityHelperError, "no matching projected fact"):
+            build_fact_remove_action(
+                store,
+                index,
+                e_ref=e_ref,
+                field=FieldPath(entity_type="Profile", field_name="tag"),
+                current_value="blue",
             )
 
 

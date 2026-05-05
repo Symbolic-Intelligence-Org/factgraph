@@ -130,6 +130,11 @@ def build_fact_remove_action(
     field_type = field_value_type(index, field.entity_type, field.field_name)
     if field_type.value_kind != "scalar":
         raise CapabilityHelperError("build_fact_remove_action supports scalar fields only")
+    if field_type.cardinality != "single" and current_value is None:
+        raise CapabilityHelperError(
+            f"{field.entity_type}.{field.field_name} requires current_value "
+            "to remove from a multi-cardinality field"
+        )
     normalized_current = None
     if current_value is not None:
         normalized_current = _normalize_scalar_value(

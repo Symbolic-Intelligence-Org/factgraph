@@ -261,12 +261,32 @@ class FactOverlayRuntimePreflightTests(unittest.TestCase):
         self.assertEqual(result.errors[0].code, "RULE_REF_UNRESOLVABLE")
 
     def test_malformed_ruleref_returns_invalid_request(self) -> None:
+        malformed_atoms = (
+            ("ruleref",),
+            ("ruleref", "person.exists", "1.0"),
+            ("ruleref", "person.exists", "1.0", "not-a-list"),
+            ("ruleref", 123, "1.0", []),
+            ("ruleref", "person.exists", 1.0, []),
+        )
+        for atom in malformed_atoms:
+            with self.subTest(atom=atom):
+                store, index = _build_store()
+                body, exists_pred = _exists_body(index)
+                plan = _build_plan(body + [atom], exists_pred)
+                request = _request(plan=plan, binding=(), overlay=(_override(),))
+
+                result = check_fact_overlay_binding(request, store=store, registry=RuleRegistry())
+
+                self.assertEqual(result.status, "invalid_request")
+                self.assertEqual(result.errors[0].code, "RULE_REF_MALFORMED")
+
+    def test_malformed_ruleref_precedes_missing_registry(self) -> None:
         store, index = _build_store()
         body, exists_pred = _exists_body(index)
-        plan = _build_plan(body + [("ruleref",)], exists_pred)
+        plan = _build_plan(body + [("ruleref", "person.exists", "1.0")], exists_pred)
         request = _request(plan=plan, binding=(), overlay=(_override(),))
 
-        result = check_fact_overlay_binding(request, store=store, registry=RuleRegistry())
+        result = check_fact_overlay_binding(request, store=store, registry=None)
 
         self.assertEqual(result.status, "invalid_request")
         self.assertEqual(result.errors[0].code, "RULE_REF_MALFORMED")
