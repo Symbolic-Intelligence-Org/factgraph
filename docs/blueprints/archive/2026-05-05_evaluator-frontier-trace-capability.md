@@ -11,7 +11,7 @@
   - [docs/references/working/rule-replay-line-redesign-input/20_capability-layering-l0-l11.md](../../references/working/rule-replay-line-redesign-input/20_capability-layering-l0-l11.md)
   - [docs/references/working/rule-replay-line-redesign-input/40_design-discussion-A-with-decision-1.md](../../references/working/rule-replay-line-redesign-input/40_design-discussion-A-with-decision-1.md)
   - [docs/references/working/rule-replay-line-redesign-input/80_conceptual-interaction-design/engine-extension-surface-architecture.md](../../references/working/rule-replay-line-redesign-input/80_conceptual-interaction-design/engine-extension-surface-architecture.md)
-  - [docs/blueprints/archive/2026-05-05_why-not-universe-diagnose-capability.md](../archive/2026-05-05_why-not-universe-diagnose-capability.md)
+  - [docs/blueprints/archive/2026-05-05_why-not-universe-diagnose-capability.md](./2026-05-05_why-not-universe-diagnose-capability.md)
 - Audit Log:
   - [2026-05-05_evaluator-frontier-trace-capability.audit.md](./2026-05-05_evaluator-frontier-trace-capability.audit.md)
 
