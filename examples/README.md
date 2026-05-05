@@ -19,7 +19,7 @@ smoke checks while staying readable as examples.
 
 | # | Script | Adapter | Domain | Covers |
 |---|--------|---------|--------|--------|
-| 11 | `11_capabilities_e2e_demo.py` | — (native) | general | Check / Diagnose / Fact Overlay Check / Why-not Universe Diagnose / Evaluator Frontier Trace on one Person fixture |
+| 11 | `11_capabilities_e2e_demo.ipynb` (+ `.py` smoke target) | — (native) | general | Check / Diagnose / Fact Overlay Check / Why-not Universe Diagnose / Evaluator Frontier Trace on one Person fixture |
 
 ## Kernel Optional-Engine Examples
 

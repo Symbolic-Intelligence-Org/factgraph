@@ -8,6 +8,7 @@
 |------|-------|-------|-------|
 | 2026-05-05 | draft | Master plan created | 收敛后 9 批 + 3 子批结构;Batch 0 inventory rules / branching strategy / suspension protocol 全部冻结 |
 | 2026-05-05 | scoped | Restore audit alignment | 蓝图 status 从 draft 对齐为 scoped,与 cross-session anchor 一致;Batch 0 `examples/12_rule_replay_demo.ipynb` 处置改为先 inspect 再删除/迁移 |
+| 2026-05-05 | scoped | Batch 0 inventory completed | `examples/11_capabilities_e2e_demo.ipynb` / `examples/README.md` / `tutorials/evidence-pipeline.cn.md` 纳入 Batch 0;`examples/12_rule_replay_demo.ipynb` inspected 后删除,因其引用 reset 前 SDK replay substrate API |
 
 ## Decision Notes
 
@@ -52,6 +53,12 @@ Compact 前核验发现 cross-session anchor 已明确命名为 `project_round_s
 **触发原因:** Agent X 调研发现,该 notebook 引用 `kernel.sdk.CandidateDiff / EvidenceComparison / ReplayResult` —— **均为 reset 前 SDK substrate API**。留在 examples/ 当前分支上会让 reader 误以为 reset 后这些 API 仍可用。
 
 **决议(写入 §8 Batch 0 Inventory Rules):** 优先删除;若需保留历史则移到 `docs/references/working/<sub>/` 且显式标 "pre-reset design probe, not runnable on current API"。**不允许留在 `examples/`**。
+
+### 2026-05-05 — Batch 0 Inventory Close
+
+**Inspection result:** `examples/12_rule_replay_demo.ipynb` 当前内容是 v0.1.1 preview notebook,直接 import `kernel.sdk.CandidateDiff / EvidenceComparison / ReplayResult` 并调用 `sdk.replay_with_patch(...)`;正文仍指向 reset 前 `docs/references/working/rule-replay/` 与旧 active blueprint。它不含需要迁成 current reference 的新结论。
+
+**Decision:** 删除 `examples/12_rule_replay_demo.ipynb`,不迁移。Batch 0 同时纳入 `examples/11_capabilities_e2e_demo.ipynb`,更新后的 `examples/README.md`,以及临时设计区 `tutorials/evidence-pipeline.cn.md`。
 
 ### 2026-05-05 — SDK Shell 推到 Batch 8
 
