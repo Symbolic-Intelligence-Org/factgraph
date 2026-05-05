@@ -12,6 +12,7 @@
 | 2026-05-05 | draft | Step 0.B DTO crispness decision recorded | Chose Shape A-prime as Why-not Universe Diagnose. Froze request/result/red-row DTO shape, selected Why-not-owned row diagnostics instead of nested `DiagnoseResult`, and left true near-miss Shape B outside capability scope. |
 | 2026-05-05 | draft | Step 0.C algorithm and drift gates frozen | Froze dispatcher order, green/red partition algorithm, row Diagnose mapping, three-value top-level status, row diagnostic taxonomy, all-engine support gate, and fourteen §7-WhyNot drift gates. |
 | 2026-05-05 | draft → scoped | Step 0.D lift complete | Renamed blueprint from Step 0 spike to Why-not Universe Diagnose capability, lifted Step 0 decisions into §5 / §7 / §8, and authorized implementation only through the scoped plan. |
+| 2026-05-05 | scoped | Step 1 protocol DTOs complete | Added Why-not protocol DTOs and protocol-layer tests for request shape, finite universe validation, top-level result matrix, row diagnostics, protocol-owned DTO boundaries, and static literal invariants. |
 
 ## Decision Notes
 
@@ -98,3 +99,21 @@
   - **§8 Implementation Plan** contains complete Step 0 history plus five ordered implementation steps: protocol DTOs, runtime MVP board assembly, Sibling-with-Diagnose row diagnostics, drift-prevention named gates, and close-out.
 
   The active files were renamed from `2026-05-05_why-not-step0.*` to `2026-05-05_why-not-universe-diagnose-capability.*` because the spike has selected a scoped capability. Implementation may begin, but any future change to §5 contract, §7 gates, or §8 plan requires a new audit entry before code changes.
+
+- 2026-05-05 (Step 1) — **Protocol DTO implementation.** Added `src/kernel/application/protocol/derivation_why_not.py` with the frozen Step 0 DTO set:
+  - `WhyNotUniverseRequest(plan, candidate_universe, engine)`
+  - `WhyNotUniverseResult(status, requested_universe, green, red, errors, warnings)`
+  - `WhyNotRedRow(binding, diagnostic)`
+  - `WhyNotRowDiagnostic(status, failure_kind, diagnostic_granularity, atom_locator, errors, warnings)`
+  - `WhyNotAtomLocator(branch_index, failed_atom_index, attempted_binding)`
+
+  The protocol layer enforces the Step 0 shape decisions where possible: request fields are intent-only; candidate universes are explicit finite complete-head bindings; duplicate universe entries are rejected; empty universe is accepted; top-level status is the Why-not-specific three-value set; completed results enforce ordered green/red partition coverage; non-completed results require empty boards and batch errors; row diagnostics allow only failed/coarse, failed/atom-localized, or unsupported/unavailable shapes.
+
+- 2026-05-05 (Step 1) — **Protocol ownership boundary.** The Why-not protocol exports only Why-not-owned row and locator DTOs. It does not import or expose `DiagnoseResult`, `DiagnoseAtomLocator`, Check DTOs, `EvidenceEnvelope`, `SupportArtifact`, or `ProvenanceEnvelope`. Tests also keep `WhyNotAtomLocator` out of `EvidenceEnvelope.engine_payload`, preserving the §6.5 capability-output boundary.
+
+- 2026-05-05 (Step 1) — **Verification.**
+  - `python -m unittest src.kernel.tests.test_application_why_not_protocol` — 59 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_check_protocol src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_why_not_protocol` — 165 tests OK.
+  - `python -m unittest src.kernel.tests.test_application_diagnose_protocol src.kernel.tests.test_application_fact_overlay_protocol src.kernel.tests.test_application_why_not_protocol` — 143 tests OK.
+  - `python -m ruff check src/kernel/application/protocol/derivation_why_not.py src/kernel/application/protocol/__init__.py src/kernel/tests/test_application_why_not_protocol.py` — clean.
+  - `python -m pytest ...` currently exits with code `-1` and no output even for pre-existing Diagnose protocol tests; use the repository's documented `unittest` path for this step.

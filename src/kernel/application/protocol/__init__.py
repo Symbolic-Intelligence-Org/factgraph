@@ -26,6 +26,18 @@ from .derivation_fact_overlay import (
     OverlayCheckPhaseStatus,
     OverlayCheckStatus,
 )
+from .derivation_why_not import (
+    WhyNotAtomLocator,
+    WhyNotEngine,
+    WhyNotFailureKind,
+    WhyNotRedRow,
+    WhyNotRowDiagnostic,
+    WhyNotRowGranularity,
+    WhyNotRowStatus,
+    WhyNotStatus,
+    WhyNotUniverseRequest,
+    WhyNotUniverseResult,
+)
 from .entity_read import (
     AssertionRecordDTO,
     EntityReadRequest,
@@ -121,5 +133,15 @@ __all__ = [
     "SchemaCapability",
     "WarningDTO",
     "WhereIR",
+    "WhyNotAtomLocator",
+    "WhyNotEngine",
+    "WhyNotFailureKind",
+    "WhyNotRedRow",
+    "WhyNotRowDiagnostic",
+    "WhyNotRowGranularity",
+    "WhyNotRowStatus",
+    "WhyNotStatus",
+    "WhyNotUniverseRequest",
+    "WhyNotUniverseResult",
     "WriteValue",
 ]
