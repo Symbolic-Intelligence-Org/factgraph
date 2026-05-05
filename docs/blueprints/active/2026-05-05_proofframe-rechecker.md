@@ -134,9 +134,74 @@ Per Batch 3 helper-migration lesson,Step 0 must decide:
 - If helpers ship,must not introduce SDK shell surface(per Batch 2/3 invariant).
 - Does Batch 4 add anything to existing protocol re-exports,or stay strictly module-local?
 
+### 5.5 Step 0.A Outcome(filled by spike)
+
+**Decision: NARROW SHIP.**
+
+- **Action set:** `replace + remove`(matches Batch 3 outcome,no `add` / no rule actions)
+- **Status set:** 3 statuses — `still_valid | invalidated | unknown`(`superseded_by_full_eval` **collapsed**;see §5.2 results below)
+- **Substrate scope:** `pred_witnesses` + `non_fact_steps`. Concrete `NonFactStep.kind` tags(per `where_eval.py` enumeration):
+  - **Binding-driven**(input from `pred_witnesses`):`eq`, `ne`, `in`, `gt`, `ge`, `lt`, `le`, `neg`, `add`, `sub`, `addc`, `mulc`, ...
+  - **Absence-checking**:`not`(re-evaluation requires re-projecting view_facts under overlay;Step 0.B / impl decides whether to implement;deferral makes `unknown` reachable per §5.5.3)
+  - **Unrecognized future kinds**:always `unknown`
+- **Reject** `SupportArtifact` whose `rule_ref_edges` is non-empty in narrow Batch 4 — return an `unsupported`-equivalent result and defer ruleref recheck to a follow-up batch
+- **Engine scope:** `SupportArtifact.kind == "native_binding_v1"` only;all other kinds return `unsupported`
+- **Entry-criteria check from Batch 3:** confirmed — design assumes only `replace + remove` overlay actions;no `add` or rule-action assumption present anywhere in §5.5 / §6 / §7
+
+#### 5.5.1 Falsifiability checklist results
+
+| # | Item | Verdict | Reason(grounded in substrate)|
+|---|---|---|---|
+| 1 | Status set crispness | **Falsified for `superseded_by_full_eval`** | Detecting universe shift from `replace + remove` requires re-running `evaluate_native_where(...)`,which defeats the rechecker's narrow-scope purpose. Without re-eval,`superseded_by_full_eval` is either always-on(useless)or never-fires(unreachable). Collapse it. `still_valid / invalidated / unknown` remain distinguishable(see §5.5.3). |
+| 2 | Frame granularity invariance | **Holds** | `SupportArtifact` is built per primary winning binding(`_support_capture.py:29`);overlay action's effect on other bindings is not this frame's concern. Frame = one binding stays invariant under `replace + remove`. |
+| 3 | Future-action backward compatibility | **Compatible at narrow scope** | 3-status set carries Batch 5 rule `disable / replace condition / add condition` cleanly:all map to `invalidated` if the frame's rule chain depends on the changed rule;`still_valid` otherwise. Universe-shift concerns(rule add condition enabling new bindings)reintroduce `superseded_by_full_eval` need,but **that is Batch 5's design problem,not Batch 4 justification**. |
+| 4 | Validity vs narrative split | **One capability** | To compute validity,the rechecker must identify which action invalidated which atom — narrative just formats this. Per-atom verdict data is a natural by-product. Step 0.B chooses Shape A vs B based on whether to expose this in DTO,but it is not a separate batch. |
+| 5 | Native + fact-overlay sufficiency | **Marginally meaningful,kept** | Pure pass/fail(Fact Overlay Check)cannot distinguish "exact witness chain still holds" from "alternative witness chain exists". When `PredWitness.asrt_ids` has multiple elements(`_build_pred_witness` L185-194 collects all matching projection rows),removing one asrt_id may leave the atom satisfied via the others. ProofFrame surfaces this distinction;Fact Overlay Check does not. Strongest value still lives in Batch 5 rule ops,but narrow Batch 4 has non-trivial output. |
+| 6 | No-write invariance | **Holds** | Inputs are read-only(`SupportArtifact` immutable;`EvaluationOverlay` immutable;`project_view_facts_with_witness(store.ledger, store.schema_ir)` does not mutate). Recheck logic is pure projection over these inputs. No `set_field` / `add_field` / `retract_by_asrt` / sidecar-write call paths required. |
+| 7 | Engine-kind handling | **Reject non-native** | `SupportArtifact.kind != "native_binding_v1"` returns explicit `unsupported`-equivalent. Souffle's `"souffle_witness_v1"` is also witness-bearing(per `_WITNESS_BEARING_SUPPORT_KINDS`)but excluded by §7 narrow-scope rule(L7 territory,non-target this plan). |
+
+#### 5.5.2 Per-substrate decomposition map(filled)
+
+For each substrate element × overlay-action effect,the recheck rule is:
+
+| Substrate element | Untouched | `replace` matches asrt_id | `remove` matches asrt_id |
+|---|---|---|---|
+| `pred_witnesses` entry whose `asrt_ids` include the matched id | atom `still_valid` | If new `fact_tuple` value at the bound-variable position equals the binding's value for that variable → atom `still_valid`(witness chain holds via the new value);else atom `invalidated`(this asrt_id no longer witnesses the grounded atom) | If `asrt_ids` had **other** matching elements not touched by overlay → atom `still_valid`(alternative witness still holds);if this was the only asrt_id → atom `invalidated` |
+| `pred_witnesses` entry whose `asrt_ids` do not include the matched id | atom `still_valid` | atom `still_valid`(action's asrt_id is not part of this witness chain) | atom `still_valid`(same reason) |
+| `non_fact_steps` of binding-driven kinds(`eq`, `ne`, `in`, `gt`, `ge`, `lt`, `le`, `neg`, `add`, `sub`, `addc`, `mulc`, ...) | step `still_valid` | **Never fires `unknown` in narrow Batch 4.** Frame's `binding_items` is fixed by original eval;`replace + remove` cannot mutate it mid-frame. Either(a) a referenced `pred_witnesses` atom is `invalidated` upstream → frame `invalidated` regardless of step,or(b) all referenced atoms still witness via alternative asrt_ids → step input unchanged → step `still_valid`. | Same as `replace` column |
+| `non_fact_steps` of `not` kind(absence-checking) | step `still_valid`(no relevant fact change) | If overlay's new `fact_tuple` matches the negated atom's grounded pattern under frame `binding_items`(e.g.,`not(BlockedAtTime($p, "now"))` with `$p=alice` and overlay replaces `BlockedAtTime(alice, "yesterday")` value to `BlockedAtTime(alice, "now")`):rechecker that **implements `not` re-evaluation** → step `still_valid` or `invalidated` per re-projection match;rechecker that **defers `not`** → step `unknown` | step `still_valid`(`remove` only eliminates facts;cannot introduce new positive match;absence is preserved or strengthened) |
+| `non_fact_steps` of unrecognized future kind(rechecker has no kind-specific re-eval logic) | step `still_valid`(no input changed,result preserved) | step `unknown`(rechecker cannot decide without re-evaluating the unknown kind) | step `unknown`(same) |
+| `rule_ref_edges` entry(plus its paired `non_fact_steps` ruleref step) | **Out of scope:** any `SupportArtifact` with non-empty `rule_ref_edges` returns frame-level `unsupported`;narrow Batch 4 does not traverse `child_support_digest` recursively | same(out of scope) | same(out of scope) |
+
+**Substrate note already in §5.1 honored:** the dual-element ruleref(NonFactStep + RuleRefEdge sharing `step_key == ruleref_atom_key`)is not double-counted because narrow Batch 4 simply rejects any artifact carrying ruleref. A follow-up batch may implement recursive ruleref recheck;this batch defers the design.
+
+**Frame-level aggregation rule:** frame status is the worst per-element verdict in this priority order:`invalidated > unknown > still_valid`. Any single `invalidated` element → frame `invalidated`;else any `unknown` → frame `unknown`;else `still_valid`.
+
+#### 5.5.3 Status set decomposition results
+
+| Status | Concrete current-substrate input that fires it | Kept? |
+|---|---|---|
+| `still_valid` | Overlay actions touch zero asrt_ids that appear in any `pred_witnesses.asrt_ids`,and all `non_fact_steps` are either untouched or recognizable-kind passes after re-eval. Example:overlay `replace` on `Person.name`(not used by frame's pred atoms). | ✅ kept |
+| `invalidated` | Overlay's `remove` removes the only asrt_id of a `pred_witnesses` entry,or `replace` changes the bound-variable value such that the witness no longer matches the grounded atom. Example:frame binding `$age=25` from `Person.age($p, $age)` with witness asrt_id `a2`;overlay `remove a2` → atom unsupported → frame `invalidated`. | ✅ kept |
+| `unknown` | Reachable **only** via `not` step(or future absence-checking kinds)when rechecker chooses simpler implementation. Concrete trigger:frame has `not(BlockedAtTime($p, "now"))` step with `$p=alice`;original eval saw `BlockedAtTime(alice, "yesterday")` which did **not** match grounded `(alice, "now")` → step satisfied. Overlay `replace` changes that fact's value to `BlockedAtTime(alice, "now")`(value-position,non-group-key,within same e_ref alice — passes Batch 3 validation). Frame's positive `pred_witnesses` are unchanged(none of them depend on `BlockedAtTime`). Rechecker that defers `not` re-evaluation returns `unknown` for the step → frame `unknown`. **Comparison/arithmetic/membership kinds never fire `unknown`** under narrow Batch 4(per §5.5.2 binding-driven row):frame `binding_items` is fixed,`replace + remove` cannot mutate it mid-frame,so their inputs are either preserved or pre-empted by upstream `invalidated`. | ✅ kept(reachable only via `not` / future absence-checking kinds the rechecker defers;Step 0.B / impl may implement `not` re-evaluation, in which case `unknown` may not fire under typical rule patterns. The 3-status set is preserved as protocol allowance.) |
+| `superseded_by_full_eval` | No current-substrate input fires this without running full re-eval. Detecting "universe shift"(new bindings emerge / primary selection changes)requires `evaluate_native_where(...)`,which is exactly what Fact Overlay Check does. Within narrow Batch 4 scope,this status is either always-on or unreachable. | ❌ **collapsed** — Future Batch 5 rule actions(esp. `add condition` enabling new derivations)may justify reintroducing this status,but per `§5.2` directive that is Batch 5's design problem,not Batch 4 justification. |
+
+#### 5.5.4 Step 0.B carry-overs(decided in next sub-step,not now)
+
+Step 0.A produces these inputs for Step 0.B; Step 0.B will choose:
+
+- **DTO shape choice from §6:** Shape A(status only)vs Shape B(status + per-atom verdicts)— validity/narrative are one capability(§5.5.1 item 4),so the question is whether per-atom verdicts belong in the protocol DTO or stay in the runtime. **Shape C(multi-frame)is rejected before Step 0.B**:Batch 4 caller has one primary frame from Check;multi-frame is premature. **Shape D(no DTO)remains in §6 as the parent-plan deviation path only;not selectable as a normal candidate.**
+- **Narrative renderer scope from §5.3:** Step 0.B input — narrative renderer is single-frame,deterministic;language scope and per-atom-key consumption are open questions tied to Shape A vs B choice.
+- **Helper migration scope from §5.4:** Step 0.B input — runtime-only vs add `build_proof_frame_recheck_request(...)` helper,strictly inside `kernel.application.capability_helpers`.
+
 ## 6. Candidate Shapes(Draft)
 
-Step 0.B must choose among explicit alternatives and record rejected reasons. All shapes assume Step 0.A confirmed the action set + status set; if Step 0.A narrowed either, only matching shapes are valid candidates here.
+**Active Step 0.B candidates after Step 0.A: Shape A and Shape B only.** §5.5.4 closed Shape C and Shape D before Step 0.B:
+
+- **Shape C(multi-frame): rejected pre-Step 0.B** as premature — Batch 4 callers from Check have one primary frame;multi-frame is an extension unjustified by narrow Batch 4 entry criteria.
+- **Shape D(pure function, no DTO): retained for traceability only** as the parent-plan deviation path. Selecting Shape D requires the §6.D suspend / amendment / explicit deviation audit per master plan §5.4 exit criteria;**not a normal Step 0.B alternative**.
+
+Step 0.B chooses between Shape A and Shape B and records the rejected reason for the unchosen one. C and D remain in §6 below for traceability only.
 
 **Common runtime contract(applies to every Request/Result shape below):** the rechecker entrypoint takes `*, store: Store, registry: RuleRegistry | None = None` as keyword-only side-channel arguments(matching the existing `check_fact_overlay_binding` / `check_derivation_binding` pattern). Request DTOs carry only caller intent;`Store` and `registry` are not part of any DTO.
 
@@ -150,13 +215,15 @@ class ProofFrameRecheckRequest:
 
 @dataclass(frozen=True)
 class ProofFrameRecheckResult:
-    status: ProofFrameStatus  # Literal[ "still_valid" | "invalidated" | "unknown" | "superseded_by_full_eval" ]
+    status: ProofFrameStatus  # per §5.5.3: Literal[ "still_valid" | "invalidated" | "unknown" ]
     binding_items: BindingItems  # echo of input artifact's binding for caller convenience
 ```
 
 Trade-off:minimal,easiest to prove no over-design. Risk:no provenance — narrative renderer cannot say *which* atom invalidated.
 
 ### Shape B — Per-frame result with per-atom verdict
+
+Shape B uses the **same `ProofFrameRecheckRequest(support_artifact, overlay)` as Shape A**(per master plan §5.4 mandatory DTO requirement);only the result shape differs by adding per-atom verdicts:
 
 ```python
 @dataclass(frozen=True)
@@ -174,7 +241,7 @@ class ProofFrameRecheckResult:
 
 Trade-off:enables provenance-rich narrative;atom-level coverage. Risk:atom verdict status enum is a second status set — risk of coupling drift between frame status and atom status.
 
-### Shape C — Multi-frame request / result
+### Shape C — Multi-frame request / result(closed pre-Step 0.B;not active candidate)
 
 ```python
 @dataclass(frozen=True)
