@@ -152,7 +152,7 @@ Rejected E1 variants:
 | Callback / trace kwarg | reject | Hides a second contract behind normal evaluation and conflicts with drift gates |
 | `NativeWhereEvaluation` field consumed by normal callers | reject | Invites accidental dependency from shipped application capabilities |
 
-Selected E1 shape for Step 0.C:
+Pre-freeze E1 sketch carried into Step 0.C:
 
 ```text
 evaluate_native_where_frontier(view_facts, where, *, registry=None, witness_facts=None)
@@ -177,6 +177,100 @@ NativeWhereFrontierRow(
 
 Names and exact fields are provisional until Step 0.C. What is frozen by Step 0.B is the altitude: native-only, aggregate, typed, separate entrypoint, no application protocol dependency, no callback, no open-ended search budget.
 
+Step 0.C supersedes this sketch in §5.6. In particular, `sample_binding` is rejected in the frozen row DTO.
+
+### 5.6 Step 0.C Contract Freeze
+
+Step 0.C freezes the evaluator trace contract enough to authorize a later scoped implementation.
+
+#### 5.6.1 Entrypoint
+
+```text
+evaluate_native_where_frontier(
+  view_facts,
+  where,
+  *,
+  registry=None,
+  witness_facts=None,
+  remember_support_artifact=None,
+) -> NativeWhereFrontierEvaluation
+```
+
+The signature mirrors `evaluate_native_where(...)` except for the function name and return type. It does not add `trace`, `callback`, `mode`, `options`, `search_budget`, or `sample_limit` kwargs.
+
+#### 5.6.2 Result DTO
+
+```text
+NativeWhereFrontierEvaluation(
+  bindings: list[dict[str, Any]],
+  rule_refs: tuple[str, ...] = (),
+  rule_ref_resolutions: tuple[NativeRuleRefResolution, ...] = (),
+  frontier_rows: tuple[NativeWhereFrontierRow, ...] = (),
+)
+```
+
+`bindings`, `rule_refs`, and `rule_ref_resolutions` keep the same semantics as `NativeWhereEvaluation`. Existing callers do not receive this DTO unless they explicitly call the new entrypoint.
+
+#### 5.6.3 Frontier Row DTO
+
+```text
+NativeWhereFrontierRow(
+  branch_index: int,
+  failed_atom_index: int,
+  atoms_satisfied: int,
+  frontier_count: int,
+  failure_kind: Literal["empty_input", "atom_filter_empty"],
+)
+```
+
+Field semantics:
+
+| Field | Meaning |
+|---|---|
+| `branch_index` | Normalized OR branch index; one-level AND bodies use branch `0` |
+| `failed_atom_index` | Atom index where the branch first produced no surviving environments |
+| `atoms_satisfied` | Number of atoms satisfied before `failed_atom_index`; frozen equal to `failed_atom_index` |
+| `frontier_count` | Number of environments entering the failed atom |
+| `failure_kind` | `empty_input` is reserved for defensive completeness if a helper starts a branch with no envs; `atom_filter_empty` when a concrete atom filters all frontier envs |
+
+`sample_binding` is intentionally excluded. Including a sample would make internal env dictionaries part of the evaluator contract and would pull this design back toward rejected per-partial-env dumps. A later debug-only helper may expose samples outside the stable contract, but this blueprint must not.
+
+#### 5.6.4 Algorithm Freeze
+
+For each normalized branch:
+
+1. Start with `envs = [{}]`.
+2. For each planned atom at `atom_index`, record `frontier_count = len(envs)` before evaluating the atom.
+3. Evaluate the atom with the same atom evaluator semantics as normal `evaluate_where(...)`.
+4. If no env survives, emit one `NativeWhereFrontierRow` for that branch and stop evaluating that branch.
+5. If the branch completes, emit no frontier row and append surviving envs to `bindings`.
+6. Dedupe and sort `bindings` exactly as normal `evaluate_where(...)` does.
+
+Normal successful branches have no frontier row. A body with multiple OR branches can return both successful bindings and frontier rows for failed branches.
+
+#### 5.6.5 RuleRef Freeze
+
+RuleRef rewriting remains success-side and mirrors `evaluate_native_where(...)` preflight and overlay behavior. Frontier rows are computed against the rewritten native body after RuleRef resolution. The frontier contract does not expose failed child-rule internals or rejected RuleRef rows.
+
+If RuleRef resolution itself fails, the entrypoint raises the same `WhereValidationError` shape as `evaluate_native_where(...)`.
+
+#### 5.6.6 Engine Gate
+
+This is **native-only** evaluator architecture. Souffle, ProbLog, and PyReason are explicitly out of scope for this blueprint. No cross-engine support matrix or §6.7 declaration is opened by Step 0.C.
+
+#### 5.6.7 Drift Gates
+
+- [ ] **§7-EvaluatorFrontier-1** separate entrypoint: `evaluate_native_where(...)` signature and `NativeWhereEvaluation` fields remain unchanged.
+- [ ] **§7-EvaluatorFrontier-2** no trace kwargs: no `trace`, `callback`, `near_miss`, `failed_frontier`, `exclusion_reason`, `mode`, `options`, `search_budget`, or `sample_limit` parameter is added to normal evaluation.
+- [ ] **§7-EvaluatorFrontier-3** layer separation: core rules frontier DTOs do not import application, SDK, adapter, evidence payload, or candidate DTOs.
+- [ ] **§7-EvaluatorFrontier-4** bounded rows: at most one frontier row is emitted per normalized OR branch.
+- [ ] **§7-EvaluatorFrontier-5** no env dump: frontier rows do not expose env dictionaries, candidate payloads, support artifacts, provenance envelopes, or arbitrary `details`.
+- [ ] **§7-EvaluatorFrontier-6** deterministic counts: `atoms_satisfied == failed_atom_index`, and `frontier_count` is the pre-atom input env count.
+- [ ] **§7-EvaluatorFrontier-7** success parity: calling the frontier entrypoint returns the same `bindings`, `rule_refs`, and `rule_ref_resolutions` as `evaluate_native_where(...)` for the same inputs.
+- [ ] **§7-EvaluatorFrontier-8** native-only scope: no Souffle / ProbLog / PyReason adapter API or engine evaluator contract changes land in this blueprint.
+- [ ] **§7-EvaluatorFrontier-9** no persistence: frontier evaluation does not append, accept, write ledger state, or persist trace artifacts beyond existing success-side support artifact behavior.
+- [ ] **§7-EvaluatorFrontier-10** no application back-dependency: shipped application capabilities may call the new entrypoint only in a later scoped blueprint; Step implementation must not modify Check, Diagnose, Fact Overlay, or Why-not behavior by accident.
+
 ## 6. Boundaries And Invariants
 
 - Evaluator architecture sits below application capabilities; it must not import application protocol DTOs or depend on application runtime behavior.
@@ -190,7 +284,7 @@ Names and exact fields are provisional until Step 0.C. What is frozen by Step 0.
 
 - [x] Step 0.A source pass cites the native evaluator and each current adapter surface.
 - [x] Step 0.B records a DTO crispness decision for E1 / E2 / E3 / abandon.
-- [ ] If crisp, Step 0.C freezes the evaluator boundary, status vocabulary, payload shape, and drift gates before implementation.
+- [x] If crisp, Step 0.C freezes the evaluator boundary, status vocabulary, payload shape, and drift gates before implementation.
 - [ ] If not crisp, Step 0.C records the exact blocker and why implementation is abandoned or superseded.
 - [ ] Step 0.D either moves this blueprint to `scoped` for a bounded implementation or closes it as abandoned / superseded.
 - [ ] No code, adapter, runtime, or module docs change is made while the blueprint remains `draft`.
