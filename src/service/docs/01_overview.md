@@ -4,7 +4,7 @@
 - 最后更新：2026-05-06
 - 目标读者：需要通过 HTTP 对接 runtime / registry 的前后端开发者
 
-前端 / 机读 API 参考：[`06_frontend_integration.md`](./06_frontend_integration.md)（集成指南）+ [`../../../../docs/api/openapi.yaml`](../../../../docs/api/openapi.yaml)（OpenAPI 3.0 机读契约，48 个 operation 全覆盖；漂移守卫：`scripts/export_openapi.py`）。
+前端 / 机读 API 参考：[`06_frontend_integration.md`](./06_frontend_integration.md)（集成指南）+ [`../../../docs/api/openapi.yaml`](../../../docs/api/openapi.yaml)（OpenAPI 3.0 机读契约，48 个 operation 全覆盖；漂移守卫：`scripts/export_openapi.py`，需 `PYTHONPATH=src` 执行）。
 
 ## 1. 模块职责
 

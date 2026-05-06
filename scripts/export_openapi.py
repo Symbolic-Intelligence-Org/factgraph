@@ -2,7 +2,7 @@
 """OpenAPI spec drift guard.
 
 Compares the checked-in ``docs/api/openapi.yaml`` against the live FastAPI
-spec produced by ``factpy_kernel.service.app_v1.app`` at ``(path, method)``
+spec produced by ``service.app_v1.app`` at ``(path, method)``
 granularity. Does NOT rewrite the yaml — the checked-in file is hand-curated
 and its schema precision is intentionally higher than the FastAPI
 auto-generated output.
@@ -30,7 +30,7 @@ ALLOWED_METHODS = {"get", "post", "delete", "put", "patch"}
 def _load_live_pairs() -> set[tuple[str, str]]:
     sys.path.insert(0, str(ROOT / "src"))
     os.environ.setdefault("FACTPY_KERNEL_AUTH_DISABLED", "true")
-    from factpy_kernel.service.app_v1 import app  # noqa: E402
+    from service.app_v1 import app  # noqa: E402
 
     spec = app.openapi()
     pairs: set[tuple[str, str]] = set()
