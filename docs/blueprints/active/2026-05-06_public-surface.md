@@ -227,6 +227,93 @@ This is not Path B because Batch 8 still has a concrete close-out product:it rec
 - Drift gates:static checks for no SDK/service/agent/application runtime/protocol drift,projection link scrub if docs touched,and README quickstart unchanged if not intentionally edited.
 - Reactivation triggers for SDK shell,service routes,example projection add-back,and Batch 4 `rule_refs` hardening.
 
+### 5.5 Step 0.B Spike — Scoped Public Boundary Freeze
+
+Step 0.B resolves the §5.4.3 carry-overs. The selected implementation remains **docs/checklist only**.
+
+#### 5.5.1 Public Boundary Tiers
+
+Batch 8 freezes three public-boundary labels:
+
+| Tier | Meaning | Current members |
+|---|---|---|
+| Product public | Ergonomic user-facing API with outward compatibility expectations. | `kernel.sdk` current exports and existing `SDKStore` methods. |
+| Advanced importable | Kernel package surface documented for automation / wire / audit consumers;stable enough to cite,but not ergonomic SDK product API. | `kernel.application` protocol/runtime entrypoints;`kernel.audit` reader/query/round/diff entrypoints. |
+| Internal / deferred | Not part of the v0.1 public package or not productized yet. | `service`, `agent`, `domains`, Batch 6 Frontier/rule-action event families,Batch 7 L5 aggregation,single-frame diff method,SDK shells for Batches 3-7,service routes,example projection add-back,Batch 4 ProofFrame `rule_refs` hardening. |
+
+Important wording constraint:do **not** call `kernel.application` or `kernel.audit` "private" because they are importable and already documented in projected kernel docs. Do **not** call them "SDK public" or "ergonomic product API" either.
+
+#### 5.5.2 Files Scoped For Implementation
+
+Implementation may edit only:
+
+- `README.md`
+- `README.en.md`
+- `src/kernel/sdk/docs/04_api_surface.md`
+- `src/kernel/sdk/docs/04_api_surface.en.md`
+- `src/kernel/application/docs/01_overview.md`
+- `src/kernel/application/docs/01_overview_en.md`
+- `src/kernel/audit/docs/01_overview.md`
+- `src/kernel/audit/docs/03_audit_package_contract.md`
+- `docs/blueprints/active/2026-04-28_v0.1-release-candidate.md`
+- this blueprint and audit log
+
+No code files are in scope. If implementation needs any `.py`, `pyproject.toml`,release script,or allowlist change,return to Step 0.B and record a scope change before editing.
+
+#### 5.5.3 Release Projection Decision
+
+No release projection allowlist expansion in Batch 8.
+
+Rationale:
+
+- Step 0.A #7 confirmed examples remain outside the release allowlist.
+- Existing projected docs already include README,SDK docs,application docs,audit docs,and architecture principles.
+- Public source safety is better served by updating docs already in the allowlist than by adding new files in the terminal batch.
+
+Implementation must run the projection script after docs edits to prove link scrub still passes,but it must not change `scripts/release_surface_allowlist.txt` or `scripts/project_release_surface.sh`.
+
+#### 5.5.4 Release-Day Checklist Delta
+
+Update the active release-candidate blueprint with a short Batch 8 public-surface gate:
+
+- product public surface remains `kernel.sdk`;
+- `kernel.application` and `kernel.audit` are advanced importable surfaces;
+- no Batches 3-7 SDK shell or service route is shipped;
+- projection allowlist remains unchanged;
+- no publish action occurs in Batch 8.
+
+This is a checklist delta,not a release action. The release candidate blueprint remains active/implemented and should not be archived by Batch 8.
+
+#### 5.5.5 Reactivation Triggers
+
+| Deferred item | Reactivation trigger |
+|---|---|
+| SDK shell for Check/Diagnose | A concrete user-facing workflow needs a human-friendly method and can define outward result shapes without exposing application DTOs. |
+| SDK shell for Fact Overlay / ProofFrame / Why-not / rule actions | A concrete workflow proves the one-family wrapper is needed;must get its own Step 0 because each family has distinct result shape. |
+| Service routes | A delivery/auth/session blueprint scopes HTTP DTOs and route ownership. |
+| Projection example add-back | A selected example passes projection import/link/smoke gates and is explicitly allowlisted. |
+| Batch 6 Frontier / rule-action event families | A persistence consumer requires them;must update round-event schema in its own blueprint. |
+| Batch 7 single-frame diff / L5 aggregation | A public SDK or repeated internal caller proves a stable API need;must use Batch 7 reactivation triggers. |
+| Batch 4 ProofFrame `rule_refs` hardening | Separate post-archive hardening;not bundled into Batch 8. |
+
+#### 5.5.6 Drift Gates
+
+Implementation acceptance must include:
+
+1. `git diff --stat -- src/kernel/sdk src/kernel/application src/kernel/audit` shows only the scoped `.md` files above.
+2. `git diff --stat -- src/service src/agent src/domains` is empty.
+3. `git diff --stat -- scripts/project_release_surface.sh scripts/release_surface_allowlist.txt pyproject.toml` is empty.
+4. `git diff --stat -- src/kernel/application/*.py src/kernel/application/protocol src/kernel/audit/*.py src/kernel/sdk/*.py` is empty.
+5. `scripts/project_release_surface.sh` passes after docs edits.
+6. README quickstart code block remains runnable or byte-identical if not intentionally changed.
+7. No occurrence of `superseded_by_full_eval` or `param_override` is introduced in public docs except historical references already present in archived blueprints.
+8. No public docs link to excluded paths(`docs/blueprints`, `docs/references`, `memory`, `src/service`, `src/agent`, `src/domains`, `third_party`, `tools`, `examples/`, `samples/`)unless the projection script already permits the reference.
+9. `git diff --check` passes.
+
+#### 5.5.7 Scope Status
+
+Step 0.B satisfies §7 row 3. Status remains `draft` in this commit;the separate scope-freeze commit will transition to `scoped` after review.
+
 ## 6. Boundaries And Invariants
 
 - `v0.1-oss-prep` and `master` are frozen;Batch 8 does not touch them.
@@ -244,7 +331,7 @@ This is not Path B because Batch 8 still has a concrete close-out product:it rec
 
 - [x] Step 0.A answers all 18 falsifiers with source-grounded evidence(see §5.4).
 - [x] Step 0.A selects Path A/B/C and records why alternatives were rejected(see §5.4.1).
-- [ ] Step 0.B freezes exact public surface scope before implementation,if any.
+- [x] Step 0.B freezes exact public surface scope before implementation(see §5.5).
 - [ ] No release branch,tag,publish,or public repo push occurs.
 - [ ] No SDK/service/agent/application/audit drift outside the scoped files.
 - [ ] If SDK changes ship,tests prove wrappers are thin delegates and do not expose raw application internals accidentally.
