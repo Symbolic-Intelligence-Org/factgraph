@@ -172,15 +172,12 @@ def build_proof_frame_diff(
     _require_non_empty_str(round_b_id, field_name="round_b_id")
     records_a = _proof_frame_records(round_a_events)
     records_b = _proof_frame_records(round_b_events)
-    identities = sorted(
-        set(records_a) | set(records_b),
-        key=_frame_identity_sort_key,
-    )
+    keys = sorted(set(records_a) | set(records_b))
     deltas: list[FrameDelta] = []
-    for identity in identities:
+    for key in keys:
         delta = _diff_frame_records(
-            records_a.get(identity),
-            records_b.get(identity),
+            records_a.get(key),
+            records_b.get(key),
             include_unchanged=include_unchanged,
         )
         if delta is not None:
@@ -193,13 +190,19 @@ def build_proof_frame_diff(
     )
 
 
-def _proof_frame_records(events: tuple[RoundEvent, ...]) -> dict[FrameIdentity, _ProofFrameRecord]:
-    records: dict[FrameIdentity, _ProofFrameRecord] = {}
+def _proof_frame_records(events: tuple[RoundEvent, ...]) -> dict[tuple[str, str], _ProofFrameRecord]:
+    records: dict[tuple[str, str], _ProofFrameRecord] = {}
     for event in sorted(events, key=lambda item: item.sequence):
         if event.kind != "proof_frame_result":
             continue
         record = _proof_frame_record_from_event(event)
-        records[record.identity] = record
+        key = _frame_identity_sort_key(record.identity)
+        if key in records:
+            raise ProofFrameDiffError(
+                f"duplicate proof_frame_result frame identity in round {event.round_id} "
+                f"at sequence {event.sequence}"
+            )
+        records[key] = record
     return records
 
 

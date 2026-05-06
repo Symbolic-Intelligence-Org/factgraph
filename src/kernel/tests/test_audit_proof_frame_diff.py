@@ -234,6 +234,59 @@ class AuditProofFrameDiffTests(unittest.TestCase):
         )
         self.assertEqual(identity.binding_items, (("$age", 30), ("$p", "alice")))
 
+    def test_unhashable_json_binding_values_pair_via_canonical_key(self) -> None:
+        package = _package(
+            [
+                *_round(
+                    "round-a",
+                    [_proof_payload(binding=[["$x", ["nested", "list"]]], status="still_valid")],
+                ),
+                *_round(
+                    "round-b",
+                    [
+                        _proof_payload(
+                            binding=[["$x", ["nested", "list"]]],
+                            status="invalidated",
+                            atoms={"b0.a0:pred": "invalidated"},
+                        )
+                    ],
+                ),
+            ]
+        )
+
+        diff = AuditQuery(package).diff_proof_frames("round-a", "round-b")
+
+        self.assertEqual(len(diff.frame_deltas), 1)
+        delta = diff.frame_deltas[0]
+        self.assertEqual(delta.frame_status_change.before, "still_valid")
+        self.assertEqual(delta.frame_status_change.after, "invalidated")
+        self.assertEqual(
+            delta.frame_identity.binding_items,
+            (("$x", ["nested", "list"]),),
+        )
+
+    def test_duplicate_frame_identity_in_one_round_raises(self) -> None:
+        package = _package(
+            [
+                *_round(
+                    "round-dup",
+                    [
+                        _proof_payload(status="still_valid"),
+                        _proof_payload(
+                            status="invalidated",
+                            atoms={"b0.a0:pred": "invalidated"},
+                        ),
+                    ],
+                ),
+                *_round("round-other", [_proof_payload()]),
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            AuditQueryError, "duplicate proof_frame_result frame identity"
+        ):
+            AuditQuery(package).diff_proof_frames("round-dup", "round-other")
+
 
 def _package(events: list[RoundEvent]) -> AuditPackageData:
     return AuditPackageData(
