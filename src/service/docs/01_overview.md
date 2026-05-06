@@ -1,7 +1,7 @@
 # Service 模块总览（kernel）
 
 - 范围：`src/service`
-- 最后更新：2026-04-14
+- 最后更新：2026-05-06
 - 目标读者：需要通过 HTTP 对接 runtime / registry 的前后端开发者
 
 前端 / 机读 API 参考：[`06_frontend_integration.md`](./06_frontend_integration.md)（集成指南）+ [`../../../../docs/api/openapi.yaml`](../../../../docs/api/openapi.yaml)（OpenAPI 3.0 机读契约，48 个 operation 全覆盖；漂移守卫：`scripts/export_openapi.py`）。
@@ -29,6 +29,20 @@
 - 直接实现 core 语义
 - 保存 authoring 资产
 - 替代 `SDKStore` / `SDKRegistry` 的 Python SDK 体验
+
+### 1.1 v0.1 公开 surface 边界(per Batch 8 closure decision @ `6b32972`)
+
+Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer capabilities 在 v0.1 **不**通过本 service HTTP 路由暴露:
+
+- Check / Diagnose / Fact Overlay / Why-not(`kernel.application` advanced importable)
+- ProofFrame Rechecker(`kernel.application.proofframe_runtime`)
+- Rule Disable / Literal Replace / Add Condition(`kernel.application.rule_*_runtime`)
+- Round events 持久化 + 查询(`kernel.audit.round_events`)
+- ProofFrame diff(`kernel.audit.proof_frame_diff`)
+
+这些 capabilities 按 Batch 8 公开 surface 决议(见 [`docs/blueprints/archive/2026-05-06_public-surface.md`](../../../docs/blueprints/archive/2026-05-06_public-surface.md))保留为 **advanced importable surface**,通过 Python in-process 调用 `kernel.application` / `kernel.audit` 使用;v0.1 **不**新增对应 HTTP route 或 SDK shell。
+
+如需通过 HTTP 暴露,reactivation 触发条件:explicit user-facing workflow demand + delivery / auth / session 单独 blueprint 设计。
 
 ## 2. 当前模块结构
 
