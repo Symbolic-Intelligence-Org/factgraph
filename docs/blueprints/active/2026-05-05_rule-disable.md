@@ -179,6 +179,47 @@ Step 0.B must define tests that prove:
 - no `superseded_by_full_eval` or new ProofFrame status appears;
 - disabled locators preserve later atom keys.
 
+### 5.6 Step 0.A Outcome(filled by spike)
+
+**Decision:NARROW SHIP.** `RuleDisableAction` is semantically crisp if Batch 5a keeps the two outputs separate:
+
+- **Variant evaluation output:** run native rule evaluation under a temporary disabled-locator overlay,so the disabled atom is skipped and the rule body may produce fewer,same,or more rows.
+- **ProofFrame output:** explain the original proof frame by marking the disabled locator's atom as `invalidated` when that locator appears in the passed-in `SupportArtifact`;non-target atoms remain `still_valid`. This is not a full proof-tree diff and does not search for newly-emerged frames.
+
+This makes "variant evaluation skip" and "old proof atom invalidation" two views of one action:the action disables a rule body atom identified by rule identity + stable locator. It does **not** merge two unrelated operations.
+
+#### 5.6.1 Falsifiability checklist results
+
+| # | Item | Verdict | Reason |
+|---|---|---|---|
+| 1 | Semantic crispness | **Holds with separated outputs** | The same locator action has two deterministic projections:skip the atom for variant evaluation;invalidate the same locator in the old frame if present. The trap would be using ProofFrame to report universe shift. Step 0.A rejects that:variant rows are full-eval output;ProofFrame is original-frame explanation only. |
+| 2 | Locator target crispness | **Holds if rule identity is explicit** | `b{branch}.a{atom}` alone is not globally meaningful. The action target must carry `rule_id`, `version`, `branch_index`, and `atom_index`;a display/helper locator string can be derived but must not be the only identity. |
+| 3 | Where-shape coverage | **Holds** | Current `where_eval._normalize_where(...)` treats flat bodies as branch `0` and OR bodies as explicit branch lists. Current evaluator/support code already uses `enumerate`,so a skip primitive can preserve source atom numbers instead of pre-filtering. |
+| 4 | Variable binding safety | **Holds,with existing error/row behavior surfaced** | Disabling a binder can enable constant-driven rows(e.g. `eq($x, "alice")`)or can leave selected variables unbound. Existing native evaluation either yields rows according to the remaining body or raises existing `WhereValidationError` / `RuleCompileError` paths such as `select var is unbound`. Batch 5a should map these into its result errors;it does not need a new ProofFrame status. |
+| 5 | Support capture alignment | **Viable,but not the source of truth for Step 0.A** | If Batch 5a captures variant support,`build_support_artifact_for_binding(...)` / `find_winning_branch_index(...)` / `derive_rule_ref_edges_for_binding(...)` must receive the same disabled locator set and skip with `enumerate(...); continue`. For the narrow result,ProofFrame can be computed from the original `SupportArtifact` directly,so support-capture threading is not required to prove the action crisp. Step 0.B decides whether variant support capture ships now. |
+| 6 | ProofFrame integration | **Holds without Batch 4 DTO changes** | `ProofFrameRecheckResult` already supports `invalidated | still_valid | unknown` and `affected_action_indices`. A rule-disable runtime can build a result directly from original `SupportArtifact` atom keys:matching `bX.aY:*` → `invalidated` with the action index;non-matching atoms → `still_valid`. No `superseded_by_full_eval` or `recheck_proof_frame(...)` extension is needed. |
+| 7 | RuleRef boundary | **Reject/defer** | A ruleref call site spans parent `NonFactStep` + `RuleRefEdge` + child support digest. Disabling parent or child atoms needs recursive traversal and sidecar lookup,which is outside 5a. Narrow Batch 5a should reject RuleRef-bearing inputs and rule bodies containing `ruleref` atoms. |
+| 8 | Layer boundary | **Holds with narrow core primitives** | The public surface can start in `kernel.application.protocol` + `kernel.application/rule_disable_runtime.py`. Any evaluator change should be a small native primitive for disabled locators,not SDK replay substrate. If implementation pressure pushes toward `src/kernel/sdk/replay.py`,that is a scope failure. |
+
+#### 5.6.2 ProofFrame contract answers
+
+| Question | Step 0.A answer |
+|---|---|
+| Disabled locator maps to `invalidated` even if variant rows still include the binding? | **Yes.** ProofFrame explains the old path. If the old frame used the disabled locator,the old path is invalidated even when relaxed evaluation still returns the same binding through remaining atoms. |
+| Non-target atoms remain `still_valid`? | **Yes**,for the original-frame explanation. Unknown is reserved for unsupported/rejected inputs,not for ordinary non-target atoms. |
+| Support artifact does not contain the disabled locator? | The ProofFrame result is `still_valid` if the artifact is otherwise supported and no target atom key matches the disabled locator. This means the action did not invalidate this particular frame. |
+| Multiple rule actions now? | Semantically possible,but Step 0.B should decide whether Batch 5a supports `tuple[RuleDisableAction, ...]` immediately or restricts the runtime request to one action for MVP. The DTO container may still be future-compatible. |
+| Universe shift / newly-emerged bindings? | **Surface variant rows separately.** Disable can relax a rule and create new rows. Those rows are full native evaluation output,not ProofFrame output. Do not revive `superseded_by_full_eval`;callers compare original/variant rows outside ProofFrame. |
+
+#### 5.6.3 Active Step 0.B carry-overs
+
+- Shape A is the default active path:extend `EvaluationOverlay` with a backward-compatible `rule_actions` lane. Step 0.B must freeze exact defaults and constructor compatibility tests.
+- Surface A remains the only active runtime surface:`check_rule_disable_action(request, *, store, registry) -> RuleDisableResult`. Step 0.B must freeze request/result fields.
+- Step 0.B must choose whether variant support capture ships in Batch 5a. If it does not ship,document that Batch 5a returns variant rows + original-frame ProofFrame only.
+- Step 0.B must freeze error representation for unsupported RuleRef and native evaluation errors.
+- Step 0.B must decide multi-action MVP scope:the DTO container can be `tuple[RuleDisableAction, ...]` for forward compatibility,but the runtime may restrict to one action for Batch 5a. If restricted,document the constraint and error behavior.
+- Step 0.B must freeze the two-entry-point contract:`check_rule_disable_action(...)` owns rule actions;Batch 4 `recheck_proof_frame(...)` and existing Fact Overlay runtime remain fact-only and must not silently become rule-action runtimes.
+
 ## 6. Boundaries And Invariants
 
 - Application DTO/runtime first;SDK stays untouched.
@@ -193,7 +234,7 @@ Step 0.B must define tests that prove:
 ## 7. Acceptance(Draft)
 
 **Step 0 acceptance:**
-- [ ] Step 0.A records the falsifiability checklist with concrete examples.
+- [x] Step 0.A records the falsifiability checklist with concrete examples(see §5.6.1).
 - [ ] Step 0.B freezes one action DTO shape and rejected reasons for alternatives.
 - [ ] Step 0.B freezes one runtime surface and ProofFrame output contract.
 - [ ] If any parent-plan deviation is selected,it is recorded before implementation.
