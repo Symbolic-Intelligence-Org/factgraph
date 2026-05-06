@@ -5,7 +5,7 @@
 ## 文档入口
 
 - [README.md](./README.md)（本文件）—— 实现口径：Scope / Responsibilities / Non-responsibilities / Limitations。
-- [USAGE.md](./USAGE.md) —— 产品使用者手册：`extract_document()` 最小示例、参数语义、返回值、常见失败诊断、已知限制。HTTP 端点契约见 [../../../service/docs/05_extraction.md](../../../service/docs/05_extraction.md)。
+- [USAGE.md](./USAGE.md) —— 产品使用者手册：`extract_document()` 最小示例、参数语义、返回值、常见失败诊断、已知限制。HTTP 端点契约见 [../../service/docs/05_extraction.md](../../service/docs/05_extraction.md)。
 
 ## Scope
 

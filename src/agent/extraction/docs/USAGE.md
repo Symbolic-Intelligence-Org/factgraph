@@ -1,6 +1,6 @@
 # `extract_document()` 使用手册
 
-面向产品使用者。本文档介绍**如何调用** extraction 管道的 Python 产品 API。管道本身的实现口径(Scope / Responsibilities / Non-responsibilities / Limitations)见同目录 [README.md](./README.md);HTTP 端点契约见 [../../../service/docs/05_extraction.md](../../../service/docs/05_extraction.md)。
+面向产品使用者。本文档介绍**如何调用** extraction 管道的 Python 产品 API。管道本身的实现口径(Scope / Responsibilities / Non-responsibilities / Limitations)见同目录 [README.md](./README.md);HTTP 端点契约见 [../../service/docs/05_extraction.md](../../service/docs/05_extraction.md)。
 
 ## 0. 安装
 
@@ -202,13 +202,13 @@ echo "MISTRAL=${#MISTRAL_API_KEY} OPENAI=${#OPENAI_API_KEY}"
 | 场景 | 推荐 |
 |---|---|
 | 同进程脚本 / notebook / 本地 CLI | 直接用 `extract_document()` |
-| 前端 / 跨服务调用 / 需要 auth 边界 | 走 `POST /v1/extraction/documents`([契约](../../../service/docs/05_extraction.md)) |
+| 前端 / 跨服务调用 / 需要 auth 边界 | 走 `POST /v1/extraction/documents`([契约](../../service/docs/05_extraction.md)) |
 | 需要复用已编译 schema IR 的长流程 | `extract_document_from_ir(schema_ir=...)` |
 
 ## 8. 相关文档
 
 - [README.md](./README.md):extraction 模块实现口径(Scope / Responsibilities)
-- [../../../service/docs/05_extraction.md](../../../service/docs/05_extraction.md):HTTP 端点 DTO 契约
+- [../../service/docs/05_extraction.md](../../service/docs/05_extraction.md):HTTP 端点 DTO 契约
 - [../../documents/docs/README.md](../../documents/docs/README.md):staging 层格式支持与 segmentation 策略
 - [../../../../docs/references/cross-provider-entity-benchmark-report.md](../../../../docs/references/cross-provider-entity-benchmark-report.md):模型推荐依据(Mistral Small F1=78%)
 - `examples/09_dora_document_extraction.ipynb`:DORA 端到端 real-LLM 交互式 demo

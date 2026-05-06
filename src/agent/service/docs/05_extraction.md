@@ -4,7 +4,7 @@
 
 - `POST /v1/extraction/documents`
 
-本文记录 service v1 文档抽取端点的 DTO 契约。agent 层的 Python 产品 API(`extract_document(...)` / `extract_document_from_ir(...)`)见 [../../agent/extraction/docs/USAGE.md](../../agent/extraction/docs/USAGE.md);extraction 管道本身的实现口径见 [../../agent/extraction/docs/README.md](../../agent/extraction/docs/README.md)。
+本文记录 service v1 文档抽取端点的 DTO 契约。agent 层的 Python 产品 API(`extract_document(...)` / `extract_document_from_ir(...)`)见 [../../extraction/docs/USAGE.md](../../extraction/docs/USAGE.md);extraction 管道本身的实现口径见 [../../extraction/docs/README.md](../../extraction/docs/README.md)。
 
 ## 通用约定
 
@@ -25,7 +25,7 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `file` | file upload(必填) | 待抽取文档。当前支持 `pdf` / `docx` / `md` / `txt`;staging 具体能力见 [../../agent/documents/docs/README.md](../../agent/documents/docs/README.md) |
+| `file` | file upload(必填) | 待抽取文档。当前支持 `pdf` / `docx` / `md` / `txt`;staging 具体能力见 [../../documents/docs/README.md](../../documents/docs/README.md) |
 | `options` | string(JSON,必填) | 抽取选项,形状见下 |
 
 `options` JSON 字段:
@@ -197,6 +197,6 @@ curl -X POST http://localhost:8000/v1/extraction/documents \
 ## 相关文档
 
 - `01_overview.md`:service 模块总览 + 路由目录
-- `../../agent/extraction/docs/USAGE.md`:Python 产品 API `extract_document(...)` 使用手册
-- `../../agent/extraction/docs/README.md`:extraction 管道实现口径
-- `../../agent/documents/docs/README.md`:staging 层支持的文档格式与 segmentation 策略
+- `../../extraction/docs/USAGE.md`:Python 产品 API `extract_document(...)` 使用手册
+- `../../extraction/docs/README.md`:extraction 管道实现口径
+- `../../documents/docs/README.md`:staging 层支持的文档格式与 segmentation 策略
