@@ -4,8 +4,8 @@
 
 ## 当前文档
 
-- `src/kernel/audit/docs/01_overview.md`
-  - audit 模块职责、公共入口、审计工作流、round event log、与 runtime/registry 的边界。
+- `src/kernel/audit/docs/01_overview.md` / [`01_overview.en.md`](./01_overview.en.md)
+  - audit 模块职责、公共入口、审计工作流、round event log、与 runtime/registry 的边界。CN/EN 双语镜像。
 - `src/kernel/audit/docs/02_evidence_graph.md`
   - audit 层统一 explainability DTO 与 standalone renderer：`EvidenceGraph` 的角色、最小数据模型、JSON round-trip helper、`evidence_graphs.jsonl` package contract、HTML fragment renderer 与当前边界。
 - `src/kernel/audit/docs/03_audit_package_contract.md`
