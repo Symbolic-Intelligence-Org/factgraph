@@ -1,6 +1,6 @@
 # Task Blueprint: Round Story Demo Refresh
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Related Modules:
@@ -60,12 +60,12 @@ Existing demos are section-oriented and partly predate the round-story routemap.
 
 ## 7. Acceptance
 
-- [ ] `python examples/round_story_full_demo.py` passes.
-- [ ] `python -m unittest src.kernel.tests.test_examples_round_story_full_demo` passes.
-- [ ] The new demo returns the expected compact phase summary.
-- [ ] `examples/README.md` has no stale root links to archived examples.
-- [ ] `git diff --check` passes.
-- [ ] No SDK/service/release-surface expansion is introduced.
+- [x] `python examples/round_story_full_demo.py` passes.
+- [x] `python -m unittest src.kernel.tests.test_examples_round_story_full_demo` passes.
+- [x] The new demo returns the expected compact phase summary.
+- [x] `examples/README.md` has no stale root links to archived examples.
+- [x] `git diff --check` passes.
+- [x] No SDK/service/release-surface expansion is introduced.
 
 ## 8. Implementation Plan
 
@@ -84,4 +84,27 @@ Existing demos are section-oriented and partly predate the round-story routemap.
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation.
+Implemented in `examples/round_story_full_demo.py` and
+`examples/round_story_full_demo.ipynb`. The Python script is the source of
+truth and returns the exact compact phase summary requested by the plan:
+
+- `check=passed`
+- `diagnose=atom_localized`
+- `fact_overlay=passed`
+- `why_not=completed`
+- `frontier=atom_filter_empty`
+- `proofframe=invalidated`
+- `rule_disable=completed`
+- `rule_literal_replace=completed`
+- `rule_add_condition=completed`
+- `round_diff=frame_status_changed`
+
+The root `examples/` directory now contains only the canonical demo pair plus
+`README.md`. The previous root notebooks/scripts moved to `examples/archive/`
+with an archive README explaining their historical/sectional role.
+
+The notebook intentionally imports the script by path and asserts the same
+`EXPECTED_PHASE_SUMMARY`; it does not fork behavior.
+
+Deviation: none. The change stayed within examples, tests, and blueprint/docs.
+It added no SDK shell, service route, release projection, or public API surface.
