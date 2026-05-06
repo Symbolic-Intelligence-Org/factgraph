@@ -4,8 +4,10 @@ These notebooks and scripts are historical or sectional examples retained for
 reference. They are useful when reading older blueprints, but they are not the
 current recommended user journey.
 
-Use `../round_story_full_demo.py` or `../round_story_full_demo.ipynb` for the
-canonical current v0.1 demo.
+Use `../round_story_full_demo.py` for the canonical executable script and the
+chaptered notebook suite (`../01_sdk_check_diagnose.ipynb` through
+`../04_round_persistence_diff.ipynb`) for the readable walkthrough — see
+`../README.md` for the chapter index.
 
 Archived artifacts:
 
