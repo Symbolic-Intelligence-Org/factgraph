@@ -1,29 +1,168 @@
 # Current Operational Memory
 
-最后更新:2026-05-04(`v0.1-redesign-2026-05-03` pushed/frozen at `422ffcf`;new branch `v0.1-engine-capability-declaration-2026-05-04`;engine-extension §6.6 resolves §3.6 as working hypothesis)
+最后更新:2026-05-06(`v0.1-public-surface-2026-05-06`;post-routemap light wrap-up:master plan close-out + tutorials committed,operational memory sync current)
 
-## 当前阶段(2026-05-04 — ENGINE CAPABILITY DECLARATION PHASE)
+## 当前阶段(2026-05-06 — ROUND STORY COMPLETION PLAN COMPLETE)
 
-**当前分支:** `v0.1-engine-capability-declaration-2026-05-04`,从 pushed/frozen `v0.1-redesign-2026-05-03` @ `422ffcf` 切出。
+**当前分支:** `v0.1-public-surface-2026-05-06`,基于 Batch 7 hardening final `3baf4ac` 切出。Batch 8 closed at `6b32972`;post-routemap wrap-up additionally committed master-plan close-out docs and tutorial expansion.
 
-### 已完成 checkpoint
+**Working tree 状态(预期 after this memory sync commit):**
+```
+clean
+```
 
-- `v0.1-redesign-2026-05-03` 已 push 到 `origin/v0.1-redesign-2026-05-03` @ `422ffcf`;作为 Check + Diagnose shipped reference 保持冻结。
-- Check operation shipped + archived.
-- Diagnose operation shipped + archived.
-- Engine-extension Wave 1 closed through §6.5.
-- 本分支首个工作:engine-extension topic §6.6,将 §3.6 Engine Capability Declaration 从 deferred 推进为 **resolved as working hypothesis**:
-  - locally-hardcoded per-capability gates remain default;
-  - no declarative capability schema / registry / DSL / matrix now;
-  - migration triggers:third capability, observed drift, new engine, consumer discovery need, explicit user/API request.
+### Round Story Completion Plan progress
 
-### 下一步自然动作
+- ✅ Batch 0 — Inventory / reference cleanup
+- ✅ Batch 1 — Canonical Round Story
+- ✅ Batch 2 — Capability Ergonomics
+- ✅ Batch 3 — EvaluationOverlay(`replace + remove`,fact-side add deferred)
+- ✅ Batch 4 — ProofFrame Rechecker(narrow Shape B,3-status,strict `not` deferral)
+- ✅ Batch 5a — Rule Disable(single-action native rule locator disable)
+- ✅ Batch 5b — Rule Literal Replace(narrow Const-to-Const native literal replace)
+- ✅ Batch 5c — Rule Add Condition / Binding Planner(narrow filter-only add condition;binding planner deferred)
+- ✅ Batch 6 — Durable Round Persistence(optional `audit/round_events.jsonl`,external buffered recorder,AuditQuery round-event methods)
+- ✅ Batch 7 — Evidence Diff / Cross-Run(first slice:L4 ProofFrame diff;L5 aggregation deferred)
+- ✅ Batch 8 — Public Surface Decision(docs/checklist-only public boundary close-out)
+- ⚠️ Deferred hardening tracked separately:Batch 4 ProofFrame symmetric `rule_refs` legacy-field rejection gap.
 
-- Commit §6.6 topic-doc update + memory sync.
-- Then choose next phase:
-  - third application capability(Explain / Why-not etc.) to test migration triggers;
-  - baseline P1/P2 fill;
-  - push this new branch checkpoint if desired.
+### Batch 8 landed commits
+
+- `33b0afe` — drafted Batch 8 Public Surface blueprint/audit with Step-0-first framing;key false-merge risk:SDK shell,service routes,release projection,and README baseline are lifecycle-different decisions.
+- `4273d8f` — Step 0.A selected **Path A docs/checklist first slice**:no SDK/service code,no application/audit protocol drift,no release branch action,no projection expansion by default.
+- `c26cb88` — Step 0.B froze public boundary tiers and scoped files:
+  - product public:`kernel.sdk`;
+  - advanced importable:`kernel.application` + `kernel.audit`;
+  - internal/deferred:service/agent/domains,SDK shells for Batches 3-7,service routes,example projection add-back,Batch 6/7 deferred families,Batch 4 `rule_refs` hardening.
+- `f2a4448` — scope freeze(`draft → scoped`).
+- `6b32972` — implementation + archive:
+  - README / README.en public-boundary table;
+  - SDK API docs clarify no Batch 3-7 SDK shells;
+  - application/audit docs label advanced importable surfaces;
+  - release-candidate blueprint gains Batch 8 public-surface checkpoint;
+  - Batch 8 blueprint archived to `docs/blueprints/archive/2026-05-06_public-surface.md`.
+
+### Batch 8 shipped behavior
+
+- No Python code changed.
+- No SDK shell / service route / release projection allowlist expansion / package-scope change shipped.
+- `kernel.sdk` remains product public surface.
+- `kernel.application` and `kernel.audit` are documented as advanced importable kernel surfaces.
+- Public source projection remains 261 files and default-deny.
+
+### Verification
+
+- `scripts/project_release_surface.sh` — passed(261 files).
+- README and README.en quickstart blocks — both print `Alice`.
+- public-doc deny-pattern scan over changed projected docs — clean.
+- `git diff --check` — clean.
+- Drift guards:only scoped docs/checklist files changed;0 SDK/application/audit Python code drift;0 service/agent/domain drift;0 release script/allowlist/pyproject drift.
+
+### Fresh session first action
+
+1. Confirm branch `v0.1-public-surface-2026-05-06` and clean worktree.
+2. If auditing Batch 8,read `docs/blueprints/archive/2026-05-06_public-surface.md`, `README.md`, `README.en.md`, and the scoped module docs changed in `6b32972`.
+3. Round Story Completion Plan is complete and the master plan §10 close-out is filled. Remaining work is optional/post-routemap:
+   - Batch 4 ProofFrame symmetric `rule_refs` hardening;
+   - optional final release-day workflow on `v0.1-oss-prep` / public projection,only with explicit user authorization;
+   - post-routemap design-intent reconciliation items recorded in the master plan §3.
+
+
+<!-- Historical CAPABILITIES E2E DEMO SHIPPED state follows. -->
+
+## 当前阶段(2026-05-05 — CAPABILITIES E2E DEMO SHIPPED)
+
+**当前分支:** `v0.1-capabilities-e2e-demo-2026-05-05`,HEAD `1ec314c`(`docs(examples): add capabilities e2e demo`)。基于 `v0.1-evaluator-architecture-step0-2026-05-05` @ `8ebbe70` 切出。release base `v0.1-oss-prep` 与 `master` 未触碰。
+
+**落地内容:**
+- `examples/11_capabilities_e2e_demo.py`:deterministic assertion-bearing script,one `Person(name, age, region)` fixture composes all 5 shipped surfaces:
+  1. Check
+  2. Diagnose
+  3. Fact Overlay Check
+  4. Why-not Universe Diagnose
+  5. Evaluator Frontier Trace
+- `src/kernel/tests/test_examples_capabilities_demo.py`:imports demo by path and calls `run_demo(verbose=False)`.
+- `examples/README.md`:adds script section and clarifies notebook/script convention.
+- Blueprint archived:
+  - `docs/blueprints/archive/2026-05-05_capabilities-e2e-demo.md`
+  - `docs/blueprints/archive/2026-05-05_capabilities-e2e-demo.audit.md`
+- Archive inventory row added for `capabilities-e2e-demo`.
+
+**Verification:**
+- `python examples/11_capabilities_e2e_demo.py` — passed
+- `python -m unittest src.kernel.tests.test_examples_capabilities_demo` — 1 OK
+- Related capability suites — 143 OK
+- Full kernel — 1081 OK / 1 skipped
+- `python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py` — clean
+- `git diff --check` — clean
+
+**Worktree note:** only `memory/current.md` remains modified,continuing lightweight sync policy. Demo commit is local-only unless pushed later.
+
+<!-- Historical EVALUATOR FRONTIER POST-SHIP state follows. -->
+
+## 当前阶段(2026-05-05 — EVALUATOR FRONTIER POST-SHIP)
+
+**当前分支:** `v0.1-evaluator-architecture-step0-2026-05-05`,HEAD `8ebbe70`(P3 hardening commit after archive)。
+
+**远端状态:** Branch tracks `origin/v0.1-evaluator-architecture-step0-2026-05-05` @ `8ebbe70`。Portfolio 全 origin-backed —— 5 个 v0.1.x preview branch + 1 frozen reference,全部上传 origin。release base `v0.1-oss-prep` 与 `master` 未触碰。
+
+### Shipped capability portfolio(5 个)
+
+| Capability | 日期 | 层 | Branch | Cross-session anchor |
+|---|---|---|---|---|
+| Check | 2026-05-03 | application | `v0.1-redesign-2026-05-03` @ `422ffcf` | `project_check_operation_shipped.md` |
+| Diagnose | 2026-05-04 | application | `v0.1-redesign-2026-05-03` @ `422ffcf` | `project_diagnose_operation_shipped.md` |
+| Fact Overlay Check | 2026-05-04 | application | `v0.1-fact-overlay-2026-05-04` @ `f484367` | `project_fact_overlay_operation_shipped.md` |
+| Why-not Universe Diagnose | 2026-05-05 | application | `v0.1-why-not-step0-2026-05-05` @ `32ed594` | `project_why_not_universe_diagnose_shipped.md` |
+| Evaluator Frontier Trace | 2026-05-05 | **evaluator (substrate)** | `v0.1-evaluator-architecture-step0-2026-05-05` @ `8ebbe70` | `project_evaluator_frontier_trace_shipped.md` |
+
+### 架构线索(关键 invariant 仍 hold)
+
+- **Application-first hard constraint**:每新 application capability 在 `kernel.application.protocol` + `kernel.application` 起步;`kernel.sdk` 不背 substrate
+- **Q1 Sibling discipline**(application 层 3 梯度):
+  - Diagnose vs Check:不 call 不 import(strict)
+  - Fact Overlay vs Check:不 call,共享 helper via `_derivation_match_helpers`
+  - Why-not vs Diagnose:可 call runtime + 构造 `DiagnoseRequest`,但**不 import** Diagnose result types(duck-typing access via duck typing,protocol 完全 owned)
+- **§6.6 working hypothesis**:跨 3 个 application capability(Diagnose / Fact Overlay / Why-not Universe Diagnose)三次 validate 仍 hold;§6.7 declarative capability schema 未触发
+- **Layer-separation invariant**(evaluator-frontier 引入):`frontier.py` 在 `kernel.core.rules.*`,不 import application/SDK/adapter/candidate/evidence types;application 层不 sneak-import frontier(§7-EvaluatorFrontier-10 静态扫强制,5 种 access pattern 全 catch)
+
+### Why-not Shape B fork resolution
+
+Why-not Step 0.A 时显式 deferred 的 "true near-miss" 现已 resolved as **Evaluator Frontier Trace** —— substrate piece 已 ship。Future application capability(如新 Why-not 变体)若想做 Shape B,可组合 frontier rows + Diagnose 行映射,不需要打开新 evaluator architecture topic。`project_why_not_step0_scoped.md` description 已更新反映此 fork closure。
+
+### Post-ship review(evaluator frontier)
+
+- **P3 §7-EvaluatorFrontier-10 hardening**:`8ebbe70` 加 5-pattern detection helper(direct import / module import / from-import / Name reference / Attribute access),双层 enforcement(应用扫 + helper 自身 self-test)
+- **P2 deferred**:raw binding values dedupe/sort 限制 inherited from `evaluate_native_where`,frontier 单独修会破 §7-EvaluatorFrontier-7 success parity → 留作 shared evaluator value-stability 议题(audit + memory anchor 已记录)
+
+### 测试状态
+
+- 全 kernel:**1080 tests OK / 1 skipped**(从 redesign reset 时 ~782 → 现 1080,新增 ~298 tests across 5 capabilities)
+- frontier focused:37 OK
+- ruff clean
+
+### 下一步可选方向(无 pending,均独立议题)
+
+- **停**:portfolio 已 origin-backed,compact-safe
+- **Demo / integration showcase**:5 capability 端到端示例,验证 composition + 防 integration drift
+- **跨分支 consolidation**:5 个 v0.1.x preview branch 合并整理,需新 blueprint 入口判断
+- **第 6 capability**:收益边际继续递减,除非 structurally novel(如 5th Sibling 梯度 / evaluator-layer 扩展 / fact-overlay 与 frontier 集成)
+- **OSS publish**:独立议题,需显式 publish 决策(per `project_release_branch_invariants.md`)
+- **Engine-extension Wave 2**(§3.3 / §3.5):无 trigger,§6.6 仍 hold
+- **§6.7**:仍未触发
+
+任何新工作仍须满足 application-first hard constraint(per `project_application_first_runtime_authority.md`)+ release branch invariants(per `project_release_branch_invariants.md`)。
+
+### 启动阅读顺序(新 session 用)
+
+1. 本文件
+2. `~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/MEMORY.md` index
+3. 5 个 shipped anchor + 2 个 invariant anchor(per index)
+4. `docs/blueprints/archive/README.md` inventory(5 个 implemented blueprint)
+5. `src/kernel/application/docs/01_overview.md` + `_en.md`(application capability 列表)
+6. `src/kernel/core/docs/01_architecture.md` + `.en.md`(evaluator frontier 在此)
+
+<!-- Stale Why-not Step 1 checkpoint section removed; superseded by EVALUATOR FRONTIER POST-SHIP top section above. Historical REDESIGN BASE follows. -->
 
 ## 当前阶段(2026-05-03 — REDESIGN BASE)
 
