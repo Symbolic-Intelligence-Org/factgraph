@@ -7,6 +7,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-06 | draft | Blueprint created | Initial Batch 5c Step 0 framing drafted on `v0.1-add-condition-binding-planner-2026-05-05` off Batch 5b final `5213e76`. The draft intentionally treats "add condition + binding planner" as a falsifiable premise rather than a pre-scoped implementation path. |
+| 2026-05-06 | scoped | Scope frozen | Status moved from `draft` to `scoped` after Step 0.A and Step 0.B review. Implementation may proceed only within §5.7/§5.8:narrow add-filter action,synthetic added-atom ProofFrame verdict,one-action MVP,no new-variable planner,no ProofFrame protocol change,no `evaluate_native_where(...)` change. |
 
 ## Decision Notes
 
@@ -37,3 +38,7 @@ Step 0.B froze Path A rather than falling back to Path B. The coupled identity/P
 ### 2026-05-06 — Step 0.B Pre-commit Review
 
 Review accepted the synthetic-verdict mapping and requested three P3 clarifications before commit:§5.8.3 now explains why existing `not` steps can be `still_valid` under filter-only add-condition even though Batch 4 fact-overlays strictly deferred `not`;§5.8.4 marks the three-way primitive ordering as forward-compatible only,not a current multi-action semantics claim;and §5.8.7 notes Batch 5a/5b runtimes already reject non-owned action types through existing `isinstance` guards,so tests should verify behavior without requiring runtime edits.
+
+### 2026-05-06 — Scoped For Implementation
+
+The scoped implementation lane is intentionally narrow:ship `RuleAddConditionAction` for one added native filter atom over already-bound variables;append one synthetic added-atom ProofFrame verdict;return variant rows from full native evaluation;add no public binding-planner surface;and preserve existing ProofFrame protocol,RuleRef substrate,SDK/service/agent surfaces,and `evaluate_native_where(...)`.

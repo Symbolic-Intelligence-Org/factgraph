@@ -1,6 +1,6 @@
 # Rule Add Condition + Binding Planner(Batch 5c of Round Story Completion Plan)
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Branch: `v0.1-add-condition-binding-planner-2026-05-05`
