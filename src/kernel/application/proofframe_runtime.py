@@ -45,6 +45,10 @@ def recheck_proof_frame(
     projected_witness = project_view_facts_with_witness(store.ledger, store.schema_ir)
     visible_rows = _visible_projected_rows(projected_witness)
     action_index = _index_overlay_actions(request.overlay)
+    frame_relevant_action_indices = _frame_relevant_action_indices(
+        artifact.pred_witnesses,
+        action_index=action_index,
+    )
 
     atom_verdicts = tuple(
         [
@@ -57,7 +61,10 @@ def recheck_proof_frame(
                 for witness in artifact.pred_witnesses
             ),
             *(
-                _recheck_non_fact_step(step, overlay=request.overlay)
+                _recheck_non_fact_step(
+                    step,
+                    frame_relevant_action_indices=frame_relevant_action_indices,
+                )
                 for step in artifact.non_fact_steps
             ),
         ]
@@ -82,6 +89,8 @@ def render_proof_frame_narrative(
         return "\n".join(lines)
 
     for verdict in result.atom_verdicts:
+        if verdict.verdict == "still_valid":
+            continue
         suffix = _action_suffix(verdict.affected_action_indices, overlay=overlay)
         lines.append(f"- {verdict.atom_key}: {verdict.verdict}{suffix}.")
     return "\n".join(lines)
@@ -120,7 +129,7 @@ def _recheck_pred_witness(
 def _recheck_non_fact_step(
     step: NonFactStep,
     *,
-    overlay: EvaluationOverlay,
+    frame_relevant_action_indices: tuple[int, ...],
 ) -> ProofFrameAtomVerdict:
     if step.kind == "not":
         return ProofFrameAtomVerdict(
@@ -134,7 +143,7 @@ def _recheck_non_fact_step(
             verdict="still_valid",
             affected_action_indices=(),
         )
-    if not overlay.fact_actions:
+    if not frame_relevant_action_indices:
         return ProofFrameAtomVerdict(
             atom_key=step.step_key,
             verdict="still_valid",
@@ -143,7 +152,7 @@ def _recheck_non_fact_step(
     return ProofFrameAtomVerdict(
         atom_key=step.step_key,
         verdict="unknown",
-        affected_action_indices=tuple(range(len(overlay.fact_actions))),
+        affected_action_indices=frame_relevant_action_indices,
     )
 
 
@@ -154,6 +163,20 @@ def _index_overlay_actions(
     for index, action in enumerate(overlay.fact_actions):
         output.setdefault((action.pred_id, action.asrt_id), []).append((index, action))
     return output
+
+
+def _frame_relevant_action_indices(
+    pred_witnesses: tuple[PredWitness, ...],
+    *,
+    action_index: dict[tuple[str, str], list[tuple[int, FactOverlayAction]]],
+) -> tuple[int, ...]:
+    relevant: set[int] = set()
+    for witness in pred_witnesses:
+        pred_id = _pred_id_from_atom_key(witness.pred_atom_key)
+        for asrt_id in witness.asrt_ids:
+            for index, _ in action_index.get((pred_id, asrt_id), ()):
+                relevant.add(index)
+    return tuple(sorted(relevant))
 
 
 def _action_preserves_witness(

@@ -63,12 +63,30 @@ class ProofFrameNarrativeTests(unittest.TestCase):
                 [
                     "Proof frame status: invalidated.",
                     "- b0.a0:Person.age: invalidated by action #0(replace Person.age).",
-                    "- b0.a1:eq: still_valid.",
                 ]
             ),
         )
         self.assertNotIn("opaque-age-asrt", first)
         self.assertNotIn("opaque-region-asrt", first)
+        self.assertNotIn("b0.a1:eq", first)
+
+    def test_renderer_omits_still_valid_atom_lines(self) -> None:
+        result = ProofFrameRecheckResult(
+            status="still_valid",
+            binding_items=(("$p", "person:alice"),),
+            atom_verdicts=(
+                ProofFrameAtomVerdict(
+                    atom_key="b0.a0:Person.age",
+                    verdict="still_valid",
+                    affected_action_indices=(),
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            render_proof_frame_narrative(result, overlay=EvaluationOverlay(fact_actions=())),
+            "Proof frame status: still_valid.",
+        )
 
     def test_renderer_handles_frame_level_unknown(self) -> None:
         result = ProofFrameRecheckResult(

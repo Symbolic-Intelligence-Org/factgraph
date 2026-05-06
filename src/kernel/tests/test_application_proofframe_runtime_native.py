@@ -123,6 +123,16 @@ def _replace_age(seeded: SeededPerson, *, new_age: int) -> FactValueOverride:
     )
 
 
+def _replace_region(seeded: SeededPerson, *, new_region: str) -> FactValueOverride:
+    return FactValueOverride(
+        asrt_id=seeded.region_asrt_id,
+        pred_id=seeded.region_pred_id,
+        e_ref=seeded.e_ref,
+        old_fact_tuple=(seeded.e_ref, "us"),
+        new_fact_tuple=(seeded.e_ref, new_region),
+    )
+
+
 def _remove_age(seeded: SeededPerson) -> FactRemoveAction:
     return FactRemoveAction(
         asrt_id=seeded.age_asrt_id,
@@ -280,6 +290,23 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
 
         self.assertEqual(result.status, "unknown")
         self.assertEqual(result.atom_verdicts[1].affected_action_indices, (0,))
+
+    def test_unknown_future_non_fact_kind_with_unrelated_overlay_stays_valid(self) -> None:
+        store, index = _build_store()
+        seeded = _seed_person(store, index)
+        step = NonFactStep(step_key="b0.a1:future", kind="future", status="satisfied")
+
+        result = recheck_proof_frame(
+            _request(
+                _artifact(seeded, non_fact_steps=(step,)),
+                _overlay(_replace_region(seeded, new_region="eu")),
+            ),
+            store=store,
+        )
+
+        self.assertEqual(result.status, "still_valid")
+        self.assertEqual(result.atom_verdicts[1].verdict, "still_valid")
+        self.assertEqual(result.atom_verdicts[1].affected_action_indices, ())
 
     def test_non_native_support_kind_returns_unknown_frame_level_result(self) -> None:
         store, index = _build_store()
