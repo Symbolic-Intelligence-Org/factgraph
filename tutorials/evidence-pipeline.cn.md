@@ -32,6 +32,15 @@ v0.1 已 shipped 的 5 条 capability line 统一回答这 5 个问题:
 | Q4 | Given a finite candidate universe, who passes / who fails / why? | Why-not Universe Diagnose |
 | Q5 | In native evaluation, where does the where-body collapse? | Evaluator Frontier Trace |
 
+Layer 6 后续 shipped 4 个 overlay-driven capability(详见 §16),消费 Q1 输出的 `SupportArtifact` + `EvaluationOverlay` 做 hypothetical evaluation:
+
+| 能力 | Batch | 输入 → 输出 |
+|---|---|---|
+| ProofFrame Rechecker | 4 | SupportArtifact + fact overlay → per-atom verdicts |
+| Rule Disable | 5a | RuleSpec + RuleDisableAction → variant rows + ProofFrame |
+| Rule Literal Replace | 5b | RuleSpec + RuleLiteralReplaceAction → variant rows + ProofFrame |
+| Rule Add Condition | 5c | RuleSpec + RuleAddConditionAction → variant rows + synthetic ProofFrame |
+
 ### 关键术语速查
 
 | 术语 | 含义 | 来源 |
@@ -813,6 +822,175 @@ jupyter notebook examples/11_capabilities_e2e_demo.ipynb     # 见 §8
 
 ---
 
+## 16. Layer 6 拓展 —— Overlay & ProofFrame Operations(4 capability)
+
+> 这 4 个 capability 不在 Q1-Q5 canonical questions 内。它们消费已有 `SupportArtifact` + `EvaluationOverlay`,做 hypothetical 评估,统一输出 `variant_rows + ProofFrame`。
+
+### 16.1 ProofFrame Rechecker(Batch 4)
+
+一句话:在 fact-side overlay 下,**逐 atom 解释**原 proof frame 是否仍 valid。
+
+DTO:
+
+```python
+ProofFrameStatus = Literal["still_valid", "invalidated", "unknown"]
+
+@dataclass(frozen=True)
+class ProofFrameRecheckRequest:
+    support_artifact: SupportArtifact
+    overlay: EvaluationOverlay  # fact actions only
+
+@dataclass(frozen=True)
+class ProofFrameAtomVerdict:
+    atom_key: str
+    verdict: ProofFrameStatus  # 共享同 enum,无 second status set
+    affected_action_indices: tuple[int, ...]
+
+@dataclass(frozen=True)
+class ProofFrameRecheckResult:
+    status: ProofFrameStatus  # MUST 等于 aggregate(atom_verdicts)
+    binding_items: BindingItems
+    atom_verdicts: tuple[ProofFrameAtomVerdict, ...]
+```
+
+入口:`recheck_proof_frame(request, *, store, registry=None) -> ProofFrameRecheckResult`
+
+要点:
+- **Native + fact-overlay only**:`SupportArtifact.kind != "native_binding_v1"` / `rule_ref_edges` 非空 / `rule_actions` 非空 → frame-level `unknown`(空 atom_verdicts)
+- **Aggregation 优先级**:`invalidated > unknown > still_valid`(protocol `__post_init__` enforce 不变量)
+- **`not` step strict deferral**:任何 `kind == "not"` 永远 emit `unknown`(per Batch 4 §5.5.5 Decision 4)
+- **Multi-witness pred_atom 区分** vs Fact Overlay Check:Fact Overlay 给 binding-level pass/fail;ProofFrame 区分"原 witness chain 还在"vs"alternative witness 救场"
+
+何时用:Fact Overlay Check 已通,但想知道 specific 原 proof path 是否仍走得通(per-atom 解释)。
+
+### 16.2 Rule Disable(Batch 5a)
+
+一句话:临时禁用 rule body 的一个 locator(branch + atom),跑 variant evaluation,ProofFrame 解释原 frame。
+
+DTO:
+
+```python
+@dataclass(frozen=True)
+class RuleDisableAction:
+    rule_id: str
+    version: str
+    branch_index: int
+    atom_index: int
+    note: str | None = None
+```
+
+放入 `EvaluationOverlay.rule_actions`(`fact_actions=()` 时仅 rule action 路径有效)。
+
+入口:`check_rule_disable_action(request, *, store, registry=None) -> RuleDisableResult`
+
+输出:`variant_rows: tuple[BindingItems, ...]` + `proof_frame: ProofFrameRecheckResult | None`(原 frame 解释)
+
+要点:
+- **Locator stability**:disable 后旧 `b{branch}.a{atom}:{kind}` 不漂移(`enumerate + skip` 模式)
+- **Single-action MVP**:runtime 仅接受 1 个 `RuleDisableAction`(`tuple[..., ...]` container forward-compat)
+- **RuleRef reject/defer**:`rule_refs / rule_ref_edges / rule_spec.where 含 ruleref` 全 unsupported
+- Core primitive:`evaluate_where(..., disabled_locators=frozenset())` —— `evaluate_native_where` 不动(frontier drift gate 防 hardcoded `062ba88`)
+
+### 16.3 Rule Literal Replace(Batch 5b)
+
+一句话:替换 rule body 内一个 Const leaf,跑 variant evaluation。
+
+DTO:
+
+```python
+@dataclass(frozen=True)
+class RuleLiteralPath:
+    kind: Literal["pred_term", "lhs", "rhs", "in_value", "const_operand"]
+    index: int | None  # pred_term / in_value 必需,其他必须 None
+
+@dataclass(frozen=True)
+class RuleLiteralReplaceAction:
+    rule_id: str
+    version: str
+    branch_index: int
+    atom_index: int
+    literal_path: RuleLiteralPath
+    old_literal: Any  # stale-target guard
+    new_literal: Any
+    note: str | None = None
+```
+
+入口:`check_rule_literal_replace_action(request, *, store, registry=None) -> RuleLiteralReplaceResult`
+
+要点:
+- **Const-to-Const only**:不可 Var↔Const swap(避 binder/filter 角色变化 → 走 binding planner territory = Batch 5c)
+- **5 path kinds 覆盖 7 atom kinds**:`pred_term`(pred terms[index]) / `lhs/rhs`(comparison sides) / `in_value`(in values[index]) / `const_operand`(addc/mulc 的 c)
+- **atom kind / arity / list length 全 preserved**
+- **`old_literal` stale-target guard**(同 `FactValueOverride.old_fact_tuple` 模式)
+- Core primitive:`evaluate_where(..., literal_replacements=frozenset())`
+
+### 16.4 Rule Add Condition(Batch 5c)
+
+一句话:向 rule body branch 末尾**追加**一个 native filter atom(filter-only,**不引入新变量**)。
+
+DTO:
+
+```python
+@dataclass(frozen=True)
+class RuleAddedAtom:
+    atom: tuple[Any, ...]  # raw native atom tuple
+
+@dataclass(frozen=True)
+class RuleAddConditionAction:
+    rule_id: str
+    version: str
+    branch_index: int  # 注:无 atom_index(因为是 append)
+    added_atom: RuleAddedAtom
+    note: str | None = None
+```
+
+入口:`check_rule_add_condition_action(request, *, store, registry=None) -> RuleAddConditionResult`
+
+要点:
+- **Filter-only**:7 atom kinds(`ne/gt/ge/lt/le/in/eq with both sides resolved`)—— 真正的"binding planner"(新变量绑定)deferred
+- **不引入新变量**:`where_ast_validate.atom_binds_new_variables(atom_ir, *, bound_vars)` 守门
+- **Synthetic ProofFrame verdict** —— absent-atom mapping 的 minimal-blast-radius 解决:
+  - synthetic key:`b{branch_index}.add{action_index}:{atom_kind}`(命名空间不与现 `b{br}.a{at}:{kind}` 冲突)
+  - 现有 atoms 全 `still_valid`(filter 不 add fact,`not` 的 absence-check 不被打破 —— honest under filter-only scope)
+  - synthetic verdict:`invalidated` iff 原 `binding_items` 不在 `variant_rows`,否则 `still_valid`
+  - **不改 Batch 4 ProofFrame protocol**;3-status enum 不动
+- Core primitive:`evaluate_where(..., added_conditions=frozenset())`
+
+### 16.5 共享 invariant(贯穿 16.1-16.4)
+
+| Invariant | 出处 |
+|---|---|
+| 输出 `variant_rows + ProofFrame` dual-output | Step 0.A 5a/5b/5c |
+| **不复活** `superseded_by_full_eval` | Batch 4 §5.5.5 frozen 3-status |
+| Native only;RuleRef-bearing input 全 reject | 5a/5b/5c §3 non-goals |
+| Single-action MVP;tuple container forward-compat | 5a/5b/5c §5.7.5 |
+| Cross-runtime auto-rejection via `isinstance(action, X)` 守卫 | 5b/5c §5.7.7 |
+| 3-way ordering(forward-compat,MVP 单 action 不触发):`literal_replacements → added_conditions → disabled_locators` | 5c §5.8.4 |
+
+**10 cross-batch drift gates 锁住 10 个文件**(scope guard tests 静态扫描):
+- `src/kernel/sdk/` / `src/kernel/agent/` / `src/kernel/service/`
+- `src/kernel/core/rules/frontier.py` / `ruleref_substrate.py`
+- `src/kernel/application/protocol/proofframe.py` / `proofframe_runtime.py` / `fact_overlay_runtime.py`
+- `src/kernel/application/rule_disable_runtime.py`(Batch 5b/5c implementation 0 改动)
+- `src/kernel/application/rule_literal_replace_runtime.py`(Batch 5c implementation 0 改动)
+
+### 16.6 跨 batch 经验 —— Tri-Batch Hardening Pattern
+
+5a/5b/5c 三个 rule-ops runtime 共用 helper 时,bug 同时存在 3 份。
+
+具体案例:`9ab282d` commit 一次同时修 3 处 `_contains_ruleref_atom`:
+- 旧实现 shallow-scan top-level branch atoms,**不递归 compound atom**
+- `("not", [("ruleref", ...)])` —— nested ruleref 在 `not` body 内 escape 到 native_eval_error
+- 正确 contract:返回各自 `RULE_<X>_RULE_REF_UNSUPPORTED`
+- Fix:递归 scan compound atom(目前仅 `not` 的 body;future compound kind 必须扩此函数)
+
+教训:
+1. 跨 batch copy-paste helper 的 bug 同时存在 N 份;review 时检 1 必检 N
+2. Tri-batch hardening commit 比 N 单独 hardening commit 经济 —— 前提是 drift gate 允许 cross-batch fix
+3. Cross-batch fix 在 archived audit 各自加 post-archive hardening row 同步标记
+
+---
+
 ## 覆盖检查表
 
 | 能力 | tutorial 节 | application 入口 |
@@ -827,6 +1005,10 @@ jupyter notebook examples/11_capabilities_e2e_demo.ipynb     # 见 §8
 | Fact Overlay 能力 | §7.3 | `check_fact_overlay_binding` |
 | Why-not 能力 | §7.4 | `check_why_not_universe` |
 | Frontier 能力 | §7.5 | `evaluate_native_where_frontier` |
+| **ProofFrame Rechecker**(Batch 4)| §16.1 | `recheck_proof_frame` |
+| **Rule Disable**(Batch 5a)| §16.2 | `check_rule_disable_action` |
+| **Rule Literal Replace**(Batch 5b)| §16.3 | `check_rule_literal_replace_action` |
+| **Rule Add Condition**(Batch 5c)| §16.4 | `check_rule_add_condition_action` |
 | **Derivation Evaluate**(producer)| §10.2 | `evaluate_derivation_plans` |
 | **Derivation Accept**(producer)| §10.3 | `accept_derivation_candidate_sets` |
 | **Entity Read** | §11 | `execute_read_request` |
@@ -836,4 +1018,6 @@ jupyter notebook examples/11_capabilities_e2e_demo.ipynb     # 见 §8
 | **Audit 证据查询** | §14 | `AuditQuery` / `load_audit_package` |
 | **完整 onboarding journey** | §15 | examples/10_v01_onboarding_journey.ipynb |
 
-15 节 + 1 检查表 = 当前 v0.1 evidence 线全功能面。后续若发现 SDK ergonomic facade 细节(如 `SDKStore.set` / `add` / `get` / `query` / `evaluate` / `accept` 装饰器层)需展开,可单独再加一节;那是 SDK 层 thin shell,底层落到本 tutorial 列的 application 入口。
+16 节 + 1 检查表 = 当前 v0.1 evidence 线全功能面(Q1-Q5 5 capability + ProofFrame Rechecker + 3 rule-side ops)。后续若发现 SDK ergonomic facade 细节(如 `SDKStore.set` / `add` / `get` / `query` / `evaluate` / `accept` 装饰器层)需展开,可单独再加一节;那是 SDK 层 thin shell,底层落到本 tutorial 列的 application 入口。
+
+下一阶段(Batch 6 起):persistence layer(L8 capability-event JSONL audit trail)/ evidence diff cross-run / public surface decision —— 不在本 tutorial 已覆盖范围内。
