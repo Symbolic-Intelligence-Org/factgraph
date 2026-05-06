@@ -1,6 +1,6 @@
 # ProofFrame Rechecker(narrow)(Batch 4 of Round Story Completion Plan)
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Parent: [2026-05-05_round-story-completion-plan.md](./2026-05-05_round-story-completion-plan.md) §5.4
