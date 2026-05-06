@@ -6,8 +6,10 @@ from types import SimpleNamespace
 from tempfile import TemporaryDirectory
 import unittest
 
+from kernel.application.protocol.derivation_diagnose import DiagnoseAtomLocator
 from kernel.audit import AuditQuery, load_audit_package
 from kernel.audit.round_events import (
+    RoundEventError,
     RoundRecorder,
     finalize_round,
     project_check_event_payload,
@@ -190,8 +192,9 @@ class AuditRoundEventTests(unittest.TestCase):
                 matched_count=0,
                 matched_binding=None,
                 failure_kind="atom_localized",
-                diagnostic_payload=SimpleNamespace(
-                    atom_key="b0.a0:pred",
+                diagnostic_payload=DiagnoseAtomLocator(
+                    branch_index=0,
+                    failed_atom_index=1,
                     attempted_binding=binding,
                 ),
                 errors=(),
@@ -199,8 +202,12 @@ class AuditRoundEventTests(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            diagnose_payload["result"]["diagnostic_payload"]["atom_key"],
-            "b0.a0:pred",
+            diagnose_payload["result"]["diagnostic_payload"],
+            {
+                "branch_index": 0,
+                "failed_atom_index": 1,
+                "attempted_binding": [["$age", 30], ["$p", "alice"]],
+            },
         )
 
         fact_overlay_payload = project_fact_overlay_event_payload(
@@ -290,6 +297,118 @@ class AuditRoundEventTests(unittest.TestCase):
             if "kernel.audit" in text or "from kernel import audit" in text:
                 offenders.append(path.name)
         self.assertEqual(offenders, [])
+
+    def test_full_first_slice_round_trip_with_lifecycle_consistency(self) -> None:
+        """T1/T2/T9/T15: all 5 capability kinds + lifecycle round-trip with schema_version + event_count consistency."""
+        with TemporaryDirectory() as tmpdir:
+            package_dir = _minimal_audit_package(tmpdir)
+            recorder = start_round("round-full", event_ts=100)
+            kinds = [
+                "check_result",
+                "diagnose_result",
+                "fact_overlay_result",
+                "why_not_result",
+                "proof_frame_result",
+            ]
+            for offset, kind in enumerate(kinds, start=1):
+                record_round_event(
+                    recorder,
+                    kind=kind,
+                    payload={"placeholder": kind},
+                    event_ts=100 + offset,
+                )
+            finalize_round(recorder, package_dir, event_ts=200)
+
+            package = load_audit_package(package_dir)
+            query = AuditQuery(package)
+            events = query.list_round_events("round-full")
+            self.assertEqual(
+                [event.kind for event in events],
+                ["round_started", *kinds, "round_finalized"],
+            )
+            for event in events:
+                self.assertEqual(event.schema_version, "1.0")
+            finalized = events[-1]
+            self.assertEqual(finalized.kind, "round_finalized")
+            self.assertEqual(finalized.payload["event_count"], 5)
+            self.assertEqual(
+                dict(finalized.payload["kind_counts"]),
+                {kind: 1 for kind in kinds},
+            )
+            summary = query.get_round_summary("round-full")
+            self.assertIsNotNone(summary)
+            self.assertEqual(summary.event_count, 5)
+            self.assertTrue(summary.is_finalized)
+
+    def test_finalize_is_retry_safe_on_write_failure(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            package_dir = _minimal_audit_package(tmpdir)
+            recorder = start_round("round-1", event_ts=100)
+            record_round_event(recorder, kind="check_result", payload={}, event_ts=101)
+            (package_dir / "manifest.json").unlink()
+            with self.assertRaises(RoundEventError):
+                finalize_round(recorder, package_dir, event_ts=102)
+            self.assertEqual(len(recorder.events), 2)
+            self.assertFalse(any(e.kind == "round_finalized" for e in recorder.events))
+            manifest = {
+                "package_kind": "audit",
+                "paths": {"audit_files": {"run_ledger": "audit/run_ledger.jsonl"}},
+            }
+            (package_dir / "manifest.json").write_text(
+                json.dumps(manifest, sort_keys=True), encoding="utf-8"
+            )
+            path = finalize_round(recorder, package_dir, event_ts=102)
+            self.assertTrue(path.exists())
+            self.assertTrue(any(e.kind == "round_finalized" for e in recorder.events))
+
+    def test_multi_round_packages_preserve_prior_rounds(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            package_dir = _minimal_audit_package(tmpdir)
+            recorder1 = start_round("round-1", event_ts=100)
+            record_round_event(recorder1, kind="check_result", payload={}, event_ts=101)
+            finalize_round(recorder1, package_dir, event_ts=102)
+            recorder2 = start_round("round-2", event_ts=200)
+            record_round_event(recorder2, kind="diagnose_result", payload={}, event_ts=201)
+            finalize_round(recorder2, package_dir, event_ts=202)
+
+            package = load_audit_package(package_dir)
+            query = AuditQuery(package)
+            self.assertEqual(set(query.list_rounds()), {"round-1", "round-2"})
+            round1 = query.list_round_events("round-1")
+            round2 = query.list_round_events("round-2")
+            self.assertEqual(
+                [e.kind for e in round1],
+                ["round_started", "check_result", "round_finalized"],
+            )
+            self.assertEqual(
+                [e.kind for e in round2],
+                ["round_started", "diagnose_result", "round_finalized"],
+            )
+
+    def test_v2_schema_rows_treated_as_unknown_kind(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            package_dir = _minimal_audit_package(tmpdir, include_round_events=True)
+            rows = [
+                {
+                    "round_id": "round-1",
+                    "sequence": 0,
+                    "event_ts": 100,
+                    "kind": "check_result",
+                    "schema_version": "2.0",
+                    "payload": {"new_v2_shape": True},
+                }
+            ]
+            (package_dir / "audit" / "round_events.jsonl").write_text(
+                "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+                encoding="utf-8",
+            )
+            package = load_audit_package(package_dir)
+            query = AuditQuery(package)
+            self.assertEqual(query.list_round_events("round-1", kind="check_result"), ())
+            all_events = query.list_round_events("round-1")
+            self.assertEqual(len(all_events), 1)
+            self.assertNotEqual(all_events[0].kind, "check_result")
+            self.assertTrue(all_events[0].kind.startswith("future:"))
 
 
 def _minimal_audit_package(

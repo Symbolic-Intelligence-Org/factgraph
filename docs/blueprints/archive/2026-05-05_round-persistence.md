@@ -432,19 +432,19 @@ Step 0.B satisfies §7 row 2("Step 0.B freezes Path A/B/C and all carry-over dec
 
 ## 7. Acceptance
 
-- [ ] Step 0.A records the 15 falsifiers with source-grounded answers.
-- [ ] Step 0.B freezes Path A/B/C and all carry-over decisions before implementation.
-- [ ] JSONL schema is documented with version,kind,identity,and payload projection.
-- [ ] Round serialization/reload passes round-trip tests for the selected first-slice event set.
-- [ ] Old audit packages without round events still load.
-- [ ] `AuditQuery` compatibility tests show existing methods unchanged.
-- [ ] If `AuditQuery` grows new methods,they are separate from existing run/candidate/evidence APIs.
-- [ ] No SDK/service/agent changes.
-- [ ] No Store ledger or `ArtifactSidecar` semantic changes.
-- [ ] No ProofFrame protocol or rule-action protocol drift.
-- [ ] No Batch 7 diff/aggregation code.
-- [ ] Module docs under `src/kernel/audit/docs/` and `src/kernel/application/docs/` are updated if implementation ships.
-- [ ] Archive blueprint/audit and update archive inventory after implementation.
+- [x] Step 0.A records the 15 falsifiers with source-grounded answers.
+- [x] Step 0.B freezes Path A/B/C and all carry-over decisions before implementation.
+- [x] JSONL schema is documented with version,kind,identity,and payload projection.
+- [x] Round serialization/reload passes round-trip tests for the selected first-slice event set.
+- [x] Old audit packages without round events still load.
+- [x] `AuditQuery` compatibility tests show existing methods unchanged.
+- [x] If `AuditQuery` grows new methods,they are separate from existing run/candidate/evidence APIs.
+- [x] No SDK/service/agent changes.
+- [x] No Store ledger or `ArtifactSidecar` semantic changes.
+- [x] No ProofFrame protocol or rule-action protocol drift.
+- [x] No Batch 7 diff/aggregation code.
+- [x] Module docs under `src/kernel/audit/docs/` and `src/kernel/application/docs/` are updated if implementation ships.
+- [x] Archive blueprint/audit and update archive inventory after implementation.
 
 ## 8. Implementation Plan
 

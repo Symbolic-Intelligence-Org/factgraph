@@ -147,9 +147,11 @@ class RoundRecorder:
             events=tuple(self._events),
             event_ts=_coerce_event_ts(event_ts),
         )
+        candidate_events = tuple(self._events) + (finalized,)
+        path = write_round_events_atomic(package_dir, candidate_events)
         self._events.append(finalized)
         self._finalized = True
-        return write_round_events_atomic(package_dir, tuple(self._events))
+        return path
 
     @property
     def events(self) -> tuple[RoundEvent, ...]:
@@ -240,12 +242,18 @@ def round_event_to_row(event: RoundEvent) -> dict[str, JSONValue]:
 def round_event_from_row(row: Mapping[str, Any]) -> RoundEvent:
     if not isinstance(row, Mapping):
         raise RoundEventError("round event row must be object")
+    schema_version = row.get("schema_version")
+    kind = row.get("kind")
+    if isinstance(kind, str) and kind and isinstance(schema_version, str):
+        major_part = schema_version.split(".", 1)[0]
+        if major_part.isdigit() and int(major_part) >= 2:
+            kind = f"future:{kind}"
     return RoundEvent(
         round_id=row.get("round_id"),
         sequence=row.get("sequence"),
         event_ts=row.get("event_ts"),
-        kind=row.get("kind"),
-        schema_version=row.get("schema_version"),
+        kind=kind,
+        schema_version=schema_version,
         payload=row.get("payload"),
     )
 
@@ -255,8 +263,25 @@ def write_round_events_atomic(package_dir: str | Path, events: tuple[RoundEvent,
     audit_dir = root / "audit"
     audit_dir.mkdir(parents=True, exist_ok=True)
     target = root / ROUND_EVENTS_REL_PATH
-    rows = [round_event_to_row(event) for event in events]
-    _replace_jsonl(target, rows)
+    new_round_ids = {event.round_id for event in events}
+    preserved_rows: list[dict[str, JSONValue]] = []
+    if target.exists():
+        with target.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                if row.get("round_id") in new_round_ids:
+                    continue
+                preserved_rows.append(row)
+    new_rows = [round_event_to_row(event) for event in events]
+    _replace_jsonl(target, preserved_rows + new_rows)
     _record_round_events_manifest_entry(root)
     return target
 
@@ -293,7 +318,8 @@ def project_diagnose_event_payload(request: Any, result: Any) -> dict[str, JSONV
     diagnostic_payload: dict[str, JSONValue] | None = None
     if locator is not None:
         diagnostic_payload = {
-            "atom_key": str(getattr(locator, "atom_key", "")),
+            "branch_index": int(getattr(locator, "branch_index", 0)),
+            "failed_atom_index": int(getattr(locator, "failed_atom_index", 0)),
             "attempted_binding": project_binding_items(getattr(locator, "attempted_binding", ())),
         }
     return {
