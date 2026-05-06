@@ -23,6 +23,7 @@ from .assertions import AuditAssertionReadError, load_assertion_index
 # domains.ecss.compliance during the namespace split. Imported lazily inside
 # list_compliance_matrix to keep kernel free of an import-time dependency on domains.
 from .reader import AuditPackageData
+from .round_events import RoundEvent, RoundSummary, summarize_round_events
 
 
 class AuditQueryError(Exception):
@@ -507,6 +508,55 @@ class AuditQuery:
             return render_rule_run_narrative(summary, locale="en")
         except ValueError as exc:
             raise AuditQueryError(str(exc)) from exc
+
+    def list_rounds(self) -> tuple[str, ...]:
+        first_seen: dict[str, tuple[int, str]] = {}
+        for event in self.package.round_events:
+            current = first_seen.get(event.round_id)
+            key = (event.event_ts, event.round_id)
+            if current is None or key < current:
+                first_seen[event.round_id] = key
+        return tuple(
+            round_id
+            for round_id, _key in sorted(
+                first_seen.items(),
+                key=lambda item: item[1],
+            )
+        )
+
+    def list_round_events(
+        self,
+        round_id: str,
+        *,
+        kind: str | None = None,
+    ) -> tuple[RoundEvent, ...]:
+        if not isinstance(round_id, str) or not round_id:
+            raise AuditQueryError("round_id must be non-empty string")
+        if kind is not None and (not isinstance(kind, str) or not kind):
+            raise AuditQueryError("kind must be non-empty string or None")
+        rows = [event for event in self.package.round_events if event.round_id == round_id]
+        if kind is not None:
+            rows = [event for event in rows if event.kind == kind]
+        return tuple(sorted(rows, key=lambda event: event.sequence))
+
+    def get_round_event(self, round_id: str, sequence: int) -> RoundEvent | None:
+        if not isinstance(round_id, str) or not round_id:
+            raise AuditQueryError("round_id must be non-empty string")
+        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0:
+            raise AuditQueryError("sequence must be non-negative int")
+        for event in self.package.round_events:
+            if event.round_id == round_id and event.sequence == sequence:
+                return event
+        return None
+
+    def get_round_summary(self, round_id: str) -> RoundSummary | None:
+        events = self.list_round_events(round_id)
+        if not events:
+            return None
+        return summarize_round_events(round_id, events)
+
+    def list_round_event_warnings(self) -> tuple[Any, ...]:
+        return tuple(self.package.round_event_warnings)
 
     def _get_support_artifact(self, support_digest: str) -> dict[str, Any] | None:
         for row in self.package.support_artifacts:

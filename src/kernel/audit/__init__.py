@@ -43,6 +43,24 @@ from .dto import (
 )
 from .query import AuditOptionalDomainError, AuditQuery, AuditQueryError
 from .reader import AuditPackageData, AuditReadError, load_audit_package
+from .round_events import (
+    ROUND_EVENT_KINDS,
+    ROUND_EVENT_SCHEMA_VERSION,
+    ROUND_EVENTS_AUDIT_FILE_KEY,
+    ROUND_EVENTS_REL_PATH,
+    RoundEvent,
+    RoundEventError,
+    RoundRecorder,
+    RoundSummary,
+    finalize_round,
+    project_check_event_payload,
+    project_diagnose_event_payload,
+    project_fact_overlay_event_payload,
+    project_proof_frame_event_payload,
+    project_why_not_event_payload,
+    record_round_event,
+    start_round,
+)
 
 # Note: ECSS-specific symbols (AuditComplianceError, ECSS_*, build_compliance_matrix_rows,
 # ecss_vcd_predicates, extend_schema_ir_with_ecss_vcd_predicates) moved with compliance.py
@@ -57,6 +75,22 @@ __all__ = [
     "AuditPackageData",
     "AuditReadError",
     "load_audit_package",
+    "ROUND_EVENT_KINDS",
+    "ROUND_EVENT_SCHEMA_VERSION",
+    "ROUND_EVENTS_AUDIT_FILE_KEY",
+    "ROUND_EVENTS_REL_PATH",
+    "RoundEvent",
+    "RoundEventError",
+    "RoundRecorder",
+    "RoundSummary",
+    "start_round",
+    "record_round_event",
+    "finalize_round",
+    "project_check_event_payload",
+    "project_diagnose_event_payload",
+    "project_fact_overlay_event_payload",
+    "project_why_not_event_payload",
+    "project_proof_frame_event_payload",
     "AuditAssertionIndex",
     "AuditAssertionReadError",
     "load_assertion_index",

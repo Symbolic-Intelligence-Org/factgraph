@@ -7,6 +7,14 @@ from typing import Any
 
 from .authoring_events import load_authoring_apply_events
 from .evidence_graph import EvidenceGraph, evidence_graph_from_dict
+from .round_events import (
+    ROUND_EVENTS_AUDIT_FILE_KEY,
+    RoundEvent,
+    RoundEventError,
+    make_warning,
+    round_event_from_row,
+)
+from kernel.application.protocol.common import WarningDTO
 
 
 class AuditReadError(Exception):
@@ -33,6 +41,8 @@ class AuditPackageData:
     evidence_graphs: dict[str, EvidenceGraph]
     assertion_annotations: list[dict[str, Any]]
     provenance_timelines: dict[str, dict[str, Any]]
+    round_events: tuple[RoundEvent, ...] = ()
+    round_event_warnings: tuple[WarningDTO, ...] = ()
 
 
 def load_audit_package(package_dir: str | Path) -> AuditPackageData:
@@ -53,6 +63,7 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
     run_manifest = _maybe_read_json(root / "outputs" / "run_manifest.json")
 
     mapping_resolution = _maybe_read_json(_required_rel_path(root, audit_files, "mapping_resolution"))
+    round_events, round_event_warnings = _read_round_events(root, audit_files)
     return AuditPackageData(
         package_dir=root,
         manifest=manifest,
@@ -72,6 +83,8 @@ def load_audit_package(package_dir: str | Path) -> AuditPackageData:
         evidence_graphs=_read_evidence_graphs(root, audit_files),
         assertion_annotations=_read_optional_jsonl(root, audit_files, "assertion_annotations"),
         provenance_timelines=_read_provenance_timelines(root, audit_files),
+        round_events=round_events,
+        round_event_warnings=round_event_warnings,
     )
 
 
@@ -105,6 +118,7 @@ def _read_manifest_audit_files(manifest: dict[str, Any]) -> dict[str, str]:
         "evidence_graphs",
         "assertion_annotations",
         "provenance_timelines",
+        ROUND_EVENTS_AUDIT_FILE_KEY,
     ):
         value = audit_files.get(key)
         if isinstance(value, str) and value:
@@ -207,6 +221,77 @@ def _read_provenance_timelines(root: Path, mapping: dict[str, str]) -> dict[str,
         ):
             result[candidate_id] = provenance_timeline
     return result
+
+
+def _read_round_events(
+    root: Path, mapping: dict[str, str]
+) -> tuple[tuple[RoundEvent, ...], tuple[WarningDTO, ...]]:
+    rel = mapping.get(ROUND_EVENTS_AUDIT_FILE_KEY)
+    if not isinstance(rel, str) or not rel:
+        return (), ()
+    path = root / rel
+    if not path.exists():
+        return (), ()
+
+    events: list[RoundEvent] = []
+    warnings: list[WarningDTO] = []
+    seen: set[tuple[str, int]] = set()
+    with path.open("r", encoding="utf-8") as handle:
+        for lineno, raw_line in enumerate(handle, start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                warnings.append(
+                    make_warning(
+                        code="ROUND_EVENT_MALFORMED",
+                        message=f"invalid round event JSON at {rel}:{lineno}: {exc}",
+                        details={"line": lineno},
+                    )
+                )
+                continue
+            if not isinstance(row, dict):
+                warnings.append(
+                    make_warning(
+                        code="ROUND_EVENT_MALFORMED",
+                        message=f"round event row must be object at {rel}:{lineno}",
+                        details={"line": lineno},
+                    )
+                )
+                continue
+            try:
+                event = round_event_from_row(row)
+            except RoundEventError as exc:
+                warnings.append(
+                    make_warning(
+                        code="ROUND_EVENT_MALFORMED",
+                        message=f"invalid round event row at {rel}:{lineno}: {exc}",
+                        details={"line": lineno},
+                    )
+                )
+                continue
+            identity = (event.round_id, event.sequence)
+            if identity in seen:
+                warnings.append(
+                    make_warning(
+                        code="ROUND_EVENT_DUPLICATE",
+                        message=(
+                            "duplicate round event identity "
+                            f"{event.round_id}:{event.sequence} at {rel}:{lineno}"
+                        ),
+                        details={
+                            "round_id": event.round_id,
+                            "sequence": event.sequence,
+                            "line": lineno,
+                        },
+                    )
+                )
+                continue
+            seen.add(identity)
+            events.append(event)
+    return tuple(events), tuple(warnings)
 
 
 def _read_json(path: Path) -> dict[str, Any] | list[Any] | Any:

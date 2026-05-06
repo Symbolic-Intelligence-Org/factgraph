@@ -1,7 +1,7 @@
 # Audit 模块总览（kernel）
 
 - 范围：`src/kernel/audit`
-- 最后更新：2026-04-28
+- 最后更新：2026-05-06
 - 目标读者：需要消费 audit package、做离线审计查询或构建 audit DTO 的开发者
 
 ## 1. 模块职责
@@ -24,6 +24,7 @@
 - run / candidate / materialization / decision / failure 查询
 - requirement-scoped compliance matrix 查询
 - authoring apply events 查询
+- durable round event log 读取与查询
 - 审计 DTO 构建
 - 跨引擎 explainability 的共享表示层（in-memory DTO）
 
@@ -44,6 +45,11 @@
   - 结构化查询入口
   - 当前也提供 rule trace artifact 的离线查询
   - 当前也提供 witness-bearing candidate evidence tree 的离线查询
+  - 当前也提供 round event log 的离线查询
+- `start_round(...)` / `record_round_event(...)` / `finalize_round(...)`
+  - 外部 recorder API；调用方在 capability runtime 外部记录已经产生的结果
+  - 写入 audit package 内可选 `audit/round_events.jsonl`
+  - 默认 buffered，`finalize_round(...)` 通过 tempfile + `os.replace` 原子落盘
 - `load_authoring_apply_events(...)`
   - 读取 authoring apply event 日志
 - `EvidenceGraph` / `EvidenceNode` / `EvidenceEdge`
@@ -61,6 +67,7 @@
 - `authoring_events.py`
 - `assertions.py`
 - `evidence_graph.py`
+- `round_events.py`
 
 相关 contract 文档：
 
@@ -96,8 +103,37 @@
    - `get_rule_trace_narrative(rule_run_id)`
    - `get_mapping_resolution(...)`
    - `list_authoring_apply_events(...)`
+   - `list_rounds()`
+   - `list_round_events(round_id, kind=None)`
+   - `get_round_event(round_id, sequence)`
+   - `get_round_summary(round_id)`
+   - `list_round_event_warnings()`
 
-### 3.3 Requirement / Compliance Matrix
+### 3.3 Round Event Log
+
+Round event log 是 Batch 6 引入的可选 audit package 文件，用于持久化一轮 application capability 调用的结果摘要。它不重放 capability，也不改变 Store / ledger 语义。
+
+当前 first slice 包含：
+
+- lifecycle：`round_started`、`round_finalized`
+- capability：`check_result`、`diagnose_result`、`fact_overlay_result`、`why_not_result`、`proof_frame_result`
+
+明确 deferred：
+
+- Frontier projection event family
+- 5a/5b/5c rule action result event family
+- Batch 7 diff / cross-run aggregation index
+
+Recorder 使用调用方提供的 `round_id` 和每轮递增 `sequence`。Capability runtime 不 import `kernel.audit`，由调用方在 capability 返回后显式记录事件。
+
+Reader 对 `round_events.jsonl` 使用 lenient 解析：
+
+- malformed row：跳过并记录 `ROUND_EVENT_MALFORMED` warning
+- duplicate `(round_id, sequence)`：保留第一条并记录 `ROUND_EVENT_DUPLICATE` warning
+- unknown future kind：保留 raw payload，不 warning
+- missing `round_finalized`：`RoundSummary.is_finalized=False`
+
+### 3.4 Requirement / Compliance Matrix
 
 当 audit package 中包含 requirement-scoped assertions 时，`AuditQuery` 提供离线 ECSS VCD / compliance matrix 查询入口。row assembly 语义由 `domains.ecss.compliance` 拥有，`audit` 侧只负责加载 package、构建 assertion index，并通过 lazy import 暴露 query convenience。
 
@@ -115,7 +151,7 @@
    - `build_compliance_matrix_dto(...)`
 4. query 实现会下探到 package 内已有的 assertion/fact 文件，而不是只消费 JSONL audit ledgers
 
-### 3.4 静态审计页面（service owner）
+### 3.5 静态审计页面（service owner）
 
 1. 准备 `AuditPackageData`
 2. 调用 `service.static_ui.render_audit_static_site(package_dir, out_dir)`

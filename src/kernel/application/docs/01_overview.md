@@ -33,6 +33,7 @@
 - SDK `Field` descriptor、metaclass、DSL sugar、`Query` / `Derivation` authoring object
 - HTTP routes、session、registry delivery
 - package export/run delivery surface
+- durable round persistence;`kernel.audit.round_events` records already-produced application results from outside capability runtimes
 - named view registry(`sdk.views`)
 
 ## 2. 模块结构
@@ -151,6 +152,20 @@ Current SDK runtime delegation:
 - Check, Diagnose, Fact Overlay Check, ProofFrame Rechecker, Rule Disable, Rule Literal Replace, Why-not Universe Diagnose, and the capability ergonomics helpers are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`, `diagnose_derivation_binding(...)`, `check_fact_overlay_binding(...)`, `recheck_proof_frame(...)`, `check_rule_disable_action(...)`, `check_rule_literal_replace_action(...)`, `check_why_not_universe(...)`, or the application helper functions.
 
 SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
+
+## 5.5 Durable Round Persistence Boundary
+
+Application capability runtimes return stable protocol DTOs, but they do not emit audit events internally. Batch 6 round persistence is owned by `kernel.audit.round_events` and is invoked by an external caller/recorder after a capability result exists.
+
+Current persistable first-slice result surfaces are:
+
+- Check
+- Diagnose
+- Fact Overlay Check
+- Why-not Universe Diagnose
+- ProofFrame Rechecker
+
+Frontier projection and rule-action result events are deferred. This preserves the application boundary: no `kernel.application.*runtime` module imports `kernel.audit`, and no SDK/service/agent surface is introduced for round persistence.
 
 ## 6. 保守边界
 

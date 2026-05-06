@@ -1,7 +1,7 @@
 # Audit Package Contract
 
 - Scope: `src/kernel/audit`
-- Last updated: 2026-04-28
+- Last updated: 2026-05-06
 - Owner: `kernel.audit` reader / query / DTO surface
 
 `kernel.audit` consumes exported audit packages. It does not export packages, render the full static site, query live runtime state, or own domain-specific ECSS row semantics.
@@ -46,8 +46,40 @@ Optional files are backward-compatible. If absent from the manifest or missing o
 | `evidence_graphs` | `{candidate_id, evidence_graph}` | `evidence_graphs` |
 | `assertion_annotations` | annotation rows for assertion detail panels | `assertion_annotations` |
 | `provenance_timelines` | `{candidate_id, provenance_timeline}` | `provenance_timelines` |
+| `round_events` | `RoundEvent` rows keyed by `(round_id, sequence)` | `round_events` / `round_event_warnings` |
 
 `evidence_graphs` is stricter than most optional files: duplicate `candidate_id` rows are read errors because they would make the durable graph lookup ambiguous.
+
+### 3.1 Optional Round Events
+
+`round_events` uses the current path convention `audit/round_events.jsonl`. It is optional: old audit packages without the manifest key or file load with `AuditPackageData.round_events == ()`.
+
+Each row is a JSON object:
+
+| Field | Type | Notes |
+|---|---|---|
+| `round_id` | string | Caller-supplied opaque round id. |
+| `sequence` | integer | Primary per-round order key;starts at 0. |
+| `event_ts` | integer | Nanosecond timestamp;secondary metadata,not primary ordering. |
+| `kind` | string | `round_started`, `check_result`, `diagnose_result`, `fact_overlay_result`, `why_not_result`, `proof_frame_result`, or `round_finalized` in the first slice. |
+| `schema_version` | string | Starts at `"1.0"`. |
+| `payload` | object | Kind-specific JSON projection;never a raw dataclass blob or `repr`. |
+
+Lifecycle:
+
+- sequence 0 is `round_started`
+- capability events follow
+- `round_finalized` is last and carries `event_count` plus `kind_counts`
+
+The reader is intentionally lenient for this optional file:
+
+- malformed row -> skipped, `ROUND_EVENT_MALFORMED` in `round_event_warnings`
+- duplicate `(round_id, sequence)` -> first row wins, duplicate skipped, `ROUND_EVENT_DUPLICATE` warning
+- unknown future kind -> preserved as a `RoundEvent`
+- sequence gaps -> preserved and surfaced through `RoundSummary.sequence_gaps`
+- missing `round_finalized` -> `RoundSummary.is_finalized == False`
+
+The write-side helper `finalize_round(...)` writes `round_events.jsonl` via tempfile + `os.replace` and updates the manifest with `paths.audit_files.round_events`.
 
 ## 4. Query-Derived Surfaces
 
@@ -60,6 +92,7 @@ The following are not separate durable package files today. They are derived by 
 - `candidate_evidence_tree_narrative`
 - provenance coverage summary
 - authoring apply run summary/detail
+- round summary and round event query results
 
 This distinction matters for compatibility: old packages can still load when optional durable files are absent, but derived surfaces may return empty results or raise a query/DTO error if their required source carrier is unavailable.
 

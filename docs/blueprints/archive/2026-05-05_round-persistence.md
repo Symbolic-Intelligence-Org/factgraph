@@ -1,6 +1,6 @@
 # Durable Round Persistence(Batch 6 of Round Story Completion Plan)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Related Modules:
@@ -467,9 +467,7 @@ Step 0.B satisfies §7 row 2("Step 0.B freezes Path A/B/C and all carry-over dec
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation or abandonment:
-
-- Final result:
-- Deviations:
-- Verification:
-- Archive note:
+- Final result: implemented Path A. Batch 6 adds optional `audit/round_events.jsonl` to existing audit packages,with `RoundEvent` / `RoundSummary`,external buffered recorder APIs,atomic finalize,reader/query integration,and S3 first-slice event projections(Check,Diagnose,Fact Overlay,Why-not,ProofFrame plus lifecycle markers).
+- Deviations: no scope expansion. Frontier and rule-action result event families remain deferred per §5.5.4. The implementation freezes the binding-value projection helper in `kernel.audit.round_events.project_json_value(...)`:JSON primitives/lists/tuples/dicts are projected directly;non-primitives become `{opaque_digest, opaque_type}`. No application capability runtime imports `kernel.audit`.
+- Verification: `python -m unittest src.kernel.tests.test_audit_round_events src.kernel.tests.test_provenance_timeline_audit_delivery src.kernel.tests.test_evidence_graph_audit_delivery src.kernel.tests.test_audit_optional_domains`;`python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py`;`git diff --check`.
+- Archive note: archive as implemented after full-kernel verification.
