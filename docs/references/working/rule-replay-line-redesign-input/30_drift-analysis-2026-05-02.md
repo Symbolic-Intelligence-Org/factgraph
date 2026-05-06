@@ -1,6 +1,7 @@
 # Design Landscape Synthesis (2026-05-02)
 
 - Status: working / one-shot analytical review
+- Authority: non-authoritative per `docs/references/README.md` §3.5; this document is analytical reference material only and not implementation truth nor API contract.
 - Companion: [README.md](./README.md)
 - Source-checked against: kernel @ `575b84e` (v0.1.x rollup including v0.1.1 + v0.1.2 + v0.1.3, plus 8 archives + evidence-vision bundle + design-landscape bundle)
 - Methodology: Three parallel sub-agent extractions (v0.1.x design line / pre-OSS original vision / architecture & governance) + direct cross-reference against shipped `src/kernel/` and `src/agent/` code.

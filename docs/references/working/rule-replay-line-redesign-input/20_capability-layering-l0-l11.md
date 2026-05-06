@@ -1,6 +1,7 @@
 # Evidence Vision Synthesis (2026-05-02)
 
 - Status: working / design exploration only
+- Authority: non-authoritative per `docs/references/README.md` §3.5; this document is design-discussion material only and not implementation truth nor API contract.
 - Companion: [README.md](./README.md)
 - Source-checked against: kernel @ `61e5380` (rollup containing v0.1.1 + v0.1.2 + v0.1.3)
 - Branch invariant: see [project_release_branch_invariants.md](~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/project_release_branch_invariants.md). This document does not propose any change to `v0.1-oss-prep` or `master`.
