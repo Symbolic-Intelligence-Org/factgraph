@@ -233,6 +233,191 @@ Step 0.B remaining decisions(per §5.3 carry-overs not yet frozen by Step 0.A):
 
 Step 0.A satisfies §7 row 1("Step 0.A records the 15 falsifiers with source-grounded answers"). Status remains `draft` until Step 0.B freezes the carry-overs above.
 
+### 5.5 Step 0.B Spike (synthesized 2026-05-06)
+
+This spike freezes the 8 §5.3 carry-overs plus the 8 §5.4.3 remaining decisions. First-slice scope is **S3(verdict + ProofFrame)** per user decision;rule actions and Frontier deferred per §5.5.4.
+
+#### 5.5.1 Event Identity Fields
+
+Every row carries:
+
+| Field | Type | Notes |
+|---|---|---|
+| `round_id` | str | Caller-supplied at round start;opaque token,no inferred semantics. Required;non-empty. |
+| `sequence` | int | Monotonic within a round,starts at 0,increments by 1 per event. Required. |
+| `event_ts` | int | Nanosecond UTC timestamp;matches existing audit JSONL convention(`query.py:528-534`). Required. |
+| `kind` | str | One of the 5 capability event kinds(§5.5.2)or `round_finalized`(§5.5.8). Required. |
+| `schema_version` | str | Format `"<major>.<minor>"`;starts at `"1.0"`. Required. |
+
+Primary identity is `(round_id, sequence)` per §5.4.3 #5. No separate `event_id` field;`event_id` is derivable as `f"{round_id}:{sequence}"` if downstream needs a single string.
+
+#### 5.5.2 First-Slice Event Kind Set
+
+S3 scope = 5 capability kinds + 2 lifecycle markers:
+
+| Kind | Source |
+|---|---|
+| `round_started` | recorder lifecycle marker(§5.5.8;sequence 0) |
+| `check_result` | `check_derivation_binding(...)` |
+| `diagnose_result` | `diagnose_derivation_binding(...)` |
+| `fact_overlay_result` | `check_fact_overlay_binding(...)` |
+| `why_not_result` | `check_why_not_universe(...)` |
+| `proof_frame_result` | `recheck_proof_frame(...)` |
+| `round_finalized` | recorder lifecycle marker(§5.5.8;last sequence) |
+
+Each round opens with `round_started` at sequence 0,emits capability events at sequences 1..N-1,closes with `round_finalized` at sequence N. `started_at` derives from `round_started.payload.started_at`,not from any capability event. This satisfies Step 0.A #14 explicit lifecycle bracket.
+
+#### 5.5.3 Per-Kind Payload Projection
+
+Each row has top-level identity fields(§5.5.1)plus a `payload: Mapping[str, object]` field. Below is the field-level shape per kind. All `BindingItems` projected to `list[[str, JsonValue]]` via stable JSON-projection helper(see §5.5.3.6 below). Plan / rule_spec / overlay / SupportArtifact stored as opaque digests only;impl resolves via existing sidecar / store.
+
+**`round_started` payload:**
+- `started_at: int`(nanosecond ts;equals `event_ts` of this row)
+
+**`check_result` payload:**
+- `request.plan_digest: str`
+- `request.binding: list[[str, JsonValue]]`
+- `request.engine: str`
+- `result.status: str`(CheckStatus enum value)
+- `result.requested_binding: list[[str, JsonValue]]`
+- `result.matched_count: int | null`
+- `result.matched_binding: list[[str, JsonValue]] | null`
+- `result.evidence_envelope: {engine_payload_kind: str, payload_digest: str} | null`
+- `errors: list[{code: str, message: str}]`
+- `warnings: list[{code: str, message: str}]`
+
+**`diagnose_result` payload:**
+- `request.plan_digest: str`
+- `request.binding: list[[str, JsonValue]]`
+- `request.engine: str`
+- `result.status: str`
+- `result.requested_binding: list[[str, JsonValue]]`
+- `result.matched_count: int | null`
+- `result.matched_binding: list[[str, JsonValue]] | null`
+- `result.failure_kind: str | null`
+- `result.diagnostic_payload: {atom_key: str, attempted_binding: list[[str, JsonValue]]} | null`
+- `errors`,`warnings` as above
+
+**`fact_overlay_result` payload:**
+- `request.plan_digest: str`
+- `request.binding: list[[str, JsonValue]]`
+- `request.overlay_digest: str`
+- `request.engine: str`
+- `result.status: str`
+- `result.requested_binding: list[[str, JsonValue]]`
+- `result.before: {status: str, matched_binding: list[[str, JsonValue]] | null} | null`
+- `result.after: {status: str, matched_binding: list[[str, JsonValue]] | null} | null`
+- `result.diff: {status_changed: bool, matched_count_delta: int, bindings_added: list[list[[str, JsonValue]]], bindings_removed: list[list[[str, JsonValue]]]} | null`
+- `errors`,`warnings` as above
+
+**`why_not_result` payload:**
+- `request.plan_digest: str`
+- `request.candidate_universe: list[list[[str, JsonValue]]]`
+- `request.engine: str`
+- `result.status: str`
+- `result.requested_universe: list[list[[str, JsonValue]]]`
+- `result.green: list[list[[str, JsonValue]]]`
+- `result.red: list[{binding: list[[str, JsonValue]], diagnostic: {status: str, failure_kind: str | null, diagnostic_granularity: str, atom_locator: {branch_index: int, failed_atom_index: int, attempted_binding: list[[str, JsonValue]]} | null, errors: list[{code: str, message: str}], warnings: list[{code: str, message: str}]}}]`
+- `errors`,`warnings` as above
+
+**`proof_frame_result` payload:**
+- `request.support_digest: str`
+- `request.overlay_digest: str`
+- `result.status: str`(one of `"still_valid"`,`"invalidated"`,`"unknown"`;no `superseded_by_full_eval`)
+- `result.binding_items: list[[str, JsonValue]]`
+- `result.atom_verdicts: list[{atom_key: str, verdict: str, affected_action_indices: list[int]}]`
+
+**`round_finalized` payload:**
+- `finalized_at: int`(nanosecond ts;equals `event_ts` of this row)
+- `event_count: int`(total non-lifecycle events in this round)
+- `kind_counts: {str: int}`(per-kind count for cross-checking)
+
+**§5.5.3.6 BindingItems / value encoding:**
+
+`JsonValue` is a stable JSON-projectable representation of a single binding value. Helper to be selected at impl time from existing kernel utilities;must round-trip primitive types(`int / float / str / bool / null / tuple of primitives`). Non-primitive values serialize as opaque digest reference. Impl phase to confirm coverage and document the helper choice in the audit log;Step 0.B does NOT freeze the helper identity,only the contract.
+
+#### 5.5.4 Deferral Decisions
+
+Out-of-first-slice and reactivation triggers:
+
+| Deferred item | Reason | Reactivation trigger |
+|---|---|---|
+| `frontier_projection` event family | Frontier is projection-only(no status,no DTO);Step 0.A #1 TRUE → split family. | Demand for Frontier persistence emerges in Batch 7+,or Frontier gains a verdict-bearing wrapper. |
+| `rule_disable_result` / `rule_literal_replace_result` / `rule_add_condition_result` | All three carry `variant_rows + nested ProofFrame`;designing rule-action schema before ProofFrame projection ships risks two competing schemas. | After `proof_frame_result` ships and projection schema is validated by at least one Batch 7 consumer;rule-action events then reuse `proof_frame_result` for the nested ProofFrame and add their own `rule_*_result` kind for `variant_rows`. |
+
+These deferrals are NARROW first-slice scoping,not permanent exclusions. Future batches MAY add new event kinds without reopening Step 0;adding kinds is a forward-compatible reader operation per §5.5.6.
+
+#### 5.5.5 AuditQuery Extension
+
+New methods on `AuditQuery`(separate namespace from existing `run` / `candidate` / `decision` methods):
+
+| Method | Return |
+|---|---|
+| `list_rounds() -> tuple[str, ...]` | All `round_id` values in package,sorted by first `event_ts`. |
+| `list_round_events(round_id: str, *, kind: str \| None = None) -> tuple[RoundEvent, ...]` | All events for a round,optionally filtered by `kind`,sorted by `sequence`. |
+| `get_round_event(round_id: str, sequence: int) -> RoundEvent \| None` | Single event by primary identity. |
+| `get_round_summary(round_id: str) -> RoundSummary \| None` | Per-round summary:`event_count`,`kind_counts`,`started_at`,`finalized_at`,`is_finalized`,`sequence_gaps`. |
+| `list_round_event_warnings() -> tuple[WarningDTO, ...]` | All warnings emitted by the lenient row reader while loading `round_events.jsonl`(§5.5.6). |
+
+`RoundEvent` = frozen dataclass mirror of the JSON row:`(round_id: str, sequence: int, event_ts: int, kind: str, schema_version: str, payload: Mapping[str, object])`. No typed payload variants;consumers parse `payload` based on `kind`.
+
+`AuditPackageData` gains two new fields:`round_events: tuple[RoundEvent, ...]` and `round_event_warnings: tuple[WarningDTO, ...]`,both defaulting to empty tuple for packages without `round_events.jsonl`. `round_event_warnings` carries warnings emitted by the lenient row reader for malformed or duplicate rows(§5.5.6).
+
+No existing `AuditQuery` method signature or return shape changes(§5.4.3 #9).
+
+#### 5.5.6 Error Handling
+
+| Condition | Reader behavior |
+|---|---|
+| Malformed row(invalid JSON / missing required identity field) | Skip row;append `WarningDTO(code="ROUND_EVENT_MALFORMED", ...)` to package warnings. Do not crash. |
+| Duplicate `(round_id, sequence)` | Keep first row encountered;skip subsequent;append `WarningDTO(code="ROUND_EVENT_DUPLICATE", ...)`. |
+| Unknown `kind` value | Preserve row as `RoundEvent` with raw `payload`;list via `list_round_events()` so forward readers can opt in. Do not warn(forward compat is intentional). |
+| Sequence gap(e.g. 0,1,3 missing 2) | Preserve as-is;`get_round_summary` exposes `sequence_gaps`. Do not warn. |
+| Missing `round_finalized` row for a `round_id` | `RoundSummary.is_finalized = False`. Do not warn at load time(may be in-flight or crashed;caller decides). |
+| `schema_version >= "1.0"` and `< "2.0"` | Best-effort projection. |
+| `schema_version >= "2.0"` | Treat row kind as unknown. |
+
+`round_events.jsonl` is loaded via a LENIENT row reader independent from the existing required-ledger `_read_jsonl`(which raises on invalid JSON). The lenient reader skips malformed or duplicate rows and emits `WarningDTO` entries to `AuditPackageData.round_event_warnings`(§5.5.5);it never raises on individual row failures.
+
+#### 5.5.7 Drift Gates Test List
+
+Mandatory Batch 6 implementation tests:
+
+| ID | Coverage |
+|---|---|
+| T1 | Writer:round of all 5 first-slice capability kinds plus `round_started` and `round_finalized` → JSONL rows match field-level schema(§5.5.3). |
+| T2 | Round-trip equality:writer output → reader → all event fields equal. |
+| T3 | Old audit package without `round_events.jsonl` loads cleanly with empty `round_events`. |
+| T4 | Existing `AuditQuery` methods byte-stable on packages with and without `round_events.jsonl`. |
+| T5 | Malformed row → skip + `ROUND_EVENT_MALFORMED` warning. |
+| T6 | Duplicate `(round_id, sequence)` → keep first + `ROUND_EVENT_DUPLICATE` warning. |
+| T7 | Unknown event kind → preserved as `RoundEvent` with raw `payload`,no warning. |
+| T8 | `kernel.application/*runtime*.py` contains ZERO import from `kernel.audit`(static scan,defends Step 0.A #13). |
+| T9 | Every emitted row has `schema_version` field. |
+| T10 | Round without `round_finalized` row → `RoundSummary.is_finalized == False`. |
+| T11 | Recorder rejects write with missing or empty `round_id`. |
+| T12 | Recorder rejects out-of-order sequence(must equal `last_sequence + 1`). |
+| T13 | Atomic finalize:`finalize_round(...)` writes JSONL via tempfile + `os.replace`(matching `_artifact_sidecar.py:213-225`);crash before finalize → no `round_events.jsonl` change. |
+| T14 | Round must open with `round_started` at sequence 0;recorder rejects `record(...)` or `finalize_round(...)` before `start_round(...)` is called. |
+| T15 | `round_finalized.payload.event_count` equals the count of capability-kind events(non-lifecycle)in the round. |
+
+#### 5.5.8 Partial-Round Detection
+
+Mechanism:
+
+- `round_finalized` event is emitted by recorder at `finalize_round(round_id)`.
+- It is the LAST event of the round(highest sequence number).
+- Its `payload` carries `event_count` and `kind_counts` for cross-checking.
+- Reader determines round-finalization status by scanning rows:`is_finalized = any(e.kind == "round_finalized" for e in events)`.
+
+No separate manifest file,no file-level finalize marker. The marker IS an event row(simplest forward-compat,zero new file types,easy for old readers to ignore).
+
+If a process crashes mid-round under the default(buffered)mode:recorder buffers in memory,buffer is lost,zero rows reach disk,no partial round on disk. **Partial flush API is deferred from Batch 6**;default mode is buffered atomic finalize at round end. If long-running rounds need incremental durability,a separate post-Batch-6 hardening will introduce a partial-flush contract;such follow-up MUST also define how the missing-`round_finalized` reader behavior interacts with intentional partials.
+
+#### 5.5.9 Acceptance §7 Update
+
+Step 0.B satisfies §7 row 2("Step 0.B freezes Path A/B/C and all carry-over decisions before implementation"). Status remains `draft` in this commit;a separate scope-freeze commit transitions status to `scoped` after user approval of §5.5.
+
 ## 6. Boundaries And Invariants
 
 - Existing `load_audit_package(...)` must continue loading old audit packages.
