@@ -17,3 +17,5 @@ Archived artifacts:
 - `11_capabilities_e2e_demo.py`
 - `11_capabilities_e2e_demo.ipynb`
 - `12_evidence_diff_demo.py`
+- `round_story_full_demo.ipynb` — initial all-in-one wrapper, superseded by the
+  current chaptered notebook suite.
