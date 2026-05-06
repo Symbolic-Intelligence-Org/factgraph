@@ -100,7 +100,7 @@ Path A is valid only if Step 0 proves all of the following:
 - Original-frame ProofFrame marks the matching source atom locator as `invalidated` when the artifact contains it;non-target atoms remain `still_valid`.
 - Universe shift is surfaced as `variant_rows`,not as a ProofFrame status.
 
-Open Step 0 question:which atom kinds are in the first literal-only set?
+Step 0.A answered the first literal-only atom-kind set in §5.6.1:
 
 - Conservative candidate:comparison/filter literals only(`eq`, `ne`, `in`, `gt`, `ge`, `lt`, `le`)and arithmetic constants in `addc` / `mulc`.
 - Riskier candidate:also predicate term constants. Replacing a constant in `Person.tag($p, "vip")` with `"premium"` can be a leaf swap,but replacing a predicate variable with a literal changes binder/filter role and triggers falsifier #3. Step 0 must judge predicate-term constants case by case.
@@ -129,7 +129,7 @@ Path C should not implement all three inside this blueprint. It should record th
 
 ### 5.5 Output Contract Questions
 
-If Path A ships,Step 0.B must freeze:
+Step 0.B answered the Path A output contract in §5.7:
 
 - request/result DTO names and fields;
 - whether the action extends `EvaluationOverlay.rule_actions` or uses a separate request-only DTO;
@@ -193,6 +193,158 @@ Step 0.B must freeze these before status can move to `scoped`:
 - Path A primitive function name and module location. Default expectation per Batch 5a precedent:extend `kernel.core.rules.where_eval.evaluate_where(...)` with an optional literal-replacement kwarg and implement a private helper parallel to `_apply_disabled_locators(...)`;do not modify `evaluate_native_where(...)` per falsifier #6.
 - Drift gates,especially `evaluate_native_where(...)` signature stability and no SDK/service/agent diffs.
 
+### 5.7 Step 0.B Outcome — DTO / Runtime Freeze
+
+Step 0.B freezes the Path A implementation shape. The blueprint remains `draft` until review accepts this freeze;the next transition is a separate `draft → scoped` commit.
+
+#### 5.7.1 Protocol Shape
+
+Rule literal replace extends the shared overlay lane with one new rule action:
+
+```python
+RuleLiteralPathKind = Literal[
+    "pred_term",
+    "lhs",
+    "rhs",
+    "in_value",
+    "const_operand",
+]
+
+@dataclass(frozen=True)
+class RuleLiteralPath:
+    kind: RuleLiteralPathKind
+    index: int | None = None
+
+@dataclass(frozen=True)
+class RuleLiteralReplaceAction:
+    rule_id: str
+    version: str
+    branch_index: int
+    atom_index: int
+    literal_path: RuleLiteralPath
+    old_literal: Any
+    new_literal: Any
+    note: str | None = None
+
+RuleOverlayAction = RuleDisableAction | RuleLiteralReplaceAction
+```
+
+Path semantics:
+
+- `pred_term`:requires `index`;targets `("pred", pred_id, terms)[2][index]`.
+- `lhs` / `rhs`:requires `index is None`;targets side `1` / `2` of `eq`, `ne`, `gt`, `ge`, `lt`, or `le`.
+- `in_value`:requires `index`;targets `("in", var, values)[2][index]`.
+- `const_operand`:requires `index is None`;targets arg `3` of `addc` / `mulc`.
+
+The DTO carries `old_literal` as a stale-target guard,mirroring `FactValueOverride.old_fact_tuple` and preventing accidental replacement after the caller's source view has drifted. `old_literal` and `new_literal` must be current native constants,not variables;structural shape is validated by the runtime against the target atom.
+
+#### 5.7.2 Request / Result Surface
+
+Batch 5b ships a separate result type and does **not** generalize Batch 5a `RuleDisableResult`:
+
+```python
+RuleLiteralReplaceStatus = Literal["completed", "unsupported", "invalid_request"]
+
+@dataclass(frozen=True)
+class RuleLiteralReplaceRequest:
+    rule_spec: RuleSpec
+    support_artifact: SupportArtifact
+    overlay: EvaluationOverlay
+
+@dataclass(frozen=True)
+class RuleLiteralReplaceResult:
+    status: RuleLiteralReplaceStatus
+    variant_rows: tuple[BindingItems, ...]
+    proof_frame: ProofFrameRecheckResult | None
+    errors: tuple[ErrorDTO, ...] = ()
+    warnings: tuple[WarningDTO, ...] = ()
+```
+
+Runtime entrypoint:
+
+```python
+def check_rule_literal_replace_action(
+    request: RuleLiteralReplaceRequest,
+    *,
+    store: Store,
+    registry: RuleRegistry | None = None,
+) -> RuleLiteralReplaceResult: ...
+```
+
+`registry` remains a side-channel kwarg for signature symmetry, but Batch 5b rejects RuleRef-bearing inputs before registry use. Variant rows and original-frame ProofFrame remain separate. No variant `SupportArtifact` capture ships in Batch 5b.
+
+#### 5.7.3 Runtime Scope And Core Primitive
+
+Runtime MVP accepts exactly one `RuleLiteralReplaceAction` and rejects all fact actions in the request overlay. Multiple replace actions are intentionally deferred;the tuple container remains future-compatible.
+
+The native primitive lands in `kernel.core.rules.where_eval`:
+
+```python
+@dataclass(frozen=True)
+class WhereLiteralReplacement:
+    branch_index: int
+    atom_index: int
+    literal_path: tuple[str, int | None]
+    old_literal: Any
+    new_literal: Any
+
+def evaluate_where(
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    where: list[Any],
+    *,
+    disabled_locators: frozenset[tuple[int, int]] = frozenset(),
+    literal_replacements: frozenset[WhereLiteralReplacement] = frozenset(),
+) -> list[dict[str, Any]]: ...
+```
+
+Implementation uses a private `_apply_literal_replacements(...)` helper parallel to Batch 5a `_apply_disabled_locators(...)`. The helper validates locator bounds,path compatibility,current target is a supported native literal(`bool`, `int`, or non-variable `str`),`old_literal` matches,`new_literal` is also a supported native literal,and the replacement preserves structural shape. `evaluate_native_where(...)` remains unchanged;this is a hard drift gate.
+
+If both `literal_replacements` and `disabled_locators` are ever supplied by a future caller,the implementation applies literal replacements before disabled locators. This order is chosen for deterministic debugging:overlap cases still become disable-wins because the atom is removed after replacement,and non-overlap cases are order-independent. Batch 5b runtime supplies only `literal_replacements`.
+
+#### 5.7.4 Error / Unsupported Contract
+
+`RuleLiteralReplaceResult` uses the same local status shape as Rule Disable: `completed | unsupported | invalid_request`. It does not import or unify Rule Disable's status alias.
+
+| Condition | Status | Code |
+|---|---|---|
+| non-native or non-row support artifact | `unsupported` | `RULE_LITERAL_REPLACE_SUPPORT_UNSUPPORTED` |
+| support artifact has `rule_refs` or `rule_ref_edges` | `unsupported` | `RULE_LITERAL_REPLACE_RULE_REF_UNSUPPORTED` |
+| `rule_spec.where` contains `ruleref` atom | `unsupported` | `RULE_LITERAL_REPLACE_RULE_REF_UNSUPPORTED` |
+| overlay contains fact actions | `invalid_request` | `RULE_LITERAL_REPLACE_FACT_ACTIONS_UNSUPPORTED` |
+| zero or multiple rule actions | `invalid_request` | `RULE_LITERAL_REPLACE_ACTION_COUNT` |
+| single rule action is not `RuleLiteralReplaceAction` | `invalid_request` | `RULE_LITERAL_REPLACE_ACTION_TYPE_UNSUPPORTED` |
+| action rule identity mismatches request rule | `invalid_request` | `RULE_LITERAL_REPLACE_RULE_MISMATCH` |
+| target locator does not exist | `invalid_request` | `RULE_LITERAL_REPLACE_TARGET_NOT_FOUND` |
+| target atom kind unsupported by §5.6.1 | `invalid_request` | `RULE_LITERAL_REPLACE_ATOM_UNSUPPORTED` |
+| literal path incompatible with target atom | `invalid_request` | `RULE_LITERAL_REPLACE_PATH_INVALID` |
+| target leaf is not a constant or `old_literal` mismatches current leaf | `invalid_request` | `RULE_LITERAL_REPLACE_STALE_LITERAL` |
+| `new_literal` is not a supported native literal or is a variable form | `invalid_request` | `RULE_LITERAL_REPLACE_NEW_LITERAL_INVALID` |
+| native variant evaluation raises evaluator/runtime validation error | `invalid_request` | `RULE_LITERAL_REPLACE_NATIVE_EVAL_ERROR` |
+
+Invalid replacement values are primarily caught by native evaluation and returned as `RULE_LITERAL_REPLACE_NATIVE_EVAL_ERROR`. The application runtime may preflight obvious structural violations, but it must not duplicate all evaluator type semantics.
+
+#### 5.7.5 Cross-Runtime Compatibility
+
+Adding `RuleLiteralReplaceAction` to `EvaluationOverlay.rule_actions` changes the union accepted by the shared overlay DTO. Runtime ownership remains explicit:
+
+- `check_rule_literal_replace_action(...)` owns `RuleLiteralReplaceAction` semantics.
+- `check_rule_disable_action(...)` owns `RuleDisableAction` semantics and must return `invalid_request` with `RULE_DISABLE_ACTION_TYPE_UNSUPPORTED` for a single non-disable rule action. It must not try to read `.rule_id` from an unknown action before type-checking.
+- `check_fact_overlay_binding(...)` continues to reject any non-empty `rule_actions` with `RULE_ACTIONS_NOT_SUPPORTED`;no action-specific semantics are added.
+- `recheck_proof_frame(...)` continues to return frame-level `unknown` for any non-empty `rule_actions`;the ProofFrame protocol is not expanded.
+
+This mirrors Batch 5a's two-entrypoint discipline and prevents silent ignore of new rule actions.
+
+#### 5.7.6 Drift Gates / Acceptance Additions
+
+Implementation acceptance adds these gates:
+
+- `git diff --stat -- src/kernel/core/rules/ruleref_substrate.py src/kernel/application/protocol/proofframe.py` is empty.
+- `def evaluate_native_where` signature is unchanged.
+- `src/kernel/sdk`, `src/factpy_kernel/service`, and `src/factpy_kernel/agent` diffs are empty.
+- `src/kernel/application/rule_disable_runtime.py` changes are limited to the narrow non-disable rule-action rejection guard.
+- `src/kernel/application/fact_overlay_runtime.py` and `src/kernel/application/proofframe_runtime.py` keep generic rule-action rejection behavior and do not import or inspect `RuleLiteralReplaceAction`.
+- no `superseded_by_full_eval`, `param_override`, `condition_weights`, ProbLog probability carrier, or PyReason bound surface appears in Batch 5b code.
+
 ## 6. Boundaries And Invariants
 
 - Application-first:protocol + runtime start under `kernel.application/`.
@@ -211,6 +363,7 @@ Step 0.B must freeze these before status can move to `scoped`:
 - [x] Step 0 records a concrete A/B/C decision with rejected reasons(see §5.6).
 - [x] Step 0 answers all eight falsifiers in §5.1 with source-backed examples(see §5.6.2).
 - [x] If Path A is selected,Step 0 freezes the first atom-kind set and literal-path constraints(see §5.6.1).
+- [x] Step 0.B freezes Path A protocol/runtime/core primitive/error/drift-gate shape(see §5.7).
 - [ ] If Path B is selected,abandonment audit records why no single crisp DTO exists.
 - [ ] If Path C is selected,the split is recorded without implementing a three-capability merge in this blueprint.
 
@@ -222,6 +375,8 @@ Step 0.B must freeze these before status can move to `scoped`:
 - [ ] Existing Rule Disable / Fact Overlay / ProofFrame behavior is unchanged except explicitly scoped compatibility guards.
 - [ ] No SDK/service/agent diffs.
 - [ ] No `superseded_by_full_eval` revival.
+- [ ] `evaluate_native_where(...)` signature and RuleRef substrate are unchanged.
+- [ ] Rule Disable rejects non-disable rule actions with a narrow guard;Fact Overlay and ProofFrame keep generic rule-action rejection.
 - [ ] Module docs under `src/kernel/application/docs/` are updated if implementation ships.
 - [ ] Focused tests,full kernel unittest,ruff,and `git diff --check` pass.
 

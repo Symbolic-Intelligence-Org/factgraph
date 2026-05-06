@@ -11,6 +11,8 @@
 | 2026-05-06 | draft | Pre-commit review pass 1 | Four P3 framing polish items landed before draft commit:§1 now states the master-plan default lean is Path B abandonment;§5.2 explains why predicate term constants are riskier than comparison/filter literals;§5.5 warns that generalizing Batch 5a `RuleDisableResult` would conflict with archived drift-gate posture and sets a separate result DTO as default expectation;§6 strengthens the `evaluate_native_where(...)` boundary using the Batch 5a frontier-drift correction as hard precedent. |
 | 2026-05-06 | draft | Step 0.A spike completed | Option A passes only as a narrow native `RuleLiteralReplaceAction`:replace one existing `Const` leaf in one top-level native where atom and return dual output(variant rows + original-frame ProofFrame). The spike rejects generalized `param_override`,variable edits,structural atom edits,`not` internals,RuleRef replace,condition weights,ProbLog carriers,and PyReason bounds. Step 0.B remains required before scope freeze. |
 | 2026-05-06 | draft | Pre-commit review pass on Step 0.A | Review accepted Step 0.A and requested one P3 carry-over:Step 0.B must freeze the Path A primitive function name and module location. The blueprint now sets the default expectation to extend lower-level `where_eval.evaluate_where(...)` with a private helper parallel to Batch 5a `_apply_disabled_locators(...)`,while keeping `evaluate_native_where(...)` unchanged. |
+| 2026-05-06 | draft | Step 0.B spike completed | Path A shape frozen: `RuleLiteralReplaceAction` joins `EvaluationOverlay.rule_actions`;`RuleLiteralPath` encodes five Const-leaf path kinds;runtime surface is separate `RuleLiteralReplaceRequest/Result` and `check_rule_literal_replace_action(...)`;core primitive is `WhereLiteralReplacement` plus `evaluate_where(..., literal_replacements=...)`;MVP accepts exactly one replace action;Rule Disable gets a narrow non-disable-action rejection guard;Fact Overlay and ProofFrame keep generic rule-action rejection. Blueprint remains draft until review accepts this freeze. |
+| 2026-05-06 | draft | Pre-commit review pass on Step 0.B | Review accepted Step 0.B and requested two P3 polish items:dedicate `RULE_LITERAL_REPLACE_NEW_LITERAL_INVALID` to variable/non-native replacement values,and explain why future overlap with disabled locators applies literal replacement before disable. Both were added before commit. |
 
 ## Decision Notes
 
@@ -67,3 +69,48 @@ Step 0.B carry-overs are still open:DTO names/fields,exact `literal_path` encodi
 ### 2026-05-06 — Pre-commit Review Pass on Step 0.A
 
 Review accepted the Step 0.A falsification result and found no blocker. The only requested polish was to make the primitive landing zone explicit before Step 0.B:Path A should follow the Batch 5a pattern by extending the lower-level native `where_eval.evaluate_where(...)` path and adding a private helper parallel to `_apply_disabled_locators(...)`. The frontier-protected `evaluate_native_where(...)` signature remains a hard no-change boundary.
+
+### 2026-05-06 — Step 0.B Decision
+
+Step 0.B froze the implementation shape for the narrow Path A selected by Step 0.A.
+
+Protocol decisions:
+
+- Add `RuleLiteralPath(kind,index)` and `RuleLiteralReplaceAction(rule_id,version,branch_index,atom_index,literal_path,old_literal,new_literal,note=None)` to the shared overlay protocol.
+- Extend `RuleOverlayAction` to `RuleDisableAction | RuleLiteralReplaceAction`.
+- Keep `RuleDisableResult` untouched and add a separate `RuleLiteralReplaceRequest / RuleLiteralReplaceResult` surface with local status values `completed | unsupported | invalid_request`.
+
+Runtime decisions:
+
+- Add `check_rule_literal_replace_action(...)` as the only runtime that interprets `RuleLiteralReplaceAction`.
+- Runtime MVP accepts exactly one replace action;multi-action support remains deferred behind the tuple container.
+- Fact actions in the request overlay are invalid for Rule Literal Replace.
+- RuleRef-bearing support artifacts or rule bodies are unsupported,matching Batch 5a's narrow rule action posture.
+
+Core primitive decisions:
+
+- Extend lower-level `kernel.core.rules.where_eval.evaluate_where(...)` with `literal_replacements`.
+- Add a core `WhereLiteralReplacement` dataclass and private `_apply_literal_replacements(...)` helper parallel to Batch 5a `_apply_disabled_locators(...)`.
+- Keep `evaluate_native_where(...)` unchanged;signature drift remains a hard block.
+
+Cross-runtime compatibility decisions:
+
+- `check_rule_disable_action(...)` must type-check the single rule action and return `RULE_DISABLE_ACTION_TYPE_UNSUPPORTED` for `RuleLiteralReplaceAction`,instead of reading disable-specific fields first.
+- `check_fact_overlay_binding(...)` keeps generic `RULE_ACTIONS_NOT_SUPPORTED` behavior for any rule action.
+- `recheck_proof_frame(...)` keeps frame-level `unknown` for any rule action and does not inspect `RuleLiteralReplaceAction`.
+
+Rejected alternatives:
+
+- Do not generalize Batch 5a `RuleDisableResult`;that would create archived DTO drift.
+- Do not let Rule Disable silently process or crash on non-disable rule actions.
+- Do not add action-specific semantics to Fact Overlay or ProofFrame.
+- Do not expand RuleRef,`not` internals,condition weights,ProbLog carriers,PyReason bounds,or `superseded_by_full_eval`.
+
+The blueprint remains `draft` for review. If this freeze is accepted,the next commit should move `Status: draft → scoped` before implementation begins.
+
+### 2026-05-06 — Pre-commit Review Pass on Step 0.B
+
+Review accepted the Step 0.B freeze and found no blocker. Two clarity fixes landed before commit:
+
+- `new_literal` validation now has a dedicated `RULE_LITERAL_REPLACE_NEW_LITERAL_INVALID` code so variable-form or unsupported native-literal values do not collapse into path/stale-target errors.
+- The future ordering rule for combined `literal_replacements` and `disabled_locators` now explains why replacements apply before disables:overlap still resolves to disable-wins,while non-overlap is order-independent.
