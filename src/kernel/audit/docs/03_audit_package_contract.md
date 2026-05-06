@@ -97,6 +97,8 @@ The following are not separate durable package files today. They are derived by 
 
 This distinction matters for compatibility: old packages can still load when optional durable files are absent, but derived surfaces may return empty results or raise a query/DTO error if their required source carrier is unavailable.
 
+Batch 8 public-surface note:these query-derived surfaces are `kernel.audit` advanced importable APIs. They are part of the kernel audit reader/query layer,not SDK product facade methods and not service routes.
+
 ### 4.1 ProofFrame Diff
 
 `AuditQuery.diff_proof_frames(round_a, round_b, include_partial=False, include_unchanged=False)` is a query-derived surface over `round_events`.

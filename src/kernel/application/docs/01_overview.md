@@ -90,6 +90,8 @@
 
 `src/kernel/application/__init__.py` currently exports 47 public symbols. The main executor entry points are:
 
+Batch 8 public-surface note:`kernel.application` is an **advanced importable** runtime authority in the kernel package. It is appropriate for automation,wire bridges,and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade,and Batch 8 does not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes.
+
 - `execute_read_request(...)`
 - `hydrate_entity(...)`
 - `hydrate_entities(...)`

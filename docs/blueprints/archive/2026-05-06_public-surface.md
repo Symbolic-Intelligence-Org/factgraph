@@ -1,6 +1,6 @@
 # Public Surface Decision(Batch 8 of Round Story Completion Plan)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Related Modules:
@@ -332,12 +332,12 @@ Step 0.B satisfies §7 row 3. Status remains `draft` in this commit;the separate
 - [x] Step 0.A answers all 18 falsifiers with source-grounded evidence(see §5.4).
 - [x] Step 0.A selects Path A/B/C and records why alternatives were rejected(see §5.4.1).
 - [x] Step 0.B freezes exact public surface scope before implementation(see §5.5).
-- [ ] No release branch,tag,publish,or public repo push occurs.
-- [ ] No SDK/service/agent/application/audit drift outside the scoped files.
-- [ ] If SDK changes ship,tests prove wrappers are thin delegates and do not expose raw application internals accidentally.
-- [ ] If projection/docs changes ship,projection script and link scrub gates pass.
-- [ ] If no code ships,the no-expand decision is recorded as an explicit outcome,not an omission.
-- [ ] Module docs and release/checklist docs are synchronized with the final decision.
+- [x] No release branch,tag,publish,or public repo push occurs.
+- [x] No SDK/service/agent/application/audit code drift outside the scoped docs files.
+- [x] No SDK changes ship;SDK shell remains explicitly deferred.
+- [x] Projection/docs changes ship and `scripts/project_release_surface.sh` passes.
+- [x] No runtime code ships;the docs/checklist-only decision is recorded in §10.
+- [x] Module docs and release/checklist docs are synchronized with the final decision.
 
 ## 8. Implementation Plan
 
@@ -364,4 +364,55 @@ Potentially,depending on Step 0:
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation.
+### Final result
+
+Batch 8 implemented the scoped public-surface decision as a docs/checklist-only close-out:
+
+- product public surface remains `kernel.sdk`;
+- `kernel.application` and `kernel.audit` are documented as advanced importable kernel surfaces for automation,wire/audit consumers,and package readers;
+- no SDK shells,service routes,release projection allowlist expansion,or package-scope change shipped;
+- release-day checklist gained a Batch 8 public-surface checkpoint in the active release-candidate blueprint;
+- README / README.en and module docs now distinguish product public vs advanced importable vs out-of-package surfaces.
+
+### Files changed
+
+- `README.md`
+- `README.en.md`
+- `src/kernel/sdk/docs/04_api_surface.md`
+- `src/kernel/sdk/docs/04_api_surface.en.md`
+- `src/kernel/application/docs/01_overview.md`
+- `src/kernel/application/docs/01_overview_en.md`
+- `src/kernel/audit/docs/01_overview.md`
+- `src/kernel/audit/docs/03_audit_package_contract.md`
+- `docs/blueprints/active/2026-04-28_v0.1-release-candidate.md`
+
+No Python code,release scripts,allowlist,`pyproject.toml`,service,agent,domain,or release branch files changed.
+
+### Verification
+
+- `scripts/project_release_surface.sh` passed and produced a 261-file projection.
+- README and README.en quickstart code blocks still print `Alice`.
+- Public-doc deny-pattern scan over changed projected docs found no excluded path references.
+- Drift gates confirmed:
+  - only scoped module docs changed under `src/kernel/sdk`, `src/kernel/application`, and `src/kernel/audit`;
+  - `src/service`, `src/agent`, `src/domains` unchanged;
+  - `scripts/project_release_surface.sh`, `scripts/release_surface_allowlist.txt`, and `pyproject.toml` unchanged;
+  - `src/kernel/application/*.py`, `src/kernel/application/protocol`, `src/kernel/audit/*.py`, and `src/kernel/sdk/*.py` unchanged;
+  - `git diff --check` clean.
+
+### Deviations
+
+No scope expansion after Step 0.B. The only implementation adjustment was wording the README public-boundary table so it does not trip the existing projection deny-pattern for excluded path categories.
+
+### Deferred items
+
+- SDK shells for Check / Diagnose / Fact Overlay / ProofFrame / Why-not / rule actions.
+- Service HTTP routes.
+- Public projection example add-back.
+- Batch 6 Frontier and rule-action round-event families.
+- Batch 7 single-frame diff method and L5 aggregation.
+- Batch 4 ProofFrame symmetric `rule_refs` hardening.
+
+### Archive note
+
+Batch 8 closes the Round Story Completion Plan as a public-boundary decision,not a publish action. Release blueprints that are gated on actual publish remain active until publish plus a short stability window.

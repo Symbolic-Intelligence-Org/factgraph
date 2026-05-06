@@ -2,6 +2,8 @@
 
 This page tracks the public exports in `kernel/sdk/__init__.py` and the main class APIs. The SDK API surface is the Python product surface; runtime execution for query / ingest / compiled derivation paths is delegated to `kernel.application`, while SDK preserves outward adapters and compatibility shapes.
 
+After the Batch 8 public-surface decision, the SDK surface remains narrow:the exports and existing `SDKStore` facade methods listed here are the v0.1 product public API. The Check, Diagnose, Fact Overlay, ProofFrame, Why-not, rule-action runtimes, round events, and ProofFrame diff added in Batches 3-7 do not gain SDK shells in Batch 8; use them through the `kernel.application` / `kernel.audit` advanced importable surfaces. Promoting any one family to an ergonomic SDK API requires a separate outward request/result shape and must not directly re-export application DTOs.
+
 ## 1. Top-Level Exports (`from kernel.sdk import ...`)
 
 ### 1.1 Schema / Store / Registry

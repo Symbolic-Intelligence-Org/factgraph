@@ -63,6 +63,16 @@ print(snapshot.name)  # Alice
 | 需要最低层 ledger / evidence / rule primitive | `kernel.core` | 适合 runtime implementer,不是普通用户入口 |
 | 读取已导出的 audit package | `kernel.audit` | 离线 reader/query/DTO/evidence consumer surface |
 
+## v0.1 Public Boundary
+
+| Tier | Surface | Commitment |
+|---|---|---|
+| Product public | `kernel.sdk` | 面向人写 Python product code 的 ergonomic API 与 outward compatibility surface。 |
+| Advanced importable | `kernel.application`, `kernel.audit` | 面向 automation、wire bridge、audit consumer 的 runtime/query authority；可直接 import,但不是 SDK ergonomic facade。 |
+| Out of v0.1 package | `service`, `agent`, `domains`, internal workflow docs, tutorial/demo add-back candidates | 不属于 `factpy-kernel` v0.1 kernel-only wheel / public source surface。 |
+
+Batch 3-7 新增的 Check、Diagnose、Fact Overlay、ProofFrame、Why-not、rule-action runtimes、round events 与 ProofFrame diff 当前通过 `kernel.application` / `kernel.audit` 暴露为 advanced importable surfaces。v0.1 不新增对应 SDK shell 或 HTTP route；需要 product-facing wrapper 时应先定义单独的 public API blueprint。
+
 ## Kernel Surface
 
 | Area | Entry | Notes |

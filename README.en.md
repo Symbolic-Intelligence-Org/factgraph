@@ -63,6 +63,16 @@ print(snapshot.name)  # Alice
 | Lowest-level ledger / evidence / rule primitives | `kernel.core` | Intended for runtime implementers, not as the normal user entrypoint |
 | Reading an exported audit package | `kernel.audit` | Offline reader/query/DTO/evidence consumer surface |
 
+## v0.1 Public Boundary
+
+| Tier | Surface | Commitment |
+|---|---|---|
+| Product public | `kernel.sdk` | Ergonomic API and outward compatibility surface for human-authored Python product code. |
+| Advanced importable | `kernel.application`, `kernel.audit` | Runtime/query authority for automation, wire bridges, and audit consumers; importable directly, but not an SDK ergonomic facade. |
+| Out of v0.1 package | `service`, `agent`, `domains`, internal workflow docs, tutorial/demo add-back candidates | Not part of the `factpy-kernel` v0.1 kernel-only wheel or public source surface. |
+
+The Check, Diagnose, Fact Overlay, ProofFrame, Why-not, rule-action runtimes, round events, and ProofFrame diff added in Batches 3-7 are currently exposed through `kernel.application` / `kernel.audit` as advanced importable surfaces. v0.1 does not add matching SDK shells or HTTP routes; product-facing wrappers should first define their own public API blueprint.
+
 ## Kernel Surface
 
 | Area | Entry | Notes |

@@ -69,6 +69,8 @@
 - `evidence_graph.py`
 - `round_events.py`
 
+Batch 8 public-surface note:`kernel.audit` is an **advanced importable** audit consumer surface in the kernel package. Round event recording,round-event queries,and ProofFrame diff are documented audit/query APIs,but they are not mirrored as SDK facade methods in v0.1. Service/static-site delivery remains outside the kernel-only public package.
+
 相关 contract 文档：
 
 - `src/kernel/audit/docs/03_audit_package_contract.md`
