@@ -155,6 +155,84 @@ If Step 0.A chooses Path A or B,Step 0.B must freeze:
 - error handling for malformed event rows,duplicate event ids,and unknown future event kinds;
 - test/drift gates.
 
+### 5.4 Step 0.A Spike (synthesized 2026-05-06)
+
+This spike answers §5.1 with source-grounded evidence and chooses among §5.2 paths. Evidence packs gathered from `kernel.audit`,`kernel.adapters.souffle.package`,`kernel.core.store._artifact_sidecar`,and the 9 application capability outputs(8 DTOs + 1 raw projection).
+
+#### 5.4.1 Falsifier Verdicts
+
+| # | Verdict | Source-grounded reason | Implication |
+|---|---|---|---|
+| 1 | TRUE | `build_frontier_view_facts` returns `dict[str,list[tuple[Any,...]]]`(`capability_helpers.py:207`)with no protocol DTO and no `status`;the other 8 entrypoints return verdict-bearing DTOs with explicit `status` enums. | Split event families;at minimum a verdict-bearing capability family for the 8,plus either a separate `frontier_projection` family or defer Frontier persistence to follow-up. |
+| 2 | TRUE | Every result DTO carries non-JSON inner fields. `SupportArtifact`(`_support.py:97-127`)contains nested `PredWitness`/`NonFactStep`/`RuleRefEdge` frozen dataclasses,`BindingItems = tuple[tuple[str,Any],...]` with `Any`-typed values,and `DetailItems` of the same shape. All 9 result surfaces have at least one non-JSON inner field. | No raw `dataclasses.asdict()` blob persistence. Each event kind needs an explicit JSON projection helper that hex-encodes binding values,summarises nested artifacts,and uses stable digests for opaque structures. |
+| 3 | FALSE | Existing audit package rows describe accepted derivation candidates and rule traces(`run_ledger`/`candidate_ledger`/`accept_write_ledger`/`decision_log`,`package.py:169-216`). They do not capture application capability call results. Batch 7 per-frame diff and cross-run aggregation need capability outputs,not acceptance ledgers. | Batch 6 must add new event rows;existing audit rows alone are insufficient. Path C(premature suspend)is not triggered by this falsifier. |
+| 4 | TRUE(bounded) | Audit package rows are written at `export_package(...)` time after a Store derivation run(`package.py:573-584`);capability calls happen at any read-path moment with no Store run association. Different lifecycle identities. However sharing one package directory with manifest namespace separation(`manifest.json.paths.audit_files`,`package.py:320-358`)is feasible because the manifest already supports optional file additions. | Path A is feasible. Path B avoids cohabitation but loses `AuditQuery` reuse;default to Path A with explicit namespace separation in the manifest. |
+| 5 | TRUE | Rule action result DTOs(5a/5b/5c)all carry `status + variant_rows: tuple[BindingItems,...] + proof_frame: ProofFrameRecheckResult \| None`(`rule_disable.py:80`,`rule_literal_replace.py:82`,`rule_add_condition.py:82`). Structurally distinct from Check(verdict only)and Diagnose(verdict + atom_locator). | Define distinct event kinds per capability family. Do not collapse rule-action events into the generic verdict shape. |
+| 6 | TRUE | `ProofFrameRecheckResult` carries `status + binding_items + atom_verdicts: tuple[ProofFrameAtomVerdict,...]`(`proofframe.py:120-136`). Each `ProofFrameAtomVerdict` carries `atom_key + verdict + affected_action_indices`(all primitives). Batch 7 L4 per-frame diff requires atom-level granularity;status alone(3-way enum)cannot drive a diff. | ProofFrame projection must persist `status + atom_verdicts`(atom_key + verdict + affected_action_indices). `binding_items` requires hex-encoded value projection. |
+| 7 | FALSE | `AuditQuery` is a stateless wrapper over frozen `AuditPackageData`(`query.py:55-61`);25+ public methods all keyed off `run_id`/`candidate_id`/`decision_id`. New round-event methods keyed off `round_id`/`event_id` would not collide with the existing namespace. | Extend `AuditQuery` with separate round-event query methods. Existing methods stay byte-stable. |
+| 8 | TRUE | Existing JSONL ledgers carry `event_ts`(nanosecond int)but no sequence number;rows sorted at query time by `(event_ts,decision_id)`(`query.py:528-534`);duplicates allowed(no writer dedup). Two events with the same nanosecond timestamp would be order-ambiguous for replay. | Step 0.B must freeze `(round_id,sequence)` as primary identity with monotonic per-round sequence;`event_ts` becomes secondary metadata. |
+| 9 | PARTIAL | Request DTOs carry kernel-level objects(`CompiledDerivationPlan`,`RuleSpec`,`SupportArtifact`,`BindingItems`)— no SDK/service classes. However `BindingItems` values are `Any` and caller-controlled;they may contain raw user-input strings or sensitive references. | Persist result summaries plus stable references(digests of plan/rule_spec;bindings projected via existing hex encoding for known kernel value types). Document in Step 0.B that binding-value privacy is the caller's responsibility. |
+| 10 | FALSE | All 9 capabilities are read-path;no Store mutation,no ledger write(verified across runtime files). `ArtifactSidecar` writes are atomic and outside Store(`_artifact_sidecar.py:213-225`). Round persistence captures already-produced results. | Batch 6 stays write-package-only. No Store ledger semantics change. |
+| 11 | FALSE | Reader iterates over OPTIONAL keys(`reader.py:99-111`):missing key in manifest or missing file returns empty list/dict gracefully. Adding `round_events` as an optional audit file follows this exact existing pattern. | Add new optional field on `AuditPackageData` defaulting to empty;old packages load unchanged. Old-package compat test mandatory in §7 acceptance. |
+| 12 | FALSE | Aggregation is Batch 7's responsibility,not Batch 6's. Batch 6 persists per-call/per-frame fields(rule_id digest,atom_key,etc.);Batch 7 owns module/cross-run aggregation key derivation or mapping. Whether every needed group-by key is derivable from persisted fields is a Batch 7 question;if any are not,Batch 7 adds the mapping/index. | Batch 6 captures full per-call/per-frame output. Aggregation index files,group-by mapping,or cross-run derivation belong to Batch 7. Carry over:no aggregation index file in Batch 6;module_id and other group-by mapping defer to Batch 7 if needed. |
+| 13 | FALSE | Zero runtimes import logger/recorder/audit/emit hooks(verified by agent search across all 9 runtime files). Internal emit would require `kernel.application` → `kernel.audit` import(boundary violation per §6). External recorder/wrapper at the application surface is feasible:caller invokes capability,then records the result. | Use explicit recorder/wrapper pattern. Capability runtimes do not import from `kernel.audit`. Boundary in §6 already encodes this. |
+| 14 | TRUE | Existing audit package has no round/session concept;only `run_id` is auto-generated by Store per claim(`runtime.py:335`). Read-path capability calls have no Store run association. Without explicit bracket "round" is undefined;a time-window heuristic is fragile and not a contract. | Step 0.B must define `round_id` as caller-supplied(or via context manager `with start_round() as round:`). No timestamp-based inference. |
+| 15 | TRUE | Existing audit package writer is NOT atomic(streams JSONL line-by-line per file;manifest written last;`package.py:573-584`). Streaming round events during in-flight calls would risk partial-round packages on crash with no atomic finalize signal. `ArtifactSidecar`'s tempfile + `os.replace` model demonstrates the atomic pattern. | Round write happens at round end via buffer-then-finalize;not streaming. Step 0.B carry-over:partial-round detection mechanism(e.g. finalize marker presence in manifest). |
+
+#### 5.4.2 Path Selection: Path A
+
+Selected **Path A — Narrow optional `round_events.jsonl` extension within existing audit package**.
+
+Rationale tied to falsifier verdicts:
+- Parent plan compatibility requirement(`AuditQuery`/`load_audit_package`)is met without a new reader class(#7 and #11 both FALSE — extension is clean).
+- No fundamental block surfaced(#3,#10,#12 all FALSE — capability persistence is feasible).
+- Lifecycle cohabitation feasible via optional file pattern(#4 TRUE-bounded — manifest supports namespace separation).
+- Path B(separate package)would double maintenance and lose `AuditQuery` reuse without justification;triggered only if Path A's cohabitation breaks during Step 0.B.
+- Path C(suspend/abandon)not justified;capability outputs are projectable(#2 TRUE but solvable via per-kind helpers)and persistence is feasible(#10 FALSE).
+
+Path A constraints that must hold throughout implementation:
+- `audit/round_events.jsonl` added as OPTIONAL audit file in the existing package layout.
+- Write mode:buffer-then-finalize at round end(not streaming),per #15.
+- Caller-supplied `round_id` with explicit lifecycle bracket,per #14.
+- Per-event-kind JSON projection helpers,per #1/#2/#6.
+- External recorder/wrapper at application surface;no capability runtime imports from `kernel.audit`,per #13(already encoded in §6).
+- `AuditQuery` extended with new round-event methods;existing methods byte-stable,per #7.
+- Old-package compat test mandatory,per #11.
+
+Path A kill criteria(revisit Path B if any fire during Step 0.B):
+- Manifest namespace separation cannot be achieved without renaming existing audit file keys.
+- Atomic finalize cannot be implemented without rewriting the existing audit package writer.
+- `AuditQuery` extension unavoidably collides with existing `run`/`candidate`/`decision` query namespace.
+
+#### 5.4.3 Constraints Frozen for Step 0.B
+
+These Step 0.A decisions are now FROZEN inputs to Step 0.B and must not be relitigated:
+
+1. Path A is the selected working path for Step 0.B(optional `round_events.jsonl` in existing audit package);frozen unless a §5.4.2 kill criterion fires.
+2. Distinct event KINDS per capability family;no unified verdict shape.
+3. JSON projection per kind;no raw dataclass blob persistence.
+4. Caller-supplied `round_id` with explicit lifecycle bracket;no time-window inference.
+5. `(round_id,sequence)` as primary event identity;`event_ts` secondary.
+6. Buffer-then-finalize at round end;no streaming during in-flight calls.
+7. ProofFrame persistence shape:`status + atom_verdicts`(atom_key + verdict + affected_action_indices).
+8. External recorder/wrapper at application surface;no capability runtime imports from `kernel.audit`.
+9. `AuditQuery` extended via new round-event methods;existing methods byte-stable.
+10. No aggregation index file in Batch 6;Batch 7 derives at query time.
+
+Step 0.B remaining decisions(per §5.3 carry-overs not yet frozen by Step 0.A):
+- Specific event identity field names and types(round_id,event_id,sequence,timestamp).
+- Event kind set:which of the 9 capabilities are first-slice;whether Frontier is included.
+- Exact payload projection per event kind(field-by-field schema).
+- Rule action inclusion:defer or include 5a/5b/5c result summaries in the first slice.
+- Reader/query surface details(method names,signatures,return shapes).
+- Error handling for malformed event rows,duplicate event ids,unknown future event kinds.
+- Test/drift gates list.
+- Partial-round detection mechanism(finalize marker contract).
+
+#### 5.4.4 Acceptance §7 Update
+
+Step 0.A satisfies §7 row 1("Step 0.A records the 15 falsifiers with source-grounded answers"). Status remains `draft` until Step 0.B freezes the carry-overs above.
+
 ## 6. Boundaries And Invariants
 
 - Existing `load_audit_package(...)` must continue loading old audit packages.
