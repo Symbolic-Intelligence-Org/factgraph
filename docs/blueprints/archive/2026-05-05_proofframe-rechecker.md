@@ -1,9 +1,9 @@
 # ProofFrame Rechecker(narrow)(Batch 4 of Round Story Completion Plan)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
-- Parent: [2026-05-05_round-story-completion-plan.md](./2026-05-05_round-story-completion-plan.md) §5.4
+- Parent: [2026-05-05_round-story-completion-plan.md](../active/2026-05-05_round-story-completion-plan.md) §5.4
 - Scope: Batch 4 — narrow per-frame proof validity over native + fact-overlay; deterministic narrative formatting
 - Branch: `v0.1-proofframe-2026-05-05`(off `319d879`)
 - Related Modules:
@@ -14,7 +14,7 @@
   - **NOT** `src/kernel/application/capability_helpers.py` — Batch 4 ships no helpers per §5.5.5 Decision 3
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [docs/blueprints/archive/2026-05-05_evaluation-overlay.md](../archive/2026-05-05_evaluation-overlay.md)
+  - [docs/blueprints/archive/2026-05-05_evaluation-overlay.md](./2026-05-05_evaluation-overlay.md)
 - Audit Log:
   - [2026-05-05_proofframe-rechecker.audit.md](./2026-05-05_proofframe-rechecker.audit.md)
 
@@ -396,23 +396,23 @@ Do **not** silently choose Shape D as if it were a normal Step 0.B alternative.
 - [x] Step 0.B decides helper migration scope → **no helpers in Batch 4** per §5.5.5 Decision 3.
 - [x] Step 0.B decides `not` re-evaluation → **defer**(verdict `unknown`)per §5.5.5 Decision 4.
 
-**Implementation acceptance(unchecked until impl lands):**
-- [ ] `ProofFrameRecheckRequest` / `ProofFrameRecheckResult` / `ProofFrameAtomVerdict` DTOs frozen with protocol tests per §5.5.5 final shape(shared `ProofFrameStatus` enum,`affected_action_indices: tuple[int, ...]`).Shape D selection requires the §6 parent-plan deviation path before this checkbox can be re-interpreted.
-- [ ] Rechecker runtime `recheck_proof_frame(request, *, store, registry=None) -> ProofFrameRecheckResult` ships;native + fact-overlay only.
-- [ ] **Aggregation invariant test:** `result.status == _aggregate(result.atom_verdicts)` per §5.5.2 priority rule(`invalidated > unknown > still_valid`).
-- [ ] Each of the 3 statuses(`still_valid` / `invalidated` / `unknown`)has a focused test firing it from concrete input per §5.5.3 examples.
-- [ ] **`not` step verdict invariant test:** any `NonFactStep` with `kind == "not"` always emits `ProofFrameAtomVerdict(verdict="unknown", affected_action_indices=())` per §5.5.5 Decision 4.
-- [ ] Non-native `SupportArtifact.kind` returns frame-level `unsupported`-equivalent.
-- [ ] Non-empty `rule_ref_edges` returns frame-level `unsupported`-equivalent per §5.5.2 row 6.
-- [ ] Empty overlay behavior documented and tested.
-- [ ] Narrative renderer `render_proof_frame_narrative(result, *, overlay) -> str` ships with deterministic output tests(byte-equal across re-runs;single-frame;English-only;consumes `atom_key` + `affected_action_indices`,not `asrt_id`)per §5.5.5 Decision 2.
-- [ ] No ledger writes,no Store cache writes,no `SupportArtifact` sidecar writes tested for the rechecker entry point(no-write invariant per §5.5.1 item 6).
-- [ ] **No application-layer helpers added to `kernel.application.capability_helpers`** per §5.5.5 Decision 3(grep test).
-- [ ] `src/kernel/application/docs/01_overview.md` and `_en.md` updated.
-- [ ] `python -m unittest src.kernel.tests.test_application_proofframe_protocol src.kernel.tests.test_application_proofframe_runtime_native src.kernel.tests.test_application_proofframe_narrative` passes.
-- [ ] `python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py` passes.
-- [ ] `git diff --stat -- src/kernel/sdk` is empty.
-- [ ] `git diff --stat -- src/kernel/application/derivation_check_runtime.py src/kernel/application/diagnose_runtime.py src/kernel/application/fact_overlay_runtime.py src/kernel/application/why_not_runtime.py src/kernel/application/capability_helpers.py` is empty(no shipped capability runtime or existing helper touched).
+**Implementation acceptance:**
+- [x] `ProofFrameRecheckRequest` / `ProofFrameRecheckResult` / `ProofFrameAtomVerdict` DTOs frozen with protocol tests per §5.5.5 final shape(shared `ProofFrameStatus` enum,`affected_action_indices: tuple[int, ...]`).Shape D selection requires the §6 parent-plan deviation path before this checkbox can be re-interpreted.
+- [x] Rechecker runtime `recheck_proof_frame(request, *, store, registry=None) -> ProofFrameRecheckResult` ships;native + fact-overlay only.
+- [x] **Aggregation invariant test:** `result.status == _aggregate(result.atom_verdicts)` per §5.5.2 priority rule(`invalidated > unknown > still_valid`).
+- [x] Each of the 3 statuses(`still_valid` / `invalidated` / `unknown`)has a focused test firing it from concrete input per §5.5.3 examples.
+- [x] **`not` step verdict invariant test:** any `NonFactStep` with `kind == "not"` always emits `ProofFrameAtomVerdict(verdict="unknown", affected_action_indices=())` per §5.5.5 Decision 4.
+- [x] Non-native `SupportArtifact.kind` returns frame-level `unsupported`-equivalent.
+- [x] Non-empty `rule_ref_edges` returns frame-level `unsupported`-equivalent per §5.5.2 row 6.
+- [x] Empty overlay behavior documented and tested.
+- [x] Narrative renderer `render_proof_frame_narrative(result, *, overlay) -> str` ships with deterministic output tests(byte-equal across re-runs;single-frame;English-only;consumes `atom_key` + `affected_action_indices`,not `asrt_id`)per §5.5.5 Decision 2.
+- [x] No ledger writes,no Store cache writes,no `SupportArtifact` sidecar writes tested for the rechecker entry point(no-write invariant per §5.5.1 item 6).
+- [x] **No application-layer helpers added to `kernel.application.capability_helpers`** per §5.5.5 Decision 3(grep test).
+- [x] `src/kernel/application/docs/01_overview.md` and `_en.md` updated.
+- [x] `python -m unittest src.kernel.tests.test_application_proofframe_protocol src.kernel.tests.test_application_proofframe_runtime_native src.kernel.tests.test_application_proofframe_narrative` passes.
+- [x] `python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py` passes.
+- [x] `git diff --stat -- src/kernel/sdk` is empty.
+- [x] `git diff --stat -- src/kernel/application/derivation_check_runtime.py src/kernel/application/diagnose_runtime.py src/kernel/application/fact_overlay_runtime.py src/kernel/application/why_not_runtime.py src/kernel/application/capability_helpers.py` is empty(no shipped capability runtime or existing helper touched).
 
 ## 9. Implementation Plan(Draft)
 
@@ -436,9 +436,7 @@ No `docs/README.md` update expected unless this batch adds a new durable top-lev
 
 ## 11. Outcome / Deviations
 
-任务完成后填写:
-
-- 最终落地结果:
-- 与 blueprint 不同的地方:
-- 为什么会有这些调整:
-- 归档说明:
+- 最终落地结果:Batch 4 shipped the narrow ProofFrame Rechecker application surface. Added Shape B protocol DTOs in `src/kernel/application/protocol/proofframe.py`,runtime entry point `recheck_proof_frame(...)`,deterministic narrative renderer `render_proof_frame_narrative(...)`,focused protocol/runtime/narrative tests,and application module docs updates.
+- 与 blueprint 不同的地方:`unsupported`-equivalent reject paths(non-native `SupportArtifact.kind` and non-empty `rule_ref_edges`)are represented as `ProofFrameRecheckResult(status="unknown", atom_verdicts=())` because Step 0.B's frozen result DTO intentionally has no `errors` or `unsupported` status. This keeps the Step 0.A three-status set intact and avoids an unscoped DTO expansion.
+- 为什么会有这些调整:The scoped blueprint required explicit reject behavior while also freezing `ProofFrameStatus = still_valid | invalidated | unknown`. Empty atom verdicts aggregate to `unknown`,which is the conservative frame-level representation for unsupported narrow-scope inputs.
+- 归档说明:Implementation verified with 33 focused ProofFrame tests,full kernel `python -m unittest discover -s src/kernel/tests -p "test_*.py"`(1151 tests OK / 1 skipped),ruff clean,and scope guards showing no SDK/service/agent or existing capability runtime/helper diffs.

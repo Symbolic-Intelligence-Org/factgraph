@@ -1,7 +1,7 @@
 # ProofFrame Rechecker(narrow)— Audit Log
 
 - Blueprint: [2026-05-05_proofframe-rechecker.md](./2026-05-05_proofframe-rechecker.md)
-- Parent plan: [2026-05-05_round-story-completion-plan.md](./2026-05-05_round-story-completion-plan.md) §5.4
+- Parent plan: [2026-05-05_round-story-completion-plan.md](../active/2026-05-05_round-story-completion-plan.md) §5.4
 
 ## Event Log
 
@@ -15,6 +15,7 @@
 | 2026-05-06 | draft | Step 0.B spike completed | 4 decisions filled in new §5.5.5;§3 non-goals + §8 acceptance + §11 plan updated to reflect choices;blueprint stays `draft` pending review then `scoped` transition. Decisions:**(1)Shape B selected**(Shape A rejected — would push per-atom attribution work into narrative renderer,duplicating rechecker logic);Shape B refined with shared `ProofFrameStatus` enum(no separate `AtomVerdict` literal),`affected_action_indices: tuple[int, ...]`(supports multi-witness atoms touched by multiple actions),and runtime aggregation invariant(`result.status == aggregate(atom_verdicts)` per §5.5.2 priority rule). **(2)Narrative renderer:** single-frame,English-only deterministic,consumes `atom_key` + `affected_action_indices`(not `asrt_id`),signature `render_proof_frame_narrative(result, *, overlay) -> str`. **(3)No helpers in Batch 4:** Request DTO is 2 trivial fields,no projection / asrt_id / schema mechanical setup like Batch 2 helpers — adding helper would be zero value(narrow public API). **(4)Defer `not` re-evaluation:** 3 structural problems block in-scope implementation — atom_repr is brittle to parse,sibling-import of `_apply_fact_overlay_projection` violates Q1 Sibling,inline duplication adds DRY burden;`not` steps emit `verdict="unknown"`,follow-up batch may bundle re-eval with substrate enhancement(structured atom field) |
 | 2026-05-06 | draft | Pre-commit review pass on Step 0.B | 3 review findings reconciled before commit:(P1)Decision 4 said "regardless of overlay actions" but §5.5.2 `not` row still kept `still_valid` for untouched/remove cases — internal inconsistency. Reconciled to **strict deferral**:`not` row in §5.5.2 now emits `unknown` in all 3 columns;§5.5.3 `unknown` row rewritten as deterministic trigger("any frame with at least one `not` step → `unknown`")with the "may not fire under typical patterns" wording removed;`invalidated` focused test acceptance still uses pred_witnesses path(unaffected). (P1)§6 Shape B legacy code block contradicted §5.5.5 final shape(`AtomVerdict` literal,`affected_action_index: int | None`)— replaced inline with the §5.5.5 final DTO sketch(shared `ProofFrameStatus`,`affected_action_indices: tuple[int, ...]`,aggregation invariant comment),and noted the original "second status set drift" risk is eliminated by the shared-enum refinement. (P2)Front-matter "Related Modules" still listed `capability_helpers.py (only if Step 0 chooses)` and §7 still said "helpers, if shipped, live in capability_helpers" — both updated to make Decision 3(no helpers)deterministic;Related Modules now lists explicit new module paths(`protocol/proofframe.py`,`proofframe_runtime.py`)and explicitly says `capability_helpers.py` is **NOT** touched |
 | 2026-05-06 | scoped | Scope frozen for implementation | Step 0.A and Step 0.B are complete and reviewed. Implementation is authorized only for the frozen scope:Shape B DTOs in `protocol/proofframe.py`,native `proofframe_runtime.py`,single-frame English narrative renderer,no helpers,no rule-ref recursion,no SDK/service/agent changes,and strict `not` deferral to `unknown` |
+| 2026-05-06 | implemented | Implementation completed | Added ProofFrame protocol DTOs,`recheck_proof_frame(...)`,deterministic narrative renderer,focused protocol/runtime/narrative tests,drift guards,and application docs. Verification:33 focused ProofFrame tests OK;full kernel unittest discover 1151 OK / 1 skipped;ruff clean;SDK/service/agent and existing capability runtime/helper diff guards empty |
 
 ## Decision Notes
 
@@ -25,6 +26,10 @@ Batch 3 closed at `319d879` with `EvaluationOverlay` shipped narrowed to `replac
 ### 2026-05-06 — Scoped For Implementation
 
 Step 0.A and Step 0.B have both completed and the reviewed outcomes are now scope-freezing constraints. Implementation must stay inside the selected Shape B protocol/runtime/narrative surface, leave `capability_helpers.py` untouched, reject non-native and rule-ref artifacts explicitly, and preserve the strict `not` deferral behavior recorded in §5.5.5.
+
+### 2026-05-06 — Implementation Closeout
+
+Implementation followed the scoped Shape B surface and added no helpers or SDK shell. The only representational decision made during implementation was how to express the blueprint's `unsupported`-equivalent reject paths without expanding the frozen DTO:non-native support artifacts and rule-ref frames return `ProofFrameRecheckResult(status="unknown", atom_verdicts=())`. This preserves the Step 0.A three-status set and keeps unsupported inputs conservative without introducing an unscoped error/status field.
 
 ### 2026-05-06 — Batch 3 Outcome Affects Entry Criteria
 

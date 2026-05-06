@@ -41,6 +41,13 @@ from .derivation_why_not import (
     WhyNotUniverseRequest,
     WhyNotUniverseResult,
 )
+from .proofframe import (
+    ProofFrameAtomVerdict,
+    ProofFrameRecheckRequest,
+    ProofFrameRecheckResult,
+    ProofFrameStatus,
+    aggregate_proof_frame_status,
+)
 from .entity_read import (
     AssertionRecordDTO,
     EntityReadRequest,
@@ -130,6 +137,10 @@ __all__ = [
     "OverlayCheckPhaseStatus",
     "OverlayCheckStatus",
     "PlannedOpDTO",
+    "ProofFrameAtomVerdict",
+    "ProofFrameRecheckRequest",
+    "ProofFrameRecheckResult",
+    "ProofFrameStatus",
     "ProtocolShapeError",
     "QueryReturnContract",
     "QueryReturnSlot",
@@ -150,4 +161,5 @@ __all__ = [
     "WhyNotUniverseRequest",
     "WhyNotUniverseResult",
     "WriteValue",
+    "aggregate_proof_frame_status",
 ]

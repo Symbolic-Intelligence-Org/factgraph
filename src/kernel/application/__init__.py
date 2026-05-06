@@ -42,6 +42,10 @@ from .query_runtime import (
     QueryRuntimeError,
     execute_query,
 )
+from .proofframe_runtime import (
+    recheck_proof_frame,
+    render_proof_frame_narrative,
+)
 from .schema_runtime import (
     EntityTypeInfo,
     FieldTypeInfo,
@@ -105,5 +109,7 @@ __all__ = [
     "hydrate_entity",
     "materialize_identity",
     "plan_write_command",
+    "recheck_proof_frame",
+    "render_proof_frame_narrative",
     "resolve_selector",
 ]

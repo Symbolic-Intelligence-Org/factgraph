@@ -20,6 +20,7 @@
 - explicit-binding derivation Check (`passed` / `failed` / `unsupported` / `invalid_request`)
 - explicit-binding derivation Diagnose (`passed` / `failed.no_candidate` / `failed.atom_localized` / `unsupported` / `invalid_request`)
 - explicit-binding Fact Overlay Check (`before` / `after` / `diff` under temporary fact replace/remove overlays, native-only MVP)
+- narrow ProofFrame Rechecker (`still_valid` / `invalidated` / `unknown` over one native `SupportArtifact` under fact replace/remove overlay, with deterministic single-frame narrative)
 - explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
 - capability ergonomics helpers for Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
 
@@ -44,6 +45,7 @@
   - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`)
   - `derivation_diagnose.py`: explicit-binding Diagnose protocol DTOs (`DiagnoseRequest` / `DiagnoseResult` / `DiagnoseAtomLocator`)
   - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `EvaluationOverlay` / `FactValueOverride` / `FactRemoveAction`)
+  - `proofframe.py`: ProofFrame Rechecker protocol DTOs (`ProofFrameRecheckRequest` / `ProofFrameRecheckResult` / `ProofFrameAtomVerdict` / `ProofFrameStatus`)
   - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotRedRow` / `WhyNotRowDiagnostic` / `WhyNotAtomLocator`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
@@ -65,12 +67,15 @@
   - `diagnose_derivation_binding(...)`: diagnose a complete or partial binding against a single compiled derivation plan; native can localize the failed atom, while souffle/problog/pyreason return coarse pass/fail/unsupported classifications through evidence-aware dispatch.
 - `fact_overlay_runtime.py`
   - `check_fact_overlay_binding(...)`: check a requested binding under temporary fact replace/remove overlays without writing the ledger; native runs baseline plus overlay-applied phases and returns before/after/diff summaries, while souffle/problog/pyreason return `ENGINE_OVERLAY_NOT_SUPPORTED`.
+- `proofframe_runtime.py`
+  - `recheck_proof_frame(...)`: recheck one native `SupportArtifact` under an `EvaluationOverlay` without re-running derivation evaluation; returns per-atom verdicts and aggregate frame status. Non-native support artifacts and rule-ref frames return frame-level `unknown`; `not` steps are strictly deferred to `unknown`.
+  - `render_proof_frame_narrative(...)`: deterministic English single-frame narrative formatter over a `ProofFrameRecheckResult`.
 - `why_not_runtime.py`
   - `check_why_not_universe(...)`: assemble a red/green board for an explicit finite head-binding universe, then diagnose each red row through `diagnose_derivation_binding(...)` while returning Why-not-owned row diagnostics.
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 42 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 44 public symbols. The main executor entry points are:
 
 - `execute_read_request(...)`
 - `hydrate_entity(...)`
@@ -83,6 +88,8 @@
 - `check_derivation_binding(...)`
 - `diagnose_derivation_binding(...)`
 - `check_fact_overlay_binding(...)`
+- `recheck_proof_frame(...)`
+- `render_proof_frame_narrative(...)`
 - `check_why_not_universe(...)`
 - `accept_derivation_candidate_set(...)`
 - `accept_derivation_candidate_sets(...)`
@@ -126,7 +133,7 @@ Current SDK runtime delegation:
 - `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
 - `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
 - `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
-- Check, Diagnose, Fact Overlay Check, Why-not Universe Diagnose, and the capability ergonomics helpers are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`, `diagnose_derivation_binding(...)`, `check_fact_overlay_binding(...)`, `check_why_not_universe(...)`, or the application helper functions.
+- Check, Diagnose, Fact Overlay Check, ProofFrame Rechecker, Why-not Universe Diagnose, and the capability ergonomics helpers are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`, `diagnose_derivation_binding(...)`, `check_fact_overlay_binding(...)`, `recheck_proof_frame(...)`, `check_why_not_universe(...)`, or the application helper functions.
 
 SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
@@ -166,6 +173,9 @@ Key focused tests:
 - `test_application_fact_overlay_protocol.py`
 - `test_application_fact_overlay_runtime_native.py`
 - `test_application_fact_overlay_sibling_invariant.py`
+- `test_application_proofframe_protocol.py`
+- `test_application_proofframe_runtime_native.py`
+- `test_application_proofframe_narrative.py`
 - `test_application_why_not_protocol.py`
 - `test_application_why_not_runtime.py`
 - `test_application_why_not_sibling_invariant.py`
