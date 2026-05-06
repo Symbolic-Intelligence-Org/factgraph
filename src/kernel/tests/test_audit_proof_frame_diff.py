@@ -101,14 +101,20 @@ class AuditProofFrameDiffTests(unittest.TestCase):
         self.assertEqual(by_kind["atom_added"].atom_key, "b0.a1:gt")
 
     def test_rule_ref_degenerate_frames_are_marked_without_atom_deltas(self) -> None:
-        for payloads in (
+        for payloads, expected_status_change in (
             (
-                _proof_payload(status="unknown", atoms={}),
-                _proof_payload(status="unknown", atoms={}),
+                (
+                    _proof_payload(status="unknown", atoms={}),
+                    _proof_payload(status="unknown", atoms={}),
+                ),
+                None,
             ),
             (
-                _proof_payload(status="unknown", atoms={}),
-                _proof_payload(status="still_valid", atoms={"b0.a0:pred": "still_valid"}),
+                (
+                    _proof_payload(status="unknown", atoms={}),
+                    _proof_payload(status="still_valid", atoms={"b0.a0:pred": "still_valid"}),
+                ),
+                ("unknown", "still_valid"),
             ),
         ):
             with self.subTest(payloads=payloads):
@@ -124,6 +130,12 @@ class AuditProofFrameDiffTests(unittest.TestCase):
                 delta = diff.frame_deltas[0]
                 self.assertEqual(delta.markers, ("rule_refs_unsupported",))
                 self.assertEqual(delta.atom_deltas, ())
+                if expected_status_change is None:
+                    self.assertIsNone(delta.frame_status_change)
+                else:
+                    self.assertIsNotNone(delta.frame_status_change)
+                    self.assertEqual(delta.frame_status_change.before, expected_status_change[0])
+                    self.assertEqual(delta.frame_status_change.after, expected_status_change[1])
 
     def test_partial_round_policy_default_rejects_and_opt_in_warns(self) -> None:
         package = _package(
