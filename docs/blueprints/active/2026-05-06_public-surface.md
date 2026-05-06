@@ -1,6 +1,6 @@
 # Public Surface Decision(Batch 8 of Round Story Completion Plan)
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Related Modules:
