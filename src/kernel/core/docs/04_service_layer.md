@@ -2,7 +2,7 @@
 
 - 范围：HTTP/BFF delivery layer 与 `kernel.core` 的依赖关系
 - 最后更新：2026-05-06(post Round Story Completion routemap closure @ `6b32972`)
-- 视角：本文从 **core 角度** 描述 service 层 —— core 期望 service 如何调用、service 应遵守哪些 core invariant。Service 自身路由 / DTO 详细文档参考 [`src/service/docs/01_overview.md`](../../../service/docs/01_overview.md)。
+- 视角：本文从 **core 角度** 描述 service 层 —— core 期望 service 如何调用、service 应遵守哪些 core invariant。Service 自身路由 / DTO 详细文档由 service 模块自带 overview 文档承载(monorepo;不在 kernel-only 包内)。
 
 ## 1. 入口与依赖
 
@@ -39,7 +39,7 @@ service 不负责(由 core 拥有)：
 
 ## 3. 当前 v1 路由概览
 
-详细路由列表 + DTO 在 [`src/service/docs/01_overview.md`](../../../service/docs/01_overview.md) §4。本文不重复路由清单,只列类别:
+详细路由列表 + DTO 在 service module 自带 overview 文档 §4(monorepo;不在 kernel-only 包内)。本文不重复路由清单,只列类别:
 
 - **rules**：validate / compile-preview / profiles
 - **runtime session**：open / get / delete + writes(set / add / retract)+ claims
@@ -122,11 +122,11 @@ Core / application 抛出的错误按 specific → generic 顺序映射到 envel
 
 ## 8. Cross-References
 
-- Service 自身完整文档:[`src/service/docs/01_overview.md`](../../../service/docs/01_overview.md)
+- Service 自身完整文档:service module 自带 overview 文档(monorepo;不在 kernel-only 包内)
 - Core 公共契约:[`04_public_contract_v1.md`](./04_public_contract_v1.md)
 - Application 层 advanced importable surface:[`src/kernel/application/docs/01_overview.md`](../../application/docs/01_overview.md)
 - Audit 包契约:[`src/kernel/audit/docs/03_audit_package_contract.md`](../../audit/docs/03_audit_package_contract.md)
-- Batch 8 公开 surface 决议:[`docs/blueprints/archive/2026-05-06_public-surface.md`](../../../../docs/blueprints/archive/2026-05-06_public-surface.md)
+- Batch 8 公开 surface 决议:routemap 内 archived `public-surface` blueprint(monorepo;不在 kernel-only 包内)
 
 ## 9. 说明
 

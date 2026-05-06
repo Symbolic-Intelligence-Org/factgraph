@@ -8,7 +8,7 @@
 
 The Round Story Completion routemap (2026-05-05 → 2026-05-06, 9 main batches + 3 sub-batches) closed at `6b32972`. The routemap added new capabilities primarily under `kernel.application/` and `kernel.audit/`; `kernel.core/` work during the routemap window was constrained by the application-first invariant and limited to native evaluator parameter extensions that support upper-layer capabilities.
 
-For the full closure narrative and deferred items, see [`docs/blueprints/active/2026-05-05_round-story-completion-plan.md`](../../../../docs/blueprints/active/2026-05-05_round-story-completion-plan.md) §10 Outcome.
+The full closure narrative and deferred items are recorded in the round-story-completion-plan master plan (§10 Outcome) inside the monorepo; this kernel-only package does not bundle routemap blueprints.
 
 ## 1. Current Status Snapshot
 

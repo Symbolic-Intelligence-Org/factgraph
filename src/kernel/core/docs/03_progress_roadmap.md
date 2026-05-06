@@ -8,7 +8,7 @@
 
 Round Story Completion routemap(2026-05-05 → 2026-05-06,9 大批 + 3 子批)闭环 @ `6b32972`。Routemap 主要在 `kernel.application/` + `kernel.audit/` 加新 capabilities;`kernel.core/` 在 routemap 期间的扩展受限于 application-first invariant,仅做 native evaluator 形参扩展支持上层新 capabilities。
 
-详细 closure narrative + deferred items:见 [`docs/blueprints/active/2026-05-05_round-story-completion-plan.md`](../../../../docs/blueprints/active/2026-05-05_round-story-completion-plan.md) §10 Outcome。
+详细 closure narrative + deferred items 记录在 monorepo 内的 round-story-completion-plan master plan §10 Outcome;本 kernel-only 包不含 routemap blueprints。
 
 ## 1. 当前状态快照
 
