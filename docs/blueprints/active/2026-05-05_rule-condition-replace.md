@@ -139,6 +139,60 @@ If Path A ships,Step 0.B must freeze:
 - two-entrypoint compatibility after adding another rule action type;
 - drift gates for `fact_overlay_runtime.py`, `proofframe_runtime.py`, `rule_disable_runtime.py`,and `evaluate_native_where(...)`.
 
+### 5.6 Step 0.A Outcome — Narrow Path A
+
+**Decision:** Option A passes only as a narrow native `RuleLiteralReplaceAction`. The action replaces one existing `Const` leaf inside one existing top-level native where atom,then returns Batch 5a-style dual output:variant rows from a full native re-evaluation plus original-frame ProofFrame invalidation for the touched atom locator.
+
+This is not a revival of v0.1.4 `param_override`. The other v0.1.4 lanes remain rejected:condition weights,ProbLog probability carriers,and PyReason bounds/thresholds are not where-execution literal leaves and are not part of this batch.
+
+#### 5.6.1 First-Slice Literal Set
+
+Step 0.A freezes the first atom-kind set to existing `Const` leaves in current native `where` IR:
+
+| Atom family | Included literal paths | Example | Rationale |
+|---|---|---|---|
+| `pred` | `terms[index]` only when the current term is a constant and the replacement is also a constant | `("pred", "Person:region", ["$p", "us"])` -> `"eu"` at `terms[1]` | Preserves binder/filter role;predicate variables are not replaceable in 5b. |
+| `eq` / `ne` | `lhs` or `rhs` only when that side is a current constant | `("eq", "$region", "us")` -> `"eu"` | Keeps atom kind and arity;variable-to-literal and literal-to-variable edits are rejected. |
+| `gt` / `ge` / `lt` / `le` | constant side only | `("gt", "$age", 21)` -> `18` | Current evaluator already owns int/time coercion;invalid replacement values map through native eval error handling. |
+| `in` | `values[index]` existing member only | `("in", "$region", ["us", "ca"])` member `"us"` -> `"eu"` | List length and membership shape remain unchanged;adding/removing values is not literal replace. |
+| `addc` / `mulc` | constant operand `c` only | `("addc", "$score", "$base", 5)` -> `10` | Dedicated constant operand;generic arithmetic expression editing is deferred. |
+
+Rejected from Path A first slice:
+
+- variable-to-literal or literal-to-variable edits;
+- atom kind,arity,term-list length,or `in` list-length changes;
+- `add` / `sub` / `neg` generic literal operands;
+- `not` internals;
+- `ruleref` atoms or RuleRef child rules;
+- condition weights,ProbLog probability carriers,and PyReason bounds/thresholds.
+
+The target identity remains `rule_id + version + branch_index + atom_index + literal_path`. Step 0.B must freeze the concrete `literal_path` DTO spelling,but not reopen the semantic boundary above.
+
+#### 5.6.2 Falsifiability Checklist Result
+
+| # | Verdict | Source-backed reason |
+|---|---|---|
+| 1 | Pass with hard exclusions | `where_ast.py` distinguishes `Const` leaves from rule metadata;condition weights and adapter parameters are not native `where` atoms. The v0.1.4 negative lanes remain out of scope. |
+| 2 | Pass only after narrowing | Predicate constants,comparison constants,`in` members,and `addc/mulc` constants use different validation details,but all can be expressed as existing `Const` leaf replacement plus full native re-evaluation. Generic arithmetic operands and `not` internals are rejected. |
+| 3 | Pass with variable edits rejected | `where_ast_validate.py` dataflow shows predicates and `eq` can bind variables. Path A therefore allows only current `Const -> Const`;it never changes `Var` leaves and does not need a binding planner. |
+| 4 | Pass with structural edits rejected | Current native atoms are fixed tuple/list shapes. Path A does not change atom tag,arity,term count,or list length. |
+| 5 | Pass | Batch 5a already proves original-frame atom locator invalidation can use existing `ProofFrameRecheckResult` and `affected_action_indices`. No new ProofFrame status is needed and `superseded_by_full_eval` stays rejected. |
+| 6 | Pass with lower-level primitive only | Batch 5a precedent forbids `evaluate_native_where(...)` signature drift. Path A can transform a temporary `where` body and call lower-level `evaluate_where(...)`;SDK replay substrate remains out of scope. |
+| 7 | Pass by rejection | RuleRef-bound replace is not required for the first slice. `ruleref` atoms and RuleRef-bearing artifacts are unsupported/deferred. |
+| 8 | Pass | This is not a vanity wrapper over a shipped whole-atom replace capability:there is no current whole-atom replace runtime,and the user-facing contract is narrower leaf identity plus variant rows and original-frame ProofFrame. If Step 0.B cannot preserve that distinct contract,it must fall back to Path B. |
+
+#### 5.6.3 Step 0.B Carry-Overs
+
+Step 0.B must freeze these before status can move to `scoped`:
+
+- DTO names and fields,with a separate result DTO rather than generalizing Batch 5a `RuleDisableResult`.
+- Exact `literal_path` encoding for `pred`,comparison,`in`,and `addc/mulc` constants.
+- Rule action container shape in `EvaluationOverlay.rule_actions`,including whether runtime MVP allows one replace action only.
+- Error codes for unsupported atom families,non-Const target leaves,invalid replacement values,target-not-found,and native evaluation errors.
+- Two-entrypoint compatibility:Fact Overlay and ProofFrame must continue explicit rule-action rejection;Rule Disable must reject replace actions rather than silently treating them as disable.
+- Path A primitive function name and module location. Default expectation per Batch 5a precedent:extend `kernel.core.rules.where_eval.evaluate_where(...)` with an optional literal-replacement kwarg and implement a private helper parallel to `_apply_disabled_locators(...)`;do not modify `evaluate_native_where(...)` per falsifier #6.
+- Drift gates,especially `evaluate_native_where(...)` signature stability and no SDK/service/agent diffs.
+
 ## 6. Boundaries And Invariants
 
 - Application-first:protocol + runtime start under `kernel.application/`.
@@ -154,9 +208,9 @@ If Path A ships,Step 0.B must freeze:
 
 **Step 0 acceptance:**
 
-- [ ] Step 0 records a concrete A/B/C decision with rejected reasons.
-- [ ] Step 0 answers all eight falsifiers in §5.1 with source-backed examples.
-- [ ] If Path A is selected,Step 0 freezes the first atom-kind set and literal-path constraints.
+- [x] Step 0 records a concrete A/B/C decision with rejected reasons(see §5.6).
+- [x] Step 0 answers all eight falsifiers in §5.1 with source-backed examples(see §5.6.2).
+- [x] If Path A is selected,Step 0 freezes the first atom-kind set and literal-path constraints(see §5.6.1).
 - [ ] If Path B is selected,abandonment audit records why no single crisp DTO exists.
 - [ ] If Path C is selected,the split is recorded without implementing a three-capability merge in this blueprint.
 
