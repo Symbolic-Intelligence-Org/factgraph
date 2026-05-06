@@ -1,27 +1,21 @@
 # Examples
 
-The current v0.1 demo journey is shipped as one canonical executable script
-plus a chaptered Jupyter notebook suite that imports from it. The script is
-the behavioral source of truth (the unittest in
-`src/kernel/tests/test_examples_round_story_full_demo.py` asserts on it);
-the notebooks are the readable walkthrough.
+The current v0.1 demo journey ships as a chaptered notebook suite plus a
+single canonical executable script:
 
-## Canonical script
-
-```bash
-python examples/round_story_full_demo.py
-```
-
-`round_story_full_demo.py` runs every phase end-to-end with a deterministic
-fixture and asserts on the aggregate `EXPECTED_PHASE_SUMMARY` contract. Use
-it for smoke verification or as the single source to read when you want the
-full story in one place.
+- The **notebooks** are the readable, self-contained walkthrough — each one
+  imports the real `kernel.application` / `kernel.audit` / `kernel.sdk`
+  APIs directly, builds its own fixture inline, and asserts on the result
+  of every capability call. There is no demo helper module to import; what
+  you read is what you would write.
+- The **script** is the integrated end-to-end smoke target. The unittest in
+  `src/kernel/tests/test_examples_round_story_full_demo.py` asserts on its
+  `EXPECTED_PHASE_SUMMARY` contract.
 
 ## Chaptered notebook suite
 
-Each chapter imports `round_story_full_demo` and walks one section of the
-script with prose explanations. Read them in order — later chapters reuse
-fixtures and results from earlier ones.
+Read them in order — later chapters build on the capabilities introduced in
+earlier ones, but each notebook stands on its own (no cross-notebook state).
 
 | # | Notebook | Topic |
 |---|----------|-------|
@@ -30,9 +24,19 @@ fixtures and results from earlier ones.
 | 3 | [`03_proofframe_rule_overlays.ipynb`](03_proofframe_rule_overlays.ipynb) | Batch 4 ProofFrame Rechecker + Batch 5a/b/c rule overlays |
 | 4 | [`04_round_persistence_diff.ipynb`](04_round_persistence_diff.ipynb) | Batch 6 round events + Batch 7 ProofFrame diff |
 
-Each notebook ends with an aggregate-status assertion that matches the
-smoke-test contract, so any drift in the underlying capabilities surfaces
-the same way in the notebook and in CI.
+Every code cell asserts on the structured result it produced, so any drift
+in the underlying capabilities surfaces the next time the notebook is run.
+
+## Canonical script
+
+```bash
+python examples/round_story_full_demo.py
+```
+
+`round_story_full_demo.py` runs every phase end-to-end against the same
+fixture shape as the notebooks and asserts on the aggregate
+`EXPECTED_PHASE_SUMMARY`. Use it for smoke verification, or as the single
+source to read when you want the full story in one place.
 
 ## Public-surface boundary (Batch 8)
 

@@ -23,7 +23,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-05-06
+最后更新：2026-05-07
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
@@ -209,3 +209,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-05-06 | evidence-diff | implemented | Batch 7 Evidence Diff: query-derived L4 ProofFrame diff over Batch 6 `proof_frame_result` rows,`ProofFrameDiff` / `FrameDelta` / `AtomDelta` DTOs,`AuditQuery.diff_proof_frames(...)`,partial-round and future-kind warnings,RuleRef degenerate marker,no L5 aggregation/index,no SDK/service/agent/application-runtime/ProofFrame/rule-action drift; 29 focused audit + 1288 full kernel tests OK / 1 skipped |
 | 2026-05-06 | public-surface | implemented | Batch 8 Public Surface Decision:docs/checklist-only close-out;`kernel.sdk` remains product public surface,`kernel.application` and `kernel.audit` documented as advanced importable surfaces,no SDK shell/service route/release projection expansion/package-scope change;projection script passed(261 files),README quickstarts print `Alice`,no Python code or release-branch drift |
 | 2026-05-06 | round-story-demo-refresh | implemented | Canonical current examples refresh: archived sectional root examples under `examples/archive/`,added assertion-bearing `round_story_full_demo.py` plus notebook wrapper,rewrote examples README,and replaced old demo smoke test with exact phase-summary coverage; no SDK/service/release-surface expansion |
+| 2026-05-07 | round-story-demo-suite | implemented | Chaptered notebook suite: replaced root all-in-one notebook with four self-contained inline notebooks (01 SDK+Check+Diagnose / 02 Fact Overlay+Why-not+Frontier / 03 ProofFrame+rule overlays / 04 round persistence+ProofFrame diff); each notebook imports the real `kernel.application` / `kernel.audit` / `kernel.sdk` APIs directly and asserts on every capability call; `round_story_full_demo.py` retained as smoke target; one mid-implementation reversal (shell-style → inline-style) recorded in §6 deviation; no SDK/service/release-surface expansion |
