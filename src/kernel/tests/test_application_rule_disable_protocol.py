@@ -185,6 +185,18 @@ class RuleDisableResultProtocolTests(unittest.TestCase):
                 variant_rows=[(("$p", "person:alice"),)],  # type: ignore[arg-type]
                 proof_frame=_proof_frame(),
             )
+        for bad_row in (
+            (("$p", "person:alice"), ("$p", "person:bob")),
+            (("p", "person:alice"),),
+            (("$", "person:alice"),),
+        ):
+            with self.subTest(bad_row=bad_row):
+                with self.assertRaises(ProtocolShapeError):
+                    RuleDisableResult(
+                        status="completed",
+                        variant_rows=(bad_row,),
+                        proof_frame=_proof_frame(),
+                    )
         with self.assertRaises(ProtocolShapeError):
             RuleDisableResult(
                 status="completed",

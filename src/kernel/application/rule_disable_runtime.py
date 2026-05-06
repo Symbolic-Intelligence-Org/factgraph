@@ -43,12 +43,15 @@ def check_rule_disable_action(
                 "root_result_kind": artifact.root_result_kind,
             },
         )
-    if artifact.rule_ref_edges:
+    if artifact.rule_ref_edges or artifact.rule_refs:
         return _unsupported(
             code="RULE_DISABLE_RULE_REF_UNSUPPORTED",
-            message="Rule Disable does not support rule-ref support artifacts in Batch 5a",
-            path=("support_artifact", "rule_ref_edges"),
-            details={"rule_ref_edge_count": len(artifact.rule_ref_edges)},
+            message="Rule Disable does not support RuleRef-bearing support artifacts in Batch 5a",
+            path=("support_artifact",),
+            details={
+                "rule_ref_edge_count": len(artifact.rule_ref_edges),
+                "rule_refs_count": len(artifact.rule_refs),
+            },
         )
     if _contains_ruleref_atom(request.rule_spec.where):
         return _unsupported(
@@ -116,7 +119,7 @@ def check_rule_disable_action(
             action=action,
             store=store,
         )
-    except (KeyError, RuleCompileError, WhereValidationError) as exc:
+    except (KeyError, RuleCompileError, TypeError, ValueError, WhereValidationError) as exc:
         return _invalid_request(
             code="RULE_DISABLE_NATIVE_EVAL_ERROR",
             message="Rule Disable native variant evaluation failed",

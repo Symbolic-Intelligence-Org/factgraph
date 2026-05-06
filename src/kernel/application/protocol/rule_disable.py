@@ -30,6 +30,20 @@ _RULE_DISABLE_STATUSES = ("completed", "unsupported", "invalid_request")
 def _validate_binding_items(value: Any, *, field_name: str) -> BindingItems:
     if not isinstance(value, tuple):
         raise ProtocolShapeError(f"{field_name} must be BindingItems tuple")
+
+    seen: set[str] = set()
+    for idx, item in enumerate(value):
+        if not isinstance(item, tuple) or len(item) != 2:
+            raise ProtocolShapeError(f"{field_name}[{idx}] must be tuple[str, Any]")
+        key = item[0]
+        if not isinstance(key, str) or not key:
+            raise ProtocolShapeError(f"{field_name}[{idx}][0] must be non-empty string")
+        if not key.startswith("$") or len(key) == 1:
+            raise ProtocolShapeError(f"{field_name}[{idx}][0] must be $-prefixed variable")
+        if key in seen:
+            raise ProtocolShapeError(f"{field_name} must not contain duplicate variable names")
+        seen.add(key)
+
     try:
         return normalize_binding_items(value)
     except ValueError as exc:

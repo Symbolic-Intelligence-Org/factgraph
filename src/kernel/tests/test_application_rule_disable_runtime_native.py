@@ -307,9 +307,15 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
 
         for artifact in (
             _artifact(alice, kind="souffle_witness_v1"),
+            _artifact(alice, rule_refs=("child.rule",)),
             _artifact(alice, rule_ref_edges=(edge,)),
+            _artifact(alice, rule_refs=("child.rule",), rule_ref_edges=(edge,)),
         ):
-            with self.subTest(kind=artifact.kind, edges=len(artifact.rule_ref_edges)):
+            with self.subTest(
+                kind=artifact.kind,
+                refs=len(artifact.rule_refs),
+                edges=len(artifact.rule_ref_edges),
+            ):
                 result = check_rule_disable_action(
                     _request(
                         _rule_spec(index),
@@ -341,6 +347,34 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
 
         self.assertEqual(result.status, "invalid_request")
         self.assertEqual(result.errors[0].code, "RULE_DISABLE_NATIVE_EVAL_ERROR")
+
+    def test_native_eval_type_error_maps_to_invalid_request(self) -> None:
+        store, index = _build_store()
+        alice = _seed_person(store, index, name="alice")
+        _seed_person(store, index, name="bob", age=30, region="eu")
+        rule_spec = _rule_spec(
+            index,
+            where=[
+                [
+                    ("pred", alice.age_pred_id, ["$p", "$x"]),
+                    ("eq", "$p", "unused-person"),
+                ],
+                [("pred", alice.region_pred_id, ["$p", "$x"])],
+            ],
+        )
+
+        result = check_rule_disable_action(
+            _request(
+                rule_spec,
+                _artifact(alice),
+                EvaluationOverlay(rule_actions=(_action(atom_index=1),)),
+            ),
+            store=store,
+        )
+
+        self.assertEqual(result.status, "invalid_request")
+        self.assertEqual(result.errors[0].code, "RULE_DISABLE_NATIVE_EVAL_ERROR")
+        self.assertEqual(result.errors[0].details["exception"], "TypeError")
 
     def test_no_write_invariant(self) -> None:
         store, index = _build_store()
