@@ -21,3 +21,11 @@
 ### 2026-05-06 — Pre-commit Review Pass 1
 
 Review accepted the falsifiability-first framing and requested three P3 polish edits before draft commit:Path C was sharpened so it only means split into child blueprint(s),not an alternate spelling of Path A;falsifier #5 now cross-references the parent-plan ProofFrame conflict in §5.6;and inserted-locator identity options now list their hidden trade-offs so Step 0.B cannot treat them as equivalent.
+
+### 2026-05-06 — Step 0.A Spike Completed
+
+Step 0.A selected Path A only as a **narrow add-filter first slice**. The full master-plan phrase "Add Condition + Binding Planner" was treated as a false-merge risk and reduced:Batch 5c may add one top-level native filter atom that references only variables already bound earlier in the branch;any new-variable introduction,`pred` atom binder,`eq` binder,arithmetic binder,`not`,RuleRef,or multi-action ordering is deferred/rejected. The binding-planner contract for this slice is a deterministic preflight("does not bind new variables"),not a shipped planner capability. Step 0.A also rejected `superseded_by_full_eval` revival and kept the Batch 4/5a/5b dual-output discipline:variant rows carry universe shift;ProofFrame explains the old frame only.
+
+### 2026-05-06 — Step 0.A Pre-commit Review
+
+Review accepted the Step 0.A reduction and requested three P3 carry-over refinements before commit:inserted identity and ProofFrame mapping are now a single coupled Step 0.B decision;Step 0.B must decide whether a narrow `where_ast_validate.py` binding-effect primitive is needed;and the lower-level primitive default now mirrors Batch 5a/5b explicitly(`evaluate_where(..., added_conditions=frozenset())` + private `_apply_added_conditions(...)`,with `evaluate_native_where(...)` unchanged).

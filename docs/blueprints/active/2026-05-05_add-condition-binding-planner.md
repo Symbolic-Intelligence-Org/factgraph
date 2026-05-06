@@ -182,6 +182,73 @@ Step 0 must choose one:
 
 Default expectation:do **not** revive `superseded_by_full_eval`.
 
+### 5.7 Step 0.A Outcome — Narrow Path A With Binding Planner Deferred
+
+**Decision:** Path A passes only as a narrow native `RuleAddConditionAction` first slice:insert one new top-level filter atom into one existing branch,where the new atom references only variables already bound earlier in that branch plus constants. A real new-variable binding planner does **not** ship in Batch 5c.
+
+This is a scoped reduction of the master-plan phrase "Add Condition + Binding Planner". The full phrase is a false-merge risk:adding an already-bound filter atom is an execution-time rule action,while planning new-variable introductions is a separate design surface with different inputs,outputs,and failure modes. Batch 5c can still ship a useful add-filter action because the planner contract collapses to a deterministic preflight:the inserted atom must not bind any new variables.
+
+#### 5.7.1 First-Slice Atom Set
+
+Path A freezes the first slice to one inserted atom in the current native where IR:
+
+| Atom family | Included shape | Example | Reason |
+|---|---|---|---|
+| `ne` / `gt` / `ge` / `lt` / `le` | both variable operands already bound earlier,or variable + constant with the variable already bound | add `("lt", "$age", 65)` after `Person:age($p, $age)` | Pure filter;`where_ast_validate.py` already requires these vars to be bound. |
+| `in` | first arg is already-bound variable;values are non-empty constants | add `("in", "$region", ["us", "ca"])` after `$region` is bound | Pure membership filter;does not bind. |
+| `eq` | both sides already resolved;not used to bind an unbound variable | add `("eq", "$region", "us")` after `$region` is bound | Filter equality only;the existing validator can detect binder use when one side is unbound. |
+
+Rejected from the first slice:
+
+- `pred` atoms,because they can bind new variables and require predicate arity/type planning;
+- `eq` used as binder;
+- `add`, `sub`, `neg`, `addc`, `mulc`,because their output position binds a variable under current dataflow rules;
+- `not` internals;
+- `ruleref` atoms and RuleRef-bearing artifacts;
+- inserted atoms that introduce any variable not bound earlier in the selected branch;
+- cross-branch insertion or branch-template insertion;
+- multi-action ordering with disable / literal replace.
+
+#### 5.7.2 Falsifiability Checklist Result
+
+| # | Verdict | Source-grounded reason |
+|---|---|---|
+| 1 | **Pass only after scope reduction** | Full "add condition + binding planner" is not one capability. The narrow add-filter action has a crisp DTO;new-variable planning is deferred as a separate future capability. |
+| 2 | **Pass by rejection** | Current useful examples can be filters over already-bound vars(`lt`, `in`, resolved `eq`). Any example that needs a new variable triggers binding-planner deferral. |
+| 3 | **Pass with inserted-locator freeze deferred to Step 0.B** | Existing locators stay stable if the inserted atom gets a synthetic/action-based identity instead of renumbering downstream `b{branch}.a{atom}` keys. Step 0.B must choose the concrete identity. |
+| 4 | **Pass** | Included atom families are represented by current `where_ast.py` and validated by current `where_ast_validate.py`;runtime can extend lower-level `evaluate_where(...)` without changing `evaluate_native_where(...)`. |
+| 5 | **Pass with parent-plan line rejected** | Universe shift is represented by `variant_rows`;original-frame ProofFrame remains the Batch 4 three-status result. `superseded_by_full_eval` stays collapsed unless the parent plan is amended later. |
+| 6 | **Pass with cross-runtime guard requirement** | Batch 5a/5b already established explicit owner runtimes. Adding a third rule action requires Rule Disable and Rule Literal Replace to reject non-owned rule actions before field access. |
+| 7 | **Pass by rejection** | `not` and RuleRef are not needed for the first filter examples and remain unsupported/deferred. |
+| 8 | **Pass** | Adding `("lt", "$age", 65)` is not equivalent to disabling or literal-replacing an existing atom;it creates a new conjunct and a new variant-row universe while preserving old atoms. |
+| 9 | **Pass by branch-local restriction** | The action targets one existing branch. It does not define branch templates or cross-branch variable planning. |
+| 10 | **Pass by MVP restriction** | Single-action runtime remains sufficient for the first slice. Multi-action ordering stays deferred. |
+
+#### 5.7.3 Parent-Plan Conflict Resolution
+
+Step 0.A chooses the first §5.6 option:keep Batch 4/5a/5b dual-output discipline. Batch 5c does not revive `superseded_by_full_eval`.
+
+- `variant_rows` show whether the inserted filter changes the result universe.
+- original-frame ProofFrame explains only the old support artifact.
+- if the old binding fails the new filter,ProofFrame can mark the inserted synthetic/action atom as `invalidated` or otherwise report frame-level invalidation according to the Step 0.B identity choice.
+- if Step 0.B cannot define an honest ProofFrame mapping for an atom absent from the old artifact,it must fall back to Path B or reduce output to variant rows plus warning before scope freeze.
+
+#### 5.7.4 Step 0.B Carry-Overs
+
+Step 0.B must freeze these before status can move to `scoped`:
+
+- DTO names and fields,with a separate result DTO rather than generalizing Batch 5a/5b result DTOs.
+- Add-atom payload encoding:raw native atom tuple vs structured `RuleAddedAtom` DTO.
+- Exact allowed atom families and runtime preflight codes for unbound variables,unsupported atom kinds,RuleRef,`not`,and malformed atom shape.
+- **Coupled decision(must be resolved together):**
+  - inserted identity scheme:synthetic locator vs insertion-position contract vs action-index-only identity;
+  - original-frame ProofFrame mapping for an inserted atom that was absent from the old artifact,derived from the chosen identity scheme.
+- One-action MVP and cross-runtime action-type guards for Rule Disable and Rule Literal Replace.
+- Whether `where_ast_validate.py` needs a narrow primitive for "does this atom bind variables outside the current bound set?" or whether the runtime can rely on existing validation internals;no SDK surface may expose this.
+- Lower-level primitive location:default expectation per Batch 5a/5b precedent is `kernel.core.rules.where_eval.evaluate_where(..., added_conditions=frozenset())` plus private helper `_apply_added_conditions(...)` parallel to `_apply_disabled_locators(...)` and `_apply_literal_replacements(...)`;`evaluate_native_where(...)` remains unchanged.
+- Whether Path A output includes warnings documenting that new-variable binding planner is deferred.
+- Drift gates for SDK/service/agent,RuleRef substrate,ProofFrame protocol,`evaluate_native_where(...)`,and generic Fact Overlay / ProofFrame rule-action rejection.
+
 ## 6. Boundaries And Invariants
 
 - Application-first:all public task DTOs start in `kernel.application.protocol`;runtime starts in `kernel.application`.
