@@ -93,8 +93,31 @@ The following are not separate durable package files today. They are derived by 
 - provenance coverage summary
 - authoring apply run summary/detail
 - round summary and round event query results
+- ProofFrame diff over finalized `proof_frame_result` rows
 
 This distinction matters for compatibility: old packages can still load when optional durable files are absent, but derived surfaces may return empty results or raise a query/DTO error if their required source carrier is unavailable.
+
+### 4.1 ProofFrame Diff
+
+`AuditQuery.diff_proof_frames(round_a, round_b, include_partial=False, include_unchanged=False)` is a query-derived surface over `round_events`.
+
+It does not add a new package file. It consumes only `proof_frame_result` events:
+
+| Carrier | Field used |
+|---|---|
+| Frame identity | `payload.request.support_digest` + `payload.result.binding_items` |
+| Frame status | `payload.result.status` |
+| Atom identity | `payload.result.atom_verdicts[].atom_key` |
+| Atom verdict | `payload.result.atom_verdicts[].verdict` |
+
+Important boundaries:
+
+- `affected_action_indices` are intentionally not compared across rounds.
+- Only the same `support_digest` is compared at atom level; atom keys from different support artifacts are separate frames.
+- `future:proof_frame_result` rows are skipped with `DIFF_FUTURE_KIND_SKIPPED`.
+- partial rounds are rejected by default; `include_partial=True` emits `DIFF_INCLUDES_PARTIAL_ROUND`.
+- frames with empty `atom_verdicts` are marked `rule_refs_unsupported` and do not produce per-atom deltas.
+- L5 cross-run aggregation by module is deferred and has no durable index in this slice.
 
 ## 5. Domain-Specific Compliance
 

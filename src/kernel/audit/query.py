@@ -23,7 +23,9 @@ from .assertions import AuditAssertionReadError, load_assertion_index
 # domains.ecss.compliance during the namespace split. Imported lazily inside
 # list_compliance_matrix to keep kernel free of an import-time dependency on domains.
 from .reader import AuditPackageData
+from .proof_frame_diff import ProofFrameDiff, ProofFrameDiffError, build_proof_frame_diff
 from .round_events import RoundEvent, RoundSummary, summarize_round_events
+from .round_events import make_warning
 
 
 class AuditQueryError(Exception):
@@ -558,11 +560,80 @@ class AuditQuery:
     def list_round_event_warnings(self) -> tuple[Any, ...]:
         return tuple(self.package.round_event_warnings)
 
+    def diff_proof_frames(
+        self,
+        round_a: str,
+        round_b: str,
+        *,
+        include_partial: bool = False,
+        include_unchanged: bool = False,
+    ) -> ProofFrameDiff:
+        if not isinstance(round_a, str) or not round_a:
+            raise AuditQueryError("round_a must be non-empty string")
+        if not isinstance(round_b, str) or not round_b:
+            raise AuditQueryError("round_b must be non-empty string")
+        if not isinstance(include_partial, bool):
+            raise AuditQueryError("include_partial must be bool")
+        if not isinstance(include_unchanged, bool):
+            raise AuditQueryError("include_unchanged must be bool")
+
+        events_a, warnings_a = self._round_events_for_proof_frame_diff(
+            round_a,
+            include_partial=include_partial,
+        )
+        events_b, warnings_b = self._round_events_for_proof_frame_diff(
+            round_b,
+            include_partial=include_partial,
+        )
+        try:
+            return build_proof_frame_diff(
+                round_a_id=round_a,
+                round_b_id=round_b,
+                round_a_events=events_a,
+                round_b_events=events_b,
+                warnings=warnings_a + warnings_b,
+                include_unchanged=include_unchanged,
+            )
+        except ProofFrameDiffError as exc:
+            raise AuditQueryError(str(exc)) from exc
+
     def _get_support_artifact(self, support_digest: str) -> dict[str, Any] | None:
         for row in self.package.support_artifacts:
             if row.get("support_digest") == support_digest:
                 return dict(row)
         return None
+
+    def _round_events_for_proof_frame_diff(
+        self,
+        round_id: str,
+        *,
+        include_partial: bool,
+    ) -> tuple[tuple[RoundEvent, ...], tuple[Any, ...]]:
+        events = self.list_round_events(round_id)
+        if not events:
+            raise AuditQueryError(f"round {round_id} not found")
+        summary = summarize_round_events(round_id, events)
+        warnings: list[Any] = []
+        if not summary.is_finalized:
+            if not include_partial:
+                raise AuditQueryError(f"round {round_id} is not finalized")
+            warnings.append(
+                make_warning(
+                    code="DIFF_INCLUDES_PARTIAL_ROUND",
+                    message=f"diff includes partial round: {round_id}",
+                    details={"round_id": round_id},
+                )
+            )
+        future_count = sum(1 for event in events if event.kind == "future:proof_frame_result")
+        if future_count:
+            warnings.append(
+                make_warning(
+                    code="DIFF_FUTURE_KIND_SKIPPED",
+                    message=f"skipped future ProofFrame rows in round: {round_id}",
+                    details={"round_id": round_id, "skipped_count": future_count},
+                )
+            )
+        return events, tuple(warnings)
 
     @staticmethod
     def _row_has_run_id(row: dict[str, Any], run_id: str) -> bool:

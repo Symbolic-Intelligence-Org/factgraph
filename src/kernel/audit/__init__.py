@@ -42,6 +42,15 @@ from .dto import (
     build_run_list_dto,
 )
 from .query import AuditOptionalDomainError, AuditQuery, AuditQueryError
+from .proof_frame_diff import (
+    AtomDelta,
+    EventReference,
+    FrameDelta,
+    FrameIdentity,
+    FrameStatusChange,
+    ProofFrameDiff,
+    ProofFrameDiffError,
+)
 from .reader import AuditPackageData, AuditReadError, load_audit_package
 from .round_events import (
     ROUND_EVENT_KINDS,
@@ -111,6 +120,13 @@ __all__ = [
     "AuditQuery",
     "AuditQueryError",
     "AuditOptionalDomainError",
+    "AtomDelta",
+    "EventReference",
+    "FrameDelta",
+    "FrameIdentity",
+    "FrameStatusChange",
+    "ProofFrameDiff",
+    "ProofFrameDiffError",
     "AuditDTOError",
     "build_authoring_apply_run_list_dto",
     "build_authoring_apply_run_detail_dto",

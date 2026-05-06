@@ -1,6 +1,6 @@
 # Evidence Diff / Cross-Run(Batch 7 of Round Story Completion Plan)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Related Modules:
@@ -400,19 +400,19 @@ Step 0.B satisfies §7 row 2("Step 0.B freezes diff and aggregation shape before
 
 ## 7. Acceptance
 
-- [ ] Step 0.A records all 16 falsifiers with source-grounded answers.
-- [ ] Step 0.B freezes diff and aggregation shape before status moves to `scoped`.
-- [ ] Implementation, if any, ships only after `Status: scoped`.
-- [ ] Per-frame diff tests cover unchanged, status-changed, atom-verdict-changed, missing-frame, and partial-round behavior selected by Step 0.B.
-- [ ] Cross-run aggregation tests cover selected grouping key and unknown/future event handling.
-- [ ] Old audit packages without `round_events.jsonl` keep existing query behavior.
-- [ ] Existing `AuditQuery` methods remain unchanged.
-- [ ] No SDK/service/agent diffs.
-- [ ] No application runtime imports from `kernel.audit`.
-- [ ] No ProofFrame/rule-action protocol drift.
-- [ ] No Batch 6 event-family expansion unless Step 0 explicitly scopes it.
-- [ ] Module docs updated after implementation.
-- [ ] Blueprint Outcome/Deviations completed and archived after implementation or suspension.
+- [x] Step 0.A records all 16 falsifiers with source-grounded answers.
+- [x] Step 0.B freezes diff and aggregation shape before status moves to `scoped`.
+- [x] Implementation, if any, ships only after `Status: scoped`.
+- [x] Per-frame diff tests cover unchanged, status-changed, atom-verdict-changed, missing-frame, and partial-round behavior selected by Step 0.B.
+- [x] Cross-run aggregation remains deferred per §5.5.3 #11; future-kind skip behavior is tested for the L4 first slice.
+- [x] Old audit packages without `round_events.jsonl` keep existing query behavior.
+- [x] Existing `AuditQuery` methods remain unchanged.
+- [x] No SDK/service/agent diffs.
+- [x] No application runtime imports from `kernel.audit`.
+- [x] No ProofFrame/rule-action protocol drift.
+- [x] No Batch 6 event-family expansion unless Step 0 explicitly scopes it.
+- [x] Module docs updated after implementation.
+- [x] Blueprint Outcome/Deviations completed and archived after implementation or suspension.
 
 ## 8. Implementation Plan
 
@@ -434,9 +434,24 @@ Step 0.B satisfies §7 row 2("Step 0.B freezes diff and aggregation shape before
 
 ## 10. Outcome / Deviations
 
-To be completed after implementation or suspension:
-
-- Final result:
+- Final result: implemented Batch 7 L4 ProofFrame diff as a read-only audit query surface over Batch 6 `round_events`.
+- Shipped scope:
+  - new `src/kernel/audit/proof_frame_diff.py` DTO/diff module with `ProofFrameDiff`, `FrameDelta`, `FrameIdentity`, `EventReference`, `FrameStatusChange`, and `AtomDelta`;
+  - `AuditQuery.diff_proof_frames(round_a, round_b, include_partial=False, include_unchanged=False)`;
+  - deterministic frame identity via `(support_digest, binding_items JSON)` and atom identity via `atom_key` scoped by the same `support_digest`;
+  - RuleRef / unsupported-equivalent marker `rule_refs_unsupported`;
+  - future-kind and partial-round warnings;
+  - `examples/12_evidence_diff_demo.py`;
+  - audit module docs updated.
 - Deviations from scoped blueprint:
+  - none.
+  - L5 cross-run aggregation remains deferred per §5.5.3 #11; no durable aggregation index was added.
 - Verification:
+  - `python -m unittest src.kernel.tests.test_audit_proof_frame_diff src.kernel.tests.test_audit_round_events src.kernel.tests.test_provenance_timeline_audit_delivery src.kernel.tests.test_evidence_graph_audit_delivery src.kernel.tests.test_audit_optional_domains`
+  - `python -m unittest discover -s src/kernel/tests -p "test_*.py"` → 1288 OK / 1 skipped
+  - `python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py examples/12_evidence_diff_demo.py`
+  - `git diff --check`
+  - static guard: no `kernel.audit` import from application runtimes; no SDK/service/agent/ProofFrame/rule-action/ArtifactSidecar drift.
 - Archive notes:
+  - L5 aggregation reactivation requires a fresh blueprint proving a durable module-mapping mechanism or explicit per-kind grouping keys.
+  - Batch 4 ProofFrame `rule_refs` symmetric hardening remains separately tracked and was not bundled into Batch 7.

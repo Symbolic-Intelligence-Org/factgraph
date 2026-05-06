@@ -105,9 +105,10 @@
    - `list_authoring_apply_events(...)`
    - `list_rounds()`
    - `list_round_events(round_id, kind=None)`
-   - `get_round_event(round_id, sequence)`
-   - `get_round_summary(round_id)`
-   - `list_round_event_warnings()`
+  - `get_round_event(round_id, sequence)`
+  - `get_round_summary(round_id)`
+  - `list_round_event_warnings()`
+  - `diff_proof_frames(round_a, round_b, include_partial=False, include_unchanged=False)`
 
 ### 3.3 Round Event Log
 
@@ -133,7 +134,27 @@ Reader 对 `round_events.jsonl` 使用 lenient 解析：
 - unknown future kind：保留 raw payload，不 warning
 - missing `round_finalized`：`RoundSummary.is_finalized=False`
 
-### 3.4 Requirement / Compliance Matrix
+### 3.4 ProofFrame Diff
+
+Batch 7 在 audit 查询层新增只读 `ProofFrame` diff：
+
+- 输入：两个显式 round id
+- 数据源：Batch 6 `proof_frame_result` rows
+- frame identity：`request.support_digest + result.binding_items`
+- atom identity：同一 `support_digest` 内的 `atom_key`
+- 输出：`ProofFrameDiff` / `FrameDelta` / `AtomDelta` dataclasses
+
+默认行为：
+
+- 只比较 finalized rounds；partial round 会抛 `AuditQueryError`
+- `include_partial=True` 时允许 partial round，并返回 `DIFF_INCLUDES_PARTIAL_ROUND` warning
+- `future:proof_frame_result` rows 会跳过，并返回 `DIFF_FUTURE_KIND_SKIPPED` warning
+- unchanged frames 默认省略；`include_unchanged=True` 时包含
+- RuleRef / unsupported-equivalent ProofFrame(`atom_verdicts=[]`)会标记 `rule_refs_unsupported`，不生成 per-atom delta
+
+此 diff 不持久化新的 index，不重跑 capability，不比较跨 round 的 `affected_action_indices`，也不实现 Batch 7 L5 cross-run module aggregation。
+
+### 3.5 Requirement / Compliance Matrix
 
 当 audit package 中包含 requirement-scoped assertions 时，`AuditQuery` 提供离线 ECSS VCD / compliance matrix 查询入口。row assembly 语义由 `domains.ecss.compliance` 拥有，`audit` 侧只负责加载 package、构建 assertion index，并通过 lazy import 暴露 query convenience。
 
@@ -151,7 +172,7 @@ Reader 对 `round_events.jsonl` 使用 lenient 解析：
    - `build_compliance_matrix_dto(...)`
 4. query 实现会下探到 package 内已有的 assertion/fact 文件，而不是只消费 JSONL audit ledgers
 
-### 3.5 静态审计页面（service owner）
+### 3.6 静态审计页面（service owner）
 
 1. 准备 `AuditPackageData`
 2. 调用 `service.static_ui.render_audit_static_site(package_dir, out_dir)`
