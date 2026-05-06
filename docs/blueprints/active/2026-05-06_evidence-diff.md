@@ -147,6 +147,83 @@ If Step 0.A selects Path A or a narrowed Path C, Step 0.B must freeze:
 - whether Batch 7 adds any durable index file or remains purely query-derived;
 - test/demo artifact scope.
 
+### 5.5 Step 0.A Spike (synthesized 2026-05-06)
+
+This spike answers §5.1 with source-grounded evidence and chooses among §5.2 paths. Evidence sources:`src/kernel/audit/round_events.py`(post-hardening @ `95f0d14`),`src/kernel/audit/query.py`,`src/kernel/application/protocol/proofframe.py`,Batch 4 archived blueprint `2026-05-05_proofframe-rechecker.md`,and Batch 6 archived blueprint `2026-05-05_round-persistence.md`.
+
+#### 5.5.1 Falsifier Verdicts
+
+| # | Verdict | Source-grounded reason | Implication |
+|---|---|---|---|
+| 1 | FALSE | `proof_frame_result.payload.request.support_digest` is computed from the `SupportArtifact`(`round_events.py:393-400`),and `result.binding_items` is projected via `project_binding_items`(`round_events.py:401-405`)to a sorted JSON array of `[name, JsonValue]` pairs. Together they identify a proof frame without storing raw `SupportArtifact`. | Frame identity for cross-round pairing = `(support_digest, binding_items JSON)`. No new event-schema field needed. |
+| 2 | FALSE | `_opaque_digest`(`round_events.py:579-580`)recurses via `_stable_digest_projection`(`round_events.py:583-603`)to produce canonical JSON with sorted keys;`project_json_value` is byte-stable for JSON primitives and digest-stable for non-primitives. Equality is reliable within the `(support_digest, binding_items)` frame identity. | No explicit frame-key field is needed;Step 0.B can derive a digest from `(support_digest, binding_items JSON)` if it wants a compact key. |
+| 3 | FALSE | `atom_key: str` is non-empty validated(`proofframe.py:103`). Support keys are generated from branch/atom position and kind/predicate(`make_pred_atom_key` / `make_non_fact_step_key` in `_support.py:201-225`),and support capture builders use those helpers(`rule_ir.py:411-447`). They are stable inside the same `SupportArtifact`;`support_digest` is the persisted artifact identity. | Step 0.B must scope per-atom diff to matching `support_digest`;cross-artifact atom-key comparison is out of first-slice scope. |
+| 4 | TRUE | `affected_action_indices: tuple[int, ...]`(`proofframe.py:100`)references positions in the per-event `EvaluationOverlay.actions` tuple. Index 0 in round A's overlay is not the same logical action as index 0 in round B's overlay. | Diff compares verdicts only;`affected_action_indices` are NOT comparable across rounds. Step 0.B carry-over: surface them per-event but exclude from cross-round delta. |
+| 5 | TRUE | Per-event payload field surveys(`round_events.py:264-391`):`check_result` carries `plan_digest + binding + engine`;`proof_frame_result` carries `support_digest + overlay_digest + binding_items + atom_verdicts`. NO field exposes `module_id` or any module-level identity. `plan_digest` exists for some non-ProofFrame kinds,while ProofFrame's closest identity is `support_digest`;neither is a module identity. Per Batch 6 Step 0.A #12 carry-over,this is "Batch 7's responsibility — if needed key not derivable,Batch 7 adds mapping/index". | L5 cross-run aggregation cannot use `module_id`. Options:(a)per-kind aggregation by existing event-specific identity,(b)suspend L5,(c)defer L5 with module-mapping reactivation trigger. Selected (c) — defer L5 from first slice. |
+| 6 | TRUE | Persisted payload shapes vary per kind. Common fields:`plan_digest + binding`(4 of 5: check / diagnose / fact_overlay / why_not). `proof_frame_result` has NO `plan_digest`;identity is `support_digest + overlay_digest + binding_items + atom_verdicts`. No common grouping key across all 5 kinds. | L5 aggregation cannot be one-grouping-key-fits-all. Combined with #5,reinforces L5 deferral from first slice. |
+| 7 | FALSE | Frontier event family is projection-only(no verdict);rule-action event families carry `variant_rows + nested ProofFrame`. Neither is necessary for L4 per-frame ProofFrame diff over `proof_frame_result` rows. Some L5 aggregation use cases would need them,but L5 is deferred. | L4 first slice can ship without deferred Batch 6 §5.5.4 families. Document deferral with reactivation trigger. |
+| 8 | TRUE(borderline) | Per the §5.1 #8 test condition:diff DTO(input: 2 frame identities;output: per-atom delta)and aggregation DTO(input: N rounds + group key;output: counts per group)share only generic round/event identity plus possibly event-specific payload keys(`support_digest` for ProofFrame,`plan_digest` for some non-ProofFrame kinds);output fields are mostly disjoint(per-atom delta lists vs group counts). Combined with #5/#6 L5 blockers,split is preferred. | First slice = L4 only(NARROWED Path A,not full Path C). L5 deferred without opening a parallel child blueprint;same precedent as Batch 6 §5.5.4 Frontier/rule-action deferrals. If Step 0.B finds the L4 DTO must carry aggregation-shaped fields,escalate to Path C. |
+| 9 | FALSE | Aggregation index is a derived view over raw rows. No correctness-only use case;index would be a performance optimization. | No durable index in Batch 7. Aligns with Batch 6 Step 0.A #12 carry-over. |
+| 10 | FALSE | Audit packages typically carry thousands of events,not millions. Linear scan over `AuditPackageData.round_events`(in-memory tuple)is acceptable. No measured performance issue. | Query-derived. Performance index is post-Batch-7 follow-up if measured need emerges. |
+| 11 | FALSE | `proof_frame_result.payload.result.atom_verdicts`(`round_events.py:382-388`)carries `atom_key + verdict + affected_action_indices`. Per-atom verdict-change diff and frame-level status diff both compute purely from these projected fields;no raw `SupportArtifact` access required. | Diff scope = persisted ProofFrame projections only. No `SupportArtifact` lookup;no proof-tree-internals access. |
+| 12 | TRUE | `RoundSummary.is_finalized` is True iff a `round_finalized` event is present(`round_events.py:summarize_round_events`,line 449-481). Partial rounds may be in-flight or crashed;atom_verdicts in such rounds are non-final. Cross-round diff between partial rounds risks comparing transient state. | Step 0.B default policy:require `is_finalized == True` on both rounds;opt-in flag to include partial rounds with explicit warning. |
+| 13 | FALSE | `round_event_from_row`(post-hardening at `round_events.py:240-256`)downgrades `schema_version >= "2.0"` rows to `future:{kind}` namespace. Aggregation that filters by kind naturally skips them. | Diff filters by `kind == "proof_frame_result"` and skips `future:proof_frame_result`. Skipped count surfaced via Step 0.B-defined query method. |
+| 14 | FALSE | Batch 7 capability is read-only over audit packages. Demo can be a notebook(e.g. `examples/12_evidence_diff_demo.ipynb`)or Python script reading a sample audit package and invoking new `AuditQuery.diff_proof_frames(...)`. No SDK route or service endpoint needed. | Demo as kernel-level notebook fixture. Same pattern as `examples/11_capabilities_e2e_demo.ipynb`(which still has the deferred Batch 4-6 demo gap). |
+| 15 | FALSE | RuleRef-bearing artifacts produce `ProofFrameRecheckResult(status="unknown", atom_verdicts=())` per Batch 4 archive §11 Outcome(`status="unknown"` + empty `atom_verdicts`). Diff over such frames:status `unknown → unknown` or unknown → still_valid at frame level;empty `atom_verdicts` on both sides → degenerate per-atom diff with 0 atoms. Frame-level diff still works;per-atom diff is degenerate(not wrong). | Reject path:per-atom diff for RuleRef-bearing frames returns empty atom delta with explicit `rule_refs_unsupported` marker. Frame-level status diff still emits. Don't bundle Batch 4 hardening into Batch 7. |
+| 16 | FALSE | Concrete consumers of L4 diff:(a)regression detection("did the latest rule edit invalidate previously-passing bindings?"),(b)audit / forensics("did this overlay action change proof X?"),(c)Batch 8 SDK consumer("before / after comparison view"). Without L4 diff,users compare narratives manually OR pull raw events and diff in user code. L4 diff reduces user effort and provides typed structured output. | L4 diff is foundation;Batch 8 may build user-facing wrapper. Not a vanity wrapper of Batch 4 narrative;real reduction in user effort. |
+
+#### 5.5.2 Path Selection: Path A (narrowed first slice = L4 per-frame ProofFrame diff only)
+
+Selected **Path A with first slice narrowed to L4 per-frame ProofFrame diff over `proof_frame_result` events**. L5 cross-run aggregation deferred from first slice.
+
+Rationale tied to falsifier verdicts:
+- L4 feasibility:#1 / #2 / #3 FALSE(frame identity stable via `(support_digest, binding_items)`;atom_key stable within the same `support_digest`),#11 FALSE(atom_verdicts sufficient),#15 FALSE(RuleRef degenerate but not blocking),#16 FALSE(real consumer value).
+- L5 blockers:#5 TRUE(no `module_id` derivable),#6 TRUE(kinds don't share grouping key),#8 TRUE-borderline(DTO shapes mostly disjoint).
+- Path B(full suspend)not justified — L4 itself is shippable with clear consumer value(#16 FALSE).
+- Path C(full split into two simultaneous child blueprints)is heavier ceremony than necessary because this blueprint now ships only the L4 side. L5 is not partially implemented;it is deferred with explicit reactivation triggers,matching Batch 6 §5.5.4 precedent(Frontier + rule-action event families deferred at first slice). If Step 0.B forces L4 DTOs to carry L5-shaped fields,Path C becomes mandatory.
+
+Path A constraints that must hold throughout implementation:
+- L4 per-frame ProofFrame diff is the ONLY first-slice capability;L5 explicitly deferred per §5.5.3 #11.
+- Read-only over `AuditPackageData.round_events`;no new durable files;no schema rewrite.
+- AuditQuery extension via new methods on round-event namespace;existing methods byte-stable.
+- No application runtime imports `kernel.audit`(per Batch 6 Step 0.A #13 boundary).
+- Diff scope = same `support_digest` only(per #3 caveat);no cross-artifact atom-key comparison in first slice.
+- Partial rounds rejected by default with opt-in flag(per #12).
+
+Path A kill criteria(revisit Path C if any fire during Step 0.B):
+- DTO design surfaces additional disjoint output fields beyond per-atom delta + frame status delta — would push toward formal Path C split.
+- Per-atom diff for RuleRef-bearing frames cannot be made non-misleading even with the `rule_refs_unsupported` marker — would narrow further or escalate.
+- Diff implementation would need to import any `kernel.application` runtime module — would violate Batch 6 Step 0.A #13 boundary.
+
+#### 5.5.3 Constraints Frozen for Step 0.B
+
+These Step 0.A decisions are now FROZEN inputs to Step 0.B and must not be relitigated:
+
+1. Path A first slice = L4 per-frame ProofFrame diff over `proof_frame_result` events;no L5 in first slice.
+2. Frame identity = `(support_digest, binding_items JSON)` where `binding_items` uses `project_binding_items` byte-equality.
+3. Atom diff identity = `atom_key` scoped by same `support_digest`.
+4. Diff scope = same `support_digest` only;no cross-artifact atom-key comparison in first slice.
+5. Action indices NOT compared across rounds(only verdicts);per #4 TRUE.
+6. Diff input cardinality = bilateral(`A vs B`);no multi-variant baseline in first slice.
+7. Partial rounds rejected by default(`is_finalized == True` required on both rounds);opt-in flag with explicit warning to include partial.
+8. RuleRef-bearing frames → degenerate per-atom diff with explicit `rule_refs_unsupported` marker;frame-level status diff still emits.
+9. Read-only over `AuditPackageData.round_events`;no durable index file;no Batch 6 schema amendment.
+10. AuditQuery extension via new `diff_*` methods on round-event namespace;existing methods byte-stable.
+11. L5 cross-run aggregation deferred. Reactivation requires a fresh blueprint that proves one of two concrete inputs:(a)a module-level consumer plus a durable module-mapping mechanism,or (b)a per-kind aggregation first slice with explicit grouping keys for every included event kind. Vague "module_id later" language is not enough.
+
+Step 0.B remaining decisions(per §5.4 carry-overs not yet frozen by Step 0.A):
+- Diff DTO field-by-field shape(frame delta + per-atom delta lists + per-frame metadata).
+- Diff status vocabulary(e.g. `frame_status_changed` / `atom_added` / `atom_removed` / `atom_verdict_changed` / `unchanged`).
+- Empty / degenerate handling:frames missing in one round(added vs removed),frames with empty `atom_verdicts`(RuleRef + ProofFrame `unsupported`-equivalent both produce empty).
+- AuditQuery method signatures(single `diff_proof_frames(round_a, round_b, ...)` vs split methods per cardinality).
+- Test / drift gates list(round-trip equality,partial-round rejection,AuditQuery byte-stability,application-runtime no-`kernel.audit` import,RuleRef degenerate handling,unknown-kind skip).
+- Demo artifact scope(notebook fixture vs Python script).
+- L5 reactivation documentation location(carry to anchor `project_round_story_completion_plan_scoped.md` deferred section,or new follow-up anchor file).
+
+#### 5.5.4 Acceptance §7 Update
+
+Step 0.A satisfies §7 row 1("Step 0.A records all 16 falsifiers with source-grounded answers"). Status remains `draft` in this commit;a separate scope-freeze commit transitions to `scoped` after Step 0.B completes.
+
 ## 6. Boundaries And Invariants
 
 - Batch 7 is read-only over audit packages.
