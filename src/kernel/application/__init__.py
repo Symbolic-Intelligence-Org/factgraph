@@ -42,6 +42,7 @@ from .query_runtime import (
     QueryRuntimeError,
     execute_query,
 )
+from .rule_disable_runtime import check_rule_disable_action
 from .proofframe_runtime import (
     recheck_proof_frame,
     render_proof_frame_narrative,
@@ -95,6 +96,7 @@ __all__ = [
     "build_why_not_candidate_universe",
     "check_derivation_binding",
     "check_fact_overlay_binding",
+    "check_rule_disable_action",
     "check_why_not_universe",
     "diagnose_derivation_binding",
     "encode_entity_ref",

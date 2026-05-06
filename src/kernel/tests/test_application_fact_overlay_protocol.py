@@ -23,6 +23,7 @@ from kernel.application.protocol import (
     OverlayCheckPhaseStatus,
     OverlayCheckStatus,
     ProtocolShapeError,
+    RuleDisableAction,
 )
 from kernel.application.protocol import derivation_fact_overlay as overlay_protocol
 
@@ -69,6 +70,17 @@ def _remove(**kwargs: object) -> FactRemoveAction:
     }
     fields.update(kwargs)
     return FactRemoveAction(**fields)  # type: ignore[arg-type]
+
+
+def _disable(**kwargs: object) -> RuleDisableAction:
+    fields = {
+        "rule_id": "person.eligible",
+        "version": "1.0",
+        "branch_index": 0,
+        "atom_index": 1,
+    }
+    fields.update(kwargs)
+    return RuleDisableAction(**fields)  # type: ignore[arg-type]
 
 
 _DEFAULT_MATCHED_BINDING = object()
@@ -170,14 +182,58 @@ class FactRemoveActionProtocolTests(unittest.TestCase):
             _remove(note=123)
 
 
+class RuleDisableActionProtocolTests(unittest.TestCase):
+    def test_disable_construction_defaults_note(self) -> None:
+        action = _disable()
+        self.assertEqual(action.rule_id, "person.eligible")
+        self.assertEqual(action.version, "1.0")
+        self.assertEqual(action.branch_index, 0)
+        self.assertEqual(action.atom_index, 1)
+        self.assertIsNone(action.note)
+
+    def test_disable_accepts_note(self) -> None:
+        self.assertEqual(_disable(note="caller context").note, "caller context")
+
+    def test_disable_is_frozen(self) -> None:
+        action = _disable()
+        with self.assertRaises(FrozenInstanceError):
+            action.rule_id = "other"  # type: ignore[misc]
+
+    def test_disable_rejects_bad_shape(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            _disable(rule_id="")
+        with self.assertRaises(ProtocolShapeError):
+            _disable(version="")
+        with self.assertRaises(ProtocolShapeError):
+            _disable(branch_index=-1)
+        with self.assertRaises(ProtocolShapeError):
+            _disable(branch_index=True)
+        with self.assertRaises(ProtocolShapeError):
+            _disable(atom_index=-1)
+        with self.assertRaises(ProtocolShapeError):
+            _disable(note=123)
+
+
 class EvaluationOverlayProtocolTests(unittest.TestCase):
     def test_overlay_accepts_replace_and_remove_actions(self) -> None:
         overlay = EvaluationOverlay(fact_actions=(_override(), _remove()))
         self.assertEqual(overlay.fact_actions, (_override(), _remove()))
+        self.assertEqual(overlay.rule_actions, ())
 
     def test_overlay_allows_empty_actions_for_runtime_invalid_request(self) -> None:
-        overlay = EvaluationOverlay(fact_actions=())
+        overlay = EvaluationOverlay()
         self.assertEqual(overlay.fact_actions, ())
+        self.assertEqual(overlay.rule_actions, ())
+
+    def test_overlay_preserves_legacy_positional_fact_actions(self) -> None:
+        overlay = EvaluationOverlay((_override(),))
+        self.assertEqual(overlay.fact_actions, (_override(),))
+        self.assertEqual(overlay.rule_actions, ())
+
+    def test_overlay_accepts_rule_actions_lane(self) -> None:
+        overlay = EvaluationOverlay(rule_actions=(_disable(),))
+        self.assertEqual(overlay.fact_actions, ())
+        self.assertEqual(overlay.rule_actions, (_disable(),))
 
     def test_overlay_is_frozen(self) -> None:
         overlay = EvaluationOverlay(fact_actions=(_override(),))
@@ -191,6 +247,12 @@ class EvaluationOverlayProtocolTests(unittest.TestCase):
     def test_overlay_rejects_unknown_action_type(self) -> None:
         with self.assertRaises(ProtocolShapeError):
             EvaluationOverlay(fact_actions=(object(),))  # type: ignore[arg-type]
+
+    def test_overlay_rejects_bad_rule_actions(self) -> None:
+        with self.assertRaises(ProtocolShapeError):
+            EvaluationOverlay(rule_actions=[_disable()])  # type: ignore[arg-type]
+        with self.assertRaises(ProtocolShapeError):
+            EvaluationOverlay(rule_actions=(object(),))  # type: ignore[arg-type]
 
 
 class FactOverlayCheckRequestProtocolTests(unittest.TestCase):
@@ -495,6 +557,7 @@ class FactOverlayProtocolStaticInvariantTests(unittest.TestCase):
         self.assertIs(protocol_pkg.FactOverlayCheckRequest, FactOverlayCheckRequest)
         self.assertIs(protocol_pkg.FactOverlayCheckResult, FactOverlayCheckResult)
         self.assertIs(protocol_pkg.FactValueOverride, FactValueOverride)
+        self.assertIs(protocol_pkg.RuleDisableAction, RuleDisableAction)
         self.assertIs(protocol_pkg.OverlayCheckPhase, OverlayCheckPhase)
         self.assertIs(protocol_pkg.OverlayCheckPhaseStatus, OverlayCheckPhaseStatus)
         self.assertIs(protocol_pkg.OverlayCheckDiff, OverlayCheckDiff)

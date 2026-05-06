@@ -41,6 +41,8 @@ def recheck_proof_frame(
         return _unknown_frame_result(request)
     if artifact.rule_ref_edges:
         return _unknown_frame_result(request)
+    if request.overlay.rule_actions:
+        return _unknown_frame_result(request)
 
     projected_witness = project_view_facts_with_witness(store.ledger, store.schema_ir)
     visible_rows = _visible_projected_rows(projected_witness)

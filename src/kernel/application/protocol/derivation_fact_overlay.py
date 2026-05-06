@@ -125,6 +125,26 @@ class FactRemoveAction:
 FactOverlayAction: TypeAlias = FactValueOverride | FactRemoveAction
 
 
+@dataclass(frozen=True)
+class RuleDisableAction:
+    rule_id: str
+    version: str
+    branch_index: int
+    atom_index: int
+    note: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(self.rule_id, field_name="rule_id")
+        _require_non_empty_str(self.version, field_name="version")
+        _validate_non_negative_int(self.branch_index, field_name="branch_index")
+        _validate_non_negative_int(self.atom_index, field_name="atom_index")
+        if self.note is not None and not isinstance(self.note, str):
+            raise ProtocolShapeError("note must be str or None")
+
+
+RuleOverlayAction: TypeAlias = RuleDisableAction
+
+
 def _validate_fact_actions(
     value: Any, *, field_name: str
 ) -> tuple[FactOverlayAction, ...]:
@@ -138,15 +158,32 @@ def _validate_fact_actions(
     return value
 
 
+def _validate_rule_actions(
+    value: Any, *, field_name: str
+) -> tuple[RuleOverlayAction, ...]:
+    if not isinstance(value, tuple):
+        raise ProtocolShapeError(f"{field_name} must be tuple[RuleOverlayAction, ...]")
+    for idx, item in enumerate(value):
+        if not isinstance(item, RuleDisableAction):
+            raise ProtocolShapeError(f"{field_name}[{idx}] must be RuleDisableAction")
+    return value
+
+
 @dataclass(frozen=True)
 class EvaluationOverlay:
-    fact_actions: tuple[FactOverlayAction, ...]
+    fact_actions: tuple[FactOverlayAction, ...] = ()
+    rule_actions: tuple[RuleOverlayAction, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self,
             "fact_actions",
             _validate_fact_actions(self.fact_actions, field_name="fact_actions"),
+        )
+        object.__setattr__(
+            self,
+            "rule_actions",
+            _validate_rule_actions(self.rule_actions, field_name="rule_actions"),
         )
 
 
@@ -301,4 +338,6 @@ __all__ = [
     "OverlayCheckPhase",
     "OverlayCheckPhaseStatus",
     "OverlayCheckStatus",
+    "RuleDisableAction",
+    "RuleOverlayAction",
 ]

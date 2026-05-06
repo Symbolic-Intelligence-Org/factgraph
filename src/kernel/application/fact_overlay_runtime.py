@@ -33,6 +33,18 @@ def check_fact_overlay_binding(
     """Evaluate Overlay Check."""
 
     overlay = _normalize_evaluation_overlay(request.overlay)
+    if overlay.rule_actions:
+        return _invalid_request(
+            request,
+            errors=(
+                ErrorDTO(
+                    code="RULE_ACTIONS_NOT_SUPPORTED",
+                    message="Fact Overlay Check does not support rule actions",
+                    path=("overlay", "rule_actions"),
+                    details={"rule_action_count": len(overlay.rule_actions)},
+                ),
+            ),
+        )
     if not overlay.fact_actions:
         return _invalid_request(
             request,

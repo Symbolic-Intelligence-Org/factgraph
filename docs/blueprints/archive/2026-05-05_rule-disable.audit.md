@@ -14,6 +14,7 @@
 | 2026-05-06 | draft | Step 0.B spike completed | New §5.7 freezes Shape A + Surface A. `EvaluationOverlay` gains a backward-compatible `rule_actions` lane with `fact_actions` remaining the first/defaulted field;`RuleDisableRequest/Result` return variant rows plus original-frame ProofFrame only;variant support capture is deferred;runtime accepts exactly one `RuleDisableAction`;RuleRef/native error mappings are frozen;and the two-entry-point contract is hardened so Fact Overlay and ProofFrame reject non-empty `rule_actions` rather than silently ignoring them. |
 | 2026-05-06 | draft | Pre-commit review pass on Step 0.B | Two P3 consistency fixes landed before commit:§7 drift gates now match §5.7.6 by separating ProofFrame protocol,ProofFrame runtime,FactOverlay protocol,and FactOverlay runtime acceptance boundaries;§5.7.6 now explicitly documents the intentional FactOverlay `invalid_request` vs ProofFrame `unknown` asymmetry because ProofFrame's 3-status enum is frozen by Batch 4. |
 | 2026-05-06 | scoped | Scope freeze | Status moved `draft → scoped` after Step 0.A/0.B review. Implementation is authorized only within §5.7 and §7:Shape A + Surface A,one `RuleDisableAction` MVP,variant rows plus original-frame ProofFrame,no variant support capture,no ProofFrame protocol drift,no SDK/service/agent changes,and only the §5.7.6 fact-only entrypoint rejection guards in Fact Overlay / ProofFrame runtimes. |
+| 2026-05-06 | implemented | Implementation close-out | Rule Disable shipped application-first:Shape A `EvaluationOverlay.rule_actions`,new `RuleDisableRequest/Result`,new `check_rule_disable_action(...)`,lower-level `evaluate_where(..., disabled_locators=...)` primitive,Fact Overlay / ProofFrame rule-action rejection guards,application docs,and focused/runtime/drift tests. Full kernel 1193 OK / 1 skipped;ruff clean;diff-check clean. |
 
 ## Decision Notes
 
@@ -55,3 +56,17 @@ Step 0.B also records a support provenance limitation:Batch 4 `SupportArtifact` 
 Multi-action runtime support is deferred even though the DTO container is tuple-shaped. Batch 5a accepts exactly one `RuleDisableAction` and returns `RULE_DISABLE_ACTION_COUNT` otherwise. This leaves a future expansion path without making the first implementation handle interaction ordering or partial multi-action errors.
 
 The important compatibility decision is that adding `rule_actions` to the shared overlay container requires fact-only entrypoint guards. Fact Overlay Check must return `invalid_request` for non-empty `rule_actions`;ProofFrame Rechecker must return frame-level `unknown` rather than silently ignoring them. These guards are not rule-action semantics in the old runtimes;they are compatibility protection after the shared DTO expands.
+
+### 2026-05-06 — Implementation Outcome
+
+The implementation follows §5.7 with one scoped adjustment. The first implementation attempt threaded `disabled_locators` through `evaluate_native_where(...)`,but full-kernel frontier drift gates rejected that public signature change because evaluator frontier intentionally mirrors the native entrypoint. The final implementation keeps `evaluate_native_where(...)` unchanged and places the disable primitive one layer lower in `where_eval.evaluate_where(..., disabled_locators=...)`. Rule Disable rejects RuleRef-bearing inputs before using this primitive,so no recursive RuleRef behavior is introduced.
+
+Batch 5a therefore ships only the promised outputs:variant rows as normalized `BindingItems`,and an original-frame `ProofFrameRecheckResult`. Variant `SupportArtifact` capture remains deferred. The passed-in `SupportArtifact` is still interpreted in caller-provided `RuleSpec` context because Batch 4 frames do not carry rule provenance.
+
+Verification:
+
+- Focused Rule Disable / Fact Overlay / ProofFrame / disabled-locator suites:159 OK.
+- Full kernel:`python -m unittest discover -s src/kernel/tests -p "test_*.py"` — 1193 OK / 1 skipped.
+- `python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py` — clean.
+- `git diff --check` — clean.
+- SDK/service/agent diff stat — empty.

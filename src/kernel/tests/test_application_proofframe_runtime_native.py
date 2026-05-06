@@ -21,6 +21,7 @@ from kernel.application.protocol import (
     FactRemoveAction,
     FactValueOverride,
     ProofFrameRecheckRequest,
+    RuleDisableAction,
     aggregate_proof_frame_status,
 )
 from kernel.core.evidence.write_protocol import set_field
@@ -332,6 +333,30 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
 
         result = recheck_proof_frame(
             _request(_artifact(seeded, rule_ref_edges=(edge,)), _overlay()),
+            store=store,
+        )
+
+        self.assertEqual(result.status, "unknown")
+        self.assertEqual(result.atom_verdicts, ())
+
+    def test_rule_actions_return_unknown_frame_level_result(self) -> None:
+        store, index = _build_store()
+        seeded = _seed_person(store, index)
+
+        result = recheck_proof_frame(
+            _request(
+                _artifact(seeded),
+                EvaluationOverlay(
+                    rule_actions=(
+                        RuleDisableAction(
+                            rule_id="person.eligible",
+                            version="1.0",
+                            branch_index=0,
+                            atom_index=0,
+                        ),
+                    )
+                ),
+            ),
             store=store,
         )
 

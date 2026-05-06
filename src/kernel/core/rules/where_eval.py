@@ -22,6 +22,8 @@ _ARITH_KINDS = {"add", "sub", "neg", "addc", "mulc"}
 def evaluate_where(
     view_facts: dict[str, list[tuple[Any, ...]]],
     where: list[Any],
+    *,
+    disabled_locators: frozenset[tuple[int, int]] = frozenset(),
 ) -> list[dict[str, Any]]:
     ast_gate_on = _where_ast_gate_enabled()
     if ast_gate_on:
@@ -36,6 +38,8 @@ def evaluate_where(
             raise _adapt_where_ast_error(exc) from exc
 
     bodies = _normalize_where(where)
+    if disabled_locators:
+        bodies = _apply_disabled_locators(bodies, disabled_locators=disabled_locators)
 
     all_bindings: list[dict[str, Any]] = []
     seen: set[tuple[tuple[str, Any], ...]] = set()
@@ -97,6 +101,46 @@ def _normalize_where(where: Any) -> list[list[tuple[Any, ...]]]:
         return bodies
 
     raise WhereValidationError("where must be one-level AND or two-level OR-of-AND")
+
+
+def _apply_disabled_locators(
+    bodies: list[list[tuple[Any, ...]]],
+    *,
+    disabled_locators: frozenset[tuple[int, int]],
+) -> list[list[tuple[Any, ...]]]:
+    _validate_disabled_locators(disabled_locators)
+    branch_count = len(bodies)
+    for branch_index, atom_index in disabled_locators:
+        if branch_index >= branch_count:
+            raise WhereValidationError("disabled locator branch_index out of range")
+        if atom_index >= len(bodies[branch_index]):
+            raise WhereValidationError("disabled locator atom_index out of range")
+    return [
+        [
+            atom
+            for atom_index, atom in enumerate(body)
+            if (branch_index, atom_index) not in disabled_locators
+        ]
+        for branch_index, body in enumerate(bodies)
+    ]
+
+
+def _validate_disabled_locators(disabled_locators: object) -> None:
+    if not isinstance(disabled_locators, frozenset):
+        raise WhereValidationError("disabled_locators must be frozenset[tuple[int, int]]")
+    for locator in disabled_locators:
+        if not isinstance(locator, tuple) or len(locator) != 2:
+            raise WhereValidationError("disabled_locators entries must be tuple[int, int]")
+        branch_index, atom_index = locator
+        if (
+            isinstance(branch_index, bool)
+            or not isinstance(branch_index, int)
+            or branch_index < 0
+            or isinstance(atom_index, bool)
+            or not isinstance(atom_index, int)
+            or atom_index < 0
+        ):
+            raise WhereValidationError("disabled_locators entries must be non-negative ints")
 
 
 def _validate_atom(atom: Any) -> tuple[Any, ...]:

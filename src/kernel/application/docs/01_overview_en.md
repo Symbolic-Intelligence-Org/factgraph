@@ -21,6 +21,7 @@ It is responsible for:
 - explicit-binding derivation Diagnose (`passed` / `failed.no_candidate` / `failed.atom_localized` / `unsupported` / `invalid_request`)
 - explicit-binding Fact Overlay Check (`before` / `after` / `diff` under temporary fact replace/remove overlays, native-only MVP)
 - narrow ProofFrame Rechecker (`still_valid` / `invalidated` / `unknown` over one native `SupportArtifact` under fact replace/remove overlay, with deterministic single-frame narrative)
+- native Rule Disable (`completed` / `unsupported` / `invalid_request`) over one temporary rule-condition disable action,returning variant rows plus original-frame ProofFrame output
 - explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
 - capability ergonomics helpers for Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
 
@@ -44,8 +45,9 @@ It is not responsible for:
   - `derivation.py`: compiled derivation evaluate/accept request DTOs
   - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`)
   - `derivation_diagnose.py`: explicit-binding Diagnose protocol DTOs (`DiagnoseRequest` / `DiagnoseResult` / `DiagnoseAtomLocator`)
-  - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `EvaluationOverlay` / `FactValueOverride` / `FactRemoveAction`)
+  - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs and shared overlay actions (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `EvaluationOverlay` / `FactValueOverride` / `FactRemoveAction` / `RuleDisableAction`)
   - `proofframe.py`: ProofFrame Rechecker protocol DTOs (`ProofFrameRecheckRequest` / `ProofFrameRecheckResult` / `ProofFrameAtomVerdict` / `ProofFrameStatus`)
+  - `rule_disable.py`: Rule Disable protocol DTOs (`RuleDisableRequest` / `RuleDisableResult` / `RuleDisableStatus`)
   - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotRedRow` / `WhyNotRowDiagnostic` / `WhyNotAtomLocator`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
@@ -70,12 +72,14 @@ It is not responsible for:
 - `proofframe_runtime.py`
   - `recheck_proof_frame(...)`: rechecks one native `SupportArtifact` under an `EvaluationOverlay` without re-running derivation evaluation; returns per-atom verdicts and aggregate frame status. Non-native support artifacts and rule-ref frames return frame-level `unknown`; `not` steps are strictly deferred to `unknown`.
   - `render_proof_frame_narrative(...)`: deterministic English single-frame narrative formatter over a `ProofFrameRecheckResult`.
+- `rule_disable_runtime.py`
+  - `check_rule_disable_action(...)`: evaluates one native `RuleSpec` under exactly one temporary `RuleDisableAction`; returns normalized variant rows plus a `ProofFrameRecheckResult` for the original frame. RuleRef-bearing inputs are unsupported,variant support capture is deferred,and no ledger or registry mutation occurs.
 - `why_not_runtime.py`
   - `check_why_not_universe(...)`: assembles a red/green board for an explicit finite head-binding universe, then diagnoses each red row through `diagnose_derivation_binding(...)` while returning Why-not-owned row diagnostics.
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 44 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 45 public symbols. The main executor entry points are:
 
 - `execute_read_request(...)`
 - `hydrate_entity(...)`
@@ -88,6 +92,7 @@ It is not responsible for:
 - `check_derivation_binding(...)`
 - `diagnose_derivation_binding(...)`
 - `check_fact_overlay_binding(...)`
+- `check_rule_disable_action(...)`
 - `recheck_proof_frame(...)`
 - `render_proof_frame_narrative(...)`
 - `check_why_not_universe(...)`
@@ -133,7 +138,7 @@ Current SDK runtime delegation:
 - `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
 - `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
 - `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
-- Check, Diagnose, Fact Overlay Check, ProofFrame Rechecker, Why-not Universe Diagnose, and the capability ergonomics helpers are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`, `diagnose_derivation_binding(...)`, `check_fact_overlay_binding(...)`, `recheck_proof_frame(...)`, `check_why_not_universe(...)`, or the application helper functions.
+- Check, Diagnose, Fact Overlay Check, ProofFrame Rechecker, Rule Disable, Why-not Universe Diagnose, and the capability ergonomics helpers are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`, `diagnose_derivation_binding(...)`, `check_fact_overlay_binding(...)`, `recheck_proof_frame(...)`, `check_rule_disable_action(...)`, `check_why_not_universe(...)`, or the application helper functions.
 
 SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
@@ -176,6 +181,8 @@ Key focused tests:
 - `test_application_proofframe_protocol.py`
 - `test_application_proofframe_runtime_native.py`
 - `test_application_proofframe_narrative.py`
+- `test_application_rule_disable_protocol.py`
+- `test_application_rule_disable_runtime_native.py`
 - `test_application_why_not_protocol.py`
 - `test_application_why_not_runtime.py`
 - `test_application_why_not_sibling_invariant.py`

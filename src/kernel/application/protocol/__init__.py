@@ -28,6 +28,8 @@ from .derivation_fact_overlay import (
     OverlayCheckPhase,
     OverlayCheckPhaseStatus,
     OverlayCheckStatus,
+    RuleDisableAction,
+    RuleOverlayAction,
 )
 from .derivation_why_not import (
     WhyNotAtomLocator,
@@ -47,6 +49,11 @@ from .proofframe import (
     ProofFrameRecheckResult,
     ProofFrameStatus,
     aggregate_proof_frame_status,
+)
+from .rule_disable import (
+    RuleDisableRequest,
+    RuleDisableResult,
+    RuleDisableStatus,
 )
 from .entity_read import (
     AssertionRecordDTO,
@@ -147,6 +154,11 @@ __all__ = [
     "QueryRowValue",
     "QueryRuntimeRequest",
     "QueryRuntimeResponse",
+    "RuleDisableAction",
+    "RuleDisableRequest",
+    "RuleDisableResult",
+    "RuleDisableStatus",
+    "RuleOverlayAction",
     "SchemaCapability",
     "WarningDTO",
     "WhereIR",

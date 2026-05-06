@@ -1,6 +1,6 @@
 # Rule Disable(Batch 5a of Round Story Completion Plan)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Parent: [2026-05-05_round-story-completion-plan.md](./2026-05-05_round-story-completion-plan.md) §5.5a
@@ -355,7 +355,7 @@ This is the minimum compatibility guard needed after extending `EvaluationOverla
 - Existing ProofFrame DTOs remain unchanged unless Step 0 explicitly records a parent-plan amendment;default is no ProofFrame DTO change.
 - Core changes,if any, must be small evaluator/support-capture primitives that do not expose a new public SDK surface.
 
-## 7. Acceptance(Draft)
+## 7. Acceptance
 
 **Step 0 acceptance:**
 - [x] Step 0.A records the falsifiability checklist with concrete examples(see §5.6.1).
@@ -364,27 +364,27 @@ This is the minimum compatibility guard needed after extending `EvaluationOverla
 - [x] No parent-plan deviation selected;Shape A and Surface A follow parent-plan §5.5a.
 
 **Implementation acceptance(to refine after Step 0):**
-- [ ] `RuleDisableAction` protocol DTO is frozen and tested.
-- [ ] `EvaluationOverlay` compatibility tests prove fact-only callers still work.
-- [ ] If Shape A is selected,`EvaluationOverlay(fact_actions=(...))` remains backward-compatible for both positional and keyword construction.
-- [ ] If Shape A is selected,`EvaluationOverlay()` empty construction is explicitly allowed and tested.
-- [ ] `RuleDisableRequest` rejects mixed fact+rule overlays;Batch 5a accepts exactly one `RuleDisableAction`.
-- [ ] `RuleDisableRequest` documents and tests the native row-frame support-artifact contract;rule provenance remains caller-owned because `SupportArtifact` has no `rule_id/version`.
-- [ ] Existing Fact Overlay and ProofFrame entrypoints reject non-empty `rule_actions` per §5.7.6 rather than silently ignoring them.
-- [ ] `RuleDisableResult.variant_rows` surfaces newly-emerged bindings as normalized `BindingItems`;ProofFrame remains original-frame only.
-- [ ] Batch 5a does not ship variant `SupportArtifact` capture.
-- [ ] Native disable runtime skips disabled locators without shifting later `b{branch}.a{atom}` keys.
-- [ ] Variable binding failure behavior is documented and tested.
-- [ ] RuleRef-bearing inputs are rejected/deferred unless Step 0 scopes them in.
-- [ ] Runtime returns ProofFrame-compatible status/verdicts for disabled atom invalidation.
-- [ ] `git diff --stat -- src/kernel/application/protocol/proofframe.py` is empty(no Batch 4 protocol DTO drift).
-- [ ] `git diff --stat -- src/kernel/application/proofframe_runtime.py` contains only the §5.7.6 rule-action rejection guard,no rule-action semantics.
-- [ ] `src/kernel/application/protocol/derivation_fact_overlay.py` changes are limited to the §5.7.1 backward-compatible `EvaluationOverlay` extension and `RuleDisableAction` / `RuleOverlayAction` protocol additions.
-- [ ] `src/kernel/application/fact_overlay_runtime.py` changes are limited to consuming `EvaluationOverlay.fact_actions` unchanged plus the §5.7.6 non-empty `rule_actions` rejection guard returning `invalid_request` with `RULE_ACTIONS_NOT_SUPPORTED`;no rule-action semantics.
-- [ ] No SDK/service/agent diffs.
-- [ ] No `superseded_by_full_eval` status is introduced.
-- [ ] Module docs under `src/kernel/application/docs/` are updated.
-- [ ] Focused tests,full kernel unittest,ruff,and `git diff --check` pass.
+- [x] `RuleDisableAction` protocol DTO is frozen and tested.
+- [x] `EvaluationOverlay` compatibility tests prove fact-only callers still work.
+- [x] If Shape A is selected,`EvaluationOverlay(fact_actions=(...))` remains backward-compatible for both positional and keyword construction.
+- [x] If Shape A is selected,`EvaluationOverlay()` empty construction is explicitly allowed and tested.
+- [x] `RuleDisableRequest` rejects mixed fact+rule overlays;Batch 5a accepts exactly one `RuleDisableAction`.
+- [x] `RuleDisableRequest` documents and tests the native row-frame support-artifact contract;rule provenance remains caller-owned because `SupportArtifact` has no `rule_id/version`.
+- [x] Existing Fact Overlay and ProofFrame entrypoints reject non-empty `rule_actions` per §5.7.6 rather than silently ignoring them.
+- [x] `RuleDisableResult.variant_rows` surfaces newly-emerged bindings as normalized `BindingItems`;ProofFrame remains original-frame only.
+- [x] Batch 5a does not ship variant `SupportArtifact` capture.
+- [x] Native disable runtime skips disabled locators without shifting later `b{branch}.a{atom}` keys.
+- [x] Variable binding failure behavior is documented and tested.
+- [x] RuleRef-bearing inputs are rejected/deferred unless Step 0 scopes them in.
+- [x] Runtime returns ProofFrame-compatible status/verdicts for disabled atom invalidation.
+- [x] `git diff --stat -- src/kernel/application/protocol/proofframe.py` is empty(no Batch 4 protocol DTO drift).
+- [x] `git diff --stat -- src/kernel/application/proofframe_runtime.py` contains only the §5.7.6 rule-action rejection guard,no rule-action semantics.
+- [x] `src/kernel/application/protocol/derivation_fact_overlay.py` changes are limited to the §5.7.1 backward-compatible `EvaluationOverlay` extension and `RuleDisableAction` / `RuleOverlayAction` protocol additions.
+- [x] `src/kernel/application/fact_overlay_runtime.py` changes are limited to consuming `EvaluationOverlay.fact_actions` unchanged plus the §5.7.6 non-empty `rule_actions` rejection guard returning `invalid_request` with `RULE_ACTIONS_NOT_SUPPORTED`;no rule-action semantics.
+- [x] No SDK/service/agent diffs.
+- [x] No `superseded_by_full_eval` status is introduced.
+- [x] Module docs under `src/kernel/application/docs/` are updated.
+- [x] Focused tests,full kernel unittest,ruff,and `git diff --check` pass.
 
 ## 8. Implementation Plan(Draft)
 
@@ -407,7 +407,7 @@ No SDK docs update unless Step 0 explicitly scopes an SDK wrapper,which is curre
 
 ## 10. Outcome / Deviations
 
-- 最终落地结果:
-- 与 blueprint 不同的地方:
-- 为什么会有这些调整:
-- 归档说明:
+- 最终落地结果:Batch 5a ships application-first Rule Disable. `EvaluationOverlay` now has a backward-compatible `rule_actions` lane with `RuleDisableAction`;`RuleDisableRequest` / `RuleDisableResult` live in `protocol/rule_disable.py`;`check_rule_disable_action(...)` evaluates one native `RuleSpec` under exactly one disabled locator and returns `variant_rows` plus an original-frame `ProofFrameRecheckResult`. Fact Overlay and ProofFrame old entrypoints reject non-empty `rule_actions` rather than silently ignoring them.
+- 与 blueprint 不同的地方:the scoped plan allowed a narrow core primitive. Implementation first tried threading `disabled_locators` through `evaluate_native_where(...)`,but full-kernel frontier drift gates correctly rejected that public signature change. The final implementation keeps `evaluate_native_where(...)` unchanged and adds the lower-level `evaluate_where(..., disabled_locators=...)` primitive;Rule Disable calls it directly after rejecting RuleRef-bearing inputs.
+- 为什么会有这些调整:Rule Disable does not need RuleRef substrate in Batch 5a,so changing the native RuleRef-aware entrypoint was unnecessary scope drift. The lower-level primitive preserves the required native skip semantics without affecting frontier parity gates or existing `evaluate_native_where(...)` consumers.
+- 归档说明:Archive with paired audit after implementation verification. Verification snapshot:focused Rule Disable / Fact Overlay / ProofFrame / disabled-locator tests 159 OK;full kernel `python -m unittest discover -s src/kernel/tests -p "test_*.py"` 1193 OK / 1 skipped;`python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py` clean;`git diff --check` clean;`git diff --stat -- src/kernel/sdk src/factpy_kernel/service src/factpy_kernel/agent` empty.

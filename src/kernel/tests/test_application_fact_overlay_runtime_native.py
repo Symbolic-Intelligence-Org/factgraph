@@ -23,6 +23,7 @@ from kernel.application.protocol import (
     FactRemoveAction,
     FactValueOverride,
     OverlayCheckPhase,
+    RuleDisableAction,
 )
 from kernel.core.evidence.write_protocol import set_field
 from kernel.core.rules.rule_ir import RuleRegistry
@@ -231,6 +232,29 @@ class FactOverlayRuntimePreflightTests(unittest.TestCase):
         self.assertIsNone(result.after)
         self.assertIsNone(result.diff)
         self.assertEqual(result.errors[0].code, "EMPTY_OVERLAY_NOT_PERMITTED")
+
+    def test_rule_actions_are_rejected_before_empty_fact_overlay(self) -> None:
+        store, index = _build_store()
+        body, exists_pred = _exists_body(index)
+        request = _request(
+            plan=_build_plan(body, exists_pred),
+            binding=(),
+            overlay=EvaluationOverlay(
+                rule_actions=(
+                    RuleDisableAction(
+                        rule_id="person.eligible",
+                        version="1.0",
+                        branch_index=0,
+                        atom_index=0,
+                    ),
+                )
+            ),
+        )
+
+        result = check_fact_overlay_binding(request, store=store)
+
+        self.assertEqual(result.status, "invalid_request")
+        self.assertEqual(result.errors[0].code, "RULE_ACTIONS_NOT_SUPPORTED")
 
     def test_ruleref_without_registry_returns_invalid_request(self) -> None:
         store, index = _build_store()
