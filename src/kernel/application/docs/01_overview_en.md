@@ -154,6 +154,20 @@ Current SDK runtime delegation:
 
 SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
+## 5.5 Durable Round Persistence Boundary
+
+Application capability runtimes return stable protocol DTOs, but they do not emit audit events internally. Batch 6 round persistence is owned by `kernel.audit.round_events` and is invoked by an external caller/recorder after a capability result exists.
+
+Current persistable first-slice result surfaces are:
+
+- Check
+- Diagnose
+- Fact Overlay Check
+- Why-not Universe Diagnose
+- ProofFrame Rechecker
+
+Frontier projection and rule-action result events are deferred. This preserves the application boundary: no `kernel.application.*runtime` module imports `kernel.audit`, and no SDK/service/agent surface is introduced for round persistence.
+
 ## 6. Conservative Boundaries
 
 - Application protocol does not accept SDK-only types.
