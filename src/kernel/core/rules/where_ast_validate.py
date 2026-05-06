@@ -19,6 +19,8 @@ from kernel.core.rules.where_ast import (
     Term,
     Var,
     WhereExpr,
+    WhereASTError,
+    parse_where_ir_to_ast,
 )
 
 
@@ -68,6 +70,33 @@ def validate_where_ast(
     caps = _capabilities_for_mode(mode, resolved_caps)
     _validate_expr_shape(expr, caps, in_not_body=False)
     _validate_expr_dataflow(expr, bound_outside=resolved_initial_bound_vars, caps=caps)
+
+
+def atom_binds_new_variables(
+    atom_ir: tuple[Any, ...],
+    *,
+    bound_vars: frozenset[str],
+) -> bool:
+    """Return whether one native atom would bind variables outside ``bound_vars``."""
+
+    if not isinstance(bound_vars, frozenset):
+        raise WhereASTValidationError("bound_vars must be frozenset[str]")
+    normalized_bound_vars = _normalize_initial_bound_vars(set(bound_vars))
+    try:
+        expr = parse_where_ir_to_ast([atom_ir])
+    except WhereASTError as exc:
+        raise WhereASTValidationError(str(exc), path=exc.path) from exc
+    caps = _capabilities_for_mode(
+        "python",
+        {"allow_ruleref": False},
+    )
+    _validate_expr_shape(expr, caps, in_not_body=False)
+    state = _validate_expr_dataflow(
+        expr,
+        bound_outside=normalized_bound_vars,
+        caps=caps,
+    )
+    return bool(state.local_bound - normalized_bound_vars)
 
 
 def _normalize_initial_bound_vars(initial_bound_vars: set[str] | None) -> set[str]:

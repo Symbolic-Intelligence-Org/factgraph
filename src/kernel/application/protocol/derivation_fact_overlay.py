@@ -31,6 +31,7 @@ OverlayCheckEngine: TypeAlias = Literal["native", "souffle", "problog", "pyreaso
 RuleLiteralPathKind: TypeAlias = Literal[
     "pred_term", "lhs", "rhs", "in_value", "const_operand"
 ]
+RuleAddedAtomKind: TypeAlias = Literal["eq", "ne", "gt", "ge", "lt", "le", "in"]
 
 _OVERLAY_CHECK_STATUSES = ("passed", "failed", "unsupported", "invalid_request")
 _OVERLAY_CHECK_PHASE_STATUSES = ("passed", "failed")
@@ -197,7 +198,38 @@ class RuleLiteralReplaceAction:
             raise ProtocolShapeError("note must be str or None")
 
 
-RuleOverlayAction: TypeAlias = RuleDisableAction | RuleLiteralReplaceAction
+@dataclass(frozen=True)
+class RuleAddedAtom:
+    atom: tuple[Any, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.atom, tuple) or not self.atom:
+            raise ProtocolShapeError("atom must be non-empty tuple")
+        if not isinstance(self.atom[0], str):
+            raise ProtocolShapeError("atom[0] must be atom kind string")
+
+
+@dataclass(frozen=True)
+class RuleAddConditionAction:
+    rule_id: str
+    version: str
+    branch_index: int
+    added_atom: RuleAddedAtom
+    note: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(self.rule_id, field_name="rule_id")
+        _require_non_empty_str(self.version, field_name="version")
+        _validate_non_negative_int(self.branch_index, field_name="branch_index")
+        if not isinstance(self.added_atom, RuleAddedAtom):
+            raise ProtocolShapeError("added_atom must be RuleAddedAtom")
+        if self.note is not None and not isinstance(self.note, str):
+            raise ProtocolShapeError("note must be str or None")
+
+
+RuleOverlayAction: TypeAlias = (
+    RuleDisableAction | RuleLiteralReplaceAction | RuleAddConditionAction
+)
 
 
 def _validate_fact_actions(
@@ -219,9 +251,11 @@ def _validate_rule_actions(
     if not isinstance(value, tuple):
         raise ProtocolShapeError(f"{field_name} must be tuple[RuleOverlayAction, ...]")
     for idx, item in enumerate(value):
-        if not isinstance(item, (RuleDisableAction, RuleLiteralReplaceAction)):
+        if not isinstance(
+            item, (RuleDisableAction, RuleLiteralReplaceAction, RuleAddConditionAction)
+        ):
             raise ProtocolShapeError(
-                f"{field_name}[{idx}] must be RuleDisableAction or RuleLiteralReplaceAction"
+                f"{field_name}[{idx}] must be RuleDisableAction, RuleLiteralReplaceAction, or RuleAddConditionAction"
             )
     return value
 
@@ -395,6 +429,9 @@ __all__ = [
     "OverlayCheckPhase",
     "OverlayCheckPhaseStatus",
     "OverlayCheckStatus",
+    "RuleAddConditionAction",
+    "RuleAddedAtom",
+    "RuleAddedAtomKind",
     "RuleDisableAction",
     "RuleLiteralPath",
     "RuleLiteralPathKind",

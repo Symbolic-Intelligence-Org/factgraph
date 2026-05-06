@@ -5,9 +5,14 @@ from __future__ import annotations
 import unittest
 
 from kernel.core.rules.where_eval import (
+    WhereAddedCondition,
     WhereLiteralReplacement,
     WhereValidationError,
     evaluate_where,
+)
+from kernel.core.rules.where_ast_validate import (
+    WhereASTValidationError,
+    atom_binds_new_variables,
 )
 
 
@@ -207,6 +212,114 @@ class WhereEvalLiteralReplacementTests(unittest.TestCase):
                         )
                     }
                 ),
+            )
+
+
+class WhereEvalAddedConditionTests(unittest.TestCase):
+    def test_added_condition_appends_filter_without_renumbering_old_atoms(self) -> None:
+        view_facts = {
+            "Person:exists": [("alice",), ("bob",)],
+            "Person:age": [("alice", 25), ("bob", 17)],
+        }
+        where = [
+            ("pred", "Person:exists", ["$p"]),
+            ("pred", "Person:age", ["$p", "$age"]),
+        ]
+
+        result = evaluate_where(
+            view_facts,
+            where,
+            added_conditions=frozenset(
+                {WhereAddedCondition(branch_index=0, atom=("lt", "$age", 20))}
+            ),
+        )
+
+        self.assertEqual(result, [{"$age": 17, "$p": "bob"}])
+        self.assertEqual(evaluate_where(view_facts, where), [
+            {"$age": 17, "$p": "bob"},
+            {"$age": 25, "$p": "alice"},
+        ])
+
+    def test_added_condition_supports_or_branch_coordinates(self) -> None:
+        view_facts = {
+            "Person:exists": [("alice",), ("bob",)],
+            "Person:age": [("alice", 25), ("bob", 17)],
+        }
+        where = [
+            [
+                ("pred", "Person:exists", ["$p"]),
+                ("pred", "Person:age", ["$p", "$age"]),
+            ],
+            [("pred", "Person:exists", ["$p"]), ("eq", "$p", "alice")],
+        ]
+
+        result = evaluate_where(
+            view_facts,
+            where,
+            added_conditions=frozenset(
+                {WhereAddedCondition(branch_index=0, atom=("lt", "$age", 20))}
+            ),
+        )
+
+        self.assertEqual(result, [{"$age": 17, "$p": "bob"}, {"$p": "alice"}])
+
+    def test_added_condition_rejects_bad_shape(self) -> None:
+        with self.assertRaises(WhereValidationError):
+            evaluate_where(
+                {"Person:exists": [("alice",)]},
+                [("pred", "Person:exists", ["$p"])],
+                added_conditions={(0, ("eq", "$p", "alice"))},  # type: ignore[arg-type]
+            )
+        with self.assertRaises(WhereValidationError):
+            evaluate_where(
+                {"Person:exists": [("alice",)]},
+                [("pred", "Person:exists", ["$p"])],
+                added_conditions=frozenset(
+                    {WhereAddedCondition(branch_index=1, atom=("eq", "$p", "alice"))}
+                ),
+            )
+
+
+class WhereASTBindingEffectTests(unittest.TestCase):
+    def test_atom_binds_new_variables_for_pred_eq_and_arithmetic(self) -> None:
+        self.assertTrue(
+            atom_binds_new_variables(
+                ("pred", "Person:age", ["$p", "$age"]),
+                bound_vars=frozenset({"$p"}),
+            )
+        )
+        self.assertTrue(
+            atom_binds_new_variables(
+                ("eq", "$region", "us"),
+                bound_vars=frozenset(),
+            )
+        )
+        self.assertTrue(
+            atom_binds_new_variables(
+                ("addc", "$next", "$age", 1),
+                bound_vars=frozenset({"$age"}),
+            )
+        )
+
+    def test_atom_binds_new_variables_false_for_resolved_filters(self) -> None:
+        self.assertFalse(
+            atom_binds_new_variables(
+                ("lt", "$age", 65),
+                bound_vars=frozenset({"$age"}),
+            )
+        )
+        self.assertFalse(
+            atom_binds_new_variables(
+                ("in", "$region", ["us", "ca"]),
+                bound_vars=frozenset({"$region"}),
+            )
+        )
+
+    def test_atom_binds_new_variables_raises_for_unbound_filter(self) -> None:
+        with self.assertRaises(WhereASTValidationError):
+            atom_binds_new_variables(
+                ("lt", "$age", 65),
+                bound_vars=frozenset(),
             )
 
 

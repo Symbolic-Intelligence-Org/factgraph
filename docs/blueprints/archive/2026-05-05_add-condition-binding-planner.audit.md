@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-05-06 | draft | Blueprint created | Initial Batch 5c Step 0 framing drafted on `v0.1-add-condition-binding-planner-2026-05-05` off Batch 5b final `5213e76`. The draft intentionally treats "add condition + binding planner" as a falsifiable premise rather than a pre-scoped implementation path. |
 | 2026-05-06 | scoped | Scope frozen | Status moved from `draft` to `scoped` after Step 0.A and Step 0.B review. Implementation may proceed only within §5.7/§5.8:narrow add-filter action,synthetic added-atom ProofFrame verdict,one-action MVP,no new-variable planner,no ProofFrame protocol change,no `evaluate_native_where(...)` change. |
+| 2026-05-06 | implemented | Implementation shipped and archived | Added `RuleAddConditionAction`,separate request/result DTOs,one-action native runtime,`atom_binds_new_variables(...)`,`evaluate_where(..., added_conditions=...)`,synthetic added-atom ProofFrame verdict,focused tests/docs,and archive inventory update. Verification:192 focused tests OK,full kernel 1265 OK / 1 skipped,ruff clean,`git diff --check` clean. |
 
 ## Decision Notes
 
@@ -42,3 +43,7 @@ Review accepted the synthetic-verdict mapping and requested three P3 clarificati
 ### 2026-05-06 — Scoped For Implementation
 
 The scoped implementation lane is intentionally narrow:ship `RuleAddConditionAction` for one added native filter atom over already-bound variables;append one synthetic added-atom ProofFrame verdict;return variant rows from full native evaluation;add no public binding-planner surface;and preserve existing ProofFrame protocol,RuleRef substrate,SDK/service/agent surfaces,and `evaluate_native_where(...)`.
+
+### 2026-05-06 — Implementation Close-out
+
+Implementation followed the scoped shape. The novel synthetic-verdict mapping shipped without changing `ProofFrameAtomVerdict` or `ProofFrameStatus`;`b{branch}.add{action}:{kind}` keys are produced only by `check_rule_add_condition_action(...)`. Existing Rule Disable and Rule Literal Replace runtimes were not edited;new tests verify their existing type guards reject `RuleAddConditionAction`. The core evaluator gained only the lower-level `WhereAddedCondition` / `added_conditions` primitive,with no `evaluate_native_where(...)` signature drift and no RuleRef substrate,SDK,service,or agent drift.

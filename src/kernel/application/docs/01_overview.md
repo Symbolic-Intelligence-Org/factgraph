@@ -23,6 +23,7 @@
 - narrow ProofFrame Rechecker (`still_valid` / `invalidated` / `unknown` over one native `SupportArtifact` under fact replace/remove overlay, with deterministic single-frame narrative)
 - native Rule Disable (`completed` / `unsupported` / `invalid_request`) over one temporary rule-condition disable action,returning variant rows plus original-frame ProofFrame output
 - native Rule Literal Replace (`completed` / `unsupported` / `invalid_request`) over one temporary Const-to-Const native where literal replacement,returning variant rows plus original-frame ProofFrame output
+- native Rule Add Condition (`completed` / `unsupported` / `invalid_request`) over one temporary filter-only native where atom insertion,returning variant rows plus original-frame ProofFrame output with a synthetic added-atom verdict
 - explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
 - capability ergonomics helpers for Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
 
@@ -46,10 +47,11 @@
   - `derivation.py`: compiled derivation evaluate/accept request DTOs
   - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`)
   - `derivation_diagnose.py`: explicit-binding Diagnose protocol DTOs (`DiagnoseRequest` / `DiagnoseResult` / `DiagnoseAtomLocator`)
-  - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs and shared overlay actions (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `EvaluationOverlay` / `FactValueOverride` / `FactRemoveAction` / `RuleDisableAction` / `RuleLiteralReplaceAction`)
+  - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs and shared overlay actions (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `EvaluationOverlay` / `FactValueOverride` / `FactRemoveAction` / `RuleDisableAction` / `RuleLiteralReplaceAction` / `RuleAddConditionAction`)
   - `proofframe.py`: ProofFrame Rechecker protocol DTOs (`ProofFrameRecheckRequest` / `ProofFrameRecheckResult` / `ProofFrameAtomVerdict` / `ProofFrameStatus`)
   - `rule_disable.py`: Rule Disable protocol DTOs (`RuleDisableRequest` / `RuleDisableResult` / `RuleDisableStatus`)
   - `rule_literal_replace.py`: Rule Literal Replace protocol DTOs (`RuleLiteralReplaceRequest` / `RuleLiteralReplaceResult` / `RuleLiteralReplaceStatus`)
+  - `rule_add_condition.py`: Rule Add Condition protocol DTOs (`RuleAddConditionRequest` / `RuleAddConditionResult` / `RuleAddConditionStatus`)
   - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotRedRow` / `WhyNotRowDiagnostic` / `WhyNotAtomLocator`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
@@ -78,12 +80,14 @@
   - `check_rule_disable_action(...)`: evaluate one native `RuleSpec` under exactly one temporary `RuleDisableAction`; returns normalized variant rows plus a `ProofFrameRecheckResult` for the original frame. RuleRef-bearing inputs are unsupported,variant support capture is deferred,and no ledger or registry mutation occurs.
 - `rule_literal_replace_runtime.py`
   - `check_rule_literal_replace_action(...)`: evaluate one native `RuleSpec` under exactly one temporary `RuleLiteralReplaceAction`; supports existing Const leaves in predicate terms,comparison/filter sides,`in` members,and `addc` / `mulc` constants. RuleRef-bearing inputs are unsupported,variant support capture is deferred,and no ledger or registry mutation occurs.
+- `rule_add_condition_runtime.py`
+  - `check_rule_add_condition_action(...)`: evaluate one native `RuleSpec` under exactly one temporary `RuleAddConditionAction`; supports adding one filter-only atom over variables already bound in the selected branch. The runtime returns normalized variant rows plus an original-frame `ProofFrameRecheckResult` with a synthetic `b{branch}.add{action}:{kind}` atom verdict. RuleRef-bearing inputs,new-variable binding planner behavior,`not`,variant support capture,and multi-action ordering are deferred;no ledger or registry mutation occurs.
 - `why_not_runtime.py`
   - `check_why_not_universe(...)`: assemble a red/green board for an explicit finite head-binding universe, then diagnose each red row through `diagnose_derivation_binding(...)` while returning Why-not-owned row diagnostics.
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 45 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 47 public symbols. The main executor entry points are:
 
 - `execute_read_request(...)`
 - `hydrate_entity(...)`
@@ -96,6 +100,7 @@
 - `check_derivation_binding(...)`
 - `diagnose_derivation_binding(...)`
 - `check_fact_overlay_binding(...)`
+- `check_rule_add_condition_action(...)`
 - `check_rule_disable_action(...)`
 - `check_rule_literal_replace_action(...)`
 - `recheck_proof_frame(...)`

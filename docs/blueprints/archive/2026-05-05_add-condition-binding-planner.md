@@ -1,6 +1,6 @@
 # Rule Add Condition + Binding Planner(Batch 5c of Round Story Completion Plan)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Branch: `v0.1-add-condition-binding-planner-2026-05-05`
@@ -15,7 +15,7 @@
   - `src/kernel/core/rules/where_ast_validate.py`
   - `src/kernel/core/rules/where_eval.py`
 - Related Docs:
-  - [Round Story Completion Plan](./2026-05-05_round-story-completion-plan.md) §5.5c
+  - [Round Story Completion Plan](../active/2026-05-05_round-story-completion-plan.md) §5.5c
   - [Batch 5a Rule Disable archive](../archive/2026-05-05_rule-disable.md)
   - [Batch 5b Rule Condition Replace archive](../archive/2026-05-05_rule-condition-replace.md)
   - [Rule replay redesign Direction G](../../references/working/rule-replay-line-redesign-input/40_design-discussion-A-with-decision-1.md) §G
@@ -466,17 +466,17 @@ Implementation acceptance adds these gates:
 
 **Implementation acceptance(blocked until scoped):**
 
-- [ ] Protocol DTOs are frozen and tested.
-- [ ] Runtime returns variant rows plus original-frame ProofFrame or records a parent-plan deviation first.
-- [ ] Added atoms do not renumber existing locators.
-- [ ] New-variable atoms are rejected unless a binding-planner contract is explicitly shipped.
-- [ ] RuleRef and `not` behavior matches Step 0.B.
-- [ ] Existing Rule Disable / Rule Literal Replace / Fact Overlay / ProofFrame behavior is unchanged except explicitly scoped guards.
-- [ ] No SDK/service/agent diffs.
-- [ ] `evaluate_native_where(...)` signature and RuleRef substrate are unchanged.
-- [ ] No `superseded_by_full_eval` revival unless explicitly amended.
-- [ ] Module docs under `src/kernel/application/docs/` are updated if implementation ships.
-- [ ] Focused tests,full kernel unittest,ruff,and `git diff --check` pass.
+- [x] Protocol DTOs are frozen and tested.
+- [x] Runtime returns variant rows plus original-frame ProofFrame or records a parent-plan deviation first.
+- [x] Added atoms do not renumber existing locators.
+- [x] New-variable atoms are rejected unless a binding-planner contract is explicitly shipped.
+- [x] RuleRef and `not` behavior matches Step 0.B.
+- [x] Existing Rule Disable / Rule Literal Replace / Fact Overlay / ProofFrame behavior is unchanged except explicitly scoped guards.
+- [x] No SDK/service/agent diffs.
+- [x] `evaluate_native_where(...)` signature and RuleRef substrate are unchanged.
+- [x] No `superseded_by_full_eval` revival unless explicitly amended.
+- [x] Module docs under `src/kernel/application/docs/` are updated if implementation ships.
+- [x] Focused tests,full kernel unittest,ruff,and `git diff --check` pass.
 
 ## 8. Implementation Plan
 
@@ -500,10 +500,8 @@ Path B/C:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
-
-- Final landed result:
-- A/B/C decision:
-- Rejected alternatives:
-- Deviations from draft:
-- Verification / archive note:
+- Final landed result:Batch 5c shipped narrow native Rule Add Condition. `RuleAddedAtom` and `RuleAddConditionAction` join the shared `EvaluationOverlay.rule_actions` union;`RuleAddConditionRequest / RuleAddConditionResult` provide a separate runtime surface;`check_rule_add_condition_action(...)` evaluates one temporary filter-only added atom and returns variant rows plus an original-frame ProofFrame containing one synthetic added-atom verdict.
+- A/B/C decision:Step 0 selected Path A only as a narrow add-filter first slice. A real new-variable binding planner did not ship;the binding-planner contract collapses to deterministic preflight that rejects atoms binding variables outside the selected branch's already-bound variables.
+- Rejected alternatives:new-variable `pred` binders,`eq` binders,arithmetic output binders,`not`,RuleRef,branch templates,multi-action ordering,variant `SupportArtifact` capture,`superseded_by_full_eval`,SDK replay substrate,and public binding-planner surface remain out of scope.
+- Deviations from draft:none after Step 0.B. Implementation followed the scoped shape:synthetic `b{branch}.add{action}:{kind}` atom key,separate result DTO,one-action MVP,`atom_binds_new_variables(...)`,lower-level `evaluate_where(..., added_conditions=...)`,unchanged `evaluate_native_where(...)`,generic Fact Overlay / ProofFrame rule-action rejection,and existing Rule Disable / Rule Literal Replace non-owned action guards verified without runtime edits.
+- Verification / archive note:192 focused tests passed;full kernel unittest passed with 1265 OK / 1 skipped;`python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py` passed;`git diff --check` passed. Blueprint and audit archived after implementation.

@@ -28,6 +28,9 @@ from .derivation_fact_overlay import (
     OverlayCheckPhase,
     OverlayCheckPhaseStatus,
     OverlayCheckStatus,
+    RuleAddConditionAction,
+    RuleAddedAtom,
+    RuleAddedAtomKind,
     RuleDisableAction,
     RuleLiteralPath,
     RuleLiteralPathKind,
@@ -57,6 +60,11 @@ from .rule_disable import (
     RuleDisableRequest,
     RuleDisableResult,
     RuleDisableStatus,
+)
+from .rule_add_condition import (
+    RuleAddConditionRequest,
+    RuleAddConditionResult,
+    RuleAddConditionStatus,
 )
 from .rule_literal_replace import (
     RuleLiteralReplaceRequest,
@@ -162,6 +170,12 @@ __all__ = [
     "QueryRowValue",
     "QueryRuntimeRequest",
     "QueryRuntimeResponse",
+    "RuleAddConditionAction",
+    "RuleAddConditionRequest",
+    "RuleAddConditionResult",
+    "RuleAddConditionStatus",
+    "RuleAddedAtom",
+    "RuleAddedAtomKind",
     "RuleDisableAction",
     "RuleDisableRequest",
     "RuleDisableResult",

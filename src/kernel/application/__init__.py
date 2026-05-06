@@ -43,6 +43,7 @@ from .query_runtime import (
     execute_query,
 )
 from .rule_disable_runtime import check_rule_disable_action
+from .rule_add_condition_runtime import check_rule_add_condition_action
 from .rule_literal_replace_runtime import check_rule_literal_replace_action
 from .proofframe_runtime import (
     recheck_proof_frame,
@@ -97,6 +98,7 @@ __all__ = [
     "build_why_not_candidate_universe",
     "check_derivation_binding",
     "check_fact_overlay_binding",
+    "check_rule_add_condition_action",
     "check_rule_disable_action",
     "check_rule_literal_replace_action",
     "check_why_not_universe",

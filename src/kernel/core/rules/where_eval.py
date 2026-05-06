@@ -25,6 +25,15 @@ class WhereLiteralReplacement:
     new_literal: Any
 
 
+@dataclass(frozen=True)
+class WhereAddedCondition:
+    branch_index: int
+    atom: tuple[Any, ...]
+
+    def __hash__(self) -> int:
+        return hash((self.branch_index, repr(self.atom)))
+
+
 _DEC_INT_RE = re.compile(r"^-?\d+$")
 _ARITH_KINDS = {"add", "sub", "neg", "addc", "mulc"}
 
@@ -35,6 +44,7 @@ def evaluate_where(
     *,
     disabled_locators: frozenset[tuple[int, int]] = frozenset(),
     literal_replacements: frozenset[WhereLiteralReplacement] = frozenset(),
+    added_conditions: frozenset[WhereAddedCondition] = frozenset(),
 ) -> list[dict[str, Any]]:
     ast_gate_on = _where_ast_gate_enabled()
     if ast_gate_on:
@@ -53,6 +63,11 @@ def evaluate_where(
         bodies = _apply_literal_replacements(
             bodies,
             literal_replacements=literal_replacements,
+        )
+    if added_conditions:
+        bodies = _apply_added_conditions(
+            bodies,
+            added_conditions=added_conditions,
         )
     if disabled_locators:
         bodies = _apply_disabled_locators(bodies, disabled_locators=disabled_locators)
@@ -180,6 +195,29 @@ def _apply_literal_replacements(
     return out
 
 
+def _apply_added_conditions(
+    bodies: list[list[tuple[Any, ...]]],
+    *,
+    added_conditions: frozenset[WhereAddedCondition],
+) -> list[list[tuple[Any, ...]]]:
+    _validate_added_conditions(added_conditions)
+    branch_count = len(bodies)
+    additions_by_branch: dict[int, list[tuple[Any, ...]]] = {}
+    for condition in added_conditions:
+        if condition.branch_index >= branch_count:
+            raise WhereValidationError("added condition branch_index out of range")
+        additions_by_branch.setdefault(condition.branch_index, []).append(
+            _validate_atom(condition.atom)
+        )
+    return [
+        [
+            *body,
+            *sorted(additions_by_branch.get(branch_index, ()), key=repr),
+        ]
+        for branch_index, body in enumerate(bodies)
+    ]
+
+
 def _validate_disabled_locators(disabled_locators: object) -> None:
     if not isinstance(disabled_locators, frozenset):
         raise WhereValidationError("disabled_locators must be frozenset[tuple[int, int]]")
@@ -225,6 +263,28 @@ def _validate_literal_replacements(literal_replacements: object) -> None:
             raise WhereValidationError("literal replacement old_literal must be literal")
         if not _is_literal(replacement.new_literal):
             raise WhereValidationError("literal replacement new_literal must be literal")
+
+
+def _validate_added_conditions(added_conditions: object) -> None:
+    if not isinstance(added_conditions, frozenset):
+        raise WhereValidationError(
+            "added_conditions must be frozenset[WhereAddedCondition]"
+        )
+    for condition in added_conditions:
+        if not isinstance(condition, WhereAddedCondition):
+            raise WhereValidationError(
+                "added_conditions entries must be WhereAddedCondition"
+            )
+        if (
+            isinstance(condition.branch_index, bool)
+            or not isinstance(condition.branch_index, int)
+            or condition.branch_index < 0
+        ):
+            raise WhereValidationError(
+                "added condition branch_index must be non-negative int"
+            )
+        if not _is_atom(condition.atom):
+            raise WhereValidationError("added condition atom must be atom tuple")
 
 
 def _is_literal_path(value: object) -> bool:
