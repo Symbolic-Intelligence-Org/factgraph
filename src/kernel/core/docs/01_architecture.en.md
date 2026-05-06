@@ -474,24 +474,30 @@ Environment variable:
 
 - register: `register_engine_evaluator(evaluator, name)`
 - lookup: `get_engine_evaluator(name)`
-- run: `Store.evaluate(mode='souffle'|'problog')`
+- run: `Store.evaluate(mode='souffle'|'problog'|'pyreason')`
 
 Current adapter-side behavior:
 
 - importing `kernel.adapters.souffle` registers `souffle`
 - importing `kernel.adapters.problog` registers `problog`
+- importing `kernel.adapters.pyreason` registers `pyreason`
 
 Additional notes:
 
-- `Store` now maintains two separate in-process explain registries:
-  - `_support_artifacts` for derivation-native support capture
-  - `_rule_trace_artifacts` for `run_rule_with_trace(...)`
+- `Store` now maintains three separate in-process explain registries:
+  - `_support_artifacts`: derivation-native support capture
+  - `_provenance_envelopes`: engine-native candidate provenance envelope
+  - `_rule_trace_artifacts`: rule runtime trace produced by `run_rule_with_trace(...)`
 - `Store` also maintains a session-scoped candidate explain backref index:
   - `_candidate_support_index`: `candidate_id -> support_digest`
   - `_candidate_support_kind_index`: `candidate_id -> support_kind`
-  - this index does not go to sidecar; both native and engine degraded candidate explain rely on this first hop
-- they intentionally remain separate at the carrier layer for now.
-- when `artifact_sidecar` is configured, lookup misses rehydrate these registries from the sidecar into the current in-memory dicts; without it, the behavior remains purely in-process.
+  - this index does not go to sidecar; both native and engine-degraded candidate explain rely on this first hop
+- the three registries currently coexist only at the readback protocol layer and do not share underlying carriers:
+  - native / Souffle witness → `SupportArtifact`
+  - engine provenance → `ProvenanceEnvelope`
+  - rule runtime trace → `RuleTraceArtifact`
+- when `artifact_sidecar` is configured, lookup misses on durably-readable registries rehydrate from the sidecar into the in-memory dicts; without it, the behavior remains purely in-process.
+- only `SupportArtifact` / `RuleTraceArtifact` go to the sidecar; `ProvenanceEnvelope` remains a session-scoped in-process registry.
 - `FileArtifactSidecar` now writes sidecar-adjacent `.meta.json` files on first durable write:
   - `support/sha256/<hex>.meta.json`
   - `rule_trace/<rule_run_id>.meta.json`
