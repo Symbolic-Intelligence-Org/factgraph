@@ -13,6 +13,7 @@
 | 2026-05-06 | draft | Pre-commit review pass on Step 0.A | Review accepted Step 0.A and requested one P3 carry-over:Step 0.B must freeze the Path A primitive function name and module location. The blueprint now sets the default expectation to extend lower-level `where_eval.evaluate_where(...)` with a private helper parallel to Batch 5a `_apply_disabled_locators(...)`,while keeping `evaluate_native_where(...)` unchanged. |
 | 2026-05-06 | draft | Step 0.B spike completed | Path A shape frozen: `RuleLiteralReplaceAction` joins `EvaluationOverlay.rule_actions`;`RuleLiteralPath` encodes five Const-leaf path kinds;runtime surface is separate `RuleLiteralReplaceRequest/Result` and `check_rule_literal_replace_action(...)`;core primitive is `WhereLiteralReplacement` plus `evaluate_where(..., literal_replacements=...)`;MVP accepts exactly one replace action;Rule Disable gets a narrow non-disable-action rejection guard;Fact Overlay and ProofFrame keep generic rule-action rejection. Blueprint remains draft until review accepts this freeze. |
 | 2026-05-06 | draft | Pre-commit review pass on Step 0.B | Review accepted Step 0.B and requested two P3 polish items:dedicate `RULE_LITERAL_REPLACE_NEW_LITERAL_INVALID` to variable/non-native replacement values,and explain why future overlap with disabled locators applies literal replacement before disable. Both were added before commit. |
+| 2026-05-06 | scoped | Scope freeze | Status moved `draft → scoped` after Step 0.A/0.B review acceptance. Implementation is authorized only within §5.6/§5.7 boundaries:Const-to-Const native literal replace,one action MVP,separate result DTO,lower-level `evaluate_where(..., literal_replacements=...)`,generic Fact Overlay/ProofFrame rejection,and narrow Rule Disable non-disable-action guard. |
 
 ## Decision Notes
 
@@ -114,3 +115,15 @@ Review accepted the Step 0.B freeze and found no blocker. Two clarity fixes land
 
 - `new_literal` validation now has a dedicated `RULE_LITERAL_REPLACE_NEW_LITERAL_INVALID` code so variable-form or unsupported native-literal values do not collapse into path/stale-target errors.
 - The future ordering rule for combined `literal_replacements` and `disabled_locators` now explains why replacements apply before disables:overlap still resolves to disable-wins,while non-overlap is order-independent.
+
+### 2026-05-06 — Scoped For Implementation
+
+The blueprint is now scoped for implementation. Scope is limited to the accepted Path A:
+
+- implement `RuleLiteralPath`, `RuleLiteralReplaceAction`, `RuleLiteralReplaceRequest`, and `RuleLiteralReplaceResult`;
+- extend `EvaluationOverlay.rule_actions` with `RuleLiteralReplaceAction`;
+- add `check_rule_literal_replace_action(...)`;
+- add lower-level `WhereLiteralReplacement` support to `evaluate_where(...)`;
+- add only the scoped cross-runtime guards described in §5.7.5.
+
+Implementation must not modify `evaluate_native_where(...)`,RuleRef substrate,ProofFrame protocol,SDK/service/agent surfaces,or resurrect generalized `param_override`.
