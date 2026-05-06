@@ -644,6 +644,120 @@ def _minimal_audit_package(package_dir: Path) -> Path:
     return package_dir
 
 
+def run_sdk_check_diagnose_demo(*, verbose: bool = False) -> dict[str, str]:
+    """Chapter 1 — SDK-authored schema, Q1 Check and Q2 Diagnose."""
+    fixture = _build_fixture()
+    if verbose:
+        print("Chapter 1: SDK schema setup + Q1 Check + Q2 Diagnose")
+        print("=====================================================")
+    _check_request, check_result, _support = _phase_check(fixture, verbose=verbose)
+    _diagnose_request, diagnose_result = _phase_diagnose(fixture, verbose=verbose)
+    return {
+        "check": check_result.status,
+        "diagnose": diagnose_result.failure_kind or "",
+    }
+
+
+def run_overlay_why_not_frontier_demo(*, verbose: bool = False) -> dict[str, str]:
+    """Chapter 2 — Q3 Fact Overlay, Q4 Why-not Universe, Q5 Frontier Trace."""
+    fixture = _build_fixture()
+    if verbose:
+        print("Chapter 2: Q3 Fact Overlay + Q4 Why-not + Q5 Frontier")
+        print("======================================================")
+    _fo_request, fact_overlay_result, _fact_overlay = _phase_fact_overlay(
+        fixture,
+        verbose=verbose,
+    )
+    _why_not_request, why_not_result = _phase_why_not(fixture, verbose=verbose)
+    frontier_status = _phase_frontier(fixture, verbose=verbose)
+    return {
+        "fact_overlay": fact_overlay_result.status,
+        "why_not": why_not_result.status,
+        "frontier": frontier_status,
+    }
+
+
+def run_proofframe_rule_overlay_demo(*, verbose: bool = False) -> dict[str, str]:
+    """Chapter 3 — ProofFrame Rechecker + the three rule-overlay actions."""
+    fixture = _build_fixture()
+    alice = fixture.people["alice"]
+    rule_context = RuleContext(
+        rule_spec=_rule_spec(fixture.index),
+        support_artifact=_rule_support_artifact(alice),
+    )
+    if verbose:
+        print(
+            "Chapter 3: ProofFrame Rechecker + Rule Overlays "
+            "(Disable / Replace / Add)"
+        )
+        print(
+            "============================================================"
+            "================="
+        )
+    _check_request, _check_result, support = _phase_check(fixture, verbose=False)
+    _fo_request, _fo_result, fact_overlay = _phase_fact_overlay(fixture, verbose=False)
+    _, _, _, overlay_pf_result = _phase_proofframe(
+        fixture,
+        support,
+        fact_overlay,
+        verbose=verbose,
+    )
+    rule_disable = _phase_rule_disable(fixture, rule_context, verbose=verbose)
+    rule_literal_replace = _phase_rule_literal_replace(
+        fixture,
+        rule_context,
+        verbose=verbose,
+    )
+    rule_add_condition = _phase_rule_add_condition(
+        fixture,
+        rule_context,
+        verbose=verbose,
+    )
+    return {
+        "proofframe": overlay_pf_result.status,
+        "rule_disable": rule_disable.status,
+        "rule_literal_replace": rule_literal_replace.status,
+        "rule_add_condition": rule_add_condition.status,
+    }
+
+
+def run_round_persistence_diff_demo(*, verbose: bool = False) -> dict[str, str]:
+    """Chapter 4 — Durable round events + ProofFrame diff across two rounds."""
+    fixture = _build_fixture()
+    if verbose:
+        print("Chapter 4: Round Persistence + ProofFrame Diff")
+        print("================================================")
+    check_request, check_result, support = _phase_check(fixture, verbose=False)
+    diagnose_request, diagnose_result = _phase_diagnose(fixture, verbose=False)
+    fact_overlay_request, fact_overlay_result, fact_overlay = _phase_fact_overlay(
+        fixture,
+        verbose=False,
+    )
+    why_not_request, why_not_result = _phase_why_not(fixture, verbose=False)
+    (
+        baseline_pf_request,
+        baseline_pf_result,
+        overlay_pf_request,
+        overlay_pf_result,
+    ) = _phase_proofframe(fixture, support, fact_overlay, verbose=False)
+    round_diff = _phase_round_persistence_and_diff(
+        check_request=check_request,
+        check_result=check_result,
+        diagnose_request=diagnose_request,
+        diagnose_result=diagnose_result,
+        fact_overlay_request=fact_overlay_request,
+        fact_overlay_result=fact_overlay_result,
+        why_not_request=why_not_request,
+        why_not_result=why_not_result,
+        baseline_pf_request=baseline_pf_request,
+        baseline_pf_result=baseline_pf_result,
+        overlay_pf_request=overlay_pf_request,
+        overlay_pf_result=overlay_pf_result,
+        verbose=verbose,
+    )
+    return {"round_diff": round_diff}
+
+
 def run_demo(*, verbose: bool = True) -> dict[str, str]:
     fixture = _build_fixture()
     alice = fixture.people["alice"]

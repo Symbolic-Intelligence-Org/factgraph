@@ -14,6 +14,31 @@ class RoundStoryFullDemoTests(unittest.TestCase):
             module.run_demo(verbose=False),
             module.EXPECTED_PHASE_SUMMARY,
         )
+        self.assertEqual(
+            module.run_sdk_check_diagnose_demo(verbose=False),
+            {"check": "passed", "diagnose": "atom_localized"},
+        )
+        self.assertEqual(
+            module.run_overlay_why_not_frontier_demo(verbose=False),
+            {
+                "fact_overlay": "passed",
+                "why_not": "completed",
+                "frontier": "atom_filter_empty",
+            },
+        )
+        self.assertEqual(
+            module.run_proofframe_rule_overlay_demo(verbose=False),
+            {
+                "proofframe": "invalidated",
+                "rule_disable": "completed",
+                "rule_literal_replace": "completed",
+                "rule_add_condition": "completed",
+            },
+        )
+        self.assertEqual(
+            module.run_round_persistence_diff_demo(verbose=False),
+            {"round_diff": "frame_status_changed"},
+        )
 
 
 def _load_demo_module():
