@@ -249,6 +249,197 @@ Step 0.B must freeze these before status can move to `scoped`:
 - Whether Path A output includes warnings documenting that new-variable binding planner is deferred.
 - Drift gates for SDK/service/agent,RuleRef substrate,ProofFrame protocol,`evaluate_native_where(...)`,and generic Fact Overlay / ProofFrame rule-action rejection.
 
+### 5.8 Step 0.B Outcome — Synthetic Added-Atom ProofFrame Mapping
+
+Step 0.B freezes Path A. The blueprint remains `draft` until review accepts this freeze;the next transition is a separate `draft → scoped` commit.
+
+#### 5.8.1 Protocol Shape
+
+Rule add condition extends the shared rule-action lane with one new action:
+
+```python
+RuleAddedAtomKind = Literal["eq", "ne", "gt", "ge", "lt", "le", "in"]
+
+@dataclass(frozen=True)
+class RuleAddedAtom:
+    atom: tuple[Any, ...]
+
+@dataclass(frozen=True)
+class RuleAddConditionAction:
+    rule_id: str
+    version: str
+    branch_index: int
+    added_atom: RuleAddedAtom
+    note: str | None = None
+
+RuleOverlayAction = RuleDisableAction | RuleLiteralReplaceAction | RuleAddConditionAction
+```
+
+The action does not carry `atom_index`. It appends a new synthetic filter atom to the selected branch for variant evaluation while leaving existing atom positions and locators unchanged. Runtime preflight validates that the atom is one of the Step 0.A filter families and binds no new variables.
+
+`RuleAddedAtom` stores the native atom tuple instead of a separate structured per-kind DTO. This keeps the first slice close to current `where` IR and avoids designing a larger AST editor. Protocol validation stays shallow(shape and tuple-ness);semantic validation belongs to the runtime/core helper because it needs branch-local bound-variable context.
+
+#### 5.8.2 Request / Result Surface
+
+Batch 5c ships a separate result type and does **not** generalize Batch 5a/5b result DTOs:
+
+```python
+RuleAddConditionStatus = Literal["completed", "unsupported", "invalid_request"]
+
+@dataclass(frozen=True)
+class RuleAddConditionRequest:
+    rule_spec: RuleSpec
+    support_artifact: SupportArtifact
+    overlay: EvaluationOverlay
+
+@dataclass(frozen=True)
+class RuleAddConditionResult:
+    status: RuleAddConditionStatus
+    variant_rows: tuple[BindingItems, ...]
+    proof_frame: ProofFrameRecheckResult | None
+    errors: tuple[ErrorDTO, ...] = ()
+    warnings: tuple[WarningDTO, ...] = ()
+```
+
+The result invariant mirrors Rule Disable and Rule Literal Replace:
+
+- `completed` requires `proof_frame is not None` and no errors;
+- `unsupported` / `invalid_request` require empty `variant_rows`, `proof_frame is None`, and at least one error;
+- `warnings` are allowed but not required on completed results.
+
+Batch 5c does not add a success warning for "binding planner deferred". That boundary is encoded in protocol/runtime errors for rejected atoms and in module docs. Always-on warnings would make the happy path noisy without adding machine-checkable information.
+
+#### 5.8.3 Added-Atom Identity And ProofFrame Mapping
+
+Step 0.B chooses the synthetic-locator option.
+
+Inserted atom identity:
+
+```text
+b{branch_index}.add{action_index}:{atom_kind}
+```
+
+Examples:
+
+- action `#0`,branch `0`,added atom `("lt", "$age", 65)` -> `b0.add0:lt`
+- action `#0`,branch `2`,added atom `("in", "$region", ["us"])` -> `b2.add0:in`
+
+This does not renumber old atoms and does not claim the added atom existed in the old support artifact. It is a rule-action synthetic atom key,produced only by the Rule Add Condition runtime's `ProofFrameRecheckResult`.
+
+ProofFrame mapping:
+
+- existing `artifact.pred_witnesses` and `artifact.non_fact_steps` are emitted as `still_valid`. This is honest under Batch 5c's filter-only scope because the added condition cannot introduce new facts;it only filters existing bindings,so existing fact witnesses and `not` absence checks are preserved. Batch 4's strict `not` deferral applied because fact-replacing overlays could introduce new positive matches;Batch 5c's narrower add-filter scope avoids that risk. Batch 5c constructs its own `ProofFrameRecheckResult` and does not delegate to `recheck_proof_frame(...)`;
+- one synthetic `ProofFrameAtomVerdict` is appended for the added atom;
+- if the old frame's `binding_items` appears in `variant_rows`,the synthetic verdict is `still_valid`;
+- if the old frame's `binding_items` does not appear in `variant_rows`,the synthetic verdict is `invalidated` with `affected_action_indices=(0,)`;
+- frame status remains `aggregate_proof_frame_status(atom_verdicts)`.
+
+This keeps the Batch 4 protocol intact: `atom_key` remains a string,`affected_action_indices` remains the action link,and no new ProofFrame status is introduced. The runtime is responsible for documenting that `b*.add*:*` keys are synthetic action atoms,not source artifact atom keys.
+
+Rejected alternatives:
+
+- **Insertion-position identity** was rejected because it exposes a caller-visible position contract and still cannot point to an old artifact atom.
+- **Action-index-only identity** was rejected because it overloads `atom_key` with non-atom semantics and becomes brittle when multi-action support is introduced.
+- **Frame-level `unknown` instead of synthetic verdict** was rejected because it throws away useful old-binding pass/fail information after a full variant evaluation has already run.
+
+#### 5.8.4 Runtime Scope And Core Primitive
+
+Runtime MVP accepts exactly one `RuleAddConditionAction` and rejects all fact actions. Multiple rule actions are deferred.
+
+The native primitive lands in `kernel.core.rules.where_eval`:
+
+```python
+@dataclass(frozen=True)
+class WhereAddedCondition:
+    branch_index: int
+    atom: tuple[Any, ...]
+
+def evaluate_where(
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    where: list[Any],
+    *,
+    disabled_locators: frozenset[tuple[int, int]] = frozenset(),
+    literal_replacements: frozenset[WhereLiteralReplacement] = frozenset(),
+    added_conditions: frozenset[WhereAddedCondition] = frozenset(),
+) -> list[dict[str, Any]]: ...
+```
+
+Implementation uses a private `_apply_added_conditions(...)` helper after literal replacements and before disabled locators:
+
+```text
+literal_replacements -> added_conditions -> disabled_locators
+```
+
+This order is deterministic and future-compatible:literal replacements edit existing atoms;added conditions append synthetic atoms without renumbering old locators;disabled locators remove old atoms after any edits. Batch 5c runtime supplies only `added_conditions`.
+
+This three-way ordering is forward-compatible only. Batch 5c's MVP single-action runtime never combines literal replacements,added conditions,and disabled locators. Future multi-action work must re-validate combined-input semantics,including whether disable can target an appended atom or only original atom locators.
+
+`evaluate_native_where(...)` remains unchanged.
+
+#### 5.8.5 Binding-Effect Validation
+
+Step 0.B scopes a narrow core validation helper in `where_ast_validate.py`:
+
+```python
+def atom_binds_new_variables(
+    atom_ir: tuple[Any, ...],
+    *,
+    bound_vars: frozenset[str],
+) -> bool: ...
+```
+
+The exact helper name may change during implementation,but the contract is fixed:
+
+- parse and validate one candidate atom against current native AST/dataflow rules;
+- return whether the atom would bind any variable outside `bound_vars`;
+- raise `WhereASTValidationError` for malformed or unsupported atoms;
+- expose no SDK/service/agent surface.
+
+Runtime computes branch-local `bound_vars` from atoms before the insertion point. Since Batch 5c appends to the selected branch,the insertion point is the end of the branch. That means `bound_vars` are the variables bound by the original branch. If future work supports insertion between atoms,it must reopen this contract.
+
+#### 5.8.6 Error / Unsupported Contract
+
+`RuleAddConditionResult` uses the local status shape `completed | unsupported | invalid_request`.
+
+| Condition | Status | Code |
+|---|---|---|
+| non-native or non-row support artifact | `unsupported` | `RULE_ADD_CONDITION_SUPPORT_UNSUPPORTED` |
+| support artifact has `rule_refs` or `rule_ref_edges` | `unsupported` | `RULE_ADD_CONDITION_RULE_REF_UNSUPPORTED` |
+| `rule_spec.where` contains `ruleref` atom | `unsupported` | `RULE_ADD_CONDITION_RULE_REF_UNSUPPORTED` |
+| overlay contains fact actions | `invalid_request` | `RULE_ADD_CONDITION_FACT_ACTIONS_UNSUPPORTED` |
+| zero or multiple rule actions | `invalid_request` | `RULE_ADD_CONDITION_ACTION_COUNT` |
+| single rule action is not `RuleAddConditionAction` | `invalid_request` | `RULE_ADD_CONDITION_ACTION_TYPE_UNSUPPORTED` |
+| action rule identity mismatches request rule | `invalid_request` | `RULE_ADD_CONDITION_RULE_MISMATCH` |
+| target branch does not exist | `invalid_request` | `RULE_ADD_CONDITION_BRANCH_NOT_FOUND` |
+| added atom shape is malformed | `invalid_request` | `RULE_ADD_CONDITION_ATOM_MALFORMED` |
+| added atom kind unsupported by §5.7.1 | `invalid_request` | `RULE_ADD_CONDITION_ATOM_UNSUPPORTED` |
+| added atom would bind a new variable | `invalid_request` | `RULE_ADD_CONDITION_BINDS_NEW_VARIABLE` |
+| added atom is `not` or contains `not` internals | `invalid_request` | `RULE_ADD_CONDITION_NOT_UNSUPPORTED` |
+| native variant evaluation raises evaluator/runtime validation error | `invalid_request` | `RULE_ADD_CONDITION_NATIVE_EVAL_ERROR` |
+
+The runtime may preflight obvious malformed/unsupported cases before calling the core helper. Evaluator errors remain mapped to `RULE_ADD_CONDITION_NATIVE_EVAL_ERROR`.
+
+#### 5.8.7 Cross-Runtime Compatibility
+
+Adding `RuleAddConditionAction` to `EvaluationOverlay.rule_actions` changes the union accepted by the shared overlay DTO. Runtime ownership remains explicit:
+
+- `check_rule_add_condition_action(...)` owns `RuleAddConditionAction` semantics.
+- `check_rule_disable_action(...)` and `check_rule_literal_replace_action(...)` must reject non-owned rule actions before field access.
+- `check_fact_overlay_binding(...)` continues to reject any non-empty `rule_actions` generically.
+- `recheck_proof_frame(...)` continues to return frame-level `unknown` for any non-empty `rule_actions`;no add-condition-specific semantics are added there.
+
+Implementation note:Batch 5a and 5b runtimes already type-check with `isinstance(action, RuleDisableAction)` and `isinstance(action, RuleLiteralReplaceAction)`,which automatically rejects `RuleAddConditionAction`. Batch 5c prefers no code changes in those runtimes;new tests should verify the existing guards reject the new action type.
+
+#### 5.8.8 Drift Gates / Acceptance Additions
+
+Implementation acceptance adds these gates:
+
+- `git diff --stat -- src/kernel/core/rules/ruleref_substrate.py src/kernel/application/protocol/proofframe.py src/kernel/application/proofframe_runtime.py src/kernel/application/fact_overlay_runtime.py` is empty.
+- `def evaluate_native_where` signature is unchanged.
+- `src/kernel/sdk`, `src/factpy_kernel/service`,and `src/factpy_kernel/agent` diffs are empty.
+- `src/kernel/application/rule_disable_runtime.py` and `src/kernel/application/rule_literal_replace_runtime.py` changes are limited to narrow non-owned rule-action rejection guards.
+- no `superseded_by_full_eval`, generalized binding planner public surface,SDK replay substrate,or RuleRef add-condition support appears in Batch 5c code.
+
 ## 6. Boundaries And Invariants
 
 - Application-first:all public task DTOs start in `kernel.application.protocol`;runtime starts in `kernel.application`.
@@ -266,12 +457,12 @@ Step 0.B must freeze these before status can move to `scoped`:
 
 **Step 0 acceptance:**
 
-- [ ] Step 0 records a concrete A/B/C decision with rejected reasons.
-- [ ] Step 0 answers every falsifier in §5.1 with source-grounded examples.
-- [ ] Step 0 explicitly decides whether "add condition" and "binding planner" are one capability or split capabilities.
-- [ ] Step 0 explicitly resolves the `superseded_by_full_eval` parent-plan conflict in §5.6.
-- [ ] If Path A ships,Step 0 freezes the atom family set,variable-binding boundary,and inserted-locator scheme.
-- [ ] If Path B/C is selected,the blueprint closes or splits without implementation.
+- [x] Step 0 records a concrete A/B/C decision with rejected reasons(see §5.7 and §5.8).
+- [x] Step 0 answers every falsifier in §5.1 with source-grounded examples(see §5.7.2).
+- [x] Step 0 explicitly decides whether "add condition" and "binding planner" are one capability or split capabilities(see §5.7).
+- [x] Step 0 explicitly resolves the `superseded_by_full_eval` parent-plan conflict in §5.6(see §5.7.3).
+- [x] If Path A ships,Step 0 freezes the atom family set,variable-binding boundary,and inserted-locator scheme(see §5.7.1 and §5.8.3).
+- [x] Path B/C was not selected;closure/split is not applicable(see §5.7 and §5.8).
 
 **Implementation acceptance(blocked until scoped):**
 

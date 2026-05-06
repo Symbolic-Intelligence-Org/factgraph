@@ -29,3 +29,11 @@ Step 0.A selected Path A only as a **narrow add-filter first slice**. The full m
 ### 2026-05-06 — Step 0.A Pre-commit Review
 
 Review accepted the Step 0.A reduction and requested three P3 carry-over refinements before commit:inserted identity and ProofFrame mapping are now a single coupled Step 0.B decision;Step 0.B must decide whether a narrow `where_ast_validate.py` binding-effect primitive is needed;and the lower-level primitive default now mirrors Batch 5a/5b explicitly(`evaluate_where(..., added_conditions=frozenset())` + private `_apply_added_conditions(...)`,with `evaluate_native_where(...)` unchanged).
+
+### 2026-05-06 — Step 0.B Spike Completed
+
+Step 0.B froze Path A rather than falling back to Path B. The coupled identity/ProofFrame problem has an honest mapping:the runtime appends one synthetic `ProofFrameAtomVerdict` with atom key `b{branch}.add{action_index}:{atom_kind}`. Existing artifact atom verdicts remain `still_valid`;the synthetic verdict is `invalidated` iff the original `binding_items` disappears from `variant_rows`,otherwise `still_valid`. This avoids renumbering old locators,does not modify the Batch 4 ProofFrame protocol,and preserves the 3-status aggregate invariant. Step 0.B also froze a separate `RuleAddConditionRequest / Result`,raw native tuple `RuleAddedAtom`,one-action MVP,narrow `where_ast_validate.py` binding-effect helper,`evaluate_where(..., added_conditions=frozenset())`,and cross-runtime non-owned action guards for Rule Disable and Rule Literal Replace.
+
+### 2026-05-06 — Step 0.B Pre-commit Review
+
+Review accepted the synthetic-verdict mapping and requested three P3 clarifications before commit:§5.8.3 now explains why existing `not` steps can be `still_valid` under filter-only add-condition even though Batch 4 fact-overlays strictly deferred `not`;§5.8.4 marks the three-way primitive ordering as forward-compatible only,not a current multi-action semantics claim;and §5.8.7 notes Batch 5a/5b runtimes already reject non-owned action types through existing `isinstance` guards,so tests should verify behavior without requiring runtime edits.
