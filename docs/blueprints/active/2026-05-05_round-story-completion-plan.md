@@ -1,8 +1,8 @@
 # Round Story Completion Plan(总控蓝图)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-05
-- Last Updated: 2026-05-05
+- Last Updated: 2026-05-06
 - Scope: master plan,governs Batch 0..8 + 5a/5b/5c sub-batches
 - Related Modules: ALL(meta)
 - Related Docs:
@@ -48,6 +48,11 @@
 | **§6.7 Declarative engine capability schema** | working hypothesis 仍 hold,trigger 未 fire |
 | **新引擎 onboarding(§3.5)** | 等真新 engine 落地推动 |
 | **新 substrate 在 `kernel.sdk`** | per `project_application_first_runtime_authority.md` hard constraint |
+| **Direction D unified status vocabulary** | Post-routemap design-intent audit found the upstream 10-status unification proposal was not shipped. The routed decision is per-capability status enums plus localized narrative/diff surfaces. Reactivate only if a concrete cross-capability consumer requires one status vocabulary rather than per-capability DTO interpretation. |
+| **Direction F shared condition identity / `shared_id` library resolution** | `ConditionModule.shared_id` exists as authoring metadata but the routemap did not ship producer / consumer / runtime resolution semantics. Reactivate with a separate blueprint if shared library condition reuse becomes product-critical. |
+| **Broader L6 lazy why-not carrier / near-miss tracking** | Batch 2 shipped a narrow finite-universe Why-not capability. The broader lazy carrier / near-miss board concept remains deferred until a caller needs lazy candidate generation or UI-level near-miss exploration. |
+| **Minimal cause identification for status flips** | ProofFrame atom verdicts provide inputs, but no shipped capability selects the minimal single condition / action responsible for a status change. Reactivate only with a concrete causal-analysis consumer. |
+| **L5 cross-run aggregation as first-class master-plan deferred item** | Batch 7 explicitly deferred L5 aggregation because persisted events do not provide stable `module_id` grouping. Keep the reactivation trigger here as the master-plan-level reference: concrete module mapping + cross-run consumer, or a fresh first-slice aggregation scope that does not require module identity. |
 
 任意 trigger 出现(eg. 用户实际需要 cross-engine evidence 统一 view),可单独开新蓝图;**本 plan 不预留 batch 槽位**。
 
@@ -412,11 +417,52 @@ chore(repo): batch 0 inventory + round story canonical artifacts
 - 唯一例外:依赖前批输出的批(eg. Batch 5a 依赖 Batch 4 ProofFrame 输出)abandon 时,后批应在 Step 0.A 重审 entry criteria
 - Default:每批独立判断
 
-## 10. Outcome / Deviations(填于 master plan close)
+## 10. Outcome / Deviations
 
-任务完成时填:
+Round story routemap closed on 2026-05-06 at Batch 8 close commit `6b32972`.
 
-- 9 批最终落地状态(完成 / suspended / abandoned 各几批)
-- 与本 plan 的偏差(批次重排序 / scope 缩放 / 提前结束)
-- 是否真到达 round story closure(用户能跑通 5 问题在 EvaluationOverlay 下的统一叙事)
-- Archive notes
+### 10.1 Final status
+
+| Item | Result |
+|---|---|
+| Major batches | 9/9 complete:Batch 0 / 1 / 2 / 3 / 4 / 5 / 6 / 7 / 8 |
+| Batch 5 sub-batches | 3/3 complete:5a Rule Disable / 5b Rule Condition Replace / 5c Add Condition |
+| Archived deliverables | 12 archived blueprints |
+| Post-archive hardening | Batch 4 / 5a / 6 / 7,plus tri-batch 5a/5b/5c RuleRef scan hardening |
+| Final public-surface decision | Batch 8 chose a Path-B-equivalent closure:no SDK shell,service route,release projection,or allowlist expansion |
+
+### 10.2 Closure semantics
+
+The routemap is complete under the scoped meaning of "round story completion":all committed batches were either shipped or narrowed through recorded Step 0 decisions,and all non-shipped items are explicit deferred scope with reactivation conditions. This does **not** mean every upstream design idea from the rule replay redesign notes was implemented.
+
+The canonical user story is now covered by application-first and audit-layer surfaces:
+
+- five canonical questions are documented and backed by shipped application/evaluator capabilities;
+- EvaluationOverlay fact replacement/removal,ProofFrame recheck,and the three first-slice rule actions are implemented in application-owned modules;
+- durable round events and L4 ProofFrame diff are implemented in `kernel.audit`;
+- the public boundary is documented as `kernel.sdk` product public,with `kernel.application` and `kernel.audit` advanced importable.
+
+### 10.3 Intentional narrowing / deviations
+
+| Area | Closure decision |
+|---|---|
+| Fact-side `add` | Deferred in Batch 3 because policy semantics were not crisp in Step 0. |
+| `superseded_by_full_eval` | Collapsed in Batch 4;ProofFrame status remains `still_valid | invalidated | unknown`. |
+| Rule replace | Narrowed in Batch 5b to Const-to-Const literal replacement. |
+| Add condition / binding planner | Narrowed in Batch 5c to filter-only add condition;real binding planner deferred. |
+| L5 cross-run aggregation | Deferred in Batch 7;module identity is not available from persisted first-slice fields. |
+| Public SDK/service expansion | Deferred in Batch 8;current decision is docs/checklist-only public boundary. |
+
+### 10.4 Post-routemap design-intent audit notes
+
+A post-closure design-intent audit compared the shipped routemap against `docs/references/working/rule-replay-line-redesign-input/`. It found no blocker to the current closure claim,but it identified follow-up documentation / hardening candidates now recorded in §3:
+
+- Direction D unified status vocabulary was not shipped;per-capability status enums are the actual design.
+- Direction F shared condition identity is not shipped beyond existing authoring metadata.
+- The broader L6 lazy why-not carrier / near-miss board is deferred beyond the finite-universe Why-not capability.
+- Minimal cause identification is not owned by any shipped capability.
+- L5 aggregation reactivation belongs in this master-plan deferred catalog,not only in the Batch 7 archive.
+
+### 10.5 Archive notes
+
+The individual batch blueprints remain the implementation truth for their scoped decisions. This master plan remains in `docs/blueprints/active/` as the routemap close-out reference because it is the cross-batch index and deferred-scope catalog for future sessions.

@@ -9,6 +9,7 @@
 | 2026-05-05 | draft | Master plan created | 收敛后 9 批 + 3 子批结构;Batch 0 inventory rules / branching strategy / suspension protocol 全部冻结 |
 | 2026-05-05 | scoped | Restore audit alignment | 蓝图 status 从 draft 对齐为 scoped,与 cross-session anchor 一致;Batch 0 `examples/12_rule_replay_demo.ipynb` 处置改为先 inspect 再删除/迁移 |
 | 2026-05-05 | scoped | Batch 0 inventory completed | `examples/11_capabilities_e2e_demo.ipynb` / `examples/README.md` / `tutorials/evidence-pipeline.cn.md` 纳入 Batch 0;`examples/12_rule_replay_demo.ipynb` inspected 后删除,因其引用 reset 前 SDK replay substrate API |
+| 2026-05-06 | implemented | Routemap close-out recorded | Batch 0-8 + 5a/5b/5c all closed by Batch 8 commit `6b32972`;§10 filled with final closure semantics,intentional narrowing,and archive notes. Post-routemap design-intent audit findings(Direction D status vocabulary,Direction F shared condition identity,broader L6 lazy why-not carrier,minimal cause identification,and L5 aggregation trigger location) were added to §3 as explicit deferred scope. |
 
 ## Decision Notes
 
