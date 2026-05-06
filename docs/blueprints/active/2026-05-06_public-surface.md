@@ -166,6 +166,67 @@ Step 0.B,if Step 0.A selects Path A,freezes:
 - release-day checklist deltas;
 - explicit deferrals and reactivation triggers.
 
+### 5.4 Step 0.A Spike — Source-Grounded Falsifier Answers
+
+Step 0.A read the required sources in §5.3 plus the Batch 6/7 archives. The key source facts:
+
+- `src/kernel/sdk/__init__.py` and SDK docs expose the product surface as schema/DSL/store/registry/errors and existing `SDKStore` facade methods. They do not expose Batches 3-7 capability shells.
+- `src/kernel/application/__init__.py` exports the new capability runtimes directly:Check,Diagnose,Fact Overlay,ProofFrame,Why-not,Rule Disable,Rule Literal Replace,and Rule Add Condition.
+- `src/kernel/audit/__init__.py` exports round persistence and ProofFrame diff surfaces directly.
+- `README.md` / `README.en.md` already explain Layer 1(`kernel.sdk`),Layer 2(`kernel.application`),and audit package reading;they do not expose every Batch 3-7 flow as a quickstart.
+- `scripts/release_surface_allowlist.txt` excludes `examples/` and `samples/`;release-surface cleanup kept the public source projection kernel-only and default-deny.
+
+| # | Verdict | Source-grounded answer | Consequence |
+|---|---|---|---|
+| 1 | TRUE | A naive SDK shell over all application capabilities would either expose application DTOs(`CheckRequest`, `ProofFrameRecheckRequest`, rule-action request/result DTOs)or require a new SDK lowering layer. SDK docs explicitly say not to turn application internals into SDK public API. | No broad SDK shell. |
+| 2 | PARTIAL | Thin delegates are plausible for a subset,but not for the whole capability set. Existing SDK already delegates query/ingest/derivation paths;new Batch 3-7 wrappers would need per-family outward shapes. | Step 0.B may consider a future narrow SDK family,but not as Batch 8 first slice. |
+| 3 | TRUE | The capability set is structurally heterogeneous:status-only check,localized diagnose,overlay before/after/diff,ProofFrame atom verdicts,rule-action variant rows plus nested ProofFrame,Why-not boards,and audit diffs. | One SDK method family would be false merge. |
+| 4 | TRUE | Service routes would need transport DTO,auth/session/error policy,and are not part of the kernel-only release surface. `service` is excluded from the projection. | No service route in first slice. |
+| 5 | TRUE | Projection allowlist excludes examples/samples and private docs;adding Batch 3-7 examples/docs to public source requires link/path scrub. | Projection change only if Step 0.B scopes exact docs and gates. |
+| 6 | TRUE | README quickstart is intentionally SDK-basic;application capability DTO ceremony would be too heavy for the top-level onboarding flow. | Do not add a broad README quickstart for Batches 3-7. |
+| 7 | TRUE | `examples/` is not in `release_surface_allowlist.txt`;Batch 7 demo is kernel-level but not projection-safe by policy until explicitly scrubbed. | Keep examples out of public projection in first slice. |
+| 8 | FALSE | Public documentation of current audit diff does not require single-frame diff or L5 aggregation;Batch 7 documented both as deferred. | No trigger for Batch 7 deferred work. |
+| 9 | FALSE | Public documentation of current surfaces can state Frontier/rule-action event families are deferred. | No trigger for Batch 6 deferred event families. |
+| 10 | TRUE | `kernel.application` and `kernel.audit` are already importable from the kernel package and documented as Layer 2 / audit surfaces. | A docs/checklist first slice is useful without SDK shell. |
+| 11 | TRUE | SDK docs define `kernel.sdk` as product surface and application as runtime authority. Application should be advertised as advanced/wire/automation layer,not general ergonomic API. | Keep product docs centered on SDK;document application as advanced. |
+| 12 | FALSE | Batch 8 can update internal docs/checklists without mutating `v0.1-oss-prep`, `master`,or public projection repo. | No release branch action in Batch 8. |
+| 13 | FALSE | Batch 4 ProofFrame `rule_refs` hardening remains tracked,but Batch 7 diff handles RuleRef-degenerate frames with a marker. Public docs can keep that caveat. | Do not bundle Batch 4 hardening. |
+| 14 | TRUE | The highest-confidence value is finalizing what is public vs advanced/internal and updating release-day checklist/docs. | Prefer docs/checklist first slice. |
+| 15 | FALSE | There is concrete user-facing value in a no-new-code decision:it prevents accidental SDK bloat and makes v0.1 public boundary explicit after Batches 0-7. | Path B no-expand alone is not necessary. |
+| 16 | FALSE | Docs/checklist first slice does not require `pyproject.toml` scope or dependency changes. | Keep packaging unchanged. |
+| 17 | TRUE | README and module docs can describe application/audit as advanced surfaces without expanding `kernel.sdk.__all__` or allowlisting examples. | Path A docs-only is viable. |
+| 18 | PARTIAL | A narrow SDK shell for Check/Diagnose could be designed later,but source evidence does not prove it is needed for v0.1 public close-out. | Defer SDK shell with concrete reactivation trigger. |
+
+#### 5.4.1 Decision
+
+Select **Path A,first slice A1 + A4 only:public boundary docs + release-day checklist update,no SDK/service code and no release projection expansion by default**.
+
+This is not Path B because Batch 8 still has a concrete close-out product:it records the final v0.1 public/advanced/internal boundary after the round-story implementation. It is not Path C because the code-bearing public surfaces(SDK shell,service routes,projection example add-back)are all deferred rather than partially implemented under this batch.
+
+#### 5.4.2 Frozen Constraints For Step 0.B
+
+1. No SDK code change in Batch 8 unless Step 0.B finds a docs/checklist outcome impossible without one.
+2. No service/agent code change.
+3. No application/audit runtime protocol change.
+4. No `pyproject.toml` package-scope/dependency change.
+5. No release branch,public repo,publish,or tag action.
+6. Public source projection stays default-deny;allowlist changes require explicit Step 0.B file list and link-scrub gates.
+7. README top-level quickstart remains SDK-basic;Batch 3-7 capability examples do not become the first quickstart.
+8. `kernel.application` may be documented as advanced runtime authority for automation/wire callers,not as ergonomic product surface.
+9. `kernel.audit` may be documented as offline audit/query surface,including round events and ProofFrame diff.
+10. SDK shell for Check/Diagnose/rule actions/ProofFrame remains deferred unless a future user-facing workflow proves the need.
+11. Service route exposure remains deferred to a separate delivery/auth blueprint.
+
+#### 5.4.3 Remaining Step 0.B Carry-Overs
+
+- Exact docs to change:README only,module docs only,release checklist only,or a combination.
+- Whether `scripts/release_surface_allowlist.txt` changes at all. Default expectation:no allowlist expansion.
+- Whether to add a release-day checklist section to the release-surface or RC blueprint,or only to this Batch 8 archive outcome.
+- Exact wording for the public boundary tiers:`product public`, `advanced importable`, `internal/deferred`.
+- Whether application/audit module docs need public-facing caveat labels.
+- Drift gates:static checks for no SDK/service/agent/application runtime/protocol drift,projection link scrub if docs touched,and README quickstart unchanged if not intentionally edited.
+- Reactivation triggers for SDK shell,service routes,example projection add-back,and Batch 4 `rule_refs` hardening.
+
 ## 6. Boundaries And Invariants
 
 - `v0.1-oss-prep` and `master` are frozen;Batch 8 does not touch them.
@@ -181,8 +242,8 @@ Step 0.B,if Step 0.A selects Path A,freezes:
 
 ## 7. Acceptance
 
-- [ ] Step 0.A answers all 18 falsifiers with source-grounded evidence.
-- [ ] Step 0.A selects Path A/B/C and records why alternatives were rejected.
+- [x] Step 0.A answers all 18 falsifiers with source-grounded evidence(see §5.4).
+- [x] Step 0.A selects Path A/B/C and records why alternatives were rejected(see §5.4.1).
 - [ ] Step 0.B freezes exact public surface scope before implementation,if any.
 - [ ] No release branch,tag,publish,or public repo push occurs.
 - [ ] No SDK/service/agent/application/audit drift outside the scoped files.
