@@ -224,6 +224,167 @@ Step 0.B remaining decisions(per §5.4 carry-overs not yet frozen by Step 0.A):
 
 Step 0.A satisfies §7 row 1("Step 0.A records all 16 falsifiers with source-grounded answers"). Status remains `draft` in this commit;a separate scope-freeze commit transitions to `scoped` after Step 0.B completes.
 
+### 5.6 Step 0.B Spike (synthesized 2026-05-06)
+
+This spike freezes the 7 §5.5.3 carry-overs. First slice = L4 per-frame ProofFrame diff per §5.5.2 Path A;L5 deferred per §5.5.3 #11.
+
+#### 5.6.1 Diff DTO Shape
+
+All DTOs are frozen dataclasses in `src/kernel/audit/proof_frame_diff.py`(new module). Shape grounded in §5.5.3 frozen identity:
+
+```
+ProofFrameDiff:
+  round_a_id: str
+  round_b_id: str
+  frame_deltas: tuple[FrameDelta, ...]
+  warnings: tuple[WarningDTO, ...]           # partial-round opt-in,future-kind skip,etc.
+
+FrameDelta:
+  frame_identity: FrameIdentity
+  source_a: EventReference | None            # None if frame_added
+  source_b: EventReference | None            # None if frame_removed
+  frame_status_change: FrameStatusChange | None    # None if both sides have same status
+  atom_deltas: tuple[AtomDelta, ...]
+  markers: tuple[FrameMarker, ...]           # see §5.6.2
+
+EventReference:
+  round_id: str
+  sequence: int
+
+FrameIdentity:
+  support_digest: str
+  binding_items: tuple[tuple[str, JSONValue], ...]    # canonical sorted
+
+FrameStatusChange:
+  before: ProofFrameStatus | None            # None if frame_added
+  after: ProofFrameStatus | None             # None if frame_removed
+
+AtomDelta:
+  atom_key: str
+  kind: AtomDeltaKind
+  before_verdict: ProofFrameStatus | None    # None for atom_added
+  after_verdict: ProofFrameStatus | None     # None for atom_removed
+```
+
+Type aliases:
+- `ProofFrameStatus = Literal["still_valid", "invalidated", "unknown"]`(reused from `kernel.application.protocol.proofframe`).
+- `AtomDeltaKind = Literal["atom_added", "atom_removed", "atom_verdict_changed"]`.
+- `FrameMarker = Literal["rule_refs_unsupported"]`(extensible in future schema versions).
+
+`affected_action_indices` is NOT carried in `AtomDelta` per §5.5.3 #5(action indices are per-event and not cross-round comparable).
+
+`ProofFrameDiff` intentionally has no `generated_at_ns` field. The diff is a deterministic derived view over persisted round events; adding a query-time timestamp would make equality tests and cache keys unstable without improving audit provenance. Callers needing timestamps can read source event timestamps through `EventReference`.
+
+#### 5.6.2 Status Vocabulary
+
+Frame-level state is derived from `(source_a, source_b, frame_status_change)`:
+
+| State | Encoding |
+|---|---|
+| `frame_added` | `source_a=None, source_b=set, frame_status_change=None or set` |
+| `frame_removed` | `source_a=set, source_b=None, frame_status_change=None or set` |
+| `frame_status_changed` | both sources set,`frame_status_change` set |
+| `frame_unchanged` | both sources set,`frame_status_change=None`,`atom_deltas=()`. Omitted from `frame_deltas` by default;included only when `include_unchanged=True`. |
+
+Atom-level kinds(`AtomDelta.kind`):
+- `atom_added`:`before_verdict=None`,`after_verdict` set
+- `atom_removed`:`before_verdict` set,`after_verdict=None`
+- `atom_verdict_changed`:both verdicts set,`before_verdict != after_verdict`
+
+Unchanged atoms are NOT included in `atom_deltas` by default. There is no `atom_unchanged` kind;omission carries the same meaning.
+
+Frame markers(`FrameMarker`)are carried as `markers: tuple[FrameMarker, ...]`:
+- `rule_refs_unsupported`:emitted when either side has empty `atom_verdicts`(Batch 4 RuleRef-bearing artifact;`status="unknown"` + `atom_verdicts=()` per Batch 4 archive §11 Outcome). Implies `atom_deltas=()` regardless of frame status.
+
+#### 5.6.3 Empty / Degenerate Handling
+
+| Condition | FrameDelta encoding |
+|---|---|
+| Frame in A only(matched by `(support_digest, binding_items)` in A,not in B) | `source_a=set, source_b=None, frame_status_change=None, atom_deltas=(), markers=()` |
+| Frame in B only | `source_a=None, source_b=set, frame_status_change=None, atom_deltas=(), markers=()` |
+| Both rounds,both sides have empty `atom_verdicts`(RuleRef on both) | `markers=("rule_refs_unsupported",), atom_deltas=()`;`frame_status_change` set if `status_a != status_b`,else None |
+| Both rounds,one side empty `atom_verdicts`(mixed RuleRef vs non-RuleRef for same `(support_digest, binding_items)`) | `markers=("rule_refs_unsupported",), atom_deltas=()`(cannot reliably diff atoms when one side has none);`frame_status_change` set if statuses differ |
+| Both rounds,both populated,same atom set + same verdicts + same frame status | Frame omitted from `frame_deltas` unless `include_unchanged=True` |
+| Both rounds,both populated,frame status flipped + per-atom verdict changes | `frame_status_change` set;`atom_deltas` lists changed atoms |
+| Both rounds,both populated,atom set differs | `atom_deltas` lists `atom_added` / `atom_removed` per side |
+
+#### 5.6.4 AuditQuery Extension
+
+Single new method on `AuditQuery`:
+
+```python
+def diff_proof_frames(
+    self,
+    round_a: str,
+    round_b: str,
+    *,
+    include_partial: bool = False,
+    include_unchanged: bool = False,
+) -> ProofFrameDiff:
+    ...
+```
+
+Behavior contract:
+- Validates `round_a` / `round_b` are non-empty strings present in `self.package.round_events`;raises `AuditQueryError` if missing.
+- Loads `proof_frame_result` events for each round from `self.package.round_events`.
+- Skips `future:proof_frame_result` events;emits one `WarningDTO(code="DIFF_FUTURE_KIND_SKIPPED", details={"round_id": ..., "skipped_count": N})` per round with skips.
+- If `include_partial=False` and either round has `RoundSummary.is_finalized=False`,raises `AuditQueryError("round X is not finalized")`.
+- If `include_partial=True` and either round is partial,emits `WarningDTO(code="DIFF_INCLUDES_PARTIAL_ROUND", details={"round_id": ...})`.
+- Pairs frames by canonical `(support_digest, binding_items JSON)` equality.
+- Returns `ProofFrameDiff` with all matched + unmatched frames + warnings.
+
+No single-frame filter method in first slice;callers filter `result.frame_deltas` in user code if needed.
+Reactivation trigger for a dedicated single-frame method:Batch 8 SDK or a repeated internal caller needs a stable method that accepts `FrameIdentity` and returns one `FrameDelta | None`. Until then,the whole-diff method keeps the audit query surface smaller.
+
+`AuditPackageData` gains no new fields. No new optional audit file. No durable index. Existing `AuditQuery` methods unchanged(byte-stable).
+
+#### 5.6.5 Drift Gates
+
+Mandatory Batch 7 implementation tests:
+
+| ID | Coverage |
+|---|---|
+| T1 | Two rounds with identical 5 frames + identical atom_verdicts → `frame_deltas=()`(with `include_unchanged=False` default) |
+| T2 | Frame in A only → `FrameDelta(source_b=None, ...)` |
+| T3 | Frame in B only → `FrameDelta(source_a=None, ...)` |
+| T4 | Status flipped,same atom set → `FrameDelta(frame_status_change=set, atom_deltas=...)` |
+| T5 | Atom set differs(A has atom_x,B has atom_y)→ `atom_added` + `atom_removed` deltas |
+| T6 | RuleRef-bearing frame both sides(both `atom_verdicts=()`)→ `markers=("rule_refs_unsupported",), atom_deltas=()` |
+| T7 | Mixed RuleRef vs non-RuleRef same identity → `markers=("rule_refs_unsupported",), atom_deltas=()` |
+| T8 | `include_partial=False` + partial round → raises `AuditQueryError` |
+| T9 | `include_partial=True` + partial round → succeeds + `DIFF_INCLUDES_PARTIAL_ROUND` warning |
+| T10 | `future:proof_frame_result` rows skipped + `DIFF_FUTURE_KIND_SKIPPED` warning per round |
+| T11 | Existing `AuditQuery` methods byte-stable on package with `round_events`(carry from Batch 6 T4) |
+| T12 | `kernel.application/*runtime*.py` contains ZERO import from `kernel.audit`(carry from Batch 6 T8) |
+| T13 | `affected_action_indices` is NOT a field on any `AtomDelta` instance(per §5.5.3 #5) |
+| T14 | Same `support_digest` + same `atom_key` → atoms paired correctly across rounds |
+| T15 | Different `support_digest` → frames treated as separate(no cross-artifact comparison)per §5.5.3 #4 |
+| T16 | Missing `round_id` in package → raises `AuditQueryError("round X not found")` |
+| T17 | `include_unchanged=True` + same-status frame both populated → `FrameDelta` emitted with `frame_status_change=None, atom_deltas=()` |
+| T18 | `ProofFrameDiff` has no `generated_at_ns`;same inputs produce equal DTOs across repeated calls |
+| T19 | `source_a` / `source_b` are `EventReference` instances,not raw tuple aliases |
+
+#### 5.6.6 Demo Artifact
+
+New Python script `examples/12_evidence_diff_demo.py`(no notebook in first slice):
+- Builds a minimal audit package with 2 rounds(`round-baseline` and `round-with-overlay`)using `start_round` / `record_round_event` / `finalize_round` from `kernel.audit.round_events`.
+- Both rounds invoke `recheck_proof_frame(...)` on the same `SupportArtifact` with different `EvaluationOverlay` actions.
+- Calls `AuditQuery(package).diff_proof_frames("round-baseline", "round-with-overlay")` and prints frame deltas via simple stringification.
+
+Notebook integration with `examples/11_capabilities_e2e_demo.ipynb` is OUT of first slice(would couple Batch 7 to the deferred Batch 4-6 demo gap).
+
+#### 5.6.7 L5 Reactivation Documentation Location
+
+L5 reactivation triggers documented in two places:
+1. Cross-session anchor `project_round_story_completion_plan_scoped.md` deferred items section:one-line summary referencing §5.5.3 #11 of the archived Batch 7 blueprint.
+2. Batch 7 archived blueprint §10 Outcome / Deviations:full reactivation triggers per §5.5.3 #11 wording.
+
+No new standalone anchor file. Keeps memory index lean per `MEMORY.md` 200-line guidance.
+
+#### 5.6.8 Acceptance §7 Update
+
+Step 0.B satisfies §7 row 2("Step 0.B freezes diff and aggregation shape before status moves to `scoped`"). Status remains `draft` in this commit;a separate scope-freeze commit transitions to `scoped` after user approval of §5.6.
+
 ## 6. Boundaries And Invariants
 
 - Batch 7 is read-only over audit packages.
