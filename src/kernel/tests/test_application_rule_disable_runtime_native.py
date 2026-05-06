@@ -305,22 +305,26 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
     def test_ruleref_rule_body_is_unsupported(self) -> None:
         store, index = _build_store()
         alice = _seed_person(store, index, name="alice")
-        rule_spec = _rule_spec(
-            index,
-            where=[("ruleref", "child.rule", "1.0", ["$p"])],
-        )
 
-        result = check_rule_disable_action(
-            _request(
-                rule_spec,
-                _artifact(alice),
-                EvaluationOverlay(rule_actions=(_action(atom_index=0),)),
-            ),
-            store=store,
-        )
+        for where in (
+            [("ruleref", "child.rule", "1.0", ["$p"])],
+            [
+                ("pred", alice.exists_pred_id, ["$p"]),
+                ("not", [("ruleref", "child.rule", "1.0", ["$p"])]),
+            ],
+        ):
+            with self.subTest(where=where):
+                result = check_rule_disable_action(
+                    _request(
+                        _rule_spec(index, where=where),
+                        _artifact(alice),
+                        EvaluationOverlay(rule_actions=(_action(atom_index=0),)),
+                    ),
+                    store=store,
+                )
 
-        self.assertEqual(result.status, "unsupported")
-        self.assertEqual(result.errors[0].code, "RULE_DISABLE_RULE_REF_UNSUPPORTED")
+                self.assertEqual(result.status, "unsupported")
+                self.assertEqual(result.errors[0].code, "RULE_DISABLE_RULE_REF_UNSUPPORTED")
 
     def test_non_native_or_rule_ref_support_artifacts_are_unsupported(self) -> None:
         store, index = _build_store()

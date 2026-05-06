@@ -339,10 +339,22 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
             child_support_digest="sha256:" + ("0" * 64),
         )
         rule_spec = _rule_spec(index, where=[("ruleref", "child.rule", "1.0", ["$p"])])
+        nested_rule_spec = _rule_spec(
+            index,
+            where=[
+                ("pred", alice.exists_pred_id, ["$p"]),
+                ("not", [("ruleref", "child.rule", "1.0", ["$p"])]),
+            ],
+        )
 
         for request in (
             _request(
                 rule_spec,
+                _artifact(alice),
+                EvaluationOverlay(rule_actions=(_action(),)),
+            ),
+            _request(
+                nested_rule_spec,
                 _artifact(alice),
                 EvaluationOverlay(rule_actions=(_action(),)),
             ),

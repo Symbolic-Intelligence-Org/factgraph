@@ -247,11 +247,17 @@ def _contains_ruleref_atom(where: list[Any]) -> bool:
     branches = _where_branches(where)
     if branches is None:
         return False
-    return any(
-        isinstance(atom, tuple) and bool(atom) and atom[0] == "ruleref"
-        for branch in branches
-        for atom in branch
-    )
+    return any(_atom_contains_ruleref(atom) for branch in branches for atom in branch)
+
+
+def _atom_contains_ruleref(atom: Any) -> bool:
+    if not isinstance(atom, tuple) or not atom:
+        return False
+    if atom[0] == "ruleref":
+        return True
+    if atom[0] == "not" and len(atom) >= 2 and isinstance(atom[1], list):
+        return any(_atom_contains_ruleref(child) for child in atom[1])
+    return False
 
 
 def _binding_items_sort_key(binding_items: BindingItems) -> tuple[tuple[str, str], ...]:
