@@ -29,6 +29,9 @@ from .derivation_fact_overlay import (
     OverlayCheckPhaseStatus,
     OverlayCheckStatus,
     RuleDisableAction,
+    RuleLiteralPath,
+    RuleLiteralPathKind,
+    RuleLiteralReplaceAction,
     RuleOverlayAction,
 )
 from .derivation_why_not import (
@@ -54,6 +57,11 @@ from .rule_disable import (
     RuleDisableRequest,
     RuleDisableResult,
     RuleDisableStatus,
+)
+from .rule_literal_replace import (
+    RuleLiteralReplaceRequest,
+    RuleLiteralReplaceResult,
+    RuleLiteralReplaceStatus,
 )
 from .entity_read import (
     AssertionRecordDTO,
@@ -158,6 +166,12 @@ __all__ = [
     "RuleDisableRequest",
     "RuleDisableResult",
     "RuleDisableStatus",
+    "RuleLiteralPath",
+    "RuleLiteralPathKind",
+    "RuleLiteralReplaceAction",
+    "RuleLiteralReplaceRequest",
+    "RuleLiteralReplaceResult",
+    "RuleLiteralReplaceStatus",
     "RuleOverlayAction",
     "SchemaCapability",
     "WarningDTO",

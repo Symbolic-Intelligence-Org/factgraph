@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from kernel.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
@@ -15,6 +16,15 @@ class WhereValidationError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class WhereLiteralReplacement:
+    branch_index: int
+    atom_index: int
+    literal_path: tuple[str, int | None]
+    old_literal: Any
+    new_literal: Any
+
+
 _DEC_INT_RE = re.compile(r"^-?\d+$")
 _ARITH_KINDS = {"add", "sub", "neg", "addc", "mulc"}
 
@@ -24,6 +34,7 @@ def evaluate_where(
     where: list[Any],
     *,
     disabled_locators: frozenset[tuple[int, int]] = frozenset(),
+    literal_replacements: frozenset[WhereLiteralReplacement] = frozenset(),
 ) -> list[dict[str, Any]]:
     ast_gate_on = _where_ast_gate_enabled()
     if ast_gate_on:
@@ -38,6 +49,11 @@ def evaluate_where(
             raise _adapt_where_ast_error(exc) from exc
 
     bodies = _normalize_where(where)
+    if literal_replacements:
+        bodies = _apply_literal_replacements(
+            bodies,
+            literal_replacements=literal_replacements,
+        )
     if disabled_locators:
         bodies = _apply_disabled_locators(bodies, disabled_locators=disabled_locators)
 
@@ -125,6 +141,45 @@ def _apply_disabled_locators(
     ]
 
 
+def _apply_literal_replacements(
+    bodies: list[list[tuple[Any, ...]]],
+    *,
+    literal_replacements: frozenset[WhereLiteralReplacement],
+) -> list[list[tuple[Any, ...]]]:
+    _validate_literal_replacements(literal_replacements)
+    branch_count = len(bodies)
+    replacement_by_target: dict[tuple[int, int, tuple[str, int | None]], WhereLiteralReplacement] = {}
+    for replacement in literal_replacements:
+        if replacement.branch_index >= branch_count:
+            raise WhereValidationError("literal replacement branch_index out of range")
+        if replacement.atom_index >= len(bodies[replacement.branch_index]):
+            raise WhereValidationError("literal replacement atom_index out of range")
+        key = (
+            replacement.branch_index,
+            replacement.atom_index,
+            replacement.literal_path,
+        )
+        if key in replacement_by_target:
+            raise WhereValidationError("duplicate literal replacement target")
+        replacement_by_target[key] = replacement
+
+    out: list[list[tuple[Any, ...]]] = []
+    for branch_index, body in enumerate(bodies):
+        next_body: list[tuple[Any, ...]] = []
+        for atom_index, atom in enumerate(body):
+            replacements = [
+                replacement
+                for (r_branch, r_atom, _), replacement in replacement_by_target.items()
+                if r_branch == branch_index and r_atom == atom_index
+            ]
+            next_atom = atom
+            for replacement in replacements:
+                next_atom = _apply_literal_replacement_to_atom(next_atom, replacement)
+            next_body.append(next_atom)
+        out.append(next_body)
+    return out
+
+
 def _validate_disabled_locators(disabled_locators: object) -> None:
     if not isinstance(disabled_locators, frozenset):
         raise WhereValidationError("disabled_locators must be frozenset[tuple[int, int]]")
@@ -141,6 +196,100 @@ def _validate_disabled_locators(disabled_locators: object) -> None:
             or atom_index < 0
         ):
             raise WhereValidationError("disabled_locators entries must be non-negative ints")
+
+
+def _validate_literal_replacements(literal_replacements: object) -> None:
+    if not isinstance(literal_replacements, frozenset):
+        raise WhereValidationError(
+            "literal_replacements must be frozenset[WhereLiteralReplacement]"
+        )
+    for replacement in literal_replacements:
+        if not isinstance(replacement, WhereLiteralReplacement):
+            raise WhereValidationError(
+                "literal_replacements entries must be WhereLiteralReplacement"
+            )
+        if (
+            isinstance(replacement.branch_index, bool)
+            or not isinstance(replacement.branch_index, int)
+            or replacement.branch_index < 0
+            or isinstance(replacement.atom_index, bool)
+            or not isinstance(replacement.atom_index, int)
+            or replacement.atom_index < 0
+        ):
+            raise WhereValidationError(
+                "literal replacement coordinates must be non-negative ints"
+            )
+        if not _is_literal_path(replacement.literal_path):
+            raise WhereValidationError("literal replacement path is invalid")
+        if not _is_literal(replacement.old_literal):
+            raise WhereValidationError("literal replacement old_literal must be literal")
+        if not _is_literal(replacement.new_literal):
+            raise WhereValidationError("literal replacement new_literal must be literal")
+
+
+def _is_literal_path(value: object) -> bool:
+    if not isinstance(value, tuple) or len(value) != 2:
+        return False
+    kind, index = value
+    if kind in {"lhs", "rhs", "const_operand"}:
+        return index is None
+    if kind in {"pred_term", "in_value"}:
+        return isinstance(index, int) and not isinstance(index, bool) and index >= 0
+    return False
+
+
+def _apply_literal_replacement_to_atom(
+    atom: tuple[Any, ...],
+    replacement: WhereLiteralReplacement,
+) -> tuple[Any, ...]:
+    kind, index = replacement.literal_path
+    atom_kind = atom[0]
+    if kind == "pred_term":
+        if atom_kind != "pred":
+            raise WhereValidationError("literal replacement path incompatible with atom kind")
+        if index is None:
+            raise WhereValidationError("pred_term literal replacement requires index")
+        _, pred_id, terms = atom
+        if index >= len(terms):
+            raise WhereValidationError("literal replacement term index out of range")
+        next_terms = list(terms)
+        next_terms[index] = _replace_literal_leaf(next_terms[index], replacement)
+        return ("pred", pred_id, next_terms)
+    if kind in {"lhs", "rhs"}:
+        if atom_kind not in {"eq", "ne", "gt", "ge", "lt", "le"}:
+            raise WhereValidationError("literal replacement path incompatible with atom kind")
+        side_index = 1 if kind == "lhs" else 2
+        next_atom = list(atom)
+        next_atom[side_index] = _replace_literal_leaf(next_atom[side_index], replacement)
+        return tuple(next_atom)
+    if kind == "in_value":
+        if atom_kind != "in":
+            raise WhereValidationError("literal replacement path incompatible with atom kind")
+        if index is None:
+            raise WhereValidationError("in_value literal replacement requires index")
+        _, var, values = atom
+        if index >= len(values):
+            raise WhereValidationError("literal replacement in value index out of range")
+        next_values = list(values)
+        next_values[index] = _replace_literal_leaf(next_values[index], replacement)
+        return ("in", var, next_values)
+    if kind == "const_operand":
+        if atom_kind not in {"addc", "mulc"}:
+            raise WhereValidationError("literal replacement path incompatible with atom kind")
+        next_atom = list(atom)
+        next_atom[3] = _replace_literal_leaf(next_atom[3], replacement)
+        return tuple(next_atom)
+    raise WhereValidationError("literal replacement path is invalid")
+
+
+def _replace_literal_leaf(value: Any, replacement: WhereLiteralReplacement) -> Any:
+    if not _is_literal(value):
+        raise WhereValidationError("literal replacement target leaf must be literal")
+    if value != replacement.old_literal:
+        raise WhereValidationError("literal replacement old_literal does not match target")
+    if not _is_literal(replacement.new_literal):
+        raise WhereValidationError("literal replacement new_literal must be literal")
+    return replacement.new_literal
 
 
 def _validate_atom(atom: Any) -> tuple[Any, ...]:

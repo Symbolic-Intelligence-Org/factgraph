@@ -20,6 +20,8 @@ from kernel.application.protocol import (
     FactValueOverride,
     RuleDisableAction,
     RuleDisableRequest,
+    RuleLiteralPath,
+    RuleLiteralReplaceAction,
 )
 from kernel.core.evidence.write_protocol import set_field
 from kernel.core.rules.rule_ir import RuleSpec
@@ -242,6 +244,31 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
                 )
                 self.assertEqual(result.status, "invalid_request")
                 self.assertEqual(result.errors[0].code, "RULE_DISABLE_ACTION_COUNT")
+
+    def test_rule_disable_rejects_non_disable_rule_action_before_field_access(self) -> None:
+        store, index = _build_store()
+        alice = _seed_person(store, index, name="alice")
+        action = RuleLiteralReplaceAction(
+            rule_id="person.eligible",
+            version="1.0",
+            branch_index=0,
+            atom_index=3,
+            literal_path=RuleLiteralPath(kind="rhs"),
+            old_literal="us",
+            new_literal="eu",
+        )
+
+        result = check_rule_disable_action(
+            _request(
+                _rule_spec(index),
+                _artifact(alice),
+                EvaluationOverlay(rule_actions=(action,)),
+            ),
+            store=store,
+        )
+
+        self.assertEqual(result.status, "invalid_request")
+        self.assertEqual(result.errors[0].code, "RULE_DISABLE_ACTION_TYPE_UNSUPPORTED")
 
     def test_rule_identity_mismatch_is_invalid_request(self) -> None:
         store, index = _build_store()

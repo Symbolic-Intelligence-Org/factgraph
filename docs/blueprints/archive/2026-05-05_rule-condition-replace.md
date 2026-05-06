@@ -1,6 +1,6 @@
 # Rule Condition Replace(Batch 5b of Round Story Completion Plan)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-06
 - Last Updated: 2026-05-06
 - Branch: `v0.1-rule-replace-step0-2026-05-05`
@@ -364,21 +364,21 @@ Implementation acceptance adds these gates:
 - [x] Step 0 answers all eight falsifiers in §5.1 with source-backed examples(see §5.6.2).
 - [x] If Path A is selected,Step 0 freezes the first atom-kind set and literal-path constraints(see §5.6.1).
 - [x] Step 0.B freezes Path A protocol/runtime/core primitive/error/drift-gate shape(see §5.7).
-- [ ] If Path B is selected,abandonment audit records why no single crisp DTO exists.
-- [ ] If Path C is selected,the split is recorded without implementing a three-capability merge in this blueprint.
+- [x] Path B was not selected;abandonment is not applicable(see §5.6).
+- [x] Path C was not selected;split follow-up is not applicable(see §5.6).
 
 **Implementation acceptance(Path A only;blocked until scoped):**
 
-- [ ] Protocol DTOs are frozen and tested.
-- [ ] Native variant rows stay separate from original-frame ProofFrame.
-- [ ] RuleRef-bearing inputs are rejected/deferred.
-- [ ] Existing Rule Disable / Fact Overlay / ProofFrame behavior is unchanged except explicitly scoped compatibility guards.
-- [ ] No SDK/service/agent diffs.
-- [ ] No `superseded_by_full_eval` revival.
-- [ ] `evaluate_native_where(...)` signature and RuleRef substrate are unchanged.
-- [ ] Rule Disable rejects non-disable rule actions with a narrow guard;Fact Overlay and ProofFrame keep generic rule-action rejection.
-- [ ] Module docs under `src/kernel/application/docs/` are updated if implementation ships.
-- [ ] Focused tests,full kernel unittest,ruff,and `git diff --check` pass.
+- [x] Protocol DTOs are frozen and tested.
+- [x] Native variant rows stay separate from original-frame ProofFrame.
+- [x] RuleRef-bearing inputs are rejected/deferred.
+- [x] Existing Rule Disable / Fact Overlay / ProofFrame behavior is unchanged except explicitly scoped compatibility guards.
+- [x] No SDK/service/agent diffs.
+- [x] No `superseded_by_full_eval` revival.
+- [x] `evaluate_native_where(...)` signature and RuleRef substrate are unchanged.
+- [x] Rule Disable rejects non-disable rule actions with a narrow guard;Fact Overlay and ProofFrame keep generic rule-action rejection.
+- [x] Module docs under `src/kernel/application/docs/` are updated if implementation ships.
+- [x] Focused tests,full kernel unittest,ruff,and `git diff --check` pass.
 
 ## 8. Implementation Plan
 
@@ -402,10 +402,8 @@ Path B/C:
 
 ## 10. Outcome / Deviations
 
-To be filled after Step 0:
-
-- Final landed result:
-- A/B/C decision:
-- Rejected alternatives:
-- Deviations from draft:
-- Verification / archive note:
+- Final landed result:Batch 5b shipped narrow native Rule Literal Replace. `RuleLiteralReplaceAction` joins `EvaluationOverlay.rule_actions`;`RuleLiteralReplaceRequest / RuleLiteralReplaceResult` provide a separate runtime surface;`check_rule_literal_replace_action(...)` evaluates one temporary Const-to-Const literal replacement and returns variant rows plus the original-frame ProofFrame.
+- A/B/C decision:Step 0 selected Path A only. Path B abandonment and Path C split were rejected because the selected first slice is a single Const-leaf replacement family,not a generalized v0.1.4 `param_override` revival.
+- Rejected alternatives:variable edits,atom shape changes,`not` internals,RuleRef replacement,condition weights,ProbLog carriers,PyReason bounds,generalized result DTO reuse,variant SupportArtifact capture,and multi-action runtime support remain out of scope.
+- Deviations from draft:none after Step 0.B. Implementation followed the scoped shape:separate result DTO,one-action MVP,lower-level `evaluate_where(..., literal_replacements=...)`,unchanged `evaluate_native_where(...)`,generic Fact Overlay / ProofFrame rule-action rejection,and narrow Rule Disable action-type rejection.
+- Verification / archive note:194 focused tests passed;full kernel unittest passed with 1228 OK / 1 skipped;`python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py` passed;`git diff --check` passed;drift checks show no SDK/service/agent,RuleRef substrate,or ProofFrame protocol changes. Blueprint and audit archived after implementation.

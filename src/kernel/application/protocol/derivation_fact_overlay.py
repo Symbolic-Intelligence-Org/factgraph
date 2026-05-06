@@ -28,6 +28,9 @@ OverlayCheckStatus: TypeAlias = Literal[
 ]
 OverlayCheckPhaseStatus: TypeAlias = Literal["passed", "failed"]
 OverlayCheckEngine: TypeAlias = Literal["native", "souffle", "problog", "pyreason"]
+RuleLiteralPathKind: TypeAlias = Literal[
+    "pred_term", "lhs", "rhs", "in_value", "const_operand"
+]
 
 _OVERLAY_CHECK_STATUSES = ("passed", "failed", "unsupported", "invalid_request")
 _OVERLAY_CHECK_PHASE_STATUSES = ("passed", "failed")
@@ -73,6 +76,16 @@ def _validate_signed_int(value: Any, *, field_name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ProtocolShapeError(f"{field_name} must be int")
     return value
+
+
+def _validate_optional_non_negative_int(
+    value: Any,
+    *,
+    field_name: str,
+) -> int | None:
+    if value is None:
+        return None
+    return _validate_non_negative_int(value, field_name=field_name)
 
 
 def _validate_binding_items_tuple(
@@ -142,7 +155,49 @@ class RuleDisableAction:
             raise ProtocolShapeError("note must be str or None")
 
 
-RuleOverlayAction: TypeAlias = RuleDisableAction
+@dataclass(frozen=True)
+class RuleLiteralPath:
+    kind: RuleLiteralPathKind
+    index: int | None = None
+
+    def __post_init__(self) -> None:
+        _require_literal(
+            self.kind,
+            field_name="kind",
+            allowed=("pred_term", "lhs", "rhs", "in_value", "const_operand"),
+        )
+        index = _validate_optional_non_negative_int(self.index, field_name="index")
+        if self.kind in {"pred_term", "in_value"}:
+            if index is None:
+                raise ProtocolShapeError(f"{self.kind} literal path requires index")
+            return
+        if index is not None:
+            raise ProtocolShapeError(f"{self.kind} literal path requires index=None")
+
+
+@dataclass(frozen=True)
+class RuleLiteralReplaceAction:
+    rule_id: str
+    version: str
+    branch_index: int
+    atom_index: int
+    literal_path: RuleLiteralPath
+    old_literal: Any
+    new_literal: Any
+    note: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(self.rule_id, field_name="rule_id")
+        _require_non_empty_str(self.version, field_name="version")
+        _validate_non_negative_int(self.branch_index, field_name="branch_index")
+        _validate_non_negative_int(self.atom_index, field_name="atom_index")
+        if not isinstance(self.literal_path, RuleLiteralPath):
+            raise ProtocolShapeError("literal_path must be RuleLiteralPath")
+        if self.note is not None and not isinstance(self.note, str):
+            raise ProtocolShapeError("note must be str or None")
+
+
+RuleOverlayAction: TypeAlias = RuleDisableAction | RuleLiteralReplaceAction
 
 
 def _validate_fact_actions(
@@ -164,8 +219,10 @@ def _validate_rule_actions(
     if not isinstance(value, tuple):
         raise ProtocolShapeError(f"{field_name} must be tuple[RuleOverlayAction, ...]")
     for idx, item in enumerate(value):
-        if not isinstance(item, RuleDisableAction):
-            raise ProtocolShapeError(f"{field_name}[{idx}] must be RuleDisableAction")
+        if not isinstance(item, (RuleDisableAction, RuleLiteralReplaceAction)):
+            raise ProtocolShapeError(
+                f"{field_name}[{idx}] must be RuleDisableAction or RuleLiteralReplaceAction"
+            )
     return value
 
 
@@ -339,5 +396,8 @@ __all__ = [
     "OverlayCheckPhaseStatus",
     "OverlayCheckStatus",
     "RuleDisableAction",
+    "RuleLiteralPath",
+    "RuleLiteralPathKind",
+    "RuleLiteralReplaceAction",
     "RuleOverlayAction",
 ]

@@ -14,6 +14,7 @@
 | 2026-05-06 | draft | Step 0.B spike completed | Path A shape frozen: `RuleLiteralReplaceAction` joins `EvaluationOverlay.rule_actions`;`RuleLiteralPath` encodes five Const-leaf path kinds;runtime surface is separate `RuleLiteralReplaceRequest/Result` and `check_rule_literal_replace_action(...)`;core primitive is `WhereLiteralReplacement` plus `evaluate_where(..., literal_replacements=...)`;MVP accepts exactly one replace action;Rule Disable gets a narrow non-disable-action rejection guard;Fact Overlay and ProofFrame keep generic rule-action rejection. Blueprint remains draft until review accepts this freeze. |
 | 2026-05-06 | draft | Pre-commit review pass on Step 0.B | Review accepted Step 0.B and requested two P3 polish items:dedicate `RULE_LITERAL_REPLACE_NEW_LITERAL_INVALID` to variable/non-native replacement values,and explain why future overlap with disabled locators applies literal replacement before disable. Both were added before commit. |
 | 2026-05-06 | scoped | Scope freeze | Status moved `draft → scoped` after Step 0.A/0.B review acceptance. Implementation is authorized only within §5.6/§5.7 boundaries:Const-to-Const native literal replace,one action MVP,separate result DTO,lower-level `evaluate_where(..., literal_replacements=...)`,generic Fact Overlay/ProofFrame rejection,and narrow Rule Disable non-disable-action guard. |
+| 2026-05-06 | implemented | Implementation completed | Path A landed as scoped:shared overlay protocol now accepts `RuleLiteralReplaceAction`;new `RuleLiteralReplaceRequest/Result` and `check_rule_literal_replace_action(...)` implement one-action native Const-to-Const replacement;`where_eval.evaluate_where(...)` gained lower-level `literal_replacements`;Rule Disable rejects non-disable rule actions before field access;Fact Overlay and ProofFrame keep generic rule-action rejection. Module docs updated and blueprint archived after focused/full tests,ruff,and diff checks passed. |
 
 ## Decision Notes
 
@@ -127,3 +128,31 @@ The blueprint is now scoped for implementation. Scope is limited to the accepted
 - add only the scoped cross-runtime guards described in §5.7.5.
 
 Implementation must not modify `evaluate_native_where(...)`,RuleRef substrate,ProofFrame protocol,SDK/service/agent surfaces,or resurrect generalized `param_override`.
+
+### 2026-05-06 — Implementation Close-Out
+
+Implementation followed the scoped Path A without scope expansion.
+
+Landed protocol/runtime surface:
+
+- `RuleLiteralPath` and `RuleLiteralReplaceAction` are part of the shared `EvaluationOverlay.rule_actions` union.
+- `RuleLiteralReplaceRequest` and `RuleLiteralReplaceResult` are separate DTOs;Batch 5a `RuleDisableResult` was not generalized.
+- `check_rule_literal_replace_action(...)` owns `RuleLiteralReplaceAction` semantics and returns variant rows plus the original-frame ProofFrame.
+
+Core primitive:
+
+- `WhereLiteralReplacement` and `evaluate_where(..., literal_replacements=...)` landed in `kernel.core.rules.where_eval`.
+- `evaluate_native_where(...)` and RuleRef substrate signatures are unchanged.
+
+Cross-runtime guards:
+
+- `check_rule_disable_action(...)` returns `RULE_DISABLE_ACTION_TYPE_UNSUPPORTED` for non-disable rule actions before reading disable-specific fields.
+- Fact Overlay and ProofFrame retain generic rule-action rejection and do not inspect `RuleLiteralReplaceAction`.
+
+Verification:
+
+- Focused suite:194 tests OK.
+- Full kernel unittest:1228 tests OK / 1 skipped.
+- `python -m ruff check src/kernel examples/11_capabilities_e2e_demo.py` passed.
+- `git diff --check` passed.
+- Drift checks show no SDK/service/agent,RuleRef substrate,or ProofFrame protocol diffs.
