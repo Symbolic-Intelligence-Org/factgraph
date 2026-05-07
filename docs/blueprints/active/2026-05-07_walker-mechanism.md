@@ -26,7 +26,7 @@
 Existing application / audit DTOs expose ergonomic friction at three sites:
 
 1. **IR body iteration** on `RuleSpec.where` / `CompiledDerivationPlan.body_ir` requires raw tuple unpacking (`kind, *args = atom_tuple`), and these sources are mutable `list[Any]` that need a construction-time snapshot for safe iteration.
-2. **Evidence cross-referencing** between `SupportArtifact.pred_witnesses` / `meta_witnesses` and ledger `Claim` lookup requires manual atom-key string parsing (`"pred:owner.path:asrt_id"`) and ledger boilerplate.
+2. **Evidence cross-referencing** between `SupportArtifact.pred_witnesses` / `non_fact_steps` and ledger `Claim` lookup requires manual atom-key string parsing (`"b0.a1:Person:age"`) and ledger boilerplate.
 3. **`ProofFrameDiff.frame_deltas` / `atom_deltas` queries** require nested loops with manual filter-by-status-change-kind logic and manual flatten across frames.
 
 These are the ~4-5 raw-tuple objects identified in Round 2 prior-art audit (most application / audit DTOs are already structured frozen dataclasses). Direct attribute access (e.g., `support.pred_witnesses[0].asrt_ids`) continues to work; B adds a wrapper-view layer (per `#8`) **without modifying any existing DTO**.
@@ -43,7 +43,7 @@ Add a walker mechanism in `kernel.application.walker` (with future `kernel.audit
 **B2 — Evidence cross-reference + per-DTO wrapper views (mandatory):**
 
 - `parse_atom_key(key) -> AtomKeyView`
-- `SupportArtifactView(support, frozen_claim_index, frozen_meta_index=None)` exposing `.pred_witnesses` (`FrozenTupleView`), `.meta_witnesses`, `.lookup_assertion(asrt_id) -> AssertionView`
+- `SupportArtifactView(support, frozen_claim_index, frozen_meta_index=None)` exposing `.pred_witnesses` (`FrozenTupleView`), `.non_fact_steps` (`FrozenTupleView`), `.lookup_assertion(asrt_id) -> AssertionView`
 - `ProofFrameView(frame)` per Round 6 design
 - `ProofFrameDiffView(diff)` per Round 7 (filter `frame_deltas` by `frame_status_change` kind; flatten `atom_deltas` across frames; final method names locked at this blueprint's Step 0)
 

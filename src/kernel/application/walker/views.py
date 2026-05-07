@@ -1,6 +1,6 @@
 """Per-DTO wrapper views for application / audit DTOs (B1 + B2).
 
-Phase 3 will add:
+Phase 3 implements:
 
 - `SupportArtifactView(support, frozen_claim_index, frozen_meta_index=None)`
 - `AssertionView`
@@ -21,10 +21,15 @@ Phase 2 implements `FrozenTupleView` / `frozen_collection`.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
+from types import MappingProxyType
 from typing import Any, Generic, TypeVar
 
-from .errors import WalkerFrozenError, WalkerLookupError
+from kernel.core.store._support import SupportArtifact
+from kernel.core.store.ledger import Claim, MetaRow
+
+from .errors import WalkerFrozenError, WalkerLookupError, WalkerReferenceError
+from .keys import AtomKeyView, parse_atom_key
 
 ViewT = TypeVar("ViewT")
 
@@ -159,7 +164,236 @@ def frozen_collection(items: tuple[ViewT, ...], *, source_id: str | None = None)
     return FrozenTupleView(items, source_id=source_id)
 
 
+class AssertionView:
+    """Frozen surfaced view over a ledger `Claim`.
+
+    `underlying` returns the original `Claim` escape hatch. The surfaced
+    fields snapshot mutable `Claim.rest_terms`; callers who use `underlying`
+    accept its mutability and DTO evolution risk.
+    """
+
+    __slots__ = (
+        "_asrt_id",
+        "_e_ref",
+        "_frozen",
+        "_meta_rows",
+        "_pred_id",
+        "_rest_terms",
+        "_underlying",
+    )
+
+    def __init__(
+        self,
+        asrt_id: str,
+        claim_index: Mapping[str, Claim],
+        meta_index: Mapping[str, tuple[MetaRow, ...]] | None = None,
+    ) -> None:
+        if not isinstance(asrt_id, str) or not asrt_id:
+            raise WalkerReferenceError("asrt_id must be non-empty string")
+        if not isinstance(claim_index, Mapping):
+            raise TypeError("claim_index must be Mapping[str, Claim]")
+        claim = claim_index.get(asrt_id)
+        if claim is None:
+            raise WalkerReferenceError(f"assertion not found: {asrt_id!r}")
+        if not isinstance(claim, Claim):
+            raise TypeError("claim_index values must be Claim")
+        meta_rows = _snapshot_meta_rows(meta_index, asrt_id)
+
+        object.__setattr__(self, "_frozen", False)
+        object.__setattr__(self, "_asrt_id", claim.asrt_id)
+        object.__setattr__(self, "_pred_id", claim.pred_id)
+        object.__setattr__(self, "_e_ref", claim.e_ref)
+        object.__setattr__(self, "_rest_terms", _snapshot_rest_terms(claim.rest_terms))
+        object.__setattr__(self, "_meta_rows", meta_rows)
+        object.__setattr__(self, "_underlying", claim)
+        object.__setattr__(self, "_frozen", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_frozen", False):
+            raise WalkerFrozenError("AssertionView is frozen")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if getattr(self, "_frozen", False):
+            raise WalkerFrozenError("AssertionView is frozen")
+        object.__delattr__(self, name)
+
+    @property
+    def asrt_id(self) -> str:
+        return self._asrt_id
+
+    @property
+    def pred_id(self) -> str:
+        return self._pred_id
+
+    @property
+    def e_ref(self) -> str:
+        return self._e_ref
+
+    @property
+    def rest_terms(self) -> tuple[tuple[str, Any], ...]:
+        return self._rest_terms
+
+    @property
+    def meta_rows(self) -> tuple[MetaRow, ...]:
+        return self._meta_rows
+
+    @property
+    def underlying(self) -> Claim:
+        return self._underlying
+
+    def _surface(self) -> tuple[Any, ...]:
+        return (
+            self.asrt_id,
+            self.pred_id,
+            self.e_ref,
+            self.rest_terms,
+            self.meta_rows,
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, AssertionView):
+            return NotImplemented
+        return self._surface() == other._surface()
+
+    def __hash__(self) -> int:
+        return hash(self._surface())
+
+    def __repr__(self) -> str:
+        return f"AssertionView(asrt_id={self.asrt_id!r}, pred_id={self.pred_id!r})"
+
+
+class SupportArtifactView:
+    """Frozen wrapper view over `SupportArtifact` plus assertion indexes."""
+
+    __slots__ = (
+        "_claim_index",
+        "_frozen",
+        "_meta_index",
+        "_non_fact_steps",
+        "_pred_witnesses",
+        "_source_id",
+        "_underlying",
+    )
+
+    def __init__(
+        self,
+        support: SupportArtifact,
+        frozen_claim_index: Mapping[str, Claim],
+        frozen_meta_index: Mapping[str, tuple[MetaRow, ...]] | None = None,
+        *,
+        source_id: str | None = None,
+    ) -> None:
+        if not isinstance(support, SupportArtifact):
+            raise TypeError("support must be SupportArtifact")
+        if not isinstance(frozen_claim_index, Mapping):
+            raise TypeError("frozen_claim_index must be Mapping[str, Claim]")
+
+        claim_index = _freeze_claim_index(frozen_claim_index)
+        meta_index = _freeze_meta_index(frozen_meta_index)
+
+        object.__setattr__(self, "_frozen", False)
+        object.__setattr__(self, "_underlying", support)
+        object.__setattr__(self, "_claim_index", claim_index)
+        object.__setattr__(self, "_meta_index", meta_index)
+        object.__setattr__(self, "_source_id", source_id)
+        object.__setattr__(self, "_pred_witnesses", FrozenTupleView(support.pred_witnesses, source_id=source_id))
+        object.__setattr__(self, "_non_fact_steps", FrozenTupleView(support.non_fact_steps, source_id=source_id))
+        object.__setattr__(self, "_frozen", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_frozen", False):
+            raise WalkerFrozenError("SupportArtifactView is frozen")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if getattr(self, "_frozen", False):
+            raise WalkerFrozenError("SupportArtifactView is frozen")
+        object.__delattr__(self, name)
+
+    @property
+    def underlying(self) -> SupportArtifact:
+        return self._underlying
+
+    @property
+    def source_id(self) -> str | None:
+        return self._source_id
+
+    @property
+    def pred_witnesses(self) -> FrozenTupleView[Any]:
+        return self._pred_witnesses
+
+    @property
+    def non_fact_steps(self) -> FrozenTupleView[Any]:
+        return self._non_fact_steps
+
+    def parse_pred_atom_key(self, key: str) -> AtomKeyView:
+        return parse_atom_key(key).as_pred()
+
+    def parse_step_key(self, key: str) -> AtomKeyView:
+        return parse_atom_key(key).as_step()
+
+    def lookup_assertion(self, asrt_id: str) -> AssertionView:
+        return AssertionView(asrt_id, self._claim_index, self._meta_index)
+
+    def __repr__(self) -> str:
+        return (
+            f"SupportArtifactView(source_id={self.source_id!r}, "
+            f"pred_witnesses={len(self.pred_witnesses)}, non_fact_steps={len(self.non_fact_steps)})"
+        )
+
+
+def _snapshot_rest_terms(rest_terms: list[tuple[str, Any]]) -> tuple[tuple[str, Any], ...]:
+    return tuple(tuple(row) for row in rest_terms)
+
+
+def _snapshot_meta_rows(
+    meta_index: Mapping[str, tuple[MetaRow, ...]] | None,
+    asrt_id: str,
+) -> tuple[MetaRow, ...]:
+    if meta_index is None:
+        return ()
+    if not isinstance(meta_index, Mapping):
+        raise TypeError("meta_index must be Mapping[str, tuple[MetaRow, ...]]")
+    rows = tuple(meta_index.get(asrt_id, ()))
+    for row in rows:
+        if not isinstance(row, MetaRow):
+            raise TypeError("meta_index values must contain MetaRow instances")
+    return rows
+
+
+def _freeze_claim_index(claim_index: Mapping[str, Claim]) -> Mapping[str, Claim]:
+    frozen = dict(claim_index)
+    for key, claim in frozen.items():
+        if not isinstance(key, str) or not key:
+            raise TypeError("claim_index keys must be non-empty strings")
+        if not isinstance(claim, Claim):
+            raise TypeError("claim_index values must be Claim")
+    return MappingProxyType(frozen)
+
+
+def _freeze_meta_index(
+    meta_index: Mapping[str, tuple[MetaRow, ...]] | None,
+) -> Mapping[str, tuple[MetaRow, ...]]:
+    if meta_index is None:
+        return MappingProxyType({})
+    if not isinstance(meta_index, Mapping):
+        raise TypeError("frozen_meta_index must be Mapping[str, tuple[MetaRow, ...]]")
+    frozen: dict[str, tuple[MetaRow, ...]] = {}
+    for key, rows in meta_index.items():
+        if not isinstance(key, str) or not key:
+            raise TypeError("meta_index keys must be non-empty strings")
+        row_tuple = tuple(rows)
+        for row in row_tuple:
+            if not isinstance(row, MetaRow):
+                raise TypeError("meta_index values must contain MetaRow instances")
+        frozen[key] = row_tuple
+    return MappingProxyType(frozen)
+
+
 __all__ = [
+    "AssertionView",
     "FrozenTupleView",
+    "SupportArtifactView",
     "frozen_collection",
 ]

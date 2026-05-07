@@ -2,7 +2,7 @@
 
 Per blueprint §4.1 Round 2 (B-R2-2 lightweight variant):
 
-- 5 B1/B2 subclasses with planned raise sites in later phases:
+- 5 active B1/B2 subclasses with raise sites in Phase 1-3:
   WalkerLookupError, WalkerParseError, WalkerReferenceError,
   WalkerSnapshotError, WalkerFrozenError.
 - 1 dormant subclass (UnboundedStreamError) reserved for future B3

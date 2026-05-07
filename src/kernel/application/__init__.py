@@ -39,10 +39,14 @@ from .ingest_runtime import (
     apply_ingest_request,
 )
 from .walker import (
+    AssertionView,
+    AtomKeyView,
     FrozenTupleView,
     IRAtomView,
     IRBodyWalker,
+    SupportArtifactView,
     frozen_collection,
+    parse_atom_key,
 )
 from .query_runtime import (
     QueryRuntimeError,
@@ -77,6 +81,8 @@ from .why_not_runtime import (
 )
 
 __all__ = [
+    "AssertionView",
+    "AtomKeyView",
     "CheckRuntimeError",
     "CapabilityHelperError",
     "DerivationRuntimeError",
@@ -94,6 +100,7 @@ __all__ = [
     "QueryRuntimeError",
     "SchemaIndex",
     "SchemaResolutionError",
+    "SupportArtifactView",
     "WhyNotRuntimeError",
     "accept_derivation_candidate_set",
     "accept_derivation_candidate_sets",
@@ -124,6 +131,7 @@ __all__ = [
     "hydrate_entities",
     "hydrate_entity",
     "materialize_identity",
+    "parse_atom_key",
     "plan_write_command",
     "recheck_proof_frame",
     "render_proof_frame_narrative",

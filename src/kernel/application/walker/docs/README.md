@@ -12,9 +12,11 @@ Current implementation status:
   `RuleSpec.where` / `CompiledDerivationPlan.body_ir` style IR bodies.
 - **B Phase 2:** `FrozenTupleView` and `frozen_collection(...)` are
   implemented for already-frozen tuple collections.
-- **B Phase 3+ not implemented yet:** `SupportArtifactView`,
-  `ProofFrameView`, `ProofFrameDiffView`, `parse_atom_key`, and
-  `AssertionView` remain blueprint-scoped future phases.
+- **B Phase 3:** `AtomKeyView`, `parse_atom_key(...)`,
+  `SupportArtifactView`, and `AssertionView` are implemented for
+  `SupportArtifact` / ledger-claim cross-referencing.
+- **B Phase 4+ not implemented yet:** `ProofFrameView` and
+  `ProofFrameDiffView` remain blueprint-scoped future phases.
 - **B3 not implemented:** audit/store stream walkers remain future-only.
 
 ## IRBodyWalker
@@ -96,13 +98,83 @@ view.filter(lambda row: row.kind == "pred", status="active")
 custom extractor it checks common key-like attributes: `key`, `pred_atom_key`,
 `step_key`, `atom_key`, `asrt_id`, and `id`.
 
+## Atom Keys
+
+`parse_atom_key(key)` parses canonical `b{branch}.a{atom}:{payload}` strings:
+
+```python
+from kernel.application.walker import parse_atom_key
+
+atom_key = parse_atom_key("b0.a1:Person:age")
+assert atom_key.branch_index == 0
+assert atom_key.atom_index == 1
+assert atom_key.payload == "Person:age"
+```
+
+The parser is syntactic. It returns an `AtomKeyView` with `kind="unknown"`.
+Context-specific callers can promote the same parsed key without mutation:
+
+```python
+pred_key = atom_key.as_pred()
+step_key = parse_atom_key("b0.a2:eq").as_step()
+```
+
+Malformed input raises `WalkerParseError`.
+
+## SupportArtifactView and AssertionView
+
+`SupportArtifactView` wraps a frozen `SupportArtifact` plus caller-provided
+frozen assertion indexes:
+
+```python
+from kernel.application.walker import SupportArtifactView
+
+view = SupportArtifactView(
+    support,
+    frozen_claim_index={"a1": claim},
+    frozen_meta_index={"a1": (meta_row,)},
+)
+
+pred = view.pred_witnesses.first()
+assertion = view.lookup_assertion("a1")
+```
+
+The view exposes:
+
+- `pred_witnesses` as `FrozenTupleView[PredWitness]`
+- `non_fact_steps` as `FrozenTupleView[NonFactStep]`
+- `parse_pred_atom_key(...)` / `parse_step_key(...)`
+- `lookup_assertion(asrt_id) -> AssertionView`
+- `underlying`, the original `SupportArtifact` escape hatch
+
+`SupportArtifactView` performs no live store reads. Missing assertion ids raise
+`WalkerReferenceError`.
+
+`AssertionView` can also be constructed directly from an assertion id and
+frozen claim / metadata indexes. Its surfaced fields are:
+
+- `asrt_id`
+- `pred_id`
+- `e_ref`
+- `rest_terms` as a snapshot tuple
+- `meta_rows` as a snapshot tuple
+- `underlying`, the original `Claim` escape hatch
+
+`Claim.rest_terms` is a mutable list in the underlying DTO. `AssertionView`
+snapshots it for surfaced reads, but callers who access
+`assertion.underlying.rest_terms` are using the escape hatch and accept the
+underlying object's mutability.
+
 ## Errors
 
 The module currently exports:
 
 - `FrozenTupleView`
+- `AssertionView`
+- `AtomKeyView`
 - `IRAtomView`
 - `IRBodyWalker`
+- `SupportArtifactView`
 - `WalkerError`
 - `WalkerLookupError`
 - `WalkerParseError`
@@ -111,6 +183,7 @@ The module currently exports:
 - `WalkerFrozenError`
 - `UnboundedStreamError`
 - `frozen_collection`
+- `parse_atom_key`
 
 `UnboundedStreamError` is a dormant placeholder for future B3 StreamWalker
 work. B1/B2 code has no raise site for it.

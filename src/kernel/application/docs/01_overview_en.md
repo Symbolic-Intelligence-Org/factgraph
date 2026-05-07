@@ -26,7 +26,7 @@ It is responsible for:
 - native Rule Add Condition (`completed` / `unsupported` / `invalid_request`) over one temporary filter-only native where atom insertion,returning variant rows plus original-frame ProofFrame output with a synthetic added-atom verdict
 - explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
 - capability ergonomics helpers for Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
-- application-layer walker views for SDK-independent traversal over selected DTO / IR structures (`IRBodyWalker` and `FrozenTupleView` in the current slice)
+- application-layer walker views for SDK-independent traversal over selected DTO / IR structures (`IRBodyWalker`, `FrozenTupleView`, `AtomKeyView`, `SupportArtifactView`, and `AssertionView` in the current slice)
 
 It is not responsible for:
 
@@ -59,7 +59,7 @@ It is not responsible for:
 - `capability_helpers.py`
   - application-layer ergonomic helpers: `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
 - `walker/`
-  - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`, plus `FrozenTupleView` / `frozen_collection(...)` for already-frozen tuple collections. B2 evidence wrapper views and B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
+  - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`, `FrozenTupleView` / `frozen_collection(...)` for already-frozen tuple collections, `AtomKeyView` / `parse_atom_key(...)`, and `SupportArtifactView` / `AssertionView` for `SupportArtifact` assertion cross-references. `ProofFrameView`, `ProofFrameDiffView`, and B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
 - `entity_view.py`
   - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`
@@ -90,7 +90,7 @@ It is not responsible for:
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 51 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 55 public symbols. The main executor entry points are:
 
 Batch 8 public-surface note:`kernel.application` is an **advanced importable** runtime authority in the kernel package. It is appropriate for automation,wire bridges,and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade,and Batch 8 does not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes.
 
@@ -132,10 +132,14 @@ The main schema/runtime helpers are:
 
 The current walker entry points are:
 
+- `AssertionView`
+- `AtomKeyView`
 - `FrozenTupleView`
 - `IRBodyWalker`
 - `IRAtomView`
+- `SupportArtifactView`
 - `frozen_collection(...)`
+- `parse_atom_key(...)`
 
 ## 4. Relationship with Other Layers
 

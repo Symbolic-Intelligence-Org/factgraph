@@ -28,15 +28,24 @@ from .ir import (
     IRAtomView,
     IRBodyWalker,
 )
+from .keys import (
+    AtomKeyView,
+    parse_atom_key,
+)
 from .views import (
+    AssertionView,
     FrozenTupleView,
+    SupportArtifactView,
     frozen_collection,
 )
 
 __all__ = [
+    "AssertionView",
+    "AtomKeyView",
     "FrozenTupleView",
     "IRAtomView",
     "IRBodyWalker",
+    "SupportArtifactView",
     "UnboundedStreamError",
     "WalkerError",
     "WalkerFrozenError",
@@ -45,4 +54,5 @@ __all__ = [
     "WalkerReferenceError",
     "WalkerSnapshotError",
     "frozen_collection",
+    "parse_atom_key",
 ]
