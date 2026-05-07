@@ -21,6 +21,8 @@ Current implementation status:
   `ProofFrameRecheckResult`.
 - **Implementation Phase 5:** `ProofFrameDiffView` is implemented for
   `ProofFrameDiff`.
+- **Implementation Phase 6:** cross-cutting invariant tests cover the walker
+  contract across implemented B1/B2 classes.
 - **Scope item B3 audit/store stream walker not implemented:** stream walkers
   remain future-only.
 
@@ -159,6 +161,7 @@ Focused walker tests:
 - `test_walker_views_support.py`
 - `test_walker_views_proof_frame.py`
 - `test_walker_views_proof_frame_diff.py`
+- `test_walker_invariants.py`
 
 Run:
 
@@ -168,6 +171,7 @@ PYTHONPATH=src python -m unittest \
   src.kernel.tests.test_walker_views_support \
   src.kernel.tests.test_walker_views_proof_frame \
   src.kernel.tests.test_walker_views_proof_frame_diff \
+  src.kernel.tests.test_walker_invariants \
   src.kernel.tests.test_walker_views_frozen_tuple \
   src.kernel.tests.test_walker_ir \
   src.kernel.tests.test_walker_errors -v

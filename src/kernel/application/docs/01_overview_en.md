@@ -230,6 +230,7 @@ Key focused tests:
 - `test_walker_views_support.py`
 - `test_walker_views_proof_frame.py`
 - `test_walker_views_proof_frame_diff.py`
+- `test_walker_invariants.py`
 - `test_application_rule_disable_protocol.py`
 - `test_application_rule_disable_runtime_native.py`
 - `test_application_rule_literal_replace_protocol.py`
