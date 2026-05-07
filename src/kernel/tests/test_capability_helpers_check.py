@@ -114,6 +114,13 @@ class BuildCheckRequestTests(unittest.TestCase):
         with self.assertRaises(OriginPackageError):
             build_check_request(_plan(), {"$rule": _sdk_rule()})
 
+    def test_recursive_binding_value_raises_helper_error(self) -> None:
+        recursive: dict[str, object] = {}
+        recursive["self"] = recursive
+
+        with self.assertRaisesRegex(CapabilityHelperError, "binding value is recursive"):
+            build_check_request(_plan(), {"$payload": recursive})
+
     def test_phase_1_exports_from_application_and_helper_package(self) -> None:
         from kernel import application
         from kernel.application import capability_helpers

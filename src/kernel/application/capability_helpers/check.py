@@ -72,20 +72,30 @@ def _normalize_helper_binding(binding: Mapping[str, Any] | BindingItems) -> Bind
     raise CapabilityHelperError("binding must be Mapping[str, Any] or BindingItems")
 
 
-def _reject_sdk_origin(value: Any, *, path: str) -> None:
+def _reject_sdk_origin(value: Any, *, path: str, seen: set[int] | None = None) -> None:
     module_parts = type(value).__module__.split(".")
     if len(module_parts) >= 2 and module_parts[:2] == ["kernel", "sdk"]:
         raise OriginPackageError(f"{path} must be application canonical type, not SDK object")
 
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            _reject_sdk_origin(key, path=f"{path}.key")
-            _reject_sdk_origin(item, path=f"{path}[{key!r}]")
+    if not isinstance(value, (Mapping, Sequence)) or isinstance(value, (str, bytes, bytearray)):
         return
 
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+    seen = seen if seen is not None else set()
+    marker = id(value)
+    if marker in seen:
+        raise CapabilityHelperError("binding value is recursive (self-referential structure)")
+    seen.add(marker)
+    try:
+        if isinstance(value, Mapping):
+            for key, item in value.items():
+                _reject_sdk_origin(key, path=f"{path}.key", seen=seen)
+                _reject_sdk_origin(item, path=f"{path}[{key!r}]", seen=seen)
+            return
+
         for index, item in enumerate(value):
-            _reject_sdk_origin(item, path=f"{path}[{index}]")
+            _reject_sdk_origin(item, path=f"{path}[{index}]", seen=seen)
+    finally:
+        seen.remove(marker)
 
 
 __all__ = [
