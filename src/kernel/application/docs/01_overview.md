@@ -56,8 +56,8 @@
   - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotRedRow` / `WhyNotRowDiagnostic` / `WhyNotAtomLocator`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
-- `capability_helpers.py`
-  - application-layer ergonomic helpers: `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
+- `capability_helpers/`
+  - application-layer ergonomic helper package: `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
 - `entity_view.py`
   - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`

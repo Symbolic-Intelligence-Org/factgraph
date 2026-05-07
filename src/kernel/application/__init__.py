@@ -2,6 +2,7 @@
 
 from .capability_helpers import (
     CapabilityHelperError,
+    OriginPackageError,
     build_evaluation_overlay,
     build_fact_remove_action,
     build_fact_value_override,
@@ -81,6 +82,7 @@ __all__ = [
     "FieldTypeInfo",
     "IdentityFieldInfo",
     "IngestRuntimeError",
+    "OriginPackageError",
     "PredicateInfo",
     "QueryRuntimeError",
     "SchemaIndex",

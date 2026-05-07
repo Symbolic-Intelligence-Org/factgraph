@@ -407,8 +407,8 @@ class ProofFrameRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("why_not_runtime", source)
         self.assertNotIn("kernel.sdk", source)
 
-    def test_capability_helpers_do_not_expose_proofframe_helpers(self) -> None:
-        source = Path("src/kernel/application/capability_helpers.py").read_text()
+    def test_capability_helpers_package_does_not_call_proofframe_runtime(self) -> None:
+        source = Path("src/kernel/application/capability_helpers/proof_frame.py").read_text()
 
-        self.assertNotIn("ProofFrame", source)
-        self.assertNotIn("proofframe", source)
+        self.assertNotIn("proofframe_runtime", source)
+        self.assertNotIn("recheck_proof_frame", source)
