@@ -12,7 +12,7 @@
 
 **Explicitly defer for now:**
 
-- **D (dialog agent revival)** — v0.2+ scope, no current user signal. But recommend declaring v0.1's audience-narrowing decision (Gap 1) as a separate short blueprint, so the implicit drift becomes explicit.
+- **D (dialog agent revival)** — v0.2+ scope, no new external/post-v0.1 user signal. Original internal product intent is acknowledged (per [2026-03-29_dialog-agent-blueprint-v1.md](../../../blueprints/active/2026-03-29_dialog-agent-blueprint-v1.md)) but treated as v0.2+ scope per Gap 1 strategic narrowing. Recommend declaring v0.1's audience-narrowing decision as a separate short blueprint, so the implicit drift becomes explicit.
 - **E (release publish)** — purely user-gated. Decoupled from layer choice; user can call it any time without affecting A/B work.
 - **F (demo refresh)** — downstream; will resolve naturally as A/B land.
 - **G (Batch 4 `rule_refs` hardening)** — parallel-safe, not blocking, but also no urgency. Ship if there's idle capacity; otherwise leave.
@@ -159,7 +159,7 @@ Rules:
 - `.underlying` is excluded from structural equality and hash computation (#17).
 - The `.underlying` escape hatch inherits the underlying object's mutability and deep-freeze properties; walker API itself remains read-only. Callers obtaining `.underlying` must treat it as read-only. Mutations through mutable nested objects are outside walker guarantees.
 
-**Manual review gate:** When `kernel.application.protocol.*` or `kernel.core.store._support.*` adds a field, blueprint reviewer must explicitly confirm whether walker view should surface it or not. No pre-commit hook in v1. Upgrade trigger: walker extends to 2+ DTO families and a missed-surfacing incident has occurred at least once.
+**Manual review check:** When `kernel.application.protocol.*` or `kernel.core.store._support.*` adds a field, blueprint reviewer must explicitly confirm whether walker view should surface it or not. No pre-commit hook in v1. Upgrade trigger: walker extends to 2+ DTO families and a missed-surfacing incident has occurred at least once.
 
 **Naming collision check:** When adding a new public view type, method, or property name, reviewer must explicitly check it does not collide with existing SDK / audit / core semantic vocabulary (for example, `source` for provenance, `carrier` for evidence carrier, `at` for time filter, `get` for None-on-miss).
 
@@ -188,11 +188,13 @@ Rules:
 - `require_key(...)` and `require_position(...)` raise `WalkerLookupError` on miss. They replace the earlier `get` / `at` wording to avoid SDK collisions (`SDKStore.get(...)` is None-on-miss; `FieldAssertions.at(t)` is temporal filtering).
 - `parse_atom_key(...)` raises `WalkerParseError` on invalid input.
 - `lookup_<thing>(...)` follows a declared reference and raises `WalkerReferenceError` on miss.
+- Assignment or attempted mutation through guarded walker/view namespaces raises walker-layer `WalkerFrozenError`. Do not reuse SDK `FrozenSnapshotError` across the application/audit boundary.
 
 Error hierarchy:
 
 ```text
 WalkerError(Exception)
+├── WalkerFrozenError
 ├── WalkerLookupError
 ├── WalkerParseError
 ├── WalkerReferenceError
@@ -346,6 +348,51 @@ Rules:
 
 ---
 
+## Principle dependency map
+
+The 21 principles above are not flat — several extend or depend on others. This map makes those relationships explicit so blueprint authors can see the cascade when scoping a deviation. Principles not listed here are independent (no extension or dependency on another principle).
+
+| Principle | Depends on / extends | Relationship |
+|---|---|---|
+| `#8` | `#2` | Extends evidence read-only into all walker views (not just evidence) |
+| `#10` | `#9` | Lazy traversal requires explicit determinism / snapshot semantics |
+| `#11` | `#1`, `#6`, `#17` | DTO-authority subset projection + no outward mirror commitment + equality/hash carve-out |
+| `#12` | `#7` | Shared access vocabulary requires explicit miss semantics (find vs require) |
+| `#14` | `#10`, `#15` | Bounds prevent live / store races (`#10`) and unbounded traversal under single-thread invariant (`#15`) |
+| `#19` | `#10`–`#18` | Contract tests operationalize all walker invariants from `#10` through `#18` (single-thread `#15` is docs-only, not automated) |
+| `#P0` | all `#1`–`#19` | Conflict resolver across the whole principle set |
+| `#P1` | all `#1`–`#19` + `#P0` | Revision flow over the whole set including `#P0` itself |
+
+**Notes:**
+
+- Dependency map is **explanatory, not a new priority order.** Conflict priority still lives in [`#P0`](30_recommendation.md) (boundary first, ergonomics second; see `#P0` 5-tier fallback heuristic).
+- If dependency map disagrees with a principle's source text, **principle text wins** until bundle revision per `#P1`.
+- Dependencies surfaced by future audit should be appended here without re-numbering principles.
+
+### Principle thematic grouping (explanatory)
+
+The 21 principles cluster into thematic lanes for readability. Tier 1–5 lanes correspond to the `#P0` boundary-first 5-tier fallback heuristic; Cross-cutting and Meta lanes do not participate in the priority order.
+
+| Lane | Theme | Principles |
+|---|---|---|
+| Tier 1 | Authority | `#1`, `#4a` |
+| Tier 2 | Layer isolation | `#5`, `#7` (layer aspect) |
+| Tier 3 | Read-only / no source mutation | `#2`, `#8`, `#16` (read-only aspect) |
+| Tier 4 | Ergonomic walker surface | `#7` (access aspect), `#11`, `#12`, `#13`, `#14` |
+| Tier 5 | No new outward commitment | `#6` |
+| Cross-cutting | Walker design (operational) | `#9`, `#10`, `#15`, `#17`, `#18`, `#19` |
+| Cross-cutting | Draft / scoping framing | `#4b` |
+| Meta | Conflict resolution / revision flow | `#P0`, `#P1` |
+
+**Notes:**
+
+- Grouping is **explanatory metadata only**, intended to make the 21-principle landscape navigable. It does **not** replace or override anything.
+- **Numbering `#1`–`#19` + `#P0` / `#P1` stays authoritative** for all cross-references in this bundle and future blueprints. Do not cite by Lane / Theme in blueprints — always cite by `#N` so renumbering / regrouping never breaks references.
+- **Conflict resolution still follows `#P0`** (5-tier boundary-first heuristic + cross-tier dominance footnote). The Tier 1–5 labels above match `#P0`'s ordering exactly; Cross-cutting and Meta lanes are outside that ordering and are resolved per principle's individual contract.
+- `#7` deliberately appears in two Tiers (layer aspect in Tier 2, access aspect in Tier 4) per the `#P0` cross-tier dominance footnote: "the higher-tier aspect dominates" — i.e., per-layer scope (Tier 2) takes precedence over access-pattern uniformity (Tier 4) when they conflict.
+
+---
+
 ## What this principle set forbids
 
 A consolidated negative list, derived from the principles above:
@@ -406,7 +453,7 @@ After A + B:
 
 **5. Effort is bounded and parallel-safe.**
 
-- A: ~1-2 weeks (9 helpers × focused tests + module docs)
+- A: ~1-2 weeks (8 helpers × focused tests + module docs)
 - B: ~2-3 weeks total split across sub-batches B1 + B2 (mandatory) + B3 (optional) — see [40_walker-mechanism-design-sketch.md](40_walker-mechanism-design-sketch.md)
 - Independent files, independent test suites; can run in either order or simultaneously
 
@@ -474,7 +521,7 @@ A and B are genuinely independent and can be one developer-pair per blueprint, p
 
 1. **`docs/blueprints/active/2026-05-08_application-ergonomic-helpers-extension.md`** — Direction A
    - Problem: Gap 3 from this bundle
-   - Goal: Extend Batch 2 pattern to cover Q1/Q2/Batch 4-7 (9 helpers; see [10_implicit-gaps.md §3](10_implicit-gaps.md) for proposed signatures)
+   - Goal: Extend Batch 2 pattern to cover Q1/Q2/Batch 4-7 (8 helpers; see [10_implicit-gaps.md §3](10_implicit-gaps.md) for proposed signatures)
    - Non-goals: No SDK shell, no DTO shape change, no public surface change
    - Acceptance: each helper builds the same DTO as the manual demo path, focused tests, module docs updated
    - Implementation plan: per-capability helper file or one consolidated module (extending `kernel.application.capability_helpers`)
@@ -486,8 +533,8 @@ A and B are genuinely independent and can be one developer-pair per blueprint, p
    - Goal: **Lift the walker concept from §6 draft of `check-operation-conceptual-interaction.md` into actual scoping**, aligned with EntitySnapshot prior art (`src/kernel/sdk/facade.py:102-217`), and implement sub-batches B1 + B2 (mandatory) + B3 (optional based on consumer signal). See [40_walker-mechanism-design-sketch.md](40_walker-mechanism-design-sketch.md) for sub-batch design.
    - Status framing: this is **not** "implement a settled concept design"; this is **lift design exploration out of draft and validate it through implementation**. The blueprint must explicitly state this status framing in §1 Problem.
    - Non-goals: No SDK exposure, no protocol DTO change, no audit walker (B3) unless consumer signal arrives; no walker `Walker[T]` base class (heterogeneity per #3); no live walker without explicit snapshot semantics (per #10); no `.source` / `.carrier` / `.raw` escape hatch; no raise-on-miss `get(...)` or positional `at(...)` exact-access API
-   - Reconciliation requirement: read [2026-03-28_evidence-graph-unified-explain.md](../../../blueprints/active/2026-03-28_evidence-graph-unified-explain.md) and explicitly confirm walker mechanism complements (not overlaps) Evidence Graph DTO. Verification 2026-05-07 already confirmed: Evidence Graph is rendering DTO, walker is iteration abstraction — no overlap. Blueprint records this conclusion.
-   - Acceptance: walker exposes `for x in walker:` / `.filter` / `.find` / `.first` / `.require_key` / `.require_position` over targeted objects (B1: Rule.where + Plan.body_ir IR walker with construction-time snapshot; B2: SupportArtifact cross-reference + AssertionView lookup); read-only enforced structurally (per #8); determinism honored per #10; no new export to `kernel.sdk.__all__`
+   - Reconciliation requirement: read current audit module docs for EvidenceGraph and explicitly confirm walker mechanism complements (not overlaps) EvidenceGraph. Verification 2026-05-07 confirmed: EvidenceGraph is the audit layer's unified cross-engine explainability DTO, durable as `audit/evidence_graphs.jsonl`, queryable via `AuditQuery.get_candidate_evidence_graph(candidate_id)`, and rendered via `render_evidence_graph_html()`; walker is traversal over raw protocol data before EvidenceGraph construction. Blueprint records this conclusion.
+   - Acceptance: walker exposes `for x in walker:` / `.filter` / `.find` / `.first` / `.require_key` / `.require_position` over targeted objects (B1: Rule.where + Plan.body_ir IR walker with construction-time snapshot; B1/B2: per-DTO wrapper views plus `FrozenTupleView` / `frozen_collection(...)` for existing frozen tuple fields; B2: `SupportArtifactView` cross-reference + `AssertionView(asrt_id, frozen_claim_index, frozen_meta_index=None)` lookup); read-only enforced structurally (per #8); determinism honored per #10; no new export to `kernel.sdk.__all__`
    - Cite: this bundle, conceptual interaction design §6 (draft, explicitly marked), Decision 1, EntitySnapshot prior art at `src/kernel/sdk/facade.py:102-217`
    - Boundaries-and-Invariants section: lock principles #1, #2, #3, #5, #6, #7, #8, #9, #10-#19, #P0, and #P1
 
@@ -495,12 +542,84 @@ Each blueprint follows the standard project workflow: draft → scoped → user 
 
 After A + B archive, revisit this bundle's [20_candidates.md](20_candidates.md) for the next direction (likely C with a Step 0 spike, possibly E if user calls publish).
 
+### Direction A — Input shape lock (Gap β resolution, 2026-05-07)
+
+**Direction A builders accept application-layer canonical types and application-internal convenience adapters only. They never accept SDK-exclusive DSL, facade, store, batch, editor, or snapshot objects.**
+
+To preserve `#5` layer isolation (`kernel.application` must not import `kernel.sdk`) and align with the Batch 2 helpers precedent, Direction A's 8 builders accept application-layer canonical types only.
+
+**A baseline inputs (per builder):**
+
+| Builder | Application canonical input |
+|---|---|
+| `build_check_request` | `CompiledDerivationPlan` + binding |
+| `build_diagnose_request` | `CompiledDerivationPlan` + binding |
+| `build_fact_value_override` (Batch 2 shipped) | `FieldPath` + `e_ref: str` + `new_value` |
+| `build_why_not_candidate_universe` (Batch 2 shipped) | `CompiledDerivationPlan` + candidates seq |
+| `build_frontier_view_facts` (Batch 2 shipped) | `Store` |
+| `build_proof_frame_recheck_request` | `SupportArtifact` + `EvaluationOverlay` |
+| `build_rule_disable_request` / `_literal_replace_request` / `_add_condition_request` | `RuleSpec` + `SupportArtifact` + branch / atom indices |
+| `build_round_event_payload` | capability request + result pair (both application types) |
+
+**Permitted application-layer convenience adapters (A may accept and normalize internally):**
+
+- `binding: Mapping[str, Any]` → normalized to `BindingItems` canonical sorted tuple-of-tuples
+- `EntitySelector` → resolved to `e_ref: str` via `kernel.application.schema_runtime.resolve_selector(...)`
+- Any other future application-internal adapter, provided it is defined inside `kernel.application` / `kernel.core` (not `kernel.sdk`)
+
+**Forbidden inputs:** any object whose canonical home is `kernel.sdk` — that is, types defined inside the `kernel.sdk` package and intended as SDK-exclusive surface. Examples include but are not limited to:
+
+- DSL types from `kernel.sdk.dsl`: `Rule`, `Derivation`, `Query`, `Pred`, `Not`, `Body`, the SDK-DSL `RuleRef`, `vars(...)` context-bound vars
+- Facade objects from `kernel.sdk.facade`: `EntitySnapshot`, `FieldAssertions`, `AssertionNamespace`, `AssertionRecord`
+- Store / batch / editor / snapshot objects: `SDKStore`, `SDKBatchTx`, `EntityEditor`
+- Schema authoring classes: `Entity` subclasses (the user-defined declarative form)
+
+The forbidden category is defined by **origin package** (`kernel.sdk`), not by name. If `kernel.application` or `kernel.core` defines a canonical locator that happens to share a name with an SDK type, that application/core type is permitted; only the SDK-exclusive object is forbidden.
+
+**Bridging responsibility (for future L SDK shell):** when an SDK shell needs to call A from a user-supplied SDK Rule, the SDK shell uses the existing `sdk/store.py:821-848 _compile_rule_input()` lowering pattern:
+
+```
+SDK Rule → .to_authoring_payload() → compile_authoring_rule_v1() →
+  CompiledDerivationPlan → build_check_request(plan, binding, ...)
+```
+
+This lowering path already exists in `kernel.sdk` and is verified prior art (Lane 1 SDK conventions audit, 2026-05-07). A does not invent new lowering. Future L (Tier 1 SDK shell) is the home for SDK-DSL acceptance; A (Tier 2) stays clean.
+
+**Why A is still worth shipping separately (vs absorbing into L):**
+
+- **Multi-receiver:** future agent / service / custom integration consume A directly (per `#5` parallel architecture, [Batch 8 §5.5.1](../../../blueprints/archive/2026-05-06_public-surface.md) Tier 2 advanced importable). Absorbing A into L would force these consumers to import via SDK, breaking layer parallelism.
+- **Strangler cadence:** Decision 1 ("SDK wrapper 推到第二步, 后期 strangler migration") prescribes application-first stabilization, then SDK wrap. A as standalone Tier 2 substrate is the application-first stabilization step.
+- **Batch 2 precedent:** 3 helpers already shipped this way (`build_fact_value_override` / `build_why_not_candidate_universe` / `build_frontier_view_facts`); the remaining builders in the 8-builder set (Q1 / Q2 / Batch 4 / Batch 5a/b/c / Batch 6) are continuation of this pattern, not a new shape.
+
+### Plausible follow-ons surfaced by the 2026-05-07 evidence-ecosystem audit
+
+These are not new candidate directions inside this bundle, just markers for what surfaced during the audit and was deliberately left out of A+B scope:
+
+- **Render export formats** — `render_evidence_graph_html()` is currently the only render path for `EvidenceGraph` (plus `evidence_graph_to_dict()` round-trip). Adding JSON / Markdown / CLI text formatters is a low-risk additive ergonomic enhancement (~0.5–1 day, no contract change). Plausible follow-on after A + B archive; not a B2 scope expansion. (Lane 1 borderline challenge.)
+- **EvidenceGraph + AuditQuery ergonomics cluster** — the audit surfaced 7 cohesive orthogonal ergonomic gaps spanning EvidenceGraph node/edge lookup, EvidenceGraph filter by edge_kind / node_kind, AuditQuery batch lookup, `FieldAssertions.active` filter by source/confidence/version, `sdk.conflicts()` metadata hydration, cross-`asrt_id` metadata comparison, and a single cross-engine walker over `EvidenceGraph` (consolidating ProbLog + PyReason adapter coverage). Each individually is low-to-medium severity. If this cluster becomes high-priority later, it warrants its own input bundle (`docs/references/working/evidence-ecosystem-audit-input/`) before any blueprint, not direct injection into A or B. (Lanes 1, 3, 5.)
+- **Long-term SDK completion candidate: L-Full** — surfaced 2026-05-07 by a separate user observation: "before publish, the library layer must be able to do a complete round story, otherwise the user-facing perception is incomplete." Today `kernel.sdk` covers schema authoring + read/write/rule/derivation + audit-shallow (`explain_fact` / `conflicts` / `validate_provenance`) but does NOT wrap Q1 Check / Q2 Diagnose / Q3 Fact Overlay / Q4 Why-not / Q5 Frontier / Batch 4 ProofFrame / Batch 5a/b/c rule overlays / Batch 6 Round events / Batch 7 ProofFrame Diff. L-Full is the **post-A+B v1-ready roadmap target**: ship 5-group SDK shells (G1 Check+Diagnose, G2 Fact Overlay+ProofFrame Recheck, G3 Rule overlays, G4 Why-not+Frontier, G5 Round events+Diff) so a SDK consumer can run the full round story without dropping to advanced-importable layer.
+
+  L-Full is **NOT** a Tier 2 ergonomic helper like A or B. It is a Tier 1 SDK shell shipping outward compatibility commitments per [Batch 8 §5.5.5 reactivation triggers](../../../blueprints/archive/2026-05-06_public-surface.md). Each family must follow the §5.5.5 reactivation rule: own Step 0, own falsifiers, own outward-shape lock-in. Direct tension with principle [#6 (no outward compat without user signal)](30_recommendation.md): "library completion before publish" is the proposed user signal that justifies activating the trigger; future Step 0 must source-ground that justification.
+
+  Per the 2026-05-07 SDK conventions audit (4 parallel lanes — see [README.md](README.md) Round 8 verification log), 5-group compatibility is split:
+
+  - **G1 Check + Diagnose: clean** — naming aligns with verb-first SDK convention; rule lowering pattern works via existing `to_authoring_payload()` precedent; return shape can match `ValidationReport` typed-DTO precedent.
+  - **G4 Why-not + Frontier: clean** (with naming correction `sdk.universe()` → `sdk.why_not()`); frontier should remain advanced importable rather than enter SDK facade.
+  - **G2 Fact Overlay + ProofFrame Recheck: pending Step 0 shape decision** — protocol DTOs (`SupportArtifact`, `EvaluationOverlay`) are currently surfaced as raw types; SDK shell must decide whether to wrap them in SDK DSL or leave them advanced-importable.
+  - **G3 Rule overlays: pending Step 0 shape decision** — three-sister naming has no SDK precedent (existing methods are singletons); raw `RuleSpec` exposure breaks DSL abstraction. Step 0 must choose namespace (`sdk.rule.*`), polymorphic `sdk.mutate_rule(kind=…)`, or three sister methods with explicit justification.
+  - **G5 Round events + Diff: pending Step 0 shape decision** — recorder lifecycle (raises) mixes with query API (typed DTO returns) inconsistently; SDK boundary may keep round recorder as `kernel.audit` advanced-importable and surface only `diff_proof_frames(...)` on the SDK facade.
+
+  **A and B can proceed independently of these G2/G3/G5 design decisions.** The SDK conventions audit confirmed Lane-3 mismatches sit at the SDK shell level (Tier 1), not at the application builder level (Tier 2). A's intent-shaped builders and B's walker views are not reverse-constrained by L-Full's eventual SDK shape; future SDK shells can wrap A+B without modifying their shape. (Lane 1: SDK conventions; Lane 2: evidence-side prior art; Lane 3: 5-group compatibility; Lane 4: example migration impact ~9–12 hours total.)
+
+These follow-ons are tracked here only so the audit findings are not lost. **They do not bind any future scope and they do not modify A+B recommendation rank.** A + B remains the immediate next direction; L-Full is a long-term roadmap target with the per-family Step 0 reactivation discipline already defined in Batch 8 §5.5.5.
+
 ---
 
 ## What this recommendation is NOT
 
 - **Not a commitment:** This is a recommendation to be reviewed and accepted/rejected/modified by the project lead.
 - **Not a critique of Batch 8:** Batch 8 made the right call for what it was scoped to do. The ergonomic gaps surfaced here are unscheduled additions, not unfinished Batch 8 work.
+- **Not advancing L4/L5/L8/L9/L10 evidence-product completeness:** The original rule-replay routemap framed those layers as the "evidence completion path." A+B explicitly defers them; they remain in [Round Story Plan §3](../../../blueprints/active/2026-05-05_round-story-completion-plan.md) deferred catalog with their reactivation triggers. Choosing A+B is choosing developer-facing ergonomic foundations over evidence-product layer expansion. Future A/B blueprints should explicitly state this non-advancement.
 - **Not the only valid path:** Going straight to E (publish) is also valid if the goal is "ship what we have and gather real signal." Going to D (dialog agent) is also valid if v0.2 scope is being seriously considered. The recommendation here optimizes for "fix implicit debt before adding new commitments."
 - **Not asserting walker is a settled principle.** Per #4b, walker is design exploration we are choosing to lift out of draft. The new blueprint (B) is the venue where it gets validated through implementation. If implementation surfaces fundamental issues with the §6 draft direction, B's Step 0 may legitimately re-scope or reject the walker direction.
 

@@ -89,27 +89,32 @@ Verification finding (Agent 2 2026-05-07): most application/audit DTOs are alrea
 |---|---|---|---|
 | `RuleSpec.where` | [src/kernel/core/rules/rule_ir.py:32](../../../../src/kernel/core/rules/rule_ir.py) | `list[Any]` IR tuple | `IRBodyWalker` (B1) |
 | `CompiledDerivationPlan.body_ir` | [src/kernel/application/protocol/derivation.py:37](../../../../src/kernel/application/protocol/derivation.py) | `list[Any]` IR tuple | same `IRBodyWalker` (B1) |
-| `WhyNotUniverseResult.green` | [src/kernel/application/protocol/derivation_why_not.py:298](../../../../src/kernel/application/protocol/derivation_why_not.py) | `tuple[BindingItems, ...]` | `BindingsView` mixin (B2) |
-| `DiagnoseAtomLocator.attempted_binding` | [src/kernel/application/protocol/derivation_diagnose.py:81](../../../../src/kernel/application/protocol/derivation_diagnose.py) | raw tuple | `BindingView` (B2) |
-| `Store.active_facts (by entity)` | [src/kernel/core/store/runtime.py:67](../../../../src/kernel/core/store/runtime.py) | raw `Ledger.Claim` generator | **Live walker — B3 only if triggered** |
+| `WhyNotUniverseResult.green` | [src/kernel/application/protocol/derivation_why_not.py:298](../../../../src/kernel/application/protocol/derivation_why_not.py) | `tuple[BindingItems, ...]` | first-slice attachment for generic `BindingsView` / `BindingView` (B2) |
+| `DiagnoseAtomLocator.attempted_binding` | [src/kernel/application/protocol/derivation_diagnose.py:81](../../../../src/kernel/application/protocol/derivation_diagnose.py) | raw tuple | first-slice attachment for generic `BindingView` (B2) |
+| Future live store/ledger walker (real API TBD) | current `Store` has no source-backed `active_facts` API | source API not yet named | **Deferred** — post-B3/future trigger; must identify the real ledger/store source first |
 
-### Already structured, walker NOT needed (just need protocol mixin)
+### Already structured, no new walker class — wrapper views only
 
-These already iterate fine; just need a shared `.filter` / `.find` / `.first` protocol:
+These already iterate fine as tuples. They cannot receive methods in place without changing DTO field types (forbidden by #1). B1/B2 use per-DTO wrapper views plus `FrozenTupleView` / `frozen_collection(...)` as standalone tuple adapter:
 
-- `SupportArtifact.pred_witnesses` / `non_fact_steps` / `rule_ref_edges` — frozen dataclass tuples
-- `ProofFrameRecheckResult.atom_verdicts` — frozen dataclass tuple
-- `ProofFrameDiff.frame_deltas` / `atom_deltas` — frozen dataclass tuples
-- `WhyNotUniverseResult.red` — frozen dataclass tuple
-- `RoundEvent` — frozen dataclass
+| Object | Wrapper-view treatment |
+|---|---|
+| `SupportArtifact.pred_witnesses` / `non_fact_steps` / `rule_ref_edges` | `SupportArtifactView` per-DTO wrapper view (B2) |
+| `ProofFrameRecheckResult.atom_verdicts` | `ProofFrameView` per-DTO wrapper view (B2) |
+| `ProofFrameDiff.frame_deltas` / `atom_deltas` | `ProofFrameDiffView` per-DTO wrapper view (B2). Common patterns (filter `frame_deltas` by `frame_status_change` kind, flatten all `atom_deltas` across frames) require nested loops today — wrapper view aligns with the same pattern as `SupportArtifactView` / `ProofFrameView`. **Does not modify DTO and does not attach methods to its tuple fields.** First-slice helper sketch names below; final method names locked in B blueprint Step 0. (Added 2026-05-07 evidence-ecosystem audit Lane 2 firm challenge.) |
+| `WhyNotUniverseResult.red` | direct iteration adequate today; `FrozenTupleView` / `frozen_collection(...)` standalone wrapper available if a consumer needs filter/find |
+| `RoundEvent` (audit) | direct iteration adequate today; B3 audit walker (deferred) would add filter/find protocol when consumer signal arrives |
 
 ### Cross-reference helpers needed
 
 | Helper | What it solves | Sub-batch |
 |---|---|---|
-| `SupportArtifact.lookup_assertion(asrt_id) -> AssertionView` | Lazy `asrt_id → fact tuple + meta` lookup, instead of users walking ledger themselves | B2 |
+| `SupportArtifactView.lookup_assertion(asrt_id) -> AssertionView` | Deterministic `asrt_id → Claim + optional MetaRow list` lookup through a frozen index, instead of users walking ledger themselves | B2 |
 | `parse_atom_key(key: str) -> AtomKeyView` | `b{branch}.a{index}:{pred_id}` format helper, instead of users splitting strings | B2 |
-| `AssertionView` (lazy) | Single `asrt_id` resolved on demand to `(pred_id, key_tuple, args, meta)` view | B2 |
+| `AssertionView(asrt_id, frozen_claim_index, frozen_meta_index=None)` | Single `asrt_id` resolved on demand to existing `Claim` and optional `MetaRow` data; deterministic because the index is frozen | B2 |
+| `FrozenTupleView` / `frozen_collection(tuple_value)` | Standalone `.filter` / `.find` / `.first` wrapper for an already-frozen tuple when a full per-DTO view is unnecessary | B1/B2 |
+
+`AssertionDetailLookup = Callable[[str], dict[str, Any] | None]` in [src/kernel/core/store/_candidate_evidence_tree.py](../../../../src/kernel/core/store/_candidate_evidence_tree.py) is useful prior art for "caller supplies lookup callback/index" shape. B2 should align with that callback/index discipline rather than letting application walker secretly reach into store state.
 
 ---
 
@@ -121,7 +126,8 @@ These already iterate fine; just need a shared `.filter` / `.find` / `.first` pr
 
 - One `IRBodyWalker` class wrapping `list[Any]` IR (used by both `RuleSpec.where` and `CompiledDerivationPlan.body_ir`)
 - View types: `IRPredAtomView` (kind, pred_id, args, branch_index, atom_index), `IREqAtomView`, `IRLtAtomView`, `IRNotAtomView`, etc. — one per IR node kind
-- Shared protocol mixin (e.g. `_FilterFindMixin`) added to existing frozen-tuple-bearing DTOs (SupportArtifact members, ProofFrameRecheckResult.atom_verdicts, etc.) — pure ergonomic addition, no DTO shape change
+- `FrozenTupleView` / `frozen_collection(...)` building block for existing frozen tuples
+- Per-DTO wrapper views (for example, `SupportArtifactView`, `ProofFrameView`) exposing tuple fields as `FrozenTupleView` properties — pure ergonomic addition, no DTO shape change and no methods added to existing tuple fields
 - Construction-time snapshot: because `RuleSpec.where` and `CompiledDerivationPlan.body_ir` are mutable `list[Any]`, `IRBodyWalker.__init__` snapshots them to immutable internal state (for example, `tuple(source)`) before traversal. Snapshot failure raises `WalkerSnapshotError`.
 
 **Effort:** ~1 week.
@@ -140,11 +146,17 @@ walker.find(branch_index=0, atom_index=2)  # → atom view | None
 walker.require_position(branch_index=0, atom_index=2)  # → atom view or WalkerLookupError
 walker.require_key('b0.a1:person:age')  # → atom view or WalkerLookupError
 
-# Protocol mixin on frozen tuple DTOs (already-structured, just adds ergonomics)
-support.pred_witnesses.filter(pred_atom_key__startswith='b0.')
-support.pred_witnesses.find(pred_atom_key='b0.a1:person:age')
-support.pred_witnesses.require_key('b0.a1:person:age')
-result.atom_verdicts.filter(verdict='invalidated')
+# Wrapper views over frozen tuple DTOs (already-structured, just adds ergonomics)
+support_view = SupportArtifactView(support)
+support_view.pred_witnesses.filter(pred_atom_key__startswith='b0.')
+support_view.pred_witnesses.find(pred_atom_key='b0.a1:person:age')
+support_view.pred_witnesses.require_key('b0.a1:person:age')
+
+proof_view = ProofFrameView(result)
+proof_view.atom_verdicts.filter(verdict='invalidated')
+
+# Standalone tuple escape hatch when a full DTO view is not needed
+frozen_collection(result.atom_verdicts).filter(verdict='invalidated')
 ```
 
 **Invariant enforcement:**
@@ -158,10 +170,17 @@ result.atom_verdicts.filter(verdict='invalidated')
 
 **Scope:**
 
-- `SupportArtifact.atoms` property exposing combined `pred_witnesses + non_fact_steps` as `AtomCollectionView` with parsed atom keys
+- `SupportArtifactView(support, assertion_index=..., meta_index=None)` exposing combined `pred_witnesses + non_fact_steps` as `AtomCollectionView` with parsed atom keys
+- `ProofFrameView(result)` per-DTO wrapper view over `ProofFrameRecheckResult`, exposing `atom_verdicts` as filterable view (no DTO change)
+- `ProofFrameDiffView(diff)` per-DTO wrapper view over `ProofFrameDiff` (added 2026-05-07 evidence-ecosystem audit Lane 2 firm challenge). Exposes `frame_deltas` and the cross-frame `atom_deltas` flow as filterable views without modifying the underlying DTO. **First-slice helper sketch names** (final names locked in B blueprint Step 0):
+  - "filter `frame_deltas` by `frame_status_change` kind / before / after status"
+  - "iterate all `atom_deltas` flattened across all frames"
+  - "iterate frames carrying any `atom_verdict_changed` delta"
 - `parse_atom_key(key: str) -> AtomKeyView` standalone helper
-- `AssertionView` lazy lookup — given `asrt_id`, resolve to `(pred_id, key_tuple, args, meta)` through the implementation blueprint's chosen DTO-backed or explicit snapshot/live semantics
-- `BindingView` wrapping for `tuple[(var, value), ...]` raw bindings (DiagnoseAtomLocator.attempted_binding, WhyNotUniverseResult.green elements)
+- `AssertionView(asrt_id, frozen_claim_index, frozen_meta_index=None)` — given `asrt_id`, resolve to existing `Claim` and optional `MetaRow` data through caller-provided frozen indexes
+- Generic `BindingView` / `BindingsView` wrapping for any `tuple[(var, value), ...]` / `BindingItems` shape
+- First-slice binding attachments: `DiagnoseAtomLocator.attempted_binding`, `WhyNotUniverseResult.green` elements
+- Future binding attachments (post-B2, no shape change required): Check matched binding, Fact Overlay before/after binding fields, ProofFrame variant rows binding fields, and rule-action variant_rows binding fields
 
 **Effort:** ~1 week.
 
@@ -174,11 +193,16 @@ key.branch_index   # 0
 key.atom_index     # 1
 key.pred_id        # 'person:age'
 
-# SupportArtifact: combined atoms walker
-for atom in support.atoms:
+# SupportArtifactView: combined atoms walker + deterministic assertion lookup
+support_view = SupportArtifactView(
+    support,
+    assertion_index=frozen_claim_index,
+    meta_index=frozen_meta_index,
+)
+for atom in support_view.atoms:
     print(atom.key, atom.kind, atom.witness_count)
     for asrt_id in atom.assertion_ids:
-        asrt = support.lookup_assertion(asrt_id)
+        asrt = support_view.lookup_assertion(asrt_id)
         print(asrt.pred_id, asrt.fact_tuple, asrt.meta)
 
 # BindingView: friendly access to (var, value) tuples
@@ -186,6 +210,9 @@ binding = BindingView(diag.attempted_binding)
 binding['$p']      # alice e_ref
 binding.as_dict()  # {'$p': '...', '$age': 99, '$region': 'us'}
 binding.values()   # tuple of values in canonical sort order
+
+bindings = BindingsView(why_not.green)
+bindings.find(**{'$p': alice})
 ```
 
 **Invariant enforcement:**
@@ -193,7 +220,8 @@ binding.values()   # tuple of values in canonical sort order
 - `lookup_assertion(...)` follows a declared reference; missing `asrt_id` raises `WalkerReferenceError`.
 - `parse_atom_key(...)` raises `WalkerParseError` on invalid format.
 - View escape hatch is `.underlying`, excluded from equality / hash and documented as non-stable API (#11/#17).
-- If any helper requires store-backed live lookup, snapshot/live semantics must be explicit per #10. B1/B2 should prefer DTO-backed or explicit snapshot-backed behavior; a live-read helper must not present as deterministic.
+- `SupportArtifactView.lookup_assertion(...)` requires a frozen assertion index. If the view is constructed without the required index, lookup raises a typed setup/configuration error; it must not secretly read store state.
+- Store-backed `LiveAssertionView(asrt_id, store)` is future/B3-only. If introduced, it must carry the `Live` name and obey #10/#14 live/bounded/snapshot rules.
 
 ### B3 — Audit walker (OPTIONAL — only if AuditQuery / RoundEvents prove first real consumer)
 
@@ -222,10 +250,13 @@ binding.values()   # tuple of values in canonical sort order
 All view classes:
 
 - Are frozen dataclasses, OR
-- Have `__setattr__` overridden to raise typed error (mirror `FrozenSnapshotError` pattern from `EntitySnapshot`)
+- Have `__setattr__` overridden to raise typed walker-layer error `WalkerFrozenError` (mirror `FrozenSnapshotError` pattern from `EntitySnapshot`, but do not import SDK errors across layers)
 - Return tuples (not lists) and `MappingProxyType` (not dicts) from any collection-returning property
 - Expose **no** `.set()` / `.append()` / `.delete()` / `.mutate()` methods
 - Expose **no** methods that return suggested rewrites / patches / actions
+- Expose no `_underscore` mutable internal state to callers. EntitySnapshot prior art only freezes top-level assignment; walker views must avoid leaking mutable internals through private attributes or collection properties.
+- May return tuple fields by reference (tuple is immutable); mapping/dict fields must use `MappingProxyType(dict(...))` shallow frozen copy per #11.
+- Must build any needed validation/parsing helpers inside the walker layer. Do not import SDK private helpers such as facade-local `_validate_*` / `_is_*` functions.
 
 ### From #7 + #12 — Walker uniformity, output heterogeneity, exact-access naming
 
@@ -263,7 +294,7 @@ Do not use `get(...)` or positional `at(...)` for exact-access walker APIs. Thos
 - Source is frozen or snapshotted to immutable internal state during `__init__`; same walker traversed twice MUST give identical view sequence + contents
 - For mutable IR lists, construction-time snapshot provides the repeatability guarantee
 
-**Store-backed live walker** (B3 audit walker if triggered, possible AssertionView in B2):
+**Store-backed live walker** (B3 audit walker if triggered, future `LiveAssertionView` only):
 
 - MUST declare snapshot semantics explicitly:
   - **Preferred:** bind a read projection / snapshot at walker construction. The walker reflects that snapshot for all subsequent traversals
@@ -318,7 +349,9 @@ B1/B2 add no new export to `kernel.sdk.__all__`. Any future SDK shell is Directi
 - Audit walker types (B3 if triggered) live in `kernel.audit` (likely new module `kernel.audit.walker`)
 - Audit walker does NOT import application walker types
 - Application walker does NOT import audit walker types
-- Each layer reuses the duck-typed `WalkerLike` access vocabulary (definition probably in `kernel.application.walker.protocol` if needed, or just convention) — but no shared concrete base class
+- Each layer reuses the duck-typed `WalkerLike` access vocabulary — but no shared concrete base class
+- Preferred v1 path: **convention-only**. Do not define a reusable `typing.Protocol` class unless the implementation blueprint proves typing needs it.
+- If typing strictness later requires protocol classes, duplicate them per layer (for example, `kernel.application.walker` has its own `WalkerProtocol`, and `kernel.audit.walker` has its own independent `WalkerProtocol`). Do **not** have `kernel.audit` import `kernel.application.walker.protocol`; that violates #5 and #7.
 
 ---
 
@@ -334,10 +367,11 @@ for verdict in result.atom_verdicts:
           f'affected_action_indices={verdict.affected_action_indices}')
 ```
 
-With walker (B2 protocol mixin):
+With walker (B2 wrapper view):
 
 ```python
-for verdict in result.atom_verdicts.filter(verdict='invalidated'):
+proof_view = ProofFrameView(result)
+for verdict in proof_view.atom_verdicts.filter(verdict='invalidated'):
     key = parse_atom_key(verdict.atom_key)  # B2 helper
     print(f'  atom branch={key.branch_index} idx={key.atom_index} '
           f'pred={key.pred_id}: verdict={verdict.verdict}')
@@ -349,20 +383,58 @@ This is a small win in a single demo. Larger wins appear in audit-tool / automat
 
 ---
 
-## 6. Decisions deferred to B's blueprint Step 0
+## 6. Contract test sketch
+
+Per `#19` (every walker family needs common contract tests + behavior-specific tests). This section sketches **what** the contract tests should verify; final method names + assertion structure are decided in B blueprint Step 0.
+
+### B1/B2 contract tests (mandatory)
+
+Each walker view class added by B1/B2 must pass these contract checks:
+
+| Test theme | Verifies | Principle |
+|---|---|---|
+| **Determinism (DTO-backed)** | Same walker, traversed twice, yields identical view sequence (same view contents, same order) | `#10` |
+| **Read-only structural** | Mutation attempts on view raise: either walker-layer typed error (`WalkerFrozenError`) for guarded-namespace classes, or stdlib `FrozenInstanceError` for `@dataclass(frozen=True)` views — implementation chooses, test accepts either | `#2` / `#8` |
+| **Find vs require** | `walker.find(no_match_criteria) is None`; `walker.require_key(unknown)` raises `WalkerLookupError`; `walker.require_position(out_of_range)` raises `WalkerLookupError` | `#12` |
+| **Snapshot at `__init__`** | For mutable-source walkers (e.g., IR walker over `RuleSpec.where`): mutate source list AFTER construction → walker traversal AND already-created views unaffected | `#10` augmented + `#16` |
+| **Lazy traversal (no eager materialization)** | Walker construction does **not** materialize view instances; verifiable via source-spy or sentinel-counter (count view-creation calls during construction = 0; during iteration > 0). Does NOT assert O(1) construction (too fragile) | `#9` |
+| **`.stats` frozen access-time snapshot** | Accessing `.stats` does not advance traversal; subsequent traversal followed by another `.stats` access yields a new `WalkerStats` instance with updated counters; held reference does not see post-access mutation | `#13` |
+| **`.underlying` exclusion** | Two views with equal surfaced fields but different `.underlying` → view equality True; view hash equal | `#11` + `#17` |
+| **Walker not picklable** | `pickle.dumps(walker)` raises (typed `WalkerNotPicklableError` if implemented, or stdlib pickle error — Step 0 decides) | `#18` |
+
+### Single-thread invariant (`#15`) — docs only, no automated test
+
+Walker docstrings + module docs state "single-thread object; share source not walker." No automated test verifies multi-thread misuse (per `#15` semantics, multi-thread share is caller error, not a property the walker enforces).
+
+### Future B3 contract test sketch (NOT B1/B2 acceptance)
+
+When B3 (audit / store stream walker) reactivates, additional contract tests apply:
+
+- **Bound enforcement**: `StreamWalker` construction without one of {`limit`, `snapshot=True + max_snapshot_items`, source implementing `bounded_size_hint()`} → `UnboundedStreamError` fail-fast at `__init__`
+- **Snapshot semantics declaration**: live walker class names contain `Live` prefix per `#10` no-silent-race rule; tests verify class name pattern
+
+These are **reserved test sketches**. B1/B2 implementations do NOT need to satisfy them (StreamWalker is not implemented in B1/B2 scope per `#14` + B3-deferred).
+
+### Test fixture pattern
+
+Per `#19`: flat unittest under `src/kernel/tests/test_application_walker.py` (or `test_audit_walker.py` for B3 future); fixtures in same file or `_walker_fixtures.py` if extracted. No new `tests/walker/` directory.
+
+---
+
+## 7. Decisions deferred to B's blueprint Step 0
 
 Items the implementation blueprint must resolve before scope-freeze; not pre-decided here:
 
 1. Module location: one `kernel.application.walker` module or split (e.g. `kernel.application.walker.ir`, `kernel.application.walker.evidence`, etc.)?
-2. `WalkerLike` protocol: explicit `typing.Protocol` declaration, or convention only?
-3. AssertionView semantics: DTO-backed, explicit snapshot-backed, or explicitly live-read (per §3 B2 above) — pick one and document repeatability guarantees
+2. `WalkerLike` protocol: convention-only is the v1 recommendation; if an explicit `typing.Protocol` is needed, keep it per-layer and do not import application walker protocols from audit.
+3. AssertionView frozen-index details: exact frozen index construction path, whether `meta_index` is optional or required for first slice, and which typed setup/configuration error is raised when `SupportArtifactView.lookup_assertion(...)` is called without an index.
 4. IR walker view types: one `IRAtomView` union type or one class per kind (`IRPredAtomView`, `IREqAtomView`, …)?
-5. Whether the protocol mixin (`_FilterFindMixin`) is added to existing DTO classes via subclass, mixin import, or external function (`filter_view(tuple, **kwargs)`)
+5. Per-DTO wrapper coverage: which wrapper views ship in B1/B2 (`SupportArtifactView`, `ProofFrameView`, etc.) versus which tuple fields rely only on `frozen_collection(...)`.
 6. Whether walker exports go into `kernel.application.__all__` (advanced importable, per #6) or only via submodule import (`from kernel.application.walker import IRBodyWalker`)
 
 ---
 
-## 7. Reactivation triggers for B3
+## 8. Reactivation triggers for B3
 
 If B1 + B2 ship and B3 is left optional, B3 reactivates when ANY of:
 
@@ -375,7 +447,7 @@ Until then, audit walker stays deferred — `AuditPackage` + `load_audit_package
 
 ---
 
-## 8. What this sketch does NOT cover
+## 9. What this sketch does NOT cover
 
 - No PyReason / ProbLog adapter walker scope. If those engines need walker integration, separate trigger and separate sub-batch.
 - No serialization / rendering format. Walker is iteration; rendering remains [Evidence Graph DTO](../../../blueprints/active/2026-03-28_evidence-graph-unified-explain.md)'s job.

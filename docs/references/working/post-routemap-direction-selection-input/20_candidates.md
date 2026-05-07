@@ -14,7 +14,7 @@ Nine candidates surfaced during the 2026-05-07 review. Ordered alphabetically (A
 
 **Inputs needed:** Each builder takes intent-shaped arguments (e.g. `rule_or_derivation`, `binding_dict`, `support`, `store`) and returns the corresponding protocol DTO ready for the runtime function.
 
-**Effort:** ~1-2 weeks (9 helpers × focused tests + module docs update). Pure additions to `kernel.application/capability_helpers.py` (or one new file per family). No public surface change.
+**Effort:** ~1-2 weeks (8 helpers × focused tests + module docs update). Pure additions to `kernel.application/capability_helpers.py` (or one new file per family). No public surface change.
 
 **Triggers / blockers:** None — fully internal to application layer. Aligned with Batch 2 precedent. Doesn't need any §5.5.5 reactivation.
 
@@ -33,7 +33,7 @@ Nine candidates surfaced during the 2026-05-07 review. Ordered alphabetically (A
 
 **Status framing (REVISED 2026-05-07 after verification):** The walker direction comes from [check-operation-conceptual-interaction.md §6](../rule-replay-line-redesign-input/80_conceptual-interaction-design/check-operation-conceptual-interaction.md), which the document itself marks as **draft discussion** (per its own §1.0 ordering rule, §6 loses to §1-§5 if conflict). B is **not** "implement an already-settled principle" — B is **lift the draft exploration into actual scoping** and validate it through implementation. The blueprint must explicitly state this status framing in §1 Problem.
 
-**Goal:** Add walker / view abstractions in `kernel.application` (and optionally `kernel.audit` for B3) so users can iterate IR-tuple bodies, follow `asrt_id → assertion fact tuple` cross-references, and use shared `.filter` / `.find` / `.first` protocol over already-frozen DTO tuples — instead of reinventing this glue in every consumer (audit tool, automation script, demo notebook).
+**Goal:** Add walker / view abstractions in `kernel.application` (and optionally `kernel.audit` for B3) so users can iterate IR-tuple bodies, follow `asrt_id → assertion fact tuple` cross-references, and use wrapper-view `.filter` / `.find` / `.first` protocol over already-frozen DTO tuples — instead of reinventing this glue in every consumer (audit tool, automation script, demo notebook).
 
 **Aligned with prior art:** [src/kernel/sdk/facade.py:102-217](../../../../src/kernel/sdk/facade.py) `EntitySnapshot` / `AssertionNamespace` / `FieldAssertions` already implements namespace-walker pattern in SDK layer (`snap.assertions.field.active` / `.history` / `.at(t)` / `.version(v)`), with read-only enforced via `__setattr__` raising `FrozenSnapshotError`. New walker mechanism aligns naming/conventions with this prior art rather than reinventing.
 
@@ -41,18 +41,18 @@ Nine candidates surfaced during the 2026-05-07 review. Ordered alphabetically (A
 
 | Sub-batch | Status | Scope |
 |---|---|---|
-| **B1 IR walker + common find/filter protocol** | mandatory | Walker over `RuleSpec.where` and `CompiledDerivationPlan.body_ir` (raw `list[Any]` IR); shared `.filter` / `.find` / `.first` protocol mixin over already-frozen DTO tuples (SupportArtifact members, ProofFrameRecheckResult.atom_verdicts, etc.); aligns naming with EntitySnapshot prior art |
-| **B2 evidence cross-reference helpers** | mandatory | `asrt_id → AssertionView` lazy lookup; SupportArtifact atom-key parser (`b{branch}.a{index}:{pred_id}` format helper); BindingView wrapping for raw tuple bindings (DiagnoseAtomLocator.attempted_binding, WhyNotUniverseResult.green) |
+| **B1 IR walker + common find/filter protocol** | mandatory | Walker over `RuleSpec.where` and `CompiledDerivationPlan.body_ir` (raw `list[Any]` IR); `FrozenTupleView` / `frozen_collection(...)` building block plus per-DTO wrapper views for already-frozen DTO tuples (SupportArtifact members, ProofFrameRecheckResult.atom_verdicts, etc.); no methods are added to existing tuple fields; aligns naming with EntitySnapshot prior art |
+| **B2 evidence cross-reference helpers** | mandatory | `SupportArtifactView(...).lookup_assertion(asrt_id) → AssertionView(asrt_id, frozen_claim_index, frozen_meta_index=None)`; SupportArtifact atom-key parser (`b{branch}.a{index}:{pred_id}` format helper); generic `BindingView` / `BindingsView` wrapping for raw `BindingItems` tuples (first slice: DiagnoseAtomLocator.attempted_binding, WhyNotUniverseResult.green elements) |
 | **B3 audit walker** | **OPTIONAL** | RoundEvents stream-style filter/group, audit ledger walkers — **only if AuditQuery / RoundEvents prove to be the first real consumer**. Not bundled with B1+B2 by default to respect heterogeneity (#3) and layer isolation (#5). |
 
 **Effort:** ~2-3 weeks total. B1 ~1 week, B2 ~1 week, B3 ~1 week if triggered.
 
 **Triggers / blockers:**
 
-- **Reconciliation completed (verification 2026-05-07):** [2026-03-28_evidence-graph-unified-explain.md](../../../blueprints/active/2026-03-28_evidence-graph-unified-explain.md)'s `EvidenceGraph` is a **rendering / serialization DTO** (one-shot snapshot), NOT a traversal abstraction. Walker mechanism operates **before** Graph construction. **No overlap, no conflict.** B blueprint records this conclusion.
+- **Reconciliation completed (verification 2026-05-07):** `EvidenceGraph` is the audit layer's unified cross-engine explainability DTO. It normalizes engine-native provenance (Souffle/ProbLog/PyReason) into a shared node-edge-layout representation, durable as `audit/evidence_graphs.jsonl`, queryable via `AuditQuery.get_candidate_evidence_graph(candidate_id)`, and rendered via `render_evidence_graph_html()`. It is frozen and immutable; not a traversal abstraction. The walker mechanism operates on raw protocol data before EvidenceGraph construction. Walkers and EvidenceGraph are complementary, not overlapping.
 - Native engine first slice; PyReason / ProbLog adapter walker coverage deferred (separate trigger).
 - B1 blocks on agreeing the IR walker shape (Rule.where + Plan.body_ir share the same IR vocabulary, so one walker class fits both); ~half-day Step 0 design.
-- B2 blocks on whether `AssertionView` lookup is store-backed (live, needs snapshot semantics per #10) or asrt-id-table-backed (frozen). **Default recommendation:** asrt-id-table-backed snapshot at walker construction.
+- B2 defaults to frozen-index-backed `AssertionView(asrt_id, frozen_claim_index, frozen_meta_index=None)`, using existing `Claim` and optional `MetaRow` data. A store-backed `LiveAssertionView(asrt_id, store)` is B3/future scope and must declare its live nature explicitly per #10.
 - B3 trigger: explicit user statement that audit consumer is high-frequency. Not auto-triggered by B1/B2.
 
 **Walker design invariants (per principles in [30_recommendation.md](30_recommendation.md)):**
