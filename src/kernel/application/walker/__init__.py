@@ -21,8 +21,14 @@ from .errors import (
     WalkerReferenceError,
     WalkerSnapshotError,
 )
+from .ir import (
+    IRAtomView,
+    IRBodyWalker,
+)
 
 __all__ = [
+    "IRAtomView",
+    "IRBodyWalker",
     "UnboundedStreamError",
     "WalkerError",
     "WalkerFrozenError",

@@ -215,6 +215,7 @@ src/kernel/tests/test_walker_invariants.py         # Phase 6 — cross-cutting #
 Per [40_ §1-§5](../../references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md). Highlights:
 
 - **Construction-time snapshot** for mutable-source DTO walkers (e.g., `RuleSpec.where`, `CompiledDerivationPlan.body_ir`): `tuple(source)` on init; iteration is over the snapshot.
+- **IR atom view shape (Phase 1 decision):** `IRBodyWalker` exposes a single frozen `IRAtomView` (`kind` / `pred_id` / `args` / `branch_index` / `atom_index` / `key` / `.underlying`) rather than per-kind subclasses (`IRPredAtomView`, `IREqAtomView`, etc.). Per-kind subclasses are deferred until a consumer needs kind-specific methods beyond the common surfaced fields.
 - **Wrapper-view pattern** (Round 6 + Round 7): per-DTO views (`SupportArtifactView`, `ProofFrameView`, `ProofFrameDiffView`) wrap, never modify; tuple fields not extended with methods.
 - **Escape hatch:** every walker exposes `.underlying` (no `.source` / `.carrier` / `.raw` aliases).
 - **Exact-access vocabulary:** `find(key | position) -> View | None`, `require_key(key) -> View` (raise on miss), `require_position(int) -> View` (raise on miss).

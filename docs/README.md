@@ -42,6 +42,7 @@
 
 - [src/kernel/core/docs/01_architecture.md](/Users/zhenzhili/hnsm-backend/src/kernel/core/docs/01_architecture.md)
 - [src/kernel/application/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/application/docs/README.md)
+  - application runtime authority docs, including the application-layer walker docs at `src/kernel/application/walker/docs/README.md`.
 - [src/service/docs/README.md](/Users/zhenzhili/hnsm-backend/src/service/docs/README.md)
   - service HTTP surface 与 audit static site delivery contract 的当前实现文档。
 - [src/kernel/sdk/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/sdk/docs/README.md)

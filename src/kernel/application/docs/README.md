@@ -14,6 +14,8 @@
   - application 模块职责、runtime protocol / executor 结构、SDK adapter 关系、保守 fallback 边界与测试入口。
 - `src/kernel/application/docs/01_overview_en.md`
   - English mirror of the overview.
+- `src/kernel/application/walker/docs/README.md`
+  - Current implementation contract for the application-layer walker module.
 
 ## 使用约定
 

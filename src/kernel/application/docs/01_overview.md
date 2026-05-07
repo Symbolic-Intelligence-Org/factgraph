@@ -26,6 +26,7 @@
 - native Rule Add Condition (`completed` / `unsupported` / `invalid_request`) over one temporary filter-only native where atom insertion,returning variant rows plus original-frame ProofFrame output with a synthetic added-atom verdict
 - explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
 - capability ergonomics helpers for Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
+- application-layer walker views for SDK-independent traversal over selected DTO / IR structures (`IRBodyWalker` in the current slice)
 
 它不负责:
 
@@ -58,6 +59,8 @@
   - schema index, identity materialization, ref encoding, field/type lookup
 - `capability_helpers.py`
   - application-layer ergonomic helpers: `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
+- `walker/`
+  - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`; B2 evidence wrapper views and B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
 - `entity_view.py`
   - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`
@@ -88,7 +91,7 @@
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 47 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 49 public symbols. The main executor entry points are:
 
 Batch 8 public-surface note:`kernel.application` is an **advanced importable** runtime authority in the kernel package. It is appropriate for automation,wire bridges,and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade,and Batch 8 does not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes.
 
@@ -127,6 +130,11 @@ The main schema/runtime helpers are:
 - `field_predicate(...)`
 - `field_value_type(...)`
 - `entity_type_from_ref(...)`
+
+The current walker entry points are:
+
+- `IRBodyWalker`
+- `IRAtomView`
 
 ## 4. 与其他层的关系
 

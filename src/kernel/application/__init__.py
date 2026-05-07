@@ -38,6 +38,10 @@ from .ingest_runtime import (
     IngestRuntimeError,
     apply_ingest_request,
 )
+from .walker import (
+    IRAtomView,
+    IRBodyWalker,
+)
 from .query_runtime import (
     QueryRuntimeError,
     execute_query,
@@ -81,6 +85,8 @@ __all__ = [
     "FieldTypeInfo",
     "IdentityFieldInfo",
     "IngestRuntimeError",
+    "IRAtomView",
+    "IRBodyWalker",
     "PredicateInfo",
     "QueryRuntimeError",
     "SchemaIndex",

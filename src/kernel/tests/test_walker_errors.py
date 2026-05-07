@@ -84,10 +84,10 @@ class TestWalkerErrorHierarchyImport(unittest.TestCase):
 
 
 class TestWalkerErrorPackageExports(unittest.TestCase):
-    def test_all_seven_classes_listed_in_package_all(self) -> None:
+    def test_all_seven_error_classes_listed_in_package_all(self) -> None:
         from kernel.application import walker
 
-        expected = {
+        expected_error_names = {
             "UnboundedStreamError",
             "WalkerError",
             "WalkerFrozenError",
@@ -96,13 +96,21 @@ class TestWalkerErrorPackageExports(unittest.TestCase):
             "WalkerReferenceError",
             "WalkerSnapshotError",
         }
-        self.assertEqual(set(walker.__all__), expected)
+        self.assertLessEqual(expected_error_names, set(walker.__all__))
 
-    def test_package_exports_are_errors_module_classes(self) -> None:
+    def test_package_error_exports_are_errors_module_classes(self) -> None:
         from kernel.application import walker
         from kernel.application.walker import errors
 
-        for name in walker.__all__:
+        for name in (
+            "UnboundedStreamError",
+            "WalkerError",
+            "WalkerFrozenError",
+            "WalkerLookupError",
+            "WalkerParseError",
+            "WalkerReferenceError",
+            "WalkerSnapshotError",
+        ):
             self.assertIs(getattr(walker, name), getattr(errors, name))
 
 
