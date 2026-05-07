@@ -19,8 +19,8 @@ Current implementation status:
   `SupportArtifact` / ledger-claim cross-referencing.
 - **Implementation Phase 4:** `ProofFrameView` is implemented for
   `ProofFrameRecheckResult`.
-- **Implementation Phase 5 not implemented yet:** `ProofFrameDiffView` remains
-  a blueprint-scoped future phase.
+- **Implementation Phase 5:** `ProofFrameDiffView` is implemented for
+  `ProofFrameDiff`.
 - **Scope item B3 audit/store stream walker not implemented:** stream walkers
   remain future-only.
 
@@ -101,6 +101,24 @@ The view exposes `status`, recursively frozen `binding_items`, `atom_verdicts`
 as `FrozenTupleView[ProofFrameAtomVerdict]`, and `underlying`, the original
 `ProofFrameRecheckResult` escape hatch.
 
+`ProofFrameDiffView` wraps a `ProofFrameDiff`:
+
+```python
+from kernel.application.walker import ProofFrameDiffView
+
+diff_view = ProofFrameDiffView(diff)
+changed_frames = diff_view.frames_with_status_change()
+changed_atoms = tuple(diff_view.iter_atom_deltas(kind="atom_verdict_changed"))
+```
+
+The view exposes `round_a_id`, `round_b_id`, `frame_deltas` as
+`FrozenTupleView[FrameDelta]`, `warnings` as `FrozenTupleView[WarningDTO]`,
+and `underlying`, the original `ProofFrameDiff` escape hatch. The convenience
+methods `frames_with_status_change()`, `iter_atom_deltas(kind=None)`, and
+`frames_with_atom_verdict_changes()` implement the Phase 5 first-slice
+shortcuts; callers can still use `frame_deltas.filter(...)` /
+`frame_deltas.find(...)` for custom queries.
+
 ## Non-responsibilities
 
 - No SDK shell or `kernel.sdk` import.
@@ -140,6 +158,7 @@ Focused walker tests:
 - `test_walker_keys.py`
 - `test_walker_views_support.py`
 - `test_walker_views_proof_frame.py`
+- `test_walker_views_proof_frame_diff.py`
 
 Run:
 
@@ -148,6 +167,7 @@ PYTHONPATH=src python -m unittest \
   src.kernel.tests.test_walker_keys \
   src.kernel.tests.test_walker_views_support \
   src.kernel.tests.test_walker_views_proof_frame \
+  src.kernel.tests.test_walker_views_proof_frame_diff \
   src.kernel.tests.test_walker_views_frozen_tuple \
   src.kernel.tests.test_walker_ir \
   src.kernel.tests.test_walker_errors -v

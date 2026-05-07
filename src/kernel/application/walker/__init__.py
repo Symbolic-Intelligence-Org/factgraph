@@ -35,6 +35,7 @@ from .keys import (
 from .views import (
     AssertionView,
     FrozenTupleView,
+    ProofFrameDiffView,
     ProofFrameView,
     SupportArtifactView,
     frozen_collection,
@@ -46,6 +47,7 @@ __all__ = [
     "FrozenTupleView",
     "IRAtomView",
     "IRBodyWalker",
+    "ProofFrameDiffView",
     "ProofFrameView",
     "SupportArtifactView",
     "UnboundedStreamError",

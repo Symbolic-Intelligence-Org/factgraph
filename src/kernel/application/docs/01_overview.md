@@ -26,7 +26,7 @@
 - native Rule Add Condition (`completed` / `unsupported` / `invalid_request`) over one temporary filter-only native where atom insertion,returning variant rows plus original-frame ProofFrame output with a synthetic added-atom verdict
 - explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
 - capability ergonomics helpers for Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
-- application-layer walker views for SDK-independent traversal over selected DTO / IR structures (`IRBodyWalker`, `FrozenTupleView`, `AtomKeyView`, `SupportArtifactView`, and `AssertionView` in the current slice)
+- application-layer walker views for SDK-independent traversal over selected DTO / IR structures (`IRBodyWalker`, `FrozenTupleView`, `AtomKeyView`, `SupportArtifactView`, `AssertionView`, `ProofFrameView`, and `ProofFrameDiffView` in the current slice)
 
 它不负责:
 
@@ -60,7 +60,7 @@
 - `capability_helpers.py`
   - application-layer ergonomic helpers: `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
 - `walker/`
-  - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`, `FrozenTupleView` / `frozen_collection(...)` for already-frozen tuple collections, `AtomKeyView` / `parse_atom_key(...)`, `SupportArtifactView` / `AssertionView` for `SupportArtifact` assertion cross-references, and `ProofFrameView` for `ProofFrameRecheckResult`. `ProofFrameDiffView` and B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
+  - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`, `FrozenTupleView` / `frozen_collection(...)` for already-frozen tuple collections, `AtomKeyView` / `parse_atom_key(...)`, `SupportArtifactView` / `AssertionView` for `SupportArtifact` assertion cross-references, `ProofFrameView` for `ProofFrameRecheckResult`, and `ProofFrameDiffView` for `ProofFrameDiff`. B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
 - `entity_view.py`
   - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`
@@ -91,7 +91,7 @@
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 56 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 57 public symbols. The main executor entry points are:
 
 Batch 8 public-surface note:`kernel.application` is an **advanced importable** runtime authority in the kernel package. It is appropriate for automation,wire bridges,and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade,and Batch 8 does not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes.
 
@@ -138,6 +138,7 @@ The current walker entry points are:
 - `FrozenTupleView`
 - `IRBodyWalker`
 - `IRAtomView`
+- `ProofFrameDiffView`
 - `ProofFrameView`
 - `SupportArtifactView`
 - `frozen_collection(...)`
@@ -229,6 +230,7 @@ Key focused tests:
 - `test_walker_keys.py`
 - `test_walker_views_support.py`
 - `test_walker_views_proof_frame.py`
+- `test_walker_views_proof_frame_diff.py`
 - `test_application_rule_disable_protocol.py`
 - `test_application_rule_disable_runtime_native.py`
 - `test_application_rule_literal_replace_protocol.py`

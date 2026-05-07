@@ -9,7 +9,7 @@ Phase 4 implements:
 
 - `ProofFrameView(frame)` per Round 6 design.
 
-Phase 5 will add `ProofFrameDiffView(diff)` with locked Round 3 method
+Phase 5 implements `ProofFrameDiffView(diff)` with locked Round 3 method
 names:
 
 - `frames_with_status_change() -> FrozenTupleView[FrameDelta]`
@@ -25,10 +25,17 @@ from collections.abc import Callable, Iterator, Mapping
 from types import MappingProxyType
 from typing import Any, Generic, TypeVar
 
+from kernel.application.protocol.common import WarningDTO
 from kernel.application.protocol.proofframe import (
     ProofFrameAtomVerdict,
     ProofFrameRecheckResult,
     ProofFrameStatus,
+)
+from kernel.audit.proof_frame_diff import (
+    AtomDelta,
+    AtomDeltaKind,
+    FrameDelta,
+    ProofFrameDiff,
 )
 from kernel.core.store._support import BindingItems, SupportArtifact
 from kernel.core.store.ledger import Claim, MetaRow
@@ -366,6 +373,110 @@ class ProofFrameView:
         )
 
 
+class ProofFrameDiffView:
+    """Frozen wrapper view over `ProofFrameDiff`."""
+
+    __slots__ = (
+        "_frame_deltas",
+        "_frozen",
+        "_round_a_id",
+        "_round_b_id",
+        "_underlying",
+        "_warning_surface",
+        "_warnings",
+    )
+
+    def __init__(self, diff: ProofFrameDiff) -> None:
+        if not isinstance(diff, ProofFrameDiff):
+            raise TypeError("diff must be ProofFrameDiff")
+
+        object.__setattr__(self, "_frozen", False)
+        object.__setattr__(self, "_underlying", diff)
+        object.__setattr__(self, "_round_a_id", diff.round_a_id)
+        object.__setattr__(self, "_round_b_id", diff.round_b_id)
+        object.__setattr__(self, "_frame_deltas", FrozenTupleView(diff.frame_deltas))
+        object.__setattr__(self, "_warnings", FrozenTupleView(diff.warnings))
+        object.__setattr__(self, "_warning_surface", _snapshot_warning_surface(diff.warnings))
+        object.__setattr__(self, "_frozen", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_frozen", False):
+            raise WalkerFrozenError("ProofFrameDiffView is frozen")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if getattr(self, "_frozen", False):
+            raise WalkerFrozenError("ProofFrameDiffView is frozen")
+        object.__delattr__(self, name)
+
+    @property
+    def round_a_id(self) -> str:
+        return self._round_a_id
+
+    @property
+    def round_b_id(self) -> str:
+        return self._round_b_id
+
+    @property
+    def frame_deltas(self) -> FrozenTupleView[FrameDelta]:
+        return self._frame_deltas
+
+    @property
+    def warnings(self) -> FrozenTupleView[WarningDTO]:
+        return self._warnings
+
+    @property
+    def underlying(self) -> ProofFrameDiff:
+        return self._underlying
+
+    def frames_with_status_change(self) -> FrozenTupleView[FrameDelta]:
+        return FrozenTupleView(
+            tuple(
+                frame
+                for frame in self.frame_deltas.underlying
+                if frame.frame_status_change is not None
+            )
+        )
+
+    def iter_atom_deltas(self, *, kind: AtomDeltaKind | None = None) -> Iterator[AtomDelta]:
+        for frame in self.frame_deltas.underlying:
+            for delta in frame.atom_deltas:
+                if kind is None or delta.kind == kind:
+                    yield delta
+
+    def frames_with_atom_verdict_changes(self) -> FrozenTupleView[FrameDelta]:
+        return FrozenTupleView(
+            tuple(
+                frame
+                for frame in self.frame_deltas.underlying
+                if any(delta.kind == "atom_verdict_changed" for delta in frame.atom_deltas)
+            )
+        )
+
+    def _surface(self) -> tuple[Any, ...]:
+        return (
+            self.round_a_id,
+            self.round_b_id,
+            self.frame_deltas.underlying,
+            self._warning_surface,
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ProofFrameDiffView):
+            return NotImplemented
+        return self._surface() == other._surface()
+
+    def __hash__(self) -> int:
+        return hash(self._surface())
+
+    def __repr__(self) -> str:
+        return (
+            "ProofFrameDiffView("
+            f"round_a_id={self.round_a_id!r}, round_b_id={self.round_b_id!r}, "
+            f"frame_deltas={len(self.frame_deltas)})"
+        )
+
+
 class SupportArtifactView:
     """Frozen wrapper view over `SupportArtifact` plus assertion indexes."""
 
@@ -560,6 +671,22 @@ def _snapshot_binding_items(binding_items: BindingItems) -> BindingItems:
     return tuple(frozen_items)
 
 
+def _snapshot_warning_surface(warnings: tuple[WarningDTO, ...]) -> tuple[tuple[Any, ...], ...]:
+    surface: list[tuple[Any, ...]] = []
+    for warning in warnings:
+        if not isinstance(warning, WarningDTO):
+            raise WalkerSnapshotError("warnings entries must be WarningDTO")
+        surface.append(
+            (
+                warning.code,
+                warning.message,
+                warning.path,
+                freeze_value(warning.details),
+            )
+        )
+    return tuple(surface)
+
+
 def _freeze_claim_index(
     claim_index: Mapping[str, Claim],
     meta_index: Mapping[str, tuple[MetaRow, ...]],
@@ -597,6 +724,7 @@ def _freeze_meta_index(
 __all__ = [
     "AssertionView",
     "FrozenTupleView",
+    "ProofFrameDiffView",
     "ProofFrameView",
     "SupportArtifactView",
     "frozen_collection",
