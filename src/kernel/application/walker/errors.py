@@ -49,3 +49,14 @@ class UnboundedStreamError(WalkerError):
     finalized hierarchy coherent with bundle 40_ §4 / `#12` / `#14`;
     remains dormant until B3 reactivation introduces walker/stream.py.
     """
+
+
+__all__ = [
+    "UnboundedStreamError",
+    "WalkerError",
+    "WalkerFrozenError",
+    "WalkerLookupError",
+    "WalkerParseError",
+    "WalkerReferenceError",
+    "WalkerSnapshotError",
+]

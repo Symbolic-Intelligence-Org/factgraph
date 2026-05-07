@@ -16,6 +16,7 @@
 | 2026-05-07 | scoped | Status transition `draft → scoped` | All 4 Step 0 Round decisions + process correction locked. Implementation can begin in the dedicated worktree at `/Users/zhenzhili/hnsm-backend-B` on branch `codex/v0.1-walker-mechanism-2026-05-07` (created off this commit on parent `v0.1-public-surface-2026-05-06`). Parent branch carries no further `src/` writes for B. Phase 0 (package skeleton + `errors.py` 7-class hierarchy) is the first implementation step in the worktree. |
 | 2026-05-07 | implementing | Phase 1 local decision — single `IRAtomView` | Resolved the 40_ deferred question "one `IRAtomView` union type or one class per kind" at implementation time: Phase 1 uses one frozen `IRAtomView` with common surfaced fields (`kind` / `pred_id` / `args` / `branch_index` / `atom_index` / `key` / `.underlying`). Per-kind subclasses are deferred until a real consumer needs kind-specific behavior. Rationale: active blueprint Phase 1 acceptance only requires common traversal fields; adding empty per-kind classes now would create placeholder surface without behavior. |
 | 2026-05-07 | implementing | Phase 2 local decision — `FrozenTupleView` semantics | Locked local semantics before implementation: `.first()` returns `None` on empty (aligned with `find = may miss -> None`); `require_key(value, *, key=extractor)` is exact-access and raises `WalkerLookupError` on miss, with default extractor checking `.key` / `.pred_atom_key` / `.step_key` / `.atom_key` / `.asrt_id` / `.id`; `.filter(...)` eagerly materializes a new `FrozenTupleView` because Phase 2 is DTO-backed small collection adapter, not B3 stream walker. |
+| 2026-05-07 | implementing | Phase 0/1/2 strict audit | Multi-agent audit per plan [phase1-2-recursive-bunny.md](file:///Users/zhenzhili/.claude/plans/phase1-2-recursive-bunny.md). Round 1: 3 parallel Explore agents (Design alignment / Code quality / Cross-cutting invariants & test coverage) over commits `e4afe7d` / `088f195` / `f64e399` (~1003 lines code+tests). Round 2: synthesis + spot-verification of 2 BLOCKER claims, both downgraded after verification (single-thread docstring missing but impl is single-thread; determinism test missing but impl is trivially deterministic via tuple snapshot). Round 3: 13 findings total (0 blocker / 8 clarify / 5 minor); recommendation **PROCEED to Phase 3**. Full report at `## Phase 0/1/2 Audit Report (2026-05-07)` below. **No code files modified during audit (doc-only).** |
 
 ## Decision Notes
 
@@ -27,3 +28,85 @@
 - **Step 0 complete (2026-05-07):** All 4 Round decisions + process correction locked. Status is now `scoped`; create B worktree at `/Users/zhenzhili/hnsm-backend-B` from this parent commit before any implementation.
 - Phase 1 local decision (2026-05-07): `IRBodyWalker` ships one frozen `IRAtomView` rather than per-kind atom view subclasses. This resolves the remaining 40_ IR-view-shape question without expanding scope; per-kind subclasses stay deferred until a consumer requires kind-specific methods.
 - Phase 2 local decision (2026-05-07): `FrozenTupleView.first()` returns `None` on empty; `require_key(value, *, key=extractor)` uses default key-like attribute fallback but accepts caller extractor override; `.filter(...)` is eager and returns a new `FrozenTupleView`.
+- Phase 0/1/2 audit (2026-05-07): no blockers detected; 8 clarify + 5 minor findings; recommendation **PROCEED to Phase 3**. One formal `#P1` carve-out requested for FrozenTupleView equality semantics (class-specific application of `#15`). See `## Phase 0/1/2 Audit Report (2026-05-07)` below for full findings table, aligned contracts, test coverage assessment, and follow-up bucketing.
+
+## Phase 0/1/2 Audit Report (2026-05-07)
+
+### Summary
+
+Multi-agent audit of B Phase 0/1/2 commits (`e4afe7d` / `088f195` / `f64e399`, ~1003 lines code+tests across `walker/{__init__,errors,ir,views,keys}.py` + 3 test files). **No blockers detected.** 8 of 10 design contracts ALIGNED; 1 DRIFT (`errors.py` docstring wording vs blueprint §4.1 Round 2 phrasing); 2 design clarifications (intentional class-specific divergence in `find` signatures + FrozenTupleView equality). 11 code quality findings (0 blocker / 6 clarify / 5 minor). 7 cross-cutting invariant checks (5 PASS / 1 missing docstring contract / 1 design clarify). All blueprint §7 acceptance items for Phase 0–2 covered by tests; 1 missing determinism contract test (downgraded from BLOCKER after verifying impl is trivially deterministic via tuple snapshot).
+
+### Findings table
+
+| # | Severity | File:line | Description | Recommendation |
+|---|---|---|---|---|
+| F1 | clarify | `walker/errors.py:5-7` | Docstring says "5 B1/B2 subclasses with planned raise sites in later phases" but only 3 (`WalkerFrozenError` / `WalkerLookupError` / `WalkerSnapshotError`) actually have raise sites in Phase 0–2; `WalkerParseError` + `WalkerReferenceError` are Phase 3 scope | Refresh docstring to distinguish the 3 active vs 2 reserved-for-Phase-3; natural fit when Phase 3 lands those raise sites |
+| F2 | clarify | `walker/__init__.py` + `ir.py` + `views.py` module docstrings | Walker invariant `#15` single-thread contract not mentioned in any walker module docstring; impl IS single-thread (GIL + no threading primitives + no shared mutable state) but contract is implicit | Add explicit "Walker instances are single-thread; do not share between threads" line in `walker/__init__.py` module docstring (or per-class where applicable) |
+| F3 | clarify | `walker/errors.py` end | No `__all__` declared in `errors.py` — inconsistent with `ir.py` and `views.py` which both declare `__all__` | Add `__all__ = [...]` listing the 7 error classes alphabetically |
+| F4 | clarify | `walker/views.py:149-153` (`_default_key`) | Returns the attr value as-is including `None` if the attr exists with `None` value; `require_key(value=None)` would then match items whose key attr happens to be `None` | Document the behavior or filter `None` values from valid keys (decide which is correct semantics) |
+| F5 | clarify | `walker/views.py:137-143` | FrozenTupleView equality on `_items` (which IS the underlying tuple) differs from IRAtomView pattern (which excludes `.underlying`); justified because items ARE the content (no surface/underlying split), but blueprint `#15` phrasing is ambiguous; this is a class-specific application | Document divergence in `views.py` docstring; **formal `#P1` carve-out request** (see Carve-outs below) |
+| F6 | clarify | `walker/ir.py:247` | `_build_atom_view` missing return type annotation; all other helpers in `ir.py` (e.g. `_snapshot_branches`, `_freeze_ir_value`, `_as_tuple`) have annotations | Add `-> IRAtomView` |
+| F7 | clarify | `walker/ir.py:13-18` (IRAtomView docstring) | Wording on equality/hash is ambiguous; current docstring describes `.underlying` as escape hatch but doesn't explicitly state both equality and hash exclude it | Reword to "is excluded from equality and hash comparisons; serves as an escape hatch for the underlying frozen snapshot" |
+| F8 | clarify | `walker/ir.py:217-230` (`_snapshot_atom`) | Validates only `pred` and `ruleref` kinds; other kinds (e.g. `nonsynth`, future kinds) silently pass unvalidated | Document forward-compat intent or add validation for known kind set |
+| M1 | minor | `walker/ir.py:186` (`_snapshot_branches` early-return) | Empty source returns `()` correctly via early guard; `all(_is_atom(item) for item in [])` returns vacuous-true, so removing the guard would silently treat empty as "flat AND". Fragile if reordered | Add comment at line 186 explaining why early return is needed |
+| M2 | minor | `walker/views.py:110-115` (`require_position` bool exclusion) | Rejects `bool` (since `isinstance(True, int) is True`) but error message just says "non-negative int" — bool exclusion intent not surfaced | Clarify message: `"position must be non-negative int (not bool): {position!r}"` |
+| M3 | minor | `walker/views.py:81-96` (`filter()`) | Propagates `source_id` to returned view (line 96), but docstring (line 86) doesn't mention it | Add docstring line: "Preserves `source_id` in the returned view" |
+| M4 | minor | `walker/ir.py:234-244` (`_freeze_ir_value`) | Recurses without depth bound or cycle detection — circular IR values would infinite-loop or hit Python recursion limit | Document precondition (IR values must be acyclic) or add depth guard with `WalkerSnapshotError` raise |
+| M5 | minor | `test_walker_ir.py` + `test_walker_views_frozen_tuple.py` | Determinism contract test missing — no test traverses walker twice and compares output (impl IS trivially deterministic via tuple snapshot, but explicit test guards against future regressions) | Add `test_traverse_twice_yields_identical_sequence` to both test files (natural fit for Phase 6 invariants sweep) |
+
+**Total: 13 findings (0 blocker / 8 clarify / 5 minor).**
+
+### Aligned contracts (no drift)
+
+Verified ALIGNED by Agent A (Design alignment):
+
+- A1: `walker/` package layout matches §4.1 Round 1 (5 files: `__init__.py` / `errors.py` / `keys.py` / `ir.py` / `views.py`)
+- A2: `WalkerError(Exception)` parent (NOT `ValueError`) per §4.1 Round 2 — confirmed at `errors.py:21`
+- A3: 5 active subclasses defined per §4.1 Round 2
+- A4: `UnboundedStreamError` defined; **no raise site in Phase 0–2 production code** (grep confirmed)
+- A6: `IRBodyWalker` construction-time snapshot via `_snapshot_branches → tuple(...)` (`ir.py:183-196`)
+- A7: `IRAtomView` frozen via `__slots__` + post-init lock; `__setattr__` raises `WalkerFrozenError` (`ir.py:20-60`)
+- A8: `.underlying` escape only — no `.source` / `.carrier` / `.raw` / `.get` / `.at` aliases on walker public API
+- A9–A10: `find` / `require_key` / `require_position` vocabulary on both `IRBodyWalker` and `FrozenTupleView`; `find` returns `View | None`, `require_*` raises `WalkerLookupError`
+- A11: IRAtomView equality / hash on surface tuple (excludes `.underlying`) (`ir.py:90-106`)
+- A12–A14: Phase 2 local decisions all honored — `.first() → None` on empty, `require_key(value, *, key=extractor)` keyword-only, `.filter()` eager
+- A15: Default key extractor chain matches locked order (`key` / `pred_atom_key` / `step_key` / `atom_key` / `asrt_id` / `id`)
+
+Verified PASS by Agent C (Cross-cutting invariants):
+
+- `#5` Layer isolation: no `kernel.sdk` import in walker package or tests
+- `#7` Vocabulary purity: no forbidden aliases on walker public API (only in docs as forbidden examples)
+- `#8` DTO non-mutation: walker views don't mutate underlying (no `.append` / `.extend` / `del` / attribute assignment)
+- `#9` No observable cache: no `@cache` / `@lru_cache` / `@cached_property` / `_cache` / `.stats` field
+- `#17` Equality / hash consistency: equal objects hash equal in both classes
+
+### Test coverage assessment
+
+| Phase | Test file | Tests | Coverage vs blueprint §7 acceptance |
+|---|---|---|---|
+| Phase 0 | `test_walker_errors.py` | 6 | All §7 bullets covered (hierarchy import, subclass extension, parent-not-ValueError, raise/catch for 5 active, `__all__` set, re-export identity); Agent C minor: explicit `UnboundedStreamError` no-raise grep deferred to Phase 6 invariants sweep |
+| Phase 1 | `test_walker_ir.py` | 14 | All §7 bullets covered (atom unpacking flat AND + OR-of-AND, `.underlying` escape, find/require_* semantics, snapshot errors, frozen view, equality/hash exclusion); M5: determinism contract test missing |
+| Phase 2 | `test_walker_views_frozen_tuple.py` | 14 | All §7 bullets covered (`.filter` predicate + attr-kwargs, `.find`, `.first` None on empty, `.require_position`, `.require_key` with default + override, no forbidden aliases, structural equality/hash); Phase 2 local decisions all tested; M5: determinism implicit but not explicit |
+
+### Pre-Phase-3 recommendation
+
+**PROCEED to Phase 3** (`keys.py` + `SupportArtifactView` / `AssertionView`).
+
+No blockers. Suggested follow-up bucketing:
+
+- **Fix together with Phase 3:** F1 (`errors.py` docstring) — Phase 3 will land `WalkerParseError` + `WalkerReferenceError` raise sites, so docstring needs update anyway.
+- **Quick polish before / during Phase 3:** F2 (single-thread docstring), F3 (`errors.py` `__all__`).
+- **Defer to Phase 6 (cross-cutting invariants test sweep):** F5 (FrozenTupleView equality `#P1` carve-out), M5 (determinism contract test), Phase 6-reserved items (`UnboundedStreamError` no-raise grep, `.stats` access test, pickling rejection test).
+- **Inline polish anytime:** F4, F6, F7, F8, M1–M4.
+
+### Carve-out request
+
+- **F5**: FrozenTupleView equality on `.underlying` (which IS items) is intentional class-specific application of `#15` rather than a violation. Recommend formal `#P1` carve-out at the next blueprint update — wording suggestion: "FrozenTupleView is a content-equality wrapper, not a surface/underlying view; `#15` `.underlying` exclusion principle applies only to walker classes with a separate surface representation (e.g. `IRAtomView`). For content-equality views, equality is defined over the underlying tuple itself."
+
+### Audit method
+
+- **Round 1 — Parallel exploration (3 Explore agents):** Design alignment / Code quality / Cross-cutting invariants & test coverage. Each agent received self-contained prompt with blueprint sections + code paths and produced a citation-grounded findings set.
+- **Round 2 — Synthesis + spot-verification:** Direct synthesis (no Plan agent — given findings volume, direct synthesis was efficient). Spot-verified 2 BLOCKER claims via `grep -in "thread\|concurrent" walker/*.py` (confirmed 0 matches → `#15` docstring genuinely missing) and `grep -n "def test_"` on test_walker_ir.py (confirmed no `test_traverse_twice` method). Both BLOCKERs downgraded after verifying impl is structurally compliant; only docs/tests gaps.
+- **Round 3 — Doc-only deliverable:** This report. **No code files modified during audit.**
+
+Plan: [/Users/zhenzhili/.claude/plans/phase1-2-recursive-bunny.md](file:///Users/zhenzhili/.claude/plans/phase1-2-recursive-bunny.md).

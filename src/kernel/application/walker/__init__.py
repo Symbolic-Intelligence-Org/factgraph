@@ -8,6 +8,9 @@ See docs/blueprints/active/2026-05-07_walker-mechanism.md for design.
   reserved. `UnboundedStreamError` is exported as a dormant placeholder
   per blueprint §4.1 Round 2 to keep the WalkerError hierarchy coherent
   with bundle `#12` / `#14`; B1/B2 has no raise site for it.
+
+Walker instances are single-thread objects; share frozen source DTOs between
+threads, not walker instances.
 """
 
 from __future__ import annotations
