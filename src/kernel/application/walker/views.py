@@ -25,7 +25,11 @@ from collections.abc import Callable, Iterator, Mapping
 from types import MappingProxyType
 from typing import Any, Generic, TypeVar
 
-from kernel.application.protocol.proofframe import ProofFrameRecheckResult, ProofFrameStatus
+from kernel.application.protocol.proofframe import (
+    ProofFrameAtomVerdict,
+    ProofFrameRecheckResult,
+    ProofFrameStatus,
+)
 from kernel.core.store._support import BindingItems, SupportArtifact
 from kernel.core.store.ledger import Claim, MetaRow
 
@@ -295,12 +299,11 @@ class ProofFrameView:
         "_atom_verdicts",
         "_binding_items",
         "_frozen",
-        "_source_id",
         "_status",
         "_underlying",
     )
 
-    def __init__(self, frame: ProofFrameRecheckResult, *, source_id: str | None = None) -> None:
+    def __init__(self, frame: ProofFrameRecheckResult) -> None:
         if not isinstance(frame, ProofFrameRecheckResult):
             raise TypeError("frame must be ProofFrameRecheckResult")
 
@@ -311,9 +314,8 @@ class ProofFrameView:
         object.__setattr__(
             self,
             "_atom_verdicts",
-            FrozenTupleView(frame.atom_verdicts, source_id=source_id),
+            FrozenTupleView(frame.atom_verdicts),
         )
-        object.__setattr__(self, "_source_id", source_id)
         object.__setattr__(self, "_frozen", True)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -335,16 +337,12 @@ class ProofFrameView:
         return self._binding_items
 
     @property
-    def atom_verdicts(self) -> FrozenTupleView[Any]:
+    def atom_verdicts(self) -> FrozenTupleView[ProofFrameAtomVerdict]:
         return self._atom_verdicts
 
     @property
     def underlying(self) -> ProofFrameRecheckResult:
         return self._underlying
-
-    @property
-    def source_id(self) -> str | None:
-        return self._source_id
 
     def _surface(self) -> tuple[Any, ...]:
         return (

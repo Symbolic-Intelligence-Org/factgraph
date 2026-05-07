@@ -40,10 +40,9 @@ def _proof_frame_result() -> ProofFrameRecheckResult:
 class ProofFrameViewTests(unittest.TestCase):
     def test_wraps_proof_frame_result_fields(self) -> None:
         result = _proof_frame_result()
-        view = ProofFrameView(result, source_id="proof-frame-1")
+        view = ProofFrameView(result)
 
         self.assertIs(view.underlying, result)
-        self.assertEqual(view.source_id, "proof-frame-1")
         self.assertEqual(view.status, "invalidated")
         self.assertEqual(
             view.binding_items,

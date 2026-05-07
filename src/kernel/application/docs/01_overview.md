@@ -91,7 +91,7 @@
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 55 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 56 public symbols. The main executor entry points are:
 
 Batch 8 public-surface note:`kernel.application` is an **advanced importable** runtime authority in the kernel package. It is appropriate for automation,wire bridges,and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade,and Batch 8 does not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes.
 
@@ -138,6 +138,7 @@ The current walker entry points are:
 - `FrozenTupleView`
 - `IRBodyWalker`
 - `IRAtomView`
+- `ProofFrameView`
 - `SupportArtifactView`
 - `frozen_collection(...)`
 - `parse_atom_key(...)`
@@ -227,6 +228,7 @@ Key focused tests:
 - `test_walker_views_frozen_tuple.py`
 - `test_walker_keys.py`
 - `test_walker_views_support.py`
+- `test_walker_views_proof_frame.py`
 - `test_application_rule_disable_protocol.py`
 - `test_application_rule_disable_runtime_native.py`
 - `test_application_rule_literal_replace_protocol.py`

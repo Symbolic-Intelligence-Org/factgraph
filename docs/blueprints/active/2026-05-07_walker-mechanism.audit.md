@@ -21,6 +21,7 @@
 | 2026-05-07 | implementing | Phase 3 strict-audit fixes | Follow-up to read-only Phase 3 strict audit: fixed construction-time snapshot drift by deep-freezing assertion surfaces (`Claim.rest_terms` and `MetaRow.value`) at `SupportArtifactView` construction, while keeping `AssertionView` independently constructible with the same freezer. Added `AtomKeyView` constructor validation, malformed claim-row snapshot errors, meta-index defensive-copy regression, locator-preservation regression, direct DTO tuple access regression, and module-doc convention updates. |
 | 2026-05-07 | implementing | Phase 1/2 strict-audit fixes | Follow-up to read-only Phase 1/2 strict audit: restored `#9` lazy traversal by changing `IRBodyWalker` to snapshot source only and build `IRAtomView` objects during traversal / lookup; moved recursive freezing into shared `walker/_freeze.py`; added set freezing + unhashable / recursive-value snapshot errors; tightened empty `pred` / `ruleref` id validation; froze `IRBodyWalker` instances; extended `FrozenTupleView.find(predicate=None, **attrs)` to match `.filter(...)`; formalized the `#17` `FrozenTupleView` content-wrapper carve-out in the blueprint. |
 | 2026-05-07 | implementing | Phase 4 — ProofFrameView implemented | Added `ProofFrameView(ProofFrameRecheckResult)` as the Phase 4 per-DTO wrapper view. It exposes `status`, recursively frozen `binding_items`, `atom_verdicts` as `FrozenTupleView[ProofFrameAtomVerdict]`, and `.underlying` as the original DTO escape hatch. Kept Phase 4 independent from `SupportArtifactView` / claim lookup: callers join explicitly if needed. |
+| 2026-05-07 | implementing | Phase 4 strict-audit fix | Follow-up to read-only Phase 4 strict audit: removed `source_id` constructor arg + property from `ProofFrameView` (drift from locked single-arg design); tightened `atom_verdicts` type hint to `FrozenTupleView[ProofFrameAtomVerdict]`; updated application overview docs (`55` -> `56`, walker entries, Phase 4 test list). Focused regression: 106 tests pass. |
 
 ## Decision Notes
 
@@ -37,6 +38,35 @@
 - Phase 3 strict-audit fix (2026-05-07): assertion hydration now snapshots and recursively freezes surfaced assertion data at `SupportArtifactView` construction time. `lookup_assertion(...)` remains lazy at the view-object level but reads pre-frozen data, preserving `#10` determinism while avoiding live store reads.
 - Phase 1/2 strict-audit fix (2026-05-07): `IRBodyWalker` snapshots source at construction and builds `IRAtomView` lazily during traversal / lookup; `FrozenTupleView.find(...)` now mirrors `.filter(predicate=None, **attrs)`; `FrozenTupleView` equality/hash carve-out formally recorded under `#17`.
 - Phase 4 implementation decision (2026-05-07): `ProofFrameView` remains a single-argument wrapper over real `ProofFrameRecheckResult` fields only (`status` / `binding_items` / `atom_verdicts` / `.underlying`). No `ProofAtomView`, no `SupportArtifactView` join, and no claim/meta index constructor arguments.
+- Phase 4 strict-audit fix (2026-05-07): `ProofFrameView` implementation now matches the single-argument Phase 4 lock exactly; `source_id` remains available on generic `FrozenTupleView` / `SupportArtifactView` but is not part of `ProofFrameView`.
+
+## Phase 4 Audit Report (2026-05-07)
+
+### Summary
+
+Strict audit of committed Phase 4 HEAD `fa133c1` (`feat(walker): B Phase 4 — ProofFrameView`). Audit used 2 parallel explorer lanes (design alignment + code quality) plus local coverage/docs/layering checks due agent thread limit. Verdict: **needs fix before Phase 5** because `ProofFrameView` drifted from the locked single-argument / real-fields-only surface by adding `source_id`.
+
+### Findings table
+
+| # | Severity | File:line | Description | Recommendation |
+|---|---|---|---|---|
+| P4-F1 | blocker | `walker/views.py:303`, `test_walker_views_proof_frame.py:43` | `ProofFrameView` accepted and exposed `source_id`, despite locked `ProofFrameView(frame)` shape and real DTO fields only | Remove `source_id` constructor arg, slot, property, inner `FrozenTupleView(..., source_id=...)`, and test assertion |
+| P4-F2 | minor | `walker/views.py:338` | `atom_verdicts` property returned `FrozenTupleView[Any]` while docs describe `FrozenTupleView[ProofFrameAtomVerdict]` | Import `ProofFrameAtomVerdict` and tighten return annotation |
+| P4-F3 | minor | `application/docs/01_overview.md`, `application/docs/01_overview_en.md` | Application overview docs under-reported exported surface (`55` instead of `56`), omitted `ProofFrameView`, and omitted `test_walker_views_proof_frame.py` | Update count, walker entry list, and focused test list |
+
+### No-Issue Checks
+
+- `ProofFrameView` otherwise uses real `ProofFrameRecheckResult` fields only: `status`, `binding_items`, `atom_verdicts`, and `.underlying`.
+- No `ProofAtomView`, no `SupportArtifactView` join, no claim/meta index constructor path.
+- `binding_items` are recursively frozen for surfaced reads and hashing.
+- Frozen guard is present; no `.source`, `.carrier`, or `.raw` aliases.
+- Exports exist in both `kernel.application.walker` and `kernel.application`.
+
+### Verification
+
+- Focused regression passed: 106 tests across walker Phase 0-4 tests, capability helpers, and ProofFrame runtime tests.
+- Forbidden SDK import grep returned no matches.
+- Stale `ProofFrameView future/not implemented` grep returned no current stale text.
 
 ## Phase 0/1/2 Audit Report (2026-05-07)
 
