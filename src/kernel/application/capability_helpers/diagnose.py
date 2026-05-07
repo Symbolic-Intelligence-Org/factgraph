@@ -25,7 +25,8 @@ def build_diagnose_request(
     """Build a DiagnoseRequest from application-canonical inputs."""
 
     _reject_sdk_origin(plan, path="plan")
-    _reject_sdk_origin(binding, path="binding")
+    normalized_binding = _normalize_helper_binding(binding)
+    _reject_sdk_origin(normalized_binding, path="binding")
     _reject_sdk_origin(engine, path="engine")
 
     if not isinstance(plan, CompiledDerivationPlan):
@@ -33,7 +34,7 @@ def build_diagnose_request(
 
     return DiagnoseRequest(
         plan=plan,
-        binding=_normalize_helper_binding(binding),
+        binding=normalized_binding,
         engine=engine,  # type: ignore[arg-type]
     )
 

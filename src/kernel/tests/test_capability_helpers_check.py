@@ -40,6 +40,16 @@ def _sdk_rule() -> Rule:
         )
 
 
+def _plan_with_sdk_rule_in_body_ir() -> CompiledDerivationPlan:
+    plan = _plan()
+    return CompiledDerivationPlan(
+        derivation_id=plan.derivation_id,
+        version=plan.version,
+        body_ir=[*plan.body_ir, _sdk_rule()],
+        heads=plan.heads,
+    )
+
+
 class BuildCheckRequestTests(unittest.TestCase):
     def test_builds_check_request_from_mapping_binding(self) -> None:
         plan = _plan()
@@ -110,9 +120,17 @@ class BuildCheckRequestTests(unittest.TestCase):
         with self.assertRaises(OriginPackageError):
             build_check_request(_sdk_rule(), {})  # type: ignore[arg-type]
 
+    def test_sdk_object_nested_in_plan_body_ir_raises_origin_package_error(self) -> None:
+        with self.assertRaises(OriginPackageError):
+            build_check_request(_plan_with_sdk_rule_in_body_ir(), {"$p": "person-1"})
+
     def test_sdk_object_in_binding_value_raises_origin_package_error(self) -> None:
         with self.assertRaises(OriginPackageError):
             build_check_request(_plan(), {"$rule": _sdk_rule()})
+
+    def test_sdk_object_in_binding_key_raises_origin_package_error(self) -> None:
+        with self.assertRaises(OriginPackageError):
+            build_check_request(_plan(), ((_sdk_rule(), "value"),))  # type: ignore[arg-type]
 
     def test_recursive_binding_value_raises_helper_error(self) -> None:
         recursive: dict[str, object] = {}
