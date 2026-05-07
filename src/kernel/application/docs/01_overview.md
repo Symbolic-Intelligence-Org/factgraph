@@ -60,7 +60,7 @@
 - `capability_helpers.py`
   - application-layer ergonomic helpers: `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
 - `walker/`
-  - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`, `FrozenTupleView` / `frozen_collection(...)` for already-frozen tuple collections, `AtomKeyView` / `parse_atom_key(...)`, and `SupportArtifactView` / `AssertionView` for `SupportArtifact` assertion cross-references. `ProofFrameView`, `ProofFrameDiffView`, and B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
+  - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`, `FrozenTupleView` / `frozen_collection(...)` for already-frozen tuple collections, `AtomKeyView` / `parse_atom_key(...)`, `SupportArtifactView` / `AssertionView` for `SupportArtifact` assertion cross-references, and `ProofFrameView` for `ProofFrameRecheckResult`. `ProofFrameDiffView` and B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
 - `entity_view.py`
   - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`

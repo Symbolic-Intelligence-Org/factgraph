@@ -5,7 +5,7 @@ Phase 3 implements:
 - `SupportArtifactView(support, frozen_claim_index, frozen_meta_index=None)`
 - `AssertionView`
 
-Phase 4 will add:
+Phase 4 implements:
 
 - `ProofFrameView(frame)` per Round 6 design.
 
@@ -25,7 +25,8 @@ from collections.abc import Callable, Iterator, Mapping
 from types import MappingProxyType
 from typing import Any, Generic, TypeVar
 
-from kernel.core.store._support import SupportArtifact
+from kernel.application.protocol.proofframe import ProofFrameRecheckResult, ProofFrameStatus
+from kernel.core.store._support import BindingItems, SupportArtifact
 from kernel.core.store.ledger import Claim, MetaRow
 
 from ._freeze import freeze_value
@@ -287,6 +288,86 @@ class AssertionView:
         return f"AssertionView(asrt_id={self.asrt_id!r}, pred_id={self.pred_id!r})"
 
 
+class ProofFrameView:
+    """Frozen wrapper view over `ProofFrameRecheckResult`."""
+
+    __slots__ = (
+        "_atom_verdicts",
+        "_binding_items",
+        "_frozen",
+        "_source_id",
+        "_status",
+        "_underlying",
+    )
+
+    def __init__(self, frame: ProofFrameRecheckResult, *, source_id: str | None = None) -> None:
+        if not isinstance(frame, ProofFrameRecheckResult):
+            raise TypeError("frame must be ProofFrameRecheckResult")
+
+        object.__setattr__(self, "_frozen", False)
+        object.__setattr__(self, "_underlying", frame)
+        object.__setattr__(self, "_status", frame.status)
+        object.__setattr__(self, "_binding_items", _snapshot_binding_items(frame.binding_items))
+        object.__setattr__(
+            self,
+            "_atom_verdicts",
+            FrozenTupleView(frame.atom_verdicts, source_id=source_id),
+        )
+        object.__setattr__(self, "_source_id", source_id)
+        object.__setattr__(self, "_frozen", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_frozen", False):
+            raise WalkerFrozenError("ProofFrameView is frozen")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if getattr(self, "_frozen", False):
+            raise WalkerFrozenError("ProofFrameView is frozen")
+        object.__delattr__(self, name)
+
+    @property
+    def status(self) -> ProofFrameStatus:
+        return self._status
+
+    @property
+    def binding_items(self) -> BindingItems:
+        return self._binding_items
+
+    @property
+    def atom_verdicts(self) -> FrozenTupleView[Any]:
+        return self._atom_verdicts
+
+    @property
+    def underlying(self) -> ProofFrameRecheckResult:
+        return self._underlying
+
+    @property
+    def source_id(self) -> str | None:
+        return self._source_id
+
+    def _surface(self) -> tuple[Any, ...]:
+        return (
+            self.status,
+            self.binding_items,
+            self.atom_verdicts.underlying,
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ProofFrameView):
+            return NotImplemented
+        return self._surface() == other._surface()
+
+    def __hash__(self) -> int:
+        return hash(self._surface())
+
+    def __repr__(self) -> str:
+        return (
+            "ProofFrameView("
+            f"status={self.status!r}, atom_verdicts={len(self.atom_verdicts)})"
+        )
+
+
 class SupportArtifactView:
     """Frozen wrapper view over `SupportArtifact` plus assertion indexes."""
 
@@ -467,6 +548,20 @@ def _snapshot_meta_rows_values(meta_rows: tuple[MetaRow, ...]) -> tuple[MetaRow,
     return tuple(frozen_rows)
 
 
+def _snapshot_binding_items(binding_items: BindingItems) -> BindingItems:
+    if not isinstance(binding_items, tuple):
+        raise WalkerSnapshotError("binding_items must be BindingItems tuple")
+    frozen_items: list[tuple[str, Any]] = []
+    for item in binding_items:
+        if not isinstance(item, tuple) or len(item) != 2:
+            raise WalkerSnapshotError("binding_items entries must be tuple(name, value)")
+        name, value = item
+        if not isinstance(name, str) or not name:
+            raise WalkerSnapshotError("binding_items name must be non-empty string")
+        frozen_items.append((name, freeze_value(value)))
+    return tuple(frozen_items)
+
+
 def _freeze_claim_index(
     claim_index: Mapping[str, Claim],
     meta_index: Mapping[str, tuple[MetaRow, ...]],
@@ -504,6 +599,7 @@ def _freeze_meta_index(
 __all__ = [
     "AssertionView",
     "FrozenTupleView",
+    "ProofFrameView",
     "SupportArtifactView",
     "frozen_collection",
 ]

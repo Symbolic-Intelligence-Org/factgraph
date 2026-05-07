@@ -17,8 +17,10 @@ Current implementation status:
 - **Implementation Phase 3:** `AtomKeyView`, `parse_atom_key(...)`,
   `SupportArtifactView`, and `AssertionView` are implemented for
   `SupportArtifact` / ledger-claim cross-referencing.
-- **Implementation Phase 4+ not implemented yet:** `ProofFrameView` and
-  `ProofFrameDiffView` remain blueprint-scoped future phases.
+- **Implementation Phase 4:** `ProofFrameView` is implemented for
+  `ProofFrameRecheckResult`.
+- **Implementation Phase 5 not implemented yet:** `ProofFrameDiffView` remains
+  a blueprint-scoped future phase.
 - **Scope item B3 audit/store stream walker not implemented:** stream walkers
   remain future-only.
 
@@ -86,6 +88,19 @@ The view exposes:
 `meta_rows`, and `underlying`. `rest_terms` and `meta_rows[*].value` are
 recursively frozen for surfaced reads and hashing.
 
+`ProofFrameView` wraps a `ProofFrameRecheckResult`:
+
+```python
+from kernel.application.walker import ProofFrameView
+
+proof = ProofFrameView(result)
+invalidated = proof.atom_verdicts.filter(verdict="invalidated")
+```
+
+The view exposes `status`, recursively frozen `binding_items`, `atom_verdicts`
+as `FrozenTupleView[ProofFrameAtomVerdict]`, and `underlying`, the original
+`ProofFrameRecheckResult` escape hatch.
+
 ## Non-responsibilities
 
 - No SDK shell or `kernel.sdk` import.
@@ -124,6 +139,7 @@ Focused walker tests:
 - `test_walker_views_frozen_tuple.py`
 - `test_walker_keys.py`
 - `test_walker_views_support.py`
+- `test_walker_views_proof_frame.py`
 
 Run:
 
@@ -131,6 +147,7 @@ Run:
 PYTHONPATH=src python -m unittest \
   src.kernel.tests.test_walker_keys \
   src.kernel.tests.test_walker_views_support \
+  src.kernel.tests.test_walker_views_proof_frame \
   src.kernel.tests.test_walker_views_frozen_tuple \
   src.kernel.tests.test_walker_ir \
   src.kernel.tests.test_walker_errors -v
