@@ -3,6 +3,7 @@
 from .capability_helpers import (
     CapabilityHelperError,
     OriginPackageError,
+    build_check_request,
     build_evaluation_overlay,
     build_fact_remove_action,
     build_fact_value_override,
@@ -92,6 +93,7 @@ __all__ = [
     "accept_derivation_candidate_sets",
     "apply_ingest_request",
     "apply_write_plan",
+    "build_check_request",
     "build_evaluation_overlay",
     "build_fact_remove_action",
     "build_schema_index",

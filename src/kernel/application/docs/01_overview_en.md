@@ -56,7 +56,7 @@ It is not responsible for:
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
 - `capability_helpers/`
-  - application-layer ergonomic helper package: `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
+  - application-layer ergonomic helper package: `build_check_request(...)`, `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
 - `entity_view.py`
   - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`
@@ -113,6 +113,7 @@ Batch 8 public-surface note:`kernel.application` is an **advanced importable** r
 
 The main schema/runtime helpers are:
 
+- `build_check_request(...)`
 - `build_fact_value_override(...)`
 - `build_fact_remove_action(...)`
 - `build_evaluation_overlay(...)`
@@ -201,6 +202,7 @@ Key focused tests:
 - `test_application_diagnose_runtime_non_native.py`
 - `test_application_diagnose_sibling_invariant.py`
 - `test_application_capability_helpers.py`
+- `test_capability_helpers_check.py`
 - `test_application_fact_overlay_protocol.py`
 - `test_application_fact_overlay_runtime_native.py`
 - `test_application_fact_overlay_sibling_invariant.py`

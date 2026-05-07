@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .check import build_check_request
 from .errors import (
     CapabilityHelperError,
     OriginPackageError,
@@ -17,6 +18,7 @@ from .why_not import build_why_not_candidate_universe
 __all__ = [
     "CapabilityHelperError",
     "OriginPackageError",
+    "build_check_request",
     "build_evaluation_overlay",
     "build_fact_remove_action",
     "build_fact_value_override",
