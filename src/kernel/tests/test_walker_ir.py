@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 
+import kernel.application.walker.ir as ir_module
 from kernel.application.walker import (
     IRAtomView,
     IRBodyWalker,
@@ -57,6 +58,42 @@ class IRBodyWalkerTraversalTests(unittest.TestCase):
 
         self.assertEqual([atom.key for atom in walker], ["b0.a0:Person:exists"])
 
+    def test_traverse_twice_yields_equal_but_new_view_sequence(self) -> None:
+        walker = IRBodyWalker(
+            [
+                ("pred", "Person:age", ["$p", "$age"]),
+                ("eq", "$age", 40),
+            ]
+        )
+
+        first = list(walker)
+        second = list(walker)
+
+        self.assertEqual(first, second)
+        self.assertIsNot(first[0], second[0])
+
+    def test_view_objects_are_created_lazily_on_iteration(self) -> None:
+        calls: list[tuple[int, int]] = []
+        original = ir_module._build_atom_view
+
+        def counting_build(atom, *, branch_index, atom_index):
+            calls.append((branch_index, atom_index))
+            return original(atom, branch_index=branch_index, atom_index=atom_index)
+
+        ir_module._build_atom_view = counting_build
+        try:
+            walker = IRBodyWalker(
+                [
+                    ("pred", "Person:age", ["$p", "$age"]),
+                    ("eq", "$age", 40),
+                ]
+            )
+            self.assertEqual(calls, [])
+            self.assertEqual(next(iter(walker)).key, "b0.a0:Person:age")
+            self.assertEqual(calls, [(0, 0)])
+        finally:
+            ir_module._build_atom_view = original
+
 
 class IRBodyWalkerSnapshotTests(unittest.TestCase):
     def test_snapshot_is_immune_to_top_level_and_nested_mutation(self) -> None:
@@ -87,6 +124,33 @@ class IRBodyWalkerSnapshotTests(unittest.TestCase):
     def test_snapshot_rejects_malformed_pred_atom(self) -> None:
         with self.assertRaises(WalkerSnapshotError):
             IRBodyWalker([("pred", "Person:exists")])
+
+    def test_snapshot_rejects_empty_pred_id_and_ruleref_ids(self) -> None:
+        with self.assertRaises(WalkerSnapshotError):
+            IRBodyWalker([("pred", "", [])])
+        with self.assertRaises(WalkerSnapshotError):
+            IRBodyWalker([("ruleref", "", "1.0", [])])
+        with self.assertRaises(WalkerSnapshotError):
+            IRBodyWalker([("ruleref", "adult.rule", "", [])])
+
+    def test_snapshot_freezes_sets_and_rejects_unhashable_leaves(self) -> None:
+        shared = {"tags": {"vip", "active"}}
+        walker = IRBodyWalker([("pred", "Person:tags", [shared, shared])])
+        atom = next(iter(walker))
+
+        self.assertEqual(atom.args, ((("tags", ("active", "vip")),), (("tags", ("active", "vip")),)))
+        self.assertIsInstance(hash(atom), int)
+
+        class MutableLeaf:
+            __hash__ = None
+
+        with self.assertRaises(WalkerSnapshotError):
+            IRBodyWalker([("pred", "Person:bad", [MutableLeaf()])])
+
+        recursive: list[object] = []
+        recursive.append(recursive)
+        with self.assertRaises(WalkerSnapshotError):
+            IRBodyWalker([("pred", "Person:recursive", recursive)])
 
 
 class IRBodyWalkerLookupTests(unittest.TestCase):
@@ -143,6 +207,14 @@ class IRAtomViewContractTests(unittest.TestCase):
         self.assertFalse(hasattr(atom, "source"))
         self.assertFalse(hasattr(atom, "carrier"))
         self.assertFalse(hasattr(atom, "raw"))
+
+    def test_walker_instance_is_frozen(self) -> None:
+        walker = IRBodyWalker([("pred", "Person:exists", ["$p"])])
+
+        with self.assertRaises(WalkerFrozenError):
+            walker._branches = ()  # type: ignore[misc]
+        with self.assertRaises(WalkerFrozenError):
+            walker.extra = "nope"  # type: ignore[attr-defined]
 
     def test_structural_equality_and_hash_exclude_underlying(self) -> None:
         a = IRAtomView(

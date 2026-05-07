@@ -90,9 +90,17 @@ class FrozenTupleViewLookupTests(unittest.TestCase):
         view = FrozenTupleView((Row("a", "pred", 1), Row("b", "eq", 2)))
 
         self.assertEqual(view.find(lambda row: row.kind == "eq").key, "b")
+        self.assertEqual(view.find(kind="eq").key, "b")
+        self.assertEqual(view.find(lambda row: row.value > 1, kind="eq").key, "b")
         self.assertIsNone(view.find(lambda row: row.kind == "missing"))
+        self.assertIsNone(view.find(kind="missing"))
         self.assertEqual(view.first().key, "a")
         self.assertIsNone(FrozenTupleView(()).first())
+
+    def test_traverse_twice_yields_identical_sequence(self) -> None:
+        view = FrozenTupleView((Row("a", "pred", 1), Row("b", "eq", 2)))
+
+        self.assertEqual(tuple(view), tuple(view))
 
     def test_require_position_raises_on_miss(self) -> None:
         view = FrozenTupleView((Row("a", "pred", 1),))

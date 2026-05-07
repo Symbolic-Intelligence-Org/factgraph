@@ -7,6 +7,7 @@ from typing import Any
 
 from kernel.core.store._support import make_non_fact_step_key, make_pred_atom_key
 
+from ._freeze import freeze_value
 from .errors import WalkerFrozenError, WalkerLookupError, WalkerSnapshotError
 
 
@@ -114,26 +115,41 @@ class IRAtomView:
 
 
 class IRBodyWalker:
-    """Walker over flat AND or OR-of-AND rule body IR."""
+    """Walker over flat AND or OR-of-AND rule body IR.
+
+    Construction snapshots and freezes the source body; `IRAtomView` objects
+    are created lazily during traversal / lookup.
+    """
+
+    __slots__ = ("_branches", "_frozen", "_source_id")
 
     def __init__(self, source: list[Any] | tuple[Any, ...], *, source_id: str | None = None) -> None:
-        self._source_id = source_id
-        self._branches = _snapshot_branches(source)
-        self._atoms = tuple(
-            _build_atom_view(atom, branch_index=branch_index, atom_index=atom_index)
-            for branch_index, branch in enumerate(self._branches)
-            for atom_index, atom in enumerate(branch)
-        )
+        object.__setattr__(self, "_frozen", False)
+        object.__setattr__(self, "_source_id", source_id)
+        object.__setattr__(self, "_branches", _snapshot_branches(source))
+        object.__setattr__(self, "_frozen", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_frozen", False):
+            raise WalkerFrozenError("IRBodyWalker is frozen")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if getattr(self, "_frozen", False):
+            raise WalkerFrozenError("IRBodyWalker is frozen")
+        object.__delattr__(self, name)
 
     @property
     def source_id(self) -> str | None:
         return self._source_id
 
     def __iter__(self):
-        return iter(self._atoms)
+        for branch_index, branch in enumerate(self._branches):
+            for atom_index, atom in enumerate(branch):
+                yield _build_atom_view(atom, branch_index=branch_index, atom_index=atom_index)
 
     def __len__(self) -> int:
-        return len(self._atoms)
+        return sum(len(branch) for branch in self._branches)
 
     def find(
         self,
@@ -144,7 +160,7 @@ class IRBodyWalker:
         branch_index: int | None = None,
         atom_index: int | None = None,
     ) -> IRAtomView | None:
-        for atom in self._atoms:
+        for atom in self:
             if key is not None and atom.key != key:
                 continue
             if kind is not None and atom.kind != kind:
@@ -183,6 +199,8 @@ class IRBodyWalker:
 def _snapshot_branches(source: object) -> tuple[tuple[tuple[Any, ...], ...], ...]:
     if not isinstance(source, (list, tuple)):
         raise WalkerSnapshotError("IRBodyWalker source must be list or tuple")
+    # Empty sources must stay unambiguously empty; otherwise `all(...)` below
+    # would treat them as a vacuous flat-AND body.
     if not source:
         return ()
 
@@ -211,37 +229,30 @@ def _is_branch(value: object) -> bool:
 def _snapshot_atom(atom: object) -> tuple[Any, ...]:
     if not _is_atom(atom):
         raise WalkerSnapshotError("IR atom must be tuple(kind, ...)")
-    frozen = _freeze_ir_value(atom)
+    frozen = freeze_value(atom)
     if not isinstance(frozen, tuple) or not frozen:
         raise WalkerSnapshotError("IR atom snapshot failed")
     kind = frozen[0]
     if not isinstance(kind, str) or not kind:
         raise WalkerSnapshotError("IR atom kind must be non-empty string")
     if kind == "pred":
-        if len(frozen) != 3 or not isinstance(frozen[1], str) or not isinstance(frozen[2], tuple):
+        if (
+            len(frozen) != 3
+            or not isinstance(frozen[1], str)
+            or not frozen[1]
+            or not isinstance(frozen[2], tuple)
+        ):
             raise WalkerSnapshotError("pred atom must be ('pred', pred_id, [terms...])")
     if kind == "ruleref":
         if (
             len(frozen) != 4
             or not isinstance(frozen[1], str)
-            or not (frozen[2] is None or isinstance(frozen[2], str))
+            or not frozen[1]
+            or not (frozen[2] is None or (isinstance(frozen[2], str) and bool(frozen[2])))
             or not isinstance(frozen[3], tuple)
         ):
             raise WalkerSnapshotError("ruleref atom must be ('ruleref', rule_id, version, [terms...])")
     return frozen
-
-
-def _freeze_ir_value(value: Any) -> Any:
-    if isinstance(value, list):
-        return tuple(_freeze_ir_value(item) for item in value)
-    if isinstance(value, tuple):
-        return tuple(_freeze_ir_value(item) for item in value)
-    if isinstance(value, dict):
-        return tuple(
-            (key, _freeze_ir_value(inner_value))
-            for key, inner_value in sorted(value.items(), key=lambda item: repr(item[0]))
-        )
-    return value
 
 
 def _build_atom_view(atom: tuple[Any, ...], *, branch_index: int, atom_index: int) -> IRAtomView:

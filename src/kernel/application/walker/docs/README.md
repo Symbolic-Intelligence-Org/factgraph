@@ -37,11 +37,14 @@ walker = IRBodyWalker([
 ```
 
 The walker snapshots the source at construction time, recursively freezing
-mutable list/tuple/dict containers into immutable tuples. Mutating the original
-source after construction does not change traversal results.
+mutable list/tuple/dict/set containers into immutable tuples. Mutating the
+original source after construction does not change traversal results. Atom view
+objects are created lazily during traversal or lookup; construction stores the
+frozen source snapshot, not a prebuilt view list.
 
 `FrozenTupleView` wraps an existing tuple without modifying the tuple or its
-items:
+items. `.filter(predicate=None, **attrs)` and `.find(predicate=None, **attrs)`
+support predicate filtering plus exact attribute equality:
 
 ```python
 from kernel.application.walker import frozen_collection
@@ -105,6 +108,12 @@ on miss or reference inconsistency.
 
 `UnboundedStreamError` is exported as a dormant placeholder for the future B3
 stream walker contract. B1/B2 code has no raise site for it.
+
+`FrozenTupleView` is a shallow content wrapper. Equality and hash are defined
+over the underlying tuple content; `hash(view)` is only valid when the wrapped
+tuple and its items are hashable. This is a deliberate content-wrapper carve-out
+from surfaced DTO views such as `IRAtomView` / `AssertionView`, where
+`.underlying` is excluded from equality and hash.
 
 ## Test Entry Points
 

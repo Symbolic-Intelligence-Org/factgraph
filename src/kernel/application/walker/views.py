@@ -28,6 +28,7 @@ from typing import Any, Generic, TypeVar
 from kernel.core.store._support import SupportArtifact
 from kernel.core.store.ledger import Claim, MetaRow
 
+from ._freeze import freeze_value
 from .errors import WalkerFrozenError, WalkerLookupError, WalkerReferenceError, WalkerSnapshotError
 from .keys import AtomKeyView, parse_atom_key
 
@@ -44,7 +45,12 @@ _KEY_ATTRS = (
 
 
 class FrozenTupleView(Generic[ViewT]):
-    """Frozen adapter around an already-frozen tuple collection."""
+    """Frozen adapter around an already-frozen tuple collection.
+
+    Equality and hash are defined over the wrapped tuple content. This is a
+    content-wrapper carve-out from surfaced DTO views such as `IRAtomView`,
+    whose `.underlying` escape hatch is excluded from equality / hash.
+    """
 
     __slots__ = ("_frozen", "_items", "_source_id")
 
@@ -88,21 +94,23 @@ class FrozenTupleView(Generic[ViewT]):
         predicate: Callable[[ViewT], bool] | None = None,
         **attrs: Any,
     ) -> "FrozenTupleView[ViewT]":
-        """Return a new eager view narrowed by predicate and attr equality."""
+        """Return a new eager view narrowed by predicate and attr equality.
 
-        def matches(item: ViewT) -> bool:
-            if predicate is not None and not predicate(item):
-                return False
-            for name, expected in attrs.items():
-                if getattr(item, name, None) != expected:
-                    return False
-            return True
+        The returned view preserves this view's `source_id`.
+        """
 
-        return FrozenTupleView(tuple(item for item in self._items if matches(item)), source_id=self.source_id)
+        return FrozenTupleView(
+            tuple(item for item in self._items if _matches(item, predicate, attrs)),
+            source_id=self.source_id,
+        )
 
-    def find(self, predicate: Callable[[ViewT], bool]) -> ViewT | None:
+    def find(
+        self,
+        predicate: Callable[[ViewT], bool] | None = None,
+        **attrs: Any,
+    ) -> ViewT | None:
         for item in self._items:
-            if predicate(item):
+            if _matches(item, predicate, attrs):
                 return item
         return None
 
@@ -113,7 +121,7 @@ class FrozenTupleView(Generic[ViewT]):
 
     def require_position(self, position: int) -> ViewT:
         if isinstance(position, bool) or not isinstance(position, int) or position < 0:
-            raise WalkerLookupError(f"position must be non-negative int: {position!r}")
+            raise WalkerLookupError(f"position must be non-negative int (not bool): {position!r}")
         try:
             return self._items[position]
         except IndexError as exc:
@@ -156,6 +164,19 @@ def _default_key(item: object) -> Any:
         if hasattr(item, attr):
             return getattr(item, attr)
     raise WalkerLookupError("item does not expose a key-like attribute")
+
+
+def _matches(
+    item: ViewT,
+    predicate: Callable[[ViewT], bool] | None,
+    attrs: dict[str, Any],
+) -> bool:
+    if predicate is not None and not predicate(item):
+        return False
+    for name, expected in attrs.items():
+        if getattr(item, name, None) != expected:
+            return False
+    return True
 
 
 def frozen_collection(items: tuple[ViewT, ...], *, source_id: str | None = None) -> FrozenTupleView[ViewT]:
@@ -414,7 +435,7 @@ def _snapshot_rest_terms(rest_terms: list[tuple[str, Any]]) -> tuple[tuple[str, 
         tag, value = term
         if not isinstance(tag, str) or not tag:
             raise WalkerSnapshotError("Claim.rest_terms tag must be non-empty string")
-        frozen_terms.append((tag, _freeze_value(value)))
+        frozen_terms.append((tag, freeze_value(value)))
     return tuple(frozen_terms)
 
 
@@ -442,27 +463,8 @@ def _snapshot_meta_rows_values(meta_rows: tuple[MetaRow, ...]) -> tuple[MetaRow,
             raise WalkerSnapshotError("MetaRow.key must be non-empty string")
         if not isinstance(row.kind, str) or not row.kind:
             raise WalkerSnapshotError("MetaRow.kind must be non-empty string")
-        frozen_rows.append(MetaRow(row.asrt_id, row.key, row.kind, _freeze_value(row.value)))
+        frozen_rows.append(MetaRow(row.asrt_id, row.key, row.kind, freeze_value(row.value)))
     return tuple(frozen_rows)
-
-
-def _freeze_value(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return tuple(
-            sorted(
-                ((_freeze_value(key), _freeze_value(item_value)) for key, item_value in value.items()),
-                key=lambda item: repr(item[0]),
-            )
-        )
-    if isinstance(value, (list, tuple)):
-        return tuple(_freeze_value(item) for item in value)
-    if isinstance(value, (set, frozenset)):
-        return tuple(sorted((_freeze_value(item) for item in value), key=repr))
-    try:
-        hash(value)
-    except TypeError as exc:
-        raise WalkerSnapshotError(f"value is not recursively freezable: {value!r}") from exc
-    return value
 
 
 def _freeze_claim_index(
