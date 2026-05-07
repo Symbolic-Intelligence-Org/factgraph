@@ -130,6 +130,25 @@ shortcuts; callers can still use `frame_deltas.filter(...)` /
 - No `.source`, `.carrier`, or `.raw` alias; `.underlying` is the only escape
   hatch.
 
+## Reserved Future Scope (B3)
+
+B3 (audit / store stream walker) remains reserved future scope, not part of
+the B1/B2 implementation. The reference design is
+`docs/references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md`
+§3 and §8. Reactivation requires a real audit / ledger streaming consumer plus
+the bounded-stream construction contract from `#14`.
+
+If reactivated, B3 should add a separate `kernel.audit.walker` package for
+audit-layer walker types and may introduce `walker/stream.py`-style stream
+primitives only when needed. Audit walker types must not import application
+walker types; the shared surface is vocabulary (`filter`, `find`, `first`,
+`require_*`), not shared classes.
+
+`UnboundedStreamError` is exported today as a dormant placeholder so the
+documented `WalkerError` hierarchy is complete. B1/B2 code has no raise site
+for it, and `test_walker_invariants.py` verifies that dormancy with a static
+grep audit.
+
 ## Limitations & Compatibility
 
 `underlying` is an escape hatch and not a stable walker API. For
