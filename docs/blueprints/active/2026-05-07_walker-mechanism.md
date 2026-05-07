@@ -216,6 +216,7 @@ Per [40_ §1-§5](../../references/working/post-routemap-direction-selection-inp
 
 - **Construction-time snapshot** for mutable-source DTO walkers (e.g., `RuleSpec.where`, `CompiledDerivationPlan.body_ir`): `tuple(source)` on init; iteration is over the snapshot.
 - **IR atom view shape (Phase 1 decision):** `IRBodyWalker` exposes a single frozen `IRAtomView` (`kind` / `pred_id` / `args` / `branch_index` / `atom_index` / `key` / `.underlying`) rather than per-kind subclasses (`IRPredAtomView`, `IREqAtomView`, etc.). Per-kind subclasses are deferred until a consumer needs kind-specific methods beyond the common surfaced fields.
+- **FrozenTupleView method semantics (Phase 2 decision):** `.first()` returns `None` on empty; `require_key(value, *, key=extractor)` raises `WalkerLookupError` on miss (default extractor checks `.key` / `.pred_atom_key` / `.step_key` / `.atom_key` / `.asrt_id` / `.id`); `.filter(...)` eagerly materializes a new `FrozenTupleView`, keeping stream semantics reserved for future B3.
 - **Wrapper-view pattern** (Round 6 + Round 7): per-DTO views (`SupportArtifactView`, `ProofFrameView`, `ProofFrameDiffView`) wrap, never modify; tuple fields not extended with methods.
 - **Escape hatch:** every walker exposes `.underlying` (no `.source` / `.carrier` / `.raw` aliases).
 - **Exact-access vocabulary:** `find(key | position) -> View | None`, `require_key(key) -> View` (raise on miss), `require_position(int) -> View` (raise on miss).

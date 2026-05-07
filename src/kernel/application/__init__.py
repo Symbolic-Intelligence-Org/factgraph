@@ -39,8 +39,10 @@ from .ingest_runtime import (
     apply_ingest_request,
 )
 from .walker import (
+    FrozenTupleView,
     IRAtomView,
     IRBodyWalker,
+    frozen_collection,
 )
 from .query_runtime import (
     QueryRuntimeError,
@@ -83,6 +85,7 @@ __all__ = [
     "EntityViewError",
     "EntityWriteError",
     "FieldTypeInfo",
+    "FrozenTupleView",
     "IdentityFieldInfo",
     "IngestRuntimeError",
     "IRAtomView",
@@ -117,6 +120,7 @@ __all__ = [
     "execute_read_request",
     "field_predicate",
     "field_value_type",
+    "frozen_collection",
     "hydrate_entities",
     "hydrate_entity",
     "materialize_identity",

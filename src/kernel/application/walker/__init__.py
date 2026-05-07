@@ -25,8 +25,13 @@ from .ir import (
     IRAtomView,
     IRBodyWalker,
 )
+from .views import (
+    FrozenTupleView,
+    frozen_collection,
+)
 
 __all__ = [
+    "FrozenTupleView",
     "IRAtomView",
     "IRBodyWalker",
     "UnboundedStreamError",
@@ -36,4 +41,5 @@ __all__ = [
     "WalkerParseError",
     "WalkerReferenceError",
     "WalkerSnapshotError",
+    "frozen_collection",
 ]
