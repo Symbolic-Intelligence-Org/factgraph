@@ -39,6 +39,16 @@ class AtomKeyView:
         step_kind: str | None = None,
         underlying: str | None = None,
     ) -> None:
+        _validate_atom_key_view_args(
+            key=key,
+            branch_index=branch_index,
+            atom_index=atom_index,
+            payload=payload,
+            kind=kind,
+            pred_id=pred_id,
+            step_kind=step_kind,
+            underlying=underlying,
+        )
         object.__setattr__(self, "_frozen", False)
         object.__setattr__(self, "_key", key)
         object.__setattr__(self, "_branch_index", branch_index)
@@ -165,6 +175,37 @@ def parse_atom_key(key: str) -> AtomKeyView:
         step_kind=None,
         underlying=key,
     )
+
+
+def _validate_atom_key_view_args(
+    *,
+    key: str,
+    branch_index: int,
+    atom_index: int,
+    payload: str,
+    kind: AtomKeyKind,
+    pred_id: str | None,
+    step_kind: str | None,
+    underlying: str | None,
+) -> None:
+    if not isinstance(key, str) or not key:
+        raise WalkerParseError("atom key must be non-empty string")
+    if isinstance(branch_index, bool) or not isinstance(branch_index, int) or branch_index < 0:
+        raise WalkerParseError("branch_index must be non-negative int")
+    if isinstance(atom_index, bool) or not isinstance(atom_index, int) or atom_index < 0:
+        raise WalkerParseError("atom_index must be non-negative int")
+    if not isinstance(payload, str) or not payload:
+        raise WalkerParseError("payload must be non-empty string")
+    if kind not in {"unknown", "pred", "step"}:
+        raise WalkerParseError("kind must be 'unknown', 'pred', or 'step'")
+    if kind == "unknown" and (pred_id is not None or step_kind is not None):
+        raise WalkerParseError("unknown atom key must not carry pred_id or step_kind")
+    if kind == "pred" and (not isinstance(pred_id, str) or not pred_id or step_kind is not None):
+        raise WalkerParseError("pred atom key must carry pred_id only")
+    if kind == "step" and (not isinstance(step_kind, str) or not step_kind or pred_id is not None):
+        raise WalkerParseError("step atom key must carry step_kind only")
+    if underlying is not None and not isinstance(underlying, str):
+        raise WalkerParseError("underlying atom key must be string")
 
 
 __all__ = [

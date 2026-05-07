@@ -27,13 +27,40 @@ class AtomKeyViewParseTests(unittest.TestCase):
         pred = parsed.as_pred()
         step = parse_atom_key("b0.a2:eq").as_step()
 
+        self.assertEqual(pred.key, parsed.key)
+        self.assertEqual(pred.branch_index, parsed.branch_index)
+        self.assertEqual(pred.atom_index, parsed.atom_index)
+        self.assertEqual(pred.payload, parsed.payload)
+        self.assertEqual(pred.underlying, parsed.underlying)
         self.assertEqual(pred.kind, "pred")
         self.assertEqual(pred.pred_id, "Person:exists")
         self.assertEqual(pred.step_kind, None)
+        self.assertEqual(step.key, "b0.a2:eq")
+        self.assertEqual(step.branch_index, 0)
+        self.assertEqual(step.atom_index, 2)
+        self.assertEqual(step.payload, "eq")
+        self.assertEqual(step.underlying, "b0.a2:eq")
         self.assertEqual(step.kind, "step")
         self.assertEqual(step.pred_id, None)
         self.assertEqual(step.step_kind, "eq")
         self.assertIsNot(pred, parsed)
+
+    def test_constructor_rejects_invalid_public_shape(self) -> None:
+        invalid_kwargs = [
+            dict(branch_index=-1, atom_index=0, payload="P", kind="unknown"),
+            dict(branch_index=True, atom_index=0, payload="P", kind="unknown"),
+            dict(branch_index=0, atom_index=-1, payload="P", kind="unknown"),
+            dict(branch_index=0, atom_index=False, payload="P", kind="unknown"),
+            dict(branch_index=0, atom_index=0, payload="", kind="unknown"),
+            dict(branch_index=0, atom_index=0, payload="P", kind="invalid"),
+            dict(branch_index=0, atom_index=0, payload="P", kind="pred", pred_id=None),
+            dict(branch_index=0, atom_index=0, payload="P", kind="step", step_kind=None),
+        ]
+
+        for kwargs in invalid_kwargs:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(WalkerParseError):
+                    AtomKeyView(key="b0.a0:P", **kwargs)  # type: ignore[arg-type]
 
     def test_parse_rejects_invalid_shapes(self) -> None:
         for key in (

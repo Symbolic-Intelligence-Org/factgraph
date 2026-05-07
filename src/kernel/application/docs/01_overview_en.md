@@ -1,7 +1,7 @@
 # Overview of the Application Module (`kernel`)
 
 - Scope: `src/kernel/application`
-- Last updated: 2026-05-06
+- Last updated: 2026-05-07
 - Target readers: developers who need to understand Python runtime authority, SDK adapter boundaries, and service/agent consumer constraints
 
 ## 1. Module Responsibilities
@@ -221,6 +221,11 @@ Key focused tests:
 - `test_application_proofframe_protocol.py`
 - `test_application_proofframe_runtime_native.py`
 - `test_application_proofframe_narrative.py`
+- `test_walker_errors.py`
+- `test_walker_ir.py`
+- `test_walker_views_frozen_tuple.py`
+- `test_walker_keys.py`
+- `test_walker_views_support.py`
 - `test_application_rule_disable_protocol.py`
 - `test_application_rule_disable_runtime_native.py`
 - `test_application_rule_literal_replace_protocol.py`

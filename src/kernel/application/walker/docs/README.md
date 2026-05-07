@@ -1,28 +1,31 @@
 # Application Walker Module
 
-`kernel.application.walker` is a Tier 2 advanced-importable traversal
-surface over application/core DTOs. It is not an SDK facade and does not
-create an outward compatibility promise.
+## Scope
+
+`kernel.application.walker` is a Tier 2 advanced-importable traversal surface
+over application/core DTOs. It is not an SDK facade and does not create an
+outward compatibility promise.
 
 Current implementation status:
 
-- **B Phase 0:** `WalkerError(Exception)` hierarchy is implemented and
-  exported from `kernel.application.walker`.
-- **B Phase 1:** `IRBodyWalker` and `IRAtomView` are implemented for
-  `RuleSpec.where` / `CompiledDerivationPlan.body_ir` style IR bodies.
-- **B Phase 2:** `FrozenTupleView` and `frozen_collection(...)` are
-  implemented for already-frozen tuple collections.
-- **B Phase 3:** `AtomKeyView`, `parse_atom_key(...)`,
+- **Implementation Phase 0:** `WalkerError(Exception)` hierarchy is implemented
+  and exported from `kernel.application.walker`.
+- **Implementation Phase 1:** `IRBodyWalker` and `IRAtomView` are implemented
+  for `RuleSpec.where` / `CompiledDerivationPlan.body_ir` style IR bodies.
+- **Implementation Phase 2:** `FrozenTupleView` and `frozen_collection(...)`
+  are implemented for already-frozen tuple collections.
+- **Implementation Phase 3:** `AtomKeyView`, `parse_atom_key(...)`,
   `SupportArtifactView`, and `AssertionView` are implemented for
   `SupportArtifact` / ledger-claim cross-referencing.
-- **B Phase 4+ not implemented yet:** `ProofFrameView` and
+- **Implementation Phase 4+ not implemented yet:** `ProofFrameView` and
   `ProofFrameDiffView` remain blueprint-scoped future phases.
-- **B3 not implemented:** audit/store stream walkers remain future-only.
+- **Scope item B3 audit/store stream walker not implemented:** stream walkers
+  remain future-only.
 
-## IRBodyWalker
+## Responsibilities
 
-`IRBodyWalker(source, source_id=None)` accepts a flat AND body or an
-OR-of-AND body represented as `list` / `tuple` IR:
+`IRBodyWalker(source, source_id=None)` accepts a flat AND body or an OR-of-AND
+body represented as `list` / `tuple` IR:
 
 ```python
 from kernel.application.walker import IRBodyWalker
@@ -31,46 +34,11 @@ walker = IRBodyWalker([
     ("pred", "Person:age", ["$p", "$age"]),
     ("eq", "$age", 40),
 ])
-
-for atom in walker:
-    print(atom.key, atom.kind, atom.args)
 ```
 
 The walker snapshots the source at construction time, recursively freezing
-mutable list/tuple/dict containers into immutable tuples. Mutating the
-original source after construction does not change traversal results.
-
-Each yielded `IRAtomView` exposes:
-
-- `kind`
-- `pred_id` (`str | None`; set only for `pred` atoms)
-- `args`
-- `branch_index`
-- `atom_index`
-- `key`
-- `underlying`
-
-`underlying` is the frozen snapshot atom, not the original mutable object.
-It is an escape hatch for inspection and is excluded from equality / hash.
-There are no `.source`, `.carrier`, or `.raw` aliases.
-
-## Lookup
-
-`find(...)` returns `IRAtomView | None`:
-
-```python
-atom = walker.find(kind="pred", pred_id="Person:age")
-missing = walker.find(key="b0.a9:eq")  # None
-```
-
-Exact accessors raise `WalkerLookupError` on miss:
-
-```python
-atom = walker.require_key("b0.a0:Person:age")
-atom = walker.require_position(branch_index=0, atom_index=1)
-```
-
-## FrozenTupleView
+mutable list/tuple/dict containers into immutable tuples. Mutating the original
+source after construction does not change traversal results.
 
 `FrozenTupleView` wraps an existing tuple without modifying the tuple or its
 items:
@@ -83,48 +51,12 @@ invalidated = rows.filter(verdict="invalidated")
 first = invalidated.first()  # item | None
 ```
 
-`filter(...)` eagerly returns a new `FrozenTupleView`; stream semantics remain
-reserved for future B3. It accepts an optional predicate plus attribute
-equality filters:
-
-```python
-view.filter(lambda row: row.kind == "pred", status="active")
-```
-
-`find(predicate)` returns the first matching item or `None`.
-`first()` returns the first item or `None` on empty.
-`require_position(index)` raises `WalkerLookupError` on miss.
-`require_key(value, key=...)` raises `WalkerLookupError` on miss; without a
-custom extractor it checks common key-like attributes: `key`, `pred_atom_key`,
-`step_key`, `atom_key`, `asrt_id`, and `id`.
-
-## Atom Keys
-
-`parse_atom_key(key)` parses canonical `b{branch}.a{atom}:{payload}` strings:
-
-```python
-from kernel.application.walker import parse_atom_key
-
-atom_key = parse_atom_key("b0.a1:Person:age")
-assert atom_key.branch_index == 0
-assert atom_key.atom_index == 1
-assert atom_key.payload == "Person:age"
-```
-
-The parser is syntactic. It returns an `AtomKeyView` with `kind="unknown"`.
-Context-specific callers can promote the same parsed key without mutation:
-
-```python
-pred_key = atom_key.as_pred()
-step_key = parse_atom_key("b0.a2:eq").as_step()
-```
-
-Malformed input raises `WalkerParseError`.
-
-## SupportArtifactView and AssertionView
+`parse_atom_key(key)` parses canonical `b{branch}.a{atom}:{payload}` strings.
+The parser is syntactic and returns `AtomKeyView(kind="unknown")`; contextual
+callers promote with `.as_pred()` or `.as_step()`.
 
 `SupportArtifactView` wraps a frozen `SupportArtifact` plus caller-provided
-frozen assertion indexes:
+claim / metadata indexes:
 
 ```python
 from kernel.application.walker import SupportArtifactView
@@ -147,43 +79,56 @@ The view exposes:
 - `lookup_assertion(asrt_id) -> AssertionView`
 - `underlying`, the original `SupportArtifact` escape hatch
 
-`SupportArtifactView` performs no live store reads. Missing assertion ids raise
-`WalkerReferenceError`.
+`AssertionView` exposes `asrt_id`, `pred_id`, `e_ref`, `rest_terms`,
+`meta_rows`, and `underlying`. `rest_terms` and `meta_rows[*].value` are
+recursively frozen for surfaced reads and hashing.
 
-`AssertionView` can also be constructed directly from an assertion id and
-frozen claim / metadata indexes. Its surfaced fields are:
+## Non-responsibilities
 
-- `asrt_id`
-- `pred_id`
-- `e_ref`
-- `rest_terms` as a snapshot tuple
-- `meta_rows` as a snapshot tuple
-- `underlying`, the original `Claim` escape hatch
+- No SDK shell or `kernel.sdk` import.
+- No live `Store` / `Ledger` lookup during walker traversal or assertion lookup.
+- No DTO mutation and no method attachment to tuple fields.
+- No B3 stream walker, audit package walker, or bounded-stream machinery.
+- No `.source`, `.carrier`, or `.raw` alias; `.underlying` is the only escape
+  hatch.
 
-`Claim.rest_terms` is a mutable list in the underlying DTO. `AssertionView`
-snapshots it for surfaced reads, but callers who access
-`assertion.underlying.rest_terms` are using the escape hatch and accept the
-underlying object's mutability.
+## Limitations & Compatibility
 
-## Errors
+`underlying` is an escape hatch and not a stable walker API. For
+`AssertionView`, surfaced fields are frozen snapshots, but
+`assertion.underlying` is the original `Claim`; callers who mutate
+`underlying.rest_terms` accept the DTO escape-hatch risk.
 
-The module currently exports:
+`find(...)` returns `View | None`. Exact accessors such as `require_key(...)`,
+`require_position(...)`, and `lookup_assertion(...)` raise walker-layer errors
+on miss or reference inconsistency.
 
-- `FrozenTupleView`
-- `AssertionView`
-- `AtomKeyView`
-- `IRAtomView`
-- `IRBodyWalker`
-- `SupportArtifactView`
-- `WalkerError`
-- `WalkerLookupError`
-- `WalkerParseError`
-- `WalkerReferenceError`
-- `WalkerSnapshotError`
-- `WalkerFrozenError`
-- `UnboundedStreamError`
-- `frozen_collection`
-- `parse_atom_key`
+`UnboundedStreamError` is exported as a dormant placeholder for the future B3
+stream walker contract. B1/B2 code has no raise site for it.
 
-`UnboundedStreamError` is a dormant placeholder for future B3 StreamWalker
-work. B1/B2 code has no raise site for it.
+## Test Entry Points
+
+Focused walker tests:
+
+- `test_walker_errors.py`
+- `test_walker_ir.py`
+- `test_walker_views_frozen_tuple.py`
+- `test_walker_keys.py`
+- `test_walker_views_support.py`
+
+Run:
+
+```bash
+PYTHONPATH=src python -m unittest \
+  src.kernel.tests.test_walker_keys \
+  src.kernel.tests.test_walker_views_support \
+  src.kernel.tests.test_walker_views_frozen_tuple \
+  src.kernel.tests.test_walker_ir \
+  src.kernel.tests.test_walker_errors -v
+```
+
+## Related Historical Blueprints
+
+- `docs/blueprints/active/2026-05-07_walker-mechanism.md`
+- `docs/blueprints/active/2026-05-07_walker-mechanism.audit.md`
+- `docs/references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md`

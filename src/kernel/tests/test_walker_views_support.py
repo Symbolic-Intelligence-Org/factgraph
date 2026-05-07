@@ -11,6 +11,7 @@ from kernel.application.walker import (
     SupportArtifactView,
     WalkerFrozenError,
     WalkerReferenceError,
+    WalkerSnapshotError,
 )
 from kernel.core.store._support import NonFactStep, PredWitness, SupportArtifact
 from kernel.core.store.ledger import Claim, MetaRow
@@ -78,6 +79,42 @@ class AssertionViewTests(unittest.TestCase):
         self.assertEqual(view.rest_terms, (("value", 40),))
         self.assertEqual(view.underlying.rest_terms, [("value", 40), ("late", "mutation")])
 
+    def test_assertion_view_deep_freezes_nested_values_and_hashes(self) -> None:
+        claims = {
+            "a1": Claim(
+                asrt_id="a1",
+                pred_id="Person:attrs",
+                e_ref="person:alice",
+                rest_terms=[
+                    ("attrs", {"tags": ["vip", "active"], "score": 7}),
+                ],
+            )
+        }
+        meta = {
+            "a1": (
+                MetaRow(asrt_id="a1", key="source", kind="json", value={"channels": ["seed"]}),
+            )
+        }
+
+        view = AssertionView("a1", claims, meta)
+        claims["a1"].rest_terms[0][1]["tags"].append("late")  # type: ignore[index]
+        meta["a1"][0].value["channels"].append("late")  # type: ignore[index]
+
+        self.assertEqual(view.rest_terms, (("attrs", (("score", 7), ("tags", ("vip", "active")))),))
+        self.assertEqual(view.meta_rows[0].value, (("channels", ("seed",)),))
+        self.assertIsInstance(hash(view), int)
+
+    def test_assertion_view_rejects_malformed_rest_terms(self) -> None:
+        malformed_claims = {
+            "a1": Claim("a1", "Person:age", "person:alice", [("ok", 1), ("", 2)]),
+            "a2": Claim("a2", "Person:age", "person:bob", [("too", "long", "row")]),  # type: ignore[list-item]
+        }
+
+        with self.assertRaises(WalkerSnapshotError):
+            AssertionView("a1", malformed_claims)
+        with self.assertRaises(WalkerSnapshotError):
+            AssertionView("a2", malformed_claims)
+
     def test_assertion_view_missing_claim_raises_reference_error(self) -> None:
         with self.assertRaises(WalkerReferenceError):
             AssertionView("missing", _claims())
@@ -115,6 +152,8 @@ class SupportArtifactViewTests(unittest.TestCase):
         self.assertIsInstance(view.non_fact_steps, FrozenTupleView)
         self.assertEqual(view.pred_witnesses.first().pred_atom_key, "b0.a0:Person:age")
         self.assertEqual(view.non_fact_steps.first().step_key, "b0.a1:eq")
+        self.assertEqual(support.pred_witnesses[0].asrt_ids, ("a1", "a2"))
+        self.assertEqual(support.non_fact_steps[0].step_key, "b0.a1:eq")
 
     def test_contextualizes_pred_and_step_atom_keys(self) -> None:
         view = SupportArtifactView(_support_artifact(), _claims())
@@ -123,8 +162,18 @@ class SupportArtifactViewTests(unittest.TestCase):
         step_key = view.parse_step_key("b0.a1:eq")
 
         self.assertIsInstance(pred_key, AtomKeyView)
+        self.assertEqual(pred_key.key, "b0.a0:Person:age")
+        self.assertEqual(pred_key.branch_index, 0)
+        self.assertEqual(pred_key.atom_index, 0)
+        self.assertEqual(pred_key.payload, "Person:age")
+        self.assertEqual(pred_key.underlying, "b0.a0:Person:age")
         self.assertEqual(pred_key.kind, "pred")
         self.assertEqual(pred_key.pred_id, "Person:age")
+        self.assertEqual(step_key.key, "b0.a1:eq")
+        self.assertEqual(step_key.branch_index, 0)
+        self.assertEqual(step_key.atom_index, 1)
+        self.assertEqual(step_key.payload, "eq")
+        self.assertEqual(step_key.underlying, "b0.a1:eq")
         self.assertEqual(step_key.kind, "step")
         self.assertEqual(step_key.step_kind, "eq")
 
@@ -155,6 +204,25 @@ class SupportArtifactViewTests(unittest.TestCase):
         claims.pop("a1")
 
         self.assertEqual(view.lookup_assertion("a1").asrt_id, "a1")
+
+    def test_claim_contents_are_snapshotted_at_support_view_construction(self) -> None:
+        claims = _claims()
+        view = SupportArtifactView(_support_artifact(), claims)
+
+        claims["a1"].rest_terms.append(("late", "mutation"))
+
+        self.assertEqual(view.lookup_assertion("a1").rest_terms, (("value", 40),))
+
+    def test_meta_index_is_defensively_copied_at_support_view_construction(self) -> None:
+        meta = _meta()
+        view = SupportArtifactView(_support_artifact(), _claims(), meta)
+        meta["a1"] = (
+            MetaRow(asrt_id="a1", key="source", kind="str", value="late"),
+        )
+
+        assertion = view.lookup_assertion("a1")
+        self.assertEqual([row.key for row in assertion.meta_rows], ["source", "confidence"])
+        self.assertEqual(assertion.meta_rows[0].value, "seed")
 
     def test_support_view_is_frozen_and_has_no_forbidden_aliases(self) -> None:
         view = SupportArtifactView(_support_artifact(), _claims())

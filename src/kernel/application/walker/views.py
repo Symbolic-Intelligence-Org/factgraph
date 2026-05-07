@@ -28,7 +28,7 @@ from typing import Any, Generic, TypeVar
 from kernel.core.store._support import SupportArtifact
 from kernel.core.store.ledger import Claim, MetaRow
 
-from .errors import WalkerFrozenError, WalkerLookupError, WalkerReferenceError
+from .errors import WalkerFrozenError, WalkerLookupError, WalkerReferenceError, WalkerSnapshotError
 from .keys import AtomKeyView, parse_atom_key
 
 ViewT = TypeVar("ViewT")
@@ -197,16 +197,19 @@ class AssertionView:
             raise WalkerReferenceError(f"assertion not found: {asrt_id!r}")
         if not isinstance(claim, Claim):
             raise TypeError("claim_index values must be Claim")
-        meta_rows = _snapshot_meta_rows(meta_index, asrt_id)
+        snapshot = _snapshot_assertion(asrt_id, claim, _snapshot_meta_rows(meta_index, asrt_id))
 
         object.__setattr__(self, "_frozen", False)
-        object.__setattr__(self, "_asrt_id", claim.asrt_id)
-        object.__setattr__(self, "_pred_id", claim.pred_id)
-        object.__setattr__(self, "_e_ref", claim.e_ref)
-        object.__setattr__(self, "_rest_terms", _snapshot_rest_terms(claim.rest_terms))
-        object.__setattr__(self, "_meta_rows", meta_rows)
-        object.__setattr__(self, "_underlying", claim)
+        _set_assertion_snapshot(self, snapshot, claim)
         object.__setattr__(self, "_frozen", True)
+
+    @classmethod
+    def _from_snapshot(cls, snapshot: "_AssertionSnapshot") -> "AssertionView":
+        view = cls.__new__(cls)
+        object.__setattr__(view, "_frozen", False)
+        _set_assertion_snapshot(view, snapshot, snapshot.underlying)
+        object.__setattr__(view, "_frozen", True)
+        return view
 
     def __setattr__(self, name: str, value: Any) -> None:
         if getattr(self, "_frozen", False):
@@ -289,8 +292,8 @@ class SupportArtifactView:
         if not isinstance(frozen_claim_index, Mapping):
             raise TypeError("frozen_claim_index must be Mapping[str, Claim]")
 
-        claim_index = _freeze_claim_index(frozen_claim_index)
         meta_index = _freeze_meta_index(frozen_meta_index)
+        claim_index = _freeze_claim_index(frozen_claim_index, meta_index)
 
         object.__setattr__(self, "_frozen", False)
         object.__setattr__(self, "_underlying", support)
@@ -334,7 +337,12 @@ class SupportArtifactView:
         return parse_atom_key(key).as_step()
 
     def lookup_assertion(self, asrt_id: str) -> AssertionView:
-        return AssertionView(asrt_id, self._claim_index, self._meta_index)
+        if not isinstance(asrt_id, str) or not asrt_id:
+            raise WalkerReferenceError("asrt_id must be non-empty string")
+        snapshot = self._claim_index.get(asrt_id)
+        if snapshot is None:
+            raise WalkerReferenceError(f"assertion not found: {asrt_id!r}")
+        return AssertionView._from_snapshot(snapshot)
 
     def __repr__(self) -> str:
         return (
@@ -343,8 +351,71 @@ class SupportArtifactView:
         )
 
 
+class _AssertionSnapshot:
+    __slots__ = ("asrt_id", "e_ref", "meta_rows", "pred_id", "rest_terms", "underlying")
+
+    def __init__(
+        self,
+        *,
+        asrt_id: str,
+        pred_id: str,
+        e_ref: str,
+        rest_terms: tuple[tuple[str, Any], ...],
+        meta_rows: tuple[MetaRow, ...],
+        underlying: Claim,
+    ) -> None:
+        self.asrt_id = asrt_id
+        self.pred_id = pred_id
+        self.e_ref = e_ref
+        self.rest_terms = rest_terms
+        self.meta_rows = meta_rows
+        self.underlying = underlying
+
+
+def _set_assertion_snapshot(view: AssertionView, snapshot: _AssertionSnapshot, underlying: Claim) -> None:
+    object.__setattr__(view, "_asrt_id", snapshot.asrt_id)
+    object.__setattr__(view, "_pred_id", snapshot.pred_id)
+    object.__setattr__(view, "_e_ref", snapshot.e_ref)
+    object.__setattr__(view, "_rest_terms", snapshot.rest_terms)
+    object.__setattr__(view, "_meta_rows", snapshot.meta_rows)
+    object.__setattr__(view, "_underlying", underlying)
+
+
+def _snapshot_assertion(
+    requested_asrt_id: str,
+    claim: Claim,
+    meta_rows: tuple[MetaRow, ...],
+) -> _AssertionSnapshot:
+    if not isinstance(claim.asrt_id, str) or not claim.asrt_id:
+        raise WalkerSnapshotError("Claim.asrt_id must be non-empty string")
+    if claim.asrt_id != requested_asrt_id:
+        raise WalkerSnapshotError("claim_index key must match Claim.asrt_id")
+    if not isinstance(claim.pred_id, str) or not claim.pred_id:
+        raise WalkerSnapshotError("Claim.pred_id must be non-empty string")
+    if not isinstance(claim.e_ref, str) or not claim.e_ref:
+        raise WalkerSnapshotError("Claim.e_ref must be non-empty string")
+    return _AssertionSnapshot(
+        asrt_id=claim.asrt_id,
+        pred_id=claim.pred_id,
+        e_ref=claim.e_ref,
+        rest_terms=_snapshot_rest_terms(claim.rest_terms),
+        meta_rows=_snapshot_meta_rows_values(meta_rows),
+        underlying=claim,
+    )
+
+
 def _snapshot_rest_terms(rest_terms: list[tuple[str, Any]]) -> tuple[tuple[str, Any], ...]:
-    return tuple(tuple(row) for row in rest_terms)
+    if not isinstance(rest_terms, list):
+        raise WalkerSnapshotError("Claim.rest_terms must be list")
+    frozen_terms: list[tuple[str, Any]] = []
+    for term in rest_terms:
+        if not isinstance(term, tuple) or len(term) != 2:
+            raise WalkerSnapshotError("Claim.rest_terms entries must be tuple(tag, value)")
+        tag, value = term
+        if not isinstance(tag, str) or not tag:
+            raise WalkerSnapshotError("Claim.rest_terms tag must be non-empty string")
+        frozen_terms.append((tag, _freeze_value(value)))
+    return tuple(frozen_terms)
 
 
 def _snapshot_meta_rows(
@@ -362,14 +433,51 @@ def _snapshot_meta_rows(
     return rows
 
 
-def _freeze_claim_index(claim_index: Mapping[str, Claim]) -> Mapping[str, Claim]:
+def _snapshot_meta_rows_values(meta_rows: tuple[MetaRow, ...]) -> tuple[MetaRow, ...]:
+    frozen_rows: list[MetaRow] = []
+    for row in meta_rows:
+        if not isinstance(row.asrt_id, str) or not row.asrt_id:
+            raise WalkerSnapshotError("MetaRow.asrt_id must be non-empty string")
+        if not isinstance(row.key, str) or not row.key:
+            raise WalkerSnapshotError("MetaRow.key must be non-empty string")
+        if not isinstance(row.kind, str) or not row.kind:
+            raise WalkerSnapshotError("MetaRow.kind must be non-empty string")
+        frozen_rows.append(MetaRow(row.asrt_id, row.key, row.kind, _freeze_value(row.value)))
+    return tuple(frozen_rows)
+
+
+def _freeze_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return tuple(
+            sorted(
+                ((_freeze_value(key), _freeze_value(item_value)) for key, item_value in value.items()),
+                key=lambda item: repr(item[0]),
+            )
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_value(item) for item in value)
+    if isinstance(value, (set, frozenset)):
+        return tuple(sorted((_freeze_value(item) for item in value), key=repr))
+    try:
+        hash(value)
+    except TypeError as exc:
+        raise WalkerSnapshotError(f"value is not recursively freezable: {value!r}") from exc
+    return value
+
+
+def _freeze_claim_index(
+    claim_index: Mapping[str, Claim],
+    meta_index: Mapping[str, tuple[MetaRow, ...]],
+) -> Mapping[str, _AssertionSnapshot]:
     frozen = dict(claim_index)
+    snapshots: dict[str, _AssertionSnapshot] = {}
     for key, claim in frozen.items():
         if not isinstance(key, str) or not key:
             raise TypeError("claim_index keys must be non-empty strings")
         if not isinstance(claim, Claim):
             raise TypeError("claim_index values must be Claim")
-    return MappingProxyType(frozen)
+        snapshots[key] = _snapshot_assertion(key, claim, meta_index.get(key, ()))
+    return MappingProxyType(snapshots)
 
 
 def _freeze_meta_index(

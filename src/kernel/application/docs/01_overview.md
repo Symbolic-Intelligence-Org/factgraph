@@ -1,7 +1,7 @@
 # Application 模块总览(kernel)
 
 - 范围:`src/kernel/application`
-- 最后更新:2026-05-06
+- 最后更新:2026-05-07
 - 目标读者:需要理解 Python runtime authority、SDK adapter 边界与 service/agent consumer 约束的开发者
 
 ## 1. 模块职责
@@ -222,6 +222,11 @@ Key focused tests:
 - `test_application_proofframe_protocol.py`
 - `test_application_proofframe_runtime_native.py`
 - `test_application_proofframe_narrative.py`
+- `test_walker_errors.py`
+- `test_walker_ir.py`
+- `test_walker_views_frozen_tuple.py`
+- `test_walker_keys.py`
+- `test_walker_views_support.py`
 - `test_application_rule_disable_protocol.py`
 - `test_application_rule_disable_runtime_native.py`
 - `test_application_rule_literal_replace_protocol.py`
