@@ -59,7 +59,6 @@ def _candidate_values(
     )
 
 
-
 __all__ = [
     "build_why_not_candidate_universe",
 ]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from kernel.core.store import Store
 from kernel.core.view.projector import project_view_facts
 

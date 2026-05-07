@@ -222,7 +222,6 @@ def _is_float64_hex(value: str) -> bool:
     return all(char in "0123456789abcdef" for char in value[2:])
 
 
-
 __all__ = [
     "build_evaluation_overlay",
     "build_fact_remove_action",
