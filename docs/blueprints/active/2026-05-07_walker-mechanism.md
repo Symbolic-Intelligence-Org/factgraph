@@ -1,8 +1,8 @@
 # Task Blueprint: Walker Mechanism
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-07
-- Last Updated: 2026-05-07
+- Last Updated: 2026-05-08
 - Related Modules:
   - `src/kernel/application/walker/` (Step 0 Round 1: package — `__init__.py` / `errors.py` / `keys.py` / `ir.py` / `views.py`; see §4.1)
   - `src/kernel/application/__init__.py`
@@ -239,21 +239,21 @@ Per [40_ §1-§5](../../references/working/post-routemap-direction-selection-inp
 
 Per [50_ §8 "B blueprint must cite / check"](../../references/working/post-routemap-direction-selection-input/50_migration-path.md):
 
-- [ ] B1 + B2 shipped per scope above; B3 reserved (not implemented)
-- [ ] Error class hierarchy per §4.1 Round 2 shipped at `walker/errors.py`: `WalkerError(Exception)` + 6 subclasses (`WalkerLookupError`, `WalkerParseError`, `WalkerReferenceError`, `WalkerSnapshotError`, `WalkerFrozenError`, dormant `UnboundedStreamError`); all 7 classes re-exported via `walker/__init__.py`
-- [ ] `UnboundedStreamError` has no B1/B2 raise site (verified via grep audit); class definition only, no behavior
-- [ ] Test fixture layout per §4.1 Round 4 shipped: 8 flat per-component files at `src/kernel/tests/`: `test_walker_errors.py` / `_keys.py` / `_ir.py` / `_views_frozen_tuple.py` / `_views_support.py` / `_views_proof_frame.py` / `_views_proof_frame_diff.py` / `_invariants.py`
-- [ ] No removal of direct tuple access on existing DTOs; `support.pred_witnesses[0].asrt_ids` continues to work after B archives
-- [ ] No `kernel.sdk.__all__` modification; no SDK examples / quickstart / user guide change
-- [ ] No demo rewrite in this blueprint scope
-- [ ] Proposed Shape / Non-goals sections reference all walker invariants `#7`-`#19` operationalized in [40_ §4](../../references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md)
-- [ ] Contract tests per [40_ §6](../../references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md) all pass:
+- [x] B1 + B2 shipped per scope above; B3 reserved (not implemented)
+- [x] Error class hierarchy per §4.1 Round 2 shipped at `walker/errors.py`: `WalkerError(Exception)` + 6 subclasses (`WalkerLookupError`, `WalkerParseError`, `WalkerReferenceError`, `WalkerSnapshotError`, `WalkerFrozenError`, dormant `UnboundedStreamError`); all 7 classes re-exported via `walker/__init__.py`
+- [x] `UnboundedStreamError` has no B1/B2 raise site (verified via grep audit); class definition only, no behavior
+- [x] Test fixture layout per §4.1 Round 4 shipped: 8 flat per-component files at `src/kernel/tests/`: `test_walker_errors.py` / `_keys.py` / `_ir.py` / `_views_frozen_tuple.py` / `_views_support.py` / `_views_proof_frame.py` / `_views_proof_frame_diff.py` / `_invariants.py`
+- [x] No removal of direct tuple access on existing DTOs; `support.pred_witnesses[0].asrt_ids` continues to work after B archives
+- [x] No `kernel.sdk.__all__` modification; no SDK examples / quickstart / user guide change
+- [x] No demo rewrite in this blueprint scope
+- [x] Proposed Shape / Non-goals sections reference all walker invariants `#7`-`#19` operationalized in [40_ §4](../../references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md)
+- [x] Contract tests per [40_ §6](../../references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md) all pass:
   - Common contract: `.underlying` escape; `WalkerError` hierarchy; `find` / `require_key` / `require_position` semantics; equality / hash; no observable cache
   - Behavior-specific: IR walker atom unpacking; `FrozenTupleView` `.filter` / `.find` / `.first`; `SupportArtifactView` `.lookup_assertion`; `ProofFrameView`; `ProofFrameDiffView` per §4.1 Round 3 — `frames_with_status_change()` / `iter_atom_deltas(kind=None)` / `frames_with_atom_verdict_changes()`
   - **Future-B3:** reserved StreamWalker / bound contract sketches in 40_ §6 are documented but **NOT executed** (not blueprint acceptance)
-- [ ] B3 (audit / store stream walker) explicit non-goal documented
-- [ ] grep / import-graph static audit: walker module does not import `kernel.sdk`
-- [ ] Round 6 EntitySnapshot caveats honored: no `_underscore` exposure; no SDK private import; no observable cache; walker-layer error classes (not SDK reuse)
+- [x] B3 (audit / store stream walker) explicit non-goal documented
+- [x] grep / import-graph static audit: walker module does not import `kernel.sdk`
+- [x] Round 6 EntitySnapshot caveats honored: no `_underscore` exposure; no SDK private import; no observable cache; walker-layer error classes (not SDK reuse)
 
 ## 8. Implementation Plan
 
@@ -287,9 +287,7 @@ Per phase:
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
-
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+- 最终落地结果：B1/B2 walker mechanism landed under `kernel.application.walker`: `WalkerError` hierarchy, `IRBodyWalker` / `IRAtomView`, `FrozenTupleView` / `frozen_collection`, `parse_atom_key` / `AtomKeyView`, `SupportArtifactView` / `AssertionView`, `ProofFrameView`, `ProofFrameDiffView`, cross-cutting invariant tests, and B3 reserved-future docs.
+- 与 blueprint 不同的地方：strict audits drove several implementation refinements without widening scope: `IRBodyWalker` uses construction-time source snapshot plus lazy view creation; recursive freezing moved into shared `walker/_freeze.py`; `FrozenTupleView` equality/hash has a recorded `#P1` content-wrapper carve-out; `ProofFrameView` removed the drifted `source_id` surface; `ProofFrameDiffView` hashes a frozen frame-delta projection for nested JSON binding values while exposing raw DTOs.
+- 为什么会有这些调整：the refinements close strict-audit findings and better satisfy `#9` lazy traversal, `#10` construction-time snapshotting, `#17` equality/hash boundaries, layer isolation, and B3 future-only constraints.
+- 归档说明：Phase 0-7 cumulative audit verdict is proceed / no blockers. This blueprint is implemented and ready for archive after the close-out commit; B3 remains reserved future-only and no audit walker implementation landed.
