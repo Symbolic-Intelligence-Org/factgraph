@@ -23,6 +23,7 @@
 | 2026-05-07 | implementing | Phase 4 — ProofFrameView implemented | Added `ProofFrameView(ProofFrameRecheckResult)` as the Phase 4 per-DTO wrapper view. It exposes `status`, recursively frozen `binding_items`, `atom_verdicts` as `FrozenTupleView[ProofFrameAtomVerdict]`, and `.underlying` as the original DTO escape hatch. Kept Phase 4 independent from `SupportArtifactView` / claim lookup: callers join explicitly if needed. |
 | 2026-05-07 | implementing | Phase 4 strict-audit fix | Follow-up to read-only Phase 4 strict audit: removed `source_id` constructor arg + property from `ProofFrameView` (drift from locked single-arg design); tightened `atom_verdicts` type hint to `FrozenTupleView[ProofFrameAtomVerdict]`; updated application overview docs (`55` -> `56`, walker entries, Phase 4 test list). Focused regression: 106 tests pass. |
 | 2026-05-07 | implementing | Phase 5 — ProofFrameDiffView implemented | Added `ProofFrameDiffView(ProofFrameDiff)` as the final B2 per-DTO wrapper view. It exposes real DTO fields only (`round_a_id`, `round_b_id`, `frame_deltas`, `warnings`, `.underlying`) plus the three Round 3 locked helpers: `frames_with_status_change()`, `iter_atom_deltas(kind=None)`, and `frames_with_atom_verdict_changes()`. No B3 stream walker or live audit query introduced. Focused regression: 115 tests pass. |
+| 2026-05-07 | implementing | Phase 5 strict-audit fix | Follow-up to read-only Phase 5 strict audit: fixed `ProofFrameDiffView.__hash__` for valid `FrameIdentity.binding_items` containing nested JSON dict/list values by adding a construction-time frozen frame-delta surface; added nested JSON regression coverage. Minor delete-guard / forbidden-alias sweeps deferred to Phase 6 common invariants. Focused regression: 116 tests pass. |
 
 ## Decision Notes
 
@@ -41,6 +42,38 @@
 - Phase 4 implementation decision (2026-05-07): `ProofFrameView` remains a single-argument wrapper over real `ProofFrameRecheckResult` fields only (`status` / `binding_items` / `atom_verdicts` / `.underlying`). No `ProofAtomView`, no `SupportArtifactView` join, and no claim/meta index constructor arguments.
 - Phase 4 strict-audit fix (2026-05-07): `ProofFrameView` implementation now matches the single-argument Phase 4 lock exactly; `source_id` remains available on generic `FrozenTupleView` / `SupportArtifactView` but is not part of `ProofFrameView`.
 - Phase 5 implementation decision (2026-05-07): `ProofFrameDiffView` follows the Phase 4 single-argument / real-fields-only pattern. `frame_deltas` and `warnings` are shallow `FrozenTupleView` wrappers over already-validated DTO tuples. Equality/hash excludes `.underlying`; warning DTOs keep their original objects in `.warnings`, while hash surface uses frozen warning details so `WarningDTO.details` dicts do not make the view unhashable.
+- Phase 5 strict-audit fix (2026-05-07): `FrameIdentity.binding_items` is `BindingJSON`, and its `JSONValue` leaves can be dict/list. The view still exposes raw `FrameDelta` objects via `.frame_deltas`, but equality/hash now use a private construction-time `_frame_delta_surface` that recursively freezes binding JSON values. This corrects the original Phase 5 design miss that treated validated JSON as automatically hash-safe.
+
+## Phase 5 Audit Report (2026-05-07)
+
+### Summary
+
+Strict audit of current uncommitted Phase 5 `ProofFrameDiffView` implementation. Four read-only lanes were requested; agent limits required old agents to be closed, then four Phase 5 lanes ran. Verdict before this fix: **needs fix before commit / Phase 6** because `ProofFrameDiffView.__hash__` failed for a valid `ProofFrameDiff` with nested JSON binding values in `FrameIdentity.binding_items`.
+
+### Findings table
+
+| # | Severity | File:line | Description | Recommendation |
+|---|---|---|---|---|
+| P5-F1 | blocker | `walker/views.py:456`, `walker/views.py:469`, `audit/proof_frame_diff.py:19`, `audit/proof_frame_diff.py:363` | `ProofFrameDiffView._surface()` used raw `FrameDelta` objects. Valid `FrameIdentity.binding_items` may contain JSON dict/list leaves, making `hash(ProofFrameDiffView(...))` raise `TypeError`. | Keep `.frame_deltas` as shallow `FrozenTupleView[FrameDelta]`, but use a private frozen frame-delta surface for equality/hash; add regression with nested JSON binding values. |
+| P5-F2 | minor / Phase 6 | `walker/views.py:407`, `test_walker_views_proof_frame_diff.py:157` | `__delattr__` frozen guard exists but focused Phase 5 tests only cover assignment mutation. | Defer to Phase 6 common invariant tests across walker views. |
+| P5-F3 | minor / Phase 6 | `2026-05-07_walker-mechanism.md:236`, `test_walker_views_proof_frame_diff.py:163` | Phase 5 forbidden-alias test omits `.get` / `.at` despite syntax-boundary wording. | Defer to Phase 6 common syntax-boundary invariant sweep. |
+
+### No-Issue Checks
+
+- Locked helpers match the Step 0 Round 3 design: `frames_with_status_change()`, `iter_atom_deltas(kind=None)`, and `frames_with_atom_verdict_changes()`.
+- Constructor is single-argument `ProofFrameDiffView(diff)`.
+- No invented enum; implementation reuses existing `AtomDeltaKind`.
+- No `source_id` on `ProofFrameDiffView`.
+- No B3 stream walker or live audit query expansion.
+- `.frame_deltas` / `.warnings` remain `FrozenTupleView` wrappers, and `.underlying` remains the original `ProofFrameDiff` escape hatch.
+- `WarningDTO.details` hashability is handled through `_warning_surface`.
+- `kernel.application.__all__` exports `ProofFrameDiffView` and module docs describe Phase 5 as implemented.
+
+### Fix Verification
+
+- Added construction-time `_frame_delta_surface` for hash/equality over nested `FrameIdentity.binding_items` JSON values.
+- Added focused regression `test_hash_with_nested_json_binding_values`.
+- Focused regression passed: 116 tests across walker Phase 0-5 tests, capability helpers, and ProofFrame runtime tests.
 
 ## Phase 4 Audit Report (2026-05-07)
 

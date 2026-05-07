@@ -378,6 +378,7 @@ class ProofFrameDiffView:
 
     __slots__ = (
         "_frame_deltas",
+        "_frame_delta_surface",
         "_frozen",
         "_round_a_id",
         "_round_b_id",
@@ -395,6 +396,7 @@ class ProofFrameDiffView:
         object.__setattr__(self, "_round_a_id", diff.round_a_id)
         object.__setattr__(self, "_round_b_id", diff.round_b_id)
         object.__setattr__(self, "_frame_deltas", FrozenTupleView(diff.frame_deltas))
+        object.__setattr__(self, "_frame_delta_surface", _snapshot_frame_delta_surface(diff.frame_deltas))
         object.__setattr__(self, "_warnings", FrozenTupleView(diff.warnings))
         object.__setattr__(self, "_warning_surface", _snapshot_warning_surface(diff.warnings))
         object.__setattr__(self, "_frozen", True)
@@ -457,7 +459,7 @@ class ProofFrameDiffView:
         return (
             self.round_a_id,
             self.round_b_id,
-            self.frame_deltas.underlying,
+            self._frame_delta_surface,
             self._warning_surface,
         )
 
@@ -682,6 +684,27 @@ def _snapshot_warning_surface(warnings: tuple[WarningDTO, ...]) -> tuple[tuple[A
                 warning.message,
                 warning.path,
                 freeze_value(warning.details),
+            )
+        )
+    return tuple(surface)
+
+
+def _snapshot_frame_delta_surface(frame_deltas: tuple[FrameDelta, ...]) -> tuple[tuple[Any, ...], ...]:
+    surface: list[tuple[Any, ...]] = []
+    for frame_delta in frame_deltas:
+        if not isinstance(frame_delta, FrameDelta):
+            raise WalkerSnapshotError("frame_deltas entries must be FrameDelta")
+        surface.append(
+            (
+                (
+                    frame_delta.frame_identity.support_digest,
+                    freeze_value(frame_delta.frame_identity.binding_items),
+                ),
+                frame_delta.source_a,
+                frame_delta.source_b,
+                frame_delta.frame_status_change,
+                frame_delta.atom_deltas,
+                frame_delta.markers,
             )
         )
     return tuple(surface)

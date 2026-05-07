@@ -31,6 +31,13 @@ def _identity(name: str) -> FrameIdentity:
     )
 
 
+def _nested_identity(name: str) -> FrameIdentity:
+    return FrameIdentity(
+        support_digest=f"support:{name}",
+        binding_items=(("$attrs", {"tags": ["vip", "active"]}),),
+    )
+
+
 def _status_changed_frame() -> FrameDelta:
     return FrameDelta(
         frame_identity=_identity("alice"),
@@ -181,6 +188,28 @@ class ProofFrameDiffViewTests(unittest.TestCase):
         self.assertEqual(hash(a), hash(b))
         self.assertIsInstance(hash(a), int)
         self.assertNotEqual(a, c)
+
+    def test_hash_with_nested_json_binding_values(self) -> None:
+        diff = ProofFrameDiff(
+            round_a_id="round-a",
+            round_b_id="round-b",
+            frame_deltas=(
+                FrameDelta(
+                    frame_identity=_nested_identity("alice"),
+                    source_a=_event("round-a", 1),
+                    source_b=None,
+                    frame_status_change=None,
+                ),
+            ),
+        )
+        same = ProofFrameDiffView(diff)
+        equal = ProofFrameDiffView(diff)
+
+        diff.frame_deltas[0].frame_identity.binding_items[0][1]["tags"].append("late")
+
+        self.assertEqual(same, equal)
+        self.assertEqual(hash(same), hash(equal))
+        self.assertIsInstance(hash(same), int)
 
     def test_phase_5_type_reexports_from_application_package(self) -> None:
         from kernel.application import ProofFrameDiffView as AppProofFrameDiffView
