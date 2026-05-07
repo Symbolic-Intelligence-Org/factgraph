@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .check import build_check_request
+from .diagnose import build_diagnose_request
 from .errors import (
     CapabilityHelperError,
     OriginPackageError,
@@ -19,6 +20,7 @@ __all__ = [
     "CapabilityHelperError",
     "OriginPackageError",
     "build_check_request",
+    "build_diagnose_request",
     "build_evaluation_overlay",
     "build_fact_remove_action",
     "build_fact_value_override",
