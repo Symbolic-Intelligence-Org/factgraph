@@ -126,6 +126,36 @@ This blueprint is at `draft` status. The seven questions below MUST be resolved 
 
 **Default if Step 0 inconclusive:** per-method (lower `#6` commitment per `#P0` Tier 5).
 
+**Decision (2026-05-08, falsifier pass complete):**
+
+- **G1 ships two SDK entrypoints** for Check and Diagnose.
+- Exact placement / naming deferred to §5.4 / §5.5; **scenario merge rejected for this blueprint**.
+- `sdk.explain(...)` remains future Direction C composition work, not G1 scope.
+
+**Falsifier evidence (read-only protocol audit):**
+
+1. `sdk.explain(...)` is hypothetical only — [20_candidates.md §C](../../references/working/post-routemap-direction-selection-input/20_candidates.md) shows it as a sketch and explicitly notes "Adds outward-compatibility commitment: once shipped, the `sdk.explain` shape is locked".
+2. A's design rationale already settles separate builders for Check + Diagnose on `#3` — [41_application-builders-design-sketch.md §3.1 "Rationale for separate Check + Diagnose builders"](../../references/working/post-routemap-direction-selection-input/41_application-builders-design-sketch.md): "Separate builders match `#3` heterogeneity and avoid false unification — same lesson as Batch 8 §5.4 verdict #3".
+3. Application protocol enforces Q1 Sibling at the type level — [derivation_diagnose.py module docstring](../../../src/kernel/application/protocol/derivation_diagnose.py): "Diagnose owns its full dispatch and does NOT call `check_derivation_binding(...)`; this protocol redeclares its status / engine Literals locally rather than importing Check's, keeping the two capabilities decoupled at the protocol layer".
+4. `DiagnoseResult` explicitly excludes `EvidenceEnvelope` — [derivation_diagnose.py `DiagnoseResult` docstring](../../../src/kernel/application/protocol/derivation_diagnose.py): "`DiagnoseResult` does NOT carry an `EvidenceEnvelope` (per D9 + Q1 Sibling — callers wanting Check's evidence on `passed` invoke Check separately)".
+5. `CheckResult.evidence_envelope` is populated only on `passed`; `failed` enforces `None` via runtime assertion — [derivation_check.py `CheckResult.__post_init__`](../../../src/kernel/application/protocol/derivation_check.py): "passed CheckResult requires evidence_envelope" (line 138-139) / "failed CheckResult requires evidence_envelope=None" (line 147-148). This is an active `raise ProtocolShapeError`, not a passive absence — application protocol mechanically rejects evidence-on-failure construction.
+
+**Why scenario merge is ruled out:**
+
+A `sdk.explain(rule, binding, store) -> SDKExplainResult` (with `.passed`, `.evidence`, `.failure`) would force one of three options, none acceptable:
+
+- **(a) Internal Check + Diagnose composition** — caller can do the same composition externally; no outward semantic gain over per-method.
+- **(b) Add Check evidence to Diagnose-shaped result** — violates Q1 Sibling discipline already locked at the protocol layer (evidence 3).
+- **(c) Invent hybrid result with evidence-on-failure semantics** — application layer explicitly excludes evidence-on-failure (evidence 4 + 5). Furthermore, since `CheckResult.__post_init__` actively raises `ProtocolShapeError` when `failed` carries an `evidence_envelope`, a SDK shell that tried to populate evidence on a failed branch would be **mechanically blocked at construction time** — not just an abstract `#1` layer-inversion concern. The hybrid type would have to bypass the application protocol entirely, creating both a `#1` layer-inversion (Tier 1 carrying semantics Tier 2 authoritatively rejects) AND a `#6` outward-compat commitment (`SDKExplainResult` shape locks once shipped) without source-grounded user signal.
+
+**Falsifier outcomes (against the three requirements above):**
+
+| Falsifier | Outcome |
+|---|---|
+| F1: source-ground a user workflow needing `sdk.explain` semantics specifically | **Not satisfied** — no source found. `#3` heterogeneity prevails. |
+| F2: if scenario selected, document why NOT false merge | **Blocked** — evidence-on-failure semantics absent at protocol layer AND mechanically rejected at construction; cannot construct unambiguous discriminator without bypassing the application protocol. |
+| F3: if per-method selected, document scenario composition stays caller-side | **Satisfied** — `sdk.check(...)` then `sdk.diagnose(...)` mirrors existing application-layer 1:1 pattern; no new outward type to lock. |
+
 ### 5.2 Return shape — B-typed-wrap vs raw passthrough vs documented passthrough
 
 **Question:** Does G1 return `kernel.application.protocol.derivation_check.CheckResult` / `DiagnoseResult` directly (raw passthrough), wrap them in new SDK-typed result classes (B-typed-wrap), or return raw with docstring pointer to B walker views (documented passthrough)?
@@ -236,7 +266,8 @@ Acceptance gates are completed at scope-freeze. At `draft` status, only Step 0 f
 - [x] Principle lock set documented in §6
 - [x] Non-goals enumerated in §3 (covers `factpy`, README quickstart, scenario merge pre-lock, B return-shape pre-lock, etc.)
 - [x] Bundle reference and prior art cited in §4
-- [ ] Step 0 falsifier passes for §5.1 through §5.7 — **pending scoping round**
+- [x] §5.1 falsifier pass — locked 2026-05-08 (per-method API; scenario `sdk.explain` rejected, remains Direction C future composition)
+- [ ] §5.2 through §5.7 falsifier passes — **pending scoping round**
 
 ## 8. Implementation Plan
 
