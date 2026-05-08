@@ -1,6 +1,6 @@
 # L Direction G1 — Check + Diagnose SDK Shell
 
-- **Status:** draft
+- **Status:** scoped
 - **Created:** 2026-05-08
 - **Parent:** L Direction (post-A+B v1-ready roadmap target)
 - **Related Bundle:** [post-routemap-direction-selection-input](../../references/working/post-routemap-direction-selection-input/) — Round 8 SDK conventions audit (G1 verdict: clean)
@@ -25,10 +25,10 @@ Tier 1 SDK shell that lets a `kernel.sdk` consumer invoke Q1 Check and Q2 Diagno
 
 ## 3. Non-Goals
 
-- **No scenario merge pre-lock.** `sdk.explain(...)` (Direction C scenario shape, [30_recommendation.md §"Why not start with C"](../../references/working/post-routemap-direction-selection-input/30_recommendation.md)) is one Step 0 candidate. `#3` heterogeneity warns against false merge. Falsifier required (§5.1).
-- **No return-shape pre-lock.** B-typed-wrap is the leading candidate (Round 8 `ValidationReport` precedent), but `#6` + `#P0` Tier 5 require formal Step 0 falsifier (§5.2).
+- **No scenario merge.** `sdk.explain(...)` (Direction C scenario shape, [30_recommendation.md §"Why not start with C"](../../references/working/post-routemap-direction-selection-input/30_recommendation.md)) explicitly rejected per §5.1 falsifier lock. `#3` heterogeneity prevailed; Direction C composition is deferred to a future blueprint if user signal materializes.
+- **No B-typed-wrap return shape.** Per §5.2 falsifier lock: G1 returns `CheckResult` / `DiagnoseResult` as documented passthrough; B walker imports inactive. Future `#P1` revision can add typed wrappers if user signal materializes.
 - **No README quickstart change.** Per `#6` "What this principle set forbids" — adding new helpers / walker classes to README quickstart is forbidden. Quickstart change requires its own user signal beyond G1.
-- **No `kernel.sdk.__all__` expansion without §5.4 Step 0 lock.** Per Batch 8 §5.5.5: outward-shape lock-in is part of G1 own Step 0; `__all__` insertion needs explicit decision.
+- **No `kernel.sdk.__all__` expansion.** Per §5.4 lock: G1 adds zero new entries to `__all__`; methods land as `SDKStore.check` / `SDKStore.diagnose` instance methods only. Future `__all__` changes require their own per-family Step 0 per Batch 8 §5.5.5.
 - **No SDK Derivation lowering reinvention.** G1 reuses the existing `to_authoring_payload()` + `compile_authoring_derivation_v1()` + `_compiled_derivation_plan_to_application(...)` lowering at [src/kernel/sdk/store.py:899-940 `_compile_derivation_input(...)`](../../../src/kernel/sdk/store.py) plus [src/kernel/sdk/store.py:1490+ `_compiled_derivation_plan_to_application(...)`](../../../src/kernel/sdk/store.py). NOTE: `Rule` lowering (`_compile_rule_input` → `RuleSpec` at store.py:619+) is the `sdk.run(...)` surface, NOT G1. New lowering paths are out of scope.
 - **No protocol DTO field changes.** Per `#1` + `#6` "Refactoring existing protocol DTOs to fit walker shape better" forbidden. G1 wraps existing DTOs; never reshapes them.
 - **No service / agent / domain integration.** G1 is `kernel.sdk` self-contained. Service routes deferred per Batch 8 §5.5.5 row 3.
@@ -422,7 +422,7 @@ SDKStore.diagnose(derivation, binding, *, engine="native", registry=None) -> Dia
 
 | Sub-question | Outcome |
 |---|---|
-| Plan input: `Rule` only? `Rule \| CompiledDerivationPlan`? Other? | **Resolved: SDK `Derivation` only.** `Rule` is wrong semantic family; `CompiledDerivationPlan` deferred to advanced-importable users. |
+| Plan input: SDK `Derivation` only? `Derivation \| CompiledDerivationPlan`? Other? | **Resolved: SDK `Derivation` only.** `CompiledDerivationPlan` deferred to advanced-importable users; `Rule` ruled out per evidence 4 (wrong semantic family — `sdk.run(...)` path, not Check/Diagnose). |
 | Binding: `dict[str, Any]` only? Also accept `LogicVar`? | **Resolved: `Mapping[str, Any]` with `$`-prefixed string keys only.** `LogicVar` deferred. |
 | Store: `SDKStore` only? Also accept lower-level `Store`? | **Moot: §5.4 instance-method lock made store be `self`.** No standalone `store=` parameter. |
 
@@ -454,7 +454,7 @@ Principles locked active for G1 (numbering per [30_recommendation.md](../../refe
 | `#6` No outward compat without user signal | Active | Drives §5.1 / §5.2 / §5.4 falsifier discipline. README quickstart non-goal. |
 | `#11` `.underlying` escape hatch | **Inactive for G1 v1** (resolved 2026-05-08) | §5.2 locked to documented passthrough; G1 does not import B walker views, so `.underlying` is not surfaced. Reactivates only via future `#P1` revision adding typed wrapper. |
 | `#12` Error boundaries naming | **Resolved** (2026-05-08) | `CapabilityHelperError` + `OriginPackageError` both remap to `SDKStoreError` with exception chaining per §5.3; no new SDK error subclass introduced. `WalkerError` remap remains inactive for G1 v1 since walker views are not exposed (§5.2 documented passthrough). Reactivates if future `#P1` revision adds B walker imports. |
-| `#19` Test contract | Active | Flat `unittest`; no Hypothesis; fixtures `_g1_fixtures.py` if extracted |
+| `#19` Test contract | Active | Flat `unittest`; no Hypothesis; fixtures `_sdk_g1_fixtures.py` if extracted (per §5.6 lock — `sdk_` prefix matches `test_sdk_*` file convention) |
 | `#P0` Conflict resolution | Active | Tier 5 (`#6`) constrains Tier 4 (ergonomic surface). Default-to-narrow heuristic informs §5.1 / §5.2 / §5.4 defaults. |
 | `#P1` Carve-out flow | Active | Any deviation in scoping or implementation phases must record id / reason / scope / impact / reviewer ack |
 
@@ -464,7 +464,7 @@ Principles locked active for G1 (numbering per [30_recommendation.md](../../refe
 - A internals usage: `_binding` import, `_reject_sdk_origin` direct call, direct `CheckRequest` / `DiagnoseRequest` construction.
 - Protocol DTO field changes "to fit SDK shape better" (per `#1` + `#6`).
 - README quickstart change (per `#6`).
-- `kernel.sdk.__all__` expansion without §5.4 Step 0 lock.
+- `kernel.sdk.__all__` expansion (per §5.4 lock: G1 adds zero new entries; future expansion requires its own per-family Step 0).
 - New SDK `Derivation` lowering pipeline — G1 must use existing `to_authoring_payload()` + `compile_authoring_derivation_v1()` + `_compiled_derivation_plan_to_application(...)`. NOTE: SDK `Rule` lowering (`_compile_rule_input` → `RuleSpec`) is `sdk.run(...)` territory; G1 must NOT use the Rule path.
 - Service / agent / domain integration.
 - `factpy` rebrand or umbrella-alias.
@@ -473,9 +473,9 @@ Principles locked active for G1 (numbering per [30_recommendation.md](../../refe
 
 ## 7. Acceptance Criteria
 
-Acceptance gates are completed at scope-freeze. At `draft` status, only Step 0 falsifier outcomes (per §5) are pending. Once scoped, this section will list per-falsifier resolution + concrete test contract obligations.
+Acceptance gates progress through draft → scoped → implementing → implemented. Pre-scope-freeze items (Step 0 framing + 7 falsifier passes) are tracked below as historical record; scoped per-phase acceptance follows after.
 
-**Pre-scope-freeze acceptance (this draft round):**
+**Pre-scope-freeze acceptance (draft round, all complete 2026-05-08):**
 
 - [x] Q1 / Q2 / Q3 framing decisions absorbed in §4.1
 - [x] 7 Step 0 questions enumerated in §5
@@ -491,16 +491,195 @@ Acceptance gates are completed at scope-freeze. At `draft` status, only Step 0 f
 - [x] §5.7 falsifier pass — locked 2026-05-08 (SDK `Derivation` only — NOT `Rule`; binding `Mapping[str, Any]` with `$`-prefixed keys only; surfaced and corrected blueprint drift in §1/§2/§3/§4.4/§5.7/§6 that previously cited Rule lowering)
 - [x] **All 7 §5 falsifier passes complete — blueprint ready to advance `draft → scoped`**
 
+**Scoped per-phase acceptance (added at scope-freeze):**
+
+- [ ] **Phase 0** — module skeleton + delegation hooks complete; 2 stub modules + 2 SDKStore methods + 2 skeleton tests; no `__all__` change; no application-protocol or B walker imports yet; ruff clean; `git diff --check` clean
+- [ ] **Phase 0** strict audit pass; audit-fix commit (if blocker) before Phase 1
+- [ ] **Phase 1** — `sdk_check` real implementation; full `test_sdk_check.py` contract (passed / failed / unsupported / invalid_request paths; OriginPackageError + CapabilityHelperError remap; type-check + single-head + engine + registry coverage); A helper called (no direct `CheckRequest` construction); `CheckResult` raw return; no `__all__` expansion
+- [ ] **Phase 1** strict audit pass; audit-fix commit (if blocker) before Phase 2
+- [ ] **Phase 2** — `sdk_diagnose` real implementation; full `test_sdk_diagnose.py` contract; same disciplines as Phase 1; Q1 Sibling discipline preserved (G1 diagnose does NOT call G1 check internally)
+- [ ] **Phase 2** strict audit pass; audit-fix commit (if blocker) before Phase 3
+- [ ] **Phase 3** — cross-cutting invariants + docs + close-out; layer-isolation grep clean; invariant tests added; `04_api_surface.md §2` updated; `01_overview.md` strangler note; README quickstart untouched; full kernel test suite green
+- [ ] **Phase 3** cumulative strict audit covering all §5 locks; close-out commit fills §10 Outcome
+- [ ] **Phase 4** — archive blueprint to `docs/blueprints/archive/`; update archive `README.md`; snapshot branch publish `v0.1-l-g1-check-diagnose-2026-05-DD`; sacred branches untouched
+
+**Scoped invariant tests (per principle locks):**
+
+- §5.1: `sdk.check` and `sdk.diagnose` are separate methods; no `sdk.explain` shipped (negative test on `SDKStore`)
+- §5.2: `CheckResult` / `DiagnoseResult` not in `kernel.sdk.__all__` (assertion test); `sdk.check(...)` returns `CheckResult` raw (no SDK-typed wrapper class introduced)
+- §5.3: `CapabilityHelperError` and `OriginPackageError` from G1 surface as `SDKStoreError` with chained `__cause__`
+- §5.4: `kernel.sdk.__all__` length unchanged from pre-G1 baseline; `SDKStore.check` and `SDKStore.diagnose` exist as bound methods
+- §5.5: `kernel/sdk/check.py` and `kernel/sdk/diagnose.py` exist; flat layout; no `kernel/sdk/shells/` package
+- §5.6: `test_sdk_check.py` and `test_sdk_diagnose.py` exist in `src/kernel/tests/` flat; no nested `tests/sdk/` directory
+- §5.7: SDK `Rule` rejected at G1 surface (functional test); `BindingItems` rejected; `Mapping[str, Any]` with `$`-prefixed keys accepted; multi-head `Derivation` rejected per `CheckRequest` single-head requirement
+
 ## 8. Implementation Plan
 
-Deferred to scoped status. At scope-freeze this section will include:
+Implementation proceeds in 4 sequential phases on a dedicated worktree, each phase terminating in a strict audit and audit-fix commit per [feedback_audit_cadence_per_phase](../../../../.claude/projects/-Users-zhenzhili-hnsm-backend/memory/feedback_audit_cadence_per_phase.md). Branch / worktree state per [feedback_worktree_parallel_implementation](../../../../.claude/projects/-Users-zhenzhili-hnsm-backend/memory/feedback_worktree_parallel_implementation.md).
 
-- Per-falsifier resolution (one decision per §5.x question)
-- Phased implementation order (per A+B precedent: Phase 0 process correction → Phase 1 Check shell → Phase 2 Diagnose shell → Phase N close-out)
-- Worktree branch creation: `git worktree add -b codex/v0.1-l-g1-check-diagnose-2026-05-DD /Users/zhenzhili/hnsm-backend-G1` (date filled at scope-freeze)
-- Per-phase audit cadence (per [feedback_audit_cadence_per_phase](../../../../.claude/projects/-Users-zhenzhili-hnsm-backend/memory/feedback_audit_cadence_per_phase.md))
-- Snapshot branch publish plan: `v0.1-l-g1-check-diagnose-2026-05-DD` on origin
-- Archive sequence
+### Phase preconditions
+
+- **Worktree creation** (date filled at implementation kickoff):
+  ```
+  git worktree add -b codex/v0.1-l-g1-check-diagnose-<date> /Users/zhenzhili/hnsm-backend-G1
+  ```
+- Worktree branches from the scope-freeze commit on `v0.1-public-surface-helpers-walker-2026-05-08`.
+- All phase commits land on `codex/v0.1-l-g1-check-diagnose-<date>`.
+- Sacred branches `master` / `v0.1-oss-prep` untouched throughout.
+
+### Phase 0 — Module skeleton + delegation hooks (no behavior)
+
+**Scope:**
+
+- Create `src/kernel/sdk/check.py` with `sdk_check(sdk, derivation, binding, *, engine="native", registry=None)` stub raising `NotImplementedError`.
+- Create `src/kernel/sdk/diagnose.py` with `sdk_diagnose(...)` stub raising `NotImplementedError`.
+- Add `SDKStore.check(...)` and `SDKStore.diagnose(...)` instance methods that import + delegate to the stubs (mirrors `ingest()` / `validate_provenance()` delegation pattern at [store.py:256](../../../src/kernel/sdk/store.py)).
+- Skeleton tests `src/kernel/tests/test_sdk_check.py` + `src/kernel/tests/test_sdk_diagnose.py`: each contains one test asserting `NotImplementedError` propagates through the SDKStore method.
+- No `kernel.sdk.__all__` changes.
+- No `CheckResult` / `DiagnoseResult` imports yet (return type annotations only via `TYPE_CHECKING` if needed).
+
+**Acceptance:**
+
+- 2 stub functions importable from their flat module paths.
+- 2 SDKStore methods callable; delegate via `from .check import sdk_check` pattern.
+- 2 skeleton tests pass.
+- ruff clean; `git diff --check` clean.
+
+**Strict audit (read-only, doc-only, after Phase 0 commit):**
+
+- Verify module paths match §5.5 lock (flat `kernel/sdk/check.py` + `kernel/sdk/diagnose.py`).
+- Verify SDKStore method names match §5.4 lock (`SDKStore.check` / `SDKStore.diagnose`).
+- Verify no `kernel.sdk.__all__` expansion.
+- Verify no application protocol / B walker imports yet.
+- Verify test file names match §5.6 lock.
+
+**Audit-fix commit (if blocker found):** before Phase 1 starts.
+
+### Phase 1 — `SDKStore.check` real implementation
+
+**Scope:**
+
+- Implement `sdk_check(sdk, derivation, binding, *, engine, registry)` end-to-end:
+  1. Type-check `derivation` is SDK `Derivation` instance (raise `SDKStoreError(..., path="$.check.derivation")` otherwise — see §5.7).
+  2. Type-check `binding` is `Mapping[str, Any]` with `$`-prefixed string keys (raise `SDKStoreError(..., path="$.check.binding")` otherwise — see §5.7).
+  3. Lower `Derivation` → compiled list via `sdk._compile_derivation_input(derivation)` (existing private method); enforce single-head requirement (raise `SDKStoreError` if compiled list len ≠ 1, since `CheckRequest` requires single-head plan per [derivation_check.py:93-94](../../../src/kernel/application/protocol/derivation_check.py)).
+  4. Convert compiled dict → `CompiledDerivationPlan` via `_compiled_derivation_plan_to_application(...)` (existing private function at store.py:1490+).
+  5. Resolve runtime registry per `sdk._resolve_runtime_registry(derivation, explicit_registry=registry)` (mirrors `sdk.evaluate(...)` precedent).
+  6. Call `build_check_request(plan, binding, engine=engine)` — catch `CapabilityHelperError` / `OriginPackageError`, remap to `SDKStoreError(...) from exc` per §5.3.
+  7. Call `check_derivation_binding(request, store=sdk._store, registry=resolved_registry)` from `kernel.application.derivation_check_runtime`.
+  8. Return `CheckResult` raw (no wrapping, per §5.2).
+- `test_sdk_check.py` contract test cases:
+  - Happy path: `passed` status with `evidence_envelope` populated.
+  - `failed` status with `evidence_envelope=None`.
+  - `unsupported` / `invalid_request` paths with `errors` populated.
+  - `OriginPackageError` mapping: pass an SDK `Rule` instance — verify rejection at type-check (see §5.7), NOT propagating from A.
+  - `CapabilityHelperError` mapping: malformed binding shape — verify caught and remapped.
+  - Multi-head `Derivation`: verify rejection with informative `SDKStoreError`.
+  - `engine` keyword propagation: verify each of `"native"` / `"souffle"` / `"problog"` / `"pyreason"` reaches A's `build_check_request`.
+  - `registry` keyword propagation: verify explicit registry overrides auto-resolved.
+  - Return type is `CheckResult` (raw protocol DTO, not a wrapper).
+- ruff clean.
+
+**Acceptance:**
+
+- All `test_sdk_check.py` cases pass.
+- Existing kernel tests still pass (regression sweep).
+- ruff clean.
+
+**Strict audit (read-only after Phase 1 commit):**
+
+- Verify §5.7 input shape (Derivation only; Mapping binding; engine/registry kwargs).
+- Verify §5.2 return shape (raw `CheckResult`; no wrapping; `CheckResult` not in `kernel.sdk.__all__`).
+- Verify §5.3 error mapping (`CapabilityHelperError` + `OriginPackageError` → `SDKStoreError` with chaining).
+- Verify §5.4 export discipline (`kernel.sdk.__all__` unchanged).
+- Verify §5.5 module placement (`check.py` flat in `kernel/sdk/`).
+- Verify A defense-in-depth not bypassed (`build_check_request` is called; no direct `CheckRequest` construction).
+
+**Audit-fix commit (if blocker):** before Phase 2.
+
+### Phase 2 — `SDKStore.diagnose` real implementation
+
+**Scope:**
+
+- Implement `sdk_diagnose(sdk, derivation, binding, *, engine, registry)` mirroring Phase 1 structure.
+- Same type-checks, lowering, registry resolution.
+- Call `build_diagnose_request` then `diagnose_derivation_binding` from `kernel.application.derivation_diagnose_runtime`.
+- Return `DiagnoseResult` raw passthrough.
+- `test_sdk_diagnose.py` contract test cases:
+  - `passed` status with `matched_count >= 1` and `matched_binding` populated.
+  - `failed` with `failure_kind="no_candidate"` and `diagnostic_payload=None`.
+  - `failed` with `failure_kind="atom_localized"` and `diagnostic_payload: DiagnoseAtomLocator` populated.
+  - `unsupported` / `invalid_request` paths with `errors`.
+  - Same `OriginPackageError` / `CapabilityHelperError` / type-check / multi-head / engine / registry coverage as Phase 1.
+  - **Q1 Sibling assertion:** verify `sdk_diagnose` does NOT call `sdk_check` internally (mirrors application-layer Q1 Sibling discipline; static / import-graph check OR functional spy).
+
+**Acceptance:**
+
+- All `test_sdk_diagnose.py` cases pass.
+- Phase 1 tests + existing kernel tests still pass (regression).
+- ruff clean.
+
+**Strict audit:** same dimensions as Phase 1, applied to `diagnose`.
+
+**Audit-fix commit (if blocker):** before Phase 3.
+
+### Phase 3 — Cross-cutting invariants + docs + close-out
+
+**Scope:**
+
+- **Layer-isolation static checks (grep / import-graph):**
+  - `kernel/sdk/check.py` and `kernel/sdk/diagnose.py` import only from: `kernel.application.capability_helpers` (public surface), `kernel.application.derivation_check_runtime` / `derivation_diagnose_runtime`, `kernel.application.protocol.*` (return type annotations), `kernel.sdk.errors`. NOT from: `kernel.application.capability_helpers._binding`, `kernel.application.walker.*`, `kernel.audit.*`.
+  - `kernel/sdk/store.py` `SDKStore.check` / `.diagnose` methods only delegate; no inline implementation logic.
+- **Invariant tests** (added to `test_sdk_check.py` / `test_sdk_diagnose.py` or a dedicated invariant file):
+  - `kernel.sdk.__all__` length and content unchanged from pre-G1 baseline.
+  - `CheckResult` / `DiagnoseResult` NOT importable as `from kernel.sdk import CheckResult` (`AttributeError` expected).
+  - No `WalkerError` / `SupportArtifactView` / `parse_atom_key` imports anywhere in `kernel/sdk/check.py` or `kernel/sdk/diagnose.py`.
+  - SDK `Rule` rejection at G1 surface (functional).
+- **Docstrings:**
+  - `SDKStore.check.__doc__`: input types, return type, exceptions, opt-in advanced workflow note (mention `SupportArtifactView(result.support_artifact, frozen_claim_index)` for B walker access — text only, no import).
+  - `SDKStore.diagnose.__doc__`: same pattern; mention application-layer `parse_atom_key` for atom-key parsing if user wants ergonomic access.
+  - Module docstrings for `kernel/sdk/check.py` + `kernel/sdk/diagnose.py`.
+- **SDK API surface doc update** at [src/kernel/sdk/docs/04_api_surface.md §2](../../../src/kernel/sdk/docs/04_api_surface.md): add `check(...)` and `diagnose(...)` to `SDKStore` 公开方法 list.
+- **Application docs note** at [src/kernel/application/docs/01_overview.md](../../../src/kernel/application/docs/01_overview.md): note that A's `build_check_request` / `build_diagnose_request` are now consumed by SDK shell (Tier 2 → Tier 1 strangler step landed).
+- **README quickstart untouched** (per §3 + §6 forbidden — explicit non-action).
+
+**Acceptance:**
+
+- Cumulative strict audit (read-only doc-only) covering all §5 locks.
+- Full kernel test suite green: `python -m unittest discover -s src/kernel/tests`.
+- ruff clean.
+- `git diff --check` clean.
+- All scoped invariant tests pass.
+
+**Close-out commit:**
+
+- Update blueprint §9 Outcome with: final landed result, deviations from blueprint (if any), reasons, archive note.
+- Status transition `implementing` → `implemented` in blueprint header (separate commit from Phase 3 implementation; mirrors A+B archive sequence).
+- Audit log entry: close-out summary citing all phase commits.
+
+### Phase 4 — Archive + snapshot publish
+
+**Scope:**
+
+- Move blueprint + audit log from `docs/blueprints/active/` to `docs/blueprints/archive/`.
+- Update [docs/blueprints/archive/README.md](../archive/README.md) inventory (alphabetical insertion).
+- Branch publish (drop `codex/` prefix per A+B precedent):
+  ```
+  git branch v0.1-l-g1-check-diagnose-<date> <topic-HEAD>
+  git push origin v0.1-l-g1-check-diagnose-<date>
+  ```
+- Optional: combined snapshot from current parent + G1 if user requests (per A+B precedent of `v0.1-public-surface-helpers-walker-2026-05-08`).
+- Worktree cleanup decision: `git worktree remove /Users/zhenzhili/hnsm-backend-G1` (separate user decision; not auto-executed).
+
+**Acceptance:**
+
+- Blueprint files archived; archive `README.md` inventory updated.
+- Snapshot branch on `origin`.
+- Sacred branches `master` / `v0.1-oss-prep` still untouched.
+
+### Implementation kickoff trigger
+
+Phase 0 starts when user explicitly initiates implementation. Until then, blueprint stays at `scoped` status; worktree NOT created. Per `feedback_iterative_gap_design`, no auto-progression from `scoped` to `implementing`.
 
 ## 9. Outcome
 
