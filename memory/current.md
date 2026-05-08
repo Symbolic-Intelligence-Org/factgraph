@@ -1,5 +1,54 @@
 # Current Operational Memory
 
+最后更新:2026-05-08(`v0.1-public-surface-helpers-walker-2026-05-08`;A+B post-routemap Tier 2 helpers + walker complete,blueprints archived,combined snapshot pushed,dirty notebooks reverted)
+
+## 当前阶段(2026-05-08 — A+B POST-ROUTEMAP TIER 2 SURFACE COMPLETE)
+
+**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 combined latest branch `v0.1-public-surface-helpers-walker-2026-05-08` @ `6162f1e`。
+
+**重要修正:** 早前 memory 里“parent branch untouched”应理解为 `v0.1-public-surface-2026-05-06` 分支没有承载 A/B implementation commits；不是说 `/Users/zhenzhili/hnsm-backend` 工作树 HEAD 一直停在该旧 parent branch。A+B integration 后，主工作树已切到 combined latest branch。若需要回看 A+B 前状态，显式切回 `v0.1-public-surface-2026-05-06` @ `95bbbb8`。
+
+**Working tree 状态:** clean。此前 6 个 pre-existing notebook execution-output artifacts 已全部 revert；没有 notebook changes 残留。
+
+### A+B published branch state
+
+| Branch | HEAD | Status |
+|---|---|---|
+| `v0.1-public-surface-helpers-walker-2026-05-08` | `6162f1e` | local + remote;combined A+B latest;current worktree branch |
+| `v0.1-public-surface-walker-2026-05-08` | `90d5b06` | local + remote;B-only walker snapshot retained |
+| `v0.1-public-surface-2026-05-06` | `95bbbb8` | local parent baseline;no A/B implementation commits |
+| `codex/v0.1-application-helpers-extension-2026-05-07` | `0d0b490` | local A implementation branch;blueprint archived |
+| `codex/v0.1-walker-mechanism-2026-05-07` | `7cf4ae4` | local B implementation branch;blueprint archived |
+
+### A+B outcome
+
+- **Direction B walker mechanism** complete:
+  - Implementation branch: `codex/v0.1-walker-mechanism-2026-05-07`
+  - Published B-only snapshot: `v0.1-public-surface-walker-2026-05-08` @ `90d5b06`
+  - Blueprint archived: `docs/blueprints/archive/2026-05-07_walker-mechanism.md` + `.audit.md`
+  - Delivered Tier 2 walker/view package under `kernel.application.walker`; B3 audit/store stream walker remains future-only.
+- **Direction A application ergonomic helpers** complete:
+  - Implementation branch: `codex/v0.1-application-helpers-extension-2026-05-07`
+  - Blueprint archived: `docs/blueprints/archive/2026-05-07_application-ergonomic-helpers-extension.md` + `.audit.md`
+  - Delivered `kernel.application.capability_helpers` package with 8 capability-family coverage (Batch 2 prior helpers + 5 new builder families).
+- **Combined latest**:
+  - Branch: `v0.1-public-surface-helpers-walker-2026-05-08` @ `6162f1e`
+  - Remote pushed to `origin`
+  - Focused regression on combined branch passed: 190 tests + 417 subtests.
+
+### Fresh session first action
+
+1. Confirm current branch and clean state:
+   - expected current branch: `v0.1-public-surface-helpers-walker-2026-05-08`
+   - expected HEAD: `6162f1e`
+   - expected `git status --short`: clean
+2. If starting **L direction / SDK shells G1-G5**, use the combined latest branch as the baseline unless explicitly comparing against pre-A+B parent.
+3. If housekeeping first, optional cleanup remains:
+   - remove no-longer-needed worktrees `/Users/zhenzhili/hnsm-backend-A` and `/Users/zhenzhili/hnsm-backend-B` only after confirming their branches are no longer needed locally.
+4. Sacred branches remain untouched: `master` and `v0.1-oss-prep`.
+
+<!-- Historical 2026-05-06 post-routemap state follows. -->
+
 最后更新:2026-05-06(`v0.1-public-surface-2026-05-06`;post-routemap light wrap-up:master plan close-out + tutorials committed,operational memory sync current)
 
 ## 当前阶段(2026-05-06 — ROUND STORY COMPLETION PLAN COMPLETE)
