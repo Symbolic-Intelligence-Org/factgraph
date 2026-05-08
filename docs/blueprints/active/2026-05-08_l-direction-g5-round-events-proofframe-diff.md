@@ -168,10 +168,46 @@ This matches the event-sourcing-style split (capture is an external, stateful, p
 
 **Conservative default:** (A) raw tuples. Direct mirror of A-side function signature; keeps SDK pure (no IO); leaves persistence to `kernel.audit.write_round_events_atomic` and reading to `kernel.audit.reader`.
 
-**Falsifiers required:**
-- F1: The G2 §5.1+§5.2 cross-cutting precedent ("raw application protocol DTOs at SDK boundary when frozen application-canonical AND no SDK alternative without inventing new outward surface") was scoped to `kernel.application.protocol`. Does it extend to `kernel.audit`? Source-grounded answer: `RoundEvent` is `@dataclass(frozen=True)` with canonical sorted fields and `__post_init__` validation; it is application-canonical in spirit (the audit module imports `kernel.application.protocol.common.JSONValue` for its payload type). Either accept the extension (raw tuples OK) or carve `kernel.audit` out (would force option B/C/D).
-- F2: G3 §5.1+§5.2 said substrate IR is NOT in scope. `kernel.audit` is neither substrate IR nor application protocol — it's a top-level sibling layer. Need a principled call: does "frozen + canonical" generalize, or does "lives under `kernel.application.protocol`" matter?
-- F3: Any SDK alternative without inventing surface? Currently no SDK-side alternative. Adding one (option C: pair object) creates new outward surface under `#6`.
+**Decision (2026-05-08):** Lock **option (A) — raw `tuple[RoundEvent, ...]` × 2 at the SDK boundary**, mirroring `kernel.audit.proof_frame_diff.build_proof_frame_diff(...)` 1:1. SDK shell signature shape (final method name pending §5.7):
+
+```python
+SDKStore.diff_proof_frames(
+    round_a_id: str,
+    round_b_id: str,
+    round_a_events: tuple[RoundEvent, ...],
+    round_b_events: tuple[RoundEvent, ...],
+    *,
+    warnings: tuple[WarningDTO, ...] = (),
+    include_unchanged: bool = False,
+) -> ProofFrameDiff
+```
+
+The SDK shell does no IO; users load events through `kernel.audit.load_audit_package` (or hold them from a fresh recorder), then pass the tuples in — same pattern as G2 ProofFrame Recheck which takes already-captured `SupportArtifact`.
+
+**Cross-cutting precedent layer clarification (key explicit rule):**
+
+The G2 §5.1+§5.2 precedent (raw frozen DTOs OK at SDK boundary) was originally scoped to `kernel.application.protocol`. G3 §5.2 then carved substrate IR (`RuleSpec` at `kernel.core.rules.rule_ir`) OUT. With G5 §5.3, the layer line is now stated explicitly:
+
+> **The boundary is NOT "only `kernel.application.protocol`". It is "frozen canonical DTO above `kernel.core` using `kernel.application.protocol` vocabulary".** `RoundEvent` and the supporting `kernel.audit` frozen DTOs (`ProofFrameDiff`, `FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference`) all qualify. `kernel.core.rules.rule_ir.RuleSpec` is excluded by the "above `kernel.core`" criterion (substrate IR), which preserves the G3 carve-out.
+
+This rule will appear in §6 invariants verbatim once scope-freezes.
+
+**Falsifier outcomes (3/3 PASS for option A):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Cross-cutting precedent extension to `kernel.audit` | `RoundEvent` at `src/kernel/audit/round_events.py:38-61` is `@dataclass(frozen=True)` with 6 canonical sorted fields and full `__post_init__` validation — same structural shape as `EvaluationOverlay` / `SupportArtifact` / `RuleLiteralPath` / `RuleAddedAtom` which already cross the SDK boundary per G2/G3. Imports `JSONValue` + `WarningDTO` from `kernel.application.protocol.common` (`round_events.py:11`) — uses protocol vocabulary directly. Same applies to `ProofFrameDiff` and supporting DTOs at `kernel.audit.proof_frame_diff` (also frozen, also import protocol vocabulary at `proof_frame_diff.py:7-8`). | PASS — extends the G2 precedent cleanly under the layer clarification. |
+| F2 | Layer position of `kernel.audit` and principled rule | Import-DAG inspection: `kernel.core.*` (substrate IR) sits at the bottom; `kernel.application.protocol` sits above core; `kernel.audit` imports protocol (`proof_frame_diff.py:7-8`) AND core (`audit/query.py:6-19`); `kernel.application.capability_helpers` and `kernel.application.walker` import `kernel.audit` (`capability_helpers/round_events.py:21`, `walker/views.py:34`); `kernel.sdk` sits at the top. So `kernel.audit` is sibling-DTO above protocol vocabulary, NOT substrate IR. The principled rule "frozen canonical DTO above `kernel.core` using protocol vocabulary" cleanly captures G2 + G3 + G5: G3's `RuleSpec` exclusion is preserved (substrate IR = below the line); `EvaluationOverlay` / `SupportArtifact` / `RuleLiteralPath` / `RuleAddedAtom` (G2/G3) and `RoundEvent` / `ProofFrameDiff` (G5) all clear the line. | PASS — no carve-out warranted; rule generalizes. |
+| F3 | Any SDK alternative without inventing outward surface | SDK input-pattern audit verified by grepping `def ...(self, ...)` in `src/kernel/sdk/store.py`: all 8 existing L methods take Python objects (frozen DTOs / SDK DSL objects / mappings); zero take a filesystem path as a method-level input. Path arguments appear only at constructor level (`from_schema_classes(..., ledger_path=None)` at `store.py`). Option (B) "SDK takes audit-package paths" would create a new method-level SDK input pattern under `#6` (no outward compat without consumer signal); plus it forces SDK to own file IO, depend on `kernel.audit.reader`, handle missing-file errors, and duplicate the loader's responsibility. Option (C) "SDK pair object `(round_id, events)`" would invent a new outward DTO type under `#6` without consumer signal. | PASS — options B/C add new outward surface; option A reuses the L pattern. |
+
+**Forward implications:**
+
+- §5.4 (return shape) is now nearly trivial — `ProofFrameDiff` is also a `kernel.audit` frozen DTO covered by the same precedent extension. Documented passthrough confirmed; not in `kernel.sdk.__all__`.
+- §5.5 (module placement + shared-validator decision) — only one G5 shell consuming `RoundEvent` tuples; inline-validate at the boundary; no new shared validator needed.
+- §5.6 (file naming) — single shell file `kernel/sdk/shells/proof_frame_diff.py`.
+- §5.7 (SDKStore method name) — `diff_proof_frames` (Group A from the §5.7 sub-question; verb-first, action-shape, no semantic collision with the DTO `ProofFrameDiff`).
+- §5.8 (error mapping) input paths land as: `$.diff_proof_frames.{round_a_id, round_b_id, round_a_events, round_b_events, warnings, request,}` + base. `ProofFrameDiffError` (a `ValueError` subclass at `proof_frame_diff.py:22`) remaps to `$.diff_proof_frames.request`; `ValueError` from `_require_non_empty_str` remaps to the corresponding `.<id>` path.
+- §6 invariants will encode the layer clarification verbatim so future SDK shells over audit / protocol DTOs inherit the rule without re-deriving it.
 
 ### 5.4 ProofFrame Diff return shape
 
