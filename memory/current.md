@@ -1,12 +1,15 @@
 # Current Operational Memory
 
-最后更新:2026-05-08(`codex/v0.1-l-g3-rule-overlays-2026-05-08`;G3 Rule Overlay SDK shells implemented,archived,verification-round Blocker fix landed,ready to publish snapshot pending user authorization)
+最后更新:2026-05-08(`v0.1-l-g3-rule-overlays-2026-05-08` @ `cb6d3bd` published;G3 Rule Overlay SDK shells implemented + archived + verification-round Blocker fix + published snapshot)
 
-## 当前阶段(2026-05-08 — L DIRECTION G3 RULE OVERLAY SDK SHELLS COMPLETE; PUBLISH PENDING USER AUTH)
+## 当前阶段(2026-05-08 — L DIRECTION G3 RULE OVERLAY SDK SHELLS PUBLISHED)
 
-**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 topic branch `codex/v0.1-l-g3-rule-overlays-2026-05-08`. G3 6-phase implementation done (Phase 0 `5437cd6` / Phase 1 `7f761bd` / Phase 2 `3526cc1` / Phase 3 `63c47ea` / Phase 4 `df772e2` / Phase 5 close-out `430bce2` rename + `3215083` content). Verification-round Blocker fix landing now (this commit) — shared `resolve_runtime_registry` helper extracted; 7 shells (G1+G4+G2+G3) updated; 12 new regression tests.
+**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 topic branch `codex/v0.1-l-g3-rule-overlays-2026-05-08` @ `cb6d3bd`. G3 6-phase implementation + 2-commit Phase 5 close-out + 1-commit verification-round polish done (Phase 0 `5437cd6` / Phase 1 `7f761bd` / Phase 2 `3526cc1` / Phase 3 `63c47ea` / Phase 4 `df772e2` / Phase 5 close-out `430bce2` rename + `3215083` content / verification-round polish `cb6d3bd`).
 
-**G3 published snapshot targets:** `v0.1-l-g3-rule-overlays-2026-05-08` (G3-only) + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-2026-05-08` (Path B combined per post-G2 strategy). Both pending explicit user authorization.
+**G3 published snapshots (verified post-push 2026-05-08):**
+- `origin/v0.1-l-g3-rule-overlays-2026-05-08` @ `cb6d3bd` — G3-only.
+- `origin/v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-2026-05-08` @ `cb6d3bd` — Path B combined (G1+G4+G2+G3 cumulative).
+- Prior snapshots unchanged: G2-only and G2 combined still at `d658390`; G1-only at `d6716a0`; G4-only at `acb5a6e`; sacred `master` and `v0.1-oss-prep` untouched.
 
 ### G3 outcome
 
@@ -21,10 +24,11 @@
 
 ### G3 follow-up
 
-- Publish `v0.1-l-g3-rule-overlays-2026-05-08` (G3-only) + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-2026-05-08` (Path B combined) from this verification-round HEAD pending user authorization.
-- G5 (TBD — Round events / ProofFrame diff) is next in L sequence; will inherit `kernel/sdk/shells/` subpackage at 8 modules and §5.1+§5.2 substrate-IR-out clarification.
+- G3-only + Path B combined snapshots published 2026-05-08 from verification-round HEAD `cb6d3bd`. No remaining publish action.
+- G5 (TBD — Round events / ProofFrame diff) is next in L sequence; will inherit `kernel/sdk/shells/` subpackage at 8 modules + shared `resolve_runtime_registry` boundary normalizer + §5.1+§5.2 substrate-IR-out clarification.
 - Sacred branches remain untouched: `master` and `v0.1-oss-prep`.
 - G1 + G4 + G2 published snapshot branches remain untouched at `d6716a0` / `acb5a6e` / `d658390`.
+- Watch for a post-publish verification round (G1/G4/G2 each had one with 1 Blocker + minor polish; G3's first Blocker was caught pre-publish, but a fresh round may still surface follow-ups).
 
 <!-- Historical 2026-05-08 G4 close-out state follows. -->
 
