@@ -142,3 +142,20 @@ Focused on candidate Blockers B.1, B.2 + Clarify items B.3, C.6, C.8, C.12.
 - **B.2 audit-fix**: wrap `_compiled_derivation_plan_to_application()` calls at `check.py:62-67` and `diagnose.py:67-72` with `try/except ValueError → raise SDKStoreError(..., path="$.check.derivation"/"$.diagnose.derivation") from exc`. Add regression test scenario per Round 2 Q4 (mock `_compiled_derivation_plan_to_application` to raise `ValueError`, assert SDKStoreError remap).
 - **Minor items**: defer to follow-up tasks. Several (B.4 fixture extraction, B.9 AST-based Q1 Sibling check, C.1/C.9/C.10 test coverage gaps) align naturally with G2's `kernel/sdk/shells/` migration trigger per §5.5; can be batched at that time.
 - **Implementation status**: G1 retains `implemented` status. B.2 is a remap-completeness gap (small audit-fix), not a structural failure invalidating the implementation. Audit-fix lands as polish commit on G1 branch on top of Phase 4 archive.
+
+### Audit-fix landed (2026-05-08)
+
+**B.2 fix:** Wrapped `_compiled_derivation_plan_to_application()` calls at `kernel/sdk/check.py` and `kernel/sdk/diagnose.py` with `try/except ValueError` → `raise SDKStoreError(f"invalid {check|diagnose} input: {exc}", path="$.{check|diagnose}.derivation") from exc`. The `__cause__` chain preserves the original `ValueError` for caller debugging.
+
+**Regression tests added:** `test_engine_ext_conflict_raises_sdk_store_error` in both `test_sdk_check.py` and `test_sdk_diagnose.py`. Each test patches `_compiled_derivation_plan_to_application` to raise a `ValueError` matching the actual `store.py:1617` `_resolve_engine_ext_for_evaluate_plan` error string ("Conflicting engine_ext between explicit derivation and compiled plan"), invokes `sdk.check` / `sdk.diagnose`, and asserts: (a) raised exception is `SDKStoreError`; (b) `path == "$.check.derivation"` / `"$.diagnose.derivation"`; (c) `__cause__` is the original `ValueError`; (d) message preserves "engine_ext" context.
+
+**Verification (post-fix):**
+
+- Focused G1 tests: **39 pass** (up from 37; +2 new B.2 regressions across check + diagnose).
+- Full kernel suite: **1501 pass / 1 skipped** (up from 1499; zero regression).
+- ruff: clean on all G1 files.
+- `git diff --check`: clean.
+
+**Net post-fix verdict: clean.** All §5 locks hold, B.2 remap completeness gap closed, 20 Minor items remain as deferred follow-up (none invalidating shipped behavior).
+
+**Minor items deferred:** A.1 (user guide section), B.1 / B.3 (resolved as theoretical), B.4 (validation duplication — intentional per §5.5), B.5 (error message verbosity), B.6 (type annotation looseness — intentional), B.7 (runtime error mock not needed per B.1 resolution), B.8 (forward ref runtime check), B.9 (AST-based Q1 Sibling check — v1-acceptable text grep), C.1/C.9/C.10 (binding/engine coverage gaps — recommend G2 batch), C.2 (function-level walker import grep gap), C.3 (hardcoded baseline), C.4 (redundant assertion), C.5 (brittle exception messages), C.7 (fixture duplication — intentional per §5.6), C.11 (mock scope note), C.6/C.8/C.12 (resolved acceptable). Several Minor items align with `kernel/sdk/shells/` migration trigger per §5.5 G2 trigger; can be batched at that time.

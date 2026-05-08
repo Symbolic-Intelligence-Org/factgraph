@@ -246,6 +246,26 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         mock_resolve.assert_called_once_with(derivation, explicit_registry=registry)
         self.assertIs(mock_runtime.call_args.kwargs["registry"], expected)
 
+    def test_engine_ext_conflict_raises_sdk_store_error(self) -> None:
+        """B.2 audit-fix regression: ValueError from `_compiled_derivation_plan_to_application`
+        (e.g., engine_ext conflict between explicit Derivation and compiled plan)
+        must remap to ``SDKStoreError`` per §5.3 lock, not leak as ``ValueError``.
+        """
+        sdk = _build_sdk()
+
+        with patch(
+            "kernel.sdk.diagnose._compiled_derivation_plan_to_application",
+            side_effect=ValueError(
+                "Conflicting engine_ext between explicit derivation and compiled plan"
+            ),
+        ):
+            with self.assertRaises(SDKStoreError) as ctx:
+                sdk.diagnose(_age_derivation(), {"$age": 30})
+
+        self.assertEqual(ctx.exception.path, "$.diagnose.derivation")
+        self.assertIsInstance(ctx.exception.__cause__, ValueError)
+        self.assertIn("engine_ext", str(ctx.exception))
+
     def test_diagnose_result_not_exported_from_kernel_sdk_all(self) -> None:
         import kernel.sdk as sdk_pkg
 

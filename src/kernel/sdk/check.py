@@ -66,12 +66,18 @@ def sdk_check(
             path="$.check.derivation",
         )
 
-    plan = _compiled_derivation_plan_to_application(
-        compiled_plans[0],
-        mode=engine,
-        explicit_engine_ext=getattr(derivation, "engine_ext", None),
-        engine_options=None,
-    )
+    try:
+        plan = _compiled_derivation_plan_to_application(
+            compiled_plans[0],
+            mode=engine,
+            explicit_engine_ext=getattr(derivation, "engine_ext", None),
+            engine_options=None,
+        )
+    except ValueError as exc:
+        raise SDKStoreError(
+            f"invalid check input: {exc}",
+            path="$.check.derivation",
+        ) from exc
     resolved_registry = sdk._resolve_runtime_registry(derivation, explicit_registry=registry)
 
     try:
