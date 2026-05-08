@@ -13,6 +13,8 @@
 
 **Convention reminder — `memory/current.md` tracks topic-branch HEAD, not published snapshot HEAD.** This file is updated on the topic branch *after* a publish event, so at any published snapshot HEAD the file naturally lags by 1 commit (the post-publish memory sync). Recorded in G3 archive audit log post-archive addendum 2026-05-08 and continues for G5.
 
+**G5 post-publish verification round (2026-05-09) — option B fix landed forward-only on topic.** Multi-agent read-only audit on the published HEAD `d4ceb3e` found 2 Blockers + 2 Minors, all doc/inventory drift from incomplete pre-publish polish — the polish updated SDK shell + SDKStore docstring + invariant test + §5.8 lock body + §9.4 test catalogue but missed (a) SDK API docs CN/EN per-method paragraph for `diff_proof_frames` (still listed 7-path / omitted `.include_unchanged`), (b) archive README G5 inventory row (7-path / 5 inline / 16 contract tests), (c) archived blueprint §7 acceptance line for §5.8, (d) archived blueprint §5.9 / §9.4 falsifier text. **Runtime at `d4ceb3e` is correct** — `isinstance(.., bool)` strict check is in place; consumer with `include_unchanged="yes"` gets `SDKStoreError` (safer than the docs claimed). Per option B (G3 structural-lag convention), published refs `d4ceb3e` stay immutable; doc polish lands forward-only on G5 topic; future Path B combined snapshot picks up the fix. **Published `d4ceb3e` has correct runtime but stale 7-path wording in 4 doc/inventory locations** until next combined snapshot.
+
 ### G5 outcome
 
 - **Shipped SDK method (1):** `SDKStore.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events, *, warnings=(), include_unchanged=False) -> ProofFrameDiff`.
