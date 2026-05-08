@@ -189,6 +189,16 @@ Options:
 
 **Conservative default:** raw `SupportArtifact`, by G2 §5.2 precedent and Sibling discipline.
 
+**Decision (2026-05-08):** Lock raw `SupportArtifact`. All three G3 SDK methods accept a raw `SupportArtifact` (`kernel.core.store._support.SupportArtifact`) as the `support` argument, mirroring the G2 ProofFrame Recheck pattern. No SDK wrapper, no `CheckResult` extraction, no internal `sdk.check(...)` call. Falsifier outcomes (3/3 PASS, identical to G2 §5.2 reasoning):
+
+- **F1**: `SupportArtifact` is `@dataclass(frozen=True)` with canonical sorted fields (`kernel/core/store/_support.py:96-126`); no SDK-layer state. **PASS**.
+- **F2**: A helpers `build_rule_disable_request(rule_spec, support, *, ...)`, `build_rule_literal_replace_request(...)`, `build_rule_add_condition_request(...)` (`kernel/application/capability_helpers/rule_overlays.py:27 / :57 / :96`) all accept `support: SupportArtifact` directly. **PASS**.
+- **F3**: Composition through `CheckResult.engine_payload` would force the SDK to inspect a `SupportArtifact | ProvenanceEnvelope` union and either reject non-native or call `sdk_check` internally — same Sibling-discipline violation G2 §5.2 already rejected. **PASS — composition rejected**.
+
+The G2 §5.1+§5.2 cross-cutting precedent ("raw application protocol DTOs at SDK boundary when frozen application-canonical AND no SDK alternative") covers this lock cleanly — `SupportArtifact` is frozen, application-canonical, and has no SDK-side alternative.
+
+### 5.4 Overlay / action argument shape
+
 **Falsifiers required:**
 
 - Confirm rule-overlay request DTOs require `support_artifact`.
@@ -229,11 +239,21 @@ Candidates:
 
 **Conservative default:** documented passthrough of raw result DTOs, mirroring G1 / G4 / G2.
 
-**Falsifiers required:**
+**Decision (2026-05-08):** Lock documented passthrough — each G3 method returns the raw application result DTO directly:
 
-- Verify result DTOs are frozen application protocol objects with no mutable SDK state.
-- Verify they are not exported from `kernel.sdk.__all__`.
-- Verify no wrapper signal exists in references or tests.
+- `disable_rule_*(...)` → `RuleDisableResult` (`kernel/application/protocol/rule_disable.py:80`)
+- `replace_rule_literal_*(...)` → `RuleLiteralReplaceResult` (`kernel/application/protocol/rule_literal_replace.py:82`)
+- `add_rule_condition_*(...)` → `RuleAddConditionResult` (`kernel/application/protocol/rule_add_condition.py:82`)
+
+(Method names are §5.7-pending; result DTO bindings are independent of method-name choice.) None of the three result DTOs is added to `kernel.sdk.__all__`; SDK callers either import them from `kernel.application.protocol` or use them via attribute access.
+
+**Falsifier outcomes (3/3 PASS):**
+
+- **F1**: All three result DTOs are frozen application protocol dataclasses (verified by class declarations and the established protocol pattern under `kernel/application/protocol/`); no mutable SDK state, no opaque internals. **PASS**.
+- **F2**: Current `kernel.sdk.__all__` length is 34 across G1 + G4 + G2 cycles; lock requires preservation. New G3 invariant test will mirror the G1+G4+G2 pattern asserting `__all__` length unchanged and result DTOs absent. **PASS — preservation locked**.
+- **F3**: No wrapper signal: G1 + G4 + G2 all ship documented passthrough (`CheckResult` / `DiagnoseResult` / `WhyNotUniverseResult` / `FactOverlayCheckResult` / `ProofFrameRecheckResult`); G3 inherits the established precedent without divergence. Adding wrappers would force a new outward compat commitment under `#6` without consumer signal. **PASS**.
+
+### 5.6 Module and file layout
 
 ### 5.6 Module and file layout
 
@@ -247,11 +267,26 @@ Options:
 
 **Conservative default:** one `shells/rule_overlays.py` module if §5.1 selects three `SDKStore` methods, because A grouped the three builders in one helper module while preserving separate functions.
 
-**Falsifiers required:**
+**Decision (2026-05-08):** Lock **three sibling modules** under `kernel/sdk/shells/`:
 
-- Verify whether one module makes sibling static scans harder or easier.
-- Verify whether three modules overfit implementation to runtime filenames and add noise.
-- Verify whether a nested package would be premature after G2 just activated `shells/`.
+- `kernel/sdk/shells/rule_disable.py` exporting `sdk_rule_disable(...)`
+- `kernel/sdk/shells/rule_literal_replace.py` exporting `sdk_rule_literal_replace(...)`
+- `kernel/sdk/shells/rule_add_condition.py` exporting `sdk_rule_add_condition(...)`
+
+File names mirror the application protocol/runtime filenames (`kernel/application/protocol/rule_{disable,literal_replace,add_condition}.py`, `kernel/application/rule_{disable,literal_replace,add_condition}_runtime.py`) so a Sibling static scan can locate substrate boundaries by filename alone. Function names mirror the file names with `sdk_` prefix, consistent with G1+G4+G2 (`sdk_check`, `sdk_diagnose`, `sdk_why_not`, `sdk_fact_overlay_check`, `sdk_proof_frame_recheck`). This decision overrides the blueprint's conservative default ("one consolidated module"), per falsifier evidence below. SDKStore *method* names are independent — locked separately at §5.7.
+
+**Falsifier outcomes (4/4 PASS, override conservative default):**
+
+- **F1**: Three modules make Sibling static scans **easier**, not harder. G2 invariant `test_g2_modules_do_not_import_internal_or_walker_layers` iterates per-shell-module (`G2_MODULES = ("kernel.sdk.shells.fact_overlay", "kernel.sdk.shells.proof_frame")`). G3 follows the same pattern with three module entries; one consolidated `rule_overlays.py` would force per-function source slicing inside one file, breaking the invariant test pattern. **PASS — three modules**.
+- **F2**: Three modules do not overfit to runtime filenames; they reflect the `#3` heterogeneity that §5.1 already locked. G2 already shipped two modules (`fact_overlay.py` + `proof_frame.py`) for two distinct capabilities; G3 is the same pattern at three modules. Consolidation would inherit G2 §5.8 false-merge risk. **PASS — heterogeneity preserved**.
+- **F3**: Nested `shells/rule/` subpackage is premature. G2 Phase 0 just activated `shells/` itself; adding a sub-subpackage would require another `__init__.py`, complicate import paths, and create a new convention before three modules prove the need. Sibling SDK consumers (G5 at minimum) may add more shell families; sub-subpackages can be reintroduced later under a separate trigger if the module count exceeds ~10. **PASS — defer subpackage**.
+- **F4**: Application's grouping of three builders in one `capability_helpers/rule_overlays.py` is helper-layer coincidence, not a contract for shell-layer grouping. A's helpers share validation logic via `_validate_rule_overlay_inputs(...)` and `_request_overlay(...)` which justifies one file at the helper layer. SDK shells do NOT share a build helper — each shell calls a single A helper and dispatches to a single runtime. The shared validation that DOES apply (rule, support, overlay) lives in `kernel/sdk/shells/_validation.py`, not duplicated in shell files. **PASS — no shared helper to colocate**.
+
+**Forward implications:**
+
+- §5.9 inherits three test file structure: `test_sdk_rule_disable.py`, `test_sdk_rule_literal_replace.py`, `test_sdk_rule_add_condition.py`, plus `test_sdk_g3_invariants.py`.
+- G3 invariant `test_g3_modules_live_in_shells_subpackage` will assert all three shell files exist; `G3_MODULES` constant lists three FQ module paths.
+- Post-G3 shell file count will be 8 (G1's 2 + G4's 1 + G2's 2 + G3's 3); `kernel/sdk/shells/` subpackage activated at G2 Phase 0 holds.
 
 ### 5.7 SDKStore method names
 
@@ -300,6 +335,36 @@ Expected categories:
 **Question:** What test files and invariant coverage does G3 require?
 
 **Conservative default:** one contract test file per method plus one G3 invariant file, unless §5.6 selects a one-module / one-file test layout.
+
+**Decision (2026-05-08):** Lock **three per-method contract test files + one G3 invariant file**, all flat under `src/kernel/tests/`:
+
+- `src/kernel/tests/test_sdk_rule_disable.py` (~13-15 contract tests for `sdk_rule_disable`)
+- `src/kernel/tests/test_sdk_rule_literal_replace.py` (~13-15 contract tests for `sdk_rule_literal_replace`)
+- `src/kernel/tests/test_sdk_rule_add_condition.py` (~13-15 contract tests for `sdk_rule_add_condition`)
+- `src/kernel/tests/test_sdk_g3_invariants.py` (6 invariant classes mirroring G1+G4+G2 6-class structure)
+
+Contract tests cover (per method): happy path with seeded store + real SupportArtifact + real RuleSpec; non-Rule input rejection (raw RuleSpec / Derivation / dict — all rejected per §5.2 lock); non-SupportArtifact rejection; non-EvaluationOverlay rejection (when `overlay` argument is non-None); invalid action arguments per family; ProtocolShapeError from request DTO; unexpected runtime exception (defensive remap pattern); engine + registry passthrough where applicable; result DTO not in `kernel.sdk.__all__`; Sibling discipline runtime patch + static source scan.
+
+G3 invariant file mirrors G2 1:1 with G3 substitutions:
+
+1. `test_sdk_all_unchanged_and_g3_result_types_not_exported` — `__all__` length still 34, result DTOs and SDK function names not exported.
+2. `test_g3_methods_are_instance_methods_and_no_scenario_method_shipped` — three `SDKStore` methods callable; reserved scenario names absent.
+3. `test_g3_modules_live_in_shells_subpackage` — three shell files exist under `kernel/sdk/shells/`; flat-layout files do not.
+4. `test_g3_modules_do_not_import_internal_or_walker_layers` — same forbidden-import set as G1+G4+G2 (capability_helpers `_binding`, `_reject_sdk_origin`, walker, audit, frontier).
+5. `test_store_methods_remain_thin_delegate_methods` — each method body is `from .shells.<x> import sdk_<x>; return sdk_<x>(self, ...)`; assertions check call/instantiation patterns (`RuleDisableRequest(`, etc.) so legitimate docstring references don't false-trigger.
+6. `test_store_method_docstrings_record_boundary_contracts` — each docstring includes required type names + locked `$.<method>.<arg>` paths from §5.8.
+
+**Falsifier outcomes (3/3 PASS):**
+
+- **F1**: One contract file per method is consistent with G1 (`test_sdk_check.py` + `test_sdk_diagnose.py`), G4 (`test_sdk_why_not.py`), and G2 (`test_sdk_fact_overlay.py` + `test_sdk_proof_frame.py`). Three G3 files match the three §5.6 shells 1:1, making targeted test execution and Sibling static scans straightforward. **PASS — pattern consistent**.
+- **F2**: 6-class invariant mirror is the established G1+G4+G2 cadence. Each invariant maps 1:1 to a §5.x lock dimension. The G3 invariant file replaces G3-specific module list constants (`G3_MODULES`) but keeps the structural skeleton. **PASS — mirror valid**.
+- **F3**: Tests stay flat under `src/kernel/tests/`; no nested `tests/sdk/` directory. Fixtures (Person Entity, `_seed_person`, `_age_rule`, `_capture_support`, etc.) inline per test file or shared via existing fixture helpers — same approach as G2. **PASS — flat layout preserved**.
+
+**Forward implications:**
+
+- Total post-G3 SDK shell test count target: ~39-45 contract tests across G3's three files + 6 G3 invariants = ~45-51 G3-relevant tests.
+- Estimated full kernel suite at G3 published HEAD: ~1620 OK / 1 skipped (extrapolating from G2's 1573 + ~45-50 new G3 tests).
+- §5.8 must enumerate all error paths before per-method contract tests can lock specific path assertions.
 
 **Falsifiers required:**
 
