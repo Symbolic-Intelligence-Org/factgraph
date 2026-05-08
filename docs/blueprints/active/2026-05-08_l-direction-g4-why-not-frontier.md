@@ -100,12 +100,22 @@ This blueprint is at `draft` status. The questions below must be resolved before
 
 **Conservative default:** SDK `Derivation` + explicit finite candidate universe.
 
-**Falsifiers required:**
+**Decision (2026-05-08):** Lock option 1 — `SDKStore.why_not(derivation, candidates, *, engine="native", registry=None) -> WhyNotUniverseResult`. The SDK accepts an SDK `Derivation` and an explicit candidate-universe argument; it lowers the derivation through G1's existing chain, builds a `WhyNotUniverseRequest` via the Tier 2 helper, and delegates to `check_why_not_universe(...)`. SDK never accepts a `CompiledDerivationPlan` and never auto-discovers the universe from the store.
 
-- Confirm the Why-not application contract requires an explicit candidate universe and does not search broadly.
-- Confirm SDK `Derivation` lowering can reuse the G1 `_compile_derivation_input(...)` / `_compiled_derivation_plan_to_application(...)` path.
-- Reject `CompiledDerivationPlan` unless a source-grounded SDK precedent exists for accepting application protocol inputs.
-- Reject store-wide universe discovery unless user signal justifies a new outward compatibility commitment.
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Why-not application contract requires an explicit candidate universe and does not search broadly | `WhyNotUniverseRequest.candidate_universe: tuple[BindingItems, ...]` is a required positional field (`derivation_why_not.py:182`) validated by `_validate_complete_head_universe(...)` in `__post_init__` (`derivation_why_not.py:192-200`). The runtime `check_why_not_universe(request, *, store, registry=None)` only reads `request.candidate_universe` (`why_not_runtime.py:60-76`); module docstring is explicit: "Why-not evaluates one explicit finite candidate universe into a green/red board" (`why_not_runtime.py:1-6`). No auto-discovery code path exists. | PASS — explicit universe required. |
+| F2 | SDK `Derivation` lowering can reuse G1's `_compile_derivation_input(...)` / `_compiled_derivation_plan_to_application(...)` path | `WhyNotUniverseRequest.plan` is `CompiledDerivationPlan`, identical to `CheckRequest.plan` and `DiagnoseRequest.plan` already produced by the G1 chain. G1's flow (`check.py:60-95` post-Round 4 Q1) lowers `SDK Derivation -> compiled plans (sdk._compile_derivation_input) -> CompiledDerivationPlan (_compiled_derivation_plan_to_application)`, then passes the plan into the A helper. G4 reuses the same chain verbatim and feeds the result into `build_why_not_candidate_universe(plan, candidates)`. | PASS — chain reusable, no new lowering work in G4. |
+| F3 | Reject `CompiledDerivationPlan` unless a source-grounded SDK precedent exists for accepting application protocol inputs | G1 §5.7 lock (archived blueprint) rejects `CompiledDerivationPlan` at the SDK boundary as already-lowered application-layer entry. No SDK method shipped to date accepts `CompiledDerivationPlan` as input. `kernel.sdk._validation.validate_derivation(obj, *, path)` rejects everything that is not `kernel.sdk.dsl.Derivation`, and G4 will reuse it verbatim with `path="$.why_not.derivation"`. | PASS — reject confirmed; no precedent for accepting `CompiledDerivationPlan`. |
+| F4 | Reject store-wide universe discovery unless user signal justifies a new outward compatibility commitment | No A helper, no runtime function, and no SDK precedent currently performs store-wide universe discovery for Why-not. Adding it would (a) introduce a new outward shape under `#6` (no outward compat without signal), and (b) cross substrate boundaries beyond G4's scope. Round 8 G4 verdict cited only the explicit-universe shape. | PASS — reject confirmed; future store-discovery, if ever needed, requires its own scoped blueprint. |
+
+**Forward implications:**
+
+- §5.2 (candidate universe input shape) is the next falsifier and is sharpened by this lock: the SDK input is a `candidates` argument carrying an explicit finite universe; A's `build_why_not_candidate_universe(plan, candidates)` will normalize it. The remaining §5.2 question is which row forms (mappings / sequences / SDK refs / `BindingItems`) the SDK accepts.
+- G4 reuses `kernel.sdk._validation.validate_derivation(...)` (Round 4 Q1 extraction). No additional Derivation-shape validator is needed.
+- G4's SDK signature pattern parallels G1: `(derivation, <capability-specific second arg>, *, engine="native", registry=None)`. This consistency is a side-effect of the lock, not a separate constraint.
 
 ### 5.2 Candidate universe input shape
 
