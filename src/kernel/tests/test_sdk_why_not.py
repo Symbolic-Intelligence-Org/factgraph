@@ -169,7 +169,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
     def test_capability_helper_error_remaps_to_sdk_store_error_with_cause(self) -> None:
         sdk = _build_sdk()
 
-        with patch("kernel.sdk.why_not.build_why_not_candidate_universe") as mock_builder:
+        with patch("kernel.sdk.shells.why_not.build_why_not_candidate_universe") as mock_builder:
             mock_builder.side_effect = CapabilityHelperError("bad candidate input")
             with self.assertRaises(SDKStoreError) as ctx:
                 sdk.why_not(_age_derivation(), [])
@@ -180,7 +180,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
     def test_engine_is_passed_to_request(self) -> None:
         sdk = _build_sdk()
 
-        with patch("kernel.sdk.why_not.check_why_not_universe", return_value=_empty_result()) as mock_runtime:
+        with patch("kernel.sdk.shells.why_not.check_why_not_universe", return_value=_empty_result()) as mock_runtime:
             result = sdk.why_not(_age_derivation(), [], engine="souffle")
 
         self.assertEqual(result.status, "completed")
@@ -194,7 +194,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         expected = object()
 
         with patch.object(sdk, "_resolve_runtime_registry", return_value=expected) as mock_resolve, patch(
-            "kernel.sdk.why_not.check_why_not_universe",
+            "kernel.sdk.shells.why_not.check_why_not_universe",
             return_value=_empty_result(),
         ) as mock_runtime:
             result = sdk.why_not(derivation, [], registry=registry)
@@ -207,7 +207,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "kernel.sdk.why_not._compiled_derivation_plan_to_application",
+            "kernel.sdk.shells.why_not._compiled_derivation_plan_to_application",
             side_effect=ValueError(
                 "Conflicting engine_ext between explicit derivation and compiled plan"
             ),
@@ -238,7 +238,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "kernel.sdk.why_not.WhyNotUniverseRequest",
+            "kernel.sdk.shells.why_not.WhyNotUniverseRequest",
             side_effect=ProtocolShapeError("engine must be one of"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -251,7 +251,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "kernel.sdk.why_not.check_why_not_universe",
+            "kernel.sdk.shells.why_not.check_why_not_universe",
             side_effect=WhyNotRuntimeError(
                 "runtime invariant failed",
                 code="WHY_NOT_TEST_FAILURE",
@@ -272,10 +272,10 @@ class SDKWhyNotContractTests(unittest.TestCase):
     def test_q1_sibling_why_not_does_not_call_sdk_check_or_diagnose_at_runtime(self) -> None:
         sdk = _build_sdk()
 
-        with patch("kernel.sdk.check.sdk_check") as mock_check, patch(
-            "kernel.sdk.diagnose.sdk_diagnose"
+        with patch("kernel.sdk.shells.check.sdk_check") as mock_check, patch(
+            "kernel.sdk.shells.diagnose.sdk_diagnose"
         ) as mock_diagnose, patch(
-            "kernel.sdk.why_not.check_why_not_universe",
+            "kernel.sdk.shells.why_not.check_why_not_universe",
             return_value=_empty_result(),
         ):
             sdk.why_not(_age_derivation(), [])
@@ -284,13 +284,15 @@ class SDKWhyNotContractTests(unittest.TestCase):
         mock_diagnose.assert_not_called()
 
     def test_q1_sibling_why_not_module_does_not_import_sdk_check_or_diagnose(self) -> None:
-        import kernel.sdk.why_not as why_not_module
+        import kernel.sdk.shells.why_not as why_not_module
 
         source = inspect.getsource(why_not_module)
         self.assertNotIn("from .check", source)
         self.assertNotIn("from .diagnose", source)
         self.assertNotIn("from kernel.sdk.check", source)
         self.assertNotIn("from kernel.sdk.diagnose", source)
+        self.assertNotIn("from kernel.sdk.shells.check", source)
+        self.assertNotIn("from kernel.sdk.shells.diagnose", source)
         self.assertNotIn("sdk_check(", source)
         self.assertNotIn("sdk_diagnose(", source)
 

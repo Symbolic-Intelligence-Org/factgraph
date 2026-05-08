@@ -1,10 +1,11 @@
 """Unit tests for the shared SDK shell input validators.
 
-Exercises ``kernel.sdk._validation.validate_derivation`` and
+Exercises ``kernel.sdk.shells._validation.validate_derivation`` and
 ``validate_binding`` directly: behavior parity vs the inlined G1 validators
-they replaced (Q1 follow-up to Round 4 audit), and the path-parameter
-contract that lets multiple SDK shell methods (Check, Diagnose, future G4
-Why-not + Frontier, etc.) share validators without duplicating logic.
+they replaced (Q1 follow-up to Round 4 audit), the path-parameter contract
+that lets multiple SDK shell methods (Check, Diagnose, Why-not, future G2
+shells, etc.) share validators without duplicating logic, and the post-G2
+Phase 0 hygiene location under ``kernel/sdk/shells/``.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from __future__ import annotations
 import unittest
 
 from kernel.sdk import Derivation, Entity, Field, Identity, SDKStoreError, vars
-from kernel.sdk._validation import validate_binding, validate_derivation
+from kernel.sdk.shells._validation import validate_binding, validate_derivation
 
 
 class Person(Entity):

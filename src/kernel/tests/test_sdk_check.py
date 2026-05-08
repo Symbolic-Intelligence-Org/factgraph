@@ -162,7 +162,7 @@ class SDKCheckContractTests(unittest.TestCase):
     def test_capability_helper_error_remaps_to_sdk_store_error_with_cause(self) -> None:
         sdk = _build_sdk()
 
-        with patch("kernel.sdk.check.build_check_request") as mock_builder:
+        with patch("kernel.sdk.shells.check.build_check_request") as mock_builder:
             mock_builder.side_effect = CapabilityHelperError("bad helper input")
             with self.assertRaises(SDKStoreError) as ctx:
                 sdk.check(_age_derivation(), {"$age": 30})
@@ -173,7 +173,7 @@ class SDKCheckContractTests(unittest.TestCase):
     def test_origin_package_error_remaps_to_sdk_store_error_with_cause(self) -> None:
         sdk = _build_sdk()
 
-        with patch("kernel.sdk.check.build_check_request") as mock_builder:
+        with patch("kernel.sdk.shells.check.build_check_request") as mock_builder:
             mock_builder.side_effect = OriginPackageError("sdk object leaked")
             with self.assertRaises(SDKStoreError) as ctx:
                 sdk.check(_age_derivation(), {"$age": 30})
@@ -184,8 +184,8 @@ class SDKCheckContractTests(unittest.TestCase):
     def test_engine_is_passed_to_builder(self) -> None:
         sdk = _build_sdk()
 
-        with patch("kernel.sdk.check.build_check_request") as mock_builder, patch(
-            "kernel.sdk.check.check_derivation_binding"
+        with patch("kernel.sdk.shells.check.build_check_request") as mock_builder, patch(
+            "kernel.sdk.shells.check.check_derivation_binding"
         ) as mock_runtime:
             mock_builder.side_effect = RuntimeError("stop after observing engine")
             with self.assertRaises(RuntimeError):
@@ -201,7 +201,7 @@ class SDKCheckContractTests(unittest.TestCase):
         expected = object()
 
         with patch.object(sdk, "_resolve_runtime_registry", return_value=expected) as mock_resolve, patch(
-            "kernel.sdk.check.check_derivation_binding"
+            "kernel.sdk.shells.check.check_derivation_binding"
         ) as mock_runtime:
             mock_runtime.return_value = CheckResult(
                 status="failed",
@@ -224,7 +224,7 @@ class SDKCheckContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "kernel.sdk.check._compiled_derivation_plan_to_application",
+            "kernel.sdk.shells.check._compiled_derivation_plan_to_application",
             side_effect=ValueError(
                 "Conflicting engine_ext between explicit derivation and compiled plan"
             ),

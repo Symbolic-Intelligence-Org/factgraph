@@ -48,7 +48,7 @@ EXPECTED_SDK_ALL: tuple[str, ...] = (
     "vars",
 )
 
-G1_MODULES = ("kernel.sdk.check", "kernel.sdk.diagnose")
+G1_MODULES = ("kernel.sdk.shells.check", "kernel.sdk.shells.diagnose")
 FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
     "kernel.application.capability_helpers._binding",
     "_reject_sdk_origin",
@@ -73,11 +73,15 @@ class SDKG1InvariantTests(unittest.TestCase):
         self.assertTrue(callable(getattr(SDKStore, "diagnose", None)))
         self.assertFalse(hasattr(SDKStore, "explain"))
 
-    def test_g1_modules_are_flat_and_no_shells_package_exists(self) -> None:
+    def test_g1_modules_live_in_shells_subpackage(self) -> None:
+        """Retrofit per G2 §5.5 #P1 carve-out: G1 shells migrated into kernel/sdk/shells/."""
         sdk_dir = Path(inspect.getfile(SDKStore)).parent
-        self.assertTrue((sdk_dir / "check.py").is_file())
-        self.assertTrue((sdk_dir / "diagnose.py").is_file())
-        self.assertFalse((sdk_dir / "shells").exists())
+        self.assertTrue((sdk_dir / "shells").is_dir())
+        self.assertTrue((sdk_dir / "shells" / "__init__.py").is_file())
+        self.assertTrue((sdk_dir / "shells" / "check.py").is_file())
+        self.assertTrue((sdk_dir / "shells" / "diagnose.py").is_file())
+        self.assertFalse((sdk_dir / "check.py").exists())
+        self.assertFalse((sdk_dir / "diagnose.py").exists())
 
     def test_g1_modules_do_not_import_internal_or_walker_layers(self) -> None:
         for module_name in G1_MODULES:
@@ -91,12 +95,12 @@ class SDKG1InvariantTests(unittest.TestCase):
         check_source = inspect.getsource(SDKStore.check)
         diagnose_source = inspect.getsource(SDKStore.diagnose)
 
-        self.assertIn("from .check import sdk_check", check_source)
+        self.assertIn("from .shells.check import sdk_check", check_source)
         self.assertIn("return sdk_check(", check_source)
         self.assertNotIn("build_check_request", check_source)
         self.assertNotIn("check_derivation_binding", check_source)
 
-        self.assertIn("from .diagnose import sdk_diagnose", diagnose_source)
+        self.assertIn("from .shells.diagnose import sdk_diagnose", diagnose_source)
         self.assertIn("return sdk_diagnose(", diagnose_source)
         self.assertNotIn("build_diagnose_request", diagnose_source)
         self.assertNotIn("diagnose_derivation_binding", diagnose_source)

@@ -38,8 +38,8 @@ from kernel.application.protocol import CheckResult
 from kernel.core.rules.rule_ir import RuleCompileError
 
 from ._validation import validate_binding, validate_derivation
-from .errors import SDKStoreError
-from .store import _compiled_derivation_plan_to_application
+from ..errors import SDKStoreError
+from ..store import _compiled_derivation_plan_to_application
 
 
 def sdk_check(

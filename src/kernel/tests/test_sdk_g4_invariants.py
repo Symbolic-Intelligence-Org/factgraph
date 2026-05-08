@@ -6,8 +6,8 @@ lock. Active class:
 
 1. `test_sdk_all_unchanged_and_why_not_result_not_exported` — §5.3
 2. `test_sdk_store_why_not_is_instance_method` — §5.4
-3. `test_no_frontier_sdk_module_exists` — §5.4 Frontier defer (G4-specific)
-4. `test_g4_modules_are_flat_and_no_shells_package_exists` — §5.5
+3. `test_no_frontier_sdk_module_or_method_exists` — §5.4 Frontier defer (G4-specific)
+4. `test_g4_modules_live_in_shells_subpackage` — §5.5 (retrofit per G2 §5.5 #P1 carve-out)
 5. `test_g4_modules_do_not_import_internal_or_walker_layers` — §6 layer isolation
 6. `test_store_method_remains_thin_delegate_method` — §6 thin-delegate
 7. `test_store_method_docstring_records_boundary_contract` — §5.7 + §6 docstring
@@ -24,7 +24,7 @@ from kernel import sdk as kernel_sdk
 from kernel.sdk import SDKStore
 
 
-G4_MODULES = ("kernel.sdk.why_not",)
+G4_MODULES = ("kernel.sdk.shells.why_not",)
 FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
     "kernel.application.capability_helpers._binding",
     "_reject_sdk_origin",
@@ -50,30 +50,31 @@ class SDKG4InvariantTests(unittest.TestCase):
     def test_sdk_store_why_not_is_instance_method(self) -> None:
         """§5.4 lock: ``why_not`` is an SDKStore instance method, not a free function.
 
-        ``kernel.sdk.why_not`` resolves to the submodule (``why_not.py``) once
-        any test in the process has imported it; the lock is that the SDK
-        package never exposes ``why_not`` as a callable free function.
+        Post-G2 Phase 0 hygiene: the shell module lives at
+        ``kernel.sdk.shells.why_not``, not at ``kernel.sdk.why_not``.
+        ``kernel.sdk.why_not`` therefore should not exist either as a
+        callable free function or as a submodule attribute.
         """
-        import types
-
         self.assertTrue(hasattr(SDKStore, "why_not"))
         self.assertTrue(callable(SDKStore.why_not))
-        if hasattr(kernel_sdk, "why_not"):
-            self.assertIsInstance(kernel_sdk.why_not, types.ModuleType)
+        self.assertFalse(hasattr(kernel_sdk, "why_not"))
 
     def test_no_frontier_sdk_module_or_method_exists(self) -> None:
-        """§5.4 lock: G4 ships no Frontier SDK method or module."""
+        """§5.4 lock: G4 ships no Frontier SDK method or module (flat or under shells/)."""
         sdk_dir = pathlib.Path(kernel_sdk.__file__).parent
         self.assertFalse((sdk_dir / "frontier.py").exists())
+        self.assertFalse((sdk_dir / "shells" / "frontier.py").exists())
         self.assertFalse(hasattr(kernel_sdk, "frontier"))
         self.assertFalse(hasattr(SDKStore, "frontier"))
         self.assertFalse(hasattr(SDKStore, "frontier_view_facts"))
 
-    def test_g4_modules_are_flat_and_no_shells_package_exists(self) -> None:
-        """§5.5 lock: ``why_not.py`` is flat at ``src/kernel/sdk/``; no ``shells/`` subpackage."""
+    def test_g4_modules_live_in_shells_subpackage(self) -> None:
+        """Retrofit per G2 §5.5 #P1 carve-out: ``why_not.py`` migrated into ``kernel/sdk/shells/``."""
         sdk_dir = pathlib.Path(kernel_sdk.__file__).parent
-        self.assertTrue((sdk_dir / "why_not.py").is_file())
-        self.assertFalse((sdk_dir / "shells").exists())
+        self.assertTrue((sdk_dir / "shells").is_dir())
+        self.assertTrue((sdk_dir / "shells" / "__init__.py").is_file())
+        self.assertTrue((sdk_dir / "shells" / "why_not.py").is_file())
+        self.assertFalse((sdk_dir / "why_not.py").exists())
 
     def test_g4_modules_do_not_import_internal_or_walker_layers(self) -> None:
         """§6 lock: G4 SDK modules must not import application internals, walker, or audit layers."""
@@ -85,10 +86,10 @@ class SDKG4InvariantTests(unittest.TestCase):
                     self.assertNotIn(forbidden, source)
 
     def test_store_method_remains_thin_delegate_method(self) -> None:
-        """§6 thin-delegate lock: ``SDKStore.why_not`` body is just ``from .why_not import ...; return ...``."""
+        """§6 thin-delegate lock: ``SDKStore.why_not`` body is just ``from .shells.why_not import ...; return ...``."""
         why_not_source = inspect.getsource(SDKStore.why_not)
 
-        self.assertIn("from .why_not import sdk_why_not", why_not_source)
+        self.assertIn("from .shells.why_not import sdk_why_not", why_not_source)
         self.assertIn("return sdk_why_not(", why_not_source)
         self.assertNotIn("build_why_not_candidate_universe", why_not_source)
         self.assertNotIn("check_why_not_universe", why_not_source)

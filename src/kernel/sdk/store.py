@@ -304,7 +304,7 @@ class SDKStore:
                 validation errors. Helper errors are preserved as
                 ``__cause__``.
         """
-        from .check import sdk_check
+        from .shells.check import sdk_check
 
         return sdk_check(self, derivation, binding, engine=engine, registry=registry)
 
@@ -338,7 +338,7 @@ class SDKStore:
                 validation errors. Helper errors are preserved as
                 ``__cause__``.
         """
-        from .diagnose import sdk_diagnose
+        from .shells.diagnose import sdk_diagnose
 
         return sdk_diagnose(self, derivation, binding, engine=engine, registry=registry)
 
@@ -382,7 +382,7 @@ class SDKStore:
                 failures. Original exceptions are preserved as
                 ``__cause__``.
         """
-        from .why_not import sdk_why_not
+        from .shells.why_not import sdk_why_not
 
         return sdk_why_not(self, derivation, candidates, engine=engine, registry=registry)
 

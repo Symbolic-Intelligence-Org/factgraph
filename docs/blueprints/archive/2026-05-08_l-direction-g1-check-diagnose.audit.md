@@ -202,3 +202,19 @@ Focused on candidate Blockers B.1, B.2 + Clarify items B.3, C.6, C.8, C.12.
 - The `kernel/sdk/shells/` subpackage migration trigger per §5.5 is **not** activated by this commit — `_validation.py` is a sibling module to `check.py` / `diagnose.py`, not a shells container. G2/G4 Step 0 still owns the shells-vs-flat re-evaluation.
 
 **Net verdict:** clean refactor; all §5 locks hold; no Minor items added.
+
+### G2 Phase 0 hygiene — `#P1` carve-out for `test_g1_modules_are_flat_and_no_shells_package_exists` (2026-05-08)
+
+**Principle id:** `#P1` (revision flow over `#1`-`#19`).
+
+**Reason:** G2 Step 0 §5.5 lock activates the G1 §5.5 forward trigger to G2 (`G1 archive:309`: "when G2 would add the third/fourth SDK shell file, its Step 0 MUST re-evaluate whether to migrate G1/G2 shell files into a subpackage"). G2 §5.5 falsifier pass concluded migrate at the trigger point rather than defer again. The G1 invariant test `test_g1_modules_are_flat_and_no_shells_package_exists` was authored to enforce flat layout *until the trigger fires*; it now retrofits to assert the post-migration shells/ layout. Carve-out is fully sanctioned by the G1 archived blueprint's own forward-trigger language.
+
+**Scope:** `test_g1_modules_are_flat_and_no_shells_package_exists` renamed to `test_g1_modules_live_in_shells_subpackage` and inverted to assert `kernel/sdk/shells/{check,diagnose}.py` exist while `kernel/sdk/{check,diagnose}.py` do not. Thin-delegate text assertions in `test_store_methods_remain_thin_delegate_methods` updated: `"from .check import sdk_check"` → `"from .shells.check import sdk_check"`, `"from .diagnose import sdk_diagnose"` → `"from .shells.diagnose import sdk_diagnose"`. `G1_MODULES` constant retargeted to `("kernel.sdk.shells.check", "kernel.sdk.shells.diagnose")`.
+
+**Impact:** Test names and assertion strings change; behavioral semantics unchanged. The locked §5.5 design intent — keeping G1 shells out of `kernel/sdk/store.py` and discoverable as standalone modules — is preserved. SDK consumers calling `sdk.check(...)` / `sdk.diagnose(...)` are unaffected; the public method surface is unchanged. The G1 published snapshot branches `v0.1-l-g1-check-diagnose-2026-05-08` and `v0.1-public-surface-helpers-walker-l-g1-2026-05-08` are NOT touched (carve-out lives only on G2 topic branch and forward).
+
+**Reviewer ack:** explicit user authorization at G2 §5.5 lock (commit `7ffd6e7` on G2 topic branch); migration landed in G2 Phase 0 commit on `codex/v0.1-l-g2-fact-overlay-proofframe-recheck-2026-05-08` and forward.
+
+**Historical-handling per `#P1` rule 8:** `retrofit` (rename + invert assertions). Not deprecate; the test's purpose still applies, just at the new location.
+
+**Net verdict:** carve-out recorded. G1 §5 locks remain in force; only the test scaffolding moved.

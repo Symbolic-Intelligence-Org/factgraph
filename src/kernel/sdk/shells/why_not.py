@@ -42,8 +42,8 @@ from kernel.application.why_not_runtime import WhyNotRuntimeError, check_why_not
 from kernel.core.rules.rule_ir import RuleCompileError
 
 from ._validation import validate_derivation
-from .errors import SDKStoreError
-from .store import _compiled_derivation_plan_to_application
+from ..errors import SDKStoreError
+from ..store import _compiled_derivation_plan_to_application
 
 
 def sdk_why_not(

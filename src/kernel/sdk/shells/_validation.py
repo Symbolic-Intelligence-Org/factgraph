@@ -1,9 +1,11 @@
 """Shared input validators for SDK shell methods.
 
-Currently used by ``kernel.sdk.check`` and ``kernel.sdk.diagnose`` (G1).
-Forward-readable target for G4 (Why-not + Frontier) and later G2/G3/G5
-shells: each shell passes its own capability-specific error path so the
-resulting ``SDKStoreError`` carries the correct boundary identifier.
+Used by ``kernel.sdk.shells.check`` / ``kernel.sdk.shells.diagnose`` (G1)
+and ``kernel.sdk.shells.why_not`` (G4); G2 and later groups will reuse
+these validators verbatim with capability-specific ``SDKStoreError.path``
+arguments. Lives at ``kernel/sdk/shells/_validation.py`` after G2 Phase 0
+hygiene migrated all SDK shell modules into the ``kernel/sdk/shells/``
+subpackage.
 
 The module is private (``_validation``) and the functions are imported
 locally by sibling shell modules — nothing here is part of
@@ -15,8 +17,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from .dsl import Derivation
-from .errors import SDKStoreError
+from ..dsl import Derivation
+from ..errors import SDKStoreError
 
 
 def validate_derivation(derivation: Any, *, path: str) -> None:
