@@ -1,8 +1,8 @@
 """SDK shell for G5 ProofFrame Diff capability.
 
 Implements the ``SDKStore.diff_proof_frames`` facade method per the
-active G5 blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g5-round-events-proofframe-diff.md``
+archived G5 blueprint
+``docs/blueprints/archive/2026-05-08_l-direction-g5-round-events-proofframe-diff.md``
 §5.
 
 Public surface contract per blueprint §5 locks:
@@ -24,14 +24,15 @@ Public surface contract per blueprint §5 locks:
                ``kernel.sdk.__all__``).
 - Errors:      Non-SDK exceptions crossing the SDK boundary remap to
                ``SDKStoreError(...) from exc`` per §5.8 lock with
-               7 capability-specific paths
+               8 capability-specific paths
                (``$.diff_proof_frames.round_a_id`` /
                ``$.diff_proof_frames.round_b_id`` /
                ``$.diff_proof_frames.round_a_events`` /
                ``$.diff_proof_frames.round_b_events`` /
                ``$.diff_proof_frames.warnings`` /
+               ``$.diff_proof_frames.include_unchanged`` /
                ``$.diff_proof_frames.request`` / base
-               ``$.diff_proof_frames``). The 5 input paths use inline
+               ``$.diff_proof_frames``). The 6 input paths use inline
                pre-validation; ``.request`` catches
                ``ProofFrameDiffError`` from the runtime; the base
                path is a defensive ``Exception`` wrap. No
@@ -121,6 +122,12 @@ def sdk_diff_proof_frames(
         raise SDKStoreError(
             "warnings must be tuple[WarningDTO, ...]",
             path="$.diff_proof_frames.warnings",
+        )
+
+    if not isinstance(include_unchanged, bool):
+        raise SDKStoreError(
+            "include_unchanged must be bool",
+            path="$.diff_proof_frames.include_unchanged",
         )
 
     try:

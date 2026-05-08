@@ -764,6 +764,8 @@ class SDKStore:
                 or non-``RoundEvent`` element in ``round_b_events``;
                 ``$.diff_proof_frames.warnings`` for non-tuple or
                 non-``WarningDTO`` element in ``warnings``;
+                ``$.diff_proof_frames.include_unchanged`` for
+                non-``bool`` ``include_unchanged``;
                 ``$.diff_proof_frames.request`` for ``ProofFrameDiffError``
                 from helper-internal validation (malformed event
                 payloads, duplicate frame identity, etc.); and

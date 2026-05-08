@@ -1,7 +1,7 @@
 """SDKStore.diff_proof_frames contract tests.
 
-Phase 1 of G5 (per active blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g5-round-events-proofframe-diff.md`` §8)
+Phase 1 of G5 (per archived blueprint
+``docs/blueprints/archive/2026-05-08_l-direction-g5-round-events-proofframe-diff.md`` §8)
 ships full §5.1 / §5.2 / §5.3 / §5.4 / §5.7 / §5.8 contract coverage
 for ``SDKStore.diff_proof_frames(...)``. Mirrors the G2 ProofFrame
 Recheck per-method contract test structure with diff-specific
@@ -243,6 +243,52 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
             )
 
         self.assertEqual(ctx.exception.path, "$.diff_proof_frames.warnings")
+
+    def test_non_bool_include_unchanged_rejected_at_sdk_surface(self) -> None:
+        """Pre-publish-Blocker regression: ``include_unchanged`` is
+        typed/documented as ``bool`` but Python's annotations are not
+        runtime-enforced. Without an explicit ``isinstance(.., bool)``
+        check at the SDK boundary, arbitrary truthy/falsy values would
+        be silently accepted and propagated to the runtime — creating
+        unintended SDK surface (`include_unchanged="yes"` etc.). The
+        SDK shell now validates and remaps to
+        ``$.diff_proof_frames.include_unchanged``.
+        """
+        sdk = _build_sdk()
+        round_a = _empty_round("round-a")
+        round_b = _empty_round("round-b")
+
+        for bad_value in ("yes", 1, 0, "", None, [True]):
+            with self.subTest(value=bad_value):
+                with self.assertRaises(SDKStoreError) as ctx:
+                    sdk.diff_proof_frames(
+                        "round-a",
+                        "round-b",
+                        round_a,
+                        round_b,
+                        include_unchanged=bad_value,  # type: ignore[arg-type]
+                    )
+                self.assertEqual(
+                    ctx.exception.path,
+                    "$.diff_proof_frames.include_unchanged",
+                )
+                self.assertIn("must be bool", str(ctx.exception))
+
+    def test_bool_include_unchanged_accepted(self) -> None:
+        sdk = _build_sdk()
+        round_a = _empty_round("round-a")
+        round_b = _empty_round("round-b")
+
+        for good_value in (True, False):
+            with self.subTest(value=good_value):
+                result = sdk.diff_proof_frames(
+                    "round-a",
+                    "round-b",
+                    round_a,
+                    round_b,
+                    include_unchanged=good_value,
+                )
+                self.assertIsInstance(result, ProofFrameDiff)
 
     def test_proof_frame_diff_error_remaps_to_request_path(self) -> None:
         """``ProofFrameDiffError`` from helper-internal validation

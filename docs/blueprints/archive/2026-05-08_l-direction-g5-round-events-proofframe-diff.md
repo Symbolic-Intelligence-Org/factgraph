@@ -306,9 +306,11 @@ Also: does G5 need new shared validators?
 
 **Question:** Per-method `$.<method>.<input>` paths + Sibling discipline.
 
-**Decision (2026-05-08):** Lock **7-path remap** (5 input paths + 1 request path + 1 base path) with `ProofFrameDiffError` covering the `.request` boundary; inline pre-validation for input paths; defensive `Exception` for the base path. Sibling discipline at 9-shell scope tests the new G5 shell against all 8 prior shells.
+**Decision (2026-05-08):** Lock **8-path remap** (6 input paths + 1 request path + 1 base path) with `ProofFrameDiffError` covering the `.request` boundary; inline pre-validation for input paths; defensive `Exception` for the base path. Sibling discipline at 9-shell scope tests the new G5 shell against all 8 prior shells.
 
-**7-path remap (locked execution order in `sdk_diff_proof_frames`):**
+> **Pre-publish-Blocker upgrade (2026-05-09):** the original §5.8 lock listed 7 paths (5 input + request + base) and missed `include_unchanged` as a typed-bool boundary. Without an explicit `isinstance(.., bool)` check, arbitrary truthy/falsy values were silently accepted (e.g., `include_unchanged="yes"`), creating unintended SDK surface. Pre-publish verification round added the 6th input path `$.diff_proof_frames.include_unchanged`. Original 7-path table preserved below with the new row 6 inserted; original "5 input paths" prose updated to "6 input paths".
+
+**8-path remap (locked execution order in `sdk_diff_proof_frames`):**
 
 | # | SDK boundary check | Path | Source / Outcome |
 |---|---|---|---|
@@ -317,8 +319,9 @@ Also: does G5 need new shared validators?
 | 3 | `isinstance(events, tuple) and all(isinstance(e, RoundEvent))` for round_a_events | `$.diff_proof_frames.round_a_events` | inline validation; raises `SDKStoreError("round_a_events must be tuple[RoundEvent, ...]", path=...)` — protects against `TypeError` / `AttributeError` leaks from `sorted(events, key=...)` and `event.kind`/`event.sequence` access in `_proof_frame_records` |
 | 4 | Same for round_b_events | `$.diff_proof_frames.round_b_events` | inline validation; same shape |
 | 5 | `isinstance(warnings, tuple) and all(isinstance(w, WarningDTO))` | `$.diff_proof_frames.warnings` | inline validation; same shape |
-| 6 | `try: build_proof_frame_diff(...)` | `$.diff_proof_frames.request` | catches `ProofFrameDiffError` (covers helper-internal validation in `_require_non_empty_str` / `_require_mapping` / `_validate_binding_json` / `_validate_proof_frame_status` / `_validate_literal` / `_validate_tuple_items` for payload parse errors at `_proof_frame_record_from_event`; covers frame-identity duplicate check at `_proof_frame_records:201`; covers `ProofFrameDiff.__post_init__` `_validate_tuple_items(frame_deltas)` and `_validate_tuple_items(warnings)`); raises `SDKStoreError(..., path=...) from exc` with `__cause__` chain |
-| 7 | `try:` (defensive) | base `$.diff_proof_frames` | catches forward-compat `Exception`; raises `SDKStoreError(..., path=...) from exc` |
+| 6 | `isinstance(include_unchanged, bool)` | `$.diff_proof_frames.include_unchanged` | inline validation (added in pre-publish-Blocker fix); raises `SDKStoreError("include_unchanged must be bool", path=...)` — closes the typed-bool boundary that arbitrary truthy/falsy values were silently slipping through |
+| 7 | `try: build_proof_frame_diff(...)` | `$.diff_proof_frames.request` | catches `ProofFrameDiffError` (covers helper-internal validation in `_require_non_empty_str` / `_require_mapping` / `_validate_binding_json` / `_validate_proof_frame_status` / `_validate_literal` / `_validate_tuple_items` for payload parse errors at `_proof_frame_record_from_event`; covers frame-identity duplicate check at `_proof_frame_records:201`; covers `ProofFrameDiff.__post_init__` `_validate_tuple_items(frame_deltas)` and `_validate_tuple_items(warnings)`); raises `SDKStoreError(..., path=...) from exc` with `__cause__` chain |
+| 8 | `try:` (defensive) | base `$.diff_proof_frames` | catches forward-compat `Exception`; raises `SDKStoreError(..., path=...) from exc` |
 
 **No `ProtocolShapeError` path needed** — `build_proof_frame_diff` returns the result directly without an intermediate request DTO. **No `.dependencies` path** — no derivation lowering, no rule registry, no A helper that resolves dependencies. **No `CapabilityHelperError` path** — diff is a pure function in `kernel.audit`, not a `kernel.application.capability_helpers` builder.
 
@@ -406,9 +409,10 @@ Scoped-stage acceptance:
 
 Implementation-stage acceptance (per phase, gated by phase-end strict audit):
 
-- [ ] Phase 1 — combined skeleton + implementation: `src/kernel/sdk/shells/proof_frame_diff.py` (`sdk_diff_proof_frames`) with all 7-path inline pre-validation + `ProofFrameDiffError` catch + defensive base-path catch; `SDKStore.diff_proof_frames(...)` thin delegate in `store.py`; TYPE_CHECKING extended to import `ProofFrameDiff`; `src/kernel/tests/test_sdk_proof_frame_diff.py` with ~13 contract tests covering happy path, 8 input rejection paths, `.request` remap, base-path remap, DTO non-export, Sibling runtime patch (8 sister shells), Sibling static source scan (16 forbidden patterns).
-- [ ] Phase 2 — invariants + docs + cumulative audit: `src/kernel/tests/test_sdk_g5_invariants.py` (6-class mirror); update SDK API docs `kernel/sdk/docs/04_api_surface.md` + `.en.md` (add `diff_proof_frames` to method list, preamble bumps to "9 L methods", G5 paragraph documents §5.3 layer rule extension); update application overview docs `kernel/application/docs/01_overview.md` + `_en.md` (extend L-direction paragraph; trim "remaining at application layer only" — round events stays, ProofFrame diff moves out; test inventory adds `test_sdk_proof_frame_diff.py` + `test_sdk_g5_invariants.py`); cumulative G5 strict audit gate (5 dimensions: §5.x locks honored / §6 invariants verified / shells/ + retrofit holding / `kernel.sdk.__all__` length still 34 / G1+G4+G2+G3 published snapshot branches untouched).
-- [ ] Phase 3 — close-out + archive + publish prep: fill §9 Outcome / Deviations; flip status `scoped → implemented`; archive blueprint + audit log under `docs/blueprints/archive/`; update archive inventory; update memory (`project_g5_published.md` external + `MEMORY.md` index + `memory/current.md` in-repo); publish to `origin/v0.1-l-g5-round-events-proofframe-diff-2026-05-08` (G5-only) + `origin/v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-2026-05-08` (Path B combined, 5th immutable Path B snapshot) **pending explicit user authorization** per `project_release_branch_invariants`.
+- [x] Phase 1 — combined skeleton + implementation. (commit `a961e1d`; full kernel 1677 OK / 1 skipped; +16 G5 contract tests. Pre-publish-Blocker fix later upgraded the contract test count to 18 and the path count from 7 to 8 with the new `.include_unchanged` boundary.)
+- [x] Phase 2 — invariants + docs + cumulative audit. (commit `754d2a2`; full kernel 1683 OK / 1 skipped; +6 G5 invariants; cumulative 5-dim audit gate PASS.)
+- [x] Phase 3 local close-out — §9 Outcome / Deviations filled, status flipped, archive done, archive inventory + memory synced. (commit `480ebc6`.)
+- [ ] Phase 3 publish — `v0.1-l-g5-round-events-proofframe-diff-2026-05-08` (G5-only) + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-2026-05-08` (Path B combined, 5th immutable Path B snapshot) pushed to origin. **Pending explicit user authorization** per `project_release_branch_invariants` — sacred branches and publish decisions stay user-gated; auto mode does not extend to pushing to origin.
 
 ## 8. Implementation Plan
 
@@ -510,7 +514,7 @@ Three deliberate deviations recorded across the audit log:
 
 ### 9.4 Test Catalogue
 
-- `test_sdk_proof_frame_diff.py` — 16 contract tests:
+- `test_sdk_proof_frame_diff.py` — 18 contract tests (16 at original Phase 1 close + 2 added in pre-publish-Blocker fix for `include_unchanged` validation):
   - happy path (empty rounds → empty `frame_deltas`)
   - end-to-end happy path with real `proof_frame_result` events producing non-empty `frame_deltas` (validates `frame_status_change`)
   - 8 input rejection tests covering all 5 input paths × the type+content checks

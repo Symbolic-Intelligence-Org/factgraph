@@ -175,7 +175,9 @@ class SDKG5InvariantTests(unittest.TestCase):
 
     def test_store_method_docstring_records_boundary_contract(self) -> None:
         """§5.7 + §6 lock: `SDKStore.diff_proof_frames` docstring records
-        boundary contract + all 7 locked `$.diff_proof_frames.*` paths."""
+        boundary contract + all 8 locked `$.diff_proof_frames.*` paths
+        (post-pre-publish-Blocker fix: 7-path → 8-path with new
+        `.include_unchanged` boundary check)."""
         diff_doc = SDKStore.diff_proof_frames.__doc__ or ""
 
         for required in (
@@ -183,12 +185,13 @@ class SDKG5InvariantTests(unittest.TestCase):
             "ProofFrameDiff",
             "WarningDTO",
             "SDKStoreError",
-            # §5.8 7-path remap
+            # §5.8 8-path remap
             "$.diff_proof_frames.round_a_id",
             "$.diff_proof_frames.round_b_id",
             "$.diff_proof_frames.round_a_events",
             "$.diff_proof_frames.round_b_events",
             "$.diff_proof_frames.warnings",
+            "$.diff_proof_frames.include_unchanged",
             "$.diff_proof_frames.request",
             "$.diff_proof_frames",
         ):
