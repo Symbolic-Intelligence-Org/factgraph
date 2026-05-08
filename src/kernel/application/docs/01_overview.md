@@ -262,8 +262,11 @@ Key focused tests:
 - `test_sdk_check.py`
 - `test_sdk_diagnose.py`
 - `test_sdk_why_not.py`
+- `test_sdk_fact_overlay.py`
+- `test_sdk_proof_frame.py`
 - `test_sdk_g1_invariants.py`
 - `test_sdk_g4_invariants.py`
+- `test_sdk_g2_invariants.py`
 - `test_sdk_validation.py`
 - `test_sdk_consumer_boundary.py`
 

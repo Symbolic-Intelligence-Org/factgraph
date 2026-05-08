@@ -2,7 +2,7 @@
 
 本页对齐 `kernel/sdk/__init__.py` 的公开导出与核心类方法。SDK API surface 是 Python product surface；query / ingest / compiled derivation 等 runtime execution 由 `kernel.application` 承接,SDK 负责 outward adapter 与兼容形态。
 
-Batch 8 public-surface 决议后,SDK surface 仍保持窄口径:本页列出的导出与 `SDKStore` 既有 facade 是 v0.1 product public API。L Direction G1 新增 `SDKStore.check(...)` / `SDKStore.diagnose(...)` 作为 Check / Diagnose 的窄 SDK shell;G4 新增 `SDKStore.why_not(...)` 作为 Why-not Universe Diagnose 的窄 SDK shell。三个方法都不新增 `kernel.sdk.__all__` 导出,也不 re-export application DTO。Fact Overlay、ProofFrame、rule-action runtimes、round events、ProofFrame diff 与 Frontier trace 仍通过 `kernel.application` / `kernel.audit` / `kernel.core.rules.frontier` advanced importable surface 使用。Frontier 在 G4 §5.4 中显式不进入 SDK facade,evaluator drift gate 与 application no-opt-in 测试继续生效;未来若要把 Frontier 或其他族提升为 SDK ergonomic API,必须单独冻结 outward request/result shape,不能直接 re-export application DTO。
+Batch 8 public-surface 决议后,SDK surface 仍保持窄口径:本页列出的导出与 `SDKStore` 既有 facade 是 v0.1 product public API。L Direction G1 新增 `SDKStore.check(...)` / `SDKStore.diagnose(...)` 作为 Check / Diagnose 的窄 SDK shell;G4 新增 `SDKStore.why_not(...)` 作为 Why-not Universe Diagnose 的窄 SDK shell;G2 新增 `SDKStore.check_fact_overlay(...)` 与 `SDKStore.recheck_proof_frame(...)` 作为 Fact Overlay Check 与 ProofFrame Recheck 的窄 SDK shell。所有 5 个 L 方法都不新增 `kernel.sdk.__all__` 导出,也不 re-export application DTO。G2 Phase 0 hygiene 把 5 个 shell 模块迁移到 `kernel/sdk/shells/` 子包(G1 + G4 invariant tests retrofit per `#P1` carve-out)。rule-action runtimes、round events、ProofFrame diff 与 Frontier trace 仍通过 `kernel.application` / `kernel.audit` / `kernel.core.rules.frontier` advanced importable surface 使用。Frontier 在 G4 §5.4 中显式不进入 SDK facade,evaluator drift gate 与 application no-opt-in 测试继续生效;未来若要把 Frontier 或其他族提升为 SDK ergonomic API,必须单独冻结 outward request/result shape,不能直接 re-export application DTO。
 
 ## 1. 顶层导出（`from kernel.sdk import ...`）
 
@@ -64,6 +64,8 @@ Batch 8 public-surface 决议后,SDK surface 仍保持窄口径:本页列出的�
 - `check(...)`
 - `diagnose(...)`
 - `why_not(...)`
+- `check_fact_overlay(...)`
+- `recheck_proof_frame(...)`
 - `ref(...)`
 - `set(...)`
 - `add(...)`
@@ -90,6 +92,8 @@ Batch 8 public-surface 决议后,SDK surface 仍保持窄口径:本页列出的�
 - `evaluate(mode="native", engine_options={...})` 会显式报错；engine_options 的 key 校验与默认值由目标 adapter 负责。
 - `check(Derivation(...), binding, *, engine="native", registry=None)` 与 `diagnose(...)` 只接受 SDK `Derivation` 和 `$` 前缀 binding `Mapping`；返回 application `CheckResult` / `DiagnoseResult` 原始 DTO,但这些 DTO 不进入 `kernel.sdk.__all__`。
 - `why_not(Derivation(...), candidates, *, engine="native", registry=None)` 接受 SDK `Derivation` + 显式有限 candidate universe (`Sequence[Mapping[str, Any] | Sequence[Any]]`,与 `kernel.application.capability_helpers.build_why_not_candidate_universe(...)` 同型),返回 application `WhyNotUniverseResult` 原始 DTO；不进入 `kernel.sdk.__all__`。Why-not 不接受 `CompiledDerivationPlan` 也不在 store 内做 universe 自动发现。所有非-SDK 异常 (`ValueError` / `RuleCompileError` / `CapabilityHelperError` / `ProtocolShapeError` / `WhyNotRuntimeError`) 都 remap 成 `SDKStoreError(..., path="$.why_not[.derivation|.dependencies|.candidates|.request|]") from exc`。
+- `check_fact_overlay(Derivation(...), binding, overlay, *, engine="native", registry=None)` 接受 SDK `Derivation` + `$` 前缀 binding `Mapping` + 原始 `EvaluationOverlay` protocol DTO,返回 application `FactOverlayCheckResult` 原始 DTO；不进入 `kernel.sdk.__all__`。`EvaluationOverlay` 是 author-time intent (G1 §5.7 拒绝 `CompiledDerivationPlan` 的 already-lowered 理由不适用)。Runtime 把 unsupported overlay / rule_actions / 内部 phase 错误表示为 `FactOverlayCheckResult(status="invalid_request")`,SDK 直接透传。所有非-SDK 异常 (`ValueError` / `RuleCompileError` / `CapabilityHelperError` / `ProtocolShapeError`) remap 成 `SDKStoreError(..., path="$.check_fact_overlay[.derivation|.binding|.dependencies|.request]") from exc`。
+- `recheck_proof_frame(support_artifact, overlay)` 接受原始 `SupportArtifact`(从前一次 `sdk.check(...)` 的 `result.evidence_envelope.engine_payload` 取出)和原始 `EvaluationOverlay`,返回 application `ProofFrameRecheckResult` 原始 DTO；不进入 `kernel.sdk.__all__`。无 derivation lowering / registry resolution / engine 参数。SDK 不 wrap `SupportArtifact`,不从 `CheckResult` argument 中抽取,不内部调 `sdk.check(...)`。所有非-SDK 异常 (validation / `ProtocolShapeError` / 运行时 unexpected) remap 成 `SDKStoreError(..., path="$.recheck_proof_frame[.support_artifact|.overlay|.request|]") from exc`。
 - `run(rule)` 的 `row_format` 优先级：调用参数 > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`。
 - `FACTPY_ROW_FORMAT` 在 `SDKStore` 初始化时读取并缓存。
 - `row_format="tuple"` 仍可用但会触发 `DeprecationWarning`。
