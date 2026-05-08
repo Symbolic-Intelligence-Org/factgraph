@@ -25,7 +25,7 @@ It is responsible for:
 - native Rule Literal Replace (`completed` / `unsupported` / `invalid_request`) over one temporary Const-to-Const native where literal replacement,returning variant rows plus original-frame ProofFrame output
 - native Rule Add Condition (`completed` / `unsupported` / `invalid_request`) over one temporary filter-only native where atom insertion,returning variant rows plus original-frame ProofFrame output with a synthetic added-atom verdict
 - explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
-- capability ergonomics helpers for Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
+- capability ergonomics helpers for Check / Diagnose / ProofFrame request construction, rule-overlay request construction, round-event payload projection, Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
 
 It is not responsible for:
 
@@ -56,7 +56,7 @@ It is not responsible for:
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
 - `capability_helpers/`
-  - application-layer ergonomic helper package: `build_check_request(...)`, `build_diagnose_request(...)`, `build_proof_frame_recheck_request(...)`, `build_rule_disable_request(...)`, `build_rule_literal_replace_request(...)`, `build_rule_add_condition_request(...)`, `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
+  - application-layer ergonomic helper package: `build_check_request(...)`, `build_diagnose_request(...)`, `build_proof_frame_recheck_request(...)`, `build_rule_disable_request(...)`, `build_rule_literal_replace_request(...)`, `build_rule_add_condition_request(...)`, `build_round_event_payload(...)`, `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
 - `entity_view.py`
   - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`
@@ -87,7 +87,7 @@ It is not responsible for:
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 54 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 55 public symbols. The main executor entry points are:
 
 Batch 8 public-surface note:`kernel.application` is an **advanced importable** runtime authority in the kernel package. It is appropriate for automation,wire bridges,and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade,and Batch 8 does not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes.
 
@@ -119,6 +119,7 @@ The main schema/runtime helpers are:
 - `build_rule_disable_request(...)`
 - `build_rule_literal_replace_request(...)`
 - `build_rule_add_condition_request(...)`
+- `build_round_event_payload(...)`
 - `build_fact_value_override(...)`
 - `build_fact_remove_action(...)`
 - `build_evaluation_overlay(...)`
@@ -211,6 +212,7 @@ Key focused tests:
 - `test_capability_helpers_diagnose.py`
 - `test_capability_helpers_proof_frame.py`
 - `test_capability_helpers_rule_overlays.py`
+- `test_capability_helpers_round_events.py`
 - `test_application_fact_overlay_protocol.py`
 - `test_application_fact_overlay_runtime_native.py`
 - `test_application_fact_overlay_sibling_invariant.py`

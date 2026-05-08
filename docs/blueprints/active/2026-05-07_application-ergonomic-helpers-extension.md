@@ -44,7 +44,7 @@ Extend `kernel.application` capability helpers with **5 new builder families** t
 | 2 | Q2 Diagnose | `build_diagnose_request(plan, binding, *, engine="native")` | `DiagnoseRequest` |
 | 3 | Batch 4 ProofFrame Recheck | `build_proof_frame_recheck_request(support, *, overlay=None)` | `ProofFrameRecheckRequest` |
 | 4 | Batch 5 rule overlays (x3) | `build_rule_disable_request` / `build_rule_literal_replace_request` / `build_rule_add_condition_request` (`note=None` passes through to the matching action DTO's existing `note` field) | `RuleDisableRequest` / `RuleLiteralReplaceRequest` / `RuleAddConditionRequest` |
-| 5 | Batch 6 round event | `build_round_event_payload(*, kind, request, result)` | event payload `dict[str, Any]` (already the `audit/round_events.jsonl` row shape per [41_ §1 Batch 6 row](../../references/working/post-routemap-direction-selection-input/41_application-builders-design-sketch.md); no named DTO) |
+| 5 | Batch 6 round event | `build_round_event_payload(*, kind, request, result)` | capability result payload `dict[str, Any]` (per-kind projector shape, suitable for embedding into a `RoundEvent` row; no named DTO) |
 
 Each builder accepts **application canonical types only** per Direction A — Input shape lock (Gap beta); SDK-to-application lowering bridging is **L's responsibility, not A's**.
 
