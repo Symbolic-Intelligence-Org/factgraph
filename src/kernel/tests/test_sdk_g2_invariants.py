@@ -75,14 +75,22 @@ class SDKG2InvariantTests(unittest.TestCase):
                 self.assertFalse(hasattr(SDKStore, scenario_name))
 
     def test_g2_modules_live_in_shells_subpackage(self) -> None:
-        """§5.5 + §5.6 lock: G2 shells live at ``kernel/sdk/shells/{fact_overlay,proof_frame}.py``."""
+        """§5.5 + §5.6 lock: G2 shells live at ``kernel/sdk/shells/{fact_overlay,proof_frame}.py``.
+
+        Also enforces that the shared SDK shell validators
+        (``_validation.py``) sit under ``kernel/sdk/shells/`` post-G2
+        Phase 0 hygiene migration; the flat ``kernel/sdk/_validation.py``
+        location must not exist.
+        """
         sdk_dir = pathlib.Path(kernel_sdk.__file__).parent
         self.assertTrue((sdk_dir / "shells").is_dir())
         self.assertTrue((sdk_dir / "shells" / "__init__.py").is_file())
         self.assertTrue((sdk_dir / "shells" / "fact_overlay.py").is_file())
         self.assertTrue((sdk_dir / "shells" / "proof_frame.py").is_file())
+        self.assertTrue((sdk_dir / "shells" / "_validation.py").is_file())
         self.assertFalse((sdk_dir / "fact_overlay.py").exists())
         self.assertFalse((sdk_dir / "proof_frame.py").exists())
+        self.assertFalse((sdk_dir / "_validation.py").exists())
 
     def test_g2_modules_do_not_import_internal_or_walker_layers(self) -> None:
         """§6 lock: G2 SDK shells must not import application internals, walker, audit, or frontier."""
@@ -135,8 +143,10 @@ class SDKG2InvariantTests(unittest.TestCase):
             "SDKStoreError",
             "$.check_fact_overlay.derivation",
             "$.check_fact_overlay.binding",
+            "$.check_fact_overlay.overlay",
             "$.check_fact_overlay.dependencies",
             "$.check_fact_overlay.request",
+            "$.check_fact_overlay",
         ):
             with self.subTest(doc="check_fact_overlay", required=required):
                 self.assertIn(required, fact_overlay_doc)

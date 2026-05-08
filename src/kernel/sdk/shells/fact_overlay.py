@@ -1,11 +1,12 @@
 """SDK shell for Q3 Fact Overlay Check capability.
 
 Implements the ``SDKStore.check_fact_overlay`` facade method per the
-scoped G2 blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md``
+archived G2 blueprint
+``docs/blueprints/archive/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md``
 §5.
 
-Public surface contract per blueprint §5 locks:
+Public surface contract per blueprint §5 locks (with post-publish
+verification round polish landed 2026-05-08):
 
 - Method:      ``SDKStore.check_fact_overlay(...)`` (instance method; not
                a free function in ``kernel.sdk.__all__`` — see §5.7 lock
@@ -15,7 +16,10 @@ Public surface contract per blueprint §5 locks:
                ``derivation`` is SDK ``Derivation`` only, ``binding`` is a
                ``$``-prefixed mapping validated through the shared SDK
                validators, and ``overlay`` is a raw ``EvaluationOverlay``
-               protocol DTO).
+               protocol DTO — the SDK rejects ``tuple[FactValueOverride,
+               ...]`` form even though the application
+               ``FactOverlayCheckRequest.overlay`` field would otherwise
+               tolerate it).
 - Return:      ``FactOverlayCheckResult`` (raw application protocol DTO;
                documented passthrough per §5.3 lock; not re-exported from
                ``kernel.sdk.__all__``).
@@ -23,12 +27,16 @@ Public surface contract per blueprint §5 locks:
                ``SDKStoreError(...) from exc`` per §5.8 lock with
                capability-specific paths (``$.check_fact_overlay.derivation``
                / ``$.check_fact_overlay.binding`` /
+               ``$.check_fact_overlay.overlay`` /
                ``$.check_fact_overlay.dependencies`` /
-               ``$.check_fact_overlay.request``). The runtime
-               ``check_fact_overlay_binding(...)`` returns a
-               ``FactOverlayCheckResult`` (including ``invalid_request``
-               status) rather than raising; that result is passed through
-               unchanged per §5.8 lock.
+               ``$.check_fact_overlay.request`` / base
+               ``$.check_fact_overlay`` for unexpected runtime). The
+               runtime ``check_fact_overlay_binding(...)`` represents
+               supported failure modes (``rule_actions``, empty overlay,
+               ruleref / action errors, native phase failures) as
+               ``FactOverlayCheckResult(status="invalid_request")`` and
+               those results are passed through unchanged; only truly
+               unexpected runtime exceptions reach the base-path remap.
 - Q3 Sibling:  ``sdk_fact_overlay_check`` does NOT call any sibling SDK
                shell (``sdk_check`` / ``sdk_diagnose`` / ``sdk_why_not``
                / ``sdk_proof_frame_recheck``) — it owns its own dispatch
@@ -51,7 +59,7 @@ from kernel.application.fact_overlay_runtime import check_fact_overlay_binding
 from kernel.core.rules.rule_ir import RuleCompileError
 from kernel.core.store._support import normalize_binding_items
 
-from ._validation import validate_binding, validate_derivation
+from ._validation import validate_binding, validate_derivation, validate_evaluation_overlay
 from ..errors import SDKStoreError
 from ..store import _compiled_derivation_plan_to_application
 
@@ -76,6 +84,7 @@ def sdk_fact_overlay_check(
 
     validate_derivation(derivation, path="$.check_fact_overlay.derivation")
     binding_dict = validate_binding(binding, path="$.check_fact_overlay.binding")
+    validate_evaluation_overlay(overlay, path="$.check_fact_overlay.overlay")
 
     compiled_plans = sdk._compile_derivation_input(derivation)
     if len(compiled_plans) != 1:
@@ -120,7 +129,13 @@ def sdk_fact_overlay_check(
             path="$.check_fact_overlay.request",
         ) from exc
 
-    return check_fact_overlay_binding(request, store=sdk._store, registry=resolved_registry)
+    try:
+        return check_fact_overlay_binding(request, store=sdk._store, registry=resolved_registry)
+    except Exception as exc:
+        raise SDKStoreError(
+            f"check_fact_overlay runtime failed: {exc}",
+            path="$.check_fact_overlay",
+        ) from exc
 
 
 __all__ = [

@@ -1,7 +1,7 @@
 """SDKStore.recheck_proof_frame contract tests.
 
-Phase 2 of G2 (per blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md`` §8)
+Phase 2 of G2 (per archived blueprint
+``docs/blueprints/archive/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md`` §8)
 ships full §5.2 / §5.4 / §5.6 / §5.8 contract coverage for
 ``SDKStore.recheck_proof_frame(...)``. Mirrors the G1 / G4 / Fact Overlay
 per-method contract test structure with ProofFrame-specific narrowing

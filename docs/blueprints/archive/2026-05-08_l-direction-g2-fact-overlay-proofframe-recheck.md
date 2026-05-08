@@ -545,3 +545,35 @@ Both methods land at `kernel/sdk/shells/{fact_overlay,proof_frame}.py` (§5.5+§
 - **G5 Round events / ProofFrame diff**: per Round 8 SDK conventions audit, both still need own Step 0 shape decision; G5 inherits the precedents above.
 
 Snapshot publish is intentionally separate from this close-out commit per user request — Phase 4 close-out lands here; publish is a separate decision after the close-out commit.
+
+### Post-publish verification round + 7 polish items landed (2026-05-08)
+
+Multi-agent verification round on G2 close-out commit `38b970d` (Verdict: fix before G3, no §5.x lock change). 1 Blocker + 1 Clarify + 5 Minor findings, all polish; public surface unchanged.
+
+| Severity | Finding | Fix |
+|---|---|---|
+| Blocker | `SDKStore.check_fact_overlay(...)` accepted tuple-form overlay (request DTO tolerates it; §5.1 SDK lock should reject) | Added `validate_evaluation_overlay(value, *, path)` to `kernel/sdk/shells/_validation.py`; called from both Fact Overlay and ProofFrame Recheck (replacing `proof_frame.py`'s local `_validate_overlay`); new SDK error path `$.check_fact_overlay.overlay` for tuple-form / non-`EvaluationOverlay` rejection |
+| Clarify | Fact Overlay error-remap inconsistent: §5.8 said runtime `invalid_request` passes through, but Outcome implied a base-path remap; SDK docs mentioned `CapabilityHelperError` though no A helper is called | Added defensive `try/except Exception` around `check_fact_overlay_binding(...)` runtime call → `SDKStoreError(path="$.check_fact_overlay") from exc`; `invalid_request` results still pass through unchanged. Removed `CapabilityHelperError` references from SDK docs and `SDKStore.check_fact_overlay` docstring (no A helper is called by Fact Overlay shell). |
+| Minor | Application overview wording said Fact Overlay / ProofFrame are application-only and SDK entrypoints are future | Updated `01_overview.md` + `_en.md` to describe G2 SDK shells as the active L Direction entry points for both capabilities; reorganized "remaining" list to point at Rule Disable / Literal Replace / Add Condition / Round events / ProofFrame diff. |
+| Minor | G2 shell + test docstrings still pointed at `docs/blueprints/active/...` after archive | Updated `kernel/sdk/shells/fact_overlay.py`, `proof_frame.py`, and `kernel/tests/test_sdk_fact_overlay.py`, `test_sdk_proof_frame.py` to reference `docs/blueprints/archive/...`. |
+| Minor | Fact Overlay Sibling runtime test omitted `sdk_proof_frame_recheck` patch | Extended `test_q3_sibling_fact_overlay_does_not_call_other_sdk_shells_at_runtime` to also patch `sdk_proof_frame_recheck` and assert `not_called`. |
+| Minor | `test_overlay_with_rule_actions_returns_invalid_request_passthrough` actually used empty overlay, not rule_actions | Renamed to `test_empty_overlay_returns_invalid_request_passthrough`; removed unused `override` variable; comment + docstring now match actual coverage. |
+| Minor | G2 invariants didn't directly assert `_validation.py` migration | Extended `test_g2_modules_live_in_shells_subpackage` to also assert `kernel/sdk/shells/_validation.py` exists and the flat `kernel/sdk/_validation.py` does not. |
+
+Implementation paths now landed on `SDKStore.check_fact_overlay`:
+- `$.check_fact_overlay.derivation` (input + multi-plan + ValueError engine_ext)
+- `$.check_fact_overlay.binding` (binding shape errors)
+- `$.check_fact_overlay.overlay` (NEW — non-`EvaluationOverlay` input, including tuple form)
+- `$.check_fact_overlay.dependencies` (RuleCompileError)
+- `$.check_fact_overlay.request` (ProtocolShapeError from request DTO)
+- `$.check_fact_overlay` (NEW — defensive runtime exception remap; runtime ordinarily returns `invalid_request` result)
+
+Implementation paths on `SDKStore.recheck_proof_frame` unchanged (still 4: support_artifact / overlay / request / base); only the validator implementation moved (local `_validate_overlay` replaced by shared `validate_evaluation_overlay`).
+
+Verification (post-fix):
+- targeted SDK shell + invariant + validation suite: 111 OK
+- full kernel: **1573 OK / 1 skipped** (was 1571; +2 new Fact Overlay tests for tuple-form rejection + runtime exception remap)
+- ruff clean / `git diff --check` clean
+- `kernel.sdk.__all__` length unchanged at 34
+- G1 + G4 published snapshot branches NOT touched
+- `kernel.sdk.shells._validation.__all__` extended with `validate_evaluation_overlay`

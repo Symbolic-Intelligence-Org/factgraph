@@ -430,11 +430,19 @@ class SDKStore:
                 ``$.check_fact_overlay.derivation`` for SDK input-shape
                 and derivation-lowering failures,
                 ``$.check_fact_overlay.binding`` for binding shape errors,
+                ``$.check_fact_overlay.overlay`` for non-
+                ``EvaluationOverlay`` overlay input (the SDK rejects
+                ``tuple[FactValueOverride, ...]`` form even though the
+                application request DTO would tolerate it),
                 ``$.check_fact_overlay.dependencies`` for dependency
-                registration failures, and
+                registration failures,
                 ``$.check_fact_overlay.request`` for request DTO shape
-                errors (including malformed ``overlay``). Original
-                exceptions are preserved as ``__cause__``.
+                errors, and base ``$.check_fact_overlay`` for unexpected
+                runtime exceptions (the runtime ordinarily returns
+                ``FactOverlayCheckResult(status="invalid_request")`` for
+                unsupported overlay / runtime conditions, which is
+                passed through unchanged). Original exceptions are
+                preserved as ``__cause__``.
         """
         from .shells.fact_overlay import sdk_fact_overlay_check
 

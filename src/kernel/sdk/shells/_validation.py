@@ -17,6 +17,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from kernel.application.protocol import EvaluationOverlay
+
 from ..dsl import Derivation
 from ..errors import SDKStoreError
 
@@ -57,7 +59,23 @@ def validate_binding(binding: Any, *, path: str) -> dict[str, Any]:
     return out
 
 
+def validate_evaluation_overlay(value: Any, *, path: str) -> None:
+    """Reject anything that is not an ``EvaluationOverlay`` instance.
+
+    Used by both Fact Overlay Check (``$.check_fact_overlay.overlay``) and
+    ProofFrame Recheck (``$.recheck_proof_frame.overlay``) to enforce the
+    G2 §5.1 + §5.2 lock that the SDK boundary accepts only
+    ``EvaluationOverlay`` — narrower than the application
+    ``FactOverlayCheckRequest.overlay`` field which also tolerates
+    ``tuple[FactValueOverride, ...]``.
+    """
+
+    if not isinstance(value, EvaluationOverlay):
+        raise SDKStoreError("overlay must be EvaluationOverlay", path=path)
+
+
 __all__ = [
     "validate_binding",
     "validate_derivation",
+    "validate_evaluation_overlay",
 ]

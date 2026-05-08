@@ -1,12 +1,14 @@
 """SDKStore.check_fact_overlay contract tests.
 
-Phase 1 of G2 (per blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md`` §8)
+Phase 1 of G2 (per archived blueprint
+``docs/blueprints/archive/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md`` §8)
 ships full §5.1 / §5.3 / §5.6 / §5.8 contract coverage for
 ``SDKStore.check_fact_overlay(...)``. Mirrors the G1 + G4 per-method
 contract test structure (Mapping/Sequence input variants, type-rejection
 boundary, error-path remap, engine + registry passthrough,
-Q3 Sibling discipline).
+Q3 Sibling discipline). Tuple-form overlay rejection and runtime
+exception remap (`$.check_fact_overlay`) coverage landed during the
+post-publish verification round 2026-05-08.
 """
 
 from __future__ import annotations
@@ -21,7 +23,6 @@ from kernel.application.protocol import (
     EvaluationOverlay,
     FactOverlayCheckResult,
     FactValueOverride,
-    ProtocolShapeError,
 )
 from kernel.application.protocol.schema_runtime import FieldPath
 from kernel.core.rules.rule_ir import RuleCompileError, RuleRegistry
@@ -110,7 +111,20 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         self.assertIsInstance(result, FactOverlayCheckResult)
         self.assertNotIn(result.status, ("", None))
 
-    def test_overlay_with_rule_actions_returns_invalid_request_passthrough(self) -> None:
+    def test_empty_overlay_returns_invalid_request_passthrough(self) -> None:
+        """Empty `EvaluationOverlay` is a runtime ``invalid_request`` condition;
+        the SDK passes the result through unchanged per §5.8 lock."""
+        empty_overlay = EvaluationOverlay(fact_actions=(), rule_actions=())
+        result = _build_sdk().check_fact_overlay(
+            _age_derivation(), {"$age": 30}, empty_overlay
+        )
+
+        self.assertEqual(result.status, "invalid_request")
+
+    def test_tuple_form_overlay_rejected_at_sdk_surface(self) -> None:
+        """Per §5.1 lock, the SDK accepts only `EvaluationOverlay`; the
+        application `FactOverlayCheckRequest.overlay` would otherwise tolerate
+        ``tuple[FactValueOverride, ...]``, but the SDK boundary rejects it."""
         sdk = _build_sdk()
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         override = build_fact_value_override(
@@ -121,13 +135,10 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             new_value=30,
         )
 
-        # Manually construct an invalid_request scenario without raising at SDK
-        # boundary: empty overlay returns invalid_request from runtime, not exception.
-        empty_overlay = EvaluationOverlay(fact_actions=(), rule_actions=())
-        result = sdk.check_fact_overlay(_age_derivation(), {"$age": 30}, empty_overlay)
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.check_fact_overlay(_age_derivation(), {"$age": 30}, (override,))  # type: ignore[arg-type]
 
-        self.assertEqual(result.status, "invalid_request")
-        # Use override to keep the variable referenced (silences ruff F841).
+        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.overlay")
         self.assertIsInstance(override, FactValueOverride)
 
     def test_rule_is_rejected_at_sdk_surface(self) -> None:
@@ -186,14 +197,19 @@ class SDKFactOverlayContractTests(unittest.TestCase):
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.binding")
 
-    def test_non_evaluation_overlay_remaps_to_request_protocol_shape_error(self) -> None:
+    def test_string_overlay_rejected_at_sdk_surface_overlay_path(self) -> None:
+        """Non-`EvaluationOverlay` input (string) is caught by the shared
+        ``validate_evaluation_overlay`` SDK-side validator and remapped to
+        ``$.check_fact_overlay.overlay``. This is a direct `SDKStoreError`
+        raise (no `ProtocolShapeError` chain), distinct from the §5.8
+        request-construction path."""
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
             sdk.check_fact_overlay(_age_derivation(), {"$age": 30}, "not-an-overlay")  # type: ignore[arg-type]
 
-        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.request")
-        self.assertIsInstance(ctx.exception.__cause__, ProtocolShapeError)
+        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.overlay")
+        self.assertIn("EvaluationOverlay", str(ctx.exception))
 
     def test_engine_ext_conflict_raises_sdk_store_error(self) -> None:
         sdk = _build_sdk()
@@ -264,6 +280,23 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         self.assertNotIn("FactOverlayCheckResult", sdk_pkg.__all__)
         self.assertFalse(hasattr(sdk_pkg, "FactOverlayCheckResult"))
 
+    def test_unexpected_runtime_exception_remaps_to_sdk_store_error_with_cause(self) -> None:
+        """§5.8 base path: unexpected `check_fact_overlay_binding(...)` exceptions
+        remap to `SDKStoreError(path="$.check_fact_overlay") from exc`. The runtime
+        ordinarily returns `FactOverlayCheckResult` (no raise), so this is
+        defensive coverage for forward-compat."""
+        sdk = _build_sdk()
+
+        with patch(
+            "kernel.sdk.shells.fact_overlay.check_fact_overlay_binding",
+            side_effect=RuntimeError("simulated runtime failure"),
+        ):
+            with self.assertRaises(SDKStoreError) as ctx:
+                sdk.check_fact_overlay(_age_derivation(), {"$age": 30}, EvaluationOverlay())
+
+        self.assertEqual(ctx.exception.path, "$.check_fact_overlay")
+        self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
+
     def test_q3_sibling_fact_overlay_does_not_call_other_sdk_shells_at_runtime(self) -> None:
         """§5.8 Q3 Sibling: ``sdk_fact_overlay_check`` MUST NOT call ``sdk_check`` /
         ``sdk_diagnose`` / ``sdk_why_not`` / ``sdk_proof_frame_recheck`` internally."""
@@ -274,6 +307,8 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         ) as mock_diagnose, patch(
             "kernel.sdk.shells.why_not.sdk_why_not"
         ) as mock_why_not, patch(
+            "kernel.sdk.shells.proof_frame.sdk_proof_frame_recheck"
+        ) as mock_proof_frame, patch(
             "kernel.sdk.shells.fact_overlay.check_fact_overlay_binding",
             return_value=_empty_result(),
         ):
@@ -282,6 +317,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         mock_check.assert_not_called()
         mock_diagnose.assert_not_called()
         mock_why_not.assert_not_called()
+        mock_proof_frame.assert_not_called()
 
     def test_q3_sibling_fact_overlay_module_does_not_import_sibling_sdk_shells(self) -> None:
         """§5.8 Q3 Sibling static check: kernel.sdk.shells.fact_overlay source has no sibling references."""

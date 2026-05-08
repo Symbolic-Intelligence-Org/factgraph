@@ -1,8 +1,8 @@
 """SDK shell for Batch 4 ProofFrame Recheck capability.
 
 Implements the ``SDKStore.recheck_proof_frame`` facade method per the
-scoped G2 blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md``
+archived G2 blueprint
+``docs/blueprints/archive/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md``
 §5.
 
 Public surface contract per blueprint §5 locks:
@@ -41,10 +41,12 @@ Public surface contract per blueprint §5 locks:
                (which is a ``SupportArtifact | ProvenanceEnvelope``
                union per G2 §5.2 falsifier F2).
 
-Validators ``_validate_support_artifact`` / ``_validate_overlay`` are
-intentionally local to this module (per user guidance at G2 Phase 2
-kickoff). Extraction to ``shells/_validation.py`` deferred until G3 or
-G5 also need them.
+Validator ``_validate_support_artifact`` is intentionally local to this
+module (per user guidance at G2 Phase 2 kickoff — only one consumer
+today). The overlay validator now lives in
+``kernel.sdk.shells._validation`` (extraction landed during the G2
+post-publish verification round 2026-05-08, since both Fact Overlay and
+ProofFrame Recheck need the same ``EvaluationOverlay`` boundary check).
 """
 
 from __future__ import annotations
@@ -52,7 +54,6 @@ from __future__ import annotations
 from typing import Any
 
 from kernel.application.protocol import (
-    EvaluationOverlay,
     ProofFrameRecheckRequest,
     ProofFrameRecheckResult,
     ProtocolShapeError,
@@ -60,6 +61,7 @@ from kernel.application.protocol import (
 from kernel.application.proofframe_runtime import recheck_proof_frame
 from kernel.core.store._support import SupportArtifact
 
+from ._validation import validate_evaluation_overlay
 from ..errors import SDKStoreError
 
 
@@ -68,14 +70,6 @@ def _validate_support_artifact(value: Any) -> None:
         raise SDKStoreError(
             "support_artifact must be SupportArtifact",
             path="$.recheck_proof_frame.support_artifact",
-        )
-
-
-def _validate_overlay(value: Any) -> None:
-    if not isinstance(value, EvaluationOverlay):
-        raise SDKStoreError(
-            "overlay must be EvaluationOverlay",
-            path="$.recheck_proof_frame.overlay",
         )
 
 
@@ -94,7 +88,7 @@ def sdk_proof_frame_recheck(
     """
 
     _validate_support_artifact(support_artifact)
-    _validate_overlay(overlay)
+    validate_evaluation_overlay(overlay, path="$.recheck_proof_frame.overlay")
 
     try:
         request = ProofFrameRecheckRequest(
