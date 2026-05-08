@@ -15,6 +15,38 @@
 
 > **Design-only first.** This blueprint is **explicitly design-only at the draft stage**. No SDK code change, no `kernel.sdk.__all__` change, no migration path commitment until §5 reaches `scoped`. The first Step 0 question (§5.1) is purely an inventory + option-evaluation pass; subsequent §5.x questions add decisions one at a time per `feedback_iterative_gap_design`. Per `feedback_sdk_ergonomics_redesign_target`: **OpenAI-style ergonomics is a direction input from the user, not an automatic migration target** — falsifier passes must source-ground every choice.
 
+## 0. Core Thesis
+
+> **Core thesis:** The redesign should make the SDK namespace teach FactPy's conceptual model at first contact. Compatibility is a hard constraint, and industry SDK shapes are evidence, not templates.
+
+**Why this thesis (and not "do nothing" or "match OpenAI"):**
+
+The current 30-method flat surface on `SDKStore` is the **accumulated artifact** of 9 incremental L Direction shipments (G1 + G4 + G2 + G3 + G5) layered onto the pre-L schema/read/write/eval surface. It is technically complete (every capability has a method) but pedagogically opaque (a new user reading `dir(sdk)` cannot derive the conceptual layering — schema authoring / single-fact CRUD / evaluation / what-if / overlay / diff — without reading every docstring). L Direction itself recognized this: every G1-G5 archive blueprint cited "post-L SDK ergonomics redesign blueprint is the right venue" because no individual L milestone could decide aggregate shape. Now that L is closed, **the SDK surface has accumulated enough material to be reorganized into a "concept map"** — and the redesign's goal is to do exactly that, without breaking what shipped.
+
+### 0.1 What this thesis implies for §5.x
+
+Every §5.x question becomes a falsifier against the thesis:
+
+- **§5.1 (shape evaluation):** the first question for any candidate shape is **"does `dir(client)` / IDE autocomplete express the conceptual layering?"** — not "does it look like OpenAI / Anthropic / Stripe?". Industry shapes are inputs to consider; legibility is the yardstick.
+- **§5.3 (top-level client class naming):** the question is whether a fresh name (e.g., `FactPyClient`) **resets the user's mental model** more cleanly than overloading `SDKStore` — not whether it matches naming conventions in other SDKs.
+- **§5.4 / §5.7 (compat strategy):** **the default is to never break the flat `SDKStore.<method>` surface** that 5 immutable Path B snapshots already shipped. Any replacement / deprecation / hard cutover requires its **own dedicated falsifier pass** — it cannot be implied by the namespace decision.
+- **OpenAI-style `client.<namespace>.<method>` is a strong candidate, not a preset answer.** §5.1 must source-ground whether FactPy's underlying conceptual model is closer to "client over resources" (OpenAI / Stripe) or "session over a unit of work" (SQLAlchemy `Session`). The shape follows the model, not the other way around.
+
+### 0.2 Rejected alternative theses (with reasons)
+
+The §5.1 falsifier pass evaluated three alternative theses against the situation; all are rejected:
+
+- **A — "Conservatism first" (overly conservative):** *"Default is do nothing; redesign must clear a very high bar."* Rejected because the L Direction blueprints already established that "post-L is the venue" — the bar was implicitly cleared by L's shipment. Refusing to engage now leaves the post-L gap permanent.
+- **B — "Compatibility purity" (overly compat-bound):** *"Only add nested aliases; never replace the flat surface."* Rejected as a *thesis* (kept as a strategy under §5.4 / §5.7). Compatibility is a hard constraint, but the thesis must be the *teaching goal*; treating compatibility itself as the goal collapses the redesign into a no-op overlay with no design judgment.
+- **C — "Conformance-driven" (overly templated):** *"Match OpenAI shape because it's what Python SDK users expect."* Rejected because conformance is not the goal. FactPy is a knowledge-graph reasoning system — the right shape may inherit from `Session over unit of work` (SQLAlchemy) more than `Client over resources` (OpenAI). Copying a shape that doesn't match the underlying model produces a surface that misleads users about what FactPy is.
+
+### 0.3 What this thesis does NOT do
+
+- **Does not pre-commit to nesting.** The conclusion may be "the flat shape *is* the most legible shape for this codebase, with documentation bundling instead of namespace bundling." That is a valid scoped outcome.
+- **Does not pre-commit to a `Client` class.** `SDKStore` may stay as the entrypoint; the question is whether its dir-shape teaches.
+- **Does not authorize any migration.** Migration is a §5.4 / §5.7 question, evaluated separately, with its own cost/benefit falsifier.
+- **Does not relitigate L Direction shells.** The 9 L methods stay shipped + frozen; the redesign decides how they're surfaced (flat vs nested vs alias-overlay), not their signatures.
+
 ## 1. Problem
 
 L Direction is closed. The SDK surface now exposes the full evidence-product round story through 9 narrow shell methods (G1 + G4 + G2 + G3 + G5) plus the schema/read/write/eval surface that predates L. The "completeness" goal that motivated L Direction has been met.
@@ -149,6 +181,7 @@ The §5.1 inventory is the **first deliverable**. It does not commit to any dire
 
 **Sub-questions to answer in the falsifier pass:**
 
+- **F0 (thesis-primary, per §0) — Legibility test.** For each candidate shape, can a new user reading `dir(client)` / IDE autocomplete derive the conceptual layering documented in §4.1 (schema authoring / single-fact CRUD / evaluation / what-if / overlay / diff / packaging) **without reading method docstrings**? This is the **first question** every shape must answer; only after F0 do migration cost (F4) and industry conformance comparisons matter. A shape that ranks high on F4 (low migration cost) but fails F0 is rejected per thesis.
 - F1 — Confirm the 30-method count + family grouping in §4.1 by exhaustively enumerating `def ` definitions in `kernel/sdk/store.py`. Capture line numbers for every public method.
 - F2 — For each method, classify: (a) what resource is the primary subject? (b) what verb describes the action? (c) does the method belong to a "session over knowledge graph" model or a "client over capabilities" model?
 - F3 — Inventory candidate alternative shapes (read-only enumeration, not yet a recommendation):
@@ -180,6 +213,7 @@ Candidate groupings (provisional; finalized at §5.2 lock):
 
 **Falsifiers required:**
 
+- **F0 (thesis-primary, per §0) — Conceptual-layer legibility.** Does the grouping make the §4.1 conceptual layering legible at `dir(client)` time? Specifically: does each top-level namespace name (`schema`, `read`, `write`, `eval`, `what_if`, `diff`, etc.) immediately convey what's inside, or does it require docstring lookup? A grouping that scores high on F1 (verb→namespace inference) but fragments the conceptual layering (e.g., splits "what-if analysis" across `check`, `overlay`, `diff` namespaces) fails F0 and is rejected per thesis.
 - F1 — Which grouping minimizes the "method-name search problem" (user knows verb but doesn't know namespace)? Test by asking: given a verb, can a user infer the namespace?
 - F2 — Which grouping aligns with the existing notebook progression (01 / 02 / 03 / 04)?
 - F3 — Which grouping survives the addition of a hypothetical 10th L family without restructuring?
@@ -194,21 +228,24 @@ Candidates: `Client`, `FactPyClient`, `Store`, keep `SDKStore`, `Kernel`, other.
 
 **Falsifiers required:**
 
+- **F0 (thesis-primary, per §0) — Mental-model-reset test.** Does a new top-level name (e.g., `FactPyClient`) **reset the user's mental model** more cleanly than overloading `SDKStore`? Specifically: would a user encountering `FactPyClient` for the first time form a more accurate expectation of what's inside than a user encountering a re-namespaced `SDKStore`? This question is upstream of industry-alignment (F3) — conformance is not the goal per §0.
 - F1 — Naming must not collide with existing identifiers in `kernel.sdk.__all__` (length 34).
 - F2 — Naming must not be ambiguous with `kernel.core.store.Store` (substrate-layer Store class).
-- F3 — Industry alignment: OpenAI uses `OpenAI` (PascalCase namespace name); Anthropic uses `Anthropic`; Stripe uses `stripe.Stripe()`; Google's GenAI uses `genai.Client`. FactPy convention: TBD.
+- F3 — Industry alignment: OpenAI uses `OpenAI` (PascalCase namespace name); Anthropic uses `Anthropic`; Stripe uses `stripe.Stripe()`; Google's GenAI uses `genai.Client`. FactPy convention: TBD. **Industry alignment is evidence to weigh, not a template to copy.**
 - F4 — Backwards-compat: if `SDKStore` stays, the new client name is purely additive; if `SDKStore` is renamed, all 5 immutable Path B snapshots' callsites in user code break.
 
 ### 5.4 Compatibility / deprecation strategy
 
 **Question:** How are existing flat-method users handled?
 
+**Thesis-derived default (per §0):** **Never break the flat `SDKStore.<method>` surface that 5 immutable Path B snapshots already shipped.** Compatibility is a hard constraint, not a goal. Any candidate that breaks the flat surface (B / C / D below) requires its **own dedicated falsifier pass** justifying the break — the namespace decision in §5.2 cannot imply it.
+
 Candidates:
 
-- **(A) Permanent dual surface** — flat methods stay forever, new shape is additive. Zero breakage; surface area grows.
-- **(B) Deprecation warnings + grace period** — flat methods emit `DeprecationWarning` for N versions, then removed. Predictable breakage path.
-- **(C) Hard cutover at v0.2** — flat methods removed at next major; redesign is the canonical shape. Highest breakage.
-- **(D) Tier-based** — flat L methods stay (since they're newest and in published refs); pre-L flat methods get deprecated/removed. Mixed strategy.
+- **(A) Permanent dual surface** — flat methods stay forever, new shape is additive. Zero breakage; surface area grows. **Default under thesis** unless §5.7 falsifier explicitly argues otherwise.
+- **(B) Deprecation warnings + grace period** — flat methods emit `DeprecationWarning` for N versions, then removed. Predictable breakage path. **Requires standalone falsifier per thesis.**
+- **(C) Hard cutover at v0.2** — flat methods removed at next major; redesign is the canonical shape. Highest breakage. **Requires standalone falsifier per thesis.**
+- **(D) Tier-based** — flat L methods stay (since they're newest and in published refs); pre-L flat methods get deprecated/removed. Mixed strategy. **Requires standalone falsifier per thesis.**
 
 **Falsifiers required:**
 
@@ -254,20 +291,20 @@ This is essentially a "where does the canonical implementation live" question:
 
 **Question:** Given the falsifier outcomes from §5.1-§5.6, is the redesign actually worth shipping?
 
-This is the **honest meta-question**. The user has flagged a direction; the falsifier may surface that:
+This is the **honest meta-question**. **Under §0 thesis, the test is: does the chosen shape produce a measurable legibility gain over the flat surface, large enough to justify the migration cost?** The user has flagged a direction; the falsifier may surface that:
 
-- The flat surface is conceptually fine for FactPy's "session over knowledge graph" model (per SQLAlchemy precedent).
+- The flat surface is conceptually fine for FactPy's "session over knowledge graph" model (per SQLAlchemy precedent), and **F0-legibility on the flat surface is acceptable** when paired with grouped documentation.
 - Migration cost is high relative to the ergonomic win.
 - No consumer signal exists (no recorded user complaint, no notebook friction beyond what the user noted in `feedback_sdk_ergonomics_redesign_target`).
 - The post-L moment is better spent on a different post-L blueprint (publish-line hygiene, post-publish verification on G1-G4 not yet done, dialog agent, etc.).
 
 **Falsifiers required:**
 
-- F1 — Recap §5.1-§5.6 falsifier outcomes; sum up the costs vs benefits.
+- F1 — Recap §5.1-§5.6 falsifier outcomes; sum up the costs vs benefits **using F0-legibility as the primary axis** per §0.
 - F2 — Source-ground "no" path: under what conditions would "ship nothing" be correct? Document this honestly.
 - F3 — If "ship something", what is the smallest version (alias overlay only, no flat-method changes, no docs touched beyond brief mention)?
 
-A **legitimate `scoped` outcome** for this blueprint is "no SDK surface change; record findings + close". `feedback_narrow_public_api` is the standing principle.
+A **legitimate `scoped` outcome** for this blueprint is "no SDK surface change; record findings + close" — explicitly preserved by §0.3 ("does not pre-commit to nesting"). `feedback_narrow_public_api` is the standing principle.
 
 ### 5.8 Roadmap / version stamping
 
@@ -299,6 +336,9 @@ If §5.1-§5.7 lands a replacement (option C / D): substantially more — every 
 
 (Provisional — finalized at scope-freeze. Inherited from L Direction.)
 
+- **Core thesis (verbatim, per §0):** "The redesign should make the SDK namespace teach FactPy's conceptual model at first contact. Compatibility is a hard constraint, and industry SDK shapes are evidence, not templates." Every §5.x falsifier and every implementation-stage choice must be reducible to this thesis.
+- **F0-legibility primacy.** `dir(client)` / IDE-autocomplete legibility against the §4.1 conceptual layering is the **first** falsifier axis for every shape candidate (§5.1, §5.2, §5.3). Migration cost (F4) and industry alignment (F3 in §5.3) are downstream weights, not entry gates.
+- **Compat is a hard constraint, not a goal.** The flat `SDKStore.<method>` surface across 5 immutable Path B snapshots stays callable; any candidate that breaks it requires a standalone falsifier per §5.4 thesis-derived default.
 - `kernel.sdk.__all__` length stays at **34** unless §5.x explicitly justifies an addition with falsifier pass.
 - Sacred branches `master` and `v0.1-oss-prep` untouched throughout.
 - All 5 published L milestone refs (G1 `d6716a0` / G4 `acb5a6e` / G2 `d658390` / G3 `cb6d3bd` / G5 `d4ceb3e`) and their Path B combined snapshots remain immutable.
@@ -318,6 +358,7 @@ Draft-stage acceptance:
 - [x] §5 enumerates 9 questions; no falsifier locks yet; design-only framing explicit.
 - [x] §6-§9 placeholders.
 - [x] Audit log seeded with "Draft seeded" entry.
+- [x] **§0 Core Thesis locked** — thesis D ("namespace teaches the conceptual model; compat is hard constraint; industry shapes are evidence not templates") encoded verbatim; A/B/C alternatives recorded as rejected; thesis-derived primary falsifiers added to §5.1 (F0 legibility), §5.3 (F0 mental-model-reset), §5.4 (default-no-break), §5.7 (legibility-as-primary-axis); §6 invariants extended with thesis verbatim + F0-primacy + compat-hard-constraint rules.
 
 Scoped-stage acceptance (filled after §5 falsifier passes):
 
