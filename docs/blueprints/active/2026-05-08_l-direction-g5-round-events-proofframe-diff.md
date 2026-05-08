@@ -153,10 +153,15 @@ This matches the event-sourcing-style split (capture is an external, stateful, p
 
 **Conservative default:** ship 1 SDK method `SDKStore.diff_proof_frames(...)`. Falsifier confirms the pattern matches G2 ProofFrame Recheck precedent (frozen-DTO-in, frozen-DTO-out, no derivation/rule lowering).
 
-**Falsifiers required:**
-- F1: `build_proof_frame_diff` signature aligns with the L SDK shape (pure function, frozen-DTO output, no `Store` parameter). Verified at `proof_frame_diff.py:160-191`.
-- F2: All input DTOs (`RoundEvent`) are frozen application-canonical and have no SDK alternative. Verified at `round_events.py:39`.
-- F3: The output DTO `ProofFrameDiff` is frozen and has no SDK wrapper today. Walker view `ProofFrameDiffView` exists but is Tier 2 — does not require SDK to surface.
+**Decision (2026-05-08):** Lock **ship 1 SDK shell — `SDKStore.diff_proof_frames(...) -> ProofFrameDiff`**. This was structurally implied by §5.1 (defer recorder, ship only diff); the falsifier here is structural confirmation.
+
+**Falsifier outcomes (3/3 PASS):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | `build_proof_frame_diff` matches L SDK shape | Pure function (no `Store` parameter), frozen-DTO output, deterministic. Signature `(*, round_a_id, round_b_id, round_a_events, round_b_events, warnings=(), include_unchanged=False) -> ProofFrameDiff` at `src/kernel/audit/proof_frame_diff.py:160-191`. Same shape as G2 ProofFrame Recheck (frozen-DTO-in, frozen-DTO-out, no derivation/rule lowering). | PASS. |
+| F2 | All input DTOs are frozen application-canonical with no SDK alternative | `RoundEvent` confirmed frozen + canonical at §5.3 (`round_events.py:38-61`). No SDK alternative. Covered by §5.3 layer rule. | PASS. |
+| F3 | Output `ProofFrameDiff` is frozen with no SDK wrapper | `@dataclass(frozen=True)` at `proof_frame_diff.py:123-148`. Walker view `ProofFrameDiffView` exists at `kernel.application.walker.views.py:376-415` but is Tier 2 advanced-importable — see §5.4 lock. | PASS. |
 
 ### 5.3 ProofFrame Diff input shape
 
@@ -215,10 +220,35 @@ This rule will appear in §6 invariants verbatim once scope-freezes.
 
 **Conservative default:** documented passthrough of raw `ProofFrameDiff`. Mirrors G2 ProofFrame Recheck (returns raw `ProofFrameRecheckResult`, walker view available but not auto-applied) and every other L return.
 
-**Falsifiers required:**
-- F1: Verify `ProofFrameDiff` is `@dataclass(frozen=True)` with canonical fields and no audit-store / persistence state. Confirmed at `proof_frame_diff.py:123-148`.
-- F2: Verify `ProofFrameDiffView` is opt-in (caller imports walker explicitly), not auto-wrapped anywhere. Confirmed at `walker/views.py:376-415`.
-- F3: `kernel.sdk.__all__` length must remain 34; `ProofFrameDiff` and supporting DTOs not exported.
+**Decision (2026-05-08):** Lock **documented passthrough of raw `ProofFrameDiff`**. No SDK wrapper. Walker view `kernel.application.walker.ProofFrameDiffView` stays advanced importable, opt-in for callers who want ergonomic traversal — exactly mirrors G2's relationship between `recheck_proof_frame` and `ProofFrameView`.
+
+**Falsifier outcomes (3/3 PASS):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | `ProofFrameDiff` is frozen + canonical with no audit-store / persistence state | `@dataclass(frozen=True)` at `proof_frame_diff.py:123-148` with 4 fields (`round_a_id: str`, `round_b_id: str`, `frame_deltas: tuple[FrameDelta, ...]`, `warnings: tuple[WarningDTO, ...]`) + `__post_init__` validation. No mutable state, no IO, no store reference. | PASS — qualifies for raw passthrough under the §5.3 layer rule. |
+| F2 | `ProofFrameDiffView` is opt-in, not auto-wrapped anywhere | `grep` for `ProofFrameDiffView(` shows usage only in (a) `kernel/tests/test_walker_invariants.py:122`, (b) `kernel/tests/test_walker_views_proof_frame_diff.py` (multiple), and (c) `kernel/application/walker/views.py:376` (the definition site). **Zero call sites in `kernel.sdk` or `kernel.application` runtime code.** Users import explicitly via `from kernel.application.walker import ProofFrameDiffView`. Same opt-in pattern as G2's relationship to `ProofFrameView` over `ProofFrameRecheckResult`. | PASS — walker view stays opt-in; SDK shell does not auto-wrap. |
+| F3 | `kernel.sdk.__all__` length stays 34 | Verified at HEAD `75f2826`: `len(kernel.sdk.__all__) == 34`. `ProofFrameDiff` and supporting DTOs (`FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference`) NOT exported. | PASS — boundary unchanged. |
+
+**Forward implications (§5.2 + §5.4 combined):**
+
+- Final SDK signature shape now fully bounded by §5.1 + §5.2 + §5.3 + §5.4:
+
+  ```python
+  SDKStore.diff_proof_frames(
+      round_a_id: str,
+      round_b_id: str,
+      round_a_events: tuple[RoundEvent, ...],
+      round_b_events: tuple[RoundEvent, ...],
+      *,
+      warnings: tuple[WarningDTO, ...] = (),
+      include_unchanged: bool = False,
+  ) -> ProofFrameDiff   # raw passthrough; not in kernel.sdk.__all__
+  ```
+- §5.5 (module placement + shared-validator) becomes mechanical — single shell file, inline validation.
+- §5.6 (file naming) → `kernel/sdk/shells/proof_frame_diff.py`.
+- §5.7 (method name) → `SDKStore.diff_proof_frames` (Group A).
+- §5.8 + §5.9 remain as the final substantive batch (error paths + tests/invariants/`#P1` retrofit count).
 
 ### 5.5 Module placement + sub-question on shared validators
 
