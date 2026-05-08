@@ -293,6 +293,29 @@ becoming SDK API errors.
 
 Tests stay flat under `src/kernel/tests/`; no nested SDK test directory.
 
+**Decision (2026-05-08):** Lock the conservative default. G4 ships exactly two test files, both flat under `src/kernel/tests/`:
+
+- **`src/kernel/tests/test_sdk_why_not.py`** — Why-not per-method contract tests (mirroring G1's `test_sdk_check.py` / `test_sdk_diagnose.py` 14-17-test cadence). Covers each §5.1-§5.6 lock with at least one assertion; includes Sibling-discipline tests (static + runtime) verifying `sdk_why_not` does not call `sdk_check` or `sdk_diagnose`. Estimated ≈ 16-18 tests.
+- **`src/kernel/tests/test_sdk_g4_invariants.py`** — G4 cross-cutting invariants (mirroring G1's `test_sdk_g1_invariants.py` 6-test single-class structure). Six classes mapping 1-to-1 to G1's invariants, scoped to G4's surface.
+
+`test_sdk_frontier.py` is **not** created — §5.4 locked no Frontier SDK method.
+
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Test file count and naming follows G1's per-method + invariant pattern | G1 ships `test_sdk_check.py` (16 tests), `test_sdk_diagnose.py` (19 tests including Q1 Sibling), `test_sdk_g1_invariants.py` (6 tests in single `SDKG1InvariantTests` class). G4 mirrors with one capability test file (`test_sdk_why_not.py`) plus one invariant file (`test_sdk_g4_invariants.py`) — same naming convention `test_sdk_{capability}.py` + `test_sdk_g{N}_invariants.py`. No `test_sdk_frontier.py` per §5.4 lock. | PASS — pattern symmetric. |
+| F2 | Per-method tests cover all §5.1-§5.6 locks | Each lock maps to at least one test in `test_sdk_why_not.py`: §5.1 (SDK Derivation accepted, `Rule`/`CompiledDerivationPlan` rejected); §5.2 (mapping rows + sequence rows + malformed-row error); §5.3 (raw `WhyNotUniverseResult` returned, not in `__all__`); §5.4 (no Frontier SDK method exists — covered in invariant file by absence assertion); §5.5 (module path verified); §5.6 (each of the 5 remap paths tested with mock-injected exceptions: `ValueError` from compiled-plan, `RuleCompileError` from registry, `CapabilityHelperError` from candidate helper, `ProtocolShapeError` from request DTO, `WhyNotRuntimeError` from runtime). | PASS — coverage plan complete. |
+| F3 | Invariant tests cover all §6 principles + §5.5 layout requirements | G4 invariant file mirrors G1 1-to-1: (1) `test_sdk_all_is_unchanged_and_result_types_are_not_exported` — `kernel.sdk.__all__` length unchanged, `WhyNotUniverseResult` not exported; (2) `test_g4_method_is_instance_method_and_no_scenario_method_shipped` — `SDKStore.why_not` is instance method, no top-level `why_not` free function; (3) `test_g4_modules_are_flat_and_no_shells_package_exists` — `kernel/sdk/why_not.py` is flat sibling, no `kernel/sdk/shells/`; (4) `test_g4_modules_do_not_import_internal_or_walker_layers` — `kernel.sdk.why_not` source has no import of `kernel.application.capability_helpers._binding`, `kernel.application.walker.*`, `kernel.audit.*`; (5) `test_store_method_remains_thin_delegate_method` — `SDKStore.why_not` body is just `from .why_not import sdk_why_not; return sdk_why_not(self, ...)`; (6) `test_store_method_docstring_records_boundary_contract` — docstring mentions `WhyNotUniverseResult`, `SDKStoreError`, and `$.why_not.*` paths. | PASS — six invariant classes, one per G1 invariant slot. |
+| F4 | Q1-Sibling-style discipline tested in both static + runtime forms | Even though Why-not has no symmetric Check sibling (it's a single capability), the Sibling discipline still applies — `sdk_why_not` MUST NOT internally call `sdk_check` or `sdk_diagnose`. Two tests in `test_sdk_why_not.py`: (a) runtime patch of `sdk_check` + `sdk_diagnose` and assert neither is invoked during a `sdk.why_not(...)` call; (b) static source scan of `kernel/sdk/why_not.py` confirming no `from .check`, `from .diagnose`, `sdk_check(`, or `sdk_diagnose(` references. Mirrors G1 Diagnose pattern verbatim. | PASS — two-form discipline preserved. |
+| F5 | Tests stay flat (no nested `tests/sdk/` directory) | G1 §5.6 lock kept tests flat in `src/kernel/tests/`. Current inventory: `test_sdk_check.py`, `test_sdk_diagnose.py`, `test_sdk_g1_invariants.py`, `test_sdk_validation.py` — all flat. G4 adds `test_sdk_why_not.py` + `test_sdk_g4_invariants.py` at the same flat level. No `tests/sdk/` subdirectory. Fixtures (e.g., `Person` Entity, `_seed_person(...)`, `_age_derivation()`) inline per test file — duplication intentional per G1 §5.6 (see Round 4 audit C.7 Minor recorded as accepted). If a future shared fixture file becomes necessary, G2 Phase 0 hygiene (alongside the `kernel/sdk/shells/` migration trigger inherited from G1 §5.5) is the right venue. | PASS — flat layout preserved. |
+
+**Forward implications:**
+
+- All seven §5.1-§5.7 are now locked. Status transition `draft -> scoped` is the next step (separate decision; not auto-promoted).
+- Scoped-stage acceptance section in §7 must be filled in before status moves to `scoped`: enumerate per-test counts, reference §5.6 remap paths, and bind the implementation phase plan to the locked surface.
+- Implementation phase plan in §8 follows G1's 4-phase template: Phase 0 skeleton + delegate stubs → Phase 1 real implementation + contract tests → Phase 2 invariants + cross-cutting tests + docs → Phase 3 archive + snapshot publish.
+
 ## 6. Boundaries And Invariants
 
 | Principle | G4 interpretation |
