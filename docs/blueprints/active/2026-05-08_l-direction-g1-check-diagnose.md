@@ -222,6 +222,45 @@ A `sdk.explain(rule, binding, store) -> SDKExplainResult` (with `.passed`, `.evi
 
 **Falsifier required:** confirm error hierarchy growth is minimal — only what current G1 needs (per `#6`).
 
+**Decision (2026-05-08, falsifier pass complete):**
+
+- **G1 remaps both A errors to `SDKStoreError`; no new SDK error subclass introduced:**
+  - `CapabilityHelperError` → `SDKStoreError`
+  - `OriginPackageError` → `SDKStoreError` (caught via parent class `CapabilityHelperError`; concrete subclass distinction available at runtime via `isinstance(exc, OriginPackageError)` if implementation needs to differentiate `code` values)
+- **Preserve exception chaining:** `raise SDKStoreError(...) from exc`.
+- **Set `path` per call-site:** e.g. `$.check`, `$.diagnose`; more precise paths like `$.check.rule` / `$.check.binding` if implementation naturally has that context.
+- **`code` optional at Step 0:** Step 0 does not lock specific codes. If implementation uses codes, keep minimal (e.g. `SDK_CHECK_HELPER_INVALID` / `SDK_DIAGNOSE_HELPER_INVALID`); not required.
+- **No new exported SDK error class** — no `SDKLoweringError`, no `SDKCapabilityError` introduction in G1.
+- **`WalkerError` remap not in scope:** §5.2 lock disabled B walker imports; this falsifier sub-question is resolved as moot.
+
+**Falsifier evidence (read-only audit):**
+
+1. **SDK error hierarchy is intentionally small** — [errors.py](../../../src/kernel/sdk/errors.py): `SDKError` base (with `code` + `path` fields) + 3 main subclasses (`SDKSchemaError` / `SDKStoreError` / `SDKRegistryError`) + 4 facade-specific (`EntityNotFoundError` / `FrozenSnapshotError` / `CardinalityError` / `EditorClosedError`). No capability-specific error family exists today; SDK convention is to keep the hierarchy lean.
+2. **SDK docs classify SDK facade input / constraint failures under `SDKStoreError`** — [00_user_guide.md §9.0 line 1080](../../../src/kernel/sdk/docs/00_user_guide.md): "SDK facade 层 | `SDKSchemaError` / `SDKStoreError` | 入参形态错误、约束不满足、功能边界不支持". Line 1086: "`SDKError` 及其子类统一提供结构化字段：`code`（机器可读错误码）、`path`（未设置时为 `None`）". G1's failure mode (caller-input-shape error caught from A's helpers) maps directly to the documented `SDKStoreError` category.
+3. **SDK lowering already wraps lower-layer compiler exceptions into `SDKStoreError` with chaining** — [store.py:845-848](../../../src/kernel/sdk/store.py): `compile_authoring_rule_v1(...)` exception caught and re-raised as `raise SDKStoreError(f"invalid rule input: {exc}") from exc`. [store.py:939-940](../../../src/kernel/sdk/store.py): `compile_authoring_derivation_v1(...)` same pattern. G1 inherits this established pattern verbatim for `CapabilityHelperError` / `OriginPackageError`.
+4. **SDK/application bridge maps `ErrorDTO` to `SDKStoreError` while preserving `code` and `path`** — [ingest.py:448-453](../../../src/kernel/sdk/ingest.py): `_sdk_error_from_app_error(error, fallback_path)` returns `SDKStoreError(error.message, code=error.code, path=_sdk_path_from_app_path(error.path, fallback_path=fallback_path))`. [query_runtime.py:112-123](../../../src/kernel/sdk/query_runtime.py): `_sdk_error_from_app_dto(error, query_id)` similar pattern with optional code translation. Pattern: SDK layer wraps application errors into `SDKStoreError` with `code` and `path` preserved/translated; no specialized SDK error subclass introduced.
+5. **A errors are application-helper errors, NOT SDK API errors** — [errors.py](../../../src/kernel/application/capability_helpers/errors.py): `CapabilityHelperError(ValueError)` (line 6) and `OriginPackageError(CapabilityHelperError)` (line 10). Notably `CapabilityHelperError` extends `ValueError`, not any SDK error type — confirms it is an application-layer caller-input-validation error, NOT an SDK API contract error. SDK shell catches at the boundary and remaps; propagating `CapabilityHelperError` directly would leak `kernel.application.capability_helpers` types into the SDK exception surface.
+
+**Why `SDKStoreError` is the right target (no new subclass):**
+
+| Option | Outcome |
+|---|---|
+| **`SDKStoreError`** (chosen) | Matches existing 4 SDK lowering precedents (evidence 3 + 4); aligns with docs' explicit "SDK facade 层 入参形态错误 → `SDKStoreError`" guidance (evidence 2); zero hierarchy growth per `#6`. |
+| **New `SDKLoweringError(SDKStoreError)` subclass** | More specific catch-by-type, but no other SDK lowering site uses this — would be a unique-to-G1 subclass without consistency precedent. Adds outward surface without source-grounded user signal per `#6`. |
+| **New `SDKCapabilityError` family** | Strongly violates `#6` minimal hierarchy + adds capability-specific outward type that future G2-G5 would also have to commit to. Premature. |
+| **Propagate `CapabilityHelperError` directly** | Leaks `kernel.application.capability_helpers` types into SDK exception surface; caller catches `CapabilityHelperError` from SDK call, breaking the SDK error boundary. Inconsistent with established wrap-then-raise convention (evidence 3 + 4). |
+
+**Falsifier outcomes (against §5.3 sub-questions + `#6` minimality):**
+
+| Sub-question | Outcome |
+|---|---|
+| Q1: `OriginPackageError` → `SDKLoweringError` subclass, or propagate? | **Resolved:** remap to `SDKStoreError`. No new subclass; propagation would leak application types; subclass would add unique-to-G1 outward type without precedent. |
+| Q2: Walker exceptions surface or remap at SDK boundary? | **Moot:** §5.2 lock disabled B walker imports; this sub-question dissolves. |
+| Q3: New SDK error subclasses needed (list)? | **None.** Existing `SDKStoreError` covers G1's failure modes per evidence 1-4. |
+| `#6` minimality check | **Satisfied:** zero new SDK error subclasses; `__all__` unchanged; pattern matches 4 established precedents. |
+
+**Implementation note (not part of lock):** Single `except CapabilityHelperError as exc:` catches both `CapabilityHelperError` and `OriginPackageError` (subclass relation per evidence 5). If implementation phase wants different `code` values for the two, an `isinstance(exc, OriginPackageError)` check inside the handler is sufficient — no separate except clauses needed.
+
 ### 5.4 `kernel.sdk.__all__` exposure pattern
 
 **Question:** Are G1's new methods added to `kernel.sdk.__all__` directly (top-level), exposed only via submodule path (`from kernel.sdk.check import sdk_check_derivation_binding`), or both?
@@ -270,7 +309,7 @@ Principles locked active for G1 (numbering per [30_recommendation.md](../../refe
 | `#5` Layer isolation | Active | G1 in `kernel.sdk` may import `kernel.application.capability_helpers` public surface and `kernel.application.derivation_check_runtime` / `derivation_diagnose_runtime`. Reverse imports forbidden. |
 | `#6` No outward compat without user signal | Active | Drives §5.1 / §5.2 / §5.4 falsifier discipline. README quickstart non-goal. |
 | `#11` `.underlying` escape hatch | **Inactive for G1 v1** (resolved 2026-05-08) | §5.2 locked to documented passthrough; G1 does not import B walker views, so `.underlying` is not surfaced. Reactivates only via future `#P1` revision adding typed wrapper. |
-| `#12` Error boundaries naming | **Partial** (resolved 2026-05-08) | `OriginPackageError` remap (§5.3) remains unconditionally active. `WalkerError` remap is inactive for G1 v1 since walker views are not exposed (§5.2 documented passthrough). Reactivates if future `#P1` revision adds B walker imports. |
+| `#12` Error boundaries naming | **Resolved** (2026-05-08) | `CapabilityHelperError` + `OriginPackageError` both remap to `SDKStoreError` with exception chaining per §5.3; no new SDK error subclass introduced. `WalkerError` remap remains inactive for G1 v1 since walker views are not exposed (§5.2 documented passthrough). Reactivates if future `#P1` revision adds B walker imports. |
 | `#19` Test contract | Active | Flat `unittest`; no Hypothesis; fixtures `_g1_fixtures.py` if extracted |
 | `#P0` Conflict resolution | Active | Tier 5 (`#6`) constrains Tier 4 (ergonomic surface). Default-to-narrow heuristic informs §5.1 / §5.2 / §5.4 defaults. |
 | `#P1` Carve-out flow | Active | Any deviation in scoping or implementation phases must record id / reason / scope / impact / reviewer ack |
@@ -301,7 +340,8 @@ Acceptance gates are completed at scope-freeze. At `draft` status, only Step 0 f
 - [x] Bundle reference and prior art cited in §4
 - [x] §5.1 falsifier pass — locked 2026-05-08 (per-method API; scenario `sdk.explain` rejected, remains Direction C future composition)
 - [x] §5.2 falsifier pass — locked 2026-05-08 (documented passthrough for both methods; B dependencies inactive; `CheckResult` / `DiagnoseResult` not re-exported from `kernel.sdk.__all__`)
-- [ ] §5.3 through §5.7 falsifier passes — **pending scoping round**
+- [x] §5.3 falsifier pass — locked 2026-05-08 (`CapabilityHelperError` + `OriginPackageError` both remap to `SDKStoreError`; exception chaining preserved; `path` set per call-site; no new SDK error subclass)
+- [ ] §5.4 through §5.7 falsifier passes — **pending scoping round**
 
 ## 8. Implementation Plan
 
