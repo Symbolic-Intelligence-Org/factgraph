@@ -9,6 +9,7 @@ from .capability_helpers import (
     build_fact_remove_action,
     build_fact_value_override,
     build_frontier_view_facts,
+    build_proof_frame_recheck_request,
     build_why_not_candidate_universe,
 )
 from .derivation_check_runtime import (
@@ -101,6 +102,7 @@ __all__ = [
     "build_schema_index",
     "build_fact_value_override",
     "build_frontier_view_facts",
+    "build_proof_frame_recheck_request",
     "build_why_not_candidate_universe",
     "check_derivation_binding",
     "check_fact_overlay_binding",
