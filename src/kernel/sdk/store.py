@@ -55,6 +55,7 @@ if TYPE_CHECKING:
         DiagnoseResult,
         FactOverlayCheckResult,
         ProofFrameRecheckResult,
+        RuleAddConditionResult,
         RuleDisableResult,
         RuleLiteralReplaceResult,
         WhyNotUniverseResult,
@@ -637,6 +638,79 @@ class SDKStore:
             literal_path=literal_path,
             old_literal=old_literal,
             new_literal=new_literal,
+            overlay=overlay,
+            note=note,
+        )
+
+    def check_rule_add_condition(
+        self,
+        rule: Any,
+        support: Any,
+        *,
+        branch_index: int,
+        added_atom: Any,
+        overlay: Any = None,
+        note: str | None = None,
+    ) -> "RuleAddConditionResult":
+        """Check a Rule Add Condition rule-overlay action against captured support.
+
+        Args:
+            rule: SDK ``Rule`` describing the target rule. Lowered through
+                ``SDKStore._compile_rule_input(...)`` to a substrate
+                ``RuleSpec`` per §5.2 lock; raw ``RuleSpec`` is rejected.
+            support: Raw application ``SupportArtifact`` from a prior
+                Check run's ``CheckResult.evidence_envelope.engine_payload``.
+                Per §5.3 lock the SDK never wraps it.
+            branch_index: Non-negative branch locator into
+                ``rule_spec.where`` per §5.4 lock. Note Add Condition
+                has no ``atom_index`` argument — it appends a new atom
+                to the branch rather than pointing at an existing
+                locator.
+            added_atom: Raw application ``RuleAddedAtom`` per §5.4
+                lock (frozen application-canonical, no SDK alternative
+                without inventing outward surface — G2 §5.1+§5.2
+                cross-cutting precedent applies).
+            overlay: ``None`` or an empty ``EvaluationOverlay``. The
+                rule-action overlay is constructed internally by the A
+                helper ``build_rule_add_condition_request(...)``;
+                non-empty overlay is rejected at the SDK boundary per
+                §5.4 + §5.8 locks.
+            note: Optional human-readable annotation forwarded to the
+                ``RuleAddConditionAction`` per §5.4 lock.
+
+        Returns:
+            The application ``RuleAddConditionResult`` DTO directly.
+            The runtime represents unsupported support kinds, rule-ref
+            edges, rule-id/version mismatch, and native evaluation
+            failures as result DTOs; the SDK shell passes the result
+            through unchanged per §5.8 lock.
+
+        Raises:
+            SDKStoreError: For non-SDK exceptions crossing the SDK
+                boundary. The ``path`` field locates the failure:
+                ``$.check_rule_add_condition.rule`` for non-``Rule``
+                SDK input or invalid rule shape after lowering;
+                ``$.check_rule_add_condition.support`` for non-
+                ``SupportArtifact`` input;
+                ``$.check_rule_add_condition.overlay`` for non-
+                ``EvaluationOverlay`` non-None or non-empty
+                ``EvaluationOverlay`` input;
+                ``$.check_rule_add_condition.dependencies`` for
+                dependency rule registration / RuleRef resolution
+                failures; ``$.check_rule_add_condition.request`` for
+                ``RuleAddedAtom`` shape errors / action / request DTO
+                shape errors; and ``$.check_rule_add_condition`` for
+                unexpected runtime exceptions. Original exceptions are
+                preserved as ``__cause__``.
+        """
+        from .shells.rule_add_condition import sdk_rule_add_condition
+
+        return sdk_rule_add_condition(
+            self,
+            rule,
+            support,
+            branch_index=branch_index,
+            added_atom=added_atom,
             overlay=overlay,
             note=note,
         )

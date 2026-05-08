@@ -472,14 +472,45 @@ class RuleAddConditionRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("why_not_runtime", source)
         self.assertNotIn("kernel.sdk", source)
 
-    def test_no_sdk_rule_add_condition_surface(self) -> None:
-        sdk_sources = "\n".join(
-            path.read_text()
-            for path in Path("src/kernel/sdk").rglob("*.py")
+    def test_sdk_rule_add_condition_shell_imports_runtime_only_in_shell(self) -> None:
+        """G3 Phase 3 retrofit (per `#P1` carve-out, mirroring G2 Phase 0
+        retrofits of G1 + G4 archived invariants and G3 Phase 1 / Phase 2
+        retrofits of the Rule Disable + Rule Literal Replace boundary
+        tests): the SDK Rule Add Condition shell at
+        ``kernel/sdk/shells/rule_add_condition.py`` is now the active L
+        Direction entry point. The original "no SDK surface" assertion
+        is replaced by a narrower invariant: the runtime entrypoint
+        ``check_rule_add_condition_action`` is imported only by the
+        shell file, and ``RuleAddConditionAction`` is never IMPORTED
+        anywhere in SDK code (docstring references documenting the
+        boundary contract are allowed; the application A helper
+        ``build_rule_add_condition_request`` constructs the action
+        internally).
+        """
+        shell_path = Path("src/kernel/sdk/shells/rule_add_condition.py")
+        self.assertTrue(
+            shell_path.is_file(), f"{shell_path} should exist after G3 Phase 3"
         )
 
-        self.assertNotIn("check_rule_add_condition_action", sdk_sources)
-        self.assertNotIn("RuleAddConditionAction", sdk_sources)
+        shell_source = shell_path.read_text()
+        self.assertIn(
+            "from kernel.application.rule_add_condition_runtime import (",
+            shell_source,
+        )
+        self.assertIn("check_rule_add_condition_action", shell_source)
+        self.assertNotIn("import RuleAddConditionAction", shell_source)
+        self.assertNotIn(", RuleAddConditionAction", shell_source)
+        self.assertNotIn("RuleAddConditionAction(", shell_source)
+
+        other_sdk_sources = "\n".join(
+            path.read_text()
+            for path in Path("src/kernel/sdk").rglob("*.py")
+            if path != shell_path
+        )
+        self.assertNotIn("check_rule_add_condition_action", other_sdk_sources)
+        self.assertNotIn("import RuleAddConditionAction", other_sdk_sources)
+        self.assertNotIn(", RuleAddConditionAction", other_sdk_sources)
+        self.assertNotIn("RuleAddConditionAction(", other_sdk_sources)
 
     def test_frontier_protected_entrypoints_do_not_drift(self) -> None:
         ruleref_source = Path("src/kernel/core/rules/ruleref_substrate.py").read_text()
