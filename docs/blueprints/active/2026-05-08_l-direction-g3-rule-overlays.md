@@ -226,6 +226,45 @@ Candidates:
 - Confirm A helper behavior around `overlay=None`, empty overlay, and non-empty overlay rejection.
 - Decide whether `note=None` remains a SDK convenience parameter or is omitted to keep surface minimal.
 
+**Decision (2026-05-08):** Lock 1:1 mirror of A signatures (with §5.2's `rule` substitution for `rule_spec`). All three SDK methods accept raw `RuleLiteralPath` / `RuleAddedAtom` per the G2 §5.1+§5.2 cross-cutting precedent (frozen application-canonical + no SDK alternative without inventing surface). `overlay=None` and `note=None` are exposed at SDK boundary, forwarded to A. A's existing `_request_overlay(...)` contract is preserved: `None` or empty `EvaluationOverlay()` accepted; non-empty overlay raises `CapabilityHelperError("non-empty overlay not supported")` which §5.8 maps to `$.<method>.overlay` → `SDKStoreError`. Final signatures:
+
+```python
+SDKStore.check_rule_disable(
+    rule, support, *,
+    branch_index, atom_index,
+    overlay=None, note=None,
+) -> RuleDisableResult
+
+SDKStore.check_rule_literal_replace(
+    rule, support, *,
+    branch_index, atom_index,
+    literal_path, old_literal, new_literal,
+    overlay=None, note=None,
+) -> RuleLiteralReplaceResult
+
+SDKStore.check_rule_add_condition(
+    rule, support, *,
+    branch_index, added_atom,
+    overlay=None, note=None,
+) -> RuleAddConditionResult
+```
+
+**Falsifier outcomes (5/5 PASS):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | `RuleLiteralPath` and `RuleAddedAtom` are frozen application-canonical DTOs comparable to G2's raw DTO precedent | `RuleLiteralPath` at `kernel/application/protocol/derivation_fact_overlay.py:159-176` is `@dataclass(frozen=True)` with `kind: RuleLiteralPathKind` (literal-typed `"pred_term" / "lhs" / "rhs" / "in_value" / "const_operand"`) + `index: int | None`, with strict `__post_init__` validation enforcing kind/index pairing rules. `RuleAddedAtom` at `:201-209` is `@dataclass(frozen=True)` with single `atom: tuple[Any, ...]` field, validating non-empty tuple + first element is atom-kind string. Both live in `kernel.application.protocol` (same layer as `EvaluationOverlay` / `SupportArtifact`). They satisfy the G2 §5.1+§5.2 cross-cutting precedent: (a) frozen application-canonical, (b) no SDK alternative — wrapping would force a new outward DTO under `#6` without consumer signal. | PASS — raw exposure aligned with G2 precedent. |
+| F2 | SDK-friendly alternatives are obvious and source-grounded | No source signal for SDK-side wrappers around `RuleLiteralPath` (the kind+index pairing is application-protocol concept, not SDK ergonomics) or `RuleAddedAtom` (the tuple form is `kernel.core.rules.rule_ir` IR convention, used directly by the runtime). `old_literal: Any` / `new_literal: Any` are by design — literal values may be `int`, `str`, `float`, `bool`, etc. depending on which literal position is being replaced; tightening the type at SDK boundary would be either incorrect (rejecting valid literals) or a no-op (`Any` is already permissive). Inventing SDK-side per-action wrappers (e.g., `class SDKLiteralReplace`, `class SDKAddedAtom`) would expand SDK surface without ergonomic gain. | PASS reject SDK wrappers. |
+| F3 | A helper behavior around `overlay=None`, empty overlay, and non-empty overlay rejection | `kernel/application/capability_helpers/rule_overlays.py:_request_overlay(action, *, overlay)` (`:150-163`): if `overlay is None` → returns `EvaluationOverlay(rule_actions=(action,))` (single-action overlay built internally); elif overlay is `EvaluationOverlay` and empty (`not overlay.fact_actions and not overlay.rule_actions`) → returns `EvaluationOverlay(rule_actions=(action,))`; elif overlay is `EvaluationOverlay` non-empty → raises `CapabilityHelperError("non-empty overlay not supported; use overlay=None or EvaluationOverlay()")`; elif overlay is non-`EvaluationOverlay` → raises `CapabilityHelperError("overlay must be EvaluationOverlay or None")`. SDK contract therefore: caller passes `None` or empty `EvaluationOverlay`; A enforces emptiness; SDK remaps non-`EvaluationOverlay` and non-empty `EvaluationOverlay` errors via `CapabilityHelperError` path mapping in §5.8. | PASS — A contract preserved verbatim. |
+| F4 | `note=None` remains a SDK convenience parameter (vs. omitted) | A helpers already accept `note: str | None = None` (rule_overlays.py `:33`, `:67`, `:103`). `note` is forwarded into the rule-action DTO and used as audit/observability metadata. Omitting `note` at the SDK boundary would force callers who want to attach notes to drop to advanced-importable layer (against the L Direction spirit of full-coverage SDK). Forwarding `note` is a zero-cost continuation of an already-shipped A surface; it does not add a new outward commitment under `#6`. | PASS — note exposed. |
+| F5 | `branch_index` / `atom_index` / `added_atom` / `literal_path` / `old_literal` / `new_literal` action arguments are passed positionally? Or keyword-only? | A helpers use keyword-only after `*` (verified in `rule_overlays.py` builder signatures). SDK mirrors keyword-only to (a) avoid positional-argument drift if A reorders, (b) make call sites self-documenting (`branch_index=0, atom_index=2, ...`), (c) align with G1+G4+G2 SDK methods which all have `*` before any non-required arg (e.g., G2's `check_fact_overlay(derivation, binding, overlay, *, engine, registry)`). | PASS — keyword-only. |
+
+**Forward implications:**
+
+- §5.8 (error mapping) covers the per-method `$.<method>.overlay` path for non-`EvaluationOverlay` and non-empty `EvaluationOverlay` rejection (both via A's `CapabilityHelperError`); `validate_evaluation_overlay` from G2 cannot be reused as-is because it rejects `None`. §5.8 lock will decide between (a) extend `_validation.py` with `validate_optional_evaluation_overlay(value, *, path)` that allows `None`, or (b) inline the type check in each shell, or (c) skip pre-check and let A's `CapabilityHelperError` fire. Conservative default: extend shared validator with optional variant.
+- The locked signatures preserve A's positional vs keyword-only convention exactly, so SDK delegate body remains a thin wrapper passing all kwargs through to the A helper.
+- `RuleLiteralPath` / `RuleAddedAtom` are NOT exported from `kernel.sdk.__all__` (per §5.5 lock + §5.6 invariants); SDK callers either import them from `kernel.application.protocol` or construct them inline at call sites.
+
 ### 5.5 Return shape
 
 **Question:** Do the three methods return raw application result DTOs or SDK wrappers?
