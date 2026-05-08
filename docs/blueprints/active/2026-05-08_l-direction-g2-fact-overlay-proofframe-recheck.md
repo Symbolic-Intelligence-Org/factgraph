@@ -115,6 +115,23 @@ This blueprint is at `draft` status. The questions below must be resolved before
 - Confirm whether existing application-layer Fact Overlay tests construct `EvaluationOverlay` directly, indicating it is the ergonomic intent shape.
 - Reject any shape that requires SDK-side `EvaluationOverlay` reconstruction without source signal.
 
+**Decision (2026-05-08):** Lock option 2 — `SDKStore.check_fact_overlay(derivation, binding, overlay, *, engine="native", registry=None) -> FactOverlayCheckResult`, where `derivation` is SDK `Derivation`, `binding` is a `$`-prefixed mapping validated through the shared SDK validators, and `overlay` is a raw `EvaluationOverlay` protocol DTO. G2 treats `EvaluationOverlay` as author-time intent, not a lowered application plan. It is therefore not covered by G1's rejection of `CompiledDerivationPlan`, which was rejected because it is already-lowered application-layer representation.
+
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | `EvaluationOverlay` is author-time intent, not lowered plan state | `EvaluationOverlay` is a frozen protocol DTO over `fact_actions` / `rule_actions` with validation only for action tuple shape (`derivation_fact_overlay.py:263-278`). `FactOverlayCheckRequest` accepts either legacy tuple-of-`FactValueOverride` or `EvaluationOverlay` directly (`derivation_fact_overlay.py:281-307`). It is not a compiled plan and does not contain runtime store/registry/projection/cache state. | PASS — G1 §5.7 `CompiledDerivationPlan` rejection does not apply. |
+| F2 | Application tests already treat `EvaluationOverlay` as the ergonomic intent shape | Protocol tests construct `EvaluationOverlay(fact_actions=...)`, preserve legacy positional fact actions, allow empty overlay for runtime invalid-request behavior, and accept rule-action lane values (`test_application_fact_overlay_protocol.py:274-313`). Runtime tests pass `EvaluationOverlay(...)` directly to `FactOverlayCheckRequest` for rule-action rejection and other preflight paths (`test_application_fact_overlay_runtime_native.py:236-258`). | PASS — raw overlay is already the user-facing application intent object. |
+| F3 | A helper surface already builds the action pieces, not a separate SDK overlay DTO | Batch 2 helpers build `FactValueOverride`, `FactRemoveAction`, and `EvaluationOverlay` from existing store/schema context (`capability_helpers/fact_overlay.py:28-178`). Creating a parallel SDK overlay wrapper would duplicate that construction path and add a new outward SDK type under `#6` without source signal. | PASS — no new SDK overlay wrapper in first slice. |
+| F4 | Direct protocol validation constrains bad overlay shapes | `EvaluationOverlay.__post_init__` rejects non-tuple actions and unknown action types (`derivation_fact_overlay.py:268-278`; tests at `test_application_fact_overlay_protocol.py:300-312`). G2 will still remap request DTO `ProtocolShapeError` and runtime failures to `SDKStoreError` in §5.8. | PASS — raw DTO does not bypass validation. |
+
+**Forward implications:**
+
+- `SDKStore.check_fact_overlay(...)` does not accept application `CompiledDerivationPlan`, raw `FactOverlayCheckRequest`, SDK-owned overlay DTOs, or per-action keyword shapes in this slice.
+- Implementation validates `derivation` and `binding` with the same shared SDK validators used by G1/G4, then constructs `FactOverlayCheckRequest(plan, binding, overlay, engine)`.
+- `overlay` wrong-type / malformed-shape failures are handled through request DTO construction and remapped per §5.8, not through a new SDK overlay normalizer.
+
 ### 5.2 ProofFrame Recheck SDK input shape
 
 **Question:** Does `SDKStore.recheck_proof_frame(...)` accept:
