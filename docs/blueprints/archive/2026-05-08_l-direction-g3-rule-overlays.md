@@ -1,6 +1,6 @@
 # L Direction G3 — Rule Overlay SDK Shells
 
-- **Status:** scoped
+- **Status:** implemented
 - **Created:** 2026-05-08
 - **Last Updated:** 2026-05-08
 - **Parent:** L Direction (post-A+B+G1+G4+G2 v1-ready roadmap target)
@@ -607,4 +607,82 @@ Sacred branches `master` and `v0.1-oss-prep` remain untouched throughout. G1 + G
 
 ## 9. Outcome / Deviations
 
-To be filled at close-out.
+### 9.1 Final Landed Surface
+
+Five new artifacts visible at the SDK boundary:
+
+```
+SDKStore.check_rule_disable(
+    rule, support, *,
+    branch_index, atom_index,
+    overlay=None, note=None,
+) -> RuleDisableResult
+
+SDKStore.check_rule_literal_replace(
+    rule, support, *,
+    branch_index, atom_index,
+    literal_path, old_literal, new_literal,
+    overlay=None, note=None,
+) -> RuleLiteralReplaceResult
+
+SDKStore.check_rule_add_condition(
+    rule, support, *,
+    branch_index, added_atom,
+    overlay=None, note=None,
+) -> RuleAddConditionResult
+```
+
+Three new SDK shell files under the existing `kernel/sdk/shells/` subpackage (8 modules total post-G3): `rule_disable.py`, `rule_literal_replace.py`, `rule_add_condition.py`. Three new shared validators added to `kernel/sdk/shells/_validation.py`: `validate_rule`, `validate_support_artifact`, `validate_optional_evaluation_overlay`. `kernel.sdk.__all__` length **unchanged at 34** — no new outward exports.
+
+### 9.2 6-Phase Commit Chain
+
+| Phase | Commit | Description |
+|---|---|---|
+| Phase 0 | `5437cd6` | Shared validator extraction; ProofFrame migration to shared `validate_support_artifact`; G2 §5.2 deferred trigger fired |
+| Phase 1 | `7f761bd` | `sdk_rule_disable` shell + thin delegate + 16 contract tests + `#P1` retrofit on `test_no_sdk_rule_disable_surface` |
+| Phase 2 | `3526cc1` | `sdk_rule_literal_replace` shell + thin delegate + 17 contract tests + `#P1` retrofit on `test_no_sdk_rule_literal_replace_surface` |
+| Phase 3 | `63c47ea` | `sdk_rule_add_condition` shell + thin delegate + 17 contract tests + `#P1` retrofit on `test_no_sdk_rule_add_condition_surface` |
+| Phase 4 | `df772e2` | G3 invariants (6-class mirror) + SDK API docs CN/EN + application overview docs CN/EN + cumulative audit |
+| Phase 5 | (this commit) | Close-out: §9 Outcome filled, status `scoped → implemented`, archive |
+
+Plus 9 doc/lock commits before Phase 0 (recorded in audit log entries 1-11) covering Step 0 falsifier passes for all 9 §5.x questions.
+
+### 9.3 Deviations from Original Design
+
+Four deliberate deviations recorded across the audit log:
+
+1. **§5.6 module layout — three sibling modules over one consolidated `rule_overlays.py`** (Decision lock at `ce4ab49`). Conservative default in §5.6 was a single consolidated module; falsifier evidence (Sibling static-scan ergonomics + `#3` heterogeneity preservation + future per-method test isolation) supported three sibling modules. Decision overrode the conservative default explicitly with full rationale.
+
+2. **§5.7 method names — `check_rule_*` (Group A) over `disable_rule` / `replace_rule_literal` / `add_rule_condition` (Group B)** (Decision lock at `660e61d`). User-articulated concern: Group B `disable_rule` could read as persistent rule mutation given existing SDK `add` / `set` / `retract` write methods. Group A signals what-if semantics via `check_*` prefix consistent with G1's `check` and G2's `check_fact_overlay`. Group A also drops only `_action` suffix from runtime names, preserving 1:1 trace.
+
+3. **§5.2 — SDK `Rule` over raw `RuleSpec`** (Decision lock at `8b36110`). G2 §5.1+§5.2 cross-cutting precedent ("raw application protocol DTOs at SDK boundary") does NOT extend to `RuleSpec` because `RuleSpec` lives at `kernel.core.rules.rule_ir` (substrate IR) rather than `kernel.application.protocol`. SDK uses existing `_compile_rule_input(rule)` lowering chain. Cross-cutting precedent extended in §5.4 to cover `RuleLiteralPath` and `RuleAddedAtom` since those ARE in `kernel.application.protocol`.
+
+4. **`#P1` carve-out applied three times — once per Phase 1/2/3** for the pre-G3 application-runtime boundary tests (`test_no_sdk_rule_{disable,literal_replace,add_condition}_surface`). Each test asserted **no** SDK surface for the corresponding capability; G3 §5.6 explicitly inverts the premise. Retrofit in-place (mirroring G2 Phase 0's G1+G4 retrofits) renames each test to `test_sdk_rule_<x>_shell_imports_runtime_only_in_shell` with inverted assertions and pattern-based checks tolerating docstring references. Carve-out scope and reviewer ack recorded in audit log per `#P1` rule 8.
+
+### 9.4 Test Catalogue
+
+- `test_sdk_rule_disable.py` — 16 contract tests
+- `test_sdk_rule_literal_replace.py` — 17 contract tests (1 extra for `RuleLiteralPath` shape validation)
+- `test_sdk_rule_add_condition.py` — 17 contract tests (1 extra for `RuleAddedAtom` shape validation)
+- `test_sdk_g3_invariants.py` — 6 invariant classes (1:1 mirror of G1/G4/G2)
+- `test_sdk_validation.py` — extended from 11 to 30 tests (+19 covering all three new shared validators)
+- `#P1` retrofits on 3 application-runtime boundary tests (one per phase)
+
+Phase-end test counts: Phase 0 → 1593 OK; Phase 1 → 1609 OK; Phase 2 → 1626 OK; Phase 3 → 1643 OK; Phase 4 → 1649 OK. Pre-existing `kernel.adapters.problog` import error environment-only and unaffected throughout.
+
+### 9.5 Boundary Outcomes
+
+- **`kernel.sdk.__all__` length still 34** — no G3 result/action/request/path/atom DTOs nor SDK function names added; verified by all four invariant test files (G1 + G4 + G2 + G3).
+- **`kernel/sdk/shells/` populated to 8 modules** — `check.py` (G1) + `diagnose.py` (G1) + `why_not.py` (G4) + `fact_overlay.py` (G2) + `proof_frame.py` (G2) + `rule_disable.py` (G3) + `rule_literal_replace.py` (G3) + `rule_add_condition.py` (G3) + `_validation.py` (shared).
+- **SDKStore method count: 39** (was 36 pre-G3; +3 G3 methods).
+- **README quickstart untouched** — G3 introduces no new top-level exports or recommended snippets at this layer.
+- **Frontier remains advanced importable per G4 §5.4** — evaluator drift gate and application no-opt-in tests stay in force.
+- **G1 + G4 + G2 published snapshot branches NOT modified** — verified at Phase 4 audit and remain at: `origin/v0.1-l-g1-check-diagnose-2026-05-08` @ `d6716a0`, `origin/v0.1-l-g4-why-not-frontier-2026-05-08` @ `acb5a6e`, `origin/v0.1-l-g2-fact-overlay-proofframe-recheck-2026-05-08` and combined snapshot @ `d658390`. Sacred branches `master` and `v0.1-oss-prep` untouched throughout.
+
+### 9.6 Forward Triggers
+
+- **`kernel/sdk/shells/` subpackage at 8 modules** — G5 (TBD) lands new shells directly under `shells/`; no migration needed. Validator extraction trigger (currently 6 shared validators in `_validation.py`) reactivates only if G5 needs new shared check.
+- **§5.1 + §5.2 cross-cutting precedent extended** — substrate IR (`RuleSpec`) is OUT of scope for raw cross-boundary DTO; application protocol DTOs (e.g., `RuleLiteralPath`, `RuleAddedAtom`) remain IN scope. Available for G5 + post-L SDK ergonomics redesign.
+- **8-shell Sibling discipline scope active** — each new shell tests against all 7 sister shells (runtime patch + static source scan with at least 14 forbidden import/call patterns).
+- **Post-L SDK ergonomics redesign target** (per `feedback_sdk_ergonomics_redesign_target` memory) — when L Direction completes, redesign blueprint may revisit `SDKStore.<method>` flat pattern and consider OpenAI-style `Client.rule.*` namespace; until then, `check_*` prefix is the L-Direction what-if convention.
+- **Round events + ProofFrame diff at G5** — both still need own Step 0 shape decision; G5 inherits §5.1+§5.2 precedent (incl. G3 substrate-IR-out clarification).
