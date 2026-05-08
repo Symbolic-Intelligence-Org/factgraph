@@ -154,11 +154,21 @@ Options:
 
 **Conservative default:** documented passthrough of `WhyNotUniverseResult`, mirroring G1.
 
-**Falsifiers required:**
+**Decision (2026-05-08):** Lock documented passthrough — `SDKStore.why_not(...)` returns the raw application protocol `WhyNotUniverseResult` directly, mirroring G1's §5.2 lock (`SDKStore.check(...) -> CheckResult`, `SDKStore.diagnose(...) -> DiagnoseResult`). The result type is documented in the SDK shell docstring and `kernel.sdk.docs.04_api_surface.md`, but is NOT re-exported from `kernel.sdk.__all__`. SDK callers either import `WhyNotUniverseResult` from `kernel.application.protocol` themselves (advanced importable, per `#6`), or use it via `result.<attr>` access without importing the type.
 
-- Confirm existing SDK raw-passthrough precedent still applies.
-- Confirm `WhyNotUniverseResult` is not added to `kernel.sdk.__all__`.
-- If a wrapper is proposed, source-ground why its shape is durable and necessary now.
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Existing SDK raw-passthrough precedent still applies | G1 archived §5.2 locks documented passthrough; runtime verification: `kernel.sdk.__all__` length is 34, `CheckResult` and `DiagnoseResult` are NOT in `__all__`, G1 invariant `test_sdk_all_is_unchanged_and_result_types_are_not_exported` enforces this. Pattern is unchanged since G1 publish at `d6716a0`. | PASS — precedent in force. |
+| F2 | `WhyNotUniverseResult` is not added to `kernel.sdk.__all__` | Current `kernel.sdk.__all__` does not contain `WhyNotUniverseResult`, `WhyNotRedRow`, `WhyNotRowDiagnostic`, `WhyNotAtomLocator`, or any other Why-not DTO (verified at runtime). Lock requires the SDK shell to retain this state — no `__init__.py` `__all__` extension during G4 implementation; G4 invariant test will mirror G1's. | PASS — current state matches lock; G4 must preserve. |
+| F3 | If a wrapper is proposed, source-ground why its shape is durable and necessary now | `WhyNotUniverseResult` is a `@dataclass(frozen=True)` with fields `status` (literal), `requested_universe` / `green` (tuples of `BindingItems`), `red` (tuple of `WhyNotRedRow`), `errors` / `warnings` (tuples of `ErrorDTO` / `WarningDTO`) — all application-canonical types, no mutable inner state, no opaque internals to redact (`derivation_why_not.py:294-332`). Direct attribute access already ergonomic. A wrapper would (a) force a new outward compat commitment under `#6` without user signal, (b) duplicate field forwarding for zero added value, (c) couple SDK to a wrapper version that drifts from protocol. No source signal justifies wrapping. | PASS — no wrapper. |
+
+**Forward implications:**
+
+- §5.4 (Frontier placement) is independent of return shape and is the next falsifier.
+- §5.6 (error mapping) inherits G1 pattern: `WhyNotRuntimeError` (`why_not_runtime.py:35`) and `CapabilityHelperError` from candidate normalization both must remap to `SDKStoreError(...) from exc` with capability-specific paths.
+- G4 acceptance will include an invariant test: `kernel.sdk.__all__` length unchanged at 34 (or whatever the post-G4 baseline is, with G4 confirming no additions); `WhyNotUniverseResult` not exported.
 
 ### 5.4 Frontier placement
 
