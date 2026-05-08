@@ -382,6 +382,65 @@ Expected categories:
 - Decide whether shared validators should be added to `kernel.sdk.shells._validation` for `SupportArtifact`, `RuleSpec`, `RuleLiteralPath`, and `RuleAddedAtom`.
 - Confirm path naming for each method is stable before tests lock it.
 
+**Decision (2026-05-08):** Lock per-method 6-path remap with shared validator extraction:
+
+**Phase 0 hygiene (preceding G3 implementation):**
+
+1. Extend `kernel/sdk/shells/_validation.py` with three new shared validators:
+   - `validate_rule(value, *, path)` — rejects non-`Rule` inputs. Mirrors `validate_derivation` from G1 Round 4 Q1 extraction.
+   - `validate_support_artifact(value, *, path)` — rejects non-`SupportArtifact` inputs. Promotes the local `_validate_support_artifact` from G2 `proof_frame.py`. **G2 §5.2 deferred trigger fires now** ("until G3/G5 also need them").
+   - `validate_optional_evaluation_overlay(value, *, path)` — rejects non-`EvaluationOverlay` non-None inputs **AND** rejects non-empty `EvaluationOverlay`. Sibling to G2's `validate_evaluation_overlay` but allows `None` (which is required by all three G3 methods because A's `_request_overlay` constructs the rule-action overlay internally).
+2. Update `kernel/sdk/shells/proof_frame.py` to import and use shared `validate_support_artifact` instead of the local helper. Remove the local `_validate_support_artifact` function. This is a behavior-preserving refactor — the validator semantics are identical; only the import path changes.
+
+**Per-method 6-path remap (each of the three G3 methods):**
+
+| Source | Exception | Where | SDK Path | Notes |
+|---|---|---|---|---|
+| `validate_rule(rule, path="$.<method>.rule")` | `SDKStoreError` (direct raise) | SDK shell pre-validation | `$.<method>.rule` | non-`Rule` SDK input |
+| `sdk._compile_rule_input(rule)` + `RuleSpec(rule_id=..., version=..., ...)` construction | `RuleCompileError` from compile chain or `RuleSpec.__post_init__` | SDK shell during lowering | `$.<method>.rule` | invalid SDK Rule shape after lowering (rule_id/version/select_vars/where shape errors) |
+| `validate_support_artifact(support, path="$.<method>.support")` | `SDKStoreError` (direct raise) | SDK shell pre-validation | `$.<method>.support` | non-`SupportArtifact` SDK input |
+| `validate_optional_evaluation_overlay(overlay, path="$.<method>.overlay")` | `SDKStoreError` (direct raise) | SDK shell pre-validation | `$.<method>.overlay` | non-`EvaluationOverlay` non-None OR non-empty `EvaluationOverlay` (A's `_request_overlay` non-empty rejection becomes defensive / unreachable from SDK after this) |
+| `sdk._resolve_runtime_registry(rule, explicit_registry=registry)` | `RuleCompileError` from `_register_rule_dependencies` | SDK shell try/except | `$.<method>.dependencies` | duplicate rule registration / RuleRef cycle / similar |
+| `build_rule_<x>_request(rule_spec, support, *, ...)` (A helper) | `CapabilityHelperError` (e.g., `_reject_sdk_origin` if SDK object slips through) OR `ProtocolShapeError` from action / request DTO `__post_init__` | SDK shell try/except around helper call | `$.<method>.request` | invalid action argument shape (branch_index/atom_index out-of-range, literal_path kind/index pairing wrong, added_atom shape wrong, etc.); also any `RuleSpec` / `SupportArtifact` shape errors that slipped past SDK pre-validation (defensive) |
+| `check_rule_<x>_action(request, store, registry)` (A runtime) | unexpected `Exception` | SDK shell try/except defensive | `$.<method>` (base) | runtime ordinarily catches its own `RuleCompileError` / `ValueError` / `KeyError` / `TypeError` / `WhereValidationError` and returns a `Rule<X>Result` (no raise); base path covers any forward-compat unexpected raise |
+
+All non-SDK exceptions remap to `SDKStoreError(message, path=...) from exc` with `__cause__` chain preserved.
+
+**Sibling discipline at 8-shell scope:**
+
+After G3 lands, `kernel/sdk/shells/` contains 8 shell modules:
+
+```
+shells/check.py             (G1)
+shells/diagnose.py          (G1)
+shells/why_not.py           (G4)
+shells/fact_overlay.py      (G2)
+shells/proof_frame.py       (G2)
+shells/rule_disable.py      (G3 NEW)
+shells/rule_literal_replace.py (G3 NEW)
+shells/rule_add_condition.py   (G3 NEW)
+```
+
+Each G3 shell's Sibling discipline test (runtime patch + static source scan) must verify NO call/import to ANY of the other 7 shells. The G3 invariant `test_g3_modules_do_not_import_internal_or_walker_layers` extends `FORBIDDEN_PRODUCTION_IMPORT_TEXT` with sibling-shell import patterns where applicable; static scans inside the per-method test files iterate the 7 sibling SDK function names (`sdk_check`, `sdk_diagnose`, `sdk_why_not`, `sdk_fact_overlay_check`, `sdk_proof_frame_recheck`, plus the two other G3 shells per-test).
+
+**Falsifier outcomes (5/5 PASS):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Runtime `RuleCompileError` does not leak past A | `kernel/application/rule_disable_runtime.py:129`, `rule_literal_replace_runtime.py:144`, `rule_add_condition_runtime.py:133` all wrap `(KeyError, RuleCompileError, TypeError, ValueError, WhereValidationError)` and convert to `Rule<X>Result(status="invalid_request", errors=...)`. SDK never sees `RuleCompileError` from runtime; the only `RuleCompileError` source from SDK perspective is the lowering / registry path before runtime. | PASS — `$.<method>.rule` and `$.<method>.dependencies` paths are the only `RuleCompileError` boundaries. |
+| F2 | Shared validator extraction is sound for ProofFrame | `kernel/sdk/shells/proof_frame.py` `_validate_support_artifact` is byte-identical to the proposed shared `validate_support_artifact` semantics: `if not isinstance(value, SupportArtifact): raise SDKStoreError("support_artifact must be SupportArtifact", path=...)`. The only difference is the path constant is now passed by caller. ProofFrame Recheck call site updates to `validate_support_artifact(support, path="$.recheck_proof_frame.support_artifact")` — single line change. No behavior drift; existing G2 tests pass without modification. | PASS — extraction is behavior-preserving. |
+| F3 | `validate_optional_evaluation_overlay` cleanly distinguishes the overlay path from the request path | The function pre-validates: (a) `None` → pass; (b) non-`EvaluationOverlay` → SDKStoreError at `$.<method>.overlay`; (c) empty `EvaluationOverlay` → pass; (d) non-empty `EvaluationOverlay` → SDKStoreError at `$.<method>.overlay`. After this pre-validation, A's `_request_overlay(...)` only sees `None` or empty `EvaluationOverlay` — its non-empty `CapabilityHelperError` path becomes defensive / unreachable from SDK. Any remaining `CapabilityHelperError` from `build_rule_<x>_request(...)` (e.g., `_reject_sdk_origin` if user passes an SDK DSL object as `branch_index` by mistake — extremely unlikely but defensive) maps to `$.<method>.request`. The two paths (`overlay` vs `request`) are now cleanly separated. | PASS — overlay/request path separation clean. |
+| F4 | `RuleCompileError` source separation between `$.<method>.rule` and `$.<method>.dependencies` | Two distinct call sites: (1) `sdk._compile_rule_input(rule)` + `RuleSpec(...)` construction during SDK Rule lowering — `RuleCompileError` here means the user's SDK `Rule` itself has an invalid shape after `compile_authoring_rule_v1` (rule_id/version/select_vars/where validation in `RuleSpec.__post_init__` at `kernel/core/rules/rule_ir.py:35-46`); (2) `sdk._resolve_runtime_registry(...)` for dependency rules — `RuleCompileError` here means duplicate dependency registration, RuleRef cycle, or unknown RuleRef from `kernel/core/rules/rule_ir.py:55-78` and `:175`. Distinguishing these two paths matches G1 B.1 fix pattern (`$.check.dependencies` for registry, `$.check.derivation` for compile). For G3, the analogous mapping is `$.<method>.rule` ↔ `$.<method>.dependencies`. | PASS — same B.1 pattern as G1, semantically separated. |
+| F5 | Sibling discipline at 8-shell scope is testable | G2 invariant `test_g2_modules_do_not_import_internal_or_walker_layers` already iterates per-module via `G2_MODULES` constant. G3 invariant follows the same pattern with `G3_MODULES = ("kernel.sdk.shells.rule_disable", "kernel.sdk.shells.rule_literal_replace", "kernel.sdk.shells.rule_add_condition")` and identical `FORBIDDEN_PRODUCTION_IMPORT_TEXT` set. Per-method runtime patches the 7 sibling shells (G1's `sdk_check` / `sdk_diagnose`, G4's `sdk_why_not`, G2's `sdk_fact_overlay_check` / `sdk_proof_frame_recheck`, plus the two other G3 shells), asserts none invoked. Static source scans use the same `assertNotIn("from kernel.sdk.shells.<x>", source)` and `assertNotIn("sdk_<x>(", source)` patterns established by G2. | PASS — testable at scale. |
+
+**Forward implications:**
+
+- Phase 0 hygiene commit (preceding G3 implementation Phases 1/2/3) lands the three new validators + `proof_frame.py` migration in a single atomic refactor. Behavior-preserving; full kernel suite must pass without test modifications beyond the G2 ProofFrame `_validate_support_artifact` import path update.
+- §5.9 contract test files use the locked path strings (`$.check_rule_disable.{rule,support,overlay,dependencies,request,}` etc.) for assertion exact-match.
+- G3 invariant `test_store_method_docstrings_record_boundary_contracts` asserts each `SDKStore.check_rule_<x>` docstring includes all six locked paths.
+- G2 ProofFrame's existing `validate_optional_evaluation_overlay` is NOT introduced for ProofFrame — it stays on `validate_evaluation_overlay` (rejects `None`) because §5.2 ProofFrame contract requires `EvaluationOverlay` at the SDK boundary (no None default). Only G3 needs the optional-allowing variant.
+- Implementation phase plan: Phase 0 = validator extraction + proof_frame migration; Phase 1 = `sdk_rule_disable` impl + tests; Phase 2 = `sdk_rule_literal_replace` impl + tests; Phase 3 = `sdk_rule_add_condition` impl + tests; Phase 4 = G3 invariants + docs + cumulative audit; Phase 5 = close-out + archive + publish. (5-impl-phase plan reflects 3-method scope; G2 was 4-phase for 2-method scope.)
+
 ### 5.9 Tests and invariants
 
 **Question:** What test files and invariant coverage does G3 require?
