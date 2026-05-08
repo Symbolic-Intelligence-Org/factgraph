@@ -352,12 +352,12 @@ Draft-stage acceptance:
 
 Scoped-stage acceptance:
 
-- [ ] Phase 0 ships only `src/kernel/sdk/why_not.py` skeleton, `SDKStore.why_not(...)` thin delegate, and placeholder flat tests; no real runtime dispatch yet.
-- [ ] Phase 1 implements `sdk_why_not(...)` with the locked signature and return shape:
+- [x] Phase 0 ships only `src/kernel/sdk/why_not.py` skeleton, `SDKStore.why_not(...)` thin delegate, and placeholder flat tests; no real runtime dispatch yet.
+- [x] Phase 1 implements `sdk_why_not(...)` with the locked signature and return shape:
   `SDKStore.why_not(derivation, candidates, *, engine="native", registry=None) -> WhyNotUniverseResult`.
-- [ ] Phase 1 validates SDK `Derivation` via `validate_derivation(..., path="$.why_not.derivation")`, lowers through the G1 derivation path, normalizes candidates through `build_why_not_candidate_universe(...)`, constructs `WhyNotUniverseRequest`, dispatches `check_why_not_universe(...)`, and returns the raw `WhyNotUniverseResult`.
-- [ ] Phase 1 maps all §5.6 lower-layer errors to `SDKStoreError(...) from exc` with the locked paths: `$.why_not.derivation`, `$.why_not.dependencies`, `$.why_not.candidates`, `$.why_not.request`, and `$.why_not`.
-- [ ] Phase 1 tests cover mapping rows, sequence rows, malformed candidates, invalid derivation input, multi-plan derivation rejection, dependency registry failure, request DTO `ProtocolShapeError`, runtime `WhyNotRuntimeError`, and no internal call to G1 `sdk_check` / `sdk_diagnose`.
+- [x] Phase 1 validates SDK `Derivation` via `validate_derivation(..., path="$.why_not.derivation")`, lowers through the G1 derivation path, normalizes candidates through `build_why_not_candidate_universe(...)`, constructs `WhyNotUniverseRequest`, dispatches `check_why_not_universe(...)`, and returns the raw `WhyNotUniverseResult`.
+- [x] Phase 1 maps all §5.6 lower-layer errors to `SDKStoreError(...) from exc` with the locked paths: `$.why_not.derivation`, `$.why_not.dependencies`, `$.why_not.candidates`, `$.why_not.request`, and `$.why_not`.
+- [x] Phase 1 tests cover mapping rows, sequence rows, malformed candidates, invalid derivation input, multi-plan derivation rejection, dependency registry failure, request DTO `ProtocolShapeError`, runtime `WhyNotRuntimeError`, and no internal call to G1 `sdk_check` / `sdk_diagnose`.
 - [ ] Phase 2 adds `test_sdk_g4_invariants.py` with the six locked invariants: `__all__` unchanged and `WhyNotUniverseResult` absent, instance-method placement, flat module/no `shells/`, no internal/walker/audit imports, thin delegate, and boundary docstring.
 - [ ] Phase 2 updates SDK/application module docs listed in §9 while leaving README quickstart untouched.
 - [ ] Phase 2 runs focused G4 tests plus the relevant SDK/application regression suite and performs a strict audit before close-out.

@@ -1,10 +1,8 @@
 """SDK shell for Q4 Why-not Universe Diagnose capability.
 
-Phase 0 of G4 (per blueprint
+Phase 1 of G4 (per blueprint
 ``docs/blueprints/active/2026-05-08_l-direction-g4-why-not-frontier.md`` §8)
-adds the module skeleton + delegation hook with the locked signature.
-Phase 1 fills in the real lowering, request construction, dispatch, and
-``SDKStoreError`` remap.
+implements the ``SDKStore.why_not`` facade method.
 
 Public surface contract per blueprint §5 locks:
 
@@ -36,7 +34,17 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from kernel.application.protocol import WhyNotUniverseResult
+from kernel.application.capability_helpers import (
+    CapabilityHelperError,
+    build_why_not_candidate_universe,
+)
+from kernel.application.protocol import ProtocolShapeError, WhyNotUniverseRequest, WhyNotUniverseResult
+from kernel.application.why_not_runtime import WhyNotRuntimeError, check_why_not_universe
+from kernel.core.rules.rule_ir import RuleCompileError
+
+from ._validation import validate_derivation
+from .errors import SDKStoreError
+from .store import _compiled_derivation_plan_to_application
 
 
 def sdk_why_not(
@@ -49,25 +57,65 @@ def sdk_why_not(
 ) -> WhyNotUniverseResult:
     """Run Why-not for a single SDK ``Derivation`` and explicit candidate universe.
 
-    Phase 0 placeholder. Phase 1 implements the real path:
-
-    1. ``validate_derivation(derivation, path="$.why_not.derivation")``
-    2. lower derivation via G1 ``_compile_derivation_input(...)`` /
-       ``_compiled_derivation_plan_to_application(...)`` chain
-    3. resolve runtime registry (G1 B.1 pattern)
-    4. ``build_why_not_candidate_universe(plan, candidates)`` (A helper)
-    5. construct ``WhyNotUniverseRequest(...)``
-    6. dispatch ``check_why_not_universe(request, store, registry)``
-    7. return raw ``WhyNotUniverseResult``
-
-    All non-SDK exceptions remap to ``SDKStoreError(...) from exc`` per
-    §5.6 lock.
+    Returns the application ``WhyNotUniverseResult`` DTO directly. The SDK
+    shell does not import Check / Diagnose SDK shells and does not wrap result
+    rows or Frontier data.
     """
 
-    raise NotImplementedError(
-        "G4 Phase 1 will implement sdk_why_not; current state is the "
-        "Phase 0 skeleton."
-    )
+    validate_derivation(derivation, path="$.why_not.derivation")
+
+    compiled_plans = sdk._compile_derivation_input(derivation)
+    if len(compiled_plans) != 1:
+        raise SDKStoreError(
+            "why_not derivation must compile to exactly one plan",
+            path="$.why_not.derivation",
+        )
+
+    try:
+        plan = _compiled_derivation_plan_to_application(
+            compiled_plans[0],
+            mode=engine,
+            explicit_engine_ext=getattr(derivation, "engine_ext", None),
+            engine_options=None,
+        )
+    except ValueError as exc:
+        raise SDKStoreError(
+            f"invalid why_not input: {exc}",
+            path="$.why_not.derivation",
+        ) from exc
+
+    try:
+        resolved_registry = sdk._resolve_runtime_registry(derivation, explicit_registry=registry)
+    except RuleCompileError as exc:
+        raise SDKStoreError(
+            f"invalid why_not dependencies: {exc}",
+            path="$.why_not.dependencies",
+        ) from exc
+
+    try:
+        candidate_universe = build_why_not_candidate_universe(plan, candidates)
+    except CapabilityHelperError as exc:
+        raise SDKStoreError(
+            f"invalid why_not candidates: {exc}",
+            path="$.why_not.candidates",
+        ) from exc
+
+    try:
+        request = WhyNotUniverseRequest(
+            plan=plan,
+            candidate_universe=candidate_universe,
+            engine=engine,
+        )
+    except ProtocolShapeError as exc:
+        raise SDKStoreError(
+            f"invalid why_not request: {exc}",
+            path="$.why_not.request",
+        ) from exc
+
+    try:
+        return check_why_not_universe(request, store=sdk._store, registry=resolved_registry)
+    except WhyNotRuntimeError as exc:
+        raise SDKStoreError(f"why_not runtime failed: {exc}", path="$.why_not") from exc
 
 
 __all__ = [
