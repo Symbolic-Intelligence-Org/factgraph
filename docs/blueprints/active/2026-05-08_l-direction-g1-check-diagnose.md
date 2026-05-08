@@ -175,6 +175,39 @@ A `sdk.explain(rule, binding, store) -> SDKExplainResult` (with `.passed`, `.evi
 
 **Default if Step 0 inconclusive:** documented passthrough (lowest outward commitment per `#P0` Tier 5).
 
+**Decision (2026-05-08, falsifier pass complete):**
+
+- **Both methods return application protocol DTOs as documented passthrough:**
+  - `sdk.check(...) -> CheckResult` (from `kernel.application.protocol.derivation_check`)
+  - `sdk.diagnose(...) -> DiagnoseResult` (from `kernel.application.protocol.derivation_diagnose`)
+- **`CheckResult` / `DiagnoseResult` may appear as return annotations / imports in G1 implementation, but are NOT re-exported from `kernel.sdk.__all__`** — preserves the `kernel.sdk` surface boundary at the export level.
+- **B dependencies inactive for G1 v1:** no `SupportArtifactView`, no `AssertionView`, no `parse_atom_key`, no `WalkerError` remap. SDK method/module docstrings MAY mention advanced importable opt-in workflow (e.g., "use `SupportArtifactView(result.support_artifact, frozen_claim_index)` for ergonomic evidence access") but G1 itself does not import B walker types.
+- **SDK-typed wrappers (`SDKCheckResult` / `SDKDiagnoseResult`) deferred** as future `#P1` revision trigger if a user-facing evidence workflow signal materializes.
+
+**Falsifier evidence (read-only audit):**
+
+1. **`ValidationReport` precedent does not force SDK wrapper** — [ingest.py:81-86](../../../src/kernel/sdk/ingest.py): `ValidationReport` is an SDK-owned frozen dataclass for provenance diagnostics (`ok` / `warnings` / `errors` fields), NOT a wrapping precedent over application protocol DTOs. Round 8 Lane 1 cited it as alignment reference for typed-DTO style, not as evidence that SDK must wrap protocol types.
+2. **SDK has established raw-passthrough precedent** — [store.py:773 `evaluate_compiled`](../../../src/kernel/sdk/store.py): returns `list[CandidateSet]`; [store.py:776 `accept`](../../../src/kernel/sdk/store.py): returns `AcceptResult`. Both return core/application types directly. The pattern is established: SDK methods may return non-SDK types as long as those types aren't re-exported from `kernel.sdk.__all__`.
+3. **`__all__` boundary is about exports, not return types** — [01_alignment_matrix.md §3 line 36](../../../src/kernel/sdk/docs/01_alignment_matrix.md): "`kernel.sdk.__all__` 只表达 SDK user-facing surface / compatibility aliases，不导出 application internals". Exporting `CheckResult` from `kernel.sdk.__all__` would be the violation; returning it as `sdk.check()` output type does not violate the boundary as long as `__all__` stays clean.
+4. **B-typed-wrap for Check would force G1 to build new substrate** — [views.py:495-509 `SupportArtifactView.__init__`](../../../src/kernel/application/walker/views.py): constructor requires `support` + `frozen_claim_index: Mapping[str, Claim]` (positional, no default). G1 to wrap CheckResult would need to construct/hydrate a `frozen_claim_index` from the store — that's new substrate inside `kernel.sdk` that doesn't exist today, directly violating `#1` "no new substrate in `kernel.sdk`".
+5. **B-typed-wrap for Diagnose has no input** — [derivation_diagnose.py:80-104 `DiagnoseAtomLocator`](../../../src/kernel/application/protocol/derivation_diagnose.py): fields are `branch_index: int`, `failed_atom_index: int`, `attempted_binding: BindingItems`. NO `b{branch}.a{idx}:{pred_id}` string field — `parse_atom_key` / `AtomKeyView` from B has no actual input from Diagnose to consume. Diagnose's atom-key wrap is mechanically moot.
+
+**Why documented passthrough is the only viable option:**
+
+| Option | Outcome |
+|---|---|
+| **B-typed-wrap** | Blocked by evidence 4 (Check would need new substrate inside `kernel.sdk`, `#1` violation) AND evidence 5 (Diagnose has no atom-key string input — wrapping is mechanically moot). Not technically viable for G1 today. |
+| **Raw passthrough (no docstring guidance)** | Functionally equivalent to documented passthrough but loses the opt-in advanced-workflow pointer; users wanting B walker integration must discover it independently. |
+| **Documented passthrough** | Returns `CheckResult` / `DiagnoseResult` directly + docstring opt-in pointer to B walker views. Zero G1 import of B; zero `__all__` expansion; preserves option to ship typed wrappers later under `#P1` if user signal materializes. |
+
+**Falsifier outcomes (against the three requirements above):**
+
+| Falsifier | Outcome |
+|---|---|
+| F1: if B-typed-wrap selected, source-ground that wrapper shape is durable in v0.x | **Blocked** — evidence 4 + 5 show B-typed-wrap is not technically viable for G1 today (would force new substrate / has no input to wrap). Cannot ship a "durable" wrapper that doesn't currently work. |
+| F2: if documented passthrough selected, confirm SDK quickstart and user guide do NOT need wrapper-style return surface | **Satisfied** — quickstart unchanged per `#6` non-goal; user guide gets opt-in advanced workflow pointer (docstring only), not a new SDK type contract. |
+| F3: if raw passthrough selected, confirm cross-layer leak is bounded — only G1's signature exposes `CheckResult` | **Satisfied** — `CheckResult` / `DiagnoseResult` appear ONLY as G1 method return annotations; not added to `kernel.sdk.__all__`; consistent with existing `evaluate_compiled` / `accept` precedent (evidence 2). Boundary preserved. |
+
 ### 5.3 Error mapping strategy
 
 **Question:** How are `CapabilityHelperError`, `OriginPackageError`, `WalkerError` family (if applicable) caught and remapped into the `SDKError` hierarchy?
@@ -236,8 +269,8 @@ Principles locked active for G1 (numbering per [30_recommendation.md](../../refe
 | `#4a` Intent-minimal at SDK | Active | G1 accepts SDK-shaped intent; lowering is internal |
 | `#5` Layer isolation | Active | G1 in `kernel.sdk` may import `kernel.application.capability_helpers` public surface and `kernel.application.derivation_check_runtime` / `derivation_diagnose_runtime`. Reverse imports forbidden. |
 | `#6` No outward compat without user signal | Active | Drives §5.1 / §5.2 / §5.4 falsifier discipline. README quickstart non-goal. |
-| `#11` `.underlying` escape hatch | **Conditional** | Active only if §5.2 selects B-typed-wrap (walker views exposed) |
-| `#12` Error boundaries naming | **Conditional** | Active only if §5.2 selects B-typed-wrap (`WalkerError` surfaces require remap discipline). `OriginPackageError` remap (§5.3) is unconditional. |
+| `#11` `.underlying` escape hatch | **Inactive for G1 v1** (resolved 2026-05-08) | §5.2 locked to documented passthrough; G1 does not import B walker views, so `.underlying` is not surfaced. Reactivates only via future `#P1` revision adding typed wrapper. |
+| `#12` Error boundaries naming | **Partial** (resolved 2026-05-08) | `OriginPackageError` remap (§5.3) remains unconditionally active. `WalkerError` remap is inactive for G1 v1 since walker views are not exposed (§5.2 documented passthrough). Reactivates if future `#P1` revision adds B walker imports. |
 | `#19` Test contract | Active | Flat `unittest`; no Hypothesis; fixtures `_g1_fixtures.py` if extracted |
 | `#P0` Conflict resolution | Active | Tier 5 (`#6`) constrains Tier 4 (ergonomic surface). Default-to-narrow heuristic informs §5.1 / §5.2 / §5.4 defaults. |
 | `#P1` Carve-out flow | Active | Any deviation in scoping or implementation phases must record id / reason / scope / impact / reviewer ack |
@@ -267,7 +300,8 @@ Acceptance gates are completed at scope-freeze. At `draft` status, only Step 0 f
 - [x] Non-goals enumerated in §3 (covers `factpy`, README quickstart, scenario merge pre-lock, B return-shape pre-lock, etc.)
 - [x] Bundle reference and prior art cited in §4
 - [x] §5.1 falsifier pass — locked 2026-05-08 (per-method API; scenario `sdk.explain` rejected, remains Direction C future composition)
-- [ ] §5.2 through §5.7 falsifier passes — **pending scoping round**
+- [x] §5.2 falsifier pass — locked 2026-05-08 (documented passthrough for both methods; B dependencies inactive; `CheckResult` / `DiagnoseResult` not re-exported from `kernel.sdk.__all__`)
+- [ ] §5.3 through §5.7 falsifier passes — **pending scoping round**
 
 ## 8. Implementation Plan
 
