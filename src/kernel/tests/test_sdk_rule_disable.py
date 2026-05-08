@@ -1,7 +1,7 @@
 """SDKStore.check_rule_disable contract tests.
 
-Phase 1 of G3 (per active blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g3-rule-overlays.md`` §8)
+Phase 1 of G3 (per archived blueprint
+``docs/blueprints/archive/2026-05-08_l-direction-g3-rule-overlays.md`` §8)
 ships full §5.1 / §5.2 / §5.4 / §5.7 / §5.8 contract coverage for
 ``SDKStore.check_rule_disable(...)``. Mirrors the G1 / G4 / G2
 per-method contract test structure with rule-overlay specifics
@@ -257,6 +257,38 @@ class SDKRuleDisableContractTests(unittest.TestCase):
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.dependencies")
         self.assertIsInstance(ctx.exception.__cause__, RuleCompileError)
+
+    def test_pathless_sdk_store_error_from_dep_compile_remaps_to_dependencies_path(
+        self,
+    ) -> None:
+        """Verification-round Blocker regression: a malformed dependency
+        rule causes ``_compile_rule_input(dep_rule)`` (called via
+        ``_register_rule_dependencies`` inside ``_resolve_runtime_registry``)
+        to raise a pathless ``SDKStoreError("invalid rule input: ...")``.
+        The G3 shell must catch this in addition to ``RuleCompileError``
+        and remap to ``$.check_rule_disable.dependencies`` — otherwise
+        the pathless error leaks past the SDK boundary.
+        """
+        sdk = _build_sdk()
+        alice = _seed_person(sdk, name="alice", age=25, region="us")
+        support = _capture_support(sdk, alice, 25)
+
+        with patch.object(
+            SDKStore,
+            "_resolve_runtime_registry",
+            side_effect=SDKStoreError("invalid rule input: malformed dep payload"),
+        ):
+            with self.assertRaises(SDKStoreError) as ctx:
+                sdk.check_rule_disable(
+                    _adult_rule(),
+                    support,
+                    branch_index=0,
+                    atom_index=0,
+                )
+
+        self.assertEqual(ctx.exception.path, "$.check_rule_disable.dependencies")
+        self.assertIsInstance(ctx.exception.__cause__, SDKStoreError)
+        self.assertIn("malformed dep payload", str(ctx.exception))
 
     def test_capability_helper_error_remaps_to_request_path(self) -> None:
         """A helper ``CapabilityHelperError`` (e.g., ``_reject_sdk_origin``

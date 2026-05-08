@@ -17,12 +17,15 @@ from __future__ import annotations
 
 import unittest
 
+from unittest.mock import MagicMock
+
 from kernel.application.protocol import (
     EvaluationOverlay,
     FactRemoveAction,
     FactValueOverride,
     RuleDisableAction,
 )
+from kernel.core.rules.rule_ir import RuleCompileError
 from kernel.sdk import (
     Derivation,
     Entity,
@@ -34,6 +37,7 @@ from kernel.sdk import (
     vars,
 )
 from kernel.sdk.shells._validation import (
+    resolve_runtime_registry,
     validate_binding,
     validate_derivation,
     validate_evaluation_overlay,
@@ -270,6 +274,98 @@ class ValidateOptionalEvaluationOverlayTests(unittest.TestCase):
         with self.assertRaises(SDKStoreError) as ctx:
             validate_optional_evaluation_overlay("not-overlay", path=custom_path)
         self.assertEqual(ctx.exception.path, custom_path)
+
+
+class ResolveRuntimeRegistryTests(unittest.TestCase):
+    """Verification-round Blocker fix: dependency boundary normalizer.
+
+    The shared ``resolve_runtime_registry`` helper wraps
+    ``SDKStore._resolve_runtime_registry`` so both error sources at the
+    dependency boundary remap to ``SDKStoreError(path="$.<method>.dependencies")``:
+    ``RuleCompileError`` from ``RuleRegistry.register`` validation AND
+    ``SDKStoreError`` from ``_compile_rule_input`` wrapping authoring-
+    compile failures of dependency rules. Without the helper the inner
+    pathless ``SDKStoreError`` would leak past the shell.
+    """
+
+    def test_passes_through_non_failing_resolve(self) -> None:
+        sentinel_registry = object()
+        sdk = MagicMock()
+        sdk._resolve_runtime_registry.return_value = sentinel_registry
+        obj = object()
+        explicit = object()
+
+        result = resolve_runtime_registry(
+            sdk, obj, explicit_registry=explicit, path="$.check.dependencies"
+        )
+
+        self.assertIs(result, sentinel_registry)
+        sdk._resolve_runtime_registry.assert_called_once_with(
+            obj, explicit_registry=explicit
+        )
+
+    def test_rule_compile_error_remaps_with_path_and_cause(self) -> None:
+        sdk = MagicMock()
+        sdk._resolve_runtime_registry.side_effect = RuleCompileError(
+            "duplicate rule registration"
+        )
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            resolve_runtime_registry(
+                sdk, object(), explicit_registry=None, path="$.check.dependencies"
+            )
+
+        self.assertEqual(ctx.exception.path, "$.check.dependencies")
+        self.assertIsInstance(ctx.exception.__cause__, RuleCompileError)
+        self.assertIn("duplicate rule registration", str(ctx.exception))
+
+    def test_pathless_sdk_store_error_from_compile_rule_input_remaps_with_path_and_cause(
+        self,
+    ) -> None:
+        """The Blocker case: ``_compile_rule_input`` wraps any ``Exception``
+        as a pathless ``SDKStoreError("invalid rule input: ...")``. When
+        that runs inside ``_register_rule_dependencies`` (called via
+        ``_resolve_runtime_registry``) the pathless error must NOT leak
+        past the shell — the helper must catch it and re-raise with the
+        caller-supplied path.
+        """
+        inner = SDKStoreError("invalid rule input: malformed dep payload")
+        sdk = MagicMock()
+        sdk._resolve_runtime_registry.side_effect = inner
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            resolve_runtime_registry(
+                sdk, object(), explicit_registry=None, path="$.check_rule_disable.dependencies"
+            )
+
+        self.assertEqual(ctx.exception.path, "$.check_rule_disable.dependencies")
+        self.assertIsInstance(ctx.exception.__cause__, SDKStoreError)
+        self.assertIs(ctx.exception.__cause__, inner)
+        self.assertIn("malformed dep payload", str(ctx.exception))
+
+    def test_path_is_forwarded_verbatim(self) -> None:
+        sdk = MagicMock()
+        sdk._resolve_runtime_registry.side_effect = RuleCompileError("boom")
+        custom_path = "$.future_g5.future_method.dependencies"
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            resolve_runtime_registry(
+                sdk, object(), explicit_registry=None, path=custom_path
+            )
+
+        self.assertEqual(ctx.exception.path, custom_path)
+
+    def test_other_exceptions_pass_through(self) -> None:
+        """Helper only normalizes RuleCompileError + SDKStoreError; other
+        exception types must propagate so unexpected runtime failures
+        reach the shell's defensive base-path remap."""
+        sdk = MagicMock()
+        sdk._resolve_runtime_registry.side_effect = RuntimeError("unexpected")
+
+        with self.assertRaises(RuntimeError):
+            resolve_runtime_registry(
+                sdk, object(), explicit_registry=None, path="$.check.dependencies"
+            )
 
 
 class ValidateEvaluationOverlayTests(unittest.TestCase):

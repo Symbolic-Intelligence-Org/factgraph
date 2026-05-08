@@ -41,9 +41,8 @@ from kernel.application.capability_helpers import (
 )
 from kernel.application.diagnose_runtime import diagnose_derivation_binding
 from kernel.application.protocol import DiagnoseResult
-from kernel.core.rules.rule_ir import RuleCompileError
 
-from ._validation import validate_binding, validate_derivation
+from ._validation import resolve_runtime_registry, validate_binding, validate_derivation
 from ..errors import SDKStoreError
 from ..store import _compiled_derivation_plan_to_application
 
@@ -84,13 +83,12 @@ def sdk_diagnose(
             f"invalid diagnose input: {exc}",
             path="$.diagnose.derivation",
         ) from exc
-    try:
-        resolved_registry = sdk._resolve_runtime_registry(derivation, explicit_registry=registry)
-    except RuleCompileError as exc:
-        raise SDKStoreError(
-            f"invalid diagnose dependencies: {exc}",
-            path="$.diagnose.dependencies",
-        ) from exc
+    resolved_registry = resolve_runtime_registry(
+        sdk,
+        derivation,
+        explicit_registry=registry,
+        path="$.diagnose.dependencies",
+    )
 
     try:
         request = build_diagnose_request(plan, binding_dict, engine=engine)

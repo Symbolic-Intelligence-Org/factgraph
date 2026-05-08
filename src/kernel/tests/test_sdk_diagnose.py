@@ -282,6 +282,25 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         self.assertIsInstance(ctx.exception.__cause__, RuleCompileError)
         self.assertIn("duplicate rule registration", str(ctx.exception))
 
+    def test_pathless_sdk_store_error_from_dep_compile_remaps_to_dependencies_path(
+        self,
+    ) -> None:
+        """G3 verification-round Blocker regression: see test_sdk_check.py
+        sister test for full rationale."""
+        sdk = _build_sdk()
+
+        with patch.object(
+            sdk,
+            "_resolve_runtime_registry",
+            side_effect=SDKStoreError("invalid rule input: malformed dep payload"),
+        ):
+            with self.assertRaises(SDKStoreError) as ctx:
+                sdk.diagnose(_age_derivation(), {"$age": 30})
+
+        self.assertEqual(ctx.exception.path, "$.diagnose.dependencies")
+        self.assertIsInstance(ctx.exception.__cause__, SDKStoreError)
+        self.assertIn("malformed dep payload", str(ctx.exception))
+
     def test_diagnose_result_not_exported_from_kernel_sdk_all(self) -> None:
         import kernel.sdk as sdk_pkg
 

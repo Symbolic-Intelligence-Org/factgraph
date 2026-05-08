@@ -1,5 +1,33 @@
 # Current Operational Memory
 
+最后更新:2026-05-08(`codex/v0.1-l-g3-rule-overlays-2026-05-08`;G3 Rule Overlay SDK shells implemented,archived,verification-round Blocker fix landed,ready to publish snapshot pending user authorization)
+
+## 当前阶段(2026-05-08 — L DIRECTION G3 RULE OVERLAY SDK SHELLS COMPLETE; PUBLISH PENDING USER AUTH)
+
+**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 topic branch `codex/v0.1-l-g3-rule-overlays-2026-05-08`. G3 6-phase implementation done (Phase 0 `5437cd6` / Phase 1 `7f761bd` / Phase 2 `3526cc1` / Phase 3 `63c47ea` / Phase 4 `df772e2` / Phase 5 close-out `430bce2` rename + `3215083` content). Verification-round Blocker fix landing now (this commit) — shared `resolve_runtime_registry` helper extracted; 7 shells (G1+G4+G2+G3) updated; 12 new regression tests.
+
+**G3 published snapshot targets:** `v0.1-l-g3-rule-overlays-2026-05-08` (G3-only) + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-2026-05-08` (Path B combined per post-G2 strategy). Both pending explicit user authorization.
+
+### G3 outcome
+
+- **Shipped SDK methods (3):** `SDKStore.check_rule_disable(rule, support, *, branch_index, atom_index, overlay=None, note=None) -> RuleDisableResult`; `SDKStore.check_rule_literal_replace(rule, support, *, branch_index, atom_index, literal_path, old_literal, new_literal, overlay=None, note=None) -> RuleLiteralReplaceResult`; `SDKStore.check_rule_add_condition(rule, support, *, branch_index, added_atom, overlay=None, note=None) -> RuleAddConditionResult`.
+- **Input contract:** SDK `Rule` (lowered through `_compile_rule_input` to substrate `RuleSpec` per §5.2 — substrate IR `RuleSpec` rejected at SDK boundary; G2 §5.1+§5.2 cross-cutting precedent scoped to `kernel.application.protocol` DTOs only); raw `SupportArtifact`; raw `RuleLiteralPath` / `RuleAddedAtom`; optional `EvaluationOverlay` (None or empty only — rule-action overlay constructed internally by A helper).
+- **Return contract:** raw application result DTOs (documented passthrough; `kernel.sdk.__all__` length still 34).
+- **Method naming:** Group A (`check_rule_*`) chosen over Group B per §5.7 falsifier (Group B `disable_rule` would semantically collide with persistent-write family).
+- **Phase 0 fired G2 §5.2 deferred validator-extraction trigger:** promoted ProofFrame Recheck's local `_validate_support_artifact` to shared `validate_support_artifact`; added `validate_rule` and `validate_optional_evaluation_overlay`. Post-Blocker-fix: also added shared `resolve_runtime_registry` boundary normalizer (catches both `RuleCompileError` and pathless `SDKStoreError` from `_compile_rule_input`).
+- **`#P1` carve-out applied 3×:** one per Phase 1/2/3 retrofit on pre-G3 application-runtime boundary tests `test_no_sdk_rule_{disable,literal_replace,add_condition}_surface`.
+- **Blueprint:** `docs/blueprints/archive/2026-05-08_l-direction-g3-rule-overlays.md` + `.audit.md` archived and marked `implemented`.
+- **Verification basis:** post-Blocker-fix 198 SDK shell + invariant + validation tests OK; full kernel suite (re-run incoming); ruff clean; `git diff --check` clean.
+
+### G3 follow-up
+
+- Publish `v0.1-l-g3-rule-overlays-2026-05-08` (G3-only) + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-2026-05-08` (Path B combined) from this verification-round HEAD pending user authorization.
+- G5 (TBD — Round events / ProofFrame diff) is next in L sequence; will inherit `kernel/sdk/shells/` subpackage at 8 modules and §5.1+§5.2 substrate-IR-out clarification.
+- Sacred branches remain untouched: `master` and `v0.1-oss-prep`.
+- G1 + G4 + G2 published snapshot branches remain untouched at `d6716a0` / `acb5a6e` / `d658390`.
+
+<!-- Historical 2026-05-08 G4 close-out state follows. -->
+
 最后更新:2026-05-08(`codex/v0.1-l-g4-why-not-frontier-2026-05-08`;G4 Why-not SDK shell implemented,archived,ready to publish snapshot)
 
 ## 当前阶段(2026-05-08 — L DIRECTION G4 WHY-NOT SDK SHELL COMPLETE)

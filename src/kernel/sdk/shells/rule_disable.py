@@ -1,8 +1,8 @@
 """SDK shell for G3 Batch 5a Rule Disable capability.
 
 Implements the ``SDKStore.check_rule_disable`` facade method per the
-active G3 blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g3-rule-overlays.md``
+archived G3 blueprint
+``docs/blueprints/archive/2026-05-08_l-direction-g3-rule-overlays.md``
 §5.
 
 Public surface contract per blueprint §5 locks:
@@ -56,6 +56,7 @@ from kernel.application.rule_disable_runtime import check_rule_disable_action
 from kernel.core.rules.rule_ir import RuleCompileError, RuleSpec
 
 from ._validation import (
+    resolve_runtime_registry,
     validate_optional_evaluation_overlay,
     validate_rule,
     validate_support_artifact,
@@ -101,13 +102,12 @@ def sdk_rule_disable(
             path="$.check_rule_disable.rule",
         ) from exc
 
-    try:
-        resolved_registry = sdk._resolve_runtime_registry(rule, explicit_registry=None)
-    except RuleCompileError as exc:
-        raise SDKStoreError(
-            f"invalid check_rule_disable dependencies: {exc}",
-            path="$.check_rule_disable.dependencies",
-        ) from exc
+    resolved_registry = resolve_runtime_registry(
+        sdk,
+        rule,
+        explicit_registry=None,
+        path="$.check_rule_disable.dependencies",
+    )
 
     try:
         request = build_rule_disable_request(

@@ -39,9 +39,8 @@ from kernel.application.capability_helpers import (
 )
 from kernel.application.protocol import ProtocolShapeError, WhyNotUniverseRequest, WhyNotUniverseResult
 from kernel.application.why_not_runtime import WhyNotRuntimeError, check_why_not_universe
-from kernel.core.rules.rule_ir import RuleCompileError
 
-from ._validation import validate_derivation
+from ._validation import resolve_runtime_registry, validate_derivation
 from ..errors import SDKStoreError
 from ..store import _compiled_derivation_plan_to_application
 
@@ -83,13 +82,12 @@ def sdk_why_not(
             path="$.why_not.derivation",
         ) from exc
 
-    try:
-        resolved_registry = sdk._resolve_runtime_registry(derivation, explicit_registry=registry)
-    except RuleCompileError as exc:
-        raise SDKStoreError(
-            f"invalid why_not dependencies: {exc}",
-            path="$.why_not.dependencies",
-        ) from exc
+    resolved_registry = resolve_runtime_registry(
+        sdk,
+        derivation,
+        explicit_registry=registry,
+        path="$.why_not.dependencies",
+    )
 
     try:
         candidate_universe = build_why_not_candidate_universe(plan, candidates)

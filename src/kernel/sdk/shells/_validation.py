@@ -1,11 +1,11 @@
-"""Shared input validators for SDK shell methods.
+"""Shared boundary helpers for SDK shell methods.
 
 Used by ``kernel.sdk.shells.check`` / ``kernel.sdk.shells.diagnose`` (G1),
 ``kernel.sdk.shells.why_not`` (G4), ``kernel.sdk.shells.fact_overlay`` /
 ``kernel.sdk.shells.proof_frame`` (G2), and
 ``kernel.sdk.shells.rule_disable`` /
 ``kernel.sdk.shells.rule_literal_replace`` /
-``kernel.sdk.shells.rule_add_condition`` (G3). Each validator accepts a
+``kernel.sdk.shells.rule_add_condition`` (G3). Each helper accepts a
 caller-specific ``SDKStoreError.path`` boundary identifier so a single
 implementation serves multiple shells. Lives at
 ``kernel/sdk/shells/_validation.py`` after G2 Phase 0 hygiene migrated
@@ -15,7 +15,9 @@ The module is private (``_validation``) and the functions are imported
 locally by sibling shell modules — nothing here is part of
 ``kernel.sdk.__all__`` (per blueprint §5.2 / §5.4 / §6 narrow public API).
 
-Validator inventory:
+Helper inventory:
+
+Input validators (pure type / shape guards):
 
 - ``validate_derivation`` — G1 + G4 + G2 Fact Overlay (rejects non-SDK
   ``Derivation``).
@@ -31,6 +33,17 @@ Validator inventory:
   ``EvaluationOverlay`` non-None AND rejects non-empty
   ``EvaluationOverlay``; allows ``None`` because the G3 rule-overlay A
   helpers construct the rule-action overlay internally).
+
+Boundary normalizers (catch + re-raise with caller-supplied path):
+
+- ``resolve_runtime_registry`` — G1 + G4 + G2 Fact Overlay + G3 (wraps
+  ``SDKStore._resolve_runtime_registry`` to remap both
+  ``RuleCompileError`` (from ``RuleRegistry.register`` validation) and
+  ``SDKStoreError`` (from ``_compile_rule_input`` wrapping
+  authoring-compile failures of dependency rules) to
+  ``SDKStoreError(path="$.<method>.dependencies") from exc``. Without
+  this helper the inner ``SDKStoreError`` from ``_compile_rule_input``
+  leaks past the shell with ``path=None``).
 """
 
 from __future__ import annotations
@@ -39,6 +52,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from kernel.application.protocol import EvaluationOverlay
+from kernel.core.rules.rule_ir import RuleCompileError
 from kernel.core.store._support import SupportArtifact
 
 from ..dsl import Derivation, Rule
@@ -158,7 +172,44 @@ def validate_optional_evaluation_overlay(value: Any, *, path: str) -> None:
         )
 
 
+def resolve_runtime_registry(
+    sdk: Any,
+    obj: Any,
+    *,
+    explicit_registry: Any,
+    path: str,
+) -> Any:
+    """Resolve dependency registry; normalize boundary exceptions.
+
+    Wraps ``SDKStore._resolve_runtime_registry(obj, explicit_registry=...)``
+    so both error sources at the dependency boundary remap to a single
+    ``SDKStoreError(path=...)`` shape:
+
+    - ``RuleCompileError`` from ``RuleRegistry.register(...)`` validation
+      (e.g., duplicate rule registration, RuleRef cycle, unknown
+      RuleRef).
+    - ``SDKStoreError`` from ``SDKStore._compile_rule_input(dep_rule)``
+      which itself wraps any ``Exception`` (including
+      ``AuthoringRuleCompileError`` from ``compile_authoring_rule_v1``)
+      as a pathless ``SDKStoreError("invalid rule input: ...")``. Without
+      this re-wrap the pathless ``SDKStoreError`` would leak past the
+      shell — a verification-round Blocker the helper exists to prevent.
+
+    The original exception is preserved as ``__cause__`` so callers can
+    still inspect the underlying compile failure.
+    """
+
+    try:
+        return sdk._resolve_runtime_registry(obj, explicit_registry=explicit_registry)
+    except (RuleCompileError, SDKStoreError) as exc:
+        raise SDKStoreError(
+            f"invalid dependencies: {exc}",
+            path=path,
+        ) from exc
+
+
 __all__ = [
+    "resolve_runtime_registry",
     "validate_binding",
     "validate_derivation",
     "validate_evaluation_overlay",

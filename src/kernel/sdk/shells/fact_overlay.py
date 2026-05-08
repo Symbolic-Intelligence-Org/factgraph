@@ -56,10 +56,14 @@ from kernel.application.protocol import (
     ProtocolShapeError,
 )
 from kernel.application.fact_overlay_runtime import check_fact_overlay_binding
-from kernel.core.rules.rule_ir import RuleCompileError
 from kernel.core.store._support import normalize_binding_items
 
-from ._validation import validate_binding, validate_derivation, validate_evaluation_overlay
+from ._validation import (
+    resolve_runtime_registry,
+    validate_binding,
+    validate_derivation,
+    validate_evaluation_overlay,
+)
 from ..errors import SDKStoreError
 from ..store import _compiled_derivation_plan_to_application
 
@@ -106,13 +110,12 @@ def sdk_fact_overlay_check(
             path="$.check_fact_overlay.derivation",
         ) from exc
 
-    try:
-        resolved_registry = sdk._resolve_runtime_registry(derivation, explicit_registry=registry)
-    except RuleCompileError as exc:
-        raise SDKStoreError(
-            f"invalid check_fact_overlay dependencies: {exc}",
-            path="$.check_fact_overlay.dependencies",
-        ) from exc
+    resolved_registry = resolve_runtime_registry(
+        sdk,
+        derivation,
+        explicit_registry=registry,
+        path="$.check_fact_overlay.dependencies",
+    )
 
     binding_items = normalize_binding_items(binding_dict)
 

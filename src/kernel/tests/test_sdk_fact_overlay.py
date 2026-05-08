@@ -240,6 +240,25 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.dependencies")
         self.assertIsInstance(ctx.exception.__cause__, RuleCompileError)
 
+    def test_pathless_sdk_store_error_from_dep_compile_remaps_to_dependencies_path(
+        self,
+    ) -> None:
+        """G3 verification-round Blocker regression: see test_sdk_check.py
+        sister test for full rationale."""
+        sdk = _build_sdk()
+
+        with patch.object(
+            sdk,
+            "_resolve_runtime_registry",
+            side_effect=SDKStoreError("invalid rule input: malformed dep payload"),
+        ):
+            with self.assertRaises(SDKStoreError) as ctx:
+                sdk.check_fact_overlay(_age_derivation(), {"$age": 30}, EvaluationOverlay())
+
+        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.dependencies")
+        self.assertIsInstance(ctx.exception.__cause__, SDKStoreError)
+        self.assertIn("malformed dep payload", str(ctx.exception))
+
     def test_engine_is_passed_to_request(self) -> None:
         sdk = _build_sdk()
 

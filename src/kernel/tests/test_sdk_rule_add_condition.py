@@ -1,7 +1,7 @@
 """SDKStore.check_rule_add_condition contract tests.
 
-Phase 3 of G3 (per active blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g3-rule-overlays.md`` §8)
+Phase 3 of G3 (per archived blueprint
+``docs/blueprints/archive/2026-05-08_l-direction-g3-rule-overlays.md`` §8)
 ships full §5.1 / §5.2 / §5.4 / §5.7 / §5.8 contract coverage for
 ``SDKStore.check_rule_add_condition(...)``. Mirrors the Phase 1
 ``test_sdk_rule_disable.py`` and Phase 2
@@ -289,6 +289,34 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             ctx.exception.path, "$.check_rule_add_condition.dependencies"
         )
         self.assertIsInstance(ctx.exception.__cause__, RuleCompileError)
+
+    def test_pathless_sdk_store_error_from_dep_compile_remaps_to_dependencies_path(
+        self,
+    ) -> None:
+        """Verification-round Blocker regression: see Phase 1 sister test
+        in ``test_sdk_rule_disable.py`` for full rationale."""
+        sdk = _build_sdk()
+        alice = _seed_person(sdk, name="alice", age=25, region="us")
+        support = _capture_support(sdk, alice, 25)
+
+        with patch.object(
+            SDKStore,
+            "_resolve_runtime_registry",
+            side_effect=SDKStoreError("invalid rule input: malformed dep payload"),
+        ):
+            with self.assertRaises(SDKStoreError) as ctx:
+                sdk.check_rule_add_condition(
+                    _adult_rule(),
+                    support,
+                    branch_index=0,
+                    added_atom=_added_atom(),
+                )
+
+        self.assertEqual(
+            ctx.exception.path, "$.check_rule_add_condition.dependencies"
+        )
+        self.assertIsInstance(ctx.exception.__cause__, SDKStoreError)
+        self.assertIn("malformed dep payload", str(ctx.exception))
 
     def test_capability_helper_error_remaps_to_request_path(self) -> None:
         sdk = _build_sdk()
