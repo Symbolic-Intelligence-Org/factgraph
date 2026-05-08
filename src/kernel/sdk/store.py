@@ -54,6 +54,7 @@ if TYPE_CHECKING:
         CheckResult,
         DiagnoseResult,
         FactOverlayCheckResult,
+        ProofFrameRecheckResult,
         WhyNotUniverseResult,
     )
 
@@ -440,6 +441,44 @@ class SDKStore:
         return sdk_fact_overlay_check(
             self, derivation, binding, overlay, engine=engine, registry=registry
         )
+
+    def recheck_proof_frame(
+        self,
+        support_artifact: Any,
+        overlay: Any,
+    ) -> "ProofFrameRecheckResult":
+        """Recheck a previously captured support frame under a fact-side overlay.
+
+        Args:
+            support_artifact: Raw application ``SupportArtifact`` (frozen
+                dataclass) obtained from a prior Check run's
+                ``CheckResult.evidence_envelope.engine_payload``. Per §5.2
+                lock, the SDK never wraps ``SupportArtifact``, never
+                extracts it from a ``CheckResult`` argument, and never
+                calls ``sdk.check(...)`` internally to obtain it.
+            overlay: Raw application ``EvaluationOverlay`` protocol DTO
+                (per §5.2 lock — author-time intent).
+
+        Returns:
+            The application ``ProofFrameRecheckResult`` DTO directly. The
+            runtime represents unsupported support kinds, rule-ref edges,
+            and rule actions as result DTOs; the SDK shell passes the
+            result through unchanged per §5.8 lock.
+
+        Raises:
+            SDKStoreError: For non-SDK exceptions crossing the SDK
+                boundary. The ``path`` field locates the failure:
+                ``$.recheck_proof_frame.support_artifact`` for non-
+                ``SupportArtifact`` input, ``$.recheck_proof_frame.overlay``
+                for non-``EvaluationOverlay`` input,
+                ``$.recheck_proof_frame.request`` for request DTO shape
+                errors, and ``$.recheck_proof_frame`` for unexpected
+                runtime exceptions. Original exceptions are preserved as
+                ``__cause__``.
+        """
+        from .shells.proof_frame import sdk_proof_frame_recheck
+
+        return sdk_proof_frame_recheck(self, support_artifact, overlay)
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
         """Return a managed e_ref string for the entity identified by kwargs.
