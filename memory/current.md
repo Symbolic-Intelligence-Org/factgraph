@@ -1,5 +1,42 @@
 # Current Operational Memory
 
+最后更新:2026-05-09(`codex/v0.1-l-g5-round-events-proofframe-diff-2026-05-08`;G5 ProofFrame Diff SDK shell implemented + archived; **L Direction sequence closed (G1→G4→G2→G3→G5)**; publish pending user authorization)
+
+## 当前阶段(2026-05-09 — L DIRECTION G5 PROOFFRAME DIFF SDK SHELL COMPLETE; PUBLISH PENDING USER AUTH; **L SEQUENCE CLOSED**)
+
+**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 topic branch `codex/v0.1-l-g5-round-events-proofframe-diff-2026-05-08`. G5 3-phase implementation + 7-commit Step 0 lock chain done (draft seed `90c5c05` → §5.1 `2b493b1` → §5.3 `75f2826` → §5.2+§5.4 batch `b1ff0e6` → §5.5+§5.6+§5.7 batch `150d740` → §5.8+§5.9 batch `2f81b56` → scope-freeze `5fe0e6b` → Phase 1 `a961e1d` → Phase 2 `754d2a2` → Phase 3 close-out (this commit chain on topic branch)).
+
+**G5 published snapshot targets (pending explicit user authorization):**
+- `origin/v0.1-l-g5-round-events-proofframe-diff-2026-05-08` (G5-only; rename drops `codex/` prefix per `feedback_worktree_parallel_implementation`)
+- `origin/v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-2026-05-08` (Path B combined, **5th immutable Path B snapshot** per post-G2 strategy)
+- Prior snapshots unchanged: G3-only and G3 combined still at `cb6d3bd`; G2-only and G2 combined still at `d658390`; G1-only at `d6716a0`; G4-only at `acb5a6e`; sacred `master` and `v0.1-oss-prep` untouched.
+
+### G5 outcome
+
+- **Shipped SDK method (1):** `SDKStore.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events, *, warnings=(), include_unchanged=False) -> ProofFrameDiff`.
+- **Input contract:** two non-empty round-id strings + two raw `tuple[RoundEvent, ...]` (`kernel.audit.round_events.RoundEvent`) + optional `tuple[WarningDTO, ...]`. SDK shell is pure — no Store / no registry / no engine arg / no IO. Mirrors `kernel.audit.proof_frame_diff.build_proof_frame_diff(...)` 1:1.
+- **Return contract:** raw application-canonical `ProofFrameDiff` (`kernel.audit.proof_frame_diff.ProofFrameDiff`); `kernel.sdk.__all__` length still 34.
+- **Method naming:** Group A `diff_proof_frames` chosen over Group B per §5.7 falsifier (Group B would collide with the DTO name).
+- **Recorder lifecycle deferred per §5.1:** `start_round` / `record_round_event` / `finalize_round` stay at `kernel.audit.round_events` advanced importable. **Capture path is `from kernel.audit.round_events import ...`** (existing UX, not changed by G5).
+- **Cross-cutting precedent layer rule encoded verbatim in §6 invariants** (G5 architectural deliverable): "**frozen canonical DTO above `kernel.core` using `kernel.application.protocol` vocabulary**" — keeps `kernel.audit` frozen DTOs IN scope; preserves G3 substrate-IR-out carve-out.
+- **Error paths (7):** `$.diff_proof_frames.{round_a_id,round_b_id,round_a_events,round_b_events,warnings,request,}` + base. NO `ProtocolShapeError` / `.dependencies` / `CapabilityHelperError` paths.
+- **9-shell Sibling discipline scope** active forward-only.
+- **Blueprint:** `docs/blueprints/archive/2026-05-08_l-direction-g5-round-events-proofframe-diff.md` + `.audit.md` archived and marked `implemented`.
+- **Verification basis:** post-Phase-2 1683 OK / 1 skipped (was 1661/1 at G3 polish baseline `2f81b56` topic tip; +22 new G5 tests); ruff clean; `git diff --check` clean.
+
+### G5 follow-up
+
+- Publish `v0.1-l-g5-round-events-proofframe-diff-2026-05-08` (G5-only) + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-2026-05-08` (Path B combined) from this Phase 3 close-out HEAD pending user authorization.
+- **L Direction sequence CLOSED.** Post-L SDK ergonomics redesign blueprint (per `feedback_sdk_ergonomics_redesign_target`) is **now unblocked**.
+- Sacred branches remain untouched: `master` and `v0.1-oss-prep`.
+- G1 + G4 + G2 + G3 published snapshot branches remain untouched at `d6716a0` / `acb5a6e` / `d658390` / `cb6d3bd`.
+- Watch for a post-publish verification round (G1/G4/G2/G3 each had one; G5's pre-publish gates already passed clean, but a fresh round on the published HEAD is cheap insurance).
+- Post-L hygiene tracker:
+  - `store.py:1024` (`run`) and `store.py:1154` (`evaluate`) call `_resolve_runtime_registry` directly without the shared boundary normalizer (originally G3 verification-round addendum).
+  - `kernel.audit.proof_frame_diff` cold-import circularity worked around inline in `test_sdk_proof_frame_diff.py` (Phase 1 implementation discovery).
+
+<!-- Historical 2026-05-08 G3 publish state follows. -->
+
 最后更新:2026-05-08(`v0.1-l-g3-rule-overlays-2026-05-08` @ `cb6d3bd` published;G3 Rule Overlay SDK shells implemented + archived + verification-round Blocker fix + published snapshot)
 
 ## 当前阶段(2026-05-08 — L DIRECTION G3 RULE OVERLAY SDK SHELLS PUBLISHED)

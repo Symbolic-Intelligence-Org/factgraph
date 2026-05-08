@@ -1,8 +1,8 @@
 # L Direction G5 — Round Events + ProofFrame Diff SDK Shell
 
-- **Status:** scoped
+- **Status:** implemented
 - **Created:** 2026-05-08
-- **Last Updated:** 2026-05-08
+- **Last Updated:** 2026-05-09
 - **Parent:** L Direction (final group; closes the 5-group SDK shell rollout G1→G4→G2→G3→G5 per [post-routemap-direction-selection-input/30_recommendation.md:600](../../references/working/post-routemap-direction-selection-input/30_recommendation.md))
 - **Predecessors (shipped):**
   - [2026-05-08_l-direction-g3-rule-overlays (archived)](../archive/2026-05-08_l-direction-g3-rule-overlays.md) — Rule overlays; established §5.1+§5.2 substrate-IR-out clarification + shared `resolve_runtime_registry` boundary normalizer
@@ -466,4 +466,84 @@ Implementation-stage acceptance (per phase, gated by phase-end strict audit):
 
 ## 9. Outcome / Deviations
 
-To be filled at close-out.
+### 9.1 Final Landed Surface
+
+One new SDKStore method visible at the SDK boundary:
+
+```python
+SDKStore.diff_proof_frames(
+    round_a_id: str,
+    round_b_id: str,
+    round_a_events: tuple[RoundEvent, ...],
+    round_b_events: tuple[RoundEvent, ...],
+    *,
+    warnings: tuple[WarningDTO, ...] = (),
+    include_unchanged: bool = False,
+) -> ProofFrameDiff
+```
+
+One new SDK shell file: [`kernel/sdk/shells/proof_frame_diff.py`](../../../src/kernel/sdk/shells/proof_frame_diff.py). Total `kernel/sdk/shells/` module count after G5 publish: **9**. `kernel.sdk.__all__` length **unchanged at 34** — no new outward exports.
+
+Recorder lifecycle (Round events: `start_round` / `record_round_event` / `finalize_round`) deliberately deferred to advanced importable per §5.1; capture path remains `from kernel.audit.round_events import ...`.
+
+### 9.2 3-Phase Commit Chain
+
+| Phase | Commit | Description |
+|---|---|---|
+| Phase 1 | `a961e1d` | Combined skeleton + impl: `proof_frame_diff.py` shell + `SDKStore.diff_proof_frames` thin delegate + `test_sdk_proof_frame_diff.py` (16 contract tests, slightly more than the ~13 estimate due to splitting input checks) |
+| Phase 2 | `754d2a2` | G5 invariants (6-class mirror with novel audit-import allowlist carve) + SDK API docs CN/EN + application overview docs CN/EN + cumulative G5 strict audit gate (5 dimensions PASS) |
+| Phase 3 | (this commit) | Close-out: §9 Outcome filled, status `scoped → implemented`, blueprint + audit log archived, archive inventory updated, memory synced (publish pending) |
+
+Plus 7 docs/lock commits before Phase 1 (recorded in audit log entries 1-7) covering Step 0 falsifier passes for all 9 §5.x questions: `90c5c05` draft seed → `2b493b1` §5.1 → `75f2826` §5.3 → `b1ff0e6` batch §5.2+§5.4 → `150d740` batch §5.5+§5.6+§5.7 → `2f81b56` batch §5.8+§5.9 → `5fe0e6b` scope-freeze.
+
+### 9.3 Deviations from Original Design
+
+Three deliberate deviations recorded across the audit log:
+
+1. **§5.5 single-shell scope + inline validation** (Decision lock at `150d740`). The blueprint draft listed a §5.5 sub-question on shared validators; falsifier evidence (`grep -rn "RoundEvent\|kernel\.audit" src/kernel/sdk/shells/` returned zero hits) confirmed only one G5 shell consumes `RoundEvent` tuples, so no extraction trigger fires. Inline `isinstance` validation is sufficient and avoids premature shared-validator surface.
+
+2. **§5.7 Group A `diff_proof_frames` over Group B `proof_frame_diff`** (Decision lock at `150d740`). Conservative default in §5.7 was Group A (Round 8 hint). Falsifier confirmed: Group B reads as noun and would semantically collide with the DTO name `ProofFrameDiff` (same anti-pattern G3 §5.7 rejected for `disable_rule` colliding with persistent-write `add` family). Group A reads as verb-first action shape ("diff these proof frames"), consistent with G1 / G2 / G3 / G4 verb-first L methods.
+
+3. **§5.3 cross-cutting precedent layer rule made explicit** (Decision lock at `75f2826`, encoded verbatim in §6 invariants). The G2 §5.1+§5.2 precedent was originally scoped to `kernel.application.protocol`. G3 §5.2 carved substrate IR (`RuleSpec`) OUT. With G5 §5.3, the layer line is now stated explicitly as: **"frozen canonical DTO above `kernel.core` using `kernel.application.protocol` vocabulary"**. This rule keeps `kernel.audit` frozen DTOs (e.g., `RoundEvent`, `ProofFrameDiff`, `FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference`) IN scope as raw cross-boundary DTOs, and preserves the G3 substrate-IR-out carve-out (`RuleSpec` excluded by the "above `kernel.core`" criterion). Available for any future SDK shell over audit-layer or application-protocol DTOs without re-deriving the rule.
+
+**One Phase 1 implementation discovery (recorded but not a deviation):** the `test_sdk_proof_frame_diff.py` file imports `kernel.sdk` first to warm the kernel.application + kernel.audit chain. Cold import of `kernel.audit.proof_frame_diff` alone triggers a circular import via `kernel.application.capability_helpers.round_events ← kernel.audit.round_events`. This is a pre-existing latent issue, not caused by G5; the full kernel suite already imports things in an order that doesn't surface it. Recorded inline as a comment for future readers.
+
+### 9.4 Test Catalogue
+
+- `test_sdk_proof_frame_diff.py` — 16 contract tests:
+  - happy path (empty rounds → empty `frame_deltas`)
+  - end-to-end happy path with real `proof_frame_result` events producing non-empty `frame_deltas` (validates `frame_status_change`)
+  - 8 input rejection tests covering all 5 input paths × the type+content checks
+  - `ProofFrameDiffError` from helper-internal validation remaps to `.request` with `__cause__`
+  - defensive `Exception` from runtime remaps to base `$.diff_proof_frames` with `__cause__`
+  - DTO non-export (10 names: result + 6 supporting + 2 round-event names + 2 SDK identifiers)
+  - Sibling discipline runtime patch (8 prior sister `sdk_*` shells, all `assert_not_called`)
+  - Sibling discipline static source scan (16 forbidden patterns: 8 module imports + 8 function calls)
+- `test_sdk_g5_invariants.py` — 6 invariant classes (1:1 mirror of G1/G4/G2/G3 with novel audit-allowlist check at class 4)
+- `test_sdk_validation.py` — unchanged (no shared validator extraction per §5.5)
+
+**Zero `#P1` retrofits** (audit-layer tests never asserted "no SDK surface" — confirmed at §5.9 falsifier).
+
+Phase-end test counts: Phase 1 → **1677 OK / 1 skipped** (was 1661 / 1 at G3 polish baseline `2f81b56` topic tip; +16 new contract tests). Phase 2 → **1683 OK / 1 skipped** (+6 new invariant tests). Pre-existing `kernel.adapters.problog` import error environment-only and unaffected throughout.
+
+### 9.5 Boundary Outcomes
+
+- **`kernel.sdk.__all__` length still 34** — no G5 result/method/function names added; verified by all 5 invariant test files (G1+G4+G2+G3+G5).
+- **`kernel/sdk/shells/` populated to 9 modules** — `check.py` (G1) + `diagnose.py` (G1) + `why_not.py` (G4) + `fact_overlay.py` (G2) + `proof_frame.py` (G2) + `rule_disable.py` (G3) + `rule_literal_replace.py` (G3) + `rule_add_condition.py` (G3) + `proof_frame_diff.py` (G5) + `_validation.py` (shared, unchanged).
+- **SDKStore method count: 40** (was 39 pre-G5; +1 G5 method).
+- **README quickstart untouched** — G5 introduces no new top-level exports or recommended snippets at this layer.
+- **Frontier remains advanced importable per G4 §5.4** — evaluator drift gate and application no-opt-in tests stay in force.
+- **Round events recorder lifecycle remains advanced importable per G5 §5.1** — `start_round` / `record_round_event` / `finalize_round` + 5 projection helpers all stay at `kernel.audit.round_events`. Existing UX (`examples/round_story_full_demo.py`) unchanged.
+- **Walker view `ProofFrameDiffView` remains opt-in** — Tier 2 advanced importable; SDK shell does not auto-wrap.
+- **G1 + G4 + G2 + G3 published snapshot branches NOT modified** — verified at Phase 2 audit and remain at: `origin/v0.1-l-g1-check-diagnose-2026-05-08` @ `d6716a0`, `origin/v0.1-l-g4-why-not-frontier-2026-05-08` @ `acb5a6e`, `origin/v0.1-l-g2-fact-overlay-proofframe-recheck-2026-05-08` @ `d658390`, `origin/v0.1-l-g3-rule-overlays-2026-05-08` @ `cb6d3bd`. Sacred branches `master` and `v0.1-oss-prep` untouched throughout.
+
+### 9.6 Forward Triggers
+
+- **L Direction sequence closed.** G1 → G4 → G2 → G3 → G5 all shipped. Every L-Full slot from the 2026-05-07 round-story-completion target is now reachable through `SDKStore.<method>(...)` for the *query* side. Capture side (recorder lifecycle) stays at `kernel.audit` per the event-sourcing pattern split.
+- **Cross-cutting precedent layer rule encoded** — "frozen canonical DTO above `kernel.core` using `kernel.application.protocol` vocabulary" is now §6 invariant text. Any future SDK shell over audit-layer or application-protocol DTOs inherits the rule without re-deriving it.
+- **`kernel/sdk/shells/` subpackage at 9 modules** — any future shell lands directly under `shells/`; no migration trigger.
+- **9-shell Sibling discipline scope active** — each new shell tests against all 8 prior sister shells (forward-only convention; prior shells' tests stay frozen at their publication moment per Path B immutability).
+- **Post-L SDK ergonomics redesign blueprint is now unblocked** (per `feedback_sdk_ergonomics_redesign_target` memory). With L Direction complete, the redesign blueprint may revisit `SDKStore.<method>` flat pattern and consider OpenAI-style `Client.<family>.<method>` namespace migration. Until then, `check_*` / `recheck_*` / `why_not` / `diff_*` verb-first prefixes are the L-Direction conventions.
+- **Out-of-scope `store.py` legacy paths flagged for post-L hygiene** (originally surfaced in G3 verification round addendum): `store.py:1024` (`run`) and `store.py:1154` (`evaluate`) call `_resolve_runtime_registry` directly without the shared boundary normalizer. Pre-shell-era code with different upstream callers; if they ever surface a `_compile_rule_input` failure on a dependency rule they'd leak the same pathless `SDKStoreError` G3 caught. Tracked for separate hygiene blueprint.
+- **`build_proof_frame_diff` / `kernel.audit.round_events` cold-import circularity** observed at Phase 1 — pre-existing latent issue (full kernel suite warms the chain via discovery order); not introduced by G5; recorded inline as a comment in the test file. Tracked for separate hygiene blueprint if it ever surfaces in user-facing flows.
+- **Post-publish verification round expected** — G1 / G4 / G2 / G3 each surfaced 1 Blocker + minor polish after publish via multi-agent read-only audit on the published HEAD. G5's pre-publish scope-freeze + Phase 1+2 audit gates already passed clean, but a fresh round on the published HEAD is still cheap insurance.
