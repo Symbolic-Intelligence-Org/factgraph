@@ -491,14 +491,44 @@ class RuleLiteralReplaceRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("why_not_runtime", source)
         self.assertNotIn("kernel.sdk", source)
 
-    def test_no_sdk_rule_literal_replace_surface(self) -> None:
-        sdk_sources = "\n".join(
-            path.read_text()
-            for path in Path("src/kernel/sdk").rglob("*.py")
+    def test_sdk_rule_literal_replace_shell_imports_runtime_only_in_shell(self) -> None:
+        """G3 Phase 2 retrofit (per `#P1` carve-out, mirroring G2 Phase 0
+        retrofits of G1 + G4 archived invariants and G3 Phase 1 retrofit
+        of the Rule Disable boundary test): the SDK Rule Literal Replace
+        shell at ``kernel/sdk/shells/rule_literal_replace.py`` is now the
+        active L Direction entry point. The original "no SDK surface"
+        assertion is replaced by a narrower invariant: the runtime
+        entrypoint ``check_rule_literal_replace_action`` is imported
+        only by the shell file, and ``RuleLiteralReplaceAction`` is
+        never IMPORTED anywhere in SDK code (docstring references
+        documenting the boundary contract are allowed; the application
+        A helper ``build_rule_literal_replace_request`` constructs the
+        action internally).
+        """
+        shell_path = Path("src/kernel/sdk/shells/rule_literal_replace.py")
+        self.assertTrue(
+            shell_path.is_file(), f"{shell_path} should exist after G3 Phase 2"
         )
 
-        self.assertNotIn("check_rule_literal_replace_action", sdk_sources)
-        self.assertNotIn("RuleLiteralReplaceAction", sdk_sources)
+        shell_source = shell_path.read_text()
+        self.assertIn(
+            "from kernel.application.rule_literal_replace_runtime import (",
+            shell_source,
+        )
+        self.assertIn("check_rule_literal_replace_action", shell_source)
+        self.assertNotIn("import RuleLiteralReplaceAction", shell_source)
+        self.assertNotIn(", RuleLiteralReplaceAction", shell_source)
+        self.assertNotIn("RuleLiteralReplaceAction(", shell_source)
+
+        other_sdk_sources = "\n".join(
+            path.read_text()
+            for path in Path("src/kernel/sdk").rglob("*.py")
+            if path != shell_path
+        )
+        self.assertNotIn("check_rule_literal_replace_action", other_sdk_sources)
+        self.assertNotIn("import RuleLiteralReplaceAction", other_sdk_sources)
+        self.assertNotIn(", RuleLiteralReplaceAction", other_sdk_sources)
+        self.assertNotIn("RuleLiteralReplaceAction(", other_sdk_sources)
 
     def test_frontier_protected_entrypoints_do_not_drift(self) -> None:
         ruleref_source = Path("src/kernel/core/rules/ruleref_substrate.py").read_text()

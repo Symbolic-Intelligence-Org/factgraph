@@ -56,6 +56,7 @@ if TYPE_CHECKING:
         FactOverlayCheckResult,
         ProofFrameRecheckResult,
         RuleDisableResult,
+        RuleLiteralReplaceResult,
         WhyNotUniverseResult,
     )
 
@@ -554,6 +555,88 @@ class SDKStore:
             support,
             branch_index=branch_index,
             atom_index=atom_index,
+            overlay=overlay,
+            note=note,
+        )
+
+    def check_rule_literal_replace(
+        self,
+        rule: Any,
+        support: Any,
+        *,
+        branch_index: int,
+        atom_index: int,
+        literal_path: Any,
+        old_literal: Any,
+        new_literal: Any,
+        overlay: Any = None,
+        note: str | None = None,
+    ) -> "RuleLiteralReplaceResult":
+        """Check a Rule Literal Replace rule-overlay action against captured support.
+
+        Args:
+            rule: SDK ``Rule`` describing the target rule. Lowered through
+                ``SDKStore._compile_rule_input(...)`` to a substrate
+                ``RuleSpec`` per §5.2 lock; raw ``RuleSpec`` is rejected.
+            support: Raw application ``SupportArtifact`` from a prior
+                Check run's ``CheckResult.evidence_envelope.engine_payload``.
+                Per §5.3 lock the SDK never wraps it.
+            branch_index: Non-negative branch locator into
+                ``rule_spec.where`` per §5.4 lock.
+            atom_index: Non-negative atom locator into
+                ``rule_spec.where[branch_index]`` per §5.4 lock.
+            literal_path: Raw application ``RuleLiteralPath`` per §5.4
+                lock (frozen application-canonical, no SDK alternative
+                without inventing outward surface — G2 §5.1+§5.2
+                cross-cutting precedent applies).
+            old_literal: Existing literal value at the locator. ``Any``
+                typing matches the application protocol.
+            new_literal: Replacement literal value at the locator.
+                ``Any`` typing matches the application protocol.
+            overlay: ``None`` or an empty ``EvaluationOverlay``. The
+                rule-action overlay is constructed internally by the A
+                helper ``build_rule_literal_replace_request(...)``;
+                non-empty overlay is rejected at the SDK boundary per
+                §5.4 + §5.8 locks.
+            note: Optional human-readable annotation forwarded to the
+                ``RuleLiteralReplaceAction`` per §5.4 lock.
+
+        Returns:
+            The application ``RuleLiteralReplaceResult`` DTO directly.
+            The runtime represents unsupported support kinds, rule-ref
+            edges, target-not-found, rule-id/version mismatch, and
+            native evaluation failures as result DTOs; the SDK shell
+            passes the result through unchanged per §5.8 lock.
+
+        Raises:
+            SDKStoreError: For non-SDK exceptions crossing the SDK
+                boundary. The ``path`` field locates the failure:
+                ``$.check_rule_literal_replace.rule`` for non-``Rule``
+                SDK input or invalid rule shape after lowering;
+                ``$.check_rule_literal_replace.support`` for non-
+                ``SupportArtifact`` input;
+                ``$.check_rule_literal_replace.overlay`` for non-
+                ``EvaluationOverlay`` non-None or non-empty
+                ``EvaluationOverlay`` input;
+                ``$.check_rule_literal_replace.dependencies`` for
+                dependency rule registration / RuleRef resolution
+                failures; ``$.check_rule_literal_replace.request`` for
+                ``RuleLiteralPath`` shape errors / action / request
+                DTO shape errors; and ``$.check_rule_literal_replace``
+                for unexpected runtime exceptions. Original exceptions
+                are preserved as ``__cause__``.
+        """
+        from .shells.rule_literal_replace import sdk_rule_literal_replace
+
+        return sdk_rule_literal_replace(
+            self,
+            rule,
+            support,
+            branch_index=branch_index,
+            atom_index=atom_index,
+            literal_path=literal_path,
+            old_literal=old_literal,
+            new_literal=new_literal,
             overlay=overlay,
             note=note,
         )
