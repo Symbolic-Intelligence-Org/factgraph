@@ -439,14 +439,43 @@ class RuleDisableRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("why_not_runtime", source)
         self.assertNotIn("kernel.sdk", source)
 
-    def test_no_sdk_rule_disable_surface(self) -> None:
-        sdk_sources = "\n".join(
-            path.read_text()
-            for path in Path("src/kernel/sdk").rglob("*.py")
+    def test_sdk_rule_disable_shell_imports_runtime_only_in_shell(self) -> None:
+        """G3 Phase 1 retrofit (per `#P1` carve-out, mirroring G2 Phase 0
+        retrofits of G1 + G4 archived invariants): the SDK Rule Disable
+        shell at ``kernel/sdk/shells/rule_disable.py`` is now the active
+        L Direction entry point for Rule Disable. The original "no SDK
+        surface" assertion is replaced by a narrower invariant: the
+        runtime entrypoint ``check_rule_disable_action`` is imported only
+        by the shell file, and ``RuleDisableAction`` is never IMPORTED
+        anywhere in SDK code (docstring references documenting the
+        boundary contract are allowed; the application A helper
+        ``build_rule_disable_request`` constructs the action internally,
+        so SDK passes only ``branch_index`` / ``atom_index`` / ``note``
+        primitives across the boundary).
+        """
+        shell_path = Path("src/kernel/sdk/shells/rule_disable.py")
+        self.assertTrue(
+            shell_path.is_file(), f"{shell_path} should exist after G3 Phase 1"
         )
 
-        self.assertNotIn("check_rule_disable_action", sdk_sources)
-        self.assertNotIn("RuleDisableAction", sdk_sources)
+        shell_source = shell_path.read_text()
+        self.assertIn(
+            "from kernel.application.rule_disable_runtime import check_rule_disable_action",
+            shell_source,
+        )
+        self.assertNotIn("import RuleDisableAction", shell_source)
+        self.assertNotIn(", RuleDisableAction", shell_source)
+        self.assertNotIn("RuleDisableAction(", shell_source)
+
+        other_sdk_sources = "\n".join(
+            path.read_text()
+            for path in Path("src/kernel/sdk").rglob("*.py")
+            if path != shell_path
+        )
+        self.assertNotIn("check_rule_disable_action", other_sdk_sources)
+        self.assertNotIn("import RuleDisableAction", other_sdk_sources)
+        self.assertNotIn(", RuleDisableAction", other_sdk_sources)
+        self.assertNotIn("RuleDisableAction(", other_sdk_sources)
 
     def test_batch_4_proofframe_protocol_has_no_rule_disable_drift(self) -> None:
         source = Path("src/kernel/application/protocol/proofframe.py").read_text()

@@ -532,8 +532,8 @@ Scoped-stage acceptance:
 
 Implementation-stage acceptance (per phase, gated by phase-end audit):
 
-- [ ] Phase 0 lands `validate_rule` / `validate_support_artifact` / `validate_optional_evaluation_overlay` in `kernel/sdk/shells/_validation.py`; G2 `proof_frame.py` migrates to shared `validate_support_artifact`; full kernel suite passes without test-file modifications beyond ProofFrame import-path update.
-- [ ] Phase 1 lands `kernel/sdk/shells/rule_disable.py` (real `sdk_rule_disable` implementation), `SDKStore.check_rule_disable(...)` thin delegate in `store.py`, `test_sdk_rule_disable.py` with full §5.4 + §5.8 contract coverage.
+- [x] Phase 0 lands `validate_rule` / `validate_support_artifact` / `validate_optional_evaluation_overlay` in `kernel/sdk/shells/_validation.py`; G2 `proof_frame.py` migrates to shared `validate_support_artifact`; full kernel suite passes without test-file modifications beyond ProofFrame import-path update. (commit `5437cd6`; full kernel 1593 OK / 1 skipped; +19 new validator unit tests)
+- [x] Phase 1 lands `kernel/sdk/shells/rule_disable.py` (real `sdk_rule_disable` implementation), `SDKStore.check_rule_disable(...)` thin delegate in `store.py`, `test_sdk_rule_disable.py` with full §5.4 + §5.8 contract coverage. (full kernel 1609 OK / 1 skipped; +16 G3 contract tests; `#P1` retrofit on pre-G3 `test_no_sdk_rule_disable_surface` boundary test)
 - [ ] Phase 2 lands `kernel/sdk/shells/rule_literal_replace.py`, `SDKStore.check_rule_literal_replace(...)` thin delegate, `test_sdk_rule_literal_replace.py`.
 - [ ] Phase 3 lands `kernel/sdk/shells/rule_add_condition.py`, `SDKStore.check_rule_add_condition(...)` thin delegate, `test_sdk_rule_add_condition.py`.
 - [ ] Phase 4 lands `test_sdk_g3_invariants.py` (6-class mirror), updates SDK API docs (`04_api_surface.md` + `.en.md`) and application overview docs (`01_overview.md` + `_en.md`); cumulative G3 strict audit gates the close-out.

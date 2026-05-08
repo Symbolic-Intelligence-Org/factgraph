@@ -55,6 +55,7 @@ if TYPE_CHECKING:
         DiagnoseResult,
         FactOverlayCheckResult,
         ProofFrameRecheckResult,
+        RuleDisableResult,
         WhyNotUniverseResult,
     )
 
@@ -487,6 +488,75 @@ class SDKStore:
         from .shells.proof_frame import sdk_proof_frame_recheck
 
         return sdk_proof_frame_recheck(self, support_artifact, overlay)
+
+    def check_rule_disable(
+        self,
+        rule: Any,
+        support: Any,
+        *,
+        branch_index: int,
+        atom_index: int,
+        overlay: Any = None,
+        note: str | None = None,
+    ) -> "RuleDisableResult":
+        """Check a Rule Disable rule-overlay action against captured support.
+
+        Args:
+            rule: SDK ``Rule`` describing the target rule. Lowered through
+                ``SDKStore._compile_rule_input(...)`` to a substrate
+                ``RuleSpec`` per §5.2 lock; raw ``RuleSpec`` is rejected.
+            support: Raw application ``SupportArtifact`` from a prior
+                Check run's ``CheckResult.evidence_envelope.engine_payload``.
+                Per §5.3 lock the SDK never wraps it, never extracts it
+                from a ``CheckResult`` argument, and never calls
+                ``sdk.check(...)`` internally.
+            branch_index: Non-negative branch locator into
+                ``rule_spec.where`` per §5.4 lock.
+            atom_index: Non-negative atom locator into
+                ``rule_spec.where[branch_index]`` per §5.4 lock.
+            overlay: ``None`` or an empty ``EvaluationOverlay``. The
+                rule-action overlay is constructed internally by the A
+                helper ``build_rule_disable_request(...)``; non-empty
+                overlay is rejected at the SDK boundary per §5.4 + §5.8
+                locks.
+            note: Optional human-readable annotation forwarded to the
+                ``RuleDisableAction`` per §5.4 lock.
+
+        Returns:
+            The application ``RuleDisableResult`` DTO directly. The
+            runtime represents unsupported support kinds, rule-ref
+            edges, target-not-found, rule-id/version mismatch, and
+            native evaluation failures as result DTOs; the SDK shell
+            passes the result through unchanged per §5.8 lock.
+
+        Raises:
+            SDKStoreError: For non-SDK exceptions crossing the SDK
+                boundary. The ``path`` field locates the failure:
+                ``$.check_rule_disable.rule`` for non-``Rule`` SDK
+                input or invalid rule shape after lowering;
+                ``$.check_rule_disable.support`` for non-
+                ``SupportArtifact`` input;
+                ``$.check_rule_disable.overlay`` for non-
+                ``EvaluationOverlay`` non-None or non-empty
+                ``EvaluationOverlay`` input;
+                ``$.check_rule_disable.dependencies`` for dependency
+                rule registration / RuleRef resolution failures;
+                ``$.check_rule_disable.request`` for action / request
+                DTO shape errors; and ``$.check_rule_disable`` for
+                unexpected runtime exceptions. Original exceptions are
+                preserved as ``__cause__``.
+        """
+        from .shells.rule_disable import sdk_rule_disable
+
+        return sdk_rule_disable(
+            self,
+            rule,
+            support,
+            branch_index=branch_index,
+            atom_index=atom_index,
+            overlay=overlay,
+            note=note,
+        )
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
         """Return a managed e_ref string for the entity identified by kwargs.
