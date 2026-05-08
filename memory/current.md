@@ -1,15 +1,17 @@
 # Current Operational Memory
 
-最后更新:2026-05-09(`codex/v0.1-l-g5-round-events-proofframe-diff-2026-05-08`;G5 ProofFrame Diff SDK shell implemented + archived; **L Direction sequence closed (G1→G4→G2→G3→G5)**; publish pending user authorization)
+最后更新:2026-05-09(`v0.1-l-g5-round-events-proofframe-diff-2026-05-08` @ `d4ceb3e` published;G5 ProofFrame Diff SDK shell implemented + archived + pre-publish-Blocker fix + published snapshot;**L Direction sequence CLOSED on origin (G1→G4→G2→G3→G5)**)
 
-## 当前阶段(2026-05-09 — L DIRECTION G5 PROOFFRAME DIFF SDK SHELL COMPLETE; PUBLISH PENDING USER AUTH; **L SEQUENCE CLOSED**)
+## 当前阶段(2026-05-09 — L DIRECTION G5 PROOFFRAME DIFF SDK SHELL PUBLISHED; **L SEQUENCE CLOSED ON ORIGIN**)
 
-**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 topic branch `codex/v0.1-l-g5-round-events-proofframe-diff-2026-05-08`. G5 3-phase implementation + 7-commit Step 0 lock chain done (draft seed `90c5c05` → §5.1 `2b493b1` → §5.3 `75f2826` → §5.2+§5.4 batch `b1ff0e6` → §5.5+§5.6+§5.7 batch `150d740` → §5.8+§5.9 batch `2f81b56` → scope-freeze `5fe0e6b` → Phase 1 `a961e1d` → Phase 2 `754d2a2` → Phase 3 close-out (this commit chain on topic branch)).
+**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 topic branch `codex/v0.1-l-g5-round-events-proofframe-diff-2026-05-08` @ `d4ceb3e`. G5 3-phase implementation + 7-commit Step 0 lock chain + pre-publish polish done (draft seed `90c5c05` → §5.1 `2b493b1` → §5.3 `75f2826` → §5.2+§5.4 batch `b1ff0e6` → §5.5+§5.6+§5.7 batch `150d740` → §5.8+§5.9 batch `2f81b56` → scope-freeze `5fe0e6b` → Phase 1 `a961e1d` → Phase 2 `754d2a2` → Phase 3 close-out `480ebc6` → pre-publish polish `d4ceb3e`).
 
-**G5 published snapshot targets (pending explicit user authorization):**
-- `origin/v0.1-l-g5-round-events-proofframe-diff-2026-05-08` (G5-only; rename drops `codex/` prefix per `feedback_worktree_parallel_implementation`)
-- `origin/v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-2026-05-08` (Path B combined, **5th immutable Path B snapshot** per post-G2 strategy)
-- Prior snapshots unchanged: G3-only and G3 combined still at `cb6d3bd`; G2-only and G2 combined still at `d658390`; G1-only at `d6716a0`; G4-only at `acb5a6e`; sacred `master` and `v0.1-oss-prep` untouched.
+**G5 published snapshots (verified post-push 2026-05-09):**
+- `origin/v0.1-l-g5-round-events-proofframe-diff-2026-05-08` @ `d4ceb3e` — G5-only.
+- `origin/v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-2026-05-08` @ `d4ceb3e` — Path B combined (G1+G4+G2+G3+G5 cumulative, **5th immutable Path B snapshot**).
+- Prior snapshots unchanged: G3-only and G3 combined still at `cb6d3bd`; G2-only and G2 combined still at `d658390`; G1-only at `d6716a0`; G4-only at `acb5a6e`; sacred `master` @ `81c6f775` and `v0.1-oss-prep` @ `f5ade36d` untouched. Only the two new G5 refs were added.
+
+**Convention reminder — `memory/current.md` tracks topic-branch HEAD, not published snapshot HEAD.** This file is updated on the topic branch *after* a publish event, so at any published snapshot HEAD the file naturally lags by 1 commit (the post-publish memory sync). Recorded in G3 archive audit log post-archive addendum 2026-05-08 and continues for G5.
 
 ### G5 outcome
 
@@ -26,14 +28,15 @@
 
 ### G5 follow-up
 
-- Publish `v0.1-l-g5-round-events-proofframe-diff-2026-05-08` (G5-only) + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-2026-05-08` (Path B combined) from this Phase 3 close-out HEAD pending user authorization.
-- **L Direction sequence CLOSED.** Post-L SDK ergonomics redesign blueprint (per `feedback_sdk_ergonomics_redesign_target`) is **now unblocked**.
+- G5-only + Path B combined snapshots published 2026-05-09 from pre-publish polish HEAD `d4ceb3e`. **L Direction sequence CLOSED on origin.** No remaining publish action.
+- Pre-publish verification round caught + fixed at `d4ceb3e`: 1 Blocker (include_unchanged isinstance(bool); 7-path → 8-path) + 1 Clarify (overview docs) + 3 Minors (checkboxes / docstring refs / test count). 18 contract + 6 invariants now; full kernel 1685 OK / 1 skipped at published HEAD.
+- **Post-L SDK ergonomics redesign blueprint (per `feedback_sdk_ergonomics_redesign_target`) is now UNBLOCKED.** With L Direction complete on origin, the redesign blueprint may revisit `SDKStore.<method>` flat pattern and consider OpenAI-style `Client.<family>.<method>` namespace migration.
 - Sacred branches remain untouched: `master` and `v0.1-oss-prep`.
 - G1 + G4 + G2 + G3 published snapshot branches remain untouched at `d6716a0` / `acb5a6e` / `d658390` / `cb6d3bd`.
-- Watch for a post-publish verification round (G1/G4/G2/G3 each had one; G5's pre-publish gates already passed clean, but a fresh round on the published HEAD is cheap insurance).
-- Post-L hygiene tracker:
+- Watch for a post-publish verification round on the new G5 published HEAD (G1/G4/G2/G3 each had one; G5's pre-publish round caught the Blocker, but a fresh round on the published HEAD remains cheap insurance).
+- Post-L hygiene tracker (carry-forward; not blocking redesign):
   - `store.py:1024` (`run`) and `store.py:1154` (`evaluate`) call `_resolve_runtime_registry` directly without the shared boundary normalizer (originally G3 verification-round addendum).
-  - `kernel.audit.proof_frame_diff` cold-import circularity worked around inline in `test_sdk_proof_frame_diff.py` (Phase 1 implementation discovery).
+  - `kernel.audit.proof_frame_diff` cold-import circularity worked around inline in `test_sdk_proof_frame_diff.py` (G5 Phase 1 implementation discovery).
 
 <!-- Historical 2026-05-08 G3 publish state follows. -->
 
