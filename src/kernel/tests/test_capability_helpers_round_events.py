@@ -52,6 +52,15 @@ def _plan() -> CompiledDerivationPlan:
     )
 
 
+def _plan_with_sdk_rule_in_body_ir() -> CompiledDerivationPlan:
+    return CompiledDerivationPlan(
+        derivation_id="helper.round_event",
+        version="1.0",
+        body_ir=[("pred", "Person:exists", ["$p"]), _sdk_rule()],
+        heads=(CompiledHeadCall(target_pred_id="Person:eligible", head_var_names=("$p",)),),
+    )
+
+
 def _overlay() -> EvaluationOverlay:
     return EvaluationOverlay(
         fact_actions=(
@@ -261,6 +270,28 @@ class BuildRoundEventPayloadTests(unittest.TestCase):
             build_round_event_payload(
                 kind="check_result",
                 request=_sdk_rule(),
+                result=result,
+            )
+
+    def test_rejects_nested_sdk_origin_in_request_dataclass(self) -> None:
+        binding = _binding()
+        request = CheckRequest(
+            plan=_plan_with_sdk_rule_in_body_ir(),
+            binding=binding,
+            engine="native",
+        )
+        result = CheckResult(
+            status="failed",
+            requested_binding=binding,
+            matched_count=0,
+            matched_binding=None,
+            evidence_envelope=None,
+        )
+
+        with self.assertRaises(OriginPackageError):
+            build_round_event_payload(
+                kind="check_result",
+                request=request,
                 result=result,
             )
 

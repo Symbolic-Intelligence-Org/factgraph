@@ -1,7 +1,7 @@
 # Application 模块总览(kernel)
 
 - 范围:`src/kernel/application`
-- 最后更新:2026-05-06
+- 最后更新:2026-05-08
 - 目标读者:需要理解 Python runtime authority、SDK adapter 边界与 service/agent consumer 约束的开发者
 
 ## 1. 模块职责

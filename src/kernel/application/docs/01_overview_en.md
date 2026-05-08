@@ -1,7 +1,7 @@
 # Overview of the Application Module (`kernel`)
 
 - Scope: `src/kernel/application`
-- Last updated: 2026-05-06
+- Last updated: 2026-05-08
 - Target readers: developers who need to understand Python runtime authority, SDK adapter boundaries, and service/agent consumer constraints
 
 ## 1. Module Responsibilities

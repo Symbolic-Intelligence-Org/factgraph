@@ -24,7 +24,7 @@
 
 ## 1. Problem
 
-Application-layer ergonomic helpers cover only **3 of 8** capability families today (Q3 Fact Overlay, Q4 Why-not, Q5 Frontier — all shipped in Batch 2 capability-ergonomics). The remaining **5 families** require manual DTO construction, sorted-binding boilerplate, and 5 separate `project_<kind>_event_payload` imports:
+At blueprint creation, application-layer ergonomic helpers covered only **3 of 8** capability families (Q3 Fact Overlay, Q4 Why-not, Q5 Frontier — all shipped in Batch 2 capability-ergonomics). The remaining **5 families** required manual DTO construction, sorted-binding boilerplate, and 5 separate `project_<kind>_event_payload` imports; these families ship across Phases 1-5 of this blueprint:
 
 - Q1 Check
 - Q2 Diagnose
