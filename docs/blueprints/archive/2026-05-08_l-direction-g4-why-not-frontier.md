@@ -1,6 +1,6 @@
 # L Direction G4 — Why-not + Frontier SDK Shell
 
-- **Status:** implementing
+- **Status:** implemented
 - **Created:** 2026-05-08
 - **Last Updated:** 2026-05-08
 - **Parent:** L Direction (post-A+B+G1 v1-ready roadmap target)
@@ -358,10 +358,10 @@ Scoped-stage acceptance:
 - [x] Phase 1 validates SDK `Derivation` via `validate_derivation(..., path="$.why_not.derivation")`, lowers through the G1 derivation path, normalizes candidates through `build_why_not_candidate_universe(...)`, constructs `WhyNotUniverseRequest`, dispatches `check_why_not_universe(...)`, and returns the raw `WhyNotUniverseResult`.
 - [x] Phase 1 maps all §5.6 lower-layer errors to `SDKStoreError(...) from exc` with the locked paths: `$.why_not.derivation`, `$.why_not.dependencies`, `$.why_not.candidates`, `$.why_not.request`, and `$.why_not`.
 - [x] Phase 1 tests cover mapping rows, sequence rows, malformed candidates, invalid derivation input, multi-plan derivation rejection, dependency registry failure, request DTO `ProtocolShapeError`, runtime `WhyNotRuntimeError`, and no internal call to G1 `sdk_check` / `sdk_diagnose`.
-- [ ] Phase 2 adds `test_sdk_g4_invariants.py` with the six locked invariants: `__all__` unchanged and `WhyNotUniverseResult` absent, instance-method placement, flat module/no `shells/`, no internal/walker/audit imports, thin delegate, and boundary docstring.
-- [ ] Phase 2 updates SDK/application module docs listed in §9 while leaving README quickstart untouched.
-- [ ] Phase 2 runs focused G4 tests plus the relevant SDK/application regression suite and performs a strict audit before close-out.
-- [ ] Phase 3 fills Outcome / Deviations, marks this blueprint `implemented`, archives blueprint + audit log, updates `docs/blueprints/archive/README.md`, and publishes a `v0.1-l-g4-why-not-frontier-2026-05-08` snapshot.
+- [x] Phase 2 adds `test_sdk_g4_invariants.py` with the six locked invariants: `__all__` unchanged and `WhyNotUniverseResult` absent, instance-method placement, flat module/no `shells/`, no internal/walker/audit imports, thin delegate, and boundary docstring.
+- [x] Phase 2 updates SDK/application module docs listed in §9 while leaving README quickstart untouched.
+- [x] Phase 2 runs focused G4 tests plus the relevant SDK/application regression suite and performs a strict audit before close-out.
+- [x] Phase 3 fills Outcome / Deviations, marks this blueprint `implemented`, archives blueprint + audit log, updates `docs/blueprints/archive/README.md`, and publishes a `v0.1-l-g4-why-not-frontier-2026-05-08` snapshot.
 
 ## 8. Implementation Plan
 
@@ -425,4 +425,53 @@ README quickstart remains untouched unless a separate blueprint scopes it.
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation.
+Implemented.
+
+### Outcome
+
+G4 shipped the second L-direction SDK shell after G1:
+
+```python
+SDKStore.why_not(
+    derivation,
+    candidates,
+    *,
+    engine="native",
+    registry=None,
+) -> WhyNotUniverseResult
+```
+
+The implementation:
+
+- Adds flat `src/kernel/sdk/why_not.py` with `sdk_why_not(...)`.
+- Adds `SDKStore.why_not(...)` as a thin instance-method delegate.
+- Reuses G1's SDK `Derivation` validation and derivation lowering path.
+- Uses A's public `build_why_not_candidate_universe(...)` for candidate row normalization.
+- Constructs `WhyNotUniverseRequest(...)` and dispatches `check_why_not_universe(...)`.
+- Returns raw application `WhyNotUniverseResult` as documented passthrough.
+- Keeps `kernel.sdk.__all__` unchanged at 34; `WhyNotUniverseResult` is not re-exported.
+- Keeps Frontier advanced importable; no `SDKStore.frontier(...)`, `kernel/sdk/frontier.py`, or `test_sdk_frontier.py`.
+- Keeps README quickstart unchanged.
+
+Verification at close-out:
+
+- SDK shell targeted suite: 76 tests OK.
+- Why-not application/helper regression suite: 109 tests OK.
+- Full kernel suite: 1538 tests OK / 1 skipped.
+- ruff clean for touched SDK/test/docs files.
+- `git diff --check` clean.
+
+### Deviations / Scope Refinements
+
+- Frontier stayed out of SDK scope. Step 0 confirmed the Round 8 guidance:
+  Why-not is a result-bearing application capability suitable for Tier 1 SDK
+  shelling; Frontier remains substrate/advanced-importable until a separate
+  application opt-in blueprint exists.
+- The G1 `kernel/sdk/shells/` migration trigger was re-recorded for G2 rather
+  than activated in G4. G4 adds only one shell file, so the cost of moving G1
+  and updating archived G1 invariants was not justified.
+- `ProtocolShapeError` from `WhyNotUniverseRequest(...)` was explicitly added
+  to the §5.6 remap matrix during Step 0. This preserves the SDK boundary when
+  request DTO construction catches invalid engine or candidate universe shape.
+- English SDK API surface docs were brought up to date with the G1 + G4 shell
+  surface during Phase 2; the English file had lagged the Chinese overview.
