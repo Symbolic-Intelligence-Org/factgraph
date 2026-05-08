@@ -37,7 +37,7 @@ from kernel.application.derivation_check_runtime import check_derivation_binding
 from kernel.application.protocol import CheckResult
 from kernel.core.rules.rule_ir import RuleCompileError
 
-from .dsl import Derivation
+from ._validation import validate_binding, validate_derivation
 from .errors import SDKStoreError
 from .store import _compiled_derivation_plan_to_application
 
@@ -57,8 +57,8 @@ def sdk_check(
     can opt into ``kernel.application.walker`` themselves.
     """
 
-    _validate_derivation(derivation)
-    binding_dict = _validate_binding(binding)
+    validate_derivation(derivation, path="$.check.derivation")
+    binding_dict = validate_binding(binding, path="$.check.binding")
 
     compiled_plans = sdk._compile_derivation_input(derivation)
     if len(compiled_plans) != 1:
@@ -93,26 +93,6 @@ def sdk_check(
         raise SDKStoreError(f"invalid check input: {exc}", path="$.check") from exc
 
     return check_derivation_binding(request, store=sdk._store, registry=resolved_registry)
-
-
-def _validate_derivation(derivation: Any) -> None:
-    if not isinstance(derivation, Derivation):
-        raise SDKStoreError("derivation must be SDK Derivation", path="$.check.derivation")
-
-
-def _validate_binding(binding: Any) -> dict[str, Any]:
-    if not isinstance(binding, Mapping):
-        raise SDKStoreError("binding must be Mapping[str, Any]", path="$.check.binding")
-
-    out: dict[str, Any] = {}
-    for key, value in binding.items():
-        if not isinstance(key, str) or not key.startswith("$") or len(key) == 1:
-            raise SDKStoreError(
-                "binding keys must be $-prefixed variable names",
-                path="$.check.binding",
-            )
-        out[key] = value
-    return out
 
 
 __all__ = [

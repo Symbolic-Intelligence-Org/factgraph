@@ -43,7 +43,7 @@ from kernel.application.diagnose_runtime import diagnose_derivation_binding
 from kernel.application.protocol import DiagnoseResult
 from kernel.core.rules.rule_ir import RuleCompileError
 
-from .dsl import Derivation
+from ._validation import validate_binding, validate_derivation
 from .errors import SDKStoreError
 from .store import _compiled_derivation_plan_to_application
 
@@ -62,8 +62,8 @@ def sdk_diagnose(
     keeps Diagnose independent from Check and does not import walker helpers.
     """
 
-    _validate_derivation(derivation)
-    binding_dict = _validate_binding(binding)
+    validate_derivation(derivation, path="$.diagnose.derivation")
+    binding_dict = validate_binding(binding, path="$.diagnose.binding")
 
     compiled_plans = sdk._compile_derivation_input(derivation)
     if len(compiled_plans) != 1:
@@ -98,26 +98,6 @@ def sdk_diagnose(
         raise SDKStoreError(f"invalid diagnose input: {exc}", path="$.diagnose") from exc
 
     return diagnose_derivation_binding(request, store=sdk._store, registry=resolved_registry)
-
-
-def _validate_derivation(derivation: Any) -> None:
-    if not isinstance(derivation, Derivation):
-        raise SDKStoreError("derivation must be SDK Derivation", path="$.diagnose.derivation")
-
-
-def _validate_binding(binding: Any) -> dict[str, Any]:
-    if not isinstance(binding, Mapping):
-        raise SDKStoreError("binding must be Mapping[str, Any]", path="$.diagnose.binding")
-
-    out: dict[str, Any] = {}
-    for key, value in binding.items():
-        if not isinstance(key, str) or not key.startswith("$") or len(key) == 1:
-            raise SDKStoreError(
-                "binding keys must be $-prefixed variable names",
-                path="$.diagnose.binding",
-            )
-        out[key] = value
-    return out
 
 
 __all__ = [

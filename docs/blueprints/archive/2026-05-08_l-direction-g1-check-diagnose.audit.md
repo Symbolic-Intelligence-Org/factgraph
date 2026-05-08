@@ -169,3 +169,36 @@ Focused on candidate Blockers B.1, B.2 + Clarify items B.3, C.6, C.8, C.12.
 **Regression tests added:** `test_dependency_rule_compile_error_raises_sdk_store_error` in both `test_sdk_check.py` and `test_sdk_diagnose.py`. Each patches `_resolve_runtime_registry` to raise `RuleCompileError("duplicate rule registration")` and asserts `SDKStoreError`, precise dependency path, preserved `__cause__`, and message context.
 
 **Post-fix note:** Q1 validation-helper extraction, AST-based Q1 Sibling static check, payload-extract wrapping, and brittle message assertions remain deferred design/polish items for G4/G2 follow-up. The B.1 fix is intentionally narrow and does not introduce shared validation refactors.
+
+### Round 4 Q1 follow-up landed — validation-helper extraction (2026-05-08)
+
+**Context:** Round 4 Clarify Q1 was "should `_validate_derivation` + `_validate_binding` be extracted to a shared SDK helper before G4 starts to avoid 3-4× duplication once G4 (Why-not + Frontier) and G2/G3/G5 follow." User locked the design at: **method A** (path-parameterized shared functions), **module name `_validation.py`** (private but generalizable beyond G1), **small targeted audit cadence**, **publish both G1 snapshots after extraction**.
+
+**Refactor:**
+
+- New module `src/kernel/sdk/_validation.py` exposing `validate_derivation(obj, *, path)` and `validate_binding(binding, *, path) -> dict[str, Any]`. Both forward the caller-supplied `path` verbatim into `SDKStoreError`. Error message text and validation logic are identical byte-for-byte to the pre-extraction G1 inline validators (Round 4 audit confirmed only the `path` differed across check / diagnose).
+- `kernel/sdk/check.py` and `kernel/sdk/diagnose.py` now import the helpers from `._validation` and pass capability-specific paths (`"$.{check|diagnose}.derivation"` / `"$.{check|diagnose}.binding"`). The local `_validate_derivation` / `_validate_binding` definitions are removed; the unused `from .dsl import Derivation` import drops out as a result.
+- New `src/kernel/tests/test_sdk_validation.py` with 11 unit tests covering the path-parameter contract, forwarded-path behavior, dict-copy return, empty-mapping acceptance, and standard rejection cases (non-Derivation, non-Mapping, non-string keys, unprefixed keys, lone `$`, `None`).
+
+**Behavior parity verification:**
+
+- Public `kernel.sdk.__all__` length unchanged at 34 (covered by `test_sdk_all_is_unchanged_and_result_types_are_not_exported`); `_validation` is private (`_`-prefixed module) and is not added to `__all__`.
+- `SDKStore.check(...)` / `SDKStore.diagnose(...)` signatures unchanged — `kernel/sdk/store.py` not modified by this commit.
+- Error path strings unchanged — every existing G1 contract test asserting on `SDKStoreError.path` continues to pass without test edits.
+- Error message strings unchanged — `"derivation must be SDK Derivation"` / `"binding must be Mapping[str, Any]"` / `"binding keys must be $-prefixed variable names"` preserved verbatim.
+- Existing G1 tests (`test_sdk_check.py`, `test_sdk_diagnose.py`, `test_sdk_g1_invariants.py`) pass without modification.
+
+**Verification:**
+
+- Targeted: **52 tests pass** (11 new validation + 41 pre-existing G1).
+- Full kernel suite: **1514 OK / 1 skipped** (up from 1503 / 1 by exactly the 11 new validation tests; zero regression elsewhere).
+- ruff: clean on `_validation.py`, `check.py`, `diagnose.py`, `test_sdk_validation.py`.
+- `git diff --check`: clean.
+
+**Forward implications:**
+
+- **G4 (Why-not + Frontier)** can import the same helpers without duplicating the validation logic for the 3rd/4th time. G4 Step 0 is unblocked from this dimension; the input-shape decision (Q5: `Derivation` vs `Store` at SDK boundary) remains the only validation-related Step 0 question.
+- **G2 / G3 / G5** inherit the same helpers when their SDK shells reactivate per Batch 8 §5.5.5.
+- The `kernel/sdk/shells/` subpackage migration trigger per §5.5 is **not** activated by this commit — `_validation.py` is a sibling module to `check.py` / `diagnose.py`, not a shells container. G2/G4 Step 0 still owns the shells-vs-flat re-evaluation.
+
+**Net verdict:** clean refactor; all §5 locks hold; no Minor items added.
