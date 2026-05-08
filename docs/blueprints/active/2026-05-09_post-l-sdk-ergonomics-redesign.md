@@ -213,6 +213,165 @@ The §5.1 inventory is the **first deliverable**. It does not commit to any dire
 
 **This question deliberately does not propose locking a direction.** §5.1 is a **research deliverable**: enumerate options, source-ground costs, set up the subsequent §5.x questions. Lock here is "the inventory is complete and we have N candidates with documented costs".
 
+#### 5.1 Deliverable (locked 2026-05-09 read-only research at HEAD `60af8bc`)
+
+**5.1.1 Inventory verified.** Source-grounded against `src/kernel/sdk/store.py`:
+
+- **30 user-facing methods on `SDKStore`** (1 classmethod `from_schema_classes` + 29 instance methods); confirms §4.1 count exactly.
+- **4 properties** (`store`, `ledger`, `schema_ir`, `views`) — `views` is a property returning `_SDKViewsManager` (private nested class at `store.py:66-104`).
+- **1 nested namespace `SDKStore.views`** with 5 sub-methods (`create`, `update`, `delete`, `get`, `list`) — sole existing namespace precedent on `SDKStore`.
+- **Total user-facing callables = 35** (30 methods + 5 views sub-methods); + 4 properties as accessors.
+- `kernel.sdk.__all__` length **34** (verified by reading `kernel/sdk/__init__.py:30-65` exports list).
+
+**14 conceptual families** (consolidated from §4.1 table):
+
+| # | Family | Methods | Count |
+|---|---|---|---|
+| 1 | Schema authoring (cls + instance) | `from_schema_classes`, `ingest`, `validate_provenance` | 3 |
+| 2 | Read / lookup | `get`, `find`, `ref` | 3 |
+| 3 | Write (single-fact) | `set`, `add`, `retract`, `edit` | 4 |
+| 4 | Write (batch) | `batch` | 1 |
+| 5 | Rule / Derivation evaluation | `run`, `evaluate`, `evaluate_compiled` | 3 |
+| 6 | Candidate acceptance | `accept`, `accept_compiled`, `accept_many` | 3 |
+| 7 | L — what-if (G1) | `check`, `diagnose` | 2 |
+| 8 | L — Why-not (G4) | `why_not` | 1 |
+| 9 | L — Fact Overlay (G2) | `check_fact_overlay`, `recheck_proof_frame` | 2 |
+| 10 | L — Rule overlays (G3) | `check_rule_disable`, `check_rule_literal_replace`, `check_rule_add_condition` | 3 |
+| 11 | L — ProofFrame Diff (G5) | `diff_proof_frames` | 1 |
+| 12 | Audit / explain | `explain_fact`, `conflicts` | 2 |
+| 13 | Packaging | `export_package`, `run_package` | 2 |
+| 14 | Views | `views.create`, `views.update`, `views.delete`, `views.get`, `views.list` | 5 (nested) |
+
+Consolidation possibilities for namespace shape (§5.2 territory): families 1+ → `schema`, 2 → `read`, 3+4 → `write`, 5+6 → `eval`, 7+8+9+10+11 → `what_if` (or split sub-namespaces), 12 → `audit`, 13 → `package`, 14 → `views` (existing). Yields **8 top-level concepts** under one consolidation; could split `what_if` into 5 sub-namespaces under another.
+
+**5.1.2 Migration cost surface (source-grounded, read-only).**
+
+| Surface | Files | SDKStore method-call count | Migration cost |
+|---|---|---|---|
+| `kernel/tests/test_sdk_*.py` | 23 files | ~150+ method-call mentions (sample top: `diff_proof_frames` 7×, `why_not` 6×, `recheck_proof_frame` 4×, each rule-overlay 4×, `check_fact_overlay` 4×, `check`/`diagnose` 3× each per-file across multiple files) | **HIGH** — primary impact surface |
+| `examples/0[1-4]_*.ipynb` (4 notebooks) | 4 files | **1 mention total** (only `diff_proof_frames` in 04 notebook) | **NEGLIGIBLE** — notebooks bypass `SDKStore` and call `kernel.application` / `kernel.core` directly (Tier 2 advanced importable) |
+| `examples/round_story_full_demo.py` | 1 file | **0 SDKStore mentions** (uses `kernel.application` / `kernel.core` directly) | **NONE** |
+| `kernel/sdk/docs/04_api_surface.md` + `.en.md` | 2 files | extensive `SDKStore.<method>` references | **MEDIUM** — doc rewrite |
+| `kernel/application/docs/01_overview.md` + `_en.md` | 2 files | mention SDK shells but not as primary surface | **LOW** |
+| `README.md` (CN/EN) quickstart | 2 files | minimal SDK method demo | **LOW** |
+| Path B published L snapshots (5 immutable refs) | n/a (frozen) | n/a | **N/A** — never modified |
+
+**Critical insight:** notebooks were authored Tier-2-style (advanced importable, predating L Direction); the L methods on `SDKStore` are not yet demonstrated in chaptered notebooks. **Migration cost is concentrated in tests + API docs, NOT in user-facing examples.** This bounds the practical migration cost more than the §4.3 impact-surface initial estimate suggested.
+
+**5.1.3 Five-shape evaluation (per user §5.1 instruction; mapped to original A-G enumeration where applicable).**
+
+The user-listed 5 shapes mapped to the original A-G candidate set:
+
+| User-listed shape | Maps to | Description |
+|---|---|---|
+| Status quo flat | A | `FactGraph = SDKStore` literal alias; no nested namespace; `dir()` = current 30 methods + 4 properties |
+| Additive nested aliases | B | Both flat and nested coexist; nested namespaces are thin proxies delegating to flat methods; `dir()` shows BOTH |
+| Canonical nested + flat compat | (B/C variant) | Nested is canonical via docs/quickstart lever; flat methods stay callable but de-emphasized; runtime same as B but editorial framing different |
+| Replacement / deprecation | C/D | Flat methods get `DeprecationWarning`; eventually removed; nested becomes only shape |
+| Hybrid / staged | F | Some methods nested, others flat (e.g., L methods nested, pre-L flat); or phased rollout |
+
+(Shape E "new top-level Client class" is moot post-§5.3 lock — `FactGraph` IS the new top-level name; whether it has nested structure is now §5.1/§5.2.)
+
+**Per-shape evaluation under §0 thesis F0 (`dir(FactGraph)` legibility), F4 (migration cost), F5 (Session-vs-Client conceptual fit):**
+
+##### Shape 1 — Status quo flat (`FactGraph = SDKStore` literal alias)
+
+```python
+fg = FactGraph.from_schema_classes([Person])
+fg.check(...)
+fg.add(...)
+fg.diff_proof_frames(...)
+```
+
+`dir(fg)` (alphabetical): `accept`, `accept_compiled`, `accept_many`, `add`, `batch`, `check`, `check_fact_overlay`, `check_rule_add_condition`, `check_rule_disable`, `check_rule_literal_replace`, `conflicts`, `diagnose`, `diff_proof_frames`, `edit`, `evaluate`, `evaluate_compiled`, `explain_fact`, `export_package`, `find`, `from_schema_classes`, `get`, `ingest`, `ledger`, `recheck_proof_frame`, `ref`, `retract`, `run`, `run_package`, `schema_ir`, `set`, `store`, `validate_provenance`, `views`, `why_not`.
+
+- **F0 (legibility):** ❌ **FAILS.** A new user reading `dir()` cannot derive the 14 conceptual families. `check_fact_overlay` and `recheck_proof_frame` are alphabetically interleaved with `explain_fact` and `conflicts`. The L-prefix `check_*` is mixed with bare `check`. No grouping signal.
+- **F4 (migration cost):** ✅ **ZERO** — literal alias; existing SDKStore tests + callsites unchanged.
+- **F5 (conceptual fit):** matches "Session over knowledge graph" (SQLAlchemy precedent) — flat surface where you mutate the session with discrete operations.
+- **Verdict:** lowest-cost shape but fails thesis F0. Conservative default per §0.3 ("does not pre-commit to nesting"). Falls to thesis unless §5.7 explicitly carves out "no change is the right answer".
+
+##### Shape 2 — Additive nested aliases (overlay)
+
+```python
+fg = FactGraph.from_schema_classes([Person])
+fg.check(...)              # flat (still works)
+fg.what_if.check(...)      # nested (new alias, delegates to flat)
+fg.write.add(...)          # nested (delegates to fg.add)
+fg.read.get(...)           # nested (delegates to fg.get)
+```
+
+`dir(fg)` shows ALL flat methods + new namespace attributes (`schema`, `read`, `write`, `eval`, `what_if`, `audit`, `package`, plus existing `views`).
+
+- **F0 (legibility):** **MIXED-PARTIAL.** Namespaces ARE informative — a user can `tab` into `fg.what_if.<TAB>` and see `check` / `diagnose` / `why_not` / etc. But `dir(fg)` is now cluttered: namespaces compete with flat methods for attention. Discoverability improves; raw `dir()` still doesn't visibly TEACH layering because flat methods drown out namespaces.
+- **F4 (migration cost):** ✅ **NEAR-ZERO** at runtime. Tests stay valid (call flat methods). New tests added for nested-form parity. Docs add nested examples.
+- **F5 (conceptual fit):** hybrid — flat (Session) + nested (Client) coexist. Conceptually messy but honest about the dual identity.
+- **Verdict:** adds learning surface without taking away. F0 partial — namespaces help IDE/autocomplete but raw `dir()` still mixed. Most defensible under `#6 — no outward compat without user signal` (additive only).
+
+##### Shape 3 — Canonical nested + flat compat (docs lever)
+
+Same runtime as Shape 2, but documentation/quickstart only show nested form. Flat methods stay callable as undocumented compat. Optional: `__dir__` override could de-emphasize flat methods.
+
+```python
+# Quickstart (canonical):
+fg = FactGraph.from_schema_classes([Person])
+fg.write.add(...)
+fg.what_if.check(...)
+fg.what_if.diff(...)
+
+# Still works (compat, undocumented):
+fg.add(...)
+fg.check(...)
+```
+
+`dir(fg)`: same as Shape 2 unless `__dir__` is overridden.
+
+- **F0 (legibility):** **BETTER THAN SHAPE 2** if quickstart + IDE autocomplete favor nested. Editorial pressure makes nested the "obvious" path even though flat works. With `__dir__` override, `dir()` could show only namespaces (advanced users still call flat directly). HOWEVER `__dir__` override has subtle compatibility costs (REPL surprise, debugger inspection).
+- **F4 (migration cost):** **MEDIUM.** Runtime same as Shape 2. Documentation cost is high — every flat-method callsite in docs (04_api_surface.md, README quickstart, application overview) needs nested equivalent. Tests stay valid; new nested-form parity tests added.
+- **F5 (conceptual fit):** reframes toward "Client over capabilities" with namespaces; keeps Session-over-graph compat.
+- **Verdict:** documentation lever pulls F0 up over Shape 2. The "canonical" framing is editorial, not structural. Risk: if users still write `fg.add(...)` because that's what they typed before, the editorial lever fails.
+
+##### Shape 4 — Replacement / deprecation
+
+```python
+fg.add(...)  # DeprecationWarning: use fg.write.add(...) instead
+fg.write.add(...)  # canonical
+# Eventually (next major): fg.add removed entirely
+```
+
+- **F0 (legibility):** ✅ **STRONG (eventually).** Once flat is deprecated/removed, `dir(fg)` shows only namespaces. Layering is visible. Conceptual model is taught.
+- **F4 (migration cost):** ❌ **HIGH.** Breaks `#6` "no outward compat without user signal" — flat surface is shipped; removing it is breaking change. All 23 `test_sdk_*.py` files update method calls. All docs update. Path B published snapshots stay frozen but stop matching current shape (audit confusion).
+- **F5 (conceptual fit):** "Client over capabilities" replaces "Session over graph".
+- **Verdict:** **violates §0 thesis hard-constraint** (compat is hard constraint). Per §5.4 thesis-derived default, Shape 4 candidates require **standalone falsifier pass** justifying the break. Current evidence basis is no stronger than Batch 8's falsifier #18 PARTIAL ("not now") — no concrete consumer signal demanding flat removal. Rejected unless §5.4 standalone falsifier surfaces specific user-pain that nested+flat-compat does not solve.
+
+##### Shape 5 — Hybrid / staged
+
+Variant 5a: L methods nested only (`fg.what_if.check(...)`); pre-L methods stay flat (`fg.add(...)`).
+Variant 5b: New methods (post-redesign) only get nested; existing 30 stay flat.
+Variant 5c: Phased rollout — Phase 1 = L methods nested + flat alias; Phase 2 = pre-L verbs nested + flat alias; etc.
+
+- **F0 (legibility):** **VARIES, generally weaker than Shape 3.** Variant 5a has split-personality `dir()`: nested for L, flat for pre-L. Variant 5b is even more confusing (depends on when method was added). Variant 5c is cleaner if explicit phase markers, but adds blueprint discipline cost.
+- **F4 (migration cost):** **MODERATE to HIGH.** Variant 5a needs migration of L methods only in tests (still 9 methods × ~4 mentions each = ~36 callsites). Variant 5c needs phase-by-phase migration discipline.
+- **F5 (conceptual fit):** mixed.
+- **Verdict:** hybrid variants tend to muddle without clear win unless 5c is paired with a specific phased rollout justification (e.g., "first phase deferred until consumer feedback"). Less defensible than Shape 2 or Shape 3 unless specifically motivated.
+
+**5.1.4 Conclusion / setup for §5.2.**
+
+Under §0 thesis F0 (legibility-first) + flat-compat hard-constraint (§5.4 default-no-break):
+
+| Shape | F0 verdict | F4 cost | Compat-honoring | Status under thesis |
+|---|---|---|---|---|
+| 1 — Status quo flat | FAILS | ZERO | YES | conservative default; rejected by thesis unless §5.7 carves out "no change" |
+| 2 — Additive nested aliases | PARTIAL | NEAR-ZERO | YES | most defensible additive under `#6` |
+| 3 — Canonical nested + flat compat | BETTER (docs lever) | MEDIUM (docs) | YES | leading candidate under thesis |
+| 4 — Replacement / deprecation | STRONG (eventually) | HIGH | NO | requires §5.4 standalone falsifier; current evidence does not justify |
+| 5 — Hybrid / staged | VARIES | MODERATE-HIGH | YES | weaker than Shape 3 unless specifically motivated |
+
+**§5.1 lock outcome:** inventory complete; 5 shapes evaluated with F0 / F4 / F5 source-grounded; **Shape 3 (canonical nested + flat compat) is the leading candidate under thesis**, with Shape 2 (additive aliases) as the conservative-additive fallback, Shape 1 (status quo) as the §5.7 "no change" fallback, and Shape 4 (replacement) requiring standalone §5.4 falsifier the current evidence does not yet support. Shape 5 (hybrid) is weaker than Shape 3 unless a specific phased motivation surfaces.
+
+**§5.2 (namespace grouping) is now the substantive next decision.** The 14 conceptual families consolidated into ~8 top-level concepts (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) under one consolidation; alternative consolidations split `what_if` into 5 sub-namespaces (G1/G2/G3/G4/G5 family structure) or use round-story-flow ordering. §5.2 picks the grouping under F0 conceptual-layer-legibility + F1 verb→namespace-inference + F4 layer-rule preservation.
+
+**§5.1 is research-only; no direction locked.** Shape decision (1 vs 2 vs 3 vs 5) is deferred to §5.7 (the "ship at all" meta-question), which weighs the F0 legibility gain (Shape 3 > Shape 2 > Shape 1) against the migration cost (Shape 3 > Shape 2 > Shape 1) and §5.4-determined compat strategy.
+
 ### 5.2 Namespace shape — if non-flat, what is the grouping?
 
 **Question:** If §5.1 surfaces non-(A) options worth pursuing, what is the actual namespace grouping?
@@ -407,7 +566,7 @@ Draft-stage acceptance:
 
 Scoped-stage acceptance (filled after §5 falsifier passes):
 
-- [ ] §5.1 deliverable — full inventory of 30-method flat surface + N candidate alternative shapes with documented migration cost surfaces and conceptual-fit evaluation.
+- [x] §5.1 deliverable — inventory verified at HEAD `60af8bc` (30 methods + 4 properties + 1 nested `views` namespace; 14 conceptual families consolidated to ~8 top-level concepts); migration cost surface source-grounded (~150+ method-call mentions across 23 test files; notebooks negligible because they bypass SDKStore for kernel.application Tier 2 direct usage); 5-shape evaluation under F0/F4/F5 with verdicts: Shape 1 (status quo flat) fails F0 + zero cost; Shape 2 (additive nested aliases) F0 partial + near-zero cost; Shape 3 (canonical nested + flat compat) F0 better via docs lever + medium docs cost; Shape 4 (replacement) F0 strong but violates thesis hard-constraint; Shape 5 (hybrid/staged) varies + moderate-high cost. Leading candidate Shape 3 under thesis; Shape 2 most defensible additive; Shape 1 conservative default; Shape 4 requires §5.4 standalone falsifier; Shape 5 weaker than Shape 3 unless specifically motivated. §5.1 research-only; shape direction deferred to §5.7.
 - [ ] §5.2 locked — namespace shape (or "no nesting").
 - [x] §5.3 locked — top-level entrypoint class name is **`FactGraph`** (4-round chat-driven falsifier pass 2026-05-09; sources: TF/PySpark/pyparsing Python precedent for Fact-overlap; `EvidenceGraph` substrate F2-clean — not in `factpy.__all__`; SDK* family pattern preserved by keeping `SDKStore` callable per §5.4).
 - [ ] §5.4 locked — compatibility / deprecation strategy.
