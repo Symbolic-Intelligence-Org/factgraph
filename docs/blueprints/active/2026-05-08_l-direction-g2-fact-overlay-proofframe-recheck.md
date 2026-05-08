@@ -276,6 +276,20 @@ Options for the two G2 capabilities:
 - Confirm naming aligns with existing `check.py` / `diagnose.py` / `why_not.py` convention (single concept per file).
 - Confirm no name collision with existing `kernel/sdk/` modules.
 
+**Decision (2026-05-08):** Lock `kernel/sdk/shells/fact_overlay.py` and `kernel/sdk/shells/proof_frame.py`.
+
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Naming aligns with existing shell modules | Existing L shell files are concept-scoped: `check.py`, `diagnose.py`, and `why_not.py`. G2's capability names split cleanly into the same pattern: `fact_overlay.py` owns `sdk_fact_overlay_check(...)`, and `proof_frame.py` owns `sdk_proof_frame_recheck(...)`. §5.5 already chose the `shells/` subpackage, so these names live under `kernel/sdk/shells/`. | PASS — one concept per file, no artificial grouping. |
+| F2 | No name collision with existing SDK modules | Existing flat `kernel/sdk/` modules do not include `fact_overlay.py`, `proof_frame.py`, or `shells/`. The new files live under `kernel/sdk/shells/`, where only migrated G1/G4 shell modules and `_validation.py` will exist after Phase 0. | PASS — no collision. |
+
+**Forward implications:**
+
+- Phase 0 creates / migrates the package layout before adding these two files.
+- §5.8 tests and static scans should address both module paths explicitly.
+
 ### 5.7 SDKStore method names
 
 **Question:** What are the SDKStore method names for the two G2 capabilities?
@@ -329,6 +343,45 @@ Sibling discipline:
 - **SDK-layer question:** does `sdk_fact_overlay_check` or `sdk_proof_frame_recheck` call `sdk_check`, `sdk_diagnose`, or `sdk_why_not`? Conservative: **NO** — mirror G1/G4 Q1 Sibling lock.
 
 **Conservative default:** every non-SDK exception crossing SDK shell boundary remaps to `SDKStoreError(...) from exc` with capability-specific path; no SDK shell calls another SDK shell internally.
+
+**Decision (2026-05-08):** Lock SDKStoreError remap paths plus Sibling discipline as follows.
+
+Fact Overlay (`sdk_fact_overlay_check`):
+
+| Source | Exception / behavior | SDK path |
+|---|---|---|
+| SDK input validation | non-SDK `derivation` | `$.check_fact_overlay.derivation` |
+| SDK input validation | non-mapping / non-`$` binding | `$.check_fact_overlay.binding` |
+| SDK derivation lowering | multi-plan derivation or `_compiled_derivation_plan_to_application(...)` `ValueError` | `$.check_fact_overlay.derivation` |
+| dependency registry resolution | `_resolve_runtime_registry(...)` `RuleCompileError` | `$.check_fact_overlay.dependencies` |
+| request construction | `FactOverlayCheckRequest(...)` `ProtocolShapeError` | `$.check_fact_overlay.request` |
+| runtime result | `check_fact_overlay_binding(...)` returns `FactOverlayCheckResult`, including `invalid_request` results for unsupported overlay/runtime conditions | no exception remap; pass result through |
+
+ProofFrame Recheck (`sdk_proof_frame_recheck`):
+
+| Source | Exception / behavior | SDK path |
+|---|---|---|
+| SDK input validation | non-`SupportArtifact` support input | `$.recheck_proof_frame.support_artifact` |
+| SDK input validation | non-`EvaluationOverlay` overlay input | `$.recheck_proof_frame.overlay` |
+| request construction | `ProofFrameRecheckRequest(...)` `ProtocolShapeError` | `$.recheck_proof_frame.request` |
+| runtime dispatch | unexpected `recheck_proof_frame(...)` exception | `$.recheck_proof_frame` |
+
+Both SDK shells must raise `SDKStoreError(..., path=<above>) from exc` for remapped non-SDK exceptions. Neither shell may call any sibling SDK shell (`sdk_check`, `sdk_diagnose`, `sdk_why_not`, or the other G2 shell) internally.
+
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Fact Overlay has G1/G4-style derivation and registry paths | Fact Overlay is derivation-backed, so it reuses G1/G4 lowering: validate SDK `Derivation`, compile to one plan, convert via `_compiled_derivation_plan_to_application(...)`, and resolve dependencies via `_resolve_runtime_registry(...)`. Prior G1/G4 audits established `ValueError` from plan conversion and `RuleCompileError` from registry resolution must be wrapped as `SDKStoreError(... ) from exc`. | PASS — paths mirror established L shell precedent with `check_fact_overlay` capability names. |
+| F2 | Fact Overlay request/runtime distinction is result-oriented | `FactOverlayCheckRequest.__post_init__` raises `ProtocolShapeError` for bad plan/binding/overlay/engine (`derivation_fact_overlay.py:282-307`), so request construction must remap to `$.check_fact_overlay.request`. The runtime `check_fact_overlay_binding(...)` returns `FactOverlayCheckResult`; unsupported rule actions, empty overlay, ruleref problems, action validation failures, and native phase exceptions are represented as `invalid_request` result DTOs rather than raised SDK exceptions (`fact_overlay_runtime.py:27-104`, `:478-489`). | PASS — request exceptions remap; runtime result passthrough. |
+| F3 | ProofFrame Recheck has no derivation lowering / registry paths | `ProofFrameRecheckRequest` only validates `support_artifact: SupportArtifact` and `overlay: EvaluationOverlay` (`proofframe.py:85-94`). `recheck_proof_frame(request, *, store, registry=None)` deletes the registry argument and operates on `request.support_artifact` + `request.overlay`; unsupported support kinds, rule-ref edges, and rule actions return an unknown-frame result, not registry/lowering exceptions (`proofframe_runtime.py:30-45`). | PASS — narrow paths only. |
+| F4 | Sibling discipline stays enforceable | §5.1 and §5.2 already rejected composition through `sdk_check` or wrapper extraction. Implementation tests can static-scan `kernel/sdk/shells/fact_overlay.py` and `kernel/sdk/shells/proof_frame.py` for sibling imports/calls, and runtime-patch the target application runtimes to prove each shell owns direct application dispatch. | PASS — no SDK shell composition. |
+
+**Forward implications:**
+
+- Phase 1 Fact Overlay tests cover each remap path above plus result passthrough of `invalid_request`.
+- Phase 2 ProofFrame tests cover type validation, request construction, runtime exception remap, and sibling-call absence.
+- Phase 3 G2 invariants consolidate Sibling static scans across G1/G4/G2 under `kernel/sdk/shells/`.
 
 ## 6. Boundaries And Invariants
 
