@@ -220,11 +220,45 @@ Options:
 
 **Conservative default:** **migrate**. G2 is the natural migration point per the inherited trigger; deferring twice while file count grows runs counter to the trigger's intent.
 
-**Falsifiers required:**
+**Decision (2026-05-08):** Lock **migrate**. G2 Phase 0 hygiene moves all SDK shell modules into a new `kernel/sdk/shells/` subpackage **before** any G2 implementation lands. Migrated layout:
 
-- Verify migration cost: list every file/test/import that needs touching; estimate `#P1` carve-out scope for G1+G4 invariant tests.
-- Confirm thin `SDKStore` delegate pattern is preserved under either option.
-- Verify G2 invariants can still mirror G1+G4 patterns under shells/ layout.
+```
+src/kernel/sdk/
+├── shells/
+│   ├── __init__.py        (empty)
+│   ├── _validation.py     (moved from kernel/sdk/_validation.py)
+│   ├── check.py           (moved)
+│   ├── diagnose.py        (moved)
+│   ├── why_not.py         (moved)
+│   ├── fact_overlay.py    (G2 NEW, Phase 1)
+│   └── proof_frame.py     (G2 NEW, Phase 2)
+├── store.py               (3 delegate imports updated to `.shells.<module>`)
+└── ... (all other flat SDK modules unchanged)
+```
+
+`_validation.py` moves with the shells because it is structurally a shell-only helper — shipped specifically as Round 4 Q1 follow-up "shared SDK shell input validation". Keeping it adjacent to its only consumers reads cleanly; if a future non-shell SDK consumer ever needs the validators, that becomes a re-promotion decision at that time.
+
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Migration cost is bounded and mostly mechanical | Concrete touch list: (a) 4 source files moved (`check.py` / `diagnose.py` / `why_not.py` / `_validation.py`) into `kernel/sdk/shells/` via `git mv`; (b) new empty `kernel/sdk/shells/__init__.py`; (c) `kernel/sdk/store.py` 3 delegate import lines updated (`from .check` → `from .shells.check` etc.); (d) ~15 test patch paths in `test_sdk_check.py` + `test_sdk_diagnose.py` updated from `kernel.sdk.check.<name>` to `kernel.sdk.shells.check.<name>`; (e) `G1_MODULES` constant in `test_sdk_g1_invariants.py:51` and `G4_MODULES` constant in `test_sdk_g4_invariants.py:27` retargeted; (f) Q1 Sibling static-check assertion at `test_sdk_diagnose.py:318` updated. Total ~30-50 lines across ~7 files; no behavior change; mechanical rename + import path updates. | PASS — bounded cost. |
+| F2 | Thin `SDKStore` delegate pattern is preserved under shells/ | Each `SDKStore` method body becomes `from .shells.<name> import sdk_<name>; return sdk_<name>(self, ...)` — same one-line import + delegate-call shape as G1's pre-migration pattern. The `.shells.` prefix is the only diff. G1+G4 invariant slot 5 (`test_store_methods_remain_thin_delegate_methods`) keeps holding under the new layout with one-character changes to the assertion text. | PASS — pattern preserved. |
+| F3 | G1+G4 invariant tests can be retrofit with `#P1` carve-out | The two archived invariants (`test_g1_modules_are_flat_and_no_shells_package_exists` and `test_g4_modules_are_flat_and_no_shells_package_exists`) are retrofit (not deprecated): assertions invert from "no shells/ subpackage" to "shell modules live in shells/ subpackage". `#P1` carve-out is fully sanctioned by precedent — G1 §5.5 archived blueprint explicitly recorded the forward trigger to G2 (`G1 archive:309`). The carve-out historical-handling per `#P1` rule 8 = **retrofit**. New G2 invariant `test_g2_shells_package_exists_with_g1_g4_g2_modules_migrated` consolidates the layout assertion across all shells. | PASS — retrofit valid. |
+| F4 | Test inventory + import paths after migration verified by direct run | Post-migration verification plan: (a) targeted `python -m unittest src.kernel.tests.test_sdk_check src.kernel.tests.test_sdk_diagnose src.kernel.tests.test_sdk_why_not src.kernel.tests.test_sdk_validation src.kernel.tests.test_sdk_g1_invariants src.kernel.tests.test_sdk_g4_invariants` must pass with new paths; (b) full kernel `python -m unittest discover -s src/kernel/tests` must pass with no regression; (c) `python -m ruff check src/kernel/sdk/shells/ src/kernel/sdk/store.py` must be clean. If any fail, migration is reverted (single commit, no behavioral change). | PASS — testable. |
+| F5 | Defer alternative is structurally weaker | If §5.5 defers again to G3: post-G2 = 5 flat shell files; G3 (rule overlays) per Round 8 likely adds 1-3 more (6-8 total); migration cost grows with each defer; the trigger that G1 §5.5 specifically recorded ("when 3rd/4th SDK shell file would land") fired at G4 (3rd) and is overdue at G2 (5th). Continuing to defer would require a positive justification beyond "convenience" — none surfaced during this falsifier pass. | PASS — defer rejected on structural grounds. |
+
+**Forward implications:**
+
+- §5.6 (module file naming) is constrained: G2 new files are `kernel/sdk/shells/fact_overlay.py` (`sdk_fact_overlay_check(...)`) + `kernel/sdk/shells/proof_frame.py` (`sdk_proof_frame_recheck(...)`). G2 §5.6 lock can proceed mechanically.
+- §8 implementation plan keeps the 5-phase shape with a sharper Phase 0:
+  - **Phase 0 hygiene (the migration):** `git mv` 4 files into `shells/`, add `__init__.py`, update store.py imports + test patch paths, retrofit G1+G4 invariant tests with `#P1` carve-out entries in their archived audit logs, run full kernel suite + ruff. Ships as a single migration commit before any G2 implementation. **No behavioral change.**
+  - Phase 1: `sdk_fact_overlay_check(...)` real impl + contract tests.
+  - Phase 2: `sdk_proof_frame_recheck(...)` real impl + contract tests + Q3/Batch-4 Sibling tests.
+  - Phase 3: `test_sdk_g2_invariants.py` (6-class mirror, plus consolidated shells-layout assertion) + docs updates + cumulative G2 strict audit.
+  - Phase 4: close-out, archive, snapshot publish.
+- `#P1` carve-out audit-log entries land in `docs/blueprints/archive/2026-05-08_l-direction-g1-check-diagnose.audit.md` and `docs/blueprints/archive/2026-05-08_l-direction-g4-why-not-frontier.audit.md` as part of Phase 0 hygiene, recording: principle id (`#P1`), reason ("G2 §5.5 lock activates the G1 §5.5 forward trigger to G2"), scope ("rename two flat-layout invariant assertions to shells/-layout assertions"), impact ("test paths change; behavioral semantics unchanged"), reviewer ack ("user authorization at G2 §5.5 lock").
+- The G1+G4 published snapshot branches (`v0.1-l-g1-check-diagnose-2026-05-08`, `v0.1-l-g4-why-not-frontier-2026-05-08`) are NOT touched. The migration only lands on the G2 topic branch and forward in time.
 
 ### 5.6 Module file naming under chosen layout
 
