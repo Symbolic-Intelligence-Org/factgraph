@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 import os
 import warnings
@@ -50,7 +50,7 @@ from .query_runtime import execute_query_plan
 from .schema import Entity, Field
 
 if TYPE_CHECKING:
-    from kernel.application.protocol import CheckResult, DiagnoseResult
+    from kernel.application.protocol import CheckResult, DiagnoseResult, WhyNotUniverseResult
 
 
 class _SDKViewsManager:
@@ -341,6 +341,46 @@ class SDKStore:
         from .diagnose import sdk_diagnose
 
         return sdk_diagnose(self, derivation, binding, engine=engine, registry=registry)
+
+    def why_not(
+        self,
+        derivation: Any,
+        candidates: Sequence[Mapping[str, Any] | Sequence[Any]],
+        *,
+        engine: str = "native",
+        registry: RuleRegistry | None = None,
+    ) -> "WhyNotUniverseResult":
+        """Run Why-not for one SDK ``Derivation`` against an explicit candidate universe.
+
+        Args:
+            derivation: SDK ``Derivation`` authoring object. ``Rule`` and
+                application ``CompiledDerivationPlan`` inputs are rejected at
+                the SDK boundary (per §5.1 lock).
+            candidates: Sequence of candidate rows. Each row is either a
+                ``Mapping[str, Any]`` keyed by the head variable names, or a
+                positional ``Sequence[Any]`` matching the head variable
+                order. Rows are normalized via A's
+                ``build_why_not_candidate_universe(plan, candidates)``.
+            engine: Runtime engine name passed through to the application
+                Why-not request DTO.
+            registry: Optional runtime registry override.
+
+        Returns:
+            The application ``WhyNotUniverseResult`` DTO directly. The SDK
+            shell does not wrap or re-export the result; advanced callers
+            can import ``WhyNotUniverseResult`` from
+            ``kernel.application.protocol`` if a typed reference is needed.
+
+        Raises:
+            SDKStoreError: For SDK input-shape errors, derivation lowering
+                failures, dependency registration failures, candidate-row
+                validation errors, request DTO shape errors, or runtime
+                Why-not failures. Original exceptions are preserved as
+                ``__cause__``.
+        """
+        from .why_not import sdk_why_not
+
+        return sdk_why_not(self, derivation, candidates, engine=engine, registry=registry)
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
         """Return a managed e_ref string for the entity identified by kwargs.

@@ -1,6 +1,6 @@
 # L Direction G4 — Why-not + Frontier SDK Shell
 
-- **Status:** scoped
+- **Status:** implementing
 - **Created:** 2026-05-08
 - **Last Updated:** 2026-05-08
 - **Parent:** L Direction (post-A+B+G1 v1-ready roadmap target)
