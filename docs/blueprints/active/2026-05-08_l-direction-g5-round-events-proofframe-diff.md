@@ -254,35 +254,53 @@ This rule will appear in §6 invariants verbatim once scope-freezes.
 
 **Question:** New shell file(s) under `kernel/sdk/shells/`. Does §5.1 outcome affect the file count?
 - If §5.1 = (A) defer recorder: 1 new file `proof_frame_diff.py` → `sdk_diff_proof_frames`.
-- If §5.1 = (B) ship recorder: 2-4 new files (`round_events.py` for the 3 lifecycle methods + `proof_frame_diff.py`, OR 4 separate files mirroring G3's three-sibling pattern).
+- If §5.1 = (B) ship recorder: 2-4 new files.
 - If §5.1 = (C) hybrid: 2 files.
 
 Also: does G5 need new shared validators?
-- If shipping recorder: probably need `validate_round_recorder` (rejects non-`RoundRecorder` for record/finalize calls).
-- If just diff: probably not — input is `tuple[RoundEvent, ...]`, validation can be inline.
 
-**Falsifiers required:**
-- F1: If §5.1 defers, only 1 file is needed and no new shared validator. Confirmed by precedent (G4 had only 1 method = 1 file).
-- F2: Shell file count after G5: 8 (current) + N where N depends on §5.1.
+**Decision (2026-05-08):** Lock **single shell file under `kernel/sdk/shells/` + inline validation (no new shared validator)**. Total `kernel/sdk/shells/` module count after G5 publishes: **9** (current 8 + new `proof_frame_diff.py`). The G3 verification-round shared `resolve_runtime_registry` boundary normalizer remains at 1; G5 adds 0.
+
+**Falsifier outcomes (2/2 PASS):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Single-file pattern with §5.1 deferred | G4 precedent: only `why_not.py` shipped under `shells/` for the single-method `SDKStore.why_not(...)`. With §5.1 deferring recorder, G5 has the same single-method shape. | PASS — single file is the L precedent for single-method shells. |
+| F2 | No 2nd consumer of `RoundEvent` / `kernel.audit` DTOs in shells | `grep -rn "RoundEvent\|kernel\.audit" src/kernel/sdk/shells/` returned zero hits. Inline `isinstance(events, tuple)` + per-element `isinstance(e, RoundEvent)` + `_require_non_empty_str` for ids in the new shell is sufficient; extraction to `_validation.py` only fires if a 2nd shell needs it (per the validator-extraction trigger established at G3 Phase 0). | PASS — extraction trigger does not fire; inline validation. |
 
 ### 5.6 Module file naming
 
-**Question:** Final filename(s).
-- §5.1 = (A): `kernel/sdk/shells/proof_frame_diff.py` (verb-first inside the file: `sdk_diff_proof_frames`).
-- §5.1 = (B): see §5.5.
+**Question:** Final filename.
 
-**Conservative default:** `proof_frame_diff.py` (matches `kernel.audit.proof_frame_diff` 1:1).
+**Decision (2026-05-08):** Lock **`kernel/sdk/shells/proof_frame_diff.py`** with module function `sdk_diff_proof_frames(...)`.
+
+**Falsifier outcomes (2/2 PASS):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | File-name collision check | `ls src/kernel/sdk/shells/` returns 8 files (`__init__.py`, `_validation.py`, `check.py`, `diagnose.py`, `fact_overlay.py`, `proof_frame.py`, `rule_add_condition.py`, `rule_disable.py`, `rule_literal_replace.py`, `why_not.py`). `proof_frame_diff.py` does NOT exist. Adding it keeps clear separation from G2's `proof_frame.py` (which holds `sdk_proof_frame_recheck` — the *recheck* shell). | PASS — collision-free. |
+| F2 | Naming mirrors A-side module | `kernel.audit.proof_frame_diff` is the A-side module hosting `build_proof_frame_diff(...)`. SDK shell `kernel.sdk.shells.proof_frame_diff` mirrors 1:1, matching the G1+G4+G2+G3 pattern (each shell file shares its A-side module name when one exists). | PASS — naming mirrors A. |
 
 ### 5.7 SDKStore method names
 
-**Question:** Final method name (verb-first per L convention).
-- Diff: candidates `diff_proof_frames(...)`, `proof_frame_diff(...)` (noun-verb collision with G2 `recheck_proof_frame`), `compare_proof_frames(...)`. Round 8 hint: `diff_proof_frames`.
-- If recorder ships: `start_round` / `record_round_event` / `finalize_round` mirror audit-layer 1:1, OR `record_round(round_id, events) -> tuple[RoundEvent, ...]` if §5.1 option D.
+**Question:** Final method name (verb-first per L convention). Group A (`diff_proof_frames`) vs Group B (`proof_frame_diff`).
 
-**Falsifiers required:**
-- F1: Method name uniqueness — no existing `SDKStore` method starts with `diff_*`, `proof_frame_*` (G2 has `recheck_proof_frame`), `start_*`, `record_*`, or `finalize_*`. Verify at `store.py`.
-- F2: Verb-first consistency with G1 (`check`, `diagnose`), G4 (`why_not`), G2 (`check_fact_overlay`, `recheck_proof_frame`), G3 (`check_rule_*`).
-- F3: Group A (`diff_proof_frames`) vs Group B (`proof_frame_diff`) — Group A reads as action; Group B reads as noun and collides semantically with the DTO name `ProofFrameDiff`. Strong preference for Group A.
+**Decision (2026-05-08):** Lock **`SDKStore.diff_proof_frames(...)`** (Group A — verb-first action shape; no semantic collision with the DTO name `ProofFrameDiff`).
+
+**Falsifier outcomes (3/3 PASS):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Method-name collision check | `grep -E "^    def (diff_\|proof_frame_)" src/kernel/sdk/store.py` returns zero hits. No existing `SDKStore` method starts with `diff_*` or `proof_frame_*` (G2's `recheck_proof_frame` starts with `recheck_*`). | PASS — collision-free. |
+| F2 | Verb-first consistency | All L-Direction methods are verb-first: G1 (`check`, `diagnose`), G4 (`why_not`), G2 (`check_fact_overlay`, `recheck_proof_frame`), G3 (`check_rule_disable`, `check_rule_literal_replace`, `check_rule_add_condition`). `diff_proof_frames` follows the same shape (verb + object). | PASS — consistent. |
+| F3 | Group A vs Group B | Group A `diff_proof_frames` reads as action ("diff these proof frames"); Group B `proof_frame_diff` reads as noun and would semantically collide with the DTO name `ProofFrameDiff` (i.e., the method would be named the same as what it returns, which is the G3 §5.7 anti-pattern that rejected `disable_rule` because it collided with persistent-write `add` family). Group A is also the Round 8 hint at `30_recommendation.md:610`. | PASS — Group A clearly preferable. |
+
+**Forward implications (§5.5 + §5.6 + §5.7 combined):**
+
+- After G5 publishes: `kernel/sdk/shells/` has **9 modules** (8 + `proof_frame_diff.py`); `SDKStore` has **40 methods** (39 + `diff_proof_frames`); `kernel.sdk.__all__` length stays at **34**.
+- Sibling discipline scope after G5 = **9 shells** (each existing shell tests against all 8 sister shells; new shell tests against all 8 prior).
+- The shell function name is `sdk_diff_proof_frames(sdk, round_a_id, round_b_id, round_a_events, round_b_events, *, warnings=(), include_unchanged=False) -> ProofFrameDiff`.
+- §5.8 (error mapping) and §5.9 (tests + invariants) are the only remaining substantive locks before scope-freeze.
 
 ### 5.8 Error mapping + Sibling discipline at 9+ shell scope
 
