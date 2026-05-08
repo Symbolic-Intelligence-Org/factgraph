@@ -1,7 +1,7 @@
 # Application 模块总览(kernel)
 
 - 范围:`src/kernel/application`
-- 最后更新:2026-05-07
+- 最后更新:2026-05-08
 - 目标读者:需要理解 Python runtime authority、SDK adapter 边界与 service/agent consumer 约束的开发者
 
 ## 1. 模块职责
@@ -25,7 +25,7 @@
 - native Rule Literal Replace (`completed` / `unsupported` / `invalid_request`) over one temporary Const-to-Const native where literal replacement,returning variant rows plus original-frame ProofFrame output
 - native Rule Add Condition (`completed` / `unsupported` / `invalid_request`) over one temporary filter-only native where atom insertion,returning variant rows plus original-frame ProofFrame output with a synthetic added-atom verdict
 - explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
-- capability ergonomics helpers for Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
+- capability ergonomics helpers for Check / Diagnose / ProofFrame request construction, rule-overlay request construction, round-event payload projection, Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
 - application-layer walker views for SDK-independent traversal over selected DTO / IR structures (`IRBodyWalker`, `FrozenTupleView`, `AtomKeyView`, `SupportArtifactView`, `AssertionView`, `ProofFrameView`, and `ProofFrameDiffView` in the current slice)
 
 它不负责:
@@ -57,8 +57,8 @@
   - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotRedRow` / `WhyNotRowDiagnostic` / `WhyNotAtomLocator`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
-- `capability_helpers.py`
-  - application-layer ergonomic helpers: `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
+- `capability_helpers/`
+  - application-layer ergonomic helper package: `build_check_request(...)`, `build_diagnose_request(...)`, `build_proof_frame_recheck_request(...)`, `build_rule_disable_request(...)`, `build_rule_literal_replace_request(...)`, `build_rule_add_condition_request(...)`, `build_round_event_payload(...)`, `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
 - `walker/`
   - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`, `FrozenTupleView` / `frozen_collection(...)` for already-frozen tuple collections, `AtomKeyView` / `parse_atom_key(...)`, `SupportArtifactView` / `AssertionView` for `SupportArtifact` assertion cross-references, `ProofFrameView` for `ProofFrameRecheckResult`, and `ProofFrameDiffView` for `ProofFrameDiff`. B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
 - `entity_view.py`
@@ -91,7 +91,7 @@
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 57 public symbols. The main executor entry points are:
+`src/kernel/application/__init__.py` currently exports 65 public symbols. The main executor entry points are:
 
 Batch 8 public-surface note:`kernel.application` is an **advanced importable** runtime authority in the kernel package. It is appropriate for automation,wire bridges,and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade,and Batch 8 does not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes.
 
@@ -117,6 +117,13 @@ Batch 8 public-surface note:`kernel.application` is an **advanced importable** r
 
 The main schema/runtime helpers are:
 
+- `build_check_request(...)`
+- `build_diagnose_request(...)`
+- `build_proof_frame_recheck_request(...)`
+- `build_rule_disable_request(...)`
+- `build_rule_literal_replace_request(...)`
+- `build_rule_add_condition_request(...)`
+- `build_round_event_payload(...)`
 - `build_fact_value_override(...)`
 - `build_fact_remove_action(...)`
 - `build_evaluation_overlay(...)`
@@ -218,6 +225,12 @@ Key focused tests:
 - `test_application_diagnose_runtime_non_native.py`
 - `test_application_diagnose_sibling_invariant.py`
 - `test_application_capability_helpers.py`
+- `test_capability_helpers_check.py`
+- `test_capability_helpers_diagnose.py`
+- `test_capability_helpers_proof_frame.py`
+- `test_capability_helpers_rule_overlays.py`
+- `test_capability_helpers_round_events.py`
+- `test_capability_helpers_invariants.py`
 - `test_application_fact_overlay_protocol.py`
 - `test_application_fact_overlay_runtime_native.py`
 - `test_application_fact_overlay_sibling_invariant.py`

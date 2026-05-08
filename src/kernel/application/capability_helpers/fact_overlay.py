@@ -1,16 +1,13 @@
-"""Ergonomic application-layer helpers for shipped capability surfaces."""
+"""Fact Overlay capability helper builders."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from typing import Any
 
 from kernel.core.store import Store
-from kernel.core.store._support import BindingItems, normalize_binding_items
-from kernel.core.view.projector import project_view_facts, project_view_facts_with_witness
+from kernel.core.view.projector import project_view_facts_with_witness
 
-from .protocol import (
-    CompiledDerivationPlan,
+from kernel.application.protocol import (
     EntityRef,
     EvaluationOverlay,
     FactOverlayAction,
@@ -18,16 +15,14 @@ from .protocol import (
     FactValueOverride,
     FieldPath,
 )
-from .schema_runtime import (
+from kernel.application.schema_runtime import (
     SchemaIndex,
     entity_type_from_ref,
     field_predicate,
     field_value_type,
 )
 
-
-class CapabilityHelperError(ValueError):
-    """Raised when an ergonomic helper cannot build a valid capability input."""
+from .errors import CapabilityHelperError
 
 
 def build_fact_value_override(
@@ -183,61 +178,6 @@ def build_evaluation_overlay(*actions: FactOverlayAction) -> EvaluationOverlay:
     return EvaluationOverlay(fact_actions=actions)
 
 
-def build_why_not_candidate_universe(
-    plan: CompiledDerivationPlan,
-    candidates: Sequence[Mapping[str, Any] | Sequence[Any]],
-) -> tuple[BindingItems, ...]:
-    """Normalize candidate rows against the plan's single head variable order."""
-
-    if not isinstance(plan, CompiledDerivationPlan):
-        raise CapabilityHelperError("plan must be CompiledDerivationPlan")
-    if len(plan.heads) != 1:
-        raise CapabilityHelperError("plan must contain exactly one head")
-    if not isinstance(candidates, Sequence) or isinstance(candidates, (str, bytes)):
-        raise CapabilityHelperError("candidates must be a sequence of rows")
-
-    head_vars = plan.heads[0].head_var_names
-    universe: list[BindingItems] = []
-    for idx, row in enumerate(candidates):
-        values = _candidate_values(row, head_vars=head_vars, row_index=idx)
-        universe.append(normalize_binding_items(tuple(zip(head_vars, values, strict=True))))
-    return tuple(universe)
-
-
-def build_frontier_view_facts(store: Store) -> dict[str, list[tuple[Any, ...]]]:
-    """Project a Store into the view_facts shape expected by native frontier."""
-
-    if not isinstance(store, Store):
-        raise CapabilityHelperError("store must be Store")
-    return project_view_facts(store.ledger, store.schema_ir)
-
-
-def _candidate_values(
-    row: Mapping[str, Any] | Sequence[Any],
-    *,
-    head_vars: tuple[str, ...],
-    row_index: int,
-) -> tuple[Any, ...]:
-    if isinstance(row, Mapping):
-        missing = [name for name in head_vars if name not in row]
-        if missing:
-            raise CapabilityHelperError(
-                f"candidate row {row_index} missing head variables: {missing}"
-            )
-        return tuple(row[name] for name in head_vars)
-
-    if isinstance(row, Sequence) and not isinstance(row, (str, bytes)):
-        if len(row) != len(head_vars):
-            raise CapabilityHelperError(
-                f"candidate row {row_index} must have {len(head_vars)} values"
-            )
-        return tuple(row)
-
-    raise CapabilityHelperError(
-        f"candidate row {row_index} must be mapping or non-string sequence"
-    )
-
-
 def _normalize_scalar_value(
     scalar_domain: str | None,
     value: Any,
@@ -283,10 +223,7 @@ def _is_float64_hex(value: str) -> bool:
 
 
 __all__ = [
-    "CapabilityHelperError",
     "build_evaluation_overlay",
     "build_fact_remove_action",
     "build_fact_value_override",
-    "build_frontier_view_facts",
-    "build_why_not_candidate_universe",
 ]
