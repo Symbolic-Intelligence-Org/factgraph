@@ -1,6 +1,6 @@
 # L Direction G3 — Rule Overlay SDK Shells
 
-- **Status:** draft
+- **Status:** scoped
 - **Created:** 2026-05-08
 - **Last Updated:** 2026-05-08
 - **Parent:** L Direction (post-A+B+G1+G4+G2 v1-ready roadmap target)
@@ -199,14 +199,6 @@ The G2 §5.1+§5.2 cross-cutting precedent ("raw application protocol DTOs at SD
 
 ### 5.4 Overlay / action argument shape
 
-**Falsifiers required:**
-
-- Confirm rule-overlay request DTOs require `support_artifact`.
-- Confirm composition through `CheckResult` would repeat the G2-rejected pattern of inspecting `CheckResult.engine_payload` union or calling sibling SDK shell.
-- Confirm raw `SupportArtifact` still satisfies the G2 precedent after rule overlays add `RuleSpec`.
-
-### 5.4 Overlay / action argument shape
-
 **Question:** Which action-specific arguments cross the SDK boundary?
 
 Candidates:
@@ -291,8 +283,6 @@ Candidates:
 - **F1**: All three result DTOs are frozen application protocol dataclasses (verified by class declarations and the established protocol pattern under `kernel/application/protocol/`); no mutable SDK state, no opaque internals. **PASS**.
 - **F2**: Current `kernel.sdk.__all__` length is 34 across G1 + G4 + G2 cycles; lock requires preservation. New G3 invariant test will mirror the G1+G4+G2 pattern asserting `__all__` length unchanged and result DTOs absent. **PASS — preservation locked**.
 - **F3**: No wrapper signal: G1 + G4 + G2 all ship documented passthrough (`CheckResult` / `DiagnoseResult` / `WhyNotUniverseResult` / `FactOverlayCheckResult` / `ProofFrameRecheckResult`); G3 inherits the established precedent without divergence. Adding wrappers would force a new outward compat commitment under `#6` without consumer signal. **PASS**.
-
-### 5.6 Module and file layout
 
 ### 5.6 Module and file layout
 
@@ -526,27 +516,94 @@ Draft-stage acceptance:
 - [x] G1 / G4 / G2 inherited constraints recorded.
 - [x] Principle locks and forbidden list recorded.
 
-Scoped-stage acceptance (pending):
+Scoped-stage acceptance:
 
-- [ ] §5.1-§5.9 falsifiers are source-grounded and locked.
-- [ ] §8 implementation plan is filled with phases, audit gates, and expected test files.
-- [ ] Status moves from `draft` to `scoped`.
+- [x] §5.1 locked — three explicit `SDKStore` instance methods (commit `e648384`).
+- [x] §5.2 locked — SDK `Rule` object as target rule input (commit `8b36110`).
+- [x] §5.3 locked — raw `SupportArtifact` (batch commit `ce4ab49`).
+- [x] §5.4 locked — action arg shapes mirror A; raw `RuleLiteralPath` / `RuleAddedAtom`; `overlay=None` or empty only; `note=None` exposed (commit `476e311`).
+- [x] §5.5 locked — documented passthrough of raw result DTOs (batch commit `ce4ab49`).
+- [x] §5.6 locked — three sibling shell modules under `kernel/sdk/shells/` (batch commit `ce4ab49`, overrides conservative default).
+- [x] §5.7 locked — `check_rule_disable` / `check_rule_literal_replace` / `check_rule_add_condition` (Group A; commit `660e61d`).
+- [x] §5.8 locked — per-method 6-path remap + Phase 0 shared validator extraction (commit `cd3a5f0`).
+- [x] §5.9 locked — three per-method test files + one G3 invariant file (batch commit `ce4ab49`).
+- [x] §8 implementation plan filled with six phases (Phase 0 shared validators, Phase 1-3 three rule-overlay methods, Phase 4 invariants/docs/cumulative audit, Phase 5 close-out/archive/publish).
+- [x] Status moves from `draft` to `scoped`.
 
-Implementation acceptance is intentionally deferred until scope-freeze.
+Implementation-stage acceptance (per phase, gated by phase-end audit):
+
+- [ ] Phase 0 lands `validate_rule` / `validate_support_artifact` / `validate_optional_evaluation_overlay` in `kernel/sdk/shells/_validation.py`; G2 `proof_frame.py` migrates to shared `validate_support_artifact`; full kernel suite passes without test-file modifications beyond ProofFrame import-path update.
+- [ ] Phase 1 lands `kernel/sdk/shells/rule_disable.py` (real `sdk_rule_disable` implementation), `SDKStore.check_rule_disable(...)` thin delegate in `store.py`, `test_sdk_rule_disable.py` with full §5.4 + §5.8 contract coverage.
+- [ ] Phase 2 lands `kernel/sdk/shells/rule_literal_replace.py`, `SDKStore.check_rule_literal_replace(...)` thin delegate, `test_sdk_rule_literal_replace.py`.
+- [ ] Phase 3 lands `kernel/sdk/shells/rule_add_condition.py`, `SDKStore.check_rule_add_condition(...)` thin delegate, `test_sdk_rule_add_condition.py`.
+- [ ] Phase 4 lands `test_sdk_g3_invariants.py` (6-class mirror), updates SDK API docs (`04_api_surface.md` + `.en.md`) and application overview docs (`01_overview.md` + `_en.md`); cumulative G3 strict audit gates the close-out.
+- [ ] Phase 5 fills §10 Outcome / Deviations, marks status `implemented`, archives blueprint + audit log under `docs/blueprints/archive/`, updates archive inventory, and publishes `v0.1-l-g3-rule-overlays-2026-05-08` (G3-only) + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-2026-05-08` (Path B combined snapshot per the post-G2 strategy) to origin pending user authorization.
 
 ## 8. Implementation Plan
 
-Deferred until `scoped` status.
+### Phase 0 — Shared validator extraction (no behavior change)
 
-Expected implementation shape, subject to §5 locks:
+Scope:
 
-- Phase 0: any scaffolding / shared validator extraction needed by G3.
-- Phase 1: first rule-overlay method or module slice.
-- Phase 2: remaining rule-overlay methods.
-- Phase 3: invariants + docs + cumulative audit.
-- Phase 4: close-out / archive / publish.
+- Add `validate_rule(value, *, path)` to `kernel/sdk/shells/_validation.py` (mirror `validate_derivation` shape).
+- Add `validate_support_artifact(value, *, path)` to `kernel/sdk/shells/_validation.py` (promotes G2 ProofFrame's local `_validate_support_artifact`).
+- Add `validate_optional_evaluation_overlay(value, *, path)` to `kernel/sdk/shells/_validation.py` (None-allowed sibling of G2's `validate_evaluation_overlay`; rejects non-`EvaluationOverlay` non-None AND non-empty `EvaluationOverlay`).
+- Update `kernel/sdk/shells/proof_frame.py` to import shared `validate_support_artifact` and remove the local helper (G2 §5.2 deferred trigger fires now).
+- Update `kernel/sdk/shells/_validation.py` `__all__` to export the three new validators.
 
-The exact phase split depends on §5.1 / §5.6: one module vs three modules and one commit vs three family commits.
+Audit gate:
+
+- All G2 ProofFrame contract tests pass without source modifications.
+- G2 G2 invariants test_g2_modules_live_in_shells_subpackage continues to pass (shells/_validation.py still in shells/).
+- Full kernel suite: 1573 OK / 1 skipped (no count change since validators are pure additions + a behavior-preserving migration).
+- ruff clean across `_validation.py` and `proof_frame.py`.
+
+### Phase 1 — `sdk_rule_disable` implementation
+
+Scope:
+
+- New `src/kernel/sdk/shells/rule_disable.py` implementing `sdk_rule_disable(sdk, rule, support, *, branch_index, atom_index, overlay=None, note=None) -> RuleDisableResult` per locked §5.1 / §5.2 / §5.4 / §5.7 signatures.
+- Implementation calls (in order): `validate_rule` → `validate_support_artifact` → `validate_optional_evaluation_overlay` → `sdk._compile_rule_input(rule)` + `RuleSpec(...)` lowering (B.2 ValueError remap + B.1 RuleCompileError remap) → `sdk._resolve_runtime_registry(...)` (RuleCompileError remap) → `build_rule_disable_request(rule_spec, support, *, branch_index, atom_index, overlay, note)` (CapabilityHelperError + ProtocolShapeError remap) → `check_rule_disable_action(request, store, registry)` (defensive base path remap).
+- Add `SDKStore.check_rule_disable(...)` thin delegate in `store.py` between `recheck_proof_frame` and `ref` methods. Extend TYPE_CHECKING to import `RuleDisableResult`.
+- New `src/kernel/tests/test_sdk_rule_disable.py` with ~14 contract tests covering: happy path with seeded store + real Rule + real SupportArtifact; non-Rule rejection (raw RuleSpec / Derivation / dict); non-SupportArtifact rejection; non-EvaluationOverlay overlay rejection; non-empty overlay rejection at `$.check_rule_disable.overlay`; ProtocolShapeError from action / request DTO; engine_ext-style RuleCompileError remap from `_compile_rule_input`; RuleCompileError dependency from `_resolve_runtime_registry`; CapabilityHelperError from helper; runtime exception base path; result DTO not in `__all__`; Sibling discipline runtime patch (7 sibling shells) + static source scan.
+
+Audit gate: strict per-phase audit on locked §5.x / `#5` / `#6` invariants; phase-end test count and ruff verification.
+
+### Phase 2 — `sdk_rule_literal_replace` implementation
+
+Scope: same shape as Phase 1 with rule-literal-replace specifics (`literal_path`, `old_literal`, `new_literal` action args). New `kernel/sdk/shells/rule_literal_replace.py` + `SDKStore.check_rule_literal_replace(...)` + `test_sdk_rule_literal_replace.py` (~15 contract tests; one extra for `literal_path` shape validation propagating through `RuleLiteralPath.__post_init__` to `$.check_rule_literal_replace.request`).
+
+Audit gate: strict per-phase audit; G3 SDK shell file count after this phase = 2; SDKStore method count = 38.
+
+### Phase 3 — `sdk_rule_add_condition` implementation
+
+Scope: same shape as Phase 1 with rule-add-condition specifics (`added_atom` action arg). New `kernel/sdk/shells/rule_add_condition.py` + `SDKStore.check_rule_add_condition(...)` + `test_sdk_rule_add_condition.py` (~14 contract tests; one extra for `added_atom: RuleAddedAtom` shape validation propagating through `RuleAddedAtom.__post_init__` to `$.check_rule_add_condition.request`).
+
+Audit gate: strict per-phase audit; G3 SDK shell file count after this phase = 3; SDKStore method count = 39.
+
+### Phase 4 — Invariants + docs + cumulative audit
+
+Scope:
+
+- New `src/kernel/tests/test_sdk_g3_invariants.py` with 6 invariant classes mirroring G1 + G4 + G2 1:1: (1) `test_sdk_all_unchanged_and_g3_result_types_not_exported` — `__all__` length still 34, G3 result DTOs and SDK function names not exported; (2) `test_g3_methods_are_instance_methods_and_no_scenario_method_shipped` — three SDKStore methods callable, no scenario name; (3) `test_g3_modules_live_in_shells_subpackage` — three shell files at `kernel/sdk/shells/` flat-layout files do not; (4) `test_g3_modules_do_not_import_internal_or_walker_layers` — same `FORBIDDEN_PRODUCTION_IMPORT_TEXT` set as G1+G4+G2; (5) `test_store_methods_remain_thin_delegate_methods` — assertion-pattern style matching call/instantiation patterns (no false-trigger from docstring references); (6) `test_store_method_docstrings_record_boundary_contracts` — each docstring includes required type names + all six locked `$.<method>.<arg>` paths.
+- Update SDK API docs `kernel/sdk/docs/04_api_surface.md` + `.en.md` with G3 method list + per-method shape/error-path descriptions; preamble paragraph notes G3 shells under `kernel/sdk/shells/` and the §5.1+§5.2 cross-cutting precedent extension.
+- Update application overview `kernel/application/docs/01_overview.md` + `_en.md` test inventory and G3 SDK shell paragraph.
+- Cumulative G3 strict audit gate (5 dimensions: §5.x locks honored / §6 invariants verified / shells/ + retrofit holding / `kernel.sdk.__all__` length still 34 / G1+G4+G2 published snapshot branches untouched).
+
+Audit gate: cumulative G3 strict audit before close-out; all findings either fixed or recorded as explicit deferred minors.
+
+### Phase 5 — Close-out / archive / publish
+
+Scope:
+
+- Fill §10 Outcome / Deviations.
+- Mark status `implemented`.
+- Archive blueprint + audit log under `docs/blueprints/archive/`.
+- Update `docs/blueprints/archive/README.md` with G3 row.
+- Publish `v0.1-l-g3-rule-overlays-2026-05-08` (G3-only) + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-2026-05-08` (Path B combined snapshot per post-G2 strategy) to origin pending user authorization.
+- Update memory: create `project_g3_published.md`; update `MEMORY.md` index.
+
+Sacred branches `master` and `v0.1-oss-prep` remain untouched throughout. G1 + G4 + G2 published snapshot branches NOT modified by Phase 0 hygiene (extraction only adds new validator names; G2 ProofFrame's import-path update is on G3 topic forward).
 
 ## 9. Outcome / Deviations
 
