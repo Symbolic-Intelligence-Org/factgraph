@@ -372,10 +372,14 @@ class SDKStore:
             ``kernel.application.protocol`` if a typed reference is needed.
 
         Raises:
-            SDKStoreError: For SDK input-shape errors, derivation lowering
-                failures, dependency registration failures, candidate-row
-                validation errors, request DTO shape errors, or runtime
-                Why-not failures. Original exceptions are preserved as
+            SDKStoreError: For non-SDK exceptions crossing the SDK boundary.
+                The ``path`` field locates the failure: ``$.why_not.derivation``
+                for SDK input-shape and derivation-lowering failures,
+                ``$.why_not.dependencies`` for dependency registration
+                failures, ``$.why_not.candidates`` for candidate-row
+                validation errors, ``$.why_not.request`` for request DTO
+                shape errors, and ``$.why_not`` for runtime Why-not
+                failures. Original exceptions are preserved as
                 ``__cause__``.
         """
         from .why_not import sdk_why_not

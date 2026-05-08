@@ -32,6 +32,7 @@ FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
     "import kernel.application.walker",
     "from kernel.application.walker import",
     "kernel.audit",
+    "kernel.core.rules.frontier",
 )
 
 
@@ -47,15 +48,26 @@ class SDKG4InvariantTests(unittest.TestCase):
         self.assertFalse(hasattr(kernel_sdk, "WhyNotUniverseResult"))
 
     def test_sdk_store_why_not_is_instance_method(self) -> None:
-        """§5.4 lock: ``why_not`` is an SDKStore instance method, not a free function."""
+        """§5.4 lock: ``why_not`` is an SDKStore instance method, not a free function.
+
+        ``kernel.sdk.why_not`` resolves to the submodule (``why_not.py``) once
+        any test in the process has imported it; the lock is that the SDK
+        package never exposes ``why_not`` as a callable free function.
+        """
+        import types
+
         self.assertTrue(hasattr(SDKStore, "why_not"))
         self.assertTrue(callable(SDKStore.why_not))
+        if hasattr(kernel_sdk, "why_not"):
+            self.assertIsInstance(kernel_sdk.why_not, types.ModuleType)
 
-    def test_no_frontier_sdk_module_exists(self) -> None:
+    def test_no_frontier_sdk_module_or_method_exists(self) -> None:
         """§5.4 lock: G4 ships no Frontier SDK method or module."""
         sdk_dir = pathlib.Path(kernel_sdk.__file__).parent
         self.assertFalse((sdk_dir / "frontier.py").exists())
         self.assertFalse(hasattr(kernel_sdk, "frontier"))
+        self.assertFalse(hasattr(SDKStore, "frontier"))
+        self.assertFalse(hasattr(SDKStore, "frontier_view_facts"))
 
     def test_g4_modules_are_flat_and_no_shells_package_exists(self) -> None:
         """§5.5 lock: ``why_not.py`` is flat at ``src/kernel/sdk/``; no ``shells/`` subpackage."""
@@ -90,6 +102,15 @@ class SDKG4InvariantTests(unittest.TestCase):
         self.assertIn("WhyNotUniverseResult", why_not_doc)
         self.assertIn("SDKStoreError", why_not_doc)
         self.assertIn("candidate", why_not_doc.lower())
+        for path in (
+            "$.why_not.derivation",
+            "$.why_not.dependencies",
+            "$.why_not.candidates",
+            "$.why_not.request",
+            "$.why_not",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, why_not_doc)
 
 
 if __name__ == "__main__":

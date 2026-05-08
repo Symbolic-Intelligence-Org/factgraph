@@ -261,7 +261,10 @@ Key focused tests:
 - `test_sdk_ingest_application_delegate.py`
 - `test_sdk_check.py`
 - `test_sdk_diagnose.py`
+- `test_sdk_why_not.py`
 - `test_sdk_g1_invariants.py`
+- `test_sdk_g4_invariants.py`
+- `test_sdk_validation.py`
 - `test_sdk_consumer_boundary.py`
 
 ## 8. 相关文档

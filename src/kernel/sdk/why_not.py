@@ -1,8 +1,7 @@
 """SDK shell for Q4 Why-not Universe Diagnose capability.
 
-Phase 1 of G4 (per blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g4-why-not-frontier.md`` §8)
-implements the ``SDKStore.why_not`` facade method.
+Implements the ``SDKStore.why_not`` facade method per the archived G4 blueprint
+``docs/blueprints/archive/2026-05-08_l-direction-g4-why-not-frontier.md`` §5.
 
 Public surface contract per blueprint §5 locks:
 

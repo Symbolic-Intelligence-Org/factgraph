@@ -156,6 +156,16 @@ class SDKWhyNotContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.why_not.candidates")
         self.assertIsInstance(ctx.exception.__cause__, CapabilityHelperError)
 
+    def test_wrong_length_sequence_candidate_row_remaps_to_sdk_store_error_with_cause(self) -> None:
+        sdk = _build_sdk()
+        alice = _seed_person(sdk, name="alice", age=30, region="us")
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.why_not(_age_derivation(), [(alice,)])
+
+        self.assertEqual(ctx.exception.path, "$.why_not.candidates")
+        self.assertIsInstance(ctx.exception.__cause__, CapabilityHelperError)
+
     def test_capability_helper_error_remaps_to_sdk_store_error_with_cause(self) -> None:
         sdk = _build_sdk()
 
