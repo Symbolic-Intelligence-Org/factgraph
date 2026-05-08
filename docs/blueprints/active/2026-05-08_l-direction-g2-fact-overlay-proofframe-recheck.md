@@ -171,6 +171,20 @@ This blueprint is at `draft` status. The questions below must be resolved before
 - Confirm G1 + G4 raw-passthrough precedent applies (`__all__` unchanged, no SDK wrapper).
 - Confirm `FactOverlayCheckResult` has no mutable internals that warrant wrapping.
 
+**Decision (2026-05-08):** Lock documented passthrough — `SDKStore.check_fact_overlay(...) -> FactOverlayCheckResult`. The method returns the application protocol DTO directly, does not wrap or simplify it, and does not add `FactOverlayCheckResult` to `kernel.sdk.__all__`.
+
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | G1 + G4 raw-passthrough precedent applies | G1 ships `SDKStore.check(...) -> CheckResult` and `SDKStore.diagnose(...) -> DiagnoseResult`; G4 ships `SDKStore.why_not(...) -> WhyNotUniverseResult`. Those application result DTOs remain documented passthrough values and are not re-exported through `kernel.sdk.__all__`. Runtime check during this pass: `len(kernel.sdk.__all__) == 34`; `FactOverlayCheckResult` is neither in `__all__` nor present as `kernel.sdk.FactOverlayCheckResult`. | PASS — G2 follows the established L-series result boundary. |
+| F2 | `FactOverlayCheckResult` has no mutable SDK state that warrants wrapping | `FactOverlayCheckResult` is a frozen application protocol dataclass with canonical fields (`status`, `requested_binding`, `before`, `after`, `diff`, `errors`, `warnings`) and protocol validation in `__post_init__` (`derivation_fact_overlay.py:367-415`). It exposes result data directly and contains no SDK store, registry, walker, cache, or lazy substrate handle. | PASS — raw DTO passthrough is adequate and narrower than inventing an SDK wrapper under `#6`. |
+
+**Forward implications:**
+
+- §5.8 tests must verify `FactOverlayCheckResult` is not added to `kernel.sdk.__all__`.
+- SDK docs should document `FactOverlayCheckResult` as an advanced application protocol DTO returned by the SDK method, matching G1 + G4 wording.
+
 ### 5.4 ProofFrame Recheck return shape
 
 **Question:** Does `SDKStore.recheck_proof_frame(...)` return raw `ProofFrameRecheckResult`, wrap, or simplify?
@@ -180,6 +194,20 @@ This blueprint is at `draft` status. The questions below must be resolved before
 **Falsifiers required:**
 
 - Same as §5.3 with `ProofFrameRecheckResult` shape inspected.
+
+**Decision (2026-05-08):** Lock documented passthrough — `SDKStore.recheck_proof_frame(...) -> ProofFrameRecheckResult`. The method returns the application protocol DTO directly, does not wrap or simplify it, and does not add `ProofFrameRecheckResult` to `kernel.sdk.__all__`.
+
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | G1 + G4 raw-passthrough precedent applies | Same L-series precedent as §5.3. Runtime check during this pass: `len(kernel.sdk.__all__) == 34`; `ProofFrameRecheckResult` is neither in `__all__` nor present as `kernel.sdk.ProofFrameRecheckResult`. | PASS — no SDK wrapper or re-export. |
+| F2 | `ProofFrameRecheckResult` has no mutable SDK state that warrants wrapping | `ProofFrameRecheckResult` is a frozen application protocol dataclass with canonical fields (`status`, `binding_items`, `atom_verdicts`) and protocol validation in `__post_init__` (`proofframe.py:120-139`). It aggregates proof-frame verdict data without SDK store, registry, walker, cache, or lazy substrate state. | PASS — raw DTO passthrough is adequate and narrower than inventing an SDK wrapper under `#6`. |
+
+**Forward implications:**
+
+- §5.8 tests must verify `ProofFrameRecheckResult` is not added to `kernel.sdk.__all__`.
+- SDK docs should document `ProofFrameRecheckResult` as an advanced application protocol DTO returned by the SDK method, matching G1 + G4 wording.
 
 ### 5.5 Module placement and `kernel/sdk/shells/` migration
 
@@ -231,6 +259,21 @@ Candidates:
 - Confirm consistency with existing G1 / G4 method names.
 - Reject any name that collides with or shadows an existing `SDKStore` attribute (`SDKStore.add`, `.set`, `.ref`, `.evaluate`, `.get`, `.check`, `.diagnose`, `.why_not`, `.batch`, etc.).
 - Note that final renaming is out of G2 scope (post-L redesign blueprint).
+
+**Decision (2026-05-08):** Lock `SDKStore.check_fact_overlay(...)` and `SDKStore.recheck_proof_frame(...)`.
+
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Names are consistent with G1 / G4 method style | G1 uses short verb-first methods for Q1/Q2 (`check`, `diagnose`); G4 uses the established capability phrase `why_not`. G2 has two composite capabilities, so the verb-first names preserve action semantics while staying explicit: `check_fact_overlay` checks a derivation under an overlay, and `recheck_proof_frame` rechecks an existing proof frame. | PASS — verb-first, explicit, and consistent enough without inventing a new naming family. |
+| F2 | Names do not collide with current `SDKStore` attributes | Runtime check during this pass confirmed `hasattr(SDKStore, "check_fact_overlay") == False` and `hasattr(SDKStore, "recheck_proof_frame") == False` before implementation. The names do not shadow existing facade methods such as `add`, `set`, `ref`, `evaluate`, `get`, `check`, `diagnose`, `why_not`, or `batch`. | PASS — safe to add in Phase 0. |
+| F3 | Post-L redesign remains out of scope | User preference for OpenAI-style SDK ergonomics is recorded as a post-L redesign input, not a per-family Step 0 override. G2 keeps the current `SDKStore.<method>` pattern and leaves global renaming / namespace redesign to the dedicated post-L blueprint. | PASS — no premature outward rename. |
+
+**Forward implications:**
+
+- §5.6 file naming should derive from the locked method names and chosen layout.
+- §5.8 Sibling discipline must ensure neither method calls the other SDK shell or any G1/G4 sibling shell internally.
 
 ### 5.8 Error mapping and Q3 / Batch-4 Sibling discipline
 
