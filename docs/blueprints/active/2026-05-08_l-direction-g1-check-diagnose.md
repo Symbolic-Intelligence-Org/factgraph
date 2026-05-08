@@ -269,6 +269,28 @@ A `sdk.explain(rule, binding, store) -> SDKExplainResult` (with `.passed`, `.evi
 
 **Default if Step 0 inconclusive:** start with submodule-only path; promote to `__all__` only if Step 0 gathers explicit signal.
 
+**Decision (2026-05-08, paired with §5.5 falsifier pass):**
+
+- G1 adds **instance methods** to `SDKStore`: `SDKStore.check(...)` and `SDKStore.diagnose(...)`.
+- G1 does **not** add free functions to `kernel.sdk.__all__`.
+- G1 does **not** re-export `CheckResult`, `DiagnoseResult`, A helper builders, or application DTOs from `kernel.sdk.__all__` (continues §5.2 export boundary).
+- The SDK public surface change is therefore limited to the `SDKStore` facade method list and docs/tests for those methods.
+
+**Falsifier evidence (read-only audit):**
+
+1. **SDK product API already includes `SDKStore` methods independent of `__all__`** — [04_api_surface.md §2](../../../src/kernel/sdk/docs/04_api_surface.md) lists `SDKStore` public methods (`ingest`, `validate_provenance`, `run`, `evaluate`, `accept`, `explain_fact`, `conflicts`, etc.) separately from top-level exports.
+2. **`kernel.sdk.__all__` currently exports types/classes/constants, not store-bound free functions** — [sdk/__init__.py](../../../src/kernel/sdk/__init__.py) includes error classes/codes, DSL classes, `SDKStore`, `SDKRegistry`, `ValidationReport`, schema compile helpers; no `run`, `evaluate`, `ingest`, `accept`, `explain_fact`, or `conflicts` free functions.
+3. **`__all__` boundary remains intact** — [01_alignment_matrix.md §3](../../../src/kernel/sdk/docs/01_alignment_matrix.md) states `kernel.sdk.__all__` expresses SDK user-facing surface / compatibility aliases and does not export application internals. §5.2 already locked `CheckResult` / `DiagnoseResult` as return annotations only, not exports.
+4. **Future SDK ergonomic promotion must freeze outward shape but cannot directly re-export application DTOs** — [04_api_surface.md §1](../../../src/kernel/sdk/docs/04_api_surface.md) explicitly says future promotion of Check/Diagnose/etc. to SDK ergonomic API must freeze outward request/result shape and cannot directly re-export application DTOs. `SDKStore.check` / `.diagnose` satisfies this by adding methods while keeping DTOs out of `__all__`.
+
+**Falsifier outcomes:**
+
+| Option | Outcome |
+|---|---|
+| Add free functions to `kernel.sdk.__all__` | Rejected — no precedent for store-bound capability methods as top-level free functions; would require explicit `store` argument or hidden global store, both inconsistent with existing SDK facade. |
+| Expose only submodule functions (`from kernel.sdk.check import sdk_check`) | Rejected as primary public API — implementation helper path is acceptable, but user-facing SDK pattern is `SDKStore.method(...)` for store-bound operations. |
+| Add `SDKStore.check` / `.diagnose`, leave `__all__` unchanged | **Chosen** — matches SDKStore facade method convention while preserving `kernel.sdk.__all__` discipline and §5.2 return-export boundary. |
+
 ### 5.5 Module location and structure
 
 **Question:** Single file `kernel/sdk/g1.py`? Per-method files (`kernel/sdk/check.py` + `kernel/sdk/diagnose.py`)? New `kernel/sdk/shells/` package? Inject into existing `kernel/sdk/facade.py`?
@@ -276,6 +298,30 @@ A `sdk.explain(rule, binding, store) -> SDKExplainResult` (with `.passed`, `.evi
 **Reference:** A's Step 0 selected `capability_helpers/` package layout with per-family files. By analogy, G1 could mirror this for forward compatibility with G2-G5.
 
 **Default if Step 0 inconclusive:** mirror A's per-family layout (`kernel/sdk/check.py` + `kernel/sdk/diagnose.py`) for forward compatibility.
+
+**Decision (2026-05-08, paired with §5.4 falsifier pass):**
+
+- Implement G1 helper modules as flat files:
+  - `src/kernel/sdk/check.py` with `sdk_check(sdk: SDKStore, rule, binding, *, engine="native", registry=None)`.
+  - `src/kernel/sdk/diagnose.py` with `sdk_diagnose(sdk: SDKStore, rule, binding, *, engine="native", registry=None)`.
+- Add thin `SDKStore.check(...)` and `SDKStore.diagnose(...)` methods in `store.py` that import/delegate to those module helpers, mirroring existing `ingest(...)` / `validate_provenance(...)` delegate pattern.
+- Do not create `kernel/sdk/shells/` in G1. Flat module layout remains consistent with current `kernel/sdk/` structure and keeps the first G1 slice minimal.
+- **Forward trigger for G2:** when G2 would add the third/fourth SDK shell file, its Step 0 MUST re-evaluate whether to migrate G1/G2 shell files into a subpackage (e.g. `kernel/sdk/shells/`) before the shell family count grows. That migration remains out of G1 scope.
+
+**Falsifier evidence (read-only audit):**
+
+1. **Existing `SDKStore` delegate pattern** — [store.py `ingest`](../../../src/kernel/sdk/store.py) imports `sdk_ingest` from `.ingest` and delegates; [store.py `validate_provenance`](../../../src/kernel/sdk/store.py) imports `sdk_validate_provenance` from `.ingest` and delegates. G1 can follow this exact pattern with `.check` / `.diagnose`.
+2. **Current SDK module layout is flat** — `kernel/sdk/` has flat implementation modules (`store.py`, `ingest.py`, `facade.py`, `query_lower.py`, `query_runtime.py`, `registry.py`, `compile.py`, etc.) plus the DSL subpackage. A new `shells/` package would introduce a new convention before G1 proves the pattern.
+3. **A's per-family package remains relevant but not mechanically binding** — A used `kernel.application.capability_helpers/` because it already covered 8 capability families. G1 starts with 2 files; subpackage migration becomes more justified at G2/G4 scale.
+
+**Falsifier outcomes:**
+
+| Option | Outcome |
+|---|---|
+| Single `kernel/sdk/g1.py` | Rejected — "G1" is roadmap taxonomy, not a durable user-facing module concept; obscures per-method split already locked in §5.1. |
+| Per-method flat files `kernel/sdk/check.py` + `diagnose.py` | **Chosen** — matches current flat SDK layout and keeps check/diagnose implementation boundaries independent. |
+| New `kernel/sdk/shells/` package now | Deferred — plausible once more L groups land, but premature for two files. Explicit G2 trigger recorded. |
+| Inject implementation directly into `store.py` | Rejected — `store.py` is already large and existing pattern delegates specialized logic to module helpers (`ingest`, `facade`, query lowering/runtime). |
 
 ### 5.6 Test layout
 
@@ -341,7 +387,9 @@ Acceptance gates are completed at scope-freeze. At `draft` status, only Step 0 f
 - [x] §5.1 falsifier pass — locked 2026-05-08 (per-method API; scenario `sdk.explain` rejected, remains Direction C future composition)
 - [x] §5.2 falsifier pass — locked 2026-05-08 (documented passthrough for both methods; B dependencies inactive; `CheckResult` / `DiagnoseResult` not re-exported from `kernel.sdk.__all__`)
 - [x] §5.3 falsifier pass — locked 2026-05-08 (`CapabilityHelperError` + `OriginPackageError` both remap to `SDKStoreError`; exception chaining preserved; `path` set per call-site; no new SDK error subclass)
-- [ ] §5.4 through §5.7 falsifier passes — **pending scoping round**
+- [x] §5.4 falsifier pass — locked 2026-05-08 (`SDKStore.check` / `.diagnose`; no new `kernel.sdk.__all__` exports)
+- [x] §5.5 falsifier pass — locked 2026-05-08 (flat `kernel/sdk/check.py` + `diagnose.py`; `SDKStore` delegate pattern; G2 must re-evaluate shell subpackage migration before adding more shell files)
+- [ ] §5.6 through §5.7 falsifier passes — **pending scoping round**
 
 ## 8. Implementation Plan
 
