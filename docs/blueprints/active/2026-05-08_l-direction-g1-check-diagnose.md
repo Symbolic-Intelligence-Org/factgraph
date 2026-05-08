@@ -331,6 +331,35 @@ A `sdk.explain(rule, binding, store) -> SDKExplainResult` (with `.passed`, `.evi
 
 **Default if Step 0 inconclusive:** flat per-method (`test_sdk_check.py` + `test_sdk_diagnose.py`); shared fixtures in `_g1_fixtures.py` if extracted.
 
+**Decision (2026-05-08, falsifier pass complete):**
+
+- **Per-method flat test files at `src/kernel/tests/`:**
+  - `test_sdk_check.py`
+  - `test_sdk_diagnose.py`
+- **Shared fixtures only if duplication becomes material:** `_sdk_g1_fixtures.py` (extract on demand, not pre-emptively; `sdk_` prefix added per existing `test_sdk_*` file convention — minor refine over default).
+- **No combined `test_sdk_g1.py`** — would reintroduce a grouped test surface where §5.1 explicitly split the product surface into separate methods.
+- **No extension of unrelated existing SDK test files** — G1 is a new outward SDK method family and owns its own behavior / contract files.
+- **No nested `tests/sdk/` directory** — `#19` flat layout, consistent with all 8 existing `test_sdk_*.py` files.
+
+**Falsifier evidence (read-only audit):**
+
+1. **`#19` Test contract requires flat layout** — [30_recommendation.md §`#19`](../../references/working/post-routemap-direction-selection-input/30_recommendation.md): "use the repository's existing `unittest`-first, flat `tests/test_*.py` style"; "keep shared fixtures flat, e.g. `_walker_fixtures.py`, rather than introducing `tests/walker/`"; "no Hypothesis dependency in v1".
+2. **B sketch repeats flat tests + no nested walker dir** — [40_walker-mechanism-design-sketch.md §6](../../references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md): "flat unittest under `src/kernel/tests/test_application_walker.py`... fixtures in same file or `_walker_fixtures.py` if extracted. No new `tests/walker/` directory."
+3. **A sketch repeats flat tests + no nested capability_helpers dir** — [41_application-builders-design-sketch.md §6](../../references/working/post-routemap-direction-selection-input/41_application-builders-design-sketch.md): "flat unittest extending existing `src/kernel/tests/test_application_capability_helpers.py`... Fixtures in same file or `_helpers_fixtures.py` if extracted. No new `tests/capability_helpers/` directory."
+4. **Existing SDK tests already use flat `test_sdk_*` files** — repo scan (2026-05-08): 8 files all flat in `src/kernel/tests/`: `test_sdk_batch_application_delegate.py`, `test_sdk_consumer_boundary.py`, `test_sdk_error_hierarchy.py`, `test_sdk_facade_application_delegate.py`, `test_sdk_ingest_application_delegate.py`, `test_sdk_query_policies.py`, `test_sdk_schema_primary_key_required.py`, `test_sdk_set_add_application_delegate.py`. Existing fixture pattern: single `_test_helpers.py` (underscore-prefixed, no nested dirs). G1's `test_sdk_check.py` / `test_sdk_diagnose.py` continues established convention verbatim.
+5. **§5.6 conservative default already pointed here** — the "Default if Step 0 inconclusive" line above already specifies flat per-method as the conservative path. Lock confirms that default with one refinement: shared-fixture file name `_g1_fixtures.py` → `_sdk_g1_fixtures.py` for `sdk_` prefix consistency with `test_sdk_*` files.
+
+**Why per-method (not combined / extended / nested):**
+
+| Option | Outcome |
+|---|---|
+| **Per-method flat** (chosen) | Mirrors §5.1 product surface split (`sdk.check` + `sdk.diagnose` are separate methods). Failure locality clear: each test file owns one method's contract. Matches all 8 existing `test_sdk_*` files. |
+| **Combined `test_sdk_g1.py`** | Would reintroduce a grouped surface where §5.1 explicitly rejected merging Check + Diagnose into one entry. Inconsistent with `#3` heterogeneity. |
+| **Extend existing SDK test file** | Blurs ownership; G1 is a new outward method family; mixing into unrelated tests dilutes failure attribution. Inconsistent with current pattern (each `test_sdk_*.py` covers its specific surface). |
+| **Nested `tests/sdk/`** | Forbidden by `#19` + B/A precedent; zero current repo precedent. |
+
+**Falsifier outcome:** all 5 evidence sources converge on flat per-method layout; no signal supports combined / extended / nested alternatives.
+
 ### 5.7 SDK-side input shape
 
 **Question:** What SDK-side input types are accepted at G1's surface?
@@ -389,7 +418,8 @@ Acceptance gates are completed at scope-freeze. At `draft` status, only Step 0 f
 - [x] §5.3 falsifier pass — locked 2026-05-08 (`CapabilityHelperError` + `OriginPackageError` both remap to `SDKStoreError`; exception chaining preserved; `path` set per call-site; no new SDK error subclass)
 - [x] §5.4 falsifier pass — locked 2026-05-08 (`SDKStore.check` / `.diagnose`; no new `kernel.sdk.__all__` exports)
 - [x] §5.5 falsifier pass — locked 2026-05-08 (flat `kernel/sdk/check.py` + `diagnose.py`; `SDKStore` delegate pattern; G2 must re-evaluate shell subpackage migration before adding more shell files)
-- [ ] §5.6 through §5.7 falsifier passes — **pending scoping round**
+- [x] §5.6 falsifier pass — locked 2026-05-08 (flat per-method tests `test_sdk_check.py` + `test_sdk_diagnose.py`; shared fixtures `_sdk_g1_fixtures.py` only on demand; no combined / extended / nested alternatives)
+- [ ] §5.7 falsifier pass — **pending scoping round**
 
 ## 8. Implementation Plan
 
