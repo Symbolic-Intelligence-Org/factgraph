@@ -60,6 +60,7 @@ if TYPE_CHECKING:
         RuleLiteralReplaceResult,
         WhyNotUniverseResult,
     )
+    from kernel.audit.proof_frame_diff import ProofFrameDiff
 
 
 class _SDKViewsManager:
@@ -713,6 +714,80 @@ class SDKStore:
             added_atom=added_atom,
             overlay=overlay,
             note=note,
+        )
+
+    def diff_proof_frames(
+        self,
+        round_a_id: Any,
+        round_b_id: Any,
+        round_a_events: Any,
+        round_b_events: Any,
+        *,
+        warnings: Any = (),
+        include_unchanged: bool = False,
+    ) -> "ProofFrameDiff":
+        """Diff two rounds' proof-frame events.
+
+        Args:
+            round_a_id: Non-empty string identifying the A-side round.
+            round_b_id: Non-empty string identifying the B-side round.
+            round_a_events: Raw ``tuple[RoundEvent, ...]`` from
+                ``kernel.audit.round_events`` (e.g., loaded via
+                ``kernel.audit.load_audit_package`` or held from a
+                fresh recorder). Per §5.3 lock the SDK never wraps
+                ``RoundEvent`` and never reads files internally.
+            round_b_events: Raw ``tuple[RoundEvent, ...]`` for the
+                B-side round.
+            warnings: Optional ``tuple[WarningDTO, ...]``; defaults to
+                empty tuple.
+            include_unchanged: Whether to emit deltas for unchanged
+                frames; mirrors the A-side parameter at
+                ``kernel.audit.proof_frame_diff.build_proof_frame_diff``.
+
+        Returns:
+            The application-canonical ``ProofFrameDiff`` DTO directly.
+            The runtime represents helper-internal validation failures
+            (malformed payloads, duplicate frame identity) as
+            ``ProofFrameDiffError`` exceptions which the SDK shell
+            remaps to ``$.diff_proof_frames.request`` per §5.8 lock.
+
+        Raises:
+            SDKStoreError: For non-SDK exceptions crossing the SDK
+                boundary. The ``path`` field locates the failure:
+                ``$.diff_proof_frames.round_a_id`` for non-string /
+                empty ``round_a_id``;
+                ``$.diff_proof_frames.round_b_id`` for non-string /
+                empty ``round_b_id``;
+                ``$.diff_proof_frames.round_a_events`` for non-tuple
+                or non-``RoundEvent`` element in ``round_a_events``;
+                ``$.diff_proof_frames.round_b_events`` for non-tuple
+                or non-``RoundEvent`` element in ``round_b_events``;
+                ``$.diff_proof_frames.warnings`` for non-tuple or
+                non-``WarningDTO`` element in ``warnings``;
+                ``$.diff_proof_frames.request`` for ``ProofFrameDiffError``
+                from helper-internal validation (malformed event
+                payloads, duplicate frame identity, etc.); and
+                ``$.diff_proof_frames`` for unexpected runtime
+                exceptions. Original exceptions are preserved as
+                ``__cause__``.
+
+        Notes:
+            Recorder lifecycle is intentionally NOT a SDK shell per
+            G5 §5.1 — capture stays at advanced-importable
+            ``kernel.audit.round_events`` (``start_round`` /
+            ``record_round_event`` / ``finalize_round``); G5 ships
+            only the pure query side (this method).
+        """
+        from .shells.proof_frame_diff import sdk_diff_proof_frames
+
+        return sdk_diff_proof_frames(
+            self,
+            round_a_id,
+            round_b_id,
+            round_a_events,
+            round_b_events,
+            warnings=warnings,
+            include_unchanged=include_unchanged,
         )
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
