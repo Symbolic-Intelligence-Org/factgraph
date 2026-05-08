@@ -111,11 +111,41 @@ Active substrate / patterns G5 inherits without re-deciding:
 
 **Conservative default:** option (A) — defer entirely, per Round 8 hint and the principle that mutable-state-returning methods are a new category for `SDKStore`.
 
-**Falsifiers required:**
-- F1: Verify the existing 5 L-Direction methods ALL return frozen DTOs and never mutable objects. If true, shipping a `RoundRecorder` would be a category split — strong signal toward defer.
-- F2: Verify there is genuine consumer signal for SDK-side recorder ergonomics — search for documentation, examples, or external references that describe the desired shape. If signal is absent, `#6` (no outward compat without user signal) supports defer.
-- F3: Verify the recorder's stateful API can't be reasonably "compressed" into a single pure call — e.g., `record_round(round_id, events) -> tuple[RoundEvent, ...]` that does start + records + finalize internally. If yes, that becomes option (D); if no, the lifecycle pattern is irreducible and defer is cleaner.
-- F4: Verify whether deferring breaks any existing test that asserts "SDK exposes the full round story" — should be none today, but check `test_sdk_consumer_boundary.py` and similar.
+**Decision (2026-05-08):** Lock **option (A) — defer Round events from SDK entirely**. G5 narrows to a single SDK shell on the pure query side: ProofFrame Diff. Recorder capture stays at `kernel.audit` advanced importable, where it has been stable since Batch 6. The downstream call shapes are:
+
+```python
+# G5 ships (the pure query side):
+SDKStore.diff_proof_frames(...) -> ProofFrameDiff
+```
+
+```python
+# G5 deliberately does NOT ship (capture stays advanced importable):
+from kernel.audit.round_events import (
+    start_round,
+    record_round_event,
+    finalize_round,
+)
+```
+
+This matches the event-sourcing-style split (capture is an external, stateful, persistence-adjacent concern; query is pure and SDK-friendly) and preserves every prior L invariant.
+
+**Falsifier outcomes (all 4 PASS for defer):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | All existing L methods return frozen DTOs and never mutable objects | Verified 8 L methods at `src/kernel/sdk/store.py`: `check` → `CheckResult`; `diagnose` → `DiagnoseResult`; `why_not` → `WhyNotUniverseResult`; `check_fact_overlay` → `FactOverlayCheckResult`; `recheck_proof_frame` → `ProofFrameRecheckResult`; `check_rule_disable` → `RuleDisableResult`; `check_rule_literal_replace` → `RuleLiteralReplaceResult`; `check_rule_add_condition` → `RuleAddConditionResult`. All eight return DTOs are `@dataclass(frozen=True)`. `RoundRecorder` at `src/kernel/audit/round_events.py:99` is `@dataclass` **without** `frozen=True`, with mutable `_events: list[RoundEvent]` + `_started: bool` + `_finalized: bool` state. Shipping it would be the first L method returning a mutable object — a category split with no precedent. | PASS — defer preserves the all-frozen-DTO L category invariant. |
+| F2 | Genuine consumer signal for SDK-side recorder ergonomics | `grep -rn "SDKStore\.\(start\|record\|finalize\)_round" docs/ src/` — zero hits. Round 8 audit at `docs/references/working/post-routemap-direction-selection-input/30_recommendation.md:610` explicitly hints "may keep round recorder as `kernel.audit` advanced-importable". The Batch 6 round-persistence blueprint at `docs/blueprints/archive/2026-05-05_round-persistence.md:470` declared "external buffered recorder APIs ... No application capability runtime imports `kernel.audit`" — recorder was always designed as orthogonal/external. The canonical user-facing example `examples/round_story_full_demo.py` already imports `start_round` / `record_round_event` / `finalize_round` directly from `kernel.audit.round_events`. Defer breaks zero UX expectations — users already do exactly this. | PASS — `#6` (no outward compat without user signal) supports defer. Ship would create new outward surface without signal. |
+| F3 | Recorder API can be compressed into a single pure call | Examined `RoundRecorder.start/record/finalize` (`src/kernel/audit/round_events.py:108-160`): accumulates `_events: list[RoundEvent]` across N calls; `sequence` numbering = `len(self._events)` order-sensitive; `finalize()` writes JSONL via `write_round_events_atomic(package_dir, events)` — file IO, not pure. Typical usage interleaves `recorder.record(...)` between capability calls (e.g., `sdk.check(...)` → record → `sdk.diagnose(...)` → record → finalize). Cannot reasonably collapse to `record_round(round_id, events) -> tuple[RoundEvent, ...]` — that would force callers to construct `RoundEvent` instances themselves with manual sequence numbering, which is exactly the state the recorder owns. | NOT compressible — option (D) rejected. Defer is cleaner. |
+| F4 | Deferring breaks any existing test asserting "SDK exposes the full round story" | `grep -rn "test_no_sdk_round_events\|test_no_sdk_proof_frame_diff" src/kernel/tests/` — zero hits. `test_sdk_consumer_boundary.py` has zero references to `round_events` / `proof_frame_diff` / `RoundRecorder`. No pre-G5 boundary test asserts "no SDK round" — defer is the natural state, no `#P1` retrofit needed for the recorder side. (Diff side: see §5.9 — `test_audit_proof_frame_diff.py` exists but tests audit-layer pure function only; no "no SDK surface" assertion.) | PASS — defer breaks zero existing tests. |
+
+**Forward implications:**
+
+- G5 becomes a **1-method shell**. §5.5 / §5.6 / §5.7 simplify to single-file decisions; phase count drops to **3-4 phases** (vs G3's 5+1 polish): Phase 0 hygiene if §5.5 surfaces shared validators (likely none) + Phase 1 impl + Phase 2 invariants/docs/cumulative audit + Phase 3 close-out + Phase 4 publish.
+- Sibling discipline scope after G5 publishes: **9 shells** (current 8 + new diff shell).
+- The "complete round story through SDK" goal becomes more honest: G5 ships the *query* side (diff). Capture side stays at `kernel.audit` — matches the event-sourcing pattern split. Users follow the same import path as today's `examples/round_story_full_demo.py`.
+- §5.2 is now nearly settled by §5.1 (since at least the diff side ships); falsifier remains for source-grounded confirmation that `build_proof_frame_diff` matches the L SDK shape.
+- §5.3 (Diff input shape + cross-cutting precedent layer scope) becomes the next critical decision: with recorder deferred, the question reduces to whether raw `RoundEvent` (frozen `kernel.audit` DTO, two tuples of) can cross the SDK boundary as input. F1+F3 of §5.3 already lean toward "yes — extend the G2 precedent to `kernel.audit` for this one frozen DTO"; falsifier will source-ground.
+- No SDK shell file for round events; no new shared validator for `RoundRecorder`; no `#P1` retrofit on the recorder side.
 
 ### 5.2 Does ProofFrame Diff ship as a SDK shell?
 
