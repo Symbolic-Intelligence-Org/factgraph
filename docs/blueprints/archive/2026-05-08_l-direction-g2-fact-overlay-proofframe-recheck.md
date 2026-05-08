@@ -1,6 +1,6 @@
 # L Direction G2 — Fact Overlay + ProofFrame Recheck SDK Shell
 
-- **Status:** scoped
+- **Status:** implemented
 - **Created:** 2026-05-08
 - **Last Updated:** 2026-05-08
 - **Parent:** L Direction (post-A+B+G1+G4 v1-ready roadmap target)
@@ -481,4 +481,67 @@ README quickstart remains untouched unless a separate blueprint scopes it.
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation.
+### Final landed surface
+
+```python
+SDKStore.check_fact_overlay(
+    derivation,                                                    # SDK Derivation only (§5.1)
+    binding,                                                       # $-prefixed Mapping[str, Any] (§5.1 + Q1 _validation)
+    overlay,                                                       # raw EvaluationOverlay (§5.1)
+    *,
+    engine="native",
+    registry=None,
+) -> FactOverlayCheckResult                                        # documented passthrough (§5.3)
+
+SDKStore.recheck_proof_frame(
+    support_artifact,                                              # raw SupportArtifact (§5.2)
+    overlay,                                                       # raw EvaluationOverlay (§5.2)
+) -> ProofFrameRecheckResult                                       # documented passthrough (§5.4)
+```
+
+Both methods land at `kernel/sdk/shells/{fact_overlay,proof_frame}.py` (§5.5+§5.6); `SDKStore` delegates with thin `from .shells.<x> import sdk_<x>; return sdk_<x>(self, ...)` bodies; `kernel.sdk.__all__` length remains 34 (§5.3+§5.4 documented-passthrough; never expanded across G1+G4+G2). `SDKStoreError` remap covers the 5 Fact Overlay paths (`$.check_fact_overlay.{derivation,binding,dependencies,request}` + base `$.check_fact_overlay`) and the 4 ProofFrame Recheck paths (`$.recheck_proof_frame.{support_artifact,overlay,request}` + base `$.recheck_proof_frame`) per §5.8. Q3/Batch-4 Sibling discipline enforced: each shell statically does not import any sibling SDK shell, and runtime patching of all four other shells (sdk_check / sdk_diagnose / sdk_why_not / the other G2 shell) confirms none is invoked.
+
+### Implementation phases (5 commits + Phase 0)
+
+| Phase | Commit | Scope |
+|---|---|---|
+| Phase 0 | `dad109b` | shells/ migration hygiene — `git mv` G1+G4 shells (`check.py` / `diagnose.py` / `why_not.py` / `_validation.py`) into `kernel/sdk/shells/`; new `__init__.py`; cross-package import fixes (`from ..errors` / `..store` / `..dsl` for parent-package siblings); 3 `SDKStore` delegate imports rewritten; ~22 test patch paths rewritten; G1 + G4 archived invariants retrofit per `#P1` carve-out (see "Deviations" below); 0 behavior change |
+| Phase 1 | `cab15a9` | `sdk_fact_overlay_check` real impl with G1 lowering chain + 5-step error remap; new `kernel/sdk/shells/fact_overlay.py` (108 LOC); new `SDKStore.check_fact_overlay(...)` thin delegate; new `test_sdk_fact_overlay.py` 15 contract tests (happy path + 5-path remap + Q3 Sibling × 2) |
+| Phase 2 | `6e88f56` | `sdk_proof_frame_recheck` real impl with narrow 4-step error remap (no derivation lowering, no registry, no engine arg per §5.2); new `kernel/sdk/shells/proof_frame.py` (122 LOC) with 2 local module-private validators; new `SDKStore.recheck_proof_frame(...)` thin delegate; new `test_sdk_proof_frame.py` 11 contract tests including Sibling discipline runtime + static |
+| Phase 3 | `385bb01` | G2 cross-cutting invariant test file (`test_sdk_g2_invariants.py`, 6 classes mirroring G1+G4); SDK API docs (`04_api_surface{,.en}.md`) updated with G2 method list + per-method shape/error-path descriptions + preamble `kernel/sdk/shells/` note + `#P1` carve-out reference; application overview docs (`01_overview{,_en}.md`) test inventory expanded; cumulative Phase 3 audit gate PASS on 5 dimensions |
+
+### Deviations from scoped plan
+
+1. **`kernel/sdk/shells/` subpackage activated** — G2 Phase 0 fired the `kernel/sdk/shells/` migration trigger that G1 §5.5 forwarded and G4 §5.5 re-recorded. The migration moved 4 existing shell modules (G1 `check.py`+`diagnose.py`, G4 `why_not.py`, Q1 `_validation.py`) into the new subpackage. This required a `#P1` carve-out retrofit of the G1 + G4 archived invariant tests `test_g{1,4}_modules_are_flat_and_no_shells_package_exists` to `test_g{1,4}_modules_live_in_shells_subpackage` (assertions inverted; `G1_MODULES` / `G4_MODULES` constants retargeted; thin-delegate text assertions updated to `from .shells.<x> import sdk_<x>`). Carve-out audit-log entries landed at `docs/blueprints/archive/2026-05-08_l-direction-g1-check-diagnose.audit.md` and `docs/blueprints/archive/2026-05-08_l-direction-g4-why-not-frontier.audit.md` recording principle id (`#P1`), reason, scope, impact, reviewer ack (G2 §5.5 lock at commit `7ffd6e7`), and historical-handling = `retrofit`. The G1 + G4 published snapshot branches (`v0.1-l-g1-check-diagnose-2026-05-08`, `v0.1-l-g4-why-not-frontier-2026-05-08`, plus the two combined snapshots) are NOT touched by the carve-out — it lives only on G2 topic and forward.
+
+2. **Local validators in `proof_frame.py`** — Per user guidance at G2 Phase 2 kickoff, `_validate_support_artifact` / `_validate_overlay` were kept local to `proof_frame.py` rather than added to `kernel/sdk/shells/_validation.py`. Rationale: only one consumer today; extraction can happen when G3 / G5 also need them. This is consistent with §5.7 lock spirit (validators are caller-specific path-bound checks) and does not create test or behavior drift.
+
+3. **Defensive `try/except Exception` in `proof_frame.py` runtime call** — `kernel.application.proofframe_runtime.recheck_proof_frame(...)` source has zero `raise` paths today (it returns `ProofFrameRecheckResult` for unsupported support kinds, rule-ref edges, and rule actions). The §5.8 lock explicitly enumerated "unexpected `recheck_proof_frame(...)` exception" as the `$.recheck_proof_frame` remap path. Implementation kept the `try/except Exception` wrap as defense-in-depth + forward-compat, with one regression test patching the runtime to raise `RuntimeError`.
+
+4. **`SDKStore.check_fact_overlay` docstring mentions `FactOverlayCheckRequest`** — Required by §5.7 + §6 docstring boundary contract (the docstring explains that overlay shape errors are caught by `FactOverlayCheckRequest` construction and remapped to `$.check_fact_overlay.request`). The G2 invariant `test_store_methods_remain_thin_delegate_methods` was written to match call/instantiation patterns (`FactOverlayCheckRequest(`, `check_fact_overlay_binding(`, validator-call patterns) instead of bare class names so the docstring reference does not false-trigger.
+
+### Tests + invariants
+
+- **G2 contract tests:** 15 (`test_sdk_fact_overlay.py`) + 11 (`test_sdk_proof_frame.py`) = 26 capability-shell tests.
+- **G2 invariant tests:** 6 (`test_sdk_g2_invariants.py`) — full mirror of G1+G4 6-class structure under post-migration shells/ layout.
+- **G1+G4 retrofit invariants:** 6 each, all updated under `#P1` carve-out and passing.
+- **Q1 validation tests:** 11 (`test_sdk_validation.py`, import path retargeted to `kernel.sdk.shells._validation`).
+- **G1+G4 contract tests:** 16+19 (existing) — patch paths retargeted in Phase 0; pass without modification beyond import-path updates.
+- **Full kernel suite at G2 close-out:** 1571 OK / 1 skipped (was 1499 at G1 ship; +72 across G1+G4+G2 + Q1 extraction).
+- **ruff** clean across all touched G2 files plus G1+G4 files affected by Phase 0 migration.
+
+### Boundary outcomes
+
+- `kernel.sdk.__all__` length unchanged at 34 across G1 + G4 + G2 cycles.
+- `kernel/sdk/shells/` subpackage created with `__init__.py` + 5 shell files (`check.py`, `diagnose.py`, `why_not.py`, `fact_overlay.py`, `proof_frame.py`) + 1 shared validator (`_validation.py`).
+- README quickstart untouched; user-facing examples / READMEs / quickstarts not modified.
+- Frontier remains advanced importable per G4 §5.4; G2 invariant `test_g2_modules_do_not_import_internal_or_walker_layers` extends the forbidden-import list to `kernel.core.rules.frontier` for G2 shells too.
+- G1 + G4 published snapshot branches unchanged: `v0.1-l-g1-check-diagnose-2026-05-08` @ `d6716a0`, `v0.1-l-g4-why-not-frontier-2026-05-08` @ `acb5a6e`, plus the two combined snapshots `v0.1-public-surface-helpers-walker-l-g1-2026-05-08` @ `d6716a0` and `v0.1-public-surface-helpers-walker-l-g1-l-g4-2026-05-08` @ `acb5a6e`.
+
+### Forward triggers
+
+- **G3 (rule overlays)**: G2 already activated `kernel/sdk/shells/`; G3 shells land directly under shells/ with no new migration. The cross-cutting precedent established by §5.1 + §5.2 ("raw application protocol DTOs may cross the SDK boundary as input when frozen application-canonical AND no SDK alternative without inventing new outward surface or breaking Sibling discipline") is available for G3's rule-overlay-action input shape question.
+- **G3 / G5 validator extraction**: If `_validate_support_artifact` / `_validate_overlay` (or analogous validators in G3) need to be reused, extract to `kernel/sdk/shells/_validation.py`. Until then they stay local per Phase 2 user guidance.
+- **G5 Round events / ProofFrame diff**: per Round 8 SDK conventions audit, both still need own Step 0 shape decision; G5 inherits the precedents above.
+
+Snapshot publish is intentionally separate from this close-out commit per user request — Phase 4 close-out lands here; publish is a separate decision after the close-out commit.
