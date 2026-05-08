@@ -43,7 +43,7 @@ Extend `kernel.application` capability helpers with **5 new builder families** t
 | 1 | Q1 Check | `build_check_request(plan, binding, *, engine="native")` | `CheckRequest` |
 | 2 | Q2 Diagnose | `build_diagnose_request(plan, binding, *, engine="native")` | `DiagnoseRequest` |
 | 3 | Batch 4 ProofFrame Recheck | `build_proof_frame_recheck_request(support, *, overlay=None)` | `ProofFrameRecheckRequest` |
-| 4 | Batch 5 rule overlays (x3) | `build_rule_disable_request` / `build_rule_literal_replace_request` / `build_rule_add_condition_request` | `RuleDisableRequest` / `RuleLiteralReplaceRequest` / `RuleAddConditionRequest` |
+| 4 | Batch 5 rule overlays (x3) | `build_rule_disable_request` / `build_rule_literal_replace_request` / `build_rule_add_condition_request` (`note=None` passes through to the matching action DTO's existing `note` field) | `RuleDisableRequest` / `RuleLiteralReplaceRequest` / `RuleAddConditionRequest` |
 | 5 | Batch 6 round event | `build_round_event_payload(*, kind, request, result)` | event payload `dict[str, Any]` (already the `audit/round_events.jsonl` row shape per [41_ §1 Batch 6 row](../../references/working/post-routemap-direction-selection-input/41_application-builders-design-sketch.md); no named DTO) |
 
 Each builder accepts **application canonical types only** per Direction A — Input shape lock (Gap beta); SDK-to-application lowering bridging is **L's responsibility, not A's**.
@@ -251,7 +251,7 @@ Phased per family. Each phase = one builder + tests + audit log entry; never bat
 | 1 | Q1 Check `build_check_request` | `kernel/application/capability_helpers/check.py` | `test_capability_helpers_check.py` |
 | 2 | Q2 Diagnose `build_diagnose_request` | `kernel/application/capability_helpers/diagnose.py` | `test_capability_helpers_diagnose.py` |
 | 3 | Batch 4 ProofFrame Recheck | `kernel/application/capability_helpers/proof_frame.py` | `test_capability_helpers_proof_frame.py`; **replace** `test_application_proofframe_runtime_native.py:410-414` with package-aware boundary test per §4.1 Round 1 + Round 4 (not just remove) |
-| 4 | Batch 5 rule overlays (3 sub) | `kernel/application/capability_helpers/rule_overlays.py` | `test_capability_helpers_rule_overlays.py` |
+| 4 | Batch 5 rule overlays (3 sub) | `kernel/application/capability_helpers/rule_overlays.py` | `test_capability_helpers_rule_overlays.py`; verify `note=None` pass-through and raw SDK-origin rejection before action DTO construction |
 | 5 | Batch 6 round event payload | `kernel/application/capability_helpers/round_events.py` | `test_capability_helpers_round_events.py` |
 | 6 | Cross-cutting invariants | n/a | `test_capability_helpers_invariants.py`: grep audit + import-graph review + origin-package runtime check + `OriginPackageError` raise verification + import path stability check |
 

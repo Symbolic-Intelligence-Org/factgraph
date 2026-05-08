@@ -74,6 +74,20 @@ def _fact_overlay() -> EvaluationOverlay:
     )
 
 
+def _sdk_fact_overlay() -> EvaluationOverlay:
+    return EvaluationOverlay(
+        fact_actions=(
+            FactValueOverride(
+                asrt_id="a1",
+                pred_id="Person.age",
+                e_ref="person:alice",
+                old_fact_tuple=("person:alice", 25),
+                new_fact_tuple=("person:alice", _sdk_rule()),
+            ),
+        )
+    )
+
+
 class BuildRuleDisableRequestTests(unittest.TestCase):
     def test_builds_disable_request_with_generated_overlay(self) -> None:
         rule_spec = _rule_spec()
@@ -151,6 +165,38 @@ class BuildRuleDisableRequestTests(unittest.TestCase):
                 _rule_spec(where=[_sdk_rule()]),
                 _support(),
                 branch_index=0,
+                atom_index=1,
+            )
+
+    def test_rejects_top_level_sdk_origin_before_type_or_overlay_errors(self) -> None:
+        with self.assertRaises(OriginPackageError):
+            build_rule_disable_request(
+                _sdk_rule(),  # type: ignore[arg-type]
+                _support(),
+                branch_index=0,
+                atom_index=1,
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_disable_request(
+                _rule_spec(),
+                _support(),
+                branch_index=0,
+                atom_index=1,
+                overlay=_sdk_rule(),  # type: ignore[arg-type]
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_disable_request(
+                _rule_spec(),
+                _support(),
+                branch_index=0,
+                atom_index=1,
+                overlay=_sdk_fact_overlay(),
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_disable_request(
+                _rule_spec(),
+                _support(),
+                branch_index=_sdk_rule(),  # type: ignore[arg-type]
                 atom_index=1,
             )
         with self.assertRaises(OriginPackageError):
@@ -274,6 +320,60 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 new_literal=_sdk_rule(),
             )
 
+    def test_rejects_top_level_sdk_origin_before_type_or_overlay_errors(self) -> None:
+        with self.assertRaises(OriginPackageError):
+            build_rule_literal_replace_request(
+                _sdk_rule(),  # type: ignore[arg-type]
+                _support(),
+                branch_index=0,
+                atom_index=1,
+                literal_path=RuleLiteralPath(kind="rhs"),
+                old_literal="us",
+                new_literal="eu",
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_literal_replace_request(
+                _rule_spec(),
+                _support(),
+                branch_index=0,
+                atom_index=1,
+                literal_path=RuleLiteralPath(kind="rhs"),
+                old_literal="us",
+                new_literal="eu",
+                overlay=_sdk_rule(),  # type: ignore[arg-type]
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_literal_replace_request(
+                _rule_spec(),
+                _support(),
+                branch_index=0,
+                atom_index=1,
+                literal_path=RuleLiteralPath(kind="rhs"),
+                old_literal="us",
+                new_literal="eu",
+                overlay=_sdk_fact_overlay(),
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_literal_replace_request(
+                _rule_spec(),
+                _support(),
+                branch_index=0,
+                atom_index=1,
+                literal_path=_sdk_rule(),  # type: ignore[arg-type]
+                old_literal="us",
+                new_literal="eu",
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_literal_replace_request(
+                _rule_spec(),
+                _support(),
+                branch_index=0,
+                atom_index=1,
+                literal_path=RuleLiteralPath(kind="rhs"),
+                old_literal=_sdk_rule(),
+                new_literal="eu",
+            )
+
 
 class BuildRuleAddConditionRequestTests(unittest.TestCase):
     def test_builds_add_condition_request_with_generated_overlay(self) -> None:
@@ -358,6 +458,45 @@ class BuildRuleAddConditionRequestTests(unittest.TestCase):
                 _support(),
                 branch_index=0,
                 added_atom=RuleAddedAtom(("lt", "$age", _sdk_rule())),
+            )
+
+    def test_rejects_top_level_sdk_origin_before_type_or_overlay_errors(self) -> None:
+        with self.assertRaises(OriginPackageError):
+            build_rule_add_condition_request(
+                _sdk_rule(),  # type: ignore[arg-type]
+                _support(),
+                branch_index=0,
+                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_add_condition_request(
+                _rule_spec(),
+                _support(),
+                branch_index=0,
+                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                overlay=_sdk_rule(),  # type: ignore[arg-type]
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_add_condition_request(
+                _rule_spec(),
+                _support(),
+                branch_index=0,
+                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                overlay=_sdk_fact_overlay(),
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_add_condition_request(
+                _rule_spec(),
+                _support(),
+                branch_index=_sdk_rule(),  # type: ignore[arg-type]
+                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+            )
+        with self.assertRaises(OriginPackageError):
+            build_rule_add_condition_request(
+                _rule_spec(),
+                _support(),
+                branch_index=0,
+                added_atom=_sdk_rule(),  # type: ignore[arg-type]
             )
 
 

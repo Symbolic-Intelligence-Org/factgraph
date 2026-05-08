@@ -35,7 +35,10 @@ def build_rule_disable_request(
 ) -> RuleDisableRequest:
     """Build a RuleDisableRequest with exactly one RuleDisableAction."""
 
-    _validate_rule_and_support(rule_spec, support)
+    _validate_rule_overlay_inputs(rule_spec, support, overlay)
+    _reject_sdk_origin(branch_index, path="branch_index")
+    _reject_sdk_origin(atom_index, path="atom_index")
+    _reject_sdk_origin(note, path="note")
     action = RuleDisableAction(
         rule_id=rule_spec.rule_id,
         version=rule_spec.version,
@@ -44,7 +47,6 @@ def build_rule_disable_request(
         note=note,
     )
     overlay_value = _request_overlay(action, overlay=overlay)
-    _reject_common_inputs(rule_spec, support, overlay_value)
     return RuleDisableRequest(
         rule_spec=rule_spec,
         support_artifact=support,
@@ -66,7 +68,13 @@ def build_rule_literal_replace_request(
 ) -> RuleLiteralReplaceRequest:
     """Build a RuleLiteralReplaceRequest with exactly one RuleLiteralReplaceAction."""
 
-    _validate_rule_and_support(rule_spec, support)
+    _validate_rule_overlay_inputs(rule_spec, support, overlay)
+    _reject_sdk_origin(branch_index, path="branch_index")
+    _reject_sdk_origin(atom_index, path="atom_index")
+    _reject_sdk_origin(literal_path, path="literal_path")
+    _reject_sdk_origin(old_literal, path="old_literal")
+    _reject_sdk_origin(new_literal, path="new_literal")
+    _reject_sdk_origin(note, path="note")
     action = RuleLiteralReplaceAction(
         rule_id=rule_spec.rule_id,
         version=rule_spec.version,
@@ -78,7 +86,6 @@ def build_rule_literal_replace_request(
         note=note,
     )
     overlay_value = _request_overlay(action, overlay=overlay)
-    _reject_common_inputs(rule_spec, support, overlay_value)
     return RuleLiteralReplaceRequest(
         rule_spec=rule_spec,
         support_artifact=support,
@@ -97,7 +104,10 @@ def build_rule_add_condition_request(
 ) -> RuleAddConditionRequest:
     """Build a RuleAddConditionRequest with exactly one RuleAddConditionAction."""
 
-    _validate_rule_and_support(rule_spec, support)
+    _validate_rule_overlay_inputs(rule_spec, support, overlay)
+    _reject_sdk_origin(branch_index, path="branch_index")
+    _reject_sdk_origin(added_atom, path="added_atom")
+    _reject_sdk_origin(note, path="note")
     action = RuleAddConditionAction(
         rule_id=rule_spec.rule_id,
         version=rule_spec.version,
@@ -106,7 +116,6 @@ def build_rule_add_condition_request(
         note=note,
     )
     overlay_value = _request_overlay(action, overlay=overlay)
-    _reject_common_inputs(rule_spec, support, overlay_value)
     return RuleAddConditionRequest(
         rule_spec=rule_spec,
         support_artifact=support,
@@ -119,6 +128,23 @@ def _validate_rule_and_support(rule_spec: RuleSpec, support: SupportArtifact) ->
         raise CapabilityHelperError("rule_spec must be RuleSpec")
     if not isinstance(support, SupportArtifact):
         raise CapabilityHelperError("support must be SupportArtifact")
+
+
+def _validate_rule_overlay_inputs(
+    rule_spec: RuleSpec,
+    support: SupportArtifact,
+    overlay: EvaluationOverlay | None,
+) -> None:
+    """Scan raw inputs before protocol DTO construction, then type-check."""
+
+    _reject_sdk_origin(rule_spec, path="rule_spec")
+    _reject_sdk_origin(support, path="support")
+    if overlay is not None:
+        _reject_sdk_origin(overlay, path="overlay")
+
+    _validate_rule_and_support(rule_spec, support)
+    if overlay is not None and not isinstance(overlay, EvaluationOverlay):
+        raise CapabilityHelperError("overlay must be EvaluationOverlay or None")
 
 
 def _request_overlay(
@@ -135,16 +161,6 @@ def _request_overlay(
             "non-empty overlay not supported; use overlay=None or EvaluationOverlay()"
         )
     return EvaluationOverlay(rule_actions=(action,))
-
-
-def _reject_common_inputs(
-    rule_spec: RuleSpec,
-    support: SupportArtifact,
-    overlay: EvaluationOverlay,
-) -> None:
-    _reject_sdk_origin(rule_spec, path="rule_spec")
-    _reject_sdk_origin(support, path="support")
-    _reject_sdk_origin(overlay, path="overlay")
 
 
 __all__ = [
