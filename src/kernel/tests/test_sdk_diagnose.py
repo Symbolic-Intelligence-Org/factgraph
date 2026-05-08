@@ -1,32 +1,285 @@
-"""Phase 0 skeleton test for SDKStore.diagnose.
-
-Validates the Phase 0 stub raises ``NotImplementedError`` when invoked
-through the ``SDKStore.diagnose`` instance method delegation. Full
-contract tests (passed / failed.no_candidate / failed.atom_localized /
-unsupported / invalid_request paths, error remap, type-check,
-single-head, Q1 Sibling assertion, engine + registry coverage) land in
-Phase 2 per blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g1-check-diagnose.md`` §8.
-"""
+"""SDKStore.diagnose contract tests."""
 
 from __future__ import annotations
 
+import inspect
 import unittest
+from unittest.mock import patch
 
-from kernel.sdk import Entity, Identity, SDKStore
+from kernel.application.capability_helpers import CapabilityHelperError, OriginPackageError
+from kernel.application.protocol import DiagnoseResult
+from kernel.core.rules.rule_ir import RuleRegistry
+from kernel.sdk import Derivation, Entity, Field, Identity, Pred, Rule, SDKStore, SDKStoreError, vars
+from kernel.sdk.store import _compiled_derivation_plan_to_application
 
 
-class _DummyEntity(Entity):
+class Person(Entity):
     name: str = Identity(primary_key=True)
+    age: int = Field(cardinality="single")
+    region: str = Field(cardinality="single")
 
 
-class TestSDKDiagnosePhase0(unittest.TestCase):
-    """Phase 0 — verifies stub delegation; no real Diagnose behavior tested."""
+def _build_sdk() -> SDKStore:
+    return SDKStore([Person])
 
-    def test_sdk_diagnose_phase0_stub_raises_not_implemented(self) -> None:
-        sdk = SDKStore.from_schema_classes(classes=[_DummyEntity])
-        with self.assertRaises(NotImplementedError):
-            sdk.diagnose(None, {})
+
+def _seed_person(sdk: SDKStore, *, name: str, age: int, region: str) -> str:
+    ref = sdk.ref(Person, name=name)
+    sdk.set(Person.age, ref, age)
+    sdk.set(Person.region, ref, region)
+    return ref
+
+
+def _age_derivation() -> Derivation:
+    with vars("p", "age") as (p, age):
+        return Derivation(
+            id="sdk.diagnose.age",
+            version="v1",
+            where=[Person(p), p.age == age],
+            head=Person.age(value=age),
+        )
+
+
+def _region_filtered_age_derivation() -> Derivation:
+    with vars("p", "age", "region") as (p, age, region):
+        return Derivation(
+            id="sdk.diagnose.age_by_region",
+            version="v1",
+            where=[Person(p), p.age == age, p.region == region],
+            head=Person.age(value=age),
+        )
+
+
+def _multi_head_derivation() -> Derivation:
+    with vars("p", "age", "region") as (p, age, region):
+        return Derivation(
+            id="sdk.diagnose.multi_head",
+            version="v1",
+            where=[Person(p), p.age == age, p.region == region],
+            head=[Person.age(value=age), Person.region(value=region)],
+        )
+
+
+class SDKDiagnoseContractTests(unittest.TestCase):
+    def test_complete_binding_passes_and_returns_raw_diagnose_result(self) -> None:
+        sdk = _build_sdk()
+        person_ref = _seed_person(sdk, name="alice", age=30, region="us")
+
+        result = sdk.diagnose(_age_derivation(), {"$p": person_ref, "$age": 30})
+
+        self.assertIsInstance(result, DiagnoseResult)
+        self.assertEqual(result.status, "passed")
+        self.assertGreaterEqual(result.matched_count or 0, 1)
+        self.assertIsNotNone(result.matched_binding)
+        self.assertNotIsInstance(result, tuple)
+
+    def test_complete_binding_fails_with_atom_localized(self) -> None:
+        sdk = _build_sdk()
+        person_ref = _seed_person(sdk, name="alice", age=30, region="us")
+
+        result = sdk.diagnose(_age_derivation(), {"$p": person_ref, "$age": 99})
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_kind, "atom_localized")
+        self.assertIsNotNone(result.diagnostic_payload)
+
+    def test_no_candidate_propagates_through_sdk_shell(self) -> None:
+        """SDK shell must propagate ``failure_kind="no_candidate"`` verbatim
+        when the application runtime returns it. Triggering ``no_candidate``
+        is a runtime-layer concern (non-native ``no-match`` bucket); SDK shell
+        responsibility is faithful passthrough of the result DTO.
+        """
+        sdk = _build_sdk()
+        expected = DiagnoseResult(
+            status="failed",
+            requested_binding=(("$age", 30),),
+            matched_count=0,
+            matched_binding=None,
+            failure_kind="no_candidate",
+            diagnostic_payload=None,
+        )
+
+        with patch(
+            "kernel.sdk.diagnose.diagnose_derivation_binding",
+            return_value=expected,
+        ):
+            result = sdk.diagnose(_age_derivation(), {"$age": 30})
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_kind, "no_candidate")
+        self.assertIsNone(result.diagnostic_payload)
+        self.assertIs(result, expected)
+
+    def test_unknown_variable_binding_returns_invalid_request(self) -> None:
+        sdk = _build_sdk()
+        _seed_person(sdk, name="alice", age=30, region="us")
+
+        result = sdk.diagnose(_age_derivation(), {"$unknown": "x"})
+
+        self.assertEqual(result.status, "invalid_request")
+        self.assertGreater(len(result.errors), 0)
+
+    def test_non_native_body_only_binding_returns_unsupported(self) -> None:
+        sdk = _build_sdk()
+        _seed_person(sdk, name="alice", age=30, region="us")
+
+        result = sdk.diagnose(
+            _region_filtered_age_derivation(),
+            {"$region": "us"},
+            engine="problog",
+        )
+
+        self.assertEqual(result.status, "unsupported")
+        self.assertGreater(len(result.errors), 0)
+
+    def test_rule_is_rejected_at_sdk_surface(self) -> None:
+        with vars("p") as (p,):
+            rule = Rule(
+                id="sdk.diagnose.not_derivation",
+                version="v1",
+                select=[Pred("Person:exists", p)],
+                where=[Person(p)],
+            )
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            _build_sdk().diagnose(rule, {})  # type: ignore[arg-type]
+
+        self.assertEqual(ctx.exception.path, "$.diagnose.derivation")
+        self.assertIn("Derivation", str(ctx.exception))
+
+    def test_compiled_plan_is_rejected_at_sdk_surface(self) -> None:
+        sdk = _build_sdk()
+        compiled = sdk._compile_derivation_input(_age_derivation())
+        app_plan = _compiled_derivation_plan_to_application(
+            compiled[0],
+            mode="native",
+            explicit_engine_ext=None,
+            engine_options=None,
+        )
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.diagnose(app_plan, {})  # type: ignore[arg-type]
+
+        self.assertEqual(ctx.exception.path, "$.diagnose.derivation")
+
+    def test_binding_items_are_rejected_at_sdk_surface(self) -> None:
+        sdk = _build_sdk()
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.diagnose(_age_derivation(), (("$age", 30),))  # type: ignore[arg-type]
+
+        self.assertEqual(ctx.exception.path, "$.diagnose.binding")
+
+    def test_binding_keys_must_be_dollar_prefixed_strings(self) -> None:
+        sdk = _build_sdk()
+
+        for binding in ({"age": 30}, {"": 30}, {1: 30}):
+            with self.subTest(binding=binding):
+                with self.assertRaises(SDKStoreError) as ctx:
+                    sdk.diagnose(_age_derivation(), binding)  # type: ignore[arg-type]
+                self.assertEqual(ctx.exception.path, "$.diagnose.binding")
+
+    def test_multi_head_derivation_is_rejected_before_request_construction(self) -> None:
+        sdk = _build_sdk()
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.diagnose(_multi_head_derivation(), {})
+
+        self.assertEqual(ctx.exception.path, "$.diagnose.derivation")
+        self.assertIn("exactly one plan", str(ctx.exception))
+
+    def test_capability_helper_error_remaps_to_sdk_store_error_with_cause(self) -> None:
+        sdk = _build_sdk()
+
+        with patch("kernel.sdk.diagnose.build_diagnose_request") as mock_builder:
+            mock_builder.side_effect = CapabilityHelperError("bad helper input")
+            with self.assertRaises(SDKStoreError) as ctx:
+                sdk.diagnose(_age_derivation(), {"$age": 30})
+
+        self.assertEqual(ctx.exception.path, "$.diagnose")
+        self.assertIsInstance(ctx.exception.__cause__, CapabilityHelperError)
+
+    def test_origin_package_error_remaps_to_sdk_store_error_with_cause(self) -> None:
+        sdk = _build_sdk()
+
+        with patch("kernel.sdk.diagnose.build_diagnose_request") as mock_builder:
+            mock_builder.side_effect = OriginPackageError("sdk object leaked")
+            with self.assertRaises(SDKStoreError) as ctx:
+                sdk.diagnose(_age_derivation(), {"$age": 30})
+
+        self.assertEqual(ctx.exception.path, "$.diagnose")
+        self.assertIsInstance(ctx.exception.__cause__, OriginPackageError)
+
+    def test_engine_is_passed_to_builder(self) -> None:
+        sdk = _build_sdk()
+
+        with patch("kernel.sdk.diagnose.build_diagnose_request") as mock_builder, patch(
+            "kernel.sdk.diagnose.diagnose_derivation_binding"
+        ) as mock_runtime:
+            mock_builder.side_effect = RuntimeError("stop after observing engine")
+            with self.assertRaises(RuntimeError):
+                sdk.diagnose(_age_derivation(), {"$age": 30}, engine="souffle")
+
+        self.assertEqual(mock_builder.call_args.kwargs["engine"], "souffle")
+        mock_runtime.assert_not_called()
+
+    def test_registry_is_resolved_and_passed_to_runtime(self) -> None:
+        sdk = _build_sdk()
+        derivation = _age_derivation()
+        registry = RuleRegistry()
+        expected = object()
+
+        with patch.object(sdk, "_resolve_runtime_registry", return_value=expected) as mock_resolve, patch(
+            "kernel.sdk.diagnose.diagnose_derivation_binding"
+        ) as mock_runtime:
+            mock_runtime.return_value = DiagnoseResult(
+                status="failed",
+                requested_binding=(("$age", 30),),
+                matched_count=0,
+                matched_binding=None,
+                failure_kind="no_candidate",
+                diagnostic_payload=None,
+            )
+            result = sdk.diagnose(derivation, {"$age": 30}, registry=registry)
+
+        self.assertEqual(result.status, "failed")
+        mock_resolve.assert_called_once_with(derivation, explicit_registry=registry)
+        self.assertIs(mock_runtime.call_args.kwargs["registry"], expected)
+
+    def test_diagnose_result_not_exported_from_kernel_sdk_all(self) -> None:
+        import kernel.sdk as sdk_pkg
+
+        self.assertNotIn("DiagnoseResult", sdk_pkg.__all__)
+        self.assertFalse(hasattr(sdk_pkg, "DiagnoseResult"))
+
+    def test_q1_sibling_diagnose_does_not_call_sdk_check_at_runtime(self) -> None:
+        """§5.1 + Q1 Sibling: sdk_diagnose MUST NOT invoke sdk_check internally."""
+        sdk = _build_sdk()
+        person_ref = _seed_person(sdk, name="alice", age=30, region="us")
+
+        with patch("kernel.sdk.check.sdk_check") as mock_check, patch(
+            "kernel.sdk.diagnose.diagnose_derivation_binding"
+        ) as mock_runtime:
+            mock_runtime.return_value = DiagnoseResult(
+                status="failed",
+                requested_binding=(("$p", person_ref), ("$age", 99)),
+                matched_count=0,
+                matched_binding=None,
+                failure_kind="no_candidate",
+                diagnostic_payload=None,
+            )
+            sdk.diagnose(_age_derivation(), {"$p": person_ref, "$age": 99})
+
+        mock_check.assert_not_called()
+
+    def test_q1_sibling_diagnose_module_does_not_import_sdk_check(self) -> None:
+        """§5.1 + Q1 Sibling static check: kernel.sdk.diagnose source has no sdk_check reference."""
+        import kernel.sdk.diagnose as diag_module
+
+        source = inspect.getsource(diag_module)
+        self.assertNotIn("sdk_check", source)
+        self.assertNotIn("from .check", source)
+        self.assertNotIn("from kernel.sdk.check", source)
 
 
 if __name__ == "__main__":

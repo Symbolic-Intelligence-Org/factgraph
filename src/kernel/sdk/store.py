@@ -50,7 +50,7 @@ from .query_runtime import execute_query_plan
 from .schema import Entity, Field
 
 if TYPE_CHECKING:
-    from kernel.application.protocol import CheckResult
+    from kernel.application.protocol import CheckResult, DiagnoseResult
 
 
 class _SDKViewsManager:
@@ -292,10 +292,7 @@ class SDKStore:
         *,
         engine: str = "native",
         registry: RuleRegistry | None = None,
-    ) -> Any:
-        # Phase 0 stub delegation — see kernel/sdk/diagnose.py and
-        # docs/blueprints/active/2026-05-08_l-direction-g1-check-diagnose.md §8.
-        # Phase 2 tightens return type to DiagnoseResult.
+    ) -> "DiagnoseResult":
         from .diagnose import sdk_diagnose
 
         return sdk_diagnose(self, derivation, binding, engine=engine, registry=registry)
