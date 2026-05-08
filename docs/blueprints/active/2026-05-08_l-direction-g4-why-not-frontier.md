@@ -239,10 +239,47 @@ Known candidates:
 - `CapabilityHelperError` from `build_why_not_candidate_universe(...)`.
 - `WhyNotRuntimeError` from `check_why_not_universe(...)`.
 - `RuleCompileError` from registry resolution.
+- `ProtocolShapeError` from `WhyNotUniverseRequest(...)` construction.
 - `ValueError` from derivation lowering / engine extension conversion.
-- Frontier `WhereValidationError` / `ValueError` if Frontier enters SDK.
+- Frontier `WhereValidationError` / `ValueError` if Frontier enters SDK (inactive per §5.4).
 
 **Conservative default:** follow G1: every non-SDK exception crossing SDK shell boundary is remapped to `SDKStoreError(...) from exc` with a capability-specific path.
+
+**Decision (2026-05-08):** lock the G1-style boundary remap for
+`SDKStore.why_not(...)`. Every lower-layer exception that can cross the SDK
+shell boundary becomes `SDKStoreError(...) from exc`; no new SDK error subclass
+is introduced.
+
+| Source | Remap |
+|---|---|
+| `validate_derivation(...)` | Already raises `SDKStoreError(path="$.why_not.derivation")`. |
+| `_compiled_derivation_plan_to_application(...)` `ValueError` | `SDKStoreError(path="$.why_not.derivation") from exc`. |
+| `_resolve_runtime_registry(...)` `RuleCompileError` | `SDKStoreError(path="$.why_not.dependencies") from exc`. |
+| `build_why_not_candidate_universe(...)` `CapabilityHelperError` | `SDKStoreError(path="$.why_not.candidates") from exc`. |
+| `WhyNotUniverseRequest(...)` `ProtocolShapeError` | `SDKStoreError(path="$.why_not.request") from exc`. |
+| `check_why_not_universe(...)` `WhyNotRuntimeError` | `SDKStoreError(path="$.why_not") from exc`. |
+
+Falsifier outcomes:
+
+1. `WhyNotRuntimeError` must be wrapped. It is an application runtime
+   `ValueError` subclass with multiple runtime-only raise sites; allowing it to
+   propagate would violate the G1 §5.3 SDK boundary rule.
+2. `ProtocolShapeError` must be wrapped. `WhyNotUniverseRequest.__post_init__`
+   validates `plan`, single-head shape, complete candidate universe, and
+   `engine`; because G4 delegates request-shape validation to that DTO, raw
+   `ProtocolShapeError` must not leak across `kernel.sdk`.
+3. Derivation lowering and dependency registry failures follow the already
+   landed G1 B.2 / B.1 remap pattern.
+4. Candidate universe shape errors belong to A's public helper; they remap at
+   `$.why_not.candidates`, preserving the `CapabilityHelperError` cause chain.
+5. Frontier error mapping is inactive. G4 ships no Frontier SDK method per
+   §5.4, so Frontier `WhereValidationError` / substrate `ValueError` handling
+   is out of scope.
+
+Forward implication: G4 implementation tests must cover all five remap paths
+above plus the direct `validate_derivation(...)` path, and must assert
+`__cause__` chaining so application-layer errors stay inspectable without
+becoming SDK API errors.
 
 ### 5.7 Test layout and invariants
 
@@ -287,7 +324,7 @@ Draft-stage acceptance:
 - [x] Round 8 G4 clean verdict and `universe -> why_not` correction captured.
 - [x] G1 infrastructure and Q1 validation extraction captured as available prior art.
 - [x] Why-not / Frontier boundary split documented.
-- [ ] §5.1-§5.7 falsifier passes complete (`§5.1`-`§5.4` locked; `§5.5`-`§5.7` pending).
+- [ ] §5.1-§5.7 falsifier passes complete (`§5.1`-`§5.6` locked; `§5.7` pending).
 - [ ] Status moves to `scoped` only after all Step 0 questions are resolved.
 
 Scoped-stage acceptance will be filled once §5 is locked.
