@@ -10,7 +10,7 @@
 
 A+B Tier 2 application-layer surface (`kernel.application.capability_helpers` + `kernel.application.walker`) shipped 2026-05-08 on combined branch `v0.1-public-surface-helpers-walker-2026-05-08` @ `6162f1e`. SDK consumers (Tier 1) still cannot run Q1 Check or Q2 Diagnose without dropping to advanced importable layer (importing from `kernel.application.*`).
 
-Round 8 SDK conventions audit (4 parallel lanes, 2026-05-07) verified G1 (Check + Diagnose) is the cleanest of 5 candidate L groups: naming aligns with verb-first SDK convention; SDK Rule lowering reuses existing `to_authoring_payload()` pipeline; return shape can match the `ValidationReport` typed-DTO precedent. G1 is therefore the right starting point for L's SDK-shell template — the validation pattern (lowering / dispatch / return wrap / error remap / `__all__` boundary) established here is reused by G4 → G2 → G3 → G5 in subsequent blueprints.
+Round 8 SDK conventions audit (4 parallel lanes, 2026-05-07) verified G1 (Check + Diagnose) is the cleanest of 5 candidate L groups: naming aligns with verb-first SDK convention; SDK `Derivation` lowering reuses the existing `to_authoring_payload()` + `compile_authoring_derivation_v1()` + `_compiled_derivation_plan_to_application(...)` pipeline; return shape can match the `ValidationReport` typed-DTO precedent. G1 is therefore the right starting point for L's SDK-shell template — the validation pattern (lowering / dispatch / return wrap / error remap / `__all__` boundary) established here is reused by G4 → G2 → G3 → G5 in subsequent blueprints.
 
 This blueprint covers G1 only. Each remaining group has own per-family Step 0 + own blueprint per [Batch 8 §5.5.5 reactivation rule](../archive/2026-05-06_public-surface.md).
 
@@ -18,7 +18,7 @@ This blueprint covers G1 only. Each remaining group has own per-family Step 0 + 
 
 Tier 1 SDK shell that lets a `kernel.sdk` consumer invoke Q1 Check and Q2 Diagnose without importing `kernel.application` or `kernel.application.capability_helpers`. Specifically:
 
-- Accept SDK-canonical inputs (SDK `Rule` / DSL plan, SDK store, SDK-shaped binding) and lower internally to `CompiledDerivationPlan` via existing `to_authoring_payload()` + `compile_authoring_rule_v1()` pipeline.
+- Accept SDK-canonical inputs (SDK `Derivation`, SDK store, SDK-shaped binding) and lower internally to `CompiledDerivationPlan` via existing `to_authoring_payload()` + `compile_authoring_derivation_v1()` + `_compiled_derivation_plan_to_application(...)` pipeline.
 - Consume A's `build_check_request` / `build_diagnose_request` after lowering — do not duplicate normalization or origin-package validation.
 - Resolve return shape, error mapping, exposure pattern, module/test layout, and scenario-vs-per-method API at G1 Step 0 falsifier pass — none pre-locked here.
 - Establish the SDK-shell template (lowering pipeline / dispatch contract / boundary discipline) reusable by G2–G5 blueprints.
@@ -29,7 +29,7 @@ Tier 1 SDK shell that lets a `kernel.sdk` consumer invoke Q1 Check and Q2 Diagno
 - **No return-shape pre-lock.** B-typed-wrap is the leading candidate (Round 8 `ValidationReport` precedent), but `#6` + `#P0` Tier 5 require formal Step 0 falsifier (§5.2).
 - **No README quickstart change.** Per `#6` "What this principle set forbids" — adding new helpers / walker classes to README quickstart is forbidden. Quickstart change requires its own user signal beyond G1.
 - **No `kernel.sdk.__all__` expansion without §5.4 Step 0 lock.** Per Batch 8 §5.5.5: outward-shape lock-in is part of G1 own Step 0; `__all__` insertion needs explicit decision.
-- **No SDK Rule lowering reinvention.** G1 reuses the existing `to_authoring_payload()` + `compile_authoring_rule_v1()` lowering at [src/kernel/sdk/store.py:821-848 `_compile_rule_input(...)`](../../../src/kernel/sdk/store.py). New lowering paths are out of scope.
+- **No SDK Derivation lowering reinvention.** G1 reuses the existing `to_authoring_payload()` + `compile_authoring_derivation_v1()` + `_compiled_derivation_plan_to_application(...)` lowering at [src/kernel/sdk/store.py:899-940 `_compile_derivation_input(...)`](../../../src/kernel/sdk/store.py) plus [src/kernel/sdk/store.py:1490+ `_compiled_derivation_plan_to_application(...)`](../../../src/kernel/sdk/store.py). NOTE: `Rule` lowering (`_compile_rule_input` → `RuleSpec` at store.py:619+) is the `sdk.run(...)` surface, NOT G1. New lowering paths are out of scope.
 - **No protocol DTO field changes.** Per `#1` + `#6` "Refactoring existing protocol DTOs to fit walker shape better" forbidden. G1 wraps existing DTOs; never reshapes them.
 - **No service / agent / domain integration.** G1 is `kernel.sdk` self-contained. Service routes deferred per Batch 8 §5.5.5 row 3.
 - **No `factpy` rebrand or umbrella alias.** Import root continues `kernel.sdk` (Q3 lock, §4.1). Rebrand is publish-day or product-naming blueprint, not L/G1.
@@ -79,7 +79,7 @@ Per [60_lessons-learned.md](../../references/working/rule-replay-line-redesign-i
 
 | Resource | Purpose |
 |---|---|
-| [src/kernel/sdk/store.py:821-848 `_compile_rule_input(...)`](../../../src/kernel/sdk/store.py) | Existing SDK Rule → `CompiledDerivationPlan` lowering pipeline; G1 reuses, does not invent |
+| [src/kernel/sdk/store.py:899-940 `_compile_derivation_input(...)`](../../../src/kernel/sdk/store.py) + [src/kernel/sdk/store.py:1490+ `_compiled_derivation_plan_to_application(...)`](../../../src/kernel/sdk/store.py) | Existing SDK `Derivation` → `CompiledDerivationPlan` lowering pipeline; G1 reuses, does not invent. **NOTE:** `_compile_rule_input` (store.py:619+) is the `Rule → RuleSpec` path used by `sdk.run(...)`, NOT G1. |
 | [src/kernel/application/capability_helpers/check.py](../../../src/kernel/application/capability_helpers/check.py) | A's `build_check_request` |
 | [src/kernel/application/capability_helpers/diagnose.py](../../../src/kernel/application/capability_helpers/diagnose.py) | A's `build_diagnose_request` |
 | [src/kernel/application/walker/views.py](../../../src/kernel/application/walker/views.py) | B's walker views; conditional dependency per §5.2 |
@@ -364,13 +364,82 @@ A `sdk.explain(rule, binding, store) -> SDKExplainResult` (with `.passed`, `.evi
 
 **Question:** What SDK-side input types are accepted at G1's surface?
 
-- Plan: SDK `Rule` instance only? `Rule | CompiledDerivationPlan` accepted? Other?
+- Plan: SDK `Derivation` instance only? `Derivation | CompiledDerivationPlan` accepted? Other? (NOT SDK `Rule` — `Rule` lowers to `RuleSpec` for `sdk.run(...)`, wrong semantic family for Check/Diagnose.)
 - Binding: `dict[str, Any]` only? Also accept SDK DSL `Var` references?
 - Store: SDK `SDKStore` only, or also accept lower-level `Store` for advanced usage?
 
-**Constraint:** SDK boundary should accept SDK-canonical types. `CompiledDerivationPlan` is technically `kernel.application` — should G1 accept it as a power-user escape, or strictly SDK Rule?
+**Constraint:** SDK boundary should accept SDK-canonical types. `CompiledDerivationPlan` is technically `kernel.application` — should G1 accept it as a power-user escape, or strictly SDK `Derivation`?
 
 **Default if Step 0 inconclusive:** SDK-canonical inputs only at G1 surface; advanced importable users keep using A's `build_check_request` directly.
+
+**Decision (2026-05-08, falsifier pass complete):**
+
+- **Plan input: SDK `Derivation` instance only** (NOT SDK `Rule`).
+  - `Rule` is the `sdk.run(...)` / query-like surface that lowers to `RuleSpec`.
+  - `Check` / `Diagnose` operate over `CompiledDerivationPlan`, which lowers from `Derivation`, not `Rule`.
+  - This lock surfaces and corrects an architectural drift in earlier blueprint sections that mistakenly said "SDK `Rule`" — see "Blueprint corrections" sub-section below.
+- **Binding input: `Mapping[str, Any]` only** with `$`-prefixed variable-name string keys.
+  - SDK does NOT accept `BindingItems` (application/core canonical type).
+  - SDK does NOT accept `LogicVar` keys in binding (deferred); user passes plain `"$p"` strings.
+  - A's helper accepts `Mapping | BindingItems` internally; SDK exposes the narrower `Mapping` form.
+- **Store: `SDKStore` only** (already fixed by §5.4 instance-method lock; receiver is `self`).
+- **`engine` keyword:** same Literal set delegated through A and protocol DTOs (`"native"` default; `"souffle"` / `"problog"` / `"pyreason"` as alternatives).
+- **`registry` keyword:** optional `RuleRegistry | None`, matching `sdk.evaluate(...)` precedent.
+
+**Final method signatures:**
+
+```python
+SDKStore.check(derivation, binding, *, engine="native", registry=None) -> CheckResult
+SDKStore.diagnose(derivation, binding, *, engine="native", registry=None) -> DiagnoseResult
+```
+
+**Rejected for G1 v1:**
+
+- SDK `Rule` object — wrong semantic family; `Rule` is `sdk.run(...)` path, lowers to `RuleSpec`.
+- `CompiledDerivationPlan` — application protocol type; advanced users call A's `build_check_request` directly.
+- raw derivation dict / compiled derivation dict — `sdk.evaluate(...)` supports them; G1 does not expand new outward compat surface.
+- `BindingItems` — application/core canonical type, not SDK surface.
+- SDK `LogicVar` keys in binding — deferred; users pass `"$p"` strings.
+
+**Falsifier evidence (read-only audit):**
+
+1. **Check / Diagnose are derivation-plan shaped, not rule-spec shaped** — [derivation_check.py:84-94](../../../src/kernel/application/protocol/derivation_check.py): `CheckRequest.plan: CompiledDerivationPlan`, `__post_init__` raises `ProtocolShapeError("plan must be CompiledDerivationPlan")` and "plan must contain exactly one head for CheckRequest". [derivation_diagnose.py:107-127](../../../src/kernel/application/protocol/derivation_diagnose.py): `DiagnoseRequest.plan: CompiledDerivationPlan`, same single-head requirement. Protocol layer authoritatively says these capabilities consume derivation plans, not rule specs.
+2. **SDK `Derivation.to_authoring_payload()` produces derivation-shaped payload** — [rule.py:129-152](../../../src/kernel/sdk/dsl/rule.py): payload contains `derivation_id`, `version`, `where`, `head`, `target`, `head_vars`, `mode`, `status`, `description`, `tags`. This payload is what `compile_authoring_derivation_v1(...)` consumes to produce a compiled derivation dict.
+3. **`sdk.evaluate(...)` already implements the SDK `Derivation` → `CompiledDerivationPlan` lowering chain** — [store.py:692-717](../../../src/kernel/sdk/store.py): when called with `Derivation` (object with `to_authoring_payload`), `evaluate` calls `self._compile_derivation_input(derivation)` (line 709) returning a list of compiled dicts; each is then converted via [`_compiled_derivation_plan_to_application(...)`](../../../src/kernel/sdk/store.py) (line 1490+). G1 reuses this exact chain — does not invent new lowering.
+4. **SDK `Rule` lowers to `RuleSpec`, NOT `CompiledDerivationPlan`** — [store.py:619-643](../../../src/kernel/sdk/store.py): `_run_rule` calls `self._compile_rule_input(rule)` (line 632) and constructs a `RuleSpec(rule_id, version, select_vars, where, expose)` (line 633-639). This is a DIFFERENT lowering path serving `sdk.run(...)`, not Check/Diagnose. Confirms `Rule` is the wrong input type for G1.
+5. **A's `build_check_request` accepts `Mapping[str, Any] | BindingItems` for binding normalization** — [check.py:19-39](../../../src/kernel/application/capability_helpers/check.py): A internally normalizes binding via `_normalize_helper_binding`. SDK can expose only the narrower `Mapping[str, Any]` form because A handles normalization downstream. Exposing `BindingItems` at SDK boundary would leak application/core type into product surface.
+
+**Why SDK `Derivation` (not `Rule`):**
+
+| Option | Outcome |
+|---|---|
+| **SDK `Derivation`** (chosen) | Aligns with protocol's plan-shaped requirement (evidence 1); reuses existing `_compile_derivation_input` lowering chain (evidence 3); single semantic family — `Derivation` IS the derivation-style query of "is this binding supported by the ledger". |
+| **SDK `Rule`** (rejected) | Lowers to `RuleSpec`, not `CompiledDerivationPlan` (evidence 4); would force inventing a `Rule → CompiledDerivationPlan` path that doesn't exist; mixes "execute rule" semantics (sdk.run) with "verify binding" semantics (sdk.check) — `#3` heterogeneity violation. |
+| **Both `Rule \| Derivation`** (rejected) | Two semantic families merged, blurs SDK ergonomics; `#3` heterogeneity violation; no source-grounded user need for accepting `Rule` at G1 surface. |
+| **`CompiledDerivationPlan`** (rejected for v1) | Power-user escape would expose application protocol type at SDK boundary; `#5` layer-isolation concern (mild) and `#6` outward-commitment concern (deferring `CompiledDerivationPlan` to advanced-importable users keeps SDK surface narrow). Advanced users call A's `build_check_request` directly. |
+
+**Falsifier outcomes (against §5.7 sub-questions):**
+
+| Sub-question | Outcome |
+|---|---|
+| Plan input: `Rule` only? `Rule \| CompiledDerivationPlan`? Other? | **Resolved: SDK `Derivation` only.** `Rule` is wrong semantic family; `CompiledDerivationPlan` deferred to advanced-importable users. |
+| Binding: `dict[str, Any]` only? Also accept `LogicVar`? | **Resolved: `Mapping[str, Any]` with `$`-prefixed string keys only.** `LogicVar` deferred. |
+| Store: `SDKStore` only? Also accept lower-level `Store`? | **Moot: §5.4 instance-method lock made store be `self`.** No standalone `store=` parameter. |
+
+**Blueprint corrections (Step 0 architectural refinement, applied as part of this lock):**
+
+This §5.7 lock surfaced an architectural drift in earlier blueprint sections that incorrectly cited "SDK `Rule`" or `compile_authoring_rule_v1` / `_compile_rule_input` as G1's lowering path. The correct lowering target is **SDK `Derivation`** via `_compile_derivation_input` + `compile_authoring_derivation_v1` + `_compiled_derivation_plan_to_application`. Sections updated as part of this lock (recorded here, not silently fixed):
+
+| Section | Correction |
+|---|---|
+| §1 Problem | "SDK Rule lowering reuses..." → "SDK `Derivation` lowering reuses... + `compile_authoring_derivation_v1()` + `_compiled_derivation_plan_to_application(...)`" |
+| §2 Goal | "SDK `Rule` / DSL plan" → "SDK `Derivation`"; `compile_authoring_rule_v1` → `compile_authoring_derivation_v1` |
+| §3 Non-Goals | "No SDK Rule lowering reinvention" → "No SDK Derivation lowering reinvention"; lowering function names corrected; explicit note that `_compile_rule_input` is `sdk.run` territory |
+| §4.4 Prior art | `_compile_rule_input` / "SDK Rule" → `_compile_derivation_input` + `_compiled_derivation_plan_to_application` / "SDK `Derivation`"; explicit note distinguishing `_compile_rule_input` as Rule path |
+| §5.7 Question / Constraint | "SDK `Rule` instance" → "SDK `Derivation` instance"; "strictly SDK Rule" → "strictly SDK `Derivation`" |
+| §6 Forbidden | "New SDK Rule lowering pipeline" → "New SDK `Derivation` lowering pipeline"; lowering function names corrected; explicit note that SDK `Rule` lowering is `sdk.run` territory |
+
+§5.1's quoted hypothetical from [20_candidates.md §C](../../references/working/post-routemap-direction-selection-input/20_candidates.md) (`sdk.explain(rule=eligible_rule, ...)`) is preserved verbatim as a faithful citation. Bundle's Direction C used "rule" loosely; G1's lock here clarifies the corresponding G1 input is `Derivation`. Bundle text is reference, not contract.
 
 ## 6. Boundaries-and-Invariants
 
@@ -396,7 +465,7 @@ Principles locked active for G1 (numbering per [30_recommendation.md](../../refe
 - Protocol DTO field changes "to fit SDK shape better" (per `#1` + `#6`).
 - README quickstart change (per `#6`).
 - `kernel.sdk.__all__` expansion without §5.4 Step 0 lock.
-- New SDK Rule lowering pipeline (use existing `to_authoring_payload()`).
+- New SDK `Derivation` lowering pipeline — G1 must use existing `to_authoring_payload()` + `compile_authoring_derivation_v1()` + `_compiled_derivation_plan_to_application(...)`. NOTE: SDK `Rule` lowering (`_compile_rule_input` → `RuleSpec`) is `sdk.run(...)` territory; G1 must NOT use the Rule path.
 - Service / agent / domain integration.
 - `factpy` rebrand or umbrella-alias.
 - G2 / G3 / G4 / G5 work mixed into this blueprint.
@@ -419,7 +488,8 @@ Acceptance gates are completed at scope-freeze. At `draft` status, only Step 0 f
 - [x] §5.4 falsifier pass — locked 2026-05-08 (`SDKStore.check` / `.diagnose`; no new `kernel.sdk.__all__` exports)
 - [x] §5.5 falsifier pass — locked 2026-05-08 (flat `kernel/sdk/check.py` + `diagnose.py`; `SDKStore` delegate pattern; G2 must re-evaluate shell subpackage migration before adding more shell files)
 - [x] §5.6 falsifier pass — locked 2026-05-08 (flat per-method tests `test_sdk_check.py` + `test_sdk_diagnose.py`; shared fixtures `_sdk_g1_fixtures.py` only on demand; no combined / extended / nested alternatives)
-- [ ] §5.7 falsifier pass — **pending scoping round**
+- [x] §5.7 falsifier pass — locked 2026-05-08 (SDK `Derivation` only — NOT `Rule`; binding `Mapping[str, Any]` with `$`-prefixed keys only; surfaced and corrected blueprint drift in §1/§2/§3/§4.4/§5.7/§6 that previously cited Rule lowering)
+- [x] **All 7 §5 falsifier passes complete — blueprint ready to advance `draft → scoped`**
 
 ## 8. Implementation Plan
 
