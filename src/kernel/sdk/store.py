@@ -281,6 +281,29 @@ class SDKStore:
         engine: str = "native",
         registry: RuleRegistry | None = None,
     ) -> "CheckResult":
+        """Check one SDK ``Derivation`` against a concrete binding.
+
+        Args:
+            derivation: SDK ``Derivation`` authoring object. ``Rule`` and
+                application ``CompiledDerivationPlan`` inputs are rejected at
+                the SDK boundary.
+            binding: Mapping of ``$``-prefixed variable names to Python
+                values. Tuple-form ``BindingItems`` are intentionally not part
+                of the SDK shell contract.
+            engine: Runtime engine name passed through to the application
+                Check request builder.
+            registry: Optional runtime registry override.
+
+        Returns:
+            The application ``CheckResult`` DTO directly. For ergonomic
+            evidence traversal, advanced callers may opt into
+            ``kernel.application.walker.SupportArtifactView`` outside the SDK.
+
+        Raises:
+            SDKStoreError: For SDK input-shape errors or application helper
+                validation errors. Helper errors are preserved as
+                ``__cause__``.
+        """
         from .check import sdk_check
 
         return sdk_check(self, derivation, binding, engine=engine, registry=registry)
@@ -293,6 +316,28 @@ class SDKStore:
         engine: str = "native",
         registry: RuleRegistry | None = None,
     ) -> "DiagnoseResult":
+        """Diagnose one SDK ``Derivation`` against a concrete binding.
+
+        Args:
+            derivation: SDK ``Derivation`` authoring object. ``Rule`` and
+                application ``CompiledDerivationPlan`` inputs are rejected at
+                the SDK boundary.
+            binding: Mapping of ``$``-prefixed variable names to Python
+                values.
+            engine: Runtime engine name passed through to the application
+                Diagnose request builder.
+            registry: Optional runtime registry override.
+
+        Returns:
+            The application ``DiagnoseResult`` DTO directly. Locator parsing
+            remains an opt-in application-layer workflow; this SDK shell does
+            not import walker helpers.
+
+        Raises:
+            SDKStoreError: For SDK input-shape errors or application helper
+                validation errors. Helper errors are preserved as
+                ``__cause__``.
+        """
         from .diagnose import sdk_diagnose
 
         return sdk_diagnose(self, derivation, binding, engine=engine, registry=registry)

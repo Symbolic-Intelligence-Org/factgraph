@@ -1,6 +1,6 @@
 # L Direction G1 — Check + Diagnose SDK Shell
 
-- **Status:** scoped
+- **Status:** implemented
 - **Created:** 2026-05-08
 - **Parent:** L Direction (post-A+B v1-ready roadmap target)
 - **Related Bundle:** [post-routemap-direction-selection-input](../../references/working/post-routemap-direction-selection-input/) — Round 8 SDK conventions audit (G1 verdict: clean)
@@ -480,7 +480,7 @@ Acceptance gates progress through draft → scoped → implementing → implemen
 - [x] Q1 / Q2 / Q3 framing decisions absorbed in §4.1
 - [x] 7 Step 0 questions enumerated in §5
 - [x] Principle lock set documented in §6
-- [x] Non-goals enumerated in §3 (covers `factpy`, README quickstart, scenario merge pre-lock, B return-shape pre-lock, etc.)
+- [x] Non-goals enumerated in §3 (covers `factpy`, README quickstart, scenario merge rejection, B-typed-wrap rejection, etc.)
 - [x] Bundle reference and prior art cited in §4
 - [x] §5.1 falsifier pass — locked 2026-05-08 (per-method API; scenario `sdk.explain` rejected, remains Direction C future composition)
 - [x] §5.2 falsifier pass — locked 2026-05-08 (documented passthrough for both methods; B dependencies inactive; `CheckResult` / `DiagnoseResult` not re-exported from `kernel.sdk.__all__`)
@@ -493,14 +493,14 @@ Acceptance gates progress through draft → scoped → implementing → implemen
 
 **Scoped per-phase acceptance (added at scope-freeze):**
 
-- [ ] **Phase 0** — module skeleton + delegation hooks complete; 2 stub modules + 2 SDKStore methods + 2 skeleton tests; no `__all__` change; no application-protocol or B walker imports yet; ruff clean; `git diff --check` clean
-- [ ] **Phase 0** strict audit pass; audit-fix commit (if blocker) before Phase 1
-- [ ] **Phase 1** — `sdk_check` real implementation; full `test_sdk_check.py` contract (passed / failed / unsupported / invalid_request paths; OriginPackageError + CapabilityHelperError remap; type-check + single-head + engine + registry coverage); A helper called (no direct `CheckRequest` construction); `CheckResult` raw return; no `__all__` expansion
-- [ ] **Phase 1** strict audit pass; audit-fix commit (if blocker) before Phase 2
-- [ ] **Phase 2** — `sdk_diagnose` real implementation; full `test_sdk_diagnose.py` contract; same disciplines as Phase 1; Q1 Sibling discipline preserved (G1 diagnose does NOT call G1 check internally)
-- [ ] **Phase 2** strict audit pass; audit-fix commit (if blocker) before Phase 3
-- [ ] **Phase 3** — cross-cutting invariants + docs + close-out; layer-isolation grep clean; invariant tests added; `04_api_surface.md §2` updated; `01_overview.md` strangler note; README quickstart untouched; full kernel test suite green
-- [ ] **Phase 3** cumulative strict audit covering all §5 locks; close-out commit fills §10 Outcome
+- [x] **Phase 0** — module skeleton + delegation hooks complete; 2 stub modules + 2 SDKStore methods + 2 skeleton tests; no `__all__` change; no application-protocol or B walker imports yet; ruff clean; `git diff --check` clean
+- [x] **Phase 0** strict audit pass; audit-fix commit (if blocker) before Phase 1
+- [x] **Phase 1** — `sdk_check` real implementation; full `test_sdk_check.py` contract (passed / failed / unsupported / invalid_request paths; OriginPackageError + CapabilityHelperError remap; type-check + single-head + engine + registry coverage); A helper called (no direct `CheckRequest` construction); `CheckResult` raw return; no `__all__` expansion
+- [x] **Phase 1** strict audit pass; audit-fix commit (if blocker) before Phase 2
+- [x] **Phase 2** — `sdk_diagnose` real implementation; full `test_sdk_diagnose.py` contract; same disciplines as Phase 1; Q1 Sibling discipline preserved (G1 diagnose does NOT call G1 check internally)
+- [x] **Phase 2** strict audit pass; audit-fix commit (if blocker) before Phase 3
+- [x] **Phase 3** — cross-cutting invariants + docs + close-out; layer-isolation grep clean; invariant tests added; `04_api_surface.md §2` updated; `01_overview.md` strangler note; README quickstart untouched; full kernel test suite green
+- [x] **Phase 3** cumulative strict audit covering all §5 locks; close-out commit fills §9 Outcome
 - [ ] **Phase 4** — archive blueprint to `docs/blueprints/archive/`; update archive `README.md`; snapshot branch publish `v0.1-l-g1-check-diagnose-2026-05-DD`; sacred branches untouched
 
 **Scoped invariant tests (per principle locks):**
@@ -632,7 +632,7 @@ Implementation proceeds in 4 sequential phases on a dedicated worktree, each pha
   - `kernel/sdk/store.py` `SDKStore.check` / `.diagnose` methods only delegate; no inline implementation logic.
 - **Invariant tests** (added to `test_sdk_check.py` / `test_sdk_diagnose.py` or a dedicated invariant file):
   - `kernel.sdk.__all__` length and content unchanged from pre-G1 baseline.
-  - `CheckResult` / `DiagnoseResult` NOT importable as `from kernel.sdk import CheckResult` (`AttributeError` expected).
+  - `CheckResult` / `DiagnoseResult` NOT available from `kernel.sdk` as exported attributes/imports.
   - No `WalkerError` / `SupportArtifactView` / `parse_atom_key` imports anywhere in `kernel/sdk/check.py` or `kernel/sdk/diagnose.py`.
   - SDK `Rule` rejection at G1 surface (functional).
 - **Docstrings:**
@@ -654,7 +654,7 @@ Implementation proceeds in 4 sequential phases on a dedicated worktree, each pha
 **Close-out commit:**
 
 - Update blueprint §9 Outcome with: final landed result, deviations from blueprint (if any), reasons, archive note.
-- Status transition `implementing` → `implemented` in blueprint header (separate commit from Phase 3 implementation; mirrors A+B archive sequence).
+- Status transition to `implemented` in blueprint header (close-out commit; this G1 worktree started implementation from `scoped`, so the audit log records the late status correction explicitly).
 - Audit log entry: close-out summary citing all phase commits.
 
 ### Phase 4 — Archive + snapshot publish
@@ -679,13 +679,13 @@ Implementation proceeds in 4 sequential phases on a dedicated worktree, each pha
 
 ### Implementation kickoff trigger
 
-Phase 0 starts when user explicitly initiates implementation. Until then, blueprint stays at `scoped` status; worktree NOT created. Per `feedback_iterative_gap_design`, no auto-progression from `scoped` to `implementing`.
+Historical note: Phase 0 started after explicit user kickoff in `/Users/zhenzhili/hnsm-backend-G1`. The worktree branched from the scope-freeze commit; no auto-progression occurred before that kickoff.
 
 ## 9. Outcome
 
-任务完成后填写：
-
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+- **Final landed result:** G1 shipped `SDKStore.check(...)` and `SDKStore.diagnose(...)` as Tier 1 SDK shell instance methods over existing SDK `Derivation` lowering. Both methods accept SDK `Derivation` plus `$`-prefixed `Mapping[str, Any]` binding, resolve optional registry, call A's `build_check_request(...)` / `build_diagnose_request(...)`, delegate to application Check / Diagnose runtimes, and return raw `CheckResult` / `DiagnoseResult` DTOs as documented passthrough.
+- **Commits:** Phase 0 skeleton (`f58299c`), Phase 1 Check implementation (`6852f2d`), Phase 2 Diagnose implementation (`73f5410`), and Phase 3 invariants/docs/close-out (this commit).
+- **Verification:** Phase 1 and Phase 2 strict audits both returned `0 blocker / 0 clarify / 0 minor`; Phase 3 cumulative audit covered all §5 locks. Full kernel unittest discovery passed before close-out; ruff and `git diff --check` were clean.
+- **Deviations from the scoped plan:** status moved from `scoped` directly to `implemented` at close-out because implementation began before a separate `implementing` header transition. The audit log records the process correction. No API-shape deviations from §5 locks were introduced.
+- **Boundary outcomes:** `kernel.sdk.__all__` remains unchanged; no `CheckResult` / `DiagnoseResult` export; no B walker imports; README quickstart untouched; `kernel/sdk/check.py` and `diagnose.py` remain flat files; G2 is still responsible for re-evaluating `kernel/sdk/shells/` before adding more SDK shell files.
+- **Archive note:** Phase 4 remains pending: move this blueprint and audit log to `docs/blueprints/archive/`, update archive inventory, and publish a non-`codex/` snapshot branch when the user requests archive/publish.

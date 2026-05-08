@@ -14,7 +14,10 @@ Public surface contract per blueprint §5 locks:
                variable-name string keys).
 - Return:      ``DiagnoseResult`` (raw application protocol DTO; documented
                passthrough per §5.2 lock; not re-exported from
-               ``kernel.sdk.__all__``).
+               ``kernel.sdk.__all__``). Advanced callers that need locator
+               parsing can opt into application-layer helpers such as
+               ``kernel.application.walker.parse_atom_key`` when they have a
+               compatible atom-key string.
 - Errors:      ``CapabilityHelperError`` and ``OriginPackageError`` from
                ``kernel.application.capability_helpers`` are caught and
                re-raised as ``SDKStoreError`` with ``__cause__`` chaining
@@ -52,7 +55,11 @@ def sdk_diagnose(
     engine: str = "native",
     registry: Any = None,
 ) -> DiagnoseResult:
-    """Run Diagnose for a single SDK ``Derivation`` and binding mapping."""
+    """Run Diagnose for a single SDK ``Derivation`` and binding mapping.
+
+    Returns the application ``DiagnoseResult`` DTO directly. The SDK shell
+    keeps Diagnose independent from Check and does not import walker helpers.
+    """
 
     _validate_derivation(derivation)
     binding_dict = _validate_binding(binding)

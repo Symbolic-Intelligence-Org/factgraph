@@ -2,7 +2,7 @@
 
 本页对齐 `kernel/sdk/__init__.py` 的公开导出与核心类方法。SDK API surface 是 Python product surface；query / ingest / compiled derivation 等 runtime execution 由 `kernel.application` 承接,SDK 负责 outward adapter 与兼容形态。
 
-Batch 8 public-surface 决议后,SDK surface 仍保持窄口径:本页列出的导出与 `SDKStore` 既有 facade 是 v0.1 product public API。Batches 3-7 的 Check、Diagnose、Fact Overlay、ProofFrame、Why-not、rule-action runtimes、round events 与 ProofFrame diff 不在 Batch 8 中新增 SDK shell；需要时通过 `kernel.application` / `kernel.audit` advanced importable surface 使用。未来若要把其中某一族提升为 SDK ergonomic API,必须单独冻结 outward request/result shape,不能直接 re-export application DTO。
+Batch 8 public-surface 决议后,SDK surface 仍保持窄口径:本页列出的导出与 `SDKStore` 既有 facade 是 v0.1 product public API。L Direction G1 新增 `SDKStore.check(...)` / `SDKStore.diagnose(...)` 作为 Check / Diagnose 的窄 SDK shell,但不新增 `kernel.sdk.__all__` 导出,也不 re-export application DTO。Fact Overlay、ProofFrame、Why-not、rule-action runtimes、round events 与 ProofFrame diff 仍通过 `kernel.application` / `kernel.audit` advanced importable surface 使用。未来若要把其中某一族提升为 SDK ergonomic API,必须单独冻结 outward request/result shape,不能直接 re-export application DTO。
 
 ## 1. 顶层导出（`from kernel.sdk import ...`）
 
@@ -61,6 +61,8 @@ Batch 8 public-surface 决议后,SDK surface 仍保持窄口径:本页列出的�
 - `edit(...)`
 - `ingest(...)`
 - `validate_provenance(...)`
+- `check(...)`
+- `diagnose(...)`
 - `ref(...)`
 - `set(...)`
 - `add(...)`
@@ -85,6 +87,7 @@ Batch 8 public-surface 决议后,SDK surface 仍保持窄口径:本页列出的�
 - `evaluate(...)` 显式拒绝 `view` 与 `temporal_view`。
 - `evaluate(..., engine_options={...})` 支持 engine run-time 配置；该参数是 call-time only，不进入 `Derivation` / authoring payload。
 - `evaluate(mode="native", engine_options={...})` 会显式报错；engine_options 的 key 校验与默认值由目标 adapter 负责。
+- `check(Derivation(...), binding, *, engine="native", registry=None)` 与 `diagnose(...)` 只接受 SDK `Derivation` 和 `$` 前缀 binding `Mapping`；返回 application `CheckResult` / `DiagnoseResult` 原始 DTO,但这些 DTO 不进入 `kernel.sdk.__all__`。
 - `run(rule)` 的 `row_format` 优先级：调用参数 > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`。
 - `FACTPY_ROW_FORMAT` 在 `SDKStore` 初始化时读取并缓存。
 - `row_format="tuple"` 仍可用但会触发 `DeprecationWarning`。

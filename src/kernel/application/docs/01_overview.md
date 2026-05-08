@@ -174,7 +174,8 @@ Current SDK runtime delegation:
 - `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
 - `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
 - `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
-- Check, Diagnose, Fact Overlay Check, ProofFrame Rechecker, Rule Disable, Rule Literal Replace, Why-not Universe Diagnose, and the capability ergonomics helpers are currently exposed at the application layer only. No SDK shell is added in the MVP; any future SDK entrypoint must remain a thin delegate to `check_derivation_binding(...)`, `diagnose_derivation_binding(...)`, `check_fact_overlay_binding(...)`, `recheck_proof_frame(...)`, `check_rule_disable_action(...)`, `check_rule_literal_replace_action(...)`, `check_why_not_universe(...)`, or the application helper functions.
+- `sdk.check(...)` / `sdk.diagnose(...)` are the first L Direction SDK shell consumers of the capability helper package: they lower SDK `Derivation` inputs, call `build_check_request(...)` / `build_diagnose_request(...)`, and delegate to `check_derivation_binding(...)` / `diagnose_derivation_binding(...)`.
+- Fact Overlay Check, ProofFrame Rechecker, Rule Disable, Rule Literal Replace, Why-not Universe Diagnose, and the remaining capability ergonomics helpers are currently exposed at the application layer only. Any future SDK entrypoint must remain a thin delegate to `check_fact_overlay_binding(...)`, `recheck_proof_frame(...)`, `check_rule_disable_action(...)`, `check_rule_literal_replace_action(...)`, `check_why_not_universe(...)`, or the application helper functions.
 
 SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
@@ -258,6 +259,9 @@ Key focused tests:
 - `test_sdk_batch_application_delegate.py`
 - `test_sdk_query_policies.py`
 - `test_sdk_ingest_application_delegate.py`
+- `test_sdk_check.py`
+- `test_sdk_diagnose.py`
+- `test_sdk_g1_invariants.py`
 - `test_sdk_consumer_boundary.py`
 
 ## 8. 相关文档
