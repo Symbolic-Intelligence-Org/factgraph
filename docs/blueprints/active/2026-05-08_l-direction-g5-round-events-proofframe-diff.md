@@ -1,6 +1,6 @@
 # L Direction G5 — Round Events + ProofFrame Diff SDK Shell
 
-- **Status:** draft
+- **Status:** scoped
 - **Created:** 2026-05-08
 - **Last Updated:** 2026-05-08
 - **Parent:** L Direction (final group; closes the 5-group SDK shell rollout G1→G4→G2→G3→G5 per [post-routemap-direction-selection-input/30_recommendation.md:600](../../references/working/post-routemap-direction-selection-input/30_recommendation.md))
@@ -367,17 +367,18 @@ Test pattern in `test_sdk_proof_frame_diff.py`:
 
 ## 6. Boundaries and Invariants
 
-(Provisional — finalized at scope-freeze. Inherited from G1-G4 + G3 verification-round addendum.)
+Locked at scope-freeze. G5 inherits all G1-G4 + G3-verification-round invariants and adds the cross-cutting precedent layer rule from §5.3.
 
-- `kernel.sdk.__all__` length stays at **34**.
-- New shells live under `kernel/sdk/shells/`. No flat-layout reintroduction.
-- Sibling discipline at 9+ shell scope (depending on §5.1 / §5.5).
-- No SDK shell calls another SDK shell at runtime; verified via runtime patch + static source scan.
-- Frontier remains advanced importable per G4 §5.4.
-- Sacred branches `master` and `v0.1-oss-prep` untouched throughout.
-- G1 + G4 + G2 + G3 published snapshot branches untouched (`d6716a0` / `acb5a6e` / `d658390` / `cb6d3bd`). G5 publishes new G5-only ref + new Path B combined ref, leaves prior 4 immutable.
-- Shared `resolve_runtime_registry` boundary normalizer is available; G5 uses it if and only if a G5 shell resolves a dependency registry (likely not needed).
-- §5.1+§5.2 cross-cutting precedent layer scope decided in §5.3 falsifier (extend to `kernel.audit` or carve out).
+- `kernel.sdk.__all__` length stays at **34**. G5 result DTO (`ProofFrameDiff`) and supporting DTOs (`FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference`, `RoundEvent`, `RoundSummary`) NOT exported. SDK function name `sdk_diff_proof_frames` and method name `diff_proof_frames` NOT exported.
+- New shell lives under `kernel/sdk/shells/proof_frame_diff.py`. No flat-layout reintroduction. Total `kernel/sdk/shells/` module count after G5 publish: **9**.
+- Sibling discipline at **9-shell scope** (forward-only convention per §5.8): the new G5 shell tests against all 8 prior sister shells; the 8 prior shells' contract tests are NOT retrofit. Mirrors G3's forward-only convention; preserves Path B immutability for already-published groups.
+- No SDK shell calls another SDK shell at runtime; verified via runtime patch (G5 shell patches all 8 sister `sdk_*` functions and asserts each `_not_called`) + static source scan (16 forbidden patterns: 8 module imports + 8 function calls).
+- Frontier remains advanced importable per G4 §5.4 evaluator drift gate.
+- Sacred branches `master` and `v0.1-oss-prep` untouched throughout. G1 + G4 + G2 + G3 published snapshot branches untouched (`d6716a0` / `acb5a6e` / `d658390` / `cb6d3bd`). G5 publishes new G5-only ref + new Path B combined ref `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-2026-05-08`; prior 4 Path B snapshots remain immutable.
+- Shared `resolve_runtime_registry` boundary normalizer is available but **NOT used by G5** — diff has no dependency-registry resolution path.
+- **Cross-cutting precedent layer rule (locked at G5 §5.3):** the boundary is NOT "only `kernel.application.protocol`"; it is "**frozen canonical DTO above `kernel.core` using `kernel.application.protocol` vocabulary**". This rule (a) keeps `kernel.audit` frozen DTOs (`RoundEvent`, `ProofFrameDiff`, `FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference`) IN scope as raw cross-boundary DTOs; (b) preserves the G3 §5.2 substrate-IR-out carve-out (`RuleSpec` at `kernel.core.rules.rule_ir` excluded by the "above `kernel.core`" criterion). Available for any future SDK shell over audit-layer or application-protocol DTOs without re-deriving the rule.
+- Recorder lifecycle (`kernel.audit.round_events.start_round` / `record_round_event` / `finalize_round`) stays advanced importable; G5 §5.1 locked defer-recorder per the "all L methods return frozen DTOs" invariant.
+- `kernel.audit.proof_frame_diff` is the explicit A-side dependency of `kernel/sdk/shells/proof_frame_diff.py` and is allowed in G5 invariant `FORBIDDEN_PRODUCTION_IMPORT_TEXT` exclusion logic — distinct from broader `kernel.audit` private internals which remain forbidden.
 
 ## 7. Acceptance Criteria
 
@@ -388,31 +389,80 @@ Draft-stage acceptance:
 - [x] §6-§9 placeholders.
 - [x] Audit log seeded with "Draft seeded" entry.
 
-Scoped-stage acceptance (filled after §5 falsifier passes):
+Scoped-stage acceptance:
 
-- [ ] §5.1 locked — Round events SDK shape (defer / ship recorder / hybrid).
-- [ ] §5.2 locked — ProofFrame Diff SDK shipped.
-- [ ] §5.3 locked — Diff input shape + cross-cutting precedent extension/carve.
-- [ ] §5.4 locked — Diff return shape (passthrough).
-- [ ] §5.5 locked — Module placement + shared-validator decision.
-- [ ] §5.6 locked — Module file naming.
-- [ ] §5.7 locked — SDKStore method names.
-- [ ] §5.8 locked — Error mapping + Sibling discipline at G5-final scope.
-- [ ] §5.9 locked — Tests + invariants + `#P1` retrofit count.
-- [ ] §8 implementation plan filled with N phases (N depends on §5.1).
-- [ ] Status moves from `draft` to `scoped`.
+- [x] §5.1 locked — defer Round events from SDK; ship only ProofFrame Diff (commit `2b493b1`).
+- [x] §5.2 locked — ship 1 SDK shell (commit `b1ff0e6`).
+- [x] §5.3 locked — raw `tuple[RoundEvent, ...]` × 2 at SDK boundary; explicit cross-cutting precedent layer rule (commit `75f2826`).
+- [x] §5.4 locked — documented passthrough of raw `ProofFrameDiff` (commit `b1ff0e6`).
+- [x] §5.5 locked — single shell file at `kernel/sdk/shells/proof_frame_diff.py`; no new shared validator (commit `150d740`).
+- [x] §5.6 locked — file `kernel/sdk/shells/proof_frame_diff.py`; function `sdk_diff_proof_frames` (commit `150d740`).
+- [x] §5.7 locked — `SDKStore.diff_proof_frames(...)` Group A (commit `150d740`).
+- [x] §5.8 locked — 7-path remap with `ProofFrameDiffError` covering `.request`; forward-only Sibling at 9-shell scope (commit `2f81b56`).
+- [x] §5.9 locked — 1 contract test file (~13 tests) + 1 invariant file (6-class mirror); zero `#P1` retrofits (commit `2f81b56`).
+- [x] §6 invariants finalized (cross-cutting precedent layer rule encoded verbatim).
+- [x] §8 implementation plan filled with 3 phases (combined skeleton+impl per user guidance — Phase 0 hygiene NOT needed since §5.5 confirmed no shared-validator extraction and §5.9 confirmed zero retrofits).
+- [x] Status moves from `draft` to `scoped`.
 
-Implementation-stage acceptance (per phase, gated by phase-end audit):
+Implementation-stage acceptance (per phase, gated by phase-end strict audit):
 
-- [ ] Phase 0 — shared-validator additions (if §5.5 adds any) + any pre-G5 boundary-test retrofits.
-- [ ] Phase 1+ — one phase per new SDK shell file.
-- [ ] Phase N-2 — G5 invariants + docs CN/EN + cumulative audit.
-- [ ] Phase N-1 — close-out + archive.
-- [ ] Phase N — publish G5-only + Path B combined snapshots.
+- [ ] Phase 1 — combined skeleton + implementation: `src/kernel/sdk/shells/proof_frame_diff.py` (`sdk_diff_proof_frames`) with all 7-path inline pre-validation + `ProofFrameDiffError` catch + defensive base-path catch; `SDKStore.diff_proof_frames(...)` thin delegate in `store.py`; TYPE_CHECKING extended to import `ProofFrameDiff`; `src/kernel/tests/test_sdk_proof_frame_diff.py` with ~13 contract tests covering happy path, 8 input rejection paths, `.request` remap, base-path remap, DTO non-export, Sibling runtime patch (8 sister shells), Sibling static source scan (16 forbidden patterns).
+- [ ] Phase 2 — invariants + docs + cumulative audit: `src/kernel/tests/test_sdk_g5_invariants.py` (6-class mirror); update SDK API docs `kernel/sdk/docs/04_api_surface.md` + `.en.md` (add `diff_proof_frames` to method list, preamble bumps to "9 L methods", G5 paragraph documents §5.3 layer rule extension); update application overview docs `kernel/application/docs/01_overview.md` + `_en.md` (extend L-direction paragraph; trim "remaining at application layer only" — round events stays, ProofFrame diff moves out; test inventory adds `test_sdk_proof_frame_diff.py` + `test_sdk_g5_invariants.py`); cumulative G5 strict audit gate (5 dimensions: §5.x locks honored / §6 invariants verified / shells/ + retrofit holding / `kernel.sdk.__all__` length still 34 / G1+G4+G2+G3 published snapshot branches untouched).
+- [ ] Phase 3 — close-out + archive + publish prep: fill §9 Outcome / Deviations; flip status `scoped → implemented`; archive blueprint + audit log under `docs/blueprints/archive/`; update archive inventory; update memory (`project_g5_published.md` external + `MEMORY.md` index + `memory/current.md` in-repo); publish to `origin/v0.1-l-g5-round-events-proofframe-diff-2026-05-08` (G5-only) + `origin/v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-2026-05-08` (Path B combined, 5th immutable Path B snapshot) **pending explicit user authorization** per `project_release_branch_invariants`.
 
 ## 8. Implementation Plan
 
-(Filled at scope-freeze.)
+### Phase 1 — Combined skeleton + implementation
+
+**Scope** (single commit; combined since the implementation is small enough that splitting skeleton-vs-impl adds friction without value, per user guidance):
+
+- New `src/kernel/sdk/shells/proof_frame_diff.py` implementing `sdk_diff_proof_frames(sdk, round_a_id, round_b_id, round_a_events, round_b_events, *, warnings=(), include_unchanged=False) -> ProofFrameDiff`. Order:
+  1. Inline pre-validate `round_a_id` (`isinstance(str)` + non-empty) → `$.diff_proof_frames.round_a_id`.
+  2. Inline pre-validate `round_b_id` → `$.diff_proof_frames.round_b_id`.
+  3. Inline pre-validate `round_a_events` (`isinstance(tuple)` + per-element `isinstance(RoundEvent)`) → `$.diff_proof_frames.round_a_events`.
+  4. Inline pre-validate `round_b_events` → `$.diff_proof_frames.round_b_events`.
+  5. Inline pre-validate `warnings` (`isinstance(tuple)` + per-element `isinstance(WarningDTO)`) → `$.diff_proof_frames.warnings`.
+  6. `try: build_proof_frame_diff(...) except ProofFrameDiffError` → `$.diff_proof_frames.request` with `__cause__`.
+  7. `try: ... except Exception` (defensive) → `$.diff_proof_frames` with `__cause__`.
+  Returns raw `ProofFrameDiff` (documented passthrough; not in `kernel.sdk.__all__`).
+- New `SDKStore.diff_proof_frames(...)` thin delegate in `src/kernel/sdk/store.py` (placement after the 3 G3 rule-overlay methods, before `ref(...)`). TYPE_CHECKING extended to import `ProofFrameDiff` from `kernel.audit.proof_frame_diff`.
+- New `src/kernel/tests/test_sdk_proof_frame_diff.py` with ~13 contract tests. Helper functions to construct seeded `RoundEvent` tuples for happy path; mock-based assertions for ProofFrameDiffError remap and defensive base-path remap; Sibling runtime patch covers all 8 sister `sdk_*` functions.
+- Verification: targeted `python -m unittest src.kernel.tests.test_sdk_proof_frame_diff` (~13 OK); full kernel suite (~1674 OK / 1 skipped, +13 vs Phase 1 baseline `2f81b56` = 1661 / 1); ruff clean on changed files; `git diff --check` clean.
+- **Phase 1 audit gate (5 dimensions):** §5.x locks honored — input shapes match §5.3, return shape matches §5.4, method name matches §5.7, error paths match §5.8 (all 7 exercised by contract tests); `kernel.sdk.__all__` length still 34; SDK shell does not import sibling shells (Sibling static check); thin-delegate pattern preserved (no business logic in `store.py`); inline validation only (no shared validator extraction per §5.5).
+
+### Phase 2 — Invariants + docs + cumulative audit
+
+**Scope:**
+
+- New `src/kernel/tests/test_sdk_g5_invariants.py` mirroring G1+G4+G2+G3 6-class structure. `G5_MODULES = ("kernel.sdk.shells.proof_frame_diff",)`. Reserved scenario names list includes `proof_frame_diff` and `compare_proof_frames`. `FORBIDDEN_PRODUCTION_IMPORT_TEXT` reuses the existing G2/G3 set (capability_helpers private `_binding`, `_reject_sdk_origin`, walker, audit privates, frontier). Note: the new G5 shell legitimately imports from `kernel.audit.proof_frame_diff` — that's the explicit A-side dependency, distinct from broader `kernel.audit` privates; G5 invariant `test_g5_module_does_not_import_internal_or_walker_layers` either uses a narrower forbidden-text set, or asserts via positive whitelist that only `kernel.audit.proof_frame_diff` (not other `kernel.audit.*` modules) appears in shell imports.
+- Update SDK API docs `src/kernel/sdk/docs/04_api_surface.md` + `.en.md`:
+  - Method list extended with `diff_proof_frames(...)`.
+  - Preamble paragraph: "8 L methods" → "9 L methods"; new paragraph documents §5.1 recorder-defer + §5.3 cross-cutting precedent layer rule extension (frozen canonical DTO above `kernel.core` using `kernel.application.protocol` vocabulary).
+  - Per-method shape / error-path description for `diff_proof_frames(...)`.
+- Update application overview docs `src/kernel/application/docs/01_overview.md` + `_en.md`:
+  - L-direction SDK shell paragraph extended (G5 lowers raw `tuple[RoundEvent, ...]` × 2 + raw `WarningDTO` warnings, calls `build_proof_frame_diff(...)`, returns raw `ProofFrameDiff`).
+  - "Remaining at application layer only" paragraph trimmed: ProofFrame Diff moves out (now SDK shell), Round events explicitly stays in (per §5.1 defer-recorder lock), Frontier still in (per G4 §5.4).
+  - Test inventory adds `test_sdk_proof_frame_diff.py` + `test_sdk_g5_invariants.py`.
+- **Cumulative G5 strict audit gate (5 dimensions):** §5.1-§5.9 locks all honored across Phase 1+2 (verified by G5 invariant file + contract tests); §6 invariants verified by 6-test G5 invariant file (1:1 mirror of G1+G4+G2+G3); shells/ layout + prior retrofit invariants holding (G1 + G4 + G2 + G3 invariant files all green at this HEAD); public `kernel.sdk.__all__` length still 34 (verified by all five invariant test files asserting the count); G1 + G4 + G2 + G3 published snapshot branches untouched at this HEAD.
+- Verification: targeted (~13 + 6 = 19 G5-relevant tests OK); 100+ SDK shell + invariant + validation tests OK across all five L milestones; full kernel ~1680 OK / 1 skipped; ruff clean; `git diff --check` clean.
+
+### Phase 3 — Close-out + archive + publish prep
+
+**Scope** (mirrors G3's close-out template):
+
+- Fill §9 Outcome / Deviations with subsections: Final Landed Surface (1 SDKStore method + 1 shell file + 0 shared validators); 3-Phase Commit Chain (Phase 1 / Phase 2 / Phase 3); Deviations from Original Design (any locked vs. shipped delta); Test Catalogue (~13 contract + 6 invariants + 0 retrofits; phase-end test counts); Boundary Outcomes (`__all__` length 34, `shells/` 9 modules, SDKStore 40 methods, README untouched, Frontier advanced importable, sacred + G1+G4+G2+G3 snapshot branches all verified untouched); Forward Triggers (post-L SDK ergonomics redesign now unblocked; `kernel/sdk/shells/` at 9 modules; cross-cutting precedent layer rule encoded; G5 closes the L Direction sequence).
+- Status flipped `scoped → implemented` in blueprint header.
+- Move blueprint + audit log from `docs/blueprints/active/` to `docs/blueprints/archive/`.
+- Update `docs/blueprints/archive/README.md` inventory with G5 row and refresh "last updated" line.
+- Memory updates:
+  - External: create `~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/project_g5_published.md` capturing shipped-state and forward triggers.
+  - External: update `~/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/MEMORY.md` index with G5 line.
+  - In-repo: update `memory/current.md` to reflect G5 published state (post-publish; pre-publish stays "scoped + implemented but not yet pushed").
+- Publish prep:
+  - Branch rename: `codex/v0.1-l-g5-round-events-proofframe-diff-2026-05-08` → `v0.1-l-g5-round-events-proofframe-diff-2026-05-08` (drop `codex/` prefix per `feedback_worktree_parallel_implementation`).
+  - Path B combined snapshot: `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-2026-05-08` from same HEAD.
+  - **Push to origin pending explicit user authorization** per `project_release_branch_invariants` — sacred branches and publish decisions stay user-gated; auto mode does not extend to pushing to origin.
+- Verification at this point: full kernel still ~1680 OK / 1 skipped; ruff clean; `git diff --check` clean; `kernel.sdk.__all__` length still 34; all prior published refs verified untouched; sacred branches untouched.
 
 ## 9. Outcome / Deviations
 
