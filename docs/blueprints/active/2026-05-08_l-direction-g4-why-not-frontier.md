@@ -1,6 +1,6 @@
 # L Direction G4 — Why-not + Frontier SDK Shell
 
-- **Status:** draft
+- **Status:** scoped
 - **Created:** 2026-05-08
 - **Last Updated:** 2026-05-08
 - **Parent:** L Direction (post-A+B+G1 v1-ready roadmap target)
@@ -20,7 +20,7 @@ The next L group is G4: Why-not + Frontier. Round 8 classified G4 as **clean**, 
 - Why-not can become an SDK shell because it is a result-bearing application capability (`check_why_not_universe(...) -> WhyNotUniverseResult`) with an existing Tier 2 helper for candidate-universe normalization.
 - Frontier should remain advanced importable / substrate-facing unless Step 0 finds a narrow SDK projection that does not violate the evaluator frontier drift gates.
 
-This blueprint starts G4 Step 0 only. It does not implement SDK methods until the questions in §5 are source-grounded and scope-frozen.
+This blueprint has completed G4 Step 0 and is scoped for implementation of `SDKStore.why_not(...)`.
 
 ## 2. Goals
 
@@ -28,11 +28,11 @@ This blueprint starts G4 Step 0 only. It does not implement SDK methods until th
 - Reuse G1's SDK shell infrastructure where appropriate, especially `kernel.sdk._validation.validate_derivation(...)` and SDKStore method delegation.
 - Preserve the Round 8 naming correction: if Why-not enters SDK, it uses `why_not` vocabulary, not `universe`.
 - Determine whether Frontier remains advanced importable or gets a narrow SDK surface.
-- Establish a scoped implementation plan only after §5 falsifiers are resolved.
+- Establish and execute a scoped implementation plan after §5 falsifiers are resolved.
 
 ## 3. Non-Goals
 
-- **No implementation in draft.** No `SDKStore.why_not(...)`, `SDKStore.frontier(...)`, module files, docs updates, or tests ship until §5 is locked and status moves to `scoped`.
+- **No implementation outside this scope.** `SDKStore.why_not(...)` is the only SDK method scoped; `SDKStore.frontier(...)` remains out of scope.
 - **No README quickstart change.** Per `#6`, new SDK shell promotion does not automatically enter README quickstart.
 - **No `kernel.sdk.__all__` expansion by default.** G1 set the pattern: SDKStore instance methods first; top-level exports need their own falsifier.
 - **No `kernel.sdk` walker or B dependency.** G4 is not evidence traversal. B walker types stay out unless a later Step 0 explicitly activates them.
@@ -44,9 +44,9 @@ This blueprint starts G4 Step 0 only. It does not implement SDK methods until th
 
 ### 4.1 L ordering and baseline
 
-Q1 split is locked: **G1 -> G4 -> G2 -> G3 -> G5**, one blueprint per group. G1 is implemented and published; this G4 draft is based on `v0.1-public-surface-helpers-walker-l-g1-2026-05-08` @ `d6716a0`.
+Q1 split is locked: **G1 -> G4 -> G2 -> G3 -> G5**, one blueprint per group. G1 is implemented and published; this G4 blueprint is based on `v0.1-public-surface-helpers-walker-l-g1-2026-05-08` @ `d6716a0`.
 
-Current branch for this draft: `codex/v0.1-l-g4-why-not-frontier-2026-05-08`.
+Current branch: `codex/v0.1-l-g4-why-not-frontier-2026-05-08`.
 
 ### 4.2 Round 8 G4 verdict
 
@@ -87,7 +87,7 @@ G4 is such a potential consumer decision point, but it must still respect `#1`, 
 
 ## 5. Design — Step 0 Questions
 
-This blueprint is at `draft` status. The questions below must be resolved before status advances to `scoped`.
+All seven questions below are source-grounded and locked; implementation must stay inside these answers unless the audit log records a `#P1` carve-out first.
 
 ### 5.1 Why-not SDK input shape
 
@@ -312,8 +312,8 @@ Tests stay flat under `src/kernel/tests/`; no nested SDK test directory.
 
 **Forward implications:**
 
-- All seven §5.1-§5.7 are now locked. Status transition `draft -> scoped` is the next step (separate decision; not auto-promoted).
-- Scoped-stage acceptance section in §7 must be filled in before status moves to `scoped`: enumerate per-test counts, reference §5.6 remap paths, and bind the implementation phase plan to the locked surface.
+- All seven §5.1-§5.7 are now locked.
+- Scoped-stage acceptance in §7 enumerates the per-phase gates, including §5.6 remap paths and §5.7 invariant coverage.
 - Implementation phase plan in §8 follows G1's 4-phase template: Phase 0 skeleton + delegate stubs → Phase 1 real implementation + contract tests → Phase 2 invariants + cross-cutting tests + docs → Phase 3 archive + snapshot publish.
 
 ## 6. Boundaries And Invariants
@@ -329,7 +329,7 @@ Tests stay flat under `src/kernel/tests/`; no nested SDK test directory.
 | `#P0` Conflict resolution | Authority > layer isolation > read-only > ergonomics > outward commitment. |
 | `#P1` Revision flow | Any deviation from G1/L locks gets a named carve-out with reason/scope/impact. |
 
-Forbidden until scoped:
+Forbidden during implementation unless a later blueprint explicitly scopes a carve-out:
 
 - No `kernel.sdk.__all__` addition.
 - No README quickstart update.
@@ -347,23 +347,69 @@ Draft-stage acceptance:
 - [x] Round 8 G4 clean verdict and `universe -> why_not` correction captured.
 - [x] G1 infrastructure and Q1 validation extraction captured as available prior art.
 - [x] Why-not / Frontier boundary split documented.
-- [ ] §5.1-§5.7 falsifier passes complete (`§5.1`-`§5.6` locked; `§5.7` pending).
-- [ ] Status moves to `scoped` only after all Step 0 questions are resolved.
+- [x] §5.1-§5.7 falsifier passes complete.
+- [x] Status moves to `scoped` only after all Step 0 questions are resolved.
 
-Scoped-stage acceptance will be filled once §5 is locked.
+Scoped-stage acceptance:
+
+- [ ] Phase 0 ships only `src/kernel/sdk/why_not.py` skeleton, `SDKStore.why_not(...)` thin delegate, and placeholder flat tests; no real runtime dispatch yet.
+- [ ] Phase 1 implements `sdk_why_not(...)` with the locked signature and return shape:
+  `SDKStore.why_not(derivation, candidates, *, engine="native", registry=None) -> WhyNotUniverseResult`.
+- [ ] Phase 1 validates SDK `Derivation` via `validate_derivation(..., path="$.why_not.derivation")`, lowers through the G1 derivation path, normalizes candidates through `build_why_not_candidate_universe(...)`, constructs `WhyNotUniverseRequest`, dispatches `check_why_not_universe(...)`, and returns the raw `WhyNotUniverseResult`.
+- [ ] Phase 1 maps all §5.6 lower-layer errors to `SDKStoreError(...) from exc` with the locked paths: `$.why_not.derivation`, `$.why_not.dependencies`, `$.why_not.candidates`, `$.why_not.request`, and `$.why_not`.
+- [ ] Phase 1 tests cover mapping rows, sequence rows, malformed candidates, invalid derivation input, multi-plan derivation rejection, dependency registry failure, request DTO `ProtocolShapeError`, runtime `WhyNotRuntimeError`, and no internal call to G1 `sdk_check` / `sdk_diagnose`.
+- [ ] Phase 2 adds `test_sdk_g4_invariants.py` with the six locked invariants: `__all__` unchanged and `WhyNotUniverseResult` absent, instance-method placement, flat module/no `shells/`, no internal/walker/audit imports, thin delegate, and boundary docstring.
+- [ ] Phase 2 updates SDK/application module docs listed in §9 while leaving README quickstart untouched.
+- [ ] Phase 2 runs focused G4 tests plus the relevant SDK/application regression suite and performs a strict audit before close-out.
+- [ ] Phase 3 fills Outcome / Deviations, marks this blueprint `implemented`, archives blueprint + audit log, updates `docs/blueprints/archive/README.md`, and publishes a `v0.1-l-g4-why-not-frontier-2026-05-08` snapshot.
 
 ## 8. Implementation Plan
 
-Deferred until status `scoped`.
+### Phase 0 — Skeleton And Delegation Hook
 
-Expected shape if Step 0 follows conservative defaults:
+Scope:
 
-1. Phase 0: module skeleton / SDKStore method stubs / tests.
-2. Phase 1: `SDKStore.why_not(...)` real implementation.
-3. Phase 2: cross-cutting invariants and docs.
-4. Phase 3: close-out, archive, snapshot publish.
+- Add `src/kernel/sdk/why_not.py` with `sdk_why_not(...)` placeholder matching the locked signature.
+- Add `SDKStore.why_not(...)` as a thin delegate in `src/kernel/sdk/store.py`.
+- Add flat placeholder tests in `test_sdk_why_not.py` and `test_sdk_g4_invariants.py`.
+- Do not add `kernel.sdk.__all__` entries, `kernel/sdk/frontier.py`, `test_sdk_frontier.py`, or `kernel/sdk/shells/`.
 
-Frontier phases are added only if §5.4 scopes a Frontier SDK method.
+Audit gate: verify flat module placement, delegate shape, locked signature, no `__all__` expansion, and no runtime dispatch.
+
+### Phase 1 — Real `SDKStore.why_not(...)`
+
+Scope:
+
+- Implement `sdk_why_not(...)` using the G1 derivation lowering path and A's `build_why_not_candidate_universe(...)`.
+- Construct `WhyNotUniverseRequest(...)` and dispatch `check_why_not_universe(...)`.
+- Return raw `WhyNotUniverseResult`.
+- Implement all §5.6 remap paths with `SDKStoreError(...) from exc`.
+- Fill `test_sdk_why_not.py` contract coverage for §5.1-§5.6.
+
+Audit gate: strict code-quality and design-alignment audit focused on error remaps, layer imports, return shape, and Q1 Sibling independence from Check / Diagnose.
+
+### Phase 2 — Invariants And Docs
+
+Scope:
+
+- Add `test_sdk_g4_invariants.py` with the six §5.7 invariant slots.
+- Update SDK/application module docs listed in §9.
+- Keep README quickstart unchanged.
+- Run focused G4 tests plus relevant SDK/application regression suites.
+
+Audit gate: cumulative G4 strict audit before close-out; all findings either fixed or recorded as explicit deferred minors.
+
+### Phase 3 — Close-Out, Archive, Publish
+
+Scope:
+
+- Fill §10 Outcome / Deviations.
+- Mark status `implemented`.
+- Archive blueprint + audit log to `docs/blueprints/archive/`.
+- Update archive inventory.
+- Publish `v0.1-l-g4-why-not-frontier-2026-05-08` and update operational memory.
+
+Frontier remains out of scope in every phase. Any future Frontier SDK method requires a separate blueprint or a `#P1` carve-out with source-grounded justification.
 
 ## 9. Docs To Update
 
