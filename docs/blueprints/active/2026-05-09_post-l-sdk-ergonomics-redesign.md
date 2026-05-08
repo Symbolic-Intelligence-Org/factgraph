@@ -169,6 +169,17 @@ Notebooks 01-04 implicitly assume the flat surface shape. Any redesign that chan
 - `feedback_worktree_parallel_implementation` — topic branches use `codex/` prefix; published refs drop it.
 - `feedback_narrow_public_api` — in OSS preview lines, default to internal/contained mechanisms; expand public SDK surface only when current scope explicitly requires user-facing access.
 
+### 4.6 Reference bundle inputs
+
+[2026-05-07 post-routemap direction selection input bundle](../../references/working/post-routemap-direction-selection-input/) (8 files, 2231 lines, 9 verification rounds, design-complete). Most relevant findings for redesign:
+
+- **`SDK*` family is established**: `SDKStore` + `SDKBatchTx` (with `SDK*` prefix) + descriptive siblings `EntitySnapshot` / `FieldAssertions` / `AssertionNamespace` / `EntityEditor` / `AssertionRecord` (per [30_recommendation.md:570-577](../../references/working/post-routemap-direction-selection-input/30_recommendation.md)). Renaming `SDKStore` has cascade effects on the SDK* family.
+- **`EntitySnapshot.assertions` namespace pattern is established prior art** at [src/kernel/sdk/facade.py:102-217](../../../src/kernel/sdk/facade.py) — `__getattr__` + `FrozenSnapshotError`-on-mutation. Pattern: `snap.assertions.field.active` / `.history` / `.at(t)` / `.version(v)`. **Redesign sub-namespacing should reuse this pattern, not invent.**
+- **`EvidenceGraph` is the audit substrate** unified cross-engine explainability DTO (durable as `audit/evidence_graphs.jsonl`; queryable via `AuditQuery.get_candidate_evidence_graph()`). Lives in `kernel.audit` advanced importable, NOT in `factpy.__all__`. Adjacent name only — not a §5.3 collision.
+- **L-Full follow-on already anticipated this redesign blueprint** ([30_recommendation.md:600+](../../references/working/post-routemap-direction-selection-input/30_recommendation.md)). L Direction (G1-G5) shipped per Batch 8 §5.5.5 reactivation discipline. `sdk.universe()` → `sdk.why_not()` naming correction shipped at G4. G3 three-sister naming chosen with explicit justification at G3 §5.7.
+- **`#6 — No outward compat without user signal`** ([60_lessons-learned.md §2.3](../../references/working/rule-replay-line-redesign-input/60_lessons-learned.md)) cited via §95 lessons quote: user has historically rejected SDK surface expansion "for consistency"; redesign trigger is explicit user signal (per `feedback_sdk_ergonomics_redesign_target`).
+- **`import naming (factpy vs kernel.sdk)` deferred** ([README.md Round 9 close](../../references/working/post-routemap-direction-selection-input/README.md)) — separate parallel question to §5.3 class name. Out of §5.3 scope.
+
 ## 5. Design — Step 0 Questions
 
 **Convention:** Each §5.x question lists what must be source-grounded by a falsifier pass before locking. **No question below has a final decision yet.** Per `feedback_iterative_gap_design`, decisions land one at a time (or in low-suspense batches), each in its own commit, with a fresh falsifier scan against the codebase HEAD.
@@ -220,19 +231,49 @@ Candidate groupings (provisional; finalized at §5.2 lock):
 - F4 — Does any grouping accidentally promote `kernel.audit` or `kernel.core` concepts into the SDK surface? The G5 §5.3 layer rule must hold.
 - F5 — Existing `views` namespace precedent — does it fit the chosen grouping or stay an outlier?
 
-### 5.3 Top-level client class naming
+### 5.3 Top-level entrypoint class naming
 
-**Question:** If the redesign introduces a top-level client (option E or rename), what is it called?
+**Question:** What is the user-facing top-level entrypoint class name? Keep `SDKStore`, or introduce a new name (and if new, what)?
 
-Candidates: `Client`, `FactPyClient`, `Store`, keep `SDKStore`, `Kernel`, other.
+**Candidates evaluated** (4-round chat-driven falsifier pass on 2026-05-09):
 
-**Falsifiers required:**
+| Candidate | Repetition with package | Python precedent | F0 mental-model-reset (thesis primary) | 信达雅 | Verdict |
+|---|---|---|---|---|---|
+| `keep SDKStore` | n/a (current) | — | **Fails F0** — "SDK" tells you HOW (channel), "Store" collides mentally with substrate `kernel.core.store.Store` | low | rejected as canonical (kept callable per §5.4 compat) |
+| `FactPy` | full repetition (eponymous) | `flask.Flask`, `openai.OpenAI`, `anthropic.Anthropic` | **Fails F0** — eponymous teaches identity not model; sends wrong category signal (eponymous in Python = hosted-service SDK or web framework; FactPy is neither); no natural variable-name convention (no `app`/`client` equivalent); forecloses future top-level types | medium | rejected (wrong category signal) |
+| `Client` | none | `cohere.Client`, `genai.Client` | Fails F0 + F2 — wrong category signal; FactPy is not a hosted service | low | rejected (wrong category signal) |
+| `FactPyClient` | partial (Fact+Py) | — | Compounds two rejections (Fact-prefix + Client) | low | rejected |
+| `Kernel` | full collision with internal `kernel.*` package | `genai.Client` (in google.generativeai) | Fails F1 — package namespace collision | n/a | rejected (collision) |
+| `Store` | bare | — | Fails F2 — substrate `kernel.core.store.Store` ambiguity | n/a | rejected (substrate collision) |
+| `Session` | none | `sqlalchemy.Session`, `requests.Session`, `pyspark.sql.SparkSession` | Mixed F0 — teaches pattern (transactional unit-of-work) but not domain; FactPy has no commit/rollback semantics so SQLAlchemy migration knowledge would partially mislead | high (Pythonic) | rejected (teaches pattern not domain; partial mislead) |
+| `KnowledgeBase` | none | `pydantic.BaseModel`, AI/Prolog tradition | Strong F0 — teaches full domain ("you're holding a knowledge base"); `kb` standard variable abbrev | medium-high (13 chars, classical) | strong runner-up |
+| **`FactGraph`** | partial ("Fact") | **`tensorflow.Tensor`, `pyspark.sql.SparkSession`, `pyparsing.ParserElement`** — major Python libraries explicitly use same-morpheme repetition where the repeated morpheme strengthens domain abstraction | **Strong F0** — teaches domain ("Fact") + structure ("Graph"); user reading `from factpy import FactGraph` learns at first contact "this is a graph of facts" | high (9 chars; both axes covered) | **chosen** |
 
-- **F0 (thesis-primary, per §0) — Mental-model-reset test.** Does a new top-level name (e.g., `FactPyClient`) **reset the user's mental model** more cleanly than overloading `SDKStore`? Specifically: would a user encountering `FactPyClient` for the first time form a more accurate expectation of what's inside than a user encountering a re-namespaced `SDKStore`? This question is upstream of industry-alignment (F3) — conformance is not the goal per §0.
-- F1 — Naming must not collide with existing identifiers in `kernel.sdk.__all__` (length 34).
-- F2 — Naming must not be ambiguous with `kernel.core.store.Store` (substrate-layer Store class).
-- F3 — Industry alignment: OpenAI uses `OpenAI` (PascalCase namespace name); Anthropic uses `Anthropic`; Stripe uses `stripe.Stripe()`; Google's GenAI uses `genai.Client`. FactPy convention: TBD. **Industry alignment is evidence to weigh, not a template to copy.**
-- F4 — Backwards-compat: if `SDKStore` stays, the new client name is purely additive; if `SDKStore` is renamed, all 5 immutable Path B snapshots' callsites in user code break.
+**Decision (locked 2026-05-09 via 4-round chat-driven falsifier pass): `FactGraph`.**
+
+**Falsifier evidence:**
+
+- **F0 (mental-model-reset, thesis-primary, per §0):** `factpy.FactGraph` teaches users at first contact that they're holding a "fact graph" — both domain ("Fact") and structure ("Graph"). `factpy.FactPy()` (eponymous) only teaches identity. `factpy.SDKStore()` (current) tells users HOW they encounter it (the SDK), not WHAT it is.
+- **F1 (collision in `kernel.sdk`):** clean. `grep -rn "FactGraph" src/ docs/ examples/` returned zero hits at HEAD `f04d25d`. `kernel.sdk.__all__` length 34 unchanged.
+- **F2 (substrate ambiguity):** clean for top-level user-facing surface. Adjacent name `kernel.audit.evidence_graph.EvidenceGraph` (audit substrate; durable as `audit/evidence_graphs.jsonl`; queryable via `AuditQuery.get_candidate_evidence_graph()`) is **not** in `factpy.__all__` — lives in `kernel.audit` advanced-importable surface only. Different word ("Fact" vs "Evidence"), different package, different concept (`EvidenceGraph` is per-candidate audit DTO; `FactGraph` is top-level user-facing entrypoint to the knowledge graph). Users encountering `from factpy import FactGraph` do not naturally encounter `EvidenceGraph`.
+- **F3 (industry alignment, recategorized as evidence per §0, NOT template):** Convention 3 (descriptive class name distinct from package name) is the dominant Python pattern for non-hosted-service libraries (`networkx.Graph`, `sqlalchemy.Session`, `pandas.DataFrame`, `pydantic.BaseModel`, `requests.Session`). **The mild Fact-prefix overlap with `factpy` package name is NOT a Python-ecosystem convention violation.** Go's "avoid stutter" rule (effective_go + Google Go Style Guide) is formally documented; Python has no equivalent PEP. Major Python libraries explicitly use same-morpheme repetition: `tensorflow.Tensor`, `pyspark.sql.SparkSession`, `pyspark.SparkContext`, `pyparsing.ParserElement`. In these patterns the repeated morpheme strengthens (rather than dilutes) the abstraction's identity — `Tensor` IS the core abstraction of `tensorflow`; `SparkSession` IS the core abstraction of `pyspark`. `FactGraph` follows the same pattern.
+- **F4 (backwards-compat, defers to §5.4):** `SDKStore` callable surface stays per §0 thesis hard-constraint. The relationship between `FactGraph` and `SDKStore` (literal alias `FactGraph = SDKStore`, subclass, wrapper, or replacement-with-deprecation) is determined at §5.4. The §5.3 lock only commits to the user-facing class name — not to how it integrates with the existing `SDKStore` class.
+
+**Implications for §5.4 + §5.1 (recorded; not pre-locking):**
+
+- **§5.4 (compat strategy):** since `SDKStore` is part of an established `SDK*` family (also `SDKBatchTx`, plus descriptive siblings `EntitySnapshot` / `FieldAssertions` / `AssertionNamespace` / `EntityEditor` per `kernel.sdk.facade`), wholesale rename is high-cost. §5.4 likely lands on permanent dual surface: `FactGraph` as canonical user-facing name; `SDKStore` callable for back-compat. §5.4 falsifier confirms.
+- **§5.1 (shape evaluation):** subsequent shape evaluation uses `FactGraph` as the new top-level entrypoint name. Candidate shape D (replacement) and shape F (hybrid) become more naturally framed under `FactGraph`. Candidate shape A (status quo) trivially applies if `FactGraph` is a literal alias of `SDKStore`. Candidate shape B (alias-only namespace overlay) and E (new `Client` class) are now more sharply distinguished — E is essentially "new top-level name + nested namespaces", which under §5.3 lock becomes "FactGraph with nested namespaces".
+- **`EntitySnapshot.assertions` prior art** (`src/kernel/sdk/facade.py:102-217`) demonstrates that nested namespace under a top-level class is an established pattern in SDK using `__getattr__` + `FrozenSnapshotError`. Sub-namespacing for `FactGraph` (if §5.1 elects) can reuse this pattern rather than invent.
+
+**Rejected industry-alignment framings:**
+
+- "Match OpenAI eponymous (`factpy.FactPy()`)" — wrong category signal per F0; eponymous in Python is reserved for hosted-service SDKs and web frameworks.
+- "Match Stripe / boto3 module-level functions (`factpy.from_classes(...)`)" — pushes the class-name question down without resolving it; user still ends up holding some class instance.
+- "Match SQLAlchemy `Session`" — teaches pattern not domain; FactPy has no commit/rollback semantics so the migration knowledge partially misleads.
+
+**Package-import naming (`factpy` vs `kernel.sdk`):**
+
+The reference bundle ([README §Verification log Round 9](../../references/working/post-routemap-direction-selection-input/README.md)) explicitly defers `import naming (factpy vs kernel.sdk)` as a separate parallel question. §5.3 commits **only** to the class name `FactGraph`. The package-import side is its own decision (out of §5.3 scope; may surface in §5.5 docs/quickstart impact or §5.8 version stamping).
 
 ### 5.4 Compatibility / deprecation strategy
 
@@ -339,6 +380,7 @@ If §5.1-§5.7 lands a replacement (option C / D): substantially more — every 
 - **Core thesis (verbatim, per §0):** "The redesign should make the SDK namespace teach FactPy's conceptual model at first contact. Compatibility is a hard constraint, and industry SDK shapes are evidence, not templates." Every §5.x falsifier and every implementation-stage choice must be reducible to this thesis.
 - **F0-legibility primacy.** `dir(client)` / IDE-autocomplete legibility against the §4.1 conceptual layering is the **first** falsifier axis for every shape candidate (§5.1, §5.2, §5.3). Migration cost (F4) and industry alignment (F3 in §5.3) are downstream weights, not entry gates.
 - **Compat is a hard constraint, not a goal.** The flat `SDKStore.<method>` surface across 5 immutable Path B snapshots stays callable; any candidate that breaks it requires a standalone falsifier per §5.4 thesis-derived default.
+- **§5.3 locked: top-level entrypoint class name is `FactGraph`** (sourced from chat-driven 4-round falsifier pass on 2026-05-09; `tensorflow.Tensor` / `pyspark.sql.SparkSession` / `pyparsing.ParserElement` Python precedent for Fact-overlap; `EvidenceGraph` substrate-audit name does NOT collide because it's not in `factpy.__all__`). Relationship with existing `SDKStore` class is §5.4 territory.
 - `kernel.sdk.__all__` length stays at **34** unless §5.x explicitly justifies an addition with falsifier pass.
 - Sacred branches `master` and `v0.1-oss-prep` untouched throughout.
 - All 5 published L milestone refs (G1 `d6716a0` / G4 `acb5a6e` / G2 `d658390` / G3 `cb6d3bd` / G5 `d4ceb3e`) and their Path B combined snapshots remain immutable.
@@ -364,7 +406,7 @@ Scoped-stage acceptance (filled after §5 falsifier passes):
 
 - [ ] §5.1 deliverable — full inventory of 30-method flat surface + N candidate alternative shapes with documented migration cost surfaces and conceptual-fit evaluation.
 - [ ] §5.2 locked — namespace shape (or "no nesting").
-- [ ] §5.3 locked — top-level client naming (or "keep `SDKStore`").
+- [x] §5.3 locked — top-level entrypoint class name is **`FactGraph`** (4-round chat-driven falsifier pass 2026-05-09; sources: TF/PySpark/pyparsing Python precedent for Fact-overlap; `EvidenceGraph` substrate F2-clean — not in `factpy.__all__`; SDK* family pattern preserved by keeping `SDKStore` callable per §5.4).
 - [ ] §5.4 locked — compatibility / deprecation strategy.
 - [ ] §5.5 locked — docs / quickstart impact assessment.
 - [ ] §5.6 locked — aliases vs replacement decision (if non-no-change outcome).
