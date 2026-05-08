@@ -1,5 +1,30 @@
 # Current Operational Memory
 
+最后更新:2026-05-08(`codex/v0.1-l-g4-why-not-frontier-2026-05-08`;G4 Why-not SDK shell implemented,archived,ready to publish snapshot)
+
+## 当前阶段(2026-05-08 — L DIRECTION G4 WHY-NOT SDK SHELL COMPLETE)
+
+**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 topic branch `codex/v0.1-l-g4-why-not-frontier-2026-05-08`; G4 close-out/archive commit is `a3b7f119`, followed by this operational memory sync.
+
+**G4 published snapshot target:** `v0.1-l-g4-why-not-frontier-2026-05-08` should point to the final G4 close-out HEAD after publish.
+
+### G4 outcome
+
+- **Shipped SDK method:** `SDKStore.why_not(derivation, candidates, *, engine="native", registry=None) -> WhyNotUniverseResult`.
+- **Input contract:** SDK `Derivation` only; explicit finite `candidates` rows as `Sequence[Mapping[str, Any] | Sequence[Any]]`.
+- **Return contract:** raw application `WhyNotUniverseResult` documented passthrough; `kernel.sdk.__all__` remains unchanged.
+- **Frontier:** remains advanced importable; no `SDKStore.frontier`, no `kernel/sdk/frontier.py`, no SDK/core frontier import.
+- **Blueprint:** `docs/blueprints/archive/2026-05-08_l-direction-g4-why-not-frontier.md` + `.audit.md` archived and marked `implemented`.
+- **Verification basis:** 76 SDK shell targeted tests OK; 109 Why-not application/helper regression tests OK; full kernel suite 1538 OK / 1 skipped; ruff clean; `git diff --check` clean.
+
+### G4 follow-up
+
+- Publish `v0.1-l-g4-why-not-frontier-2026-05-08` from the final close-out HEAD.
+- G2 is next in L sequence and MUST re-evaluate `kernel/sdk/shells/` migration before adding more SDK shell files; this is the re-recorded G1/G4 flat-layout trigger.
+- Sacred branches remain untouched: `master` and `v0.1-oss-prep`.
+
+<!-- Historical 2026-05-08 A+B / pre-G4 state follows. -->
+
 最后更新:2026-05-08(`v0.1-public-surface-helpers-walker-2026-05-08`;A+B post-routemap Tier 2 helpers + walker complete,blueprints archived,combined snapshot pushed,dirty notebooks reverted)
 
 ## 当前阶段(2026-05-08 — A+B POST-ROUTEMAP TIER 2 SURFACE COMPLETE)
