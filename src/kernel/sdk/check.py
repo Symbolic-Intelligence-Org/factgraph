@@ -1,9 +1,8 @@
-"""SDK shell for Q1 Check capability — Phase 0 stub.
+"""SDK shell for Q1 Check capability.
 
-Phase 0 of G1 (per blueprint
+Phase 1 of G1 (per blueprint
 ``docs/blueprints/active/2026-05-08_l-direction-g1-check-diagnose.md`` §8)
-ships only a delegation skeleton that raises ``NotImplementedError``. Real
-end-to-end implementation lands in Phase 1.
+implements the ``SDKStore.check`` facade method.
 
 Public surface contract per blueprint §5 locks:
 
@@ -27,6 +26,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from kernel.application.capability_helpers import (
+    CapabilityHelperError,
+    build_check_request,
+)
+from kernel.application.derivation_check_runtime import check_derivation_binding
+from kernel.application.protocol import CheckResult
+
+from .dsl import Derivation
+from .errors import SDKStoreError
+from .store import _compiled_derivation_plan_to_application
+
 
 def sdk_check(
     sdk: Any,
@@ -35,12 +45,55 @@ def sdk_check(
     *,
     engine: str = "native",
     registry: Any = None,
-) -> Any:
-    """Phase 0 stub for ``SDKStore.check``; raises ``NotImplementedError``.
+) -> CheckResult:
+    """Run Check for a single SDK ``Derivation`` and binding mapping."""
 
-    Real implementation lands in Phase 1 per blueprint §8.
-    """
-    raise NotImplementedError(
-        "sdk_check is a Phase 0 stub; real implementation lands in Phase 1 "
-        "per docs/blueprints/active/2026-05-08_l-direction-g1-check-diagnose.md §8"
+    _validate_derivation(derivation)
+    binding_dict = _validate_binding(binding)
+
+    compiled_plans = sdk._compile_derivation_input(derivation)
+    if len(compiled_plans) != 1:
+        raise SDKStoreError(
+            "check derivation must compile to exactly one plan",
+            path="$.check.derivation",
+        )
+
+    plan = _compiled_derivation_plan_to_application(
+        compiled_plans[0],
+        mode=engine,
+        explicit_engine_ext=getattr(derivation, "engine_ext", None),
+        engine_options=None,
     )
+    resolved_registry = sdk._resolve_runtime_registry(derivation, explicit_registry=registry)
+
+    try:
+        request = build_check_request(plan, binding_dict, engine=engine)
+    except CapabilityHelperError as exc:
+        raise SDKStoreError(f"invalid check input: {exc}", path="$.check") from exc
+
+    return check_derivation_binding(request, store=sdk._store, registry=resolved_registry)
+
+
+def _validate_derivation(derivation: Any) -> None:
+    if not isinstance(derivation, Derivation):
+        raise SDKStoreError("derivation must be SDK Derivation", path="$.check.derivation")
+
+
+def _validate_binding(binding: Any) -> dict[str, Any]:
+    if not isinstance(binding, Mapping):
+        raise SDKStoreError("binding must be Mapping[str, Any]", path="$.check.binding")
+
+    out: dict[str, Any] = {}
+    for key, value in binding.items():
+        if not isinstance(key, str) or not key.startswith("$") or len(key) == 1:
+            raise SDKStoreError(
+                "binding keys must be $-prefixed variable names",
+                path="$.check.binding",
+            )
+        out[key] = value
+    return out
+
+
+__all__ = [
+    "sdk_check",
+]

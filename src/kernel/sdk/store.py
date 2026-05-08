@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 import os
 import warnings
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from kernel.application import apply_write_plan, plan_write_command
@@ -48,6 +48,9 @@ from .errors import CardinalityError, EntityNotFoundError, SDKStoreError
 from .query_lower import QueryPlan, lower_query
 from .query_runtime import execute_query_plan
 from .schema import Entity, Field
+
+if TYPE_CHECKING:
+    from kernel.application.protocol import CheckResult
 
 
 class _SDKViewsManager:
@@ -277,10 +280,7 @@ class SDKStore:
         *,
         engine: str = "native",
         registry: RuleRegistry | None = None,
-    ) -> Any:
-        # Phase 0 stub delegation — see kernel/sdk/check.py and
-        # docs/blueprints/active/2026-05-08_l-direction-g1-check-diagnose.md §8.
-        # Phase 1 tightens return type to CheckResult.
+    ) -> "CheckResult":
         from .check import sdk_check
 
         return sdk_check(self, derivation, binding, engine=engine, registry=registry)
