@@ -50,7 +50,12 @@ from .query_runtime import execute_query_plan
 from .schema import Entity, Field
 
 if TYPE_CHECKING:
-    from kernel.application.protocol import CheckResult, DiagnoseResult, WhyNotUniverseResult
+    from kernel.application.protocol import (
+        CheckResult,
+        DiagnoseResult,
+        FactOverlayCheckResult,
+        WhyNotUniverseResult,
+    )
 
 
 class _SDKViewsManager:
@@ -385,6 +390,56 @@ class SDKStore:
         from .shells.why_not import sdk_why_not
 
         return sdk_why_not(self, derivation, candidates, engine=engine, registry=registry)
+
+    def check_fact_overlay(
+        self,
+        derivation: Any,
+        binding: Mapping[str, Any],
+        overlay: Any,
+        *,
+        engine: str = "native",
+        registry: RuleRegistry | None = None,
+    ) -> "FactOverlayCheckResult":
+        """Run Fact Overlay Check for one SDK ``Derivation`` + binding + overlay.
+
+        Args:
+            derivation: SDK ``Derivation`` authoring object. ``Rule`` and
+                application ``CompiledDerivationPlan`` inputs are rejected
+                at the SDK boundary (per §5.1 lock).
+            binding: Mapping of ``$``-prefixed variable names to Python
+                values; validated through ``kernel.sdk.shells._validation``.
+            overlay: Raw application ``EvaluationOverlay`` protocol DTO
+                (per §5.1 lock — author-time intent, not a lowered plan).
+                Wrong-type or malformed overlay shape is caught by
+                ``FactOverlayCheckRequest`` construction and remapped to
+                ``$.check_fact_overlay.request`` per §5.8.
+            engine: Runtime engine name passed through to the application
+                Fact Overlay request DTO.
+            registry: Optional runtime registry override.
+
+        Returns:
+            The application ``FactOverlayCheckResult`` DTO directly. The
+            runtime represents unsupported overlay / runtime conditions as
+            ``invalid_request`` result DTOs (not raised exceptions); the
+            SDK shell passes the result through unchanged per §5.8 lock.
+
+        Raises:
+            SDKStoreError: For non-SDK exceptions crossing the SDK
+                boundary. The ``path`` field locates the failure:
+                ``$.check_fact_overlay.derivation`` for SDK input-shape
+                and derivation-lowering failures,
+                ``$.check_fact_overlay.binding`` for binding shape errors,
+                ``$.check_fact_overlay.dependencies`` for dependency
+                registration failures, and
+                ``$.check_fact_overlay.request`` for request DTO shape
+                errors (including malformed ``overlay``). Original
+                exceptions are preserved as ``__cause__``.
+        """
+        from .shells.fact_overlay import sdk_fact_overlay_check
+
+        return sdk_fact_overlay_check(
+            self, derivation, binding, overlay, engine=engine, registry=registry
+        )
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
         """Return a managed e_ref string for the entity identified by kwargs.
