@@ -359,8 +359,8 @@ class SDKStore:
             candidates: Sequence of candidate rows. Each row is either a
                 ``Mapping[str, Any]`` keyed by the head variable names, or a
                 positional ``Sequence[Any]`` matching the head variable
-                order. Rows are normalized via A's
-                ``build_why_not_candidate_universe(plan, candidates)``.
+                order. Rows are normalized internally against the plan
+                head variable order.
             engine: Runtime engine name passed through to the application
                 Why-not request DTO.
             registry: Optional runtime registry override.

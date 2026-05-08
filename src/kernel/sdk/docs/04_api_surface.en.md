@@ -2,7 +2,7 @@
 
 This page tracks the public exports in `kernel/sdk/__init__.py` and the main class APIs. The SDK API surface is the Python product surface; runtime execution for query / ingest / compiled derivation paths is delegated to `kernel.application`, while SDK preserves outward adapters and compatibility shapes.
 
-After the Batch 8 public-surface decision, the SDK surface remains narrow:the exports and existing `SDKStore` facade methods listed here are the v0.1 product public API. The Check, Diagnose, Fact Overlay, ProofFrame, Why-not, rule-action runtimes, round events, and ProofFrame diff added in Batches 3-7 do not gain SDK shells in Batch 8; use them through the `kernel.application` / `kernel.audit` advanced importable surfaces. Promoting any one family to an ergonomic SDK API requires a separate outward request/result shape and must not directly re-export application DTOs.
+After the Batch 8 public-surface decision, the SDK surface remains narrow: the exports and existing `SDKStore` facade methods listed here are the v0.1 product public API. L Direction G1 added `SDKStore.check(...)` / `SDKStore.diagnose(...)` as narrow SDK shells for Check / Diagnose; G4 added `SDKStore.why_not(...)` as the narrow SDK shell for Why-not Universe Diagnose. None of these methods extend `kernel.sdk.__all__` or re-export application DTOs. Fact Overlay, ProofFrame, rule-action runtimes, round events, ProofFrame diff, and Frontier trace remain on the `kernel.application` / `kernel.audit` / `kernel.core.rules.frontier` advanced importable surfaces. Frontier was explicitly kept out of the SDK facade in G4 §5.4; the evaluator drift gate and the application no-opt-in tests stay in force. Promoting any other family to an ergonomic SDK API requires a separate outward request/result shape and must not directly re-export application DTOs.
 
 ## 1. Top-Level Exports (`from kernel.sdk import ...`)
 
@@ -61,6 +61,9 @@ Additional note:
 - `edit(...)`
 - `ingest(...)`
 - `validate_provenance(...)`
+- `check(...)`
+- `diagnose(...)`
+- `why_not(...)`
 - `ref(...)`
 - `set(...)`
 - `add(...)`
@@ -85,6 +88,8 @@ Key boundaries:
 - `evaluate(...)` explicitly rejects `view` and `temporal_view`.
 - `evaluate(..., engine_options={...})` supports engine run-time configuration; it is call-time only and does not enter `Derivation` or authoring payloads.
 - `evaluate(mode="native", engine_options={...})` fails explicitly; engine_options key validation and defaults remain adapter-owned.
+- `check(Derivation(...), binding, *, engine="native", registry=None)` and `diagnose(...)` accept only SDK `Derivation` and `$`-prefixed binding `Mapping`; they return raw application `CheckResult` / `DiagnoseResult` DTOs that are not added to `kernel.sdk.__all__`.
+- `why_not(Derivation(...), candidates, *, engine="native", registry=None)` accepts an SDK `Derivation` and an explicit finite candidate universe (`Sequence[Mapping[str, Any] | Sequence[Any]]`, mirroring `kernel.application.capability_helpers.build_why_not_candidate_universe(...)`). It returns the raw application `WhyNotUniverseResult` DTO; the result type is not added to `kernel.sdk.__all__`. Why-not rejects `CompiledDerivationPlan` at the SDK boundary and never auto-discovers the universe from the store. All non-SDK exceptions (`ValueError` / `RuleCompileError` / `CapabilityHelperError` / `ProtocolShapeError` / `WhyNotRuntimeError`) remap to `SDKStoreError(..., path="$.why_not[.derivation|.dependencies|.candidates|.request|]") from exc`.
 - Rule `row_format` precedence: call-site > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`.
 - `FACTPY_ROW_FORMAT` is read once at `SDKStore` initialization and cached.
 - `row_format="tuple"` still works but emits `DeprecationWarning`.

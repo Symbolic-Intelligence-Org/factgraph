@@ -1,34 +1,42 @@
-"""G4 cross-cutting invariants.
+"""Cross-cutting invariants for G4 Why-not SDK shell.
 
-Phase 0 of G4 (per blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g4-why-not-frontier.md`` §8)
-seeds the invariant test class. Phase 0 covers only the invariants that
-can be verified before the real implementation ships:
+Mirrors G1's `test_sdk_g1_invariants.py` 6-class structure plus one
+G4-specific invariant for the §5.4 Frontier-stays-advanced-importable
+lock. Active class:
 
-- ``kernel.sdk.__all__`` length unchanged at 34 and ``WhyNotUniverseResult``
-  not exported (§5.3 lock).
-- ``SDKStore.why_not`` exists as instance method, not as a free function
-  in ``kernel.sdk.__all__`` (§5.4 instance-method-placement lock).
-- No ``kernel/sdk/frontier.py`` module shipped (§5.4 Frontier-stays-
-  advanced-importable lock).
-- No ``kernel/sdk/shells/`` subpackage exists (§5.5 flat-layout lock).
-
-Phase 2 adds the remaining four invariants per §5.7 (no-internal-walker-
-audit-imports / thin-delegate / docstring-boundary-contract / Q1 Sibling
-static scan).
+1. `test_sdk_all_unchanged_and_why_not_result_not_exported` — §5.3
+2. `test_sdk_store_why_not_is_instance_method` — §5.4
+3. `test_no_frontier_sdk_module_exists` — §5.4 Frontier defer (G4-specific)
+4. `test_g4_modules_are_flat_and_no_shells_package_exists` — §5.5
+5. `test_g4_modules_do_not_import_internal_or_walker_layers` — §6 layer isolation
+6. `test_store_method_remains_thin_delegate_method` — §6 thin-delegate
+7. `test_store_method_docstring_records_boundary_contract` — §5.7 + §6 docstring
 """
 
 from __future__ import annotations
 
+import inspect
 import pathlib
 import unittest
+from importlib import import_module
 
 from kernel import sdk as kernel_sdk
 from kernel.sdk import SDKStore
 
 
-class SDKG4InvariantPhase0Tests(unittest.TestCase):
-    """Phase 0 G4 invariants — must hold before Phase 1 real implementation."""
+G4_MODULES = ("kernel.sdk.why_not",)
+FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
+    "kernel.application.capability_helpers._binding",
+    "_reject_sdk_origin",
+    "from kernel.application.walker",
+    "import kernel.application.walker",
+    "from kernel.application.walker import",
+    "kernel.audit",
+)
+
+
+class SDKG4InvariantTests(unittest.TestCase):
+    """G4 invariants — must hold across all G4 phases."""
 
     def test_sdk_all_unchanged_and_why_not_result_not_exported(self) -> None:
         """§5.3 lock: ``WhyNotUniverseResult`` is not re-exported from SDK."""
@@ -54,6 +62,34 @@ class SDKG4InvariantPhase0Tests(unittest.TestCase):
         sdk_dir = pathlib.Path(kernel_sdk.__file__).parent
         self.assertTrue((sdk_dir / "why_not.py").is_file())
         self.assertFalse((sdk_dir / "shells").exists())
+
+    def test_g4_modules_do_not_import_internal_or_walker_layers(self) -> None:
+        """§6 lock: G4 SDK modules must not import application internals, walker, or audit layers."""
+        for module_name in G4_MODULES:
+            module = import_module(module_name)
+            source = pathlib.Path(inspect.getfile(module)).read_text(encoding="utf-8")
+            for forbidden in FORBIDDEN_PRODUCTION_IMPORT_TEXT:
+                with self.subTest(module=module_name, forbidden=forbidden):
+                    self.assertNotIn(forbidden, source)
+
+    def test_store_method_remains_thin_delegate_method(self) -> None:
+        """§6 thin-delegate lock: ``SDKStore.why_not`` body is just ``from .why_not import ...; return ...``."""
+        why_not_source = inspect.getsource(SDKStore.why_not)
+
+        self.assertIn("from .why_not import sdk_why_not", why_not_source)
+        self.assertIn("return sdk_why_not(", why_not_source)
+        self.assertNotIn("build_why_not_candidate_universe", why_not_source)
+        self.assertNotIn("check_why_not_universe", why_not_source)
+        self.assertNotIn("WhyNotUniverseRequest", why_not_source)
+
+    def test_store_method_docstring_records_boundary_contract(self) -> None:
+        """§5.7 + §6 lock: ``SDKStore.why_not`` docstring records boundary contract."""
+        why_not_doc = SDKStore.why_not.__doc__ or ""
+
+        self.assertIn("Derivation", why_not_doc)
+        self.assertIn("WhyNotUniverseResult", why_not_doc)
+        self.assertIn("SDKStoreError", why_not_doc)
+        self.assertIn("candidate", why_not_doc.lower())
 
 
 if __name__ == "__main__":
