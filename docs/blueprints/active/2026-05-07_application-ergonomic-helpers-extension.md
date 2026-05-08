@@ -1,13 +1,13 @@
 # Task Blueprint: Application Ergonomic Helpers Extension
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-07
-- Last Updated: 2026-05-07
+- Last Updated: 2026-05-08
 - Related Modules:
   - `src/kernel/application/capability_helpers/` (Step 0 Round 1: package — supersedes single-file `capability_helpers.py`; see §4.1)
   - `src/kernel/application/__init__.py`
   - `src/kernel/application/docs/`
-  - `src/kernel/tests/test_application_proofframe_runtime_native.py` (path-based gate to update in Phase 3 — see §4.1)
+  - `src/kernel/tests/test_application_proofframe_runtime_native.py` (path-based gate replaced with package-aware boundary test in Phase 3 — see §4.1)
   - `src/kernel/tests/`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
@@ -46,7 +46,7 @@ Extend `kernel.application` capability helpers with **5 new builder families** t
 | 4 | Batch 5 rule overlays (x3) | `build_rule_disable_request` / `build_rule_literal_replace_request` / `build_rule_add_condition_request` (`note=None` passes through to the matching action DTO's existing `note` field) | `RuleDisableRequest` / `RuleLiteralReplaceRequest` / `RuleAddConditionRequest` |
 | 5 | Batch 6 round event | `build_round_event_payload(*, kind, request, result)` | capability result payload `dict[str, Any]` (per-kind projector shape, suitable for embedding into a `RoundEvent` row; no named DTO) |
 
-Each builder accepts **application canonical types only** per Direction A — Input shape lock (Gap beta); SDK-to-application lowering bridging is **L's responsibility, not A's**.
+Each Phase 1-5 builder accepts **application canonical types only** per Direction A — Input shape lock (Gap beta); SDK-to-application lowering bridging is **L's responsibility, not A's**. Batch 2 helpers preserve their pre-Gap beta runtime behavior while remaining subject to the static no-SDK-import helper boundary.
 
 ## 3. Non-goals
 
@@ -215,31 +215,31 @@ Per [41_ §1-§5](../../references/working/post-routemap-direction-selection-inp
 - **Store boundary:** helpers do not write to the ledger or mutate `Store`. Reads are allowed only when declared by the specific builder contract.
 - **Frontier boundary:** helpers do not import or call frontier internals unless the existing Batch 2 helper already declared that read-only behavior.
 - **Public-surface boundary:** no new `kernel.sdk.__all__` export, no SDK docs, no README quickstart change, no outward compatibility promise.
-- **Shape boundary:** SDK-exclusive objects (`Rule`, `Derivation`, `EntitySnapshot`, `SDKStore`, `SDKBatchTx`, etc.) are rejected at this layer with `OriginPackageError(CapabilityHelperError)` per §4.1 Round 2. Future L SDK shells are responsible for SDK-to-application lowering and may catch `OriginPackageError` to detect bridging gaps.
+- **Shape boundary:** SDK-exclusive objects (`Rule`, `Derivation`, `EntitySnapshot`, `SDKStore`, `SDKBatchTx`, etc.) are rejected by Phase 1-5 builders with `OriginPackageError(CapabilityHelperError)` per §4.1 Round 2. Batch 2 helpers preserve their pre-Gap beta runtime validation behavior; Phase 6 still enforces the static no-`kernel.sdk` import boundary across the whole helper package. Future L SDK shells are responsible for SDK-to-application lowering and may catch `OriginPackageError` to detect bridging gaps.
 - **Migration boundary:** Existing `capability_helpers.py` migrates to a package per §4.1; `__init__.py` re-exports all public symbols so `from kernel.application.capability_helpers import ...` and `from kernel.application import ...` paths remain stable. Path-based test gates that read `capability_helpers.py` as a single file (see §4.1) must be rewritten or removed in their corresponding phase.
 
 ## 7. Acceptance
 
 Per [50_ §8 "A blueprint must cite / check"](../../references/working/post-routemap-direction-selection-input/50_migration-path.md):
 
-- [ ] All 5 new builders shipped, exported from `kernel.application` (Tier 2 advanced importable)
-- [ ] All builders accept application canonical types only; SDK-package inputs raise `OriginPackageError(CapabilityHelperError)` (origin-package rule per §4.1 Round 2, not name match)
-- [ ] Error class layout (per §4.1 Round 2) shipped: `CapabilityHelperError(ValueError)` unchanged at `errors.py`; `OriginPackageError(CapabilityHelperError)` newly exported from package `__init__.py`
-- [ ] No `kernel.sdk.__all__` modification; no SDK examples / quickstart / user guide change
-- [ ] No demo rewrite in this blueprint scope; demo migration tracked separately after archive
-- [ ] No SDK Rule lowering inside A; bridging deferred to L
-- [ ] Proposed Shape / Non-goals sections reference `#1`, `#5`, `#6`, plus Batch 2 §6 helper-layer constraints
-- [ ] Contract tests per [41_ §6](../../references/working/post-routemap-direction-selection-input/41_application-builders-design-sketch.md) all pass:
+- [x] All 5 new builders shipped, exported from `kernel.application` (Tier 2 advanced importable)
+- [x] Phase 1-5 builders accept application canonical types only; SDK-package inputs raise `OriginPackageError(CapabilityHelperError)` (origin-package rule per §4.1 Round 2, not name match). Batch 2 helpers (`build_fact_value_override`, `build_fact_remove_action`, `build_evaluation_overlay`, `build_frontier_view_facts`, `build_why_not_candidate_universe`) preserve pre-Gap beta runtime behavior while remaining covered by the whole-package static no-SDK-import invariant.
+- [x] Error class layout (per §4.1 Round 2) shipped: `CapabilityHelperError(ValueError)` unchanged at `errors.py`; `OriginPackageError(CapabilityHelperError)` newly exported from package `__init__.py`
+- [x] No `kernel.sdk.__all__` modification; no SDK examples / quickstart / user guide change
+- [x] No demo rewrite in this blueprint scope; demo migration tracked separately after archive
+- [x] No SDK Rule lowering inside A; bridging deferred to L
+- [x] Proposed Shape / Non-goals sections reference `#1`, `#5`, `#6`, plus Batch 2 §6 helper-layer constraints
+- [x] Contract tests per [41_ §6](../../references/working/post-routemap-direction-selection-input/41_application-builders-design-sketch.md) all pass:
   - Determinism (same input -> same DTO)
   - Equivalence to manual DTO construction
   - SDK-package input rejection (origin-package rule)
   - Binding normalization per §4.1 Round 3: dual-form `Mapping[str, Any] | BindingItems` accepted; `Mapping` sorted lexicographically; `BindingItems` validated for sortedness + non-duplicate keys (raise on violation, no silent re-sort); `None` values + empty binding allowed; `OriginPackageError` raised for SDK-origin objects in keys/values
   - No-side-effect (no ledger / no frontier / no sibling)
-- [ ] grep / import-graph static audit clean: no transitive SDK reach
-- [ ] Module split A2 (per §4.1) shipped: `capability_helpers.py` migrated to package; `__init__.py` re-exports all public symbols; `from kernel.application.capability_helpers import ...` and `from kernel.application import ...` paths verified equivalent to pre-A state for Batch 2 helpers
-- [ ] Path-based test gate at [test_application_proofframe_runtime_native.py:410-414](../../../src/kernel/tests/test_application_proofframe_runtime_native.py) **replaced with a package-aware boundary test** in Phase 3 (intentional supersede per §4.1 Round 1 + Round 4) — not just removed
-- [ ] Test fixture layout per §4.1 Round 4 shipped: existing `test_application_capability_helpers.py` untouched; 5 new family files (`test_capability_helpers_<family>.py`) + 1 cross-cutting file (`test_capability_helpers_invariants.py`)
-- [ ] All 8 capability families now have an importable builder (3 prior shipped + 5 new = **8-helper coverage target met**)
+- [x] grep / import-graph static audit clean: no transitive SDK reach
+- [x] Module split A2 (per §4.1) shipped: `capability_helpers.py` migrated to package; `__init__.py` re-exports all public symbols; `from kernel.application.capability_helpers import ...` and `from kernel.application import ...` paths verified equivalent to pre-A state for Batch 2 helpers
+- [x] Path-based test gate at [test_application_proofframe_runtime_native.py:410-414](../../../src/kernel/tests/test_application_proofframe_runtime_native.py) **replaced with a package-aware boundary test** in Phase 3 (intentional supersede per §4.1 Round 1 + Round 4) — not just removed
+- [x] Test fixture layout per §4.1 Round 4 shipped: existing `test_application_capability_helpers.py` untouched; 5 new family files (`test_capability_helpers_<family>.py`) + 1 cross-cutting file (`test_capability_helpers_invariants.py`)
+- [x] All 8 capability families now have an importable builder (3 prior shipped + 5 new = **8-helper coverage target met**)
 
 ## 8. Implementation Plan
 
@@ -279,9 +279,25 @@ Per phase:
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
+最终落地结果：
 
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+- Phase 0-6 全部完成于 `codex/v0.1-application-helpers-extension-2026-05-07`。Phase 0 migrated `capability_helpers.py` to a package while preserving import paths; Phases 1-5 shipped the 5 new builder families; Phase 6 shipped cross-cutting invariants.
+- The helper package now covers all 8 target capability families: Batch 2 prior helpers (Q3 Fact Overlay, Q4 Why-not, Q5 Frontier) plus Q1 Check, Q2 Diagnose, Batch 4 ProofFrame Recheck, Batch 5 rule overlays, and Batch 6 round-event payload projection.
+- `kernel.application` and `kernel.application.capability_helpers` export the same helper callables; no `kernel.sdk.__all__`, SDK docs, quickstart, examples, or demo migration changed in this blueprint.
+- Final focused regression after close-out audit fix: 292 tests pass across helper, protocol/runtime, and audit round-event suites.
+
+与 blueprint 不同的地方：
+
+- The origin-package runtime rule is enforced for Phase 1-5 builders. Batch 2 helpers keep their pre-Gap beta runtime behavior; Phase 6 enforces the static no-SDK-import boundary across the whole helper package. This is an explicit close-out refinement, not a drift.
+- `_reject_sdk_origin(...)` grew dataclass-field walking, cycle detection, and SDK class-object detection during strict audits. These were not spelled out in Step 0, but are required to make the Gap beta origin-package rule robust for nested application DTOs and class objects.
+- Rule overlay helpers scan raw caller inputs before constructing `Rule*Action` DTOs so SDK-origin inputs raise `OriginPackageError` instead of downstream protocol errors. The `note=None` convenience parameter is retained as pass-through to existing action DTO fields.
+- `build_round_event_payload(...)` is intentionally narrowed to the 5 existing projector-backed result kinds (`check_result`, `diagnose_result`, `fact_overlay_result`, `why_not_result`, `proof_frame_result`). Lifecycle and rule-overlay event kinds remain unsupported until audit projectors exist.
+
+为什么会有这些调整：
+
+- The strict-audit cadence repeatedly caught gaps between design shorthand and code reality: nested SDK objects in dataclass fields, validation-order interactions with protocol DTO constructors, round-event projector availability, and the distinction between pre-Gap beta Batch 2 behavior and new Phase 1-5 helpers.
+- Preserving Batch 2 runtime behavior avoids retroactive breakage while still completing A's additive Tier 2 substrate for new helper families.
+
+归档说明：
+
+- Blueprint is implemented and ready to archive after this close-out commit. Demo migration, SDK shell wrapping, and release publishing remain separate follow-up work.

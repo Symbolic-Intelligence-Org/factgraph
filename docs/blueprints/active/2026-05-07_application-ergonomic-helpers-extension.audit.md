@@ -24,6 +24,7 @@
 | 2026-05-08 | implementing | Phase 5 — Round event payload helper implemented | Added `build_round_event_payload(*, kind, request, result)` in `capability_helpers/round_events.py`. The helper narrows Batch 6 to the 5 existing projector-backed capability result kinds (`check_result`, `diagnose_result`, `fact_overlay_result`, `why_not_result`, `proof_frame_result`), rejects lifecycle and rule-overlay kinds until audit projectors exist, scans raw request/result inputs for SDK-origin objects before type validation, validates the `(kind, request, result)` triple, and dispatches to the existing `kernel.audit.round_events.project_*_event_payload(...)` functions. Wording tightened: helper returns a capability result payload dict suitable for embedding into a `RoundEvent` row, not the full jsonl row. Added `test_capability_helpers_round_events.py`; focused regression: 99 tests pass (Round event helper + Phase 1-4 helpers + existing capability helpers + audit round event projector/recorder tests). |
 | 2026-05-08 | implementing | Phase 5 strict-audit polish | Added nested SDK-origin request regression coverage for `build_round_event_payload(...)` (`CheckRequest.plan.body_ir` containing an SDK `Rule` now explicitly asserts `OriginPackageError`), updated application overview doc dates, and changed the blueprint Problem wording from pre-implementation "today" wording to blueprint-creation framing. Focused regression: 100 tests pass (Round event helper + Phase 1-4 helpers + existing capability helpers + audit round event projector/recorder tests). |
 | 2026-05-08 | implementing | Phase 6 — Cross-cutting invariants shipped | Added `test_capability_helpers_invariants.py` for export identity, 8-family coverage, private helper non-export, production no-SDK-import static audit, no sibling runtime / recorder calls, deterministic Phase 1-5 builders, top-level and nested SDK-origin rejection, and binding cycle guard coverage. Scope intentionally distinguishes Batch 2 helpers (Store/projector reads remain allowed) from Phase 1-5 Gap beta origin enforcement. Focused regression: 98 tests pass (Phase 6 invariants + Phase 1-5 helper tests + existing Batch 2 helper tests). |
+| 2026-05-08 | implemented | Close-out strict-audit fix + outcome | Final cumulative strict audit found one boundary blocker: SDK class objects bypassed `_reject_sdk_origin(...)` because the check used `type(value).__module__`. Fixed class-object origin detection, added a regression test, synchronized application overview test lists, marked acceptance complete, and filled Outcome / Deviations. Final focused regression: 292 tests pass. |
 
 ## Decision Notes
 
@@ -45,3 +46,73 @@
 - Phase 5 implementation (2026-05-08): Round event payload helper is a thin projector dispatch, not a recorder wrapper. It supports only the 5 currently projector-backed capability result kinds; lifecycle events stay owned by `RoundRecorder`, and rule-overlay event kinds remain deferred until audit-layer projectors/kinds exist.
 - Phase 5 strict-audit polish (2026-05-08): Behavior was already aligned; polish added explicit regression coverage for nested SDK-origin objects inside request dataclasses and synchronized docs chronology after the Phase 5 surface landed.
 - Phase 6 implementation (2026-05-08): Cross-cutting invariants are scoped by helper generation. Static no-SDK / no sibling-runtime / no recorder checks apply to the whole helper package; runtime origin-package and determinism invariants apply to Phase 1-5 builders. Batch 2 Store/projector reads remain legal precedent and are not treated as drift.
+- Close-out strict audit (2026-05-08): `OriginPackageError` runtime enforcement is robust for Phase 1-5 builders, including SDK class objects as values. Batch 2 helpers remain a documented pre-Gap beta carve-out for runtime origin-package behavior while retaining whole-package static no-SDK-import coverage.
+
+## Phase 0-6 Final Strict Audit Report (2026-05-08)
+
+### Summary
+
+Final cumulative audit covered the completed A implementation at `2a6d08c` plus the close-out blocker fix in this commit. The audit checked design alignment, production helper code quality, focused regression coverage, module docs, and reconciliation of all prior strict-audit fixes.
+
+**Verdict after close-out fix:** implemented and ready to archive.
+
+### Findings
+
+| Severity | Finding | Resolution |
+|---|---|---|
+| Blocker | `_reject_sdk_origin(...)` missed SDK class objects because it checked `type(value).__module__`; class objects report `builtins` through `type(value)`. | Fixed by checking `value.__module__` when `value` is itself a class object; added `test_sdk_class_objects_are_rejected_for_phase_1_to_5_builders`. |
+| Clarify | Blueprint acceptance wording originally said all builders enforce runtime `OriginPackageError`, while Phase 6 intentionally scoped runtime origin checks to Phase 1-5 builders. | Acceptance and Outcome now explicitly record the Batch 2 pre-Gap beta runtime carve-out plus whole-package static no-SDK-import coverage. |
+| Minor | Application overview docs omitted `test_capability_helpers_invariants.py`; English overview also omitted rule add condition protocol/runtime tests. | Both overview docs updated. |
+| Minor | Blueprint metadata and Related Modules wording still reflected pre-close-out state. | Status set to `implemented`, Last Updated set to `2026-05-08`, and the ProofFrame gate note now records the completed package-aware replacement. |
+
+### Aligned Contracts
+
+- A2 package layout shipped: `capability_helpers/` package with per-family modules and `__init__.py` re-exporting public symbols.
+- Error layout shipped: `CapabilityHelperError(ValueError)` preserved and `OriginPackageError(CapabilityHelperError)` exported.
+- Phase 1-5 builders reject SDK-package instances and class objects through origin-package checks before protocol/runtime construction paths can obscure the error.
+- Check / Diagnose binding normalization accepts `Mapping[str, Any] | BindingItems`, preserves `None` and empty binding values, validates canonical tuple shape, and rejects cycles.
+- ProofFrame Recheck helper remains DTO-only and bridges `overlay=None` to `EvaluationOverlay()`.
+- Rule overlay helpers build exactly one matching rule action, reject non-empty caller overlays, preserve `note=None` pass-through, and scan raw inputs before DTO construction.
+- Round event payload helper dispatches only to the 5 existing projector-backed result kinds and returns payload dicts suitable for embedding in round-event rows.
+- Batch 2 helper behavior is preserved; whole-package static checks enforce no production `kernel.sdk` imports, no sibling runtime calls, and no recorder calls.
+
+### Audit History Reconciliation
+
+- Phase 0 package migration caveat recorded; import-path verification uses `PYTHONPATH=src` for the A worktree.
+- Phase 1 cycle guard and Phase 1-2 dataclass walking remain present in `_binding.py`.
+- Phase 3 clean audit held: `proof_frame.py` does not call `recheck_proof_frame` or sibling runtime internals.
+- Phase 3-4 hardening held: rule overlay raw input scans happen before action/request DTO construction.
+- Phase 5 hardening held: round-event helper is narrowed to 5 result kinds and rejects lifecycle / rule-overlay kinds until projectors exist.
+- Phase 6 invariants held: export identity, 8-family representative coverage, private helper non-export, deterministic Phase 1-5 builders, origin-package rejection, and static import/recorder checks.
+
+### Verification
+
+Focused regression after the close-out fix:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest \
+  src.kernel.tests.test_capability_helpers_invariants \
+  src.kernel.tests.test_capability_helpers_round_events \
+  src.kernel.tests.test_capability_helpers_rule_overlays \
+  src.kernel.tests.test_capability_helpers_proof_frame \
+  src.kernel.tests.test_capability_helpers_check \
+  src.kernel.tests.test_capability_helpers_diagnose \
+  src.kernel.tests.test_application_capability_helpers \
+  src.kernel.tests.test_application_check_protocol \
+  src.kernel.tests.test_application_diagnose_protocol \
+  src.kernel.tests.test_application_proofframe_protocol \
+  src.kernel.tests.test_application_proofframe_runtime_native \
+  src.kernel.tests.test_application_rule_disable_protocol \
+  src.kernel.tests.test_application_rule_literal_replace_protocol \
+  src.kernel.tests.test_application_rule_add_condition_protocol \
+  src.kernel.tests.test_application_rule_disable_runtime_native \
+  src.kernel.tests.test_application_rule_literal_replace_runtime_native \
+  src.kernel.tests.test_application_rule_add_condition_runtime_native \
+  src.kernel.tests.test_audit_round_events -v
+```
+
+Result: 292 tests pass.
+
+### Close-out Readiness
+
+A is implemented. Archive can proceed after this commit. Demo migration, SDK L-shell wrapping, release publishing, and branch integration remain separate follow-up decisions.

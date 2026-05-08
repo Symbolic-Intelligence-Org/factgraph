@@ -214,6 +214,7 @@ Key focused tests:
 - `test_capability_helpers_proof_frame.py`
 - `test_capability_helpers_rule_overlays.py`
 - `test_capability_helpers_round_events.py`
+- `test_capability_helpers_invariants.py`
 - `test_application_fact_overlay_protocol.py`
 - `test_application_fact_overlay_runtime_native.py`
 - `test_application_fact_overlay_sibling_invariant.py`

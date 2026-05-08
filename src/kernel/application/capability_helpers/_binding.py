@@ -49,7 +49,8 @@ def _normalize_helper_binding(binding: Mapping[str, Any] | BindingItems) -> Bind
 
 
 def _reject_sdk_origin(value: Any, *, path: str, seen: set[int] | None = None) -> None:
-    module_parts = type(value).__module__.split(".")
+    module_name = getattr(value, "__module__", "") if isinstance(value, type) else type(value).__module__
+    module_parts = module_name.split(".")
     if len(module_parts) >= 2 and module_parts[:2] == ["kernel", "sdk"]:
         raise OriginPackageError(f"{path} must be application canonical type, not SDK object")
 

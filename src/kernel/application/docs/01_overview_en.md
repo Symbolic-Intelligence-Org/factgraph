@@ -213,6 +213,7 @@ Key focused tests:
 - `test_capability_helpers_proof_frame.py`
 - `test_capability_helpers_rule_overlays.py`
 - `test_capability_helpers_round_events.py`
+- `test_capability_helpers_invariants.py`
 - `test_application_fact_overlay_protocol.py`
 - `test_application_fact_overlay_runtime_native.py`
 - `test_application_fact_overlay_sibling_invariant.py`
@@ -223,6 +224,8 @@ Key focused tests:
 - `test_application_rule_disable_runtime_native.py`
 - `test_application_rule_literal_replace_protocol.py`
 - `test_application_rule_literal_replace_runtime_native.py`
+- `test_application_rule_add_condition_protocol.py`
+- `test_application_rule_add_condition_runtime_native.py`
 - `test_application_why_not_protocol.py`
 - `test_application_why_not_runtime.py`
 - `test_application_why_not_sibling_invariant.py`

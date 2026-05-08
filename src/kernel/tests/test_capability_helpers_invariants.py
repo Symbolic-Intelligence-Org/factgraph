@@ -363,6 +363,10 @@ class CapabilityHelperInvariantTests(unittest.TestCase):
                 with self.assertRaises(application.OriginPackageError):
                     builder(*args, **kwargs)
 
+    def test_sdk_class_objects_are_rejected_for_phase_1_to_5_builders(self) -> None:
+        with self.assertRaises(application.OriginPackageError):
+            capability_helpers.build_check_request(_plan(), {"$rule": Rule})
+
     def test_nested_sdk_origin_rejected_for_representative_dataclass_paths(self) -> None:
         sdk_rule = _sdk_rule()
         cases = (
