@@ -35,6 +35,7 @@ from kernel.application.capability_helpers import (
 )
 from kernel.application.derivation_check_runtime import check_derivation_binding
 from kernel.application.protocol import CheckResult
+from kernel.core.rules.rule_ir import RuleCompileError
 
 from .dsl import Derivation
 from .errors import SDKStoreError
@@ -78,7 +79,13 @@ def sdk_check(
             f"invalid check input: {exc}",
             path="$.check.derivation",
         ) from exc
-    resolved_registry = sdk._resolve_runtime_registry(derivation, explicit_registry=registry)
+    try:
+        resolved_registry = sdk._resolve_runtime_registry(derivation, explicit_registry=registry)
+    except RuleCompileError as exc:
+        raise SDKStoreError(
+            f"invalid check dependencies: {exc}",
+            path="$.check.dependencies",
+        ) from exc
 
     try:
         request = build_check_request(plan, binding_dict, engine=engine)

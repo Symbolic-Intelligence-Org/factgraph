@@ -159,3 +159,13 @@ Focused on candidate Blockers B.1, B.2 + Clarify items B.3, C.6, C.8, C.12.
 **Net post-fix verdict: clean.** All §5 locks hold, B.2 remap completeness gap closed, 20 Minor items remain as deferred follow-up (none invalidating shipped behavior).
 
 **Minor items deferred:** A.1 (user guide section), B.1 / B.3 (resolved as theoretical), B.4 (validation duplication — intentional per §5.5), B.5 (error message verbosity), B.6 (type annotation looseness — intentional), B.7 (runtime error mock not needed per B.1 resolution), B.8 (forward ref runtime check), B.9 (AST-based Q1 Sibling check — v1-acceptable text grep), C.1/C.9/C.10 (binding/engine coverage gaps — recommend G2 batch), C.2 (function-level walker import grep gap), C.3 (hardcoded baseline), C.4 (redundant assertion), C.5 (brittle exception messages), C.7 (fixture duplication — intentional per §5.6), C.11 (mock scope note), C.6/C.8/C.12 (resolved acceptable). Several Minor items align with `kernel/sdk/shells/` migration trigger per §5.5 G2 trigger; can be batched at that time.
+
+### Round 4 cross-cutting audit follow-up (2026-05-08)
+
+**New blocker B.1 confirmed:** `_resolve_runtime_registry(...)` can raise `RuleCompileError` through dependency registration (`_register_rule_dependencies(...)` → `RuleRegistry.register(...)`). The calls in `kernel/sdk/check.py` and `kernel/sdk/diagnose.py` ran before the A helper `CapabilityHelperError` wrapper and were not covered by the B.2 ValueError fix. This leaked a non-SDK exception across the G1 SDK boundary, violating §5.3 remap discipline.
+
+**B.1 fix:** Wrapped `_resolve_runtime_registry(...)` in both G1 shells with `try/except RuleCompileError` and re-raised `SDKStoreError(..., path="$.check.dependencies" / "$.diagnose.dependencies") from exc`. This mirrors the B.2 fix shape while keeping dependency-registration failures distinct from derivation-lowering failures.
+
+**Regression tests added:** `test_dependency_rule_compile_error_raises_sdk_store_error` in both `test_sdk_check.py` and `test_sdk_diagnose.py`. Each patches `_resolve_runtime_registry` to raise `RuleCompileError("duplicate rule registration")` and asserts `SDKStoreError`, precise dependency path, preserved `__cause__`, and message context.
+
+**Post-fix note:** Q1 validation-helper extraction, AST-based Q1 Sibling static check, payload-extract wrapping, and brittle message assertions remain deferred design/polish items for G4/G2 follow-up. The B.1 fix is intentionally narrow and does not introduce shared validation refactors.

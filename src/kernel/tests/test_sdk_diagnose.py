@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from kernel.application.capability_helpers import CapabilityHelperError, OriginPackageError
 from kernel.application.protocol import DiagnoseResult
-from kernel.core.rules.rule_ir import RuleRegistry
+from kernel.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from kernel.sdk import Derivation, Entity, Field, Identity, Pred, Rule, SDKStore, SDKStoreError, vars
 from kernel.sdk.store import _compiled_derivation_plan_to_application
 
@@ -265,6 +265,22 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.diagnose.derivation")
         self.assertIsInstance(ctx.exception.__cause__, ValueError)
         self.assertIn("engine_ext", str(ctx.exception))
+
+    def test_dependency_rule_compile_error_raises_sdk_store_error(self) -> None:
+        """B.1 audit-fix regression: registry dependency failures must not leak."""
+        sdk = _build_sdk()
+
+        with patch.object(
+            sdk,
+            "_resolve_runtime_registry",
+            side_effect=RuleCompileError("duplicate rule registration"),
+        ):
+            with self.assertRaises(SDKStoreError) as ctx:
+                sdk.diagnose(_age_derivation(), {"$age": 30})
+
+        self.assertEqual(ctx.exception.path, "$.diagnose.dependencies")
+        self.assertIsInstance(ctx.exception.__cause__, RuleCompileError)
+        self.assertIn("duplicate rule registration", str(ctx.exception))
 
     def test_diagnose_result_not_exported_from_kernel_sdk_all(self) -> None:
         import kernel.sdk as sdk_pkg
