@@ -41,12 +41,15 @@ Public surface contract per blueprint §5 locks:
                (which is a ``SupportArtifact | ProvenanceEnvelope``
                union per G2 §5.2 falsifier F2).
 
-Validator ``_validate_support_artifact`` is intentionally local to this
-module (per user guidance at G2 Phase 2 kickoff — only one consumer
-today). The overlay validator now lives in
-``kernel.sdk.shells._validation`` (extraction landed during the G2
-post-publish verification round 2026-05-08, since both Fact Overlay and
-ProofFrame Recheck need the same ``EvaluationOverlay`` boundary check).
+Both validators (``validate_support_artifact`` and
+``validate_evaluation_overlay``) live in
+``kernel.sdk.shells._validation``. The overlay validator was extracted
+during the G2 post-publish verification round 2026-05-08 (Fact Overlay
+and ProofFrame Recheck share the same ``EvaluationOverlay`` boundary
+check). The support-artifact validator was promoted from local at G3
+Phase 0 hygiene 2026-05-08 — G3 rule-overlay shells also need it, which
+fires the G2 §5.2 deferred extraction trigger ("until G3/G5 also need
+them").
 """
 
 from __future__ import annotations
@@ -59,18 +62,9 @@ from kernel.application.protocol import (
     ProtocolShapeError,
 )
 from kernel.application.proofframe_runtime import recheck_proof_frame
-from kernel.core.store._support import SupportArtifact
 
-from ._validation import validate_evaluation_overlay
+from ._validation import validate_evaluation_overlay, validate_support_artifact
 from ..errors import SDKStoreError
-
-
-def _validate_support_artifact(value: Any) -> None:
-    if not isinstance(value, SupportArtifact):
-        raise SDKStoreError(
-            "support_artifact must be SupportArtifact",
-            path="$.recheck_proof_frame.support_artifact",
-        )
 
 
 def sdk_proof_frame_recheck(
@@ -87,7 +81,9 @@ def sdk_proof_frame_recheck(
     defensively for forward-compat).
     """
 
-    _validate_support_artifact(support_artifact)
+    validate_support_artifact(
+        support_artifact, path="$.recheck_proof_frame.support_artifact"
+    )
     validate_evaluation_overlay(overlay, path="$.recheck_proof_frame.overlay")
 
     try:
