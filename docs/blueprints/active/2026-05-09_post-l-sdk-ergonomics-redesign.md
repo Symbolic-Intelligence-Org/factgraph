@@ -79,6 +79,7 @@ The user has flagged a preference for OpenAI-style shape since 2026-05-07 (recor
 - **No round-events recorder promotion.** G5 §5.1 defer stands. Capture-side stays at `kernel.audit.round_events` advanced importable.
 - **No Path B published-snapshot modification.** All 5 published L milestone refs and prior Path B combined snapshots are immutable. The redesign produces a new snapshot only at its own publish time.
 - **No automatic OpenAI-style migration.** Per `feedback_sdk_ergonomics_redesign_target`, OpenAI-style is a direction input the user has flagged — falsifier passes must source-ground whether the migration costs are justified, whether the shape actually fits this codebase, and what compatibility commitments the migration entails.
+- **No SDK code change on the design branch.** This blueprint branch (`codex/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09`) holds **design / blueprint commits only**. All implementation work post-scope-freeze happens on the dedicated implementation branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09` (created at design HEAD `59a5694` on 2026-05-09). This isolation prevents implementation regressions from polluting the design source-of-truth and keeps sacred branches (`master` / `v0.1-oss-prep`) and 5 Path B published L snapshots fully untouched even if implementation experiments break.
 
 ## 4. Current Context
 
@@ -158,6 +159,7 @@ Notebooks 01-04 implicitly assume the flat surface shape. Any redesign that chan
 - **Path B per-milestone immutable snapshot strategy.** 5 immutable Path B snapshots exist (G1 / G4 / G2 / G3 / G5). The redesign produces a new combined snapshot only at its own publish time.
 - **`kernel.sdk.__all__` length 34** is asserted by 5 invariant test files. Any redesign that adds top-level exports must update all 5 invariant files in lockstep.
 - **Sacred branches `master` and `v0.1-oss-prep` untouched.** The redesign branch is a topic forward; no merge back without explicit user authorization.
+- **Design / implementation branch isolation.** Design / blueprint work lives on `codex/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09` (current branch). When status flips `draft → scoped` and implementation is authorized, code changes happen on the parallel branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09` (created at design HEAD `59a5694` on 2026-05-09). The impl branch is rebased onto design HEAD at scope-freeze time before implementation begins. This enforces "design-only first" structurally — even if implementation breaks every test, the blueprint source-of-truth and sacred branches are isolated.
 
 ### 4.5 Memory inputs
 
@@ -381,6 +383,7 @@ If §5.1-§5.7 lands a replacement (option C / D): substantially more — every 
 - **F0-legibility primacy.** `dir(client)` / IDE-autocomplete legibility against the §4.1 conceptual layering is the **first** falsifier axis for every shape candidate (§5.1, §5.2, §5.3). Migration cost (F4) and industry alignment (F3 in §5.3) are downstream weights, not entry gates.
 - **Compat is a hard constraint, not a goal.** The flat `SDKStore.<method>` surface across 5 immutable Path B snapshots stays callable; any candidate that breaks it requires a standalone falsifier per §5.4 thesis-derived default.
 - **§5.3 locked: top-level entrypoint class name is `FactGraph`** (sourced from chat-driven 4-round falsifier pass on 2026-05-09; `tensorflow.Tensor` / `pyspark.sql.SparkSession` / `pyparsing.ParserElement` Python precedent for Fact-overlap; `EvidenceGraph` substrate-audit name does NOT collide because it's not in `factpy.__all__`). Relationship with existing `SDKStore` class is §5.4 territory.
+- **Design / implementation branch isolation in force.** Design branch (this branch, `codex/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09`) accepts blueprint / docs / audit-log commits only. Implementation branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09` (created 2026-05-09 at design HEAD `59a5694`) is the only authorized location for code changes post-scope-freeze. Cross-contamination is a structural invariant violation.
 - `kernel.sdk.__all__` length stays at **34** unless §5.x explicitly justifies an addition with falsifier pass.
 - Sacred branches `master` and `v0.1-oss-prep` untouched throughout.
 - All 5 published L milestone refs (G1 `d6716a0` / G4 `acb5a6e` / G2 `d658390` / G3 `cb6d3bd` / G5 `d4ceb3e`) and their Path B combined snapshots remain immutable.
