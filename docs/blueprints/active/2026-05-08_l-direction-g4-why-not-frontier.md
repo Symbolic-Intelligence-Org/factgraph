@@ -183,11 +183,23 @@ Options:
 
 **Conservative default:** no Frontier SDK method in first G4 slice; keep advanced importable.
 
-**Falsifiers required:**
+**Decision (2026-05-08):** Lock option 1 — **no Frontier SDK method in G4 first slice**. G4 implementation ships `SDKStore.why_not(...)` only. Frontier remains advanced importable through `kernel.core.rules.frontier.evaluate_native_where_frontier(...)` plus the Tier 2 projection helper `kernel.application.capability_helpers.build_frontier_view_facts(...)`. G4 docs may point advanced callers at that path, but `kernel.sdk` does not import `kernel.core.rules.frontier`, does not add `SDKStore.frontier(...)`, and does not add a projection-only `SDKStore.frontier_view_facts(...)`.
 
-- Confirm whether Frontier still violates or satisfies the "SDK complete round story" signal if kept advanced importable.
-- Confirm any SDK Frontier method does not import application-only helpers incorrectly or pierce evaluator drift gates.
-- Reject combined Why-not+Frontier if it false-merges result-bearing board output with substrate aggregate rows (`#3`).
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Frontier-as-advanced-importable still matches the recorded Round 8 G4 verdict | Round 8 Lane 3 explicitly recorded: "G4 Why-not + Frontier: clean (with naming correction `sdk.universe()` -> `sdk.why_not()`); frontier should remain advanced importable rather than enter SDK facade" (`README.md` Round 8; `30_recommendation.md` L607). This is not a silent omission — it is the source-grounded G4 classification. | PASS — keeping Frontier advanced importable is the Round 8 verdict, not a regression. |
+| F2 | A SDK Frontier method would pierce existing Frontier drift gates / layer boundaries | Frontier blueprint scoped native evaluator substrate only: "No application protocol DTOs, SDK shell, UI, or public application capability" (`evaluator-frontier-trace-capability.md:34-36`). Its close-out says future application consumers must open a new scoped blueprint before importing or depending on `evaluate_native_where_frontier(...)` (`...md:210-214`). The runtime drift gate `test_10_application_layer_does_not_opt_into_frontier_trace` scans application files and asserts no Frontier imports or symbol use (`test_core_rules_frontier_drift_gates.py:412-419`). SDK directly importing core Frontier would skip that required application opt-in step and create a Tier 1 -> core substrate dependency without a Tier 2 boundary. | PASS — no SDK Frontier method in G4. |
+| F3 | Combined Why-not+Frontier method would false-merge heterogeneous outputs | Why-not returns `WhyNotUniverseResult`: explicit finite-universe green/red board with row diagnostics. Frontier returns `NativeWhereFrontierEvaluation`: native aggregate success bindings plus sparse per-branch `frontier_rows`; the Frontier blueprint stresses aggregate-only rows, no env dump, native-only, substrate-level semantics (`evaluator-frontier-trace-capability.md:72-130`). These are different capabilities and layers. `#3` heterogeneity and G1's rejection of scenario merge apply directly. | PASS — no combined method. |
+| F4 | Projection-only `SDKStore.frontier_view_facts(...)` adds too little value | A's `build_frontier_view_facts(store)` only projects a `Store` to `view_facts`; callers must still import and call `evaluate_native_where_frontier(...)` themselves (`capability_helpers/frontier.py:13-18`, helper test lines 450-455). A SDK method that only returns `view_facts` would expose an intermediate substrate shape without actually giving SDK callers a complete Frontier capability. | PASS — no projection-only SDK method. |
+
+**Forward implications:**
+
+- `SDKStore.why_not(...)` is the only G4 SDK method scoped by this blueprint.
+- No `kernel/sdk/frontier.py`, no `test_sdk_frontier.py`, and no `SDKStore.frontier(...)` phase in §8.
+- `src/kernel/sdk/docs/04_api_surface.md` should document Why-not; it may mention Frontier remains advanced importable but must not advertise it as a SDK facade method.
+- G5 or a future Frontier-specific blueprint may reopen SDK Frontier only after a Tier 2 application opt-in or an explicit `#P1` carve-out updates the frontier drift gates.
 
 ### 5.5 Module and method placement
 
@@ -264,7 +276,7 @@ Draft-stage acceptance:
 - [x] Round 8 G4 clean verdict and `universe -> why_not` correction captured.
 - [x] G1 infrastructure and Q1 validation extraction captured as available prior art.
 - [x] Why-not / Frontier boundary split documented.
-- [ ] §5.1-§5.7 falsifier passes complete (`§5.1` and `§5.2` locked; `§5.3`-`§5.7` pending).
+- [ ] §5.1-§5.7 falsifier passes complete (`§5.1`-`§5.4` locked; `§5.5`-`§5.7` pending).
 - [ ] Status moves to `scoped` only after all Step 0 questions are resolved.
 
 Scoped-stage acceptance will be filled once §5 is locked.
