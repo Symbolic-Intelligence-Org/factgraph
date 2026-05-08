@@ -130,11 +130,23 @@ Options:
 
 **Conservative default:** mirror A's row forms: mappings or sequences normalized against the plan head variable order.
 
-**Falsifiers required:**
+**Decision (2026-05-08):** Lock option 1 — `candidates: Sequence[Mapping[str, Any] | Sequence[Any]]`, passed to A's public `build_why_not_candidate_universe(plan, candidates)` helper after SDK derivation lowering. G4 mirrors A's row forms exactly: mapping rows are indexed by plan head variable names; sequence rows are interpreted in plan head variable order. SDK entity snapshots / refs / DSL objects, direct `BindingItems`, and SDK-owned candidate-universe DTOs are out of scope for the first slice.
 
-- Confirm this does not require importing A private normalization helpers.
-- Confirm SDK entity snapshots are not needed for first slice.
-- Confirm tuple-form `BindingItems` does not leak application canonical shape into SDK inputs without benefit.
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | No A private normalization helper import needed | `build_why_not_candidate_universe` is exported from `kernel.application.capability_helpers.__all__` and re-exported from `kernel.application.__all__`; its implementation owns `_candidate_values(...)` and calls `normalize_binding_items(...)` internally (`capability_helpers/why_not.py:15-33`). G4 only imports this public builder, not `_candidate_values`, `normalize_binding_items`, `_binding`, or any private helper. | PASS — public A helper is sufficient. |
+| F2 | First slice does not need SDK entity snapshots / refs / DSL objects | A helper tests already cover mapping rows (`{"$region": "us", "$p": alice.e_ref, "$age": 30}`) and sequence rows (`(alice.e_ref, 30, "us")`) as sufficient inputs (`test_application_capability_helpers.py:398-427`). No shipped Why-not helper, runtime, SDK method, or Round 8 G4 evidence requires hydrated entity snapshots or DSL objects for candidate rows. | PASS — SDK entity objects deferred; row values remain ordinary Python values. |
+| F3 | Direct `BindingItems` tuple form would leak application canonical shape without benefit | `BindingItems` is imported from `kernel.core.store._support` by A's helper as its output canonical type, not advertised as SDK input. Passing tuple-of-tuples as a candidate row would be ambiguous at SDK boundary: it is also a `Sequence[Any]` row and would be interpreted positionally, not as "already normalized" application canonical input. G1 §5.7 already rejected application protocol/canonical inputs at SDK boundary when an intent-shaped input exists. | PASS — reject `BindingItems` as explicit SDK input. |
+| F4 | A `CapabilityHelperError` paths are remappable at SDK boundary | A helper raises `CapabilityHelperError` for malformed candidate universes: non-sequence `candidates`, incomplete mapping rows, wrong sequence length, and non-row values (`capability_helpers/why_not.py:21-58`). G1 already maps `CapabilityHelperError` to `SDKStoreError(...) from exc` in Check/Diagnose; §5.6 will require G4 to map candidate helper failures to `SDKStoreError(path="$.why_not.candidates")`. | PASS — error boundary fits existing G1 pattern. |
+| F5 | SDK-owned candidate-universe DTO is unnecessary now | A's public helper already gives a small, intent-shaped input surface and canonicalizes into `tuple[BindingItems, ...]` accepted by `WhyNotUniverseRequest`; creating a SDK DTO would add a new outward type under `#6` without source-grounded user signal. | PASS — no SDK DTO first slice. |
+
+**Forward implications:**
+
+- `SDKStore.why_not(...)` signature second argument is named `candidates`, not `candidate_universe`; the latter remains the application DTO field name after A normalization.
+- Implementation wraps `build_why_not_candidate_universe(plan, candidates)` in `try/except CapabilityHelperError as exc` and remaps to `SDKStoreError(..., path="$.why_not.candidates") from exc`.
+- Test coverage must include both mapping-row and sequence-row success, plus missing-key / wrong-length failures crossing the SDK boundary as `SDKStoreError` with `__cause__` set.
 
 ### 5.3 Why-not return shape
 
@@ -242,7 +254,7 @@ Draft-stage acceptance:
 - [x] Round 8 G4 clean verdict and `universe -> why_not` correction captured.
 - [x] G1 infrastructure and Q1 validation extraction captured as available prior art.
 - [x] Why-not / Frontier boundary split documented.
-- [ ] §5.1-§5.7 falsifier passes complete.
+- [ ] §5.1-§5.7 falsifier passes complete (`§5.1` and `§5.2` locked; `§5.3`-`§5.7` pending).
 - [ ] Status moves to `scoped` only after all Step 0 questions are resolved.
 
 Scoped-stage acceptance will be filled once §5 is locked.
@@ -275,4 +287,3 @@ README quickstart remains untouched unless a separate blueprint scopes it.
 ## 10. Outcome / Deviations
 
 To be filled after implementation.
-
