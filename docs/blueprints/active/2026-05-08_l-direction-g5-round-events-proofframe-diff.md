@@ -302,27 +302,68 @@ Also: does G5 need new shared validators?
 - The shell function name is `sdk_diff_proof_frames(sdk, round_a_id, round_b_id, round_a_events, round_b_events, *, warnings=(), include_unchanged=False) -> ProofFrameDiff`.
 - §5.8 (error mapping) and §5.9 (tests + invariants) are the only remaining substantive locks before scope-freeze.
 
-### 5.8 Error mapping + Sibling discipline at 9+ shell scope
+### 5.8 Error mapping + Sibling discipline at 9-shell scope
 
 **Question:** Per-method `$.<method>.<input>` paths + Sibling discipline.
-- Diff has fewer error sources than rule-overlay (no derivation lowering, no rule registry, no A helper that raises `CapabilityHelperError`). Likely 4-5 paths: `$.diff_proof_frames.{round_a_id, round_b_id, round_a_events, round_b_events, request, }` + base.
-- Sibling at 9-shell scope: G5 shell(s) must not call any of the 8 prior shells. Existing G3 sibling pattern (runtime patch + static source scan) extends naturally; just one extra forbidden-import pattern per G5 module.
 
-**Falsifiers required:**
-- F1: Enumerate every exception type from `build_proof_frame_diff`. Source: `proof_frame_diff.py` raises `ProofFrameDiffError(ValueError)` for invalid event payloads (`_proof_frame_record_from_event` at `:209`); `_require_non_empty_str` raises `ValueError` for empty round_ids. Need to verify these are the ONLY raise paths; everything else returns the DTO.
-- F2: Confirm `build_proof_frame_diff` is the only entry point — no helper between it and `kernel.audit.round_events` that adds new raise paths.
-- F3: `kernel.sdk.__all__` length must remain 34 even with new G5 SDKStore method(s). G3 invariant test pattern extends to G5 invariant.
+**Decision (2026-05-08):** Lock **7-path remap** (5 input paths + 1 request path + 1 base path) with `ProofFrameDiffError` covering the `.request` boundary; inline pre-validation for input paths; defensive `Exception` for the base path. Sibling discipline at 9-shell scope tests the new G5 shell against all 8 prior shells.
+
+**7-path remap (locked execution order in `sdk_diff_proof_frames`):**
+
+| # | SDK boundary check | Path | Source / Outcome |
+|---|---|---|---|
+| 1 | `isinstance(round_a_id, str) and round_a_id` | `$.diff_proof_frames.round_a_id` | inline validation; raises `SDKStoreError("round_a_id must be non-empty str", path=...)` |
+| 2 | `isinstance(round_b_id, str) and round_b_id` | `$.diff_proof_frames.round_b_id` | inline validation; raises `SDKStoreError("round_b_id must be non-empty str", path=...)` |
+| 3 | `isinstance(events, tuple) and all(isinstance(e, RoundEvent))` for round_a_events | `$.diff_proof_frames.round_a_events` | inline validation; raises `SDKStoreError("round_a_events must be tuple[RoundEvent, ...]", path=...)` — protects against `TypeError` / `AttributeError` leaks from `sorted(events, key=...)` and `event.kind`/`event.sequence` access in `_proof_frame_records` |
+| 4 | Same for round_b_events | `$.diff_proof_frames.round_b_events` | inline validation; same shape |
+| 5 | `isinstance(warnings, tuple) and all(isinstance(w, WarningDTO))` | `$.diff_proof_frames.warnings` | inline validation; same shape |
+| 6 | `try: build_proof_frame_diff(...)` | `$.diff_proof_frames.request` | catches `ProofFrameDiffError` (covers helper-internal validation in `_require_non_empty_str` / `_require_mapping` / `_validate_binding_json` / `_validate_proof_frame_status` / `_validate_literal` / `_validate_tuple_items` for payload parse errors at `_proof_frame_record_from_event`; covers frame-identity duplicate check at `_proof_frame_records:201`; covers `ProofFrameDiff.__post_init__` `_validate_tuple_items(frame_deltas)` and `_validate_tuple_items(warnings)`); raises `SDKStoreError(..., path=...) from exc` with `__cause__` chain |
+| 7 | `try:` (defensive) | base `$.diff_proof_frames` | catches forward-compat `Exception`; raises `SDKStoreError(..., path=...) from exc` |
+
+**No `ProtocolShapeError` path needed** — `build_proof_frame_diff` returns the result directly without an intermediate request DTO. **No `.dependencies` path** — no derivation lowering, no rule registry, no A helper that resolves dependencies. **No `CapabilityHelperError` path** — diff is a pure function in `kernel.audit`, not a `kernel.application.capability_helpers` builder.
+
+**Falsifier outcomes (3/3 PASS):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Every internal-helper exception from `build_proof_frame_diff` | All 6 helpers (`_require_non_empty_str` / `_require_mapping` / `_validate_binding_json` / `_validate_proof_frame_status` / `_validate_literal` / `_validate_tuple_items`) raise `ProofFrameDiffError` (a `ValueError` subclass at `proof_frame_diff.py:22`). `_proof_frame_records` raises `ProofFrameDiffError("duplicate proof_frame_result frame identity ...")` at `:201`. `ProofFrameDiff.__post_init__` raises `ProofFrameDiffError` via `_validate_tuple_items` for both `frame_deltas` and `warnings`. **All internal raises are `ProofFrameDiffError`**; single catch covers the boundary. | PASS — `.request` path catches one type cleanly. |
+| F2 | Hidden non-`ProofFrameDiffError` raise paths | `_proof_frame_records` calls `sorted(events, key=lambda item: item.sequence)` — if `events` isn't iterable, raises `TypeError`; if items lack `.sequence` / `.kind`, raises `AttributeError`. **These are exactly why SDK pre-validation must verify `tuple[RoundEvent, ...]` BEFORE calling `build_proof_frame_diff`.** Inline pre-validation at boundary check #3 / #4 prevents these from leaking as base-path errors. | PASS — pre-validation at SDK boundary closes the gap. |
+| F3 | `kernel.sdk.__all__` length stays 34 | Verified at HEAD `150d740`: `len(kernel.sdk.__all__) == 34`. G5 invariant will assert this; new SDKStore method does not add any export. | PASS — boundary unchanged. |
+
+**Sibling discipline at 9-shell scope (forward-only convention):**
+
+The new G5 shell tests against all **8 prior** sister shells (G1 `sdk_check` + `sdk_diagnose`, G4 `sdk_why_not`, G2 `sdk_fact_overlay_check` + `sdk_proof_frame_recheck`, G3 `sdk_rule_disable` + `sdk_rule_literal_replace` + `sdk_rule_add_condition`). The 8 prior shells' contract tests **are NOT retrofit** to add a new `sdk_diff_proof_frames` patch — same forward-only convention G3 used (each new shell tests against all prior; prior shells' Sibling tests stay frozen at their publication moment). This avoids post-hoc churn in already-published groups (G1 @ `d6716a0`, G4 @ `acb5a6e`, G2 @ `d658390`, G3 @ `cb6d3bd`) and keeps Path B immutable.
+
+Test pattern in `test_sdk_proof_frame_diff.py`:
+- `test_sibling_diff_proof_frames_does_not_call_other_sdk_shells_at_runtime` — runtime-patches all 8 sister `sdk_*` functions, calls `sdk.diff_proof_frames(...)`, asserts each `mock.assert_not_called()`.
+- `test_sibling_diff_proof_frames_module_does_not_import_sibling_sdk_shells` — static source scan with 16 forbidden patterns (8 sister shells × 2 patterns each: `from kernel.sdk.shells.<name>` + `sdk_<name>(`).
 
 ### 5.9 Tests + invariants
 
-**Question:** Test file structure.
-- 1 contract test file per shell module: `test_sdk_proof_frame_diff.py` (and `test_sdk_round_events.py` if §5.1 ships recorder).
-- 1 invariant file: `test_sdk_g5_invariants.py` (6-class mirror of G1+G4+G2+G3 invariants).
-- Possible `#P1` retrofit: any existing test asserting "no SDK surface for round events / proof_frame_diff"? `grep -rn "no_sdk.*round\|no_sdk.*proof_frame_diff" src/kernel/tests/` to confirm.
+**Question:** Test file structure + `#P1` retrofit count.
 
-**Falsifiers required:**
-- F1: Per-method test count expectation — G2 ProofFrame Recheck had 11 tests (similar shape); G5 diff likely 12-14 (one extra for `include_unchanged=True/False` parameterization, one for empty events, one for cross-round-id mismatch handling).
-- F2: `#P1` retrofit count — depends on what pre-G5 boundary tests exist.
+**Decision (2026-05-08):** Lock **1 contract test file (~13 tests) + 1 invariant file (6-class mirror)**. **Zero `#P1` retrofits**. Phase-end test count target: ~1681 OK / 1 skipped (was 1661 at G3 published HEAD `cb6d3bd` + topic `112401a`; +~20 new G5 tests).
+
+**Locked test plan:**
+
+| File | Coverage |
+|---|---|
+| `src/kernel/tests/test_sdk_proof_frame_diff.py` | ~13 contract tests: (1) happy path with seeded events; (2) non-str / empty round_a_id rejected at `$.diff_proof_frames.round_a_id`; (3) non-str / empty round_b_id rejected at `$.diff_proof_frames.round_b_id`; (4) non-tuple round_a_events rejected at `$.diff_proof_frames.round_a_events`; (5) non-`RoundEvent` element rejected at same path; (6) non-tuple round_b_events rejected; (7) non-`RoundEvent` element rejected; (8) non-tuple warnings rejected at `$.diff_proof_frames.warnings`; (9) non-`WarningDTO` element rejected at same path; (10) `ProofFrameDiffError` from malformed payload remaps to `$.diff_proof_frames.request` with `__cause__`; (11) defensive `Exception` from runtime remaps to base `$.diff_proof_frames` with `__cause__`; (12) result + supporting DTOs not in `kernel.sdk.__all__`; (13) Sibling discipline runtime patch (8 sister `sdk_*` patches + `assert_not_called`) + static source scan (16 forbidden patterns). May split (13) into two methods if cleaner. |
+| `src/kernel/tests/test_sdk_g5_invariants.py` | 6-class mirror of G1+G4+G2+G3 invariants: (1) `test_sdk_all_unchanged_and_g5_result_types_not_exported` — `__all__` length 34, no `ProofFrameDiff` / `FrameDelta` / `AtomDelta` / `FrameIdentity` / `FrameStatusChange` / `EventReference` / `RoundEvent` / `RoundSummary` / `diff_proof_frames` / `sdk_diff_proof_frames` exported; (2) `test_g5_method_is_instance_method_and_no_scenario_method_shipped` — `SDKStore.diff_proof_frames` callable; reserved scenario names (`proof_frame_diff`, `compare_proof_frames`) absent; (3) `test_g5_module_lives_in_shells_subpackage` — `kernel/sdk/shells/proof_frame_diff.py` exists; flat path absent; (4) `test_g5_module_does_not_import_internal_or_walker_layers` — `FORBIDDEN_PRODUCTION_IMPORT_TEXT` set as G1+G4+G2+G3 (capability_helpers private `_binding`, `_reject_sdk_origin`, walker, frontier; **note: `kernel.audit.proof_frame_diff` IS allowed** as the explicit A-side dependency, distinct from the broader `kernel.audit` private internals); (5) `test_store_method_remains_thin_delegate` — pattern-based assertion (delegate-only; no `RoundEvent(` / `ProofFrameDiff(` / `build_proof_frame_diff(` / inline-validate calls in delegate source); (6) `test_store_method_docstring_records_boundary_contract` — docstring includes `Rule Round events / RoundEvent`, `ProofFrameDiff`, `SDKStoreError`, all 7 path strings. |
+
+**Falsifier outcomes (2/2 PASS):**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Pre-G5 "no SDK surface" boundary test scan | `grep -rn "no_sdk\|test_no_sdk" src/kernel/tests/test_audit_proof_frame_diff.py test_audit_round_events.py test_capability_helpers_round_events.py` returned zero hits. `grep "kernel\.sdk"` in those files — zero hits. The audit-layer tests never made the "no SDK surface" assertion that G3's rule-overlay application-runtime tests did. | PASS — zero `#P1` retrofits required for G5. |
+| F2 | Test count expectation | G2 ProofFrame Recheck has 11 tests with similar shape (frozen-DTO-in, frozen-DTO-out, no derivation lowering); G5 has 5 input boundaries (vs G2's 2: `support_artifact` + `overlay`) so naturally more rejection tests. Estimate ~13 contract tests covers all 7 paths + DTO non-export + Sibling. | PASS — bounded expectation. |
+
+**Forward implications (§5.8 + §5.9 combined):**
+
+- G5 implementation surface is fully bounded. Ready for scope-freeze.
+- Phase 1 implementation work is purely additive: 1 new shell file, 1 new SDKStore method (thin delegate), 1 contract test file, 1 invariant file. No refactor, no shared validator extraction, no `#P1` retrofits.
+- Phase 2 scope is fixed: 6-class invariant mirror + SDK API docs CN/EN + application overview docs CN/EN updates + cumulative audit gate.
+- Phase 3 (close-out + archive + publish) follows the G3 close-out template exactly.
 
 ## 6. Boundaries and Invariants
 
