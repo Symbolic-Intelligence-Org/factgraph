@@ -213,11 +213,22 @@ Options:
 
 **Conservative default:** continue flat modules unless the number of shell files or import structure becomes visibly noisy during the scoping pass.
 
-**Falsifiers required:**
+**Decision (2026-05-08):** Lock continued flat layout — `SDKStore.why_not(...)` lands at `src/kernel/sdk/why_not.py` exporting `sdk_why_not(...)`, mirroring G1's `check.py` / `diagnose.py` pattern verbatim. SDKStore method delegates via `from .why_not import sdk_why_not`. The G1 §5.5 forward trigger (originally named "G2") is **re-recorded as a G2 Step 0 requirement** — see "Forward implications" below. G4 does not migrate G1 files into a `kernel/sdk/shells/` subpackage.
 
-- Count shell files after G4 and compare with G1's trigger.
-- Verify migration cost / churn if moving G1 files now.
-- Keep `SDKStore` methods as thin delegates either way.
+**Falsifier outcomes:**
+
+| # | Falsifier | Evidence | Outcome |
+|---|---|---|---|
+| F1 | Count shell files after G4 and compare with G1's trigger | Current shell files post-G1: `check.py` + `diagnose.py` (2). G4 adds `why_not.py` only (Frontier deferred per §5.4). Post-G4 count: 3. G1 §5.5 forward trigger reads "when G2 would add the third/fourth SDK shell file, its Step 0 MUST re-evaluate" (`docs/blueprints/archive/2026-05-08_l-direction-g1-check-diagnose.md:309`). The threshold is 3-4 files; G4 reaches 3. Q1 ordering changed (G1 -> **G4** -> G2 -> G3 -> G5) so the literal "G2" wording is stale; the **intent** (file-count-driven re-evaluation) transfers to G4 as the next group. | At threshold — re-evaluation owed; not auto-migration. |
+| F2 | Verify migration cost / churn if moving G1 files now | G1 ships an explicit invariant test `test_g1_modules_are_flat_and_no_shells_package_exists` (referenced in G1 archived §5.5 lock) that asserts the absence of `kernel/sdk/shells/`. Migrating now requires (a) `#P1` carve-out to update / replace this G1-archived invariant, (b) moving 3 source files (`check.py`, `diagnose.py`, `why_not.py`), (c) updating `_validation.py` import paths from siblings, (d) updating `SDKStore` delegate imports in `store.py`, (e) updating 3+ test files that reference `kernel.sdk.check` / `kernel.sdk.diagnose`, (f) audit-log entry on G1 archived branch. G4 currently adds 1 new file; the migration cost dwarfs the new-file cost. | High — defer. |
+| F3 | Keep `SDKStore` methods as thin delegates either way | G1 pattern: `SDKStore.check(self, ...) -> CheckResult` body is `from .check import sdk_check; return sdk_check(self, ...)` with no behavior. G4 `SDKStore.why_not` will mirror this — `from .why_not import sdk_why_not; return sdk_why_not(self, ...)`. Thin delegate preserved under flat layout (Option A) and would also be preserved under shells/ (Option B). Independent of placement. | PASS for either option. |
+| F4 | Re-recorded trigger to G2 Step 0 is verifiable | G2 will land the next batch of SDK shells (Fact Overlay + ProofFrame Recheck per Round 8 — at least 2 new files). After G2 lands, shell-file count would be 5. G2 Step 0 falsifier set MUST include "before adding the first new shell file, re-evaluate `kernel/sdk/shells/` migration; if migration happens, do it as G2 Phase 0 hygiene before any G2 implementation." This forward record makes the trigger physically owned by G2's Step 0 design rather than getting lost as a paragraph in G4's audit log. | PASS — recorded below. |
+
+**Forward implications:**
+
+- **G2 Step 0 forward trigger (re-recorded from G1 §5.5):** Before G2's Step 0 lock, G2 MUST evaluate whether `kernel/sdk/shells/` subpackage migration happens as G2 Phase 0 hygiene (before any G2 implementation). At the time G2 starts, shell-file count will already be 3 (`check.py`, `diagnose.py`, `why_not.py`); G2 adds at least 2 more. The trigger is at the file-count signal, not at any specific blueprint name; G4 inherited it from G1 and now passes it forward to G2. The accompanying decision must address the G1 invariant test `test_g1_modules_are_flat_and_no_shells_package_exists` via explicit `#P1` carve-out.
+- G4 invariant tests (G4 acceptance) will mirror G1: assert flat layout for `why_not.py`, assert no `kernel/sdk/shells/` exists, assert `kernel.sdk.__all__` length unchanged, assert `WhyNotUniverseResult` not exported.
+- §5.6 (error mapping) is independent of placement and is the next falsifier.
 
 ### 5.6 Error mapping
 
