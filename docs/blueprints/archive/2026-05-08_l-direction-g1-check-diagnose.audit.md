@@ -35,3 +35,110 @@
 **Audit history reconciliation:** Phase 0, Phase 1, and Phase 2 strict audits all returned clean. Phase 3 introduced only cross-cutting tests/docs/close-out changes and did not change runtime behavior beyond docstrings.
 
 **Residual work:** Phase 4 archive + snapshot publish remains pending by design.
+
+---
+
+## Phase 1-3 Reference / Quality Audit Report (2026-05-08)
+
+Cross-cutting verification of Phase 1-3 deliverables (commits `6852f2d` Phase 1, `73f5410` Phase 2, `5922aa7` Phase 3) against (a) reference design bundle at `docs/references/working/post-routemap-direction-selection-input/`, (b) blueprint §5/§6/§7 locks, and (c) code-level hidden risks. Three-round audit per audit plan at `~/.claude/plans/phase-1-3-reference-warm-moth.md`. Auditor: `claude-opus-4-7[1m]` cross-session execution.
+
+### Round 1 — Parallel Discovery (3 Explore agents)
+
+#### Agent A — Design Alignment
+
+**Verdict: 17/17 dimensions aligned. 0 Blocker / 0 Clarify / 1 Minor.**
+
+| Lock / Principle | Status |
+|---|---|
+| §5.1 per-method API | Aligned — separate `SDKStore.check`/`SDKStore.diagnose`, no `sdk.explain` |
+| §5.2 documented passthrough | Aligned — raw `CheckResult`/`DiagnoseResult`, not in `__all__`, no wrapper |
+| §5.3 SDKStoreError remap | Aligned at design level (chaining + path) — see B.2 below for completeness gap |
+| §5.4 `__all__` boundary | Aligned — length 34 unchanged from `dd8a40c` baseline |
+| §5.5 flat module + delegate | Aligned — flat `kernel/sdk/check.py`+`diagnose.py`, mirrors `ingest()` precedent |
+| §5.6 per-method tests | Aligned — flat `test_sdk_check.py`+`test_sdk_diagnose.py`+`test_sdk_g1_invariants.py` |
+| §5.7 input shape | Aligned — SDK `Derivation` only, `$`-prefixed `Mapping` binding |
+| Direction A bridging | Aligned — uses `compile_authoring_derivation_v1` + `_compiled_derivation_plan_to_application` |
+| Strangler migration | Aligned — G1 calls A's `build_*_request` |
+| `#1` Application-first | Aligned — no substrate in `kernel.sdk` |
+| `#3` Heterogeneity | Aligned |
+| `#5` Layer isolation | Aligned — no `_binding`/`walker.*`/`audit.*` imports |
+| `#6` No outward compat | Aligned — README quickstart untouched, `__all__` unchanged |
+| `#11` Inactive | Aligned — no walker import |
+| `#12` Resolved | Aligned at design level |
+| `#19` Test contract | Aligned — flat unittest, no Hypothesis |
+| Docs strangler note | Aligned — `01_overview.md` Tier 2→Tier 1 strangler |
+
+| ID | Severity | Finding |
+|---|---|---|
+| A.1 | Minor | `00_user_guide.md` lacks dedicated section explaining documented-passthrough semantics + opt-in B walker workflow. Docstring-only documentation. §5.2 lock says "may mention" — not hard requirement. |
+
+#### Agent B — Code Quality + Hidden Risks
+
+**Verdict (post Round 2 deep-dive): 1 Blocker / 0 Clarify / 8 Minor.**
+
+| ID | Severity | Finding | File:line |
+|---|---|---|---|
+| **B.2** | **Blocker** | `_compiled_derivation_plan_to_application()` raises `ValueError` at `store.py:1617` (`_resolve_engine_ext_for_evaluate_plan`) when caller-supplied `derivation.engine_ext` conflicts with compiled-plan `engine_ext`. G1 call sites at `check.py:62-67` and `diagnose.py:67-72` are NOT wrapped → `ValueError` leaks uncaught, violating §5.3 `SDKStoreError` remap contract. Caller-controllable via `derivation.engine_ext`. | `check.py:62-67`, `diagnose.py:67-72`, `store.py:1617` |
+| B.1 | Minor | (Initially candidate Blocker.) Docstrings claim `OriginPackageError` is caught and remapped, but G1 only wraps `build_*_request()`. Round 2 verified: `_reject_sdk_origin` fires ONLY at A's `build_check_request`/`build_diagnose_request` build-time (`capability_helpers/_binding.py:51-88`), NOT from `check_derivation_binding`/`diagnose_derivation_binding` runtime. G1's existing `except CapabilityHelperError` (catches subclass `OriginPackageError`) IS sufficient. **Theoretical — downgraded.** |
+| B.3 | Minor (resolved) | Docstring claim verified accurate: `OriginPackageError(CapabilityHelperError)` per `capability_helpers/errors.py:10`; single `except CapabilityHelperError` catches both. |
+| B.4 | Minor | `_validate_derivation`/`_validate_binding` byte-identical between `check.py:85-102` and `diagnose.py:90-107` except path strings. Intentional self-containment per §5.5; drift risk if shapes evolve. |
+| B.5 | Minor | Multi-head error message `"check derivation must compile to exactly one plan"` lacks `derivation.id` context. Caller debug ergonomics. |
+| B.6 | Minor | `sdk: Any` / `registry: Any` in `sdk_check`/`sdk_diagnose` intentionally loose; `store.py` tightens `registry: RuleRegistry \| None`. Asymmetry intentional. |
+| B.7 | Minor | Tests do NOT mock runtime to inject `OriginPackageError`. Acceptable given B.1 resolution. |
+| B.8 | Minor | `store.py:52` TYPE_CHECKING forward refs work via `from __future__ import annotations`. No explicit runtime-annotation validation test. |
+| B.9 | Minor | Static Q1 Sibling check (`test_sdk_g1_invariants.py:275-282`) text-greps; evadable via aliasing or lazy import. AST-based stricter. v1-acceptable. |
+
+**Layer-isolation imports**: ALL G1 imports compliant with §5/§6 locks. NO `_binding`, `walker.*`, `audit.*`, or direct `CheckRequest()` construction.
+
+#### Agent C — Test Contract Completeness
+
+**Verdict (post Round 2 deep-dive): 0 Blocker / 0 Clarify / 12 Minor.** 31 G1 tests + 9 invariant tests reviewed.
+
+| ID | Severity | Finding | Test:line |
+|---|---|---|---|
+| C.1 | Minor | `LogicVar` binding key rejection not explicitly tested. Coverage by broader shape validation. | test_sdk_check.py:144-151, test_sdk_diagnose.py:173-180 |
+| C.2 | Minor | Function-level walker imports (e.g., `from kernel.application.walker.views import parse_atom_key`) would pass current module-level grep. Low risk since walker inactive. | test_sdk_g1_invariants.py:82-88 |
+| C.3 | Minor | `EXPECTED_SDK_ALL` hardcoded; manual baseline maintenance. | test_sdk_g1_invariants.py:14-49 |
+| C.4 | Minor | `__all__` assertion uses both set equality AND length — redundant. | test_sdk_g1_invariants.py:64-65 |
+| C.5 | Minor | Brittle exception-message string assertions. | test_sdk_check.py:119, 160; test_sdk_diagnose.py:148, 189 |
+| C.6 | Resolved | Tests observable boundary not implementation detail. |
+| C.7 | Minor | Fixture duplication (Person, `_build_sdk`, `_seed_person`, etc.) byte-identical between test files. Per §5.6 "extract on demand", intentional. |
+| C.8 | Resolved | Docstring opt-in pointer tested at `test_sdk_g1_invariants.py:104-111`. |
+| C.9 | Minor | `engine="pyreason"` not explicitly tested. Tests use `"native"`/`"souffle"`/`"problog"`. |
+| C.10 | Minor | Empty binding `{}` not explicitly tested. |
+| C.11 | Minor | `test_registry_is_resolved_and_passed_to_runtime` patches both `_resolve_runtime_registry` AND runtime; pure mock test. |
+| C.12 | Resolved | `test_sdk_g1_invariants.py:74` covers §5.1 (`hasattr(SDKStore, "explain")` is False; `explain_fact` orthogonal). |
+
+### Round 2 — Targeted Deep-Dive
+
+Focused on candidate Blockers B.1, B.2 + Clarify items B.3, C.6, C.8, C.12.
+
+**Q1 — Where does A's `_reject_sdk_origin` fire?** Investigated `capability_helpers/check.py` (3 calls in `build_check_request` lines 27-30), `capability_helpers/diagnose.py` (3 calls in `build_diagnose_request` lines 27-30), `capability_helpers/_binding.py` (recursive traversal lines 51-88), `derivation_check_runtime.py` (no calls), `diagnose_runtime.py` (no calls).
+
+**B.1 verdict: Theoretical (downgrade Minor).** `OriginPackageError` raised ONLY at build-time. Runtime cannot trigger it. G1's `except CapabilityHelperError` wrap sufficient.
+
+**Q2 — When does `_compiled_derivation_plan_to_application` raise ValueError?** Investigated `store.py:1480-1640`. Found 1 raise site at `store.py:1617` in `_resolve_engine_ext_for_evaluate_plan`: triggers when `explicit_engine_ext != compiled_engine_ext` and both non-None. Both caller-controllable via `derivation.engine_ext`.
+
+**B.2 verdict: Real Blocker (confirmed).** ValueError reachable from caller input; G1 must wrap.
+
+**Clarify resolutions:**
+- B.3: docstring accurate (subclass relationship implicit but correct). Resolved.
+- C.6: tests observable contract, not implementation detail. Resolved acceptable.
+- C.8: docstring presence tested at invariants:104-111. Resolved.
+- C.12: test correctly covers §5.1; `explain_fact` orthogonal pre-existing. Resolved.
+
+### Round 3 — Synthesis
+
+**Categorized totals:**
+
+- **Blockers: 1** (B.2 — engine_ext conflict ValueError unhandled at SDK boundary)
+- **Clarify: 0** (all resolved by Round 2)
+- **Minor: 20** (1 design + 8 code-quality + 12 test-contract; all recorded for future follow-up)
+
+**Net audit verdict: needs-fix (1 Blocker).**
+
+**Recommended actions:**
+
+- **B.2 audit-fix**: wrap `_compiled_derivation_plan_to_application()` calls at `check.py:62-67` and `diagnose.py:67-72` with `try/except ValueError → raise SDKStoreError(..., path="$.check.derivation"/"$.diagnose.derivation") from exc`. Add regression test scenario per Round 2 Q4 (mock `_compiled_derivation_plan_to_application` to raise `ValueError`, assert SDKStoreError remap).
+- **Minor items**: defer to follow-up tasks. Several (B.4 fixture extraction, B.9 AST-based Q1 Sibling check, C.1/C.9/C.10 test coverage gaps) align naturally with G2's `kernel/sdk/shells/` migration trigger per §5.5; can be batched at that time.
+- **Implementation status**: G1 retains `implemented` status. B.2 is a remap-completeness gap (small audit-fix), not a structural failure invalidating the implementation. Audit-fix lands as polish commit on G1 branch on top of Phase 4 archive.
