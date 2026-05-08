@@ -1,6 +1,6 @@
 # L Direction G2 — Fact Overlay + ProofFrame Recheck SDK Shell
 
-- **Status:** draft
+- **Status:** scoped
 - **Created:** 2026-05-08
 - **Last Updated:** 2026-05-08
 - **Parent:** L Direction (post-A+B+G1+G4 v1-ready roadmap target)
@@ -31,7 +31,7 @@ This blueprint starts G2 Step 0 only. It does not implement SDK methods until §
 
 ## 3. Non-Goals
 
-- **No implementation in draft.** No `SDKStore.check_fact_overlay(...)`, `SDKStore.recheck_proof_frame(...)`, module files, docs updates, or tests ship until §5 is locked and status moves to `scoped`.
+- **No implementation before scoped.** No `SDKStore.check_fact_overlay(...)`, `SDKStore.recheck_proof_frame(...)`, module files, docs updates, or tests ship before §5 is locked and status moves to `scoped`.
 - **No README quickstart change.** Per `#6`, new SDK shell promotion does not automatically enter README quickstart.
 - **No `kernel.sdk.__all__` expansion by default.** G1 + G4 set the pattern: SDKStore instance methods first; top-level exports need their own falsifier.
 - **No B walker dependency.** G2 returns raw protocol DTOs; advanced traversal stays application-side.
@@ -44,9 +44,9 @@ This blueprint starts G2 Step 0 only. It does not implement SDK methods until §
 
 ### 4.1 L ordering and baseline
 
-Q1 split locked: **G1 -> G4 -> G2 -> G3 -> G5**. G1 + G4 are implemented, archived, and published. This G2 draft is based on `v0.1-public-surface-helpers-walker-l-g1-l-g4-2026-05-08` @ `acb5a6e` (Path B combined snapshot post-G4).
+Q1 split locked: **G1 -> G4 -> G2 -> G3 -> G5**. G1 + G4 are implemented, archived, and published. This G2 blueprint is based on `v0.1-public-surface-helpers-walker-l-g1-l-g4-2026-05-08` @ `acb5a6e` (Path B combined snapshot post-G4).
 
-Current branch for this draft: `codex/v0.1-l-g2-fact-overlay-proofframe-recheck-2026-05-08`.
+Current branch for this scoped work: `codex/v0.1-l-g2-fact-overlay-proofframe-recheck-2026-05-08`.
 
 ### 4.2 Round 8 G2 verdict
 
@@ -96,7 +96,7 @@ If migration is again deferred, G2 §5.5 must record a positive justification fo
 
 ## 5. Design — Step 0 Questions
 
-This blueprint is at `draft` status. The questions below must be resolved before status advances to `scoped`.
+This blueprint is at `scoped` status. The questions below are locked; implementation must follow the recorded decisions and update the blueprint/audit first if scope changes.
 
 ### 5.1 Fact Overlay SDK input shape
 
@@ -396,7 +396,7 @@ Both SDK shells must raise `SDKStoreError(..., path=<above>) from exc` for remap
 | `#P0` Conflict resolution | Authority > layer isolation > read-only > ergonomics > outward commitment. |
 | `#P1` Revision flow | Any deviation gets a named carve-out with reason/scope/impact. The `kernel/sdk/shells/` migration (if it happens) requires `#P1` carve-out for G1 + G4 invariant tests. |
 
-Forbidden until scoped:
+Forbidden during implementation unless separately scoped:
 
 - No `kernel.sdk.__all__` addition.
 - No README quickstart update.
@@ -413,28 +413,63 @@ Draft-stage acceptance:
 - [x] Round 8 G2 verdict ("pending Step 0 shape decision") + the inherited `kernel/sdk/shells/` migration trigger captured.
 - [x] G1 + G4 infrastructure inventoried as available prior art.
 - [x] Eight Step 0 questions enumerated covering input shapes (×2), return shapes (×2), shells/ migration, file naming, method naming, error mapping + Sibling discipline.
-- [ ] §5.1-§5.8 falsifier passes complete.
-- [ ] Status moves to `scoped` only after all Step 0 questions are resolved.
+- [x] §5.1-§5.8 falsifier passes complete.
+- [x] Status moves to `scoped` only after all Step 0 questions are resolved.
 
-Scoped-stage acceptance will be filled once §5 is locked.
+Scoped-stage acceptance:
+
+- [ ] Phase 0 migrates SDK shell modules into `kernel/sdk/shells/` with no behavior change.
+- [ ] Phase 0 records `#P1` carve-out entries in archived G1 + G4 audit logs for invariant-test retrofit.
+- [ ] Phase 0 targeted SDK shell tests + full kernel suite + ruff pass after migration.
+- [ ] Phase 1 implements `SDKStore.check_fact_overlay(...)` via `kernel/sdk/shells/fact_overlay.py`, with contract tests for §5.1 / §5.3 / §5.6 / §5.7 / §5.8.
+- [ ] Phase 2 implements `SDKStore.recheck_proof_frame(...)` via `kernel/sdk/shells/proof_frame.py`, with contract tests for §5.2 / §5.4 / §5.6 / §5.7 / §5.8.
+- [ ] Phase 3 adds `test_sdk_g2_invariants.py`, updates SDK/application docs, and runs a cumulative strict audit against §5 locks and the reference bundle.
+- [ ] Phase 4 completes Outcome / Deviations, marks status `implemented`, archives blueprint + audit log, updates archive inventory, and publishes the G2 snapshot branch.
 
 ## 8. Implementation Plan
 
-Deferred until status `scoped`.
+1. **Phase 0 — shells/ migration hygiene**
+   - `git mv` existing G1/G4 shell files into `src/kernel/sdk/shells/`: `check.py`, `diagnose.py`, `why_not.py`, `_validation.py`.
+   - Add empty `src/kernel/sdk/shells/__init__.py`.
+   - Update `SDKStore.check(...)`, `.diagnose(...)`, `.why_not(...)` delegate imports to `.shells.<module>`.
+   - Retarget G1/G4 tests and invariants to `kernel.sdk.shells.*`.
+   - Record `#P1` carve-out entries in archived G1 + G4 audit logs.
+   - Run targeted SDK shell suites, full kernel suite, ruff, and `git diff --check`.
 
-Expected shape if Step 0 follows conservative defaults:
+2. **Phase 1 — Fact Overlay SDK shell**
+   - Add `src/kernel/sdk/shells/fact_overlay.py` with `sdk_fact_overlay_check(...)`.
+   - Add `SDKStore.check_fact_overlay(...)` thin delegate in `store.py`.
+   - Validate `derivation` / `binding`; lower SDK `Derivation`; resolve runtime registry; construct `FactOverlayCheckRequest`; call `check_fact_overlay_binding(...)`.
+   - Remap errors per §5.8 and return raw `FactOverlayCheckResult`.
+   - Add `test_sdk_fact_overlay.py` contract tests, including invalid request passthrough and Sibling discipline.
+   - Run strict Phase 1 audit before continuing.
 
-1. **Phase 0** — module skeleton / `SDKStore` method stubs / placeholder tests / **shells/ migration if §5.5 locks it (Phase 0 hygiene with `#P1` carve-out for G1 + G4 invariant tests)**.
-2. **Phase 1** — `sdk_fact_overlay_check(...)` real implementation + contract tests.
-3. **Phase 2** — `sdk_proof_frame_recheck(...)` real implementation + contract tests + Q3/Batch-4 Sibling discipline tests.
-4. **Phase 3** — `test_sdk_g2_invariants.py` (6-class mirror) + docs updates + cumulative G2 strict audit.
-5. **Phase 4** — close-out, archive, snapshot publish (`v0.1-l-g2-fact-overlay-proofframe-recheck-2026-05-09` or `-2026-05-08` if same day).
+3. **Phase 2 — ProofFrame Recheck SDK shell**
+   - Add `src/kernel/sdk/shells/proof_frame.py` with `sdk_proof_frame_recheck(...)`.
+   - Add `SDKStore.recheck_proof_frame(...)` thin delegate in `store.py`.
+   - Validate raw `SupportArtifact` + `EvaluationOverlay`; construct `ProofFrameRecheckRequest`; call `recheck_proof_frame(...)`.
+   - Remap errors per §5.8 and return raw `ProofFrameRecheckResult`.
+   - Add `test_sdk_proof_frame.py` contract tests, including runtime exception remap and no sibling shell calls.
+   - Run strict Phase 2 audit before continuing.
 
-The 5-phase plan reflects G2's two-method scope (vs G4's single-method) and the potential shells/ migration phase.
+4. **Phase 3 — invariants, docs, cumulative audit**
+   - Add `test_sdk_g2_invariants.py` mirroring G1/G4 invariant structure plus consolidated `shells/` layout assertion.
+   - Update `src/kernel/sdk/docs/04_api_surface.md` and `.en.md`.
+   - Update `src/kernel/application/docs/01_overview.md` and `.en.md` focused test inventory.
+   - Run cumulative strict audit across §5.1-§5.8, source code, tests, docs, and archived G1/G4 carve-out entries.
+
+5. **Phase 4 — close-out, archive, publish**
+   - Fill §10 Outcome / Deviations, including `shells/` migration and raw DTO input precedent.
+   - Mark status `implemented`.
+   - Archive blueprint and audit log; update `docs/blueprints/archive/README.md`.
+   - Publish `v0.1-l-g2-fact-overlay-proofframe-recheck-2026-05-08` (or next-date suffix if needed).
+   - Decide whether to create a new combined latest branch including G1+G4+G2.
+
+The 5-phase plan reflects G2's two-method scope and the now-locked Phase 0 `shells/` migration.
 
 ## 9. Docs To Update
 
-If implementation is scoped:
+During implementation:
 
 - `src/kernel/sdk/docs/04_api_surface.md`
 - `src/kernel/sdk/docs/04_api_surface.en.md`
