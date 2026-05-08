@@ -423,7 +423,11 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             "kernel.sdk.shells.fact_overlay.sdk_fact_overlay_check"
         ) as mock_fact_overlay, patch(
             "kernel.sdk.shells.proof_frame.sdk_proof_frame_recheck"
-        ) as mock_proof_frame:
+        ) as mock_proof_frame, patch(
+            "kernel.sdk.shells.rule_literal_replace.sdk_rule_literal_replace"
+        ) as mock_rule_literal_replace, patch(
+            "kernel.sdk.shells.rule_add_condition.sdk_rule_add_condition"
+        ) as mock_rule_add_condition:
             sdk.check_rule_disable(
                 _adult_rule(),
                 support,
@@ -436,6 +440,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
         mock_why_not.assert_not_called()
         mock_fact_overlay.assert_not_called()
         mock_proof_frame.assert_not_called()
+        mock_rule_literal_replace.assert_not_called()
+        mock_rule_add_condition.assert_not_called()
 
     def test_sibling_rule_disable_module_does_not_import_sibling_sdk_shells(self) -> None:
         """§5.8 Sibling static check: kernel.sdk.shells.rule_disable

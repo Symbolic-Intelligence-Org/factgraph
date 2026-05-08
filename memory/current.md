@@ -11,6 +11,8 @@
 - `origin/v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-2026-05-08` @ `cb6d3bd` — Path B combined (G1+G4+G2+G3 cumulative).
 - Prior snapshots unchanged: G2-only and G2 combined still at `d658390`; G1-only at `d6716a0`; G4-only at `acb5a6e`; sacred `master` and `v0.1-oss-prep` untouched.
 
+**Convention — `memory/current.md` tracks topic-branch HEAD, not published snapshot HEAD.** This file is updated on the topic branch *after* a publish event, so at any published snapshot HEAD the file naturally lags by 1 commit (the post-publish memory sync). When auditing a published ref, treat operational handoff cues here as referring to what's true on the topic branch tip; the canonical published refs and external `~/.claude/.../memory/project_g*_published.md` are the authoritative published-state record. Path B published refs are immutable per `feedback_worktree_parallel_implementation`; we do NOT advance them just to make this file self-describing. Recorded in G3 archive audit log post-archive addendum 2026-05-08.
+
 ### G3 outcome
 
 - **Shipped SDK methods (3):** `SDKStore.check_rule_disable(rule, support, *, branch_index, atom_index, overlay=None, note=None) -> RuleDisableResult`; `SDKStore.check_rule_literal_replace(rule, support, *, branch_index, atom_index, literal_path, old_literal, new_literal, overlay=None, note=None) -> RuleLiteralReplaceResult`; `SDKStore.check_rule_add_condition(rule, support, *, branch_index, added_atom, overlay=None, note=None) -> RuleAddConditionResult`.

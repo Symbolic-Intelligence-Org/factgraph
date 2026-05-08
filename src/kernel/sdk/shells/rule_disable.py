@@ -96,7 +96,7 @@ def sdk_rule_disable(
             where=list(compiled["where"]),
             expose=bool(compiled.get("expose", False)),
         )
-    except (SDKStoreError, RuleCompileError, ValueError) as exc:
+    except (SDKStoreError, RuleCompileError) as exc:
         raise SDKStoreError(
             f"invalid check_rule_disable rule: {exc}",
             path="$.check_rule_disable.rule",
