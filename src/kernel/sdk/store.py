@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timezone
 import os
 import warnings
@@ -268,6 +269,36 @@ class SDKStore:
         from .ingest import sdk_validate_provenance
 
         return sdk_validate_provenance(self, obj, standard=standard)
+
+    def check(
+        self,
+        derivation: Any,
+        binding: Mapping[str, Any],
+        *,
+        engine: str = "native",
+        registry: RuleRegistry | None = None,
+    ) -> Any:
+        # Phase 0 stub delegation — see kernel/sdk/check.py and
+        # docs/blueprints/active/2026-05-08_l-direction-g1-check-diagnose.md §8.
+        # Phase 1 tightens return type to CheckResult.
+        from .check import sdk_check
+
+        return sdk_check(self, derivation, binding, engine=engine, registry=registry)
+
+    def diagnose(
+        self,
+        derivation: Any,
+        binding: Mapping[str, Any],
+        *,
+        engine: str = "native",
+        registry: RuleRegistry | None = None,
+    ) -> Any:
+        # Phase 0 stub delegation — see kernel/sdk/diagnose.py and
+        # docs/blueprints/active/2026-05-08_l-direction-g1-check-diagnose.md §8.
+        # Phase 2 tightens return type to DiagnoseResult.
+        from .diagnose import sdk_diagnose
+
+        return sdk_diagnose(self, derivation, binding, engine=engine, registry=registry)
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
         """Return a managed e_ref string for the entity identified by kwargs.
