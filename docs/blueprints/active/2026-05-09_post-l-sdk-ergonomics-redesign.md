@@ -1151,6 +1151,98 @@ If §5.1-§5.7 lands a replacement (option C / D): substantially more — every 
 - F2 — Any `#P1` carve-outs needed for old invariant text that asserts "method exists at flat path"?
 - F3 — Sibling discipline test pattern updates: 9-shell scope test patches all 8 prior sister `sdk_*` functions; does the redesign change function reference paths?
 
+#### 5.9 Decision (locked 2026-05-09): test scope focused on alias parity + namespace shape; existing shell tests reused for behavior
+
+**Per user direction:** "Keep implementation tests focused on alias parity and namespace shape, not re-testing every underlying runtime capability. Reuse existing shell tests for behavior."
+
+**Source-grounded:** verified via `grep -lE "__all__.*== 34"` that 5 existing G invariant files at `src/kernel/tests/test_sdk_g{1,4,2,3,5}_invariants.py` all assert `__all__` length 34 (verified explicit at `test_sdk_g5_invariants.py:63` `self.assertEqual(len(kernel_sdk.__all__), 34)`). The §5.8 lock requires these 5 files to be edited at impl to assert 35.
+
+##### 5.9.1 Seven-category test plan (per user enumeration)
+
+| # | Category | New file / edit | Test count estimate |
+|---|---|---|---|
+| 1 | **Alias parity** — `FactGraph.<flat_method>(...)` ≡ `SDKStore.<flat_method>(...)` for all 30 methods | NEW `src/kernel/tests/test_sdk_redesign_alias_parity.py` | ~30-35 tests (one per flat method; parametrize where natural) |
+| 2 | **Namespace-manager structure** — 8 top-level (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) + 2 sub (`what_if.fact_overlay` / `what_if.rule`) exist as properties; each manager's contained methods exist and delegate correctly | NEW `src/kernel/tests/test_sdk_redesign_namespace_shape.py` | ~10-15 tests (one per namespace + sub-namespace + manager-method-delegation parametrized) |
+| 3 | **`__all__` length update** 34 → 35; require `FactGraph` as new export | EDIT 5 existing G invariant files: `test_sdk_g1_invariants.py`, `test_sdk_g4_invariants.py`, `test_sdk_g2_invariants.py`, `test_sdk_g3_invariants.py`, `test_sdk_g5_invariants.py` | 5 single-line edits + 5 small additions asserting `"FactGraph" in kernel_sdk.__all__` |
+| 4 | **Manager classes private + not in `__all__`** — assert `_SDKWhatIfManager` / `_SDKReadManager` / etc. names start with `_`, are not exported, only reachable via `FactGraph.<namespace>` properties | NEW `src/kernel/tests/test_sdk_redesign_invariants.py` (consolidates all redesign-specific invariants) | ~5 invariant tests |
+| 5 | **No `DeprecationWarning` from flat `SDKStore.<method>`** — assert calling each of the 30 flat methods does NOT emit `DeprecationWarning` (§5.4 lock); contrast: existing `row_format='tuple'` warning at `store.py:2133-2141` is **separately scoped** and stays — assert only that flat-method-vs-nested-method emits no NEW warnings | NEW (folded into `test_sdk_redesign_invariants.py`) | ~5 tests (parametrized across method families) |
+| 6 | **Docs taxonomy-first shape + flat compat references remain** — structural doc-lint:<br/>(a) README quickstart imports `FactGraph` not `SDKStore`<br/>(b) each taxonomy-first SDK doc has compat reference section<br/>(c) NO "deprecated" label on flat methods in any doc<br/>(d) `kernel/core/docs/04_public_contract_v1.md` has taxonomy cross-ref note | NEW (folded into `test_sdk_redesign_invariants.py`) | ~6-8 doc-lint tests (regex over markdown content) |
+| 7 | **Implementation tests focused on alias parity + namespace shape; NOT re-testing underlying runtime capability — reuse existing shell tests** | n/a (architectural decision) | Behavior tests stay at existing `test_sdk_*.py` (23 files, 150+ method-call mentions per §5.1 inventory) — unchanged |
+
+**Total new test count target:** ~50-65 new tests across 3 new files; 5 single-line edits to existing G invariant files. Existing 23 `test_sdk_*.py` files **stay verbatim** (zero churn per §5.4 lock).
+
+##### 5.9.2 Test architecture
+
+```
+NEW FILES (impl branch only):
+  - src/kernel/tests/test_sdk_redesign_alias_parity.py     [~30-35 tests]
+      Per-flat-method parity: fg.<method>(...) result equals
+      SDKStore.<method>(...) result for all 30 user-facing methods.
+      Same fixture, two call paths, asserts identical.
+
+  - src/kernel/tests/test_sdk_redesign_namespace_shape.py  [~10-15 tests]
+      8 top-level managers + 2 sub-managers exist as properties on
+      FactGraph. Each manager's methods reachable, signature
+      matches flat method, delegates correctly. Read-only managers
+      (per `EntitySnapshot.assertions` precedent: __setattr__
+      raises FrozenSnapshotError).
+
+  - src/kernel/tests/test_sdk_redesign_invariants.py       [~16-18 tests]
+      Class 1: kernel.sdk.__all__ length 35; FactGraph in __all__
+      Class 2: Manager class names private (start with _);
+               not in kernel.sdk.__all__
+      Class 3: No DeprecationWarning from flat SDKStore methods
+               (parametrized across 6 method families)
+      Class 4: Docs taxonomy-first lint
+               (a) README quickstart imports FactGraph
+               (b) each taxonomy-first SDK doc has compat ref section
+               (c) no "deprecated" label on flat methods
+               (d) public_contract_v1 has taxonomy cross-ref note
+      Class 5: Sub-manager structure under what_if (fact_overlay + rule)
+
+EDITS (impl branch only; published Path B snapshots stay frozen):
+  - src/kernel/tests/test_sdk_g1_invariants.py             [single line: 34 → 35]
+  - src/kernel/tests/test_sdk_g4_invariants.py             [single line: 34 → 35]
+  - src/kernel/tests/test_sdk_g2_invariants.py             [single line: 34 → 35]
+  - src/kernel/tests/test_sdk_g3_invariants.py             [single line: 34 → 35]
+  - src/kernel/tests/test_sdk_g5_invariants.py             [single line: 34 → 35]
+  Each file also adds:
+      self.assertIn("FactGraph", kernel_sdk.__all__)
+  to verify the new export beside SDKStore.
+
+UNCHANGED:
+  - All 23 existing test_sdk_*.py contract test files (test_sdk_check.py,
+    test_sdk_diagnose.py, test_sdk_why_not.py, test_sdk_check_fact_overlay.py,
+    test_sdk_recheck_proof_frame.py, 3× test_sdk_check_rule_*.py,
+    test_sdk_proof_frame_diff.py, test_sdk_validation.py, test_sdk_*.py for
+    pre-L methods, etc.) — behavior testing stays at flat-method level
+  - Path B published L snapshots (5 immutable refs) — never modified
+```
+
+##### 5.9.3 Falsifier verdicts (F1, F2, F3 from §5.9 question text)
+
+- **F1 — Inventory of patch paths in existing G1-G5 contract tests:** verified via `grep "kernel.sdk.shells"` (per §5.4 lock evidence) — patch paths in existing contract tests reference `kernel.sdk.shells.<x>.<y>` directly. **None of these patch paths change** under §5.4 + §5.5 + §5.7 lock (Shape 3 with additive aliases). Manager methods delegate to existing flat-method implementations which delegate to existing shell modules; the shell module paths don't move. **No `#P1` carve-out needed for patch paths.**
+- **F2 — `#P1` carve-outs for old invariant text:** the only "method exists at flat path" assertion is `__all__` length 34 → 35 + new `FactGraph` entry. **NOT a `#P1` carve-out** — it's a forward-only update to a numerically-changing assertion. The 5 existing G invariant files retain all their L Direction structural invariants (substrate-IR exclusion, kernel.audit allowlist, etc.); only the count + new export entry change. Per Sibling discipline: **published Path B snapshots stay frozen at 34**; impl-branch versions assert 35. No retroactive snapshot modification.
+- **F3 — Sibling discipline 9-shell scope:** existing 9-shell Sibling discipline tests patch all 8 prior `sdk_*` functions per shell test (e.g., G5's contract tests patch the 8 prior G1+G4+G2+G3 shell entry points). **The redesign does NOT add new shell modules under `kernel/sdk/shells/`** — managers and aliases are at the `kernel/sdk/store.py` level (FactGraph + manager classes); shell modules under `kernel/sdk/shells/` stay unchanged at 9. **Sibling scope stays 9; no patch-path additions; no retrofit needed.**
+
+All 3 falsifier verdicts: **clean — no `#P1` carve-out required.**
+
+##### 5.9.4 Phase-end test count expectations (estimated)
+
+- Pre-impl baseline: 1685 tests OK / 1 skipped (verified at G5 published HEAD `d4ceb3e` per `project_g5_published.md` memory).
+- Phase 1 (alias parity + namespace shape): ~+45 tests → ~1730 OK / 1 skipped.
+- Phase 2 (invariants + docs): ~+18 tests + 5 single-line edits → ~1748 OK / 1 skipped.
+- Phase 3 (close-out + archive): no new tests; counts stable.
+
+Phase ranges are estimates — exact final counts emerge at impl time.
+
+##### 5.9.5 What §5.9 does NOT decide
+
+- **Exact test fixture shapes** — fixture choices (e.g., minimal `Person` Entity vs richer schema) are impl-time decisions per existing test conventions in `test_sdk_*.py`.
+- **Whether parametrized tests count as 1 or N** — pytest-style parametrization is fine; final count is approximate.
+- **Whether to add `__dir__` override on `FactGraph`** — Optional `__dir__` shaping (to surface namespaces prominently in IDE autocomplete) is impl-time experimentation; default behavior (no override) already passes F0 because namespaces appear as attributes in standard `dir()` output.
+- **L-Direction shell module reorganization** — no shell module changes; Sibling scope stays 9.
+
 ## 6. Boundaries and Invariants
 
 (Provisional — finalized at scope-freeze. Inherited from L Direction.)
@@ -1160,6 +1252,7 @@ If §5.1-§5.7 lands a replacement (option C / D): substantially more — every 
 - **Compat is a hard constraint, not a goal.** The flat `SDKStore.<method>` surface across 5 immutable Path B snapshots stays callable; any candidate that breaks it requires a standalone falsifier per §5.4 thesis-derived default.
 - **§5.3 locked: top-level entrypoint class name is `FactGraph`** (sourced from chat-driven 4-round falsifier pass on 2026-05-09; `tensorflow.Tensor` / `pyspark.sql.SparkSession` / `pyparsing.ParserElement` Python precedent for Fact-overlap; `EvidenceGraph` substrate-audit name does NOT collide because it's not in `factpy.__all__`). Relationship with existing `SDKStore` class is §5.4 territory.
 - **§5.2 locked: teaching taxonomy** — 8 top-level namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) + 2 sub-namespaces (`what_if.fact_overlay`, `what_if.rule`); `from_schema_classes` (cls) + `batch` (cm) + 4 properties at top-level. Locked 2026-05-09 per user direction with all 5 placement decisions: `what_if` Option B split / `diff_proof_frames` → `audit` / `validate_provenance` → `schema` / `accept*` stays in `eval` / `from_schema_classes` + `batch` stay top-level. **Teaching-taxonomy lock is conceptual only — does NOT pre-decide rollout shape (Shape 1 docs-only vs Shape 2 additive aliases vs Shape 3 canonical nested + flat compat vs Shape 5 hybrid).** Shipping shape decision deferred to §5.4 / §5.7.
+- **§5.9 locked: test scope = alias parity + namespace shape; reuse existing shell tests for behavior.** 7 categories: (1) alias parity tests in NEW `test_sdk_redesign_alias_parity.py` (~30-35 tests, one per flat method); (2) namespace-manager structure tests in NEW `test_sdk_redesign_namespace_shape.py` (~10-15 tests covering 8 top-level managers + 2 sub-managers under `what_if`, property accessors, read-only enforcement per `EntitySnapshot.assertions` precedent); (3) `__all__` length 34 → 35 via 5 single-line edits + 5 `assertIn("FactGraph", ...)` additions in existing G1-G5 invariant files (impl branch only; published Path B snapshots stay frozen at 34); (4) manager-classes-private invariant via NEW `test_sdk_redesign_invariants.py` (Class 2: assert `_SDK*Manager` names start with `_`, not in `__all__`); (5) no-`DeprecationWarning` invariant (Class 3 in same file: parametrized across 6 method families per §5.4 lock); (6) docs taxonomy-first lint (Class 4: README quickstart imports `FactGraph`, each taxonomy-first SDK doc has compat ref section, no "deprecated" labels, public_contract has taxonomy cross-ref); (7) **architectural decision: implementation tests focus on alias parity + namespace shape, NOT re-testing underlying runtime capability** — existing 23 `test_sdk_*.py` contract tests stay verbatim (zero churn per §5.4 lock). Total new test count target: **~50-65 new tests across 3 new files; 5 single-line edits to existing G invariant files**. Phase-end count expectation: ~1730 → ~1748 OK / 1 skipped (vs G5 published baseline 1685 / 1). 3 falsifier verdicts (F1/F2/F3 from §5.9 question) all CLEAN — no `#P1` carve-out needed (patch paths in existing G1-G5 contract tests don't change; `__all__` length is forward-only update not carve-out; Sibling scope stays 9 — managers + aliases at `store.py` level, shell modules unchanged).
 - **§5.8 locked: stay on v0.1 line; no v0.2 marker.** 4 decisions locked: (1) `FactGraph` enters `kernel.sdk.__all__` — length **34 → 35** (manager classes `_SDK*Manager` stay private per `views` precedent at `store.py:66-104`); (2) NO `__version__` definition added; NO `pyproject.toml` version bump at redesign impl (`version = "0.1.0"` stays); (3) docs call this **"post-L SDK ergonomics redesign"** (or "FactGraph taxonomy") within v0.1; NO "v0.2" framing in user-facing surfaces; (4) release note materializes as blueprint + audit log + archive inventory row + brief mentions in README/04_api_surface intro/public_contract_v1 cross-ref note (per §5.5/§5.5.6 locks); NO standalone `CHANGELOG.md` created. **Path B 6th immutable snapshot naming locked:** standalone `v0.1-post-l-sdk-ergonomics-redesign-<DATE>` + combined `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-post-l-redesign-<DATE>` (extends 5th at `d4ceb3e`). Source-grounded against `pyproject.toml:7` (`version = "0.1.0"`), absent CHANGELOG, and 5 published L milestone snapshot patterns. F1/F2/F3 all confirm v0.1 continuation. NOT a replacement / deprecation / package rename per §5.7 non-commitments — therefore not a v0.2 trigger.
 - **§5.7 locked: SHIP additive redesign.** F0 vs F4 weighing source-grounded against §5.1-§5.5 + §5.5.6 locks: F0 strong gain (coherent taxonomy + bridge name + docs lever); F4 bounded (concentrated in `00_user_guide` 319-ref rewrite which IS the teaching investment; runtime additive only; zero test churn; module-internal docs mostly unchanged). "Ship nothing" path falsified — F0 gain real not illusory; F4 cost bounded not exhausting. **4 explicit non-commitments locked:** (1) NOT a replacement of `SDKStore` — class remains canonical implementation behind `FactGraph` taxonomy; (2) NOT a deprecation of flat methods — no `DeprecationWarning`, no removal, no "deprecated" labels per §5.4 lock; (3) NOT a package rename to `factpy` — current `from kernel.sdk import ...` import path stays; rename question deferred to §5.8 or separate blueprint; (4) NOT immediate implementation on design branch — impl work happens on `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09` after scope-freeze + rebase. Smallest shipping version (F3) = §5.5 Tier 1 (12 SDK doc files taxonomy-aware) + minimum-viable runtime (1 `FactGraph` top-level class + 8 manager classes + 2 sub-manager classes via property pattern per `views` precedent). Workflow advances toward scope-freeze (status `draft → scoped`) after §5.8 + §5.9 lock.
 - **§5.5 locked: per-surface doc treatment.** **4-tier classification (post-§5.5.6 extension):** (a) **Taxonomy-first** (lead with `FactGraph.<namespace>.<method>`) — README CN/EN + 6 SDK doc files (`00_user_guide`, `04_api_surface`, `02_readwrite_and_ingest`, `03_rules_and_derivations`, `01_alignment_matrix`, `05_cn_en_consistency_checklist`); (b) **SDK-presentation-only** (brief note + cross-ref; own content unchanged) — `kernel/application/docs/01_overview` CN/EN (enumeration stays flat; intro adds taxonomy bridge note); (c) **Public-contract anchor** (stays flat + adds taxonomy cross-ref) — `kernel/core/docs/04_public_contract_v1.md` (per §5.4 flat IS permanent contract); (d) **Compatibility/reference** sections within taxonomy-first docs (NOT separate "deprecated" labels) — flat-method documentation absorbed as "Foundational API" / "Compatibility reference" sections. **Module-internal docs with peripheral SDK references mostly UNCHANGED:** `application/docs/README.md` (routing note survives — points to taxonomy-first SDK docs), `application/walker/docs/README.md` (negative assertion "No SDK shell" stays valid), `adapters/docs/02_problog_adapter.md` + `03_pyreason_adapter.md` (DSL imports unchanged; prose mechanism descriptions stay flat as foundational; 1-2 usage examples conditionally taxonomy if Shape 2/3 ships); other module docs zero SDK refs (audit/authoring/core-architecture/annotation). Notebooks 01-04 + `round_story_full_demo.py` UNCHANGED (Tier-2 advanced importable bypass; only conditional 1-line update in notebook 04 if Shape 2/3 ships). NO separate migration guide file (no breaking migration; release notes suffice). L archive blueprints + Path B published snapshots untouched (Path B immutability). Total rewrite surface: ~12 doc files become taxonomy-aware (taxonomy-first tier), 1 SDK-presentation bridge note (application overview), 1 cross-ref note (public contract), 0 application/audit/core narrative changes, 0-3 conditional notebook/adapter example edits. Locked 2026-05-09 per user direction with default per-surface treatment + 2026-05-09 §5.5.6 extension covering 5 module-internal doc surfaces missed in original lock.
@@ -1196,7 +1289,7 @@ Scoped-stage acceptance (filled after §5 falsifier passes):
 - [ ] §5.6 locked — aliases vs replacement decision (if non-no-change outcome).
 - [x] §5.7 locked — **SHIP additive redesign** (locked 2026-05-09 per user binary decision direction). F0 vs F4 weighing source-grounded against all prior §5.x locks: F0 strong gain (coherent taxonomy + bridge name + docs lever); F4 bounded (`00_user_guide` 319-ref rewrite IS the teaching investment; runtime additive; zero test churn). 4 explicit non-commitments locked: (1) NOT replacement of `SDKStore`; (2) NOT deprecation of flat methods; (3) NOT package rename to `factpy` (deferred to §5.8); (4) NOT immediate impl on design branch (impl branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09` post-scope-freeze + rebase). Smallest shipping version = §5.5 Tier 1 (12 SDK docs taxonomy-aware) + 1 `FactGraph` top-level class + 8+2 manager classes via `views` property precedent. Workflow advances to §5.8 + §5.9 locks before scope-freeze.
 - [x] §5.8 locked — **stay on v0.1 line; no v0.2 marker** (locked 2026-05-09 per user default hypothesis). 4 decisions locked: `FactGraph` enters `kernel.sdk.__all__` 34 → 35 (manager classes private per `views` precedent); no `__version__` / `pyproject.toml` version bump (stays `0.1.0`); docs call it "post-L SDK ergonomics redesign" within v0.1; release note in blueprint+audit-log+archive-inventory + brief mentions in 3 docs (NO standalone CHANGELOG). Path B 6th snapshot naming locked: `v0.1-post-l-sdk-ergonomics-redesign-<DATE>` standalone + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-post-l-redesign-<DATE>` combined Path B (extends 5th at `d4ceb3e`). Source-grounded against `pyproject.toml`, absent CHANGELOG, and 5 published L milestone snapshot patterns.
-- [ ] §5.9 locked — test + invariant impact assessment.
+- [x] §5.9 locked — **test scope = alias parity + namespace shape; reuse existing shell tests for behavior** (locked 2026-05-09 per user 7-category recommendation). 3 NEW test files: `test_sdk_redesign_alias_parity.py` (~30-35 tests), `test_sdk_redesign_namespace_shape.py` (~10-15 tests), `test_sdk_redesign_invariants.py` (~16-18 tests across 5 invariant classes). 5 EXISTING G invariant files edited single-line: `test_sdk_g{1,4,2,3,5}_invariants.py` from `__all__` length 34 → 35 + add `assertIn("FactGraph", kernel_sdk.__all__)`. 23 existing `test_sdk_*.py` contract tests stay verbatim (zero churn per §5.4 lock). Phase-end count expectation: ~1730→~1748 OK / 1 skipped (vs G5 published baseline 1685/1). All 3 falsifier verdicts CLEAN — no `#P1` carve-out needed; patch paths in G1-G5 contract tests don't change (managers+aliases at `store.py` level, shell modules unchanged at 9). Published Path B snapshots stay frozen at `__all__` length 34 (their own immutable codebase); impl branch asserts 35.
 - [ ] §8 implementation plan filled with N phases (or "no implementation; close as research-only" if §5.7 lands no-change).
 - [ ] Status moves from `draft` to `scoped`.
 
