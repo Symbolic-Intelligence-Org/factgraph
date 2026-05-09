@@ -16,9 +16,7 @@ from kernel.application.protocol.common import WarningDTO
 from kernel.application.protocol.proofframe import ProofFrameAtomVerdict, ProofFrameRecheckResult
 from kernel.application.walker import (
     AssertionView,
-    AtomKeyView,
     FrozenTupleView,
-    IRAtomView,
     IRBodyWalker,
     ProofFrameDiffView,
     ProofFrameView,

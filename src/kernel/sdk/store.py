@@ -65,7 +65,16 @@ if TYPE_CHECKING:
 
 class _SDKViewsManager:
     def __init__(self) -> None:
-        self._views: dict[str, ViewSpec] = {"default": ViewSpec()}
+        # Read-only attribute boundary per post-L redesign §5.4 lock.
+        # Internal init bypasses ``__setattr__`` via ``object.__setattr__``;
+        # external assignment (``fg.views.foo = ...``) raises
+        # ``FrozenSnapshotError``. Dict mutation against ``self._views``
+        # via ``create`` / ``update`` / ``delete`` is unaffected (it
+        # mutates the dict, not the attribute).
+        object.__setattr__(self, "_views", {"default": ViewSpec()})
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.views namespace is read-only")
 
     def create(self, name: str, view_spec: ViewSpec) -> ViewSpec:
         normalized = _normalize_view_name(name)

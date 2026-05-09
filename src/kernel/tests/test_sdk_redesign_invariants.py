@@ -234,6 +234,49 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
             "public_contract_v1.md must contain a taxonomy cross-ref note per §5.5.6",
         )
 
+    def test_api_surface_canonical_signatures_match_flat_methods(self) -> None:
+        """Per pre-publish audit Blocker 1: SDK API docs canonical
+        taxonomy examples must match actual flat method signatures.
+
+        Flat signatures (per `src/kernel/sdk/store.py`):
+        - ``check(derivation, binding, ...)``
+        - ``check_fact_overlay(derivation, binding, overlay, ...)``
+        - ``check_rule_disable(rule, support_artifact, *, branch_index, atom_index, ...)``
+
+        The taxonomy examples MUST keep the same positional argument
+        names so users copy-pasting from docs get a valid call shape.
+        """
+        for relpath in (
+            "src/kernel/sdk/docs/04_api_surface.md",
+            "src/kernel/sdk/docs/04_api_surface.en.md",
+        ):
+            with self.subTest(doc=relpath):
+                text = self._read(relpath)
+                # Taxonomy what_if.check must take (derivation, binding)
+                # — NOT (rule, binding) which was the pre-fix bug.
+                self.assertIn(
+                    "fg.what_if.check(derivation, binding)",
+                    text,
+                    "fg.what_if.check must show (derivation, binding) signature",
+                )
+                self.assertNotIn(
+                    "fg.what_if.check(rule, binding)",
+                    text,
+                    "fg.what_if.check must NOT show (rule, binding) — wrong argname per flat signature",
+                )
+                # Taxonomy fact_overlay.check must take 3 positional args
+                # — NOT (support, overlay) which was the pre-fix bug.
+                self.assertIn(
+                    "fg.what_if.fact_overlay.check(derivation, binding, overlay)",
+                    text,
+                    "fg.what_if.fact_overlay.check must show (derivation, binding, overlay) signature",
+                )
+                self.assertNotIn(
+                    "fg.what_if.fact_overlay.check(support, overlay)",
+                    text,
+                    "fg.what_if.fact_overlay.check must NOT show (support, overlay) — missing derivation+binding per flat signature",
+                )
+
 
 # Class 5 — Sub-namespace structure under `what_if`
 

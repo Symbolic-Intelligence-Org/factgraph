@@ -1,7 +1,7 @@
 """SDK shell for Q1 Check capability.
 
 Phase 1 of G1 (per blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g1-check-diagnose.md`` §8)
+``docs/blueprints/archive/2026-05-08_l-direction-g1-check-diagnose.md`` §8)
 implements the ``SDKStore.check`` facade method.
 
 Public surface contract per blueprint §5 locks:

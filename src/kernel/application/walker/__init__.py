@@ -1,6 +1,6 @@
 """Application-layer walker mechanism (Tier 2 advanced importable).
 
-See docs/blueprints/active/2026-05-07_walker-mechanism.md for design.
+See docs/blueprints/archive/2026-05-07_walker-mechanism.md for design.
 
 - B1 (mandatory): IR walker + frozen tuple wrapper protocol.
 - B2 (mandatory): evidence cross-reference + per-DTO wrapper views.

@@ -198,6 +198,6 @@ PYTHONPATH=src python -m unittest \
 
 ## Related Historical Blueprints
 
-- `docs/blueprints/active/2026-05-07_walker-mechanism.md`
-- `docs/blueprints/active/2026-05-07_walker-mechanism.audit.md`
+- `docs/blueprints/archive/2026-05-07_walker-mechanism.md`
+- `docs/blueprints/archive/2026-05-07_walker-mechanism.audit.md`
 - `docs/references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md`

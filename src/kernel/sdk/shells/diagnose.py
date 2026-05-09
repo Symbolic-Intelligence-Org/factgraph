@@ -1,7 +1,7 @@
 """SDK shell for Q2 Diagnose capability.
 
 Phase 2 of G1 (per blueprint
-``docs/blueprints/active/2026-05-08_l-direction-g1-check-diagnose.md`` §8)
+``docs/blueprints/archive/2026-05-08_l-direction-g1-check-diagnose.md`` §8)
 implements the ``SDKStore.diagnose`` facade method.
 
 Public surface contract per blueprint §5 locks:

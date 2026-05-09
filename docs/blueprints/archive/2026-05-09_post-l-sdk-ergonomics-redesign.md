@@ -815,7 +815,7 @@ Candidate scope:
 
 **3-tier doc surface classification (codified):**
 
-1. **Taxonomy-first surfaces** (lead with `FactGraph.<namespace>.<method>`): README, 00_user_guide, 04_api_surface, 02_readwrite_and_ingest, 03_rules_and_derivations, 01_alignment_matrix.
+1. **Taxonomy-first surfaces** (lead with `FactGraph.<namespace>.<method>`): README, 00_user_guide, 04_api_surface, 02_readwrite_and_ingest, 03_rules_and_derivations, 01_alignment_matrix. [Pre-publish audit addendum 2026-05-09 — Clarify 2 narrowing] In Phase 2 impl, "lead with" was implemented as **"taxonomy intro note + cross-ref + flat-form foundational body"** (rather than rewriting every body example to taxonomy form). README quickstart + 04_api_surface §0 do lead with full taxonomy + side-by-side flat code; 00_user_guide / 02_readwrite_and_ingest / 03_rules_and_derivations / 01_alignment_matrix add the taxonomy intro note + foundational-API framing while keeping the body's flat-form examples as foundational reference. Rationale: the heaviest doc (00_user_guide, 319 SDK refs) would have required rewriting hundreds of inline examples for marginal F0 gain over the intro-note treatment (the intro signposts the taxonomy; the body is detailed reference). The intro-note pattern is the locked treatment for Tier 1; per-body rewrite is deferred until consumer signal warrants it.
 2. **SDK-presentation surfaces** (record taxonomy as SDK presentation, not own truth): application/01_overview.
 3. **Compatibility/reference surfaces** (preserve flat as primary content; note taxonomy as alternative): within taxonomy-first docs, the "Compatibility reference" or "Foundational API" sections; NOT separate "deprecated" labels.
 
@@ -844,7 +844,7 @@ Candidate scope:
 **§5.4 alignment check:**
 
 - "Flat as foundational, NOT deprecated" framing materializes in every doc surface: compat sections labeled "Foundational API" / "Compatibility reference", not "Deprecated".
-- No `DeprecationWarning` references in any doc (per §5.4 F-noise-cost).
+- No `DeprecationWarning` references in any doc (per §5.4 F-noise-cost). [Pre-publish audit addendum 2026-05-09 — Minor 3 narrowing] **Narrow this claim to "no flat-vs-nested `DeprecationWarning` references in any doc."** The pre-existing `row_format='tuple'` `DeprecationWarning` documented at `04_api_surface.md` (and referenced in `00_user_guide` / `02_readwrite_and_ingest` / `03_rules_and_derivations`) is **separately scoped** — it pre-dates the post-L redesign and marks a behaviorally distinct legacy mode (tuple vs dict return shapes). It stays. The redesign §5.4 lock applies only to flat-method-vs-nested-method semantics (which produce identical results). The Class 3 invariant test in `test_sdk_redesign_invariants.py` reflects this narrowed scope.
 - Taxonomy is the **preferred** form for new code; flat is **supported foundational** API.
 
 ##### 5.5.6 Module-internal docs with peripheral SDK references (extension 2026-05-09)
@@ -1186,6 +1186,19 @@ NEW FILES (impl branch only):
       matches flat method, delegates correctly. Read-only managers
       (per `EntitySnapshot.assertions` precedent: __setattr__
       raises FrozenSnapshotError).
+      [Pre-publish audit addendum 2026-05-09 — Clarify 1 narrowing]
+      Phase 1 impl chose generic ``*args, **kwargs`` delegation
+      across all 28 manager methods rather than per-method explicit
+      signatures. The lock semantic is "call-compatible, not
+      signature-identical" — i.e., ``fg.what_if.check(*a, **kw)``
+      forwards verbatim to ``fg.check(*a, **kw)`` and produces
+      identical behavior, but IDE / static-analysis signature hints
+      live on ``SDKStore.<method>`` only. Per-method explicit
+      signatures are deferred (no concrete consumer signal yet for
+      the IDE-hint cost; the alias parity tests already prove
+      runtime equivalence). Rationale: keeps the 9-manager-class
+      addition narrow and avoids a maintenance surface that would
+      need to stay in sync with 28 underlying signatures forever.
 
   - src/kernel/tests/test_sdk_redesign_invariants.py       [~16-18 tests]
       Class 1: kernel.sdk.__all__ length 35; FactGraph in __all__

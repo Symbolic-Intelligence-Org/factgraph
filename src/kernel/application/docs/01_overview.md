@@ -93,7 +93,7 @@
 
 `src/kernel/application/__init__.py` currently exports 65 public symbols. The main executor entry points are:
 
-Batch 8 public-surface note:`kernel.application` is an **advanced importable** runtime authority in the kernel package. It is appropriate for automation,wire bridges,and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade,and Batch 8 does not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes.
+Batch 8 public-surface note (historical Batch 8 state, since updated by L Direction G1-G5 + post-L SDK ergonomics redesign): `kernel.application` is an **advanced importable** runtime authority in the kernel package. It is appropriate for automation, wire bridges, and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade. Batch 8 itself did not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes; subsequent L Direction milestones (G1 Check + Diagnose, G4 Why-not, G2 Fact Overlay + ProofFrame Recheck, G3 rule overlays, G5 ProofFrame Diff) added narrow SDK shells over those runtimes, and the post-L redesign exposes them through the `FactGraph` taxonomy as well — see [04_api_surface §0](../../sdk/docs/04_api_surface.md) and the cross-ref note further down this overview.
 
 - `execute_read_request(...)`
 - `hydrate_entity(...)`

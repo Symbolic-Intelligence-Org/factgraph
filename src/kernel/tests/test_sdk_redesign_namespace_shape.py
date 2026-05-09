@@ -167,6 +167,12 @@ class ReadOnlyEnforcementTests(unittest.TestCase):
     def test_package_manager_read_only(self) -> None:
         self._assert_read_only(_new_fg().package, "package")
 
+    def test_views_manager_read_only(self) -> None:
+        """Per pre-publish audit Blocker 2: `views` is part of the 8
+        top-level taxonomy and must enforce read-only attribute
+        boundary uniformly with the other managers."""
+        self._assert_read_only(_new_fg().views, "views")
+
 
 class PropertyAccessorIdempotenceTests(unittest.TestCase):
     """Repeated property access returns the same manager instance.
