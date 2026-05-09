@@ -1,22 +1,39 @@
-# FactPy Application 文档
+# FactPy Application Docs
 
-本目录记录 `src/kernel/application` 的当前实现口径。`application` 是 `core` 之上的 canonical Python runtime authority；`sdk` 负责 Python product surface、DSL authoring 和 outward facade compatibility。
+This directory records the current implementation contract for
+`src/kernel/application`. `application` is the canonical Python
+runtime authority on top of `core`; `sdk` is responsible for the
+Python product surface, DSL authoring, and outward facade
+compatibility.
 
 > **Audience note**
 >
-> 如果你是在写普通 Python product code,并希望用 `Entity` / `Field` / `Identity` classes、Query DSL、snapshot、batch 或 user-facing exceptions,优先阅读 `src/kernel/sdk/docs/` 并从 `kernel.sdk` 开始。
+> If you are writing ordinary Python product code and want to use
+> `Entity` / `Field` / `Identity` classes, the Query DSL, snapshots,
+> batches, or user-facing exceptions, read `src/kernel/sdk/docs/`
+> first and start from `kernel.sdk`.
 >
-> 本目录面向 integration / automation / pipeline / RPC bridge 作者:调用方可能只拥有 JSON-like payload、schema identity 字符串、field path 和 error DTO,不应依赖 SDK descriptor 或 Python DSL object。这里记录的是 SDK 之下的 Layer 2 runtime contract。
+> This directory targets integration / automation / pipeline / RPC
+> bridge authors: callers who may only hold JSON-like payloads,
+> schema identity strings, field paths, and error DTOs, and who
+> should not depend on SDK descriptors or Python DSL objects. What
+> this directory records is the Layer 2 runtime contract beneath
+> the SDK.
 
-## 当前文档
+## Current documents
 
 - `src/kernel/application/docs/01_overview_en.md`
-  - English mirror of the overview.
+  - English overview of the application module.
 - `src/kernel/application/walker/docs/README.md`
-  - Current implementation contract for the application-layer walker module.
+  - Current implementation contract for the application-layer walker
+    module.
 
-## 使用约定
+## Conventions
 
-- 本目录文档以当前实现行为为准，不是独立设计草案。
-- 新增或调整 `application` 公共入口时，应同步更新本目录文档与对应测试。
-- application protocol 不接收 SDK facade objects、SDK `Field` descriptors 或 SDK DSL objects；SDK 负责把 ergonomic 输入 lower/adapter 成 application runtime DTO。
+- Documents in this directory reflect current implementation
+  behavior, not standalone design drafts.
+- When adding or adjusting public `application` entry points, update
+  the corresponding doc and tests in the same change.
+- The application protocol does not accept SDK facade objects, SDK
+  `Field` descriptors, or SDK DSL objects; SDK is responsible for
+  lowering / adapting ergonomic inputs into application runtime DTOs.

@@ -1,140 +1,208 @@
 # Annotation
 
-- 适用范围：`src/kernel/core/annotation`
-- 状态：experimental / internal API
-- 已被 kernel/core/store 内部消费;不允许 breaking change,但 public API 不承诺
-- 最后更新：2026-04-27
+- Scope: `src/kernel/core/annotation`
+- Status: experimental / internal API
+- Already consumed internally by kernel/core/store; breaking changes
+  are not allowed, but the public API is not promised
+- Last updated: 2026-04-27
 
-## 1. 模块边界
+## 1. Module boundary
 
-本目录承载 `Souffle annotation kernel prototype` 的内部语义能力。
+This directory carries the internal semantic capability of the
+"Souffle annotation kernel prototype".
 
-当前目标不是提供稳定 public API，而是把已验证有价值的 annotation 逻辑沉淀为可维护的内部实现落点。
+The current goal is not to provide a stable public API, but to
+distill validated annotation logic into a maintainable internal
+implementation site.
 
-## 2. 当前能力
+## 2. Current capabilities
 
 - `_min_max.py`
-  - `Workload A` 对应的 `min-max` 路径置信度传播
-  - 产出带 `confidence`、`min_support_depth`、`support_path` 的结论
+  - `min-max` path-confidence propagation corresponding to
+    `Workload A`
+  - Produces conclusions with `confidence`, `min_support_depth`,
+    `support_path`
 - `_evidence.py`
-  - `Workload C` 对应的结构候选 / 直接证据 / provenance 重建与 `max` 聚合 helper
-  - 当前已实现 prototype 级 raw candidate 与 provenance 能力；Top-K 仍留在 benchmark harness
+  - Structural candidates / direct evidence / provenance
+    reconstruction and `max` aggregation helpers, corresponding to
+    `Workload C`
+  - Currently implements prototype-level raw-candidate and
+    provenance capabilities; Top-K still lives in the benchmark
+    harness
 - `_certainty.py`
-  - certainty-weight vocabulary 的 first-consumer prototype
-  - 消费 `confidence_kind="certainty"`、rule metadata `condition_weights` 与 candidate evidence tree
-  - `confidence_kind="certainty"` 的 producer routing 不在 annotation 内实现；当前由 core `store._confidence_kind_resolver` 在 candidate 创建时决定
-  - 产出 `CertaintySummary` / `ConditionImpact`，用于 candidate-level certainty summary 派生
-  - 支持两种聚合策略（`AGGREGATION_STRATEGIES`）：
-    - `"bottleneck"`（默认）：`impact = weight × confidence`，`aggregate = min(impacts)`
-    - `"additive"`：`impact = (weight / Σweights) × confidence`，`aggregate = sum(impacts)`
-  - `CertaintySummary.aggregation` 字段标识使用的策略
-  - `ConditionImpact.impact` 的语义随策略改变：bottleneck 为绝对 weighted impact，additive 为归一化 contribution
-  - `rank_certainty_conditions(conditions, aggregate_certainty, *, aggregation=...)` → `list[RankedCondition]`
-    - 按 impact 升序排序（weighted first → unweighted last）
-    - bottleneck 模式：`is_bottleneck=True` 当 condition impact == aggregate_certainty（tie 全标）
-    - additive 模式：`is_bottleneck=False`（additive 无 bottleneck 概念）
-    - narrative / NL 消费 ranked view，不自行排序
-  - 当前只实现 certainty lane；`probability` / `none` 直接返回 `None`
-  - 当前 production consumers：
-    - runtime candidate explain delivery：
-      - `queries/explain-summary` 的 response-level sibling `certainty_summary`
-      - `queries/explain-narrative` 的 additive `certainty_lines`
-      - `queries/explain-nl` 的 additive certainty paragraph
-    - audit package + static site delivery：
-      - `export_package` 通过预计算写入 `certainty_summaries.jsonl`
-      - `AuditQuery.get_candidate_certainty_summary(candidate_id)` 读取物化值
-      - `AuditQuery.get_candidate_evidence_tree_narrative(candidate_id)` 传入 certainty_summary，产出含 `certainty_lines` 的 narrative
-      - static site candidate evidence page 渲染 certainty section
-  - runtime / audit / static 三面共享同一条 certainty 派生链路：
-    - 只在 candidate tree 能定位到唯一 child-rule `referenced_support` subtree 时派生
-    - `condition_weights` 从该 subtree 对应的单条 `rule_ref_edge -> rule_ref_id@version -> registry rule payload` 查询
-    - 多 rule、递归 nested subtree、unresolved child support、或 registry 链路缺失时 graceful degrade 为 `certainty_summary=null`
+  - First-consumer prototype for the certainty-weight vocabulary
+  - Consumes `confidence_kind="certainty"`, rule metadata
+    `condition_weights`, and the candidate evidence tree
+  - Producer routing for `confidence_kind="certainty"` is not
+    implemented inside annotation; it is decided by core
+    `store._confidence_kind_resolver` at candidate creation time
+  - Produces `CertaintySummary` / `ConditionImpact`, used to derive
+    candidate-level certainty summaries
+  - Supports two aggregation strategies (`AGGREGATION_STRATEGIES`):
+    - `"bottleneck"` (default): `impact = weight × confidence`,
+      `aggregate = min(impacts)`
+    - `"additive"`: `impact = (weight / Σweights) × confidence`,
+      `aggregate = sum(impacts)`
+  - The `CertaintySummary.aggregation` field identifies the strategy
+    in use
+  - `ConditionImpact.impact` semantics shift with the strategy:
+    bottleneck = absolute weighted impact; additive = normalized
+    contribution
+  - `rank_certainty_conditions(conditions, aggregate_certainty, *, aggregation=...)`
+    → `list[RankedCondition]`
+    - Sorted by impact ascending (weighted first → unweighted last)
+    - Bottleneck mode: `is_bottleneck=True` when condition impact ==
+      aggregate_certainty (all ties marked)
+    - Additive mode: `is_bottleneck=False` (additive has no
+      bottleneck concept)
+    - narrative / NL consume the ranked view; they don't sort
+      themselves
+  - Only the certainty lane is implemented; `probability` / `none`
+    return `None` directly
+  - Current production consumers:
+    - runtime candidate explain delivery:
+      - response-level sibling `certainty_summary` on
+        `queries/explain-summary`
+      - additive `certainty_lines` on `queries/explain-narrative`
+      - additive certainty paragraph on `queries/explain-nl`
+    - audit package + static site delivery:
+      - `export_package` precomputes and writes
+        `certainty_summaries.jsonl`
+      - `AuditQuery.get_candidate_certainty_summary(candidate_id)`
+        reads the materialized value
+      - `AuditQuery.get_candidate_evidence_tree_narrative(candidate_id)`
+        accepts a certainty_summary and produces a narrative with
+        `certainty_lines`
+      - the static-site candidate evidence page renders the
+        certainty section
+  - The runtime / audit / static surfaces share a single certainty
+    derivation chain:
+    - Derivation occurs only when the candidate tree resolves to a
+      unique child-rule `referenced_support` subtree
+    - `condition_weights` is queried from the single
+      `rule_ref_edge -> rule_ref_id@version -> registry rule payload`
+      corresponding to that subtree
+    - Multi-rule, recursive nested subtree, unresolved child
+      support, or missing registry chain → graceful degrade to
+      `certainty_summary=null`
 - `types.py`
-  - 仅放最小共享基础类型
-  - 不在第一轮 prototype 中引入通用 annotation algebra
+  - Holds only the minimal shared base types
+  - Does not introduce a general annotation algebra in the first
+    prototype round
 
-## 3. 与 Benchmark 的关系
+## 3. Relationship with the benchmark
 
-- 外部 benchmark/reference harness
-  - 继续作为 oracle / golden 参考实现
+- External benchmark / reference harness
+  - Continues as the oracle / golden reference implementation
 - `src/kernel/core/annotation/*`
-  - 作为新的 prototype 实现
+  - Acts as the new prototype implementation
 
-这两者必须保持独立，避免同一份代码同时充当“参考真值”和“候选实现”。
+The two must remain independent so that the same code does not
+simultaneously serve as "reference truth" and "candidate
+implementation".
 
-## 4. 不变量
+## 4. Invariants
 
-- 不直接进入正式 `Store.evaluate(...)` public contract
-- 不拥有 `confidence_kind` producer routing；annotation 只消费已确定的 semantic lane
-- 不修改 `CandidateSet` 稳定结构
-- 不把 certainty summary 写回 `CandidateSet`、`SupportArtifact` 或 evidence tree core summary 12 字段
-- 结构化 `certainty_summary` 只允许以 response-level sibling 形式暴露，不嵌入 core 12 字段 summary set
-- runtime narrative / NL 允许消费已派生的 certainty summary，并以 additive `certainty_lines` / certainty paragraph 呈现
-- audit package 允许物化 certainty_summary（export-time 预计算），但不导出 `condition_weights` 本身
+- Does not enter the formal `Store.evaluate(...)` public contract
+- Does not own `confidence_kind` producer routing; annotation only
+  consumes the determined semantic lane
+- Does not modify the stable structure of `CandidateSet`
+- Does not write certainty summary back to `CandidateSet`,
+  `SupportArtifact`, or the core 12-field summary of the evidence
+  tree
+- Structured `certainty_summary` is exposed only as a
+  response-level sibling, not embedded in the core 12-field summary
+  set
+- Runtime narrative / NL may consume the derived certainty summary
+  and present it as additive `certainty_lines` / a certainty
+  paragraph
+- The audit package may materialize `certainty_summary` (export-time
+  precomputation) but does not export `condition_weights` itself
 
 ## 5. Certainty V1 Contract (frozen)
 
-**状态：v1 已冻结。语义改动必须经 blueprint，不允许直接迭代。**
+**Status: v1 is frozen. Semantic changes require a blueprint;
+direct iteration is not allowed.**
 
-### 5.1 Frozen Contract
+### 5.1 Frozen contract
 
-以下 contract 已稳定，后续只接受 bug fix / performance / docs clarification：
+The following contract is stable; further changes are limited to
+bug fixes / performance / docs clarification:
 
 - **Producer contract**
-  - 仅 `native` 路径
-  - 仅 create-time `CertaintyConfidenceKindResolver` 自动标记
-  - 仅 eligible child-proof subtree（single structured `rule_ref_edge` + no nested `referenced_support`）
+  - `native` path only
+  - Auto-marked only at create time by
+    `CertaintyConfidenceKindResolver`
+  - Eligible only on a child-proof subtree (single structured
+    `rule_ref_edge` + no nested `referenced_support`)
 - **Evidence tree carrier contract**
-  - `assertion_fact.confidence` — 从 `meta.confidence` 读取
+  - `assertion_fact.confidence` — read from `meta.confidence`
   - `predicate_witness_group.condition_confidence = max(child confidences)`
-  - tree 只是 carrier，不 bake scoring 语义
+  - The tree is only a carrier; it does not bake in scoring
+    semantics
 - **Summary contract**
-  - `bottleneck` = 默认策略：`impact = weight × confidence`，`aggregate = min(impacts)`
-  - `additive` = explain-time 可选策略：`impact = (weight / Σweights) × confidence`，`aggregate = sum(impacts)`
-  - `ConditionImpact.impact` 语义随策略改变
-  - `CertaintySummary` shape：`confidence_kind`, `condition_count`, `weighted_condition_count`, `conditions`, `aggregate_certainty`, `aggregation`
+  - `bottleneck` = default strategy:
+    `impact = weight × confidence`, `aggregate = min(impacts)`
+  - `additive` = explain-time optional strategy:
+    `impact = (weight / Σweights) × confidence`,
+    `aggregate = sum(impacts)`
+  - `ConditionImpact.impact` semantics shift with the strategy
+  - `CertaintySummary` shape: `confidence_kind`, `condition_count`,
+    `weighted_condition_count`, `conditions`, `aggregate_certainty`,
+    `aggregation`
 - **Delivery contract**
-  - runtime summary / narrative / NL 支持双策略（via `certainty_aggregation` query option）
-  - narrative：`certainty_lines`（ranked by impact ascending）+ `certainty_bottleneck`（machine-readable，bottleneck only）
-  - NL：weakest-condition sentence（bottleneck only）
-  - audit / static：固定走默认 `bottleneck`
-  - export-time materialization：`certainty_summaries.jsonl`
+  - runtime summary / narrative / NL support both strategies (via
+    the `certainty_aggregation` query option)
+  - narrative: `certainty_lines` (ranked by impact ascending) +
+    `certainty_bottleneck` (machine-readable, bottleneck only)
+  - NL: weakest-condition sentence (bottleneck only)
+  - audit / static: always use the default `bottleneck`
+  - export-time materialization: `certainty_summaries.jsonl`
 
-### 5.2 变更门槛
+### 5.2 Change thresholds
 
-以下改动必须开新 blueprint：
+The following changes require a new blueprint:
+
 - `CertaintySummary` shape
 - `certainty_summary` response shape
-- evidence tree carrier fields（`confidence` / `condition_confidence`）
-- resolver eligibility 规则
-- aggregation 公式或策略
-- audit/static certainty contract
+- evidence-tree carrier fields (`confidence` /
+  `condition_confidence`)
+- resolver eligibility rules
+- aggregation formula or strategy
+- audit / static certainty contract
 
-### 5.3 Non-goals (显式推迟)
+### 5.3 Non-goals (explicitly deferred)
 
-以下不在 v1 范围，不是遗漏：
-- chain / recursive certainty 传播（eligibility guard 遇嵌套 `referenced_support` 返回 `null`）
-- leaf min / weighted mean 聚合
+The following are not in v1 scope; they are not omissions:
+
+- chain / recursive certainty propagation (the eligibility guard
+  returns `null` when nested `referenced_support` is encountered)
+- leaf min / weighted-mean aggregation
 - probability explainability
-- additive 策略在 audit/static 的 parity
-- engine parity（`souffle` / `problog`）
+- additive-strategy parity in audit / static
+- engine parity (`souffle` / `problog`)
 - SDK certainty auto-routing parity
 - rule cap / threshold / optional conditions
-- `Workload B` 时序语义
+- `Workload B` temporal semantics
 
-### 5.4 测试基线
+### 5.4 Test baseline
 
-- 234 tests 全绿
-- 关键 contract test：auto-routing e2e、fact-confidence propagation、bottleneck vs additive、ranking/narrative/NL wording、audit/static round-trip
-- 改语义先更新 blueprint，不先改测试预期
+- 234 tests all green
+- Key contract tests: auto-routing e2e, fact-confidence
+  propagation, bottleneck vs additive, ranking / narrative / NL
+  wording, audit / static round-trip
+- Changing semantics requires updating the blueprint first, not
+  changing test expectations first
 
-## 5. Provenance Summary Schema
+## 6. Provenance Summary Schema
 
-prototype 当前保留两套 **按领域区分** 的 provenance 摘要形态；它们不强行统一字段命名，这是刻意设计，不是遗漏。
+The prototype currently keeps two **domain-specific** provenance
+summary shapes; field names are deliberately not unified across
+them, by design.
 
-### 5.1 `_min_max.py`
+### 6.1 `_min_max.py`
 
-`build_min_max_provenance_entries(...)` 产出：
+`build_min_max_provenance_entries(...)` produces:
 
 ```json
 {
@@ -149,18 +217,18 @@ prototype 当前保留两套 **按领域区分** 的 provenance 摘要形态；�
 }
 ```
 
-字段约定：
+Field conventions:
 
 - `candidate.source / candidate.target`
-  - 对应图路径问题中的起点 / 终点
+  - Source / target endpoints of the graph-path problem
 - `support_path`
-  - 边路径字符串列表
-  - 格式固定为 `"X -[0.900000]-> Y"`
-  - 边权使用 6 位小数浮点表示
+  - List of edge-path strings
+  - Format fixed as `"X -[0.900000]-> Y"`
+  - Edge weights are 6-decimal floats
 
-### 5.2 `_evidence.py`
+### 6.2 `_evidence.py`
 
-`build_max_evidence_provenance(...)` 产出：
+`build_max_evidence_provenance(...)` produces:
 
 ```json
 {
@@ -177,20 +245,26 @@ prototype 当前保留两套 **按领域区分** 的 provenance 摘要形态；�
 }
 ```
 
-字段约定：
+Field conventions:
 
 - `candidate.subject / candidate.relation / candidate.object`
-  - 对应关系三元组问题中的候选主键
+  - Candidate primary key for the relational-triple problem
 - `direct_evidence`
-  - `claim_id` 列表
+  - List of `claim_id`
 - `struct_support`
-  - 结构支持链字符串列表
-  - 格式固定为 `"X -[relation]-> Y"`
-  - 中括号中的内容是关系名，不是数值权重
+  - List of structural-support chain strings
+  - Format fixed as `"X -[relation]-> Y"`
+  - Bracketed content is the relation name, not a numeric weight
 
-### 5.3 为什么不统一 `candidate` 字段名
+### 6.3 Why `candidate` field names are not unified
 
-- `_min_max.py` 表达的是图路径结论，主键天然是 `(source, target)`
-- `_evidence.py` 表达的是关系三元组结论，主键天然是 `(subject, relation, object)`
+- `_min_max.py` expresses graph-path conclusions whose primary key
+  is naturally `(source, target)`
+- `_evidence.py` expresses relational-triple conclusions whose
+  primary key is naturally `(subject, relation, object)`
 
-prototype 当前明确保留这一区分，以避免为了“字段统一”而引入一层没有必要的抽象。若未来进入正式 runtime，再根据实际调用面决定是否需要统一 carrier。
+The prototype keeps this distinction explicit to avoid introducing
+an unnecessary abstraction layer in the name of "field
+unification". If this work later moves into formal runtime, we will
+decide whether a unified carrier is needed based on actual call
+sites.

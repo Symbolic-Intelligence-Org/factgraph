@@ -1,21 +1,34 @@
-# FactPy Authoring 文档
+# FactPy Authoring Docs
 
-本目录记录 `src/kernel/authoring` 的当前实现口径，面向需要理解 authoring 预检、发布与 registry 工作流的开发者。
+This directory records the current implementation contract for
+`src/kernel/authoring`, targeting developers who need to understand
+authoring preflight, publish, and registry workflows.
 
-## 当前文档
+## Current documents
 
 - `src/kernel/authoring/docs/01_overview.md`
-  - authoring 模块职责、公共入口、registry 文件布局、与 SDK/service/core 的边界。
+  - Authoring module responsibilities, public entry points, registry
+    file layout, and boundaries with SDK / service / core.
 
-## 使用约定
+## Conventions
 
-- 本目录文档以当前实现行为为准，不是独立设计草案。
-- 新增/调整 authoring 公共入口时，应同步更新本目录文档与相关测试。
-- 若 `authoring` 内部继续做第二阶段收口，优先更新 `01_overview.md` 中的“推荐入口”与“兼容层”部分。
-- 当前声明元数据 contract 已统一到 `version / description / tags`：
-  - schema DSL 走 `Entity.Meta`
-  - rule / derivation DSL 走顶层参数
-  - 这些字段属于 authoring 资产元数据，不参与 runtime 语义
-- 当前 derivation authoring 仍保留少量 compatibility compile lane：
-  - 例如 ProbLog 的 `body_confidences`
-  - 这类字段可进入 compile 产物，但不等于 shared runtime contract；执行前可能会被 bridge 到 typed `engine_ext`
+- Documents in this directory reflect current implementation
+  behavior, not standalone design drafts.
+- When adding or adjusting public `authoring` entry points, update
+  the corresponding doc and tests in the same change.
+- If `authoring` continues into a second-phase consolidation, prefer
+  updating the "recommended entry points" and "compatibility lane"
+  sections in `01_overview.md` first.
+- The declarative metadata contract is unified to `version /
+  description / tags`:
+  - schema DSL goes through `Entity.Meta`
+  - rule / derivation DSL goes through top-level constructor
+    parameters
+  - These fields are authoring asset metadata; they do not
+    participate in runtime semantics.
+- Derivation authoring still keeps a small compatibility compile
+  lane:
+  - For example, ProbLog's `body_confidences`
+  - Such fields may enter compile artifacts but are not part of the
+    shared runtime contract; before execution they may be bridged
+    into a typed `engine_ext`.

@@ -1,17 +1,25 @@
-# FactPy Adapters 文档
+# FactPy Adapters Docs
 
-本目录记录 `src/kernel/adapters` 的当前实现口径，面向需要理解 core 与外部执行/导出引擎边界的开发者。
+This directory records the current implementation contract for
+`src/kernel/adapters`, targeting developers who need to understand
+the boundary between core and external execution / export engines.
 
-## 当前文档
+## Current documents
 
 - `src/kernel/adapters/docs/01_souffle_adapter.md`
-  - Souffle adapter 的职责、模块分工、导出/运行链路、与 core 的边界。
+  - Souffle adapter responsibilities, module breakdown, export /
+    run path, and the boundary with core.
 - `src/kernel/adapters/docs/02_problog_adapter.md`
-  - ProbLog adapter 的职责、导出/执行/解析链路、与 core 的边界。
+  - ProbLog adapter responsibilities, export / execution / parse
+    path, and the boundary with core.
 - `src/kernel/adapters/docs/03_pyreason_adapter.md`
-  - PyReason adapter 的 spike 边界、event-log trace 形态、与 Souffle provenance 的对比结论。
+  - PyReason adapter spike boundary, event-log trace shape, and
+    comparative conclusions versus Souffle provenance.
 
-## 使用约定
+## Conventions
 
-- 当前 `adapters` 目录下包含 `souffle`、`problog` 与 `pyreason`（spike）适配器。
-- 如未来新增其它引擎适配器，应按同样方式在本目录追加新文档，而不是把所有适配器揉进一篇里。
+- The `adapters` directory currently holds the `souffle`, `problog`,
+  and `pyreason` (spike) adapters.
+- When new engine adapters are added, follow the same convention
+  and add a separate doc rather than merging all adapters into a
+  single page.

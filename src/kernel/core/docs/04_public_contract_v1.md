@@ -1,112 +1,131 @@
-# Public Contract v1（对外稳定约定）
+# Public Contract v1 (stable external commitments)
 
-- 范围：`core/service/sdk` 的 v1 外部行为约束
-- 状态：`v1`
-- 最后更新：2026-03-10
+- Scope: external behavioral constraints of `core / service / sdk`
+  v1
+- Status: `v1`
+- Last updated: 2026-03-10
 
-本文档只记录“当前代码已实现且应保持稳定”的对外契约；不记录已移除能力。
+This document records only what "current code already implements
+and should remain stable" as an external contract; it does not
+record removed capabilities.
 
-## 1. 字符串 DSL 策略（v1）
+## 1. String DSL policy (v1)
 
-### 1.1 service / HTTP（rules v1）
+### 1.1 service / HTTP (rules v1)
 
-入口：
+Entry points:
 
 - `service.rules_v1.validate_rule(...)`
 - `service.rules_v1.compile_rule_preview(...)`
-- `app_v1` 下 `/v1/rules/*` 路由
+- `/v1/rules/*` routes under `app_v1`
 
-若请求使用字符串 DSL，返回：
+If a request uses string DSL, the response is:
 
 - `ok=false`
 - `errors[*].kind="string_dsl_unsupported"`
 
-当前覆盖：
+Currently covered:
 
-- `$.rule` 为字符串
-- `$.rule.where` 为字符串
+- `$.rule` is a string
+- `$.rule.where` is a string
 
-### 1.2 SDK（Python）
+### 1.2 SDK (Python)
 
-入口：
+Entry points:
 
 - `SDKStore.run(...)`
 - `SDKStore.evaluate(...)`
 
-> **post-L SDK ergonomics redesign cross-ref（§5.5.6）：** 自 post-L 重设计起，`FactGraph` 作为 `SDKStore` 的字面别名进入 `kernel.sdk.__all__`,上述 contract 入口同样可通过 `FactGraph.eval.run(...)` / `FactGraph.eval.evaluate(...)` 触达;flat `SDKStore.<method>` 形式仍是 v1 contract 的 foundational anchor,既不被弃用也不会移除。详细 design 由 post-L SDK ergonomics redesign blueprint 记录(internal design record;§5.4 / §5.5)。
+> **post-L SDK ergonomics redesign cross-ref (§5.5.6):** since the
+> post-L redesign, `FactGraph` enters `kernel.sdk.__all__` as a
+> literal alias of `SDKStore`; the contract entry points above are
+> equally reachable via `FactGraph.eval.run(...)` /
+> `FactGraph.eval.evaluate(...)`. The flat `SDKStore.<method>` form
+> remains the foundational anchor of the v1 contract — neither
+> deprecated nor removed. Detailed design is recorded in the post-L
+> SDK ergonomics redesign blueprint (an internal design record;
+> §5.4 / §5.5).
 
-字符串 DSL 被显式拒绝，抛 `SDKStoreError`，稳定前缀：
+String DSL is explicitly rejected with `SDKStoreError`; stable
+prefixes:
 
 - `string rule DSL is not supported in SDK v1; ...`
 - `string derivation DSL is not supported in SDK v1; ...`
 
-## 2. 声明元数据契约（v1）
+## 2. Declarative metadata contract (v1)
 
 ### 2.1 Entity / schema
 
-SDK 与 authoring schema DSL 当前统一的声明元数据为：
+The unified declarative metadata across the SDK and authoring
+schema DSL is:
 
 - `version`
 - `description`
 - `tags`
 
-稳定口径：
+Stable points:
 
-- `entity_type` 由 `Entity` 类名推导，不单独要求 `schema_id`
-- `Entity.Meta` 只允许 `version / description / tags`
-- `description` 的优先级为：`Meta.description > 类 docstring fallback`
-- compiler 会校验并保留这些字段到 schema 编译输出
+- `entity_type` is derived from the `Entity` class name; no
+  separate `schema_id` is required
+- `Entity.Meta` allows only `version / description / tags`
+- `description` precedence: `Meta.description > class docstring
+  fallback`
+- The compiler validates and preserves these fields in the schema
+  compile output
 
 ### 2.2 Rule / Derivation
 
-`Rule` / `Derivation` 当前允许的声明元数据：
+Currently allowed declarative metadata for `Rule` / `Derivation`:
 
 - `description: str`
 - `tags: list[str]`
 
-稳定口径：
+Stable points:
 
-- 走 SDK 对象时，`Rule(...)` / `Derivation(...)` 使用顶层参数
-- 走 authoring payload 时，使用顶层键 `description` / `tags`
-- compiler 会校验并保留这些字段
-- 这些字段不改变 `where` 校验、求值、candidate 生成或 accept 语义
+- For SDK objects, use top-level constructor parameters of
+  `Rule(...)` / `Derivation(...)`
+- For authoring payloads, use top-level keys `description` / `tags`
+- The compiler validates and preserves these fields
+- These fields do not change `where` validation, evaluation,
+  candidate generation, or accept semantics
 
-兼容说明：
+Compatibility note:
 
-- `Derivation.target` 仍是兼容字段；高层声明推荐以 `head` 为主
+- `Derivation.target` remains a compatibility field; high-level
+  declarations should prefer `head`
 
-## 3. Store.evaluate 模式契约（v1）
+## 3. Store.evaluate mode contract (v1)
 
-允许模式：
+Allowed modes:
 
 - `native`
 - `souffle`
 - `problog`
 
-已移除别名：
+Removed aliases:
 
 - `mode='python'` -> `ValueError("mode='python' is removed; use mode='native'")`
 - `mode='engine'` -> `ValueError("mode='engine' is removed; use mode='souffle'")`
 
-若未注册对应 evaluator：
+If the corresponding evaluator is not registered:
 
-- 抛 `WhereValidationError`
-- 错误消息格式：`"{mode} evaluator not registered; import kernel.adapters.{mode} first"`
+- raise `WhereValidationError`
+- error-message format: `"{mode} evaluator not registered; import kernel.adapters.{mode} first"`
 
-## 4. AcceptResult 诊断契约（v1）
+## 4. AcceptResult diagnostics contract (v1)
 
-来源：
+Source:
 
 - `kernel.core.derivation.accept.AcceptResult`
 - `kernel.core.store._accept.accept_store_candidate(...)`
 
-### 3.1 版本字段
+### 3.1 Version field
 
 - `AcceptResult.diagnostics_contract_version == 1`
 
-### 3.2 AcceptResult 字段
+### 3.2 AcceptResult fields
 
-稳定字段：
+Stable fields:
 
 - `run_id`
 - `accepted_count`
@@ -119,9 +138,9 @@ SDK 与 authoring schema DSL 当前统一的声明元数据为：
 - `candidate_id`
 - `candidate_key`
 
-### 3.3 `diagnostics[*]` 形状
+### 3.3 `diagnostics[*]` shape
 
-每项为对象，字段：
+Each item is an object with fields:
 
 - `code: str`
 - `severity: "info" | "warning" | "error"`
@@ -129,24 +148,25 @@ SDK 与 authoring schema DSL 当前统一的声明元数据为：
 - `message: str`
 - `data: dict[str, Any]`
 
-### 3.4 当前稳定 code（已在 store accept 路径使用）
+### 3.4 Currently stable codes (already used in the store accept path)
 
 - `accept_meta_schema_digest_unavailable`
 - `accept_meta_policy_digest_unavailable`
 
-说明：
+Notes:
 
-- 可新增 code。
-- 若出现破坏性字段变更，需 bump `diagnostics_contract_version`。
+- New codes may be added.
+- Any breaking field change must bump
+  `diagnostics_contract_version`.
 
-## 5. accept_many 返回契约（v1）
+## 5. accept_many return contract (v1)
 
-来源：
+Source:
 
 - `Store.accept_many(...)`
 - `accept_many_candidate_sets(...)`
 
-每个返回项形状：
+Each returned item has the shape:
 
 - `candidate_id: str`
 - `candidate_key: str`
@@ -154,7 +174,7 @@ SDK 与 authoring schema DSL 当前统一的声明元数据为：
 - `entity_ref: str | None`
 - `error: None | {code: str, message: str, diagnostics?: list[dict]}`
 
-当前 `state` 集合（实现侧已使用）：
+The current `state` set (already used by the implementation):
 
 - `ACCEPTED`
 - `DUPLICATE`
@@ -162,31 +182,37 @@ SDK 与 authoring schema DSL 当前统一的声明元数据为：
 - `FAILED_RUNTIME`
 - `BLOCKED_DEPENDENCY`
 
-典型 `error.code`：
+Typical `error.code` values:
 
 - `ATOMIC_ROLLBACK`
 - `ATOMIC_ABORTED`
 - `BLOCKED_DEPENDENCY`
 - `DUPLICATE_NOT_ALLOWED`
-- 或来自异常前缀（例如 `IDENTITY_INCOMPLETE`, `INVALID_TERM`）
+- or a prefix derived from an exception (e.g.
+  `IDENTITY_INCOMPLETE`, `INVALID_TERM`)
 
-前置失败说明：
+Pre-failure notes:
 
-- `mode` 非 `atomic|best_effort` 时，当前实现直接抛 `WriteProtocolError`，不会返回逐项结果
-- 候选依赖图存在环时，当前实现直接抛 `WriteProtocolError("CANDIDATE_DEPENDENCY_CYCLE: ...")`，不会返回逐项结果
+- When `mode` is not `atomic|best_effort`, the current
+  implementation raises `WriteProtocolError` directly and does not
+  return per-item results
+- When the candidate dependency graph contains a cycle, the
+  current implementation raises
+  `WriteProtocolError("CANDIDATE_DEPENDENCY_CYCLE: ...")` directly
+  and does not return per-item results
 
-## 6. ProjectorAudit 契约（v2）
+## 6. ProjectorAudit contract (v2)
 
-来源：
+Source:
 
 - `kernel.core.view.projector.ProjectorAudit`
 - `project_view_facts_with_audit(...)`
 
-版本：
+Version:
 
 - `ProjectorAudit.contract_version == 2`
 
-字段：
+Fields:
 
 - `predicate_count: int`
 - `active_claim_count: int`
@@ -194,21 +220,23 @@ SDK 与 authoring schema DSL 当前统一的声明元数据为：
 - `selected_by_pred: dict[str, int]`
 - `dropped_by_policy_count: int`
 
-说明：
+Notes:
 
-- `project_view_facts(...)` 不带审计字段。
-- `project_view_facts_with_audit(...)` 返回 `(facts, audit)`。
-- 当前 projector 不支持 `legacy_record_visibility` 参数。
+- `project_view_facts(...)` does not carry audit fields.
+- `project_view_facts_with_audit(...)` returns `(facts, audit)`.
+- The current projector does not support a
+  `legacy_record_visibility` parameter.
 
-## 7. 兼容面与变更流程
+## 7. Compatibility surface and change process
 
-当前兼容入口（保留但不建议新增依赖）：
+Current compatibility entry points (kept but new dependencies are
+discouraged):
 
 - `kernel.core.store.api`
-- `Store.evaluate_dummy(...)`（deprecated）
+- `Store.evaluate_dummy(...)` (deprecated)
 
-变更流程约束：
+Change-process constraints:
 
-1. 先更新本文档中的 contract 描述。
-2. 同步更新/补充回归测试。
-3. 最后修改实现。
+1. Update the contract description in this document first.
+2. Update / add regression tests next.
+3. Modify the implementation last.

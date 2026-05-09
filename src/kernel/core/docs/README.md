@@ -1,20 +1,44 @@
 # Core Module Docs
 
-`src/kernel/core/` 是 FactPy 的内核 substrate 层 —— 提供 Store / Ledger / native evaluator / engine adapters / projection 等所有上层模块依赖的基础语义。本目录文档面向 advanced importable 的使用者(integrator / contributor),不是 SDK 用户入门文档。
+`src/kernel/core/` is FactPy's substrate layer — it provides the
+Store / Ledger / native evaluator / engine adapters / projection
+semantics that every higher layer depends on. The documents in this
+directory target advanced importable consumers (integrators /
+contributors), not SDK end-users learning the surface.
 
-## 入口
+## Entry points
 
-- [01_architecture.md](./01_architecture.md) / [.en.md](./01_architecture.en.md) —— Core 架构总览:Store / Ledger / native evaluator + 引擎支持矩阵(`native | souffle | problog | pyreason`) + 关键 data model + entry points。
-- [02_quality_assessment.md](./02_quality_assessment.md) / [.en.md](./02_quality_assessment.en.md) —— 质量评估框架(代码 snapshot 视角)。
-- [03_progress_roadmap.md](./03_progress_roadmap.md) / [.en.md](./03_progress_roadmap.en.md) —— 开发进度与 future trajectory(post-routemap 状态)。
-- [04_public_contract_v1.md](./04_public_contract_v1.md) —— Public contract v1:`core / service / sdk` v1 对外稳定行为约束。
-- [04_service_layer.md](./04_service_layer.md) —— Service 层现状(HTTP/BFF delivery 与 core 的 boundary)。
+- [01_architecture.en.md](./01_architecture.en.md) — Core
+  architecture overview: Store / Ledger / native evaluator + the
+  engine support matrix (`native | souffle | problog | pyreason`),
+  key data models, and entry points.
+- [02_quality_assessment.en.md](./02_quality_assessment.en.md) —
+  Quality assessment framework (code-snapshot perspective).
+- [03_progress_roadmap.en.md](./03_progress_roadmap.en.md) —
+  Development progress and future trajectory (post-routemap state).
+- [04_public_contract_v1.md](./04_public_contract_v1.md) — Public
+  contract v1: stable external behavioral constraints across `core /
+  service / sdk` v1.
+- [04_service_layer.md](./04_service_layer.md) — Current state of
+  the service layer (the boundary between HTTP/BFF delivery and
+  core).
 
-> 注:`04` 编号在历史中分给两个不同主题(`04_public_contract_v1` + `04_service_layer`),两者不冲突,沿用既有文件名。
+> Note: the `04` numeric prefix was historically split between two
+> different topics (`04_public_contract_v1` + `04_service_layer`);
+> the two do not conflict and the existing filenames are preserved.
 
-## 边界
+## Boundaries
 
-- 本目录**不是 SDK 入门文档** —— SDK user guide 在 [`src/kernel/sdk/docs/00_user_guide.en.md`](../../sdk/docs/00_user_guide.en.md)。
-- 本目录**不是 application capability docs** —— Check / Diagnose / Fact Overlay / ProofFrame / rule actions / Why-not 在 [`src/kernel/application/docs/`](../../application/docs/)。
-- 本目录**不是 audit consumer docs** —— audit package + round events + ProofFrame diff 在 [`src/kernel/audit/docs/`](../../audit/docs/)。
-- 本目录**不是 routemap closure narrative** —— round story 闭环故事由 round-story-completion-plan blueprint(internal design record)在 §10 Outcome 记录。
+- This directory is **not the SDK getting-started guide** — the SDK
+  user guide lives at
+  [`src/kernel/sdk/docs/00_user_guide.en.md`](../../sdk/docs/00_user_guide.en.md).
+- This directory is **not the application capability docs** — Check
+  / Diagnose / Fact Overlay / ProofFrame / rule actions / Why-not
+  live in
+  [`src/kernel/application/docs/`](../../application/docs/).
+- This directory is **not the audit consumer docs** — audit package
+  + round events + ProofFrame diff live in
+  [`src/kernel/audit/docs/`](../../audit/docs/).
+- This directory is **not the routemap closure narrative** — the
+  round-story closure narrative is recorded in §10 Outcome of the
+  round-story-completion-plan blueprint (an internal design record).

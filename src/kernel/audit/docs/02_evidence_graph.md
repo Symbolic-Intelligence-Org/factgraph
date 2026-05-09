@@ -1,28 +1,33 @@
-# EvidenceGraph（audit）
+# EvidenceGraph (audit)
 
-- 范围：`src/kernel/audit/evidence_graph.py`
-- 最后更新：2026-04-30
-- 目标读者：需要在 audit 层实现跨引擎 explainability consumer 的开发者
+- Scope: `src/kernel/audit/evidence_graph.py`
+- Last updated: 2026-04-30
+- Audience: developers implementing cross-engine explainability
+  consumers in the audit layer
 
-## 1. 角色
+## 1. Role
 
-`EvidenceGraph` 是 `audit` 层的统一 explainability DTO。
+`EvidenceGraph` is the unified explainability DTO of the `audit`
+layer.
 
-它的职责是：
+Its responsibilities are:
 
-- 接住 engine-native provenance carrier 经过 converter 之后的共享骨架
-- 为后续 renderer 提供统一的 node / edge / layout 入口
-- 在不改写 engine truth 的前提下，给 Souffle / ProbLog / PyReason 提供同一消费抽象
+- Hold the shared skeleton produced by converters from engine-native
+  provenance carriers
+- Provide a unified node / edge / layout entry point for downstream
+  renderers
+- Give Souffle / ProbLog / PyReason a single consumption abstraction
+  without rewriting any engine truth
 
-它当前不负责：
+It currently does not:
 
-- 替代各引擎自己的 provenance carrier
-- 替代 Souffle 现有 `CandidateEvidenceTree`
-- 替代 `service.static_ui` 的整页模板
+- Replace each engine's own provenance carrier
+- Replace Souffle's existing `CandidateEvidenceTree`
+- Replace `service.static_ui`'s full-page templates
 
-## 2. 当前数据模型
+## 2. Current data model
 
-当前 v1 暴露三个 frozen dataclass：
+The current v1 exposes three frozen dataclasses:
 
 - `EvidenceNode`
   - `node_id`
@@ -49,11 +54,13 @@
   - `layout_hint`
   - `metadata`
 
-`component` 是 renderer-facing subject key，不保证一定是单一实体 identity。像 `alice→bob` 这样的关系表达也允许作为 `component`。
+`component` is a renderer-facing subject key; it is not guaranteed to
+correspond to a single entity identity. Relational expressions such
+as `alice→bob` are also allowed as a `component`.
 
-## 3. 冻结枚举
+## 3. Frozen enumerations
 
-当前只冻结最小共享枚举：
+Only the minimal shared enumerations are frozen at v1:
 
 - `layout_hint`
   - `tree`
@@ -67,78 +74,114 @@
   - `derives`
   - `updates`
 
-`dag` layout 与 `rule_fire` node kind 还不在 v1 scope。
+The `dag` layout and the `rule_fire` node kind are not in v1 scope yet.
 
-## 4. 校验与不变量
+## 4. Validation and invariants
 
-当前 `EvidenceGraph` 在 `__post_init__` 中执行最小结构校验：
+`EvidenceGraph` performs minimal structural validation in
+`__post_init__`:
 
-- `layout_hint` 必须是 `tree` 或 `timeline`
-- `root_node_id` 必须存在于 `nodes`
-- `node_id` 必须唯一
-- `edge_id` 必须唯一
-- 每条 edge 的端点必须引用已有 node
+- `layout_hint` must be `tree` or `timeline`
+- `root_node_id` must exist in `nodes`
+- `node_id` must be unique
+- `edge_id` must be unique
+- Each edge's endpoints must reference existing nodes
 
-当前 `engine_meta` / `metadata` 会做 `MappingProxyType` 浅冻结，避免 consumer 在渲染阶段原地改写共享 DTO。
+`engine_meta` and `metadata` are shallow-frozen via `MappingProxyType`
+to prevent consumers from mutating the shared DTO during rendering.
 
-## 5. 当前渲染器
+## 5. Current renderer
 
-当前 `audit/evidence_graph.py` 已实现：
+`audit/evidence_graph.py` currently implements:
 
 - `render_evidence_graph_html(graph)`
-  - 根据 `layout_hint` 分派到：
+  - Dispatches by `layout_hint` to:
     - tree renderer
     - timeline renderer
 - tree renderer
-  - 以 `root_node_id` 为入口
-  - 当前按 edge `from -> to` 的 child-to-parent 约定，把 incoming edges 渲染成子分支
+  - Entry at `root_node_id`
+  - By the current edge `from -> to` child-to-parent convention,
+    incoming edges are rendered as child branches
 - timeline renderer
-  - 当前使用 CSS grid 形态：
-    - 列 = timestep
-    - 行 = component
+  - Currently uses a CSS-grid form:
+    - column = timestep
+    - row = component
     - cell = stacked event cards
 
-当前 renderer 产出的是 **standalone HTML fragment**，不是整页 HTML。它的设计目标是后续被 `service.static_ui` 的 candidate evidence page 直接嵌入。
+The renderer produces a **standalone HTML fragment**, not a full HTML
+page. It is designed to be embedded later by
+`service.static_ui`'s candidate evidence page.
 
-## 6. 当前边界
+## 6. Current boundaries
 
-当前 `EvidenceGraph` 已不再只是内存内 DTO：
+`EvidenceGraph` is no longer just an in-memory DTO:
 
-- `audit/evidence_graph.py` 现在提供：
-  - frozen dataclass DTO
-  - standalone HTML fragment renderer
-  - `evidence_graph_to_dict(...)` / `evidence_graph_from_dict(...)` round-trip helper
-- audit package 当前可选写出 `audit/evidence_graphs.jsonl`
-  - 每行 `{candidate_id, evidence_graph}`
-  - 当前由 runtime export 在 export-time materialize：
-    - `souffle`：从 `provenance_trees.jsonl` 的 proof tree 重建
-    - `pyreason`：从 `ProvenanceEnvelope.payload` 的 event log 转换
-    - `problog`：从 `ProvenanceEnvelope.payload` 的 proof trace 转换
-  - `native` derivation 不产生 `EvidenceGraph`；native candidate 的 reader-side explain surface 是 candidate evidence tree / summary / narrative DTO
-- `AuditQuery.get_candidate_evidence_graph(...)` 会读取 durable graph
-- `service.static_ui` 的 candidate evidence page 现在优先渲染 durable `EvidenceGraph`，并仅对旧 package 保留 Souffle provenance-tree fallback
+- `audit/evidence_graph.py` now provides:
+  - the frozen dataclass DTO
+  - the standalone HTML fragment renderer
+  - `evidence_graph_to_dict(...)` / `evidence_graph_from_dict(...)`
+    round-trip helpers
+- The audit package can optionally write
+  `audit/evidence_graphs.jsonl`
+  - One line per `{candidate_id, evidence_graph}`
+  - Materialized at export time by the runtime exporter:
+    - `souffle`: rebuilt from the proof tree in
+      `provenance_trees.jsonl`
+    - `pyreason`: converted from the event log in
+      `ProvenanceEnvelope.payload`
+    - `problog`: converted from the proof trace in
+      `ProvenanceEnvelope.payload`
+  - `native` derivations do not produce an `EvidenceGraph`; the
+    reader-side explain surface for native candidates is the
+    candidate evidence tree / summary / narrative DTOs
+- `AuditQuery.get_candidate_evidence_graph(...)` reads the durable
+  graph
+- `service.static_ui`'s candidate evidence page now prefers rendering
+  the durable `EvidenceGraph`, keeping the Souffle proof-tree
+  fallback only for older packages
 
-当前仍保持的边界：
+Boundaries that still hold:
 
-- `EvidenceGraph` 是 engine-bound adapter provenance artifact，不是所有 candidate 都必然拥有的 explain surface
-- runtime live `explain-tree` / `explain-summary` / `explain-narrative` / `explain-nl` 仍不直接支持 `pyreason_provenance_v1` / `problog_provenance_v1`
-- `EvidenceGraph` 仍不替代 engine-native provenance carrier；durable package 只是写 converter 结果，不抹平 engine truth
-- candidate evidence page 仍保留既有 Souffle provenance tree section；`EvidenceGraph` 是新增统一 explain block，不替换旧 tree viewer
+- `EvidenceGraph` is an engine-bound adapter provenance artifact, not
+  an explain surface that every candidate must have
+- Runtime live `explain-tree` / `explain-summary` /
+  `explain-narrative` / `explain-nl` still do not directly support
+  `pyreason_provenance_v1` / `problog_provenance_v1`
+- `EvidenceGraph` still does not replace engine-native provenance
+  carriers; the durable package writes only the converter output
+  without flattening engine truth
+- The candidate evidence page still keeps the existing Souffle
+  provenance-tree section; `EvidenceGraph` is an additional unified
+  explain block, not a replacement for the older tree viewer
 
-## 7. Known Issues（2026-03-29 walkthrough 确认）
+## 7. Known Issues (confirmed during 2026-03-29 walkthrough)
 
-### ~~F-EG-1 构造时无环检测（严重：低）~~ — RESOLVED
+### ~~F-EG-1 No cycle detection at construction (severity: low)~~ — RESOLVED
 
-已修复：`EvidenceGraph.__post_init__` 在端点引用校验之后增加 DFS 环检测。含有环的图在构造时即 raise `ValueError("cycle detected in EvidenceGraph involving node ...")`。渲染期 `if node_id in ancestry` 截断保留为双重防御。
+Fixed: `EvidenceGraph.__post_init__` adds DFS cycle detection after
+endpoint reference validation. Graphs containing cycles raise
+`ValueError("cycle detected in EvidenceGraph involving node ...")` at
+construction. The render-time `if node_id in ancestry` cut-off
+remains as defense in depth.
 
-### ~~F-EG-2 Timeline renderer 不渲染 edges（严重：低）~~ — RESOLVED
+### ~~F-EG-2 Timeline renderer doesn't render edges (severity: low)~~ — RESOLVED
 
-已修复：`_render_timeline_card` 接收 `incoming_edges` 和 `node_by_id` 参数，在每个 card 底部渲染 incoming edge 注释（`← {edge_kind} · {rule_label} from {source_label}`）。无 edge 时不产出 edge-note div。
+Fixed: `_render_timeline_card` accepts `incoming_edges` and
+`node_by_id` parameters and renders an incoming-edge annotation at
+the bottom of each card (`← {edge_kind} · {rule_label} from
+{source_label}`). When no edges are present, no edge-note div is
+emitted.
 
-### ~~F-EG-3 `evidence_graphs.jsonl` 重复 candidate_id 静默覆盖（严重：低）~~ — RESOLVED
+### ~~F-EG-3 `evidence_graphs.jsonl` silently overwrites duplicate candidate_id (severity: low)~~ — RESOLVED
 
-已修复：`reader._read_evidence_graphs()` 在赋值前检查 `candidate_id in result`，重复时 raise `AuditReadError("duplicate candidate_id in evidence_graphs: ...")`。
+Fixed: `reader._read_evidence_graphs()` checks `candidate_id in
+result` before assignment and raises `AuditReadError("duplicate
+candidate_id in evidence_graphs: ...")` on duplicates.
 
-### ~~F-EG-4 `static_ui._try_build_evidence_graph_from_provenance` 裸 Exception 捕获（严重：低）~~ — RESOLVED
+### ~~F-EG-4 `static_ui._try_build_evidence_graph_from_provenance` bare Exception catch (severity: low)~~ — RESOLVED
 
-已修复：`except Exception:` 收窄为 `except (ValueError, KeyError, TypeError):`，覆盖 `souffle_proof_tree_from_dict` 和 `souffle_proof_tree_to_evidence_graph` 的已知失败模式。`ImportError`、`AttributeError` 等非预期异常将正常传播。
+Fixed: `except Exception:` narrowed to `except (ValueError, KeyError,
+TypeError):`, covering the known failure modes of
+`souffle_proof_tree_from_dict` and
+`souffle_proof_tree_to_evidence_graph`. Unexpected exceptions such as
+`ImportError` and `AttributeError` propagate normally.

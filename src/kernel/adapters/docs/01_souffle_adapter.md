@@ -1,191 +1,249 @@
-# Souffle Adapter 总览（kernel）
+# Souffle Adapter overview (kernel)
 
-- 范围：`src/kernel/adapters/souffle`
-- 最后更新：2026-03-23
-- 目标读者：需要理解 Souffle 导出、执行、查询编译链路的开发者
+- Scope: `src/kernel/adapters/souffle`
+- Last updated: 2026-03-23
+- Audience: developers who need to understand the Souffle export,
+  execution, and query-compile path
 
-## 1. 模块职责
+## 1. Module responsibilities
 
-`adapters.souffle` 是外部引擎适配层，负责把 `Store`/where IR 转换为 Souffle 可执行程序与输出。
+`adapters.souffle` is the external-engine adapter layer; it
+converts `Store` / where IR into Souffle-executable programs and
+their outputs.
 
-它主要负责：
+It is responsible for:
 
-- `Store.evaluate(mode="souffle")` 的引擎评估实现
-- inference/audit package 导出（`manifest + facts + rules + policy + outputs`）
-- package 执行（支持 `souffle` 与 `noop`）
-- where IR 编译为查询关系（query relation）
-- view 规则生成与 predicate 名称归一化
+- Engine evaluation for `Store.evaluate(mode="souffle")`
+- Inference / audit package export
+  (`manifest + facts + rules + policy + outputs`)
+- Package execution (supporting `souffle` and `noop`)
+- Compiling where IR into a query relation
+- View rule generation and predicate-name normalization
 
-它不负责：
+It is not responsible for:
 
-- core 语义定义（规则语义、ledger 语义、schema canonical）
-- runtime session 生命周期编排（service 层职责）
-- Deontic 语义执行（当前未在本适配器内实现）
+- Core semantic definitions (rule semantics, ledger semantics,
+  schema canonicalization)
+- Runtime session lifecycle orchestration (a service-layer
+  responsibility)
+- Deontic semantic execution (not implemented in this adapter
+  currently)
 
-## 2. 当前模块结构
+## 2. Current module structure
 
 - `__init__.py`
-  - import 时调用 `register_engine_evaluator(evaluate_store_engine, "souffle")`
+  - On import, calls
+    `register_engine_evaluator(evaluate_store_engine, "souffle")`
 - `engine_eval.py`
-  - `evaluate_store_engine(...)`，`Store.evaluate(mode="souffle")` 的入口
+  - `evaluate_store_engine(...)`, the entry point for
+    `Store.evaluate(mode="souffle")`
 - `package.py`
-  - `ExportOptions`、`export_package(...)`
+  - `ExportOptions`, `export_package(...)`
 - `runner.py`
-  - `run_package(...)`、`find_souffle_binary(...)`
+  - `run_package(...)`, `find_souffle_binary(...)`
 - `provenance.py`
-  - `SouffleProofNodeV0`、`SouffleProofTreeV0`
+  - `SouffleProofNodeV0`, `SouffleProofTreeV0`
   - `parse_souffle_proof_json(...)`
   - `run_provenance_explain(...)`
 - `where_compile.py`
-  - `compile_where_to_query_dl(...)`、`query_rel_for_where(...)`
+  - `compile_where_to_query_dl(...)`, `query_rel_for_where(...)`
 - `souffle_view_gen.py`
   - `generate_view_dl(...)`
 - `pred_norm.py`
   - `normalize_pred_id(...)` / `denormalize_engine_pred(...)`
 - `tsv_v1.py`
-  - TSV/facts 的读写编码
+  - TSV / facts read / write encoding
 
-## 3. 与 core 的边界
+## 3. Boundary with core
 
-`core` 通过注册机制调用引擎，不静态依赖具体适配器：
+`core` invokes the engine via a registration mechanism; it does not
+statically depend on a specific adapter:
 
-1. 导入 `kernel.adapters.souffle`
-2. `__init__` 注册 `souffle` evaluator
-3. `Store.evaluate(mode="souffle")` 进入该适配器实现
+1. Import `kernel.adapters.souffle`
+2. `__init__` registers the `souffle` evaluator
+3. `Store.evaluate(mode="souffle")` enters this adapter's
+   implementation
 
-这个边界允许：
+This boundary allows:
 
-- core 独立测试
-- 多引擎并存（当前已有 `souffle` 与 `problog`）
-- 引擎实现按 mode 解耦切换
+- core to be tested independently
+- multiple engines to coexist (currently `souffle` and `problog`)
+- engine implementations to be decoupled and switched by mode
 
-补充边界：
+Additional boundaries:
 
-- `Souffle` 仍然只承担结构执行器职责。
-- 当前 `src/kernel/core/annotation/` 中的 prototype annotation kernel 不属于 adapter 本身的一部分。
-- benchmark / prototype 阶段允许出现“`Souffle` 结构结果 + core 内部 annotation helper”这种组合，但这不改变正式 `Store.evaluate(mode="souffle")` 仍是单引擎 adapter 契约这一事实。
+- `Souffle` continues to play only the structural-executor role.
+- The prototype annotation kernel under
+  `src/kernel/core/annotation/` is not part of the adapter itself.
+- During the benchmark / prototype phase, combinations such as
+  "Souffle structural results + a core-internal annotation helper"
+  are allowed, but this does not change the fact that the formal
+  `Store.evaluate(mode="souffle")` remains a single-engine adapter
+  contract.
 
-## 4. 典型工作流
+## 4. Typical workflows
 
-### 4.1 Souffle 引擎评估
+### 4.1 Souffle engine evaluation
 
-`evaluate_store_engine(...)` 的主流程：
+The main flow of `evaluate_store_engine(...)`:
 
-1. 校验目标/变量绑定（entity head 或 fact head）
-2. `export_package(...)` 导出临时 package（包含 query where）
-3. `run_package(..., engine="souffle")` 执行
-4. 读取 `outputs/<query_rel>.out.facts` 解析 bindings
-5. 转换为 `CandidateSet`（entity/fact candidate）
+1. Validate target / variable bindings (entity head or fact head)
+2. `export_package(...)` exports a temporary package (containing
+   the query where)
+3. `run_package(..., engine="souffle")` executes
+4. Read `outputs/<query_rel>.out.facts` and parse bindings
+5. Convert into `CandidateSet` (entity / fact candidate)
 
-注意：`engine_eval` 会强校验 `run_manifest.engine_mode == "souffle"`；如果 runner 因缺少二进制回退到 `noop`，会报错而不是静默成功。
+Note: `engine_eval` strictly verifies that
+`run_manifest.engine_mode == "souffle"`; if the runner falls back
+to `noop` because the binary is missing, it raises rather than
+silently succeeding.
 
-explainability 补充：
+Explainability addendum:
 
-- 当前 Souffle evaluate 分两条 explainability 路径：
+- The current Souffle evaluate splits explainability into two
+  paths:
   - **partial witness path**
-    - 当 where 含有 top-level `pred` atoms 时，adapter 会导出 `_w` witness 变体 view，并让 query output 额外穿透 witness 列
-    - engine_eval 会按 binding 聚合这些 witness 列，构建 `SupportArtifact` 的受限子集并注册到 `Store`
-    - 对外 `support_kind="souffle_witness_v1"`
-    - 当前承诺的字段范围：
+    - When `where` contains top-level `pred` atoms, the adapter
+      exports a `_w` witness variant view and lets the query
+      output additionally pass through witness columns
+    - `engine_eval` aggregates these witness columns by binding,
+      builds a restricted subset of `SupportArtifact`, and
+      registers it with `Store`
+    - Externally, `support_kind="souffle_witness_v1"`
+    - Currently committed field scope:
       - `binding`
       - `pred_witnesses`
       - minimal `non_fact_steps`
       - `rule_ref_edges=[]`
-    - 同一 final binding 若跨多个 OR branch 都有 witness row，adapter 侧采用 `source-order wins`
-    - 这不是 Soufflé 官方 provenance proof tree，而是 adapter-level witness sidecar via Datalog rewriting
+    - When the same final binding has witness rows across
+      multiple OR branches, the adapter applies a
+      `source-order wins` rule
+    - This is not the official Souffle provenance proof tree, but
+      an adapter-level witness sidecar via Datalog rewriting
   - **degraded path**
-    - 若当前 query 无法走 partial witness，candidate 继续显式标记：
+    - If the current query cannot take the partial-witness path,
+      the candidate is explicitly tagged:
       - `support_kind="engine_no_witness_v1"`
-      - `support_digest="sha256:000...0"`（兼容占位符）
-    - service `explain_ref(kind="candidate")` 对这类 candidate 返回 `ok=true` + `witness_status="degraded"`
-- first-round consumer surface 仍收窄在 runtime：
-  - runtime `explain` / `explain-tree` 接受 `souffle_witness_v1`
-  - audit/static 对 `souffle_witness_v1` 继续 deferred
+      - `support_digest="sha256:000...0"` (compatibility
+        placeholder)
+    - Service `explain_ref(kind="candidate")` returns `ok=true` +
+      `witness_status="degraded"` for such candidates
+- The first-round consumer surface still narrows to the runtime:
+  - runtime `explain` / `explain-tree` accepts
+    `souffle_witness_v1`
+  - audit / static still defers `souffle_witness_v1`
 
-### 4.2 Package 导出
+### 4.2 Package export
 
-`export_package(...)` 会产出（`export_version=v2`）：
+`export_package(...)` produces (`export_version=v2`):
 
 - `schema/schema_ir.json`
-- `policy/policy_ir.json` 与 `policy/policy_rules.dl`
-- `facts/*.facts`（claim/claim_arg/meta*/revokes）
-- `rules/view.dl` 与 `rules/idb.dl`
-- `manifest.json`（含 `outputs_map`、digests、entrypoints）
-- `audit/*`（仅 `package_kind="audit"` 时）
+- `policy/policy_ir.json` and `policy/policy_rules.dl`
+- `facts/*.facts` (claim / claim_arg / meta* / revokes)
+- `rules/view.dl` and `rules/idb.dl`
+- `manifest.json` (containing `outputs_map`, digests, entrypoints)
+- `audit/*` (only when `package_kind="audit"`)
 
-### 4.3 Package 执行
+### 4.3 Package execution
 
-`run_package(...)` 支持：
+`run_package(...)` supports:
 
-- `engine="souffle"`：调用 Souffle CLI
-- `engine="noop"`：仅生成空/占位输出
+- `engine="souffle"`: invokes the Souffle CLI
+- `engine="noop"`: produces only empty / placeholder outputs
 
-Souffle 二进制查找顺序：
+Souffle binary lookup order:
 
-1. 环境变量 `SOUFFLE_BIN`
-2. `PATH` 中的 `souffle`
+1. The `SOUFFLE_BIN` environment variable
+2. `souffle` on `PATH`
 
-### 4.4 Provenance Helper（V0, adapter-local）
+### 4.4 Provenance helper (V0, adapter-local)
 
-当前 `adapters.souffle` 还提供一个 **adapter-local provenance helper**：
+`adapters.souffle` also provides an **adapter-local provenance
+helper**:
 
 - `run_provenance_explain(...)`
-  - 独立调用 Souffle `-t explain`
-  - 通过 stdin 发送 `format json` / `explain ...`
-  - 解析为 `SouffleProofTreeV0`
+  - Independently invokes Souffle `-t explain`
+  - Sends `format json` / `explain ...` over stdin
+  - Parses the result into `SouffleProofTreeV0`
 - `run_package_provenance(...)`
-  - 接收已导出的 factpy package 目录
-  - 复用 package manifest 中的 `view/idb/policy` 组装逻辑
-  - 自动定位 Souffle binary 后调用 `run_provenance_explain(...)`
-  - 对 flat query package 直接可用；对含 `ruleref` 的 composed query package，导出时需要提供 `query.registry_root`
+  - Accepts an already-exported factpy package directory
+  - Reuses the `view / idb / policy` assembly logic from the
+    package manifest
+  - Locates the Souffle binary and calls
+    `run_provenance_explain(...)`
+  - Works directly on flat query packages; for composed query
+    packages containing `ruleref`, the export must provide
+    `query.registry_root`
 - `parse_souffle_proof_json(...)`
-  - 解析 Souffle JSON proof stream
-  - depth-limited `subproof ...` 截断节点会保留为 `node_type="subproof"` 的叶子，而不是报错
+  - Parses the Souffle JSON proof stream
+  - Depth-limited `subproof ...` truncation nodes are kept as
+    leaves of `node_type="subproof"` rather than raising
 - `souffle_proof_tree_to_evidence_graph(...)`
-  - 直接消费 `SouffleProofTreeV0`
-  - 产出 `EvidenceGraph(engine="souffle", layout_hint="tree", support_kind="souffle_witness_v1")`
-  - 当前映射口径：
+  - Consumes `SouffleProofTreeV0` directly
+  - Produces `EvidenceGraph(engine="souffle",
+    layout_hint="tree", support_kind="souffle_witness_v1")`
+  - Current mapping conventions:
     - root = `conclusion`
     - `axiom` = `seed`
     - `derived` / `negation` / `subproof` = `premise`
-    - child node 通过 `edge_kind="supports"` 指向 parent node
-  - `rule-number` / `rule text` 保留在 `rule_label` + `engine_meta`
+    - Child nodes point at parent nodes via
+      `edge_kind="supports"`
+  - `rule-number` / `rule text` is preserved in `rule_label` +
+    `engine_meta`
 
-边界：
+Boundaries:
 
-- 不修改 `run_package(...)` 的签名或返回值
-- 不进入 `core/` 公共 contract
-- 不引入新的 service endpoint
-- 不写入新的 audit durable artifact
-- 不替换当前 `candidate_evidence_tree`
+- Does not modify the signature or return value of
+  `run_package(...)`
+- Does not enter the public contract of `core/`
+- Does not introduce new service endpoints
+- Does not write new audit durable artifacts
+- Does not replace the existing `candidate_evidence_tree`
 
-这条路径当前只用于：
+This path is currently used only for:
 
-- 真实 ECSS rule / provenance shape 验证
-- adapter-local proof consumption spike
+- Real-world ECSS rule / provenance shape validation
+- An adapter-local proof-consumption spike
 
-它不是通用 `ProofNode`，也不是已经进入 runtime/audit/static 正式消费链的稳定 contract。
+It is not a generic `ProofNode`, nor a stable contract that has
+entered the formal runtime / audit / static consumption chain.
 
-## 5. where 编译与校验口径
+## 5. where compilation and validation conventions
 
-`where_compile.py` 支持把 where 子集编译为 query relation，并默认走 AST gate（`FACTPY_WHERE_AST_VALIDATE`）：
+`where_compile.py` supports compiling a subset of where into a
+query relation, and runs through the AST gate by default
+(`FACTPY_WHERE_AST_VALIDATE`):
 
-- 支持原子：`pred/eq/in/ne/gt/ge/lt/le/not/add/sub/neg/addc/mulc`
-- 支持 AND 与 OR-of-AND 结构
-- query relation 名为 `query__<sha256前8位>`（协议约束）
-- not body 与数据流约束由 validator + 编译期检查共同保证
-- 当 query where 含 `ruleref` 时：
-  - exporter 可通过 `query.registry_root` 加载 registry 中的 exposed rules
-  - compiler 会递归重写 `ruleref` 为 adapter-local internal relations，并把这些 relation 一起写入同一个 `rules/idb.dl`
-  - flat query 的输出形状保持不变
+- Supported atoms: `pred/eq/in/ne/gt/ge/lt/le/not/add/sub/neg/addc/mulc`
+- Supports AND and OR-of-AND structures
+- The query relation is named `query__<first-8-of-sha256>`
+  (protocol-prescribed)
+- Not-body and data-flow constraints are jointly enforced by the
+  validator and compile-time checks
+- When the query where contains `ruleref`:
+  - The exporter can load exposed rules from the registry via
+    `query.registry_root`
+  - The compiler recursively rewrites `ruleref` into adapter-local
+    internal relations and writes those relations into the same
+    `rules/idb.dl`
+  - The output shape of a flat query is unchanged
 
-## 6. 当前限制
+## 6. Current limitations
 
-- 依赖外部 Souffle CLI；缺失时 runner 会回退 `noop`
-- `engine_eval` 不接受 `noop` 结果作为有效求值
-- 当前适配目标是 query/derivation 执行，不是 Deontic 规范推理引擎
-- 当前不承诺 full native parity；Souffle first-round 只输出 partial witness，而不是完整 rule-chain / recursive proof
-- Souffle provenance helper 当前仍是 adapter-local V0：
-  - 只验证 recursive chain / negation / rule-number capture
-  - 已可转换到 `audit.EvidenceGraph`，且 runtime export 现在会把统一 graph 写入 `audit/evidence_graphs.jsonl`
-  - 不替代现有 `candidate_evidence_tree` / witness pipeline
+- Depends on the external Souffle CLI; when missing, the runner
+  falls back to `noop`
+- `engine_eval` does not accept `noop` results as valid evaluation
+- The current adaptation target is query / derivation execution,
+  not a Deontic-semantics inference engine
+- Full native parity is not committed currently; the first-round
+  Souffle output is a partial witness, not a complete rule-chain /
+  recursive proof
+- The Souffle provenance helper is still an adapter-local V0:
+  - Only validates recursive chain / negation / rule-number
+    capture
+  - Already convertible to `audit.EvidenceGraph`; the runtime
+    exporter now writes the unified graph into
+    `audit/evidence_graphs.jsonl`
+  - Does not replace the existing
+    `candidate_evidence_tree` / witness pipeline

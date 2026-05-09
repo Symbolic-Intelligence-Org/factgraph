@@ -1,69 +1,91 @@
-# PyReason Adapter（kernel）
+# PyReason Adapter (kernel)
 
-- 范围：`src/kernel/adapters/pyreason`
-- 最后更新：2026-03-29
-- 状态：execution-surface V1（engine_options: timesteps）+ bounded materialization L3b + runtime provenance explain + EvidenceGraph audit/static delivery
+- Scope: `src/kernel/adapters/pyreason`
+- Last updated: 2026-03-29
+- Status: execution-surface V1 (engine_options: timesteps) +
+  bounded materialization L3b + runtime provenance explain +
+  EvidenceGraph audit/static delivery
 
-## 1. 概述
+## 1. Overview
 
-PyReason adapter 是 factpy 对 [PyReason](https://github.com/lab-v2/pyreason) 图推理引擎的接入。当前已经接上 shared evaluate surface：`Store.evaluate(mode="pyreason")` / `SDKStore.evaluate(Derivation(..., mode="pyreason"))` 会走 adapter 的 EDB materialization、WhereIR 编译、runner 和 CandidateSet 输出。adapter-local 的 provenance、session、rule ext、runner、accept helper 仍然保留，作为引擎内部实现与独立 helper 层。
+The PyReason adapter is factpy's integration with the
+[PyReason](https://github.com/lab-v2/pyreason) graph-reasoning
+engine. It is now wired into the shared evaluate surface:
+`Store.evaluate(mode="pyreason")` /
+`SDKStore.evaluate(Derivation(..., mode="pyreason"))` go through
+the adapter's EDB materialization, WhereIR compilation, runner,
+and `CandidateSet` output. The adapter-local provenance, session,
+rule extension, runner, and accept helper are still kept as
+engine-internal implementation and standalone helper layers.
 
-PyReason 使用 Generalized Annotated Logic Programs (GAPs) 在 NetworkX 图上做区间值时序推理，与 Souffle（确定性 Datalog）和 ProbLog（概率逻辑）都有本质差异。
+PyReason uses Generalized Annotated Logic Programs (GAPs) to
+perform interval-valued temporal reasoning over NetworkX graphs;
+it differs essentially from Souffle (deterministic Datalog) and
+ProbLog (probabilistic logic).
 
-## 2. 环境要求
+## 2. Environment requirements
 
-- `pyreason==3.0.0`（或更新版本；3.4.0 依赖矩阵相同）
+- `pyreason==3.0.0` (or newer; the dependency matrix at 3.4.0 is
+  the same)
 - Python 3.10
-- 手动安装：`pip install 'pyreason==3.0.0'`（不在 `pyproject.toml` 中，spike-only dependency）
-- 当前已验证环境（2026-03-27）：`numba==0.64.0`、`llvmlite==0.46.0`
-- **重要**：如果 `import pyreason` 报 numba cache 错误（`RuntimeError: cannot cache function ... no locator available`），清除过期 cache：`rm -rf $(python -c "import pyreason, pathlib; print(pathlib.Path(pyreason.__file__).parent / 'cache')")`
-- 首次运行时 numba JIT 编译约 `~170s`，后续运行使用 cache 约 `~8s`
+- Manual install: `pip install 'pyreason==3.0.0'` (not in
+  `pyproject.toml`; spike-only dependency)
+- Verified environment as of 2026-03-27: `numba==0.64.0`,
+  `llvmlite==0.46.0`
+- **Important**: if `import pyreason` fails with a numba cache
+  error (`RuntimeError: cannot cache function ... no locator
+  available`), clear the stale cache:
+  `rm -rf $(python -c "import pyreason, pathlib; print(pathlib.Path(pyreason.__file__).parent / 'cache')")`
+- The first run takes about `~170s` for numba JIT compilation;
+  subsequent runs use the cache and take about `~8s`
 
-## 3. 当前模块内容
+## 3. Current module contents
 
-| 文件 | 角色 |
+| File | Role |
 |------|------|
 | `provenance.py` | `PyReasonTraceEventV0` / `PyReasonTraceV0` / `parse_pyreason_trace` / `pyreason_trace_to_dict` / `pyreason_trace_to_evidence_graph` |
-| `session.py` | `PyReasonSession` — 引擎特定写入 session，校验 shared schema_ir，处理 batch API / bound / active_from / active_to / annotation templates |
+| `session.py` | `PyReasonSession` — engine-specific write session; validates the shared schema_ir; handles batch API / bound / active_from / active_to / annotation templates |
 | `rule_ext.py` | `PyReasonRuleExt` / `PyReasonFactDef` / `compile_pyreason_rule(...)` |
-| `where_compile.py` | `compile_where_ir_to_pyreason(...)` — lowered WhereIR → PyReason rule syntax（execution surface compiler） |
-| `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult`；接受 legacy tuple 与 shared `Rule` / typed `PyReasonFactDef` |
-| `engine_eval.py` | `pyreason_engine_eval(...)` / `_materialize_edb_session(...)` — shared evaluate dispatch 入口，输出 `CandidateSet` 并缓存 pending annotations |
+| `where_compile.py` | `compile_where_ir_to_pyreason(...)` — lowered WhereIR → PyReason rule syntax (the execution-surface compiler) |
+| `runner.py` | `run_pyreason(...)` / `build_pyreason_graph(...)` / `PyReasonRunConfig` / `PyReasonRunResult`; accepts both legacy tuple form and shared `Rule` / typed `PyReasonFactDef` |
+| `engine_eval.py` | `pyreason_engine_eval(...)` / `_materialize_edb_session(...)` — shared evaluate dispatch entry point that emits `CandidateSet` and caches pending annotations |
 | `accept.py` | `accept_pyreason_session(...)` + `persist_pyreason_annotations(...)` — adapter-local accept helper and shared-surface post-accept annotation binder |
-| `__init__.py` | import 时注册 `register_engine_evaluator(pyreason_engine_eval, "pyreason")` |
+| `__init__.py` | On import, registers `register_engine_evaluator(pyreason_engine_eval, "pyreason")` |
 
-## 4. PyReason 推理模型
+## 4. PyReason inference model
 
 ```text
-输入：NetworkX DiGraph + 规则 + 初始事实
-规则语法：head(x) <-T body(y), edge(x,y)   （T = 时间步延迟）
-值域：[lower, upper] 区间，不是 true/false 或概率
-世界假设：开放世界（缺失事实 = [0,1] 未知，不是 false）
-输出：Interpretation（每时间步每节点的谓词区间值）+ Rule Trace（事件日志）
+Input: NetworkX DiGraph + rules + initial facts
+Rule syntax: head(x) <-T body(y), edge(x,y)   (T = timestep delay)
+Value domain: [lower, upper] interval, not boolean or probability
+World assumption: open-world (a missing fact = [0,1] unknown, not false)
+Output: Interpretation (per-timestep, per-node predicate intervals) + Rule Trace (event log)
 ```
 
-## 5. Trace 数据形态
+## 5. Trace data shape
 
-PyReason 的 `pr.get_rule_trace(interpretation)` 返回两个 pandas DataFrame。
+PyReason's `pr.get_rule_trace(interpretation)` returns two pandas
+DataFrames.
 
-**nodes_trace 列：**
+**`nodes_trace` columns:**
 
-| 列 | 含义 |
+| Column | Meaning |
 |----|------|
-| Time | 时间步 |
-| Fixed-Point-Operation / Fixed-Point-Op | 固定点迭代编号 |
-| Node | 图节点标识 |
-| Label | 谓词名 |
-| Old Bound | 变化前的区间 `[lo, hi]` |
-| New Bound | 变化后的区间 `[lo, hi]` |
-| Occurred Due To | 规则名或 `fact` |
-| Clause-1, Clause-2, ... | 具体的 clause grounding（哪些节点/边匹配了规则体原子） |
+| Time | Timestep |
+| Fixed-Point-Operation / Fixed-Point-Op | Fixed-point iteration number |
+| Node | Graph node identifier |
+| Label | Predicate name |
+| Old Bound | Pre-change interval `[lo, hi]` |
+| New Bound | Post-change interval `[lo, hi]` |
+| Occurred Due To | Rule name or `fact` |
+| Clause-1, Clause-2, ... | Concrete clause grounding (which nodes / edges matched the rule-body atoms) |
 
-**这是事件日志（event log），不是证明树（proof tree）。**
+**This is an event log, not a proof tree.**
 
-## 5A. Session 写入模型
+## 5A. Session write model
 
-当前写入路径不是 `runtime_v1` 的统一写入 API，而是 adapter-local 的 `PyReasonSession`：
+The write path is currently not the unified `runtime_v1` write
+API; it is the adapter-local `PyReasonSession`:
 
 ```python
 session = PyReasonSession(schema_ir)
@@ -75,42 +97,46 @@ with session.batch() as tx:
     tx.commit()
 ```
 
-### 5A.1 当前 session API
+### 5A.1 Current session API
 
-| API | 角色 |
+| API | Role |
 |-----|------|
-| `session.batch()` | entity-level batch transaction 入口 |
-| `tx.entity(EntityCls, **identity)` | 创建/复用 entity handle |
-| `handle.field.set(value, *, bound, active_from, active_to, meta)` | 写 node fact |
-| `tx.relationship(RelCls, *, from_entity, to_entity, **fields)` | 写 edge fact |
-| `session.node_facts` / `session.edge_facts` | engine consumption buffer |
-| `session.annotation_templates` | assertion annotation 模板（待 Ledger consumer 填充 `asrt_id`） |
-| `session.all_facts_meta` | audit-facing shared metadata |
+| `session.batch()` | Entity-level batch transaction entry |
+| `tx.entity(EntityCls, **identity)` | Create / reuse an entity handle |
+| `handle.field.set(value, *, bound, active_from, active_to, meta)` | Write a node fact |
+| `tx.relationship(RelCls, *, from_entity, to_entity, **fields)` | Write an edge fact |
+| `session.node_facts` / `session.edge_facts` | Engine consumption buffer |
+| `session.annotation_templates` | Assertion annotation templates (waiting for the Ledger consumer to fill in `asrt_id`) |
+| `session.all_facts_meta` | Audit-facing shared metadata |
 
-### 5A.2 Annotation 模板
+### 5A.2 Annotation templates
 
-每条 buffered fact 同时生成 annotation-ready dict（`asrt_id=""` 占位）：
+Each buffered fact also produces an annotation-ready dict
+(`asrt_id=""` placeholder):
 
-| namespace | category | key | 说明 |
+| namespace | category | key | Notes |
 |-----------|----------|-----|------|
-| `pyreason` | `semantic` | `bound_lower` | 区间下界 |
-| `pyreason` | `semantic` | `bound_upper` | 区间上界 |
-| `pyreason` | `semantic` | `active_from` | 非默认时写入 |
-| `pyreason` | `semantic` | `active_to` | 非 `None` 时写入 |
-| `shared` | `derived` | `confidence` | 派生摘要 = lower bound |
-| `shared` | `derived` | `confidence_source` | 当前固定为 `pyreason:lower_bound` |
-| `shared` | `source` | `source` / `analyst` / `method` | 从 shared meta 转发 |
+| `pyreason` | `semantic` | `bound_lower` | Interval lower bound |
+| `pyreason` | `semantic` | `bound_upper` | Interval upper bound |
+| `pyreason` | `semantic` | `active_from` | Written when non-default |
+| `pyreason` | `semantic` | `active_to` | Written when non-`None` |
+| `shared` | `derived` | `confidence` | Derived summary = lower bound |
+| `shared` | `derived` | `confidence_source` | Currently fixed at `pyreason:lower_bound` |
+| `shared` | `source` | `source` / `analyst` / `method` | Forwarded from shared meta |
 
-session 会自动补 shared confidence 元信息：
+The session also auto-fills shared confidence metadata:
 
-- 未显式给 `confidence` 时，默认 `confidence = lower_bound`
-- 未显式给 `confidence_source` 时：
-  - 默认 lower-bound 路径写 `pyreason:lower_bound`
-  - 若调用侧显式覆盖了 `confidence`，则写 `meta:confidence`
+- When `confidence` is not explicitly provided, it defaults to
+  `confidence = lower_bound`
+- When `confidence_source` is not explicitly provided:
+  - The default lower-bound path writes
+    `pyreason:lower_bound`
+  - If the caller explicitly overrides `confidence`, it writes
+    `meta:confidence`
 
-### 5A.3 Accept Helper
+### 5A.3 Accept helper
 
-当前已经有一条最小的 adapter-local accept 路径：
+A minimal adapter-local accept path exists:
 
 ```python
 from kernel.adapters.pyreason.accept import accept_pyreason_session
@@ -118,27 +144,42 @@ from kernel.adapters.pyreason.accept import accept_pyreason_session
 result = accept_pyreason_session(ledger, session)
 ```
 
-它做两件事：
+It does two things:
 
-1. 对每条 buffered fact 走 shared `set_field()`，拿到真正的 `asrt_id`
-2. 只把 `session.annotation_templates` 中的 `pyreason/*` 条目 materialize 成 `AnnotationRow` 并写入 `ledger.append_annotations()`
+1. For each buffered fact, calls shared `set_field()` and gets
+   the real `asrt_id`
+2. Materializes only the `pyreason/*` entries from
+   `session.annotation_templates` into `AnnotationRow` and writes
+   them via `ledger.append_annotations()`
 
-`shared/*` annotation 不在这里重复写入，因为 `set_field()` 已经会通过 shared whitelist 自动写入。accept helper 现在会在本地校验 `origin/derivation` 组合，避免非法模板拖到 `Ledger.append_annotations()` 才失败。
+`shared/*` annotations are not re-written here, because
+`set_field()` already writes them via the shared whitelist. The
+accept helper now validates the `origin/derivation` combination
+locally to avoid letting illegal templates fail late inside
+`Ledger.append_annotations()`.
 
-### 5A.4 当前 accept 约束
+### 5A.4 Current accept constraints
 
-PyReason session 内部的 graph node id 仍然是裸字符串（如 `Alice` / `Dog`），而 shared write path 的 ingest key 计算要求 `entity_ref` 走 canonical token。
+The graph node ids inside the PyReason session are still raw
+strings (e.g. `Alice` / `Dog`), while the shared write path's
+ingest-key computation requires `entity_ref` to be a canonical
+token.
 
-因此 `accept_pyreason_session(...)` 在写入 Ledger 前会做一个最小的 adapter-local materialization：
+`accept_pyreason_session(...)` therefore performs a minimal
+adapter-local materialization before writing into the Ledger:
 
 - node fact: `Alice` → `idref_v1:User:Alice`
 - edge `to_ref`: `Bob` → `idref_v1:User:Bob`
 
-这不是完整的 factpy entity identity 对齐，只是为了让 PyReason 的 raw graph ids 能进入当前 shared write path。更完整的 identity/encoding 方案留待后续蓝图。
+This is not full factpy entity-identity alignment; it merely
+allows PyReason's raw graph ids to enter the current shared write
+path. A more complete identity / encoding plan is left to a
+follow-up blueprint.
 
-## 5B. Runner 模型
+## 5B. Runner model
 
-当前仍有一条 reusable 的底层执行路径；shared evaluate surface 会在 `engine_eval.py` 里复用它：
+There is still a reusable lower-level execution path; the shared
+evaluate surface reuses it inside `engine_eval.py`:
 
 ```python
 from kernel.adapters.pyreason.rule_ext import (
@@ -179,41 +220,73 @@ result = run_pyreason(
 )
 ```
 
-### 5B.1 Runner 输出
+### 5B.1 Runner output
 
-| 字段 | 含义 |
+| Field | Meaning |
 |------|------|
-| `interpretation` | 原始 PyReason `Interpretation` 对象 |
+| `interpretation` | Raw PyReason `Interpretation` object |
 | `trace` | `PyReasonTraceV0` |
-| `trace_dict` | 可序列化 trace dict |
-| `derived_session` | 只包含引擎推导出的新 facts 的 `PyReasonSession` |
-| `config` | 本次运行配置 |
-| `elapsed_seconds` | 运行耗时 |
+| `trace_dict` | Serializable trace dict |
+| `derived_session` | A `PyReasonSession` containing only the new facts derived by the engine |
+| `config` | The configuration used for this run |
+| `elapsed_seconds` | Run duration |
 
-### 5B.2 Runner 边界
+### 5B.2 Runner boundaries
 
-- `run_pyreason(...)` 同时接受 legacy tuple 形式的 `rules` / `facts`，以及 shared `Rule` `rule_defs` / typed `fact_defs`
-- `PyReasonFactDef.bound` 是 typed initial fact 的显式区间入口；runner 会把它编码为 `pred(node) : [lo, hi]` 形式的 fact text 再传给底层 PyReason。未显式提供时默认 `(1.0, 1.0)`。
-- `PyReasonRuleExt` 除了 `timestep_delay` 之外，还支持 `body_predicate_bounds={pred_id: (lo, hi)}` 与 `head_bound=(lo, hi)`。前者会把 body atom 编译成 `popular(y) : [0.5, 1.0]` 这类显式 clause interval；后者会把 head 编译成 `popular(x) : [0.8, 0.9] <-1 ...` 这类静态 head annotation。
-- 当存在 rule、initial **node** seed 使用非 `[1.0, 1.0]` bound，且 rule body 没有显式 clause interval 时，runner 会发出 `UserWarning`。warning 指向的是 **PyReason 的默认 body threshold 语义**，不是“bounded seed 永远不能参与匹配”。
-- `Rule(..., engine_ext=PyReasonRuleExt(...))` 现在是唯一的 rule-definition 入口；`compile_pyreason_rule(...)` 与 `run_pyreason(..., rule_defs=[...])` 都直接消费 shared `Rule`
-- `compile_pyreason_rule(...)` 当前只支持 `PredAtom` + `LogicVar` + 字面量；`CompareExpr` / `NotExpr` / `RuleRefAtom` 会报明确错误
-- `run_pyreason(...)` 本身仍是底层 helper；`Store.evaluate(mode="pyreason")` 通过 `engine_eval.py` 在外层完成 WHERE→PyReason 编译和 CandidateSet 组装
-- `derived_session` 可以直接接到 `accept_pyreason_session(...)`
+- `run_pyreason(...)` accepts both the legacy tuple form
+  `rules` / `facts` and the shared `Rule` `rule_defs` / typed
+  `fact_defs`
+- `PyReasonFactDef.bound` is the explicit-interval entry for
+  typed initial facts; the runner encodes it as
+  `pred(node) : [lo, hi]` fact text before passing it to
+  underlying PyReason. When omitted, it defaults to
+  `(1.0, 1.0)`.
+- Beyond `timestep_delay`, `PyReasonRuleExt` also supports
+  `body_predicate_bounds={pred_id: (lo, hi)}` and
+  `head_bound=(lo, hi)`. The former compiles body atoms into
+  explicit clause intervals such as `popular(y) : [0.5, 1.0]`;
+  the latter compiles the head into a static head annotation
+  such as `popular(x) : [0.8, 0.9] <-1 ...`.
+- When a rule plus an initial **node** seed using a non-`[1.0, 1.0]`
+  bound is present, and the rule body has no explicit clause
+  interval, the runner emits a `UserWarning`. The warning points
+  at **PyReason's default body-threshold semantics**, not at "a
+  bounded seed can never participate in matching".
+- `Rule(..., engine_ext=PyReasonRuleExt(...))` is now the only
+  rule-definition entry point; `compile_pyreason_rule(...)` and
+  `run_pyreason(..., rule_defs=[...])` both consume the shared
+  `Rule` directly
+- `compile_pyreason_rule(...)` currently supports only
+  `PredAtom` + `LogicVar` + literals; `CompareExpr` / `NotExpr` /
+  `RuleRefAtom` raise an explicit error
+- `run_pyreason(...)` itself remains a low-level helper;
+  `Store.evaluate(mode="pyreason")` performs the WHERE → PyReason
+  compilation and CandidateSet assembly outside, via
+  `engine_eval.py`
+- `derived_session` can be passed directly to
+  `accept_pyreason_session(...)`
 
-### 5B.3 Thread Safety
+### 5B.3 Thread safety
 
-`run_pyreason(...)` 在所有 PyReason 全局状态操作（`pr.reset()` 到最终 `pr.reset()`）期间持有模块级 `threading.Lock`（`_PYREASON_LOCK`）。因为 `import pyreason as pr` 是进程全局单例，lock 确保并发调用被串行化。
+`run_pyreason(...)` holds a module-level `threading.Lock`
+(`_PYREASON_LOCK`) across all PyReason global-state operations
+(from `pr.reset()` to the final `pr.reset()`). Because
+`import pyreason as pr` is a process-global singleton, the lock
+serializes concurrent calls.
 
-清理合约：
+Cleanup contract:
 
-- `pr.reset()` 在 `finally` 块中执行，保证即使 `pr.reason()` 或任何中间调用抛出异常也能完成状态清理
-- `build_pyreason_graph()`（纯 NetworkX 操作）在 lock 之前执行
-- Lock 是不可重入的（`threading.Lock`，不是 `RLock`），重入调用意味着 bug
+- `pr.reset()` runs in a `finally` block, so even if
+  `pr.reason()` or any intermediate call raises, state cleanup
+  still happens
+- `build_pyreason_graph()` (a pure NetworkX operation) runs
+  before the lock is taken
+- The lock is non-reentrant (`threading.Lock`, not `RLock`); a
+  reentrant call indicates a bug
 
-## 5C. Shared Execution Surface
+## 5C. Shared execution surface
 
-当前共享执行链路如下：
+The current shared execution path is:
 
 ```python
 import kernel.adapters.pyreason
@@ -232,173 +305,301 @@ candidates = sdk.evaluate(
 )
 ```
 
-执行顺序：
+Execution sequence:
 
-1. `SDKStore.evaluate(...)` 从 `Derivation` 单独提取 `engine_ext`，同时把 call-time `engine_options` 保持在 evaluate 调用层；两者都不写入 `to_authoring_payload()`
-2. `evaluate_store(...)` / `Store.evaluate_engine(...)` 把 `mode="pyreason"`、`engine_ext` 与 `engine_options` 转发到 adapter
-3. `pyreason_engine_eval(...)`：
-   - 用 `project_view_facts(...)` 把 Ledger active facts materialize 成 `PyReasonSession`
-   - 用 `compile_where_ir_to_pyreason(...)` 把 lowered WhereIR 编译成 PyReason rule strings
-   - 用 `resolve_pyreason_run_config(engine_options)` 归一化运行配置
-   - 调用 `run_pyreason(...)`；当前 shared evaluate path 会内部强制 `atom_trace=True` 以产出 runtime provenance
-   - 把 derived session facts 转成 `CandidateSet`
-   - 若本次 run 带 `trace_dict`，则把每个 candidate 升级成：
+1. `SDKStore.evaluate(...)` extracts `engine_ext` from the
+   `Derivation` separately, while keeping the call-time
+   `engine_options` at the evaluate-call layer; neither enters
+   `to_authoring_payload()`
+2. `evaluate_store(...)` / `Store.evaluate_engine(...)` forwards
+   `mode="pyreason"`, `engine_ext`, and `engine_options` to the
+   adapter
+3. `pyreason_engine_eval(...)`:
+   - Materializes Ledger active facts into a `PyReasonSession`
+     via `project_view_facts(...)`
+   - Compiles lowered WhereIR into PyReason rule strings via
+     `compile_where_ir_to_pyreason(...)`
+   - Normalizes run config via
+     `resolve_pyreason_run_config(engine_options)`
+   - Calls `run_pyreason(...)`; the shared evaluate path
+     internally forces `atom_trace=True` to produce runtime
+     provenance
+   - Converts derived session facts into `CandidateSet`
+   - When the run carries a `trace_dict`, upgrades each
+     candidate to:
      - `support_kind="pyreason_provenance_v1"`
      - `support_digest=<ProvenanceEnvelope digest>`
-     - `Store.explain_provenance(...)` 可按 digest 回放 event-log envelope
-   - 把 annotation templates 缓存在 `store._engine_pending_annotations[run_id]`
-4. core `accept()` 负责把 candidate payload 写回 Ledger
-5. caller 在 post-accept 阶段调用 `persist_pyreason_annotations(ledger, run_id, store, accept_result)`，把 pending `pyreason/*` templates 绑定到真实 `asrt_id` 后写入 `annotation_rows`
+     - `Store.explain_provenance(...)` can replay the event-log
+       envelope by digest
+   - Caches annotation templates in
+     `store._engine_pending_annotations[run_id]`
+4. core `accept()` writes the candidate payload back into the
+   Ledger
+5. In the post-accept stage the caller invokes
+   `persist_pyreason_annotations(ledger, run_id, store, accept_result)`
+   to bind the pending `pyreason/*` templates to real
+   `asrt_id`s and write them into `annotation_rows`
 
 ### 5C.0 Runtime options
 
-shared evaluate surface 当前对 PyReason 公开的 run-time 选项只有一个：
+PyReason currently exposes only one run-time option on the
+shared evaluate surface:
 
 - `timesteps: int`
 
-约束：
+Constraints:
 
-- `sdk.evaluate(..., mode="pyreason", engine_options={"timesteps": 5})` 会生效
-- 缺省时使用 adapter 默认值 `timesteps=2`
-- unknown keys 直接报 `ValueError`
-- `atom_trace` / `convergence_*` 仍保持 adapter-internal，不通过 shared evaluate surface 暴露
-- 虽然 `atom_trace` 不对 shared evaluate surface 暴露，runtime candidate explain 当前会在 adapter 内部强制开启它，用于生成 `PyReasonTraceV0` / `ProvenanceEnvelope`
+- `sdk.evaluate(..., mode="pyreason", engine_options={"timesteps": 5})`
+  takes effect
+- When omitted, the adapter default `timesteps=2` is used
+- Unknown keys raise `ValueError`
+- `atom_trace` / `convergence_*` remain adapter-internal and are
+  not exposed via the shared evaluate surface
+- Although `atom_trace` is not exposed on the shared evaluate
+  surface, runtime candidate explain forces it on inside the
+  adapter to generate `PyReasonTraceV0` / `ProvenanceEnvelope`
 
 ### 5C.1 Bounded numeric extension (L3b)
 
-PyReason adapter 当前支持一个收窄的 value-carrying 路径：**bounded numeric predicates**。
+The PyReason adapter currently supports a narrowed value-carrying
+path: **bounded numeric predicates**.
 
-触发条件必须同时满足：
+The trigger conditions must all hold:
 
-1. predicate spec 显式声明 `pyreason_bounded: true`
-2. value `type_domain` 是 numeric（当前实际覆盖 `int` / `float64`）
-3. 事实值可解析为 `[0, 1]` 内的数值
+1. The predicate spec explicitly declares
+   `pyreason_bounded: true`
+2. The value `type_domain` is numeric (currently `int` /
+   `float64`)
+3. The fact value can be parsed into a number within `[0, 1]`
 
-这是 adapter-local 语义扩展，不是 shared schema contract。没有 `pyreason_bounded: true` 的 predicate，即使值长得像 `0.85`，也继续走 v0 existence materialization。
+This is an adapter-local semantic extension, not a shared schema
+contract. Predicates without `pyreason_bounded: true` continue to
+take v0 existence materialization, even if the value looks like
+`0.85`.
 
-当前实现行为：
+Current behaviors:
 
-- **EDB materialization**：`engine_eval.py` 把 bounded predicate 的 Ledger value 解析成 point interval `bound=(v, v)`；非 bounded predicate 仍用 `bound=(1.0, 1.0)`
-- **Graph build**：`runner.build_pyreason_graph(...)` 现在保留 graph 结构，并把 **edge labels** 写成 edge attributes；当 edge fact 有非默认 bound 时，当前写入 lower-bound summary，否则写 `1`
-- **Initial fact registration**：`runner.run_pyreason(...)` 只把 `PyReasonSession` 中的 **node facts** lower 成 `pr.add_fact(...)`；edge facts 不再重复注册。node facts 通过 fact text interval 保留 `[lo, hi]`，edge facts 当前继续通过 graph attribute lower-bound summary 进入引擎
-- **Propagation boundary**：当前真实引擎行为表明，非 `[1.0, 1.0]` 的 node seed 在 **默认 rule body threshold** 下不会匹配 body clause；若 compiler 发出显式 clause interval（例如 `popular(y) : [0.5, 1.0]`），bounded seed 可以参与 body matching。当前已验证到这里为止，不应自动外推成“derived head 会继承输入 interval”
-- **Derived head boundary**：当前真实引擎行为表明，未声明 head interval 时 derived head 默认是 `[1.0, 1.0]`；若 compiler 发出显式 head annotation（例如 `popular(x) : [0.8, 0.9] <-1 ...`），derived head 会得到这个静态 interval。这里的 interval 来自 rule head 声明，不是从 body bound 动态传播出来的。
-- **Derived extraction**：`runner._extract_derived_facts(...)` 对 bounded predicate 返回 `value=str(lower_bound)`；非 bounded node 仍是 `"true"/"false"`，非 bounded edge 仍是空字符串
-- **Canonical float64**：通过 `project_view_facts(...)` 进入 adapter 的 `float64` 值会是 canonical `0x...` bit-pattern；bounded parser 已显式支持这种形态
+- **EDB materialization**: `engine_eval.py` parses the Ledger
+  value of a bounded predicate into a point interval
+  `bound=(v, v)`; non-bounded predicates still use
+  `bound=(1.0, 1.0)`
+- **Graph build**: `runner.build_pyreason_graph(...)` now
+  preserves the graph structure and writes **edge labels** as
+  edge attributes; when an edge fact has a non-default bound, it
+  currently writes the lower-bound summary; otherwise it writes
+  `1`
+- **Initial fact registration**: `runner.run_pyreason(...)` only
+  lowers **node facts** from `PyReasonSession` into
+  `pr.add_fact(...)`; edge facts are no longer registered
+  separately. Node facts preserve `[lo, hi]` via the fact-text
+  interval; edge facts continue to enter the engine via the
+  graph-attribute lower-bound summary
+- **Propagation boundary**: real engine behavior shows that
+  non-`[1.0, 1.0]` node seeds will not match a body clause
+  under the **default rule-body threshold**; if the compiler
+  emits an explicit clause interval (e.g.
+  `popular(y) : [0.5, 1.0]`), bounded seeds can participate in
+  body matching. This is verified up to here; do not extrapolate
+  to "the derived head will inherit the input interval"
+- **Derived head boundary**: real engine behavior shows that
+  when the head interval is not declared, the derived head
+  defaults to `[1.0, 1.0]`; if the compiler emits an explicit
+  head annotation (e.g. `popular(x) : [0.8, 0.9] <-1 ...`), the
+  derived head receives that static interval. The interval here
+  comes from the rule-head declaration, not from dynamic
+  propagation of body bounds.
+- **Derived extraction**: `runner._extract_derived_facts(...)`
+  returns `value=str(lower_bound)` for bounded predicates;
+  non-bounded nodes are still `"true"/"false"`; non-bounded
+  edges are still empty strings
+- **Canonical float64**: `float64` values that enter the
+  adapter via `project_view_facts(...)` are canonical `0x...`
+  bit patterns; the bounded parser explicitly supports this
+  form
 
-v0 / v1 约束：
+v0 / v1 constraints:
 
-- WhereIR compiler 只支持 lowered `("pred", pred_id, terms)` atoms；`eq` / `not` / `ruleref` 直接报错
-- 采用 attribute-existence model：node predicates 只编译实体变量，不带 value variable
-- 可通过 `PyReasonRuleExt.body_predicate_bounds` 给 body atom 附显式 interval threshold，但这是 engine-specific compile hint，不是 shared DSL 新语义
-- 可通过 `PyReasonRuleExt.head_bound` 给 rule head 附静态 interval annotation，但这同样是 engine-specific compile hint，不是 shared DSL 的动态 uncertainty propagation 语义
-- bounded numeric 只影响 materialization / extraction，不引入 rule syntax value variable
-- `engine_ext` 是 definition-time only 的共享 carrier；当前由 `Rule.engine_ext` 与 `Derivation.engine_ext` 使用，但都不进入持久化 payload
-- `engine_options` 是 call-time only，不进入 `Derivation`、`to_authoring_payload()` 或 audit artifacts
-- `Store.accept()` 当前不会自动 materialize / clear pending annotations；v0 通过 `persist_pyreason_annotations(...)` 完成这一步
+- The WhereIR compiler supports only lowered
+  `("pred", pred_id, terms)` atoms; `eq` / `not` / `ruleref`
+  raise immediately
+- It uses the attribute-existence model: node predicates
+  compile only the entity variable, without a value variable
+- Body atoms can carry an explicit interval threshold via
+  `PyReasonRuleExt.body_predicate_bounds`, but this is an
+  engine-specific compile hint, not new shared-DSL semantics
+- Rule heads can carry a static interval annotation via
+  `PyReasonRuleExt.head_bound`, but this is also an
+  engine-specific compile hint, not the dynamic uncertainty
+  propagation semantics of the shared DSL
+- Bounded numeric only affects materialization / extraction; it
+  does not introduce a value variable into rule syntax
+- `engine_ext` is a definition-time-only shared carrier;
+  currently used by `Rule.engine_ext` and `Derivation.engine_ext`,
+  neither of which enters the persisted payload
+- `engine_options` is call-time only; it does not enter
+  `Derivation`, `to_authoring_payload()`, or audit artifacts
+- `Store.accept()` does not currently auto-materialize / clear
+  pending annotations; v0 completes that step via
+  `persist_pyreason_annotations(...)`
 
-## 6. Souffle vs PyReason Provenance 对比
+## 6. Souffle vs PyReason provenance comparison
 
-### 6.1 形态
+### 6.1 Shape
 
-| 维度 | Souffle | PyReason |
+| Dimension | Souffle | PyReason |
 |------|---------|----------|
-| **数据结构** | JSON proof tree（per-conclusion） | pandas DataFrame event log（per-change） |
-| **粒度** | 一棵树解释一个结论 | 所有变化的扁平日志 |
-| **时间维度** | 无 | 内建 timestep，可追踪传播 |
-| **值域** | Boolean（true/false） | 区间 `[lower, upper]` |
-| **世界假设** | 封闭（CWA） | 开放（OWA，缺失 = `[0,1]`） |
-| **获取方式** | `-t explain` + stdin pipe（subprocess） | `pr.get_rule_trace()`（in-process Python） |
-| **序列化** | JSON（天然） | DataFrame → 需转换为 JSON |
+| **Data structure** | JSON proof tree (per-conclusion) | pandas DataFrame event log (per-change) |
+| **Granularity** | One tree explains one conclusion | A flat log of every change |
+| **Time dimension** | None | Built-in timestep, propagation traceable |
+| **Value domain** | Boolean (true / false) | Interval `[lower, upper]` |
+| **World assumption** | Closed (CWA) | Open (OWA, missing = `[0,1]`) |
+| **How it's obtained** | `-t explain` + stdin pipe (subprocess) | `pr.get_rule_trace()` (in-process Python) |
+| **Serialization** | JSON (native) | DataFrame → must be converted to JSON |
 
-### 6.2 可统一字段
+### 6.2 Unifiable fields
 
-| 字段 | Souffle | PyReason | 可统一？ |
+| Field | Souffle | PyReason | Unifiable? |
 |------|---------|----------|---------|
-| 结论标识 | `relation(args)` | `Node + Label` | ✅ 映射 |
-| 规则标识 | `rule-number (R1)` | `Occurred Due To`（rule name） | ✅ 语义一致 |
-| 叶子事实 | `axiom` nodes | `Occurred Due To = "fact"` rows | ✅ 语义一致 |
-| 时间 | 无 | `Time` 列 | ❌ Souffle 无此维度 |
-| 区间值 | 无 | `Old Bound / New Bound` | ❌ Souffle 无此维度 |
-| 否定 | `!relation` negation leaf | 不适用（OWA 下无显式否定） | ❌ 语义不同 |
-| 子证明截断 | `subproof` marker | 不适用 | ❌ Souffle 特有 |
-| Clause grounding | 无（隐含在树结构中） | `Clause-1, Clause-2, ...` 显式列 | ⚠️ 形态不同但语义可桥接 |
+| Conclusion identifier | `relation(args)` | `Node + Label` | ✅ map |
+| Rule identifier | `rule-number (R1)` | `Occurred Due To` (rule name) | ✅ semantically aligned |
+| Leaf facts | `axiom` nodes | `Occurred Due To = "fact"` rows | ✅ semantically aligned |
+| Time | None | `Time` column | ❌ Souffle has no such dimension |
+| Interval value | None | `Old Bound / New Bound` | ❌ Souffle has no such dimension |
+| Negation | `!relation` negation leaf | N/A (no explicit negation under OWA) | ❌ different semantics |
+| Sub-proof truncation | `subproof` marker | N/A | ❌ Souffle-specific |
+| Clause grounding | None (implicit in tree structure) | Explicit `Clause-1, Clause-2, ...` columns | ⚠️ different shape but semantically bridgeable |
 
-### 6.3 ProofNode v1 更新建议
+### 6.3 ProofNode v1 update suggestions
 
-基于 Souffle + PyReason 两个真实样本的结论：
+Based on the two real samples (Souffle + PyReason):
 
-1. **不能假设所有引擎产出 tree。** Souffle 是 tree，PyReason 是 event log。统一抽象不能是 `ProofTree`。
-2. **候选方案 A：per-candidate payload with engine-specific shape。** 每个 candidate 携带一个 `provenance_payload`，其 `engine` 字段指示形态（`souffle_proof_tree` / `pyreason_event_log`），consumer 按 engine 分发渲染。
-3. **候选方案 B：统一为 event sequence。** 把 Souffle proof tree 展平为事件序列（DFS），再与 PyReason 的 event log 对齐。代价是丢失 Souffle 的树结构。
-4. **当前建议：选 A。** 保留引擎原生形态更诚实，也更符合 ADR 的 adapter-local before core 原则。
-5. **ProofNode v1 开启门槛**：至少有 2 个引擎的真实 provenance 通过 adapter → audit → static 完整管道验证后，再冻结统一抽象。当前 Souffle 已完整，PyReason 仍是 spike，不足以冻结。
+1. **We cannot assume every engine emits a tree.** Souffle is a
+   tree; PyReason is an event log. The unified abstraction
+   cannot be `ProofTree`.
+2. **Option A: per-candidate payload with engine-specific shape.**
+   Each candidate carries a `provenance_payload` whose `engine`
+   field indicates the shape (`souffle_proof_tree` /
+   `pyreason_event_log`); consumers dispatch rendering by engine.
+3. **Option B: unify into an event sequence.** Flatten the
+   Souffle proof tree into an event sequence (DFS) and align
+   with the PyReason event log. The cost is losing Souffle's
+   tree structure.
+4. **Current recommendation: choose A.** Preserving the
+   engine-native shape is more honest and aligns with the ADR
+   principle of "adapter-local before core".
+5. **Threshold for opening ProofNode v1**: at least two
+   engines' real provenance must have flowed through the
+   adapter → audit → static pipeline end-to-end before the
+   unified abstraction is frozen. Souffle is complete already;
+   PyReason is still a spike, not enough to freeze.
 
-## 6A. 当前 EvidenceGraph Converter（Step 2）
+## 6A. Current EvidenceGraph converter (Step 2)
 
-`pyreason_trace_to_evidence_graph(...)` 当前已实现一个 **candidate-anchored timeline converter**：
+`pyreason_trace_to_evidence_graph(...)` currently implements a
+**candidate-anchored timeline converter**:
 
-- 输入：
+- Input:
   - `PyReasonTraceV0`
   - `candidate_id`
-  - `candidate_payload`（当前消费 `pred_id + terms`）
-- 输出：
-  - `EvidenceGraph(engine="pyreason", layout_hint="timeline", support_kind="pyreason_provenance_v1")`
-- runtime export 现在会把该 graph 物化到 audit package：
+  - `candidate_payload` (currently consumes `pred_id + terms`)
+- Output:
+  - `EvidenceGraph(engine="pyreason",
+    layout_hint="timeline",
+    support_kind="pyreason_provenance_v1")`
+- Runtime export now materializes the graph into the audit
+  package:
   - `audit/evidence_graphs.jsonl`
   - `AuditQuery.get_candidate_evidence_graph(...)`
-  - candidate static page unified `EvidenceGraph` section
+  - Candidate static-page unified `EvidenceGraph` section
 
-当前映射规则：
+Current mapping rules:
 
-- graph root 通过 candidate payload 锚定到 trace 中最后一个匹配事件：
-  - node candidate：`component=<entity_ref>` + `label=<pred short name>`
-  - edge candidate：`component=<from_ref->to_ref>` + `label=<pred short name>`
-- 所有 trace event 都进入 graph node
-- 只有 **同一 `(component_type, component, label)` 链** 上的连续事件会产出 `edge_kind="updates"` 的边
-- `occurred_due_to`、`old_bound/new_bound`、`clause_groundings` 当前都保留在 `engine_meta`
+- The graph root anchors on the candidate payload to the last
+  matching event in the trace:
+  - node candidate: `component=<entity_ref>` +
+    `label=<pred short name>`
+  - edge candidate: `component=<from_ref->to_ref>` +
+    `label=<pred short name>`
+- All trace events become graph nodes
+- Only consecutive events on the same
+  `(component_type, component, label)` chain produce edges of
+  `edge_kind="updates"`
+- `occurred_due_to`, `old_bound/new_bound`, and
+  `clause_groundings` are kept in `engine_meta`
 
-当前刻意不做的事：
+Deliberate non-goals at this version:
 
-- 不伪造跨 fact / cross-component 因果边
-- 不把 `clause_groundings` 强行解释成统一的 body-atom dependency edge
-- 不把 run-scoped event log 假装成 lossless proof tree
+- Does not fabricate cross-fact / cross-component causal edges
+- Does not forcibly interpret `clause_groundings` as a unified
+  body-atom dependency edge
+- Does not pretend a run-scoped event log is a lossless proof
+  tree
 
-原因是当前 v0 carrier 只有 grounding 文本，没有 body atom label / pred_id 级别的稳定锚点；因此 v1 converter 只承诺“诚实的 timeline + intra-fact update chain”。
+The reason is that the current v0 carrier provides only
+grounding text and lacks stable anchors at the body-atom label /
+pred_id level; therefore the v1 converter promises only "an
+honest timeline + intra-fact update chain".
 
-## 7. 当前限制
+## 7. Current limitations
 
-- shared evaluate surface 已实现，但 rule registry / rule builder integration 仍未做
-- 当前只承诺 runtime `explain_ref(kind="candidate")` 可返回 `payload_type="event_log"` 的 provenance envelope；不会自动生成 candidate evidence tree / summary / narrative / NL
-- `session.annotation_templates` 已可通过 `accept_pyreason_session(...)` 落到 Ledger；但当前 accept 仍依赖 adapter-local synthetic `entity_ref` materialization
-- pending `pyreason/*` annotations 仍需在 accept 后显式 bind/persist；core `Store.accept()` 不会自动完成这一步，但 adapter 已提供 `persist_pyreason_annotations(...)`
-- 依赖 `pyreason==3.0.0`（非 repo-managed dependency）
-- 真实 execution-surface operator path 仍受外部 `pyreason` / `numba` / `llvmlite` 环境兼容性限制；当前本机组合 `numba==0.64.0`、`llvmlite==0.46.0` 未通过验证
-- `PyReasonTraceEventV0` 字段未冻结
-- `pyreason_trace_to_evidence_graph(...)` 当前只建立同一 fact/edge 的 `updates` 链；cross-fact causal edges deferred
+- The shared evaluate surface is implemented, but rule registry
+  / rule builder integration is still pending
+- Currently commits only the runtime
+  `explain_ref(kind="candidate")` provenance envelope of
+  `payload_type="event_log"`; does not auto-generate candidate
+  evidence tree / summary / narrative / NL
+- `session.annotation_templates` can already land in the Ledger
+  via `accept_pyreason_session(...)`; however accept still
+  relies on adapter-local synthetic `entity_ref` materialization
+- Pending `pyreason/*` annotations still need explicit
+  bind/persist after accept; core `Store.accept()` does not
+  complete that step automatically, but the adapter provides
+  `persist_pyreason_annotations(...)`
+- Depends on `pyreason==3.0.0` (not a repo-managed dependency)
+- The real execution-surface operator path is still constrained
+  by the external `pyreason` / `numba` / `llvmlite` environment
+  compatibility; the local combination
+  `numba==0.64.0` / `llvmlite==0.46.0` has not been validated
+- `PyReasonTraceEventV0` field shape is not frozen
+- `pyreason_trace_to_evidence_graph(...)` only builds the
+  `updates` chain within the same fact / edge; cross-fact causal
+  edges are deferred
 
-## 8. Known Issues（2026-03-29 walkthrough 确认）
+## 8. Known issues (confirmed during 2026-03-29 walkthrough)
 
-### ~~F-PR-1 PyReason 全局状态无线程安全保护（严重：高）~~ — RESOLVED
+### ~~F-PR-1 PyReason global state has no thread-safety guard (severity: high)~~ — RESOLVED
 
-已修复：`runner.py` 新增 `_PYREASON_LOCK = threading.Lock()` 并用 `with _PYREASON_LOCK:` + `try/finally` 包裹所有 `pr.*` 全局状态操作。详见 §5B.3。
+Fixed: `runner.py` adds
+`_PYREASON_LOCK = threading.Lock()` and wraps all `pr.*`
+global-state operations with `with _PYREASON_LOCK:` +
+`try/finally`. See §5B.3.
 
-### ~~F-PR-2 `_validate_bound` 不拒绝 bool（严重：中）~~ — RESOLVED
+### ~~F-PR-2 `_validate_bound` does not reject bool (severity: medium)~~ — RESOLVED
 
-已修复：`_validate_bound` 在 `float()` 转换前加 `if any(isinstance(v, bool) for v in bound)` guard，bool 值现在 raise ValueError。
+Fixed: `_validate_bound` now adds an
+`if any(isinstance(v, bool) for v in bound)` guard before
+`float()` conversion; bool values now raise `ValueError`.
 
-### ~~F-PR-3 `_resolve_shared_meta` confidence=0.0 不对称（严重：中）~~ — RESOLVED
+### ~~F-PR-3 `_resolve_shared_meta` confidence=0.0 asymmetric (severity: medium)~~ — RESOLVED
 
-已修复：显式 confidence 校验范围从 `(0, 1]` 改为 `[0, 1]`，与自动派生路径对齐。
+Fixed: the explicit confidence validation range was changed
+from `(0, 1]` to `[0, 1]`, aligned with the auto-derivation
+path.
 
-### ~~F-PR-4 `pred_id.split(":", 1)[1]` 假设 pred_id 含冒号（严重：低）~~ — RESOLVED
+### ~~F-PR-4 `pred_id.split(":", 1)[1]` assumes pred_id contains a colon (severity: low)~~ — RESOLVED
 
-已修复：3 处 `split(":",1)[1]` 改用 `_pred_short_name()`（来自 `_helpers.py`），无冒号时返回原值。
+Fixed: 3 instances of `split(":",1)[1]` were replaced with
+`_pred_short_name()` (from `_helpers.py`), which returns the
+original value when there is no colon.
 
-### ~~F-PR-5 `persist_pyreason_annotations` 只用首条 asrt_id（严重：低）~~ — RESOLVED
+### ~~F-PR-5 `persist_pyreason_annotations` uses only the first asrt_id (severity: low)~~ — RESOLVED
 
-已修复：`persist_pyreason_annotations` 改为遍历 `written` 建 index→asrt_id 映射，每条 template 按 `fact_index` 绑定正确的 asrt_id。
+Fixed: `persist_pyreason_annotations` now iterates over
+`written` to build an index→asrt_id mapping and binds each
+template to the correct `asrt_id` by `fact_index`.
 
-### ~~F-PR-6 辅助函数三处重复（严重：信息）~~ — RESOLVED
+### ~~F-PR-6 Three duplicate helper functions (severity: info)~~ — RESOLVED
 
-已修复：`_pred_short_name` 和 `_parse_edge_component` 抽到 `_helpers.py`，`provenance.py`、`runner.py`、`where_compile.py` 改为 import。
+Fixed: `_pred_short_name` and `_parse_edge_component` were
+extracted into `_helpers.py`; `provenance.py`, `runner.py`, and
+`where_compile.py` now import them.

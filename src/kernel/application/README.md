@@ -1,10 +1,12 @@
 # Application Layer
 
-`kernel.application` 是建立在 `core` 之上的 canonical Python runtime authority。
+`kernel.application` is the canonical Python runtime authority built
+on top of `core`.
 
-详细模块文档已迁移到：
+Module documentation has moved to:
 
 - [README.md](docs/README.md)
 - [01_overview_en.md](docs/01_overview_en.md)
 
-相关测试见 `src/kernel/tests/test_application_*.py` 与 SDK adapter delegation tests。
+For related tests, see `src/kernel/tests/test_application_*.py` and
+the SDK adapter delegation tests.
