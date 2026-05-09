@@ -16,9 +16,8 @@ class User(Entity):
 
 fg = FactGraph.from_schema_classes([User])
 
-fg.ingest([
-    {"entity": "User", "user_id": "u-1", "name": "Alice"},
-])
+ref_alice = fg.read.ref(User, user_id="u-1")
+fg.write.set(User.name, ref_alice, "Alice")
 
 snap = fg.read.get(User, user_id="u-1")
 print(snap.name)            # → Alice
