@@ -453,8 +453,9 @@ candidates = fg.eval.evaluate(deriv, mode="pyreason",
 `mode` is **call-time**, not stored on the `Derivation`. Allowed
 values: `"native"` (default), `"souffle"`, `"problog"`, `"pyreason"`.
 `mode="native"` rejects non-empty `engine_options`. The legacy
-`engine=` and `python=` keywords are removed; using them raises with a
-rename hint.
+`mode='python'` and `mode='engine'` **values** are removed; passing
+them raises with rename hints (use `mode='native'` and
+`mode='souffle'` respectively).
 
 Multi-head Derivation:
 
@@ -824,8 +825,8 @@ Notable changes:
 | `fact_key` / `pred_id` on `Pred` | (removed) | Use field accessors instead |
 | `.chosen` on assertion view | (removed) | Use `snapshot.field("X").active` |
 | `temporal_view` parameter | (removed) | Pass via `meta` and use a custom view |
-| `engine=` keyword in `evaluate` | (removed) | Use `mode=`; old keyword raises with rename hint |
-| `python=` keyword in `evaluate` | (removed) | Use `mode="native"`; old keyword raises with rename hint |
+| `mode='engine'` value in `evaluate` | (removed) | Use `mode='souffle'`; old value raises with rename hint |
+| `mode='python'` value in `evaluate` | (removed) | Use `mode='native'`; old value raises with rename hint |
 
 ### Probabilistic confidence bridge
 

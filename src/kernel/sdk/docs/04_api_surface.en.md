@@ -383,7 +383,7 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 
 - `fg.evaluate(Derivation(...), mode="native"|"souffle"|"problog"|"pyreason")`
   returns `list[CandidateSet]`
-- Legacy `python` / `engine` keyword arguments raise explicit rename errors
+- Legacy `mode='python'` / `mode='engine'` **values** raise explicit rename errors (use `mode='native'` / `mode='souffle'`)
 - `head=[...]` is supported (flattened output)
 - `CandidateSet.confidence` semantics depend on engine:
   - `native` / `souffle` → `None`
