@@ -1,8 +1,8 @@
 # Post-L SDK Ergonomics Redesign
 
-- **Status:** scoped
+- **Status:** implemented
 - **Created:** 2026-05-09
-- **Last Updated:** 2026-05-09 (scope-freeze)
+- **Last Updated:** 2026-05-09 (implemented; close-out on impl branch)
 - **Parent:** Post-L (closes the L Direction sequence G1→G4→G2→G3→G5; this blueprint evaluates the SDK ergonomic shape now that the L surface is settled)
 - **Predecessors (shipped):**
   - [2026-05-08_l-direction-g5-round-events-proofframe-diff (archived)](../archive/2026-05-08_l-direction-g5-round-events-proofframe-diff.md) — G5 ProofFrame Diff; closed L Direction
@@ -1291,9 +1291,19 @@ Scoped-stage acceptance (filled after §5 falsifier passes):
 - [x] §5.8 locked — **stay on v0.1 line; no v0.2 marker** (locked 2026-05-09 per user default hypothesis). 4 decisions locked: `FactGraph` enters `kernel.sdk.__all__` 34 → 35 (manager classes private per `views` precedent); no `__version__` / `pyproject.toml` version bump (stays `0.1.0`); docs call it "post-L SDK ergonomics redesign" within v0.1; release note in blueprint+audit-log+archive-inventory + brief mentions in 3 docs (NO standalone CHANGELOG). Path B 6th snapshot naming locked: `v0.1-post-l-sdk-ergonomics-redesign-<DATE>` standalone + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-post-l-redesign-<DATE>` combined Path B (extends 5th at `d4ceb3e`). Source-grounded against `pyproject.toml`, absent CHANGELOG, and 5 published L milestone snapshot patterns.
 - [x] §5.9 locked — **test scope = alias parity + namespace shape; reuse existing shell tests for behavior** (locked 2026-05-09 per user 7-category recommendation). 3 NEW test files: `test_sdk_redesign_alias_parity.py` (~30-35 tests), `test_sdk_redesign_namespace_shape.py` (~10-15 tests), `test_sdk_redesign_invariants.py` (~16-18 tests across 5 invariant classes). 5 EXISTING G invariant files edited single-line: `test_sdk_g{1,4,2,3,5}_invariants.py` from `__all__` length 34 → 35 + add `assertIn("FactGraph", kernel_sdk.__all__)`. 23 existing `test_sdk_*.py` contract tests stay verbatim (zero churn per §5.4 lock). Phase-end count expectation: ~1730→~1748 OK / 1 skipped (vs G5 published baseline 1685/1). All 3 falsifier verdicts CLEAN — no `#P1` carve-out needed; patch paths in G1-G5 contract tests don't change (managers+aliases at `store.py` level, shell modules unchanged at 9). Published Path B snapshots stay frozen at `__all__` length 34 (their own immutable codebase); impl branch asserts 35.
 - [x] §8 implementation plan filled with **3 phases** (locked at scope-freeze 2026-05-09): Phase 1 runtime aliases + namespace managers (rebase impl branch, add `FactGraph` + 9 manager classes + property accessors + read-only enforcement; ~+45 tests); Phase 2 invariants + docs (5 G invariant edits + new redesign invariants file + Tier 1 docs taxonomy-first rewrite + Tier 2/3/4 module-internal updates per §5.5+§5.5.6); Phase 3 close-out + publish prep (§9 Outcome + archive + memory sync + Path B 6th snapshot refs prepared, no push without authorization). §8.0 constraints locked verbatim per user direction: no impl on design branch / impl branch must rebase / Path B frozen / `__all__` 34→35 only `FactGraph`. Per-phase audit cadence per `feedback_audit_cadence_per_phase`. Publish authorization user-explicit per `project_release_branch_invariants`.
-- [ ] Status moves from `draft` to `scoped`.
+- [x] Status moved from `draft` to `scoped` at `fb067de`.
 
-Implementation-stage acceptance: TBD post-§5.7 (depends on whether the redesign ships; if §5.7 = no-change, this entire stage is empty and the blueprint closes at `scoped → implemented` with §9 documenting "research-only outcome").
+Implementation-stage acceptance:
+
+- [x] Impl branch rebased onto design HEAD before code (`af99c87` lineage starts from design HEAD `fb067de`).
+- [x] Phase 1 runtime aliases + namespace managers landed (`af99c87`): `FactGraph = SDKStore`, 9 private manager classes, property accessors, read-only enforcement, alias parity + namespace-shape tests.
+- [x] Phase 1 audit gate passed: taxonomy structure 1:1, manager methods delegate to flat methods, manager privacy/read-only/per-instance scoping, no flat deprecation warnings, no docs/notebook churn, `__all__ == 35`.
+- [x] Phase 2 invariants + docs landed (`31889ae`): redesign invariant file, G1-G5 `__all__` updates, taxonomy-first docs across locked Tier 1 / Tier 2 / Tier 3 surfaces.
+- [x] Phase 2 audit-fix landed (`380e391`): README CN/EN stale "no SDK shell" paragraph corrected, stale `709 tests` baseline removed, regression invariant added.
+- [x] Focused redesign + G1-G5 invariant suite passes (98 tests).
+- [x] Full discovery behavior recorded: 1752 discovery items with 1 skipped and the known environment-only `kernel.adapters.problog` cold-start circular import error.
+- [x] `ruff` and `git diff --check` clean.
+- [x] Sacred branches + five published L Path B snapshots left untouched.
 
 ## 8. Implementation Plan
 
@@ -1441,4 +1451,101 @@ NOT created:
 
 ## 9. Outcome / Deviations
 
-To be filled at close-out.
+### 9.1 Final Landed Surface
+
+The post-L SDK ergonomics redesign shipped as an additive v0.1 surface on the implementation branch:
+
+- `FactGraph` is exported from `kernel.sdk` and is a literal alias of `SDKStore`.
+- `kernel.sdk.__all__` intentionally changed from 34 to 35, with **only** `FactGraph` added.
+- Existing flat `SDKStore.<method>` / `FactGraph.<method>` calls remain permanent foundational API; no flat method was removed, renamed, or deprecated.
+- Nine private manager classes expose the teaching taxonomy through read-only properties:
+  - top-level: `schema`, `read`, `write`, `eval`, `what_if`, `audit`, `package`, plus existing `views`;
+  - sub-namespaces: `what_if.fact_overlay`, `what_if.rule`.
+- Manager methods delegate to the already-shipped flat methods; no capability shell behavior was reimplemented.
+- The existing 9 SDK shell modules under `kernel/sdk/shells/` are unchanged.
+
+Canonical taxonomy examples:
+
+```python
+from kernel.sdk import FactGraph
+
+fg = FactGraph.from_schema_classes([User])
+fg.read.get(User, user_id="u-1")
+fg.write.set(User.name, user_ref, "Alice")
+fg.eval.evaluate(derivation)
+fg.what_if.check(derivation, binding)
+fg.what_if.fact_overlay.check(derivation, binding, overlay)
+fg.what_if.rule.disable(rule, support_artifact, branch_index=0, atom_index=1)
+fg.audit.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
+fg.package.export_package(path)
+```
+
+### 9.2 Commit Chain
+
+Implementation branch: `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09`
+
+```text
+380e391  fix(docs): post-L Phase 2 audit polish
+31889ae  feat(sdk): post-L redesign Phase 2 — taxonomy-first docs (CN/EN) + redesign invariants file
+af99c87  feat(sdk): post-L redesign Phase 1 — FactGraph alias + 9 namespace managers + Phase 1 tests
+fb067de  docs(blueprints): post-L redesign — scope-freeze (status draft→scoped); §8 implementation plan filled with 3 phases
+```
+
+Design branch `codex/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09` remains at scoped design HEAD `fb067de`; implementation and close-out live on the implementation branch so the publish candidate includes the actual runtime/docs/test tree.
+
+### 9.3 Deviations
+
+- **Close-out branch:** §8 text said "fill §9 on impl branch"; the user shorthand mentioned switching to the design branch. Final close-out is intentionally on the implementation branch because the publish candidate must contain Phase 1/2 code and docs. The design branch stays a scoped design source.
+- **`FactGraph` implementation choice:** §8 allowed literal alias or thin subclass. Implementation chose literal alias (`FactGraph = SDKStore`) to preserve identity and avoid a second class hierarchy.
+- **Notebook update:** §8 listed a conditional one-line update for `examples/04_round_persistence_diff.ipynb`. Phase 2 left all notebooks unchanged because §5.5.6 classified notebooks as Tier-2 / advanced-importable bypass surfaces and the README + SDK docs now carry the product-taxonomy teaching load. This is a deliberate low-risk deviation; no notebook currently defines the SDK surface contract.
+- **Full discovery count:** Expected phase-end counts were approximate. Final discovery reports 1752 discovery items with 1 skipped and the known environment-only `kernel.adapters.problog` cold-start circular import error. Focused redesign/G-invariant suites are clean.
+- **README stale paragraph:** Phase 2 audit caught stale pre-L public-boundary wording in README CN/EN. Audit-fix `380e391` corrected it and added invariant coverage.
+
+### 9.4 Test Catalogue
+
+New redesign tests:
+
+- `src/kernel/tests/test_sdk_redesign_alias_parity.py` — alias delegation + representative real-result parity.
+- `src/kernel/tests/test_sdk_redesign_namespace_shape.py` — namespace presence, manager privacy, idempotence, per-instance scoping, read-only enforcement.
+- `src/kernel/tests/test_sdk_redesign_invariants.py` — `__all__` 35 + `FactGraph`, manager privacy, flat no-deprecation, docs lint, `what_if` sub-namespace structure.
+
+Updated existing invariants:
+
+- `src/kernel/tests/test_sdk_g1_invariants.py`
+- `src/kernel/tests/test_sdk_g2_invariants.py`
+- `src/kernel/tests/test_sdk_g3_invariants.py`
+- `src/kernel/tests/test_sdk_g4_invariants.py`
+- `src/kernel/tests/test_sdk_g5_invariants.py`
+
+Verification at close-out:
+
+- Focused redesign + G1-G5 invariant suite: 98 tests OK.
+- `kernel.sdk.__all__ == 35`; `FactGraph` is present; manager classes remain private.
+- `ruff` clean on touched Python files.
+- `git diff --check` clean.
+- Full discovery: 1752 discovery items, 1 skipped, 1 known environment-only `kernel.adapters.problog` cold-start circular import error.
+
+### 9.5 Boundary Outcomes
+
+- `master` and `v0.1-oss-prep` remain untouched.
+- The five existing published L milestone snapshots remain frozen:
+  - G1: `v0.1-l-g1-check-diagnose-2026-05-08` at `d6716a0`
+  - G4: `v0.1-l-g4-why-not-frontier-2026-05-08` at `acb5a6e`
+  - G2: `v0.1-l-g2-fact-overlay-proofframe-recheck-2026-05-08` at `d658390`
+  - G3: `v0.1-l-g3-rule-overlays-2026-05-08` at `cb6d3bd`
+  - G5: `v0.1-l-g5-round-events-proofframe-diff-2026-05-08` at `d4ceb3e`
+- Prior Path B combined snapshots remain immutable.
+- No `kernel.application`, `kernel.audit`, `kernel.core`, SDK shell behavior, Frontier boundary, or round-recorder boundary changed.
+- No package/version rename: `pyproject.toml` remains `0.1.0`; import path remains `kernel.sdk`.
+- No standalone `CHANGELOG.md` added; release record remains blueprint + audit log + archive inventory + memory.
+
+### 9.6 Forward Triggers
+
+- **Publish authorization:** push remains user-explicit. Prepared refs:
+  - standalone: `v0.1-post-l-sdk-ergonomics-redesign-2026-05-09`
+  - Path B 6th combined: `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-post-l-redesign-2026-05-09`
+- **Post-publish verification:** run the same post-publish verification pattern used for G1/G4/G2/G3/G5.
+- **Import naming (`factpy` vs `kernel.sdk`):** explicitly deferred; requires separate scoped blueprint and likely v0.2-line evaluation.
+- **Deprecation question:** flat methods are permanent under this blueprint. Reopening deprecation/removal requires new user signal and a separate falsifier pass.
+- **Docs expansion:** future examples/notebooks may prefer taxonomy form opportunistically, but existing notebooks are not part of this close-out.
+- **Known environment debt:** the optional Prolog adapter cold-start circular import remains outside this blueprint.

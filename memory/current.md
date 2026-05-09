@@ -1,6 +1,37 @@
 # Current Operational Memory
 
-最后更新:2026-05-09(`v0.1-l-g5-round-events-proofframe-diff-2026-05-08` @ `d4ceb3e` published;G5 ProofFrame Diff SDK shell implemented + archived + pre-publish-Blocker fix + published snapshot;**L Direction sequence CLOSED on origin (G1→G4→G2→G3→G5)**)
+最后更新:2026-05-09(`codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09`;post-L SDK ergonomics redesign implemented + archived locally;publish pending explicit authorization)
+
+## 当前阶段(2026-05-09 — POST-L SDK ERGONOMICS REDESIGN IMPLEMENTED; PUBLISH PENDING)
+
+**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 impl branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09`. 设计分支 `codex/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09` 保持 scoped design HEAD `fb067de`;implementation / close-out 在 impl branch 上完成。
+
+**最终 surface:**
+- `FactGraph` 进入 `kernel.sdk.__all__`;`FactGraph is SDKStore` literal alias。
+- `kernel.sdk.__all__` 从 34 → 35,唯一新增导出是 `FactGraph`;manager classes 全部私有。
+- 8 top-level taxonomy namespaces + 2 `what_if` sub-namespaces: `schema`, `read`, `write`, `eval`, `what_if`, `what_if.fact_overlay`, `what_if.rule`, `audit`, `package`, `views`。
+- Flat `SDKStore.<method>` / `FactGraph.<method>` 永久保留为 foundational API;无 deprecation warning,无 removal plan,无 package rename。
+- 9 SDK shells (`kernel/sdk/shells/`) 行为未重写;manager methods 只 delegate 到既有 flat methods。
+
+**Commit chain:**
+- `af99c87` — Phase 1: `FactGraph` alias + 9 namespace managers + alias parity / namespace shape tests。
+- `31889ae` — Phase 2: taxonomy-first docs + redesign invariants。
+- `380e391` — Phase 2 audit-fix: README stale L Direction boundary paragraph + stale test baseline fixed;regression lint added。
+- close-out commit — fills §9, archives blueprint, updates archive inventory + memory, prepares publish refs locally.
+
+**Verification:**
+- Focused redesign + G1-G5 invariant suite: 98 OK。
+- `ruff` clean;`git diff --check` clean。
+- Full discovery records 1752 discovery items with 1 skipped + known environment-only `kernel.adapters.problog` cold-start circular import error。
+- Sacred branches + five existing L Path B published snapshots untouched。
+
+**Prepared publish refs (local only; no push yet):**
+- `v0.1-post-l-sdk-ergonomics-redesign-2026-05-09`
+- `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-post-l-redesign-2026-05-09`
+
+**Next required action:** user must explicitly authorize publish. On publish, push the standalone ref and Path B 6th combined ref, then verify existing G1/G4/G2/G3/G5 snapshots remain frozen.
+
+<!-- Historical 2026-05-09 G5 published state follows. -->
 
 ## 当前阶段(2026-05-09 — L DIRECTION G5 PROOFFRAME DIFF SDK SHELL PUBLISHED; **L SEQUENCE CLOSED ON ORIGIN**)
 

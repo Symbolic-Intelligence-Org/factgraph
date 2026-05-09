@@ -54,7 +54,7 @@ The 8 top-level namespaces:
 | `package` | `export_package`, `run_package` |
 | `views` (existing) | `create`, `update`, `delete`, `get`, `list` |
 
-Manager classes (`_SDKSchemaManager`, etc.) are private and do not enter `kernel.sdk.__all__`; they are reachable only through `FactGraph.<namespace>` property accessors. Writes such as `fg.what_if.foo = ...` raise `FrozenSnapshotError`. See [post-L SDK ergonomics redesign blueprint](../../../../docs/blueprints/active/2026-05-09_post-l-sdk-ergonomics-redesign.md) §5.2 / §5.4 / §5.7.
+Manager classes (`_SDKSchemaManager`, etc.) are private and do not enter `kernel.sdk.__all__`; they are reachable only through `FactGraph.<namespace>` property accessors. Writes such as `fg.what_if.foo = ...` raise `FrozenSnapshotError`. See [post-L SDK ergonomics redesign blueprint](../../../../docs/blueprints/archive/2026-05-09_post-l-sdk-ergonomics-redesign.md) §5.2 / §5.4 / §5.7.
 
 ## 1. Top-Level Exports (`from kernel.sdk import ...`)
 
