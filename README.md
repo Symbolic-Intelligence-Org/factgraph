@@ -73,7 +73,7 @@ print(snapshot.name)  # Alice
 | Advanced importable | `kernel.application`, `kernel.audit` | 面向 automation、wire bridge、audit consumer 的 runtime/query authority；可直接 import,但不是 SDK ergonomic facade。 |
 | Out of v0.1 package | `service`, `agent`, `domains`, internal workflow docs, tutorial/demo add-back candidates | 不属于 `factpy-kernel` v0.1 kernel-only wheel / public source surface。 |
 
-Batch 3-7 新增的 Check、Diagnose、Fact Overlay、ProofFrame、Why-not、rule-action runtimes、round events 与 ProofFrame diff 当前通过 `kernel.application` / `kernel.audit` 暴露为 advanced importable surfaces。v0.1 不新增对应 SDK shell 或 HTTP route；需要 product-facing wrapper 时应先定义单独的 public API blueprint。
+L Direction G1-G5 已为 Check、Diagnose、Why-not、Fact Overlay、ProofFrame Recheck、rule-action what-if 与 ProofFrame Diff 增加窄 SDK shell,并通过 `FactGraph` taxonomy 暴露为 product API。Round events recorder lifecycle (`start_round` / `record_round_event` / `finalize_round`) 与 Frontier trace 仍停留在 `kernel.audit` / `kernel.core` advanced importable surfaces；需要把这些边界提升为 product-facing wrapper 时,仍应先定义单独的 public API blueprint。
 
 ## Kernel Surface
 
@@ -115,7 +115,7 @@ kernel 回归:
 PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
 ```
 
-当前 kernel suite 基线:709 tests, 1 skip。
+当前 kernel suite 基线以 CI 与蓝图 audit 记录为准；本地环境可能因 optional adapter 依赖或冷启动 import 顺序显示额外环境性错误。
 
 ## 许可证与安全
 

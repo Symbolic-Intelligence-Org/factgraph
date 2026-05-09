@@ -73,7 +73,7 @@ print(snapshot.name)  # Alice
 | Advanced importable | `kernel.application`, `kernel.audit` | Runtime/query authority for automation, wire bridges, and audit consumers; importable directly, but not an SDK ergonomic facade. |
 | Out of v0.1 package | `service`, `agent`, `domains`, internal workflow docs, tutorial/demo add-back candidates | Not part of the `factpy-kernel` v0.1 kernel-only wheel or public source surface. |
 
-The Check, Diagnose, Fact Overlay, ProofFrame, Why-not, rule-action runtimes, round events, and ProofFrame diff added in Batches 3-7 are currently exposed through `kernel.application` / `kernel.audit` as advanced importable surfaces. v0.1 does not add matching SDK shells or HTTP routes; product-facing wrappers should first define their own public API blueprint.
+L Direction G1-G5 added narrow SDK shells for Check, Diagnose, Why-not, Fact Overlay, ProofFrame Recheck, rule-action what-if, and ProofFrame Diff, now exposed through the `FactGraph` taxonomy as product API. Round events recorder lifecycle (`start_round` / `record_round_event` / `finalize_round`) and Frontier trace remain on `kernel.audit` / `kernel.core` advanced importable surfaces; promoting those boundaries to product-facing wrappers still requires a separate public API blueprint.
 
 ## Kernel Surface
 
@@ -115,7 +115,7 @@ Kernel regression:
 PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
 ```
 
-Current kernel suite baseline: 709 tests, 1 skip.
+The current kernel suite baseline is tracked by CI and blueprint audit records; local environments may show additional environment-only errors for optional adapters or cold-start import order.
 
 ## License And Security
 
