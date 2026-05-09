@@ -44,7 +44,7 @@ from .error_codes import (
     INVALID_ROW_FORMAT,
     QUERY_INVALID_ROW_FORMAT,
 )
-from .errors import CardinalityError, EntityNotFoundError, SDKStoreError
+from .errors import CardinalityError, EntityNotFoundError, FrozenSnapshotError, SDKStoreError
 from .query_lower import QueryPlan, lower_query
 from .query_runtime import execute_query_plan
 from .schema import Entity, Field
@@ -103,6 +103,211 @@ class _SDKViewsManager:
         return {name: spec for name, spec in self._views.items()}
 
 
+class _SDKSchemaManager:
+    """Read-only namespace manager for the `schema` taxonomy group.
+
+    Delegates to flat ``SDKStore`` methods per §5.2 teaching taxonomy +
+    §5.4 Option 2 (additive aliases) lock. Manager class is private;
+    `FactGraph.schema` property returns this manager.
+    """
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.schema namespace is read-only")
+
+    def ingest(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.ingest(*args, **kwargs)
+
+    def validate_provenance(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.validate_provenance(*args, **kwargs)
+
+
+class _SDKReadManager:
+    """Read-only namespace manager for the `read` taxonomy group."""
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.read namespace is read-only")
+
+    def get(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.get(*args, **kwargs)
+
+    def find(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.find(*args, **kwargs)
+
+    def ref(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.ref(*args, **kwargs)
+
+
+class _SDKWriteManager:
+    """Read-only namespace manager for the `write` taxonomy group."""
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.write namespace is read-only")
+
+    def set(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.set(*args, **kwargs)
+
+    def add(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.add(*args, **kwargs)
+
+    def retract(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.retract(*args, **kwargs)
+
+    def edit(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.edit(*args, **kwargs)
+
+
+class _SDKEvalManager:
+    """Read-only namespace manager for the `eval` taxonomy group.
+
+    Per §5.2 §5.2.5 placement #4, ``accept*`` stays in `eval` because
+    the mental workflow is evaluation lifecycle (evaluate → accept).
+    """
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.eval namespace is read-only")
+
+    def run(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.run(*args, **kwargs)
+
+    def evaluate(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.evaluate(*args, **kwargs)
+
+    def evaluate_compiled(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.evaluate_compiled(*args, **kwargs)
+
+    def accept(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.accept(*args, **kwargs)
+
+    def accept_compiled(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.accept_compiled(*args, **kwargs)
+
+    def accept_many(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.accept_many(*args, **kwargs)
+
+
+class _SDKWhatIfFactOverlayManager:
+    """Read-only sub-namespace manager for `what_if.fact_overlay` (G2)."""
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.what_if.fact_overlay namespace is read-only")
+
+    def check(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.check_fact_overlay(*args, **kwargs)
+
+    def recheck_proof_frame(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.recheck_proof_frame(*args, **kwargs)
+
+
+class _SDKWhatIfRuleManager:
+    """Read-only sub-namespace manager for `what_if.rule` (G3)."""
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.what_if.rule namespace is read-only")
+
+    def disable(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.check_rule_disable(*args, **kwargs)
+
+    def literal_replace(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.check_rule_literal_replace(*args, **kwargs)
+
+    def add_condition(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.check_rule_add_condition(*args, **kwargs)
+
+
+class _SDKWhatIfManager:
+    """Read-only namespace manager for the `what_if` taxonomy group.
+
+    Per §5.2 Option B split: G1 + G4 methods (check, diagnose, why_not)
+    are direct on this manager; G2 routed under ``fact_overlay`` sub-
+    namespace; G3 routed under ``rule`` sub-namespace. G5 ``diff_proof_
+    frames`` lives under ``audit`` per §5.2.1 placement decision.
+    """
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+        object.__setattr__(self, "_fact_overlay", _SDKWhatIfFactOverlayManager(sdk))
+        object.__setattr__(self, "_rule", _SDKWhatIfRuleManager(sdk))
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.what_if namespace is read-only")
+
+    def check(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.check(*args, **kwargs)
+
+    def diagnose(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.diagnose(*args, **kwargs)
+
+    def why_not(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.why_not(*args, **kwargs)
+
+    @property
+    def fact_overlay(self) -> _SDKWhatIfFactOverlayManager:
+        return self._fact_overlay
+
+    @property
+    def rule(self) -> _SDKWhatIfRuleManager:
+        return self._rule
+
+
+class _SDKAuditManager:
+    """Read-only namespace manager for the `audit` taxonomy group.
+
+    Per §5.2 §5.2.1 placement #2, ``diff_proof_frames`` (G5) lives here
+    rather than under ``what_if`` because it consumes recorded round
+    events and compares persisted proof-frame outcomes — post-hoc
+    audit, not hypothetical evaluation.
+    """
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.audit namespace is read-only")
+
+    def explain_fact(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.explain_fact(*args, **kwargs)
+
+    def conflicts(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.conflicts(*args, **kwargs)
+
+    def diff_proof_frames(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.diff_proof_frames(*args, **kwargs)
+
+
+class _SDKPackageManager:
+    """Read-only namespace manager for the `package` taxonomy group."""
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.package namespace is read-only")
+
+    def export_package(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.export_package(*args, **kwargs)
+
+    def run_package(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.run_package(*args, **kwargs)
+
+
 class SDKStore:
     def __init__(
         self,
@@ -138,6 +343,13 @@ class SDKStore:
         self._entity_spec_by_class: dict[type[Entity], dict[str, Any]] = {}
         self._identity_values_by_e_ref: dict[str, dict[str, Any]] = {}
         self._views_manager = _SDKViewsManager()
+        self._schema_manager = _SDKSchemaManager(self)
+        self._read_manager = _SDKReadManager(self)
+        self._write_manager = _SDKWriteManager(self)
+        self._eval_manager = _SDKEvalManager(self)
+        self._what_if_manager = _SDKWhatIfManager(self)
+        self._audit_manager = _SDKAuditManager(self)
+        self._package_manager = _SDKPackageManager(self)
         self._default_row_format = default_row_format
         # Read once at init time; do not re-read env on each run().
         self._env_row_format = os.environ.get("FACTPY_ROW_FORMAT")
@@ -198,6 +410,45 @@ class SDKStore:
     @property
     def views(self) -> _SDKViewsManager:
         return self._views_manager
+
+    @property
+    def schema(self) -> _SDKSchemaManager:
+        """`schema` taxonomy namespace (post-L redesign §5.2 lock).
+
+        Read-only manager exposing ``ingest`` and ``validate_provenance``.
+        Delegates to flat ``SDKStore.<method>`` per §5.4 Option 2 lock.
+        """
+        return self._schema_manager
+
+    @property
+    def read(self) -> _SDKReadManager:
+        """`read` taxonomy namespace exposing ``get`` / ``find`` / ``ref``."""
+        return self._read_manager
+
+    @property
+    def write(self) -> _SDKWriteManager:
+        """`write` taxonomy namespace exposing ``set`` / ``add`` / ``retract`` / ``edit``."""
+        return self._write_manager
+
+    @property
+    def eval(self) -> _SDKEvalManager:
+        """`eval` taxonomy namespace exposing the evaluate→accept lifecycle."""
+        return self._eval_manager
+
+    @property
+    def what_if(self) -> _SDKWhatIfManager:
+        """`what_if` taxonomy namespace (G1+G4 direct; G2 / G3 sub-namespaced)."""
+        return self._what_if_manager
+
+    @property
+    def audit(self) -> _SDKAuditManager:
+        """`audit` taxonomy namespace exposing ``explain_fact`` / ``conflicts`` / ``diff_proof_frames``."""
+        return self._audit_manager
+
+    @property
+    def package(self) -> _SDKPackageManager:
+        """`package` taxonomy namespace exposing ``export_package`` / ``run_package``."""
+        return self._package_manager
 
     def batch(self, *, meta: dict[str, Any] | None = None):
         from .batch import SDKBatchTx
@@ -2209,3 +2460,12 @@ def _is_derivation_run_object(obj: Any) -> bool:
     except Exception:
         return False
     return isinstance(obj, Derivation)
+
+
+# Post-L SDK ergonomics redesign (locked at §5.3 / §5.7) — `FactGraph` is
+# the canonical user-facing entrypoint name. Literal alias of `SDKStore`
+# per §5.7 non-commitment #1 ("NOT a replacement of `SDKStore`"); both
+# names resolve to the same class. `SDKStore` stays as the canonical
+# implementation behind the `FactGraph` taxonomy and remains permanently
+# callable per §5.4 Option 2 lock.
+FactGraph = SDKStore

@@ -18,6 +18,7 @@ EXPECTED_SDK_ALL: tuple[str, ...] = (
     "EditorClosedError",
     "Entity",
     "EntityNotFoundError",
+    "FactGraph",
     "Field",
     "FrozenSnapshotError",
     "INVALID_ROW_FORMAT",
@@ -62,7 +63,8 @@ FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
 class SDKG1InvariantTests(unittest.TestCase):
     def test_sdk_all_is_unchanged_and_result_types_are_not_exported(self) -> None:
         self.assertEqual(set(sdk_pkg.__all__), set(EXPECTED_SDK_ALL))
-        self.assertEqual(len(sdk_pkg.__all__), 34)
+        self.assertEqual(len(sdk_pkg.__all__), 35)
+        self.assertIn("FactGraph", sdk_pkg.__all__)
         for name in ("CheckResult", "DiagnoseResult"):
             with self.subTest(name=name):
                 self.assertNotIn(name, sdk_pkg.__all__)

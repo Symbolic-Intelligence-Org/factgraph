@@ -43,7 +43,8 @@ class SDKG2InvariantTests(unittest.TestCase):
 
     def test_sdk_all_unchanged_and_g2_result_types_not_exported(self) -> None:
         """§5.3 + §5.4 lock: G2 result DTOs are not re-exported from SDK."""
-        self.assertEqual(len(kernel_sdk.__all__), 34)
+        self.assertEqual(len(kernel_sdk.__all__), 35)
+        self.assertIn("FactGraph", kernel_sdk.__all__)
         for name in (
             "FactOverlayCheckResult",
             "ProofFrameRecheckResult",

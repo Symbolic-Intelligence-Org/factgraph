@@ -25,7 +25,7 @@ from .error_codes import (
 )
 from .registry import SDKRegistry
 from .schema import Entity, Field, Identity, Relationship
-from .store import SDKStore
+from .store import FactGraph, SDKStore
 from .dsl import Body, Derivation, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
 from .ingest import IngestResult, ValidationReport
 
@@ -59,6 +59,7 @@ __all__ = [
     "Pred",
     "Not",
     "vars",
+    "FactGraph",
     "SDKStore",
     "SDKRegistry",
     "build_authoring_schema_from_classes",
