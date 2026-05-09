@@ -26,7 +26,13 @@ class User(Entity):                   # entity declaration
     user_id: str = Identity(primary_key=True)
     name: str = Field(cardinality="single")
 
-r = Rule(head=..., body=...)          # rule declaration
+with vars("u",) as (u,):              # rule declaration
+    r = Rule(
+        id="rule_alice",
+        version="1.0.0",
+        select=[u],
+        where=[User(u), u.name == "Alice"],
+    )
 ```
 
 ### Candidate
@@ -38,9 +44,17 @@ the ledger until you `accept(...)` them.
 
 ```python
 candidates = fg.eval.evaluate(deriv)
-candidates[0].confidence              # probability (engine-dependent)
-candidates[0].evidence_envelope       # support trace
+candidates[0].candidate_kind          # "fact" or "entity"
+candidates[0].payload                 # the proposed fact / entity body
+candidates[0].confidence              # float | None (engine-dependent)
+candidates[0].confidence_kind         # "none" | "probability" | "certainty"
+candidates[0].support_digest          # sha256 token of the supporting evidence
 ```
+
+The supporting evidence itself (a `SupportArtifact`) is reachable
+*only* via `fg.what_if.check(...)` — see the Derivation block below.
+`CandidateSet` deliberately keeps just the digest so the run/accept
+path stays narrow.
 
 ### Assertion
 
@@ -50,8 +64,9 @@ assertions. Each carries an `asrt_id`, a value, a `meta` dict, and
 provenance (source, trace_id, ingested_at, etc.).
 
 ```python
-snap.field("name").current()          # → list of currently-active values
-snap.field("name").history()          # → all assertions ever, including retracted
+snap.field("name").active             # property → tuple of currently-active records
+snap.field("name").history            # property → all records ever (active + revoked)
+[r.value for r in snap.field("name").active]   # the underlying values
 ```
 
 Assertions are **append-only**. Retracting an assertion creates a
@@ -62,9 +77,14 @@ original record is preserved for audit.
 
 A *derivation* in proof terms is the structured trace showing how a
 candidate or assertion came to exist: which rule fired, which body
-literals supported it, which sub-proofs were chained. The
-`SupportArtifact` is the typed representation; `ProofFrame` is its
-audit-log shape.
+literals supported it, which sub-proofs were chained. The typed
+representation is `SupportArtifact`
+(`kernel.core.store._support`). "ProofFrame" in this doc is an
+informal umbrella for the audit-log shapes that wrap or compare
+support artifacts — concretely `ProofFrameRecheckResult`
+(`kernel.application.protocol.proofframe`) and `ProofFrameDiff`
+(`kernel.audit.proof_frame_diff`). There is no class literally
+named `ProofFrame`.
 
 ```python
 result = fg.what_if.check(my_deriv, binding)
@@ -137,13 +157,21 @@ types**. Other internal types stay inside their layer.
 |---|---|
 | `EvaluationOverlay`, `FactOverlayAction`, `RuleOverlayAction` | `fact_overlay.check`, rule overlays |
 | `RuleLiteralPath`, `RuleAddedAtom` | `rule.literal_replace`, `rule.add_condition` |
-| `SupportArtifact` | Returned by `check`, consumed by `recheck_proof_frame` |
+| `SupportArtifact` | Returned inside `CheckResult.evidence_envelope.engine_payload`; consumed by `recheck_proof_frame` |
+| `ProofFrameRecheckResult` | Returned by `recheck_proof_frame` |
 | `RoundEvent`, `WarningDTO` | `audit.diff_proof_frames` |
 | `ProofFrameDiff`, `FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference` | Returned by `audit.diff_proof_frames` |
 
-These live in `kernel.application.protocol` and `kernel.audit`. They
-are frozen dataclasses with `__post_init__` validation — constructing
-one with bad shape raises `ProtocolShapeError`.
+These mostly live in `kernel.application.protocol` and `kernel.audit`.
+They are frozen dataclasses with `__post_init__` validation —
+constructing one with bad shape raises `ProtocolShapeError`.
+
+> Footnote on `SupportArtifact`: defined in
+> `kernel.core.store._support` (substrate-private module) but referenced
+> as a frozen DTO at the protocol boundary
+> (`kernel.application.protocol.derivation_check.EvidenceEnvelope.engine_payload`).
+> The `_support` location reflects that it's also produced by the
+> native evaluator inside `kernel.core`.
 
 ### Stays internal
 
@@ -184,7 +212,7 @@ direct import; see [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md
 | Frontier trace | `kernel.core.rules.frontier` |
 | Walker views (`ProofFrameDiffView`, etc.) | `kernel.application.walker` |
 | Engine adapter registration | `kernel.adapters.{souffle,problog,pyreason}` |
-| Optional domain bundles (e.g. ECSS) | `ensure_domain("...")` (single import point) |
+| Optional domain bundles (e.g. ECSS) | Direct import at the call site (`import kernel.adapters.ecss as ecss`); guard with `try/except ImportError` if the bundle may be absent |
 
 The SDK does not auto-wrap these surfaces. The boundary is intentional:
 each wrapper commits the SDK to a stable contract, and the team
@@ -211,7 +239,7 @@ prefers to add wrappers after seeing real usage patterns.
 |---|---|
 | SDK product surface | `kernel.sdk.__all__` exposes only user-facing surface; no application internals |
 | Application protocol | Does not accept SDK facade objects, SDK `Field` descriptors, or SDK DSL objects |
-| service / agent imports | Production SDK imports are guarded; only `compile_schema_from_classes` is allowlisted today |
+| service / agent imports | **Convention** (not enforced in code today): production runtime code does not add `kernel.sdk` runtime imports beyond `compile_schema_from_classes`. Authoring tools and tests are exempt. |
 | Legacy field semantics | `functional`, `temporal`, `dims`, `fact_key` are removed |
 | `vars()` runtime unpack | `with vars() as (a, b)` is unsupported; use named or factory forms |
 | String DSL | `sdk.run("...")` / `sdk.evaluate("...")` are unsupported |
@@ -227,7 +255,7 @@ prefers to add wrappers after seeing real usage patterns.
 | Cross-coordinate attr comparison | Only `==` on the same entity type and same `primary_key` field is allowed |
 | `RuleRef` constraints | Target must be `expose=True`; `RuleRef` is forbidden inside `Not(...)` body |
 | Query head constraints | Only `Entity(var)` or `Entity.field(...)`; field projection supports only `single` fields |
-| Registry multi-head | `evaluate` supports multi-head; `register_derivation(...)` is still single-head-oriented |
+| Multi-head derivations | `register_derivation(...)` and `fg.eval.evaluate(...)` accept multi-head Derivations (the DSL serializes `head: [...]` as a list when more than one head is present). The single-head constraint lives in capability shells: `fg.what_if.{check, diagnose, why_not}` reject plans with `len(plan.heads) != 1` (`kernel.application.capability_helpers.why_not.py:23` and siblings) |
 
 ---
 
