@@ -709,7 +709,61 @@ Candidates:
 - F2 — `feedback_narrow_public_api` says expand surface only when scope requires it. Does adding deprecation infrastructure (warnings, version stamps, removal schedules) qualify as "scoped"?
 - F3 — Path B immutability constraint: published L milestone snapshots' callsites are in their archived test files; those don't move. The compatibility question is purely about NEW user code post-redesign.
 
-### 5.5 Docs / quickstart impact
+#### 5.4 Decision (locked 2026-05-09): Option 2 — Permanent additive aliases + docs prefer new taxonomy
+
+**Default hypothesis (per user direction):** Flat `SDKStore.<method>` remains permanently callable; `FactGraph` + teaching taxonomy can only be additive unless a falsifier proves a breaking migration is necessary.
+
+**5 strategies evaluated** (per user instruction):
+
+| # | Strategy | Compat-honoring | F0 lever (taxonomy teaching gain) | Migration cost | User signal needed | Verdict |
+|---|---|---|---|---|---|---|
+| 1 | Permanent additive aliases, **no deprecation, no docs preference** | ✅ | ⚠️ Weak — no editorial preference; flat + taxonomy compete equally in docs | Zero | Already met for additive | Underdelivers thesis F0 |
+| 2 | **Additive aliases + docs prefer new taxonomy** (this lock) | ✅ | ✅ Strong — quickstart + notebooks + API surface lead with taxonomy; flat documented as foundational/supported | Medium (docs rewrite is the teaching investment) | Already met (per `feedback_sdk_ergonomics_redesign_target`) | **Locked** |
+| 3 | Soft deprecation in docs only ("deprecated; use taxonomy") | ⚠️ Implies removal | Stronger editorial signal | Same as Option 2 | None for "deprecated" framing | Rejected — see falsifier F-no-removal-plan |
+| 4 | Runtime `DeprecationWarning` (per existing `row_format='tuple'` precedent at `store.py:2133-2141`) | ⚠️ Adds noise | Strong (forces user attention) | High — every flat-method callsite emits warnings; tests/notebooks/downstream consumers all noisy; Path B published L tests don't expect warnings | None for flat removal | Rejected — see falsifier F-noise-cost |
+| 5 | Replacement / hard deprecation (flat removed at v0.2) | ❌ Violates §0 thesis hard-constraint | Strongest eventually | Highest — 23 test files + Path B audit confusion | Per `#6`, none — Batch 8 falsifier #18 PARTIAL ("not now") still holds | Rejected — violates compat hard-constraint without standalone falsifier |
+
+**Falsifier evidence per rejected option:**
+
+- **F-no-removal-plan (rejects Option 3):** "Deprecated" semantically implies "will be removed someday". Per `#6 — no outward compat without user signal` (cited 30_recommendation.md:95 lessons quote: "v0.1.3 disable_condition 实现时, 我推荐扩 SDKStore.evaluate(disabled_locators=...) kwarg 'for consistency'; 用户改成内部 _evaluate_with_overlay-style 路径") and Batch 8 §5.5.5 falsifier #18 PARTIAL ("not now"), there is no concrete user signal demanding flat-method removal. Marking flat methods "deprecated" without a removal plan misleads users who reasonably ask "when will this break?" and creates a worse contract than honest "supported foundational API".
+
+- **F-noise-cost (rejects Option 4):** The existing `row_format='tuple'` `DeprecationWarning` at `store.py:2133-2141` was justified because tuple-mode and dict-mode produced **different return shapes** — runtime warning steered users away from a behaviorally distinct legacy mode. Flat-method-vs-nested-method is **NOT that case**: both produce identical results (per Shape 2 alias semantics). Adding `DeprecationWarning` to every flat method:
+  - Makes 23 `test_sdk_*.py` files emit warnings on every call (hundreds of warnings per test run); tests using `pytest.filterwarnings('error')` start failing.
+  - Path B published L snapshot tests (immutable refs at `d6716a0` / `acb5a6e` / `d658390` / `cb6d3bd` / `d4ceb3e`) were authored without warning expectations — their test invariants assume clean stdout/stderr; runtime warnings retroactively complicate test review.
+  - Notebook execution emits warnings at every cell that calls flat methods.
+  - User direction explicit: "Runtime warnings are likely too noisy for a library whose flat surface is already valid and published." Source-grounded — confirmed by the runtime-noise cost above.
+
+- **F-compat-violation (rejects Option 5):** Per §0 thesis hard-constraint, "compat is a hard constraint". Per §5.4 thesis-derived default, options that break flat surface require standalone falsifier. No such falsifier surfaces — the user's signal is for the redesign to teach, not for flat removal. Path B published snapshots ship the flat surface; their immutability means flat removal would break retroactive auditability.
+
+**Falsifier check on locked Option 2:**
+
+- **Compat hard-constraint:** ✅ Preserved. Flat methods stay permanently callable; no DeprecationWarning, no removal plan. 23 `test_sdk_*.py` files unchanged. Path B published snapshots' tests stay green retroactively.
+- **`#6 — no outward compat without user signal`:** ✅ Honored. The new surface (taxonomy aliases) is additive only, triggered by explicit user signal (`feedback_sdk_ergonomics_redesign_target`). Flat surface is not modified.
+- **F0 thesis legibility:** ✅ Achieved via docs lever — quickstart + notebooks + API surface docs lead with `FactGraph.<namespace>.<method>`; new users encounter the teaching taxonomy first; existing users on flat methods continue working without surprise.
+- **Path B immutability:** ✅ Preserved. The 5 published L snapshots ship at `d6716a0` / `acb5a6e` / `d658390` / `cb6d3bd` / `d4ceb3e` with flat-only docs; under Option 2, current docs evolve forward to lead with taxonomy, but published snapshots stay frozen with their original flat-only framing.
+- **Maintenance liability check:** taxonomy aliases delegate to flat methods via attribute-access pattern (per `EntitySnapshot.assertions` prior art at `kernel/sdk/facade.py:102-217`); maintenance cost is near-zero per added namespace because there's no separate implementation. Tests stay on flat methods (no test churn). New parity tests for nested-form aliases are additive.
+- **§5.7 ship-at-all preserved:** Option 2 lock is conditional on shipping. If §5.7 elects "no change" (Shape 1), Option 2's docs preparation doesn't ship; flat surface stays as-is.
+
+**Decision rationale (per user):** "I expect option 2 to be strongest: it gives the redesign teaching value without breaking published L surfaces or turning current tests into migration churn. Runtime warnings are likely too noisy for a library whose flat surface is already valid and published." Confirmed by source-grounded falsifier evidence above.
+
+**Locked compatibility strategy:**
+
+- Flat `SDKStore.<method>` callable permanently; **no deprecation, no removal plan, no runtime warnings**.
+- `FactGraph` + teaching taxonomy materializes as **additive** runtime aliases (under §5.7-conditional Shape 2 or Shape 3 rollout).
+- Aliases delegate to flat methods via property/`__getattr__` namespace pattern (per `EntitySnapshot.assertions` prior art).
+- **Docs / quickstart / notebooks lead with new taxonomy** as the preferred form for new code; flat methods documented as "supported foundational API" (NOT "deprecated").
+- API surface docs (`kernel/sdk/docs/04_api_surface.md` + `.en.md`) reorganize to present taxonomy first, with cross-reference to flat-method foundations.
+- Tests: existing flat-method tests stay verbatim (no churn); new nested-form parity tests added under §5.9 (each alias's result equals flat-method result).
+- Path B published L snapshots stay immutable with their original flat-only docs framing — current/future docs evolution is forward-only on this design branch and downstream rollouts.
+
+**Alias implementation pattern (locked):** sub-namespace attributes use the existing `views` precedent — property returning a private namespace class (e.g., `_SDKWhatIfManager`, `_SDKWriteManager`) with read-only methods that delegate to flat `SDKStore.<method>`. No `__getattr__` magic; explicit attribute methods for static analyzability + IDE autocomplete. Same pattern G2 used to build `kernel/sdk/shells/` subpackage at G2 §5.5 lock.
+
+**Implications for downstream §5.x:**
+
+- **§5.5 (docs/quickstart impact):** SUBSTANTIAL — docs rewrite is the F0 teaching investment. README quickstart, 4 chaptered notebooks, 04_api_surface.md (CN/EN), application overview docs all evolve to lead with `FactGraph.<namespace>.<method>` taxonomy. Flat-method documentation becomes the "foundational API reference" section.
+- **§5.6 (aliases vs replacement):** RESOLVED implicitly by §5.4 lock — aliases. Section becomes residual cleanup or absorbed into §5.4.
+- **§5.7 (ship-at-all):** the question becomes "is the docs rewrite + alias surface investment worth the F0 legibility gain?" — F0 (Shape 3 strong) vs F4 (medium docs cost) weighed against `feedback_narrow_public_api` "default to internal/contained mechanisms". §5.7 still has authority to elect Shape 1 (no change).
+- **§5.9 (tests + invariants):** existing tests stay; new alias-form parity tests added (each alias path computes identical result to flat); sub-namespace property invariants (read-only enforcement, alias-vs-flat parity, no `__all__` length change).
 
 **Question:** What docs change at redesign release?
 
@@ -797,6 +851,7 @@ If §5.1-§5.7 lands a replacement (option C / D): substantially more — every 
 - **Compat is a hard constraint, not a goal.** The flat `SDKStore.<method>` surface across 5 immutable Path B snapshots stays callable; any candidate that breaks it requires a standalone falsifier per §5.4 thesis-derived default.
 - **§5.3 locked: top-level entrypoint class name is `FactGraph`** (sourced from chat-driven 4-round falsifier pass on 2026-05-09; `tensorflow.Tensor` / `pyspark.sql.SparkSession` / `pyparsing.ParserElement` Python precedent for Fact-overlap; `EvidenceGraph` substrate-audit name does NOT collide because it's not in `factpy.__all__`). Relationship with existing `SDKStore` class is §5.4 territory.
 - **§5.2 locked: teaching taxonomy** — 8 top-level namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) + 2 sub-namespaces (`what_if.fact_overlay`, `what_if.rule`); `from_schema_classes` (cls) + `batch` (cm) + 4 properties at top-level. Locked 2026-05-09 per user direction with all 5 placement decisions: `what_if` Option B split / `diff_proof_frames` → `audit` / `validate_provenance` → `schema` / `accept*` stays in `eval` / `from_schema_classes` + `batch` stay top-level. **Teaching-taxonomy lock is conceptual only — does NOT pre-decide rollout shape (Shape 1 docs-only vs Shape 2 additive aliases vs Shape 3 canonical nested + flat compat vs Shape 5 hybrid).** Shipping shape decision deferred to §5.4 / §5.7.
+- **§5.4 locked: Option 2 — Permanent additive aliases + docs prefer new taxonomy.** Flat `SDKStore.<method>` callable permanently with NO deprecation, NO removal plan, NO runtime `DeprecationWarning`; `FactGraph` + teaching taxonomy materializes as additive runtime aliases under §5.7-conditional Shape 2/3 rollout. Aliases delegate to flat methods via property/private-manager-class pattern (per `views` precedent at `kernel/sdk/store.py:198-200` + `EntitySnapshot.assertions` precedent at `kernel/sdk/facade.py:102-217`). Docs / quickstart / notebooks lead with new taxonomy; flat methods documented as "supported foundational API" (NOT "deprecated"). Existing flat-method tests stay verbatim; new alias-form parity tests added under §5.9. Path B published L snapshots stay immutable with original flat-only docs framing — docs evolution is forward-only on design branch. **Rejected options recorded with falsifier evidence:** Option 3 (soft "deprecated" docs) misleads without removal plan; Option 4 (runtime `DeprecationWarning`) creates noise (flat ↔ nested produce identical results, unlike `row_format='tuple'` precedent which marked behaviorally distinct legacy mode); Option 5 (hard removal) violates §0 thesis hard-constraint without standalone falsifier.
 - **Design / implementation branch isolation in force.** Design branch (this branch, `codex/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09`) accepts blueprint / docs / audit-log commits only. Implementation branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09` (created 2026-05-09 at design HEAD `59a5694`) is the only authorized location for code changes post-scope-freeze. Cross-contamination is a structural invariant violation.
 - `kernel.sdk.__all__` length stays at **34** unless §5.x explicitly justifies an addition with falsifier pass.
 - Sacred branches `master` and `v0.1-oss-prep` untouched throughout.
@@ -824,7 +879,7 @@ Scoped-stage acceptance (filled after §5 falsifier passes):
 - [x] §5.1 deliverable — inventory verified at HEAD `60af8bc` (30 methods + 4 properties + 1 nested `views` namespace; 14 conceptual families consolidated to ~8 top-level concepts); migration cost surface source-grounded (~150+ method-call mentions across 23 test files; notebooks negligible because they bypass SDKStore for kernel.application Tier 2 direct usage); 5-shape evaluation under F0/F4/F5 with verdicts: Shape 1 (status quo flat) fails F0 + zero cost; Shape 2 (additive nested aliases) F0 partial + near-zero cost; Shape 3 (canonical nested + flat compat) F0 better via docs lever + medium docs cost; Shape 4 (replacement) F0 strong but violates thesis hard-constraint; Shape 5 (hybrid/staged) varies + moderate-high cost. Leading candidate Shape 3 under thesis; Shape 2 most defensible additive; Shape 1 conservative default; Shape 4 requires §5.4 standalone falsifier; Shape 5 weaker than Shape 3 unless specifically motivated. §5.1 research-only; shape direction deferred to §5.7.
 - [x] §5.2 locked — **teaching taxonomy** locked 2026-05-09 per user direction: 8 top-level namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) + 2 sub-namespaces (`what_if.fact_overlay`, `what_if.rule`); `from_schema_classes` (cls) + `batch` (cm) + 4 properties at top-level. All 5 placements locked: Option B split for `what_if` / `diff_proof_frames` → `audit` / `validate_provenance` → `schema` / `accept*` stays in `eval` / `from_schema_classes` + `batch` stay top-level. **Teaching taxonomy ≠ shipping shape** — rollout decision (Shape 1 docs-only vs Shape 2 additive aliases vs Shape 3 canonical nested vs Shape 5 hybrid) deferred to §5.4 / §5.7.
 - [x] §5.3 locked — top-level entrypoint class name is **`FactGraph`** (4-round chat-driven falsifier pass 2026-05-09; sources: TF/PySpark/pyparsing Python precedent for Fact-overlap; `EvidenceGraph` substrate F2-clean — not in `factpy.__all__`; SDK* family pattern preserved by keeping `SDKStore` callable per §5.4).
-- [ ] §5.4 locked — compatibility / deprecation strategy.
+- [x] §5.4 locked — **Option 2: permanent additive aliases + docs prefer new taxonomy** (locked 2026-05-09 per user direction with default hypothesis "flat callable permanently; taxonomy additive only unless falsifier proves migration necessary"). Flat `SDKStore.<method>` permanently callable; NO deprecation, NO removal plan, NO runtime `DeprecationWarning`. Aliases delegate via property/manager-class pattern (per `views` + `EntitySnapshot.assertions` precedent). Docs lead with taxonomy; flat documented as foundational. Rejected options 3/4/5 with source-grounded falsifier evidence. Implications: §5.5 substantial docs rewrite (the F0 teaching investment); §5.6 implicitly resolved (aliases); §5.7 still has authority to elect Shape 1.
 - [ ] §5.5 locked — docs / quickstart impact assessment.
 - [ ] §5.6 locked — aliases vs replacement decision (if non-no-change outcome).
 - [ ] §5.7 locked — ship-or-not meta-decision.
