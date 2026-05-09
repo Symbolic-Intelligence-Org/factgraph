@@ -124,7 +124,7 @@ Core / application 抛出的错误按 specific → generic 顺序映射到 envel
 
 - Service 自身完整文档:service module 自带 overview 文档(monorepo;不在 kernel-only 包内)
 - Core 公共契约:[`04_public_contract_v1.md`](./04_public_contract_v1.md)
-- Application 层 advanced importable surface:[`src/kernel/application/docs/01_overview.md`](../../application/docs/01_overview.md)
+- Application 层 advanced importable surface:[`src/kernel/application/docs/01_overview_en.md`](../../application/docs/01_overview_en.md)
 - Audit 包契约:[`src/kernel/audit/docs/03_audit_package_contract.md`](../../audit/docs/03_audit_package_contract.md)
 - Batch 8 公开 surface 决议:routemap 内 archived `public-surface` blueprint(monorepo;不在 kernel-only 包内)
 
