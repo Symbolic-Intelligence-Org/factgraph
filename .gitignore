@@ -6,6 +6,10 @@
 !/README.md
 !/README.en.md
 !/AGENTS.md
+!/CHANGELOG.md
+!/CODE_OF_CONDUCT.md
+!/CONTRIBUTING.md
+!/LICENSE
 !/pyproject.toml
 !/.gitignore
 !/.gitmodules
