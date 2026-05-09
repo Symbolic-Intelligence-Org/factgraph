@@ -1,10 +1,33 @@
-# SDK Rule / Query / Derivation DSL (Current Implementation)
+# SDK Rule / Query / Derivation DSL
 
-Scope: `src/kernel/sdk/dsl` + `SDKStore.run/evaluate/accept`
+Scope: `src/kernel/sdk/dsl` + the `eval` and `what_if` namespaces of
+`FactGraph` / `SDKStore`. For the introductory walkthrough see
+[`00_user_guide.en.md`](00_user_guide.en.md); for the API index see
+[`04_api_surface.en.md`](04_api_surface.en.md); for what-if examples
+see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
 
-Runtime authority note: SDK retains Rule / Query / Derivation DSLs, authoring validation, lowering, and outward compatibility; Query runtime and compiled Derivation evaluate/accept orchestration now delegate to `kernel.application`.
+In the snippets below, `fg = FactGraph.from_schema_classes([...])`.
+All flat methods are also reachable through namespaces:
 
-> **post-L taxonomy note:** the `sdk.run/evaluate/evaluate_compiled/accept/accept_compiled/accept_many` flat methods on this page are also reachable via `FactGraph.eval.<verb>(...)`; G1+G4 (`sdk.check/diagnose/why_not`) via `FactGraph.what_if.<verb>(...)`; G2 fact overlay via `FactGraph.what_if.fact_overlay.<verb>(...)`; G3 rule overlays via `FactGraph.what_if.rule.<verb>(...)` (prefix dropped at sub-namespace level). The flat form is permanently supported foundational API. See [04_api_surface.en.md §0](04_api_surface.en.md).
+| Flat | Namespaced | Namespace |
+|---|---|---|
+| `fg.run / evaluate / evaluate_compiled / accept / accept_compiled / accept_many` | `fg.eval.<verb>` | `eval` |
+| `fg.check / diagnose / why_not` | `fg.what_if.<verb>` | `what_if` |
+| `fg.check_fact_overlay / recheck_proof_frame` | `fg.what_if.fact_overlay.{check, recheck_proof_frame}` | `what_if.fact_overlay` |
+| `fg.check_rule_disable / check_rule_literal_replace / check_rule_add_condition` | `fg.what_if.rule.{disable, literal_replace, add_condition}` | `what_if.rule` |
+
+Both forms have identical semantics. The flat form is permanently
+supported.
+
+### `engine_ext` vs `engine_options`
+
+- `engine_ext` is **definition-time** semantics that travel with a
+  `Rule` or `Derivation` (e.g. `Rule(..., engine_ext=PyReasonRuleExt(...))`).
+  It must inherit `EngineExtBase`.
+- `engine_options` is **call-time** runtime configuration passed at
+  `evaluate(...)` (e.g. `fg.eval.evaluate(deriv, engine_options={"timesteps": 5})`).
+  It never enters the `Derivation` or the ledger. `mode="native"`
+  rejects non-empty `engine_options`.
 
 ## 1. `vars(...)`
 

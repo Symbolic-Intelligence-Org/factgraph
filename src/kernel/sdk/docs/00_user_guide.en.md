@@ -1,1555 +1,634 @@
 # FactPy SDK User Guide
 
-> This document describes implemented behavior; unimplemented capabilities are explicitly marked as "current boundaries."
-> Behaviors in this document are classified using three labels: **stable contract** (recommended for strong assertion tests), **current behavior** (subject to evolution), and **planned** (not yet implemented).
+The end-to-end tour of `kernel.sdk` for new users. Reading this doc plus
+running the snippets is enough to use the SDK confidently for typical
+workloads.
 
-> **post-L SDK ergonomics redesign teaching note:** the v0.1 SDK top-level entrypoint is `FactGraph` (a literal alias of `SDKStore`). New code is encouraged to use the 8 taxonomy namespaces + 2 sub-namespaces (`fg.read.get(...)` / `fg.write.set(...)` / `fg.what_if.check(...)` / `fg.what_if.fact_overlay.check(...)` / `fg.what_if.rule.disable(...)` / `fg.audit.diff_proof_frames(...)`, etc.), which makes the conceptual layering legible at first contact. The body of this guide presents most examples in the flat `sdk.<method>(...)` form — this is **foundational API**, supported alongside the nested form, neither deprecated nor scheduled for removal. See [04_api_surface.en.md §0](04_api_surface.en.md) for the full taxonomy; design rationale is captured in the post-L SDK ergonomics redesign blueprint (internal design record; §5.2 / §5.4).
+For exhaustive API listings see
+[`04_api_surface.en.md`](04_api_surface.en.md). For counterfactual
+analysis see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
+For walker views and advanced importables see
+[`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md).
 
 ---
 
 ## Table of Contents
 
-1. [Installation and Initialization](#1-installation-and-initialization)
-2. [Schema Definition](#2-schema-definition)
-3. [Writing Data](#3-writing-data)
-4. [The `meta` Field](#4-the-meta-field)
-5. [Reading Data](#5-reading-data)
-6. [Rule / Query / Derivation](#6-rule--query--derivation)
-7. [Provenance Validation](#7-provenance-validation)
-8. [Which Write Entry Point Should I Choose?](#8-which-write-entry-point-should-i-choose)
-9. [Quick Error Handling Reference](#9-quick-error-handling-reference)
+1. [Install and FactGraph tour](#1-install-and-factgraph-tour)
+2. [Schema](#2-schema)
+3. [Reading](#3-reading)
+4. [Writing](#4-writing)
+5. [Eval — Rule / Query / Derivation](#5-eval--rule--query--derivation)
+6. [What-if](#6-what-if)
+7. [Audit](#7-audit)
+8. [Views and packages](#8-views-and-packages)
+9. [Error handling](#9-error-handling)
 10. [Registry](#10-registry)
-11. [Advanced APIs](#11-advanced-apis)
-12. [Migration Notes (v2 → v3)](#12-migration-notes-v2--v3)
+11. [Where to go next](#11-where-to-go-next)
+12. [Appendix: migration notes (v2 → v3)](#12-appendix-migration-notes-v2--v3)
 
 ---
 
-## 1. Installation and Initialization
+## 1. Install and FactGraph tour
 
-### 1.1 Initializing a Store
+### Install
 
-```python
-from kernel.sdk import SDKStore
-
-sdk = SDKStore.from_schema_classes([User, Country, Language, LivesIn])
+```bash
+python -m pip install factpy-kernel
 ```
 
-If persistence is needed, specify `ledger_path`:
+For development from source:
 
-```python
-sdk = SDKStore.from_schema_classes(
-    [User, Country, Language, LivesIn],
-    ledger_path="./data/ledger.db",
-)
+```bash
+git clone https://github.com/Symbolic-Intelligence-Org/hnsm-backend.git
+cd hnsm-backend
+python -m pip install -e .
 ```
 
-If you also want explain artifacts to survive across later `SDKStore` instances, add `artifact_store_root`:
+### Hello FactGraph
 
 ```python
-sdk = SDKStore.from_schema_classes(
-    [User, Country, Language, LivesIn],
-    ledger_path="./data/ledger.db",
-    artifact_store_root="./data/artifacts",
-)
-```
-
-If you want Rule query results to default to dict rows:
-
-```python
-sdk = SDKStore.from_schema_classes(
-    [User, Country, Language, LivesIn],
-    default_row_format="dict",
-)
-```
-
-**Stable contract**
-
-* `classes` must be a non-empty `list[Entity subclass]`; the `from_schema_classes(...)` / `schema_preflight_from_classes(...)` path raises `SDKSchemaError`, while the `SDKStore(...)` constructor path raises `SDKStoreError`.
-* `ledger` and `ledger_path` are mutually exclusive; they cannot be provided at the same time.
-* `ledger_path` records `schema_digest` when opening/creating the ledger; it is validated on reopening, and a mismatch raises `SDKStoreError`.
-* `artifact_store_root` is an optional `str`; when provided it enables sidecar-backed explain artifact readback across later `SDKStore` instances, and when omitted the default in-process explain-registry behavior remains unchanged.
-* `default_row_format` only affects `sdk.run(rule, ...)`; valid values are `"tuple"` / `"dict"`, with default `"dict"`.
-* When the parsed result is `"tuple"`, a `DeprecationWarning` is triggered; it is recommended to standardize on `"dict"`.
-* The `FACTPY_ROW_FORMAT` environment variable is read and cached during `SDKStore` initialization (not dynamically read on each `run()`).
-
-### 1.2 Schema Preflight
-
-In scenarios where a runtime store is not needed (CI validation, module import phase), you can perform preflight separately:
-
-```python
-from kernel.sdk import schema_preflight_from_classes
-
-preflight = schema_preflight_from_classes([User, Country, LivesIn])
-
-print(preflight["ok"])
-print(preflight.get("warnings", []))
-print(preflight.get("summary", {}))   # entity_count / predicate_count / pred_ids
-```
-
-**Stable contract**: returns a `dict`; core keys include `ok`, `warnings`, `errors`, `diagnostics`, and `summary` (on success).
-
----
-
-## 2. Schema Definition
-
-### 2.1 Basic Structure
-
-```python
-from kernel.sdk import Entity, Identity, Field
+from kernel.sdk import Entity, FactGraph, Field, Identity
 
 class User(Entity):
-    """When description is not explicitly set, the docstring is used as a fallback."""
+    user_id: str = Identity(primary_key=True)
+    name: str = Field(cardinality="single")
+    tags: str = Field(cardinality="multi")
 
-    class Meta:
-        version = "v1"
-        description = "User entity"
-        tags = ["user", "profile"]
+fg = FactGraph.from_schema_classes([User])
 
-    user_id: str = Identity(primary_key=True, default_factory="uuid4")
-    lang: str = Identity()
+fg.ingest([
+    {"entity": "User", "user_id": "u-1", "name": "Alice"},
+    {"entity": "User", "user_id": "u-2", "name": "Bob"},
+])
 
-    name: str = Field(cardinality="multi")
-    age: int = Field(cardinality="single")
-    country: Country = Field(cardinality="single")
+fg.write.add(User.tags, fg.read.ref(User, user_id="u-1"), "engineer")
+
+snap = fg.read.get(User, user_id="u-1")
+print(snap.name, snap.field("tags").current())
+# → Alice ['engineer']
 ```
 
-`Identity` locates a fact, while `Field` carries that fact’s value. On the read side, there is limited symmetry: snapshot **value access** (`snap.lang`, `snap.name`) is consistent for both; however, `snap.assertions.lang` is unavailable — the `assertions` namespace only covers `Field` fields, not `Identity` fields. On the write side, the distinction is explicit: calling `.set()` / `.add()` on an `Identity` field raises an exception.
+`FactGraph` is the canonical entry point. It is a literal alias of
+`SDKStore` — both names refer to the same class. Operations are
+available both as flat methods (`fg.get(...)`, `fg.add(...)`) and as
+namespaced methods (`fg.read.get(...)`, `fg.write.add(...)`); both
+forms are permanent and equivalent.
 
-**Stable contract**: every `Entity` must define at least one `Identity(primary_key=True)`, otherwise `SDKSchemaError` is raised at class definition time. Secondary `Identity()` fields (e.g. coordinate dimensions like `locale`, `lang`) are allowed alongside the primary.
-
-**Current behavior**
-
-* `entity_type` is derived directly from the class name; no separate `schema_id` declaration is needed.
-* `Entity.Meta` currently supports only `version`, `description`, and `tags`; any other keys raise `SDKSchemaError` at declaration time.
-* Description resolution priority is `Meta.description > class docstring`; docstring is only used when no explicit `description` is provided.
-* `version`, `description`, and `tags` are included in authoring / schema compilation output, but do not participate in runtime evaluation semantics.
-
-### 2.2 Identity Parameters
-
-| Parameter                 | Meaning                                                                                                      |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `primary_key=True`        | Marks a join anchor; implicitly carried across Fields during Rule inference, and does not appear in the head |
-| `default`                 | Static default value                                                                                         |
-| `default_factory="uuid4"` | Automatically generates a UUID when absent                                                                   |
-
-`primary_key=True` and `default_factory` are orthogonal — the former declares semantic responsibility, the latter declares a generation strategy. They may be used together or separately. For an Entity without any `primary_key=True` field, if cross-Field joins appear in a Rule, compilation fails.
-
-**Recommendation**: `Identity` fields should point to business attributes of the entity (such as `user_id`, `lang`), rather than data management dimensions such as `source` or `version`. The latter belong in `meta`, not in `Identity`. This is a design recommendation only; the engine does not enforce it.
-
-### 2.2.1 Declaration Metadata
-
-Declaration metadata for an `Entity` is uniformly provided via `Meta`:
-
-| Key           | Meaning                                       |
-| ------------- | --------------------------------------------- |
-| `version`     | Declaration version                           |
-| `description` | Entity description for documentation and LLMs |
-| `tags`        | Lightweight classification tags               |
-
-```python
-class EmploymentEvent(Entity):
-    """If Meta.description is absent, this will be used as the description."""
-
-    class Meta:
-        version = "v2"
-        description = "Employment event"
-        tags = ["employment", "event"]
-
-    event_id: str = Identity(primary_key=True)
-    company: str = Field(cardinality="single")
-```
-
-**Current boundary**: `Meta` is not an open dictionary; fields such as `owner`, `llm_hint`, or `schema_id` are currently unsupported.
-
-### 2.3 Field Parameters
-
-| Parameter              | Meaning                                                                            |
-| ---------------------- | ---------------------------------------------------------------------------------- |
-| `cardinality="single"` | Single-valued view: reading `snap.<field>` returns a scalar; writing uses `.set()` |
-| `cardinality="multi"`  | Multi-valued; all values at the same coordinate are retained                       |
-| `description`          | Descriptive text for documentation and LLMs                                        |
-
-**Current behavior supplement**: `single` does not automatically clean up old assertions during writes; multiple unretracted assertions may still appear in `active/history`, while `snap.<field>` returns the current single-valued view.
-
-**Current boundary**: `dims` / `fact_key` / `pred_id` / `functional` / `temporal` have been removed.
-
-### 2.4 Reified Record (Relationship Node)
-
-All entities are based on `Entity`; relationship nodes are merely a usage convention:
-
-```python
-class LivesIn(Entity):
-    uid: str = Identity(primary_key=True, default_factory="uuid4")
-    user: User = Field(cardinality="single")
-    country: Country = Field(cardinality="single")
-    since: int = Field(cardinality="single")
-```
-
-**Stable contract**: after compilation, the schema generates a `<T>:exists` predicate for every `Entity`; batch field writes automatically insert the corresponding `<T>:exists` write op.
-
-### 2.5 Common Type Mapping
-
-| Python annotation         | type_domain  |
-| ------------------------- | ------------ |
-| `str`                     | `string`     |
-| `int`                     | `int`        |
-| `bool`                    | `bool`       |
-| `float`                   | `float64`    |
-| `bytes`                   | `bytes`      |
-| `datetime`                | `time`       |
-| `UUID`                    | `uuid`       |
-| other `Entity` subclasses | `entity_ref` |
-
-**Current behavior**: string annotations are also supported (such as `"str"`, `"datetime"`, `"uuid"`, `"entity_ref"`); unrecognized annotations fall back to `entity_ref`.
-
-### 2.6 In-Memory Objects vs Managed Objects
-
-```python
-# Ordinary in-memory object (not bound to a store)
-alice = User(user_id="u-001")
-alice.name = "Alice"      # ordinary Python assignment
-
-# sdk.batch-managed object (supports .set/.add/.retract)
-with sdk.batch(meta={"trace_id": "t1"}) as tx:
-    alice_h = tx.entity(User, user_id="u-001", lang="zh")
-    alice_h.name.add("Alice")
-    tx.commit()
-```
-
-**Stable contract**: `.set` / `.add` / `.retract` are capabilities of batch/edit managed handles, not of ordinary in-memory objects.
+The eight namespaces:
+`schema`, `read`, `write`, `eval`, `what_if`, `audit`, `package`,
+`views`. See [§0 of 04_api_surface.en.md](04_api_surface.en.md#0-namespace-map)
+for the full map.
 
 ---
 
-## 3. Writing Data
+## 2. Schema
 
-### 3.1 `sdk.batch`
-
-Primary entry point for batch writes; suitable for ETL, sample data construction, and scenarios requiring preview / wire plan.
+Schema is declared as Python classes. Every entity must declare at
+least one `Identity(primary_key=True)`; `Field` declares non-identity
+fields with `cardinality="single"` or `"multi"`.
 
 ```python
-with sdk.batch(meta={"trace_id": "import-001", "source": "hr"}) as tx:
-    de = tx.entity(Country, iso_code="DE")
-    de.name.set("Germany")
+from kernel.sdk import Entity, Field, Identity, Relationship
 
-    # Provide all Identity fields at once
-    u = tx.entity(User, user_id="u-001", lang="zh")
-    u.name.add("艾丽西亚")
-    u.age.set(30)
-    u.country.set(de)   # can directly reference a handle within the same tx
+class Document(Entity):
+    doc_id: str = Identity(primary_key=True)
+    title: str = Field(cardinality="single")
+    keywords: str = Field(cardinality="multi")
+    author: str = Field(cardinality="single")  # entity_ref to User
 
-    # Or bind Identity step by step
-    u2 = tx.entity(User, user_id="u-002")
-    u2 = u2.bind(lang="en")
-    u2.name.add("Alicia")
-
-    plan = tx.preview()   # read-only preview, does not persist
-    res = tx.commit()     # actual write
+class Authored(Relationship):
+    user: str = Identity(primary_key=True)      # User.user_id
+    document: str = Identity(primary_key=True)  # Document.doc_id
+    role: str = Field(cardinality="single")
 ```
 
-The `meta` of `batch` is inherited by all write operations; individual operations may override it with their own `meta`:
+### Compile and instantiate
+
+`from_schema_classes` compiles, validates, and constructs in one step:
 
 ```python
-with sdk.batch(meta={"source": "hr", "valid_from": "2024-01"}) as tx:
-    u = tx.entity(User, user_id="u-001", lang="zh")
-    u.name.add("艾丽西亚")                                  # inherits batch meta
-    u.name.add("Alice", meta={"valid_from": "2024-06"})    # per-operation override
-    tx.commit()
+fg = FactGraph.from_schema_classes([User, Document, Authored])
 ```
 
-**Meta merge precedence** (higher overrides lower): `commit_meta > field_op_meta > entity_meta > batch_meta`
-
-**Stable contract**
-
-* Use `.set()` for `single` fields and `.add()` for `multi` fields; misuse raises `SDKStoreError` (batch handle path), while the `sdk.edit` path raises `CardinalityError`.
-* Batch handles use `.retract(assertion_id)` for retraction; `FieldEditor` in edit uses `.retract(asrt_id=...)`; neither supports value-based retraction.
-* If Identity is incomplete, `.set()` / `.add()` immediately raises `SDKStoreError` (the error message lists missing fields; use `bind(...)` first to complete them).
-* Calling `.set()` / `.add()` on an Identity field immediately raises `SDKStoreError` — once determined, Identity is immutable.
-* `preview()` does not persist and may be called repeatedly; only `commit()` persists.
-* The `SDKBatchTx` context manager itself does not auto-commit or auto-rollback (`__exit__` is a no-op); callers must explicitly call `commit()`, and exception handling is also the caller’s responsibility.
-
-**`entity_ref` fields** (stable contract): may accept a "same-tx handle" or a "canonical idref_v1 token"; ordinary business strings (such as `"DE"`) are not allowed.
-
-**Field cardinality quick reference**
-
-| Field type | Allowed                                                           | Forbidden                                                           |
-| ---------- | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `single`   | `.set(value)`                                                     | `.add(value)` → `SDKStoreError` (batch) / `CardinalityError` (edit) |
-| `multi`    | `.add(value)`                                                     | `.set(value)` → `SDKStoreError` (batch) / `CardinalityError` (edit) |
-| any        | `.retract(assertion_id)` (batch) / `.retract(asrt_id=...)` (edit) | value-based retraction (unsupported)                                |
+You can also compile separately:
 
 ```python
-# batch handle path
-u.age.set(30)         # single ✅
-u.age.add(30)         # ❌ SDKStoreError
-u.name.add("Alice")   # multi ✅
-u.name.set("Alice")   # ❌ SDKStoreError
+from kernel.sdk import compile_schema_from_classes, schema_preflight_from_classes
+
+schema_preflight_from_classes([User, Document])    # raises SDKSchemaError on issues
+schema_ir = compile_schema_from_classes([User, Document])
 ```
 
-### 3.2 Wire Plan (Serializable / Replayable)
+### Provenance validation
 
 ```python
-with sdk.batch(meta={"trace_id": "t1"}) as tx:
-    u = tx.entity(User, user_id="u-001", lang="zh")
-    u.name.add("Alice")
-    wire_json = tx.preview().to_json(sdk)
-
-# replay across process/time
-from kernel.sdk.batch import WireBatchPlan
-
-plan2 = WireBatchPlan.from_json(wire_json)
-plan2.apply(sdk, strict_schema=True)
+report = fg.schema.validate_provenance(items)  # also: fg.validate_provenance
+report.ok                # True if everything passes
+report.errors            # list of (item_index, code, message)
 ```
 
-**Current behavior**: `strict_schema=True` checks that the wire plan’s `schema_digest` matches the current SDK schema.
+This inspects an item batch's provenance shape **without** writing.
+Useful as a pre-flight before `fg.ingest(...)`. Returns a
+`ValidationReport`.
 
-**Current behavior supplement**: wire export (`to_json` / `export`) does not accept raw `idref_v1` string values as `entity_ref` writes; to build replayable wire plans, use "same-tx handle references" in batch to express entity relationships.
+---
 
-### 3.3 Dependency Closure (`include_deps`)
+## 3. Reading
 
-By default, `include_deps=True`: committing an object automatically includes all dependency objects it references. Missing dependencies are not silently skipped; an error is raised directly (**stable contract**).
-
-### 3.4 `sdk.edit`
-
-Suitable for scenarios where the full Identity is known and only a small number of fields need modification:
+### Get one entity by identity
 
 ```python
-with sdk.edit(User, user_id="u-001", lang="zh") as editor:
-    editor.name.add("Alicia")
-    editor.age.set(31)
-    # normal exit from with: auto commit()
-    # exception inside with block: auto rollback()
+snap = fg.read.get(User, user_id="u-1")          # → EntitySnapshot | None
+# Or flat:
+snap = fg.get(User, user_id="u-1")
 ```
 
-Explicit version control:
+### Find entities
 
 ```python
-editor = sdk.edit(User, user_id="u-001", lang="zh")
-editor.__enter__()
+# By exact value on a single-cardinality field
+admins = fg.read.find(User, name="Alice")
+
+# Multi-cardinality field uses containment match
+engineers = fg.read.find(User, tags="engineer")
+
+# Apply a named view (see §8) and limit
+recent = fg.read.find(Document, view="last_30_days", limit=20)
+```
+
+### Reference encoding
+
+```python
+ref = fg.read.ref(User, user_id="u-1")  # → "User#u-1" (encoded form)
+```
+
+`ref` is required as the second argument to `fg.write.{set,add,retract}`.
+
+### `EntitySnapshot` cheat-sheet
+
+```python
+snap = fg.read.get(User, user_id="u-1")
+
+snap.name                         # current single-field value
+snap.field("tags").current()      # → list of current multi-field values
+snap.field("name").history()      # → all assertions ever (active + retracted)
+snap.field("name").at("2026-05-01T00:00:00Z")  # value at a point in time
+snap.field("name").version(3)     # value at version N
+
+snap.assertions.field("name")     # FieldAssertions namespace (raw access)
+snap.identity                     # dict of identity values
+snap.entity_type                  # "User"
+snap.ref                          # encoded ref
+```
+
+`EntitySnapshot` is read-only; assigning to any attribute raises
+`FrozenSnapshotError`.
+
+---
+
+## 4. Writing
+
+Four primitive operations: `set`, `add`, `retract`, `edit`. Plus
+`ingest` for bulk insertion from external sources, and `batch` for
+grouping multiple operations into one transaction.
+
+### Single writes
+
+```python
+ref = fg.read.ref(User, user_id="u-1")
+
+fg.write.set(User.name, ref, "Alice Liddell")    # single-cardinality field
+fg.write.add(User.tags, ref, "manager")          # multi-cardinality field
+fg.write.retract(asrt_id="asrt-abc-123")         # by assertion id
+```
+
+`set` on a multi-field raises `CardinalityError`. `add` on a
+single-field raises `CardinalityError`.
+
+### Transactional editor
+
+```python
+with fg.write.edit(User, user_id="u-1") as ed:
+    ed.field("name").set("Alice in Wonderland")
+    ed.field("tags").add("storyteller")
+    ed.commit(meta={"source": "manual_review", "approved_by": "u-admin"})
+```
+
+The editor preview-then-commit pattern is recommended when multiple
+fields need to change atomically with shared meta.
+
+### Batch transactions
+
+```python
+with fg.batch(meta={"source": "import_2026_05_09"}) as tx:
+    alice = tx.entity(User, user_id="u-1")
+    alice.field("name").set("Alice")
+    alice.field("tags").add("engineer")
+
+    bob = tx.entity(User, user_id="u-2")
+    bob.field("name").set("Bob")
+
+    tx.commit()  # or tx.rollback() — `with` does NOT auto-commit
+```
+
+The context manager **does not** auto-commit on success or rollback on
+exception — call them explicitly. This is intentional so that batch
+preview/review patterns work naturally.
+
+### Bulk ingest
+
+```python
+result = fg.ingest([
+    {"entity": "User", "user_id": "u-3", "name": "Carol", "_meta": {...}},
+    {"entity": "User", "user_id": "u-4", "name": "Dave"},
+])
+
+result.ingested_count
+result.assertion_ids
+result.validation_report
+```
+
+`ingest` accepts each item as either:
+- `{"entity": "User", <identity>, <fields>, "_meta": {...}}` — single-row form
+- A pre-built application protocol DTO (advanced)
+
+Returns an `IngestResult` with counts, ids, and a `ValidationReport`.
+
+### The `meta` field
+
+Every write accepts an optional `meta` dict. Keys recognized by the SDK:
+
+| Key | Type | Purpose |
+|---|---|---|
+| `source` | str | Where this assertion came from |
+| `trace_id` | str | Trace identifier for cross-system correlation |
+| `confidence` | float in (0, 1] | Probabilistic confidence; `int` is not auto-promoted |
+| `approved_by` | str | Reviewer identifier (for governance) |
+| `note` | str | Free-form annotation |
+| `derived_rule_id` | str | Set automatically by `accept(...)` for derived facts |
+| `candidate_id` | str | Set automatically by `accept(...)` |
+
+Unknown keys are preserved on the assertion as opaque metadata.
+
+`confidence` validation:
+
+```python
+fg.write.set(User.name, ref, "Alice", meta={"confidence": 0.85})  # ✅
+fg.write.set(User.name, ref, "Alice", meta={"confidence": 1})     # ❌ int rejected
+fg.write.set(User.name, ref, "Alice", meta={"confidence": 1.2})   # ❌ out of range
+```
+
+### Which write entry point?
+
+| If you need to ... | Use |
+|---|---|
+| Insert one fact | `fg.write.set` / `fg.write.add` |
+| Update multiple fields atomically on one entity | `fg.write.edit(...)` context manager |
+| Group writes across multiple entities | `fg.batch(...)` context manager |
+| Bulk-insert from external data | `fg.ingest(...)` |
+| Persist derived facts | `fg.eval.accept(...)` (handles meta automatically) |
+
+---
+
+## 5. Eval — Rule / Query / Derivation
+
+Three primitives:
+
+| | Purpose | Returned by `fg.eval.run` |
+|---|---|---|
+| `Rule` | A single inference (head + body) | List of `CandidateSet` |
+| `Query` | Materialize a view of the current store | `list[dict]` (default) |
+| `Derivation` | A multi-rule envelope for engine evaluation | Use `fg.eval.evaluate` |
+
+### Query
+
+```python
+from kernel.sdk import Query, Pred, vars
+
+user, lang = vars("user", "lang")
+
+q = Query(
+    head=[user, lang],
+    body=[Pred("User", user, lang=lang)],
+)
+
+rows = fg.eval.run(q)            # → [{"user": "u-1", "lang": "en"}, ...]
+rows = fg.eval.run(q, row_format="instance")  # → [EntitySnapshot, ...] for single-Entity head
+```
+
+Query options:
+- `on_missing="error" | "skip" | "null"` — handle missing field references
+- `on_type_mismatch="error" | "skip" | "null"` — handle type mismatches
+- `row_format="dict" | "instance" | "tuple"` — `tuple` is deprecated
+
+Invalid `row_format` or incompatible head raises
+`SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
+
+### Rule + run
+
+```python
+from kernel.sdk import Rule, Pred, vars
+
+user, role = vars("user", "role")
+
+r = Rule(
+    head=Pred("Authored", user, document=vars("d")),
+    body=[
+        Pred("User", user),
+        Pred("Document", vars("d"), author=user),
+    ],
+)
+
+candidates = fg.eval.run(r)      # → list[CandidateSet]
+```
+
+Rule `body` may be a `Body([...])` or a raw list of `Pred` literals.
+`Body` is required when you need to pass `body_confidences` for
+probabilistic engines.
+
+### Derivation + evaluate
+
+```python
+from kernel.sdk import Derivation
+
+deriv = Derivation(rules=[r1, r2, r3])
+
+candidates = fg.eval.evaluate(deriv, mode="native")           # → list[CandidateSet]
+candidates = fg.eval.evaluate(deriv, mode="problog")          # probabilistic
+candidates = fg.eval.evaluate(deriv, mode="pyreason",
+                              engine_options={"timesteps": 5})  # temporal
+```
+
+`mode` selects the engine; `engine_options` is call-time runtime
+config that never enters the `Derivation` or the ledger.
+`mode="native"` rejects non-empty `engine_options`.
+
+`CandidateSet.confidence`:
+- `native` / `souffle` → `None`
+- `problog` → probability `float`
+- `pyreason` → lower-bound `float`
+
+### Accept
+
+```python
+result = fg.eval.accept(
+    candidates[0],
+    approved_by="u-admin",
+    note="weekly batch",
+)
+```
+
+`accept` writes the candidate's facts into the ledger. Sugar keys:
+`approved_by`, `note`, `dry_run`, `identity_override` (also via
+`meta_overrides`).
+
+```python
+results = fg.eval.accept_many(candidates)  # idempotent batch accept
+```
+
+Accepting the same candidate twice is idempotent (skipped).
+Accepting the same claim with a **different** confidence creates a
+new assertion alongside, not a replacement.
+
+### Engine semantics (`engine_ext` vs `engine_options`)
+
+```python
+from kernel.adapters.pyreason import PyReasonRuleExt
+
+r = Rule(head=..., body=..., engine_ext=PyReasonRuleExt(timestep_delay=1))
+
+# engine_options is call-time only
+fg.eval.evaluate(deriv, mode="pyreason", engine_options={"timesteps": 10})
+```
+
+`engine_ext` lives **on the rule definition** (definition-time semantics
+that travel with the rule). `engine_options` is **call-time** runtime
+config that never enters the `Derivation` or ledger.
+
+### Semantic annotations
+
+PyReason runs produce `pyreason/semantic/*` annotations; ProbLog runs
+produce `problog/semantic/probability`. To persist them after
+`accept(...)`:
+
+```python
+fg.persist_pyreason_annotations()
+fg.persist_problog_annotations()
+```
+
+---
+
+## 6. What-if
+
+Counterfactual analysis without writing to the ledger. The full tour
+is in [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
+
+Quick reference:
+
+| Method | Question |
+|---|---|
+| `fg.what_if.check(deriv, binding)` | Does this fact derive? |
+| `fg.what_if.diagnose(deriv, binding)` | Why does it derive (or why not)? |
+| `fg.what_if.fact_overlay.check(deriv, binding, overlay)` | What if facts were different? |
+| `fg.what_if.fact_overlay.recheck_proof_frame(support, overlay)` | Re-check a held proof under overlay |
+| `fg.what_if.rule.disable(rule, support, ...)` | What if this body literal were disabled? |
+| `fg.what_if.rule.literal_replace(rule, support, ...)` | What if this literal were replaced? |
+| `fg.what_if.rule.add_condition(rule, support, ...)` | What if we added this condition? |
+| `fg.what_if.why_not(deriv, candidates)` | Across this candidate universe, what doesn't derive and why? |
+
+All return frozen application DTOs (not in `kernel.sdk.__all__`); see
+06 for the result shapes.
+
+---
+
+## 7. Audit
+
+```python
+explanation = fg.audit.explain_fact("User#u-1.name@asrt-abc-123")
+conflicts = fg.audit.conflicts()
+diff = fg.audit.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
+```
+
+`explain_fact` returns the proof structure for a specific fact
+(by encoded locator). `conflicts` enumerates active conflicting
+assertions. `diff_proof_frames` compares two recorded rounds — see
+[06 §Q5](06_what_if_and_proof.en.md#q5-how-did-derivation-change-between-rounds--fgaudit_diff_proof_frames).
+
+---
+
+## 8. Views and packages
+
+### Views
+
+```python
+spec = {
+    "strategy": "max_confidence",
+    "predicate": "User",
+    "fields": ["name"],
+}
+
+fg.views.create("preferred_names", spec)
+fg.views.update("preferred_names", new_spec)
+fg.views.delete("legacy_view")          # cannot delete "default"
+fg.views.get("preferred_names")
+all_views = fg.views.list()             # → dict[str, ViewSpec]
+```
+
+Use a view in `find` with `view="preferred_names"`.
+
+Available aggregation strategies include `max_confidence`, `mean`,
+`latest`. See `kernel.sdk.views` source for the full set.
+
+### Packages (Souffle export and replay)
+
+```python
+fg.package.export_package("/tmp/my_export/")
+fg.package.run_package(
+    "/tmp/my_export/",
+    entrypoints=["my_rule"],
+    engine="souffle",
+)
+```
+
+`export_package` materializes a Souffle-format package directory.
+`run_package` invokes the engine on it. Useful for offline analysis
+and integration with non-Python toolchains.
+
+---
+
+## 9. Error handling
+
+All SDK errors derive from `SDKError` and expose:
+- `code` — error code constant (see [§1.5 of 04](04_api_surface.en.md#15-errors-and-error-codes))
+- `path` — JSON-pointer-style locator into the offending input
+- `__cause__` — chained underlying exception (when applicable)
+
+### Top-level taxonomy
+
+```python
 try:
-    editor.name.add("Alicia")
-    plan = editor.preview()
-    editor.commit(meta={"trace_id": "manual-fix", "approved_by": "admin"})
-except Exception:
-    editor.rollback()
-    raise
+    fg.write.set(User.tags, ref, "engineer")  # multi-field; should be add
+except CardinalityError as e:
+    print(e.field_name, e.actual_cardinality, e.operation)
+    # → tags multi set
 ```
 
-**Stable contract**
+| Class | When |
+|---|---|
+| `SDKSchemaError` | Schema preflight or compilation issue |
+| `SDKStoreError` | Most write/read/eval/what-if/audit failures |
+| `EntityNotFoundError` | `read.get` / `write.edit` on missing identity |
+| `CardinalityError` | `set` on multi-field, or `add` on single-field |
+| `FrozenSnapshotError` | Assigning to a snapshot or namespace attribute |
+| `EditorClosedError` | Operating on a committed/rolled-back editor |
+| `SDKRegistryError` | Registry/rule registration issues |
 
-* If the entity does not exist, raises `EntityNotFoundError` (no implicit creation; use `sdk.batch()` for creation).
-* After `commit()` or `rollback()`, the editor is closed; any further method call raises `EditorClosedError`.
-
-### 3.5 `sdk.ingest`
-
-Suitable for external imports or scenarios where only `ref + asrt_id` is available (without full Identity):
+### Error code constants
 
 ```python
-result = sdk.ingest(
-    [
-        {"kind": "add", "field": User.name, "e_ref": alice_ref, "value": "Alicia"},
-        {"kind": "set", "field": User.age, "e_ref": alice_ref, "value": 31},
-        {"kind": "retract", "asrt_id": "asrt_old_xxx"},
-    ],
-    meta={"source": "hr", "trace_id": "hr-001"},
+from kernel.sdk import (
+    INVALID_ROW_FORMAT,
+    QUERY_INVALID_ROW_FORMAT,
+    QUERY_MISSING_REF,
+    SDKStoreError,
 )
 
-print(result.written_assertion_ids)
-print(result.skipped_count)
-print(result.duplicate_count)
-print(result.warnings)
-print(result.diagnostics)
+try:
+    fg.eval.run(query, row_format="banana")
+except SDKStoreError as e:
+    if e.code == QUERY_INVALID_ROW_FORMAT:
+        print("Caller bug: row_format must be one of dict|instance|tuple")
 ```
 
-**Item structure**
-
-| `kind`    | Required fields           | Optional fields |
-| --------- | ------------------------- | --------------- |
-| `set`     | `field`, `e_ref`, `value` | `meta`          |
-| `add`     | `field`, `e_ref`, `value` | `meta`          |
-| `retract` | `asrt_id`                 | `meta`          |
-
-**Stable contract**
-
-* Top-level `meta` is merged with item `meta`, with item keys overriding top-level keys of the same name.
-* `kind=set` corresponds to `single` fields; `kind=add` corresponds to `multi` fields.
-* If any `diagnostics` entry has `severity="error"`, the entire batch is not written (collect-and-stop).
-* `allow_sensitive_meta=True` only suppresses sensitive warnings; it does not relax hard reserved constraints.
-
-### 3.5.1 Typical Scenario: Entity Migration
-
-When full Identity cannot be obtained via `find`, `ingest` serves as a fallback:
-
-```python
-records = sdk.find(LivesIn, user=alice.ref)
-li = records[0]
-
-old_asrt_id = li.assertions.country.active[0].asrt_id
-fr_ref = sdk.get(Country, iso_code="FR").ref
-
-sdk.ingest(
-    [
-        {"kind": "retract", "asrt_id": old_asrt_id},
-        {"kind": "set", "field": LivesIn.country, "e_ref": li.ref, "value": fr_ref},
-    ],
-    meta={"source": "hr", "trace_id": "relocation-001", "note": "Alice moved to France"},
-)
-```
-
-### 3.6 Low-Level Write Entry Points
-
-```python
-alice_ref = sdk.ref(User, user_id="u-001", lang="zh")
-sdk.set(User.age, alice_ref, 31, meta={"source": "hr"})
-sdk.add(User.name, alice_ref, "Alicia", meta={"source": "hr"})
-sdk.retract("asrt_xxx", meta={"source": "hr"})
-```
-
-Minimal wrapping, directly writes to the ledger, with no preview/wire support.
-
-**Current behavior**
-
-* `sdk.set(...)` / `sdk.add(...)` only backfill the corresponding Identity predicate if the identity values of `e_ref` have already been recorded by the current `SDKStore`; arbitrary external canonical `idref_v1` values are not guaranteed to be auto-backfilled.
-* `sdk.retract(...)` returns the revoker assertion id; if the target assertion has already been revoked, it returns the existing revoker id; if the assertion does not exist, it raises an error.
-
----
-
-## 4. The `meta` Field
-
-`meta` is not a free dictionary. Fields are grouped into four categories by responsibility:
-
-**System-reserved (written by the ingest process, not user-writable)**
-
-`ingested_at`, `ingest_key`, `revoked_asrt_id`
-
-**Operation tracing (conventional fields, recommended)**
-
-`source`, `source_loc`, `trace_id`, `confidence`, `approved_by`, `note`
-
-**Derivation chain (automatically written by the accept process)**
-
-`derived_rule_id`, `derived_rule_version`, `run_id`, `support_digest`, `support_kind`, `candidate_id`, `candidate_key`, `accepted_at`, etc.
-
-**Business temporal fields (used to unlock temporal views)**
-
-`valid_from`, `valid_to`, `version`
-
-Business temporal fields are user-writable, recognized by the view layer, but not enforced. If omitted, only `.active` / `.history` views are available; once provided, `.at(t)` / `.version(v)` queries are enabled.
-
-**Meta key stratification** (stable contract)
-
-| Level              | Representative fields                                                         | Behavior                                   |
-| ------------------ | ----------------------------------------------------------------------------- | ------------------------------------------ |
-| hard reserved      | `ingested_at`, `ingest_key`, `revoked_asrt_id`                                | user cannot write                          |
-| sensitive semantic | derivation-chain fields such as `derived_rule_id`, `run_id`, `support_digest` | warning by default, does not block writing |
-| convention         | `source`, `source_loc`, `trace_id`, `confidence`, `approved_by`, `note`       | normal write                               |
-| free               | business-defined custom keys                                                  | normal write                               |
-
-**Meta kind system** (v3 update)
-
-Meta numeric fields are stored by kind; kind names were renamed and extended in v3:
-
-| kind      | Type    | Description                                                      |
-| --------- | ------- | ---------------------------------------------------------------- |
-| `"str"`   | `str`   | string                                                           |
-| `"int"`   | `int`   | integer (formerly `"num"`, renamed in v3)                        |
-| `"float"` | `float` | floating point (new in v3, used for fields such as `confidence`) |
-| `"bool"`  | `bool`  | boolean                                                          |
-| `"time"`  | `int`   | epoch nanosecond timestamp                                       |
-| `"json"`  | `Any`   | JSON-serializable object                                         |
-
-The kind of the `confidence` field is fixed to `"float"` and is inferred automatically by the write protocol; the user does not need to specify it.
-
-`kind` is not visible to the caller: the write protocol first performs forced mapping using conventional keys (`_KEY_KIND_MAP`), then infers unknown keys from value types.
-Coverage checks for conventional keys are performed at module load time (all `convention + sensitive` keys must exist in the mapping table).
-
-Type inference rules for unknown keys (conventional keys take precedence over these rules):
-
-* `bool` → `"bool"`
-* `int` → `"int"`
-* `float` → `"float"`
-* `str` → `"str"`
-* other types are unsupported and raise `WriteProtocolError`
-
-**Stable contract (`confidence`)**
-
-* `meta["confidence"]` must be a `float` with value in `(0, 1]`.
-* `int` values (such as `1`) are not automatically promoted to `float`; they raise an error directly.
-* `meta.confidence` belongs to the source/display lane and should not be reused as Scenario A requirement-threshold probability.
-
-### 4.1 Common Examples (`confidence`)
-
-```python
-from kernel.core.store.types import ViewSpec
-
-alice_ref = sdk.ref(User, user_id="u-001", lang="zh")
-
-# ✅ valid: float and within (0,1]
-sdk.set(User.age, alice_ref, 30, meta={"source": "hr", "confidence": 0.82})
-sdk.set(User.age, alice_ref, 30, meta={"source": "model_v2", "confidence": 0.64})
-
-# ❌ invalid: int is not auto-promoted to float
-sdk.set(User.age, alice_ref, 30, meta={"confidence": 1})      # WriteProtocolError
-
-# ❌ invalid: out of range
-sdk.set(User.age, alice_ref, 30, meta={"confidence": 1.2})    # WriteProtocolError
-
-# aggregate by view during reading
-row_max = sdk.find(User, user_id="u-001", lang="zh", view=ViewSpec(confidence_strategy="max"))[0]
-row_mean = sdk.find(User, user_id="u-001", lang="zh", view=ViewSpec(confidence_strategy="mean"))[0]
-print(row_max.confidence)   # 0.82
-print(row_mean.confidence)  # 0.73
-```
-
-**Deduplication basis**: `claim + source + source_loc + trace_id + valid_from + valid_to + version`
-
-**Boundary note (important)**
-
-* `confidence` does not participate in the ingest idempotency key.
-* Therefore, under the same `trace_id` (in the accept path this typically equals the same `run_id`), if the claim and all other deduplication fields are identical, differing only in `confidence`, no new assertion is created; it is folded by idempotency.
-* Coexistence of “same fact, different `confidence`” usually occurs across different reasoning batches (different `run_id/trace_id`) or different source fields (`source/source_loc`).
-
-Note: `ingested_at` is the system write time, not the same as `valid_from` (business effective time). Using `ingested_at` in place of `valid_from` for temporal views causes semantic misalignment.
-
-**Semantics of `trace_id`**: `trace_id` participates in idempotency calculation, but is not the sole determining factor; `valid_from` / `valid_to` / `version` also participate in deduplication. Under the same `trace_id`, different temporal dimensions still produce different assertions.
-
----
-
-## 5. Reading Data
-
-### 5.1 `sdk.get`
-
-```python
-snap = sdk.get(User, user_id="u-001", lang="zh")
-
-if snap is None:
-    print("Does not exist")
-else:
-    print(snap.ref)                 # canonical idref_v1 token
-    print(snap.entity_type)         # "User"
-    print(snap.identity_available)  # True
-    print(snap.identity)            # can be used as identity kwargs for sdk.edit(...)
-```
-
-**Stable contract**
-
-* `get` accepts only Identity parameters; passing non-Identity fields raises `SDKSchemaError`.
-* Returns `EntitySnapshot | None`.
-* Snapshots returned via `get` have `identity_available=True`.
-
-### 5.2 `sdk.find`
-
-```python
-# single field: exact match
-rows = sdk.find(User, age=30)
-
-# multi field: containment match
-rows = sdk.find(User, name="Alice")
-
-# entity_ref field
-de = sdk.get(Country, iso_code="DE")
-rows = sdk.find(User, country=de.ref)   # ✅
-rows = sdk.find(User, country=de)       # ✅ (internally uses .ref)
-
-rows = sdk.find(User, age=30, limit=20)
-
-from kernel.core.store.types import ViewSpec
-rows = sdk.find(User, lang="zh", view=ViewSpec(confidence_strategy="mean"))
-```
-
-**Stable contract**
-
-* `limit` must be a non-negative integer (`limit=0` returns an empty list).
-* When filtering by Identity, all Identity fields of that entity must be provided.
-* `temporal_view` is not supported.
-* Passing an unknown filter field raises `SDKSchemaError`.
-
-**Current boundary**
-
-* The `confidence_strategy` in the `view` parameter only affects the displayed `confidence` value in the returned result, not which assertions are returned.
-
-**Identity availability in `find` results** (current behavior)
-
-```python
-records = sdk.find(LivesIn, user=alice_ref)
-for rec in records:
-    if rec.identity_available:
-        with sdk.edit(LivesIn, **rec.identity) as editor:
-            ...
-    else:
-        # use ingest: retract/set via rec.ref + asrt_id
-        ...
-```
-
-* Without an identity filter: snapshots usually have `identity_available=False`.
-* With a complete identity filter: returned snapshots have `identity_available=True`.
-
-### 5.3 Assertion Views on `EntitySnapshot`
-
-```python
-snap = sdk.get(User, user_id="u-001", lang="zh")
-
-# current-view values
-snap.name      # multi -> tuple[...]
-snap.age       # single -> scalar or None
-snap.country   # single entity_ref -> idref_v1 token or None
-
-# assertion views
-snap.assertions.name.active           # currently unretracted assertions
-snap.assertions.name.history          # complete history (including revoked)
-snap.assertions.name.at("2024-03-01") # business temporal filter
-snap.assertions.name.version("v2")    # version filter
-snap.field("name").active             # equivalent form
-```
-
-**View semantics** (stable contract)
-
-| View          | Semantics                                                                          |
-| ------------- | ---------------------------------------------------------------------------------- |
-| `.active`     | currently unretracted, maintained by the store registry mechanism                  |
-| `.history`    | complete history, including revoked assertions                                     |
-| `.at(t)`      | over the active set: `valid_from <= t` and (`valid_to` is empty or `valid_to > t`) |
-| `.version(v)` | over the active set: `version == v`                                                |
-
-**Temporal view boundaries**
-
-* Assertions missing `valid_from` do not match `.at(t)` and only appear in `.active`.
-* Assertions missing `version` do not match `.version(v)`.
-* `.at(t)` validates ISO 8601 format (both the `t` argument and the assertion’s `valid_from`/`valid_to` are validated); invalid format raises `SDKStoreError`.
-* `.version(v)` only accepts `str | int` (`bool` is invalid).
-* Temporal filtering is applied on top of the active set, not drawn from history.
-* `EntitySnapshot` and the `assertions` namespace are both read-only; assignment raises `FrozenSnapshotError`.
-
----
-
-## 6. Rule / Query / Derivation
-
-### 6.1 Variable Declaration
-
-```python
-from kernel.sdk import vars
-
-# recommended form
-with vars("u", "l", "n") as (u, l, n):
-    ...
-
-# factory form
-with vars() as V:
-    u, l, n = V("u", "l", "n")
-```
-
-**Stable contract**: `with vars() as (u, l)` without-argument unpacking is not supported and raises `SDKDSLError`.
-
-### 6.2 Rule: Immediate Query
-
-```python
-from kernel.sdk import Rule, Pred, Not, vars
-
-with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
-    speaks_rule = Rule(
-        id="q_speaks",
-        version="1.0.0",
-        description="Find languages a user may speak",
-        tags=["demo", "query"],
-        select=[u, l],
-        where=[
-            LivesIn(li),
-            li.user == u,      # two-step form (chained form unsupported)
-            li.country == c,
-            HasLanguage(hl),
-            hl.country == c,
-            hl.language == l,
-        ],
-    )
-
-rows = sdk.run(speaks_rule, row_format="dict")
-# [{"u": "...", "l": "..."}, ...]
-
-rows = sdk.run(speaks_rule, view="default", row_format="dict")
-# by default returns rows, without injecting confidence into each row
-
-rows, display_meta = sdk.run(
-    speaks_rule,
-    view="default",
-    row_format="dict",
-    return_display_meta=True,
-)
-# display_meta has the same length as rows; each item contains at least confidence / confidence_strategy / source_breakdown
-```
-
-**Stable contract**
-
-* Chained syntax such as `LivesIn(li).user == u` is unsupported; use the two-step form.
-* OR uses `where=[[...], [...]]` (OR-of-AND).
-* `row_format` precedence has three levels: `run(..., row_format=...) > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`.
-* Invalid `row_format` raises `SDKStoreError(code="INVALID_ROW_FORMAT")`.
-* `RuleRef` targets must have `expose=True`, otherwise `RuleCompileError` is raised; `RuleRef` is not allowed inside `Not(...)`.
-* `view` may be a named view or a `ViewSpec`, and only affects result presentation, not Rule evaluation scope.
-* `sdk.run(rule, view=...)` returns only `rows` by default, without injecting `confidence` into each row.
-* With `return_display_meta=True`, the return value is `(rows, display_meta)`; `view` must also be provided, otherwise `SDKStoreError` is raised.
-* `Rule` supports two declaration fields: `description` and `tags`; they are included in compiler output, but do not affect query semantics.
-
-**Current behavior**: linear arithmetic `+/-/constant multiples` is supported (such as `age == (2026 - by)`); non-linear multiplication such as `x * y` is unsupported.
-
-### 6.3 Body: OR Branches with Confidence
-
-In probabilistic reasoning scenarios, OR branches may be wrapped with `Body` and assigned branch confidence:
-
-```python
-from kernel.sdk import Body
-
-with vars("u", "lang") as (u, lang):
-    drv = Derivation(
-        id="drv.speaks",
-        version="1.0.0",
-        where=[
-            Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
-            Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
-        ],
-        head=Speaks(user=u, language=lang),
-    )
-```
-
-**Stable contract**
-
-* `Body.confidence` must be in `(0, 1]`; `confidence=0` causes a compile-time error.
-* `Body.confidence=None` is valid (meaning no confidence constraint).
-* Mixing `Body(...)` and raw list branches in the same `where` is forbidden; violation causes compilation failure.
-* Raw list form is retained; after compilation, `body_confidences=None`, and behavior remains as before.
-
-**Supported scope**
-
-* Rule: supports `Body(...)`, currently only for where normalization; `body_confidences` do not participate in Rule runtime evaluation.
-* Derivation: supports `Body(...)`; after compilation, `body_confidences` are extracted and bridged to `ProbLogRuleExt(branch_probabilities=...)` via `engine_ext` before evaluation. The legacy `body_confidences` is no longer a shared evaluate parameter.
-* Query: `Body.confidence` is unsupported and causes an error at construction time.
-* `Body.confidence` belongs to the probabilistic reasoning lane and is not the same as requirement-threshold probability.
-
-`body_confidences` bridge path (legacy compatibility):
-`SDK Derivation/authoring payload -> compile -> body_confidences extracted -> bridged to ProbLogRuleExt in sdk.evaluate -> engine_ext passed to engine(problog)`.
-
-### 6.3.1 Example of `Body` Mode Differences
-
-```python
-from kernel.sdk import Body, Derivation, Pred, vars
-
-with vars("u", "lang") as (u, lang):
-    drv = Derivation(
-        id="drv.lang",
-        version="1.0.0",
-        where=[
-            Body([Pred("user:lang_pref", u, lang)], confidence=0.9),
-            Body([Pred("user:lang_model", u, lang)], confidence=0.6),
-        ],
-        head=User.name(lang="zh", name=lang),
-    )
-
-# native: ignores body_confidences (same behavior as raw lists)
-cands_native = sdk.evaluate(drv, mode="native")
-print(cands_native[0].confidence)  # None
-
-# problog: consumes body_confidences and returns probabilities
-import kernel.adapters.problog
-cands_prob = sdk.evaluate(drv, mode="problog")
-print(cands_prob[0].confidence)    # float, e.g. 0.86
-```
-
-```python
-# ❌ mixing Body and raw list (compile-time error)
-with vars("u") as (u,):
-    Rule(
-        id="r.bad",
-        version="1.0.0",
-        select=[u],
-        where=[Body([Pred("p", u)], confidence=0.9), [Pred("q", u)]],
-    )
-```
-
-### 6.4 Query DSL
-
-Identity and Field fields use exactly the same access syntax inside `where` clauses:
-
-```python
-from kernel.sdk import Query, vars
-
-with vars("u", "l", "n") as (u, l, n):
-    q = Query(
-        head=[User(u), User.name(lang=l, name=n)],
-        where=[
-            User(u),
-            u.lang == l,    # constrain an Identity field
-            u.name == n,    # constrain a Field field
-        ],
-    )
-
-rows = sdk.run(q)   # default return type is list[dict]
-```
-
-**Stable contract**
-
-* Query supports `row_format="dict"|"instance"`; default is `"dict"`.
-* `row_format="instance"` is only valid when the head is a single `Entity(var)`; it returns `list[EntitySnapshot|None]`.
-* If the Query head shape does not satisfy instance constraints, or if Query uses an invalid `row_format`, `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")` is raised.
-* Valid head forms: `Entity(var)`, `[Entity(var1), ...]`, `Entity.field(...)`.
-* Query performs alias conflict validation at construction time (raising `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`) and where-variable binding validation (raising `SDKDSLError(code="QUERY_UNBOUND_VAR")`).
-* Prefer field sugar for schema-field conditions in `where`, such as `u.name == name` and `u.tag == "admin"`. This lowers to the corresponding predicates (`user:name` / `user:tag`), and both `single` and `multi` fields are supported. `Pred("...")` is the low-level explicit-predicate escape hatch for non-schema-field predicates, temporal / uncertainty predicates, or debugging and migration cases.
-* Entity head columns return `EntitySnapshot`; field projection columns return scalar values.
-* `Query.where` does not support `Body.confidence`; passing it causes a compile-time error.
-* `sdk.run(query, view=...)` is unsupported (raises `SDKStoreError`).
-* `sdk.run(query, return_display_meta=True)` is unsupported (raises `SDKStoreError`).
-
-**Current behavior**: `on_missing` / `on_type_mismatch` strategies:
-
-* `error`: raises `SDKStoreError` (`QUERY_MISSING_REF` / `QUERY_TYPE_MISMATCH`)
-* `skip`: drops the row
-* `null`: sets that column to `None`, while keeping the row (it still participates in deduplication)
-
-### 6.5 Derivation
-
-```python
-from kernel.sdk import Derivation, vars
-
-with vars("u", "l", "li", "hl", "c") as (u, l, li, hl, c):
-    speaks_drv = Derivation(
-        id="drv.speaks",
-        version="1.0.0",
-        description="Infer a user's language ability from residence and official language",
-        tags=["demo", "derivation"],
-        where=[
-            LivesIn(li), li.user == u, li.country == c,
-            HasLanguage(hl), hl.country == c, hl.language == l,
-        ],
-        head=Speaks(user=u, language=l),
-    )
-
-cands = sdk.evaluate(speaks_drv, mode="native")   # list[CandidateSet]
-res = sdk.accept(cands[0], approved_by="alice")
-
-# atomic submission of multiple candidate sets
-res = sdk.accept_many(cands, mode="atomic")
-```
-
-**Valid `mode` values** (stable contract, v3 update)
-
-| mode        | Description                                              |
-| ----------- | -------------------------------------------------------- |
-| `"native"`  | Python built-in evaluator (formerly `"python"`, renamed) |
-| `"souffle"` | Soufflé engine (formerly `"engine"`, renamed)            |
-| `"problog"` | ProbLog probabilistic reasoning engine                   |
-| `"pyreason"`| PyReason graph-based fuzzy reasoning engine               |
-
-Passing old names `"python"` / `"engine"` raises a clear error and suggests the new name.
-
-The engine uses a name registry (not a singleton): `register_engine_evaluator(name -> fn)`.
-Adapters auto-register upon import:
-
-* `import kernel.adapters.souffle` registers `"souffle"`
-* `import kernel.adapters.problog` registers `"problog"`
-* `import kernel.adapters.pyreason` registers `"pyreason"`
-
-#### 6.4.1 PyReason Usage Example
-
-```python
-import kernel.adapters.pyreason  # registers "pyreason"
-from kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
-from kernel.adapters.pyreason.accept import persist_pyreason_annotations
-
-# engine_ext carries engine-specific rule semantics (definition-time)
-drv = Derivation(
-    id="drv.popular",
-    version="v1",
-    where=[Pred("user:name", u, name)],
-    target="user:popular",
-    head_vars=[u],
-    mode="pyreason",
-    engine_ext=PyReasonRuleExt(timestep_delay=1),
-)
-
-# engine_options carries runtime config (call-time only, never enters Derivation)
-cands = sdk.evaluate(drv, engine_options={"timesteps": 5})
-
-# Persist semantic annotations after accept
-result = sdk.accept(cands[0])
-persist_pyreason_annotations(sdk.ledger, cands[0].run_id, sdk.store, result)
-# → pyreason/semantic/bound_lower, bound_upper etc. written to Annotation Store
-```
-
-**Key distinctions**:
-- `engine_ext`: definition-time engine semantics carrier on shared `Rule.engine_ext` or `Derivation.engine_ext`; it travels with compilation but is never serialized
-- `engine_options`: runtime parameters, call-time only; `mode="native"` rejects non-empty options
-- Semantic annotations: post-accept, explicitly call `persist_pyreason_annotations()` or `persist_problog_annotations()` to persist
-
-**Stable contract**
-
-* `sdk.evaluate(...)` produces candidates and does not write to the ledger; only `sdk.accept(...)` writes.
-* Multi-head `head=[H1, H2, ...]` is supported; `evaluate` returns flattened results sharing the same `run_id`.
-* `sdk.accept(CandidateSet, ...)` accepts exactly one positional argument; allowed override keys are `approved_by`, `note`, `dry_run`, `identity_override` (also accepted via `meta_overrides`); unrecognized parameters raise `SDKStoreError`.
-* `sdk.run(Derivation(...))` is unsupported; use `sdk.evaluate(...)`.
-* `sdk.evaluate(..., view=...)` is unsupported; passing it raises `SDKStoreError` (reasoning always operates over the full active assertion set).
-* If a dependency graph exists, `sdk.accept_many(..., mode="atomic")` should be preferred to guarantee atomicity.
-* `Derivation` supports two declaration fields, `description` and `tags`; they are included in compiler output, but do not affect candidate generation semantics.
-
-### 6.5.1 Example of `accept` Idempotency and Coexistence
-
-```python
-from dataclasses import replace
-import kernel.adapters.problog
-
-cands = sdk.evaluate(speaks_drv, mode="problog")
-cand = cands[0]
-
-# first write
-r1 = sdk.accept(cand, approved_by="alice")
-print(r1.accepted_count, r1.skipped_count)  # 1, 0
-
-# writing the exact same candidate again: idempotently skipped
-r2 = sdk.accept(cand, approved_by="alice")
-print(r2.accepted_count, r2.skipped_count)  # 0, 1
-print(r2.skipped_reason_counts)             # {"duplicate": 1}
-
-# same claim, different confidence: coexistence (not duplicate)
-cand_v2 = replace(cand, confidence=0.61)
-r3 = sdk.accept(cand_v2, approved_by="alice")
-print(r3.accepted_count, r3.skipped_count)  # 1, 0
-```
-
-**Current boundary**
-
-* Temporal write semantics in Derivation heads (heads directly producing assertions with `valid_from`/`valid_to`/`version`) are not yet exposed. Temporal information can currently only be carried via `meta` in write paths (`sdk.batch` / `sdk.ingest`).
-
-### 6.6 Identity Rules in the Head
-
-```text
-fields appearing in the head = all non-primary Identity fields + the target Field value
-```
-
-* **`primary_key` fields**: regardless of how many there are, they never appear in the head and are implicitly carried by entity bindings in the where clause.
-* **Non-primary Identity fields**: must be explicitly specified in the head, otherwise the write target is ambiguous.
-
-```python
-# User has primary_key=user_id, non-primary Identity=lang
-head=User.name(lang=l, name=n)   # user_id does not appear, lang must be given
-```
-
-It is a compile-time hard error for a `primary_key` field to appear in the head.
-
-### 6.7 Cross-Coordinate Joins
-
-Two facts of the same entity at different coordinates are represented as two different variables in a Rule, explicitly joined via `primary_key`:
-
-```python
-with vars("u1", "u2", "n1", "n2") as (u1, u2, n1, n2):
-    q = Query(
-        head=[],
-        where=[
-            User(u1), u1.lang == "zh", u1.name == n1,
-            User(u2), u2.lang == "en", u2.name == n2,
-            u1.user_id == u2.user_id,   # primary_key cross-coordinate join
-        ],
-    )
-```
-
-**Stable contract**
-
-* Only `primary_key` fields may participate in `==` comparisons for cross-coordinate joins.
-* Equality comparisons across coordinates using non-`primary_key` fields are compile-time hard errors; the error message indicates which `primary_key` should be used instead.
-* Cross-entity-type comparisons are compile-time hard errors.
-
-### 6.8 Current Limitations of Rule / Derivation
-
-| Limitation                                   | Description                                                |
-| -------------------------------------------- | ---------------------------------------------------------- |
-| String DSL                                   | `sdk.run("...")` / `sdk.evaluate("...")` unsupported       |
-| `sdk.run(Derivation(...))`                   | unsupported; use `sdk.evaluate(...)`                       |
-| Chained path comparisons                     | `LivesIn(li).user == p` unsupported; use two-step form     |
-| Cross-coordinate non-primary_key comparisons | compile-time hard error                                    |
-| Non-linear arithmetic                        | `x * y` unsupported                                        |
-| `Not(...)` body                              | must be non-empty; safety checks apply with outer bindings |
-| `RuleRef` inside `Not(...)`                  | compile-time error                                         |
-
----
-
-## 7. Provenance Validation
-
-`sdk.validate_provenance(...)` is a pure validation entry point. It does not write to the ledger and does not automatically block ingest/accept.
-
-```python
-report = sdk.validate_provenance(candidate_set, standard="derivation_v1")
-
-# or validate a dict
-report = sdk.validate_provenance(
-    {"derived_rule_id": "drv.speaks", "derived_rule_version": "1.0.0",
-     "run_id": "run-001", "support_kind": "exact", "support_digest": "sha256:...."},
-    standard="derivation_v1",
-)
-
-print(report.ok)
-print(report.errors)
-print(report.warnings)
-```
-
-**Required fields for `derivation_v1`** (stable contract)
-
-| Field                  | Requirement      |
-| ---------------------- | ---------------- |
-| `derived_rule_id`      | non-empty string |
-| `derived_rule_version` | non-empty string |
-| `run_id`               | non-empty string |
-| `support_kind`         | non-empty string |
-| `support_digest`       | `sha256:<64hex>` |
-
-Optional keys `schema_digest` / `policy_digest` with invalid formats are written to `warnings` (not `errors`).
-
----
-
-## 8. Which Write Entry Point Should I Choose?
-
-| Scenario                                                                | Recommended entry point               |
-| ----------------------------------------------------------------------- | ------------------------------------- |
-| Constructing objects with references, and previewing before commit      | `sdk.batch()`                         |
-| Full identity is known, and only a few fields need to be changed        | `sdk.edit(...)`                       |
-| External system pushes item lists, or only `ref + asrt_id` is available | `sdk.ingest(...)`                     |
-| Review and materialization of derived candidates                        | `sdk.evaluate(...) + sdk.accept(...)` |
-| Single low-level write                                                  | `sdk.set / sdk.add / sdk.retract`     |
-
-**Decision tree**
-
-```text
-Need to inspect the write plan (ops) first?
-  ├─ Yes -> sdk.batch()
-  └─ No
-      ├─ Have full identity and only changing one entity?
-      │    ├─ Yes -> sdk.edit(...)
-      │    └─ No
-      │         ├─ Is this a derived-candidate write?
-      │         │    ├─ Yes -> sdk.evaluate(...) + sdk.accept(...)
-      │         │    └─ No -> sdk.ingest(...)
-```
-
-**Common wrong choices**
-
-| Wrong choice                                                        | Correct approach                                                     |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `find(...)` does not return identity but still trying to use `edit` | switch to `ingest(retract + set/add)`                                |
-| Need cross-process replay of writes                                 | export a wire plan with `batch.preview().to_json(sdk)`               |
-| Treating hard-reserved meta as ordinary keys during external import | remove reserved keys; use `validate_provenance(...)` first if needed |
-
----
-
-## 9. Quick Error Handling Reference
-
-### 9.0 Error Layers
-
-| Layer                            | Representative errors                                                                    | Typical triggers                                                  |
-| -------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| SDK facade layer                 | `SDKSchemaError` / `SDKStoreError`                                                       | invalid argument shape, unmet constraints, unsupported boundaries |
-| Entity read/write object layer   | `EntityNotFoundError` / `FrozenSnapshotError` / `CardinalityError` / `EditorClosedError` | edit/get/snapshot/assertions related                              |
-| DSL construction layer           | `SDKDSLError`                                                                            | invalid vars/Rule/Derivation object construction                  |
-| Core compilation/execution layer | `RuleCompileError`                                                                       | rule semantic constraints (e.g. RuleRef target not `expose=True`) |
-| ingest diagnostic layer          | `result.diagnostics` (non-exception)                                                     | item-level validation failure (collect-and-stop)                  |
-
-`SDKError` and its subclasses all provide structured fields: `code` (machine-readable error code), and `path` (`None` if unset).
-
-### 9.1 Common Errors Quick Reference
-
-| Error                                            | Common trigger                                                                                                                            | Suggested handling                                                                                                    |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `EntityNotFoundError`                            | target of `sdk.edit(...)` does not exist                                                                                                  | verify identity; use `sdk.batch()` to create new entities; `err.entity_type` and `err.identity_kwargs` can help debug |
-| `FrozenSnapshotError`                            | assigning to `EntitySnapshot` or `assertions`                                                                                             | use `sdk.edit(...)` / `sdk.ingest(...)` instead                                                                       |
-| `CardinalityError`                               | on `sdk.edit`: using `.add` on a `single` field, or `.set` on a `multi` field (same class of error raises `SDKStoreError` on `sdk.batch`) | choose the correct API based on field cardinality                                                                     |
-| `EditorClosedError`                              | continuing to use an editor after `commit/rollback`                                                                                       | reopen with `sdk.edit(...)`                                                                                           |
-| `SDKSchemaError`                                 | passing non-identity fields to `get`; invalid `find` field or incomplete identity                                                         | correct parameters according to schema                                                                                |
-| `SDKStoreError`                                  | write type mismatch; unknown parameters passed to `accept`; string DSL passed to `run/evaluate`                                           | check parameter types and API boundaries                                                                              |
-| `SDKStoreError(code="INVALID_ROW_FORMAT")`       | invalid `row_format` value                                                                                                                | change to `"dict"`                                                                                                    |
-| `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")` | Query uses invalid `row_format`, `row_format="instance"` but head does not satisfy constraints, or calling `sdk.run(...)` on a Derivation | Query should use `"dict"`/`"instance"` with valid head constraints; use `sdk.evaluate(...)` for Derivation            |
-| `SDKDSLError(code="QUERY_ALIAS_CONFLICT")`       | duplicate output aliases in Query head                                                                                                    | adjust head variable naming                                                                                           |
-| `SDKDSLError(code="QUERY_UNBOUND_VAR")`          | unbound variable used in Query where                                                                                                      | bind the variable in the head or a preceding atom                                                                     |
-| `SDKDSLError`                                    | chained entity syntax; `with vars() as (u,)` unpacking without arguments                                                                  | use supported syntax (two-step form)                                                                                  |
-| `RuleCompileError`                               | RuleRef target not `expose=True`                                                                                                          | correct the rule declaration                                                                                          |
-| `IngestResult.diagnostics` contains `error`      | invalid item structure; unknown retract asrt_id                                                                                           | fix item-by-item according to `path`; any error prevents the whole batch from being written                           |
-
-### 9.2 Diagnosing ingest
-
-```python
-res = sdk.ingest(items, meta=meta)
-for d in res.diagnostics:
-    print(d["severity"], d["code"], d["path"], d["message"])
-```
-
-Suggested troubleshooting order: first inspect `diagnostics` (fastest way to locate structural errors) → then `warnings` (semantically sensitive keys) → finally `written_assertion_ids`.
+### Optional-domain bundles
+
+When importing optional domain packs (e.g. ECSS), use the
+`ensure_domain` helper rather than catching `ImportError`. See
+[`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md#optional-domain-bundles).
 
 ---
 
 ## 10. Registry
 
-### 10.1 Initialization
+The registry tracks compiled schemas, rules, and derivations across
+versions and apply runs.
 
 ```python
 from kernel.sdk import SDKRegistry
 
-reg = SDKRegistry(root_dir="./registry")
-```
+reg = SDKRegistry(...)            # see ./registry.py for constructor
 
-**Stable contract**: at least one of `root_dir` or `registry` must be provided; both may be provided simultaneously, but the paths must be consistent, otherwise `SDKRegistryError` is raised.
+reg.apply_schema_classes([User, Document])
+reg.register_rule(my_rule)
+reg.register_derivation(my_derivation)
 
-### 10.2 Applying a Schema
-
-```python
-res = reg.apply_schema_classes(
-    [User, Country],
-    apply_request_id="req-001",
-    transaction_policy="best_effort_no_rollback_v1",
-)
-
-print(res["ok"])
-print(res["apply_execute"]["idempotency"]["replayed"])
-```
-
-Replaying the same `apply_request_id` takes the idempotent replay path (current behavior).
-
-### 10.3 Registering Rule / Derivation
-
-```python
-with vars("u", "l") as (u, l):
-    rule = Rule(
-        id="rule.speaks", version="1.0.0",
-        select=[u, l],
-        where=[Pred("speaks:language", u, l)],
-        expose=True,
-    )
-reg.register_rule(rule)
-
-with vars("u", "l", "n") as (u, l, n):
-    drv = Derivation(
-        id="drv.copy_lang", version="1.0.0",
-        head=User.name(lang=l, name=n),
-        where=[User(u), u.lang == l, u.name == n],
-    )
-reg.register_derivation(drv)
-```
-
-You can also register already-compiled specs directly (skipping DSL compilation):
-
-```python
-reg.register_rule_spec(compiled_rule_spec_dict)
-reg.register_derivation_spec(compiled_derivation_spec_dict)
-```
-
-**Current behavior**: multi-head Derivation is supported only at runtime via `sdk.evaluate(...)`; `register_derivation(...)` processes it as single-head. If multi-head logic needs to be published, expand it into multiple single-head derivations before registration.
-
-### 10.4 Reading and Listing
-
-```python
 reg.list_rule_ids()
-reg.list_derivation_ids()
-reg.list_rule_versions("rule.speaks")
-reg.list_derivation_versions("drv.copy_lang")
-reg.get_latest_rule_spec("rule.speaks")
-reg.read_rule_spec("rule.speaks", "1.0.0")
-reg.get_latest_derivation_spec("drv.copy_lang")
-reg.read_derivation_spec("drv.copy_lang", "1.0.0")
+reg.list_rule_versions("rule:authored_v1")
+reg.read_rule_spec("rule:authored_v1", version=2)
 ```
 
-**Stable contract**: `get_latest_*` / `read_*` return `None` if the target does not exist.
-
-### 10.5 Apply Pipeline Queries
+Apply runs:
 
 ```python
 reg.list_apply_run_ids()
 reg.list_apply_runs()
-reg.show_apply_run("req-001")
+reg.show_apply_run("apply-2026-05-09T10:00:00Z")
 ```
 
-**Current behavior**: `show_apply_run(...)` returns `None` if not found; `list_apply_runs()` returns a list of apply execute run records (`list[dict]`).
+`register_derivation` is single-head-oriented; for multi-head
+publishing, expand into multiple single-head derivations first.
 
-### 10.6 Unified Low-Level Entry Point: `apply_authoring_bundle`
-
-```python
-res = reg.apply_authoring_bundle(
-    authoring_schema=authoring_schema_dict,
-    rule_request={"rule_spec_payload": compiled_rule_spec_dict},
-    apply_request_id="req-002",
-)
-```
-
-**Current behavior**: `apply_authoring_bundle(...)` is the low-level master entry point behind `apply_schema_classes(...)`, suitable for composing schema/rule/derivation changes in one shot.
-
-### 10.7 Schema Metadata
-
-```python
-manifest = reg.read_manifest()          # registry manifest dict
-entry = reg.get_schema_entry()          # schema entry metadata (dict | None)
-res = reg.upsert_schema_ir(schema_ir)   # directly write compiled schema_ir
-```
+See [§3 of 04](04_api_surface.en.md#3-sdkregistry-methods) for the
+full method list.
 
 ---
 
-## 11. Advanced APIs
+## 11. Where to go next
 
-### 11.1 Direct Pass-Through After Compilation
-
-```python
-cands = sdk.evaluate_compiled(...)
-res = sdk.accept_compiled(...)
-```
-
-Suitable for scenarios where compiled parameters are already available and SDK object compilation should be skipped (current behavior).
-
-### 11.2 Package Export and Execution
-
-```python
-sdk.export_package("./pkg", options)
-sdk.run_package("./pkg", entrypoints=["__query__"], engine="souffle")
-```
-
-The export package format is v2. `manifest.json` contains `"export_version": "v2"`, and the facts directory structure is:
-
-```text
-facts/
-  claim.facts
-  claim_arg.facts
-  meta_str.facts
-  meta_int.facts
-  meta_float.facts
-  meta_bool.facts
-  meta_time.facts
-  revokes.facts
-```
-
-Floating-point meta uses reversible serialization: export writes `repr(value)`, import reads `float(raw)`; scientific notation is a valid format.
-
-**Stable contract**: feeding a v1 package (containing `meta_num.facts` and lacking `export_version`) into the new reader raises a clear `unsupported export_version` error.
-
-### 11.3 Configurable Views (`sdk.views`)
-
-Views define “which perspective to use when reading data” and affect result presentation in `sdk.find()` and `sdk.run()`:
-
-```python
-from kernel.core.store.types import ViewSpec
-
-sdk.views.create("conservative", ViewSpec(confidence_strategy="max"))
-sdk.views.create("hr_only", ViewSpec(
-    confidence_strategy="prefer_source",
-    prefer_source="HR system",
-))
-sdk.views.update("conservative", ViewSpec(confidence_strategy="mean"))
-sdk.views.delete("hr_only")
-sdk.views.get("conservative")
-sdk.views.list()
-```
-
-`sdk.views` is an in-process manager (non-persistent); after restarting the process, it returns to the built-in `"default"` view.
-
-**`ViewSpec` parameters**
-
-| Parameter             | Type          | Default | Description                                     |
-| --------------------- | ------------- | ------- | ----------------------------------------------- |
-| `active`              | `bool`        | `True`  | whether to look only at active assertions       |
-| `confidence_strategy` | `str`         | `"max"` | confidence aggregation strategy                 |
-| `prefer_source`       | `str \| None` | `None`  | only effective when strategy is `prefer_source` |
-
-**Confidence aggregation strategies**
-
-| Strategy          | Semantics                                                              |
-| ----------------- | ---------------------------------------------------------------------- |
-| `"max"`           | take the highest confidence (default)                                  |
-| `"mean"`          | arithmetic mean                                                        |
-| `"median"`        | median                                                                 |
-| `"prefer_source"` | prefer values from `prefer_source`, falling back to `max` if not found |
-
-**Scope of effect**: `confidence_strategy` only affects the presentation of `sdk.find()` / `sdk.run()` results, not the reasoning process. `sdk.evaluate()` does not accept a `view` parameter.
-
-**Output contract for `sdk.run(..., view=...)`** (stable contract)
-
-* Default: returns `rows` (`list[dict]` or `list[tuple]`), without injecting a `confidence` field into each row.
-* With `return_display_meta=True`: returns `(rows, display_meta)`.
-* `display_meta` has the same length as `rows`; each item contains at least `confidence`, `confidence_strategy`, and `source_breakdown`.
-* `return_display_meta=True` must be used together with `view`, otherwise `SDKStoreError` is raised.
-
-### 11.3.1 End-to-End Example: How `find` and `run` Obtain Confidence
-
-```python
-from kernel.core.store.types import ViewSpec
-
-# 1) register a view (mean strategy)
-sdk.views.create("risk_mean", ViewSpec(confidence_strategy="mean"))
-
-# 2) find: read aggregated value directly from snapshot object
-users = sdk.find(User, lang="zh", view="risk_mean")
-print(users[0].confidence)  # e.g. 0.73
-
-# 3) run: confidence is not injected by default
-rows = sdk.run(speaks_rule, view="risk_mean", row_format="dict")
-print(rows[0])  # {"u": "...", "l": "..."}
-
-# 4) run + return_display_meta: obtain display metadata
-rows, display_meta = sdk.run(
-    speaks_rule,
-    view="risk_mean",
-    row_format="dict",
-    return_display_meta=True,
-)
-print(display_meta[0]["confidence"])           # e.g. 0.73
-print(display_meta[0]["confidence_strategy"])  # "mean"
-print(display_meta[0]["source_breakdown"])     # source-wise aggregation breakdown
-```
-
-**Built-in view**: `"default"` (`active=True, confidence_strategy="max"`), and it cannot be deleted.
-
-**Inline views** (temporary, not stored):
-
-```python
-sdk.find(User, view=ViewSpec(confidence_strategy="mean"))
-sdk.run(rule, view="conservative", row_format="dict")
-sdk.run(rule, view=ViewSpec(confidence_strategy="max"), row_format="dict")
-
-rows, display_meta = sdk.run(
-    rule,
-    view="conservative",
-    row_format="dict",
-    return_display_meta=True,
-)
-```
-
-View management endpoints in service `runtime_v1` (current implementation):
-
-| Method | Endpoint                                         |
-| ------ | ------------------------------------------------ |
-| `POST` | `/v1/runtime/sessions/{session_id}/views/create` |
-| `POST` | `/v1/runtime/sessions/{session_id}/views/update` |
-| `POST` | `/v1/runtime/sessions/{session_id}/views/delete` |
-| `POST` | `/v1/runtime/sessions/{session_id}/views/get`    |
-| `GET`  | `/v1/runtime/sessions/{session_id}/views`        |
-
-### 11.4 ProbLog Probabilistic Reasoning
-
-```python
-from kernel.sdk import Body
-import kernel.adapters.problog
-
-with vars("u", "lang") as (u, lang):
-    drv = Derivation(
-        id="drv.infer_speaks",
-        version="1.0.0",
-        where=[
-            Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
-            Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
-        ],
-        head=Speaks(user=u, language=lang),
-    )
-
-cands = sdk.evaluate(drv, mode="problog")
-res = sdk.accept(cands[0], approved_by="alice")
-```
-
-**`CandidateSet.confidence` field** (new in v3)
-
-* Type: `float | None`
-* Under the ProbLog path, it is the marginal probability value; under native/souffle paths, it is `None`
-* Fully passed through serialization/deserialization, without loss across processes
-* This field currently belongs to the probabilistic engine lane; Scenario A threshold checks should instead use fact-backed `ecss.uncertainty` predicates.
-
-**Accept semantics** (v3 update)
-
-* Duplicate determination is: same claim, and same business-semantic meta (after excluding timestamp/run/candidate identifier fields)
-* Assertions for the same fact with different `confidence` or different `source` may coexist and are not misclassified as duplicates
-
-**Current boundaries**
-
-* If ProbLog CLI is unavailable or times out, `ProbLogEngineError` is raised.
-* If export-stage structure is unsupported or parameters are invalid, `ProbLogExportError` is raised.
-* If result parsing fails, `ProbLogImportError` is raised.
-* Within the same reasoning batch (same `run_id/trace_id`), repeated writes of the same claim are not forced into coexistence merely because `confidence` changes; coexistence is still governed by the ingest idempotency key.
-
-### 11.5 Debugging Properties
-
-```python
-sdk.store        # underlying Store object
-sdk.ledger       # underlying Ledger object
-sdk.schema_ir    # compiled schema actually used by the current store
-```
-
-Plain `Entity` instances now expose a debugging-friendly `repr(...)` that previews declared identity and field values in declaration order; unset `Field` values render as `None`, for example `User(user_id='u-1', name='Alice', age=None)`.
-
-### 11.6 Audit Queries
-
-```python
-audit = sdk.explain_fact("user:age", alice_ref)
-conf = sdk.conflicts("user:age", alice_ref)
-```
-
-Both are computed over the current active assertion set (**stable contract**).
-
-`explain_fact(pred_id, e_ref, *val_atoms)` returns (current behavior):
-
-* `pred_id`, `e_ref`
-* `active_claims`: `list[dict]`, each item containing `asrt_id`, `args`, `meta`
-* `chosen_asrt_id`
-
-The `*val_atoms` parameter filters `active_claims` by exact match on value atoms.
-
-`conflicts(pred_id, e_ref)` returns (current behavior):
-
-* `pred_id`, `e_ref`
-* `active_asrt_ids`
-* `chosen_asrt_id`
-
-Pass predicate IDs as `pred_id` (such as `"user:age"`), and canonical `idref_v1` tokens as `e_ref`.
+- **[`04_api_surface.en.md`](04_api_surface.en.md)** — full API
+  reference with every method signature
+- **[`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md)** —
+  end-to-end tutorial of all nine what-if and proof methods
+- **[`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md)** —
+  walker views, recorder lifecycle, raw DTO construction, optional
+  domain helpers, engine adapter registration
 
 ---
 
-## 12. Migration Notes (v2 → v3)
+## 12. Appendix: migration notes (v2 → v3)
 
-### EvaluateMode Renaming
+The v3 SDK is API-compatible with v2 for the flat method surface.
+Two changes worth noting:
 
-| Old        | New         | Behavior when old value is passed      |
-| ---------- | ----------- | -------------------------------------- |
-| `"python"` | `"native"`  | explicit error with new name suggested |
-| `"engine"` | `"souffle"` | explicit error with new name suggested |
-| ——         | `"problog"` | new in v3                              |
+### Removed/renamed APIs
 
-The default value is also updated to `"native"` (including authoring DTO/session and SDK derivation evaluate paths).
+| v2 | v3 | Notes |
+|---|---|---|
+| `functional` field on `Field` | (removed) | Use `cardinality="single"` |
+| `temporal` field on `Field` | (removed) | Temporal semantics moved to `meta` |
+| `dims` field on `Field` | (removed) | Multi-dimensional fields not supported |
+| `fact_key` / `pred_id` on `Pred` | (removed) | Use field accessors instead |
+| `.chosen` on assertion view | (removed) | Use `field(...).current()` |
+| `temporal_view` parameter | (removed) | Pass via `meta` and use a custom view |
+| `engine` keyword in `evaluate` | renamed | Use `mode` |
+| `python` keyword in `evaluate` | renamed | Use `mode="native"` |
 
-### Meta Kind Renaming + Addition
+### body_confidences bridge
 
-| Old     | New       | Description                       |
-| ------- | --------- | --------------------------------- |
-| `"num"` | `"int"`   | integer; write validation updated |
-| ——      | `"float"` | new in v3; used by `confidence`   |
+Probabilistic engines (`problog`) accept per-literal confidence via
+`Body([...], body_confidences=[...])`. The legacy v2 `body_confidences`
+keyword on `Rule(...)` is still accepted but emits a deprecation
+warning; new code should use the `Body(...)` constructor form.
 
-`Ledger.META_KINDS` has been updated from `{"str","num","bool","time","json"}` to `{"str","int","float","bool","time","json"}`. Code writing `kind="num"` must be changed to `kind="int"` (the system will raise a clear error during write validation).
+### Tag semantics on multi-fields
 
-### Export Package Format Upgrade (v1 → v2)
+In v3, `add` on a multi-field creates a separate assertion per call
+even for the same value. Use `meta` to differentiate when needed.
+v2's de-duplication on `add` is gone; the v2 semantic is now expressed
+via `accept(...)` idempotency.
 
-| v1                  | v2                                                |
-| ------------------- | ------------------------------------------------- |
-| `meta_num.facts`    | `meta_int.facts`                                  |
-| ——                  | `meta_float.facts` (new)                          |
-| no `export_version` | `manifest.json` contains `"export_version": "v2"` |
+### Row format
 
-Feeding a v1 package into a v2 reader raises a clear error: `unsupported export_version: 'v1'; expected 'v2'`.
-
-### Accept Semantics Change
-
-| Old                                                                    | New                                                                         |
-| ---------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| duplicate detection only checks claim (`pred_id + e_ref + rest_terms`) | also compares business-semantic meta (excluding timestamps/run identifiers) |
-| same fact with different confidence may be misclassified as duplicate  | naturally coexists, no longer misclassified                                 |
-
-### Body DSL (New)
-
-```python
-# v2 form (still supported)
-where=[[atom1, atom2], [atom3]]
-
-# new v3 form (when confidence is needed)
-from kernel.sdk import Body
-where=[
-    Body([atom1, atom2], confidence=0.9),
-    Body([atom3], confidence=0.6),
-]
-# mixing the two forms is forbidden
-```
-
-### Tightened `run(view)` Result Contract
-
-| Old assumption                                                 | Actual v3 behavior                                                                                    |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `sdk.run(rule, view=...)` may include `confidence` inside rows | by default no in-row fields are injected, and the return type remains consistent with `row_format`    |
-| ——                                                             | to obtain aggregated confidence, use `return_display_meta=True`, which returns `(rows, display_meta)` |
-
-### Schema Layer (v1 → v2, historical legacy)
-
-* `Field.cardinality`: `"functional"` / `"temporal"` → `"single"`
-* `Field.dims`, `Field.fact_key`, and `Field.pred_id` have been removed
-* `Identity(primary_key=True)` is required for cross-coordinate joins
-* `sdk_batch_plan_v1` wire payload no longer carries `dims` / `fact_key`
-
----
-
-## 13. Optional-Domain Bundle Helper Pattern
-
-The v0.1 kernel-only wheel does not ship domain bundles directly. ECSS compliance, industry scoring, internal review models, and similar domain layers should be provided as separate packages or monorepo companions. They can still follow the same helper pattern: the domain package owns its schema preset or entity definitions, exposes small functions, and calls only public `kernel.sdk` APIs internally.
-
-A minimal helper can look like this:
-
-```python
-from kernel.sdk import Entity, Field, Identity, SDKStore
-
-
-class ReviewNote(Entity):
-    note_id: str = Identity(primary_key=True)
-    target_ref: str = Field(cardinality="single")
-    reviewer: str = Field(cardinality="single")
-    decision: str = Field(cardinality="single")
-
-
-def write_review_note(
-    sdk: SDKStore,
-    *,
-    note_id: str,
-    target_ref: str,
-    reviewer: str,
-    decision: str,
-) -> str:
-    note_ref = sdk.ref(ReviewNote, note_id=note_id)
-    sdk.set(ReviewNote.target_ref, note_ref, target_ref)
-    sdk.set(ReviewNote.reviewer, note_ref, reviewer)
-    return sdk.set(ReviewNote.decision, note_ref, decision)
-
-
-sdk = SDKStore([ReviewNote])
-write_review_note(
-    sdk,
-    note_id="review-001",
-    target_ref="idref_v1:User:example",
-    reviewer="alice",
-    decision="approved",
-)
-```
-
-Notes:
-
-* A domain package may provide functions such as `apply_<domain>_schema(...)`, but that function belongs to the domain package, not to the top-level `kernel.sdk` API.
-* Helpers should wrap public entrypoints such as `sdk.ref`, `sdk.set`, and `sdk.add`; they should not write the ledger directly.
-* If a helper depends on a package outside the v0.1 wheel, primary user documentation must label it as optional-domain capability rather than kernel-only default behavior.
-
----
-
-## 14. When To Drop Down To Layer 2 (`kernel.application`)
-
-Most Python users should stay in `kernel.sdk`: it provides `Entity` / `Field` descriptors, DSL sugar, snapshots, batches, editors, and the SDK exception hierarchy.
-
-Drop down to `kernel.application` when the caller is automation or a wire bridge rather than a human writing Python schema / DSL:
-
-| Scenario | Why not use the SDK facade |
-| -------- | -------------------------- |
-| LLM / agent produces JSON-like ingest payloads | the caller has `entity_type` / `field_name` / identity values, not SDK `Field` descriptors |
-| HTTP / RPC server receives cross-process requests | the boundary needs stable DTOs and error shapes, not Python DSL objects |
-| batch ingest needs `collect_mode="collect"` | application `IngestRequest` can collect per-item errors as DTOs |
-| migration / replay / bridge adapter | the input is already a string-keyed contract, so constructing `Entity` classes again is unnecessary |
-
-The minimal shape looks like this; the hosting process owns `store` and `SchemaIndex`:
-
-```python
-from kernel.application import apply_ingest_request
-from kernel.application.protocol import (
-    EntitySelector,
-    FieldPath,
-    IngestRequest,
-    IngestSetItem,
-)
-
-request = IngestRequest(
-    items=(
-        IngestSetItem(
-            target=EntitySelector(entity_type="User", identity={"user_id": "u-1"}),
-            field=FieldPath(entity_type="User", field_name="name"),
-            value="Alice",
-        ),
-    ),
-    collect_mode="collect",
-)
-
-result = apply_ingest_request(request, store=store, index=schema_index)
-```
-
-Layer 2 is SDK-independent by contract: do not pass SDK `Field` descriptors, `EntitySnapshot`, `Query`, or `Derivation` objects. The SDK's job is to lower / adapt those ergonomic outward objects into application DTOs.
+The default `row_format` is `"dict"`. `"tuple"` still works but emits
+`DeprecationWarning`. New code should use `"dict"` or `"instance"`.

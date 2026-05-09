@@ -1,45 +1,43 @@
-# SDK API Surface Index (Current Implementation)
+# SDK API Surface Reference
 
-This page tracks the public exports in `kernel/sdk/__init__.py` and the main class APIs. The SDK API surface is the Python product surface; runtime execution for query / ingest / compiled derivation paths is delegated to `kernel.application`, while SDK preserves outward adapters and compatibility shapes.
+The exact public surface of `kernel.sdk`. For tutorials see
+[`00_user_guide.en.md`](00_user_guide.en.md). For what-if and proof
+workflows see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
 
-After the Batch 8 public-surface decision, the SDK surface remains narrow: the exports and existing `SDKStore` facade methods listed here are the v0.1 product public API. L Direction G1 added `SDKStore.check(...)` / `SDKStore.diagnose(...)` as narrow SDK shells for Check / Diagnose; G4 added `SDKStore.why_not(...)` as the narrow SDK shell for Why-not Universe Diagnose; G2 added `SDKStore.check_fact_overlay(...)` and `SDKStore.recheck_proof_frame(...)` as narrow SDK shells for Fact Overlay Check and ProofFrame Recheck; G3 added `SDKStore.check_rule_disable(...)` / `SDKStore.check_rule_literal_replace(...)` / `SDKStore.check_rule_add_condition(...)` as the three narrow rule-overlay SDK shells; G5 added `SDKStore.diff_proof_frames(...)` as the narrow SDK shell for ProofFrame Diff query side, and explicitly deferred Round events recorder lifecycle to advanced importable. None of the nine L methods extend `kernel.sdk.__all__` or re-export application or audit DTOs. G2 Phase 0 hygiene migrated the five then-extant shell modules into the `kernel/sdk/shells/` subpackage (with `#P1` carve-out retrofit of the G1 + G4 invariant tests); G3 Phases 1/2/3 added the three rule-overlay shell files under that subpackage and applied `#P1` retrofits to the three application-runtime boundary tests (`test_no_sdk_rule_{disable,literal_replace,add_condition}_surface`); G5 Phase 1 added `proof_frame_diff.py` under the subpackage (9 modules total post-G5), with no `#P1` retrofit needed (audit-layer tests never asserted "no SDK surface"). Rule-action runtimes are reachable through the G3 SDK shells; ProofFrame diff is reachable through the G5 SDK shell; Round events recorder lifecycle (`start_round` / `record_round_event` / `finalize_round`) and Frontier trace remain on the `kernel.audit.round_events` / `kernel.core.rules.frontier` advanced importable surfaces. Frontier was explicitly kept out of the SDK facade in G4 §5.4 (evaluator drift gate + application no-opt-in tests stay in force); Round events recorder was explicitly deferred in G5 §5.1 (stateful, raises, persistence-adjacent; existing UX already imports `from kernel.audit.round_events import ...` directly). Promoting any other family to an ergonomic SDK API requires a separate outward request/result shape and must not directly re-export application or audit DTOs.
+---
 
-L Direction cross-boundary DTO layer rule (locked at G5 §5.3 / §6, extending G2 §5.1+§5.2 + G3 §5.2): **raw cross-boundary DTOs at the SDK boundary must be "frozen canonical DTOs above `kernel.core` using `kernel.application.protocol` vocabulary"**. Concretely:
+## 0. Namespace Map
 
-- **In scope** — `kernel.application.protocol` frozen DTOs (e.g., `EvaluationOverlay`, `SupportArtifact`, `RuleLiteralPath`, `RuleAddedAtom`) and `kernel.audit` frozen DTOs (e.g., `RoundEvent`, `ProofFrameDiff`, `FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference`, `WarningDTO`).
-- **Out of scope** — `kernel.core.*` substrate IR (e.g., `kernel.core.rules.rule_ir.RuleSpec`). The SDK explicitly rejects raw `RuleSpec` and accepts SDK `Rule` objects instead, lowered internally via `_compile_rule_input(...)`.
+`FactGraph` is the canonical entry point. It is a literal alias of
+`SDKStore` — both names refer to the same class object and accept the
+same calls.
 
-This rule is encoded verbatim in §6 invariants and applies to any future SDK shell over audit-layer or application-protocol DTOs.
-
-## 0. Post-L SDK teaching taxonomy (FactGraph)
-
-The post-L SDK ergonomics redesign organizes 30 user-facing flat methods into 8 top-level taxonomy namespaces + 2 sub-namespaces (under `what_if`). `FactGraph` is the literal alias of `SDKStore`, serving as the canonical v0.1 SDK top-level entrypoint name; the flat `SDKStore.<method>` form remains supported as **foundational API** — neither deprecated nor scheduled for removal.
-
-New code is encouraged to use the taxonomy form:
+`FactGraph` exposes operations through 8 top-level namespaces and 2
+sub-namespaces under `what_if`. The same operations are also available
+as flat methods on the same instance; both shapes are permanently
+supported.
 
 ```python
 from kernel.sdk import FactGraph
 
 fg = FactGraph.from_schema_classes([User])
 
-# Taxonomy form (preferred for new code)
+# Namespaced (preferred for new code)
 fg.read.get(User, user_id="u-1")
 fg.write.add(User.tag, alice, "engineer")
 fg.what_if.check(derivation, binding)
 fg.what_if.fact_overlay.check(derivation, binding, overlay)
-fg.what_if.rule.disable(rule, support_artifact, branch_index=0, atom_index=0)
+fg.what_if.rule.disable(rule, support, branch_index=0, atom_index=0)
 fg.audit.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
 
-# Flat form (foundational API; permanently supported)
+# Flat (foundational; permanent)
 fg.get(User, user_id="u-1")
 fg.add(User.tag, alice, "engineer")
 fg.check(derivation, binding)
 fg.check_fact_overlay(derivation, binding, overlay)
-fg.check_rule_disable(rule, support_artifact, branch_index=0, atom_index=0)
+fg.check_rule_disable(rule, support, branch_index=0, atom_index=0)
 fg.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
 ```
-
-The 8 top-level namespaces:
 
 | Namespace | Methods |
 |---|---|
@@ -47,191 +45,388 @@ The 8 top-level namespaces:
 | `read` | `get`, `find`, `ref` |
 | `write` | `set`, `add`, `retract`, `edit` |
 | `eval` | `run`, `evaluate`, `evaluate_compiled`, `accept`, `accept_compiled`, `accept_many` |
-| `what_if` (G1+G4 direct) | `check`, `diagnose`, `why_not` |
-| `what_if.fact_overlay` (G2) | `check` (was `check_fact_overlay`), `recheck_proof_frame` |
-| `what_if.rule` (G3) | `disable`, `literal_replace`, `add_condition` (prefix dropped at sub-namespace level) |
-| `audit` | `explain_fact`, `conflicts`, `diff_proof_frames` (G5; placed here per §5.2.1 because it consumes recorded round events) |
+| `what_if` | `check`, `diagnose`, `why_not` |
+| `what_if.fact_overlay` | `check`, `recheck_proof_frame` |
+| `what_if.rule` | `disable`, `literal_replace`, `add_condition` |
+| `audit` | `explain_fact`, `conflicts`, `diff_proof_frames` |
 | `package` | `export_package`, `run_package` |
-| `views` (existing) | `create`, `update`, `delete`, `get`, `list` |
+| `views` | `create`, `update`, `delete`, `get`, `list` |
 
-Manager classes (`_SDKSchemaManager`, etc.) are private and do not enter `kernel.sdk.__all__`; they are reachable only through `FactGraph.<namespace>` property accessors. Writes such as `fg.what_if.foo = ...` raise `FrozenSnapshotError`. Detailed design is captured in the post-L SDK ergonomics redesign blueprint (internal design record; §5.2 / §5.4 / §5.7).
+Namespace accessors return private manager objects. The managers are
+read-only — assigning attributes (`fg.what_if.foo = ...`) raises
+`FrozenSnapshotError`. They are not part of `kernel.sdk.__all__` and
+should not be imported directly.
 
-## 1. Top-Level Exports (`from kernel.sdk import ...`)
+---
 
-### 1.1 Schema / Store / Registry
+## 1. Top-Level Exports
 
-- `Entity`
-- `Field`
-- `Identity`
-- `FactGraph` *(post-L; canonical taxonomy entrypoint; literal alias of `SDKStore`)*
-- `SDKStore` *(foundational; permanently supported)*
-- `SDKRegistry`
+Everything below is importable as `from kernel.sdk import <name>`.
 
-Additional note:
-- Plain `Entity` instances implement a debugging-friendly `__repr__()` that lists declared identity and field values in declaration order; unset `Field` values render as `None`.
+### 1.1 Schema, store, registry
+
+| Symbol | Purpose |
+|---|---|
+| `Entity` | Base class for entity declarations |
+| `Field` | Descriptor for a field with cardinality |
+| `Identity` | Descriptor for an identity (primary-key) field |
+| `Relationship` | Base class for relationship type declarations |
+| `FactGraph` | Canonical entry point (alias of `SDKStore`) |
+| `SDKStore` | Foundational entry point (same class as `FactGraph`) |
+| `SDKRegistry` | Schema/rule/derivation registry |
+
+`Entity` instances render via `__repr__` showing identity and field
+values in declaration order; unset `Field` values render as `None`.
 
 ### 1.2 DSL
 
-- `Body`
-- `Rule`
-- `RuleRef`
-- `Derivation`
-- `Query`
-- `Pred`
-- `Not`
-- `vars`
-- `SDKDSLError`
+| Symbol | Purpose |
+|---|---|
+| `Body` | Rule body constructor (literal conjunction) |
+| `Rule` | Declarative rule (head + body) |
+| `RuleRef` | Reference to a registered rule by id |
+| `Derivation` | Multi-rule derivation envelope |
+| `Query` | Query over the current store |
+| `Pred` | Predicate literal (fact reference) |
+| `Not` | Negation operator for body literals |
+| `vars` | Logic-variable factory for rule construction |
+| `SDKDSLError` | Raised on DSL construction errors |
 
 ### 1.3 Schema compile helpers
 
-- `build_authoring_schema_from_classes`
-- `compile_schema_from_classes`
-- `schema_preflight_from_classes`
+| Symbol | Purpose |
+|---|---|
+| `build_authoring_schema_from_classes` | Build authoring schema from `Entity` classes |
+| `compile_schema_from_classes` | Compile authoring schema into runtime IR |
+| `schema_preflight_from_classes` | Validate classes; raise `SDKSchemaError` on issues |
 
-### 1.4 Ingest / Provenance
+### 1.4 Ingest
 
-- `IngestResult`
-- `ValidationReport`
+| Symbol | Purpose |
+|---|---|
+| `IngestResult` | Result of `fg.ingest(...)`: counts, ids, validation report |
+| `ValidationReport` | Per-row provenance/shape validation outcome |
 
 ### 1.5 Errors and error codes
 
-- Error classes: `SDKSchemaError`, `SDKStoreError`, `SDKRegistryError`, `EntityNotFoundError`, `FrozenSnapshotError`, `CardinalityError`, `EditorClosedError`
-- Exported codes:
-  - `INVALID_ROW_FORMAT`
-  - `QUERY_MISSING_REF`
-  - `QUERY_TYPE_MISMATCH`
-  - `QUERY_ALIAS_CONFLICT`
-  - `QUERY_UNBOUND_VAR`
-  - `QUERY_INVALID_ROW_FORMAT`
-  - `QUERY_NOT_IMPLEMENTED`
+| Class | Triggered by |
+|---|---|
+| `SDKSchemaError` | Schema compilation, descriptor binding, preflight |
+| `SDKStoreError` | Store operations (write, view, batch, query, eval shells) |
+| `SDKRegistryError` | Registry/rule registration failures |
+| `EntityNotFoundError` (← `SDKStoreError`) | `read.get(...)` / `write.edit(...)` on missing identity |
+| `FrozenSnapshotError` (← `SDKStoreError`) | Assigning to read-only attribute (snapshot or namespace) |
+| `CardinalityError` (← `SDKStoreError`) | `set` on multi-field, `add` on single-field |
+| `EditorClosedError` (← `SDKStoreError`) | Operating on a committed/rolled-back `EntityEditor` |
 
-## 2. `SDKStore` Public Methods
+| Error code | Where it appears |
+|---|---|
+| `INVALID_ROW_FORMAT` | Generic invalid `row_format=` |
+| `QUERY_INVALID_ROW_FORMAT` | Query-specific invalid `row_format=` |
+| `QUERY_MISSING_REF` | Query references undeclared field |
+| `QUERY_TYPE_MISMATCH` | Query head/literal type mismatch |
+| `QUERY_ALIAS_CONFLICT` | Query alias collision |
+| `QUERY_UNBOUND_VAR` | Query variable not bound in body |
+| `QUERY_NOT_IMPLEMENTED` | Query feature not yet implemented |
 
-- `from_schema_classes(..., ledger=None, ledger_path=None, artifact_store_root=None, default_row_format=None)`
-- `batch(...)`
-- `get(...)`
-- `find(...)`
-- `edit(...)`
-- `ingest(...)`
-- `validate_provenance(...)`
-- `check(...)`
-- `diagnose(...)`
-- `why_not(...)`
-- `check_fact_overlay(...)`
-- `recheck_proof_frame(...)`
-- `check_rule_disable(...)`
-- `check_rule_literal_replace(...)`
-- `check_rule_add_condition(...)`
-- `diff_proof_frames(...)`
-- `ref(...)`
-- `set(...)`
-- `add(...)`
-- `retract(...)`
-- `run(...)`
-- `evaluate(...)`
-- `evaluate_compiled(...)`
-- `accept(...)`
-- `accept_many(...)`
-- `accept_compiled(...)`
-- `explain_fact(...)`
-- `conflicts(...)`
-- `export_package(...)`
-- `run_package(...)`
+---
 
-Key boundaries:
-- `SDKStore` is the user entry point and facade aggregator, not the canonical runtime authority. Runtime-normalized query / ingest / compiled derivation orchestration now delegates to `kernel.application`.
-- `from_schema_classes(...)` / `schema_preflight_from_classes(...)` class-validation failures raise `SDKSchemaError` (`SDKStore(...)` constructor-path checks raise `SDKStoreError`).
-- `SDKStore.__init__(..., artifact_store_root=None)` and `from_schema_classes(..., artifact_store_root=None)` both support sidecar-backed explain artifact readback; if a fully constructed `store=...` is already supplied, the constructor-level `artifact_store_root` is ignored.
-- `run(...)` supports Rule/Query and rejects Derivation.
-- `run(rule, view=...)` supports named/inline views; Query path rejects `view` and `return_display_meta`.
-- `evaluate(...)` explicitly rejects `view` and `temporal_view`.
-- `evaluate(..., engine_options={...})` supports engine run-time configuration; it is call-time only and does not enter `Derivation` or authoring payloads.
-- `evaluate(mode="native", engine_options={...})` fails explicitly; engine_options key validation and defaults remain adapter-owned.
-- `check(Derivation(...), binding, *, engine="native", registry=None)` and `diagnose(...)` accept only SDK `Derivation` and `$`-prefixed binding `Mapping`; they return raw application `CheckResult` / `DiagnoseResult` DTOs that are not added to `kernel.sdk.__all__`.
-- `why_not(Derivation(...), candidates, *, engine="native", registry=None)` accepts an SDK `Derivation` and an explicit finite candidate universe (`Sequence[Mapping[str, Any] | Sequence[Any]]`, mirroring `kernel.application.capability_helpers.build_why_not_candidate_universe(...)`). It returns the raw application `WhyNotUniverseResult` DTO; the result type is not added to `kernel.sdk.__all__`. Why-not rejects `CompiledDerivationPlan` at the SDK boundary and never auto-discovers the universe from the store. All non-SDK exceptions (`ValueError` / `RuleCompileError` / `CapabilityHelperError` / `ProtocolShapeError` / `WhyNotRuntimeError`) remap to `SDKStoreError(..., path="$.why_not[.derivation|.dependencies|.candidates|.request|]") from exc`.
-- `check_fact_overlay(Derivation(...), binding, overlay, *, engine="native", registry=None)` accepts an SDK `Derivation`, a `$`-prefixed binding `Mapping`, and a raw `EvaluationOverlay` protocol DTO. It returns the raw application `FactOverlayCheckResult` DTO; the result type is not added to `kernel.sdk.__all__`. `EvaluationOverlay` is author-time intent (G1 §5.7's rejection of `CompiledDerivationPlan` does not apply because the overlay is not an already-lowered plan); the SDK explicitly rejects the `tuple[FactValueOverride, ...]` form even though the application `FactOverlayCheckRequest.overlay` field would otherwise tolerate it. The runtime represents unsupported overlay / `rule_actions` / inner phase failures as `FactOverlayCheckResult(status="invalid_request")` and the SDK passes that through; only truly unexpected runtime exceptions reach the base-path remap. All non-SDK exceptions (`ValueError` / `RuleCompileError` / `ProtocolShapeError` / other unexpected) remap to `SDKStoreError(..., path="$.check_fact_overlay[.derivation|.binding|.overlay|.dependencies|.request|]") from exc`.
-- `recheck_proof_frame(support_artifact, overlay)` accepts a raw `SupportArtifact` (obtained from a prior `sdk.check(...)`'s `result.evidence_envelope.engine_payload`) and a raw `EvaluationOverlay`. It returns the raw application `ProofFrameRecheckResult` DTO; the result type is not added to `kernel.sdk.__all__`. There is no derivation lowering, registry resolution, or engine argument. The SDK never wraps `SupportArtifact`, never extracts it from a `CheckResult` argument, and never calls `sdk.check(...)` internally. All non-SDK exceptions (validation / `ProtocolShapeError` / unexpected runtime) remap to `SDKStoreError(..., path="$.recheck_proof_frame[.support_artifact|.overlay|.request|]") from exc`.
-- `check_rule_disable(rule, support, *, branch_index, atom_index, overlay=None, note=None)` accepts an SDK `Rule` (lowered internally via `_compile_rule_input` to a `RuleSpec`), a raw `SupportArtifact`, and an optional `EvaluationOverlay` (only `None` or an empty overlay is accepted; the rule-action overlay is constructed internally by the A helper). It returns the raw application `RuleDisableResult` DTO; the result type is not added to `kernel.sdk.__all__`. The SDK rejects raw `RuleSpec` (substrate IR layer mismatch per §5.2 lock) and SDK `Derivation`. The runtime represents unsupported support / rule_ref-bearing support / target-not-found / rule-id mismatch / native-eval failures as `RuleDisableResult(status="invalid_request"|"unsupported")` and the SDK passes that through. All non-SDK exceptions (`SDKStoreError` / `RuleCompileError` / `ValueError` from lowering, `RuleCompileError` from registry, `CapabilityHelperError` / `ProtocolShapeError` from the A helper, unexpected runtime) remap to `SDKStoreError(..., path="$.check_rule_disable[.rule|.support|.overlay|.dependencies|.request|]") from exc`.
-- `check_rule_literal_replace(rule, support, *, branch_index, atom_index, literal_path, old_literal, new_literal, overlay=None, note=None)` mirrors `check_rule_disable` but additionally accepts a raw `RuleLiteralPath` (`kernel.application.protocol.RuleLiteralPath`, a frozen application DTO covered by the G2 §5.1+§5.2 cross-cutting precedent) along with `old_literal` / `new_literal: Any`, and returns `RuleLiteralReplaceResult`. A non-`RuleLiteralPath` `literal_path` slips past SDK pre-validation (no shared validator exists for it) and is caught by the A helper / action DTO `__post_init__` as `ProtocolShapeError`, which remaps to `$.check_rule_literal_replace.request`. Other non-SDK exception remap paths follow the same shape as `check_rule_disable`.
-- `check_rule_add_condition(rule, support, *, branch_index, added_atom, overlay=None, note=None)` mirrors `check_rule_disable` but **has no `atom_index` argument** (Add Condition appends a new atom at the end of the branch rather than pointing at an existing locator) and accepts a raw `RuleAddedAtom` (`kernel.application.protocol.RuleAddedAtom`, a frozen application DTO), returning `RuleAddConditionResult`. A non-`RuleAddedAtom` `added_atom` slips past SDK pre-validation and is caught by the A helper / action DTO `__post_init__` as `ProtocolShapeError`, which remaps to `$.check_rule_add_condition.request`. Other non-SDK exception remap paths follow the same shape as `check_rule_disable`.
-- `diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events, *, warnings=(), include_unchanged=False)` accepts two non-empty round-id strings + two raw `tuple[RoundEvent, ...]` (`kernel.audit.round_events.RoundEvent`, frozen audit DTOs covered by the G5 §5.3 cross-boundary layer rule) + an optional `tuple[WarningDTO, ...]`, and returns the application-canonical `ProofFrameDiff` raw DTO (`kernel.audit.proof_frame_diff.ProofFrameDiff`); the result type is not added to `kernel.sdk.__all__`. The SDK shell is pure (no Store / no registry / no engine arg / no IO), mirroring `kernel.audit.proof_frame_diff.build_proof_frame_diff(...)` 1:1; users load events via `kernel.audit.load_audit_package` or hold them from a fresh recorder. **Round events recorder lifecycle (`start_round` / `record_round_event` / `finalize_round`) is explicitly deferred to `kernel.audit.round_events` advanced importable** (G5 §5.1 lock — recorder is mutable / stateful / persistence-adjacent; existing UX already imports `from kernel.audit.round_events import ...` directly). All non-SDK exceptions remap to `SDKStoreError(..., path="$.diff_proof_frames[.round_a_id|.round_b_id|.round_a_events|.round_b_events|.warnings|.include_unchanged|.request|]") from exc` (**8-path**: 6 inline pre-validation input paths + `ProofFrameDiffError` to `.request` + defensive `Exception` to base; `.include_unchanged` is a strict `isinstance(.., bool)` check, so `1` / `0` are also rejected — matching the established `return_display_meta` SDK precedent). Walker view `kernel.application.walker.ProofFrameDiffView` remains a Tier 2 advanced-importable opt-in; the SDK shell does not auto-wrap.
-- Rule `row_format` precedence: call-site > `default_row_format` > `FACTPY_ROW_FORMAT` > `"dict"`.
-- `FACTPY_ROW_FORMAT` is read once at `SDKStore` initialization and cached.
-- `row_format="tuple"` still works but emits `DeprecationWarning`.
-- Query defaults to `list[dict]`; it also supports `row_format="instance"` (only for single `Entity(var)` head).
-- Invalid Query `row_format`, incompatible head shape for `instance`, or calling `run(...)` with Derivation raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
-- `accept(CandidateSet, ...)` accepts exactly one positional candidate; supported sugar keys are `approved_by`/`note`/`dry_run`/`identity_override` (also via `meta_overrides`).
+## 2. `FactGraph` / `SDKStore` Methods
 
-## 3. `SDKRegistry` Public Methods
+Methods are listed once per logical operation. All have flat (`fg.X(...)`)
+and namespaced (`fg.<ns>.X(...)`) call sites; both delegate to the same
+implementation.
 
-- `apply_schema_classes(...)`
-- `apply_authoring_bundle(...)`
-- `read_manifest(...)`
-- `upsert_schema_ir(...)`
-- `register_rule_spec(...)`
-- `register_rule(...)`
-- `register_derivation_spec(...)`
-- `register_derivation(...)`
-- `get_schema_entry(...)`
-- `list_rule_ids(...)`
-- `list_derivation_ids(...)`
-- `list_rule_versions(...)`
-- `list_derivation_versions(...)`
-- `list_apply_run_ids(...)`
-- `list_apply_runs(...)`
-- `show_apply_run(...)`
-- `get_latest_rule_spec(...)`
-- `get_latest_derivation_spec(...)`
-- `read_rule_spec(...)`
-- `read_derivation_spec(...)`
+### 2.1 Constructor
 
-Notes:
-- `register_derivation(...)` is currently single-head-oriented.
-- For multi-head publishing, expand into multiple single-head derivations first.
+```python
+FactGraph.from_schema_classes(
+    classes,
+    *,
+    ledger=None,
+    ledger_path=None,
+    artifact_store_root=None,
+    default_row_format=None,
+)
+```
 
-## 4. Common Facade Return Objects
+Class-validation errors raise `SDKSchemaError`; constructor-path errors
+raise `SDKStoreError`. `artifact_store_root` enables sidecar-backed
+explain artifact readback (ignored if a fully constructed `store=` is
+supplied).
 
-- `EntitySnapshot`
-  - attributes: `ref`, `entity_type`, `identity_available`, `identity`, `assertions`
-  - method: `field(name)`
-- `EntityEditor`
-  - `preview()`, `commit(meta=...)`, `rollback()`
-  - attributes: `ref`, `entity_type`
-- `FieldEditor`
-  - `set(...)`, `add(...)`, `retract(*, asrt_id=..., meta=...)` (keyword-only)
+### 2.2 Schema namespace (`fg.schema.*`)
+
+| Method | One-liner |
+|---|---|
+| `ingest(items, *, allow_sensitive_meta=False)` | Bulk-insert assertions; returns `IngestResult` |
+| `validate_provenance(items)` | Inspect provenance shape without writing; returns `ValidationReport` |
+
+### 2.3 Read namespace (`fg.read.*`)
+
+| Method | One-liner |
+|---|---|
+| `get(entity_cls, **identity)` | Fetch single entity by identity or `None` |
+| `find(entity_cls, *, view=None, limit=None, **filters)` | Filter entities; returns list of `EntitySnapshot` |
+| `ref(entity_cls, **identity)` | Encode an entity reference string |
+
+### 2.4 Write namespace (`fg.write.*`)
+
+| Method | One-liner |
+|---|---|
+| `set(field, ref, value, *, meta=None)` | Set a single-cardinality field |
+| `add(field, ref, value, *, meta=None)` | Append to a multi-cardinality field |
+| `retract(asrt_id, *, meta=None)` | Retract a specific assertion |
+| `edit(entity_cls, **identity)` | Open an `EntityEditor` transaction |
+
+`fg.batch(meta=None)` opens an `SDKBatchTx` for grouping multiple writes
+into one transaction.
+
+### 2.5 Eval namespace (`fg.eval.*`)
+
+| Method | One-liner |
+|---|---|
+| `run(rule_or_query, *, view=None, row_format=None)` | Evaluate a `Rule`, `RuleRef`, or `Query`; not for `Derivation` |
+| `evaluate(derivation, *, mode='native', engine_options=None)` | Evaluate a `Derivation`; returns list of `CandidateSet` |
+| `evaluate_compiled(plans, *, mode='native', engine_options=None)` | Evaluate already-compiled derivation plans |
+| `accept(candidate, *, approved_by=None, note=None, dry_run=False, identity_override=None)` | Accept exactly one candidate; performs writes |
+| `accept_compiled(...)` | Accept against already-compiled plans |
+| `accept_many(candidates, *, ...)` | Accept multiple candidates idempotently |
+
+`mode='native'` rejects non-empty `engine_options`. Adapter-owned engines
+(`souffle`, `problog`, `pyreason`) consume `engine_options` at call time
+and never propagate to `Derivation` or ledger.
+
+### 2.6 What-if namespace (`fg.what_if.*`)
+
+For tutorial usage see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
+
+| Method | One-liner |
+|---|---|
+| `check(derivation, binding, *, engine='native', registry=None)` | Counterfactual evaluation; returns `CheckResult` |
+| `diagnose(derivation, binding, *, engine='native', registry=None)` | Trace why a fact was derived; returns `DiagnoseResult` |
+| `why_not(derivation, candidates, *, engine='native', registry=None)` | Explain why facts in an explicit candidate universe did not derive; returns `WhyNotUniverseResult` |
+
+### 2.7 What-if fact overlay (`fg.what_if.fact_overlay.*`)
+
+| Method | One-liner |
+|---|---|
+| `check(derivation, binding, overlay, *, engine='native', registry=None)` | Re-check derivation with fact-value overrides; returns `FactOverlayCheckResult` |
+| `recheck_proof_frame(support_artifact, overlay)` | Re-evaluate a held `SupportArtifact` under a new overlay; returns `ProofFrameRecheckResult` |
+
+`overlay` is a `kernel.application.protocol.EvaluationOverlay`. The
+`tuple[FactValueOverride, ...]` form is rejected at the SDK boundary.
+
+### 2.8 What-if rule (`fg.what_if.rule.*`)
+
+All three accept an SDK `Rule` (lowered internally; raw `RuleSpec` IR
+is rejected) and a `SupportArtifact`. `overlay` may be `None` or empty;
+the rule-action overlay is constructed internally.
+
+| Method | One-liner |
+|---|---|
+| `disable(rule, support, *, branch_index, atom_index, overlay=None, note=None)` | Re-check with a literal disabled; returns `RuleDisableResult` |
+| `literal_replace(rule, support, *, branch_index, atom_index, literal_path, old_literal, new_literal, overlay=None, note=None)` | Re-check with a literal replaced; returns `RuleLiteralReplaceResult` |
+| `add_condition(rule, support, *, branch_index, added_atom, overlay=None, note=None)` | Re-check with a condition appended (no `atom_index`); returns `RuleAddConditionResult` |
+
+`literal_path` is a `kernel.application.protocol.RuleLiteralPath`;
+`added_atom` is a `kernel.application.protocol.RuleAddedAtom`.
+
+### 2.9 Audit namespace (`fg.audit.*`)
+
+| Method | One-liner |
+|---|---|
+| `explain_fact(locator)` | Get proof explanation for a fact |
+| `conflicts()` | Return active conflicting assertions |
+| `diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events, *, warnings=(), include_unchanged=False)` | Compare two recorded rounds; returns `ProofFrameDiff` |
+
+`diff_proof_frames` is pure (no store/registry/engine/IO). Load events
+via `kernel.audit.load_audit_package` or hold them from a recorder.
+`include_unchanged` is a strict bool — `1` and `0` are rejected.
+
+### 2.10 Package namespace (`fg.package.*`)
+
+| Method | One-liner |
+|---|---|
+| `export_package(out_dir, *, options=None, **kwargs)` | Export Souffle-format package |
+| `run_package(package_dir, *, entrypoints, engine='souffle')` | Execute an exported package |
+
+### 2.11 Views namespace (`fg.views.*`)
+
+| Method | One-liner |
+|---|---|
+| `create(name, view_spec)` | Create a named view |
+| `update(name, view_spec)` | Update an existing view |
+| `delete(name)` | Delete a view (not `"default"`) |
+| `get(name)` | Retrieve a view spec |
+| `list()` | Return `dict[str, ViewSpec]` of all views |
+
+### 2.12 Result-type non-export
+
+`CheckResult`, `DiagnoseResult`, `WhyNotUniverseResult`,
+`FactOverlayCheckResult`, `ProofFrameRecheckResult`, `RuleDisableResult`,
+`RuleLiteralReplaceResult`, `RuleAddConditionResult`, and
+`ProofFrameDiff` are returned by `fg.what_if.*` and `fg.audit.*` but
+**are not in `kernel.sdk.__all__`**. They are passthrough application
+DTOs. Import them directly from `kernel.application.protocol` or
+`kernel.audit` if your code needs to type-annotate them.
+
+---
+
+## 3. `SDKRegistry` Methods
+
+| Method | Purpose |
+|---|---|
+| `apply_schema_classes(classes)` | Compile and register schema from classes |
+| `apply_authoring_bundle(bundle)` | Apply a full authoring bundle |
+| `read_manifest()` | Read the registry manifest |
+| `upsert_schema_ir(schema_ir)` | Insert/update compiled schema IR |
+| `register_rule_spec(spec)` | Register a low-level rule spec |
+| `register_rule(rule)` | Register an SDK `Rule` |
+| `register_derivation_spec(spec)` | Register a low-level derivation spec |
+| `register_derivation(derivation)` | Register an SDK `Derivation` (single-head) |
+| `get_schema_entry(...)` | Fetch a schema entry by id |
+| `list_rule_ids()` / `list_derivation_ids()` | Enumerate registered ids |
+| `list_rule_versions(id)` / `list_derivation_versions(id)` | Version history |
+| `list_apply_run_ids()` / `list_apply_runs()` | Enumerate apply runs |
+| `show_apply_run(run_id)` | Inspect a specific apply run |
+| `get_latest_rule_spec(id)` / `get_latest_derivation_spec(id)` | Latest version lookup |
+| `read_rule_spec(id, version)` / `read_derivation_spec(id, version)` | Specific version read |
+
+`register_derivation` is single-head-oriented; for multi-head publishing
+expand into multiple single-head derivations first.
+
+---
+
+## 4. Facade Return Objects
+
+### `EntitySnapshot`
+
+Read-only view of an entity. Attributes:
+- `ref` — encoded reference string
+- `entity_type` — entity class name
+- `identity_available` — whether the identity is usable for `.edit()`
+- `identity` — dict of identity field values
+- `assertions` — namespace exposing per-field assertion records
+
+Method: `field(name)` returns a `FieldAssertions` for the given field.
+
+Assigning to a snapshot attribute raises `FrozenSnapshotError`.
+
+### `EntityEditor`
+
+Transactional editor obtained from `fg.write.edit(...)`. Methods:
+`preview()`, `commit(meta=...)`, `rollback()`. Attributes: `ref`,
+`entity_type`. Operating on a committed/rolled-back editor raises
+`EditorClosedError`.
+
+### `FieldEditor`
+
+Per-field editor on an `EntityEditor`: `set(value, *, meta=None)`,
+`add(value, *, meta=None)`, `retract(*, asrt_id, meta=None)` (keyword-only).
+
+### `FieldAssertions`, `AssertionRecord`, `AssertionMeta`
+
+`FieldAssertions` exposes a field's active assertions plus history.
+Supports time-slice access via `.at(iso8601_time)` and version slice via
+`.version(v)`. Each entry is an `AssertionRecord` with `asrt_id`,
+`value`, `is_active`, `is_revoked`, and `meta: AssertionMeta`.
+`AssertionMeta` carries provenance fields (source, trace_id,
+ingested_at, confidence, approved_by, derived_rule_id, candidate_id, ...).
+
+---
 
 ## 5. Batch Objects
 
-- `SDKBatchTx`
-  - `entity(...)`, `preview(...)`, `commit(...)`, `save(...)`
-  - context manager `__exit__` does not auto-commit or auto-rollback
-- `BatchPlan`
-  - `ops`, `warnings`, `export(sdk)`, `to_json(sdk)`, `apply(sdk)`
-- `WireBatchPlan`
-  - `to_dict()`, `to_json()`, `from_dict(...)`, `from_json(...)`, `apply(sdk, strict_schema=True)`
+### `SDKBatchTx`
 
-Additional note:
-- Batch managed-handle retract method is `ManagedFieldHandle.retract(assertion_id, ...)` (parameter name is `assertion_id`; positional arg is also supported).
+Returned by `fg.batch(meta=None)`. Methods: `entity(entity_cls,
+**identity)`, `preview()`, `commit()`, `save()`. The context manager's
+`__exit__` does **not** auto-commit or auto-rollback — call `commit()`
+or `rollback()` explicitly.
 
-## 6. Query / Derivation Runtime Quick View
+### `BatchPlan` / `WireBatchPlan`
+
+`BatchPlan` (`ops`, `warnings`, `export(sdk)`, `to_json(sdk)`,
+`apply(sdk)`) is the in-process batch plan. `WireBatchPlan`
+(`to_dict()`, `to_json()`, `from_dict(...)`, `from_json(...)`,
+`apply(sdk, strict_schema=True)`) is the serialization-friendly form
+for cross-process / cross-language consumers.
+
+### `ManagedFieldHandle`
+
+Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
+(parameter name `assertion_id`; positional also supported).
+
+---
+
+## 6. Query / Derivation Quick Reference
 
 ### 6.1 Query
 
-- `sdk.run(Query(...)) -> list[dict]` (default) or `list[EntitySnapshot|None]` (`row_format="instance"` with single `Entity(var)` head)
-- SDK retains `Query` DSL lowering and outward row formatting; application `execute_query(...)` executes the runtime-normalized request.
-- `on_missing` / `on_type_mismatch`: `error|skip|null`
-- Query field head supports only schema `single` fields
+- `fg.run(Query(...))` — defaults to `list[dict]`
+- `row_format="instance"` returns `list[EntitySnapshot|None]` (only for
+  single `Entity(var)` head)
+- `on_missing` and `on_type_mismatch` accept `error | skip | null`
+- Query head supports only schema `single` fields
+- Invalid `row_format` or incompatible head raises
+  `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`
+- Calling `run(...)` with a `Derivation` raises the same error
 
 ### 6.2 Derivation
 
-- `sdk.evaluate(Derivation(...), mode="native|souffle|problog|pyreason") -> list[CandidateSet]`
-- SDK retains `Derivation` DSL lowering, mode sugar, and compatibility checks; application `evaluate_derivation_plans(...)` executes compiled plan orchestration.
-- Passing legacy `python|engine` raises explicit rename errors
-- `head` shape determines candidate kind
-- `head=[...]` is supported in evaluate (flattened output)
-- `CandidateSet.confidence`: probability `float` for `problog`, lower bound `float` for `pyreason`, `None` for `native/souffle`
-- `sdk.accept(...)` / `sdk.accept_many(...)` handle writes and idempotency
-- `engine_ext`: shared definition-time engine semantics carrier on `Rule.engine_ext` or `Derivation.engine_ext` (for example `PyReasonRuleExt(timestep_delay=1)`); must inherit `EngineExtBase`
-- `engine_options`: `sdk.evaluate(..., engine_options={"timesteps": 5})` passes runtime config; call-time only, never enters Derivation or Ledger
-- `mode="native"` rejects non-empty `engine_options`
-- Semantic annotations: PyReason results generate `pyreason/semantic/*`, ProbLog generates `problog/semantic/probability`; post-accept, call `persist_pyreason_annotations()` or `persist_problog_annotations()` to persist
+- `fg.evaluate(Derivation(...), mode="native"|"souffle"|"problog"|"pyreason")`
+  returns `list[CandidateSet]`
+- Legacy `python` / `engine` keyword arguments raise explicit rename errors
+- `head=[...]` is supported (flattened output)
+- `CandidateSet.confidence` semantics depend on engine:
+  - `native` / `souffle` → `None`
+  - `problog` → probability `float`
+  - `pyreason` → lower-bound `float`
+- `engine_ext`: definition-time engine semantics carrier on
+  `Rule.engine_ext` or `Derivation.engine_ext` (e.g.
+  `PyReasonRuleExt(timestep_delay=1)`); must inherit `EngineExtBase`
+- `engine_options`: call-time runtime config (e.g.
+  `fg.evaluate(..., engine_options={"timesteps": 5})`); never enters
+  `Derivation` or ledger
+- Semantic annotations: PyReason produces `pyreason/semantic/*`,
+  ProbLog produces `problog/semantic/probability`. Persist post-accept
+  via `persist_pyreason_annotations()` or `persist_problog_annotations()`
+
+### 6.3 Row format precedence
+
+`row_format` resolves in order: call-site argument >
+`default_row_format` constructor argument > `FACTPY_ROW_FORMAT`
+environment variable > `"dict"` default.
+
+`FACTPY_ROW_FORMAT` is read once at `SDKStore` initialization and
+cached. `row_format="tuple"` still works but emits `DeprecationWarning`.
+
+### 6.4 Accept
+
+`accept(CandidateSet, ...)` accepts exactly one positional candidate.
+Sugar keyword arguments: `approved_by`, `note`, `dry_run`,
+`identity_override` (also via `meta_overrides`).
+
+---
+
+## 7. What's Not in the SDK
+
+These are reachable via direct imports, not through `kernel.sdk`:
+
+| Capability | Importable from |
+|---|---|
+| Round events recorder lifecycle (`start_round`, `record_round_event`, `finalize_round`) | `kernel.audit.round_events` |
+| Frontier trace | `kernel.core.rules.frontier` |
+| Walker views (`ProofFrameDiffView`, etc.) | `kernel.application.walker` |
+| Raw cross-boundary DTOs (`EvaluationOverlay`, `RuleLiteralPath`, `RuleAddedAtom`, `RoundEvent`) | `kernel.application.protocol`, `kernel.audit` |
+| Audit package loading | `kernel.audit.load_audit_package` |
+| Engine adapter registration | `kernel.adapters.{souffle,problog,pyreason}` |
+
+See [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) for
+when and why to drop down to these surfaces.
+
+---
+
+*Internal change history is recorded in `docs/blueprints/archive/` (not
+shipped with the release).*

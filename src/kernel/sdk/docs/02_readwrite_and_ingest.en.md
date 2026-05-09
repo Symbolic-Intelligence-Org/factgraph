@@ -1,19 +1,30 @@
-# SDK Read/Write and Ingest Reference (Current Implementation)
+# SDK Read/Write and Ingest Reference
 
-Scope: `store.py`, `facade.py`, `batch.py`, `ingest.py`
+Scope: `store.py`, `facade.py`, `batch.py`, `ingest.py`. For the
+introductory walkthrough see [`00_user_guide.en.md`](00_user_guide.en.md);
+for the API index see [`04_api_surface.en.md`](04_api_surface.en.md).
 
-Runtime authority note: SDK retains read/write facades, descriptor parsing, diagnostics, and outward result shapes; read/write/ingest paths expressible as application protocol delegate to `kernel.application` executors.
+In the snippets below, `fg = FactGraph.from_schema_classes([...])`.
+All flat methods (`fg.set(...)`, `fg.get(...)`, etc.) are also reachable
+through the namespaced form:
 
-> **post-L taxonomy note:** the flat `sdk.<method>(...)` forms on this page are also reachable through the taxonomy — `sdk.set/add/retract/edit/batch` map to `FactGraph.write.<verb>(...)`; `sdk.get/find/ref` map to `FactGraph.read.<verb>(...)`; `sdk.ingest/validate_provenance` map to `FactGraph.schema.<verb>(...)`. The flat form is permanently supported foundational API; both forms have identical semantics. See [04_api_surface.en.md §0](04_api_surface.en.md).
+| Flat | Namespaced | Namespace |
+|---|---|---|
+| `fg.set / add / retract / edit / batch` | `fg.write.set / add / retract / edit` (and `fg.batch`) | `write` |
+| `fg.get / find / ref` | `fg.read.get / find / ref` | `read` |
+| `fg.ingest / validate_provenance` | `fg.schema.ingest / validate_provenance` | `schema` |
+
+Both forms have identical semantics. The flat form is permanently
+supported.
 
 ## 1. Choosing a Write Entry
 
 | Scenario | Recommended API | Notes |
 | --- | --- | --- |
-| Build object graph, preview, replay/export | `sdk.batch()` | Supports `preview()`, `commit()`, wire plan |
-| Edit an existing entity with known identity | `sdk.edit(...)` | Clear write intent |
-| External batch import with diagnostics | `sdk.ingest(...)` | Item-level validation, collect-and-stop |
-| Lowest-level direct assertion writes | `sdk.ref/set/add/retract` | Most flexible, least opinionated |
+| Build object graph, preview, replay/export | `fg.batch()` | Supports `preview()`, `commit()`, wire plan |
+| Edit an existing entity with known identity | `fg.write.edit(...)` | Clear write intent |
+| External batch import with diagnostics | `fg.ingest(...)` | Item-level validation, collect-and-stop |
+| Lowest-level direct assertion writes | `fg.write.ref / set / add / retract` | Most flexible, least opinionated |
 
 ## 2. Building `SDKStore`
 
