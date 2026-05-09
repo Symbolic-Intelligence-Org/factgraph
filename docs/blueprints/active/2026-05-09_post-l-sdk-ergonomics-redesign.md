@@ -847,7 +847,71 @@ Candidate scope:
 - No `DeprecationWarning` references in any doc (per §5.4 F-noise-cost).
 - Taxonomy is the **preferred** form for new code; flat is **supported foundational** API.
 
-**Locked per-surface treatment (codified):**
+##### 5.5.6 Module-internal docs with peripheral SDK references (extension 2026-05-09)
+
+Per user observation "every module has a docs/ directory; some content may be affected", a thorough survey via `find src/kernel -type d -name docs` surfaced 9 docs directories (vs the 2 covered in original §5.5 lock). Re-grep `(SDKStore|sdk\.[a-z_]+|kernel\.sdk)` across all 9 found 5 additional surfaces with peripheral SDK references missed in the original lock:
+
+| Surface | Refs | Nature | Treatment | Rewrite cost |
+|---|---|---|---|---|
+| `kernel/application/docs/README.md` | 1 (line 7) | Routing note: "如果你是在写普通 Python product code... 优先阅读 `src/kernel/sdk/docs/` 并从 `kernel.sdk` 开始" | **UNCHANGED** — pointer survives because SDK docs (now taxonomy-first) is the right destination | ZERO |
+| `kernel/application/walker/docs/README.md` | 1 (line 126) | Negative assertion: "No SDK shell or `kernel.sdk` import" | **UNCHANGED** — affirms walker is Tier 2 advanced-importable; assertion stays valid | ZERO |
+| `kernel/adapters/docs/02_problog_adapter.md` | 1 (line 195) | Adapter usage example: `sdk.evaluate(..., mode="problog", engine_options={"timeout": 15})` | **CONDITIONAL** — flat-form OK as foundational; if Shape 2/3 ships, optionally show alongside `fg.eval.evaluate(..., mode="problog", ...)` form. Not load-bearing teaching surface. | NEGLIGIBLE (1 line) |
+| `kernel/adapters/docs/03_pyreason_adapter.md` | 6 (mixed) | (a) DSL imports `from kernel.sdk.dsl.expr import LogicVar, Pred` + `kernel.sdk.dsl.rule import Rule` (lines 149-150) — **taxonomy doesn't change DSL imports**; (b) prose mechanism descriptions `SDKStore.evaluate` (lines 9, 237) — describes underlying contract; (c) usage examples `sdk.evaluate(...)` (lines 221, 261) — adapter integration demos | **MOSTLY UNCHANGED**: DSL imports stay (orthogonal to redesign); prose mechanism descriptions stay flat (describe foundational contract per §5.4 lock); 1-2 usage examples conditionally taxonomy-form if Shape 2/3 ships | SMALL (1-2 lines) |
+| `kernel/core/docs/04_public_contract_v1.md` | 3 (lines 33-36) | **Public contract anchor**: `SDKStore.run(...)`, `SDKStore.evaluate(...)`, `SDKStoreError` listed as v1 public contract surface | **STAYS FLAT + ADD TAXONOMY CROSS-REF NOTE** — flat `SDKStore.<method>` IS the permanent contract per §5.4 lock; contract document correctly anchors flat as foundational; adds brief "and now also reachable as `FactGraph.eval.run/evaluate` per §5.5 SDK taxonomy" cross-ref. The contract document is one of the few places where flat-form is NOT just compatibility-reference — it's the canonical contract anchor. | SMALL (1 line cross-ref note) |
+
+**4th treatment tier added to §5.5 classification:**
+
+4. **Module-internal docs with peripheral SDK references** (mostly unchanged; flat refs in mechanism prose stay as foundational; usage examples may update conditionally; **public contract anchor stays flat + adds taxonomy cross-ref**).
+
+**Refinement to original §5.5 lock for `application/docs/01_overview`:** the original lock said "brief paragraph noting taxonomy + cross-ref; own content unchanged". Verified at `01_overview.md:175-180` — the L methods enumeration paragraph (line 177, ~1300 chars) is dense and references all 9 L methods by their flat `sdk.<method>` form to describe each shell's underlying mechanism. Refined treatment: enumeration **stays flat** (it's describing the foundational contract / mechanism; flat form correctly anchors what the application runtime is consumed by); brief introductory sentence added: "Under §5.5 SDK taxonomy, these are also reachable as `FactGraph.what_if.check` / `FactGraph.what_if.fact_overlay.check` / `FactGraph.what_if.rule.disable` / `FactGraph.audit.diff_proof_frames` etc.; flat `SDKStore.<method>` form retained below as the foundational contract." Effectively SDK-presentation-only (bridge note), but with taxonomy enumeration appended once for completeness.
+
+**Source-grounded falsifier verdict for §5.5.6 extension:** total additional surface = 5 files but **4 are zero-or-negligible-cost** (routing note + negative assertion + 1 adapter example line + 1 contract cross-ref note); the 5th (`pyreason_adapter`) is small (1-2 example lines). The original §5.5 lock's 12-doc-files-become-taxonomy-aware count was concentrated in actual SDK teaching surfaces; module-internal docs reach the user via routing/contract paths and stay primarily flat-form correct.
+
+**Updated total rewrite cost surface (post-§5.5.6 extension):**
+
+```
+TAXONOMY-FIRST (primary teaching investment, ~12 files):
+  - README.md + .en.md
+  - kernel/sdk/docs/00_user_guide.md + .en.md          [319 refs]
+  - kernel/sdk/docs/04_api_surface.md + .en.md
+  - kernel/sdk/docs/02_readwrite_and_ingest.md + .en.md
+  - kernel/sdk/docs/03_rules_and_derivations.md + .en.md
+  - kernel/sdk/docs/01_alignment_matrix.md + .en.md
+
+SDK-PRESENTATION-ONLY (brief note + cross-ref):
+  - kernel/application/docs/01_overview.md + _en.md    [enumeration stays flat; brief taxonomy intro added]
+
+PUBLIC-CONTRACT ANCHOR (stays flat + adds taxonomy cross-ref):
+  - kernel/core/docs/04_public_contract_v1.md          [+1 cross-ref line]
+
+CONSISTENCY MAINTENANCE:
+  - kernel/sdk/docs/05_cn_en_consistency_checklist.md  [verify CN+EN parity]
+
+CONDITIONAL UPDATES (only if Shape 2/3 ships):
+  - examples/04_round_persistence_diff.ipynb           [1 line: diff_proof_frames]
+  - kernel/adapters/docs/02_problog_adapter.md         [1 example line, optional]
+  - kernel/adapters/docs/03_pyreason_adapter.md        [1-2 example lines, optional]
+
+UNCHANGED:
+  - notebooks 01/02/03 (Tier-2 advanced importable usage)
+  - examples/round_story_full_demo.py
+  - examples/README.md (possibly minor)
+  - kernel/application/docs/README.md (routing note survives)
+  - kernel/application/walker/docs/README.md (negative assertion stays valid)
+  - kernel/audit/docs/* (0 SDK refs)
+  - kernel/authoring/docs/* (0 SDK refs)
+  - kernel/core/docs/* except 04_public_contract_v1 (architecture/quality/roadmap have 0 refs)
+  - kernel/core/annotation/docs/README.md (0 SDK refs)
+  - kernel/adapters/pyreason/docs/README.md (0 SDK refs)
+  - L archive blueprints (G1-G5)
+  - Path B published L snapshots (immutable)
+  - Sacred branches (master, v0.1-oss-prep)
+
+NOT CREATED:
+  - Separate v0.1 → v0.2 migration guide file (no breaking migration; release notes suffice)
+```
+
+**Locked per-surface treatment (codified, post-extension):**
 
 ```
 TAXONOMY-FIRST (lead with FactGraph.<namespace>.<method>):
@@ -958,7 +1022,7 @@ If §5.1-§5.7 lands a replacement (option C / D): substantially more — every 
 - **Compat is a hard constraint, not a goal.** The flat `SDKStore.<method>` surface across 5 immutable Path B snapshots stays callable; any candidate that breaks it requires a standalone falsifier per §5.4 thesis-derived default.
 - **§5.3 locked: top-level entrypoint class name is `FactGraph`** (sourced from chat-driven 4-round falsifier pass on 2026-05-09; `tensorflow.Tensor` / `pyspark.sql.SparkSession` / `pyparsing.ParserElement` Python precedent for Fact-overlap; `EvidenceGraph` substrate-audit name does NOT collide because it's not in `factpy.__all__`). Relationship with existing `SDKStore` class is §5.4 territory.
 - **§5.2 locked: teaching taxonomy** — 8 top-level namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) + 2 sub-namespaces (`what_if.fact_overlay`, `what_if.rule`); `from_schema_classes` (cls) + `batch` (cm) + 4 properties at top-level. Locked 2026-05-09 per user direction with all 5 placement decisions: `what_if` Option B split / `diff_proof_frames` → `audit` / `validate_provenance` → `schema` / `accept*` stays in `eval` / `from_schema_classes` + `batch` stay top-level. **Teaching-taxonomy lock is conceptual only — does NOT pre-decide rollout shape (Shape 1 docs-only vs Shape 2 additive aliases vs Shape 3 canonical nested + flat compat vs Shape 5 hybrid).** Shipping shape decision deferred to §5.4 / §5.7.
-- **§5.5 locked: per-surface doc treatment.** 3-tier classification: (a) **Taxonomy-first** (lead with `FactGraph.<namespace>.<method>`) — README CN/EN + 6 SDK doc files (`00_user_guide`, `04_api_surface`, `02_readwrite_and_ingest`, `03_rules_and_derivations`, `01_alignment_matrix`, `05_cn_en_consistency_checklist`); (b) **SDK-presentation-only** (brief note + cross-ref; own content unchanged) — `kernel/application/docs/01_overview` CN/EN; (c) **Compatibility/reference** sections within taxonomy-first docs (NOT separate "deprecated" labels) — flat-method documentation absorbed as "Foundational API" / "Compatibility reference" sections. Notebooks 01-04 + `round_story_full_demo.py` UNCHANGED (Tier-2 advanced importable bypass; only conditional 1-line update in notebook 04 if Shape 2/3 ships). NO separate migration guide file (no breaking migration; release notes suffice). L archive blueprints + Path B published snapshots untouched (Path B immutability). Total rewrite surface: ~12 doc files become taxonomy-aware, 0 application/audit/core narrative changes, 0-1 notebook edits. Locked 2026-05-09 per user direction with default per-surface treatment.
+- **§5.5 locked: per-surface doc treatment.** **4-tier classification (post-§5.5.6 extension):** (a) **Taxonomy-first** (lead with `FactGraph.<namespace>.<method>`) — README CN/EN + 6 SDK doc files (`00_user_guide`, `04_api_surface`, `02_readwrite_and_ingest`, `03_rules_and_derivations`, `01_alignment_matrix`, `05_cn_en_consistency_checklist`); (b) **SDK-presentation-only** (brief note + cross-ref; own content unchanged) — `kernel/application/docs/01_overview` CN/EN (enumeration stays flat; intro adds taxonomy bridge note); (c) **Public-contract anchor** (stays flat + adds taxonomy cross-ref) — `kernel/core/docs/04_public_contract_v1.md` (per §5.4 flat IS permanent contract); (d) **Compatibility/reference** sections within taxonomy-first docs (NOT separate "deprecated" labels) — flat-method documentation absorbed as "Foundational API" / "Compatibility reference" sections. **Module-internal docs with peripheral SDK references mostly UNCHANGED:** `application/docs/README.md` (routing note survives — points to taxonomy-first SDK docs), `application/walker/docs/README.md` (negative assertion "No SDK shell" stays valid), `adapters/docs/02_problog_adapter.md` + `03_pyreason_adapter.md` (DSL imports unchanged; prose mechanism descriptions stay flat as foundational; 1-2 usage examples conditionally taxonomy if Shape 2/3 ships); other module docs zero SDK refs (audit/authoring/core-architecture/annotation). Notebooks 01-04 + `round_story_full_demo.py` UNCHANGED (Tier-2 advanced importable bypass; only conditional 1-line update in notebook 04 if Shape 2/3 ships). NO separate migration guide file (no breaking migration; release notes suffice). L archive blueprints + Path B published snapshots untouched (Path B immutability). Total rewrite surface: ~12 doc files become taxonomy-aware (taxonomy-first tier), 1 SDK-presentation bridge note (application overview), 1 cross-ref note (public contract), 0 application/audit/core narrative changes, 0-3 conditional notebook/adapter example edits. Locked 2026-05-09 per user direction with default per-surface treatment + 2026-05-09 §5.5.6 extension covering 5 module-internal doc surfaces missed in original lock.
 - **§5.4 locked: Option 2 — Permanent additive aliases + docs prefer new taxonomy.** Flat `SDKStore.<method>` callable permanently with NO deprecation, NO removal plan, NO runtime `DeprecationWarning`; `FactGraph` + teaching taxonomy materializes as additive runtime aliases under §5.7-conditional Shape 2/3 rollout. Aliases delegate to flat methods via property/private-manager-class pattern (per `views` precedent at `kernel/sdk/store.py:198-200` + `EntitySnapshot.assertions` precedent at `kernel/sdk/facade.py:102-217`). Docs / quickstart / notebooks lead with new taxonomy; flat methods documented as "supported foundational API" (NOT "deprecated"). Existing flat-method tests stay verbatim; new alias-form parity tests added under §5.9. Path B published L snapshots stay immutable with original flat-only docs framing — docs evolution is forward-only on design branch. **Rejected options recorded with falsifier evidence:** Option 3 (soft "deprecated" docs) misleads without removal plan; Option 4 (runtime `DeprecationWarning`) creates noise (flat ↔ nested produce identical results, unlike `row_format='tuple'` precedent which marked behaviorally distinct legacy mode); Option 5 (hard removal) violates §0 thesis hard-constraint without standalone falsifier.
 - **Design / implementation branch isolation in force.** Design branch (this branch, `codex/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09`) accepts blueprint / docs / audit-log commits only. Implementation branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09` (created 2026-05-09 at design HEAD `59a5694`) is the only authorized location for code changes post-scope-freeze. Cross-contamination is a structural invariant violation.
 - `kernel.sdk.__all__` length stays at **34** unless §5.x explicitly justifies an addition with falsifier pass.
