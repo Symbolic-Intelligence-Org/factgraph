@@ -113,9 +113,12 @@ info "projection script + allowlist present"
 if git ls-remote --heads origin "$RELEASE_BRANCH" 2>/dev/null | grep -q "$RELEASE_BRANCH"; then
   RELEASE_BRANCH_EXISTS=true
   info "release branch exists on origin: $RELEASE_BRANCH (will add new commit)"
+  # Snapshot local release-branch SHA so dry-run cleanup can restore it.
+  RELEASE_BRANCH_PREDRY="$(git rev-parse --verify "refs/heads/$RELEASE_BRANCH" 2>/dev/null || true)"
 else
   RELEASE_BRANCH_EXISTS=false
   info "release branch does not exist: $RELEASE_BRANCH (will create orphan)"
+  RELEASE_BRANCH_PREDRY=""
 fi
 
 # --- plan summary -------------------------------------------------------------
@@ -150,12 +153,16 @@ cleanup() {
   git worktree remove --force "$RELEASE_WT" 2>/dev/null || true
   rm -rf "$STAGING" "$STAGING.manifest" 2>/dev/null || true
   if [[ "$DRY_RUN" == true ]]; then
-    # Drop local milestone + release branch + tag created during dry-run
+    # Drop local milestone + tag created during dry-run
     git branch -D "$MILESTONE_BRANCH" 2>/dev/null || true
-    if [[ "$RELEASE_BRANCH_EXISTS" == false ]]; then
+    git tag -d "$VERSION" 2>/dev/null || true
+    # Restore local release branch ref to whatever it was before the dry-run
+    # (the worktree's git checkout -B advanced it; here we revert)
+    if [[ "$RELEASE_BRANCH_EXISTS" == true && -n "${RELEASE_BRANCH_PREDRY:-}" ]]; then
+      git update-ref "refs/heads/$RELEASE_BRANCH" "$RELEASE_BRANCH_PREDRY" 2>/dev/null || true
+    elif [[ "$RELEASE_BRANCH_EXISTS" == false ]]; then
       git branch -D "$RELEASE_BRANCH" 2>/dev/null || true
     fi
-    git tag -d "$VERSION" 2>/dev/null || true
   fi
   if [[ $rc -ne 0 ]]; then
     color "31" "release.sh exited with status $rc"
