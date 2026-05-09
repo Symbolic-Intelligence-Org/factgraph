@@ -1,35 +1,55 @@
 # Current Operational Memory
 
-最后更新:2026-05-09(`codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09`;post-L SDK ergonomics redesign implemented + archived locally;publish pending explicit authorization)
+最后更新:2026-05-09(`codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09 @ 30810c9`;**post-L SDK ergonomics redesign PUBLISHED** + pre-publish-audit-fix landed)
 
-## 当前阶段(2026-05-09 — POST-L SDK ERGONOMICS REDESIGN IMPLEMENTED; PUBLISH PENDING)
+## 当前阶段(2026-05-09 — POST-L SDK ERGONOMICS REDESIGN PUBLISHED)
 
-**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 impl branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09`. 设计分支 `codex/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09` 保持 scoped design HEAD `fb067de`;implementation / close-out 在 impl branch 上完成。
+**当前工作树:** `/Users/zhenzhili/hnsm-backend` 当前停在 impl branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09 @ 30810c9`(pre-publish audit-fix HEAD).
 
-**最终 surface:**
+**两个 publish refs 已推送到 origin:**
+- `origin/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09` @ `30810c9`(standalone)
+- `origin/v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-post-l-redesign-2026-05-09` @ `30810c9`(Path B 6th immutable combined snapshot,extends 5th at `d4ceb3e`)
+
+**最终 surface(已发布):**
 - `FactGraph` 进入 `kernel.sdk.__all__`;`FactGraph is SDKStore` literal alias。
-- `kernel.sdk.__all__` 从 34 → 35,唯一新增导出是 `FactGraph`;manager classes 全部私有。
+- `kernel.sdk.__all__` 从 34 → 35,唯一新增导出是 `FactGraph`;9 个 manager classes 全部私有(包括预存的 `_SDKViewsManager`,pre-publish Blocker 2 fix 加上 `__setattr__` 守卫)。
 - 8 top-level taxonomy namespaces + 2 `what_if` sub-namespaces: `schema`, `read`, `write`, `eval`, `what_if`, `what_if.fact_overlay`, `what_if.rule`, `audit`, `package`, `views`。
 - Flat `SDKStore.<method>` / `FactGraph.<method>` 永久保留为 foundational API;无 deprecation warning,无 removal plan,无 package rename。
-- 9 SDK shells (`kernel/sdk/shells/`) 行为未重写;manager methods 只 delegate 到既有 flat methods。
+- 9 SDK shells (`kernel/sdk/shells/`) 行为未重写;manager methods 只 `*args, **kwargs` delegate 到既有 flat methods(call-compatible,not signature-identical;per Clarify 1 narrowing)。
 
-**Commit chain:**
+**Commit chain on impl branch:**
 - `af99c87` — Phase 1: `FactGraph` alias + 9 namespace managers + alias parity / namespace shape tests。
 - `31889ae` — Phase 2: taxonomy-first docs + redesign invariants。
 - `380e391` — Phase 2 audit-fix: README stale L Direction boundary paragraph + stale test baseline fixed;regression lint added。
-- close-out commit — fills §9, archives blueprint, updates archive inventory + memory, prepares publish refs locally.
+- `eb0fdae` — Phase 3 close-out: 填 §9,归档 blueprint,更新 archive inventory + memory,本地 prepare publish refs。
+- `30810c9` — pre-publish audit-fix: 2 Blockers + 4 Clarify + 3 Minors 全部修;archived blueprint amendments(Clarify 1/2 + Minor 3 narrowing);ruff cleanup of inherited unused imports(Clarify 3);regression-prevention lint added(Blocker 1 prevention)。**PUBLISHED HEAD**.
 
-**Verification:**
-- Focused redesign + G1-G5 invariant suite: 98 OK。
-- `ruff` clean;`git diff --check` clean。
-- Full discovery records 1752 discovery items with 1 skipped + known environment-only `kernel.adapters.problog` cold-start circular import error。
-- Sacred branches + five existing L Path B published snapshots untouched。
+**Pre-publish audit catches(经验记录):**
+1. Blocker 1 — `04_api_surface.md` + `.en.md` taxonomy code examples 用错 canonical signatures(`fg.what_if.check(rule, binding)` 应该是 `(derivation, binding)`;`fg.what_if.fact_overlay.check(support, overlay)` 缺 2 个 positional args)。
+2. Blocker 2 — `_SDKViewsManager` 没有 `__setattr__` 守卫,违反 8-namespace 教学 taxonomy 的 read-only invariant。
+3. Clarify 1 — manager `*args, **kwargs` 是有意选择(call-compatible not signature-identical);archived blueprint §8 narrowing 已加。
+4. Clarify 2 — Tier 1 docs 实际是 "taxonomy intro note + cross-ref + flat-form foundational body",不是逐示例 taxonomy-first;archived blueprint §5.5 narrowing 已加。
+5. Clarify 3 — full `ruff check src/kernel` 在 2 个 inherited 测试文件 fail(unused imports);auto-fix 已清。
+6. Minor 1 — 4 个 source files 引用 stale `docs/blueprints/active/` 路径;已更新到 `archive/`。
+7. Minor 2 — `application/01_overview` Batch 8 wording outdated;已 reframe 为 "historical Batch 8 state, since updated by L Direction G1-G5 + post-L redesign"。
+8. Minor 3 — archived blueprint "no `DeprecationWarning` references in any doc" overbroad claim;已 narrow 到 "no flat-vs-nested DeprecationWarning"(预存的 `row_format='tuple'` 警告 separately scoped)。
 
-**Prepared publish refs (local only; no push yet):**
-- `v0.1-post-l-sdk-ergonomics-redesign-2026-05-09`
-- `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-post-l-redesign-2026-05-09`
+**Verification at published HEAD `30810c9`:**
+- Focused redesign + G1-G5 invariant suite: **100 OK**(98 + 2 new tests:views read-only + canonical-signature lint)。
+- Full `ruff check src/kernel`: ALL CHECKS PASSED(post Clarify 3 cleanup)。
+- `git diff --check` clean。
+- `git ls-remote origin` 验证两个 published refs 都在 `30810c9`。
 
-**Next required action:** user must explicitly authorize publish. On publish, push the standalone ref and Path B 6th combined ref, then verify existing G1/G4/G2/G3/G5 snapshots remain frozen.
+**Sacred + 5 prior L snapshots verified untouched at publish:**
+- `origin/master 81c6f775`,`origin/v0.1-oss-prep f5ade36d`
+- G1 `d6716a01`,G4 `acb5a6ed`,G2 `d6583907`,G3 `cb6d3bd8`,G5 `d4ceb3eb`
+
+**Forward triggers:**
+- Optional notebook/example taxonomy updates 可机会主义跟进;current state 保留 notebooks 不变。
+- `factpy` package rename 仍 deferred 到独立 scoped blueprint。
+- Flat method deprecation/removal 仍显式 out of scope,直到 future user signal 重开。
+- Per-method explicit manager signatures 仍 deferred 直到具体 IDE-hint consumer signal 出现。
+- Per-body Tier 1 docs rewrite(vs current intro-note treatment)仍 deferred 直到 consumer signal 给出 churn justification。
 
 <!-- Historical 2026-05-09 G5 published state follows. -->
 
