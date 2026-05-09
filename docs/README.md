@@ -40,7 +40,7 @@
 
 以下模块目录中的 `docs/` 才是对应实现的当前真相：
 
-- [src/kernel/core/docs/01_architecture.md](/Users/zhenzhili/hnsm-backend/src/kernel/core/docs/01_architecture.md)
+- [src/kernel/core/docs/01_architecture.en.md](/Users/zhenzhili/hnsm-backend/src/kernel/core/docs/01_architecture.en.md)
 - [src/kernel/application/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/application/docs/README.md)
   - application runtime authority docs, including the application-layer walker docs at `src/kernel/application/walker/docs/README.md`.
 - [src/service/docs/README.md](/Users/zhenzhili/hnsm-backend/src/service/docs/README.md)

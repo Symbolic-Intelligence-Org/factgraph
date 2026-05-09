@@ -84,7 +84,7 @@
 
 `README.md` 之外的专题文档（如 `01_overview.md`、`02_readwrite_and_ingest.md`）没有固定模板，但必须遵守以下规则：
 
-- **文件头必须标明适用范围和最后更新时间**，格式参考 `core/docs/01_architecture.md` 的前 6 行
+- **文件头必须标明适用范围和最后更新时间**，格式参考 `core/docs/01_architecture.en.md` 的前 6 行
 - **描述的是当前实现行为**，不是设计目标或未来计划；计划内容可以放在独立的 `roadmap` 文件中
 - **与 README.md 保持一致**：README.md 中列出的文件就是当前有效的文档集；从 README 删除条目等同于废弃该文档
 - **双语文档**：如果模块需要中英双语（参考 `sdk/docs/`），中文文档是语义基线；先更新中文，再同步英文；`_cn_en_consistency_checklist.md` 类文件是可选的，但如果存在，必须保持同步
