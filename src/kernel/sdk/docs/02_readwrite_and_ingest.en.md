@@ -10,7 +10,8 @@ through the namespaced form:
 
 | Flat | Namespaced | Namespace |
 |---|---|---|
-| `fg.set / add / retract / edit / batch` | `fg.write.set / add / retract / edit` (and `fg.batch`) | `write` |
+| `fg.set / add / retract / edit` | `fg.write.set / add / retract / edit` | `write` |
+| `fg.batch(...)` | (flat-only — there is no `fg.write.batch`) | — |
 | `fg.get / find / ref` | `fg.read.get / find / ref` | `read` |
 | `fg.ingest / validate_provenance` | `fg.schema.ingest / validate_provenance` | `schema` |
 
@@ -87,7 +88,12 @@ sdk.retract(asrt_id, meta={"trace_id": "fix-1"})
 ```
 
 - Append-only revoke (no physical delete of claim rows).
-- Returns the revoker assertion id; re-retracting an already revoked assertion returns the existing revoker id, while unknown assertions raise.
+- Returns the revoker assertion id; re-retracting an already revoked
+  assertion returns the existing revoker id; unknown assertions raise
+  `kernel.core.evidence.write_protocol.WriteProtocolError` (this is
+  not currently wrapped to `SDKStoreError` at the SDK boundary —
+  catch the underlying exception or `Exception` if you need broad
+  coverage).
 
 ## 4. Batch Writes (`sdk.batch()`)
 
@@ -148,6 +154,8 @@ Stable contract:
 - `limit` must be a non-negative integer.
 - Filter keys must be entity identity or field names.
 - If identity filters are used, all identity fields are required.
+- `view: ViewSpec | str | None` — apply a named or inline view to the
+  result projection (`view="preferred_names"` or `view=ViewSpec(...)`).
 - `temporal_view` parameter is not supported.
 
 Filter semantics:
