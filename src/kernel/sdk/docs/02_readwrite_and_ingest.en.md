@@ -4,6 +4,8 @@ Scope: `store.py`, `facade.py`, `batch.py`, `ingest.py`
 
 Runtime authority note: SDK retains read/write facades, descriptor parsing, diagnostics, and outward result shapes; read/write/ingest paths expressible as application protocol delegate to `kernel.application` executors.
 
+> **post-L taxonomy note:** the flat `sdk.<method>(...)` forms on this page are also reachable through the taxonomy — `sdk.set/add/retract/edit/batch` map to `FactGraph.write.<verb>(...)`; `sdk.get/find/ref` map to `FactGraph.read.<verb>(...)`; `sdk.ingest/validate_provenance` map to `FactGraph.schema.<verb>(...)`. The flat form is permanently supported foundational API; both forms have identical semantics. See [04_api_surface.en.md §0](04_api_surface.en.md).
+
 ## 1. Choosing a Write Entry
 
 | Scenario | Recommended API | Notes |

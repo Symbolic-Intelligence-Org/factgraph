@@ -4,6 +4,8 @@
 
 Runtime authority note:SDK 保留读写 facade、descriptor parsing、diagnostics 与 outward result shape；可表达为 application protocol 的 read/write/ingest 路径委托给 `kernel.application` executor。
 
+> **post-L taxonomy note：** 本页 flat `sdk.<method>(...)` 形式同样可通过 taxonomy 触达 —— `sdk.set/add/retract/edit/batch` 对应 `FactGraph.write.<verb>(...)`,`sdk.get/find/ref` 对应 `FactGraph.read.<verb>(...)`,`sdk.ingest/validate_provenance` 对应 `FactGraph.schema.<verb>(...)`。flat 形式作为 foundational API 被永久支持;两种形式语义相同。详见 [04_api_surface.md §0](04_api_surface.md)。
+
 ## 1. 写入口选择
 
 | 场景 | 推荐 API | 说明 |

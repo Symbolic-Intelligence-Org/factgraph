@@ -168,6 +168,8 @@ The current walker entry points are:
 
 Current SDK runtime delegation:
 
+> **post-L SDK ergonomics redesign cross-ref (§5.5 Tier 2 SDK-presentation note):** the flat `sdk.<method>(...)` enumeration below describes the SDK shell delegation contract — application runtime is the canonical authority. From the post-L redesign these flat methods are also reachable through the `FactGraph` taxonomy (`fg.read.get(...)` / `fg.what_if.check(...)` / `fg.what_if.fact_overlay.check(...)` / `fg.what_if.rule.disable(...)` / `fg.audit.diff_proof_frames(...)` etc.); the underlying delegation chain to application runtime is unchanged. Flat `SDKStore.<method>` form is retained below as the foundational contract anchor. See [post-L SDK ergonomics redesign](../../../../docs/blueprints/active/2026-05-09_post-l-sdk-ergonomics-redesign.md) §5.2 / §5.4.
+
 - `sdk.get(...)` / `sdk.find(...)` use application read/hydration DTOs.
 - `SDKBatchTx.preview()` and `BatchPlan.apply()` delegate to application write planning/apply when staged operations can be represented by application protocol.
 - `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.

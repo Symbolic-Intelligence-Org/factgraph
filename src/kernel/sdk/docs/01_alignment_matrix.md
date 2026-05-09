@@ -1,7 +1,9 @@
 # SDK 能力对齐矩阵（当前实现）
 
-更新时间：2026-04-28
+更新时间：2026-05-09 (post-L SDK ergonomics redesign)
 范围：`src/kernel/sdk`
+
+> **post-L taxonomy note：** v0.1 SDK 顶层入口为 `FactGraph` (`SDKStore` 字面别名),通过 8 个 taxonomy namespace + 2 个 sub-namespace 暴露既有 30 个 flat 方法。flat 形式 (`sdk.<method>(...)` / `SDKStore.<method>(...)`) 作为 foundational API 永久支持。详见 [04_api_surface.md §0](04_api_surface.md)。
 
 ## 1. Layer Ownership
 

@@ -4,6 +4,8 @@ Scope: `src/kernel/sdk/dsl` + `SDKStore.run/evaluate/accept`
 
 Runtime authority note: SDK retains Rule / Query / Derivation DSLs, authoring validation, lowering, and outward compatibility; Query runtime and compiled Derivation evaluate/accept orchestration now delegate to `kernel.application`.
 
+> **post-L taxonomy note:** the `sdk.run/evaluate/evaluate_compiled/accept/accept_compiled/accept_many` flat methods on this page are also reachable via `FactGraph.eval.<verb>(...)`; G1+G4 (`sdk.check/diagnose/why_not`) via `FactGraph.what_if.<verb>(...)`; G2 fact overlay via `FactGraph.what_if.fact_overlay.<verb>(...)`; G3 rule overlays via `FactGraph.what_if.rule.<verb>(...)` (prefix dropped at sub-namespace level). The flat form is permanently supported foundational API. See [04_api_surface.en.md §0](04_api_surface.en.md).
+
 ## 1. `vars(...)`
 
 Supported:

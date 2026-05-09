@@ -4,6 +4,8 @@
 
 Runtime authority note:SDK 保留 Rule / Query / Derivation DSL、authoring validation、lowering 与 outward compatibility；Query runtime 与 compiled Derivation evaluate/accept orchestration 已委托给 `kernel.application`。
 
+> **post-L taxonomy note：** 本页 `sdk.run/evaluate/evaluate_compiled/accept/accept_compiled/accept_many` 同样可通过 `FactGraph.eval.<verb>(...)` 触达;G1+G4 (`sdk.check/diagnose/why_not`) 通过 `FactGraph.what_if.<verb>(...)`;G2 fact overlay 通过 `FactGraph.what_if.fact_overlay.<verb>(...)`;G3 rule overlays 通过 `FactGraph.what_if.rule.<verb>(...)`(prefix dropped at sub-namespace level)。flat 形式作为 foundational API 被永久支持。详见 [04_api_surface.md §0](04_api_surface.md)。
+
 ## 1. `vars(...)`
 
 支持：

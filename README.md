@@ -35,7 +35,7 @@ pip install -e .
 ## Quickstart
 
 ```python
-from kernel.sdk import Entity, Field, Identity, SDKStore
+from kernel.sdk import Entity, Field, Identity, FactGraph
 
 
 class User(Entity):
@@ -43,14 +43,16 @@ class User(Entity):
     name: str = Field(cardinality="single")
 
 
-sdk = SDKStore.from_schema_classes([User])
+fg = FactGraph.from_schema_classes([User])
 
-alice = sdk.ref(User, user_id="u-1")
-sdk.set(User.name, alice, "Alice")
+alice = fg.read.ref(User, user_id="u-1")
+fg.write.set(User.name, alice, "Alice")
 
-snapshot = sdk.get(User, user_id="u-1")
+snapshot = fg.read.get(User, user_id="u-1")
 print(snapshot.name)  # Alice
 ```
+
+`FactGraph` 是 v0.1 SDK 的顶层入口,通过 8 个 taxonomy namespace (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) 教学概念分层。`FactGraph` 是 `SDKStore` 的别名 (literal alias),flat 形式 `fg.ref(...)` / `fg.set(...)` / `fg.get(...)` 与 nested 形式同样受支持,作为 **foundational API**——既不被弃用也不会移除。
 
 `kernel.sdk` 是面向用户的 Python product surface。运行时权威在 `kernel.application`;SDK 负责把 ergonomic API、schema/DSL authoring、snapshot/batch/editor 等 outward objects adapter 到 application runtime contract。
 
@@ -77,7 +79,7 @@ Batch 3-7 新增的 Check、Diagnose、Fact Overlay、ProofFrame、Why-not、rul
 
 | Area | Entry | Notes |
 |---|---|---|
-| SDK product API | `kernel.sdk` | Entity / Field / Identity / SDKStore / Query / Derivation 等用户入口 |
+| SDK product API | `kernel.sdk` | Entity / Field / Identity / FactGraph (与别名 SDKStore) / Query / Derivation 等用户入口 |
 | Runtime authority | `kernel.application` | read/write/query/ingest/derivation protocol DTO + executor |
 | Core primitives | `kernel.core` | ledger、rules、evidence、candidate support、low-level store semantics |
 | Authoring | `kernel.authoring` | rule/schema authoring helpers and validation surfaces |

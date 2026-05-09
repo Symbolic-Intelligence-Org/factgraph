@@ -11,6 +11,51 @@ L Direction 跨边界 DTO 层规则(锁于 G5 §5.3 / §6,承接 G2 §5.1+§5.2 
 
 该规则在 §6 invariants 中编入 verbatim,适用任何未来对 audit-layer 或 application-protocol DTO 的 SDK shell。
 
+## 0. Post-L SDK 教学分类（FactGraph taxonomy）
+
+post-L SDK ergonomics redesign 将 30 个 user-facing flat 方法组织为 8 个 top-level taxonomy namespaces + 2 个 sub-namespaces (under `what_if`)。`FactGraph` 是 `SDKStore` 的字面别名（literal alias）,作为 v0.1 SDK 的 canonical 顶层入口名;flat `SDKStore.<method>` 形式仍然受支持作为 **foundational API** ——既不被弃用也不会移除。
+
+新代码推荐使用 taxonomy form:
+
+```python
+from kernel.sdk import FactGraph
+
+fg = FactGraph.from_schema_classes([User])
+
+# Taxonomy form (preferred for new code)
+fg.read.get(User, user_id="u-1")
+fg.write.add(User.tag, alice, "engineer")
+fg.what_if.check(rule, binding)
+fg.what_if.fact_overlay.check(support, overlay)
+fg.what_if.rule.disable(rule, support_artifact, ...)
+fg.audit.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
+
+# Flat form (foundational API; permanently supported)
+fg.get(User, user_id="u-1")
+fg.add(User.tag, alice, "engineer")
+fg.check(rule, binding)
+fg.check_fact_overlay(support, overlay)
+fg.check_rule_disable(rule, support_artifact, ...)
+fg.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
+```
+
+8 top-level namespaces:
+
+| Namespace | 包含方法 |
+|---|---|
+| `schema` | `ingest`, `validate_provenance` |
+| `read` | `get`, `find`, `ref` |
+| `write` | `set`, `add`, `retract`, `edit` |
+| `eval` | `run`, `evaluate`, `evaluate_compiled`, `accept`, `accept_compiled`, `accept_many` |
+| `what_if` (G1+G4 direct) | `check`, `diagnose`, `why_not` |
+| `what_if.fact_overlay` (G2) | `check` (was `check_fact_overlay`), `recheck_proof_frame` |
+| `what_if.rule` (G3) | `disable`, `literal_replace`, `add_condition` (prefix dropped at sub-namespace level) |
+| `audit` | `explain_fact`, `conflicts`, `diff_proof_frames` (G5; placed here per §5.2.1 because it consumes recorded round events) |
+| `package` | `export_package`, `run_package` |
+| `views` (existing) | `create`, `update`, `delete`, `get`, `list` |
+
+Manager 类（`_SDKSchemaManager` 等）保持私有,不进入 `kernel.sdk.__all__`;读时通过 `FactGraph.<namespace>` 属性访问;写时（如 `fg.what_if.foo = ...`）抛 `FrozenSnapshotError`。详细 design 见 [post-L SDK ergonomics redesign blueprint](../../../../docs/blueprints/active/2026-05-09_post-l-sdk-ergonomics-redesign.md) §5.2 / §5.4 / §5.7。
+
 ## 1. 顶层导出（`from kernel.sdk import ...`）
 
 ### 1.1 Schema / Store / Registry
@@ -18,7 +63,8 @@ L Direction 跨边界 DTO 层规则(锁于 G5 §5.3 / §6,承接 G2 §5.1+§5.2 
 - `Entity`
 - `Field`
 - `Identity`
-- `SDKStore`
+- `FactGraph` *(post-L; canonical taxonomy entrypoint;`SDKStore` 的字面别名)*
+- `SDKStore` *(foundational; permanently supported)*
 - `SDKRegistry`
 
 补充：

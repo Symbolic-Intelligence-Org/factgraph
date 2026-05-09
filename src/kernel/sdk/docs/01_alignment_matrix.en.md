@@ -1,7 +1,9 @@
 # SDK Alignment Matrix (Current Implementation)
 
-Updated: 2026-04-28
+Updated: 2026-05-09 (post-L SDK ergonomics redesign)
 Scope: `src/kernel/sdk`
+
+> **post-L taxonomy note:** the v0.1 SDK top-level entrypoint is `FactGraph` (literal alias of `SDKStore`); the existing 30 flat methods are surfaced through 8 taxonomy namespaces + 2 sub-namespaces. The flat form (`sdk.<method>(...)` / `SDKStore.<method>(...)`) is permanently supported foundational API. See [04_api_surface.en.md §0](04_api_surface.en.md).
 
 ## 1. Layer Ownership
 

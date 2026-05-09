@@ -33,6 +33,8 @@
 - `SDKStore.run(...)`
 - `SDKStore.evaluate(...)`
 
+> **post-L SDK ergonomics redesign cross-ref（§5.5.6）：** 自 post-L 重设计起，`FactGraph` 作为 `SDKStore` 的字面别名进入 `kernel.sdk.__all__`,上述 contract 入口同样可通过 `FactGraph.eval.run(...)` / `FactGraph.eval.evaluate(...)` 触达;flat `SDKStore.<method>` 形式仍是 v1 contract 的 foundational anchor,既不被弃用也不会移除。详见 [post-L SDK ergonomics redesign](../../../../docs/blueprints/active/2026-05-09_post-l-sdk-ergonomics-redesign.md) §5.4 / §5.5。
+
 字符串 DSL 被显式拒绝，抛 `SDKStoreError`，稳定前缀：
 
 - `string rule DSL is not supported in SDK v1; ...`

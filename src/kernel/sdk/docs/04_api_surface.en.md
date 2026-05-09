@@ -11,6 +11,51 @@ L Direction cross-boundary DTO layer rule (locked at G5 §5.3 / §6, extending G
 
 This rule is encoded verbatim in §6 invariants and applies to any future SDK shell over audit-layer or application-protocol DTOs.
 
+## 0. Post-L SDK teaching taxonomy (FactGraph)
+
+The post-L SDK ergonomics redesign organizes 30 user-facing flat methods into 8 top-level taxonomy namespaces + 2 sub-namespaces (under `what_if`). `FactGraph` is the literal alias of `SDKStore`, serving as the canonical v0.1 SDK top-level entrypoint name; the flat `SDKStore.<method>` form remains supported as **foundational API** — neither deprecated nor scheduled for removal.
+
+New code is encouraged to use the taxonomy form:
+
+```python
+from kernel.sdk import FactGraph
+
+fg = FactGraph.from_schema_classes([User])
+
+# Taxonomy form (preferred for new code)
+fg.read.get(User, user_id="u-1")
+fg.write.add(User.tag, alice, "engineer")
+fg.what_if.check(rule, binding)
+fg.what_if.fact_overlay.check(support, overlay)
+fg.what_if.rule.disable(rule, support_artifact, ...)
+fg.audit.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
+
+# Flat form (foundational API; permanently supported)
+fg.get(User, user_id="u-1")
+fg.add(User.tag, alice, "engineer")
+fg.check(rule, binding)
+fg.check_fact_overlay(support, overlay)
+fg.check_rule_disable(rule, support_artifact, ...)
+fg.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
+```
+
+The 8 top-level namespaces:
+
+| Namespace | Methods |
+|---|---|
+| `schema` | `ingest`, `validate_provenance` |
+| `read` | `get`, `find`, `ref` |
+| `write` | `set`, `add`, `retract`, `edit` |
+| `eval` | `run`, `evaluate`, `evaluate_compiled`, `accept`, `accept_compiled`, `accept_many` |
+| `what_if` (G1+G4 direct) | `check`, `diagnose`, `why_not` |
+| `what_if.fact_overlay` (G2) | `check` (was `check_fact_overlay`), `recheck_proof_frame` |
+| `what_if.rule` (G3) | `disable`, `literal_replace`, `add_condition` (prefix dropped at sub-namespace level) |
+| `audit` | `explain_fact`, `conflicts`, `diff_proof_frames` (G5; placed here per §5.2.1 because it consumes recorded round events) |
+| `package` | `export_package`, `run_package` |
+| `views` (existing) | `create`, `update`, `delete`, `get`, `list` |
+
+Manager classes (`_SDKSchemaManager`, etc.) are private and do not enter `kernel.sdk.__all__`; they are reachable only through `FactGraph.<namespace>` property accessors. Writes such as `fg.what_if.foo = ...` raise `FrozenSnapshotError`. See [post-L SDK ergonomics redesign blueprint](../../../../docs/blueprints/active/2026-05-09_post-l-sdk-ergonomics-redesign.md) §5.2 / §5.4 / §5.7.
+
 ## 1. Top-Level Exports (`from kernel.sdk import ...`)
 
 ### 1.1 Schema / Store / Registry
@@ -18,7 +63,8 @@ This rule is encoded verbatim in §6 invariants and applies to any future SDK sh
 - `Entity`
 - `Field`
 - `Identity`
-- `SDKStore`
+- `FactGraph` *(post-L; canonical taxonomy entrypoint; literal alias of `SDKStore`)*
+- `SDKStore` *(foundational; permanently supported)*
 - `SDKRegistry`
 
 Additional note:

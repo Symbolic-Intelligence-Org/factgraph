@@ -35,7 +35,7 @@ pip install -e .
 ## Quickstart
 
 ```python
-from kernel.sdk import Entity, Field, Identity, SDKStore
+from kernel.sdk import Entity, Field, Identity, FactGraph
 
 
 class User(Entity):
@@ -43,14 +43,16 @@ class User(Entity):
     name: str = Field(cardinality="single")
 
 
-sdk = SDKStore.from_schema_classes([User])
+fg = FactGraph.from_schema_classes([User])
 
-alice = sdk.ref(User, user_id="u-1")
-sdk.set(User.name, alice, "Alice")
+alice = fg.read.ref(User, user_id="u-1")
+fg.write.set(User.name, alice, "Alice")
 
-snapshot = sdk.get(User, user_id="u-1")
+snapshot = fg.read.get(User, user_id="u-1")
 print(snapshot.name)  # Alice
 ```
+
+`FactGraph` is the v0.1 SDK top-level entrypoint. Its 8 taxonomy namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) teach the conceptual layering at first contact. `FactGraph` is a literal alias of `SDKStore`; the flat form `fg.ref(...)` / `fg.set(...)` / `fg.get(...)` is supported alongside the nested form as **foundational API** — neither deprecated nor scheduled for removal.
 
 `kernel.sdk` is the user-facing Python product surface. Runtime authority lives in `kernel.application`; the SDK adapts ergonomic APIs, schema/DSL authoring, snapshots, batches, editors, and compatibility errors into the application runtime contract.
 
@@ -77,7 +79,7 @@ The Check, Diagnose, Fact Overlay, ProofFrame, Why-not, rule-action runtimes, ro
 
 | Area | Entry | Notes |
 |---|---|---|
-| SDK product API | `kernel.sdk` | Entity / Field / Identity / SDKStore / Query / Derivation user entrypoints |
+| SDK product API | `kernel.sdk` | Entity / Field / Identity / FactGraph (with alias SDKStore) / Query / Derivation user entrypoints |
 | Runtime authority | `kernel.application` | read/write/query/ingest/derivation protocol DTOs and executors |
 | Core primitives | `kernel.core` | ledger, rules, evidence, candidate support, low-level store semantics |
 | Authoring | `kernel.authoring` | rule/schema authoring helpers and validation surfaces |

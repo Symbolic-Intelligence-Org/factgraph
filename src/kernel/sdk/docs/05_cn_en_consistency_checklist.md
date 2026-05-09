@@ -1,9 +1,11 @@
 # SDK 中英一致性检查表
 
-更新时间：2026-04-28
+更新时间：2026-05-09 (post-L SDK ergonomics redesign)
 基线目录：`src/kernel/sdk/docs`
 
 本文件用于确认中文与英文 SDK 文档是否同时反映当前代码行为。
+
+> **post-L 一致性扩展项：** 自 post-L SDK ergonomics redesign 起,CN/EN 文档需同时呈现 taxonomy form (`FactGraph.<namespace>.<method>(...)`)与 flat form (`sdk.<method>(...)` / `SDKStore.<method>(...)`),并且都以 foundational API 标注 flat 形式 ——既不被弃用也不会移除。新增条目:CN 与 EN 的 taxonomy intro 段落必须包含 `FactGraph` 入口、8 top-level + 2 sub-namespace 列表、与 flat-form-as-foundational-API 说明。详见 [post-L SDK ergonomics redesign blueprint](../../../../docs/blueprints/active/2026-05-09_post-l-sdk-ergonomics-redesign.md) §5.5 / §5.5.6。
 
 ## 1. 检查范围
 
