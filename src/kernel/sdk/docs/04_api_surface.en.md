@@ -28,7 +28,7 @@ fg.write.add(User.tag, alice, "engineer")
 fg.what_if.check(derivation, binding)
 fg.what_if.fact_overlay.check(derivation, binding, overlay)
 fg.what_if.rule.disable(rule, support, branch_index=0, atom_index=0)
-fg.audit.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
+fg.audit.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 
 # Flat (foundational; permanent)
 fg.get(User, user_id="u-1")
@@ -36,7 +36,7 @@ fg.add(User.tag, alice, "engineer")
 fg.check(derivation, binding)
 fg.check_fact_overlay(derivation, binding, overlay)
 fg.check_rule_disable(rule, support, branch_index=0, atom_index=0)
-fg.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
+fg.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 ```
 
 | Namespace | Methods |
@@ -159,8 +159,8 @@ supplied).
 
 | Method | One-liner |
 |---|---|
-| `ingest(items, *, allow_sensitive_meta=False)` | Bulk-insert assertions; returns `IngestResult` |
-| `validate_provenance(items)` | Inspect provenance shape without writing; returns `ValidationReport` |
+| `ingest(items, *, meta=None, allow_sensitive_meta=False)` | Bulk-insert assertions; `meta` merges into every item's meta. Returns `IngestResult` |
+| `validate_provenance(obj, *, standard="derivation_v1")` | Inspect provenance shape without writing; returns `ValidationReport` |
 
 ### 2.3 Read namespace (`fg.read.*`)
 
@@ -248,7 +248,7 @@ via `kernel.audit.load_audit_package` or hold them from a recorder.
 
 | Method | One-liner |
 |---|---|
-| `export_package(out_dir, *, options=None, **kwargs)` | Export Souffle-format package |
+| `export_package(out_dir, options, **kwargs)` | Export Souffle-format package; `options` is a required `ExportOptions` instance |
 | `run_package(package_dir, *, entrypoints, engine='souffle')` | Execute an exported package |
 
 ### 2.11 Views namespace (`fg.views.*`)
@@ -284,7 +284,7 @@ DTOs. Import them directly from `kernel.application.protocol` or
 | `register_rule_spec(spec)` | Register a low-level rule spec |
 | `register_rule(rule)` | Register an SDK `Rule` |
 | `register_derivation_spec(spec)` | Register a low-level derivation spec |
-| `register_derivation(derivation)` | Register an SDK `Derivation` (single-head) |
+| `register_derivation(derivation)` | Register an SDK `Derivation` (single- or multi-head; multi-head heads serialize as `head: [...]`) |
 | `get_schema_entry(...)` | Fetch a schema entry by id |
 | `list_rule_ids()` / `list_derivation_ids()` | Enumerate registered ids |
 | `list_rule_versions(id)` / `list_derivation_versions(id)` | Version history |
@@ -293,8 +293,12 @@ DTOs. Import them directly from `kernel.application.protocol` or
 | `get_latest_rule_spec(id)` / `get_latest_derivation_spec(id)` | Latest version lookup |
 | `read_rule_spec(id, version)` / `read_derivation_spec(id, version)` | Specific version read |
 
-`register_derivation` is single-head-oriented; for multi-head publishing
-expand into multiple single-head derivations first.
+`register_derivation` and `fg.eval.evaluate` both accept multi-head
+Derivations. The single-head constraint applies only at the
+**capability shell** layer — `fg.what_if.{check, diagnose, why_not}`
+reject plans with `len(plan.heads) != 1`
+(`kernel.application.capability_helpers.why_not.py:23` and siblings).
+Registry storage and authoring payload serialization are head-agnostic.
 
 ---
 
@@ -343,7 +347,9 @@ ingested_at, confidence, approved_by, derived_rule_id, candidate_id, ...).
 Returned by `fg.batch(meta=None)`. Methods: `entity(entity_cls,
 **identity)`, `preview()`, `commit()`, `save()`. The context manager's
 `__exit__` does **not** auto-commit or auto-rollback — call `commit()`
-or `rollback()` explicitly.
+explicitly to persist. An unfinished tx writes nothing if `commit()`
+is never called (there is no `rollback()` method on `SDKBatchTx`
+itself; use `EntityEditor.rollback()` for editor-scoped rollback).
 
 ### `BatchPlan` / `WireBatchPlan`
 
