@@ -3,7 +3,7 @@
 > 本文描述已实现行为；未实现能力明确标注"当前边界"。  
 > 文档中的行为按三类标签区分：**稳定合约**（建议写强断言测试）、**当前行为**（可能演进）、**规划中**（尚未实现）。
 
-> **post-L SDK ergonomics redesign 教学说明：** v0.1 SDK 的顶层入口为 `FactGraph`(`SDKStore` 的字面别名)。新代码推荐使用 8 个 taxonomy namespace + 2 个 sub-namespace 的形式 (`fg.read.get(...)` / `fg.write.set(...)` / `fg.what_if.check(...)` / `fg.what_if.fact_overlay.check(...)` / `fg.what_if.rule.disable(...)` / `fg.audit.diff_proof_frames(...)` 等),清晰表达概念分层。本指南下文示例多以 flat `sdk.<method>(...)` 形式呈现 ——这是 **foundational API**,与 nested 形式同样受支持,既不被弃用也不会移除。完整 taxonomy 见 [04_api_surface.md §0](04_api_surface.md);redesign 详细 design 见 [post-L SDK ergonomics redesign blueprint](../../../../docs/blueprints/archive/2026-05-09_post-l-sdk-ergonomics-redesign.md) §5.2 / §5.4。
+> **post-L SDK ergonomics redesign 教学说明：** v0.1 SDK 的顶层入口为 `FactGraph`(`SDKStore` 的字面别名)。新代码推荐使用 8 个 taxonomy namespace + 2 个 sub-namespace 的形式 (`fg.read.get(...)` / `fg.write.set(...)` / `fg.what_if.check(...)` / `fg.what_if.fact_overlay.check(...)` / `fg.what_if.rule.disable(...)` / `fg.audit.diff_proof_frames(...)` 等),清晰表达概念分层。本指南下文示例多以 flat `sdk.<method>(...)` 形式呈现 ——这是 **foundational API**,与 nested 形式同样受支持,既不被弃用也不会移除。完整 taxonomy 见 [04_api_surface.md §0](04_api_surface.md);redesign 详细 design 由 post-L SDK ergonomics redesign blueprint 记录(internal design record;§5.2 / §5.4)。
 
 ---
 

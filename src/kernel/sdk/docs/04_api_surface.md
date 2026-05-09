@@ -54,7 +54,7 @@ fg.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
 | `package` | `export_package`, `run_package` |
 | `views` (existing) | `create`, `update`, `delete`, `get`, `list` |
 
-Manager 类（`_SDKSchemaManager` 等）保持私有,不进入 `kernel.sdk.__all__`;读时通过 `FactGraph.<namespace>` 属性访问;写时（如 `fg.what_if.foo = ...`）抛 `FrozenSnapshotError`。详细 design 见 [post-L SDK ergonomics redesign blueprint](../../../../docs/blueprints/archive/2026-05-09_post-l-sdk-ergonomics-redesign.md) §5.2 / §5.4 / §5.7。
+Manager 类（`_SDKSchemaManager` 等）保持私有,不进入 `kernel.sdk.__all__`;读时通过 `FactGraph.<namespace>` 属性访问;写时（如 `fg.what_if.foo = ...`）抛 `FrozenSnapshotError`。详细 design 由 post-L SDK ergonomics redesign blueprint 记录(internal design record;§5.2 / §5.4 / §5.7)。
 
 ## 1. 顶层导出（`from kernel.sdk import ...`）
 

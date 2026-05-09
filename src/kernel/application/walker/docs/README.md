@@ -133,10 +133,10 @@ shortcuts; callers can still use `frame_deltas.filter(...)` /
 ## Reserved Future Scope (B3)
 
 B3 (audit / store stream walker) remains reserved future scope, not part of
-the B1/B2 implementation. The reference design is
-`docs/references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md`
-§3 and §8. Reactivation requires a real audit / ledger streaming consumer plus
-the bounded-stream construction contract from `#14`.
+the B1/B2 implementation. The reference design is the post-routemap walker
+mechanism design sketch (internal design record) §3 and §8. Reactivation
+requires a real audit / ledger streaming consumer plus the bounded-stream
+construction contract from `#14`.
 
 If reactivated, B3 should add a separate `kernel.audit.walker` package for
 audit-layer walker types and may introduce `walker/stream.py`-style stream
@@ -198,6 +198,8 @@ PYTHONPATH=src python -m unittest \
 
 ## Related Historical Blueprints
 
-- `docs/blueprints/archive/2026-05-07_walker-mechanism.md`
-- `docs/blueprints/archive/2026-05-07_walker-mechanism.audit.md`
-- `docs/references/working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md`
+The detailed design history for B1/B2 (and reserved B3 future scope) is
+captured in internal design records:
+
+- walker-mechanism blueprint (archived) + audit log
+- post-routemap walker-mechanism design sketch (working reference)
