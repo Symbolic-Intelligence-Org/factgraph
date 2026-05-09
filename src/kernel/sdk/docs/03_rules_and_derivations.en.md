@@ -69,8 +69,7 @@ Stable contract:
 - `Rule.id/version` must be non-empty strings.
 - `Rule.select/where` must be non-empty lists.
 - `engine_ext` is available as a definition-time engine semantics carrier and never enters authoring payload serialization.
-- `row_format` is supported only on the Rule path.
-- `row_format` precedence is: call-site > `SDKStore(default_row_format=...)` > `FACTPY_ROW_FORMAT` > `"dict"`.
+- The `row_format` precedence chain (`call-site > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`) and the `"tuple"` `DeprecationWarning` apply to the **Rule path**. `Query` has its own narrower contract (`"dict"|"instance"`, `"tuple"` rejected) — see §5.
 - Resolving to `"tuple"` emits `DeprecationWarning` (prefer `"dict"`).
 
 ## 3. `where` Syntax and Limits
@@ -188,7 +187,7 @@ res = sdk.accept(cands[0], approved_by="alice")
 
 Fields:
 - required: `id`, `version`, `where`
-- optional: `head`, `target`, `head_vars`, `mode`, `engine_ext`, `status`
+- optional: `head`, `target`, `head_vars`, `mode`, `engine_ext`, `status`, `description`, `tags`
 
 Stable contract:
 - `head` shape infers candidate kind (fact/entity).
@@ -235,7 +234,7 @@ cands = sdk.evaluate(drv, mode="native")
 
 - `mode`: `native` (default) / `souffle` / `problog` / `pyreason`.
 - SDK lowers `Derivation` DSL objects into compiled plans, then delegates orchestration to application `evaluate_derivation_plans(...)`; SDK remains responsible for mode alias rejection, registry sugar, and outward compatibility.
-- Legacy names `python` / `engine` fail with explicit rename hints.
+- Legacy `mode='python'` / `mode='engine'` **values** fail with explicit rename hints (use `mode='native'` / `mode='souffle'` respectively); enforced at `kernel/core/store/_evaluate.py:50,52`.
 - `souffle` / `problog` / `pyreason` require registered adapters (for example `import kernel.adapters.souffle`, `import kernel.adapters.problog`, `import kernel.adapters.pyreason`).
 - `sdk.evaluate(..., view=...)` is not supported; inference always uses the full active assertion set.
 - `engine_options` is call-time engine run-time configuration, for example `sdk.evaluate(drv, mode="pyreason", engine_options={"timesteps": 5})`.
@@ -246,8 +245,9 @@ cands = sdk.evaluate(drv, mode="native")
 - `candidate_id`: per-run handle
 - `candidate_key`: cross-run stable key
 - `candidate_kind`: `fact` / `entity`
-- `confidence`: `float | None` (`problog` yields a probability; `native/souffle` return `None`)
-- This field currently belongs to the probabilistic engine lane and should not be reused as Scenario A requirement-threshold probability; that path should use fact-backed uncertainty predicates plus the existing comparison syntax.
+- `confidence`: `float | None` (`problog` yields a probability; `pyreason` yields a lower-bound; `native/souffle` return `None`)
+- `confidence_kind`: literal `"none"` (native/souffle) / `"probability"` (problog) / `"certainty"` (pyreason); paired with `confidence` to disambiguate the engine semantic. Source: `kernel/core/derivation/candidates.py:10, 27`.
+- `confidence` belongs to the probabilistic-engine lane and should not be reused as Scenario A requirement-threshold probability; that path should use fact-backed uncertainty predicates plus the existing comparison syntax.
 - `payload`:
   - fact: `{"pred_id": ..., "terms": [...]}`
   - entity: `{"entity_type": ..., "resolved_identity": ..., ...}`
