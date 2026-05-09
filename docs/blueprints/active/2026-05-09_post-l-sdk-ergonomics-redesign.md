@@ -46,6 +46,7 @@ The §5.1 falsifier pass evaluated three alternative theses against the situatio
 - **Does not pre-commit to a `Client` class.** `SDKStore` may stay as the entrypoint; the question is whether its dir-shape teaches.
 - **Does not authorize any migration.** Migration is a §5.4 / §5.7 question, evaluated separately, with its own cost/benefit falsifier.
 - **Does not relitigate L Direction shells.** The 9 L methods stay shipped + frozen; the redesign decides how they're surfaced (flat vs nested vs alias-overlay), not their signatures.
+- **The §5.2 teaching taxonomy lock (2026-05-09) is conceptual, NOT a shipping commitment.** The 8-namespace taxonomy + 2 sub-namespaces under `what_if` describe how the redesign *teaches* the conceptual model. Whether the taxonomy materializes as runtime attributes (Shape 2/3) or stays as a documentation artifact (Shape 1) is decided at §5.4 / §5.7. The taxonomy lock and the shipping-shape lock are deliberately separate.
 
 ## 1. Problem
 
@@ -567,15 +568,83 @@ fg
 | F-DTO-rule — G5 boundary + G3 substrate-IR exclusion preserved | ✅ PRESERVED | Grouping doesn't change signatures; method-level invariants intact |
 | F-anti-resource — avoids OpenAI/Stripe resource model | ✅ AVOIDED at top level; mild local resource-flavor in `what_if.rule.*` / `what_if.fact_overlay.*` (Option B); top-level stays operation-mode-leaning per Session-over-graph thesis | `views` is the existing precedent for local resource-flavor at sub-namespace |
 
-##### 5.2.5 Open questions for user confirmation before lock
+##### 5.2.5 Decision (locked 2026-05-09 per user direction): teaching taxonomy
 
-1. **Confirm Option B split for `what_if`?** — Recommended: split (G1+G4 direct, G2 sub-namespaced, G3 sub-namespaced). Option A (unified 8-method) is simpler/cheaper but F0-weaker.
-2. **Confirm `diff_proof_frames` → `audit` (not `what_if`)?** — Source-grounded recommendation: audit (post-hoc comparison of persisted rounds, not hypothetical).
-3. **Confirm `validate_provenance` → `schema` (not `audit`)?** — Recommendation: schema (pre-ingest validation).
-4. **Confirm `accept*` stays in `eval` (not split to `write`)?** — Recommendation: eval (workflow-paired with `evaluate*`).
-5. **Confirm `from_schema_classes` and `batch` stay top-level (not under `schema` / `write` respectively)?** — Recommendation: top-level (entrypoint constructor + frequently-used context manager).
+**Critical framing per user direction:** §5.2 lock is the **teaching taxonomy** — the locked conceptual model that the redesign uses to organize `dir(FactGraph)` legibility. **It is NOT the shipping shape.** Whether the taxonomy materializes as additive aliases (Shape 2), canonical nested surface + flat compat (Shape 3), docs-only with no runtime aliases (Shape 1), or some §5.7-resolved variant is a separate decision deferred to §5.4 (compat strategy) and §5.7 (ship-at-all meta-question). This separation prevents accidentally pre-locking the rollout shape via the taxonomy lock.
 
-§5.2 lock is pending user confirmation on these 5 placements.
+**5 placements locked:**
+
+1. **`what_if` adopts Option B (split).** G1+G4 direct (`check`, `diagnose`, `why_not`); G2 sub-namespaced as `what_if.fact_overlay.check` + `what_if.fact_overlay.recheck_proof_frame`; G3 sub-namespaced as `what_if.rule.disable` + `what_if.rule.literal_replace` + `what_if.rule.add_condition`. **Rationale (per user):** "Option B is the right teaching shape. It keeps the top-level concept small while exposing the internal structure of what-if work: direct check/diagnose/why-not, plus fact overlay and rule overlay subfamilies."
+
+2. **`diff_proof_frames` → `audit`.** Removed from L-Direction `what_if` cluster, placed alongside `explain_fact` and `conflicts`. **Rationale (per user):** "It consumes recorded round events and compares persisted proof-frame outcomes; it is post-hoc audit, not hypothetical evaluation." Source-grounded at `store.py:719-795` — takes `tuple[RoundEvent, ...]` from `kernel.audit.round_events` (PERSISTED rounds), returns frozen `kernel.audit.ProofFrameDiff`.
+
+3. **`validate_provenance` → `schema`.** Placed alongside `ingest`. **Rationale (per user):** "It validates package/schema/provenance before ingest rather than auditing runtime behavior."
+
+4. **`accept` / `accept_compiled` / `accept_many` stay in `eval`** (despite being mutating operations). **Rationale (per user):** "The mental workflow is evaluation lifecycle: evaluate candidates, then accept them. Splitting to `write` would hide the evaluate→accept flow."
+
+5. **`from_schema_classes` (classmethod) + `batch` (context manager) stay top-level** on `FactGraph`, NOT moved to `schema.from_classes` or `write.batch`. **Rationale (per user):** "They are entrypoint/context-construction APIs, not ordinary methods inside conceptual namespaces."
+
+**Locked teaching taxonomy structure:**
+
+```
+FactGraph                                       # locked at §5.3
+├── from_schema_classes (classmethod)          # entrypoint, top-level
+├── batch (context manager)                     # context-construction, top-level
+├── store, ledger, schema_ir (properties)       # low-level access
+├── views (property → namespace)                # existing precedent (5 sub-methods)
+├── schema                                      # 2 methods
+│   ├── ingest
+│   └── validate_provenance
+├── read                                        # 3 methods
+│   ├── get
+│   ├── find
+│   └── ref
+├── write                                       # 4 methods
+│   ├── set
+│   ├── add
+│   ├── retract
+│   └── edit
+├── eval                                        # 6 methods (evaluate→accept lifecycle)
+│   ├── run
+│   ├── evaluate
+│   ├── evaluate_compiled
+│   ├── accept
+│   ├── accept_compiled
+│   └── accept_many
+├── what_if                                     # G1+G4 direct + G2/G3 sub-namespaced
+│   ├── check                                   # G1
+│   ├── diagnose                                # G1
+│   ├── why_not                                 # G4
+│   ├── fact_overlay
+│   │   ├── check                               # was check_fact_overlay
+│   │   └── recheck_proof_frame                 # G2 (verb retained)
+│   └── rule
+│       ├── disable                             # was check_rule_disable
+│       ├── literal_replace                     # was check_rule_literal_replace
+│       └── add_condition                       # was check_rule_add_condition
+├── audit                                       # 3 methods (post-hoc inspection)
+│   ├── explain_fact
+│   ├── conflicts
+│   └── diff_proof_frames                       # G5 — moved here
+└── package                                     # 2 methods
+    ├── export_package
+    └── run_package
+```
+
+**Lock outcome counts:**
+- 8 top-level namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`)
+- 2 sub-namespaces under `what_if` (`fact_overlay`, `rule`)
+- Top-level direct surface: `from_schema_classes` (cls) + `batch` (cm) + 4 properties (`store`, `ledger`, `schema_ir`, `views`)
+- 30 user-facing methods preserved verbatim at flat `SDKStore.<method>` level (per §0 thesis hard-constraint)
+- 5 nested-short alias paths surface in the taxonomy (`what_if.fact_overlay.check`, `what_if.fact_overlay.recheck_proof_frame`, `what_if.rule.disable`, `what_if.rule.literal_replace`, `what_if.rule.add_condition`)
+
+**What this lock does NOT decide:**
+
+- **Whether the taxonomy ships at all** — §5.7 ship-at-all meta-question.
+- **How the taxonomy materializes** — §5.4 compat strategy (Shape 1 docs-only / Shape 2 additive aliases / Shape 3 canonical nested + flat compat / Shape 5 hybrid).
+- **Whether the 5 nested-short alias names are exposed at runtime** — depends on §5.4/§5.7. Under Shape 1, the taxonomy is a documentation artifact; the 5 alias paths exist only in docs. Under Shape 2/3, the alias paths materialize as runtime attributes via property/`__getattr__` namespace pattern (per `EntitySnapshot.assertions` prior art at `kernel/sdk/facade.py:102-217`).
+
+**Cross-references encoded in §6 invariants:** locked teaching taxonomy + "teaching taxonomy ≠ shipping shape" separation rule. Cross-references encoded in §0.3 thesis non-pre-commitments (does not pre-commit migration).
 
 ### 5.3 Top-level entrypoint class naming
 
@@ -727,6 +796,7 @@ If §5.1-§5.7 lands a replacement (option C / D): substantially more — every 
 - **F0-legibility primacy.** `dir(client)` / IDE-autocomplete legibility against the §4.1 conceptual layering is the **first** falsifier axis for every shape candidate (§5.1, §5.2, §5.3). Migration cost (F4) and industry alignment (F3 in §5.3) are downstream weights, not entry gates.
 - **Compat is a hard constraint, not a goal.** The flat `SDKStore.<method>` surface across 5 immutable Path B snapshots stays callable; any candidate that breaks it requires a standalone falsifier per §5.4 thesis-derived default.
 - **§5.3 locked: top-level entrypoint class name is `FactGraph`** (sourced from chat-driven 4-round falsifier pass on 2026-05-09; `tensorflow.Tensor` / `pyspark.sql.SparkSession` / `pyparsing.ParserElement` Python precedent for Fact-overlap; `EvidenceGraph` substrate-audit name does NOT collide because it's not in `factpy.__all__`). Relationship with existing `SDKStore` class is §5.4 territory.
+- **§5.2 locked: teaching taxonomy** — 8 top-level namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) + 2 sub-namespaces (`what_if.fact_overlay`, `what_if.rule`); `from_schema_classes` (cls) + `batch` (cm) + 4 properties at top-level. Locked 2026-05-09 per user direction with all 5 placement decisions: `what_if` Option B split / `diff_proof_frames` → `audit` / `validate_provenance` → `schema` / `accept*` stays in `eval` / `from_schema_classes` + `batch` stay top-level. **Teaching-taxonomy lock is conceptual only — does NOT pre-decide rollout shape (Shape 1 docs-only vs Shape 2 additive aliases vs Shape 3 canonical nested + flat compat vs Shape 5 hybrid).** Shipping shape decision deferred to §5.4 / §5.7.
 - **Design / implementation branch isolation in force.** Design branch (this branch, `codex/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09`) accepts blueprint / docs / audit-log commits only. Implementation branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09` (created 2026-05-09 at design HEAD `59a5694`) is the only authorized location for code changes post-scope-freeze. Cross-contamination is a structural invariant violation.
 - `kernel.sdk.__all__` length stays at **34** unless §5.x explicitly justifies an addition with falsifier pass.
 - Sacred branches `master` and `v0.1-oss-prep` untouched throughout.
@@ -752,7 +822,7 @@ Draft-stage acceptance:
 Scoped-stage acceptance (filled after §5 falsifier passes):
 
 - [x] §5.1 deliverable — inventory verified at HEAD `60af8bc` (30 methods + 4 properties + 1 nested `views` namespace; 14 conceptual families consolidated to ~8 top-level concepts); migration cost surface source-grounded (~150+ method-call mentions across 23 test files; notebooks negligible because they bypass SDKStore for kernel.application Tier 2 direct usage); 5-shape evaluation under F0/F4/F5 with verdicts: Shape 1 (status quo flat) fails F0 + zero cost; Shape 2 (additive nested aliases) F0 partial + near-zero cost; Shape 3 (canonical nested + flat compat) F0 better via docs lever + medium docs cost; Shape 4 (replacement) F0 strong but violates thesis hard-constraint; Shape 5 (hybrid/staged) varies + moderate-high cost. Leading candidate Shape 3 under thesis; Shape 2 most defensible additive; Shape 1 conservative default; Shape 4 requires §5.4 standalone falsifier; Shape 5 weaker than Shape 3 unless specifically motivated. §5.1 research-only; shape direction deferred to §5.7.
-- [ ] §5.2 locked — namespace shape (or "no nesting").
+- [x] §5.2 locked — **teaching taxonomy** locked 2026-05-09 per user direction: 8 top-level namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) + 2 sub-namespaces (`what_if.fact_overlay`, `what_if.rule`); `from_schema_classes` (cls) + `batch` (cm) + 4 properties at top-level. All 5 placements locked: Option B split for `what_if` / `diff_proof_frames` → `audit` / `validate_provenance` → `schema` / `accept*` stays in `eval` / `from_schema_classes` + `batch` stay top-level. **Teaching taxonomy ≠ shipping shape** — rollout decision (Shape 1 docs-only vs Shape 2 additive aliases vs Shape 3 canonical nested vs Shape 5 hybrid) deferred to §5.4 / §5.7.
 - [x] §5.3 locked — top-level entrypoint class name is **`FactGraph`** (4-round chat-driven falsifier pass 2026-05-09; sources: TF/PySpark/pyparsing Python precedent for Fact-overlap; `EvidenceGraph` substrate F2-clean — not in `factpy.__all__`; SDK* family pattern preserved by keeping `SDKStore` callable per §5.4).
 - [ ] §5.4 locked — compatibility / deprecation strategy.
 - [ ] §5.5 locked — docs / quickstart impact assessment.
