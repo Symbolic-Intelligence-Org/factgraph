@@ -1058,6 +1058,83 @@ The §5.7 lock is precise about what the redesign IS NOT, to prevent scope creep
 - F2 — Whether the redesign is "L hygiene continuation" (still v0.1 line) or "post-L major refactor" (v0.2 line).
 - F3 — Path B 5th immutable snapshot is at v0.1; would a redesign produce a 6th v0.1 snapshot or start a v0.2 line?
 
+#### 5.8 Decision (locked 2026-05-09): stay on v0.1 line; no v0.2 marker
+
+**Default hypothesis (per user direction):** stay on v0.1 line; no v0.2 marker yet. Source-grounded against actual version metadata + branch convention + §5.7 ship-verdict's 4 non-commitments — all confirm.
+
+**5.8.1 Source-grounded verification:**
+
+- `pyproject.toml:7` — `version = "0.1.0"`. No `__version__` defined in any `kernel/__init__.py`, `kernel/sdk/__init__.py`, or other module init.
+- No `CHANGELOG.md` / `RELEASES.md` / `HISTORY.md` file in the repo (verified `ls CHANGELOG* RELEASES* HISTORY*` returns no matches).
+- Branch convention verified via `git branch -r`: 5 published L milestone snapshots all use `v0.1-l-g{N}-...-2026-05-08` pattern; 5 progressive Path B combined snapshots all use `v0.1-public-surface-helpers-walker-l-g1-...-l-g5-2026-05-08` pattern.
+
+**5.8.2 Four key decisions locked (per user enumeration):**
+
+##### (1) Does `FactGraph` enter `kernel.sdk.__all__`? **YES** — `__all__` length 34 → 35
+
+**Rationale:** `FactGraph` is the canonical user-facing entrypoint per §5.3 lock. The §5.5-locked teaching surfaces (README quickstart, `00_user_guide`, `04_api_surface`, etc.) all use the form `from kernel.sdk import FactGraph`. Not exporting `FactGraph` would force users to use full path `kernel.sdk.store.FactGraph` (or wherever it lands), which contradicts the F0 teaching goal — the import line is the first thing a user sees.
+
+`SDKStore` already in `__all__` (entry 30 of 34). Adding `FactGraph` alongside is purely additive — both names are exported; flat-call semantics work via either name (per §5.4 lock + §5.7 non-commitment #1 "NOT a replacement of `SDKStore`").
+
+`__all__` semantic: 34 → **35**. Whether `FactGraph` is a literal alias (`FactGraph = SDKStore`), thin subclass, or wrapper is impl-time decision per §5.7 non-commitment #1 — but in all cases both names live in `__all__`.
+
+**Manager classes (`_SDKWhatIfManager`, etc.) do NOT enter `__all__`.** Per `views` precedent at `store.py:66-104`, the existing `_SDKViewsManager` is private (underscore prefix) and is exposed only via `SDKStore.views` property. The 8 top-level managers + 2 sub-managers under `what_if` follow the same convention: private classes, not exported. Users reach them only through `FactGraph.<namespace>` attribute access.
+
+**`__all__` length invariant update:** the 5 invariant files that currently assert length 34 (per `project_g{1,2,3,4,5}_published.md` memory + cumulative §6 invariants) need an update to assert length 35 at scope-freeze. The single-line increment is the additive-only acknowledgement that §5.8 stays on v0.1.
+
+##### (2) Does any `__version__` or package metadata change? **NO**
+
+**Rationale:** `pyproject.toml:7` stays at `version = "0.1.0"` (or whatever current point release is when impl lands). The redesign is additive surface within v0.1 line:
+
+- No breaking change → no major/minor bump needed
+- No bug fix that warrants point release
+- Per `feedback_narrow_public_api`: additive surface in preview v0.1 is normal; not every additive landing demands a version stamp
+- Project hasn't published any tagged release yet (verified — no CHANGELOG; current version `0.1.0` has been stable through L Direction's 5 milestone shipments)
+
+**Decision:** no `__version__` definition added; no `pyproject.toml` version bump at redesign impl. If/when the project decides to publish a tagged release, that's a separate decision orthogonal to §5.8.
+
+##### (3) Do docs call this v0.2? **NO** — call it "post-L SDK ergonomics redesign" within v0.1
+
+**Rationale:** Branch naming pattern verified: project uses `v0.1-<scope>-<date>` for all post-L work (this design branch is `codex/v0.1-post-l-sdk-ergonomics-redesign-2026-05-09` — already follows convention). Calling it "v0.2" would imply breaking change or major shift; neither applies under §5.4 + §5.7 locks.
+
+**Decision:** docs refer to this redesign as **"post-L SDK ergonomics redesign"** (or shorthand: "FactGraph taxonomy") — within v0.1 line. No "v0.2" framing in any user-facing surface.
+
+##### (4) Does it need a release note entry? **YES** — in blueprint/docs only, not package version metadata
+
+**Rationale:** No `CHANGELOG.md` / `RELEASES.md` exists in the repo. The blueprint itself + audit log + archived blueprint inventory (`docs/blueprints/archive/README.md`) ARE the canonical release record convention. Plus brief notes in:
+
+- README.md / .en.md — "post-L SDK ergonomics redesign" line in the public boundary table
+- `kernel/sdk/docs/04_api_surface.md` / `.en.md` — already documents L milestones; adds a redesign entry describing the taxonomy addition (in line with §5.5 taxonomy-first treatment)
+- `kernel/core/docs/04_public_contract_v1.md` — already gets a taxonomy cross-ref note per §5.5.6 extension
+
+**Decision:** release note materializes as:
+1. The blueprint + audit log themselves (canonical record)
+2. Archive inventory row at `docs/blueprints/archive/README.md` post-archive
+3. Brief mention in README quickstart-section header + 04_api_surface intro + public_contract_v1 cross-ref note
+
+NO standalone CHANGELOG.md created. NO `pyproject.toml` version metadata change. NO additional release-tracking infrastructure introduced — the blueprint+audit-log convention IS the release record.
+
+**5.8.3 Path B snapshot naming (locked):**
+
+Following the established convention verified above, the redesign snapshots will be:
+
+- **Standalone:** `v0.1-post-l-sdk-ergonomics-redesign-<DATE>` (drop `codex/` prefix at publish; `<DATE>` is publish date in `YYYY-MM-DD` format).
+- **Path B 6th immutable combined snapshot:** `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-post-l-redesign-<DATE>` — extends the 5th snapshot at `d4ceb3e` per Path B convention (6th immutable snapshot in the lineage).
+
+Both names use `v0.1-` prefix consistent with the version-stamping decision. No `v0.2-` snapshot created.
+
+**5.8.4 Falsifier verdicts:**
+
+- **F1 (existing version conventions):** ✅ matches — `v0.1-<scope>-<date>` pattern continues; new snapshots follow exactly.
+- **F2 (L hygiene continuation vs post-L major refactor):** the redesign is **L hygiene continuation** under §5.7 ship-verdict — additive surface only, no behavior change, no breaking change. Not a "post-L major refactor" because per §5.7 non-commitment #1 it is NOT a replacement of `SDKStore`, per #2 NOT a deprecation, per #3 NOT a package rename. v0.1 line stays.
+- **F3 (Path B 6th snapshot vs v0.2 line):** **6th v0.1 snapshot** under existing Path B convention. No v0.2 line opened. The 5 prior Path B snapshots' immutability is preserved; the 6th is additive.
+
+**5.8.5 What this lock does NOT decide:**
+
+- **The eventual published version when the project tags a release.** That's a separate decision; redesign impl doesn't force the issue. Project may tag `0.1.0` or `0.1.1` or stay on `0.1.0` indefinitely; §5.8 only locks "the redesign itself doesn't bump version metadata".
+- **The `factpy` vs `kernel.sdk` import naming question** (per §5.7 non-commitment #3 + README:189 reference bundle deferred question). If a future scoped blueprint elects a `factpy` package rename, that IS a v0.2-line decision and would be a separate version-stamping evaluation. §5.8 ships under existing `kernel.sdk` only.
+- **Whether the §5.5 docs update to v0.2 framing if/when the package eventually bumps.** Future doc updates follow the project's actual published-version state at the time; §5.8 only fixes the redesign-impl version stamping at v0.1.
+
 ### 5.9 Tests + invariants
 
 **Question:** What invariant / test changes does the redesign require?
@@ -1083,6 +1160,7 @@ If §5.1-§5.7 lands a replacement (option C / D): substantially more — every 
 - **Compat is a hard constraint, not a goal.** The flat `SDKStore.<method>` surface across 5 immutable Path B snapshots stays callable; any candidate that breaks it requires a standalone falsifier per §5.4 thesis-derived default.
 - **§5.3 locked: top-level entrypoint class name is `FactGraph`** (sourced from chat-driven 4-round falsifier pass on 2026-05-09; `tensorflow.Tensor` / `pyspark.sql.SparkSession` / `pyparsing.ParserElement` Python precedent for Fact-overlap; `EvidenceGraph` substrate-audit name does NOT collide because it's not in `factpy.__all__`). Relationship with existing `SDKStore` class is §5.4 territory.
 - **§5.2 locked: teaching taxonomy** — 8 top-level namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) + 2 sub-namespaces (`what_if.fact_overlay`, `what_if.rule`); `from_schema_classes` (cls) + `batch` (cm) + 4 properties at top-level. Locked 2026-05-09 per user direction with all 5 placement decisions: `what_if` Option B split / `diff_proof_frames` → `audit` / `validate_provenance` → `schema` / `accept*` stays in `eval` / `from_schema_classes` + `batch` stay top-level. **Teaching-taxonomy lock is conceptual only — does NOT pre-decide rollout shape (Shape 1 docs-only vs Shape 2 additive aliases vs Shape 3 canonical nested + flat compat vs Shape 5 hybrid).** Shipping shape decision deferred to §5.4 / §5.7.
+- **§5.8 locked: stay on v0.1 line; no v0.2 marker.** 4 decisions locked: (1) `FactGraph` enters `kernel.sdk.__all__` — length **34 → 35** (manager classes `_SDK*Manager` stay private per `views` precedent at `store.py:66-104`); (2) NO `__version__` definition added; NO `pyproject.toml` version bump at redesign impl (`version = "0.1.0"` stays); (3) docs call this **"post-L SDK ergonomics redesign"** (or "FactGraph taxonomy") within v0.1; NO "v0.2" framing in user-facing surfaces; (4) release note materializes as blueprint + audit log + archive inventory row + brief mentions in README/04_api_surface intro/public_contract_v1 cross-ref note (per §5.5/§5.5.6 locks); NO standalone `CHANGELOG.md` created. **Path B 6th immutable snapshot naming locked:** standalone `v0.1-post-l-sdk-ergonomics-redesign-<DATE>` + combined `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-post-l-redesign-<DATE>` (extends 5th at `d4ceb3e`). Source-grounded against `pyproject.toml:7` (`version = "0.1.0"`), absent CHANGELOG, and 5 published L milestone snapshot patterns. F1/F2/F3 all confirm v0.1 continuation. NOT a replacement / deprecation / package rename per §5.7 non-commitments — therefore not a v0.2 trigger.
 - **§5.7 locked: SHIP additive redesign.** F0 vs F4 weighing source-grounded against §5.1-§5.5 + §5.5.6 locks: F0 strong gain (coherent taxonomy + bridge name + docs lever); F4 bounded (concentrated in `00_user_guide` 319-ref rewrite which IS the teaching investment; runtime additive only; zero test churn; module-internal docs mostly unchanged). "Ship nothing" path falsified — F0 gain real not illusory; F4 cost bounded not exhausting. **4 explicit non-commitments locked:** (1) NOT a replacement of `SDKStore` — class remains canonical implementation behind `FactGraph` taxonomy; (2) NOT a deprecation of flat methods — no `DeprecationWarning`, no removal, no "deprecated" labels per §5.4 lock; (3) NOT a package rename to `factpy` — current `from kernel.sdk import ...` import path stays; rename question deferred to §5.8 or separate blueprint; (4) NOT immediate implementation on design branch — impl work happens on `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09` after scope-freeze + rebase. Smallest shipping version (F3) = §5.5 Tier 1 (12 SDK doc files taxonomy-aware) + minimum-viable runtime (1 `FactGraph` top-level class + 8 manager classes + 2 sub-manager classes via property pattern per `views` precedent). Workflow advances toward scope-freeze (status `draft → scoped`) after §5.8 + §5.9 lock.
 - **§5.5 locked: per-surface doc treatment.** **4-tier classification (post-§5.5.6 extension):** (a) **Taxonomy-first** (lead with `FactGraph.<namespace>.<method>`) — README CN/EN + 6 SDK doc files (`00_user_guide`, `04_api_surface`, `02_readwrite_and_ingest`, `03_rules_and_derivations`, `01_alignment_matrix`, `05_cn_en_consistency_checklist`); (b) **SDK-presentation-only** (brief note + cross-ref; own content unchanged) — `kernel/application/docs/01_overview` CN/EN (enumeration stays flat; intro adds taxonomy bridge note); (c) **Public-contract anchor** (stays flat + adds taxonomy cross-ref) — `kernel/core/docs/04_public_contract_v1.md` (per §5.4 flat IS permanent contract); (d) **Compatibility/reference** sections within taxonomy-first docs (NOT separate "deprecated" labels) — flat-method documentation absorbed as "Foundational API" / "Compatibility reference" sections. **Module-internal docs with peripheral SDK references mostly UNCHANGED:** `application/docs/README.md` (routing note survives — points to taxonomy-first SDK docs), `application/walker/docs/README.md` (negative assertion "No SDK shell" stays valid), `adapters/docs/02_problog_adapter.md` + `03_pyreason_adapter.md` (DSL imports unchanged; prose mechanism descriptions stay flat as foundational; 1-2 usage examples conditionally taxonomy if Shape 2/3 ships); other module docs zero SDK refs (audit/authoring/core-architecture/annotation). Notebooks 01-04 + `round_story_full_demo.py` UNCHANGED (Tier-2 advanced importable bypass; only conditional 1-line update in notebook 04 if Shape 2/3 ships). NO separate migration guide file (no breaking migration; release notes suffice). L archive blueprints + Path B published snapshots untouched (Path B immutability). Total rewrite surface: ~12 doc files become taxonomy-aware (taxonomy-first tier), 1 SDK-presentation bridge note (application overview), 1 cross-ref note (public contract), 0 application/audit/core narrative changes, 0-3 conditional notebook/adapter example edits. Locked 2026-05-09 per user direction with default per-surface treatment + 2026-05-09 §5.5.6 extension covering 5 module-internal doc surfaces missed in original lock.
 - **§5.4 locked: Option 2 — Permanent additive aliases + docs prefer new taxonomy.** Flat `SDKStore.<method>` callable permanently with NO deprecation, NO removal plan, NO runtime `DeprecationWarning`; `FactGraph` + teaching taxonomy materializes as additive runtime aliases under §5.7-conditional Shape 2/3 rollout. Aliases delegate to flat methods via property/private-manager-class pattern (per `views` precedent at `kernel/sdk/store.py:198-200` + `EntitySnapshot.assertions` precedent at `kernel/sdk/facade.py:102-217`). Docs / quickstart / notebooks lead with new taxonomy; flat methods documented as "supported foundational API" (NOT "deprecated"). Existing flat-method tests stay verbatim; new alias-form parity tests added under §5.9. Path B published L snapshots stay immutable with original flat-only docs framing — docs evolution is forward-only on design branch. **Rejected options recorded with falsifier evidence:** Option 3 (soft "deprecated" docs) misleads without removal plan; Option 4 (runtime `DeprecationWarning`) creates noise (flat ↔ nested produce identical results, unlike `row_format='tuple'` precedent which marked behaviorally distinct legacy mode); Option 5 (hard removal) violates §0 thesis hard-constraint without standalone falsifier.
@@ -1117,7 +1195,7 @@ Scoped-stage acceptance (filled after §5 falsifier passes):
 - [x] §5.5 locked — **per-surface doc treatment with taxonomy-first SDK docs** (locked 2026-05-09 per user direction with default per-surface treatment). 3-tier classification: taxonomy-first (README + 5 SDK doc CN/EN pairs + checklist); SDK-presentation-only (application overview brief note + cross-ref); compatibility/reference (within taxonomy-first docs as "Foundational API" sections, NOT separate "deprecated" labels). Source-grounded cost: ~12 doc files become taxonomy-aware (319 refs in `00_user_guide` largest); 0-1 notebook edits (only `diff_proof_frames` in 04 if Shape 2/3 ships); 0 application/audit/core narrative changes. NO separate migration guide file (no breaking migration; release notes suffice). L archive blueprints + Path B published snapshots untouched (Path B immutability). §5.6 implicitly resolved by §5.4 + §5.5 (aliases delegate to flat; new taxonomy is editorial canonical via docs lever).
 - [ ] §5.6 locked — aliases vs replacement decision (if non-no-change outcome).
 - [x] §5.7 locked — **SHIP additive redesign** (locked 2026-05-09 per user binary decision direction). F0 vs F4 weighing source-grounded against all prior §5.x locks: F0 strong gain (coherent taxonomy + bridge name + docs lever); F4 bounded (`00_user_guide` 319-ref rewrite IS the teaching investment; runtime additive; zero test churn). 4 explicit non-commitments locked: (1) NOT replacement of `SDKStore`; (2) NOT deprecation of flat methods; (3) NOT package rename to `factpy` (deferred to §5.8); (4) NOT immediate impl on design branch (impl branch `codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09` post-scope-freeze + rebase). Smallest shipping version = §5.5 Tier 1 (12 SDK docs taxonomy-aware) + 1 `FactGraph` top-level class + 8+2 manager classes via `views` property precedent. Workflow advances to §5.8 + §5.9 locks before scope-freeze.
-- [ ] §5.8 locked — version stamp / roadmap timing.
+- [x] §5.8 locked — **stay on v0.1 line; no v0.2 marker** (locked 2026-05-09 per user default hypothesis). 4 decisions locked: `FactGraph` enters `kernel.sdk.__all__` 34 → 35 (manager classes private per `views` precedent); no `__version__` / `pyproject.toml` version bump (stays `0.1.0`); docs call it "post-L SDK ergonomics redesign" within v0.1; release note in blueprint+audit-log+archive-inventory + brief mentions in 3 docs (NO standalone CHANGELOG). Path B 6th snapshot naming locked: `v0.1-post-l-sdk-ergonomics-redesign-<DATE>` standalone + `v0.1-public-surface-helpers-walker-l-g1-l-g4-l-g2-l-g3-l-g5-post-l-redesign-<DATE>` combined Path B (extends 5th at `d4ceb3e`). Source-grounded against `pyproject.toml`, absent CHANGELOG, and 5 published L milestone snapshot patterns.
 - [ ] §5.9 locked — test + invariant impact assessment.
 - [ ] §8 implementation plan filled with N phases (or "no implementation; close as research-only" if §5.7 lands no-change).
 - [ ] Status moves from `draft` to `scoped`.
