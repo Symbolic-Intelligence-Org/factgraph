@@ -57,15 +57,15 @@ class User(Entity):
 
 fg = FactGraph.from_schema_classes([User])
 
-fg.ingest([
-    {"entity": "User", "user_id": "u-1", "name": "Alice"},
-    {"entity": "User", "user_id": "u-2", "name": "Bob"},
-])
+ref_alice = fg.read.ref(User, user_id="u-1")
+ref_bob   = fg.read.ref(User, user_id="u-2")
 
-fg.write.add(User.tags, fg.read.ref(User, user_id="u-1"), "engineer")
+fg.write.set(User.name, ref_alice, "Alice")
+fg.write.set(User.name, ref_bob,   "Bob")
+fg.write.add(User.tags, ref_alice, "engineer")
 
 snap = fg.read.get(User, user_id="u-1")
-print(snap.name, snap.field("tags").current())
+print(snap.name, [r.value for r in snap.field("tags").active])
 # → Alice ['engineer']
 ```
 
@@ -125,12 +125,13 @@ schema_ir = compile_schema_from_classes([User, Document])
 ```python
 report = fg.schema.validate_provenance(items)  # also: fg.validate_provenance
 report.ok                # True if everything passes
-report.errors            # list of (item_index, code, message)
+report.warnings          # list[dict] — non-fatal advisories
+report.errors            # list[dict], each: {code, severity, path, message, data}
 ```
 
 This inspects an item batch's provenance shape **without** writing.
 Useful as a pre-flight before `fg.ingest(...)`. Returns a
-`ValidationReport`.
+`ValidationReport(ok, warnings, errors, diagnostics_contract_version)`.
 
 ---
 
@@ -160,10 +161,13 @@ recent = fg.read.find(Document, view="last_30_days", limit=20)
 ### Reference encoding
 
 ```python
-ref = fg.read.ref(User, user_id="u-1")  # → "User#u-1" (encoded form)
+ref = fg.read.ref(User, user_id="u-1")
+# → "idref_v1:User:<base32-sha256-digest>"  (opaque, content-derived)
 ```
 
 `ref` is required as the second argument to `fg.write.{set,add,retract}`.
+The string is opaque — never parse or compare it as a textual identity;
+treat it as a stable handle.
 
 ### `EntitySnapshot` cheat-sheet
 
@@ -171,19 +175,29 @@ ref = fg.read.ref(User, user_id="u-1")  # → "User#u-1" (encoded form)
 snap = fg.read.get(User, user_id="u-1")
 
 snap.name                         # current single-field value
-snap.field("tags").current()      # → list of current multi-field values
-snap.field("name").history()      # → all assertions ever (active + retracted)
-snap.field("name").at("2026-05-01T00:00:00Z")  # value at a point in time
-snap.field("name").version(3)     # value at version N
+snap.field("tags").active         # → tuple[AssertionRecord, ...] (current values)
+[r.value for r in snap.field("tags").active]   # → ['engineer', ...]
 
-snap.assertions.field("name")     # FieldAssertions namespace (raw access)
-snap.identity                     # dict of identity values
+snap.field("name").history        # → tuple[AssertionRecord, ...] (active + revoked)
+snap.field("name").at("2026-05-01T00:00:00Z")  # → tuple[AssertionRecord, ...] visible at t
+snap.field("name").version(3)     # → tuple[AssertionRecord, ...] at version N
+
+snap.assertions.name              # equivalent to snap.field("name") — attr access
+snap.identity                     # dict of identity values (when identity_available=True)
+snap.identity_available           # bool — False if snapshot lacks full identity
 snap.entity_type                  # "User"
-snap.ref                          # encoded ref
+snap.ref                          # encoded idref_v1 ref
 ```
 
-`EntitySnapshot` is read-only; assigning to any attribute raises
-`FrozenSnapshotError`.
+Notes:
+- `.active` and `.history` are **properties**, not methods (no
+  parentheses). `.at(t)` and `.version(v)` are methods.
+- All four return `tuple[AssertionRecord, ...]`. To read the underlying
+  values, project `.value` off each record.
+- `AssertionRecord` exposes `asrt_id`, `value`, `is_active`,
+  `is_revoked`, and `meta` (an `AssertionMeta`).
+- `EntitySnapshot` is read-only; assigning to any attribute raises
+  `FrozenSnapshotError`.
 
 ---
 
@@ -238,22 +252,45 @@ preview/review patterns work naturally.
 
 ### Bulk ingest
 
-```python
-result = fg.ingest([
-    {"entity": "User", "user_id": "u-3", "name": "Carol", "_meta": {...}},
-    {"entity": "User", "user_id": "u-4", "name": "Dave"},
-])
+`fg.ingest(items, *, meta=None)` is the external-batch import path. Each
+item is one normalized fact write:
 
-result.ingested_count
-result.assertion_ids
-result.validation_report
+```python
+ref_carol = fg.read.ref(User, user_id="u-3")
+ref_dave  = fg.read.ref(User, user_id="u-4")
+
+result = fg.ingest(
+    [
+        {"kind": "set", "field": User.name, "e_ref": ref_carol, "value": "Carol"},
+        {"kind": "set", "field": User.name, "e_ref": ref_dave,  "value": "Dave"},
+        {"kind": "add", "field": User.tags, "e_ref": ref_carol, "value": "manager"},
+        {"kind": "retract", "asrt_id": "asrt-old-id"},
+    ],
+    meta={"source": "import_2026_05_09"},  # merged into every item's meta
+)
+
+result.written_assertion_ids   # list[str] — newly persisted assertion ids
+result.skipped_count           # int — rows skipped by validator
+result.duplicate_count         # int — rows already present (idempotent dedup)
+result.warnings                # list[dict] — non-fatal diagnostics
+result.diagnostics             # list[dict] — full diagnostic stream (see §2)
 ```
 
-`ingest` accepts each item as either:
-- `{"entity": "User", <identity>, <fields>, "_meta": {...}}` — single-row form
-- A pre-built application protocol DTO (advanced)
+Item shapes:
+- `{"kind": "set", "field": <Field>, "e_ref": str, "value": Any, "meta"?: dict}`
+- `{"kind": "add", "field": <Field>, "e_ref": str, "value": Any, "meta"?: dict}`
+- `{"kind": "retract", "asrt_id": str, "meta"?: dict}`
 
-Returns an `IngestResult` with counts, ids, and a `ValidationReport`.
+Item-level `meta` overrides top-level `meta` keys.
+`ingested_at`, `ingest_key`, and `revoked_asrt_id` are reserved
+(passing them in user `meta` is an error).
+
+Returns an `IngestResult(written_assertion_ids, skipped_count,
+duplicate_count, warnings, diagnostics, diagnostics_contract_version)`.
+Each entry in `warnings` and `diagnostics` follows the same dict shape
+as `ValidationReport.errors` (`{code, severity, path, message, data}`).
+`severity="error"` items trigger collect-and-stop semantics — the whole
+batch is not written.
 
 ### The `meta` field
 
@@ -295,64 +332,117 @@ fg.write.set(User.name, ref, "Alice", meta={"confidence": 1.2})   # ❌ out of r
 
 Three primitives:
 
-| | Purpose | Returned by `fg.eval.run` |
+| | Purpose | Returned by |
 |---|---|---|
-| `Rule` | A single inference (head + body) | List of `CandidateSet` |
-| `Query` | Materialize a view of the current store | `list[dict]` (default) |
-| `Derivation` | A multi-rule envelope for engine evaluation | Use `fg.eval.evaluate` |
+| `Rule` | Single-rule inference (`select` + `where`); produces rows | `fg.eval.run(rule)` → `list[dict]` (default) |
+| `Query` | Read-side projection over the current store; produces rows | `fg.eval.run(query)` → `list[dict]` (default) |
+| `Derivation` | A single derivation (one or more heads); produces accept-ready candidates | `fg.eval.evaluate(deriv, mode=...)` → `list[CandidateSet]` |
+
+All three are constructed inside a `with vars(...) as (...):` block.
+For the deeper DSL spec see
+[`03_rules_and_derivations.en.md`](03_rules_and_derivations.en.md).
 
 ### Query
 
+A `Query(head, where, on_missing?, on_type_mismatch?)` projects rows from
+the current ledger. `head` is either a single item or a list of items —
+each item is an entity binding (`Entity(var)`) or a field projection
+(`Entity.field(...)`). `where` is the body (always a list).
+
 ```python
-from kernel.sdk import Query, Pred, vars
+from kernel.sdk import Query, vars
 
-user, lang = vars("user", "lang")
+# Multi-projection head — list of two items, returns one column per item
+with vars("u", "nm") as (u, nm):
+    q = Query(
+        head=[User(u), User.name(name=nm)],
+        where=[User(u), u.name == nm],
+    )
 
-q = Query(
-    head=[user, lang],
-    body=[Pred("User", user, lang=lang)],
-)
+rows = fg.eval.run(q)
+# → [{"u": <EntitySnapshot User Alice>, "nm": "Alice"}, ...]
 
-rows = fg.eval.run(q)            # → [{"user": "u-1", "lang": "en"}, ...]
-rows = fg.eval.run(q, row_format="instance")  # → [EntitySnapshot, ...] for single-Entity head
+# Single-projection head — pass the item directly OR wrap it in a list
+with vars("u",) as (u,):
+    q_one = Query(head=User(u), where=[User(u)])           # single item
+    q_one_list = Query(head=[User(u)], where=[User(u)])    # equivalent
+    snaps = fg.eval.run(q_one, row_format="instance")
+    # → [<EntitySnapshot for Alice>, ...]
 ```
+
+In the `dict` rows above, each column key is the **var token without
+the `$` prefix** (so `vars("u", "nm")` produces aliases `"u"` and
+`"nm"`). Entity-bound columns project to `EntitySnapshot` instances;
+field-projection columns project to the field's value type.
+`row_format="instance"` is only valid when `head` is a single
+`Entity(var)` (either bare or wrapped in a one-element list).
 
 Query options:
 - `on_missing="error" | "skip" | "null"` — handle missing field references
 - `on_type_mismatch="error" | "skip" | "null"` — handle type mismatches
-- `row_format="dict" | "instance" | "tuple"` — `tuple` is deprecated
+- `row_format="dict" | "instance"` — Query **rejects** `"tuple"`. Default is `"dict"`.
+  `"instance"` requires a single `Entity(var)` head.
 
 Invalid `row_format` or incompatible head raises
-`SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
+`SDKStoreError(code=QUERY_INVALID_ROW_FORMAT)`. Unbound variables in
+`where` fail at construction with `SDKDSLError(code=QUERY_UNBOUND_VAR)`.
 
 ### Rule + run
 
+A `Rule(id, version, select, where, expose=False, ...)` is a named,
+versioned single-rule inference. Required: `id`, `version`, `select`,
+`where` (all non-empty). `expose=True` is required if other rules will
+reference it via `RuleRef`.
+
 ```python
-from kernel.sdk import Rule, Pred, vars
+from kernel.sdk import Rule, vars
 
-user, role = vars("user", "role")
+with vars("u",) as (u,):
+    r = Rule(
+        id="rule_alice",
+        version="1.0.0",
+        select=[u],
+        where=[User(u), u.name == "Alice"],
+        expose=True,
+    )
 
-r = Rule(
-    head=Pred("Authored", user, document=vars("d")),
-    body=[
-        Pred("User", user),
-        Pred("Document", vars("d"), author=user),
-    ],
-)
-
-candidates = fg.eval.run(r)      # → list[CandidateSet]
+rows = fg.eval.run(r)
+# → [{"u": "idref_v1:User:<digest>"}, ...]   (default row_format="dict")
 ```
 
-Rule `body` may be a `Body([...])` or a raw list of `Pred` literals.
-`Body` is required when you need to pass `body_confidences` for
-probabilistic engines.
+Rule's `where` accepts:
+- A flat list of atoms: `[User(u), u.name == "Alice"]`
+- OR a list of `Body([...], confidence=<float>)` branches for
+  probabilistic engines:
+  ```python
+  from kernel.sdk import Body
+  where = [
+      Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
+      Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
+  ]
+  ```
+  `where` cannot mix `Body(...)` with bare branches.
+
+Rule `run` is a row dispatcher. Passing a `Derivation` to `run`
+explicitly raises (`use sdk.evaluate() instead`).
 
 ### Derivation + evaluate
+
+A `Derivation(id, version, where, head=None, mode=None, ...)` is a
+single derivation that produces accept-ready candidates. `head` is
+either a single head (entity or field) or a list `[H1, H2, ...]` for
+multi-head derivations.
 
 ```python
 from kernel.sdk import Derivation
 
-deriv = Derivation(rules=[r1, r2, r3])
+with vars("u", "d") as (u, d):
+    deriv = Derivation(
+        id="drv.authored_from_author_field",
+        version="1.0.0",
+        where=[User(u), Document(d), d.author == u],
+        head=Authored(user=u, document=d),  # entity-candidate head
+    )
 
 candidates = fg.eval.evaluate(deriv, mode="native")           # → list[CandidateSet]
 candidates = fg.eval.evaluate(deriv, mode="problog")          # probabilistic
@@ -360,14 +450,37 @@ candidates = fg.eval.evaluate(deriv, mode="pyreason",
                               engine_options={"timesteps": 5})  # temporal
 ```
 
-`mode` selects the engine; `engine_options` is call-time runtime
-config that never enters the `Derivation` or the ledger.
-`mode="native"` rejects non-empty `engine_options`.
+`mode` is **call-time**, not stored on the `Derivation`. Allowed
+values: `"native"` (default), `"souffle"`, `"problog"`, `"pyreason"`.
+`mode="native"` rejects non-empty `engine_options`. The legacy
+`engine=` and `python=` keywords are removed; using them raises with a
+rename hint.
 
-`CandidateSet.confidence`:
-- `native` / `souffle` → `None`
-- `problog` → probability `float`
-- `pyreason` → lower-bound `float`
+Multi-head Derivation:
+
+```python
+with vars("u", "d") as (u, d):
+    deriv = Derivation(
+        id="drv.authored_plus_role",
+        version="1.0.0",
+        where=[User(u), Document(d), d.author == u],
+        head=[
+            Authored(user=u, document=d),
+            User.name(value=u),  # additional fact head
+        ],
+    )
+# evaluate returns flattened candidates sharing one run_id
+```
+
+`CandidateSet` exposes `candidate_id`, `candidate_key`, `candidate_kind`
+(`"fact"` or `"entity"`), `payload`, plus a `confidence` paired with
+`confidence_kind`:
+
+| Engine | `confidence` | `confidence_kind` |
+|---|---|---|
+| `native` / `souffle` | `None` | `"none"` |
+| `problog` | probability `float` ∈ `(0, 1]` | `"probability"` |
+| `pyreason` | lower-bound `float` ∈ `(0, 1]` | `"certainty"` |
 
 ### Accept
 
@@ -380,42 +493,68 @@ result = fg.eval.accept(
 ```
 
 `accept` writes the candidate's facts into the ledger. Sugar keys:
-`approved_by`, `note`, `dry_run`, `identity_override` (also via
-`meta_overrides`).
+`approved_by`, `note`, `dry_run`, `identity_override` — each can also
+be passed via `meta_overrides={...}` (but not in both at once).
+
+Batch:
 
 ```python
-results = fg.eval.accept_many(candidates)  # idempotent batch accept
+results = fg.eval.accept_many(
+    candidates,
+    mode="atomic",                # or "best_effort"
+    idempotent_duplicate_ok=True, # default — skip already-accepted
+)
 ```
 
-Accepting the same candidate twice is idempotent (skipped).
-Accepting the same claim with a **different** confidence creates a
-new assertion alongside, not a replacement.
+- Re-accepting the same candidate is idempotent (returns
+  `result.kind="duplicate"`) when `idempotent_duplicate_ok=True`.
+- Same claim with a different `confidence` (or other meta) creates a
+  separate assertion, not a replacement.
+- `mode="atomic"` rolls the whole batch back on any failure;
+  `"best_effort"` accepts what it can.
 
 ### Engine semantics (`engine_ext` vs `engine_options`)
 
 ```python
 from kernel.adapters.pyreason import PyReasonRuleExt
 
-r = Rule(head=..., body=..., engine_ext=PyReasonRuleExt(timestep_delay=1))
+with vars("u",) as (u,):
+    r = Rule(
+        id="rule_pyr_demo",
+        version="1.0.0",
+        select=[u],
+        where=[User(u)],
+        engine_ext=PyReasonRuleExt(timestep_delay=1),
+    )
 
 # engine_options is call-time only
 fg.eval.evaluate(deriv, mode="pyreason", engine_options={"timesteps": 10})
 ```
 
-`engine_ext` lives **on the rule definition** (definition-time semantics
-that travel with the rule). `engine_options` is **call-time** runtime
-config that never enters the `Derivation` or ledger.
+`engine_ext` lives **on the rule/derivation definition** (definition-time
+semantics that travel with the rule and enter authoring payload
+serialization). `engine_options` is **call-time** runtime config that
+never enters the `Derivation` or the ledger.
 
 ### Semantic annotations
 
 PyReason runs produce `pyreason/semantic/*` annotations; ProbLog runs
-produce `problog/semantic/probability`. To persist them after
-`accept(...)`:
+produce `problog/semantic/probability`. These are persisted by adapter
+helpers (not flat methods on `fg`):
 
 ```python
-fg.persist_pyreason_annotations()
-fg.persist_problog_annotations()
+from kernel.adapters.pyreason.accept import persist_pyreason_annotations
+from kernel.adapters.problog.accept  import persist_problog_annotations
+
+accept_result = fg.eval.accept(candidates[0])
+
+persist_pyreason_annotations(fg.ledger, run_id="run-1", store=fg, accept_result=accept_result)
+persist_problog_annotations(fg.ledger,  run_id="run-1", store=fg, accept_result=accept_result)
 ```
+
+Each helper walks the accept result, maps every accepted candidate to
+its persisted `asrt_id`, and writes the engine-specific annotation
+records into the ledger's annotation store.
 
 ---
 
@@ -437,23 +576,52 @@ Quick reference:
 | `fg.what_if.rule.add_condition(rule, support, ...)` | What if we added this condition? |
 | `fg.what_if.why_not(deriv, candidates)` | Across this candidate universe, what doesn't derive and why? |
 
-All return frozen application DTOs (not in `kernel.sdk.__all__`); see
-06 for the result shapes.
+All nine methods are **also available as flat methods** on `fg` (e.g.
+`fg.check(deriv, binding)`, `fg.check_fact_overlay(deriv, binding, overlay)`,
+`fg.check_rule_disable(rule, support, ...)`, `fg.why_not(deriv, candidates)`).
+The namespaced and flat forms are equivalent.
+
+All return frozen application DTOs (e.g. `CheckResult`,
+`DiagnoseResult`, `FactOverlayCheckResult`, `WhyNotUniverseResult`).
+These DTOs are **not** in `kernel.sdk.__all__` — they live in
+`kernel.application.protocol` and are imported only when the user
+needs to typecheck a return value. See 06 for the result shapes.
 
 ---
 
 ## 7. Audit
 
 ```python
-explanation = fg.audit.explain_fact("User#u-1.name@asrt-abc-123")
-conflicts = fg.audit.conflicts()
-diff = fg.audit.diff_proof_frames(round_a_id, round_b_id, events_a, events_b)
+ref = fg.read.ref(User, user_id="u-1")
+
+# explain_fact(pred_id, e_ref, *val_atoms) — narrow by value atoms when needed
+explanation = fg.audit.explain_fact("user:name", ref)
+# → {"pred_id": "user:name", "e_ref": ref, "active_claims": [...], "chosen_asrt_id": "asrt-..."}
+
+# conflicts(pred_id, e_ref) — list active conflicting assertions on a pred+entity
+conflicting = fg.audit.conflicts("user:name", ref)
+
+# diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events,
+#                   *, warnings=(), include_unchanged=False)
+diff = fg.audit.diff_proof_frames(
+    round_a_id,
+    round_b_id,
+    round_a_events,
+    round_b_events,
+    include_unchanged=False,  # set True to keep unchanged rows in the diff
+)
 ```
 
-`explain_fact` returns the proof structure for a specific fact
-(by encoded locator). `conflicts` enumerates active conflicting
-assertions. `diff_proof_frames` compares two recorded rounds — see
-[06 §Q5](06_what_if_and_proof.en.md#q5-how-did-derivation-change-between-rounds--fgaudit_diff_proof_frames).
+- `explain_fact` returns the active claims for a `(pred_id, e_ref)`
+  pair (optionally narrowed by trailing value atoms) plus the
+  currently-chosen `asrt_id` per the active view policy.
+- `conflicts` enumerates active conflicting assertions on the same
+  `(pred_id, e_ref)` pair.
+- `diff_proof_frames` compares two recorded derivation rounds and
+  returns a `ProofFrameDiff`. The `round_*_events` arguments are the
+  full event tuples emitted at evaluate time; `include_unchanged=False`
+  trims the diff to changed rows only. See
+  [06 §Q5](06_what_if_and_proof.en.md#q5-how-did-derivation-change-between-rounds--fgaudit_diff_proof_frames).
 
 ---
 
@@ -461,24 +629,44 @@ assertions. `diff_proof_frames` compares two recorded rounds — see
 
 ### Views
 
+A view selects how the SDK aggregates conflicting assertions on the
+same `(pred_id, e_ref)` into a single chosen value when reading. Specs
+are `ViewSpec` instances (frozen dataclasses), not dicts.
+
 ```python
-spec = {
-    "strategy": "max_confidence",
-    "predicate": "User",
-    "fields": ["name"],
-}
+from kernel.core.store.types import ViewSpec
+
+spec = ViewSpec(
+    active=True,
+    confidence_strategy="max",     # see strategy list below
+    prefer_source=None,            # required when strategy="prefer_source"
+)
 
 fg.views.create("preferred_names", spec)
-fg.views.update("preferred_names", new_spec)
-fg.views.delete("legacy_view")          # cannot delete "default"
-fg.views.get("preferred_names")
-all_views = fg.views.list()             # → dict[str, ViewSpec]
+fg.views.update("preferred_names", spec)
+fg.views.delete("legacy_view")           # cannot delete the built-in "default"
+fg.views.get("preferred_names")          # → ViewSpec
+all_views = fg.views.list()              # → dict[str, ViewSpec]
 ```
 
-Use a view in `find` with `view="preferred_names"`.
+Use a view in `find` with either the name or the spec:
 
-Available aggregation strategies include `max_confidence`, `mean`,
-`latest`. See `kernel.sdk.views` source for the full set.
+```python
+fg.read.find(User, name="Alice", view="preferred_names")
+fg.read.find(User, name="Alice", view=spec)
+```
+
+Aggregation strategies (`ConfidenceStrategy` literal):
+- `"max"` — pick the assertion with the highest confidence (default)
+- `"mean"` — average of all confidences
+- `"median"` — median confidence
+- `"prefer_source"` — pick assertions from the source named in
+  `prefer_source`; falls back to `"max"` for sources outside the
+  preferred set.
+
+Passing a raw dict to `views.create` raises `SDKStoreError("view_spec
+must be ViewSpec")`. Deleting `"default"` raises
+`SDKStoreError("cannot delete built-in view: default")`.
 
 ### Packages (Souffle export and replay)
 
@@ -526,11 +714,27 @@ except CardinalityError as e:
 
 ### Error code constants
 
+All seven error codes are exported from `kernel.sdk`:
+
+| Code | Raised when |
+|---|---|
+| `INVALID_ROW_FORMAT` | Rule `run` receives an unrecognized `row_format` value |
+| `QUERY_INVALID_ROW_FORMAT` | Query `run` receives an invalid `row_format`, or `"instance"` is requested for a non-Entity head |
+| `QUERY_MISSING_REF` | Query references an entity ref that doesn't exist in the store |
+| `QUERY_TYPE_MISMATCH` | A Query value comparison hits a value of unexpected type and `on_type_mismatch="error"` |
+| `QUERY_UNBOUND_VAR` | Query construction detects a `where` var with no binding upstream |
+| `QUERY_ALIAS_CONFLICT` | Two Query head items lower to the same alias |
+| `QUERY_NOT_IMPLEMENTED` | Query reaches a code path that is reserved but not yet wired |
+
 ```python
 from kernel.sdk import (
     INVALID_ROW_FORMAT,
+    QUERY_ALIAS_CONFLICT,
     QUERY_INVALID_ROW_FORMAT,
     QUERY_MISSING_REF,
+    QUERY_NOT_IMPLEMENTED,
+    QUERY_TYPE_MISMATCH,
+    QUERY_UNBOUND_VAR,
     SDKStoreError,
 )
 
@@ -538,35 +742,43 @@ try:
     fg.eval.run(query, row_format="banana")
 except SDKStoreError as e:
     if e.code == QUERY_INVALID_ROW_FORMAT:
-        print("Caller bug: row_format must be one of dict|instance|tuple")
+        print("Caller bug: row_format must be one of dict|instance")
 ```
 
-### Optional-domain bundles
-
-When importing optional domain packs (e.g. ECSS), use the
-`ensure_domain` helper rather than catching `ImportError`. See
-[`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md#optional-domain-bundles).
+`SDKDSLError` (raised by Query/Rule/Derivation construction) carries
+the same `code` and `path` attributes; some codes (notably
+`QUERY_UNBOUND_VAR`, `QUERY_ALIAS_CONFLICT`) surface there rather than
+on `SDKStoreError`.
 
 ---
 
 ## 10. Registry
 
 The registry tracks compiled schemas, rules, and derivations across
-versions and apply runs.
+versions and apply runs. It writes to a directory on disk
+(`FileAuthoringRegistry` under the hood).
 
 ```python
 from kernel.sdk import SDKRegistry
 
-reg = SDKRegistry(...)            # see ./registry.py for constructor
+# Construct with one of:
+reg = SDKRegistry(root_dir="/var/factpy/registry")           # path-based
+# or pass a pre-built FileAuthoringRegistry:
+# reg = SDKRegistry(registry=existing_file_authoring_registry)
 
 reg.apply_schema_classes([User, Document])
-reg.register_rule(my_rule)
-reg.register_derivation(my_derivation)
+reg.register_rule(my_rule)                # SDK Rule object
+reg.register_derivation(my_derivation)    # SDK Derivation object (multi-head OK)
 
 reg.list_rule_ids()
-reg.list_rule_versions("rule:authored_v1")
-reg.read_rule_spec("rule:authored_v1", version=2)
+reg.list_rule_versions("rule_alice")
+reg.read_rule_spec("rule_alice", "1.0.0")        # both args positional
 ```
+
+`register_rule` / `register_derivation` accept either an SDK DSL object
+(uses `.to_authoring_payload()`) or a pre-built authoring payload
+`dict`. Multi-head Derivations are supported — the payload's
+`head` field carries a list when more than one head is present.
 
 Apply runs:
 
@@ -576,9 +788,6 @@ reg.list_apply_runs()
 reg.show_apply_run("apply-2026-05-09T10:00:00Z")
 ```
 
-`register_derivation` is single-head-oriented; for multi-head
-publishing, expand into multiple single-head derivations first.
-
 See [§3 of 04](04_api_surface.en.md#3-sdkregistry-methods) for the
 full method list.
 
@@ -586,6 +795,10 @@ full method list.
 
 ## 11. Where to go next
 
+- **[`03_rules_and_derivations.en.md`](03_rules_and_derivations.en.md)** —
+  canonical Rule / Query / Derivation DSL spec (compile-time
+  constraints, `where` syntax, `engine_ext` vs `engine_options`,
+  `accept` parameter boundaries)
 - **[`04_api_surface.en.md`](04_api_surface.en.md)** — full API
   reference with every method signature
 - **[`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md)** —
@@ -599,9 +812,9 @@ full method list.
 ## 12. Appendix: migration notes (v2 → v3)
 
 The v3 SDK is API-compatible with v2 for the flat method surface.
-Two changes worth noting:
+Notable changes:
 
-### Removed/renamed APIs
+### Removed / renamed APIs
 
 | v2 | v3 | Notes |
 |---|---|---|
@@ -609,17 +822,29 @@ Two changes worth noting:
 | `temporal` field on `Field` | (removed) | Temporal semantics moved to `meta` |
 | `dims` field on `Field` | (removed) | Multi-dimensional fields not supported |
 | `fact_key` / `pred_id` on `Pred` | (removed) | Use field accessors instead |
-| `.chosen` on assertion view | (removed) | Use `field(...).current()` |
+| `.chosen` on assertion view | (removed) | Use `snapshot.field("X").active` |
 | `temporal_view` parameter | (removed) | Pass via `meta` and use a custom view |
-| `engine` keyword in `evaluate` | renamed | Use `mode` |
-| `python` keyword in `evaluate` | renamed | Use `mode="native"` |
+| `engine=` keyword in `evaluate` | (removed) | Use `mode=`; old keyword raises with rename hint |
+| `python=` keyword in `evaluate` | (removed) | Use `mode="native"`; old keyword raises with rename hint |
 
-### body_confidences bridge
+### Probabilistic confidence bridge
 
 Probabilistic engines (`problog`) accept per-literal confidence via
-`Body([...], body_confidences=[...])`. The legacy v2 `body_confidences`
-keyword on `Rule(...)` is still accepted but emits a deprecation
-warning; new code should use the `Body(...)` constructor form.
+the `Body(...)` constructor:
+
+```python
+from kernel.sdk import Body
+where = [
+    Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
+    Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
+]
+```
+
+`Body.confidence` is `float ∈ (0, 1]`. There is **no** `body_confidences`
+keyword on `Rule(...)` — the SDK's public Rule dataclass does not
+accept it. (`body_confidences` is the internal IR field name for the
+flattened per-branch confidence list and is handled implicitly when
+`where` is composed of `Body(...)` branches.)
 
 ### Tag semantics on multi-fields
 
@@ -630,5 +855,7 @@ via `accept(...)` idempotency.
 
 ### Row format
 
-The default `row_format` is `"dict"`. `"tuple"` still works but emits
-`DeprecationWarning`. New code should use `"dict"` or `"instance"`.
+The default `row_format` is `"dict"`. For **Rule**, `"tuple"` still
+works but emits `DeprecationWarning`. For **Query**, `"tuple"` is
+**rejected** (only `"dict"` and `"instance"` are valid). New code
+should always use `"dict"` or `"instance"`.
