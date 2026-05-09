@@ -14,7 +14,7 @@
 
 ## 边界
 
-- 本目录**不是 SDK 入门文档** —— SDK user guide 在 [`src/kernel/sdk/docs/00_user_guide.md`](../../sdk/docs/00_user_guide.md)。
+- 本目录**不是 SDK 入门文档** —— SDK user guide 在 [`src/kernel/sdk/docs/00_user_guide.en.md`](../../sdk/docs/00_user_guide.en.md)。
 - 本目录**不是 application capability docs** —— Check / Diagnose / Fact Overlay / ProofFrame / rule actions / Why-not 在 [`src/kernel/application/docs/`](../../application/docs/)。
 - 本目录**不是 audit consumer docs** —— audit package + round events + ProofFrame diff 在 [`src/kernel/audit/docs/`](../../audit/docs/)。
 - 本目录**不是 routemap closure narrative** —— round story 闭环故事由 round-story-completion-plan blueprint(internal design record)在 §10 Outcome 记录。

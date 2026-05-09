@@ -281,5 +281,5 @@ Key focused tests:
 
 ## 8. Related Documents
 
-- [docs/architecture_principles.md](/Users/zhenzhili/hnsm-backend/docs/architecture_principles.md)
-- [src/kernel/sdk/docs/README.md](/Users/zhenzhili/hnsm-backend/src/kernel/sdk/docs/README.md)
+- [docs/architecture_principles.md](../../../../docs/architecture_principles.md)
+- [src/kernel/sdk/docs/README.md](../../sdk/docs/README.md)

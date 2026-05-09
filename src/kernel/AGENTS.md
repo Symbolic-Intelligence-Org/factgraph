@@ -7,7 +7,7 @@
 
 ## Module Docs Convention
 
-Each module's `docs/README.md` must cover these six items. See [docs/module_docs_convention.md](/Users/zhenzhili/hnsm-backend/docs/module_docs_convention.md) for the full spec and a copy-paste starter template.
+Each module's `docs/README.md` must cover these six items. See [docs/module_docs_convention.md](../../docs/module_docs_convention.md) for the full spec and a copy-paste starter template.
 
 1. **Scope** — which code paths this module covers
 2. **Responsibilities** — what it actually does, with entry points
@@ -42,4 +42,4 @@ No update needed for:
 
 ## Indexing
 
-- When a new durable module docs entry is introduced, update [docs/README.md](/Users/zhenzhili/hnsm-backend/docs/README.md) if that index would otherwise miss it.
+- When a new durable module docs entry is introduced, update [docs/README.md](../../docs/README.md) if that index would otherwise miss it.
