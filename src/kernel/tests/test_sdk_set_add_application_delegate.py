@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from kernel.core.evidence.write_protocol import WriteProtocolError
 from kernel.sdk import Entity, Field, Identity, SDKStore
 from kernel.sdk.errors import CardinalityError, SDKStoreError
 
@@ -100,6 +101,26 @@ class SDKSetAddApplicationDelegateTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "FIELD_CARDINALITY_MISMATCH")
         self.assertEqual(ctx.exception.operation, "add")
         self.assertEqual(ctx.exception.actual_cardinality, "single")
+
+    def test_retract_unknown_assertion_remaps_core_write_error(self) -> None:
+        sdk = _build_sdk()
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.retract("asrt_missing")
+
+        self.assertEqual(ctx.exception.code, "ASSERTION_NOT_FOUND")
+        self.assertIn("unknown revoked_asrt_id", str(ctx.exception))
+        self.assertIsInstance(ctx.exception.__cause__, WriteProtocolError)
+
+    def test_retract_invalid_assertion_id_remaps_core_write_error(self) -> None:
+        sdk = _build_sdk()
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.retract("")
+
+        self.assertIsNone(ctx.exception.code)
+        self.assertIn("revoked_asrt_id must be non-empty string", str(ctx.exception))
+        self.assertIsInstance(ctx.exception.__cause__, WriteProtocolError)
 
 
 if __name__ == "__main__":

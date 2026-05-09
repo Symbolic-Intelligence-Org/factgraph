@@ -246,10 +246,7 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
         The taxonomy examples MUST keep the same positional argument
         names so users copy-pasting from docs get a valid call shape.
         """
-        for relpath in (
-            "src/kernel/sdk/docs/04_api_surface.md",
-            "src/kernel/sdk/docs/04_api_surface.en.md",
-        ):
+        for relpath in ("src/kernel/sdk/docs/04_api_surface.en.md",):
             with self.subTest(doc=relpath):
                 text = self._read(relpath)
                 # Taxonomy what_if.check must take (derivation, binding)

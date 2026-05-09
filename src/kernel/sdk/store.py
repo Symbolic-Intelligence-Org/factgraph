@@ -25,7 +25,7 @@ from kernel.authoring.derivations import compile_authoring_derivation_v1
 from kernel.authoring.rules import compile_authoring_rule_v1
 from kernel.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
 from kernel.core.derivation.candidates import CandidateSet
-from kernel.core.evidence.write_protocol import retract_by_asrt
+from kernel.core.evidence.write_protocol import WriteProtocolError, retract_by_asrt
 from kernel.core.schema.schema_ir import schema_digest
 from kernel.adapters.souffle.package import ExportOptions, export_package
 from kernel.core.protocol.idref_v1 import encode_idref_v1
@@ -1306,7 +1306,11 @@ class SDKStore:
             no retraction was emitted (e.g. the target assertion is already
             retracted).
         """
-        return retract_by_asrt(self._store.ledger, asrt_id, meta)
+        try:
+            return retract_by_asrt(self._store.ledger, asrt_id, meta)
+        except WriteProtocolError as exc:
+            code = "ASSERTION_NOT_FOUND" if "unknown revoked_asrt_id" in str(exc) else None
+            raise SDKStoreError(str(exc), code=code) from exc
 
     def run(
         self,

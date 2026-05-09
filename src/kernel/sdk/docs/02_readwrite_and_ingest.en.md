@@ -89,11 +89,10 @@ sdk.retract(asrt_id, meta={"trace_id": "fix-1"})
 
 - Append-only revoke (no physical delete of claim rows).
 - Returns the revoker assertion id; re-retracting an already revoked
-  assertion returns the existing revoker id; unknown assertions raise
-  `kernel.core.evidence.write_protocol.WriteProtocolError` (this is
-  not currently wrapped to `SDKStoreError` at the SDK boundary —
-  catch the underlying exception or `Exception` if you need broad
-  coverage).
+  assertion returns the existing revoker id.
+- Unknown or invalid assertion ids raise `SDKStoreError`; unknown
+  assertion ids use `code="ASSERTION_NOT_FOUND"`. The underlying core
+  `WriteProtocolError` is preserved as `__cause__` for debugging.
 
 ## 4. Batch Writes (`sdk.batch()`)
 
