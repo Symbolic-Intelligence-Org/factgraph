@@ -392,6 +392,191 @@ Candidate groupings (provisional; finalized at §5.2 lock):
 - F4 — Does any grouping accidentally promote `kernel.audit` or `kernel.core` concepts into the SDK surface? The G5 §5.3 layer rule must hold.
 - F5 — Existing `views` namespace precedent — does it fit the chosen grouping or stay an outlier?
 
+#### 5.2 Deliverable (research-only at HEAD `d581703`; no lock yet — recommendation pending user confirmation)
+
+§5.2 evaluates namespace grouping **independently from rollout shape** (§5.1 deferred shape choice to §5.7). The grouping decision is the conceptual taxonomy; whether it ships as additive aliases (Shape 2), canonical nested + flat compat (Shape 3), or not at all (Shape 1) is a separate §5.4/§5.7 question.
+
+##### 5.2.1 Top-level 8-concept evaluation
+
+Starting candidate from §5.1 inventory:
+
+`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`
+
+**F0 (does `dir(FactGraph)` teach the model?):** ✅ **STRONG.** A new user reading `dir(fg)` would see `schema`, `read`, `write`, `eval`, `what_if`, `audit`, `package`, `views` (8 namespaces) plus 1 classmethod (`from_schema_classes`), 1 method (`batch`), 4 properties (`store`, `ledger`, `schema_ir`, `views`). The 8 namespace names form a coherent mental model: declare data shape (`schema`), look at data (`read`), modify data (`write`), run rules (`eval`), hypothetical analysis (`what_if`), post-hoc inspection (`audit`), export/import (`package`), saved queries (`views`). No docstring lookup required to derive the layering.
+
+**F1 (each method placeable unambiguously):** ✅ **MOSTLY UNAMBIGUOUS** — three methods need explicit decisions:
+
+| Method | Candidate placements | Recommendation | Rationale |
+|---|---|---|---|
+| `validate_provenance` | `schema` vs `audit` | **`schema`** | Pre-ingest validation of provenance documents; structurally schema-validation-adjacent; `audit` is post-hoc inspection. |
+| `diff_proof_frames` (G5) | `what_if` vs `audit` | **`audit`** | Source-grounded at `store.py:719-795`: takes `tuple[RoundEvent, ...]` from `kernel.audit.round_events` (PERSISTED rounds), returns frozen `ProofFrameDiff` from `kernel.audit`. Compares two real rounds — not a hypothetical scenario. Semantic fit: post-hoc comparison alongside `explain_fact` / `conflicts`. |
+| `accept` / `accept_compiled` / `accept_many` | `eval` vs `write` | **`eval`** | Conceptually mutating (commits candidates as facts), but workflow-paired with `evaluate*` (eval → accept). Splitting separates a unit-of-work pair. Documented as "evaluation closure" within `eval` group. |
+
+All 30 methods placeable post-decision. F1 PASS.
+
+**F-layer (mix `kernel.audit` vs `kernel.application.protocol` vs SDK write APIs?):** ✅ **CLEAN at top level**, mild heterogeneity at `audit` group:
+
+| Group | Layers touched | Verdict |
+|---|---|---|
+| `schema` | SDK Entity classes + `kernel.application.compile` + `IngestResult`/`ValidationReport` | clean |
+| `read` | SDK-level (Entity instances, refs) | clean |
+| `write` | SDK Entity + `kernel.core.store` (ledger writes) | clean (write APIs are inherently substrate-touching by design) |
+| `eval` | SDK Query/Derivation + `kernel.application` `CandidateSet` | clean |
+| `what_if` | SDK Rule + `kernel.application.protocol` frozen DTOs (CheckResult, DiagnoseResult, FactOverlayCheckResult, ProofFrameRecheckResult, RuleDisableResult, etc.) | clean — all G5 layer-rule-compliant |
+| `audit` | `explain_fact` / `conflicts` return shallow `dict[str, Any]`; `diff_proof_frames` returns frozen `kernel.audit.ProofFrameDiff` | **mild heterogeneity** — same group has shallow + DTO returns. Documented but not a layer violation. |
+| `package` | `ExportOptions` + path I/O | clean |
+| `views` | SDK ViewSpec | clean (existing precedent) |
+
+The `audit` group's heterogeneous return shapes (dict vs DTO) is structurally OK per G5 §5.3 layer rule (which says **frozen DTO above kernel.core**, not "all returns must be DTO"). Documentation should note that `diff_proof_frames` is the typed-return outlier in `audit`.
+
+**F-DTO-rule (preserves G5 cross-cutting precedent + G3 substrate-IR exclusion?):** ✅ **PRESERVED.** Grouping doesn't change method signatures. SDK methods continue to take/return either `kernel.application.protocol` frozen DTOs or `kernel.audit` frozen DTOs (G5 §5.3 verbatim invariant); SDK `Rule` objects still get compiled internally via `_compile_rule_input`, so `RuleSpec` substrate IR stays out of SDK boundary (G3 §5.2 verbatim).
+
+**F-anti-resource (avoids OpenAI/Stripe resource-API model?):** ✅ **AVOIDED at top level.** The 8-concept consolidation is **operation-mode-leaning** (`schema` = "schema operations", `read` = "read operations", `what_if` = "what-if operations") — closer to SQLAlchemy `Session.<operation>` than OpenAI `client.<resource>.<verb>`. Resource-model would look like `fg.entities.add(...)` / `fg.derivations.run(...)` / `fg.proof_frames.diff(...)` — explicitly NOT what this proposes. Mild resource-flavor appears in sub-namespaces where natural (`views.<verb>` is the existing precedent; `what_if.rule.<verb>` and `what_if.fact_overlay.<verb>` if §5.2.2 splits — see below). Top-level stays operation-mode.
+
+##### 5.2.2 The `what_if` question — split vs unified
+
+`what_if` group has 8 methods after `diff_proof_frames` moves to `audit`:
+
+```
+check, diagnose, why_not, check_fact_overlay, recheck_proof_frame,
+check_rule_disable, check_rule_literal_replace, check_rule_add_condition
+```
+
+**Option A — Unified (8 methods directly under `what_if`):**
+
+```python
+fg.what_if.check(...)
+fg.what_if.diagnose(...)
+fg.what_if.why_not(...)
+fg.what_if.check_fact_overlay(...)
+fg.what_if.recheck_proof_frame(...)
+fg.what_if.check_rule_disable(...)
+fg.what_if.check_rule_literal_replace(...)
+fg.what_if.check_rule_add_condition(...)
+```
+
+`dir(fg.what_if)` (alphabetical): `check`, `check_fact_overlay`, `check_rule_add_condition`, `check_rule_disable`, `check_rule_literal_replace`, `diagnose`, `recheck_proof_frame`, `why_not` — 8 methods.
+
+- **F0 (sub-legibility):** PARTIAL. `check_*` prefix appears 5 times, structurally informative but visually noisy. User reads 8 methods, needs to scan prefixes to derive sub-grouping (G1 vs G2 vs G3).
+- **F1 (placement):** unambiguous (all 8 methods are direct).
+- **Migration cost:** ZERO renames; nested namespace just adds `what_if.` prefix to existing flat names.
+- **Compatibility:** clean — exact flat-method names preserved.
+
+**Option B — Split (G1+G4 direct under `what_if`; G2 under `what_if.fact_overlay`; G3 under `what_if.rule`):**
+
+```python
+# G1 + G4 direct (3 methods, naturally verb-named)
+fg.what_if.check(...)              # G1
+fg.what_if.diagnose(...)           # G1
+fg.what_if.why_not(...)            # G4
+
+# G2 sub-namespace (2 methods)
+fg.what_if.fact_overlay.check(...)               # was check_fact_overlay
+fg.what_if.fact_overlay.recheck_proof_frame(...) # was recheck_proof_frame (verb retained)
+
+# G3 sub-namespace (3 methods)
+fg.what_if.rule.disable(...)         # was check_rule_disable
+fg.what_if.rule.literal_replace(...) # was check_rule_literal_replace
+fg.what_if.rule.add_condition(...)   # was check_rule_add_condition
+```
+
+`dir(fg.what_if)`: `check`, `diagnose`, `why_not`, `fact_overlay`, `rule` — **5 entries** (3 methods + 2 sub-namespaces).
+`dir(fg.what_if.fact_overlay)`: `check`, `recheck_proof_frame` — 2 methods.
+`dir(fg.what_if.rule)`: `disable`, `literal_replace`, `add_condition` — 3 methods.
+
+- **F0 (sub-legibility):** ✅ **STRONGER.** 5 entries instead of 8; sub-namespaces cleanly reflect G1+G4 / G2 / G3 family structure. Sub-namespace verb names lose `check_*` prefix collision (5 of 8 methods drop their `check_` prefix because at sub-namespace level there's no naming collision with bare `check`).
+- **F1 (placement):** unambiguous; 5 methods get short names (`fact_overlay.check`, `rule.disable`, `rule.literal_replace`, `rule.add_condition`).
+- **Migration cost:** **5 renames as additive aliases under Shape 2** (flat methods stay; new aliased nested-short paths added). No flat-method removal.
+- **Compatibility:** clean — flat methods stay callable verbatim; new nested paths are additive aliases. Shape 3 (canonical nested + flat compat) is the natural rollout for Option B.
+- **F-anti-resource subtle concern:** `what_if.rule.<verb>` and `what_if.fact_overlay.<verb>` ARE mildly resource-shaped at the sub-namespace level (resource = rule / fact_overlay; verb = action). HOWEVER the resource-flavor here is local to the sub-namespace (where it's natural for "operations on a rule overlay") and doesn't propagate to top-level. Distinct from OpenAI-style `client.resource.verb` where every method follows the pattern.
+
+**Recommendation: Option B (split)** under §0 thesis F0:
+
+| Axis | Option A (unified) | Option B (split) | Winner |
+|---|---|---|---|
+| F0 sub-legibility | 8 alphabetized methods | 5 entries; sub-namespaces reflect L family | **B** |
+| F1 placement | unambiguous | unambiguous | tie |
+| Migration cost (additive) | 0 renames | 5 alias paths added | A (cheaper) |
+| Naming clarity | `check_*` prefix collision noise | clean short names at sub-level | **B** |
+| Future extensibility | adding 10th L method bloats unified namespace | sub-namespaces accommodate naturally | **B** |
+| Anti-resource | clean | mild local resource-flavor | A (slightly cleaner) |
+
+Option B wins on F0, naming clarity, and future extensibility; loses on migration cost (5 alias paths) and mild local resource-flavor. Under thesis (legibility-first), Option B is the recommended split.
+
+##### 5.2.3 Resulting full grouping skeleton (recommended; lock pending user confirmation)
+
+```
+fg
+├── from_schema_classes (classmethod)        # entrypoint
+├── batch (context manager)                   # heavy use; stays top-level
+├── store, ledger, schema_ir (properties)     # low-level access
+├── views (property → namespace)              # existing precedent
+│   ├── create
+│   ├── update
+│   ├── delete
+│   ├── get
+│   └── list
+├── schema
+│   ├── ingest
+│   └── validate_provenance
+├── read
+│   ├── get
+│   ├── find
+│   └── ref
+├── write
+│   ├── set
+│   ├── add
+│   ├── retract
+│   └── edit
+├── eval
+│   ├── run
+│   ├── evaluate
+│   ├── evaluate_compiled
+│   ├── accept
+│   ├── accept_compiled
+│   └── accept_many
+├── what_if                                   # G1+G4 direct + G2/G3 sub-namespaced
+│   ├── check                                  # G1
+│   ├── diagnose                               # G1
+│   ├── why_not                                # G4
+│   ├── fact_overlay
+│   │   ├── check                              # was check_fact_overlay
+│   │   └── recheck_proof_frame                # G2
+│   └── rule
+│       ├── disable                            # was check_rule_disable
+│       ├── literal_replace                    # was check_rule_literal_replace
+│       └── add_condition                      # was check_rule_add_condition
+├── audit
+│   ├── explain_fact
+│   ├── conflicts
+│   └── diff_proof_frames                      # G5 — moved here from what_if
+└── package
+    ├── export_package
+    └── run_package
+```
+
+**Counts:** 8 top-level namespaces + 2 sub-namespaces (`what_if.fact_overlay`, `what_if.rule`) + existing `views` (5 sub-methods). 30 user-facing methods preserved verbatim at flat level under Shape 2/3 compat default; 5 nested-short alias paths added under what_if split (`what_if.fact_overlay.check`, `what_if.rule.disable`, `what_if.rule.literal_replace`, `what_if.rule.add_condition`, plus `what_if.fact_overlay.recheck_proof_frame` which keeps verb name verbatim).
+
+##### 5.2.4 Falsifier outcomes summary
+
+| Falsifier axis | Verdict | Evidence |
+|---|---|---|
+| F0 — `dir(FactGraph)` teaches the model | ✅ STRONG | 8 top-level namespace names form coherent mental model without docstring lookup |
+| F1 — methods placeable unambiguously | ✅ PASS (with 3 documented placements: `validate_provenance` → schema; `diff_proof_frames` → audit; `accept*` → eval) | All 30 methods placed; ambiguity explicitly resolved |
+| F-layer — no improper mix of `kernel.audit` / protocol / SDK write | ✅ CLEAN at top level; mild dict-vs-DTO heterogeneity in `audit` (documented) | Not a layer violation per G5 §5.3 invariant |
+| F-DTO-rule — G5 boundary + G3 substrate-IR exclusion preserved | ✅ PRESERVED | Grouping doesn't change signatures; method-level invariants intact |
+| F-anti-resource — avoids OpenAI/Stripe resource model | ✅ AVOIDED at top level; mild local resource-flavor in `what_if.rule.*` / `what_if.fact_overlay.*` (Option B); top-level stays operation-mode-leaning per Session-over-graph thesis | `views` is the existing precedent for local resource-flavor at sub-namespace |
+
+##### 5.2.5 Open questions for user confirmation before lock
+
+1. **Confirm Option B split for `what_if`?** — Recommended: split (G1+G4 direct, G2 sub-namespaced, G3 sub-namespaced). Option A (unified 8-method) is simpler/cheaper but F0-weaker.
+2. **Confirm `diff_proof_frames` → `audit` (not `what_if`)?** — Source-grounded recommendation: audit (post-hoc comparison of persisted rounds, not hypothetical).
+3. **Confirm `validate_provenance` → `schema` (not `audit`)?** — Recommendation: schema (pre-ingest validation).
+4. **Confirm `accept*` stays in `eval` (not split to `write`)?** — Recommendation: eval (workflow-paired with `evaluate*`).
+5. **Confirm `from_schema_classes` and `batch` stay top-level (not under `schema` / `write` respectively)?** — Recommendation: top-level (entrypoint constructor + frequently-used context manager).
+
+§5.2 lock is pending user confirmation on these 5 placements.
+
 ### 5.3 Top-level entrypoint class naming
 
 **Question:** What is the user-facing top-level entrypoint class name? Keep `SDKStore`, or introduce a new name (and if new, what)?
