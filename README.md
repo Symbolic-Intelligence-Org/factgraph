@@ -90,7 +90,7 @@ L Direction G1-G5 已为 Check、Diagnose、Why-not、Fact Overlay、ProofFrame 
 
 - [src/kernel/sdk/docs/README.md](src/kernel/sdk/docs/README.md)
 - [src/kernel/application/docs/README.md](src/kernel/application/docs/README.md)
-- [src/kernel/core/docs/01_architecture.md](src/kernel/core/docs/01_architecture.md)
+- [src/kernel/core/docs/01_architecture.en.md](src/kernel/core/docs/01_architecture.en.md)
 - [src/kernel/audit/docs/README.md](src/kernel/audit/docs/README.md)
 - [src/kernel/adapters/docs/README.md](src/kernel/adapters/docs/README.md)
 - [src/kernel/authoring/docs/README.md](src/kernel/authoring/docs/README.md)

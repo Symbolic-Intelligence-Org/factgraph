@@ -165,8 +165,9 @@ strings (e.g. `Alice` / `Dog`), while the shared write path's
 ingest-key computation requires `entity_ref` to be a canonical
 token.
 
-`accept_pyreason_session(...)` therefore performs a minimal
-adapter-local materialization before writing into the Ledger:
+`accept_pyreason_session(...)` therefore currently performs a
+minimal adapter-local materialization before writing into the
+Ledger:
 
 - node fact: `Alice` → `idref_v1:User:Alice`
 - edge `to_ref`: `Bob` → `idref_v1:User:Bob`
@@ -394,15 +395,15 @@ Current behaviors:
   separately. Node facts preserve `[lo, hi]` via the fact-text
   interval; edge facts continue to enter the engine via the
   graph-attribute lower-bound summary
-- **Propagation boundary**: real engine behavior shows that
-  non-`[1.0, 1.0]` node seeds will not match a body clause
+- **Propagation boundary**: currently, real engine behavior shows
+  that non-`[1.0, 1.0]` node seeds will not match a body clause
   under the **default rule-body threshold**; if the compiler
   emits an explicit clause interval (e.g.
   `popular(y) : [0.5, 1.0]`), bounded seeds can participate in
   body matching. This is verified up to here; do not extrapolate
   to "the derived head will inherit the input interval"
-- **Derived head boundary**: real engine behavior shows that
-  when the head interval is not declared, the derived head
+- **Derived head boundary**: currently, real engine behavior shows
+  that when the head interval is not declared, the derived head
   defaults to `[1.0, 1.0]`; if the compiler emits an explicit
   head annotation (e.g. `popular(x) : [0.8, 0.9] <-1 ...`), the
   derived head receives that static interval. The interval here

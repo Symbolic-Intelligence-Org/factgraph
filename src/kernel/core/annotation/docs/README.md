@@ -57,8 +57,8 @@ implementation site.
       bottleneck concept)
     - narrative / NL consume the ranked view; they don't sort
       themselves
-  - Only the certainty lane is implemented; `probability` / `none`
-    return `None` directly
+  - Currently only the certainty lane is implemented;
+    `probability` / `none` return `None` directly
   - Current production consumers:
     - runtime candidate explain delivery:
       - response-level sibling `certainty_summary` on
