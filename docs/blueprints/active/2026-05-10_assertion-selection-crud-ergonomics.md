@@ -1,6 +1,6 @@
 # Task Blueprint: Assertion Selection And CRUD Ergonomics
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-10
 - Last Updated: 2026-05-10
 - Related Modules:
@@ -627,40 +627,40 @@ implementation gates that must pass before the behavior ships.
 - [x] Blueprint body and audit log make the §5.1 supersession clear without
       requiring readers to infer it from commit history.
 
-**Implementation gates (must pass before code ships):**
+**Implementation gates (passed, 2026-05-10):**
 
-- [ ] `FieldAssertions.active`, `.history`, `.at(...)`, and `.version(...)`
+- [x] `FieldAssertions.active`, `.history`, `.at(...)`, and `.version(...)`
       return a tuple-compatible assertion collection with `.where(...)`,
       `.one()`, `.all()`, and `.first()`.
-- [ ] Existing tuple behavior remains compatible: iteration, indexing,
+- [x] Existing tuple behavior remains compatible: iteration, indexing,
       `len(...)`, equality to plain tuples such as `()`, and
       `isinstance(records, tuple)`.
-- [ ] Slicing, concatenation, multiplication, and chained
+- [x] Slicing, concatenation, multiplication, and chained
       `.where(...).where(...)` preserve the assertion collection type.
-- [ ] `.where(...)` supports `value`, `source`, `trace_id`, `confidence`,
+- [x] `.where(...)` supports `value`, `source`, `trace_id`, `confidence`,
       `version`, and `meta={...}` filters.
-- [ ] Multiple `.where(...)` filters use AND semantics.
-- [ ] Explicit `None` filters are distinguishable from omitted filters.
-- [ ] `.one()` returns exactly one `AssertionRecord`; zero and multiple
+- [x] Multiple `.where(...)` filters use AND semantics.
+- [x] Explicit `None` filters are distinguishable from omitted filters.
+- [x] `.one()` returns exactly one `AssertionRecord`; zero and multiple
       matches raise SDK errors.
-- [ ] `.all()` returns a plain `tuple[AssertionRecord, ...]`.
-- [ ] `.first()` returns the first `AssertionRecord` or `None` for an empty
+- [x] `.all()` returns a plain `tuple[AssertionRecord, ...]`.
+- [x] `.first()` returns the first `AssertionRecord` or `None` for an empty
       collection.
-- [ ] `write.retract(asrt_id)` behavior remains unchanged; no selector,
+- [x] `write.retract(asrt_id)` behavior remains unchanged; no selector,
       predicate, filter-kwargs, or `AssertionRecord` overload ships.
-- [ ] `kernel.sdk.__all__` remains unchanged.
-- [ ] No new `fg.read.*` namespace method is introduced.
-- [ ] No application protocol change is introduced for assertion selection.
-- [ ] Affected SDK docs are updated in the same implementation cycle as the
+- [x] `kernel.sdk.__all__` remains unchanged.
+- [x] No new `fg.read.*` namespace method is introduced.
+- [x] No application protocol change is introduced for assertion selection.
+- [x] Affected SDK docs are updated in the same implementation cycle as the
       behavior change.
-- [ ] SDK docs show `set(...)` / `add(...)` returning `asrt_id`.
-- [ ] SDK docs show snapshot structure as
+- [x] SDK docs show `set(...)` / `add(...)` returning `asrt_id`.
+- [x] SDK docs show snapshot structure as
       `EntitySnapshot -> FieldAssertions -> AssertionRecordSet -> AssertionRecord`.
-- [ ] Retract examples use `.where(...).one()` followed by
+- [x] Retract examples use `.where(...).one()` followed by
       `fg.write.retract(target.asrt_id)`.
-- [ ] Docs avoid magic assertion ids and positional `records[0]` as the
+- [x] Docs avoid magic assertion ids and positional `records[0]` as the
       primary retract selection pattern.
-- [ ] No release refs, historical snapshots, release branch artifacts, or
+- [x] No release refs, historical snapshots, release branch artifacts, or
       `v0.1.0-rc.1` tag/release artifacts are modified.
 
 ## 8. Implementation Plan
@@ -796,8 +796,37 @@ Likely docs if scoped:
 Task completion section to fill after implementation or explicit research
 closure:
 
-- Final landed decision:
+- Final landed decision: ship `AssertionRecordSet`, a tuple-compatible
+  returned-object helper for read-side assertion selection on existing
+  `FieldAssertions` access paths.
 - Final landed behavior:
+  - `FieldAssertions.active`, `.history`, `.at(...)`, and `.version(...)`
+    return `AssertionRecordSet`.
+  - `AssertionRecordSet` is a `tuple` subclass preserving iteration,
+    indexing, `len(...)`, equality to plain tuples, slicing, concatenation,
+    and multiplication while adding `.where(...)`, `.one()`, `.all()`, and
+    `.first()`.
+  - `.where(...)` supports `value`, `source`, `trace_id`, `confidence`,
+    `version`, and `meta={...}` equality filters with AND semantics and
+    explicit-`None` support.
+  - `write.retract(asrt_id)` remains unchanged; no selector, predicate,
+    filter-kwargs, or `AssertionRecord` overload ships.
+  - `kernel.sdk.__all__` remains unchanged; no new `fg.read.*` namespace
+    method or application protocol change ships.
+  - SDK docs now teach `set/add` returning `asrt_id`, the snapshot assertion
+    hierarchy, and `.where(...).one()` before `write.retract(target.asrt_id)`.
 - Deviations from draft:
+  - §5.1 initially locked a docs-only first slice. User review re-opened
+    §5.2 and superseded only the "no selector API" conclusion; the docs
+    hotfix baseline remained authoritative.
+  - `07_walker_and_advanced.en.md` was added to the docs-sync target list
+    after Phase 0 scan found a magic assertion id example.
+  - Full kernel discovery still reports the pre-existing Problog cold-import
+    circularity; focused and related SDK suites pass.
 - Deferred design questions:
-- Archive notes:
+  - A possible future `write.retract(AssertionRecord)` overload remains
+    deferred until user feedback shows `target.asrt_id` is confusing.
+  - Predicate DSLs, fuzzy matching, nested metadata query languages, and
+    fuzzy retract APIs remain out of scope.
+- Archive notes: implemented locally on `master`; archive after final review
+  and commit.
