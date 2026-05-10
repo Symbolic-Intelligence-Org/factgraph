@@ -155,7 +155,7 @@ Explicitly NOT decided in §5.1 (delegated):
 - Whether `bind(...)` retains mutating semantics or gains a branching
   `domain(...)` form → §5.4.
 - Any read-side primary-anchor / domain collection API → spin-off blueprint
-  [2026-05-10_primary-anchor-domain-read.md](../active/2026-05-10_primary-anchor-domain-read.md).
+  [2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md).
 - Any change to `idref_v1` substrate encoding → out of scope under §6
   invariant; reopening requires explicit invariant change.
 
@@ -292,7 +292,7 @@ Explicitly NOT decided in §5.3 (delegated):
 - Whether `bind(...)` retains mutating semantics or gains a branching
   `domain(...)` form for non-primary identity → §5.4.
 - Any read-side primary-anchor / domain collection API → spin-off blueprint
-  [2026-05-10_primary-anchor-domain-read.md](../active/2026-05-10_primary-anchor-domain-read.md).
+  [2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md).
 - Any change to read-side identity inference for query APIs (e.g., letting
   `sdk_get(...)` infer uuid4 primary identity) → out of scope; current
   rejection is preserved.
@@ -357,7 +357,7 @@ Explicitly NOT decided in §5.4 (delegated):
 
 - Branching / domain-handle / fan-out designs belong to the spin-off
   blueprint
-  [2026-05-10_primary-anchor-domain-read.md](../active/2026-05-10_primary-anchor-domain-read.md)
+  [2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md)
   or a later follow-up blueprint, not this one.
 - Whether the long-term direction prefers fluent branching
   (`handle.domain(...)`) vs an entity-level read collection
@@ -378,7 +378,7 @@ Falsifiers to run:
 **Deferred (2026-05-10):**
 
 Primary-anchor/domain read API design is split into
-[2026-05-10_primary-anchor-domain-read.md](../active/2026-05-10_primary-anchor-domain-read.md).
+[2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md).
 This parent blueprint keeps only the primary-first write/handle completion
 scope.
 
@@ -397,7 +397,7 @@ Falsifiers to run:
 **Deferred (2026-05-10):**
 
 Domain collection return-type design is split into
-[2026-05-10_primary-anchor-domain-read.md](../active/2026-05-10_primary-anchor-domain-read.md).
+[2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md).
 This parent blueprint does not define a new read DTO.
 
 ### 5.7 Write Layer
@@ -455,7 +455,7 @@ Explicitly NOT decided in §5.7 (delegated):
 
 - Any future write-to-domain-set API (e.g., "set field X on all
   coordinates of primary Y") → spin-off blueprint
-  [2026-05-10_primary-anchor-domain-read.md](../active/2026-05-10_primary-anchor-domain-read.md)
+  [2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md)
   §5.G (currently recorded there as DEFAULT NO and OUT-OF-SCOPE).
 - Error message wording refinements at write time → covered by §5.1
   commit-time error contract; no further refinement here.
@@ -625,7 +625,7 @@ following invariants govern any scoped implementation of this blueprint.
   this blueprint.
 - Any primary-anchor / domain collection read API design is owned by the
   spin-off blueprint
-  [2026-05-10_primary-anchor-domain-read.md](../active/2026-05-10_primary-anchor-domain-read.md),
+  [2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md),
   not this blueprint (§5.5 / §5.6 DEFERRED).
 
 **Rule authoring invariants (preserved, no behavior change):**
@@ -663,7 +663,7 @@ implementation gates that must pass before any code change ships.
       recorded in the audit log.
 - [x] §5.5 / §5.6 have explicit DEFERRED decisions pointing to the
       spin-off blueprint
-      [2026-05-10_primary-anchor-domain-read.md](../active/2026-05-10_primary-anchor-domain-read.md).
+      [2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md).
 
 **Scope-freeze gates (passed before `draft → scoped`, 2026-05-10):**
 
@@ -860,7 +860,7 @@ Deviations from draft:
 Deferred design questions:
 
 - Primary-anchor/domain collection read API remains deferred to
-  [2026-05-10_primary-anchor-domain-read.md](../active/2026-05-10_primary-anchor-domain-read.md).
+  [2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md).
 - Branching domain-handle or logical-entity-handle semantics remain
   deferred to the spin-off or a future blueprint.
 - No release-branch or rc.1 artifact update is part of this blueprint.
