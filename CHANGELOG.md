@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0-rc.1] - 2026-05-09
+## [0.1.0-rc.1] - 2026-05-10
 
 First public preview release candidate.
 
@@ -45,6 +45,47 @@ First public preview release candidate.
 
 - `pyproject.toml` version bumped to `0.1.0rc1` (PEP 440) for this release
   candidate.
+
+### Fixed
+
+- `SDKStore.retract()` now wraps the underlying `WriteProtocolError` from
+  `kernel.core.evidence.write_protocol` into `SDKStoreError`, with the
+  original exception preserved as `__cause__`. Unknown assertion ids
+  carry `code="ASSERTION_NOT_FOUND"`. The SDK-boundary error contract is
+  now consistent across all write operations.
+
+### Documentation
+
+- **SDK docs cycle**: full audit + rewrite of `src/kernel/sdk/docs/`
+  against source-of-truth code across all 8 files (00 user guide
+  through 07 walker, plus README and the 03 rules/derivations
+  canonical reference). Corrected fictional API claims, DTO field
+  names, status vocabularies (`CheckStatus`, `OverlayCheckStatus`,
+  `WhyNotStatus`, `ProofFrameStatus`), and helper-function imports
+  (`fg.persist_*_annotations()`, `ensure_domain`, ViewSpec dict form).
+- **Cross-doc consistency**: aligned `mode='python'` / `mode='engine'`
+  rename framing across 00 + 03 + 04; expanded error-code coverage in
+  00 from 3 to all 7 exported codes; clarified multi-head support
+  semantics (registry + evaluate accept multi-head; constraint lives
+  at capability shells `check / diagnose / why_not`).
+- **EN-only migration of module docs**: deleted 5 Chinese halves of
+  CN/EN pairs (application/01_overview, audit/01_overview,
+  core/01_architecture, core/02_quality_assessment,
+  core/03_progress_roadmap); translated 15 Chinese-only docs to
+  English; fixed cross-link hygiene (absolute filesystem paths →
+  relative paths; stale `.md` → `.en.md` references). The kernel now
+  ships EN-only documentation across every module.
+- **Translation drift audit**: restored temporal hedging in
+  spike-status adapter docs (PyReason §5C.1 propagation /
+  derived-head boundary observations, §5A.4 accept constraint;
+  core/annotation §2 certainty-lane status) so that
+  observed-up-to-here behaviors are not promoted to permanent design
+  claims.
+- **Top-level kernel landing**: added `src/kernel/README.md` as a
+  human-facing module navigation page, paralleling the existing
+  `AGENTS.md` for AI agent guidance.
+- Translated 4 deprecation docstrings in `kernel.core.store.ledger`
+  from Chinese to English (preserving deprecation semantics).
 
 ## Earlier History
 
