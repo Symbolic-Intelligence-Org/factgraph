@@ -196,7 +196,6 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
                 self.assertIn("L Direction G1-G5", text)
                 self.assertIn("FactGraph", text)
                 self.assertNotIn("does not add matching SDK shells", text)
-                self.assertNotIn("不新增对应 SDK shell", text)
                 self.assertNotIn("709 tests", text)
 
     def test_no_deprecated_label_on_flat_methods_in_sdk_docs(self) -> None:

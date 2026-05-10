@@ -512,8 +512,9 @@ class Ledger:
     def append_claim(self, claim: Claim) -> None:
         """
         .. deprecated::
-            请使用 append_assertion(...)。此方法在兼容期保留，
-            后续清理阶段将降级为私有或删除。
+            Use append_assertion(...) instead. This method is kept
+            during the compatibility window and will be downgraded
+            to private or removed in a later cleanup phase.
         """
         _validate_claim_input(claim, require_asrt_id=True)
         normalized_terms = [_normalize_term(term) for term in claim.rest_terms]
@@ -530,8 +531,9 @@ class Ledger:
     def append_claim_args(self, rows: list[ClaimArg]) -> None:
         """
         .. deprecated::
-            请使用 append_assertion(...)。此方法在兼容期保留，
-            后续清理阶段将降级为私有或删除。
+            Use append_assertion(...) instead. This method is kept
+            during the compatibility window and will be downgraded
+            to private or removed in a later cleanup phase.
         """
         _validate_claim_args_rows(rows)
         for row in rows:
@@ -551,8 +553,10 @@ class Ledger:
     def append_meta(self, rows: list[MetaRow]) -> None:
         """
         .. deprecated::
-            请使用 append_assertion(...) 或 append_revocation(...)。
-            此方法在兼容期保留，后续清理阶段将降级为私有或删除。
+            Use append_assertion(...) or append_revocation(...)
+            instead. This method is kept during the compatibility
+            window and will be downgraded to private or removed in
+            a later cleanup phase.
         """
         _validate_meta_rows(rows)
         for row in rows:
@@ -594,8 +598,10 @@ class Ledger:
     def append_revokes(self, row: Revokes) -> None:
         """
         .. deprecated::
-            请使用 append_revocation(...)。此方法在兼容期保留，
-            后续清理阶段将降级为私有或删除。
+            Use append_revocation(...) instead. This method is
+            kept during the compatibility window and will be
+            downgraded to private or removed in a later cleanup
+            phase.
         """
         _validate_revokes_row(row)
         actual_row = Revokes(
