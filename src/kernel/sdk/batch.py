@@ -1158,6 +1158,7 @@ class SDKBatchTx:
             raise SDKStoreError("tx.entity(...) requires Entity subclass")
         self._validate_identity_keys(entity_cls, identity_values, path="tx.entity(...)")
         materialized_identity, missing = self._materialize_identity_values(entity_cls, identity_values)
+        self._validate_primary_identity_present(entity_cls, materialized_identity, path="tx.entity(...)")
         e_ref = self._sdk.ref(entity_cls, **materialized_identity) if not missing else None
 
         existing = self._handles_by_e_ref.get(e_ref) if isinstance(e_ref, str) else None
@@ -1724,6 +1725,7 @@ class SDKBatchTx:
         if not isinstance(identity_values, dict) or not identity_values:
             raise SDKStoreError(f"{handle.path}.bind(...): identity kwargs must be non-empty")
         self._validate_identity_keys(handle.entity_cls, identity_values, path=f"{handle.path}.bind(...)")
+        self._reject_primary_identity_bind(handle.entity_cls, identity_values, path=f"{handle.path}.bind(...)")
         for key, value in identity_values.items():
             if key in handle.identity_values and handle.identity_values[key] != value:
                 raise SDKStoreError(
@@ -1764,6 +1766,46 @@ class SDKBatchTx:
         unknown = sorted(set(identity_values.keys()) - allowed)
         if unknown:
             raise SDKStoreError(f"{path}: unknown identity fields for {entity_cls.__name__}: {unknown}")
+
+    def _primary_identity_names(self, entity_cls: type[Entity]) -> list[str]:
+        names: list[str] = []
+        for row in self._identity_spec_rows(entity_cls):
+            name = row.get("name")
+            if isinstance(name, str) and name and bool(row.get("primary_key")):
+                names.append(name)
+        if not names:
+            raise SDKStoreError(f"{entity_cls.__name__} must declare at least one primary identity field")
+        return names
+
+    def _validate_primary_identity_present(
+        self,
+        entity_cls: type[Entity],
+        identity_values: dict[str, Any],
+        *,
+        path: str,
+    ) -> None:
+        missing_primary = sorted(name for name in self._primary_identity_names(entity_cls) if name not in identity_values)
+        if missing_primary:
+            raise SDKStoreError(
+                f"{path}: primary identity is incomplete for {entity_cls.__name__}; "
+                f"missing primary identity fields: {missing_primary}. "
+                "Provide primary identity at tx.entity(...) time; bind(...) only completes non-primary identity."
+            )
+
+    def _reject_primary_identity_bind(
+        self,
+        entity_cls: type[Entity],
+        identity_values: dict[str, Any],
+        *,
+        path: str,
+    ) -> None:
+        primary = set(self._primary_identity_names(entity_cls))
+        supplied_primary = sorted(name for name in identity_values if name in primary)
+        if supplied_primary:
+            raise SDKStoreError(
+                f"{path}: bind(...) cannot add or alter primary identity fields for {entity_cls.__name__}: "
+                f"{supplied_primary}. Provide primary identity at tx.entity(...) time."
+            )
 
     def _materialize_identity_values(
         self,
