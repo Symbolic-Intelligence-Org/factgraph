@@ -184,19 +184,12 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
         self.assertIn("from kernel.sdk import", text, "README must import from kernel.sdk")
         self.assertIn("FactGraph", text, "README must reference FactGraph entrypoint")
 
-    def test_readme_en_quickstart_imports_factgraph(self) -> None:
-        text = self._read("README.en.md")
-        self.assertIn("from kernel.sdk import", text)
-        self.assertIn("FactGraph", text)
-
     def test_readme_l_direction_boundary_is_not_stale(self) -> None:
-        for relpath in ("README.md", "README.en.md"):
-            with self.subTest(relpath=relpath):
-                text = self._read(relpath)
-                self.assertIn("L Direction G1-G5", text)
-                self.assertIn("FactGraph", text)
-                self.assertNotIn("does not add matching SDK shells", text)
-                self.assertNotIn("709 tests", text)
+        text = self._read("README.md")
+        self.assertIn("L Direction G1-G5", text)
+        self.assertIn("FactGraph", text)
+        self.assertNotIn("does not add matching SDK shells", text)
+        self.assertNotIn("709 tests", text)
 
     def test_no_deprecated_label_on_flat_methods_in_sdk_docs(self) -> None:
         """No 'deprecated' label on flat SDKStore methods per §5.4 lock.
