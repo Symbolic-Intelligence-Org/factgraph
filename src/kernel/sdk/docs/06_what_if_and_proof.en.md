@@ -158,8 +158,15 @@ from kernel.application.protocol import EvaluationOverlay, FactValueOverride
 
 # Counterfactual: what if FR's official language were Spanish?
 # The overlay needs to point at the actual asrt_id that holds the current value.
-existing = fg.audit.explain_fact("country:official_language", ref_fr)
-fr_lang_asrt_id = existing["active_claims"][0]["asrt_id"]
+fr = fg.read.get(Country, code="FR")
+assert fr is not None
+fr_lang_asrt_id = (
+    fr.field("official_language")
+    .active
+    .where(value="French")
+    .one()
+    .asrt_id
+)
 
 overlay = EvaluationOverlay(
     fact_actions=(

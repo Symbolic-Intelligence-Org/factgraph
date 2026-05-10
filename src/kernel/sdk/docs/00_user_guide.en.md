@@ -184,12 +184,15 @@ compare it as a textual identity; treat it as a stable handle.
 snap = fg.read.get(User, user_id="u-1")
 
 snap.name                         # current single-field value
-snap.field("tags").active         # → tuple[AssertionRecord, ...] (current values)
+snap.field("tags").active         # → AssertionRecordSet (tuple-compatible)
 [r.value for r in snap.field("tags").active]   # → ['engineer', ...]
 
-snap.field("name").history        # → tuple[AssertionRecord, ...] (active + revoked)
-snap.field("name").at("2026-05-01T00:00:00Z")  # → tuple[AssertionRecord, ...] visible at t
-snap.field("name").version(3)     # → tuple[AssertionRecord, ...] at version N
+snap.field("name").history        # → AssertionRecordSet (active + revoked)
+snap.field("name").at("2026-05-01T00:00:00Z")  # → AssertionRecordSet visible at t
+snap.field("name").version(3)     # → AssertionRecordSet at version N
+
+target = snap.field("name").history.where(value="Alice", source="seed").one()
+fg.write.retract(target.asrt_id)
 
 snap.assertions.name              # equivalent to snap.field("name") — attr access
 snap.identity                     # dict of identity values (when identity_available=True)
@@ -201,8 +204,10 @@ snap.ref                          # encoded idref_v1 ref
 Notes:
 - `.active` and `.history` are **properties**, not methods (no
   parentheses). `.at(t)` and `.version(v)` are methods.
-- All four return `tuple[AssertionRecord, ...]`. To read the underlying
-  values, project `.value` off each record.
+- All four return `AssertionRecordSet`, a tuple-compatible collection of
+  `AssertionRecord` values. Existing tuple-style iteration, indexing, and
+  `len(...)` still work; use `.where(...).one()` for exactly-one selection
+  before retracting an assertion.
 - `AssertionRecord` exposes `asrt_id`, `value`, `is_active`,
   `is_revoked`, and `meta` (an `AssertionMeta`).
 - `EntitySnapshot` is read-only; assigning to any attribute raises
@@ -221,13 +226,15 @@ grouping multiple operations into one transaction.
 ```python
 ref = fg.read.ref(User, user_id="u-1")
 
-fg.write.set(User.name, ref, "Alice Liddell")    # single-cardinality field
-fg.write.add(User.tags, ref, "manager")          # multi-cardinality field
-fg.write.retract(asrt_id="asrt-abc-123")         # by assertion id
+name_asrt_id = fg.write.set(User.name, ref, "Alice Liddell")
+tag_asrt_id = fg.write.add(User.tags, ref, "manager")
+fg.write.retract(tag_asrt_id)                    # by assertion id
 ```
 
 `set` on a multi-field raises `CardinalityError`. `add` on a
-single-field raises `CardinalityError`.
+single-field raises `CardinalityError`. `set(...)` and `add(...)`
+return the persisted `asrt_id`; later reads expose the same id through
+`AssertionRecord.asrt_id`.
 
 ### Transactional editor
 

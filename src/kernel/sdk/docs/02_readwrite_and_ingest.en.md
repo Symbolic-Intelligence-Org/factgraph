@@ -72,11 +72,12 @@ Stable contract:
 ### 3.2 `sdk.set(...)` / `sdk.add(...)`
 
 ```python
-sdk.set(User.age, user_ref, 31, meta={"source": "hr"})
-sdk.add(User.name, user_ref, "Alicia", meta={"source": "hr"})
+age_asrt_id = sdk.set(User.age, user_ref, 31, meta={"source": "hr"})
+name_asrt_id = sdk.add(User.name, user_ref, "Alicia", meta={"source": "hr"})
 ```
 
 Stable contract:
+- `set(...)` and `add(...)` return the persisted assertion id (`asrt_id`).
 - Value type is validated against schema `type_domain`.
 - If the current `SDKStore` already knows the identity values for `e_ref`, matching identity predicates are materialized before the field write; arbitrary external canonical `idref_v1` values are not enough to guarantee this backfill.
 - Low-level `set/add` do not strongly enforce cardinality; cardinality guards are mainly provided by batch/edit/ingest facades.
@@ -189,11 +190,22 @@ Stable contract:
 
 ### 6.2 `snapshot.assertions.<field>`
 
-- `.active`: currently non-revoked assertions
-- `.history`: full history (including revoked assertions)
+- `.active`: currently non-revoked assertions as an `AssertionRecordSet`
+- `.history`: full history (including revoked assertions) as an `AssertionRecordSet`
 - `.at(t)`: business-time filter on active assertions  
   `valid_from <= t` and (`valid_to` missing or `valid_to > t`)
 - `.version(v)`: version filter on active assertions (`version == v`)
+
+`AssertionRecordSet` is tuple-compatible (`len(...)`, indexing, and
+iteration still work) and adds read-side selection helpers:
+
+```python
+target = snapshot.assertions.name.history.where(
+    value="Alice",
+    source="seed",
+).one()
+sdk.retract(target.asrt_id)
+```
 
 Boundaries:
 - Missing `valid_from` is excluded from `.at(t)`.

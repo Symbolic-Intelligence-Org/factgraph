@@ -329,14 +329,26 @@ Transactional editor obtained from `fg.write.edit(...)`. Methods:
 Per-field editor on an `EntityEditor`: `set(value, *, meta=None)`,
 `add(value, *, meta=None)`, `retract(*, asrt_id, meta=None)` (keyword-only).
 
-### `FieldAssertions`, `AssertionRecord`, `AssertionMeta`
+### `FieldAssertions`, `AssertionRecordSet`, `AssertionRecord`, `AssertionMeta`
 
 `FieldAssertions` exposes a field's active assertions plus history.
 Supports time-slice access via `.at(iso8601_time)` and version slice via
-`.version(v)`. Each entry is an `AssertionRecord` with `asrt_id`,
-`value`, `is_active`, `is_revoked`, and `meta: AssertionMeta`.
+`.version(v)`. `.active`, `.history`, `.at(...)`, and `.version(...)`
+return `AssertionRecordSet`, a tuple-compatible returned object with
+`.where(...)`, `.one()`, `.all()`, and `.first()` helpers. It is not a
+top-level `kernel.sdk.__all__` export.
+
+Each entry is an `AssertionRecord` with `asrt_id`, `value`, `is_active`,
+`is_revoked`, and `meta: AssertionMeta`.
 `AssertionMeta` carries provenance fields (source, trace_id,
 ingested_at, confidence, approved_by, derived_rule_id, candidate_id, ...).
+
+Example:
+
+```python
+target = snapshot.field("name").history.where(value="Alice", source="seed").one()
+sdk.retract(target.asrt_id)
+```
 
 ---
 

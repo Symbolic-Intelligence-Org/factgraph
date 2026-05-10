@@ -170,10 +170,19 @@ from kernel.application.protocol import (
 )
 
 # Fact-overlay: replace one fact's value with another
+fr_lang_asrt_id = (
+    fg.read.get(Country, code="FR")
+    .field("official_language")
+    .active
+    .where(value="French")
+    .one()
+    .asrt_id
+)
+
 overlay = EvaluationOverlay(
     fact_actions=(
         FactValueOverride(
-            asrt_id="asrt-abc-123",
+            asrt_id=fr_lang_asrt_id,
             pred_id="country:official_language",
             e_ref="idref_v1:Country:<digest>",
             old_fact_tuple=("idref_v1:Country:<digest>", "French"),
