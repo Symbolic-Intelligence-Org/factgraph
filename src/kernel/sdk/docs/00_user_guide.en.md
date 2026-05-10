@@ -173,9 +173,10 @@ ref = fg.read.ref(User, user_id="u-1")
 # → "idref_v1:User:<base32-sha256-digest>"  (opaque, content-derived)
 ```
 
-`ref` is required as the second argument to `fg.write.{set,add,retract}`.
-The string is opaque — never parse or compare it as a textual identity;
-treat it as a stable handle.
+`ref` is required as the second argument to `fg.write.set(...)` and
+`fg.write.add(...)`. `fg.write.retract(...)` takes an assertion id
+(`asrt_id`), not an entity ref. The ref string is opaque — never parse or
+compare it as a textual identity; treat it as a stable handle.
 
 ### `EntitySnapshot` cheat-sheet
 
