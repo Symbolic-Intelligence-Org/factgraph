@@ -4,7 +4,6 @@ CHANGELOG.md
 CODE_OF_CONDUCT.md
 CONTRIBUTING.md
 LICENSE
-README.en.md
 README.md
 docs/SECURITY.md
 docs/architecture_principles.md

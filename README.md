@@ -2,29 +2,27 @@
 
 **Append-only fact substrate and auditable reasoning kernel.**
 
-> Language: **中文** | [English](README.en.md)
+The v0.1 open-source / PyPI surface of `factpy-kernel` contains only the `kernel` package. It provides:
 
-`factpy-kernel` 的 v0.1 开源 / PyPI surface 只包含 `kernel` 主体。它提供:
+- an append-only fact ledger and field/assertion write semantics
+- the canonical Python runtime authority: `kernel.application`
+- the Python product surface: `kernel.sdk`
+- rule / query / derivation authoring and runtime adapters
+- audit package reader, query, DTO, and evidence graph surfaces
 
-- append-only fact ledger 与 field/assertion 写入语义
-- canonical Python runtime authority: `kernel.application`
-- Python product surface: `kernel.sdk`
-- rule / query / derivation authoring 与 runtime adapter
-- audit package reader、query、DTO 与 evidence graph
+The v0.1 public source and PyPI wheel are both scoped to the kernel-only surface. LLM extraction, HTTP delivery, domain bundles, and other companion surfaces are not part of the `factpy-kernel` v0.1 release.
 
-v0.1 公开源码与 PyPI wheel 都以 kernel-only surface 为准。LLM extraction、HTTP delivery、domain bundles 等 companion surfaces 不属于 `factpy-kernel` v0.1 发布内容。
+For architecture principles, see [docs/architecture_principles.md](docs/architecture_principles.md).
 
-架构原则见 [docs/architecture_principles.md](docs/architecture_principles.md)。
+## Install
 
-## 安装
-
-发布后:
+After release:
 
 ```bash
 pip install factpy-kernel
 ```
 
-从源码使用 kernel:
+Use the kernel from source:
 
 ```bash
 git clone <repo-url>
@@ -52,73 +50,73 @@ snapshot = fg.read.get(User, user_id="u-1")
 print(snapshot.name)  # Alice
 ```
 
-`FactGraph` 是 v0.1 SDK 的顶层入口,通过 8 个 taxonomy namespace (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) 教学概念分层。`FactGraph` 是 `SDKStore` 的别名 (literal alias),flat 形式 `fg.ref(...)` / `fg.set(...)` / `fg.get(...)` 与 nested 形式同样受支持,作为 **foundational API**——既不被弃用也不会移除。
+`FactGraph` is the v0.1 SDK top-level entrypoint. Its 8 taxonomy namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) teach the conceptual layering at first contact. `FactGraph` is a literal alias of `SDKStore`; the flat form `fg.ref(...)` / `fg.set(...)` / `fg.get(...)` is supported alongside the nested form as **foundational API** — neither deprecated nor scheduled for removal.
 
-`kernel.sdk` 是面向用户的 Python product surface。运行时权威在 `kernel.application`;SDK 负责把 ergonomic API、schema/DSL authoring、snapshot/batch/editor 等 outward objects adapter 到 application runtime contract。
+`kernel.sdk` is the user-facing Python product surface. Runtime authority lives in `kernel.application`; the SDK adapts ergonomic APIs, schema/DSL authoring, snapshots, batches, editors, and compatibility errors into the application runtime contract.
 
-## 选择使用层
+## Choose Your Layer
 
-| 场景 | 推荐入口 | 原因 |
+| Scenario | Recommended entry | Why |
 |---|---|---|
-| 人写 Python product code、定义 `Entity` / `Field`、跑 query / derivation | `kernel.sdk` | 提供 descriptors、DSL sugar、snapshot、batch、editor 与用户友好的异常 |
-| automation process / HTTP bridge / wire protocol,需要接收 JSON-like request | `kernel.application` protocol + executor | 接收 SDK-independent DTO,不要求调用方持有 SDK `Field` descriptor 或 Python DSL object |
-| 需要最低层 ledger / evidence / rule primitive | `kernel.core` | 适合 runtime implementer,不是普通用户入口 |
-| 读取已导出的 audit package | `kernel.audit` | 离线 reader/query/DTO/evidence consumer surface |
+| Human-authored Python product code defining `Entity` / `Field` and running queries or derivations | `kernel.sdk` | Provides descriptors, DSL sugar, snapshots, batches, editors, and user-facing exceptions |
+| Automation process / HTTP bridge / wire protocol receiving JSON-like requests | `kernel.application` protocol + executor | Accepts SDK-independent DTOs and does not require SDK `Field` descriptors or Python DSL objects |
+| Lowest-level ledger / evidence / rule primitives | `kernel.core` | Intended for runtime implementers, not as the normal user entrypoint |
+| Reading an exported audit package | `kernel.audit` | Offline reader/query/DTO/evidence consumer surface |
 
 ## v0.1 Public Boundary
 
 | Tier | Surface | Commitment |
 |---|---|---|
-| Product public | `kernel.sdk` | 面向人写 Python product code 的 ergonomic API 与 outward compatibility surface。 |
-| Advanced importable | `kernel.application`, `kernel.audit` | 面向 automation、wire bridge、audit consumer 的 runtime/query authority；可直接 import,但不是 SDK ergonomic facade。 |
-| Out of v0.1 package | `service`, `agent`, `domains`, internal workflow docs, tutorial/demo add-back candidates | 不属于 `factpy-kernel` v0.1 kernel-only wheel / public source surface。 |
+| Product public | `kernel.sdk` | Ergonomic API and outward compatibility surface for human-authored Python product code. |
+| Advanced importable | `kernel.application`, `kernel.audit` | Runtime/query authority for automation, wire bridges, and audit consumers; importable directly, but not an SDK ergonomic facade. |
+| Out of v0.1 package | `service`, `agent`, `domains`, internal workflow docs, tutorial/demo add-back candidates | Not part of the `factpy-kernel` v0.1 kernel-only wheel or public source surface. |
 
-L Direction G1-G5 已为 Check、Diagnose、Why-not、Fact Overlay、ProofFrame Recheck、rule-action what-if 与 ProofFrame Diff 增加窄 SDK shell,并通过 `FactGraph` taxonomy 暴露为 product API。Round events recorder lifecycle (`start_round` / `record_round_event` / `finalize_round`) 与 Frontier trace 仍停留在 `kernel.audit` / `kernel.core` advanced importable surfaces；需要把这些边界提升为 product-facing wrapper 时,仍应先定义单独的 public API blueprint。
+L Direction G1-G5 added narrow SDK shells for Check, Diagnose, Why-not, Fact Overlay, ProofFrame Recheck, rule-action what-if, and ProofFrame Diff, now exposed through the `FactGraph` taxonomy as product API. Round events recorder lifecycle (`start_round` / `record_round_event` / `finalize_round`) and Frontier trace remain on `kernel.audit` / `kernel.core` advanced importable surfaces; promoting those boundaries to product-facing wrappers still requires a separate public API blueprint.
 
 ## Kernel Surface
 
 | Area | Entry | Notes |
 |---|---|---|
-| SDK product API | `kernel.sdk` | Entity / Field / Identity / FactGraph (与别名 SDKStore) / Query / Derivation 等用户入口 |
-| Runtime authority | `kernel.application` | read/write/query/ingest/derivation protocol DTO + executor |
-| Core primitives | `kernel.core` | ledger、rules、evidence、candidate support、low-level store semantics |
+| SDK product API | `kernel.sdk` | Entity / Field / Identity / FactGraph (with alias SDKStore) / Query / Derivation user entrypoints |
+| Runtime authority | `kernel.application` | read/write/query/ingest/derivation protocol DTOs and executors |
+| Core primitives | `kernel.core` | ledger, rules, evidence, candidate support, low-level store semantics |
 | Authoring | `kernel.authoring` | rule/schema authoring helpers and validation surfaces |
-| Adapters | `kernel.adapters` | optional engine integration surfaces,depending on installed third-party engines |
+| Adapters | `kernel.adapters` | optional engine integration surfaces, depending on installed third-party engines |
 | Audit | `kernel.audit` | exported audit package reader/query/DTO/evidence graph consumer contract |
 
-更详细的当前实现文档:
+Current implementation docs:
 
 - [src/kernel/sdk/docs/README.md](src/kernel/sdk/docs/README.md)
 - [src/kernel/application/docs/README.md](src/kernel/application/docs/README.md)
-- [src/kernel/core/docs/01_architecture.en.md](src/kernel/core/docs/01_architecture.en.md)
+- [src/kernel/core/docs/01_architecture.md](src/kernel/core/docs/01_architecture.md)
 - [src/kernel/audit/docs/README.md](src/kernel/audit/docs/README.md)
 - [src/kernel/adapters/docs/README.md](src/kernel/adapters/docs/README.md)
 - [src/kernel/authoring/docs/README.md](src/kernel/authoring/docs/README.md)
 
 ## Audit And Optional Domains
 
-`kernel.audit` 读取已经导出的 audit package,并提供 run / candidate / rule trace / evidence graph 等离线查询。
+`kernel.audit` reads exported audit packages and provides offline queries for runs, candidates, rule traces, evidence graphs, and related DTOs.
 
-ECSS compliance matrix row assembly 属于 `domains.ecss.compliance`,不是 kernel-only wheel 的必备能力。为兼容 monorepo caller,`AuditQuery.list_compliance_matrix(...)` 仍保留为 optional-domain convenience;缺少 `domains.ecss` 时会抛出 `AuditOptionalDomainError`,而不是隐式要求 kernel 安装 domain package。
+ECSS compliance matrix row assembly belongs to `domains.ecss.compliance`; it is not a required capability of the kernel-only wheel. For monorepo compatibility, `AuditQuery.list_compliance_matrix(...)` remains as an optional-domain convenience. If `domains.ecss` is missing, it raises `AuditOptionalDomainError` instead of silently making the domain package a kernel dependency.
 
-## 测试
+## Tests
 
-kernel-only package guard:
+Kernel-only package guard:
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_wheel_kernel_only_packaging.py"
 ```
 
-kernel 回归:
+Kernel regression:
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
 ```
 
-当前 kernel suite 基线以 CI 与蓝图 audit 记录为准；本地环境可能因 optional adapter 依赖或冷启动 import 顺序显示额外环境性错误。
+The current kernel suite baseline is tracked by CI and blueprint audit records; local environments may show additional environment-only errors for optional adapters or cold-start import order.
 
-## 许可证与安全
+## License And Security
 
-本项目代码以 Apache License 2.0 发布,见 [LICENSE](LICENSE)。
+This project is licensed under the Apache License 2.0; see [LICENSE](LICENSE).
 
-Secret 处理、API key 轮换见 [docs/SECURITY.md](docs/SECURITY.md)。
+Secret handling and API key rotation: [docs/SECURITY.md](docs/SECURITY.md).
