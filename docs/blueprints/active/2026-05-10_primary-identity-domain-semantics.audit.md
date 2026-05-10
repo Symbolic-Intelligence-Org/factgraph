@@ -1,0 +1,32 @@
+# Task Blueprint Audit: Primary Identity / Domain Semantics
+
+- Blueprint: [2026-05-10_primary-identity-domain-semantics.md](./2026-05-10_primary-identity-domain-semantics.md)
+
+## Event Log
+
+| Date | Stage | Event | Notes |
+| --- | --- | --- | --- |
+| 2026-05-10 | draft | Blueprint created | Initial research/design scope recorded. No code, tests, release refs, or memory updates. |
+| 2026-05-10 | draft | §5.1 LOCKED | Primary-first completion fixed at the `tx.entity(...)` call boundary: handles may not be created from non-primary identity alone. Single-primary baseline allowed/rejected examples recorded. Exact multi-primary completeness and primary default/default_factory treatment remain delegated to §5.2 and §5.3. Error split locked at the semantic level: entity creation errors name missing primary identity; commit/preview/write retains `_ensure_handle_resolved` incomplete-coordinate shape. Substrate stays full-coordinate `idref_v1`; no primary-only ref introduced. §5.5 / §5.6 carried by spin-off [2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md). |
+| 2026-05-10 | draft | §5.2 LOCKED | Multi-primary anchor completeness must be established at entity creation; partial-primary handles rejected; §5.3 still owns primary defaults. |
+| 2026-05-10 | draft | §5.3 LOCKED | Primary defaults/default_factory count as present only at entity creation after materialization; query/read remains explicit. |
+| 2026-05-10 | draft | §5.4 LOCKED | Bind remains mutating non-primary completion; branching domain handles deferred. |
+| 2026-05-10 | draft | §5.5/§5.6 DEFERRED | Read-side primary-anchor/domain collection and return-type design split into spin-off blueprint. Parent blueprint remains focused on primary-first handle completion. |
+| 2026-05-10 | draft | §5.7 LOCKED | Primary-only entity/handle writes rejected; write path requires full coordinate; primary-anchor-only handles must complete via `bind(...)` before write; no write-to-all-domains or default-domain fan-out. Flat assertion-id retraction is unaffected. |
+| 2026-05-10 | draft | §5.8 LOCKED | SDK primary-first handle model is aligned with existing rule-layer primary-key enforcement; cross-coordinate comparison and field-head implicit/explicit identity rules remain compile-time enforced; no rule-layer code changes; no new authoring DSL semantics. |
+| 2026-05-10 | draft | §5.9 LOCKED | Primary-first enforcement has no observed current test-surface breakage and is scoped as direct enforcement without staged warning or feature flag; final compatibility closure is gated on pre-scope-freeze docs/examples/notebooks scan. |
+| 2026-05-10 | draft | §6 invariants updated | Original 6-bullet §6 replaced with 5-group invariants (substrate / SDK ergonomics / read path / rule authoring / repository safety) reflecting §5 LOCKED decisions; no new behavior introduced. |
+| 2026-05-10 | draft | §7 acceptance updated | Acceptance split into 3 groups (closed §5 gates / scope-freeze gates / implementation gates) reflecting §5 LOCKED decisions and the scope-freeze policy (§6/§7/§8 review + docs scan + cross-blueprint self-evident). |
+| 2026-05-10 | draft | §8 implementation plan updated | Replaced draft falsifier-pass plan with post-LOCKED execution path (Phase 0 pre-scope-freeze + Phase 1 test scaffolding + Phase 2 implementation + Phase 3 docs sync + Phase 4 verification/close). |
+| 2026-05-10 | draft | Pre-scope-freeze scan completed | Scanned `examples/` notebooks/code, `docs/`, and `src/kernel/sdk/docs/` for reverse-order partial-binding teaching patterns. Zero relevant hits: `examples/` use `kernel.application` directly (no `tx.entity` / `.bind()`); `src/kernel/sdk/docs/` has 3 `tx.entity(...)` usages all primary-first with zero `.bind()` invocations; broader `docs/` "partial bind" references are about rule variable binding (Check operation), unrelated to entity identity binding; notebooks have zero `tx.entity` / `.bind()` references in code cells. §5.1 decision stands; no updates required. |
+| 2026-05-10 | scoped | Scope frozen | All §7 scope-freeze gates passed; blueprint status flipped `draft` → `scoped`. Implementation may proceed through Phase 1 test scaffolding under the locked §5 decisions and §6 invariants. |
+| 2026-05-10 | scoped | Phase 1 test scaffolding complete | Added `src/kernel/tests/test_sdk_batch_primary_identity.py` with focused coverage for §5.1 / §5.2 / §5.3 / §5.4 / §5.7, including allowed/rejected entity creation orders, multi-primary upfront completeness, primary defaults/factory materialization, `bind(...)` primary rejection, incomplete-coordinate write rejection, and flat assertion-id retraction unaffected. |
+| 2026-05-10 | scoped | Phase 2 implementation complete | Implemented SDK-layer primary-first validation in `src/kernel/sdk/batch.py`: `tx.entity(...)` validates primary identity after materialization, and `bind(...)` rejects primary identity kwargs. No substrate, read API, application DTO, or rule-authoring behavior changed. |
+| 2026-05-10 | scoped | Phase 3 docs sync complete | Synced affected SDK docs in the same implementation cycle: `00_user_guide.en.md` gained primary-first batch guidance and `02_readwrite_and_ingest.en.md` records primary-first `tx.entity(...)`, non-primary-only `bind(...)`, and incomplete-coordinate write errors. Broader pre-existing `00_user_guide.en.md` cleanup remains outside this blueprint's scope. |
+| 2026-05-10 | implemented | Phase 4 verification and close | Focused primary/batch/read/schema suite passed (25 tests); new primary identity suite passed (10 tests); `ruff check src/kernel` passed; `git diff --check` clean; no diff under `src/kernel/authoring/`; full unittest discovery still reports the pre-existing Problog cold-import circularity after 1765 tests and 1 skipped. §7 implementation gates marked complete; blueprint status flipped `scoped` → `implemented`. |
+
+## Decision Notes
+
+- 2026-05-10: Draft starts from the hypothesis that primary-first completion is the smallest useful design move, while primary-domain read should be explored as a separate additive read API rather than an overload of `get(...)`.
+- 2026-05-10: `idref_v1 = all identity fields` is an explicit invariant for draft exploration unless a later falsifier proves a storage-level change is necessary.
+- 2026-05-10: Working design-point notes under `docs/references/working/design-points/` are cited as rationale inputs only; they are not current implementation truth.
