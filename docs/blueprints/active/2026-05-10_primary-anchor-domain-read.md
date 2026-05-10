@@ -12,7 +12,7 @@
   - [Identity primary-key coordinate semantics](../../references/working/design-points/identity-primary-key-coordinate-semantics.zh.md)
   - [Historical n-ary Identity evolution](../../blueprint_history/从dims到n元Identity的设计演进.md)
 - Parent Blueprint:
-  - [2026-05-10_primary-identity-domain-semantics.md](./2026-05-10_primary-identity-domain-semantics.md)
+  - [2026-05-10_primary-identity-domain-semantics.md](../archive/2026-05-10_primary-identity-domain-semantics.md)
 - Audit Log:
   - [2026-05-10_primary-anchor-domain-read.audit.md](./2026-05-10_primary-anchor-domain-read.audit.md)
 
@@ -74,7 +74,7 @@ respect that invariant while still letting users navigate the
 - Application-layer schema runtime
   ([src/kernel/application/schema_runtime.py:355](../../src/kernel/application/schema_runtime.py:355))
   encodes refs from full identity coordinates only.
-- The parent blueprint's [§6 invariant](./2026-05-10_primary-identity-domain-semantics.md)
+- The parent blueprint's [§6 invariant](../archive/2026-05-10_primary-identity-domain-semantics.md)
   freezes `idref_v1 = all identity fields` until explicit falsification.
 
 ## 5. Open Questions

@@ -1,7 +1,7 @@
 # Task Blueprint Audit: Primary-Anchor Domain Read
 
 - Blueprint: [2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md)
-- Parent Blueprint: [2026-05-10_primary-identity-domain-semantics.md](./2026-05-10_primary-identity-domain-semantics.md)
+- Parent Blueprint: [2026-05-10_primary-identity-domain-semantics.md](../archive/2026-05-10_primary-identity-domain-semantics.md)
 
 ## Event Log
 
