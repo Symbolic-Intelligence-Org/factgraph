@@ -436,12 +436,7 @@ def sdk_find(
     identity_filters = {k: v for k, v in filter_kwargs.items() if k in set(identity_names)}
     value_filters = {k: v for k, v in filter_kwargs.items() if k in set(field_names)}
 
-    if identity_filters:
-        if set(identity_filters.keys()) != set(identity_names):
-            missing = sorted(set(identity_names) - set(identity_filters.keys()))
-            raise SDKSchemaError(
-                f"find identity filters must include all identity fields for {entity_cls.__name__}; missing: {missing}"
-            )
+    if identity_filters and set(identity_filters.keys()) == set(identity_names):
         response = execute_read_request(
             EntityReadRequest(
                 mode="get",
@@ -488,10 +483,14 @@ def sdk_find(
     if response.errors:
         raise _sdk_store_error_from_dto(response.errors[0])
     for dto in response.items:
+        if identity_filters and not _dto_matches_identity_filters(dto, identity_filters):
+            continue
+        known_identity_values = dict(dto.ref.identity) if identity_filters else None
         snap = _dto_to_sdk_snapshot(
             dto,
             sdk=sdk,
             entity_cls=entity_cls,
+            known_identity_values=known_identity_values,
         )
         if _snapshot_matches_filters(sdk, entity_cls, snap, value_filters):
             out.append(snap)
@@ -923,4 +922,11 @@ def _snapshot_matches_filters(
         else:
             if current_value != expected:
                 return False
+    return True
+
+
+def _dto_matches_identity_filters(dto: EntitySnapshotDTO, filters: dict[str, Any]) -> bool:
+    for key, expected in filters.items():
+        if dto.ref.identity.get(key) != expected:
+            return False
     return True

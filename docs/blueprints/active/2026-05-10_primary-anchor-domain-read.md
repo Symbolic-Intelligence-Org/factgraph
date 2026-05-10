@@ -1,6 +1,6 @@
 # Task Blueprint: Primary-Anchor Domain Read
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-10
 - Last Updated: 2026-05-10
 - Related Modules:
@@ -572,31 +572,31 @@ implementation gates that must pass before any code change ships.
       explicitly deferred to the implementation docs sync phase.
 - [x] Parent/spin-off cross-references are self-evident in body text.
 
-**Implementation gates (must pass before any code ships):**
+**Implementation gates (passed, 2026-05-10):**
 
-- [ ] No new SDK read method, no new DTO, no `kernel.sdk.__all__` change.
-- [ ] `fg.read.get(...full identity...)` behavior remains unchanged.
-- [ ] `fg.read.find(...)` accepts partial identity filters, including
+- [x] No new SDK read method, no new DTO, no `kernel.sdk.__all__` change.
+- [x] `fg.read.get(...full identity...)` behavior remains unchanged.
+- [x] `fg.read.find(...)` accepts partial identity filters, including
       primary-only filters.
-- [ ] Unknown filter names still raise SDK schema errors.
-- [ ] Field filters and identity filters combine with AND semantics.
-- [ ] Partial-identity `find(...)` results expose full recovered identity
+- [x] Unknown filter names still raise SDK schema errors.
+- [x] Field filters and identity filters combine with AND semantics.
+- [x] Partial-identity `find(...)` results expose full recovered identity
       via `snapshot.identity` and `snapshot.identity_available=True`.
-- [ ] Empty result remains `[]`; zero-filter `find(...)` behavior remains
+- [x] Empty result remains `[]`; zero-filter `find(...)` behavior remains
       unchanged.
-- [ ] Partial-identity result ordering has no new public sort guarantee;
+- [x] Partial-identity result ordering has no new public sort guarantee;
       `limit` applies after all supplied filters match.
-- [ ] No `EntityReadRequest` / application protocol extension; existing
+- [x] No `EntityReadRequest` / application protocol extension; existing
       application rejection of identity fields in `field_filters` remains.
-- [ ] `execute_read_request(...)` callers outside the SDK facade see no
+- [x] `execute_read_request(...)` callers outside the SDK facade see no
       behavior change.
-- [ ] No `idref_v1`, `EntitySnapshot.ref`, storage, index, or authoring-layer
+- [x] No `idref_v1`, `EntitySnapshot.ref`, storage, index, or authoring-layer
       change.
-- [ ] No primary-anchor write API; complete-coordinate write requirement
+- [x] No primary-anchor write API; complete-coordinate write requirement
       remains unchanged.
-- [ ] Affected SDK docs are updated in the same implementation cycle as
+- [x] Affected SDK docs are updated in the same implementation cycle as
       the behavior change, not before §5 decisions are locked.
-- [ ] No archived release snapshot, existing `release/0.1.x` artifact, or
+- [x] No archived release snapshot, existing `release/0.1.x` artifact, or
       `v0.1.0-rc.1` tag/release artifact is modified.
 
 ## 8. Implementation Plan
@@ -671,7 +671,7 @@ Implementation invariants:
 Update affected SDK docs in the same implementation cycle as the behavior
 change:
 
-- `src/kernel/sdk/docs/00_user_guide.en.md`
+- `src/kernel/sdk/docs/01_concepts.en.md`
 - `src/kernel/sdk/docs/02_readwrite_and_ingest.en.md`
 - Working note:
   `docs/references/working/design-points/identity-primary-key-coordinate-semantics.zh.md`
@@ -698,7 +698,7 @@ full-coordinate only.
 
 Only after decisions are locked AND the API ships:
 
-- `src/kernel/sdk/docs/00_user_guide.en.md`
+- `src/kernel/sdk/docs/01_concepts.en.md`
 - `src/kernel/sdk/docs/02_readwrite_and_ingest.en.md`
 - `docs/references/working/design-points/identity-primary-key-coordinate-semantics.zh.md`
   (extend §6.3 / §6.6 with primary-anchor read semantics if shipped)
@@ -708,8 +708,30 @@ Only after decisions are locked AND the API ships:
 Task completion section to fill after implementation, explicit research
 closure, or shelve:
 
-- Final landed decision:
-- Final landed behavior:
-- Deviations from draft:
-- Deferred design questions:
-- Archive notes:
+- Final landed decision: primary-anchor read support ships by relaxing
+  existing `fg.read.find(...)` / `SDKStore.find(...)` identity filters.
+  Partial identity filters, including primary-only filters, are accepted;
+  no new read method, no new DTO, no helper, no logical-entity-ref, and no
+  write-side parity API ship.
+- Final landed behavior: `sdk_find(...)` keeps full-identity get-backed
+  behavior where applicable and uses existing application `mode="find"`
+  hydration plus SDK-facade identity filtering for partial identity filters.
+  Partial-identity results expose full `snapshot.identity` with
+  `snapshot.identity_available=True`. `get(...)`, zero-filter `find(...)`,
+  unknown-filter errors, application `EntityReadRequest`, authoring,
+  substrate refs, storage/index, SDK exports, and write behavior are
+  unchanged.
+- Deviations from draft: the seed application-first default was superseded
+  by the §5.F scope-bounded SDK-facade exception. The stale-doc scan found
+  `01_concepts.en.md` and `02_readwrite_and_ingest.en.md`, so Phase 3 docs
+  sync updated those two files rather than the seed's initial
+  `00_user_guide.en.md` / `02_readwrite_and_ingest.en.md` pair. Full
+  kernel discovery still reports the pre-existing Problog cold-import
+  circularity; the focused SDK/application suites pass.
+- Deferred design questions: any future `fg.read.domains(...)` /
+  `fg.read.entity(...)`, `EntityDomainSet`, lookup helper,
+  logical-entity-ref, application-protocol identity filters, indexed
+  partial-identity reads, or primary-anchor write API require follow-up
+  blueprint work.
+- Archive notes: implemented locally; archive move remains a separate
+  follow-up if desired.

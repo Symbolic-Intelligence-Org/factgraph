@@ -243,7 +243,7 @@ prefers to add wrappers after seeing real usage patterns.
 | Legacy field semantics | `functional`, `temporal`, `dims`, `fact_key` are removed |
 | `vars()` runtime unpack | `with vars() as (a, b)` is unsupported; use named or factory forms |
 | String DSL | `sdk.run("...")` / `sdk.evaluate("...")` are unsupported |
-| `find(...)` | No `temporal_view`; if identity filters are used, all identity fields are required |
+| `find(...)` | No `temporal_view`; identity filters may be partial, including primary-only filters |
 | Assertion view surface | `.chosen` is removed; only `active`, `history`, `at`, `version` remain |
 | `sdk.run(...)` dispatch | Rule and Query supported; Derivation is rejected with guidance to use `evaluate()` |
 | `sdk.evaluate(...)` params | `temporal_view` is removed and fails explicitly |

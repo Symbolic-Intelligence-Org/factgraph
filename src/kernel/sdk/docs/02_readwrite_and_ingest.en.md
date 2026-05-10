@@ -154,7 +154,8 @@ rows = sdk.find(User, age=30, limit=20)
 Stable contract:
 - `limit` must be a non-negative integer.
 - Filter keys must be entity identity or field names.
-- If identity filters are used, all identity fields are required.
+- Identity filters may be partial, including primary-only filters; combine
+  them with field filters when you need AND semantics.
 - `view: ViewSpec | str | None` — apply a named or inline view to the
   result projection (`view="preferred_names"` or `view=ViewSpec(...)`).
 - `temporal_view` parameter is not supported.
