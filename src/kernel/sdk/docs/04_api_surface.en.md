@@ -434,5 +434,5 @@ when and why to drop down to these surfaces.
 
 ---
 
-*Internal change history is recorded in `docs/blueprints/archive/` (not
-shipped with the release).*
+*Internal change history is recorded in the source repository's
+blueprint archive (not shipped with the release).*

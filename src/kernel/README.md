@@ -10,7 +10,6 @@ counterfactual analysis, and audit/proof primitives.
 |---|---|
 | **End users** of the SDK | [`sdk/docs/README.md`](sdk/docs/README.md) — Python product surface (FactGraph, DSL, errors) |
 | **Contributors** working in a specific module | Pick the module's `docs/README.md` from the table below |
-| **AI coding agents** working in this directory | [`AGENTS.md`](AGENTS.md) — module docs convention + update rules |
 
 ## Module map
 

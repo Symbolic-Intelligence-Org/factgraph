@@ -62,6 +62,6 @@ print(snap.name)            # → Alice
 ## Internal Design Records
 
 Internal design history (blueprints, drift analyses, reference
-bundles) is not shipped with the release but is preserved in the repo
-under `docs/blueprints/` and `docs/references/`. See those directories
-for the design rationale behind specific API decisions.
+bundles) is not shipped with the release; it is preserved in the
+source repository alongside the corresponding code and git history,
+which capture the design rationale behind specific API decisions.
