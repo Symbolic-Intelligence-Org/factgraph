@@ -14,8 +14,8 @@
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
   - [docs/references/working/design-points/identity-primary-key-coordinate-semantics.zh.md](../../references/working/design-points/identity-primary-key-coordinate-semantics.zh.md)
-  - [docs/blueprints/archive/2026-05-10_primary-identity-domain-semantics.md](../archive/2026-05-10_primary-identity-domain-semantics.md)
-  - [docs/blueprints/archive/2026-05-10_primary-anchor-domain-read.md](../archive/2026-05-10_primary-anchor-domain-read.md)
+  - [docs/blueprints/archive/2026-05-10_primary-identity-domain-semantics.md](./2026-05-10_primary-identity-domain-semantics.md)
+  - [docs/blueprints/archive/2026-05-10_primary-anchor-domain-read.md](./2026-05-10_primary-anchor-domain-read.md)
 - Audit Log:
   - [2026-05-10_assertion-selection-crud-ergonomics.audit.md](./2026-05-10_assertion-selection-crud-ergonomics.audit.md)
 
