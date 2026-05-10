@@ -99,6 +99,83 @@ class AssertionRecord:
     meta: AssertionMeta
 
 
+_ASSERTION_FILTER_MISSING = object()
+
+
+class AssertionRecordSet(tuple):
+    def __new__(cls, records: Any = ()) -> "AssertionRecordSet":
+        return super().__new__(cls, tuple(records))
+
+    def __getitem__(self, index: Any) -> Any:
+        value = super().__getitem__(index)
+        if isinstance(index, slice):
+            return type(self)(value)
+        return value
+
+    def __add__(self, other: Any) -> "AssertionRecordSet":
+        if not isinstance(other, tuple):
+            return NotImplemented
+        return type(self)(tuple(self) + tuple(other))
+
+    def __radd__(self, other: Any) -> "AssertionRecordSet":
+        if not isinstance(other, tuple):
+            return NotImplemented
+        return type(self)(tuple(other) + tuple(self))
+
+    def __mul__(self, count: Any) -> "AssertionRecordSet":
+        if not isinstance(count, int):
+            return NotImplemented
+        return type(self)(tuple(self) * count)
+
+    __rmul__ = __mul__
+
+    def where(
+        self,
+        *,
+        value: Any = _ASSERTION_FILTER_MISSING,
+        source: Any = _ASSERTION_FILTER_MISSING,
+        trace_id: Any = _ASSERTION_FILTER_MISSING,
+        confidence: Any = _ASSERTION_FILTER_MISSING,
+        version: Any = _ASSERTION_FILTER_MISSING,
+        meta: dict[str, Any] | None = None,
+    ) -> "AssertionRecordSet":
+        if meta is not None and not isinstance(meta, dict):
+            raise SDKStoreError("where(meta=...) expects a dict when provided")
+
+        def matches(record: AssertionRecord) -> bool:
+            if value is not _ASSERTION_FILTER_MISSING and record.value != value:
+                return False
+            if source is not _ASSERTION_FILTER_MISSING and record.meta.source != source:
+                return False
+            if trace_id is not _ASSERTION_FILTER_MISSING and record.meta.trace_id != trace_id:
+                return False
+            if confidence is not _ASSERTION_FILTER_MISSING and record.meta.confidence != confidence:
+                return False
+            if version is not _ASSERTION_FILTER_MISSING and record.meta.raw.get("version") != version:
+                return False
+            if meta is not None:
+                for key, expected in meta.items():
+                    if key not in record.meta.raw or record.meta.raw[key] != expected:
+                        return False
+            return True
+
+        return type(self)(record for record in self if matches(record))
+
+    def one(self) -> AssertionRecord:
+        count = len(self)
+        if count != 1:
+            raise SDKStoreError(f"expected exactly one assertion record; found {count}")
+        return self[0]
+
+    def all(self) -> tuple[AssertionRecord, ...]:
+        return tuple(self)
+
+    def first(self) -> AssertionRecord | None:
+        if not self:
+            return None
+        return self[0]
+
+
 class FieldAssertions:
     def __init__(
         self,
@@ -110,23 +187,23 @@ class FieldAssertions:
     ) -> None:
         self._field_name = field_name
         self._cardinality = cardinality
-        self._active_records = active_records
-        self._history_records = history_records
+        self._active_records = AssertionRecordSet(active_records)
+        self._history_records = AssertionRecordSet(history_records)
 
     @property
-    def active(self) -> tuple[AssertionRecord, ...]:
+    def active(self) -> AssertionRecordSet:
         return self._active_records
 
     @property
-    def history(self) -> tuple[AssertionRecord, ...]:
+    def history(self) -> AssertionRecordSet:
         return self._history_records
 
-    def at(self, t: str) -> tuple[AssertionRecord, ...]:
+    def at(self, t: str) -> AssertionRecordSet:
         at_time = _validate_iso8601_text(
             t,
             context=f"{self._field_name}.at(t)",
         )
-        return tuple(
+        return AssertionRecordSet(
             record
             for record in self._active_records
             if _is_assertion_visible_at(
@@ -136,12 +213,12 @@ class FieldAssertions:
             )
         )
 
-    def version(self, v: str | int) -> tuple[AssertionRecord, ...]:
+    def version(self, v: str | int) -> AssertionRecordSet:
         expected_version = _validate_version_selector(
             v,
             context=f"{self._field_name}.version(v)",
         )
-        return tuple(
+        return AssertionRecordSet(
             record
             for record in self._active_records
             if _read_assertion_version(record, field_name=self._field_name) == expected_version
