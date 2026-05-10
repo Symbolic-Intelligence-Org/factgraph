@@ -118,7 +118,9 @@ Additional semantics:
 - `multi` fields only allow `.add(...)` (wrong op raises `SDKStoreError` in `sdk.batch()`, and `CardinalityError` in `sdk.edit()`).
 - Batch managed-handle retract is by assertion id: `.retract(assertion_id=...)` (positional argument is also supported); `sdk.edit()` `FieldEditor` uses `.retract(asrt_id=...)`.
 - Identity fields expose read-only guards; `set/add/retract` fail.
-- Incomplete identity causes immediate `SDKStoreError` on writes; bind missing identity first via `bind(...)`.
+- `tx.entity(...)` is primary-first: every `Identity(primary_key=True)` must be supplied at handle creation unless a literal `default` or `default_factory="uuid4"` materializes it immediately.
+- `bind(...)` only completes non-primary identity fields; it cannot add or alter primary identity.
+- Incomplete non-primary identity causes immediate `SDKStoreError` on field operations, preview, or commit; bind missing non-primary identity first via `bind(...)`.
 
 ### 4.3 Wire plan
 

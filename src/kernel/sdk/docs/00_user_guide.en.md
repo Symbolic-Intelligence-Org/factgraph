@@ -89,18 +89,17 @@ least one `Identity(primary_key=True)`; `Field` declares non-identity
 fields with `cardinality="single"` or `"multi"`.
 
 ```python
-from kernel.sdk import Entity, Field, Identity, Relationship
+from kernel.sdk import Entity, Field, Identity
+
+class User(Entity):
+    user_id: str = Identity(primary_key=True)
+    name: str = Field(cardinality="single")
 
 class Document(Entity):
     doc_id: str = Identity(primary_key=True)
     title: str = Field(cardinality="single")
     keywords: str = Field(cardinality="multi")
-    author: str = Field(cardinality="single")  # entity_ref to User
-
-class Authored(Relationship):
-    user: str = Identity(primary_key=True)      # User.user_id
-    document: str = Identity(primary_key=True)  # Document.doc_id
-    role: str = Field(cardinality="single")
+    author: User = Field(cardinality="single")  # entity_ref to User
 ```
 
 ### Compile and instantiate
@@ -108,7 +107,7 @@ class Authored(Relationship):
 `from_schema_classes` compiles, validates, and constructs in one step:
 
 ```python
-fg = FactGraph.from_schema_classes([User, Document, Authored])
+fg = FactGraph.from_schema_classes([User, Document])
 ```
 
 You can also compile separately:
@@ -116,21 +115,30 @@ You can also compile separately:
 ```python
 from kernel.sdk import compile_schema_from_classes, schema_preflight_from_classes
 
-schema_preflight_from_classes([User, Document])    # raises SDKSchemaError on issues
+report = schema_preflight_from_classes([User, Document])
+report["ok"]          # False when diagnostics contain schema errors
+report["errors"]      # list[dict] with path/message details
 schema_ir = compile_schema_from_classes([User, Document])
 ```
+
+`Relationship` classes are compile-level schema declarations, not
+entities with identity fields. They declare endpoints with `from_entity`
+and `to_entity`, and any relationship attributes are `Field(...)`
+members. `FactGraph.from_schema_classes(...)` constructs a store from
+entity classes; use `compile_schema_from_classes(...)` when you need to
+inspect relationship schema IR directly.
 
 ### Provenance validation
 
 ```python
-report = fg.schema.validate_provenance(items)  # also: fg.validate_provenance
+report = fg.schema.validate_provenance(candidate)  # also: fg.validate_provenance
 report.ok                # True if everything passes
 report.warnings          # list[dict] — non-fatal advisories
 report.errors            # list[dict], each: {code, severity, path, message, data}
 ```
 
-This inspects an item batch's provenance shape **without** writing.
-Useful as a pre-flight before `fg.ingest(...)`. Returns a
+This inspects a `CandidateSet` (or a provenance/meta dict) **without**
+writing. Returns a
 `ValidationReport(ok, warnings, errors, diagnostics_contract_version)`.
 
 ---
@@ -249,6 +257,14 @@ with fg.batch(meta={"source": "import_2026_05_09"}) as tx:
 The context manager **does not** auto-commit on success or rollback on
 exception — call them explicitly. This is intentional so that batch
 preview/review patterns work naturally.
+
+Batch entity handles are primary-first. The initial `tx.entity(...)` call
+must provide every `Identity(primary_key=True)` value, unless that
+primary identity has a literal `default` or `default_factory="uuid4"` that
+can be materialized immediately. Use `bind(...)` only to complete
+non-primary identity dimensions before the first field operation,
+preview, or commit; writes always target one complete identity
+coordinate.
 
 ### Bulk ingest
 
@@ -436,12 +452,12 @@ multi-head derivations.
 ```python
 from kernel.sdk import Derivation
 
-with vars("u", "d") as (u, d):
+with vars("d", "kw") as (d, kw):
     deriv = Derivation(
-        id="drv.authored_from_author_field",
+        id="drv.document_keyword",
         version="1.0.0",
-        where=[User(u), Document(d), d.author == u],
-        head=Authored(user=u, document=d),  # entity-candidate head
+        where=[Document(d), d.title == "FactPy guide"],
+        head=Document.keywords(value=kw),  # fact-candidate head
     )
 
 candidates = fg.eval.evaluate(deriv, mode="native")           # → list[CandidateSet]
@@ -460,14 +476,14 @@ them raises with rename hints (use `mode='native'` and
 Multi-head Derivation:
 
 ```python
-with vars("u", "d") as (u, d):
+with vars("d", "kw", "author_ref") as (d, kw, author_ref):
     deriv = Derivation(
-        id="drv.authored_plus_role",
+        id="drv.document_keyword_plus_author",
         version="1.0.0",
-        where=[User(u), Document(d), d.author == u],
+        where=[Document(d), d.title == "FactPy guide"],
         head=[
-            Authored(user=u, document=d),
-            User.name(value=u),  # additional fact head
+            Document.keywords(value=kw),
+            Document.author(value=author_ref),
         ],
     )
 # evaluate returns flattened candidates sharing one run_id
@@ -577,7 +593,7 @@ Quick reference:
 | `fg.what_if.rule.add_condition(rule, support, ...)` | What if we added this condition? |
 | `fg.what_if.why_not(deriv, candidates)` | Across this candidate universe, what doesn't derive and why? |
 
-All nine methods are **also available as flat methods** on `fg` (e.g.
+All eight methods above are **also available as flat methods** on `fg` (e.g.
 `fg.check(deriv, binding)`, `fg.check_fact_overlay(deriv, binding, overlay)`,
 `fg.check_rule_disable(rule, support, ...)`, `fg.why_not(deriv, candidates)`).
 The namespaced and flat forms are equivalent.
@@ -599,7 +615,7 @@ ref = fg.read.ref(User, user_id="u-1")
 explanation = fg.audit.explain_fact("user:name", ref)
 # → {"pred_id": "user:name", "e_ref": ref, "active_claims": [...], "chosen_asrt_id": "asrt-..."}
 
-# conflicts(pred_id, e_ref) — list active conflicting assertions on a pred+entity
+# conflicts(pred_id, e_ref) — inspect active assertion ids on a pred+entity
 conflicting = fg.audit.conflicts("user:name", ref)
 
 # diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events,
@@ -617,11 +633,14 @@ diff = fg.audit.diff_proof_frames(
   pair (optionally narrowed by trailing value atoms) plus the
   currently-chosen `asrt_id` per the active view policy.
 - `conflicts` enumerates active conflicting assertions on the same
-  `(pred_id, e_ref)` pair.
+  `(pred_id, e_ref)` pair as `active_asrt_ids`, plus the
+  `chosen_asrt_id` selected by the active view policy.
 - `diff_proof_frames` compares two recorded derivation rounds and
   returns a `ProofFrameDiff`. The `round_*_events` arguments are the
-  full event tuples emitted at evaluate time; `include_unchanged=False`
-  trims the diff to changed rows only. See
+  full `tuple[RoundEvent, ...]` values captured by the round recorder
+  or loaded from an audit package; `include_unchanged=False` trims the
+  diff to changed rows only. `diff_proof_frames` does not read files or
+  extract events from `evaluate`. See
   [06 §Q5](06_what_if_and_proof.en.md#q5-how-did-derivation-change-between-rounds--fgaudit_diff_proof_frames).
 
 ---
@@ -672,7 +691,9 @@ must be ViewSpec")`. Deleting `"default"` raises
 ### Packages (Souffle export and replay)
 
 ```python
-fg.package.export_package("/tmp/my_export/")
+from kernel.adapters.souffle.package import ExportOptions
+
+fg.package.export_package("/tmp/my_export/", ExportOptions(package_kind="audit"))
 fg.package.run_package(
     "/tmp/my_export/",
     entrypoints=["my_rule"],
