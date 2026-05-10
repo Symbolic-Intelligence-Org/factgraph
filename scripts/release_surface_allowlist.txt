@@ -9,6 +9,7 @@ README.md
 docs/SECURITY.md
 docs/architecture_principles.md
 pyproject.toml
+src/kernel/README.md
 src/kernel/__init__.py
 src/kernel/adapters/__init__.py
 src/kernel/adapters/docs/01_souffle_adapter.md
@@ -60,7 +61,6 @@ src/kernel/application/capability_helpers/why_not.py
 src/kernel/application/derivation_check_runtime.py
 src/kernel/application/derivation_runtime.py
 src/kernel/application/diagnose_runtime.py
-src/kernel/application/docs/01_overview.md
 src/kernel/application/docs/01_overview_en.md
 src/kernel/application/docs/README.md
 src/kernel/application/entity_view.py
@@ -101,7 +101,6 @@ src/kernel/audit/__init__.py
 src/kernel/audit/assertions.py
 src/kernel/audit/authoring_events.py
 src/kernel/audit/docs/01_overview.en.md
-src/kernel/audit/docs/01_overview.md
 src/kernel/audit/docs/02_evidence_graph.md
 src/kernel/audit/docs/03_audit_package_contract.md
 src/kernel/audit/docs/README.md
@@ -147,11 +146,8 @@ src/kernel/core/derivation/__init__.py
 src/kernel/core/derivation/accept.py
 src/kernel/core/derivation/candidates.py
 src/kernel/core/docs/01_architecture.en.md
-src/kernel/core/docs/01_architecture.md
 src/kernel/core/docs/02_quality_assessment.en.md
-src/kernel/core/docs/02_quality_assessment.md
 src/kernel/core/docs/03_progress_roadmap.en.md
-src/kernel/core/docs/03_progress_roadmap.md
 src/kernel/core/docs/04_public_contract_v1.md
 src/kernel/core/docs/04_service_layer.md
 src/kernel/core/docs/README.md
