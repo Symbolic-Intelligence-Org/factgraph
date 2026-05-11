@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (§5.7 LOCKED — service runtime S2 deep migration; policy registry removed; wire renames)
+- **Last Updated:** 2026-05-11 (§5.8 LOCKED — docs+examples rewrite plan; release-facing grep gate)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -160,7 +160,7 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 | §5.5 | **`policy=` call-site API. — LOCKED** | `policy: ReadPolicy \| None = None` on `find` / `run`; `policy=None` skips policy (mirrors current `view=None`); `dict` / `str` / `FrozenAssertionView` rejected; `evaluate(policy=...)` rejected; `return_display_meta=True` requires non-`None` policy. See §5.5 subsection below. |
 | §5.6 | **Old API removal mechanic. — LOCKED** | `ViewSpec` class deleted; `find` adds `"view" in filter_kwargs` guard; `run` adds **tombstone sentinel** `view: Any = _MISSING` rejecting even `view=None`; `evaluate` uses combined `view`/`policy` rejection. Error texts at semantic level only. See §5.6 subsection below. |
 | §5.7 | **Non-SDK ViewSpec reference sweep. — LOCKED** | Service runtime **S2 deep migration**: remove `RuntimeSession.views` + 5 RPC endpoints + `_resolve_runtime_view_spec` + `"default"` + `view_name` lookup; rename `_parse_view_spec` / `_view_spec_to_dict` to `_parse_read_policy` / `_read_policy_to_dict`; wire DTO key `view` → `policy`, wire field `active` → `respect_revocations`. Groups A/B covered by §5.6 / §5.3 / §5.2 cross-refs. See §5.7 subsection below. |
-| §5.8 | **Docs + examples rewrite.** | SDK docs touched by `ace2563` + `4a794f3`. The new `examples/05_sdk_assertion_views.ipynb` (`58c07fc`, 368 lines) added today with old syntax — must be rewritten or retired. Doc-URL strategy for §5.6 redirect messages. |
+| §5.8 | **Docs + examples rewrite. — LOCKED** | 5 SDK docs + 1 service doc (renamed to `03_runtime_queries_policy.md`) + `examples/05_sdk_assertion_views.ipynb` rewritten as ~5-commit per-layer batch. `respect_revocations` taught in `01_concepts` + referenced in `02_readwrite`. No doc URL in error messages. **Phase 4 grep gate** enforces release-facing-doc cleanliness with archive/migration exemptions. See §5.8 subsection below. |
 | §5.9 | **Test coverage plan.** | Policy DTO contract tests (3 fields × validation paths). `policy=` kwarg behavior on `find` / `run`. Removal-redirect tests for each §5.6 deprecated path. Existing ViewSpec test sweep — delete vs rewrite. |
 | §5.10 | **Release checklist.** | Confirm next release (rc.2 successor or rc.3) ships the migration. Per §0.7 no compat-window discussion needed; this gap is purely a checklist confirmation (`kernel.sdk.__all__` diff, allowlist sync, deny-pattern grep updates per `feedback_release_workflow_traps`). |
 
@@ -593,6 +593,90 @@ The 11 logical service sites collapse into:
 - Service-runtime tests sweep — including the 5 removed-endpoint tests that must be deleted and the `query_view_facts` policy-inline tests that must be updated → §5.9.
 - Wire-level documentation (if any external service contract docs exist beyond `src/service/docs/` directory contents) → §5.8.
 - Whether `_parse_read_policy` should be split out into a shared validation utility re-used between `ReadPolicy.__post_init__` and the wire-parser → implementation-detail freedom, not §5.7-locked.
+
+### §5.8 LOCKED — Docs + examples rewrite plan; Phase 4 grep gate enforces release-facing cleanliness
+
+**Release-facing principle (locked verbatim):**
+
+> Release-facing docs and examples must present `fg.views` only as frozen assertion membership and `ReadPolicy` only as call-site `policy=...`. They must not preserve `ViewSpec` as a documented compatibility path.
+
+This principle governs all D1–D8 decisions below; it is the acceptance gate for §5.8.
+
+**Inventory (8 files containing `ViewSpec` / `view_spec` / `view=`):**
+
+| Category | File | Decision |
+|---|---|---|
+| SDK docs | `src/kernel/sdk/docs/00_user_guide.en.md` | Rewrite (D7c commit 3). |
+| SDK docs | `src/kernel/sdk/docs/01_concepts.en.md` | Rewrite (D7c commit 1) — **owns** `respect_revocations` primary teaching + `default` anti-misread note. |
+| SDK docs | `src/kernel/sdk/docs/02_readwrite_and_ingest.en.md` | Rewrite (D7c commit 2) — references `respect_revocations` from retract section. |
+| SDK docs | `src/kernel/sdk/docs/03_rules_and_derivations.en.md` | Rewrite (D7c commit 2) — teaches `policy=` on `run` + `return_display_meta` invariant. |
+| SDK docs | `src/kernel/sdk/docs/04_api_surface.en.md` | Rewrite (D7c commit 2) — updates `__all__` table (35 → 36, `ReadPolicy` added). |
+| Example | `examples/05_sdk_assertion_views.ipynb` | **D1a**: rewrite to one notebook teaching both frozen views and `ReadPolicy`. |
+| Example | `examples/archive/02_rules_and_derivations.ipynb` | **D2a**: not touched (archive semantics). |
+| Service docs | `src/service/docs/03_runtime_queries_views.md` | **D3**: rename to `src/service/docs/03_runtime_queries_policy.md` + rewrite (D7c commit 5). |
+
+**D1 — `examples/05_sdk_assertion_views.ipynb`:** rewrite, single notebook, teaches `fg.views.create(name, asrt_ids=...)` (frozen membership) **and** `fg.read.find(policy=ReadPolicy(...))` (read-time policy). Old `view=` patterns removed wholesale.
+
+**D2 — `examples/archive/02_rules_and_derivations.ipynb`:** not modified. Archived directory is a frozen-in-time historical record; touching it breaks archive semantics.
+
+**D3 — Service doc filename:** rename to `src/service/docs/03_runtime_queries_policy.md` (not generic `03_runtime_queries.md`). Rationale (locked): "the doc's focus remains the policy/display behavior of runtime queries, not a generic runtime-queries overview." Rewrite removes the five deleted RPC endpoints; documents wire-level `policy=` payload, `respect_revocations` field, and the absence of `view_name` registry lookup.
+
+**D4 — No doc URL in §5.6 error messages:** error redirects are text-only (e.g., `"view= was renamed to policy=; pass policy=ReadPolicy(...) instead"`). Pre-release means no published doc URL; relative paths are noise in production stack traces.
+
+**D5 — `respect_revocations` docs-prominence:**
+
+- **Primary teaching**: `01_concepts.en.md` — introduces "retract ↔ confidence aggregation" as a conceptual relationship (Phase 3 must add a section explaining: `retract` does not delete history rows; `respect_revocations=True` skips revoked rows during confidence aggregation; `respect_revocations=False` includes them).
+- **Application reference**: `02_readwrite_and_ingest.en.md` — retract section cross-references the policy semantic.
+- **Forbidden**: hiding `respect_revocations` in an "advanced" / "optional" section. The field is concept-level, not advanced.
+
+**D6 — `default` anti-misread note (per §5.4):**
+
+Two locations:
+
+- `_SDKViewsManager` class docstring in `src/kernel/sdk/store.py` (IDE-visible).
+- `01_concepts.en.md` views section (systematic-reader-visible).
+
+Both sites carry the verbatim §5.4 note: "The name `default` is no longer reserved by `fg.views`. If users create a frozen assertion view named `default`, it has no special behavior; it is just another frozen assertion-id selection."
+
+**D7 — Rewrite cadence (5-commit per-layer batch):**
+
+| Commit | Files |
+|---|---|
+| 1 | `01_concepts.en.md` (concepts layer; owns D5 primary + D6 docs note). |
+| 2 | `02_readwrite_and_ingest.en.md` + `03_rules_and_derivations.en.md` + `04_api_surface.en.md` (read/write + rule eval + surface layer). |
+| 3 | `00_user_guide.en.md` (top-level guide; cross-references previous commits). |
+| 4 | `examples/05_sdk_assertion_views.ipynb` (D1a rewrite). |
+| 5 | `src/service/docs/03_runtime_queries_views.md` → `03_runtime_queries_policy.md` (D3 rename + rewrite). |
+
+**D8 — Phase 4 grep gate (release-facing cleanliness):**
+
+Phase 4 verification must include a regex/grep check across release-facing docs and examples that **fails** on any of the following patterns appearing outside the exemption set:
+
+- `ViewSpec` — old class name.
+- `view_spec` — old variable / wire-field convention.
+- `view=` with a policy/named-view payload (e.g., `view="..."`, `view=ViewSpec(...)`, `view=...preferred...`).
+- `fg.views.create(...)` with a `ReadPolicy` or `ViewSpec` payload (post-§5.4 semantic violation — `fg.views` accepts only `asrt_ids=` / `asrts=`).
+
+**Reference command** (implementation freedom on exact pattern; lock is the gate semantic):
+
+```bash
+rg "ViewSpec|view_spec|view=.*preferred|fg\.views\.create\(.*ReadPolicy|fg\.views\.create\(.*ViewSpec" \
+   src/kernel/sdk/docs src/service/docs examples/05_sdk_assertion_views.ipynb
+```
+
+**Exemption set (allowed locations for these patterns):**
+
+- `docs/blueprints/archive/**` — historical design records.
+- `examples/archive/**` — archived examples.
+- `**/archive/**` — any other archive directory.
+- This blueprint itself (`docs/blueprints/active/2026-05-11_readpolicy-call-site-migration.md` + paired audit) and any companion migration-context note that explicitly documents `ViewSpec` as **the removed legacy**, not as a supported syntax.
+- Test files at `src/kernel/tests/` and `src/service/tests/` that specifically verify rejection of old syntax (§5.9 scope).
+
+**What this gap does NOT decide:**
+
+- Specific paragraph-level rewrites of each doc file — Phase 3 implementation.
+- Test docstring rewrites → §5.9.
+- Whether commit messages contain `BREAKING CHANGE:` markers → §5.10 release checklist.
 
 ## 6. Invariants
 
