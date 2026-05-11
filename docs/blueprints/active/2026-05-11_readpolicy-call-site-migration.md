@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (§5.1 LOCKED — DTO name = `ReadPolicy`)
+- **Last Updated:** 2026-05-11 (§5.2 LOCKED — field set; rename `active` → `respect_revocations`)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -154,7 +154,7 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 | # | Gap | Primary decision points |
 |---|---|---|
 | §5.1 | **Policy DTO naming. — LOCKED** | DTO name = `ReadPolicy`. Semantic boundary locked (see §5.1 subsection below). Module location + `__all__` export NOT decided here — see §5.3. |
-| §5.2 | **Policy DTO field set.** | First slice fields = current `active` / `confidence_strategy` / `prefer_source` (carry-over verbatim). All future fields (`tie_breaker`, `merge_rule`, `confidence_propagation`, …) explicitly **deferred** — not occupied as field placeholders. |
+| §5.2 | **Policy DTO field set. — LOCKED** | `ReadPolicy` carries 3 fields: `respect_revocations` (renamed from misnomer `active`), `confidence_strategy`, `prefer_source`. Future fields DEFERRED. Single consumer `kernel/sdk/store.py:2070` migrates with the rename. See §5.2 subsection below. |
 | §5.3 | **DTO module location + public export.** | In-place replace `ViewSpec` at `kernel/core/store/types.py`, or relocate to `kernel/sdk/types.py` (SDK-only)? Is the DTO added to `kernel.sdk.__all__`? Is `ViewSpec` still importable from `kernel.core.store.types`? (High-risk because `src/service/runtime_v1.py` and `kernel.application.protocol` may import ViewSpec — coupled to §5.7.) |
 | §5.4 | **`fg.views` final semantics.** | Post-migration union → single `FrozenAssertionView` return. Decide built-in `default` entry: keep as empty `FrozenAssertionView(name="default", asrt_ids=frozenset())` vs drop the built-in entirely. |
 | §5.5 | **`policy=` call-site API.** | `find(..., policy=...)` and `run(..., policy=...)` accept Policy DTO value-object only? Accept inline dict (`policy={"confidence_strategy": "max"}`)? Accept named-string (which would resurrect the registry under a new name — **default reject** per §0.3)? Type-validation behavior on invalid input. |
@@ -195,6 +195,65 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 - `AggregationPolicy` rejected: only covers `confidence_strategy`; cannot account for `active`.
 - `ResolutionPolicy` rejected: "resolution" overlaps with conflict resolution and identity resolution, both already domain terms in the kernel.
 - `ReadDisplayPolicy` rejected: hybrid naming signals fuzzy scope; verbose; inconsistent with factpy short-name style (`SDKStore`, `BatchTx`, `EntitySnapshot`).
+
+### §5.2 LOCKED — Field set: 3 fields, `active` renamed to `respect_revocations`, future fields deferred
+
+**Final `ReadPolicy` shape:**
+
+```python
+@dataclass(frozen=True)
+class ReadPolicy:
+    respect_revocations: bool = True
+    confidence_strategy: ConfidenceStrategy = "max"
+    prefer_source: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.respect_revocations, bool):
+            raise ValueError("ReadPolicy.respect_revocations must be bool")
+        if self.confidence_strategy not in {"max", "mean", "median", "prefer_source"}:
+            raise ValueError(
+                "ReadPolicy.confidence_strategy must be one of: max, mean, median, prefer_source"
+            )
+        if self.prefer_source is not None and (
+            not isinstance(self.prefer_source, str) or not self.prefer_source
+        ):
+            raise ValueError("ReadPolicy.prefer_source must be non-empty string or None")
+```
+
+**Misnomer migration (recorded verbatim):**
+
+> `ViewSpec.active` was a misnomer. In runtime it controlled whether revoked claims are skipped during confidence/display aggregation. The new field is `ReadPolicy.respect_revocations`.
+
+**Source-grounded consumer audit:**
+
+`view_spec.active` has exactly one runtime consumer: `src/kernel/sdk/store.py:2070`:
+
+```python
+if view_spec.active and ledger.has_active_revocation(claim.asrt_id):
+    continue
+```
+
+This call site migrates to `policy.respect_revocations` during Phase 2 implementation. No other production code reads `.active` on a `ViewSpec`. (Test references separately handled at §5.9.)
+
+**What this gap locks:**
+
+- **A — Field-name carry-over with `active` rename.** `active` → `respect_revocations` (positive-boolean, default `True`). `confidence_strategy` and `prefer_source` keep names + defaults verbatim.
+- **B — `__post_init__` validation form.** Mirror existing ViewSpec validation: bool type check; Literal membership check; non-empty-string-or-None check. Error message prefix swaps to `ReadPolicy.<field>`.
+- **C — Dataclass decorator.** `@dataclass(frozen=True)`, no `slots=True`, no `kw_only=True`. (Matches existing ViewSpec shape; no metaclass churn.)
+- **D — `ConfidenceStrategy` type alias position.** Stays at `kernel.core.store.types` line 14. Independent of `ReadPolicy`'s eventual location (§5.3). `kernel/core/view/confidence.py` continues to import it unchanged. `ReadPolicy` imports `ConfidenceStrategy` from `kernel.core.store.types` regardless of §5.3 outcome.
+- **E — Future-fields DEFER list + reopen trigger.** DEFERRED fields: `tie_breaker`, `merge_rule`, `confidence_propagation`, and any other field not in the 3-field set above. **Reopen trigger**: a concrete use case + a separate scoped blueprint (or a §5 amendment to this blueprint). No speculative field placeholders.
+
+**Docs implication (cross-reference for §5.8):**
+
+`respect_revocations` must be documented as a first-class, prominent field — not hidden as an "advanced option" — because it directly teaches the relationship between `retract` and read/display confidence. §5.8 docs rewrite plan inherits this constraint.
+
+**What this gap does NOT lock:**
+
+- DTO module location and import path → §5.3.
+- Whether `ReadPolicy` enters `kernel.sdk.__all__` → §5.3.
+- Call-site shape of `policy=` (value-only vs inline-dict vs named-string) → §5.5.
+- Old `ViewSpec` import / construction removal mechanic → §5.6.
+- Test coverage for the rename + revocation-respect behavior → §5.9.
 
 ## 6. Invariants
 
