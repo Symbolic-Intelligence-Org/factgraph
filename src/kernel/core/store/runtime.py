@@ -264,6 +264,7 @@ class Store:
         confidence_kind_resolver: Any | None = None,
         engine_ext: EngineExtBase | None = None,
         engine_options: EngineOptionsIR = None,
+        semantics_profile: Any | None = None,
     ) -> list[CandidateSet]:
         return evaluate_store(
             self,
@@ -279,6 +280,7 @@ class Store:
             confidence_kind_resolver=confidence_kind_resolver,
             engine_ext=engine_ext,
             engine_options=engine_options,
+            semantics_profile=semantics_profile,
         )
 
     def evaluate_engine(
@@ -292,6 +294,7 @@ class Store:
         head: HeadSpecIR | None = None,
         engine_ext: EngineExtBase | None = None,
         engine_options: EngineOptionsIR = None,
+        semantics_profile: Any | None = None,
     ) -> list[CandidateSet]:
         """Internal adapter entrypoint; prefer evaluate(mode='souffle'|'problog'|'pyreason')."""
         if not isinstance(mode, str) or not mode:
@@ -315,6 +318,8 @@ class Store:
             call_kwargs["engine_ext"] = engine_ext
         if engine_options is not None:
             call_kwargs["engine_options"] = engine_options
+        if semantics_profile is not None:
+            call_kwargs["semantics_profile"] = semantics_profile
         return evaluator(self, **call_kwargs)
 
     def evaluate_dummy(

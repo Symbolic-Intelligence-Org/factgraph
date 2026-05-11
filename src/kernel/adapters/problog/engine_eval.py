@@ -16,6 +16,7 @@ from kernel.adapters.problog.rule_ext import resolve_problog_engine_ext
 from kernel.adapters.souffle.where_compile import extract_where_variables
 from kernel.core.derivation.candidates import CandidateSet
 from kernel.core.rules.where_eval import WhereValidationError
+from kernel.core.semantics import SemanticsProfile
 from kernel.core.store import builders as store_builders
 from kernel.core.store._support import (
     PROBLOG_PROVENANCE_KIND,
@@ -37,12 +38,14 @@ def evaluate_problog(
     head: dict[str, Any] | None = None,
     engine_ext: EngineExtBase | None = None,
     engine_options: dict[str, Any] | None = None,
+    semantics_profile: SemanticsProfile | None = None,
 ) -> list[CandidateSet]:
     """Evaluate a derivation through the ProbLog adapter."""
     del mode
     resolved_engine_ext = resolve_problog_engine_ext(
         where=where,
         engine_ext=engine_ext,
+        semantics_profile=semantics_profile,
     )
 
     timeout = resolve_problog_timeout(engine_options)

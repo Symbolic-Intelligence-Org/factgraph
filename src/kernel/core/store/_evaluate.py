@@ -45,6 +45,7 @@ def evaluate_store(
     confidence_kind_resolver: Any | None = None,
     engine_ext: EngineExtBase | None = None,
     engine_options: EngineOptionsIR = None,
+    semantics_profile: Any | None = None,
 ) -> list[CandidateSet]:
     if mode == "python":
         raise ValueError("mode='python' is removed; use mode='native'")
@@ -60,6 +61,8 @@ def evaluate_store(
         raise ValueError(
             f"engine_options must be dict[str, Any] or None, got {type(engine_options).__name__}"
         )
+    if semantics_profile is not None and mode != "problog":
+        raise ValueError("semantics_profile is only supported for mode='problog' in C")
     if mode == "native" and engine_options:
         raise ValueError("engine_options are not supported for mode='native'")
 
@@ -78,6 +81,8 @@ def evaluate_store(
                 engine_kwargs["engine_ext"] = engine_ext
             if engine_options is not None:
                 engine_kwargs["engine_options"] = engine_options
+            if semantics_profile is not None:
+                engine_kwargs["semantics_profile"] = semantics_profile
             candidates = engine_evaluate(**engine_kwargs)
             _remember_candidate_support_backrefs(store, candidates)
             return candidates
@@ -122,6 +127,8 @@ def evaluate_store(
             engine_kwargs["engine_ext"] = engine_ext
         if engine_options is not None:
             engine_kwargs["engine_options"] = engine_options
+        if semantics_profile is not None:
+            engine_kwargs["semantics_profile"] = semantics_profile
         candidates = engine_evaluate(**engine_kwargs)
         _remember_candidate_support_backrefs(store, candidates)
         return candidates
