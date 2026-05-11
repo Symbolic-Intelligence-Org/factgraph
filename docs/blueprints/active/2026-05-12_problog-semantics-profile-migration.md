@@ -1,6 +1,6 @@
 # Task Blueprint: ProbLog SemanticsProfile Migration
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -114,11 +114,11 @@ Runtime call-site:
 C should primarily answer the first question. E owns the second unless G0
 explicitly pulls a narrow core-only call-site into C.
 
-## 5. Proposed Shape
+## 5. Scope Freeze Decisions
 
 ### 5.1 Profile-to-ProbLog projection
 
-Candidate normalized profile shape:
+Locked normalized profile shape:
 
 ```python
 SemanticsProfile(
@@ -133,7 +133,7 @@ SemanticsProfile(
 )
 ```
 
-Candidate adapter-local normalization:
+Locked adapter-local normalization:
 
 ```text
 SemanticsProfile.rule_projection.problog
@@ -145,12 +145,11 @@ SemanticsProfile.rule_projection.problog
   -> materialize ProbLogRuleExt(branch_probabilities=(...))
 ```
 
-Open question for G0: whether branch entries must cover every branch or
-whether omitted branches default to `1.0`. The latter is more ergonomic and
-matches existing `ProbLogRuleExt(None)` deterministic defaults, but it must
-be explicit.
+Omitted branches default to `1.0`, matching existing
+`ProbLogRuleExt(None)` deterministic defaults. Profile-defaulted values still
+participate in carrier conflict checks.
 
-### 5.2 Conflict rules
+### 5.2 Carrier conflict rules
 
 C must define precedence when multiple carriers exist:
 
@@ -160,16 +159,14 @@ C must define precedence when multiple carriers exist:
 | `ProbLogRuleExt.branch_probabilities` | Internal adapter bridge retained. |
 | `legacy_body_confidences` | Temporary internal bridge retained until E/C follow-up removes it. |
 
-Recommended conflict rule for G0:
-
 - If only one carrier is present, use it.
 - If multiple carriers are present and materialize the same tuple, allow.
 - If multiple carriers materialize different tuples, reject with a stable
   conflict message naming all involved carrier families.
 
-### 5.3 Runtime entry options
+### 5.3 Runtime entry options considered
 
-G0 must choose one path:
+G0 considered three paths:
 
 | Option | Shape | Pros | Cons |
 | --- | --- | --- | --- |
@@ -177,54 +174,105 @@ G0 must choose one path:
 | C2 core advanced call-site | Add `Store.evaluate(..., semantics_profile=...)` and forward to ProbLog evaluator; SDK/service still reject. | Real adapter consumption without public SDK/service call-site. | Expands advanced core API before E. |
 | C3 defer C until E | Do not implement C now; start E first. | Avoids unused adapter hook. | Delays validating profile-to-adapter design. |
 
-Draft recommendation: **C2** if the project wants observable adapter
-consumption before E, otherwise **C1** if preserving the B boundary is more
-important. C2 is still narrower than E because SDK/service public profile
-kwargs remain rejected.
+Locked decision: **C2**. `Store.evaluate(..., semantics_profile=...)` becomes
+the first observable ProbLog profile-consumption path. SDK and service
+runtime profile kwargs remain rejected per B; E owns the durable user-facing
+call-site.
+
+### 5.4 Locked Decisions
+
+| ID | Decision |
+| --- | --- |
+| D1 | Use C2: add a core advanced call-site by extending `Store.evaluate(..., semantics_profile=...)` and forwarding to ProbLog evaluation. |
+| D2 | Omitted `rule_projection.problog` branch entries default to `1.0`, matching existing deterministic branch behavior. |
+| D3 | Carrier conflict rules compare materialized tuples across `SemanticsProfile.rule_projection.problog`, `ProbLogRuleExt.branch_probabilities`, and `legacy_body_confidences`; matching tuples are allowed, conflicting tuples reject with carrier-family names. |
+| D4 | ProbLog consumption strictly requires `SemanticsProfile.engine == "problog"` at runtime consumption, not at profile construction. |
+| D5 | SDK `evaluate(..., semantics=...)` / `evaluate(..., semantics_profile=...)` and service top-level / derivation-level profile payloads continue to reject per B. |
+| D6 | Branch index range validation lives in the ProbLog adapter resolver because it requires `where` branch count; B's generic profile validation remains unchanged. |
+| D7 | Adapter import guards split: ProbLog is allowed and expected to consume `SemanticsProfile`; PyReason remains forbidden from importing or consuming it in C. |
+| D8 | Existing `legacy_body_confidences` and `ProbLogRuleExt` behavior remains intact as internal bridges. |
+| D9 | `export_problog(...)` continues consuming `ProbLogRuleExt`, not profile dictionaries; profile data is normalized before export. |
+| D10 | PyReason adapter migration remains deferred to D; C must not touch PyReason interval or temporal semantics. |
+
+### 5.5 Resolved G0 Questions Map
+
+| Draft question | Resolution |
+| --- | --- |
+| C1/C2/C3 path | D1 chooses C2. |
+| Branch coverage | D2 chooses omitted branches default to `1.0`. |
+| Multi-carrier conflict | D3 locks matching-allowed / conflict-rejected materialized tuple comparison. |
+| Engine match | D4 locks strict `engine="problog"` at consumption. |
+| SDK/service boundary | D5 keeps B rejections until E. |
+| Adapter guard update | D7 splits ProbLog-positive and PyReason-negative guards. |
+| Branch index validation location | D6 keeps adapter-local validation with rule context. |
 
 ## 6. Boundaries And Invariants
 
-- `SemanticsProfile` remains in `kernel.core.semantics`; ProbLog may import
-  it only if G0 chooses C1/C2.
-- PyReason adapter must not import or consume `SemanticsProfile` in C.
+- `SemanticsProfile` remains in `kernel.core.semantics`; C does not add an
+  SDK export.
+- ProbLog may import `SemanticsProfile`; PyReason must not import
+  `SemanticsProfile` in C.
+- `Store.evaluate(..., semantics_profile=profile)` is the only scoped runtime
+  entry that consumes a profile.
 - SDK `evaluate(..., semantics=...)` and `evaluate(..., semantics_profile=...)`
-  remain rejected unless G0 explicitly expands C into E.
+  continue to reject with B's Track 3 / E redirect.
 - Service runtime top-level and derivation-level `semantics` /
-  `semantics_profile` remain rejected unless G0 explicitly expands C into E.
+  `semantics_profile` continue to reject with B's Track 3 / E redirect.
+- `SemanticsProfile.engine != "problog"` rejects only when consumed by ProbLog;
+  profile construction remains governed by B's generic engine whitelist.
+- `rule_projection.problog[*].kind` must be `branch_probability` when consumed
+  by ProbLog.
+- `rule_projection.problog[*].target` must match `branch:{index}` and index
+  must be in range for the evaluated `where` branches.
+- `rule_projection.problog[*].value` must be a numeric probability in `(0, 1]`.
+- Duplicate profile targets reject.
+- Omitted profile branch targets materialize as `1.0`.
+- Matching profile / `ProbLogRuleExt` / `legacy_body_confidences` tuples are
+  accepted; conflicting tuples reject.
 - Existing `ProbLogRuleExt` behavior remains green.
 - Existing `legacy_body_confidences` behavior remains green.
 - Existing ProbLog `engine_options.timeout` behavior remains green.
-- ProbLog exporter should continue to consume `ProbLogRuleExt`, not profile
+- `export_problog(...)` continues to consume `ProbLogRuleExt`, not profile
   dicts directly.
 - No profile-derived values are written to stored assertion data.
 
 ## 7. Acceptance
 
-- [ ] G0 locks C1/C2/C3 and records the rationale.
-- [ ] G1 red baseline covers profile-derived branch probability behavior.
+- [ ] G0 locks D1-D10 and records the rationale.
+- [ ] G1 red baseline covers profile-derived branch probability behavior
+  through the C2 core entry.
 - [ ] G1 guard tests preserve existing `ProbLogRuleExt`,
-  `legacy_body_confidences`, and conflict behavior.
+  `legacy_body_confidences`, and existing conflict behavior.
+- [ ] `Store.evaluate(..., semantics_profile=profile)` reaches ProbLog in C;
+  SDK and service still reject profile kwargs/payloads.
+- [ ] Profile-derived branch probabilities drive exported ProbLog program
+  probability annotations.
+- [ ] Omitted profile branches default to deterministic probability `1.0`.
 - [ ] Invalid ProbLog profile `kind` rejects.
 - [ ] Invalid ProbLog profile `target` rejects.
 - [ ] Out-of-range branch index rejects.
 - [ ] Out-of-range branch probability rejects.
 - [ ] Duplicate branch targets reject.
 - [ ] Profile engine mismatch rejects.
-- [ ] Profile-derived branch probabilities drive exported ProbLog program
-  probability annotations once the scoped runtime entry is used.
-- [ ] If multiple carriers are scoped, matching carriers are allowed and
-  conflicting carriers reject.
-- [ ] SDK/service public profile rejection remains green if E is out of
-  scope.
-- [ ] PyReason B guard remains green: no PyReason `SemanticsProfile`
+- [ ] Matching profile / `ProbLogRuleExt` / `legacy_body_confidences` carriers
+  are allowed.
+- [ ] Conflicting profile / `ProbLogRuleExt` / `legacy_body_confidences`
+  carriers reject with error text naming involved carrier families.
+- [ ] ProbLog adapter import guard flips positive: ProbLog imports or consumes
+  `SemanticsProfile` intentionally.
+- [ ] PyReason guard remains negative: no PyReason `SemanticsProfile`
   consumption in C.
+- [ ] `export_problog(...)` stays profile-agnostic and consumes
+  `ProbLogRuleExt`.
+- [ ] Existing ProbLog `engine_options.timeout` behavior remains green.
+- [ ] B's SDK/service profile rejection tests remain green.
 - [ ] Docs classify C as ProbLog consumption only; D/E remain deferred.
 
 ## 8. Implementation Plan
 
 1. G0 scope-freeze:
-   - choose C1/C2/C3;
-   - lock branch coverage/default behavior;
+   - choose C2;
+   - lock branch default behavior;
    - lock conflict behavior;
    - lock SDK/service boundary.
 2. G1 red + guard baseline:
