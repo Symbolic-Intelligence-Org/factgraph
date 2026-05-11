@@ -1,8 +1,8 @@
 # ReadPolicy Call-Site Migration and ViewSpec Removal from `fg.views`
 
-- **Status:** scoped
+- **Status:** implemented
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (scope-freeze; status `draft → scoped`; §6 + §7 filled)
+- **Last Updated:** 2026-05-11 (implemented; Phase 4 verification complete; ready to archive)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -11,7 +11,7 @@
 - **Audit Log:** [2026-05-11_readpolicy-call-site-migration.audit.md](./2026-05-11_readpolicy-call-site-migration.audit.md)
 - **Baseline:** `ace2563` (`docs(sdk): clarify view projection policy status`), current `origin/master` HEAD; design branch `v0.1-readpolicy-call-site-migration-2026-05-11` forked here.
 
-> **Design-only at draft.** Implementation only after status flips to `scoped`. §0 records the initial direction the 2026-05-11 user–Claude design discussion converged on; the iterative §5.x cycle source-grounds and locks each decision one at a time. Per `feedback_blueprint_workflow`: no Claude plan mode. Per `feedback_iterative_gap_design`: one gap LOCKED at a time with an audit row per lock.
+> **Implemented.** This blueprint removed `ViewSpec` from the SDK/service view surface, introduced `ReadPolicy` as the call-site read/display policy value object, and narrowed `fg.views` to frozen assertion-id membership. §10 records final outcome and deviations.
 
 ## 0. Initial Direction (pending §5 validation)
 
@@ -986,4 +986,84 @@ Tracked in §5; each is locked one at a time per `feedback_iterative_gap_design`
 
 ## 10. Outcome
 
-Placeholder; populated at implementation close-out (status flips `implemented`).
+### Final landed decision
+
+Ship a hard pre-release cutover from `ViewSpec`/`view=` policy usage to
+`ReadPolicy`/`policy=...`, while keeping `fg.views` exclusively for named
+frozen assertion-id membership.
+
+### Final landed behavior
+
+- `ReadPolicy` replaces `ViewSpec` as the read-time display/confidence policy
+  DTO. It is defined in `src/kernel/core/store/types.py`, re-exported from
+  `kernel.sdk`, and added as the only new SDK export (`__all__` 35 → 36).
+- `ReadPolicy` has exactly three fields:
+  `respect_revocations=True`, `confidence_strategy="max"`, and
+  `prefer_source=None`. The old `active` field name is removed.
+- `fg.read.find(...)` and `fg.run(...)` accept `policy=ReadPolicy(...)` or
+  `policy=None`; dict/string/named-policy and `FrozenAssertionView` payloads
+  are rejected. `fg.run(..., return_display_meta=True)` requires a non-None
+  `ReadPolicy`.
+- `ViewSpec` is no longer importable. `find(view=...)`, `run(view=...)`
+  (including explicit `view=None`), and `evaluate(..., view=.../policy=...)`
+  reject with redirect/unsupported semantics.
+- `fg.views` stores only `FrozenAssertionView` entries. It has no built-in
+  `default`, does not reserve the name `"default"`, and `create/update` accept
+  only `asrt_ids=` or `asrts=`.
+- Service runtime mirrors the SDK cutover: no `RuntimeSession.views`, no 5
+  runtime view lifecycle endpoints, no `view_name` lookup, and inline
+  `dto["policy"]` with `respect_revocations` for `view-facts`.
+- SDK docs, service docs, OpenAPI, and
+  `examples/05_sdk_assertion_views.ipynb` now teach frozen assertion views and
+  `ReadPolicy` as separate concepts. `scripts/check_legacy_view_syntax.sh`
+  enforces the release-facing absence gate.
+
+### Deviations from draft
+
+- The initial draft framed `ViewSpec` removal from `fg.views`; the locked
+  design expanded that into a full service-runtime deep migration so the HTTP
+  surface would not retain a named policy registry after the SDK removed one.
+- §5.2 renamed the old `active` field to `respect_revocations` after
+  source-grounding showed its only runtime consumer was revocation-aware
+  confidence/display aggregation, not policy lifecycle.
+- §5.6 chose an explicit `run(..., view=...)` tombstone sentinel rather than
+  relying on Python's bare unexpected-keyword `TypeError`, because the old
+  `run(view=..., return_display_meta=True)` copy path was common enough to
+  deserve a redirect-bearing error.
+- G3.5 updated adjacent live docs and OpenAPI in addition to renaming the
+  service DTO narrative, because the 5 removed runtime-view routes and the
+  `view_name`/`view` wire fields were still referenced there.
+
+### Deferred design questions
+
+- Named policy registry, if users need reusable policy values in the future.
+- Additional `ReadPolicy` fields such as `tie_breaker`, `merge_rule`, or
+  `confidence_propagation`.
+- Dynamic predicate views, `FrozenAssertionView` API changes, or any
+  unification of frozen assertion membership with rule/runtime assertion
+  universe scoping.
+- Full OpenAPI field-level schemas for all runtime DTOs.
+
+### Verification summary
+
+- Critical invariant tests: 11 passed, including `ViewSpec` absence and the
+  discriminating `run(view=None)` tombstone gate.
+- Focused ReadPolicy/runtime suites: 67 passed in Phase 2; `test_runtime_query_policy`
+  remains 18/18 green after close-out.
+- Kernel unittest discovery: 1848 tests OK, 1 skipped.
+- Release dry-run: `./scripts/release.sh v0.1.0-rc.3 --source-ref
+  v0.1-readpolicy-call-site-migration-impl-2026-05-11 --dry-run --yes`
+  passed projection and 1630 projected tests, then cleaned local dry-run refs.
+- `scripts/check_legacy_view_syntax.sh` passed.
+- Stale service-doc link gate for `03_runtime_queries_views.md` /
+  `runtime_queries_views` passed across release-facing scopes.
+- Service/ECSS standalone discovery still hits the pre-existing
+  audit/application circular import when run in isolation; this is the same
+  carried-forward environment noise already recorded during G2.4 and does not
+  affect the full kernel discovery result.
+
+### Archive notes
+
+Implemented locally on
+`v0.1-readpolicy-call-site-migration-impl-2026-05-11`; archive after final
+review and commit.
