@@ -23,6 +23,7 @@ earlier ones, but each notebook stands on its own (no cross-notebook state).
 | 2 | [`02_overlay_why_not_frontier.ipynb`](02_overlay_why_not_frontier.ipynb) | Q3 Fact Overlay, Q4 Why-not Universe, Q5 Frontier Trace |
 | 3 | [`03_proofframe_rule_overlays.ipynb`](03_proofframe_rule_overlays.ipynb) | Batch 4 ProofFrame Rechecker + Batch 5a/b/c rule overlays |
 | 4 | [`04_round_persistence_diff.ipynb`](04_round_persistence_diff.ipynb) | Batch 6 round events + Batch 7 ProofFrame diff |
+| 5 | [`05_sdk_assertion_views.ipynb`](05_sdk_assertion_views.ipynb) | SDK assertion records, frozen assertion views, by-id readback, and precise retract |
 
 Every code cell asserts on the structured result it produced, so any drift
 in the underlying capabilities surfaces the next time the notebook is run.
