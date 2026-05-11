@@ -1011,9 +1011,9 @@
     "version": "1.0.0",
     "target": "person:country_copy",
     "head_vars": ["$E", "$C"],
-    "where": [["pred", "person:country", ["$E", "$C"]]],
-    "mode": "native"
+    "where": [["pred", "person:country", ["$E", "$C"]]]
   },
+  "engine": "native",
   "override_registry_root": "/tmp/registry",
   "limit": 50
 }
@@ -1084,7 +1084,13 @@
   - runtime `explain` / `explain-tree` 会把它视为 witness-bearing support
 - `override_registry_root` 可选；未提供时默认复用 session 绑定的 `registry_root`。
 - 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供。
-- native `mode="native"` derivation 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：
+- runtime derivation evaluation 使用 top-level `engine` 选择后端；
+  `derivation.mode` 和 top-level `mode` 都会被拒绝。
+- Track 3 / B 已引入 core `SemanticsProfile` scaffolding，但 service
+  runtime 仍不消费 profile。top-level 或 `derivation` 内的
+  `semantics` / `semantics_profile` 会返回 `shape` error，并指向
+  Track 3 / E 的 runtime call-site 设计。
+- native `engine="native"` derivation 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：
   - 若已有 filesystem registry，ephemeral rules 在其后 merge
   - 若 `registry_root is None` 但 session 有 ephemeral rules，service 会临时创建一个空 `RuleRegistry()` 并注入
 - 若两边重名，filesystem rule 优先

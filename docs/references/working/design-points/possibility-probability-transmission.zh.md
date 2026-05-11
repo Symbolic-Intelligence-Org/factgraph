@@ -358,6 +358,7 @@ engine_options
 uncertainty_projection
 temporal_projection
 rule_projection
+certainty_projection
 output_readback
 fallback
 ```
@@ -369,8 +370,16 @@ Field intent:
 - `uncertainty_projection`: maps `raw_kind + bound` into engine-native input.
 - `temporal_projection`: maps business valid time into engine-native time coordinates.
 - `rule_projection`: optional adapter-specific rule-shape projections such as ProbLog branch weights or PyReason body/head intervals. This may use path-targeted entries internally, but must not become public `Branch(probability=...)` / `engine_ext=...` rule syntax.
+- `certainty_projection`: future runtime configuration home for retained certainty/explain lanes such as `condition_weights`.
 - `output_readback`: maps engine output back to candidate summaries, annotations, and business-time intervals.
 - `fallback`: global reject / warn / default behavior for unconfigured cases.
+
+Track 3 / B implementation note: the current code now contains
+`kernel.core.semantics.SemanticsProfile` as a frozen core value object
+with shape validation and `inspect_semantics_profile(...)`. This is
+scaffolding only: SDK / service runtime calls reject `semantics=` and
+`semantics_profile=`, and ProbLog / PyReason adapter consumption remains
+deferred to Track 3 / C and D.
 
 Important separation:
 

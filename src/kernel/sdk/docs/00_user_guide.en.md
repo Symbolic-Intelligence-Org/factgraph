@@ -584,6 +584,10 @@ fg.eval.evaluate(deriv, mode="pyreason", engine_options={"timesteps": 10})
 `Rule`, `Derivation`, authoring payloads, or the ledger. Engine-specific
 rule projection is intentionally not carried by public SDK rule objects;
 future `SemanticsProfile.rule_projection` owns that durable public shape.
+Track 3 / B exposes `kernel.core.semantics.SemanticsProfile` for core
+validation and inspection only; `fg.eval.evaluate(..., semantics=...)`
+and `fg.eval.evaluate(..., semantics_profile=...)` are rejected until
+Track 3 / E defines the runtime call-site.
 
 ### Semantic annotations
 
@@ -927,7 +931,8 @@ probability, confidence, or engine-specific parameters. Public
 `body_confidences` and `engine_ext` payloads are rejected. The old names
 remain only in rejection messages and adapter/internal bridges until
 future `SemanticsProfile.rule_projection` provides the durable public
-rule-projection shape.
+rule-projection shape. Track 3 / B has added only core profile
+scaffolding; ProbLog adapter consumption is deferred to Track 3 / C.
 
 ### Tag semantics on multi-fields
 

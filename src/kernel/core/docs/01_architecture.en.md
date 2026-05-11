@@ -42,6 +42,7 @@ src/kernel/core/
   derivation/              # CandidateSet generation/accept (including batch accept_many)
   mapping/                 # mapping conflict resolution and decisions
   annotation/              # internal prototype annotation kernel (A/C workload slice)
+  semantics/               # SemanticsProfile validation / inspection scaffolding
 ```
 
 ## 3. Module Responsibility Map
@@ -72,6 +73,7 @@ src/kernel/core/
 | `annotation._min_max` | internal prototype min-max path confidence propagation | `derive_min_max_path_confidence` |
 | `annotation._evidence` | internal prototype Workload C evidence expansion / provenance reconstruction / max aggregation helpers | `build_direct_evidence_candidates_proto`, `build_max_evidence_provenance`, `apply_max_evidence_aggregation` |
 | `annotation._certainty` | internal prototype certainty-lane condition-weight impact derivation + salience ranking | `derive_certainty_summary`, `rank_certainty_conditions`, `RankedCondition` |
+| `semantics` | runtime projection profile scaffolding; validates and inspects `SemanticsProfile` without adapter consumption | `SemanticsProfile`, `inspect_semantics_profile` |
 | `store._confidence_kind_resolver` | create-time `confidence_kind` routing protocol, certainty resolver, and shared artifact eligibility helper | `RuleSpecReader`, `ConfidenceKindResolver`, `CertaintyConfidenceKindResolver`, `check_certainty_artifact_eligibility` |
 | `store._certainty_materializer` | service-neutral certainty materialization (derives certainty_summary dict from pre-resolved condition_weights) | `materialize_certainty_summary`, `extract_single_referenced_support_tree`, `certainty_summary_to_dict` |
 | `store._artifact_sidecar` | file-backed durable explain carrier, capture-time retention metadata, and rule-trace TTL GC maintenance | `FileArtifactSidecar`, `GCResult`, `FileArtifactSidecar.gc_rule_trace` |
@@ -185,6 +187,10 @@ Adapter-specific rule projection is no longer public SDK rule syntax:
   - internal compiled `body_confidences` is only a temporary SDK/runtime bridge; public authoring and service payloads reject it
 - future `SemanticsProfile.rule_projection` owns the durable public
   rule-projection shape
+- Track 3 / B has introduced `kernel.core.semantics.SemanticsProfile` as
+  core scaffolding only. It validates profile shape and supports
+  inspection; no adapter imports or consumes it yet, and no profile-derived
+  values are written into assertion storage.
 
 Native `RuleRef` semantics and current boundary:
 
@@ -459,8 +465,9 @@ When integrating with `authoring/sdk`, distinguish between two different kinds o
 `condition_weights` is the special case in this boundary: it is retained
 as certainty/explain projection input and consumed by the certainty
 summary chain, but it remains outside `where` semantics and engine
-adapter rule syntax. Track 3 / B will move runtime configuration for
-this lane to `SemanticsProfile.certainty_projection`.
+adapter rule syntax. Track 3 / B has introduced the core profile
+scaffolding; future runtime configuration for this lane belongs in
+`SemanticsProfile.certainty_projection`.
 
 Under the current contract, declaration metadata does not participate in:
 

@@ -447,6 +447,10 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 - Public `Rule` / `Derivation` objects do not carry adapter-specific
   `engine_ext` parameters. Future `SemanticsProfile.rule_projection`
   owns engine-specific rule projection.
+- Track 3 / B exposes `kernel.core.semantics.SemanticsProfile` as a core
+  validation / inspection value object only. `evaluate(..., semantics=...)`
+  and `evaluate(..., semantics_profile=...)` are rejected in the SDK until
+  Track 3 / E defines the durable runtime call-site.
 - Public `Rule.condition_weights` remains available as
   certainty/explain projection input. It is not an engine adapter
   parameter, and future runtime configuration for this lane belongs in

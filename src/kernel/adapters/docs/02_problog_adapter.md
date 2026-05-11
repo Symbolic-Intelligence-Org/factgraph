@@ -88,6 +88,10 @@ Main flow of `evaluate_problog(...)`:
    - If both an internal `engine_ext` and legacy
      `body_confidences` are present and inconsistent, the bridge
      raises `ValueError`
+   - Track 3 / B provides core `SemanticsProfile` validation and
+     inspection scaffolding only. ProbLog does not consume
+     `SemanticsProfile` yet; Track 3 / C owns projection from
+     `SemanticsProfile.rule_projection.problog` into adapter internals.
 4. Assemble `rule_spec` (containing
    `where/head/head_vars/query_vars/engine_ext`)
 5. `export_problog(...)` produces a temporary `query.pl`
@@ -234,6 +238,10 @@ Semantic-delivery addendum:
   the SDK / runtime bridge, but public authoring and service payloads
   reject that key. The adapter / export itself consumes only the typed
   `engine_ext`
+- The durable public replacement is not active in this adapter yet:
+  Track 3 / B only validates / inspects `SemanticsProfile`; Track 3 / C
+  will decide how `SemanticsProfile.rule_projection.problog` normalizes
+  into branch probabilities.
 - The output program contains:
   - `edb_fact(...)` facts
   - `rule_body_i` branch rules

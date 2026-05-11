@@ -28,7 +28,11 @@ supported.
   It never enters the `Derivation` or the ledger. `mode="native"`
   rejects non-empty `engine_options`.
 - Future `SemanticsProfile.rule_projection` owns the durable public shape
-  for engine-specific rule projection.
+  for engine-specific rule projection. Track 3 / B has introduced the
+  core `kernel.core.semantics.SemanticsProfile` value object for
+  validation and inspection only; `evaluate(..., semantics=...)` and
+  `evaluate(..., semantics_profile=...)` are still rejected until the
+  runtime call-site is designed in Track 3 / E.
 
 ## 1. `vars(...)`
 

@@ -268,6 +268,10 @@ result = run_pyreason(
   rules with `compile_pyreason_rule(rule, engine_ext=PyReasonRuleExt(...))`
   and pass the resulting `(rule_text, name)` pair to `run_pyreason(...,
   rules=[...])`.
+- Track 3 / B provides core `SemanticsProfile` validation and inspection
+  scaffolding only. PyReason does not consume `SemanticsProfile` yet;
+  Track 3 / D owns `rule_projection` interval consumption and
+  `temporal_projection` valid-time-to-timestep mapping.
 - `compile_pyreason_rule(...)` currently supports only
   `PredAtom` + `LogicVar` + literals; `CompareExpr` / `NotExpr` /
   `RuleRefAtom` raise an explicit error
@@ -324,7 +328,8 @@ Execution sequence:
 2. `evaluate_store(...)` / `Store.evaluate_engine(...)` forwards
    `mode="pyreason"` and `engine_options` to the adapter. Internal
    compiled plans may still carry adapter-local `engine_ext` until
-   SemanticsProfile replaces that bridge.
+   SemanticsProfile replaces that bridge. Track 3 / B has only added the
+   core profile value object; runtime consumption remains deferred to D/E.
 3. `pyreason_engine_eval(...)`:
    - Materializes Ledger active facts into a `PyReasonSession`
      via `project_view_facts(...)`
