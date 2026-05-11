@@ -76,6 +76,21 @@ Assertions are **append-only**. Retracting an assertion creates a
 new "retraction" assertion that marks the original inactive; the
 original record is preserved for audit.
 
+Retraction also matters when reads aggregate assertion metadata. The
+read-time policy object is `ReadPolicy`, and its most important field
+is:
+
+```python
+ReadPolicy(respect_revocations=True)
+```
+
+When `respect_revocations=True` (the default), read-time confidence /
+display aggregation skips claims that have an active retraction. When
+`False`, aggregation may still consider retracted assertions. This does
+not physically delete or restore any assertion; it only controls whether
+the read-time policy respects revocation markers while resolving display
+metadata.
+
 ### Derivation (proof structure)
 
 A *derivation* in proof terms is the structured trace showing how a
@@ -99,7 +114,77 @@ The same proof structure powers `diagnose`, `recheck_proof_frame`,
 
 ---
 
-## 2. FactGraph as facade vs application as authority
+## 2. Views vs ReadPolicy
+
+The SDK has two deliberately separate concepts:
+
+- `fg.views` is for **named frozen assertion membership**.
+- `ReadPolicy` is for **read-time resolution / display policy**.
+
+They use different syntax because they answer different questions.
+
+```python
+# Named frozen assertion-id membership.
+review = fg.views.create("review_set", asrt_ids=[asrt_id])
+records = fg.assertions.by_ids(review.asrt_ids)
+
+# Read-time display / confidence resolution.
+rows, display_meta = fg.run(
+    rule,
+    policy=ReadPolicy(
+        respect_revocations=True,
+        confidence_strategy="max",
+        prefer_source=None,
+    ),
+    return_display_meta=True,
+)
+```
+
+### `fg.views`
+
+`fg.views` stores only `FrozenAssertionView` objects. A frozen view is a
+named set of concrete `asrt_id` strings captured at creation time. The
+membership does not grow automatically when new assertions are written.
+The view is useful when users need a stable review set, audit selection,
+or hand-curated assertion universe.
+
+There is no built-in `default` view. The name `"default"` is not
+reserved: if users create `fg.views.create("default", asrt_ids=[...])`,
+it is just another frozen assertion-id selection and has no special
+read-policy behavior.
+
+### `ReadPolicy`
+
+`ReadPolicy` is passed at the call site with `policy=...`. It is not
+stored in `fg.views` and has no named registry.
+
+```python
+policy = ReadPolicy(
+    respect_revocations=True,
+    confidence_strategy="max",
+    prefer_source=None,
+)
+
+rows = fg.read.find(User, policy=policy)
+rows, display_meta = fg.run(rule, policy=policy, return_display_meta=True)
+```
+
+The fields are:
+
+| Field | Meaning |
+|---|---|
+| `respect_revocations` | Whether read-time display/confidence aggregation skips actively retracted claims. Defaults to `True`. |
+| `confidence_strategy` | How confidence is resolved across matching assertion history rows: `"max"`, `"mean"`, `"median"`, or `"prefer_source"`. |
+| `prefer_source` | Required when `confidence_strategy="prefer_source"`; names the preferred source label. |
+
+`policy=None` means no policy is applied. For `fg.read.find(...)`, rows
+are returned without attached confidence metadata. For `fg.run(...)`,
+`return_display_meta=True` requires an explicit `ReadPolicy`, because
+display metadata cannot be produced without a policy.
+
+---
+
+## 3. FactGraph as facade vs application as authority
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -149,7 +234,7 @@ kernel.
 
 ---
 
-## 3. Frozen DTO boundary
+## 4. Frozen DTO boundary
 
 Some DTOs cross the SDK/application boundary as **frozen, public
 types**. Other internal types stay inside their layer.
@@ -189,7 +274,7 @@ SDK `Rule` objects; the SDK lowers them via `_compile_rule_input(...)`.
 
 ---
 
-## 4. Three stability tiers
+## 5. Three stability tiers
 
 Behaviors in the docs are labeled with one of:
 
@@ -204,7 +289,7 @@ renaming an exported name requires a major version bump.
 
 ---
 
-## 5. What the SDK does not do
+## 6. What the SDK does not do
 
 Some capabilities live outside the SDK on purpose. Reach them via
 direct import; see [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md).
@@ -248,7 +333,8 @@ prefers to add wrappers after seeing real usage patterns.
 | String DSL | `sdk.run("...")` / `sdk.evaluate("...")` are unsupported |
 | `find(...)` | No `temporal_view`; identity filters may be partial, including primary-only filters |
 | Assertion view surface | `.chosen` is removed; field assertion collections expose `active`, `history`, `at`, `version`; `AssertionRecordSet` also supports `where`, `at`, `version`, `by_id`, `one`, `first`, `all` |
-| Frozen assertion views | `fg.views` supports named frozen assertion-id selections; legacy `ViewSpec` remains projection-policy compatibility |
+| Frozen assertion views | `fg.views` supports named frozen assertion-id selections only; no built-in `default` view and no read-policy registry |
+| Read policy | `ReadPolicy` is passed with `policy=...`; `respect_revocations` controls whether display/confidence aggregation skips actively retracted claims |
 | `sdk.run(...)` dispatch | Rule and Query supported; Derivation is rejected with guidance to use `evaluate()` |
 | `sdk.evaluate(...)` params | `temporal_view` is removed and fails explicitly |
 | Rule `row_format` detail | `"tuple"` still works but emits `DeprecationWarning`; prefer `"dict"` |
