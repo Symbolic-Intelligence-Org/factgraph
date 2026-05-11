@@ -1,50 +1,75 @@
-# Read / Write Namespace、Snapshot 结构与 Assertion 精确选择
+# Read / Write、Snapshot、Assertion Selection 与 Frozen View 的统一理解
 
 Status: working / non-authoritative
-Authority: 研究笔记。当前实现真相仍以 `src/kernel/sdk/`、`src/kernel/application/`、`src/kernel/core/` 及 `src/kernel/sdk/docs/` 为准。本文用于沉淀用户文档解释方式，未来可反哺 SDK docs，但它本身不是 release 契约。
+Authority: 研究笔记。当前实现真相仍以 `src/kernel/sdk/`、`src/kernel/application/`、`src/kernel/core/` 和 `src/kernel/sdk/docs/` 为准。本文用于沉淀解释方式和后续蓝图输入，不是 release contract。
+Last updated: 2026-05-11
 
-## 1. 这份文档要解释什么
+Related implementation / docs:
 
-FactGraph 的 SDK 看起来像一个很普通的对象 API：
+- `src/kernel/sdk/facade.py`
+- `src/kernel/sdk/store.py`
+- `src/kernel/sdk/docs/00_user_guide.en.md`
+- `src/kernel/sdk/docs/01_concepts.en.md`
+- `src/kernel/sdk/docs/02_readwrite_and_ingest.en.md`
+- `src/kernel/sdk/docs/04_api_surface.en.md`
+- `docs/blueprints/archive/2026-05-10_assertion-selection-crud-ergonomics.md`
+- `docs/blueprints/archive/2026-05-11_frozen-assertion-view-model.md`
 
-```python
-ref = fg.read.ref(User, user_id="u-1", locale="en")
-fg.write.set(User.name, ref, "Alice")
+## 1. 核心心智模型
 
-snap = fg.read.get(User, user_id="u-1", locale="en")
-print(snap.name)
-```
-
-但它的底层不是“数据库行被覆盖”的模型，而是 append-only fact ledger：
-
-- `read` namespace 负责定位、观察、筛选、选择；
-- `write` namespace 负责追加新 assertion，或追加一个 revocation assertion；
-- `EntitySnapshot` 不是一个可变 ORM object，而是某个时间点读出来的只读事实视图；
-- `retract(asrt_id)` 撤销的是一条具体 assertion，不是“删除某个 entity 的某个值”。
-
-这意味着一个真实的撤销操作不应该写成：
-
-```python
-# 不存在这种 API，也不应该存在这种默认语义
-fg.write.retract(User.name, ref, value="Alice")
-```
-
-因为这会留下一个危险问题：如果同一个字段下有多条 `"Alice"` assertion，应该撤哪一条？全部撤销吗？第一条吗？最新一条吗？FactGraph 的选择是保持 write-side 精确：**用户先在 read-side 找到一条确定的 assertion，再把它的 `asrt_id` 交给 `write.retract(...)`。**
-
-本文要讲的就是这条链路：
+FactGraph 不是一个表格 CRUD 系统。它更接近一个 append-only fact ledger：
 
 ```text
-read.get / read.find
-  -> EntitySnapshot
-    -> FieldAssertions
-      -> AssertionRecordSet
-        -> AssertionRecord.asrt_id
-          -> write.retract(asrt_id)
+entity coordinate
+  -> field assertion
+    -> assertion identity (`asrt_id`)
+      -> value + metadata + revocation state
 ```
 
-## 2. FactGraph 的 CRUD 不是表格 CRUD
+用户在 SDK 里看到的是三层互相关联、但职责不同的视角：
 
-在传统 CRUD 想象里，一个 entity 可能像一行表：
+```text
+FactGraph / SDKStore
+├─ as entity collection
+│  ├─ fg.read.ref(...)
+│  ├─ fg.read.get(...)
+│  ├─ fg.read.find(...)
+│  └─ fg.write.set/add/edit/retract(...)
+│
+├─ as assertion-id view registry
+│  ├─ fg.views.create/update/delete/get/list(...)
+│  └─ FrozenAssertionView(asrt_ids=frozenset[str])
+│
+└─ as assertion readback surface
+   ├─ fg.assertions.by_id(asrt_id)
+   └─ fg.assertions.by_ids(asrt_ids)
+
+EntitySnapshot
+├─ scalar field view: snap.name
+├─ identity/ref metadata: snap.identity / snap.ref
+└─ field assertion collections:
+   ├─ snap.field("name")
+   └─ snap.assertions.name
+```
+
+这个模型里最重要的分工是：
+
+- `read` 负责定位 entity、观察 snapshot、选择 assertion；
+- `write` 负责追加 assertion 或撤销某个明确 assertion；
+- `views` 负责命名一组冻结的 `asrt_id` membership；
+- `assertions` 负责从 `asrt_id` 反查 assertion record；
+- `ViewSpec` 暂时保留为 legacy projection-policy compatibility，而不是 frozen view membership 本身。
+
+一句话版：
+
+```text
+read side 找到“哪一条 assertion”，write side 只撤销这个明确的 asrt_id；
+views side 保存“哪些 assertion ids 属于这个命名集合”。
+```
+
+## 2. 为什么 FactGraph 的 CRUD 不是表格 CRUD
+
+传统表格 CRUD 会把 entity 想象成一行：
 
 ```text
 User row
@@ -52,53 +77,48 @@ User row
   name = "Alice"
 ```
 
-更新名字就是改掉这一格，删除名字就是把这一格清空。
-
-FactGraph 的事实模型不同。一个 entity coordinate 下面挂的是一组 append-only assertions：
+FactGraph 的底层不是“覆盖这一行的某一列”，而是追加事实：
 
 ```text
 User(user_id="u-1", locale="en") -> idref_v1
 
 field: name
-  asrt-001: value="Alice", source="seed", active
-  asrt-002: value="Alice Liddell", source="hr", active
-  asrt-003: revokes asrt-001, source="manual-fix", active
+  assertion A: value="Alice", source="seed", active
+  assertion B: value="Alice Liddell", source="hr", active
+  assertion C: revokes assertion A, source="manual-fix", active
 ```
 
-所以：
+因此：
 
-- `set(...)` / `add(...)` 不是原地覆盖底层 ledger row，而是追加一条新的 assertion；
-- `retract(...)` 不是物理删除，而是追加一条撤销记录；
-- 原始 assertion 仍然可以在 history / audit 里被看见；
-- 当前视图如何选择一个 scalar value，是 read-side view policy 的问题，不等同于底层只有一个值。
+- `set(...)` / `add(...)` 追加一条新的 field assertion，并返回这条 assertion 的 `asrt_id`；
+- `retract(asrt_id)` 追加一条 revocation assertion，而不是物理删除原 assertion；
+- 原 assertion 仍可在 history / audit 中被看到；
+- scalar field 的“当前值”是 projection / read model，不是底层只有一个值。
 
-这也是为什么 `asrt_id` 是一等重要对象。它不是 entity id，而是某条事实 assertion 的 id。一个 entity 可以有很多字段，一个字段可以有很多 assertion，每条 assertion 都有自己的 `asrt_id`。
+这种做法更啰嗦，但它是专业化系统需要的取舍：每次写入、冲突、撤销和来源都可追踪。
 
-## 3. `read` namespace：定位、观察、筛选
-
-`read` namespace 的核心职责是把用户从 schema-level 概念带到可观察的 snapshot。
+## 3. `read` namespace：entity 层的定位与读取
 
 ### 3.1 `fg.read.ref(...)`
 
-`ref(...)` 生成一个 canonical entity ref：
+`ref(...)` 从 entity identity coordinate 生成 opaque `idref_v1` entity ref：
 
 ```python
 ref = fg.read.ref(User, user_id="u-1", locale="en")
 ```
 
-这个 `ref` 是 opaque token。用户可以把它交给 `write.set(...)` / `write.add(...)`，但不应该解析它的字符串结构。
+这个 ref 是 write-side 的 entity target：
 
-从抽象层次看：
-
-```text
-Identity coordinate
-  -> idref_v1 ref
-    -> write-side target for field assertions
+```python
+name_id = fg.write.set(User.name, ref, "Alice")
+tag_id = fg.write.add(User.tags, ref, "engineer")
 ```
+
+不要解析 ref 的字符串结构。它是 SDK / substrate 之间的 opaque coordinate token。
 
 ### 3.2 `fg.read.get(...)`
 
-`get(...)` 读取一个完整 coordinate：
+`get(...)` 读取一个完整 entity coordinate：
 
 ```python
 snap = fg.read.get(User, user_id="u-1", locale="en")
@@ -110,22 +130,24 @@ snap = fg.read.get(User, user_id="u-1", locale="en")
 EntitySnapshot | None
 ```
 
-它适合“我知道我要哪个具体 coordinate”的场景。比如 `User(user_id="u-1", locale="en")` 和 `User(user_id="u-1", locale="zh")` 是两个不同 coordinate，`get(...)` 应该明确指向其中一个。
+它适合“我知道完整 coordinate”的场景。`User(user_id="u-1", locale="en")` 和 `User(user_id="u-1", locale="zh")` 是不同 coordinate。
+
+当前 `get(...)` 不接受 `view=`。
 
 ### 3.3 `fg.read.find(...)`
 
-`find(...)` 是筛选多个 snapshots：
+`find(...)` 返回多个 snapshots：
 
 ```python
 rows = fg.read.find(User, user_id="u-1")
 ```
 
-它可以用于 primary anchor 级读取，也可以组合 field filters：
+它支持 partial identity filters 和 field filters 的 AND 组合：
 
 ```python
-engineers = fg.read.find(User, tags="engineer")
-alice_domains = fg.read.find(User, user_id="u-1")
-alice_engineers = fg.read.find(User, user_id="u-1", tags="engineer")
+fg.read.find(User, user_id="u-1")
+fg.read.find(User, tags="engineer")
+fg.read.find(User, user_id="u-1", tags="engineer")
 ```
 
 返回：
@@ -134,13 +156,16 @@ alice_engineers = fg.read.find(User, user_id="u-1", tags="engineer")
 list[EntitySnapshot]
 ```
 
-这里要注意：`find(...)` 返回的是多个 complete snapshots，而不是一个“logical entity aggregate”对象。每个 `EntitySnapshot` 仍然对应一个 full coordinate，并且 snapshot 里的 assertion records 仍然属于那个 coordinate。
+每个 `EntitySnapshot` 仍对应一个完整 coordinate。`find(...)` 不返回 logical entity aggregate。
 
-## 4. `write` namespace：追加 assertion，或撤销 assertion
+`find(..., view=...)` 当前有两种语义边界：
 
-`write` namespace 的核心职责是产生 ledger 变化。
+- legacy `ViewSpec` 或 legacy view name：保留原有 projection-policy compatibility；
+- `FrozenAssertionView` 或 frozen view name：当前 slice 明确拒绝，并指向 `fg.views.get(name).asrt_ids` + `fg.assertions.by_ids(...)` 的 record-level readback 路径。
 
-### 4.1 `fg.write.set(...)`
+## 4. `write` namespace：追加 assertion 与撤销 assertion
+
+### 4.1 `set(...)` 与 `add(...)` 返回 `asrt_id`
 
 `set(...)` 用于 single-cardinality field：
 
@@ -153,16 +178,6 @@ name_asrt_id = fg.write.set(
 )
 ```
 
-返回值是新写入 assertion 的 `asrt_id`：
-
-```text
-name_asrt_id -> "asrt-..."
-```
-
-用户应该把这个返回值理解成“这次写入的事实 id”。如果之后要精确撤销这次写入，最直接的方式就是保存它。
-
-### 4.2 `fg.write.add(...)`
-
 `add(...)` 用于 multi-cardinality field：
 
 ```python
@@ -174,11 +189,11 @@ tag_asrt_id = fg.write.add(
 )
 ```
 
-它同样返回 persisted `asrt_id`。
+两个方法都返回 persisted `asrt_id`。如果业务流程知道之后可能撤销这次写入，保存这个 id 是最直接、最可靠的方式。
 
-### 4.3 `fg.write.edit(...)`
+### 4.2 `edit(...)`
 
-`edit(...)` 是编辑器风格的写入入口。它适合把多个 field 操作组织成一个更接近对象编辑的流程：
+`edit(...)` 是对象编辑风格的 write facade：
 
 ```python
 with fg.write.edit(User, user_id="u-1", locale="en") as user:
@@ -186,14 +201,17 @@ with fg.write.edit(User, user_id="u-1", locale="en") as user:
     user.tags.add("engineer", meta={"source": "profile"})
 ```
 
-在这个模型里，读写边界仍然没有改变：editor 负责产生写操作；如果你要撤销历史里的某一条 assertion，仍然需要一个明确的 `asrt_id`。
+它仍然在底层产生 assertions。它不是 ORM dirty object，也不改变 `retract(asrt_id)` 的精确撤销原则。
 
-### 4.4 `fg.write.retract(...)`
+### 4.3 `retract(asrt_id)`
 
-`retract(...)` 的签名语义是：
+`retract(...)` 接收的是 assertion id：
 
 ```python
-revoker_asrt_id = fg.write.retract(target_asrt_id, meta={"trace_id": "fix-001"})
+revoker_asrt_id = fg.write.retract(
+    target_asrt_id,
+    meta={"source": "manual-fix", "trace_id": "fix-001"},
+)
 ```
 
 这里有两个 id：
@@ -203,21 +221,28 @@ target_asrt_id   -> 被撤销的原 assertion
 revoker_asrt_id  -> 这次撤销动作本身产生的新 assertion id
 ```
 
-如果目标已经被撤销，当前实现可能返回 `None`，表示没有再产生新的撤销 assertion。
+如果目标已经被撤销，当前实现可能返回 `None`，表示没有再产生新的 revocation assertion。
 
-重要的是：`retract(...)` 接收的是 `asrt_id`，不是 entity ref，也不是 `(field, value)` selector。
+错误心智模型：
 
 ```python
 fg.write.retract(ref)          # 错：ref 是 entity coordinate，不是 assertion id
 fg.write.retract("Alice")      # 错：value 不是 assertion id
-fg.write.retract(target.asrt_id)  # 对：明确撤销一条 assertion
+fg.write.retract(User.name, ref, value="Alice")  # 不存在，也不应作为默认语义
 ```
+
+推荐心智模型：
+
+```python
+target = snap.field("name").history.where(value="Alice", source="seed").one()
+fg.write.retract(target.asrt_id)
+```
+
+这就是 read/write 分离的“are you sure”机制：write-side 不猜测用户想删哪条，read-side 必须先唯一定位目标 assertion。
 
 ## 5. `EntitySnapshot` 的完整层级
 
-`EntitySnapshot` 是 read-side 返回的只读视图。它不是一条 assertion，而是某个 entity coordinate 下的一组 field views 和 assertion histories。
-
-可以用这张结构图理解：
+`EntitySnapshot` 是 read model。它把底层 ledger assertions 按 entity coordinate 和 schema field 组织成用户可读结构。
 
 ```text
 EntitySnapshot
@@ -232,14 +257,14 @@ EntitySnapshot
 │  └─ snap.ref
 │
 └─ assertion access
-   ├─ snap.field("name")              -> FieldAssertions
-   └─ snap.assertions.name            -> FieldAssertions
+   ├─ snap.field("name")       -> FieldAssertions
+   └─ snap.assertions.name     -> FieldAssertions
 
 FieldAssertions
-├─ .active                            -> AssertionRecordSet
-├─ .history                           -> AssertionRecordSet
-├─ .at("2026-05-01T00:00:00Z")        -> AssertionRecordSet
-└─ .version(3)                        -> AssertionRecordSet
+├─ .active                     -> AssertionRecordSet
+├─ .history                    -> AssertionRecordSet
+├─ .at(t)                      -> AssertionRecordSet
+└─ .version(v)                 -> AssertionRecordSet
 
 AssertionRecordSet
 ├─ tuple-compatible behavior
@@ -247,20 +272,24 @@ AssertionRecordSet
 │  ├─ records[0]
 │  ├─ records[:2]
 │  ├─ for record in records
-│  └─ records + other_records
+│  ├─ records + other_records
+│  └─ records * 2
 │
 └─ selection helpers
    ├─ .where(...)
+   ├─ .at(t)
+   ├─ .version(v)
+   ├─ .by_id(asrt_id)
    ├─ .one()
-   ├─ .all()
-   └─ .first()
+   ├─ .first()
+   └─ .all()
 
 AssertionRecord
 ├─ asrt_id
 ├─ value
 ├─ is_active
 ├─ is_revoked
-└─ meta                              -> AssertionMeta
+└─ meta                       -> AssertionMeta
 
 AssertionMeta
 ├─ source
@@ -286,128 +315,24 @@ AssertionMeta
 snap.name
 ```
 
-它适合“展示当前值”。但它不适合做精确撤销，因为 scalar view 不告诉你“这个值来自哪一条 assertion”。
+它适合展示当前值，但不适合撤销，因为它不告诉你这个值来自哪条 assertion。
 
-### 5.2 Assertion view
+### 5.2 Field assertion view
 
-需要精确选择 assertion 时，进入 assertion view：
+精确选择 assertion 时进入 field-level assertion view：
 
 ```python
 snap.field("name")
 snap.assertions.name
 ```
 
-两者等价。前者适合动态 field name，后者适合静态属性访问。
+两者等价。前者适合动态 field name；后者适合静态属性访问。
 
-```python
-name_assertions = snap.field("name")
-same = snap.assertions.name
-```
+## 6. `AssertionRecordSet`：统一的 assertion 集合操作
 
-### 5.3 `.active` / `.history` / `.at(...)` / `.version(...)`
+`AssertionRecordSet` 是 tuple-compatible returned object。它不是 top-level `kernel.sdk` export；用户通常不需要 import 它。
 
-`FieldAssertions` 有四个主要读入口：
-
-```python
-snap.field("name").active
-snap.field("name").history
-snap.field("name").at("2026-05-01T00:00:00Z")
-snap.field("name").version(3)
-```
-
-它们都返回 `AssertionRecordSet`。
-
-语义上：
-
-- `.active`：当前未撤销的 assertions；
-- `.history`：完整历史，包括 active 和 revoked；
-- `.at(t)`：按 business-time 可见性筛选，命中 `meta.raw["valid_from"]` / `meta.raw["valid_to"]`；
-- `.version(v)`：按 assertion metadata 中的 `meta.raw["version"]` 选择。
-
-`.at(t)` 不看 `ingested_at`。`ingested_at` 是系统写入时间，也就是这条 assertion 何时进入 ledger；`valid_from` / `valid_to` 是业务有效时间，也就是这条 fact 在业务语义上从什么时候到什么时候有效。当前实现使用的是半开区间：
-
-```text
-valid_from <= t and (valid_to is missing or valid_to > t)
-```
-
-如果一条 assertion 没有 `valid_from`，它不会被 `.at(t)` 命中。`valid_to == t` 也不会命中，因为右边界是开区间。
-
-为什么 `.at(...)` 和 `.version(...)` 是方法，而不是提前挂好的四个 tuple？
-
-因为它们需要参数。`active` 和 `history` 是已经确定的集合；`at(t)` 和 `version(v)` 是“基于某个输入做一次筛选”。所以合理结构是：
-
-```text
-active/history  -> property
-at/version      -> method returning AssertionRecordSet
-```
-
-### 5.4 这不是 whole-graph view
-
-这里的 `.active`、`.history`、`.at(t)`、`.version(v)` 都挂在一个 `FieldAssertions` 上：
-
-```python
-snap.field("name").active
-snap.field("name").history
-snap.field("name").at("2026-05-01T00:00:00Z")
-snap.field("name").version(3)
-```
-
-也就是说，它们是在问：
-
-```text
-这个 snapshot 的这个 field 下，哪些 assertion 处于 active/history/某个业务时间点/某个 version？
-```
-
-它们不是 graph-level API。当前没有：
-
-```python
-fg.read.active(...)
-fg.read.at("2026-05-01T00:00:00Z")
-fg.view.at("2026-05-01T00:00:00Z")
-```
-
-`ViewSpec` 也不是这个含义。当前 `ViewSpec` 主要描述 legacy projection policy，例如是否只看 active assertions、按 `confidence` 选择、或偏好某个 `source`。它不能表达 “整个 graph 在业务时间点 t 的 temporal snapshot”。
-
-新的 frozen assertion view model 把 `fg.views` 的长期语义对齐为 “named frozen assertion-id selection”：一个 view 名字对应一组创建时冻结的 `asrt_id`。但这个 first slice 仍然不把 frozen view 接入 snapshot projection 或 rule/runtime projection。也就是说：
-
-```python
-view = fg.views.get("review_set")      # FrozenAssertionView
-records = fg.assertions.by_ids(view.asrt_ids)
-```
-
-这是 record-level readback。它不是：
-
-```python
-fg.read.find(User, view="review_set")  # frozen view 目前会被拒绝
-fg.run(rule, view="review_set")        # frozen view 目前会被拒绝
-```
-
-所以当前能力分层是：
-
-```text
-ViewSpec
-  -> legacy active/conflict projection policy compatibility
-  -> not a business-time graph snapshot
-
-FrozenAssertionView
-  -> named frozen assertion-id membership
-  -> read back via fg.assertions.by_ids(...)
-  -> not snapshot/rule projection in the current slice
-
-FieldAssertions.at(t)
-  -> field-level assertion filter
-  -> uses meta.raw["valid_from"] / meta.raw["valid_to"]
-```
-
-如果未来需要 whole-graph point-in-time view，应该作为单独能力设计，而不是把 `FieldAssertions.at(t)` 误认为已经提供了 graph-level temporal view。
-
-## 6. `AssertionRecordSet` 语法全集
-
-`AssertionRecordSet` 是 tuple-compatible returned object。它不是新的 top-level SDK export；用户通常不需要 import 它。你只会从 snapshot assertion paths 上拿到它。
-
-### 6.1 它像 tuple 一样工作
-
-现有 tuple 习惯仍然成立：
+### 6.1 像 tuple 一样工作
 
 ```python
 records = snap.field("tags").active
@@ -420,14 +345,13 @@ for record in records:
     print(record.value)
 ```
 
-切片、拼接和乘法仍然保留 helper 类型，所以可以继续链式筛选：
+切片、拼接、乘法保留 helper 类型，所以后续还能继续 `.where(...)`：
 
 ```python
-subset = records[:5]
-target = subset.where(source="seed").where(value="engineer").one()
+target = records[:5].where(source="seed").where(value="engineer").one()
 ```
 
-如果你想拿回普通 tuple，使用：
+如果需要普通 tuple：
 
 ```python
 plain = records.all()
@@ -435,14 +359,14 @@ plain = records.all()
 
 ### 6.2 `.where(...)`
 
-`.where(...)` 做 read-side assertion selection：
+`.where(...)` 根据 value / metadata 筛选当前 record set：
 
 ```python
 records.where(value="Alice")
 records.where(source="seed")
 records.where(trace_id="import-001")
 records.where(confidence=0.95)
-records.where(version=3)
+records.where(version="v1")
 records.where(meta={"batch": "b1"})
 ```
 
@@ -457,84 +381,319 @@ target = (
 )
 ```
 
-这表示：同时满足 value、source、trace_id 的 assertion 必须正好一条。
+`version=...` 是 `record.meta.raw["version"]` 的便利筛选。更一般的 raw metadata 用 `meta={...}`。
 
-`version=...` 是 `AssertionMeta.raw["version"]` 的便利筛选。`valid_from` / `valid_to` 也在 `AssertionMeta.raw` 中，但它们不通过 `.where(valid_from=...)` 暴露为快捷参数；业务时间切片应该使用 `.at(t)`。更一般的 metadata 用 `meta={...}`：
-
-```python
-snap.field("name").history.where(meta={"version": 3, "batch": "b1"})
-```
-
-### 6.3 显式 `None` 和省略条件不同
-
-这是一个容易误解的点：
+显式 `None` 和省略条件不同：
 
 ```python
-records.where()
+records.where()             # 不按 source 过滤
+records.where(source=None)  # 筛选 record.meta.source is None
 ```
 
-表示不按这些维度过滤。
+### 6.3 `.active` / `.history` 是 base set
+
+`active` 和 `history` 当前仍挂在 `FieldAssertions` 上：
 
 ```python
-records.where(source=None)
+snap.field("name").active
+snap.field("name").history
 ```
 
-表示筛选 `record.meta.source is None` 的 records。也就是说，显式传入 `None` 是一个真实过滤条件；不传才是不参与过滤。
+它们的语义是选择 base set：
 
-### 6.4 `.one()`
+- `.active`：当前未撤销的 assertions；
+- `.history`：完整历史，包括 active 和 revoked。
 
-`.one()` 是最适合 destructive / mutation 前使用的选择器：
+它们不是 `AssertionRecordSet` 上的通用 filter。也就是说，当前没有：
+
+```python
+snap.field("name").history.active
+```
+
+这种写法不成立，因为 `history` 已经是一个 record set。
+
+### 6.4 `.at(t)`：业务有效时间，不是 ingest time
+
+`.at(t)` 过滤当前 record set 中在业务时间点 `t` 有效的 assertions：
+
+```python
+visible = snap.field("name").history.at("2026-05-01T00:00:00Z")
+```
+
+它命中的是：
+
+```text
+record.meta.raw["valid_from"]
+record.meta.raw["valid_to"]
+```
+
+不是：
+
+```text
+record.meta.ingested_at
+```
+
+`ingested_at` 是 assertion 进入 ledger 的系统时间。`valid_from` / `valid_to` 是业务有效时间。
+
+当前语义是半开区间：
+
+```text
+valid_from <= t and (valid_to is missing or valid_to > t)
+```
+
+因此：
+
+- 缺少 `valid_from` 的 record 不被 `.at(t)` 命中；
+- `valid_to == t` 不命中；
+- `valid_to` 缺失表示右侧开放。
+
+这回答了一个容易混淆的问题：`.at("2026-05-01T00:00:00Z")` 是问“这个时间点上哪些 assertions 有效”，不是问“这个时间区间内是否曾经有效”。
+
+如果要回答区间问题，例如“这个 assertion 是否在 `[start, end)` 期间任意时间有效”，当前没有专门的 high-level helper。可以先用 `.history` 拿 record，再按 `valid_from` / `valid_to` 自己做 interval overlap；如果这个需求变常见，应另开蓝图设计 `.overlaps(start, end)` 或类似 helper。
+
+### 6.5 `FieldAssertions.at(t)` 是 compatibility shortcut
+
+当前有两种写法：
+
+```python
+snap.field("name").at("2026-05-01T00:00:00Z")
+snap.field("name").active.at("2026-05-01T00:00:00Z")
+```
+
+它们等价。`FieldAssertions.at(t)` 是兼容快捷方式，定义为 active base set 上的 `.at(t)`。
+
+如果你想在完整历史中按业务时间筛选，应显式写：
+
+```python
+snap.field("name").history.at("2026-05-01T00:00:00Z")
+```
+
+### 6.6 `.version(v)`
+
+`.version(v)` 按 `record.meta.raw["version"] == v` 筛选当前 record set：
+
+```python
+v1_records = snap.field("name").history.version("v1")
+```
+
+`FieldAssertions.version(v)` 同样是 compatibility shortcut，等价于：
+
+```python
+snap.field("name").active.version("v1")
+```
+
+### 6.7 `.by_id(asrt_id)`
+
+`.by_id(asrt_id)` 在当前 record set 内按 assertion id 精确筛选：
+
+```python
+target = snap.field("name").history.by_id(name_asrt_id).one()
+```
+
+它返回的仍是 `AssertionRecordSet`，所以可以继续 `.one()`、`.first()` 或 `.all()`。
+
+### 6.8 `.one()` / `.first()` / `.all()`
+
+`.one()` 要求正好一条：
 
 ```python
 target = records.where(value="Alice", source="seed").one()
 ```
 
-它要求当前集合里正好有一条 record：
+- 0 条：抛 SDK error；
+- 多条：抛 SDK error；
+- 1 条：返回 `AssertionRecord`。
 
-- 0 条：抛出 SDK error；
-- 2 条或更多：抛出 SDK error；
-- 1 条：返回那条 `AssertionRecord`。
+`.first()` 返回第一条，空集合返回 `None`。它适合 preview / browse，不适合 destructive mutation。
 
-这就是 `retract` 前的 “are you sure” 机制。不是靠 UI 弹窗确认，而是靠数据选择语义确认：**你给出的筛选条件必须唯一定位一条 assertion。**
+`.all()` 返回普通 tuple。
 
-### 6.5 `.first()`
+## 7. `fg.views`：从 projection policy 走向 frozen assertion view
 
-`.first()` 返回第一条，空集合返回 `None`：
+这部分是 2026-05-11 frozen assertion view model 的核心更新。
 
-```python
-preview = records.where(source="seed").first()
-```
+### 7.1 长期概念：View 是 named frozen assertion-id selection
 
-它适合 UI preview、debug、非破坏性浏览。不建议用它来驱动 `retract`：
-
-```python
-# 不推荐：first() 没有 exactly-one 保护
-target = records.where(value="Alice").first()
-if target is not None:
-    fg.write.retract(target.asrt_id)
-```
-
-如果你要撤销，优先用 `.one()`。
-
-### 6.6 `.all()`
-
-`.all()` 返回普通 tuple：
-
-```python
-all_seed_records = records.where(source="seed").all()
-```
-
-它适合传给只接受 plain tuple 的旧工具，或明确不想继续使用 helper 方法的场景。
-
-## 7. 专业 retract 模式
-
-推荐模式是四步：
+长期概念上，FactGraph view 是：
 
 ```text
-1. read.get / read.find 取得 snapshot
-2. 进入某个 field 的 assertion history / active set
-3. 用 where(...).one() 精确选择一条 assertion
-4. 把 target.asrt_id 交给 write.retract(...)
+name -> frozen set of asrt_id strings
+```
+
+也就是：
+
+```python
+fg.views.create("review_set", asrt_ids=[name_asrt_id, tag_asrt_id])
+view = fg.views.get("review_set")
+
+view.asrt_ids  # frozenset[str]
+```
+
+`FrozenAssertionView` 的 membership 是创建或 update 时冻结的 `frozenset[str]`：
+
+- 去重；
+- 不保留顺序作为 public API；
+- 允许空集合；
+- 默认不做 ledger existence check；
+- revoked assertions 仍然可以是 valid members；
+- `FrozenAssertionView` 是 returned-object surface，不在 `kernel.sdk.__all__` 中。
+
+### 7.2 `asrts=[...]` 是便利输入，membership 仍是 id
+
+也可以从 objects 创建：
+
+```python
+target = snap.field("name").history.where(value="Alice", source="seed").one()
+fg.views.create("review_set", asrts=[target])
+```
+
+任何对象只要暴露 `.asrt_id` 即可作为 convenience input。真正进入 view membership 的只有 `asrt_id`，不是 value、meta、active state 或对象 payload。
+
+### 7.3 `update(...)` 是整体替换
+
+```python
+fg.views.update("review_set", asrt_ids=[other_asrt_id])
+```
+
+当前 first slice 没有 `patch(...)` / `diff(...)`：
+
+```python
+fg.views.patch(...)  # 不支持
+fg.views.diff(...)   # 不支持
+```
+
+如果未来需要多人 review workflow 或增量更新 workflow，可以单独设计 patch/diff。
+
+### 7.4 Legacy `ViewSpec` 仍然保留
+
+当前 SDK 仍支持 legacy projection-policy view：
+
+```python
+from kernel.core.store.types import ViewSpec
+
+spec = ViewSpec(active=True, confidence_strategy="max")
+
+fg.views.create("preferred_names", spec)
+fg.views.update("preferred_names", spec)
+fg.views.get("preferred_names")  # ViewSpec
+fg.views.list()                  # dict[str, ViewSpec | FrozenAssertionView]
+```
+
+这是 compatibility surface。`ViewSpec` 的长期命名可能更接近 `ProjectionSpec`，因为它描述的是冲突/活跃 projection policy，而不是 assertion universe membership。但当前不会移除或重命名它。
+
+因此现在 `fg.views` registry 是混合读回：
+
+```text
+legacy entry          -> ViewSpec
+frozen assertion view -> FrozenAssertionView
+```
+
+## 8. `fg.assertions`：从 frozen view 反查 records
+
+`FrozenAssertionView` 只保存 `asrt_id` membership。要看具体 records，走 `fg.assertions`：
+
+```python
+view = fg.views.get("review_set")
+records = fg.assertions.by_ids(view.asrt_ids)
+```
+
+也可以单条查：
+
+```python
+record = fg.assertions.by_id(name_asrt_id)
+if record is not None:
+    print(record.value, record.meta.source)
+```
+
+当前 `fg.assertions` 是 top-level read-only assertion namespace，只提供 by-id lookup：
+
+```text
+fg.assertions.by_id(asrt_id)       -> AssertionRecord | None
+fg.assertions.by_ids(asrt_ids)     -> AssertionRecordSet
+```
+
+它不提供 graph-wide enumeration：
+
+```python
+fg.assertions.active      # 不支持
+fg.assertions.history     # 不支持
+fg.assertions.where(...)  # 不支持
+fg.assertions.at(...)     # 不支持
+fg.assertions.version(...)# 不支持
+```
+
+这是刻意的第一刀：先闭合 frozen view readback 链路，不把 SDK 变成 graph-wide assertion query language。
+
+`by_ids(...)` 接受任意 `Iterable[str]`，所以可以直接传 `FrozenAssertionView.asrt_ids`。未知 id 默认跳过；当前没有 `strict=` 参数。
+
+返回 records 使用现有 `AssertionRecord` shape，不额外增加 `entity_type`、`field_name`、`pred_id`、`ref` 或 identity context。更丰富的 graph assertion record 是后续蓝图问题。
+
+## 9. Frozen view 不等于 snapshot/rule projection
+
+这是当前最容易误读的边界。
+
+Frozen assertion view 是 named membership：
+
+```text
+review_set -> frozenset({asrt_id1, asrt_id2, ...})
+```
+
+它当前不会自动变成：
+
+```text
+“只用这些 assertions 投影 EntitySnapshot”
+“只用这些 assertions 运行 rule”
+“整个 graph 的 temporal / active view”
+```
+
+当前行为：
+
+```python
+view = fg.views.get("review_set")
+records = fg.assertions.by_ids(view.asrt_ids)  # 支持
+```
+
+但：
+
+```python
+fg.read.find(User, view="review_set")  # frozen view 当前拒绝
+fg.run(rule, view="review_set", return_display_meta=True)  # frozen view 当前拒绝
+fg.evaluate(..., view="review_set")  # view 参数一直拒绝
+```
+
+legacy `ViewSpec` 路径仍保留：
+
+```python
+fg.read.find(User, view="preferred_names")  # legacy ViewSpec name
+fg.run(rule, view="preferred_names", return_display_meta=True)
+```
+
+换句话说：
+
+```text
+FrozenAssertionView
+  -> record-level readback
+  -> not snapshot projection in this slice
+  -> not rule/runtime assertion-universe scoping in this slice
+
+ViewSpec
+  -> legacy projection-policy compatibility
+  -> not frozen membership
+```
+
+这个边界避免把 membership 和 projection 混在一起。未来如果要支持 view-scoped reads 或 rule/runtime integration，应单独开蓝图，因为那会牵涉 entity visibility、field scalar projection、history exposure 和 runtime fact universe。
+
+## 10. 专业 retract 模式
+
+推荐流程：
+
+```text
+read.get / read.find
+  -> EntitySnapshot
+    -> field assertion set
+      -> where(...).one()
+        -> target.asrt_id
+          -> write.retract(target.asrt_id)
 ```
 
 完整例子：
@@ -559,126 +718,47 @@ revoker_asrt_id = fg.write.retract(
 
 这段代码的专业性在于：
 
-- 它没有猜测 assertion id；
-- 它没有靠 `records[0]` 假设顺序；
-- 它没有把 value 当作唯一身份；
-- 它要求筛选条件唯一定位一条 assertion；
-- 它把 selection 放在 read-side，把 mutation 放在 write-side。
+- 没有 magic assertion id；
+- 没有靠 `records[0]` 假设顺序；
+- 没有把 value 当作唯一身份；
+- 筛选条件必须唯一定位一条 assertion；
+- selection 在 read-side，mutation 在 write-side。
 
-## 8. 常见场景
-
-### 8.1 写入后立即保存 `asrt_id`
-
-最直接的方式是在写入时保存返回值：
+如果你在写入时已经保存了 `asrt_id`，可以直接撤销：
 
 ```python
-name_asrt_id = fg.write.set(
-    User.name,
-    ref,
-    "Alice",
-    meta={"source": "seed", "trace_id": "import-001"},
-)
+name_asrt_id = fg.write.set(User.name, ref, "Alice", meta={"source": "seed"})
+fg.write.retract(name_asrt_id)
 ```
 
-如果你的业务流程知道“后续可能撤销这次写入”，保存 `name_asrt_id` 是最干净的。
-
-### 8.2 事后从 history 找回 `asrt_id`
-
-如果写入时没有保存 id，可以从 snapshot history 找：
+如果你从 frozen view 做 review：
 
 ```python
-snap = fg.read.get(User, user_id="u-1", locale="en")
+view = fg.views.get("review_set")
+records = fg.assertions.by_ids(view.asrt_ids)
 
-target = (
-    snap.assertions.name
-    .history
-    .where(value="Alice", source="seed")
-    .one()
-)
-
+target = records.where(value="Alice", source="seed").one()
 fg.write.retract(target.asrt_id)
 ```
 
-### 8.3 用 metadata 缩小选择
+## 11. 不推荐的写法
 
-如果 value 不唯一，就加 metadata：
-
-```python
-target = (
-    snap.field("tags")
-    .history
-    .where(
-        value="engineer",
-        source="profile-import",
-        trace_id="run-2026-05-11",
-        meta={"batch": "b7"},
-    )
-    .one()
-)
-```
-
-这比 `records[0]` 更专业，因为它把“为什么是这一条”的业务依据写进代码。
-
-### 8.4 `.one()` 抛错时该怎么办
-
-`.one()` 抛错通常是好事：它阻止你在不确定时执行 mutation。
-
-如果是 0 条：
-
-- 检查 value 是否写错；
-- 检查你查的是 `.active` 还是 `.history`；
-- 检查 `source` / `trace_id` / `meta` 是否过窄；
-- 检查 snapshot coordinate 是否正确。
-
-如果是多条：
-
-- 增加 `source`、`trace_id`、`confidence`、`version` 或 `meta` 条件；
-- 或把结果展示给人工选择；
-- 不要改用 `records[0]` 绕过问题。
-
-### 8.5 `read.find(...)` 与 retract
-
-如果你只有 primary anchor，可以先用 `find(...)` 找到多个 coordinate：
-
-```python
-snaps = fg.read.find(User, user_id="u-1")
-```
-
-然后逐个 snapshot 做 assertion selection：
-
-```python
-for snap in snaps:
-    target = snap.field("tags").active.where(value="engineer").first()
-    if target is not None:
-        print(snap.identity, target.asrt_id)
-```
-
-注意：这里使用 `.first()` 只是在 preview。真正 retract 前应该让用户或业务规则选定唯一 coordinate，并在那个 coordinate 内使用 `.one()`：
-
-```python
-snap = fg.read.get(User, user_id="u-1", locale="en")
-target = snap.field("tags").active.where(value="engineer", source="profile").one()
-fg.write.retract(target.asrt_id)
-```
-
-## 9. 不推荐的写法
-
-### 9.1 Magic assertion id
+### 11.1 Magic assertion id
 
 ```python
 fg.write.retract("asrt-abc-123")
 ```
 
-除非这个 id 来自真实写入返回值或 read-side `AssertionRecord.asrt_id`，否则这只是一个 magic string。文档和 demo 不应该教这种模式。
+除非这个 id 来自真实写入返回值、`AssertionRecord.asrt_id` 或可信导入，否则它只是 magic string。文档和 demo 不应把它作为正常路径。
 
-### 9.2 `records[0]` 驱动撤销
+### 11.2 `records[0]` 驱动撤销
 
 ```python
 records = snap.field("name").history.where(value="Alice")
 fg.write.retract(records[0].asrt_id)
 ```
 
-这段代码的问题不是“不能运行”，而是它没有说明为什么第 0 条就是正确目标。顺序不是业务确认机制。
+这段代码的问题不是不能运行，而是没有解释为什么第 0 条就是正确目标。顺序不是业务确认机制。
 
 更好的写法：
 
@@ -692,20 +772,28 @@ target = (
 fg.write.retract(target.asrt_id)
 ```
 
-### 9.3 按 value 直接删除
+### 11.3 按 value 直接删除
 
 ```python
-# 不存在，也不推荐设计成默认语义
 fg.write.retract(User.name, ref, value="Alice")
 ```
 
-这会把“选择哪一条 assertion”的责任塞进 write-side。FactGraph 当前保持更清楚的分工：read-side 选择，write-side 按 id 撤销。
+当前没有这种 API，也不建议作为默认语义。它会把“选择哪一条 assertion”的责任塞进 write-side，容易不小心撤销多条或撤错一条。
 
-## 10. Snapshot 与底层 audit 数据的关系
+## 12. 底层 ledger、snapshot 与 view 的关系
 
-底层 ledger / audit 数据可以看成更接近表格形态：每条 assertion 都有 id、predicate、entity ref、value、metadata、revocation 状态等。
+底层 ledger 可以想象成接近表格的 assertion rows：
 
-SDK 的 `EntitySnapshot` 是对这些底层记录的用户侧组织方式：
+```text
+asrt_id
+entity ref
+predicate / field
+value
+metadata
+revocation state
+```
+
+`EntitySnapshot` 是把这些底层 rows 按 entity coordinate 和 schema field 组织后的 read model：
 
 ```text
 ledger assertion rows
@@ -714,17 +802,74 @@ ledger assertion rows
       -> expose scalar view + assertion records
 ```
 
-所以可以说：
+`FrozenAssertionView` 则是另一种组织方式：
 
-- 底层数据可以被组织成 `EntitySnapshot`；
-- 用户通过 `EntitySnapshot` 可以重新拿到 assertion-level 信息；
-- 但二者不是完全对称的“来回转换对象”。
+```text
+ledger assertion rows
+  -> select by exact asrt_id membership
+    -> name the frozen membership set
+      -> read back records by id
+```
 
-`EntitySnapshot` 是 read model，不是 ledger row 本身。它帮用户把底层事实按 schema 组织起来，但不会把所有底层细节都变成可写对象。真正的 mutation 仍然通过 `write` namespace。
+所以底层数据和 SDK 对象不是完全对称的“互相转换”：
 
-这也是 read/write 分离的价值：read model 可以越来越友好，write model 仍然保持审计上的精确和保守。
+- 底层 rows 可以被组织成 snapshots；
+- snapshots 可以暴露 assertion records；
+- frozen views 可以保存 assertion id membership；
+- `fg.assertions.by_ids(...)` 可以从 ids 找回 records；
+- 但 `EntitySnapshot` / `FrozenAssertionView` 都不是可写 ledger row 本身。
 
-## 11. 数据文件导入、读取与 CRUD
+mutation 仍然通过 `write` namespace 完成。
+
+## 13. 关于 graph-level、entity-level、field-level view 的层级
+
+当前实现里，这些概念仍然是分层的：
+
+```text
+Graph / FactGraph level
+├─ entity collection operations
+│  └─ fg.read.* / fg.write.*
+├─ view registry
+│  └─ fg.views.*
+└─ assertion by-id readback
+   └─ fg.assertions.by_id/by_ids
+
+EntitySnapshot level
+└─ field assertion collections
+   ├─ snap.field("name")
+   └─ snap.assertions.name
+
+Field level
+└─ AssertionRecordSet operations
+   ├─ active/history base sets
+   └─ where/at/version/by_id filters
+```
+
+一个更统一的未来抽象可能是：
+
+```text
+fg.assertions              -> graph-level assertion collection
+snap.assertions            -> entity-level assertion collection
+snap.field("name").records -> field-level assertion collection
+```
+
+三者共享同一套 `.where(...)` / `.at(...)` / `.version(...)` / `.by_id(...)` / `.one()` / `.all()` 操作。
+
+但当前 first slice 没有做到这一点。它只做了两件低风险事情：
+
+1. field-level `AssertionRecordSet` 具备完整 filter / terminal helpers；
+2. graph-level 只提供 by-id readback，避免 graph-wide enumeration 和 richer record shape。
+
+这不是否认统一抽象的价值，而是把高风险部分拆出去：
+
+- graph-wide enumeration 需要性能和索引策略；
+- graph-level records 可能需要 entity / field / predicate context；
+- entity-level whole-snapshot `snap.assertions.where(...)` 需要定义跨 field 的 record shape；
+- view-scoped snapshot reads 需要定义 entity visibility 和 scalar projection。
+
+这些适合后续蓝图，而不是混入 frozen view first slice。
+
+## 14. 数据文件导入、读取与 CRUD
 
 FactGraph 可以从数据文件或外部数据源导入事实，然后继续用 read/write API 操作这些事实。概念流程是：
 
@@ -737,48 +882,62 @@ external rows / files
           -> write more assertions or retract by asrt_id
 ```
 
-导入后的事实不会变成“普通表格行”被原地改写。它们仍然是 assertions：
+导入后的事实不会变成普通表格行被原地改写。它们仍然是 assertions：
 
 - 导入产生 assertion ids；
 - read 可以看到这些 assertions；
 - 后续修正可以追加新 assertion；
-- 后续撤销可以通过 `asrt_id` 精确撤销旧 assertion。
+- 后续撤销可以通过 `asrt_id` 精确撤销旧 assertion；
+- frozen view 可以保存某次 review / import / audit 选中的 assertion ids。
 
-这是一种专业化做法，尤其适合需要 provenance、audit、history、conflict handling 的系统。它比简单 CRUD 更啰嗦，但换来的是：每一次写入和撤销都有记录，每一个当前值背后都能追溯到 assertion。
+这是一种专业化做法，尤其适合 provenance、audit、history、conflict handling、human review 和 reproducibility。
 
-## 12. 设计边界与未来可能性
+## 15. 设计边界与未来可能性
 
-当前行为刻意保持几个边界：
+当前已经支持：
 
-- `AssertionRecordSet` 是 returned-object helper，不是 top-level `kernel.sdk` export；
-- `fg.read.*` 没有新增 `assertions(...)` namespace 方法；
-- `fg.write.retract(...)` 仍然只接收 `asrt_id`；
-- `retract(AssertionRecord)` overload 暂未提供；
-- predicate DSL / fuzzy retract 不在当前行为内。
+- `set/add` 返回 `asrt_id`；
+- `retract(asrt_id)` 精确撤销；
+- `EntitySnapshot.field(...).active/history/at/version`；
+- `AssertionRecordSet.where/at/version/by_id/one/first/all`；
+- `fg.views.create/update(..., asrt_ids=[...])`；
+- `fg.views.create/update(..., asrts=[...])`；
+- `FrozenAssertionView.asrt_ids`；
+- `fg.assertions.by_id/by_ids(...)`；
+- legacy `ViewSpec` compatibility。
 
-未来可以重新讨论的方向包括：
+当前刻意不支持：
 
-- 是否让 `fg.write.retract(record)` 作为 `fg.write.retract(record.asrt_id)` 的便利写法；
-- 是否为 UI 场景提供更强的 selection review object；
-- 是否为 batch 操作提供更集中的 assertion selection reporting。
+- `retract(AssertionRecord)` overload；
+- predicate DSL / fuzzy retract；
+- `fg.views.patch(...)` / `fg.views.diff(...)`；
+- dynamic predicate view；
+- graph-wide `fg.assertions.where(...)`；
+- entity-level `snap.assertions.where(...)` across all fields；
+- richer graph assertion record context；
+- `strict=` mode for `fg.assertions.by_ids(...)`；
+- frozen view scoped `fg.read.find(...)`；
+- frozen view scoped `fg.run(...)` / `fg.evaluate(...)` / `project_view_facts(...)`。
 
-但这些都应该建立在当前原则上：**不让 write-side 自动猜测用户要撤销哪一条 assertion。**
+这些不是“忘了做”，而是被有意拆成后续设计问题。原因是它们会改变更深层的语义：projection、runtime fact universe、record shape、性能模型或 write-side safety。
 
-## 13. 文档启示
+## 16. 文档表达建议
 
-未来把本文内容迁移到正式 SDK docs 时，建议坚持几条表达：
+正式 SDK docs 里应持续坚持这些表达：
 
-- 说 `set/add` 返回 `asrt_id`，不要只展示副作用；
-- 说 `retract` 接收 `asrt_id`，不要把它和 `set/add` 的 entity ref 参数并列；
-- 展示 `EntitySnapshot -> FieldAssertions -> AssertionRecordSet -> AssertionRecord` 层级；
-- 用 `.where(...).one()` 教 exactly-one selection；
-- 不用 magic assertion id 作为正常示例；
-- 不用 `records[0]` 作为 retract 教学；
-- 把 `.first()` 限定在 preview / browse 场景；
-- 明确 `AssertionRecordSet` 是 tuple-compatible，但比 plain tuple 多了 selection helpers。
+- `set/add` 返回 `asrt_id`；
+- `retract` 接收 `asrt_id`，不是 entity ref；
+- `records[0]` 不是专业 retract 模式；
+- `.where(...).one()` 是 destructive action 前的 exactly-one selection；
+- `.first()` 只适合 preview / browse；
+- `.at(t)` 是 business-time point filter，使用 `valid_from` / `valid_to`，不是 `ingested_at`；
+- `ViewSpec` 是 legacy projection-policy compatibility；
+- `FrozenAssertionView` 是 named frozen assertion-id selection；
+- frozen view 的当前 readback 路径是 `fg.assertions.by_ids(view.asrt_ids)`；
+- frozen view 当前不驱动 snapshot projection 或 rule/runtime assertion-universe scoping。
 
-如果用户记住一句话，可以是：
+如果用户只记住一句话：
 
 ```text
-read side 负责找到“哪一条 assertion”，write side 只负责撤销这个明确的 asrt_id。
+FactGraph 不是“改一行表”，而是“追加和选择 assertions”；view 命名一组 assertion ids，snapshot 组织 entity 下的 assertions，retract 只撤销明确的 asrt_id。
 ```
