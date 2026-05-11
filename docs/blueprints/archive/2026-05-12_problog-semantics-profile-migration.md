@@ -1,6 +1,6 @@
 # Task Blueprint: ProbLog SemanticsProfile Migration
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -305,9 +305,83 @@ call-site.
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+### 10.1 Final Landed Behavior
 
-- Final landed behavior:
-- Deviations from blueprint:
-- Rationale for deviations:
-- Archive notes:
+- ProbLog is now the first adapter that consumes
+  `kernel.core.semantics.SemanticsProfile`.
+- The scoped core runtime entry is:
+  `Store.evaluate(..., mode="problog", semantics_profile=profile)`.
+- SDK `evaluate(..., semantics=...)` /
+  `evaluate(..., semantics_profile=...)` still reject and point to Track 3 / E.
+- Service top-level and derivation-level `semantics` /
+  `semantics_profile` payloads still reject and point to Track 3 / E.
+- `SemanticsProfile.rule_projection.problog` entries with
+  `kind="branch_probability"` and `target="branch:{index}"` normalize into
+  adapter-local `ProbLogRuleExt.branch_probabilities`.
+- Omitted profile branches default to deterministic probability `1.0`.
+- ProbLog consumption validates profile engine, kind, target shape, branch
+  index range, numeric probability range, and duplicate branch targets.
+- `SemanticsProfile.engine` remains generically validated by the core profile
+  module; strict `engine="problog"` enforcement happens only at ProbLog
+  consumption time.
+- Profile / `ProbLogRuleExt` / legacy `body_confidences` carriers may coexist
+  only when their materialized branch probability tuples match.
+- `export_problog(...)` remains profile-agnostic and still consumes
+  `ProbLogRuleExt`.
+- PyReason remains untouched and does not import or consume
+  `SemanticsProfile` in C.
+- No profile-derived values are written into stored assertion data.
+
+### 10.2 Validation
+
+- G1 baseline before implementation:
+  - `test_problog_semantics_profile_migration`: 14 tests, 11 expected errors.
+  - `BridgeGuardTests`: 4 tests, 1 expected failure for the future ProbLog
+    positive import guard.
+- G2/G3 focused verification after implementation and docs:
+  - C focused suite: 15/15 OK after the mode/profile guard hardening test.
+  - B SemanticsProfile scaffolding suite: 24/24 OK.
+  - Existing ProbLog rule extension + engine eval suite: 19/19 OK with the
+    known `kernel.application` primer for audit/application import ordering.
+  - Combined focused suite: 59/59 OK.
+- G3 documentation grep gates:
+  - no stale "ProbLog does not consume / C will decide / deferred to C"
+    wording in release-facing C docs;
+  - current C consumption mentions exist for
+    `SemanticsProfile.rule_projection.problog`;
+  - Track 3 / D and E remain explicitly deferred.
+- `git diff --check` passed.
+
+### 10.3 Commit Lineage
+
+```text
+938d4b86 docs(blueprints): draft problog semantics profile migration
+0a0cb524 docs(blueprints): scope problog semantics profile migration
+4b66c663 test(problog): add red baseline for semantics profile migration
+6d900394 feat(problog): consume semantics profile rule projection
+c4825e44 test(problog): cover semantics profile mode guard
+01189804 docs(problog): document semantics profile consumption
+```
+
+### 10.4 Deviations
+
+- C added a mid-cycle guard-hardening commit after G2. The implementation
+  defensively rejected `Store.evaluate(..., mode="native",
+  semantics_profile=...)` to prevent silent profile ignores; `c4825e44`
+  added the focused test before G3 documented C2 as ProbLog-only.
+- G3 updated the working transmission reference because C made
+  `SemanticsProfile.rule_projection.problog` a current implementation fact,
+  not just a conceptual future target.
+
+### 10.5 Archive Notes
+
+C is the first adapter-consumption slice after B. It proves that the generic
+`SemanticsProfile.rule_projection` shape can be consumed by an adapter without
+reopening public rule syntax or writing projected values back to stored facts.
+The pattern for D is now clear: adapter-specific validation belongs at
+consumption time, after the generic profile object has only validated shape.
+
+C intentionally leaves the durable user-facing runtime call-site to E. E must
+decide SDK/service `semantics=` acceptance, the `engine=` naming preference,
+and whether `mode=` remains as an alias or is hard-cut in the pre-release
+window.
