@@ -50,6 +50,14 @@
 - `working/extraction_benchmark_report.json` — Extraction benchmark 结构化数据。
 - `working/factpy_esa_demo.pptx` — ESA demo 幻灯（binary）。
 
+#### `working/design-points/` —— design-point research notes
+
+Focused investigations that clarify one design concept before it is promoted into module docs or stable architecture principles.
+
+- [working/design-points/readme.md](./working/design-points/readme.md) — Directory purpose, lifecycle, and note template.
+- [working/design-points/identity-primary-key-coordinate-semantics.md](./working/design-points/identity-primary-key-coordinate-semantics.md) — Working note on `Identity`, `primary_key=True`, `Field`, and entity-reference coordinate semantics.
+- [working/design-points/identity-primary-key-coordinate-semantics.zh.md](./working/design-points/identity-primary-key-coordinate-semantics.zh.md) — Expanded Chinese blog-style working article for iterative design and documentation edits.
+
 #### `working/load-test-2026-04-11/` —— Layer 4C 全链路 load test bundle（2026-04-11）
 
 Agent extraction → batch → resolve → bundle → commit 全链 load test 协议、生成器、迭代报告与 review packet。
