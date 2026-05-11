@@ -282,6 +282,11 @@ Frozen assertion views are not accepted as snapshot projection input to
 use `fg.assertions.by_ids(fg.views.get(name).asrt_ids)` for record-level
 readback.
 
+`ViewSpec(active=..., confidence_strategy=..., prefer_source=...)` is the
+legacy projection-policy compatibility surface. Those projection controls
+are not independent runtime kwargs in this release; separating runtime
+projection policy from frozen assertion-view membership is deferred.
+
 ### 2.13 Result-type non-export
 
 `CheckResult`, `DiagnoseResult`, `WhyNotUniverseResult`,

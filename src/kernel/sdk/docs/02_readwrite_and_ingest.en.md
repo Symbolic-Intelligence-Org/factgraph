@@ -162,6 +162,9 @@ Stable contract:
   `view=ViewSpec(...)`). Frozen assertion views are not snapshot
   projection inputs in this slice; read them back with
   `fg.views.get(name).asrt_ids` plus `fg.assertions.by_ids(...)`.
+- Legacy projection controls (`active`, `confidence_strategy`,
+  `prefer_source`) currently live on `ViewSpec`; they are not separate
+  runtime kwargs to `find(...)`.
 - `temporal_view` parameter is not supported.
 
 Filter semantics:

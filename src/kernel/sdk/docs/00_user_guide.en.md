@@ -679,6 +679,14 @@ compatibility. A `ViewSpec` selects how the SDK aggregates conflicting
 assertions on the same `(pred_id, e_ref)` into a single chosen value when
 reading. Specs are frozen dataclasses, not dicts.
 
+Current status: `active`, `confidence_strategy`, and `prefer_source` are
+still fields on legacy `ViewSpec` objects. They are **not** separate
+runtime keyword arguments to `fg.read.find(...)`, `fg.run(...)`, or
+`fg.evaluate(...)` in this release. The long-term direction is to keep
+view membership (`FrozenAssertionView`) separate from projection policy;
+moving these projection controls to a dedicated runtime-policy surface is
+deferred to a future design pass.
+
 ```python
 from kernel.core.store.types import ViewSpec
 
@@ -700,6 +708,8 @@ Use a legacy `ViewSpec` in `find` with either the name or the spec:
 ```python
 fg.read.find(User, name="Alice", view="preferred_names")
 fg.read.find(User, name="Alice", view=spec)
+# Not current syntax:
+# fg.read.find(User, confidence_strategy="max")
 ```
 
 Create a frozen assertion view from exact assertion ids or from objects
