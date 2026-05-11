@@ -1,6 +1,49 @@
 # Current Operational Memory
 
-最后更新:2026-05-09(`codex/v0.1-post-l-sdk-ergonomics-redesign-impl-2026-05-09 @ 30810c9`;**post-L SDK ergonomics redesign PUBLISHED** + pre-publish-audit-fix landed)
+最后更新:2026-05-11(`v0.1-readpolicy-call-site-migration-impl-2026-05-11 @ b13adda4`;**ReadPolicy call-site migration implemented + archived**, rc.3 dry-run passed, no push performed)
+
+## 当前阶段(2026-05-11 — READPOLICY CALL-SITE MIGRATION IMPLEMENTED + ARCHIVED)
+
+**当前工作树:** `/Users/zhenzhili/hnsm-backend/.claude/worktrees/laughing-blackburn-c072da` on `v0.1-readpolicy-call-site-migration-impl-2026-05-11 @ b13adda4`.
+
+**Blueprint state:** `docs/blueprints/archive/2026-05-11_readpolicy-call-site-migration.md` is `implemented`; paired audit archived. Active blueprint pair removed from `docs/blueprints/active/`.
+
+**Commit chain after scope-freeze `73033ce`:**
+- `be95373` — `chore(release): bump version to 0.1.0rc3`
+- `3effae6` — `feat(kernel): replace ViewSpec core type with ReadPolicy`
+- `c3f8596` — `feat(sdk): migrate ReadPolicy call-site surface`
+- `448709b` — `feat(service): migrate runtime view policy wire surface`
+- `f1510cf` — `test(sdk): align invariants with ReadPolicy export`
+- `0b6004e` — `docs(sdk): explain ReadPolicy and frozen views concepts`
+- `e9b84b7` — `docs(sdk): update ReadPolicy API references`
+- `ea803f1` — `docs(sdk): update user guide for ReadPolicy views`
+- `c3271a2` — `docs(examples): refresh assertion views notebook for ReadPolicy`
+- `1898fa1` — `docs(service): rename runtime queries policy contract`
+- `42b7c98` — `test(release): add legacy view syntax gate`
+- `e80f8cf` — `docs(blueprints): close ReadPolicy call-site migration blueprint`
+- `f8d2a5d` — `docs(blueprints): archive ReadPolicy call-site migration blueprint`
+- `b13adda` — `fix(scripts): require ripgrep in legacy view syntax gate`
+
+**Final shipped behavior:**
+- `ViewSpec` removed from `kernel.core.store.types` and not importable from `kernel.sdk`.
+- `ReadPolicy` is the read-time resolution/display policy DTO, defined in `kernel.core.store.types`, re-exported from `kernel.sdk`; `kernel.sdk.__all__` is 35→36 with only `ReadPolicy` added.
+- `ReadPolicy` fields: `respect_revocations: bool = True`, `confidence_strategy: "max"|"mean"|"median"|"prefer_source" = "max"`, `prefer_source: str | None = None`.
+- `find(...)` and `run(...)` use value-only `policy=ReadPolicy(...) | None`; dict, str, and `FrozenAssertionView` are rejected.
+- `run(..., view=...)` tombstones old syntax, including explicit `view=None`; `return_display_meta=True` requires non-None `policy`.
+- `fg.views` is frozen assertion membership only; no built-in/reserved `default`; no policy payloads.
+- Service runtime removed named policy registry, `RuntimeSession.views`, `view_name`, and 5 runtime-view endpoints; wire policy is inline `policy` with `respect_revocations`.
+
+**Verification:**
+- Critical rejection/absence suite: 11 OK, including `ViewSpec` absence and R4 `run(view=None)` tombstone.
+- Focused ReadPolicy/frozen/service suite: 67 OK.
+- Kernel unittest discovery: 1848 OK / 1 skipped.
+- `scripts/check_legacy_view_syntax.sh`: exits 0 with `rg`; exits 2 with a clear error if `rg` is absent (fixed in `b13adda`).
+- Release dry-run passed: `./scripts/release.sh v0.1.0-rc.3 --source-ref v0.1-readpolicy-call-site-migration-impl-2026-05-11 --dry-run --yes`; projected verification reported 1630 tests OK / 1 skipped.
+- Broad service/ECSS discovery still carries the pre-existing audit/application circular-import noise; targeted service policy tests pass.
+
+**Publish state:** no push, no merge to `master`, no rc.3 tag, no release publish yet. Next publish action requires explicit user authorization.
+
+<!-- Historical 2026-05-09 post-L state follows. -->
 
 ## 当前阶段(2026-05-09 — POST-L SDK ERGONOMICS REDESIGN PUBLISHED)
 
