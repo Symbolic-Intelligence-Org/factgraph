@@ -309,7 +309,7 @@ Output:
 
 ## Annotation Store (Semantic Annotation Layer)
 
-The Annotation Store is a persistence layer independent of `meta_rows`, storing engine semantic properties of facts (e.g., PyReason bounds, ProbLog probability).
+The Annotation Store is the canonical semantic annotation layer for facts. `meta_rows` remains available as the SDK selection / review mirror used by assertion filtering and returned `AssertionMeta`.
 
 ### Core Concepts
 
@@ -320,7 +320,7 @@ The Annotation Store is a persistence layer independent of `meta_rows`, storing 
 
 ### Write Paths
 
-1. **Shared path (automatic)**: `write_protocol.set_field()` projects whitelisted meta keys (for example `source`, `confidence`, and `probability`) into `annotation_rows`
+1. **Shared path (automatic)**: `write_protocol.set_field()` projects whitelisted meta keys (for example `source`, `confidence`, `raw_kind`, and `bound`) into `annotation_rows`
 2. **PyReason path**: `persist_pyreason_annotations(ledger, run_id, store, accept_result)` writes `pyreason/semantic/bound_lower`, `bound_upper`, etc. post-accept
 3. **ProbLog path**: `persist_problog_annotations(ledger, run_id, store, accept_result)` writes `problog/semantic/probability` post-accept
 
@@ -332,19 +332,44 @@ The Annotation Store is a persistence layer independent of `meta_rows`, storing 
 
 ### Relationship to meta_rows
 
-`meta_rows` is now a legacy compatibility layer. Canonical consumers should read the Annotation Store, while some shared compatibility projections are still retained in `meta_rows`. For example, `confidence` remains available there as a compatibility projection, but its authoritative source is the `shared/derived/confidence` annotation.
+`meta_rows` is a selection / review mirror. Canonical semantic consumers should read the Annotation Store, while `AssertionRecordSet.where(meta=...)` and `AssertionRecord.meta.raw` continue to use `meta_rows`.
 
-ProbLog note:
+Raw uncertainty note:
 
-- `meta={"probability": 0.42}` is now the canonical user-authored fact probability input
-- that write produces:
-  - `shared/semantic/probability`
-  - `meta.probability`
-- if `confidence` is not explicitly provided, the write protocol derives both `shared/derived/confidence` and `meta.confidence`
-- for accepted ProbLog facts, `problog/semantic/probability` is the canonical engine-native semantic lane
-- `meta.confidence` may still exist, but only as a legacy compatibility projection
-- ProbLog export now reads in this order:
+- user-authored raw uncertainty uses paired meta:
+
+  ```python
+  fg.write.set(
+      Risk.level,
+      ref,
+      "elevated",
+      meta={"raw_kind": "probabilistic", "bound": [0.2, 0.8]},
+  )
+  ```
+
+- `raw_kind` must be exactly `"probabilistic"` or `"possibilistic"`
+- `bound` must be a two-element JSON list; numeric `int` / `float` elements
+  are accepted, bools and numeric strings are rejected, and the stored value is
+  normalized to floats
+- both keys must be provided together
+- the write produces:
+  - `shared/semantic/raw_kind`
+  - `shared/semantic/bound`
+  - mirrored `meta.raw_kind`
+  - mirrored `meta.bound`
+- user-authored `probability`, `bound_lower`, and `bound_upper` meta are
+  rejected. Those names are reserved for adapter projection / output lanes.
+
+Adapter notes:
+
+- for accepted ProbLog facts, `problog/semantic/probability` is the
+  engine-native semantic lane
+- ProbLog export reads in this order:
   1. `problog/semantic/probability`
   2. `shared/semantic/probability`
   3. `meta.confidence`
   4. default `1.0`
+- `shared/semantic/probability` can still exist as an adapter/internal
+  annotation, but it is not the user-facing raw uncertainty write contract
+- `meta.confidence` remains a compatibility / display summary and is not the
+  canonical raw uncertainty carrier

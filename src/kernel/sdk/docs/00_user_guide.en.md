@@ -342,13 +342,32 @@ Every write accepts an optional `meta` dict. Keys recognized by the SDK:
 |---|---|---|
 | `source` | str | Where this assertion came from |
 | `trace_id` | str | Trace identifier for cross-system correlation |
-| `confidence` | float in (0, 1] | Probabilistic confidence; `int` is not auto-promoted |
+| `confidence` | float in (0, 1] | Compatibility / display confidence summary; `int` is not auto-promoted |
+| `raw_kind` | `"probabilistic"` or `"possibilistic"` | Raw uncertainty kind; must be paired with `bound` |
+| `bound` | two-element JSON list `[lower, upper]` | Raw uncertainty bound; normalized to floats and matched exactly by assertion filters |
 | `approved_by` | str | Reviewer identifier (for governance) |
 | `note` | str | Free-form annotation |
 | `derived_rule_id` | str | Set automatically by `accept(...)` for derived facts |
 | `candidate_id` | str | Set automatically by `accept(...)` |
 
 Unknown keys are preserved on the assertion as opaque metadata.
+`probability`, `bound_lower`, and `bound_upper` are not accepted as
+user-authored write meta; use `raw_kind` and `bound` instead. Engine adapters
+may still produce annotations such as `problog/semantic/probability` or
+`pyreason/semantic/bound_lower` as output/projection lanes.
+
+Raw uncertainty validation:
+
+```python
+fg.write.set(User.name, ref, "Alice", meta={
+    "raw_kind": "probabilistic",
+    "bound": [0.2, 0.8],
+})  # ✅
+
+fg.write.set(User.name, ref, "Alice", meta={"raw_kind": "probabilistic"})  # ❌ bound missing
+fg.write.set(User.name, ref, "Alice", meta={"bound": [0.2, 0.8]})          # ❌ raw_kind missing
+fg.write.set(User.name, ref, "Alice", meta={"probability": 0.8})           # ❌ removed write key
+```
 
 `confidence` validation:
 
@@ -598,6 +617,9 @@ persist_problog_annotations(fg.ledger,  run_id="run-1", store=fg, accept_result=
 Each helper walks the accept result, maps every accepted candidate to
 its persisted `asrt_id`, and writes the engine-specific annotation
 records into the ledger's annotation store.
+
+These engine-native annotations are not the SDK's user-authored raw
+uncertainty contract. For new writes, use `meta={"raw_kind": ..., "bound": ...}`.
 
 ---
 

@@ -124,6 +124,12 @@ Each buffered fact also produces an annotation-ready dict
 | `shared` | `derived` | `confidence_source` | Currently fixed at `pyreason:lower_bound` |
 | `shared` | `source` | `source` / `analyst` / `method` | Forwarded from shared meta |
 
+These `pyreason/semantic/bound_lower` and `bound_upper` rows are
+engine-native adapter lanes. They are not user-authored SDK meta keys. The
+shared user-facing raw uncertainty contract is
+`meta={"raw_kind": "probabilistic"|"possibilistic", "bound": [lower, upper]}`,
+which persists as `shared/semantic/raw_kind` and `shared/semantic/bound`.
+
 The session also auto-fills shared confidence metadata:
 
 - When `confidence` is not explicitly provided, it defaults to

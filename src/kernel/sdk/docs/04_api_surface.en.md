@@ -373,7 +373,10 @@ top-level `kernel.sdk.__all__` export.
 Each entry is an `AssertionRecord` with `asrt_id`, `value`, `is_active`,
 `is_revoked`, and `meta: AssertionMeta`.
 `AssertionMeta` carries provenance fields (source, trace_id,
-ingested_at, confidence, approved_by, derived_rule_id, candidate_id, ...).
+ingested_at, confidence, raw_kind, bound, approved_by, derived_rule_id,
+candidate_id, ...). `raw_kind` / `bound` are mirrored in `meta_rows` for
+exact assertion filtering; the canonical semantic copy lives in
+`shared/semantic/raw_kind` and `shared/semantic/bound` annotation rows.
 
 Example:
 
@@ -447,6 +450,10 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 - Semantic annotations: PyReason produces `pyreason/semantic/*`,
   ProbLog produces `problog/semantic/probability`. Persist post-accept
   via `persist_pyreason_annotations()` or `persist_problog_annotations()`
+- User-authored raw uncertainty uses paired
+  `meta={"raw_kind": "probabilistic"|"possibilistic", "bound": [lower, upper]}`.
+  `probability`, `bound_lower`, and `bound_upper` are not accepted as write
+  meta keys.
 
 ### 6.3 Row format precedence
 

@@ -194,13 +194,15 @@ Semantic-delivery addendum:
     `meta.confidence`
   - `confidence_kind="probability"` is also still preserved in
     meta
-- shared user-authored fact lane:
-  - `set_field(..., meta={"probability": 0.42})` now writes
-    `shared/semantic/probability`
-  - and also preserves `meta.probability`
-  - When `confidence` is not provided explicitly,
-    `write_protocol` derives `meta.confidence=0.42` and
-    `shared/derived/confidence` automatically
+- shared raw uncertainty lane:
+  - user-authored uncertainty uses
+    `meta={"raw_kind": "probabilistic", "bound": [lower, upper]}`
+  - `write_protocol` writes `shared/semantic/raw_kind` and
+    `shared/semantic/bound`, with mirrored `meta_rows` values for SDK
+    selection / review
+  - user-authored `probability`, `bound_lower`, and `bound_upper` meta
+    are rejected; those names are reserved for adapter projection / output
+    lanes
 - engine-native semantic lane:
   - `persist_problog_annotations(...)` writes the probabilities of
     accepted fact candidates as
@@ -208,7 +210,7 @@ Semantic-delivery addendum:
   - The L2-completed audit export / reader / static annotation
     panel consume this annotation automatically
   - ProbLog export now also reads this annotation as the
-    canonical fact-level probability source first
+    engine-native fact-level probability source first
 
 ## 5. Export conventions (`problog_export.py`)
 
@@ -216,11 +218,12 @@ Semantic-delivery addendum:
 - Per-claim probability:
   - Default `1.0`
   - Read first from `problog/semantic/probability` (the canonical
-    lane)
+    engine-native lane)
   - If the engine-native annotation is absent, read from
-    `shared/semantic/probability` (canonical user-authored lane)
+    `shared/semantic/probability` (adapter/internal shared probability
+    lane, not the user-facing raw uncertainty write contract)
   - If both semantic lanes are absent, fall back to
-    `meta.confidence` (legacy compatibility lane)
+    `meta.confidence` (compatibility / display summary lane)
 - Branch probabilities for `where` are currently carried by
   `ProbLogRuleExt.branch_probabilities`:
   - `branch_probabilities[i]` corresponds to normalized `where`

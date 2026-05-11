@@ -268,7 +268,13 @@ cands = sdk.evaluate(drv, mode="native")
 - `candidate_kind`: `fact` / `entity`
 - `confidence`: `float | None` (`problog` yields a probability; `pyreason` yields a lower-bound; `native/souffle` return `None`)
 - `confidence_kind`: literal `"none"` (native/souffle) / `"probability"` (problog) / `"certainty"` (pyreason); paired with `confidence` to disambiguate the engine semantic. Source: `kernel/core/derivation/candidates.py:10, 27`.
-- `confidence` belongs to the probabilistic-engine lane and should not be reused as Scenario A requirement-threshold probability; that path should use fact-backed uncertainty predicates plus the existing comparison syntax.
+- Candidate `confidence` is an output summary, not the canonical raw
+  uncertainty carrier. User-authored raw uncertainty belongs on facts as
+  `meta={"raw_kind": ..., "bound": [...]}` and is persisted to
+  `shared/semantic/raw_kind` plus `shared/semantic/bound`.
+- `confidence` belongs to engine output / display lanes and should not be
+  reused as Scenario A requirement-threshold probability; that path should use
+  fact-backed uncertainty predicates plus the existing comparison syntax.
 - `payload`:
   - fact: `{"pred_id": ..., "terms": [...]}`
   - entity: `{"entity_type": ..., "resolved_identity": ..., ...}`

@@ -82,7 +82,7 @@ src/kernel/core/
 
 - `Claim`: primary assertion row (`asrt_id`, `pred_id`, `e_ref`, `rest_terms`)
 - `ClaimArg`: row-expanded arguments (`idx`, `val_atom`, `tag`)
-- `MetaRow`: metadata rows (`kind` in `str/int/float/bool/time/json`) — **legacy compatibility layer**
+- `MetaRow`: metadata rows (`kind` in `str/int/float/bool/time/json`) — SDK selection / review mirror
 - `AnnotationRow`: assertion-level annotation (`asrt_id`, `namespace`, `category`, `key`, `kind`, `value`, `origin`, `derivation`) — **canonical annotation carrier** (new 2026-03-26)
 - `Revokes`: revocation edge (`revoker_asrt_id -> revoked_asrt_id`)
 - `AppendResult`: atomic write result (`asrt_id`, `written`)
@@ -104,7 +104,7 @@ The Ledger's persistence now corresponds to a four-layer data architecture:
 - `category`: `source | semantic | derived | operational`
 - `origin`: `observed | derived`
 
-`meta_rows` is retained as a legacy compatibility layer. Legacy consumers continue to read `meta_rows`; new consumers should read `annotation_rows`.
+`meta_rows` is retained as a selection / review mirror for SDK ergonomics. Canonical semantic consumers should read `annotation_rows`.
 
 ### 4.2 Persistence Notes
 
@@ -127,26 +127,29 @@ flowchart LR
   E --> A
 ```
 
-`write_protocol` now performs **dual-write**: whitelisted meta keys are projected to both `annotation_rows` (canonical) and `meta_rows` (legacy).
+`write_protocol` performs **dual-write**: whitelisted meta keys are projected to both `annotation_rows` (canonical semantic copy) and `meta_rows` (selection / review mirror).
 
 Whitelist (`_SHARED_ANNOTATION_WHITELIST`):
 - `shared/source`: `source`, `source_loc`, `trace_id`, `approved_by`, `note`
 - `shared/derived`: `confidence` (`origin="derived"`, `derivation` from `meta["confidence_source"]`, fallback `meta:confidence`)
-- `shared/semantic`: `probability` (`origin="observed"`; canonical lane for user-authored fact-level probability)
+- `shared/semantic`: `raw_kind` (`origin="observed"`) and `bound` (`origin="observed"`) as the canonical raw uncertainty lane
 
-Compatibility notes:
+Raw uncertainty notes:
 
-- `meta={"probability": 0.42}` now writes both:
-  - `shared/semantic/probability`
-  - `meta.probability`
-- if the user does not explicitly provide `confidence`, `write_protocol` derives `confidence = probability` and continues to dual-write it to:
-  - `shared/derived/confidence`
-  - `meta.confidence`
+- user-authored raw uncertainty is written as
+  `meta={"raw_kind": "probabilistic"|"possibilistic", "bound": [lower, upper]}`
+- `raw_kind` and `bound` must be provided together
+- `bound` is normalized to a two-element float list and mirrored in
+  `meta_rows` for exact `AssertionRecordSet.where(meta=...)` selection
+- user-authored `probability`, `bound_lower`, and `bound_upper` meta are
+  rejected; those names are reserved for adapter projection / output lanes
 - for ProbLog fact export, the current adapter read priority is:
   1. `problog/semantic/probability`
   2. `shared/semantic/probability`
   3. `meta.confidence`
   4. default `1.0`
+- `shared/semantic/probability` remains an adapter/internal annotation lane,
+  not the user-facing raw uncertainty write contract
 
 Custom meta keys not in the whitelist continue to write only to `meta_rows`. `retract_by_asrt(...)` now dual-writes whitelisted shared meta to annotation_rows, same as `set_field(...)`.
 
