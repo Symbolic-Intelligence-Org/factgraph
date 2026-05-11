@@ -657,9 +657,15 @@ diff = fg.audit.diff_proof_frames(
 
 ### Views
 
-A view selects how the SDK aggregates conflicting assertions on the
-same `(pred_id, e_ref)` into a single chosen value when reading. Specs
-are `ViewSpec` instances (frozen dataclasses), not dicts.
+The long-term SDK meaning of a view is a named frozen assertion-id
+selection. The current SDK supports that through `FrozenAssertionView`
+entries in `fg.views`: membership is captured at creation time as a
+deduplicated set of `asrt_id` strings.
+
+The SDK also keeps legacy `ViewSpec` entries for projection-policy
+compatibility. A `ViewSpec` selects how the SDK aggregates conflicting
+assertions on the same `(pred_id, e_ref)` into a single chosen value when
+reading. Specs are frozen dataclasses, not dicts.
 
 ```python
 from kernel.core.store.types import ViewSpec
@@ -674,15 +680,36 @@ fg.views.create("preferred_names", spec)
 fg.views.update("preferred_names", spec)
 fg.views.delete("legacy_view")           # cannot delete the built-in "default"
 fg.views.get("preferred_names")          # → ViewSpec
-all_views = fg.views.list()              # → dict[str, ViewSpec]
+all_views = fg.views.list()              # → dict[str, ViewSpec | FrozenAssertionView]
 ```
 
-Use a view in `find` with either the name or the spec:
+Use a legacy `ViewSpec` in `find` with either the name or the spec:
 
 ```python
 fg.read.find(User, name="Alice", view="preferred_names")
 fg.read.find(User, name="Alice", view=spec)
 ```
+
+Create a frozen assertion view from exact assertion ids or from objects
+that expose `.asrt_id`:
+
+```python
+target = snap.field("name").history.where(source="seed").one()
+
+review = fg.views.create("review_set", asrt_ids=[target.asrt_id])
+review = fg.views.update("review_set", asrts=[target])
+
+view = fg.views.get("review_set")        # → FrozenAssertionView
+records = fg.assertions.by_ids(view.asrt_ids)
+```
+
+Frozen assertion views are read back through `fg.assertions.by_id(...)`
+and `fg.assertions.by_ids(...)`. They are not consumed by snapshot
+projection in this slice: `fg.read.find(User, view="review_set")` raises
+an SDK error that points to `fg.views.get(name).asrt_ids` plus
+`fg.assertions.by_ids(...)`. Rule/runtime projection remains unchanged;
+`fg.run(..., view="review_set", return_display_meta=True)` also rejects a
+frozen assertion view.
 
 Aggregation strategies (`ConfidenceStrategy` literal):
 - `"max"` — pick the assertion with the highest confidence (default)

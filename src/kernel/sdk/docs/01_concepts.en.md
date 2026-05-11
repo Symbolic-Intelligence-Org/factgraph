@@ -244,7 +244,8 @@ prefers to add wrappers after seeing real usage patterns.
 | `vars()` runtime unpack | `with vars() as (a, b)` is unsupported; use named or factory forms |
 | String DSL | `sdk.run("...")` / `sdk.evaluate("...")` are unsupported |
 | `find(...)` | No `temporal_view`; identity filters may be partial, including primary-only filters |
-| Assertion view surface | `.chosen` is removed; only `active`, `history`, `at`, `version` remain |
+| Assertion view surface | `.chosen` is removed; field assertion collections expose `active`, `history`, `at`, `version`; `AssertionRecordSet` also supports `where`, `at`, `version`, `by_id`, `one`, `first`, `all` |
+| Frozen assertion views | `fg.views` supports named frozen assertion-id selections; legacy `ViewSpec` remains projection-policy compatibility |
 | `sdk.run(...)` dispatch | Rule and Query supported; Derivation is rejected with guidance to use `evaluate()` |
 | `sdk.evaluate(...)` params | `temporal_view` is removed and fails explicitly |
 | Rule `row_format` detail | `"tuple"` still works but emits `DeprecationWarning`; prefer `"dict"` |

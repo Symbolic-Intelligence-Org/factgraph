@@ -182,7 +182,17 @@ supplied).
 `fg.batch(meta=None)` opens an `SDKBatchTx` for grouping multiple writes
 into one transaction.
 
-### 2.5 Eval namespace (`fg.eval.*`)
+### 2.5 Assertions namespace (`fg.assertions.*`)
+
+| Method | One-liner |
+|---|---|
+| `by_id(asrt_id)` | Return `AssertionRecord | None` for one assertion id |
+| `by_ids(asrt_ids)` | Return `AssertionRecordSet` for an iterable of assertion ids; unknown ids are skipped |
+
+This namespace is read-only and by-id only. It does not ship graph-wide
+`active`, `history`, `where`, `at`, or `version` enumeration.
+
+### 2.6 Eval namespace (`fg.eval.*`)
 
 | Method | One-liner |
 |---|---|
@@ -197,7 +207,7 @@ into one transaction.
 (`souffle`, `problog`, `pyreason`) consume `engine_options` at call time
 and never propagate to `Derivation` or ledger.
 
-### 2.6 What-if namespace (`fg.what_if.*`)
+### 2.7 What-if namespace (`fg.what_if.*`)
 
 For tutorial usage see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
 
@@ -207,7 +217,7 @@ For tutorial usage see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md
 | `diagnose(derivation, binding, *, engine='native', registry=None)` | Trace why a fact was derived; returns `DiagnoseResult` |
 | `why_not(derivation, candidates, *, engine='native', registry=None)` | Explain why facts in an explicit candidate universe did not derive; returns `WhyNotUniverseResult` |
 
-### 2.7 What-if fact overlay (`fg.what_if.fact_overlay.*`)
+### 2.8 What-if fact overlay (`fg.what_if.fact_overlay.*`)
 
 | Method | One-liner |
 |---|---|
@@ -217,7 +227,7 @@ For tutorial usage see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md
 `overlay` is a `kernel.application.protocol.EvaluationOverlay`. The
 `tuple[FactValueOverride, ...]` form is rejected at the SDK boundary.
 
-### 2.8 What-if rule (`fg.what_if.rule.*`)
+### 2.9 What-if rule (`fg.what_if.rule.*`)
 
 All three accept an SDK `Rule` (lowered internally; raw `RuleSpec` IR
 is rejected) and a `SupportArtifact`. `overlay` may be `None` or empty;
@@ -232,7 +242,7 @@ the rule-action overlay is constructed internally.
 `literal_path` is a `kernel.application.protocol.RuleLiteralPath`;
 `added_atom` is a `kernel.application.protocol.RuleAddedAtom`.
 
-### 2.9 Audit namespace (`fg.audit.*`)
+### 2.10 Audit namespace (`fg.audit.*`)
 
 | Method | One-liner |
 |---|---|
@@ -244,24 +254,35 @@ the rule-action overlay is constructed internally.
 via `kernel.audit.load_audit_package` or hold them from a recorder.
 `include_unchanged` is a strict bool — `1` and `0` are rejected.
 
-### 2.10 Package namespace (`fg.package.*`)
+### 2.11 Package namespace (`fg.package.*`)
 
 | Method | One-liner |
 |---|---|
 | `export_package(out_dir, options, **kwargs)` | Export Souffle-format package; `options` is a required `ExportOptions` instance |
 | `run_package(package_dir, *, entrypoints, engine='souffle')` | Execute an exported package |
 
-### 2.11 Views namespace (`fg.views.*`)
+### 2.12 Views namespace (`fg.views.*`)
 
 | Method | One-liner |
 |---|---|
-| `create(name, view_spec)` | Create a named view |
-| `update(name, view_spec)` | Update an existing view |
+| `create(name, view_spec)` | Create a legacy projection-policy view from `ViewSpec` |
+| `create(name, *, asrt_ids=[...])` | Create a frozen assertion view from assertion ids |
+| `create(name, *, asrts=[...])` | Create a frozen assertion view from objects exposing `.asrt_id` |
+| `update(name, view_spec)` | Replace an existing view with a legacy `ViewSpec` |
+| `update(name, *, asrt_ids=[...])` | Replace an existing view with frozen assertion-id membership |
+| `update(name, *, asrts=[...])` | Replace an existing view from objects exposing `.asrt_id` |
 | `delete(name)` | Delete a view (not `"default"`) |
-| `get(name)` | Retrieve a view spec |
-| `list()` | Return `dict[str, ViewSpec]` of all views |
+| `get(name)` | Retrieve `ViewSpec | FrozenAssertionView` |
+| `list()` | Return `dict[str, ViewSpec | FrozenAssertionView]` of all views |
 
-### 2.12 Result-type non-export
+`FrozenAssertionView` is a returned-object surface with
+`asrt_ids: frozenset[str]`; it is not exported from `kernel.sdk.__all__`.
+Frozen assertion views are not accepted as snapshot projection input to
+`fg.read.find(...)` or display-meta input to `fg.run(...)` in this slice;
+use `fg.assertions.by_ids(fg.views.get(name).asrt_ids)` for record-level
+readback.
+
+### 2.13 Result-type non-export
 
 `CheckResult`, `DiagnoseResult`, `WhyNotUniverseResult`,
 `FactOverlayCheckResult`, `ProofFrameRecheckResult`, `RuleDisableResult`,

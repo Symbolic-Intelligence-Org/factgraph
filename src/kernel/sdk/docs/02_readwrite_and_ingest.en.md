@@ -157,8 +157,11 @@ Stable contract:
 - Filter keys must be entity identity or field names.
 - Identity filters may be partial, including primary-only filters; combine
   them with field filters when you need AND semantics.
-- `view: ViewSpec | str | None` — apply a named or inline view to the
-  result projection (`view="preferred_names"` or `view=ViewSpec(...)`).
+- `view: ViewSpec | str | None` — apply a legacy named or inline
+  `ViewSpec` projection policy (`view="preferred_names"` or
+  `view=ViewSpec(...)`). Frozen assertion views are not snapshot
+  projection inputs in this slice; read them back with
+  `fg.views.get(name).asrt_ids` plus `fg.assertions.by_ids(...)`.
 - `temporal_view` parameter is not supported.
 
 Filter semantics:
