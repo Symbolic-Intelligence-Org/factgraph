@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (§5.3 LOCKED — L1 in-place at core; `ReadPolicy` enters `kernel.sdk.__all__`)
+- **Last Updated:** 2026-05-11 (§5.4 LOCKED — `fg.views` becomes frozen-only; `default` entry dropped)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -156,7 +156,7 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 | §5.1 | **Policy DTO naming. — LOCKED** | DTO name = `ReadPolicy`. Semantic boundary locked (see §5.1 subsection below). Module location + `__all__` export NOT decided here — see §5.3. |
 | §5.2 | **Policy DTO field set. — LOCKED** | `ReadPolicy` carries 3 fields: `respect_revocations` (renamed from misnomer `active`), `confidence_strategy`, `prefer_source`. Future fields DEFERRED. Single consumer `kernel/sdk/store.py:2070` migrates with the rename. See §5.2 subsection below. |
 | §5.3 | **DTO module location + public export. — LOCKED** | `ReadPolicy` defined at `kernel/core/store/types.py` (in-place replace of `ViewSpec`); enters `kernel.sdk.__all__` (35 → 36); `ConfidenceStrategy` stays core-only (not exported). See §5.3 subsection below. |
-| §5.4 | **`fg.views` final semantics.** | Post-migration union → single `FrozenAssertionView` return. Decide built-in `default` entry: keep as empty `FrozenAssertionView(name="default", asrt_ids=frozenset())` vs drop the built-in entirely. |
+| §5.4 | **`fg.views` final semantics. — LOCKED** | `default` entry dropped (not built-in, not reserved); `_views` starts `{}`; `create/update` accept only `asrt_ids=` / `asrts=` (no `view_spec=`); return types narrow to `FrozenAssertionView` / `dict[str, FrozenAssertionView]`. See §5.4 subsection below. |
 | §5.5 | **`policy=` call-site API.** | `find(..., policy=...)` and `run(..., policy=...)` accept Policy DTO value-object only? Accept inline dict (`policy={"confidence_strategy": "max"}`)? Accept named-string (which would resurrect the registry under a new name — **default reject** per §0.3)? Type-validation behavior on invalid input. |
 | §5.6 | **Old API removal mechanic.** | Per §0.7 default = hard cut. Old `ViewSpec` import: removed entirely vs raise on construction. Old `fg.views.create(name, ViewSpec(...))`: `TypeError` vs `SDKStoreError` with redirect message. Old `view=` kwarg on `find` / `run`: raise vs silent ignore. Final error texts for each path. |
 | §5.7 | **Non-SDK ViewSpec reference sweep.** | Full grep of `ViewSpec` across `src/kernel/application/protocol/`, `src/service/`, `src/kernel/audit/`, `src/kernel/tests/`. For each reference: keep (internal-only) vs migrate (cross-layer) vs delete (dead). |
@@ -293,6 +293,57 @@ This locks the **implementation/user-entry split**: the source location (`kernel
 - Call-site form of `policy=` → §5.5.
 - Old `ViewSpec` removal mechanic (exception type, redirect text, where the now-unused name disappears from) → §5.6.
 - Service-runtime ViewSpec parse/serialize rewrite (the body of `_parse_view_spec`/`_view_spec_to_dict`) → §5.7.
+
+### §5.4 LOCKED — `fg.views` narrowed to frozen assertion membership; `default` entry removed
+
+**Registry state and dispatch surface (locked):**
+
+| Aspect | Locked decision |
+|---|---|
+| `_views` initial value | `{}` (no built-in entry; was `{"default": ViewSpec()}`) |
+| `"default"` name reservation | **None.** Users may freely create a frozen view named `"default"`. |
+| `create(name, ...)` payload | Accepts only `asrt_ids=Iterable[str]` or `asrts=Iterable[Any]`, mutually exclusive (exactly one). The `view_spec=` parameter is **removed**. |
+| `update(name, ...)` payload | Same shape as `create`. |
+| `delete(name)` | Drops the entry if present; otherwise raises a generic missing-view error. The previous `default`-special-case branch is removed entirely. |
+| `get(name) -> FrozenAssertionView` | Union narrowed; no `ViewSpec` return path. |
+| `list() -> dict[str, FrozenAssertionView]` | Union narrowed. |
+| `_views: dict[str, FrozenAssertionView]` | Storage type narrowed. |
+| `_build_view_entry` | ViewSpec dispatch branch removed; returns `FrozenAssertionView`. |
+| `_normalize_view_name` | Unchanged (only does empty-string validation; no reservation logic was ever there). |
+
+**Anti-misread note (locked verbatim):**
+
+> The name "default" is no longer reserved by `fg.views`. If users create a frozen assertion view named "default", it has no special behavior; it is just another frozen assertion-id selection.
+
+This note exists to prevent future doc / test authors from re-introducing a "built-in default" semantic by accident.
+
+**Error-text scope:**
+
+Error messages on missing entries (`get` / `delete` on a non-existent name) are locked at the **semantic** level only — "view not found" — not at the literal string. Implementation may emit `"view not found: <name>"` or any equivalent phrasing; tests pin behavior (missing-key vs present-key), not exact wording.
+
+**User-visible behavior diff under §0.7 hard cut:**
+
+- A fresh `FactGraph` has `fg.views.list() == {}` (was `{"default": <ViewSpec>}`).
+- `fg.views.get("default")` raises missing-view (was: returned the baseline `ViewSpec`).
+- `fg.views.create("default", asrt_ids=[...])` is **allowed** (was: blocked because `default` already existed).
+- `fg.views.delete("default")` raises missing-view when the name does not exist (was: raised `"cannot delete built-in view: default"`).
+
+**Why `default` removal (not "keep as empty FrozenAssertionView" / "reserve the name"):**
+
+- A `FrozenAssertionView(name="default", asrt_ids=frozenset())` is semantically degenerate — an empty bookmark teaches nothing and serves no read path.
+- The current `default` entry's only real role is **baseline policy lookup** for `view="default"` / `view=None`. That role is taken over by inline `ReadPolicy()` construction at call sites (per §5.3 + the §5.5 working hypothesis); no registry slot needs to carry it.
+- Reserving the name `"default"` without a built-in value preserves a future-language hook with no concrete current use; honors `feedback_narrow_public_api` (do not occupy surface for hypotheticals).
+
+**Service-runtime symmetry (out of scope here):**
+
+`src/service/runtime_v1.py` carries a parallel `views={"default": ViewSpec()}` initialization (line 189), a `delete_runtime_view` `default` guard (line 924), and a fallback at `session.views["default"]` (line 2631). All three are **out of scope for §5.4**; they belong to §5.7 (non-SDK reference sweep) and are decided there.
+
+**What this gap does NOT decide:**
+
+- `view=` → `policy=` kwarg migration on `find` / `run` → §5.5.
+- Old `view=` kwarg removal mechanic and error text → §5.6.
+- Service-runtime `default` handling — keep symmetry, change semantics, or drop → §5.7.
+- Test coverage for the registry narrowing → §5.9.
 
 ## 6. Invariants
 
