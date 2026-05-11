@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from kernel.core.store.types import ViewSpec
+from kernel.core.store.types import ReadPolicy
 from kernel.sdk import Entity, Field, Identity, Query, Rule, SDKSchemaError, SDKStore, SDKStoreError, vars
 
 
@@ -39,9 +39,9 @@ def _name_query() -> Query:
 
 
 class FrozenViewReadBoundaryTests(unittest.TestCase):
-    def test_legacy_viewspec_find_path_is_unchanged(self) -> None:
+    def test_legacy_readpolicy_find_path_is_unchanged(self) -> None:
         sdk, _ = _seed_store()
-        spec = ViewSpec(confidence_strategy="max")
+        spec = ReadPolicy(confidence_strategy="max")
         sdk.views.create("preferred", spec)
 
         by_name = sdk.read.find(User, view="preferred")
@@ -83,7 +83,7 @@ class FrozenViewReadBoundaryTests(unittest.TestCase):
 
     def test_run_legacy_display_meta_path_is_unchanged(self) -> None:
         sdk, _ = _seed_store()
-        sdk.views.create("preferred", ViewSpec(confidence_strategy="max"))
+        sdk.views.create("preferred", ReadPolicy(confidence_strategy="max"))
 
         rows, meta = sdk.run(
             _name_rule(),

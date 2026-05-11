@@ -45,15 +45,15 @@ class DerivationSpec(TypedDict, total=False):
 
 
 @dataclass(frozen=True)
-class ViewSpec:
-    active: bool = True
+class ReadPolicy:
+    respect_revocations: bool = True
     confidence_strategy: ConfidenceStrategy = "max"
     prefer_source: str | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.active, bool):
-            raise ValueError("ViewSpec.active must be bool")
+        if not isinstance(self.respect_revocations, bool):
+            raise ValueError("ReadPolicy.respect_revocations must be bool")
         if self.confidence_strategy not in {"max", "mean", "median", "prefer_source"}:
-            raise ValueError("ViewSpec.confidence_strategy must be one of: max, mean, median, prefer_source")
+            raise ValueError("ReadPolicy.confidence_strategy must be one of: max, mean, median, prefer_source")
         if self.prefer_source is not None and (not isinstance(self.prefer_source, str) or not self.prefer_source):
-            raise ValueError("ViewSpec.prefer_source must be non-empty string or None")
+            raise ValueError("ReadPolicy.prefer_source must be non-empty string or None")

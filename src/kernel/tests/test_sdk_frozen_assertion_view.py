@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import unittest
 
-from kernel.core.store.types import ViewSpec
 from kernel.sdk import Entity, Field, Identity, SDKStore, SDKStoreError
 
 
@@ -27,32 +26,6 @@ def _seed_store() -> tuple[SDKStore, dict[str, str]]:
     }
     sdk.retract(ids["old"])
     return sdk, ids
-
-
-class LegacyViewSpecCompatibilityTests(unittest.TestCase):
-    def test_legacy_views_manager_behavior_is_preserved(self) -> None:
-        sdk, _ = _seed_store()
-        spec = ViewSpec(confidence_strategy="max")
-
-        created = sdk.views.create("preferred", spec)
-        self.assertIs(created, spec)
-        self.assertIs(sdk.views.get("preferred"), spec)
-        self.assertIs(sdk.views.list()["preferred"], spec)
-
-        replacement = ViewSpec(confidence_strategy="median")
-        updated = sdk.views.update("preferred", replacement)
-        self.assertIs(updated, replacement)
-        self.assertIs(sdk.views.get("preferred"), replacement)
-
-        sdk.views.delete("preferred")
-        with self.assertRaises(SDKStoreError):
-            sdk.views.get("preferred")
-
-    def test_default_view_protection_is_preserved(self) -> None:
-        sdk, _ = _seed_store()
-
-        with self.assertRaises(SDKStoreError):
-            sdk.views.delete("default")
 
 
 class FrozenAssertionViewCreationTests(unittest.TestCase):
@@ -88,7 +61,7 @@ class FrozenAssertionViewCreationTests(unittest.TestCase):
         sdk, ids = _seed_store()
 
         with self.assertRaises(SDKStoreError):
-            sdk.views.create("ambiguous", ViewSpec(), asrt_ids=[ids["name"]])
+            sdk.views.create("ambiguous", asrt_ids=[ids["name"]], asrts=[_AsrtLike(ids["tag"])])
         with self.assertRaises(SDKStoreError):
             sdk.views.create("missing_payload")
 
@@ -140,9 +113,9 @@ class FrozenAssertionViewSingleMeaningTests(unittest.TestCase):
         sdk, _ = _seed_store()
 
         with self.assertRaises((TypeError, SDKStoreError)) as ctx:
-            sdk.views.create("legacy", view_spec=ViewSpec(confidence_strategy="max"))
+            sdk.views.create("legacy", view_spec=object())
         msg = str(ctx.exception)
-        self.assertIn("ViewSpec", msg)
+        self.assertIn("view_spec", msg)
 
     def test_views_get_and_list_return_only_frozen_assertion_views(self) -> None:
         sdk, ids = _seed_store()

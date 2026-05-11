@@ -35,7 +35,7 @@ from kernel.core.store._artifact_sidecar import FileArtifactSidecar
 from kernel.adapters.souffle.runner import run_package
 from kernel.core.store.runtime import Store
 from kernel.core.store.ledger import Ledger
-from kernel.core.store.types import ViewSpec
+from kernel.core.store.types import ReadPolicy
 from kernel.core.view.confidence import aggregate_confidence
 from kernel.core.view.projector import project_display_facts
 
@@ -78,7 +78,7 @@ class _SDKViewsManager:
         # ``FrozenSnapshotError``. Dict mutation against ``self._views``
         # via ``create`` / ``update`` / ``delete`` is unaffected (it
         # mutates the dict, not the attribute).
-        object.__setattr__(self, "_views", {"default": ViewSpec()})
+        object.__setattr__(self, "_views", {"default": ReadPolicy()})
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise FrozenSnapshotError("FactGraph.views namespace is read-only")
@@ -86,11 +86,11 @@ class _SDKViewsManager:
     def create(
         self,
         name: str,
-        view_spec: ViewSpec | None = None,
+        view_spec: ReadPolicy | None = None,
         *,
         asrt_ids: Iterable[str] | None = None,
         asrts: Iterable[Any] | None = None,
-    ) -> ViewSpec | FrozenAssertionView:
+    ) -> ReadPolicy | FrozenAssertionView:
         normalized = _normalize_view_name(name)
         if normalized in self._views:
             raise SDKStoreError(f"view already exists: {normalized}")
@@ -106,11 +106,11 @@ class _SDKViewsManager:
     def update(
         self,
         name: str,
-        view_spec: ViewSpec | None = None,
+        view_spec: ReadPolicy | None = None,
         *,
         asrt_ids: Iterable[str] | None = None,
         asrts: Iterable[Any] | None = None,
-    ) -> ViewSpec | FrozenAssertionView:
+    ) -> ReadPolicy | FrozenAssertionView:
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -131,13 +131,13 @@ class _SDKViewsManager:
             raise SDKStoreError(f"view not found: {normalized}")
         self._views.pop(normalized, None)
 
-    def get(self, name: str) -> ViewSpec | FrozenAssertionView:
+    def get(self, name: str) -> ReadPolicy | FrozenAssertionView:
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         return self._views[normalized]
 
-    def list(self) -> dict[str, ViewSpec | FrozenAssertionView]:
+    def list(self) -> dict[str, ReadPolicy | FrozenAssertionView]:
         return {name: spec for name, spec in self._views.items()}
 
 
@@ -562,7 +562,7 @@ class SDKStore:
         self,
         entity_cls: type[Entity],
         *,
-        view: ViewSpec | str | None = None,
+        view: ReadPolicy | str | None = None,
         limit: int | None = None,
         **filter_kwargs: Any,
     ):
@@ -574,14 +574,14 @@ class SDKStore:
             limit=limit,
             **filter_kwargs,
         )
-        resolved_view = self._resolve_view_spec(view, api_path="fg.read.find")
+        resolved_view = self._resolve_read_policy(view, api_path="fg.read.find")
         if resolved_view is None:
             return rows
 
         confidence_by_ref = _build_entity_confidence_by_ref(
             self,
             entity_cls=entity_cls,
-            view_spec=resolved_view,
+            read_policy=resolved_view,
         )
         for row in rows:
             ref = getattr(row, "ref", None)
@@ -1386,7 +1386,7 @@ class SDKStore:
         obj: Any,
         *,
         row_format: str | None = None,
-        view: ViewSpec | str | None = None,
+        view: ReadPolicy | str | None = None,
         return_display_meta: bool = False,
         registry: RuleRegistry | None = None,
     ) -> list[Any] | tuple[list[Any], list[dict[str, Any]]]:
@@ -1396,7 +1396,7 @@ class SDKStore:
         if dispatch_key == "query" and view is not None:
             self._validate_query_view_argument(view)
             raise SDKStoreError("view is not supported for Query in run(); use Rule with run(view=...)")
-        resolved_view = self._resolve_view_spec(view, api_path="fg.run")
+        resolved_view = self._resolve_read_policy(view, api_path="fg.run")
         dispatch_map = {
             "query": self._run_dispatch_query,
             "derivation": self._run_dispatch_derivation,
@@ -1405,7 +1405,7 @@ class SDKStore:
         return dispatch_map[dispatch_key](
             obj,
             row_format=row_format,
-            view_spec=resolved_view,
+            read_policy=resolved_view,
             return_display_meta=return_display_meta,
             registry=registry,
         )
@@ -1425,11 +1425,11 @@ class SDKStore:
         query: Any,
         *,
         row_format: str | None,
-        view_spec: ViewSpec | None,
+        read_policy: ReadPolicy | None,
         return_display_meta: bool,
         registry: RuleRegistry | None,
     ) -> list[Any]:
-        if view_spec is not None:
+        if read_policy is not None:
             raise SDKStoreError("view is not supported for Query in run(); use Rule with run(view=...)")
         if return_display_meta:
             raise SDKStoreError("return_display_meta is not supported for Query in run()", path="$.run.return_display_meta")
@@ -1442,11 +1442,11 @@ class SDKStore:
         derivation: Any,
         *,
         row_format: str | None,
-        view_spec: ViewSpec | None,
+        read_policy: ReadPolicy | None,
         return_display_meta: bool,
         registry: RuleRegistry | None,
     ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
-        del derivation, row_format, view_spec, return_display_meta, registry
+        del derivation, row_format, read_policy, return_display_meta, registry
         raise SDKStoreError(
             "Derivation is not supported by run(); use sdk.evaluate() instead",
             code=QUERY_INVALID_ROW_FORMAT,
@@ -1458,7 +1458,7 @@ class SDKStore:
         rule: Any,
         *,
         row_format: str | None,
-        view_spec: ViewSpec | None,
+        read_policy: ReadPolicy | None,
         return_display_meta: bool,
         registry: RuleRegistry | None,
     ) -> list[tuple[Any, ...]] | list[dict[str, Any]] | tuple[list[Any], list[dict[str, Any]]]:
@@ -1470,7 +1470,7 @@ class SDKStore:
         return self._run_rule(
             rule,
             row_format=resolved_row_format,
-            view_spec=view_spec,
+            read_policy=read_policy,
             return_display_meta=return_display_meta,
             registry=registry,
         )
@@ -1480,7 +1480,7 @@ class SDKStore:
         rule: Any,
         *,
         row_format: str,
-        view_spec: ViewSpec | None,
+        read_policy: ReadPolicy | None,
         return_display_meta: bool,
         registry: RuleRegistry | None,
     ) -> list[tuple[Any, ...]] | list[dict[str, Any]] | tuple[list[Any], list[dict[str, Any]]]:
@@ -1503,12 +1503,12 @@ class SDKStore:
         formatted = _format_rule_rows(rows, select_vars=list(rule_spec.select_vars), row_format=row_format)
         if not return_display_meta:
             return formatted
-        if view_spec is None:
+        if read_policy is None:
             raise SDKStoreError("return_display_meta requires view to be provided", path="$.run.return_display_meta")
         display_meta = _build_rule_display_meta(
             formatted,
             row_format=row_format,
-            view_spec=view_spec,
+            read_policy=read_policy,
             ledger=self.ledger,
         )
         return formatted, display_meta
@@ -1539,10 +1539,10 @@ class SDKStore:
             return_mode=return_mode,
         )
 
-    def _resolve_view_spec(self, view: ViewSpec | str | FrozenAssertionView | None, *, api_path: str) -> ViewSpec | None:
+    def _resolve_read_policy(self, view: ReadPolicy | str | FrozenAssertionView | None, *, api_path: str) -> ReadPolicy | None:
         if view is None:
             return None
-        if isinstance(view, ViewSpec):
+        if isinstance(view, ReadPolicy):
             return view
         if isinstance(view, FrozenAssertionView):
             raise _frozen_assertion_view_error(api_path, view.name)
@@ -1551,15 +1551,15 @@ class SDKStore:
             if isinstance(resolved, FrozenAssertionView):
                 raise _frozen_assertion_view_error(api_path, resolved.name)
             return resolved
-        raise SDKStoreError("view must be ViewSpec, view name string, or None")
+        raise SDKStoreError("view must be ReadPolicy, view name string, or None")
 
-    def _validate_query_view_argument(self, view: ViewSpec | str | FrozenAssertionView | Any) -> None:
-        if isinstance(view, (ViewSpec, FrozenAssertionView)):
+    def _validate_query_view_argument(self, view: ReadPolicy | str | FrozenAssertionView | Any) -> None:
+        if isinstance(view, (ReadPolicy, FrozenAssertionView)):
             return
         if isinstance(view, str):
             self._views_manager.get(view)
             return
-        raise SDKStoreError("view must be ViewSpec, view name string, or None")
+        raise SDKStoreError("view must be ReadPolicy, view name string, or None")
 
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
         if "view" in kwargs:
@@ -1902,16 +1902,16 @@ def _normalize_view_name(name: Any) -> str:
 def _build_view_entry(
     name: str,
     *,
-    view_spec: ViewSpec | None,
+    view_spec: ReadPolicy | None,
     asrt_ids: Iterable[str] | None,
     asrts: Iterable[Any] | None,
-) -> ViewSpec | FrozenAssertionView:
+) -> ReadPolicy | FrozenAssertionView:
     payload_count = sum(value is not None for value in (view_spec, asrt_ids, asrts))
     if payload_count != 1:
-        raise SDKStoreError("provide exactly one view payload: ViewSpec, asrt_ids=..., or asrts=...")
+        raise SDKStoreError("provide exactly one view payload: ReadPolicy, asrt_ids=..., or asrts=...")
     if view_spec is not None:
-        if not isinstance(view_spec, ViewSpec):
-            raise SDKStoreError("view_spec must be ViewSpec")
+        if not isinstance(view_spec, ReadPolicy):
+            raise SDKStoreError("view_spec must be ReadPolicy")
         return view_spec
     if asrts is not None:
         return FrozenAssertionView(
@@ -1983,7 +1983,7 @@ def _build_entity_confidence_by_ref(
     sdk: SDKStore,
     *,
     entity_cls: type[Entity],
-    view_spec: ViewSpec,
+    read_policy: ReadPolicy,
 ) -> dict[str, float | None]:
     spec = sdk._entity_spec_by_class.get(entity_cls)
     if not isinstance(spec, dict):
@@ -2002,7 +2002,7 @@ def _build_entity_confidence_by_ref(
         if isinstance(pred_id, str) and pred_id:
             pred_ids.add(pred_id)
 
-    display_facts = project_display_facts(sdk.ledger, view_spec)
+    display_facts = project_display_facts(sdk.ledger, read_policy)
     rows_by_ref: dict[str, list[dict[str, Any]]] = {}
     for pred_id in pred_ids:
         for item in display_facts.get(pred_id, []):
@@ -2024,8 +2024,8 @@ def _build_entity_confidence_by_ref(
     return {
         e_ref: aggregate_confidence(
             rows,
-            strategy=view_spec.confidence_strategy,
-            prefer_source=view_spec.prefer_source,
+            strategy=read_policy.confidence_strategy,
+            prefer_source=read_policy.prefer_source,
         )
         for e_ref, rows in rows_by_ref.items()
     }
@@ -2035,10 +2035,10 @@ def _build_rule_display_meta(
     rows: list[tuple[Any, ...]] | list[dict[str, Any]],
     *,
     row_format: str,
-    view_spec: ViewSpec,
+    read_policy: ReadPolicy,
     ledger: Ledger,
 ) -> list[dict[str, Any]]:
-    confidence_rows_by_ref = _collect_confidence_rows_by_e_ref(ledger, view_spec=view_spec)
+    confidence_rows_by_ref = _collect_confidence_rows_by_e_ref(ledger, read_policy=read_policy)
     out: list[dict[str, Any]] = []
     for row in rows:
         refs = _extract_row_entity_refs(row, row_format=row_format)
@@ -2047,13 +2047,13 @@ def _build_rule_display_meta(
             confidence_rows.extend(confidence_rows_by_ref.get(ref, []))
         aggregated = aggregate_confidence(
             confidence_rows,
-            strategy=view_spec.confidence_strategy,
-            prefer_source=view_spec.prefer_source,
+            strategy=read_policy.confidence_strategy,
+            prefer_source=read_policy.prefer_source,
         )
         out.append(
             {
                 "confidence": aggregated,
-                "confidence_strategy": view_spec.confidence_strategy,
+                "confidence_strategy": read_policy.confidence_strategy,
                 "source_breakdown": _build_source_breakdown(confidence_rows),
             }
         )
@@ -2063,11 +2063,11 @@ def _build_rule_display_meta(
 def _collect_confidence_rows_by_e_ref(
     ledger: Ledger,
     *,
-    view_spec: ViewSpec,
+    read_policy: ReadPolicy,
 ) -> dict[str, list[dict[str, Any]]]:
     rows_by_ref: dict[str, list[dict[str, Any]]] = {}
     for claim in ledger.claims:
-        if view_spec.active and ledger.has_active_revocation(claim.asrt_id):
+        if read_policy.respect_revocations and ledger.has_active_revocation(claim.asrt_id):
             continue
         meta_rows = ledger.find_meta(asrt_id=claim.asrt_id)
         meta = {row.key: row.value for row in meta_rows}

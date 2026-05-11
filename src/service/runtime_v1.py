@@ -53,7 +53,7 @@ from kernel.core.store._support import (
 from kernel.core.store._confidence_kind_resolver import CertaintyConfidenceKindResolver
 from kernel.core.store.runtime import Store
 from kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
-from kernel.core.store.types import ViewSpec
+from kernel.core.store.types import ReadPolicy
 from kernel.core.view.projector import (
     project_display_facts,
     project_view_facts,
@@ -107,7 +107,7 @@ class RuntimeSession:
     registry_root: str | None
     schema_digest: str
     opened_at_ns: int
-    views: dict[str, ViewSpec]
+    views: dict[str, ReadPolicy]
     derivation_recipes: dict[str, RuntimeDerivationRecipe] = field(default_factory=dict)
     ephemeral_rules: list[RuleSpec] = field(default_factory=list)
 
@@ -124,7 +124,7 @@ class _RuntimeSessionManager:
         ledger_path: str | None,
         registry_root: str | None,
         digest: str,
-        views: dict[str, ViewSpec],
+        views: dict[str, ReadPolicy],
     ) -> RuntimeSession:
         session = RuntimeSession(
             session_id=f"rt_{uuid4().hex}",
@@ -186,7 +186,7 @@ def open_runtime_session(dto: dict[str, Any]) -> dict[str, Any]:
             ledger_path=ledger_path,
             registry_root=registry_root,
             digest=digest,
-            views={"default": ViewSpec()},
+            views={"default": ReadPolicy()},
         )
         return ok_response(session=_session_to_dict(session))
     except Exception as exc:
@@ -2611,7 +2611,7 @@ def _mapping_conflict_to_error(exc: MappingConflictError) -> dict[str, Any]:
     }
 
 
-def _resolve_runtime_view_spec(session: RuntimeSession, dto: dict[str, Any]) -> ViewSpec:
+def _resolve_runtime_view_spec(session: RuntimeSession, dto: dict[str, Any]) -> ReadPolicy:
     has_view_name = "view_name" in dto
     has_view_object = "view" in dto
     if has_view_name and has_view_object:
@@ -2631,8 +2631,8 @@ def _resolve_runtime_view_spec(session: RuntimeSession, dto: dict[str, Any]) -> 
     return session.views["default"]
 
 
-def _parse_view_spec(value: Any, *, path: str) -> ViewSpec:
-    if isinstance(value, ViewSpec):
+def _parse_view_spec(value: Any, *, path: str) -> ReadPolicy:
+    if isinstance(value, ReadPolicy):
         return value
     if not isinstance(value, dict):
         raise facade_error("view must be object", kind="shape", path=path)
@@ -2653,18 +2653,18 @@ def _parse_view_spec(value: Any, *, path: str) -> ViewSpec:
     if prefer_source_raw is not None and (not isinstance(prefer_source_raw, str) or not prefer_source_raw):
         raise facade_error("view.prefer_source must be non-empty string or null", kind="shape", path=f"{path}.prefer_source")
 
-    return ViewSpec(
-        active=active_raw,
+    return ReadPolicy(
+        respect_revocations=active_raw,
         confidence_strategy=strategy_raw,
         prefer_source=prefer_source_raw,
     )
 
 
-def _view_spec_to_dict(view_spec: ViewSpec) -> dict[str, Any]:
+def _view_spec_to_dict(read_policy: ReadPolicy) -> dict[str, Any]:
     return {
-        "active": view_spec.active,
-        "confidence_strategy": view_spec.confidence_strategy,
-        "prefer_source": view_spec.prefer_source,
+        "active": read_policy.respect_revocations,
+        "confidence_strategy": read_policy.confidence_strategy,
+        "prefer_source": read_policy.prefer_source,
     }
 
 
