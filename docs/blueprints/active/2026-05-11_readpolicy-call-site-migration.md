@@ -1,8 +1,8 @@
 # ReadPolicy Call-Site Migration and ViewSpec Removal from `fg.views`
 
-- **Status:** draft
+- **Status:** scoped
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (§5.10 LOCKED — release target rc.3; manual grep gate; all 10 §5 gaps complete)
+- **Last Updated:** 2026-05-11 (scope-freeze; status `draft → scoped`; §6 + §7 filled)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -816,11 +816,161 @@ Migration commits use the existing factpy convention (`feat(scope):`, `fix(scope
 
 ## 6. Invariants
 
-Placeholder; locked at scope-freeze after §5.1–§5.10 finalize.
+Eight groups, derived from §5.1–§5.10 LOCKED. Every invariant is git-diff-checkable, grep-checkable, or test-checkable.
+
+### 6.1 ReadPolicy DTO form invariants (from §5.1, §5.2, §5.3)
+
+- **I1.1** `ReadPolicy` is the sole post-migration name for the read-time resolution/display policy DTO.
+- **I1.2** `ReadPolicy` is defined as a frozen dataclass at `src/kernel/core/store/types.py`, **in-place** at the location previously occupied by `ViewSpec`. No new module is created for this DTO.
+- **I1.3** `ReadPolicy` carries exactly 3 fields: `respect_revocations: bool = True`, `confidence_strategy: ConfidenceStrategy = "max"`, `prefer_source: str | None = None`. No additional fields ship in this blueprint; future-field expansion requires a separate scoped blueprint or a §5 amendment.
+- **I1.4** `ReadPolicy.__post_init__` mirrors the (pre-migration) `ViewSpec.__post_init__` validation with error-message prefixes renamed to `ReadPolicy.<field>`. Type contracts: `respect_revocations` must be `bool`; `confidence_strategy` must be in `{"max","mean","median","prefer_source"}`; `prefer_source` must be `None` or non-empty `str`.
+- **I1.5** `ConfidenceStrategy` type alias stays at `src/kernel/core/store/types.py:14`; not moved, not duplicated, **not** added to `kernel.sdk.__all__`.
+
+### 6.2 Semantic boundary invariants (from §5.1 + §5.3 verbatim clauses)
+
+- **I2.1** *(verbatim, §5.1)*: `ReadPolicy` names the read-time resolution/display policy applied after facts are read, **not graph membership**. It replaces the old `ViewSpec` name for this policy surface; `view` remains reserved for assertion-membership views.
+- **I2.2** *(verbatim, §5.3)*: `ReadPolicy` is a core value object **re-exported by the SDK**, not an SDK-only facade type. Core projector and service runtime may consume it directly; user-facing examples should import it from `kernel.sdk`.
+- **I2.3** The word `view` (kwarg / namespace / DTO field) is exclusively reserved for assertion-membership semantics in the post-migration surface.
+
+### 6.3 `fg.views` single-meaning invariants (from §5.4)
+
+- **I3.1** `fg.views` carries only `FrozenAssertionView` entries. `get` / `create` / `update` return `FrozenAssertionView`; `list()` returns `dict[str, FrozenAssertionView]`. No union return types.
+- **I3.2** `_SDKViewsManager._views` initial state is `{}`. No built-in entries.
+- **I3.3** *(verbatim, §5.4)*: The name `"default"` is **no longer reserved** by `fg.views`. If users create a frozen assertion view named `"default"`, it has no special behavior; it is just another frozen assertion-id selection.
+- **I3.4** `create(name, ...)` / `update(name, ...)` accept exactly one payload from `{asrt_ids=Iterable[str], asrts=Iterable[Any]}`; **no `view_spec=` parameter exists**. Zero or two payloads raise.
+- **I3.5** `delete(name)` carries no `"default"` special-case; missing-name raises a generic missing-view error.
+
+### 6.4 `policy=` call-site value-only invariants (from §5.5)
+
+- **I4.1** `policy=` is the only accepted read/display policy kwarg on `find(...)` and `run(...)`: `policy: ReadPolicy | None = None`. Any `view=` keyword that remains in the physical signature exists only as a tombstone redirect and is never accepted.
+- **I4.2** `dict`, `str`, `FrozenAssertionView`, and all other types **raise** on `policy=`. No named-string policy registry exists anywhere in the post-migration SDK or service surface (falsifier baseline against §0.3 + §0.5).
+- **I4.3** `policy=None` semantic = "no policy applied". `find(policy=None)` returns rows without `row.confidence`; `run(policy=None)` without `return_display_meta` is normal eval.
+- **I4.4** *(verbatim, §5.5)*: `fg.run(rule, return_display_meta=True, policy=None)` is **invalid** because display metadata requires a `ReadPolicy`. Callers must pass `policy=ReadPolicy(...)` when requesting display metadata. The implication `return_display_meta=True ⇒ policy is not None` is the locked semantic.
+- **I4.5** `evaluate(...)` rejects any `policy=` kwarg via the §5.6 R5 combined check.
+
+### 6.5 Old-API removal redirect invariants (from §5.6)
+
+- **I5.1** `ViewSpec` class is **not importable** from any kernel module post-migration. Both `from kernel.sdk import ViewSpec` and `from kernel.core.store.types import ViewSpec` raise Python's standard `ImportError`.
+- **I5.2 — R3** `find(view=<anything>)` raises a redirect-bearing `SDKStoreError` via the `if "view" in filter_kwargs: raise` early guard. The guard fires before any entity-field filter validation so `view` never enters the filter dispatch.
+- **I5.3 — R4** *(verbatim, §5.6)*: `fg.run(..., view=...)` receives an **explicit tombstone guard**, not a bare Python `TypeError`. The guard must reject even `view=None` when supplied explicitly, and point callers to `policy=ReadPolicy(...)`. Implementation must distinguish omitted `view` from explicitly supplied `view=None`; a sentinel is the expected implementation shape, but its name and scope are implementation details.
+- **I5.4 — R5** `evaluate(...)` combined guard: `if "view" in kwargs or "policy" in kwargs: raise`. Single raise, combined message.
+- **I5.5** All R1–R5 error texts are locked at **semantic level only**; literal strings are implementation freedom. The `run(view=None)` tombstone test (per I5.3) is the discriminating gate — any implementation that silently accepts `view=None` violates I5.3.
+
+### 6.6 Service runtime symmetry invariants (from §5.7)
+
+- **I6.1** *(verbatim, §5.7)*: Service runtime must **not** keep a named policy registry after SDK removes one. A service-level policy registry would recreate the same ambiguity that this blueprint removes from `fg.views`. `RuntimeSession.views` field is removed entirely.
+- **I6.2** The 5 wire-level RPC endpoints (`create_runtime_view`, `update_runtime_view`, `delete_runtime_view`, `get_runtime_view`, `list_runtime_views`) are **removed entirely**. No equivalent endpoints replace them.
+- **I6.3** `_resolve_runtime_view_spec` function is removed entirely. No name-lookup dispatch survives; `query_view_facts` accepts inline `dto["policy"]` only.
+- **I6.4** Wire-level DTO key for the policy payload is `policy` (not `view`). `view_name` key is removed entirely. No name-lookup fallback at the wire layer.
+- **I6.5** Wire-level DTO field inside the policy object is `respect_revocations` (not `active`). `_parse_read_policy` rejects `{"active": ...}` input; `_read_policy_to_dict` emits `respect_revocations`.
+- **I6.6** Sessions start with no policy registry whatsoever; `"default"` is not initialized at the service layer.
+
+### 6.7 Concept-cleanliness invariants (from §5.8 + §5.9)
+
+- **I7.1** *(verbatim, §5.8)*: Release-facing docs and examples must present `fg.views` only as frozen assertion membership and `ReadPolicy` only as call-site `policy=...`. They must **not** preserve `ViewSpec` as a documented compatibility path.
+- **I7.2** Phase 4 grep gate (§5.8 D8 + §5.9 CI-b) fails on `ViewSpec`, `view_spec`, `view=<policy/named-view payload>`, or `fg.views.create(...)` with `ReadPolicy`/`ViewSpec` payload appearing in release-facing locations. **Forbidden matches are old syntax presented as supported usage.** Explicit rejection / migration notes may mention old syntax only when the same sentence or block marks it unsupported and points to `policy=ReadPolicy(...)`. Exemption set: `archive/**`, this blueprint + paired audit, test files asserting rejection.
+- **I7.3** *(verbatim, §5.9)*: Tests must assert **absence of `ViewSpec`** from release-facing SDK imports and examples, **not only runtime behavior**. T-NEW-6 pytest tests assert `ImportError` on both `from kernel.sdk import ViewSpec` and `from kernel.core.store.types import ViewSpec`.
+- **I7.4** `respect_revocations` is documented as a **first-class** field: primary teaching in `01_concepts.en.md` (retract ↔ confidence relationship) + application reference in `02_readwrite_and_ingest.en.md` retract section. **Forbidden** from "advanced" / "optional" sections.
+
+### 6.8 Release identification invariants (from §5.10)
+
+- **I8.1** *(verbatim, §5.10)*: Next release target is `0.1.0rc3`. This migration is kept out of the already-published `0.1.0rc2` meaning so release notes can describe it as a separate API cleanup.
+- **I8.2** `kernel.sdk.__all__` net change is exactly **35 → 36**: one entry added (`"ReadPolicy"`); zero removed.
+- **I8.3** No `BREAKING CHANGE:` footer in commit messages (repo has no historical use; cross-blueprint convention introduction is out of scope here).
 
 ## 7. Implementation Gates
 
-Placeholder; locked at scope-freeze.
+Five phase blocks (Phase 0 = pre-implementation, Phase 1–4 = execution). Each gate carries a concrete verification command, file artifact, or test assertion.
+
+### Phase 0 — Pre-implementation (scope-freeze)
+
+- **G0.1** All 10 §5 gaps LOCKED. ✅ (confirmed by scope-freeze commit).
+- **G0.2** §6 invariants finalized in blueprint body. ✅ (this section).
+- **G0.3** Paired impl branch `v0.1-readpolicy-call-site-migration-impl-2026-05-11` created at design HEAD per `feedback_design_impl_branch_isolation`. Verification: `git branch --list v0.1-readpolicy-call-site-migration-impl-2026-05-11` returns the branch.
+- **G0.4** Status flipped `draft → scoped` in blueprint header. Verification: `grep "^- \*\*Status:\*\* scoped" docs/blueprints/active/2026-05-11_readpolicy-call-site-migration.md`.
+
+### Phase 1 — Test scaffolding (red baseline)
+
+- **G1.1** New `src/kernel/tests/test_sdk_read_policy.py` contains T-NEW-1 + T-NEW-2 + T-NEW-4 + T-NEW-6. Verification: file exists; pytest collects test functions covering all 4 groups; **explicit `run(view=None)` tombstone test** present (I5.3 discriminating gate).
+- **G1.2** New `src/service/tests/test_runtime_query_policy.py` contains T-NEW-5. Verification: file exists; tests cover inline `dto["policy"]`, 5 removed endpoints raising "method not registered", wire-field `respect_revocations` rename.
+- **G1.3** Existing `src/kernel/tests/test_sdk_frozen_assertion_view.py` extended with T-NEW-3 (single-meaning + default-not-reserved).
+- **G1.4** T-SWEEP triage completed for 4 existing test files; per-test delete/rewrite decisions recorded in audit before Phase 2 starts. Verification: audit row "T-SWEEP triage complete" + per-file commit on impl branch.
+- **G1.5** Red baseline confirmed:
+  ```bash
+  python -m pytest \
+    src/kernel/tests/test_sdk_read_policy.py \
+    src/service/tests/test_runtime_query_policy.py \
+    src/kernel/tests/test_sdk_frozen_assertion_view.py \
+    -x --tb=short
+  ```
+  shows the expected red baseline (`ReadPolicy` undefined, service registry still present). If Phase 1 includes T-SWEEP rewrites of any of the 4 existing test files prior to Phase 2, those files are added to the focused red/green suite.
+
+### Phase 2 — Implementation (code changes)
+
+- **G2.0** `chore(release): bump version to 0.1.0rc3` is the **first commit** on the impl branch in Phase 2 (per I8.1). Verification:
+  ```bash
+  git log --reverse --oneline <scope-freeze-commit>..HEAD | head -1
+  ```
+  must show `chore(release): bump version to 0.1.0rc3`.
+
+- **G2.1** Core layer changes:
+  - `src/kernel/core/store/types.py`: `ViewSpec` class replaced with `ReadPolicy` class (per I1.2–I1.4 + I5.1).
+  - `src/kernel/core/view/projector.py`: import swap; signature `policy: ReadPolicy`; isinstance check swap; field access `.active` → `.respect_revocations`.
+  - Verification: `python -c "from kernel.sdk import ReadPolicy; ReadPolicy()"` succeeds; `python -c "from kernel.core.store.types import ViewSpec"` raises `ImportError` (per I5.1).
+
+- **G2.2** SDK layer changes (`src/kernel/sdk/store.py` + `src/kernel/sdk/__init__.py`):
+  - All §5.3 + §5.4 + §5.5 + §5.6 cross-refs implemented (see each LOCKED subsection).
+  - Sentinel introduced for R4 tombstone (per I5.3; name + scope is implementation freedom).
+  - `kernel.sdk.__all__` 35 → 36 with `"ReadPolicy"` added (per I8.2).
+  - Verification: T-NEW-1 / T-NEW-2 / T-NEW-3 / T-NEW-4 / T-NEW-6 all green.
+
+- **G2.3** Service layer changes (`src/service/runtime_v1.py`):
+  - All §5.7 S2 deep-migration cross-refs implemented.
+  - `_parse_read_policy` + `_read_policy_to_dict` renamed with wire-field rename (per I6.5).
+  - 5 RPC endpoints + `RuntimeSession.views` + `_resolve_runtime_view_spec` removed (per I6.1–I6.6).
+  - Verification: T-NEW-5 green.
+
+- **G2.4** Full kernel + service + ECSS test suites green: `python -m pytest src/kernel/tests src/service/tests src/domains/ecss/tests` (pre-existing Problog cold-import circularity acceptable per primary-anchor precedent).
+
+### Phase 3 — Documentation + examples rewrite (§5.8 D7c 5-commit batch)
+
+- **G3.1** Commit 1: `01_concepts.en.md` rewrites views chapter; primary teaching of `respect_revocations` (per I7.4); §5.4 anti-misread note (per I3.3).
+- **G3.2** Commit 2: `02_readwrite_and_ingest.en.md` + `03_rules_and_derivations.en.md` + `04_api_surface.en.md` rewritten (`__all__` table 35 → 36 per I8.2; `return_display_meta` invariant per I4.4).
+- **G3.3** Commit 3: `00_user_guide.en.md` top-level walkthrough updated.
+- **G3.4** Commit 4: `examples/05_sdk_assertion_views.ipynb` integral rewrite (D1a).
+- **G3.5** Commit 5: `src/service/docs/03_runtime_queries_views.md` renamed to `src/service/docs/03_runtime_queries_policy.md` (D3) + rewrite. **Stale-link gate** (Phase 4 enforcement):
+  ```bash
+  rg "03_runtime_queries_views\.md|runtime_queries_views" src docs examples
+  ```
+  must return zero matches outside `archive/**` and historical-note paths.
+- **G3.6** `_SDKViewsManager` class docstring carries §5.4 anti-misread note (per I3.3 + I7).
+
+### Phase 4 — Verification + close-out
+
+- **G4.1** `bash scripts/check_legacy_view_syntax.sh` exits 0 against impl HEAD (per I7.2). Script honors §5.8 exemption set (`archive/**`, this blueprint + paired audit, T-NEW-6 tests). Forbidden-match definition: old syntax presented as **supported** usage (per I7.2 sentence-or-block clause).
+- **G4.2** SDK `__all__` diff:
+  ```bash
+  git diff <scope-freeze-commit>..HEAD -- src/kernel/sdk/__init__.py
+  ```
+  shows exactly one-line addition `"ReadPolicy",` inside `__all__`; no other public-name churn (per I8.2). `<scope-freeze-commit>` is the impl-branch base, not the `v0.1.0-rc.2` tag (rc.2 may carry unrelated history).
+- **G4.3** Release dry-run:
+  ```bash
+  ./scripts/release.sh v0.1.0-rc.3 \
+    --source-ref v0.1-readpolicy-call-site-migration-impl-2026-05-11 \
+    --dry-run \
+    --yes
+  ```
+  passes:
+  - Allowlist sync: no references to removed symbols (`ViewSpec`, `_resolve_runtime_view_spec`, 5 removed RPC endpoint names).
+  - Test-projection imports: no references to removed dispatch entries.
+  - Deny-pattern grep: `ReadPolicy` not erroneously matched.
+- **G4.4** Absence-invariant gates triple-checked:
+  - T-NEW-6 pytest tests pass (I5.1 + I7.3).
+  - `bash scripts/check_legacy_view_syntax.sh` exit 0 (I7.2).
+  - Stale-link gate from G3.5 exit 0.
+- **G4.5** Full test suite green: `python -m pytest src/kernel/tests src/service/tests src/domains/ecss/tests -x` (carrying pre-existing Problog cold-import circularity per primary-anchor precedent).
+- **G4.6** Status flipped `scoped → implemented`. Audit close-out row added.
+- **G4.7** Blueprint files moved `docs/blueprints/active/` → `docs/blueprints/archive/` per blueprint convention.
 
 ## 8. Risks
 
