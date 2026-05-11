@@ -96,6 +96,9 @@
 
 - `validate` 只做 request 规范化、AST 校验和 profile 约束校验，不返回编译产物。
 - `description`、`tags`、`condition_weights` 可随请求一起出现，但 `validate` 只校验 rule 逻辑 IR / profile 约束；这些字段不进入 core rule AST。
+- `condition_weights` 是 certainty/explain projection input，keyed
+  by `b{branch}.a{atom}`；它不是 engine adapter 参数，未来运行时配置归
+  `SemanticsProfile.certainty_projection`。
 - string rule DSL 不被接受，客户端必须传结构化 rule object。
 - string `where` DSL 同样不被接受，客户端必须传结构化 where IR。
 - `strict=true` 且未显式提供 `profile` 时，`profile_effective` 会收敛为 `souffle_strict`。
@@ -159,6 +162,8 @@
 
 - `compile-preview` 在通过 validate 阶段后，继续返回 authoring compile 产物。
 - `compile-preview` 会保留 rule asset metadata：`description`、`tags`、`condition_weights`。
+- `condition_weights` 的语义仍是 certainty/explain projection input；
+  它只随 rule asset 持久化，供 certainty summary 链路读取。
 - 因为 `compile-preview` 复用 validate 的 request 规范化逻辑，所以 string DSL 的拒绝策略完全一致。
 
 错误 kinds：
@@ -384,6 +389,9 @@
 
 - `version` 可省略；省略时读取最新版本。
 - `rule_spec` 返回的是 registry 中持久化的 rule asset payload；除逻辑字段外，也会保留 `description`、`tags`、`condition_weights` 等 rule metadata。
+- `condition_weights` 保留为 certainty/explain projection input，不是
+  engine adapter 参数；未来运行时配置归
+  `SemanticsProfile.certainty_projection`。
 - 当指定 `rule_id` 或 `rule_id+version` 在 registry 中不存在时，当前 contract 返回 `rule_spec: null`，不是错误 envelope。
 
 错误 kinds：

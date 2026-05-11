@@ -651,6 +651,9 @@
     - 从 `support.rule_ref_edges` 定位单条 structured child rule edge
     - 用该 edge 的 `rule_ref_id@version` 到 registry 读取 `condition_weights`
     - 在唯一 `referenced_support` subtree 上调用 annotation prototype `derive_certainty_summary(...)`
+  - `condition_weights` 在这里是 certainty/explain projection input，
+    不是 engine adapter 参数，也不进入 `where` / adapter rule syntax；
+    未来运行时配置归 `SemanticsProfile.certainty_projection`
   - 若出现多 rule_ref_edges、nested referenced_support、unresolved child support、缺失 registry_root、rule payload 缺失等情况，则 graceful degrade 为 `certainty_summary=null`
   - 若 rule payload 存在但未声明 `condition_weights`，则 `certainty_summary` 仍可返回；此时所有 condition 都是 unweighted
   - 对 runtime native derivation 而言，eligible candidate 的 `confidence_kind="certainty"` 现在由 evaluate create-time routing 自动写入；不再依赖调用侧 patch
@@ -1717,6 +1720,9 @@
   - `audit/evidence_graphs.jsonl`（可选 — 当 accepted candidate 的 engine provenance / proof tree 可在 export-time 确定性转换为 `EvidenceGraph` 时写入）
   前两个文件分别导出 `SupportArtifact` 与 `RuleTraceArtifact` 的 flat JSONL rows，用于离线 audit / explain 消费。
   `certainty_summaries.jsonl` 导出 export-time 预计算的 `certainty_summary` dict（每行 `{candidate_id, certainty_summary}`），因为 `condition_weights` 只在 registry filesystem 可用、离线 audit 无法 query-time 派生。
+  `condition_weights` 不作为 engine adapter 参数导出；它是 runtime
+  certainty/explain projection input，未来运行时配置归
+  `SemanticsProfile.certainty_projection`。
   routing 与 delivery 分开：candidate 必须先在 evaluate 时被标成 `confidence_kind="certainty"`，export 才会继续物化 certainty summary。
   `provenance_trees.jsonl` 导出 runtime export-time replay 的 Souffle proof tree dict（每行 `{candidate_id, provenance_tree}`）；缺少 recipe、query export 失败、Souffle explain 失败或无法匹配 output row 的 candidate 会被静默跳过，不影响整个 package export。
   `provenance_statuses.jsonl` 导出同一轮 replay 的 per-candidate status rows（含 `engine`、`truncated`、可选 `reason`）；它让离线 audit consumer 能区分“有 provenance”、“没有 provenance”以及“为什么没有”，而不是把所有缺失都折叠成静默空白。

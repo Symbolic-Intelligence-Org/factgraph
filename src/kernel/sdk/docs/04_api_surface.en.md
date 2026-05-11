@@ -447,6 +447,10 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 - Public `Rule` / `Derivation` objects do not carry adapter-specific
   `engine_ext` parameters. Future `SemanticsProfile.rule_projection`
   owns engine-specific rule projection.
+- Public `Rule.condition_weights` remains available as
+  certainty/explain projection input. It is not an engine adapter
+  parameter, and future runtime configuration for this lane belongs in
+  `SemanticsProfile.certainty_projection`.
 - Semantic annotations: PyReason produces `pyreason/semantic/*`,
   ProbLog produces `problog/semantic/probability`. Persist post-accept
   via `persist_pyreason_annotations()` or `persist_problog_annotations()`

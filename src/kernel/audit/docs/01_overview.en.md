@@ -357,6 +357,10 @@ These files are currently exported in full without reference-subset trimming; th
 - the query layer's `get_candidate_evidence_tree_narrative(candidate_id)` passes the materialized certainty_summary into the narrative renderer, producing a narrative with an additive `certainty_lines` section
 - the `service.static_ui` candidate evidence page renders a certainty section at the end of the narrative block (when certainty_lines is present)
 - certainty_summary is precomputed at export time by the runtime service (via the core `materialize_certainty_summary` helper); the audit side does not compute query-time (because `condition_weights` is not available offline)
+- `condition_weights` is treated as certainty/explain projection input:
+  it is not exported as an engine adapter parameter, and future runtime
+  configuration for this lane belongs in
+  `SemanticsProfile.certainty_projection`
 
 `audit.reader` / `AuditQuery` / `service.static_ui` also currently consume `provenance_trees.jsonl` uniformly:
 

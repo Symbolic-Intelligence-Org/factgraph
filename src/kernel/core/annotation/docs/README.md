@@ -33,6 +33,10 @@ implementation site.
   - First-consumer prototype for the certainty-weight vocabulary
   - Consumes `confidence_kind="certainty"`, rule metadata
     `condition_weights`, and the candidate evidence tree
+  - `condition_weights` is certainty/explain projection input, not an
+    engine adapter parameter and not `where` execution semantics.
+    Future runtime configuration for this lane belongs in
+    `SemanticsProfile.certainty_projection`.
   - Producer routing for `confidence_kind="certainty"` is not
     implemented inside annotation; it is decided by core
     `store._confidence_kind_resolver` at candidate creation time

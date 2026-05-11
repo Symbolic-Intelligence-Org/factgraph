@@ -84,6 +84,11 @@ Stable contract:
 - `Rule.select/where` must be non-empty lists.
 - `Rule` is engine-independent public syntax. Adapter-specific rule
   projection is not carried by public `engine_ext` fields.
+- `Rule.condition_weights` remains public as certainty/explain
+  projection input keyed by `b{branch}.a{atom}`. It is not an engine
+  adapter parameter and does not enter `where` execution semantics.
+  Future runtime configuration for this lane belongs in
+  `SemanticsProfile.certainty_projection`.
 - The `row_format` precedence chain (`call-site > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`) and the `"tuple"` `DeprecationWarning` apply to the **Rule path**. `Query` has its own narrower contract (`"dict"|"instance"`, `"tuple"` rejected) — see §5.
 - Resolving to `"tuple"` emits `DeprecationWarning` (prefer `"dict"`).
 - `return_display_meta=True` requires `policy=ReadPolicy(...)`.

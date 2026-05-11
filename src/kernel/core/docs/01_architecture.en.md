@@ -19,7 +19,12 @@ Additional boundary notes:
 - `authoring/sdk` currently use the following declaration metadata boundary:
   - schema / derivation: `version / description / tags`
   - rule: `version / description / tags`, plus version-scoped `condition_weights`
-- those fields are declaration and management metadata, not core runtime semantics
+- `condition_weights` is certainty/explain projection input, not an
+  engine adapter parameter and not `where` execution semantics. Future
+  runtime configuration for this lane belongs in
+  `SemanticsProfile.certainty_projection`.
+- those fields are declaration and management metadata; they do not
+  change core `where` evaluation or adapter rule syntax
 - core may carry descriptive fields compiled from upper layers, but does not change `evaluate/chosen/accept` behavior because of them
 
 ## 2. Current Directory Structure (core)
@@ -223,6 +228,8 @@ Evaluate now also records a lightweight candidate explain backref after candidat
   - deterministic Souffle paths currently write `confidence_kind="none"`
   - the native path still defaults to `none`, but runtime native derivation may now write `certainty` at candidate creation time through a `ConfidenceKindResolver`
     - the current v1 resolver only covers the single resolved child-rule edge + non-empty `condition_weights` case
+    - `condition_weights` is treated here as certainty/explain
+      projection input, not as engine adapter semantics
     - SDK parity is currently deferred; paths without an injected resolver continue to stay `none`
   - ProbLog writes `confidence_kind="probability"` when setting `candidate.confidence`
   - `confidence_kind` does not enter `candidate_key` / `candidate_id` / `support_digest` computation, nor does it change evaluate / accept / chosen behavior
@@ -332,6 +339,9 @@ Evaluate now also records a lightweight candidate explain backref after candidat
       - runtime native derivation now performs certainty routing at candidate creation time; this no longer depends on test/caller patching
       - currently only consumes the single structured `rule_ref_edge` pointing to the unique `referenced_support` subtree
       - `condition_weights` are looked up by the service through `support.rule_ref_edges -> registry rule payload`
+      - they are certainty/explain projection input and do not enter
+        `where`, `where_ast`, evaluator IR, ProbLog rule syntax, or
+        PyReason rule syntax
       - multi-rule, nested referenced_support, unresolved child support, or missing registry chain all degrade gracefully to `null`
       - runtime `explain-narrative(kind="candidate")` and `explain-nl(kind="candidate")` now reuse the same certainty derivation helper:
         - narrative only attaches `certainty_lines` when certainty is derivable
@@ -445,6 +455,12 @@ When integrating with `authoring/sdk`, distinguish between two different kinds o
 
 - assertion write metadata: stored via `MetaRow`, participates in write/audit/temporal paths
 - declaration metadata: `version / description / tags`, plus rule-asset `condition_weights`, on schema/rule/derivation assets
+
+`condition_weights` is the special case in this boundary: it is retained
+as certainty/explain projection input and consumed by the certainty
+summary chain, but it remains outside `where` semantics and engine
+adapter rule syntax. Track 3 / B will move runtime configuration for
+this lane to `SemanticsProfile.certainty_projection`.
 
 Under the current contract, declaration metadata does not participate in:
 

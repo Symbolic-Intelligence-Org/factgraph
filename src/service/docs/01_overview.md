@@ -60,6 +60,9 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
   - certainty derivation helper（condition_weights lookup / summary 计算 / batch 预计算）
   - 依赖 core（Store, _certainty_materializer）+ authoring（FileAuthoringRegistry）
   - 不反向依赖 runtime_v1
+  - `condition_weights` 在该链路中是 certainty/explain projection input，
+    不是 engine adapter 参数；未来运行时配置归
+    `SemanticsProfile.certainty_projection`
 - `_registry_io.py`
   - 从 registry root 读取 schema 等底层辅助
 

@@ -85,11 +85,14 @@ Boundary constraints:
   - `description`, `tags`, `condition_weights` are passed through
     `Rule(...)` top-level parameters or through top-level keys of
     the authoring payload
-  - `condition_weights` is version-scoped rule metadata, keyed by
-    atom-position: `b{branch}.a{atom}`
+  - `condition_weights` is version-scoped certainty/explain projection
+    input, keyed by atom-position: `b{branch}.a{atom}`
   - `condition_weights` is preserved by the compiler / registry but
     does not enter `RuleSpec` or the where-evaluator execution
     surface
+  - `condition_weights` is not an engine adapter parameter. Future
+    runtime configuration for this lane belongs in
+    `SemanticsProfile.certainty_projection`.
 - `Derivation`
   - `description`, `tags` are passed through `Derivation(...)`
     top-level parameters or through top-level keys of the authoring
@@ -176,6 +179,10 @@ derivation_payload = {
   - adapter-local extension types remain internal compiled bridges only
   - future SemanticsProfile rule projection will replace this
     transitional bridge
+- `condition_weights` is the separate certainty/explain projection
+  input lane. It remains accepted on public rule payloads and is not
+  part of engine adapter projection; future runtime configuration for
+  it belongs in `SemanticsProfile.certainty_projection`.
 
 ### 5.1 Minimal input examples (authoring payload)
 
