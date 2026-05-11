@@ -1,6 +1,6 @@
 # Task Blueprint: SemanticsProfile Scaffolding
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -408,9 +408,96 @@ Expected docs to inspect:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+### Final Landed Behavior
 
-- Final landed behavior:
-- Deviations from blueprint:
-- Rationale for deviations:
-- Archive notes:
+- Added `kernel.core.semantics` as the Track 3 / B profile-scaffolding
+  package.
+- Added frozen `SemanticsProfile` in
+  `kernel.core.semantics.profile`.
+- Added package export from `kernel.core.semantics` for
+  `SemanticsProfile` and `inspect_semantics_profile`.
+- Kept `SemanticsProfile` out of `kernel.sdk.__all__`.
+- Locked schema version `"1.0"` and accepted engines
+  `native | souffle | problog | pyreason`.
+- Validated generic `rule_projection` shape only: engine buckets map to
+  lists of entries with non-empty string `target` and `kind`.
+- Preserved the D6 engine-specific deferral: B accepts future adapter
+  kinds without interpreting them or resolving targets against concrete
+  rules.
+- Locked uncertainty projection policy names and projection-level
+  fallback names per D7.
+- Rejected non-`none` temporal projection modes with a Track 3 / D
+  redirect.
+- Added pure `inspect_semantics_profile(profile)` JSON-like summary with
+  `engine`, `profile`, `version`, `fallback`, `uses`, and `warnings`.
+- Added explicit SDK rejection for
+  `SDKStore.evaluate(..., semantics=...)` and
+  `SDKStore.evaluate(..., semantics_profile=...)`.
+- Added explicit service runtime rejection for top-level and
+  derivation-level `semantics` / `semantics_profile`.
+- Preserved application protocol shape: `DerivationEvaluateRequest` did
+  not gain a profile field.
+- Preserved A1-A4 rejection gates and internal bridges:
+  `CompiledDerivationPlan.engine_ext`, `engine_options`,
+  `legacy_body_confidences`, `ProbLogRuleExt`, `PyReasonRuleExt`, and
+  `condition_weights` behavior remain unchanged.
+- Updated module and release-facing docs to classify B as core
+  scaffolding only; C/D/E own adapter consumption and durable runtime
+  call-site design.
+
+### Validation
+
+- G1 baseline before implementation: 24 tests failed as expected with
+  15 missing-module / profile errors, 4 SDK/service rejection failures,
+  and 5 passing guards.
+- G2 target suite after implementation:
+  `kernel.tests.test_semantics_profile_scaffolding` → 24/24 OK.
+- A1-A4+B focused suite:
+  `test_derivation_mode_callsite_migration`,
+  `test_branch_confidence_decomposition`,
+  `test_engine_ext_decomposition`,
+  `test_condition_weights_decomposition`, and
+  `test_semantics_profile_scaffolding` → 62/62 OK.
+- G3 docs grep gates were clean:
+  - `SemanticsProfile` mentions are scaffolding, future migration, or
+    core-only importability context.
+  - Track 3 / E redirects appear for rejected runtime call-site profile
+    kwargs.
+  - Adapter Python modules do not import `SemanticsProfile`.
+- `git diff --check` passed at G2 and G3.
+
+### Commit Lineage
+
+- `d1a8e299` — draft SemanticsProfile scaffolding blueprint.
+- `ae12819a` — scope-freeze D1-D10 and 21 acceptance gates.
+- `c95a17a0` — G1 red + guard baseline tests.
+- `d144cca7` — standalone future `engine=` naming preference note for
+  Track 3 / E.
+- `17a169e3` — G2 core scaffolding implementation.
+- `8b0dd46a` — G3 docs sync.
+
+### Deviations
+
+- B gained one standalone design-note commit between G1 and G2. The note
+  records that Track 3 / E should prefer public `engine=` over historical
+  `mode=` for durable runtime engine selection. This did not change B's
+  implementation scope.
+- G3 updated `src/kernel/sdk/docs/00_user_guide.en.md` and the root
+  `docs/README.md` in addition to the expected §9 docs. The user guide is
+  the SDK entry document, and the root docs index needed the new core
+  semantics module link.
+
+### Archive Notes
+
+B is the first Track 3 slice that adds the durable runtime value object
+that A1-A4 redirected toward. It intentionally stops before runtime
+consumption:
+
+- Track 3 / C owns ProbLog consumption of
+  `SemanticsProfile.rule_projection.problog`.
+- Track 3 / D owns PyReason interval and temporal consumption.
+- Track 3 / E owns the durable SDK/service runtime call-site, including
+  the `engine=` naming question and `semantics` / `semantics_profile`
+  acceptance.
+
+No profile-derived value is stored in assertion data in B.

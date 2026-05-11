@@ -12,6 +12,7 @@
 | 2026-05-12 | design note | Recorded future engine-selection naming preference | B does not rename current evaluate APIs, but Track 3 / E should prefer `engine=` as the public call-site engine-selection keyword over historical `mode=` when it designs the durable SDK/service runtime shape. |
 | 2026-05-12 | implementing | G2 SemanticsProfile scaffolding implemented | Added `kernel.core.semantics` with a frozen `SemanticsProfile`, generic validation, and pure `inspect_semantics_profile`; added explicit SDK/service rejection for `semantics` / `semantics_profile`; added minimal core semantics module docs. Validation: B suite 24/24 OK and A1-A4+B focused suites 62/62 OK. No adapter imports or consumes `SemanticsProfile`. |
 | 2026-05-12 | documenting | G3 docs sync | Updated SDK, core, adapter, service, root docs index, and transmission reference docs to describe B as core scaffolding only: `SemanticsProfile` is importable for validation / inspection, SDK and service runtime reject `semantics` / `semantics_profile`, and ProbLog/PyReason/runtime consumption remains deferred to C/D/E. |
+| 2026-05-12 | implemented | Closed and archived | Filled §10 Outcome / Deviations, marked implemented, archived the blueprint pair, and updated archive inventory. Final validation: B suite 24/24 OK, A1-A4+B focused suite 62/62 OK, docs grep gates clean, adapter Python imports no `SemanticsProfile`, and `git diff --check` clean. |
 
 ## Decision Notes
 
