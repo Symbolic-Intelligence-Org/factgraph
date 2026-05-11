@@ -62,6 +62,8 @@ should not be imported directly.
 ## 1. Top-Level Exports
 
 Everything below is importable as `from kernel.sdk import <name>`.
+The export list currently has 36 names; `ReadPolicy` is the only
+read-policy migration addition.
 
 ### 1.1 Schema, store, registry
 
@@ -74,6 +76,7 @@ Everything below is importable as `from kernel.sdk import <name>`.
 | `FactGraph` | Canonical entry point (alias of `SDKStore`) |
 | `SDKStore` | Foundational entry point (same class as `FactGraph`) |
 | `SDKRegistry` | Schema/rule/derivation registry |
+| `ReadPolicy` | Read-time display/confidence aggregation policy for `policy=...` call sites |
 
 `Entity` instances render via `__repr__` showing identity and field
 values in declaration order; unset `Field` values render as `None`.
@@ -167,7 +170,7 @@ supplied).
 | Method | One-liner |
 |---|---|
 | `get(entity_cls, **identity)` | Fetch single entity by identity or `None` |
-| `find(entity_cls, *, view=None, limit=None, **filters)` | Filter entities; returns list of `EntitySnapshot` |
+| `find(entity_cls, *, policy=None, limit=None, **filters)` | Filter entities; optional `ReadPolicy` attaches read-time confidence metadata |
 | `ref(entity_cls, **identity)` | Encode an entity reference string |
 
 ### 2.4 Write namespace (`fg.write.*`)
@@ -196,7 +199,7 @@ This namespace is read-only and by-id only. It does not ship graph-wide
 
 | Method | One-liner |
 |---|---|
-| `run(rule_or_query, *, view=None, row_format=None)` | Evaluate a `Rule`, `RuleRef`, or `Query`; not for `Derivation` |
+| `run(rule_or_query, *, policy=None, row_format=None, return_display_meta=False)` | Evaluate a `Rule`, `RuleRef`, or `Query`; `return_display_meta=True` requires `ReadPolicy` |
 | `evaluate(derivation, *, mode='native', engine_options=None)` | Evaluate a `Derivation`; returns list of `CandidateSet` |
 | `evaluate_compiled(plans, *, mode='native', engine_options=None)` | Evaluate already-compiled derivation plans |
 | `accept(candidate, *, approved_by=None, note=None, dry_run=False, identity_override=None)` | Accept exactly one candidate; performs writes |
@@ -265,27 +268,26 @@ via `kernel.audit.load_audit_package` or hold them from a recorder.
 
 | Method | One-liner |
 |---|---|
-| `create(name, view_spec)` | Create a legacy projection-policy view from `ViewSpec` |
 | `create(name, *, asrt_ids=[...])` | Create a frozen assertion view from assertion ids |
 | `create(name, *, asrts=[...])` | Create a frozen assertion view from objects exposing `.asrt_id` |
-| `update(name, view_spec)` | Replace an existing view with a legacy `ViewSpec` |
 | `update(name, *, asrt_ids=[...])` | Replace an existing view with frozen assertion-id membership |
 | `update(name, *, asrts=[...])` | Replace an existing view from objects exposing `.asrt_id` |
-| `delete(name)` | Delete a view (not `"default"`) |
-| `get(name)` | Retrieve `ViewSpec | FrozenAssertionView` |
-| `list()` | Return `dict[str, ViewSpec | FrozenAssertionView]` of all views |
+| `delete(name)` | Delete a frozen assertion view |
+| `get(name)` | Retrieve `FrozenAssertionView` |
+| `list()` | Return `dict[str, FrozenAssertionView]` of all views |
 
 `FrozenAssertionView` is a returned-object surface with
 `asrt_ids: frozenset[str]`; it is not exported from `kernel.sdk.__all__`.
-Frozen assertion views are not accepted as snapshot projection input to
-`fg.read.find(...)` or display-meta input to `fg.run(...)` in this slice;
-use `fg.assertions.by_ids(fg.views.get(name).asrt_ids)` for record-level
+`fg.views` has no built-in `default` entry; `"default"` is just another
+user-defined frozen assertion view name when created explicitly. Frozen
+assertion views are not accepted as snapshot input to `fg.read.find(...)`
+or display-meta input to `fg.run(...)`; use
+`fg.assertions.by_ids(fg.views.get(name).asrt_ids)` for record-level
 readback.
 
-`ViewSpec(active=..., confidence_strategy=..., prefer_source=...)` is the
-legacy projection-policy compatibility surface. Those projection controls
-are not independent runtime kwargs in this release; separating runtime
-projection policy from frozen assertion-view membership is deferred.
+Read-time display/confidence controls live on `ReadPolicy` and are passed
+with `policy=...` at the `find(...)` or `run(...)` call site. They are
+not stored in `fg.views`.
 
 ### 2.13 Result-type non-export
 

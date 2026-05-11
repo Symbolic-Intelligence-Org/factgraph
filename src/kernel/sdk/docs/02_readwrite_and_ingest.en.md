@@ -149,7 +149,14 @@ snap = sdk.get(User, user_id="u1", locale="zh")
 ### 5.2 `sdk.find(...)`
 
 ```python
+from kernel.sdk import ReadPolicy
+
 rows = sdk.find(User, age=30, limit=20)
+rows_with_confidence = sdk.find(
+    User,
+    age=30,
+    policy=ReadPolicy(respect_revocations=True, confidence_strategy="max"),
+)
 ```
 
 Stable contract:
@@ -157,14 +164,19 @@ Stable contract:
 - Filter keys must be entity identity or field names.
 - Identity filters may be partial, including primary-only filters; combine
   them with field filters when you need AND semantics.
-- `view: ViewSpec | str | None` — apply a legacy named or inline
-  `ViewSpec` projection policy (`view="preferred_names"` or
-  `view=ViewSpec(...)`). Frozen assertion views are not snapshot
-  projection inputs in this slice; read them back with
-  `fg.views.get(name).asrt_ids` plus `fg.assertions.by_ids(...)`.
-- Legacy projection controls (`active`, `confidence_strategy`,
-  `prefer_source`) currently live on `ViewSpec`; they are not separate
-  runtime kwargs to `find(...)`.
+- `policy: ReadPolicy | None = None` controls read-time display /
+  confidence aggregation. `None` means no policy is applied and rows are
+  returned without attached confidence metadata.
+- `ReadPolicy.respect_revocations` defaults to `True`: confidence/display
+  aggregation skips claims that have active retractions. Set it to
+  `False` only when you intentionally want aggregation to ignore
+  retraction markers.
+- `ReadPolicy.confidence_strategy` accepts `"max"`, `"mean"`, `"median"`,
+  or `"prefer_source"`; `prefer_source` is required for the
+  `"prefer_source"` strategy.
+- `view=` is not accepted on `find(...)`. Frozen assertion views are read
+  back via `fg.views.get(name).asrt_ids` plus
+  `fg.assertions.by_ids(...)`, not by passing a view to snapshot reads.
 - `temporal_view` parameter is not supported.
 
 Filter semantics:
