@@ -1,0 +1,17 @@
+# Task Blueprint Audit: Derivation Mode To Call-Site
+
+- Blueprint: [2026-05-11_derivation-mode-to-callsite.md](./2026-05-11_derivation-mode-to-callsite.md)
+
+## Event Log
+
+| Date | Stage | Event | Notes |
+| --- | --- | --- | --- |
+| 2026-05-11 | draft | Blueprint created | Track 3 / A1 opened after source-grounded engine-params audit. Scope is limited to moving `Derivation.mode` out of public derivation definitions and into call-site evaluation semantics. |
+| 2026-05-11 | draft | Source audit refined | Confirmed only two production code areas directly read public derivation `mode`: SDK object payload emission and authoring dict mode validation. Other mode flows are compiled/runtime or call-site dispatch. |
+| 2026-05-11 | scoped | Scope frozen | Locked D1-D5: remove SDK `Derivation.mode`; stop object payload emission; reject structured derivation `mode`; retain internal compiled `native` default if needed; rewire service derivation evaluation to request-level engine selection. |
+
+## Decision Notes
+
+- 2026-05-11: Engine Semantics Unification is split into smaller blueprint slices. A1 handles only `Derivation.mode`; `Body.confidence` / `body_confidences`, `engine_ext`, `condition_weights`, SemanticsProfile shape, and adapter migrations are deferred.
+- 2026-05-11: Preferred direction is decomposition-first. Remove definition-time engine selectors before introducing `SemanticsProfile`, so the new profile shape is not constrained by legacy public fields.
+- 2026-05-11: Service runtime currently uses `compiled["mode"]` for derivation evaluation. A1 must move this to request-level engine selection; application protocol already has the right shape through `DerivationEvaluateRequest.engine`, while service v1 needs a small DTO-level resolver.
