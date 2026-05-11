@@ -85,7 +85,7 @@ values in declaration order; unset `Field` values render as `None`.
 
 | Symbol | Purpose |
 |---|---|
-| `Body` | Rule body constructor (literal conjunction) |
+| `Branch` | Rule `where` branch constructor (alternative conjunction) |
 | `Rule` | Declarative rule (head + body) |
 | `RuleRef` | Reference to a registered rule by id |
 | `Derivation` | Multi-rule derivation envelope |

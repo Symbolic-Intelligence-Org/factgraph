@@ -169,13 +169,13 @@ derivation_payload = {
   `Entity`; it no longer relies on `is_record` as a behavior switch.
 - The no-head form (`target + head_vars`) remains as a fact-only
   compatibility path.
-- ProbLog branch probability is still allowed to enter compile
-  artifacts via the authoring payload `body_confidences` or via SDK
-  `Body(confidence=...)`:
-  - This is a compatibility lane, not a new shared runtime contract
-  - `engine_ext` still does not enter the authoring payload
-  - Before execution, SDK/runtime bridge it to
+- ProbLog branch probability no longer enters through authoring
+  payload `body_confidences` or SDK branch-wrapper confidence:
+  - public authoring payloads reject `body_confidences`
+  - the temporary public fallback is SDK-side
     `ProbLogRuleExt(branch_probabilities=...)`
+  - future SemanticsProfile rule projection will replace this
+    transitional `engine_ext` path
 
 ### 5.1 Minimal input examples (authoring payload)
 

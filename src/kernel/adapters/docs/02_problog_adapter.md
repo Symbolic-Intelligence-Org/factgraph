@@ -82,9 +82,9 @@ Main flow of `evaluate_problog(...)`:
    `resolve_problog_engine_ext(...)`:
    - Accepts an explicit
      `ProbLogRuleExt(branch_probabilities=...)`
-   - Legacy `body_confidences` is bridged upstream (in
-     `sdk/store.py` and `service/runtime_v1.py`), not inside
-     `evaluate_problog()` itself
+   - Internal compiled `body_confidences` may still be bridged
+     upstream (in `sdk/store.py` and `service/runtime_v1.py`), but
+     public authoring / service payloads reject that key
    - If both an explicit `engine_ext` and legacy
      `body_confidences` are present and inconsistent, the bridge
      raises `ValueError`
@@ -230,9 +230,10 @@ Semantic-delivery addendum:
     OR branch `i`
   - `None` is equivalent to all branches at `1.0`
   - The value range remains `(0, 1]`
-- The legacy authoring / compiled `body_confidences` may still
-  appear, but only as input for the SDK / runtime bridge; the
-  adapter / export itself consumes only the typed `engine_ext`
+- Internal compiled `body_confidences` may still appear as input for
+  the SDK / runtime bridge, but public authoring and service payloads
+  reject that key. The adapter / export itself consumes only the typed
+  `engine_ext`
 - The output program contains:
   - `edb_fact(...)` facts
   - `rule_body_i` branch rules

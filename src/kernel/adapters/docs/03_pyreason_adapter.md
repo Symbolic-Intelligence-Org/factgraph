@@ -431,7 +431,7 @@ v0 / v1 constraints:
   raise immediately
 - It uses the attribute-existence model: node predicates
   compile only the entity variable, without a value variable
-- Body atoms can carry an explicit interval threshold via
+- Rule-body atoms can carry an explicit interval threshold via
   `PyReasonRuleExt.body_predicate_bounds`, but this is an
   engine-specific compile hint, not new shared-DSL semantics
 - Rule heads can carry a static interval annotation via

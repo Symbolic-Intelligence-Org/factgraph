@@ -26,9 +26,9 @@ authoring preflight, publish, and registry workflows.
     parameters
   - These fields are authoring asset metadata; they do not
     participate in runtime semantics.
-- Derivation authoring still keeps a small compatibility compile
-  lane:
-  - For example, ProbLog's `body_confidences`
-  - Such fields may enter compile artifacts but are not part of the
-    shared runtime contract; before execution they may be bridged
-    into a typed `engine_ext`.
+- Public derivation authoring payloads reject engine-specific branch
+  probability shortcuts such as `body_confidences`.
+  - The temporary SDK fallback is
+    `ProbLogRuleExt(branch_probabilities=...)`.
+  - Future SemanticsProfile rule projection owns the durable public
+    shape.

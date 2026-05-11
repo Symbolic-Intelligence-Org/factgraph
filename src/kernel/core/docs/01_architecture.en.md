@@ -174,7 +174,7 @@ Definition-time engine semantics use `engine_ext`:
 - `pyreason` currently uses `PyReasonRuleExt`
 - `problog` currently uses `ProbLogRuleExt(branch_probabilities=...)`
   - semantics: normalized `where` OR-branch weighting
-  - legacy `body_confidences` is now only an authoring/SDK compatibility bridge, no longer a shared evaluate parameter
+  - internal compiled `body_confidences` is only a temporary SDK/runtime bridge; public authoring and service payloads reject it
 
 Native `RuleRef` semantics and current boundary:
 

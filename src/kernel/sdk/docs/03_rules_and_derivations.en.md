@@ -104,17 +104,17 @@ Supported:
 - negation: `Not([...])`
 - comparisons: `== != > >= < <=`
 - OR branches: `where=[[...], [...]]`
-- `Body` branches: `where=[Body([...], confidence=0.9), Body([...], confidence=0.6)]` (Rule/Derivation)
+- `Branch` branches: `where=[Branch([...]), Branch([...])]` (Rule/Derivation)
 - linear arithmetic inside comparisons (for example `age == (2026 - by)`, `x * 2`)
 
-`Body` example:
+`Branch` example:
 
 ```python
-from kernel.sdk import Body
+from kernel.sdk import Branch
 
 where = [
-    Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
-    Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
+    Branch([User(u), Pred("user:lang_pref", u, lang)]),
+    Branch([User(u), Pred("user:inferred_lang", u, lang)]),
 ]
 ```
 
@@ -122,9 +122,8 @@ Limits:
 - path sugar supports only `==`.
 - attr-vs-attr comparisons support only `==`, and require schema-aware compilation.
 - non-linear multiplication (`x * y`) is unsupported.
-- `where` cannot mix `Body(...)` with bare branches (for example `[Body([...]), [...]]`).
-- `Body.confidence` must be in `(0,1]`; if any branch sets confidence, all `Body` branches must set it.
-- Query does not support `Body.confidence` (`confidence!=None` fails fast).
+- `where` cannot mix `Branch(...)` with bare branches (for example `[Branch([...]), [...]]`).
+- `Branch(...)` accepts only the branch atom list; probability, confidence, and engine-specific kwargs are rejected.
 - string DSL is unsupported (`sdk.run("...")`, `sdk.evaluate("...")`).
 
 ### 3.1 Field Sugar vs `Pred(...)`
@@ -207,12 +206,12 @@ res = sdk.accept(cands[0], approved_by="alice")
 
 Fields:
 - required: `id`, `version`, `where`
-- optional: `head`, `target`, `head_vars`, `mode`, `engine_ext`, `status`, `description`, `tags`
+- optional: `head`, `target`, `head_vars`, `engine_ext`, `status`, `description`, `tags`
 
 Stable contract:
 - `head` shape infers candidate kind (fact/entity).
 - Multi-head (`head=[H1, H2, ...]`) is supported; `evaluate` returns flattened candidates sharing one `run_id`.
-- `Rule/Derivation.where` both support `Body(...)`; Rule path only unwraps atoms and ignores `confidence`.
+- `Rule/Derivation.where` both support `Branch(...)`; it unwraps to normalized OR-branch structure.
 - `sdk.run(derivation)` is not supported; use `sdk.evaluate(...)`.
 - `sdk.run(derivation)` fails with code `QUERY_INVALID_ROW_FORMAT` (error message directs callers to `evaluate()`).
 

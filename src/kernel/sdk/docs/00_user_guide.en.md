@@ -473,16 +473,15 @@ rows = fg.eval.run(r)
 
 Rule's `where` accepts:
 - A flat list of atoms: `[User(u), u.name == "Alice"]`
-- OR a list of `Body([...], confidence=<float>)` branches for
-  probabilistic engines:
+- OR a list of `Branch([...])` alternatives:
   ```python
-  from kernel.sdk import Body
+  from kernel.sdk import Branch
   where = [
-      Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
-      Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
+      Branch([User(u), Pred("user:lang_pref", u, lang)]),
+      Branch([User(u), Pred("user:inferred_lang", u, lang)]),
   ]
   ```
-  `where` cannot mix `Body(...)` with bare branches.
+  `where` cannot mix `Branch(...)` with bare branches.
 
 Rule `run` is a row dispatcher. Passing a `Derivation` to `run`
 explicitly raises (`use sdk.evaluate() instead`).
@@ -933,24 +932,35 @@ Notable changes:
 | `mode='engine'` value in `evaluate` | (removed) | Use `mode='souffle'`; old value raises with rename hint |
 | `mode='python'` value in `evaluate` | (removed) | Use `mode='native'`; old value raises with rename hint |
 
-### Probabilistic confidence bridge
+### ProbLog branch probability transition
 
-Probabilistic engines (`problog`) accept per-literal confidence via
-the `Body(...)` constructor:
+`Branch(...)` represents rule structure only. It does not carry
+probability, confidence, or engine-specific parameters. During the
+Track 3 transition, ProbLog branch probabilities remain available
+through `ProbLogRuleExt.branch_probabilities`:
 
 ```python
-from kernel.sdk import Body
+from kernel.adapters.problog.rule_ext import ProbLogRuleExt
+from kernel.sdk import Branch, Derivation
+
 where = [
-    Body([User(u), Pred("user:lang_pref", u, lang)], confidence=0.9),
-    Body([User(u), Pred("user:inferred_lang", u, lang)], confidence=0.6),
+    Branch([User(u), Pred("user:lang_pref", u, lang)]),
+    Branch([User(u), Pred("user:inferred_lang", u, lang)]),
 ]
+
+drv = Derivation(
+    id="drv.lang",
+    version="1.0.0",
+    where=where,
+    head=User.lang(value=lang),
+    engine_ext=ProbLogRuleExt(branch_probabilities=(0.9, 0.6)),
+)
 ```
 
-`Body.confidence` is `float ∈ (0, 1]`. There is **no** `body_confidences`
-keyword on `Rule(...)` — the SDK's public Rule dataclass does not
-accept it. (`body_confidences` is the internal IR field name for the
-flattened per-branch confidence list and is handled implicitly when
-`where` is composed of `Body(...)` branches.)
+Public `body_confidences` payloads are rejected. The name remains only
+as an internal compiled bridge for the ProbLog adapter until the future
+SemanticsProfile rule projection replaces the transitional `engine_ext`
+path.
 
 ### Tag semantics on multi-fields
 
