@@ -203,7 +203,8 @@ class AssertionRecordSetBoundaryTests(unittest.TestCase):
     def test_no_new_public_sdk_export_or_read_namespace_method(self) -> None:
         sdk, _, _ = _seed_store()
 
-        self.assertEqual(len(sdk_module.__all__), 35)
+        self.assertEqual(len(sdk_module.__all__), 36)
+        self.assertIn("ReadPolicy", sdk_module.__all__)
         self.assertNotIn("AssertionRecordSet", sdk_module.__all__)
         self.assertFalse(hasattr(sdk.read, "assertions"))
 

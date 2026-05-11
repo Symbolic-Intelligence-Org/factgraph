@@ -111,6 +111,7 @@ from kernel.sdk import (
     Not,
     Pred,
     Query,
+    ReadPolicy,
     Rule,
     RuleRef,
     SDKDSLError,
@@ -976,15 +977,16 @@ Derivation(
                 where=[Body([Pred("user:name", u, nm)], confidence=0.9)],
             )
 
-        rows = sdk.run(rule, row_format="dict", view="default")
+        rows = sdk.run(rule, row_format="dict")
         self.assertTrue(rows)
         self.assertNotIn("confidence", rows[0])
         self.assertEqual({row["u"] for row in rows}, {refs["u1"], refs["u2"], refs["u3"]})
 
+        policy = ReadPolicy(confidence_strategy="max")
         rows2, display_meta = sdk.run(
             rule,
             row_format="dict",
-            view="default",
+            policy=policy,
             return_display_meta=True,
         )
         self.assertEqual(rows2, rows)
@@ -996,7 +998,7 @@ Derivation(
 
         with self.assertRaises(SDKStoreError) as ctx_no_view:
             sdk.run(rule, row_format="dict", return_display_meta=True)
-        self.assertIn("requires view", str(ctx_no_view.exception))
+        self.assertIn("requires policy", str(ctx_no_view.exception))
 
     def test_write_protocol_kind_map_covers_sensitive_and_convention_meta(self) -> None:
         from kernel.core.evidence import write_protocol

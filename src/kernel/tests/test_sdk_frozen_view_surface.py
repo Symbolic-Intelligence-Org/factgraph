@@ -15,7 +15,8 @@ class User(Entity):
 
 class FrozenViewSurfaceTests(unittest.TestCase):
     def test_public_exports_remain_unchanged(self) -> None:
-        self.assertEqual(len(sdk_module.__all__), 35)
+        self.assertEqual(len(sdk_module.__all__), 36)
+        self.assertIn("ReadPolicy", sdk_module.__all__)
         self.assertNotIn("FrozenAssertionView", sdk_module.__all__)
         self.assertNotIn("AssertionRecordSet", sdk_module.__all__)
 

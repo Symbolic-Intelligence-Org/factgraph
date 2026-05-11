@@ -4,7 +4,7 @@ Per blueprint `2026-05-09_post-l-sdk-ergonomics-redesign.md` §5.9 lock:
 5 invariant classes mirroring the G5 invariant pattern, scoped to the
 post-L taxonomy + manager structure + docs lint.
 
-Class 1: `kernel.sdk.__all__` length 35 + `FactGraph` exported.
+Class 1: `kernel.sdk.__all__` length 36 + `FactGraph` exported.
 Class 2: Manager classes private (underscore prefix); not in `__all__`.
 Class 3: No `DeprecationWarning` from flat `SDKStore.<method>` calls
          (parametrized across 6 method families per §5.4 lock; existing
@@ -62,10 +62,13 @@ def _new_fg() -> FactGraph:
 
 
 class SDKAllLengthAndFactGraphExportInvariants(unittest.TestCase):
-    """`kernel.sdk.__all__` length 35 + `FactGraph` exported per §5.8 lock."""
+    """`kernel.sdk.__all__` length 36 + `FactGraph` exported, with `ReadPolicy` as the explicit addition."""
 
-    def test_all_length_is_35(self) -> None:
-        self.assertEqual(len(kernel_sdk.__all__), 35)
+    def test_all_length_is_36(self) -> None:
+        self.assertEqual(len(kernel_sdk.__all__), 36)
+
+    def test_readpolicy_in_all(self) -> None:
+        self.assertIn("ReadPolicy", kernel_sdk.__all__)
 
     def test_factgraph_in_all(self) -> None:
         self.assertIn("FactGraph", kernel_sdk.__all__)
