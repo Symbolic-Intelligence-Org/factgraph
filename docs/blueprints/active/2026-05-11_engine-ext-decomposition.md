@@ -1,6 +1,6 @@
 # Task Blueprint: Engine Ext Decomposition
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-11
 - Last Updated: 2026-05-11
 - Related Modules:
@@ -135,23 +135,25 @@ about adapter algorithm changes.
 
 ## 5. Proposed Shape
 
-### 5.0 Draft Decisions
+### 5.0 Scope Freeze Decisions
 
-The draft direction is:
+The A3 slice locks the following decisions:
 
-| ID | Draft decision |
+| ID | Decision |
 | --- | --- |
 | D1 | Remove public SDK `Rule.engine_ext`. |
 | D2 | Remove public SDK `Derivation.engine_ext`. |
 | D3 | Do not keep a public `engine_ext` alias or tombstone field on SDK rule objects. |
-| D4 | Add explicit authoring compile rejection for payload key `engine_ext`, redirecting to future SemanticsProfile. |
-| D5 | Add explicit service request rejection for top-level and derivation-level `engine_ext`, redirecting to future SemanticsProfile. |
-| D6 | Retain `EngineExtBase`, `CompiledDerivationPlan.engine_ext`, core `evaluate(..., engine_ext=...)`, and adapter-local ext dataclasses as internal transitional bridges for this slice. |
+| D4 | Reject authoring compile payload key `engine_ext`, redirecting only to future SemanticsProfile rule projection. |
+| D5 | Reject service request top-level and derivation-level `engine_ext`, redirecting only to future SemanticsProfile rule projection. |
+| D6 | Retain all current internal bridge layers unchanged for this slice: `EngineExtBase`, `CompiledDerivationPlan.engine_ext`, core `evaluate(..., engine_ext=...)`, ProbLog extension internals, and PyReason extension internals. |
 | D7 | Retain `ProbLogRuleExt.branch_probabilities` and `PyReasonRuleExt` internals, but remove release-facing docs that present them as the public SDK rule-definition entry. |
-| D8 | Accept a temporary public functionality gap: engine-specific rule projection has no durable public SDK entry between A3 and SemanticsProfile B/C/D. |
+| D8 | Accept the temporary public functionality gap: engine-specific rule projection has no durable public SDK entry between A3 and SemanticsProfile B/C/D. This is acceptable because the project is pre-release and adapter-specific rule projection will re-enter through SemanticsProfile. |
+| D9 | Enforce absence invariants: `"engine_ext"` must not appear in `Rule.__dataclass_fields__` or `Derivation.__dataclass_fields__`; `Rule(engine_ext=...)` and `Derivation(engine_ext=...)` must reject. |
 
-These are not yet scope-frozen. G0 should decide whether D6 stays broad or is
-narrowed further for specific layers.
+D6 intentionally mirrors A2's internal-bridge precedent. A3 removes public
+rule-definition syntax first; Phase B/C/D can narrow or replace the internal
+bridges when SemanticsProfile projection and adapter migrations exist.
 
 ### 5.1 User-Facing Shape After A3
 
@@ -182,7 +184,8 @@ Derivation(..., engine_ext=ProbLogRuleExt(...))
 {"engine_ext": {...}, ...}
 ```
 
-Future target shape is intentionally not implemented in A3:
+Illustrative future target shape. This is not a committed Track 3 / E API and
+is intentionally not implemented in A3:
 
 ```python
 fg.rules.evaluate(
@@ -196,25 +199,29 @@ fg.rules.evaluate(
 
 ## 6. Boundaries And Invariants
 
-Draft invariants to tighten at scope-freeze:
-
 - Public SDK:
   - `Rule` dataclass fields do not include `engine_ext`.
   - `Derivation` dataclass fields do not include `engine_ext`.
   - `Rule(..., engine_ext=...)` and `Derivation(..., engine_ext=...)` raise
     `TypeError` or a more specific SDK validation error.
   - `to_authoring_payload()` continues not to emit `engine_ext`.
+  - SDK evaluate and SDK shells do not read object-level
+    `getattr(derivation, "engine_ext", None)`.
 - Public payloads:
   - authoring derivation payloads with `engine_ext` reject with redirect text
-    to future SemanticsProfile.
+    to future SemanticsProfile rule projection.
   - service top-level `engine_ext` rejects.
   - service `derivation.engine_ext` rejects.
 - Internal bridges:
-  - `EngineExtBase` remains available for adapter internals unless G0 narrows
-    this.
-  - `CompiledDerivationPlan.engine_ext` remains available for adapter internals
-    unless G0 narrows this.
+  - `EngineExtBase` remains available for adapter internals.
+  - `CompiledDerivationPlan.engine_ext` remains available for adapter internals.
+  - core `evaluate(..., engine_ext=...)` remains available as an internal
+    bridge.
   - ProbLog `legacy_body_confidences` remains available as retained by A2.
+  - `ProbLogRuleExt.branch_probabilities` and
+    `resolve_problog_engine_ext(...)` remain available as adapter internals.
+  - `PyReasonRuleExt` and PyReason where/rule compile extension handling remain
+    available as adapter internals.
   - PyReason rule compilation behavior remains unchanged in internal tests.
 - Docs:
   - Release-facing docs no longer teach `engine_ext` as public SDK syntax.
@@ -223,31 +230,55 @@ Draft invariants to tighten at scope-freeze:
 
 ## 7. Acceptance
 
-Draft gates for G0 to make exact:
-
-- [ ] Red baseline covers `Rule` / `Derivation` public `engine_ext` fields.
-- [ ] Red baseline covers `Rule(..., engine_ext=...)` and
-      `Derivation(..., engine_ext=...)` constructor rejection.
-- [ ] Red baseline covers authoring payload `engine_ext` rejection.
-- [ ] Red baseline covers service top-level and derivation-level
-      `engine_ext` rejection.
-- [ ] Guard tests prove adapter-local `ProbLogRuleExt` / `PyReasonRuleExt`
-      still exist as internal transitional targets.
-- [ ] Guard tests prove A2 `body_confidences` internal bridge still works.
+- [ ] G1 red baseline proves `Rule.__dataclass_fields__` still contains
+      `engine_ext` before implementation.
+- [ ] G1 red baseline proves `Derivation.__dataclass_fields__` still contains
+      `engine_ext` before implementation.
+- [ ] G1 red baseline proves `Rule(..., engine_ext=...)` still constructs
+      before implementation.
+- [ ] G1 red baseline proves `Derivation(..., engine_ext=...)` still
+      constructs before implementation.
+- [ ] G1 red baseline proves authoring payload `engine_ext` is not yet
+      rejected before implementation.
+- [ ] G1 red baseline proves service top-level `engine_ext` is not yet
+      rejected before implementation.
+- [ ] G1 red baseline proves service `derivation.engine_ext` is not yet
+      rejected before implementation.
+- [ ] After G2, `Rule.__dataclass_fields__` excludes `engine_ext`.
+- [ ] After G2, `Derivation.__dataclass_fields__` excludes `engine_ext`.
+- [ ] After G2, `Rule(..., engine_ext=...)` rejects.
+- [ ] After G2, `Derivation(..., engine_ext=...)` rejects.
+- [ ] After G2, SDK `to_authoring_payload()` still emits no `engine_ext`.
+- [ ] After G2, SDK evaluate and SDK shells no longer read object-level
+      `engine_ext`.
+- [ ] After G2, authoring payload `engine_ext` rejects with future
+      SemanticsProfile redirect text.
+- [ ] After G2, service top-level `engine_ext` rejects with future
+      SemanticsProfile redirect text.
+- [ ] After G2, service `derivation.engine_ext` rejects with future
+      SemanticsProfile redirect text.
+- [ ] Guard tests prove `EngineExtBase` and `CompiledDerivationPlan.engine_ext`
+      remain available as internal transitional bridge.
+- [ ] Guard tests prove `ProbLogRuleExt.branch_probabilities` and
+      `PyReasonRuleExt` remain available as adapter internals.
+- [ ] Guard tests prove A2 `body_confidences` internal ProbLog bridge still
+      works.
 - [ ] Targeted ProbLog tests still pass.
-- [ ] Targeted PyReason tests still pass, or any moved public tests are
-      explicitly rewritten as adapter-internal tests.
+- [ ] Targeted PyReason tests still pass; any tests that used public SDK
+      `engine_ext` are rewritten as adapter-internal tests if needed.
 - [ ] No `SemanticsProfile` implementation appears in A3.
 - [ ] Release-facing docs stale-syntax grep is clean for public
-      `Rule(..., engine_ext=...)` / `Derivation(..., engine_ext=...)`.
+      `Rule(..., engine_ext=...)` / `Derivation(..., engine_ext=...)`, with
+      remaining `engine_ext` mentions limited to rejection, internal bridge,
+      archive, or future-migration context.
 
 ## 8. Implementation Plan
 
 Expected cadence, matching A1/A2:
 
 1. G0 scope-freeze:
-   - lock D1-D8;
-   - decide exactly how much of D6 internal bridge remains;
+   - lock D1-D9;
+   - lock D6 as broad internal-bridge retention;
    - tighten §6 / §7 into testable form;
    - record scope-freeze in audit.
 2. G1 red baseline:
