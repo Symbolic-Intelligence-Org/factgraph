@@ -1,8 +1,8 @@
 # Task Blueprint: Condition Weights Decomposition
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-11
-- Last Updated: 2026-05-11
+- Last Updated: 2026-05-12
 - Related Modules:
   - `src/kernel/sdk/`
   - `src/kernel/authoring/`
@@ -319,9 +319,60 @@ Expected active docs to inspect:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+### Final Landed Behavior
 
-- Final landed behavior:
-- Deviations from blueprint:
-- Rationale for deviations:
-- Archive notes:
+A4 closed as the Option C boundary-clarification slice:
+
+- `Rule.condition_weights` remains public SDK syntax.
+- Authoring, service registry, and agent rule payloads continue to accept
+  and preserve `condition_weights`.
+- `condition_weights` remains keyed by atom position:
+  `b{branch}.a{atom}`.
+- `_confidence_kind_resolver` still routes eligible candidates to
+  `confidence_kind="certainty"` when rule payloads contain non-empty
+  weights.
+- `_certainty_service` and `materialize_certainty_summary(...)` still
+  consume pre-resolved weights without changing aggregation math.
+- The March 2026 boundary is preserved: weights do not enter `where`,
+  `where_ast`, evaluator IR, ProbLog rule syntax, or PyReason rule syntax.
+- Public docs classify weights as certainty/explain projection input, not
+  engine adapter semantics.
+- Future runtime configuration for this lane is explicitly pointed at
+  `SemanticsProfile.certainty_projection`.
+
+### Validation
+
+- G1 guard baseline added `test_condition_weights_decomposition.py`;
+  A4 guard suite passed 9/9.
+- Declaration metadata + core certainty annotation regression passed 43/43.
+- A4 + certainty explain contract regression passed 50/50.
+- G3 docs grep verified `SemanticsProfile.certainty_projection` appears
+  across release-facing docs.
+- G3 docs grep verified `engine adapter` proximity appears only in explicit
+  negative classification text.
+- `git diff --check` passed during G2/G3 verification.
+
+### Commit Lineage
+
+- `9bb2817c` — draft condition weights decomposition.
+- `aa1c1143` — scope condition weights decomposition.
+- `64d17e90` — add guard baseline for condition weights decomposition.
+- `46bb77ea` — mark condition weights projection semantics.
+- `b88c4ab6` — classify condition weights projection semantics.
+
+### Deviations
+
+- G2 used the small marker path rather than an empty implementation step.
+  The marker is intentionally non-behavioral and exists only to anchor the
+  retained field to the Track 3 / B migration target.
+- G3 updated `src/kernel/authoring/docs/README.md` in addition to the
+  expected §9 list, because the README summarized declaration metadata and
+  otherwise would have omitted the retained `condition_weights` lane.
+
+### Archive Notes
+
+A4 is the final Track 3 A-slice after A1 (`Derivation.mode`), A2
+(`Body` / branch confidence), and A3 (`engine_ext`). It deliberately does
+not remove `condition_weights`; it records the retained certainty/explain
+lane so Track 3 / B can introduce `SemanticsProfile.certainty_projection`
+without rediscovering the March 2026 metadata boundary.
