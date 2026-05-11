@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (§5.5 LOCKED — P1 `policy: ReadPolicy | None` only; `return_display_meta` requires policy)
+- **Last Updated:** 2026-05-11 (§5.6 LOCKED — old-API removal; explicit redirect guards on `find` / `run` / `evaluate`; `run` uses tombstone sentinel)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -158,7 +158,7 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 | §5.3 | **DTO module location + public export. — LOCKED** | `ReadPolicy` defined at `kernel/core/store/types.py` (in-place replace of `ViewSpec`); enters `kernel.sdk.__all__` (35 → 36); `ConfidenceStrategy` stays core-only (not exported). See §5.3 subsection below. |
 | §5.4 | **`fg.views` final semantics. — LOCKED** | `default` entry dropped (not built-in, not reserved); `_views` starts `{}`; `create/update` accept only `asrt_ids=` / `asrts=` (no `view_spec=`); return types narrow to `FrozenAssertionView` / `dict[str, FrozenAssertionView]`. See §5.4 subsection below. |
 | §5.5 | **`policy=` call-site API. — LOCKED** | `policy: ReadPolicy \| None = None` on `find` / `run`; `policy=None` skips policy (mirrors current `view=None`); `dict` / `str` / `FrozenAssertionView` rejected; `evaluate(policy=...)` rejected; `return_display_meta=True` requires non-`None` policy. See §5.5 subsection below. |
-| §5.6 | **Old API removal mechanic.** | Per §0.7 default = hard cut. Old `ViewSpec` import: removed entirely vs raise on construction. Old `fg.views.create(name, ViewSpec(...))`: `TypeError` vs `SDKStoreError` with redirect message. Old `view=` kwarg on `find` / `run`: raise vs silent ignore. Final error texts for each path. |
+| §5.6 | **Old API removal mechanic. — LOCKED** | `ViewSpec` class deleted; `find` adds `"view" in filter_kwargs` guard; `run` adds **tombstone sentinel** `view: Any = _MISSING` rejecting even `view=None`; `evaluate` uses combined `view`/`policy` rejection. Error texts at semantic level only. See §5.6 subsection below. |
 | §5.7 | **Non-SDK ViewSpec reference sweep.** | Full grep of `ViewSpec` across `src/kernel/application/protocol/`, `src/service/`, `src/kernel/audit/`, `src/kernel/tests/`. For each reference: keep (internal-only) vs migrate (cross-layer) vs delete (dead). |
 | §5.8 | **Docs + examples rewrite.** | SDK docs touched by `ace2563` + `4a794f3`. The new `examples/05_sdk_assertion_views.ipynb` (`58c07fc`, 368 lines) added today with old syntax — must be rewritten or retired. Doc-URL strategy for §5.6 redirect messages. |
 | §5.9 | **Test coverage plan.** | Policy DTO contract tests (3 fields × validation paths). `policy=` kwarg behavior on `find` / `run`. Removal-redirect tests for each §5.6 deprecated path. Existing ViewSpec test sweep — delete vs rewrite. |
@@ -434,6 +434,88 @@ The literal text changes; the semantic invariant — `return_display_meta=True �
 - Old `ViewSpec` import / construction removal → §5.6.
 - Service-runtime call-site migration (its parallel `view=` API surface) → §5.7.
 - Tests for each rejection path (`dict` / `str` / `FrozenAssertionView`) and the `return_display_meta` + `policy=None` invariant → §5.9.
+
+### §5.6 LOCKED — Old-API removal; explicit redirects on `find` / `run` / `evaluate`; `run` uses tombstone sentinel
+
+**Decision matrix per old path:**
+
+| Path | Mechanic |
+|---|---|
+| R1 — `ViewSpec` class at `kernel/core/store/types.py:47-59` | **Deleted entirely.** No `__getattr__` shim. `from kernel.core.store.types import ViewSpec` raises Python's standard `ImportError`. |
+| R2 — `fg.views.create(name, ViewSpec(...))` / `view_spec=` kwarg | Already removed by §5.4 (param dropped from signature) + R1 (constructor name gone). No additional handling. |
+| R3 — `fg.read.find(..., view=...)` | **Explicit guard in `find` body.** `find` keeps its `**filter_kwargs`; guard runs before filter validation: `if "view" in filter_kwargs: raise SDKStoreError(...)`. |
+| R4 — `fg.run(..., view=...)` | **Explicit tombstone-sentinel guard.** `run` does not have `**kwargs`; `view` is preserved as a keyword-only parameter with a sentinel default `_MISSING`. Guard rejects **any** explicit pass including `view=None`. |
+| R5 — `evaluate(..., view=...)` / `evaluate(..., policy=...)` | **Combined check in evaluate body**: `if "view" in kwargs or "policy" in kwargs: raise SDKStoreError(...)`. evaluate retains `**kwargs`; both names rejected with one combined message. |
+
+**R4 tombstone-sentinel pattern (locked verbatim):**
+
+> `fg.run(..., view=...)` receives an explicit tombstone guard, not a bare Python `TypeError`. The guard must reject even `view=None` when supplied explicitly, and point callers to `policy=ReadPolicy(...)`.
+
+Implementation pattern:
+
+```python
+# kernel/sdk/store.py — module-level sentinel
+_VIEW_TOMBSTONE = object()
+
+def run(
+    self,
+    obj: Any,
+    *,
+    row_format: str | None = None,
+    policy: ReadPolicy | None = None,
+    view: Any = _VIEW_TOMBSTONE,
+    return_display_meta: bool = False,
+    registry: RuleRegistry | None = None,
+):
+    if view is not _VIEW_TOMBSTONE:
+        raise SDKStoreError(
+            "view= was renamed to policy= for read/display policy; "
+            "pass policy=ReadPolicy(...) instead",
+            path="$.run.view",
+        )
+    ...
+```
+
+The sentinel name (`_VIEW_TOMBSTONE` here) is **implementation freedom**; the **semantic contract** is locked: `run(view=anything-at-all)` raises, including `run(view=None)`, distinguishing "user explicitly passed `view`" from "user did not pass `view`".
+
+**Why R4 needs a sentinel, not a regular default:**
+
+- A default of `view: Any = None` cannot distinguish `run(rule)` (no `view` passed) from `run(rule, view=None)` (user explicitly passed `view=None`).
+- The §5.6 contract requires the explicit-pass case to raise; the no-pass case must succeed silently.
+- Sentinel `_MISSING` (any unique module-level object) provides the distinction.
+
+**Why R4 redirect, not Python `TypeError` (rejected alternative R4-a):**
+
+- `run` is a high-frequency surface that users routinely copy from old docs and examples (e.g., `fg.run(rule, view="preferred_names", return_display_meta=True)`).
+- Python's bare `TypeError: run() got an unexpected keyword argument 'view'` names the parameter but does not point to `policy=ReadPolicy(...)`.
+- R3 (`find`) already commits to explicit redirect; R4 keeps symmetry.
+
+**Error-text scope** (per §5.4 / §5.5 precedent):
+
+All R1–R5 error texts are locked at the **semantic** level only; literal strings are implementation freedom.
+
+| Path | Semantic contract (locked) | Literal (free) |
+|---|---|---|
+| R1 | "`ViewSpec` is no longer importable; the replacement is `ReadPolicy`." | Python standard `ImportError` is acceptable; the redirect to `ReadPolicy` lives in docs, not in the import-time message. |
+| R3 | "`view=` was renamed to `policy=`." | Any phrasing of the rename + suggested replacement. |
+| R4 | "`view=` was renamed to `policy=` for read/display policy." | Same. |
+| R5 | "`evaluate()` does not accept `view=` or `policy=`; derivation evaluation always uses active projection." | Any phrasing covering the two-rejection semantic in one message. |
+
+**Implementation cross-references (Phase 2):**
+
+| File:line | Change |
+|---|---|
+| `src/kernel/core/store/types.py:47-59` | **R1**: delete `ViewSpec` class block. |
+| `src/kernel/sdk/store.py:561` (`find`) | **R3**: add early-body guard `if "view" in filter_kwargs: raise SDKStoreError(...)`. |
+| `src/kernel/sdk/store.py:1384` (`run` signature) | **R4**: declare `view: Any = _VIEW_TOMBSTONE` keyword-only param; module-level `_VIEW_TOMBSTONE = object()`; guard inside `run` body. |
+| `src/kernel/sdk/store.py:1565` (`evaluate`) | **R5**: replace single-key `"view"` check with combined `"view" or "policy" in kwargs` rejection. |
+
+**What this gap does NOT decide:**
+
+- Service-runtime mirror removal (`src/service/runtime_v1.py` parallel `view=` surface, 9 sites) → §5.7.
+- Service-runtime parse/serialize body rewrite (`_parse_view_spec`, `_view_spec_to_dict`, `_resolve_runtime_view_spec`) → §5.7.
+- Test coverage for each R1–R5 redirect path (including `run(view=None)` tombstone behavior) → §5.9.
+- Documentation rewrite of any examples currently teaching the old `view=` patterns → §5.8.
 
 ## 6. Invariants
 
