@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json as _json
 import logging
 from typing import Any
 
-from fastapi import Body, Depends, FastAPI, File, Form, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from service._common import error_response
 from service.registry_v1 import (
     list_registry_assets,
     read_registry_derivation,
@@ -20,8 +18,6 @@ from service.runtime_v1 import (
     accept_runtime_derivation,
     clear_ephemeral_rules,
     close_runtime_session,
-    create_runtime_view,
-    delete_runtime_view,
     evaluate_runtime_derivation,
     explain_runtime_ref,
     explain_runtime_tree,
@@ -37,12 +33,10 @@ from service.runtime_v1 import (
     explain_runtime_timeline_summary,
     export_runtime_package,
     get_runtime_session_rules,
-    get_runtime_view,
     get_runtime_session,
     get_runtime_session_schema,
     list_ephemeral_rules,
     list_runtime_candidates,
-    list_runtime_views,
     list_runtime_conflicts,
     list_runtime_claims,
     open_runtime_session,
@@ -53,7 +47,6 @@ from service.runtime_v1 import (
     retract_runtime_fact,
     register_ephemeral_rule,
     run_runtime_rule,
-    update_runtime_view,
     write_runtime_fact,
 )
 from service.auth import require_api_key
@@ -216,31 +209,6 @@ def post_runtime_resolve_mapping(session_id: str, payload: dict[str, Any] = Body
 @app.post("/v1/runtime/sessions/{session_id}/queries/view-facts", dependencies=AUTH_DEPENDENCIES)
 def post_runtime_view_facts(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return project_runtime_view_facts(session_id, payload)
-
-
-@app.post("/v1/runtime/sessions/{session_id}/views/create", dependencies=AUTH_DEPENDENCIES)
-def post_runtime_view_create(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return create_runtime_view(session_id, payload)
-
-
-@app.post("/v1/runtime/sessions/{session_id}/views/update", dependencies=AUTH_DEPENDENCIES)
-def post_runtime_view_update(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return update_runtime_view(session_id, payload)
-
-
-@app.post("/v1/runtime/sessions/{session_id}/views/delete", dependencies=AUTH_DEPENDENCIES)
-def post_runtime_view_delete(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return delete_runtime_view(session_id, payload)
-
-
-@app.post("/v1/runtime/sessions/{session_id}/views/get", dependencies=AUTH_DEPENDENCIES)
-def post_runtime_view_get(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return get_runtime_view(session_id, payload)
-
-
-@app.get("/v1/runtime/sessions/{session_id}/views", dependencies=AUTH_DEPENDENCIES)
-def get_runtime_view_list(session_id: str) -> dict[str, Any]:
-    return list_runtime_views(session_id)
 
 
 @app.post("/v1/runtime/sessions/{session_id}/rules/run", dependencies=AUTH_DEPENDENCIES)

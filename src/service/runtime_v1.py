@@ -107,7 +107,6 @@ class RuntimeSession:
     registry_root: str | None
     schema_digest: str
     opened_at_ns: int
-    views: dict[str, ReadPolicy]
     derivation_recipes: dict[str, RuntimeDerivationRecipe] = field(default_factory=dict)
     ephemeral_rules: list[RuleSpec] = field(default_factory=list)
 
@@ -124,7 +123,6 @@ class _RuntimeSessionManager:
         ledger_path: str | None,
         registry_root: str | None,
         digest: str,
-        views: dict[str, ReadPolicy],
     ) -> RuntimeSession:
         session = RuntimeSession(
             session_id=f"rt_{uuid4().hex}",
@@ -133,7 +131,6 @@ class _RuntimeSessionManager:
             registry_root=registry_root,
             schema_digest=digest,
             opened_at_ns=time_ns(),
-            views=views,
         )
         with self._lock:
             self._sessions[session.session_id] = session
@@ -186,7 +183,6 @@ def open_runtime_session(dto: dict[str, Any]) -> dict[str, Any]:
             ledger_path=ledger_path,
             registry_root=registry_root,
             digest=digest,
-            views={"default": ReadPolicy()},
         )
         return ok_response(session=_session_to_dict(session))
     except Exception as exc:
@@ -843,19 +839,14 @@ def project_runtime_view_facts(session_id: str, dto: dict[str, Any]) -> dict[str
                 path="$.temporal_view",
             )
         include_audit = _resolve_include_audit(dto.get("include_audit"), path="$.include_audit")
-        view_spec = _resolve_runtime_view_spec(session, dto)
+        policy = _resolve_runtime_read_policy(dto)
         if include_audit:
             projected_facts, audit = project_view_facts_with_audit(
                 session.store.ledger,
                 session.store.schema_ir,
             )
-            display_facts = project_display_facts(
-                session.store.ledger,
-                view_spec,
-            )
             view = {
-                "facts": _to_jsonable(display_facts),
-                "view_spec": _view_spec_to_dict(view_spec),
+                "facts": _to_jsonable(_runtime_policy_facts(session.store.ledger, projected_facts, policy)),
                 "audit": asdict(audit),
             }
         else:
@@ -863,14 +854,11 @@ def project_runtime_view_facts(session_id: str, dto: dict[str, Any]) -> dict[str
                 session.store.ledger,
                 session.store.schema_ir,
             )
-            display_facts = project_display_facts(
-                session.store.ledger,
-                view_spec,
-            )
             view = {
-                "facts": _to_jsonable(display_facts),
-                "view_spec": _view_spec_to_dict(view_spec),
+                "facts": _to_jsonable(_runtime_policy_facts(session.store.ledger, projected_facts, policy)),
             }
+        if policy is not None:
+            view["policy"] = _read_policy_to_dict(policy)
         return ok_response(
             meta={
                 "pred_count": len(projected_facts),
@@ -880,83 +868,6 @@ def project_runtime_view_facts(session_id: str, dto: dict[str, Any]) -> dict[str
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="query_view_facts")
-        return error_response([err])
-
-
-def create_runtime_view(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
-    try:
-        session = _require_session(session_id)
-        if not isinstance(dto, dict):
-            raise facade_error("dto must be object", kind="shape", path="$")
-        name = _require_non_empty_str(dto.get("name"), path="$.name")
-        if name in session.views:
-            raise facade_error("view already exists", kind="shape", path="$.name", details={"name": name})
-        view_spec = _parse_view_spec(dto.get("view"), path="$.view")
-        session.views[name] = view_spec
-        return ok_response(view={"name": name, "spec": _view_spec_to_dict(view_spec)})
-    except Exception as exc:
-        err = _runtime_exception_to_error(exc, default_kind="view_create")
-        return error_response([err])
-
-
-def update_runtime_view(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
-    try:
-        session = _require_session(session_id)
-        if not isinstance(dto, dict):
-            raise facade_error("dto must be object", kind="shape", path="$")
-        name = _require_non_empty_str(dto.get("name"), path="$.name")
-        if name not in session.views:
-            raise facade_error("view not found", kind="shape", path="$.name", details={"name": name})
-        view_spec = _parse_view_spec(dto.get("view"), path="$.view")
-        session.views[name] = view_spec
-        return ok_response(view={"name": name, "spec": _view_spec_to_dict(view_spec)})
-    except Exception as exc:
-        err = _runtime_exception_to_error(exc, default_kind="view_update")
-        return error_response([err])
-
-
-def delete_runtime_view(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
-    try:
-        session = _require_session(session_id)
-        if not isinstance(dto, dict):
-            raise facade_error("dto must be object", kind="shape", path="$")
-        name = _require_non_empty_str(dto.get("name"), path="$.name")
-        if name == "default":
-            raise facade_error("cannot delete built-in view: default", kind="shape", path="$.name")
-        if name not in session.views:
-            raise facade_error("view not found", kind="shape", path="$.name", details={"name": name})
-        session.views.pop(name, None)
-        return ok_response(deleted={"name": name})
-    except Exception as exc:
-        err = _runtime_exception_to_error(exc, default_kind="view_delete")
-        return error_response([err])
-
-
-def get_runtime_view(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
-    try:
-        session = _require_session(session_id)
-        if not isinstance(dto, dict):
-            raise facade_error("dto must be object", kind="shape", path="$")
-        name = _require_non_empty_str(dto.get("name"), path="$.name")
-        if name not in session.views:
-            raise facade_error("view not found", kind="shape", path="$.name", details={"name": name})
-        return ok_response(view={"name": name, "spec": _view_spec_to_dict(session.views[name])})
-    except Exception as exc:
-        err = _runtime_exception_to_error(exc, default_kind="view_get")
-        return error_response([err])
-
-
-def list_runtime_views(session_id: str) -> dict[str, Any]:
-    try:
-        session = _require_session(session_id)
-        return ok_response(
-            views={
-                name: _view_spec_to_dict(spec)
-                for name, spec in sorted(session.views.items(), key=lambda item: item[0])
-            }
-        )
-    except Exception as exc:
-        err = _runtime_exception_to_error(exc, default_kind="view_list")
         return error_response([err])
 
 
@@ -2611,58 +2522,72 @@ def _mapping_conflict_to_error(exc: MappingConflictError) -> dict[str, Any]:
     }
 
 
-def _resolve_runtime_view_spec(session: RuntimeSession, dto: dict[str, Any]) -> ReadPolicy:
-    has_view_name = "view_name" in dto
-    has_view_object = "view" in dto
-    if has_view_name and has_view_object:
+def _resolve_runtime_read_policy(dto: dict[str, Any]) -> ReadPolicy | None:
+    if "view_name" in dto:
         raise facade_error(
-            "provide either view_name or view, not both",
+            "view_name was removed; pass policy inline with the policy key",
             kind="shape",
-            path="$",
+            path="$.view_name",
         )
-    if has_view_name:
-        view_name = _require_non_empty_str(dto.get("view_name"), path="$.view_name")
-        spec = session.views.get(view_name)
-        if spec is None:
-            raise facade_error("view not found", kind="shape", path="$.view_name", details={"name": view_name})
-        return spec
-    if has_view_object:
-        return _parse_view_spec(dto.get("view"), path="$.view")
-    return session.views["default"]
+    if "view" in dto:
+        raise facade_error(
+            "view was renamed to policy for runtime view-facts",
+            kind="shape",
+            path="$.view",
+        )
+    if "policy" not in dto or dto.get("policy") is None:
+        return None
+    return _parse_read_policy(dto.get("policy"), path="$.policy")
 
 
-def _parse_view_spec(value: Any, *, path: str) -> ReadPolicy:
+def _runtime_policy_facts(
+    ledger: Ledger,
+    projected_facts: dict[str, list[dict[str, Any]]],
+    policy: ReadPolicy | None,
+) -> dict[str, list[dict[str, Any]]]:
+    if policy is None:
+        return projected_facts
+    return project_display_facts(ledger, policy)
+
+
+def _parse_read_policy(value: Any, *, path: str) -> ReadPolicy:
     if isinstance(value, ReadPolicy):
         return value
     if not isinstance(value, dict):
-        raise facade_error("view must be object", kind="shape", path=path)
+        raise facade_error("policy must be object", kind="shape", path=path)
+    if "active" in value:
+        raise facade_error(
+            "policy.active was renamed to policy.respect_revocations",
+            kind="shape",
+            path=f"{path}.active",
+        )
 
-    active_raw = value.get("active", True)
-    if not isinstance(active_raw, bool):
-        raise facade_error("view.active must be bool", kind="shape", path=f"{path}.active")
+    respect_revocations_raw = value.get("respect_revocations", True)
+    if not isinstance(respect_revocations_raw, bool):
+        raise facade_error("policy.respect_revocations must be bool", kind="shape", path=f"{path}.respect_revocations")
 
     strategy_raw = value.get("confidence_strategy", "max")
     if not isinstance(strategy_raw, str) or strategy_raw not in {"max", "mean", "median", "prefer_source"}:
         raise facade_error(
-            "view.confidence_strategy must be one of: max, mean, median, prefer_source",
+            "policy.confidence_strategy must be one of: max, mean, median, prefer_source",
             kind="shape",
             path=f"{path}.confidence_strategy",
         )
 
     prefer_source_raw = value.get("prefer_source")
     if prefer_source_raw is not None and (not isinstance(prefer_source_raw, str) or not prefer_source_raw):
-        raise facade_error("view.prefer_source must be non-empty string or null", kind="shape", path=f"{path}.prefer_source")
+        raise facade_error("policy.prefer_source must be non-empty string or null", kind="shape", path=f"{path}.prefer_source")
 
     return ReadPolicy(
-        respect_revocations=active_raw,
+        respect_revocations=respect_revocations_raw,
         confidence_strategy=strategy_raw,
         prefer_source=prefer_source_raw,
     )
 
 
-def _view_spec_to_dict(read_policy: ReadPolicy) -> dict[str, Any]:
+def _read_policy_to_dict(read_policy: ReadPolicy) -> dict[str, Any]:
     return {
-        "active": read_policy.respect_revocations,
+        "respect_revocations": read_policy.respect_revocations,
         "confidence_strategy": read_policy.confidence_strategy,
         "prefer_source": read_policy.prefer_source,
     }

@@ -118,7 +118,6 @@ class SoufflePartialWitnessV1Tests(unittest.TestCase):
             registry_root=None,
             schema_digest=sha256_token(b"schema"),
             opened_at_ns=0,
-            views={},
         )
 
         explain_resp = _explain_ref_candidate(session, "cand-souffle")

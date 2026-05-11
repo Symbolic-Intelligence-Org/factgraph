@@ -36,7 +36,6 @@ substrings), not literal strings.
 from __future__ import annotations
 
 import unittest
-from typing import Any
 
 from kernel.sdk import Entity, Field, Identity, SDKStore
 
@@ -253,23 +252,18 @@ class ProjectRuntimeViewFactsInlinePolicyTests(unittest.TestCase):
 
     def test_view_name_lookup_path_is_removed(self) -> None:
         """Pre-migration `dto["view_name"]` looked up a registered ViewSpec.
-        Post-migration: registry is gone; `view_name` is no longer a
-        recognized DTO key. Either rejected explicitly or silently ignored
-        (and falls into the no-policy path).
+        Post-migration: registry is gone; `view_name` is rejected explicitly.
         """
         from service.runtime_v1 import project_runtime_view_facts
 
         sid = _open_session()
         result = project_runtime_view_facts(sid, {"view_name": "default"})
-        # Either explicit error response OR ok-without-policy.
-        if result.get("ok"):
-            view = result.get("view", {})
-            self.assertNotIn("view_spec", view)
-            self.assertNotIn("policy", view)
-        else:
-            # Error response must mention removal / rename.
-            errors = result.get("errors", [])
-            self.assertTrue(errors, msg=str(result))
+        self.assertFalse(result.get("ok"), msg=str(result))
+        errors = result.get("errors", [])
+        self.assertTrue(errors, msg=str(result))
+        message = str(errors).lower()
+        self.assertIn("view_name", message)
+        self.assertIn("policy", message)
 
 
 if __name__ == "__main__":
