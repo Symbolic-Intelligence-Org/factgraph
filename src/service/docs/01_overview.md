@@ -4,7 +4,7 @@
 - 最后更新：2026-05-06
 - 目标读者：需要通过 HTTP 对接 runtime / registry 的前后端开发者
 
-前端 / 机读 API 参考：[`06_frontend_integration.md`](./06_frontend_integration.md)（集成指南）+ [`../../../docs/api/openapi.yaml`](../../../docs/api/openapi.yaml)（OpenAPI 3.0 机读契约，48 个 operation 全覆盖；漂移守卫：`scripts/export_openapi.py`，需 `PYTHONPATH=src` 执行）。
+前端 / 机读 API 参考：[`06_frontend_integration.md`](./06_frontend_integration.md)（集成指南）+ [`../../../docs/api/openapi.yaml`](../../../docs/api/openapi.yaml)（OpenAPI 3.0 机读契约，43 个 operation 全覆盖；漂移守卫：`scripts/export_openapi.py`，需 `PYTHONPATH=src` 执行）。
 
 ## 1. 模块职责
 
@@ -20,7 +20,7 @@
 - runtime rule 执行
 - derivation evaluate / accept
 - explain/conflicts/view-facts 查询
-- runtime views 管理
+- runtime read policy DTO
 - package 导出
 - registry manifest / schema / assets / rule / derivation 读取
 
@@ -51,7 +51,7 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `rules_v1.py`
   - rule validate / compile-preview / profile 列表
 - `runtime_v1.py`
-  - runtime session、facts 写入/查询、views、rule/derivation 执行、package 导出
+- runtime session、facts 写入/查询、inline policy、rule/derivation 执行、package 导出
 - `registry_v1.py`
   - registry 只读接口
 - `_common.py`
@@ -67,8 +67,8 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 
 - `02_runtime_sessions.md`
   - runtime session 生命周期、writes、claims。
-- `03_runtime_queries_views.md`
-  - runtime query、views、rule/derivation 执行、package export。
+- `03_runtime_queries_policy.md`
+  - runtime query、inline policy、rule/derivation 执行、package export。
 - `04_rules_registry.md`
   - rules facade 与 registry 只读接口。
 - `06_frontend_integration.md`
@@ -109,13 +109,11 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
 
-### 4.4 runtime views
+### 4.4 runtime read policy
 
-- `POST /v1/runtime/sessions/{session_id}/views/create`
-- `POST /v1/runtime/sessions/{session_id}/views/update`
-- `POST /v1/runtime/sessions/{session_id}/views/delete`
-- `POST /v1/runtime/sessions/{session_id}/views/get`
-- `GET /v1/runtime/sessions/{session_id}/views`
+- `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
+  accepts inline `policy` and no longer exposes named runtime view
+  lifecycle routes.
 
 ### 4.5 runtime rule/derivation/package
 
@@ -197,10 +195,11 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `$.candidate.payload`：payload 不是 v2 形态（例如客户端裁剪了 `terms`）。
 - `$.candidate.candidate_kind`：缺少或非法（必须是 `fact` / `entity`）。
 
-### 5.3 runtime views / view-facts
+### 5.3 runtime policy / view-facts
 
-- 每个 session 会内建 `default` 视图。
-- `view-facts` 支持 `view_name` 或内联 `view`，并可选返回 projector audit。
+- runtime service 不保存命名 policy registry，也不初始化 `default` 视图。
+- `view-facts` 支持内联 `policy`，并可选返回 projector audit。
+- 旧 `view_name` 与 `view` 字段会返回 shape error；需要在 `policy` 对象内传 `respect_revocations` / `confidence_strategy` / `prefer_source`。
 - `temporal_view` 已从 runtime view / rule / derivation 链路移除；传入会返回 shape error。
 
 ### 5.4 registry 读取

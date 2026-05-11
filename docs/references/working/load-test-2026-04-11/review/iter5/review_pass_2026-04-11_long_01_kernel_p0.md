@@ -1492,7 +1492,7 @@ provenance:
       - `src/factpy_kernel/service/docs/README.md`
       - `src/factpy_kernel/service/docs/01_overview.md`
       - `src/factpy_kernel/service/docs/02_runtime_sessions.md`
-      - `src/factpy_kernel/service/docs/03_runtime_queries_views.md`
+      - `src/factpy_kernel/service/docs/03_runtime_queries_policy.md`
       - `src/factpy_kernel/service/docs/04_rules_registry.md`
       - `src/factpy_kernel/core/docs/01_architecture.md`
       - `src/factpy_kernel/agent/docs/README.md`

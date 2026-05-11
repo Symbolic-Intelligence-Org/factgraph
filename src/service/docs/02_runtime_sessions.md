@@ -28,7 +28,7 @@
 - `session_id` 一律走 path parameter。
 - `entity_ref`（如 `idref_v1:...`）直接按普通字符串透传，不额外包装。
 - `rest_terms` 使用类型化二元组 JSON：`[[type_domain, value], ...]`。
-- 新 session 会自动初始化内建视图 `default`；视图管理端点见 `03_runtime_queries_views.md`。
+- 新 session 不再初始化内建视图 `default`；runtime read policy 通过 `03_runtime_queries_policy.md` 中的内联 `policy` 字段传入。
 
 成功 envelope 示例：
 
@@ -631,5 +631,5 @@ Query 参数：
 ## 相关文档
 
 - `01_overview.md`
-- `03_runtime_queries_views.md`
+- `03_runtime_queries_policy.md`
 - `04_rules_registry.md`

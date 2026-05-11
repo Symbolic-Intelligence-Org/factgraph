@@ -4,7 +4,7 @@ info:
   version: v1
   description: |
     HTTP facade for factpy-kernel:
-    - Runtime session lifecycle, fact writes, queries, views, rules/derivations, package export
+    - Runtime session lifecycle, fact writes, queries with inline read policy, rules/derivations, package export
     - Rules authoring validation and compile preview
     - Registry read-only access
     - LLM document extraction
@@ -23,12 +23,12 @@ info:
 
     Human-readable integration guide: `src/factpy_kernel/service/docs/06_frontend_integration.md`.
     Per-endpoint DTO narratives: `service/docs/02_runtime_sessions.md` /
-    `03_runtime_queries_views.md` / `04_rules_registry.md` / `05_extraction.md`.
+    `03_runtime_queries_policy.md` / `04_rules_registry.md` / `05_extraction.md`.
 
     **Current precision boundary.** This spec is **route / auth / envelope complete**
     — every `/v1/*` operation is listed with `ApiKeyAuth` + 401 + 503 refs, and the
     `Envelope` / `Error` / `ExtractionResult` / `WriteRequest` schemas are precise.
-    However, **~40 of the 48 operations still describe their request / response
+    However, **~35 of the 43 operations still describe their request / response
     payload as a generic `type: object`**; precise field-level shape for those lives
     in the DTO narratives above. A schema-first consumer (e.g. `openapi-typescript`
     auto-gen, Swagger UI "try it out") will get `Record<string, unknown>` for those
@@ -51,9 +51,7 @@ tags:
   - name: runtime-inventory
     description: Session-level read-only inventory (rules, candidates).
   - name: runtime-queries
-    description: Runtime queries over claims, views, explain, conflicts.
-  - name: runtime-views
-    description: Runtime view lifecycle.
+    description: Runtime queries over claims, inline read policy, explain, conflicts.
   - name: runtime-evidence
     description: Runtime evidence artefact readback (candidate / rule-trace).
   - name: runtime-exec
@@ -316,7 +314,7 @@ paths:
       - $ref: "#/components/parameters/SessionId"
     post:
       tags: [runtime-queries]
-      summary: Execute a view and return its projected facts.
+      summary: Project runtime facts with optional inline read policy.
       requestBody:
         required: true
         content:
@@ -324,9 +322,8 @@ paths:
             schema:
               type: object
               properties:
-                view_name: { type: string }
-                view: { type: object }
-                include_projector_audit: { type: boolean }
+                policy: { type: object }
+                include_audit: { type: boolean }
       responses:
         "200": { $ref: "#/components/responses/Envelope200" }
         "401": { $ref: "#/components/responses/UnauthorizedError" }
@@ -551,82 +548,6 @@ paths:
         content:
           application/json:
             schema: { type: object }
-      responses:
-        "200": { $ref: "#/components/responses/Envelope200" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
-  # ── views ──────────────────────────────────────────────────────────────
-  /v1/runtime/sessions/{session_id}/views/create:
-    parameters:
-      - $ref: "#/components/parameters/SessionId"
-    post:
-      tags: [runtime-views]
-      summary: Create a named runtime view.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object }
-      responses:
-        "200": { $ref: "#/components/responses/Envelope200" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
-  /v1/runtime/sessions/{session_id}/views/update:
-    parameters:
-      - $ref: "#/components/parameters/SessionId"
-    post:
-      tags: [runtime-views]
-      summary: Update an existing runtime view.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object }
-      responses:
-        "200": { $ref: "#/components/responses/Envelope200" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
-  /v1/runtime/sessions/{session_id}/views/delete:
-    parameters:
-      - $ref: "#/components/parameters/SessionId"
-    post:
-      tags: [runtime-views]
-      summary: Delete a named runtime view.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object }
-      responses:
-        "200": { $ref: "#/components/responses/Envelope200" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
-  /v1/runtime/sessions/{session_id}/views/get:
-    parameters:
-      - $ref: "#/components/parameters/SessionId"
-    post:
-      tags: [runtime-views]
-      summary: Get one named view's definition.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object }
-      responses:
-        "200": { $ref: "#/components/responses/Envelope200" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
-  /v1/runtime/sessions/{session_id}/views:
-    parameters:
-      - $ref: "#/components/parameters/SessionId"
-    get:
-      tags: [runtime-views]
-      summary: List all views registered on the session.
       responses:
         "200": { $ref: "#/components/responses/Envelope200" }
         "401": { $ref: "#/components/responses/UnauthorizedError" }

@@ -18,8 +18,8 @@
   - service 模块职责、路由分组、关键行为约束、与 SDK/core/authoring 的关系。
 - `src/service/docs/02_runtime_sessions.md`
   - runtime session 生命周期、writes、claims 的 DTO 契约。
-- `src/service/docs/03_runtime_queries_views.md`
-  - runtime query、views、rule/derivation 执行、package export 的 DTO 契约。
+- `src/service/docs/03_runtime_queries_policy.md`
+  - runtime query、inline policy、rule/derivation 执行、package export 的 DTO 契约。
 - `src/service/docs/04_rules_registry.md`
   - rules facade 与 registry 只读接口的 DTO 契约。
 - `src/service/docs/05_audit_static_site_contract.md`

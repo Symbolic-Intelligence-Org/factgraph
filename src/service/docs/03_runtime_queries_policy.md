@@ -1,4 +1,4 @@
-# Runtime Query, View And Derivation DTO（service v1）
+# Runtime Query, Policy And Derivation DTO（service v1）
 
 范围：
 
@@ -18,18 +18,13 @@
 - `POST /v1/runtime/sessions/{session_id}/queries/conflicts`
 - `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
-- `POST /v1/runtime/sessions/{session_id}/views/create`
-- `POST /v1/runtime/sessions/{session_id}/views/update`
-- `POST /v1/runtime/sessions/{session_id}/views/delete`
-- `POST /v1/runtime/sessions/{session_id}/views/get`
-- `GET /v1/runtime/sessions/{session_id}/views`
 - `POST /v1/runtime/sessions/{session_id}/packages/export`
 
-本文记录 service v1 的 runtime query、view 管理、rule/derivation 执行与 package export DTO 契约。session open/get/close、writes、claims 和 rules/registry 端点不在本文范围内。
+本文记录 service v1 的 runtime query、内联 read policy、rule/derivation 执行与 package export DTO 契约。session open/get/close、writes、claims 和 rules/registry 端点不在本文范围内。
 
 ## 通用约定
 
-- 所有 `/v1/...` runtime query/view/derivation 端点默认都要求 `X-FactPy-API-Key`。
+- 所有 `/v1/...` runtime query/policy/derivation 端点默认都要求 `X-FactPy-API-Key`。
 - 缺失或错误 key 返回 `HTTP 401`，且不会进入 JSON envelope。
 - 认证启用但未配置 `FACTPY_KERNEL_API_KEYS` 时返回 `HTTP 503`，且不会进入 JSON envelope。
 - 只有通过认证后，应用层成功/失败才继续使用 `HTTP 200` JSON envelope。
@@ -38,7 +33,7 @@
 - tuple 在 JSON 中统一序列化为 list。
 - `entity_ref`（如 `idref_v1:...`）直接按普通字符串透传，不额外包装。
 - runtime query/rule/derivation 链路不再接受 `temporal_view`；传入时返回 `shape` error。
-- `view-facts` 通过 `view_name` 或内联 `view` 指定视图，两者不能同时提供。
+- `view-facts` 不再有命名 view registry。需要 read-time confidence/display aggregation 时，在请求体内传 `policy` 对象；`view_name` 和旧的 `view` 字段都会返回 `shape` error。
 
 成功 envelope 示例：
 
@@ -1409,12 +1404,12 @@
 
 ## 13. `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
 
-请求（使用内联 view）：
+请求（使用内联 policy）：
 
 ```json
 {
-  "view": {
-    "active": true,
+  "policy": {
+    "respect_revocations": true,
     "confidence_strategy": "max",
     "prefer_source": null
   },
@@ -1422,11 +1417,10 @@
 }
 ```
 
-请求（使用命名 view）：
+请求（不应用 read policy，只返回 active projection facts）：
 
 ```json
 {
-  "view_name": "default",
   "include_audit": false
 }
 ```
@@ -1446,8 +1440,8 @@
       "person:country": [["idref_v1:Person:source_id=u1", "de"]],
       "person:name": [["idref_v1:Person:source_id=u1", "Alice"]]
     },
-    "view_spec": {
-      "active": true,
+    "policy": {
+      "respect_revocations": true,
       "confidence_strategy": "max",
       "prefer_source": null
     },
@@ -1460,7 +1454,13 @@
 
 说明：
 
-- `view_name` 与 `view` 二选一；都不传时使用 session 默认视图 `default`。
+- `policy` 可选；缺失或 `null` 表示不应用 read policy，响应中不返回 `view.policy`。
+- `policy.respect_revocations` 默认 `true`；为 `true` 时，display/confidence aggregation 会跳过已有 active retraction 的 claim。
+- `policy.confidence_strategy` 接受 `max | mean | median | prefer_source`。
+- `policy.prefer_source` 只能是非空字符串或 `null`；仅在 `confidence_strategy="prefer_source"` 时有意义。
+- `view_name` 已移除；传入时返回 `$.view_name` 的 `shape` error，并提示改用内联 `policy`。
+- 旧字段 `view` 已重命名为 `policy`；传入时返回 `$.view` 的 `shape` error。
+- 旧字段 `policy.active` 已重命名为 `policy.respect_revocations`；传入 `active` 返回 `$.policy.active` 的 `shape` error。
 - `include_audit` 默认 `false`；为 `true` 时响应中返回 `view.audit`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。
 - `meta.pred_count` 是投影结果中的 predicate 数量；`meta.total_tuple_count` 是所有 predicate rows 总和。
@@ -1471,159 +1471,7 @@
 - `runtime_session_not_found`
 - `query_view_facts`
 
-## 14. `POST /v1/runtime/sessions/{session_id}/views/create`
-
-请求：
-
-```json
-{
-  "name": "prefer_seed",
-  "view": {
-    "active": true,
-    "confidence_strategy": "prefer_source",
-    "prefer_source": "seed"
-  }
-}
-```
-
-成功响应：
-
-```json
-{
-  "ok": true,
-  "errors": [],
-  "meta": {},
-  "view": {
-    "name": "prefer_seed",
-    "spec": {
-      "active": true,
-      "confidence_strategy": "prefer_source",
-      "prefer_source": "seed"
-    }
-  }
-}
-```
-
-说明：
-
-- `view.active` 必须是 `bool`。
-- `view.confidence_strategy` 目前只接受 `max | mean | median | prefer_source`。
-- `view.prefer_source` 只能是非空字符串或 `null`。
-
-错误 kinds：
-
-- `shape`
-- `runtime_session_not_found`
-- `view_create`
-
-## 15. `POST /v1/runtime/sessions/{session_id}/views/update`
-
-请求与成功响应结构同 `views/create`，但要求 `name` 已存在。
-
-错误 kinds：
-
-- `shape`
-- `runtime_session_not_found`
-- `view_update`
-
-## 16. `POST /v1/runtime/sessions/{session_id}/views/delete`
-
-请求：
-
-```json
-{
-  "name": "prefer_seed"
-}
-```
-
-成功响应：
-
-```json
-{
-  "ok": true,
-  "errors": [],
-  "meta": {},
-  "deleted": {
-    "name": "prefer_seed"
-  }
-}
-```
-
-说明：
-
-- 内建视图 `default` 不能删除。
-
-错误 kinds：
-
-- `shape`
-- `runtime_session_not_found`
-- `view_delete`
-
-## 17. `POST /v1/runtime/sessions/{session_id}/views/get`
-
-请求：
-
-```json
-{
-  "name": "default"
-}
-```
-
-成功响应：
-
-```json
-{
-  "ok": true,
-  "errors": [],
-  "meta": {},
-  "view": {
-    "name": "default",
-    "spec": {
-      "active": true,
-      "confidence_strategy": "max",
-      "prefer_source": null
-    }
-  }
-}
-```
-
-错误 kinds：
-
-- `shape`
-- `runtime_session_not_found`
-- `view_get`
-
-## 18. `GET /v1/runtime/sessions/{session_id}/views`
-
-成功响应：
-
-```json
-{
-  "ok": true,
-  "errors": [],
-  "meta": {},
-  "views": {
-    "default": {
-      "active": true,
-      "confidence_strategy": "max",
-      "prefer_source": null
-    },
-    "prefer_seed": {
-      "active": true,
-      "confidence_strategy": "prefer_source",
-      "prefer_source": "seed"
-    }
-  }
-}
-```
-
-错误 kinds：
-
-- `shape`
-- `runtime_session_not_found`
-- `view_list`
-
-## 19. `POST /v1/runtime/sessions/{session_id}/queries/explain-timeline`
+## 14. `POST /v1/runtime/sessions/{session_id}/queries/explain-timeline`
 
 请求：
 
@@ -1708,7 +1556,7 @@
 - `runtime_explain_not_found`
 - `runtime_explain_not_supported`
 
-## 20. `POST /v1/runtime/sessions/{session_id}/queries/explain-timeline-summary`
+## 15. `POST /v1/runtime/sessions/{session_id}/queries/explain-timeline-summary`
 
 请求：
 
@@ -1760,7 +1608,7 @@
 - `runtime_explain_not_found`
 - `runtime_explain_not_supported`
 
-## 21. `POST /v1/runtime/sessions/{session_id}/queries/explain-timeline-narrative`
+## 16. `POST /v1/runtime/sessions/{session_id}/queries/explain-timeline-narrative`
 
 请求：
 
@@ -1813,7 +1661,7 @@
 - `runtime_explain_not_found`
 - `runtime_explain_not_supported`
 
-## 22. `POST /v1/runtime/sessions/{session_id}/packages/export`
+## 17. `POST /v1/runtime/sessions/{session_id}/packages/export`
 
 请求：
 

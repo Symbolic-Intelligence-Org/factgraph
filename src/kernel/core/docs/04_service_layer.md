@@ -58,8 +58,9 @@ categories:
 - **runtime session**: open / get / delete + writes (set / add /
   retract) + claims
 - **runtime queries**: explain-fact / conflicts / resolve-mapping /
-  view-facts
-- **runtime views**: create / update / delete / get / list
+  view-facts (with inline read policy)
+- **runtime policy**: no named policy registry; `view-facts` accepts
+  inline policy only
 - **runtime rule/derivation/package**: rules.run / derivations.evaluate
   / derivations.accept / packages.export
 - **registry**: manifest / schema.read / assets.list / rules.read /
@@ -141,8 +142,8 @@ envelope concept back into core / application.
   `ProjectorAudit` from the core projector
 - `temporal_view` has been removed; passing it returns a shape
   error
-- `view_name` and `view` are mutually exclusive; if neither is
-  provided, the session default view is used
+- `policy` is optional and inline; `view_name` and old `view` fields
+  are rejected with shape errors
 
 ### 7.2 derivation and rule runtime
 
