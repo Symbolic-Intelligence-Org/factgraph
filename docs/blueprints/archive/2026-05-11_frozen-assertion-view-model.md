@@ -14,8 +14,8 @@
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
   - [docs/references/working/design-points/read-write-snapshot-assertion-selection.zh.md](../../references/working/design-points/read-write-snapshot-assertion-selection.zh.md)
-  - [docs/blueprints/archive/2026-05-10_assertion-selection-crud-ergonomics.md](../archive/2026-05-10_assertion-selection-crud-ergonomics.md)
-  - [docs/blueprints/archive/2026-03-18_scenario-a-temporal-semantics.md](../archive/2026-03-18_scenario-a-temporal-semantics.md)
+  - [docs/blueprints/archive/2026-05-10_assertion-selection-crud-ergonomics.md](./2026-05-10_assertion-selection-crud-ergonomics.md)
+  - [docs/blueprints/archive/2026-03-18_scenario-a-temporal-semantics.md](./2026-03-18_scenario-a-temporal-semantics.md)
 - Audit Log:
   - [2026-05-11_frozen-assertion-view-model.audit.md](./2026-05-11_frozen-assertion-view-model.audit.md)
 
