@@ -1,6 +1,6 @@
 # Task Blueprint: Branch Confidence Decomposition
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-11
 - Last Updated: 2026-05-11
 - Related Modules:
@@ -133,22 +133,21 @@ Layer findings:
 
 ## 5. Proposed Shape
 
-### 5.0 Draft Decisions
+### 5.0 Scope Freeze Decisions
 
-These are draft decisions. They should be converted to locked decisions at
-scope-freeze if source audit and red-baseline tests confirm the surface.
+The A2 slice locks the following decisions:
 
-| ID | Draft Decision | Current Direction |
+| ID | Decision | Locked Shape |
 | --- | --- | --- |
-| D1 | SDK `Body.confidence` | Hard remove. No deprecation shim because the project is pre-release. |
-| D2 | Public branch wrapper name | Rename `Body` to `Branch`; do not keep a public `Body` alias. |
+| D1 | SDK `Body.confidence` | Remove directly. No deprecation shim is required because the project is pre-release. |
+| D2 | Public branch wrapper name | Rename `Body` to `Branch`. Do not keep a public `Body` alias. |
 | D2a | SDK DSL file name | Rename `src/kernel/sdk/dsl/body.py` to `src/kernel/sdk/dsl/branch.py`. |
-| D3 | `Branch` parameters | `Branch` represents branch structure only; no `confidence`, `engine_*`, or adapter-specific kwargs. |
-| D4 | Internal `body_confidences` IR | Retain as an internal ProbLog bridge for this slice, matching the existing `legacy_body_confidences` adapter naming. |
-| D5 | Authoring payload `body_confidences` | Reject public `body_confidences` with a redirect to future `SemanticsProfile.rule_projection.problog` or temporary `ProbLogRuleExt.branch_probabilities`. |
-| D6 | Service request `body_confidences` | Reject public top-level / derivation-level request payload `body_confidences`; service may still pass internal compiled values where they exist. |
+| D3 | `Branch` parameters | `Branch` represents branch structure only. It must not accept `confidence`, `engine_*`, or adapter-specific kwargs. |
+| D4 | Internal `body_confidences` IR | Retain the `body_confidences` field on internal `RuleSpec` / `DerivationSpec` for this slice as a temporary ProbLog bridge, matching the existing `legacy_body_confidences` adapter naming. |
+| D5 | Authoring payload `body_confidences` | Reject user-authored `body_confidences` with a redirect to temporary `ProbLogRuleExt.branch_probabilities` and future `SemanticsProfile.rule_projection.problog`. |
+| D6 | Service request `body_confidences` | Reject public top-level and derivation-level service request `body_confidences`; service may still pass internal compiled values if produced by private internals. |
 | D7 | ProbLog branch probability transition | After A2, the only public branch-probability fallback is `ProbLogRuleExt.branch_probabilities` until A3 / Phase C replaces it with SemanticsProfile projection. |
-| D8 | Absence invariant | `from kernel.sdk import Body` should fail; `Branch` is the sole public SDK name. |
+| D8 | Absence invariant | `from kernel.sdk import Body` must fail. `Branch` is the sole public SDK name. |
 
 ### 5.1 User-Facing Shape
 
@@ -201,41 +200,75 @@ path.
 
 ## 6. Boundaries And Invariants
 
-- Public SDK exports `Branch`, not `Body`.
-- Public SDK `Branch` has no `confidence` field.
-- `from kernel.sdk import Body` is an absence invariant and should fail.
-- `Body([...])` should not appear in release-facing docs or active examples.
-- `Branch([...], confidence=...)` should fail explicitly.
-- User-authored authoring payloads reject `body_confidences`.
-- Service runtime request DTOs reject top-level and derivation-level
-  `body_confidences`.
-- Existing ProbLog branch-probability behavior remains reachable through
-  `ProbLogRuleExt.branch_probabilities`.
-- Native, Souffle, and PyReason behavior should be unchanged for equivalent
-  branch structure.
-- Internal `body_confidences` may remain in compiled IR only as a temporary
-  bridge; it must not be documented as a public contract.
+- Public SDK export shape:
+  - `Branch` is exported by `kernel.sdk` and listed in `kernel.sdk.__all__`.
+  - `Body` is not exported by `kernel.sdk` and is not listed in
+    `kernel.sdk.__all__`.
+  - `from kernel.sdk import Body` raises `ImportError`.
+- SDK file layout:
+  - `src/kernel/sdk/dsl/branch.py` exists.
+  - `src/kernel/sdk/dsl/body.py` does not exist.
+- SDK branch wrapper behavior:
+  - `Branch([...])` lowers to a branch list equivalent to the old
+    `Body([...])` structure.
+  - `Branch([...], confidence=...)` raises `TypeError` or a more specific
+    validation error.
+  - `Branch([...], engine_ext=...)`, `Branch([...], probability=...)`, or other
+    engine-specific kwargs raise rather than being accepted silently.
+- Public payload rejection:
+  - authoring `body_confidences` is rejected at compile time with a redirect to
+    `ProbLogRuleExt.branch_probabilities` / future SemanticsProfile projection.
+  - service top-level `body_confidences` is rejected.
+  - service `derivation.body_confidences` is rejected.
+- Internal bridge:
+  - `body_confidences` remains present on internal `RuleSpec` and
+    `DerivationSpec`.
+  - the ProbLog bridge may still accept internal `legacy_body_confidences`.
+  - Native, Souffle, and PyReason adapters must not gain new
+    `body_confidences` semantics in A2.
+- Transitional behavior:
+  - existing ProbLog branch-probability behavior remains reachable through
+    `ProbLogRuleExt.branch_probabilities`.
+  - `engine_ext` remains public until A3 and is not migrated in A2.
+- Documentation:
+  - `Body([...])`, `Body(..., confidence=...)`, and public
+    `body_confidences` must not appear in release-facing docs or active
+    examples, except as explicit rejection / migration notes.
 - Existing unrelated notebook changes in the worktree are out of scope.
 
 ## 7. Acceptance
 
-- [ ] Red baseline tests cover the current public `Body` export,
-      `Body.confidence`, public `body_confidences`, and service request
+- [ ] Red baseline tests cover current public `Body` export and constructor
+      behavior.
+- [ ] Red baseline tests cover current `Body(..., confidence=...)` acceptance.
+- [ ] Red baseline tests cover current authoring payload `body_confidences`
       acceptance.
+- [ ] Red baseline tests cover current service top-level or derivation-level
+      `body_confidences` acceptance where the DTO path permits it.
 - [ ] SDK public `Branch` exists and can be imported from `kernel.sdk`.
 - [ ] SDK public `Body` cannot be imported from `kernel.sdk`.
+- [ ] `Branch` replaces `Body` in `kernel.sdk.__all__` without adding a second
+      public wrapper name.
+- [ ] `src/kernel/sdk/dsl/branch.py` exists and
+      `src/kernel/sdk/dsl/body.py` does not exist.
 - [ ] SDK `Branch([...])` lowers to the same branch structure as old
       `Body([...])` without confidence.
 - [ ] SDK `Branch([...], confidence=...)` rejects.
-- [ ] SDK / authoring public payloads reject `body_confidences`.
+- [ ] SDK `Branch([...], engine_ext=...)` and other engine-specific kwargs
+      reject.
+- [ ] Authoring public payloads reject `body_confidences`.
 - [ ] Service runtime rejects top-level `body_confidences`.
 - [ ] Service runtime rejects `derivation.body_confidences`.
+- [ ] Internal `RuleSpec` / `DerivationSpec` still contain `body_confidences`
+      as a temporary bridge.
 - [ ] ProbLog branch probabilities still work through
       `ProbLogRuleExt.branch_probabilities`.
+- [ ] Native / Souffle / PyReason behavior is unchanged for equivalent branch
+      structure.
 - [ ] No `SemanticsProfile`, `engine_ext` public migration, or adapter
       semantic rewrite is included.
-- [ ] Release-facing docs and active examples no longer teach `Body(...)` or
-      `Body(..., confidence=...)`.
+- [ ] Release-facing docs and active examples no longer teach `Body(...)`,
+      `Body(..., confidence=...)`, or public `body_confidences`.
 - [ ] Affected module docs are updated.
 
 ## 8. Implementation Plan
