@@ -489,7 +489,7 @@ explicitly raises (`use sdk.evaluate() instead`).
 
 ### Derivation + evaluate
 
-A `Derivation(id, version, where, head=None, mode=None, ...)` is a
+A `Derivation(id, version, where, head=None, ...)` is a
 single derivation that produces accept-ready candidates. `head` is
 either a single head (entity or field) or a list `[H1, H2, ...]` for
 multi-head derivations.

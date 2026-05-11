@@ -11,6 +11,7 @@
 | 2026-05-11 | scoped | Scope frozen | Locked D1-D5: remove SDK `Derivation.mode`; stop object payload emission; reject structured derivation `mode`; retain internal compiled `native` default if needed; rewire service derivation evaluation to request-level engine selection. |
 | 2026-05-11 | implementing | G1 red baseline tests added | Added `test_derivation_mode_callsite_migration.py` covering D1-D5. Targeted run `env PYTHONPATH=src python -m unittest kernel.tests.test_derivation_mode_callsite_migration` fails as expected with 5 failures: SDK dataclass still exposes `mode`, constructor still accepts `mode`, authoring dict `mode` is still accepted, service still ignores top-level engine, and service still accepts `derivation.mode`. |
 | 2026-05-11 | implementing | G2 implementation landed | Removed public SDK `Derivation.mode`, rejected structured derivation `mode`, retained compiled `native` default, and rewired service runtime derivation evaluation to top-level `engine`. Targeted A1 run `env PYTHONPATH=src python -m unittest kernel.tests.test_derivation_mode_callsite_migration` now passes 7/7; focused migration/adapters/service suite passes 84/84; import-order-compatible explain/declaration checks pass 48/48 and 23/23. |
+| 2026-05-11 | documenting | G3 docs synchronized | Updated SDK user guide and PyReason adapter docs so engine selection is shown at evaluate call-time, not inside `Derivation(...)`. Release-facing stale-syntax grep for `Derivation(..., mode=...)` is clean; remaining hits are working-reference rationale / negative examples only. |
 
 ## Decision Notes
 
@@ -20,3 +21,4 @@
 - 2026-05-11: G1 red baseline intentionally includes passing guards for D2/D4 (`to_authoring_payload()` has no mode when the SDK object has no mode, and compiled payload may still keep internal `native`) alongside failing tests for the current public-surface violations.
 - 2026-05-11: G2 accepts top-level service `engine` for runtime derivation evaluation and rejects top-level service `mode`, keeping `mode` reserved for existing SDK call-site APIs until the broader SemanticsProfile surface is designed.
 - 2026-05-11: Some audit/provenance tests still have an existing standalone import-order cycle between `kernel.audit.round_events` and `kernel.application`; G2 verification runs those checks after an A1/runtime import primer and does not alter the import graph.
+- 2026-05-11: G3 leaves working-reference negative examples intact where they explicitly reject `Derivation(..., mode=...)`; current implementation truth is carried by `src/kernel/*/docs/`.
