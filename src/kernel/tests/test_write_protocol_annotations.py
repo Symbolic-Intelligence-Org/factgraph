@@ -187,6 +187,126 @@ class TestDualWriteConsistency(unittest.TestCase):
         self.assertEqual(anno_src[0].value, "handbook")
 
 
+class TestRawUncertaintyWriteLane(unittest.TestCase):
+    """raw_kind/bound are the canonical Phase 1 raw uncertainty write lane."""
+
+    def test_raw_uncertainty_projected_as_shared_semantic_and_meta_rows(self) -> None:
+        ledger = Ledger()
+        asrt_id = set_field(
+            ledger,
+            "p:risk",
+            _eref("asset-17"),
+            [("string", "elevated")],
+            meta={"raw_kind": "probabilistic", "bound": [0.2, 0.8]},
+        )
+
+        raw_kind_meta = ledger.find_meta(asrt_id=asrt_id, key="raw_kind")
+        bound_meta = ledger.find_meta(asrt_id=asrt_id, key="bound")
+        self.assertEqual(len(raw_kind_meta), 1)
+        self.assertEqual(len(bound_meta), 1)
+        self.assertEqual(raw_kind_meta[0].kind, "str")
+        self.assertEqual(raw_kind_meta[0].value, "probabilistic")
+        self.assertEqual(bound_meta[0].kind, "json")
+        self.assertEqual(bound_meta[0].value, [0.2, 0.8])
+
+        annos = ledger.find_annotations(asrt_id=asrt_id, namespace="shared", category="semantic")
+        by_key = {row.key: row for row in annos}
+        self.assertEqual(set(by_key), {"raw_kind", "bound"})
+        self.assertEqual(by_key["raw_kind"].kind, "str")
+        self.assertEqual(by_key["raw_kind"].value, "probabilistic")
+        self.assertEqual(by_key["raw_kind"].origin, "observed")
+        self.assertIsNone(by_key["raw_kind"].derivation)
+        self.assertEqual(by_key["bound"].kind, "json")
+        self.assertEqual(by_key["bound"].value, [0.2, 0.8])
+        self.assertEqual(by_key["bound"].origin, "observed")
+        self.assertIsNone(by_key["bound"].derivation)
+
+    def test_possibilistic_raw_uncertainty_accepts_integer_bounds_and_normalizes(self) -> None:
+        ledger = Ledger()
+        asrt_id = set_field(
+            ledger,
+            "p:allowed",
+            _eref("asset-17"),
+            [("bool", True)],
+            meta={"raw_kind": "possibilistic", "bound": [0, 1]},
+        )
+
+        meta = ledger.find_meta(asrt_id=asrt_id, key="bound")
+        self.assertEqual(len(meta), 1)
+        self.assertEqual(meta[0].value, [0.0, 1.0])
+
+        annos = ledger.find_annotations(asrt_id=asrt_id, key="bound")
+        self.assertEqual(len(annos), 1)
+        self.assertEqual(annos[0].value, [0.0, 1.0])
+
+    def test_raw_kind_and_bound_must_be_written_together(self) -> None:
+        cases = (
+            {"raw_kind": "probabilistic"},
+            {"bound": [0.2, 0.8]},
+        )
+        for meta in cases:
+            with self.subTest(meta=meta):
+                with self.assertRaises(WriteProtocolError) as ctx:
+                    set_field(Ledger(), "p:risk", _eref("asset-17"), [("string", "v")], meta=meta)
+                self.assertIn("raw_kind", str(ctx.exception))
+                self.assertIn("bound", str(ctx.exception))
+
+    def test_invalid_raw_kind_rejected(self) -> None:
+        for raw_kind in ("probability", "PROBABILISTIC", "", 3):
+            with self.subTest(raw_kind=raw_kind):
+                with self.assertRaises(WriteProtocolError) as ctx:
+                    set_field(
+                        Ledger(),
+                        "p:risk",
+                        _eref("asset-17"),
+                        [("string", "v")],
+                        meta={"raw_kind": raw_kind, "bound": [0.2, 0.8]},
+                    )
+                self.assertIn("raw_kind", str(ctx.exception))
+
+    def test_invalid_bound_shape_rejected(self) -> None:
+        cases = (
+            [0.2],
+            [0.2, 0.8, 0.9],
+            (0.2, 0.8),
+            {"lower": 0.2, "upper": 0.8},
+            "0.2,0.8",
+        )
+        for bound in cases:
+            with self.subTest(bound=bound):
+                with self.assertRaises(WriteProtocolError) as ctx:
+                    set_field(
+                        Ledger(),
+                        "p:risk",
+                        _eref("asset-17"),
+                        [("string", "v")],
+                        meta={"raw_kind": "probabilistic", "bound": bound},
+                    )
+                self.assertIn("bound", str(ctx.exception))
+
+    def test_invalid_bound_values_rejected(self) -> None:
+        cases = (
+            [True, 0.8],
+            [0.2, False],
+            ["0.2", 0.8],
+            [0.2, "0.8"],
+            [-0.1, 0.8],
+            [0.2, 1.1],
+            [0.9, 0.2],
+        )
+        for bound in cases:
+            with self.subTest(bound=bound):
+                with self.assertRaises(WriteProtocolError) as ctx:
+                    set_field(
+                        Ledger(),
+                        "p:risk",
+                        _eref("asset-17"),
+                        [("string", "v")],
+                        meta={"raw_kind": "probabilistic", "bound": bound},
+                    )
+                self.assertIn("bound", str(ctx.exception))
+
+
 class TestAddFieldAndReplaceField(unittest.TestCase):
     """add_field and replace_field also produce annotations."""
 
@@ -302,87 +422,23 @@ class TestWhitelistCoverage(unittest.TestCase):
 
 
 class TestProbabilityWriteLane(unittest.TestCase):
-    """probability is a first-class semantic key, separate from confidence."""
+    """Legacy raw uncertainty write keys are rejected for user-authored meta."""
 
-    def test_probability_projected_as_shared_semantic(self) -> None:
-        ledger = Ledger()
-        asrt_id = set_field(
-            ledger,
-            "p:test",
-            _eref("x"),
-            [("string", "v")],
-            meta={"probability": 0.42},
-        )
-        anns = ledger.find_annotations(asrt_id=asrt_id, key="probability")
-        self.assertEqual(len(anns), 1)
-        self.assertEqual(anns[0].namespace, "shared")
-        self.assertEqual(anns[0].category, "semantic")
-        self.assertEqual(anns[0].value, 0.42)
-        self.assertEqual(anns[0].origin, "observed")
+    def test_legacy_uncertainty_keys_rejected(self) -> None:
+        for key in ("probability", "bound_lower", "bound_upper"):
+            with self.subTest(key=key):
+                with self.assertRaises(WriteProtocolError) as ctx:
+                    set_field(
+                        Ledger(),
+                        "p:test",
+                        _eref("x"),
+                        [("string", "v")],
+                        meta={key: 0.42},
+                    )
+                self.assertIn(key, str(ctx.exception))
 
-    def test_probability_also_in_meta_rows(self) -> None:
-        ledger = Ledger()
-        asrt_id = set_field(
-            ledger,
-            "p:test",
-            _eref("x"),
-            [("string", "v")],
-            meta={"probability": 0.65},
-        )
-        meta = ledger.find_meta(asrt_id=asrt_id, key="probability")
-        self.assertEqual(len(meta), 1)
-        self.assertAlmostEqual(meta[0].value, 0.65)
-
-    def test_probability_auto_derives_confidence(self) -> None:
-        ledger = Ledger()
-        asrt_id = set_field(
-            ledger,
-            "p:test",
-            _eref("x"),
-            [("string", "v")],
-            meta={"probability": 0.42},
-        )
-        conf_anns = ledger.find_annotations(asrt_id=asrt_id, key="confidence")
-        self.assertEqual(len(conf_anns), 1)
-        self.assertAlmostEqual(conf_anns[0].value, 0.42)
-        self.assertEqual(conf_anns[0].category, "derived")
-
-        meta_conf = ledger.find_meta(asrt_id=asrt_id, key="confidence")
-        self.assertEqual(len(meta_conf), 1)
-        self.assertAlmostEqual(meta_conf[0].value, 0.42)
-
-    def test_explicit_confidence_not_overwritten_by_probability(self) -> None:
-        ledger = Ledger()
-        asrt_id = set_field(
-            ledger,
-            "p:test",
-            _eref("x"),
-            [("string", "v")],
-            meta={"probability": 0.42, "confidence": 0.9},
-        )
-        conf_anns = ledger.find_annotations(asrt_id=asrt_id, key="confidence")
-        self.assertEqual(len(conf_anns), 1)
-        self.assertAlmostEqual(conf_anns[0].value, 0.9)
-
-    def test_probability_without_confidence_still_works(self) -> None:
-        ledger = Ledger()
-        asrt_id = set_field(
-            ledger,
-            "p:test",
-            _eref("x"),
-            [("string", "v")],
-            meta={"probability": 0.7, "source": "model"},
-        )
-        anns = ledger.find_annotations(asrt_id=asrt_id)
-        keys = {a.key for a in anns}
-        self.assertIn("probability", keys)
-        self.assertIn("confidence", keys)
-        self.assertIn("source", keys)
-
-    def test_probability_whitelist_category_is_semantic(self) -> None:
-        cat, origin = _SHARED_ANNOTATION_WHITELIST["probability"]
-        self.assertEqual(cat, "semantic")
-        self.assertEqual(origin, "observed")
+    def test_probability_no_longer_whitelisted_for_user_meta_projection(self) -> None:
+        self.assertNotIn("probability", _SHARED_ANNOTATION_WHITELIST)
 
 
 class TestReplaceFieldAtomicity(unittest.TestCase):
@@ -417,8 +473,8 @@ class TestReplaceFieldAtomicity(unittest.TestCase):
         self.assertIsNone(ledger.find_revoker(old_asrt_id))
         self.assertFalse(ledger.has_active_revocation(old_asrt_id))
 
-    def test_invalid_probability_preserves_old_assertion(self) -> None:
-        """probability=2.0 should raise before revoking the old assertion."""
+    def test_invalid_raw_uncertainty_preserves_old_assertion(self) -> None:
+        """Invalid raw uncertainty should raise before revoking the old assertion."""
         ledger, old_asrt_id = self._setup_existing()
 
         with self.assertRaises(WriteProtocolError):
@@ -428,7 +484,7 @@ class TestReplaceFieldAtomicity(unittest.TestCase):
                 _eref("alice"),
                 old_rest_terms=[("string", "Alice")],
                 new_rest_terms=[("string", "Alice Updated")],
-                meta={"probability": 2.0},
+                meta={"raw_kind": "probabilistic", "bound": [0.9, 0.2]},
             )
 
         self.assertIsNone(ledger.find_revoker(old_asrt_id))

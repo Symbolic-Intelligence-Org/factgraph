@@ -11,6 +11,7 @@ class User(Entity):
     user_id: str = Identity(primary_key=True)
     name: str = Field(cardinality="single")
     tag: str = Field(cardinality="multi")
+    risk: str = Field(cardinality="multi")
 
 
 def _seed_store() -> tuple[SDKStore, str, dict[str, str]]:
@@ -183,6 +184,45 @@ class AssertionRecordSetFilterTests(unittest.TestCase):
             records.where(value="missing").one()
         with self.assertRaises(SDKStoreError):
             records.one()
+
+
+class AssertionRecordSetRawUncertaintyFilterTests(unittest.TestCase):
+    def test_where_filters_exact_raw_kind_and_bound_meta(self) -> None:
+        sdk = SDKStore([User])
+        ref = sdk.ref(User, user_id="u-risk")
+        low = sdk.add(
+            User.risk,
+            ref,
+            "low",
+            meta={"raw_kind": "probabilistic", "bound": [0.1, 0.2], "source": "model-a"},
+        )
+        high = sdk.add(
+            User.risk,
+            ref,
+            "high",
+            meta={"raw_kind": "possibilistic", "bound": [0.4, 0.9], "source": "expert-a"},
+        )
+
+        snap = sdk.get(User, user_id="u-risk")
+        self.assertIsNotNone(snap)
+        assert snap is not None
+
+        probabilistic = snap.field("risk").active.where(meta={"raw_kind": "probabilistic"}).one()
+        exact_bound = snap.field("risk").active.where(meta={"bound": [0.4, 0.9]}).one()
+        no_interval_semantics = snap.field("risk").active.where(meta={"bound": [0.4, 0.9000001]})
+
+        self.assertEqual(probabilistic.asrt_id, low)
+        self.assertEqual(exact_bound.asrt_id, high)
+        self.assertEqual(no_interval_semantics.all(), ())
+
+    def test_sdk_rejects_legacy_probability_meta(self) -> None:
+        sdk = SDKStore([User])
+        ref = sdk.ref(User, user_id="u-risk")
+
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.add(User.risk, ref, "legacy", meta={"probability": 0.4})
+
+        self.assertIn("probability", str(ctx.exception))
 
 
 class AssertionRecordSetBoundaryTests(unittest.TestCase):
