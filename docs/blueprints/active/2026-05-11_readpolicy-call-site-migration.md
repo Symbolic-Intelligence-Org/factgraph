@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (§5.8 LOCKED — docs+examples rewrite plan; release-facing grep gate)
+- **Last Updated:** 2026-05-11 (§5.9 LOCKED — test coverage plan; independent grep gate script; absence invariant)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -161,7 +161,7 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 | §5.6 | **Old API removal mechanic. — LOCKED** | `ViewSpec` class deleted; `find` adds `"view" in filter_kwargs` guard; `run` adds **tombstone sentinel** `view: Any = _MISSING` rejecting even `view=None`; `evaluate` uses combined `view`/`policy` rejection. Error texts at semantic level only. See §5.6 subsection below. |
 | §5.7 | **Non-SDK ViewSpec reference sweep. — LOCKED** | Service runtime **S2 deep migration**: remove `RuntimeSession.views` + 5 RPC endpoints + `_resolve_runtime_view_spec` + `"default"` + `view_name` lookup; rename `_parse_view_spec` / `_view_spec_to_dict` to `_parse_read_policy` / `_read_policy_to_dict`; wire DTO key `view` → `policy`, wire field `active` → `respect_revocations`. Groups A/B covered by §5.6 / §5.3 / §5.2 cross-refs. See §5.7 subsection below. |
 | §5.8 | **Docs + examples rewrite. — LOCKED** | 5 SDK docs + 1 service doc (renamed to `03_runtime_queries_policy.md`) + `examples/05_sdk_assertion_views.ipynb` rewritten as ~5-commit per-layer batch. `respect_revocations` taught in `01_concepts` + referenced in `02_readwrite`. No doc URL in error messages. **Phase 4 grep gate** enforces release-facing-doc cleanliness with archive/migration exemptions. See §5.8 subsection below. |
-| §5.9 | **Test coverage plan.** | Policy DTO contract tests (3 fields × validation paths). `policy=` kwarg behavior on `find` / `run`. Removal-redirect tests for each §5.6 deprecated path. Existing ViewSpec test sweep — delete vs rewrite. |
+| §5.9 | **Test coverage plan. — LOCKED** | T-NEW 6 groups (DTO / `policy=` surface / `fg.views` single-meaning / `view=` redirect guards / service runtime new shape / **absence invariant**). T-SWEEP 4 existing files case-by-case rewrite. 2 new test files + 1 reuse. **CI-b independent grep gate script** `scripts/check_legacy_view_syntax.sh`; release integration deferred to §5.10. See §5.9 subsection below. |
 | §5.10 | **Release checklist.** | Confirm next release (rc.2 successor or rc.3) ships the migration. Per §0.7 no compat-window discussion needed; this gap is purely a checklist confirmation (`kernel.sdk.__all__` diff, allowlist sync, deny-pattern grep updates per `feedback_release_workflow_traps`). |
 
 §5.1 is the first gap; subsequent gaps proceed in numerical order unless a downstream dependency forces reordering.
@@ -677,6 +677,78 @@ rg "ViewSpec|view_spec|view=.*preferred|fg\.views\.create\(.*ReadPolicy|fg\.view
 - Specific paragraph-level rewrites of each doc file — Phase 3 implementation.
 - Test docstring rewrites → §5.9.
 - Whether commit messages contain `BREAKING CHANGE:` markers → §5.10 release checklist.
+
+### §5.9 LOCKED — Test coverage plan; independent grep gate script; absence invariant
+
+**Absence invariant (locked verbatim):**
+
+> Tests must assert absence of `ViewSpec` from release-facing SDK imports and examples, not only runtime behavior.
+
+This invariant elevates the cleanup from "behavior still works under new names" to "old names are gone from importable surface and release-facing materials". It surfaces in three places:
+
+- T-NEW-6 below: pytest-level import-error assertions.
+- The CI-b grep gate script: filesystem-level scan over docs/examples.
+- §5.8 D8 grep gate (already locked): same content, packaged as the §5.8 acceptance gate.
+
+**Source-grounded existing test inventory** (HEAD `ace2563`):
+
+| File | `view=` / `ViewSpec` / `fg.views.` occurrences | Disposition |
+|---|---|---|
+| `src/kernel/tests/test_sdk_frozen_view_read_runtime_boundaries.py` | 12 | Rewrite (T-SWEEP). |
+| `src/kernel/tests/test_walker_invariants.py` | 7 | Case-by-case sweep (T-SWEEP). |
+| `src/kernel/tests/test_sdk_frozen_assertion_view.py` | 5 | Keep frozen-view tests; remove ViewSpec dispatch; extend for T-NEW-3. |
+| `src/domains/ecss/tests/test_phase3_contracts_v1.py` | 3 | Case-by-case sweep (T-SWEEP). |
+| `src/service/tests/*` | **0** | No existing service test exercises the 5 removed RPC endpoints; T-NEW-5 adds new coverage. |
+
+**T-NEW — six test groups (all in scope):**
+
+| Group | Coverage | New file or extend? |
+|---|---|---|
+| **T-NEW-1** | `ReadPolicy` DTO contract: 3 fields × validation paths; default construction equals `(respect_revocations=True, confidence_strategy="max", prefer_source=None)`; `__post_init__` error prefix is `ReadPolicy.<field>`; frozen-dataclass behavior (setattr rejection, hashable, equality). | New `test_sdk_read_policy.py`. |
+| **T-NEW-2** | `policy=` P1 acceptance + rejection: `ReadPolicy` accepted; `None` accepted (mirroring current `view=None`); `dict` / `str` / `FrozenAssertionView` / other types rejected; covers both `find` and `run`; `evaluate(policy=...)` always raises. | New `test_sdk_read_policy.py`. |
+| **T-NEW-3** | `fg.views` post-migration single-meaning: empty `_views` initial state; `get("default")` / `delete("default")` raise missing-view; `create("default", asrt_ids=[...])` allowed; `view_spec=` parameter rejected; return types narrowed to `FrozenAssertionView`; zero or two payloads on `create` both raise. | Extend `test_sdk_frozen_assertion_view.py`. |
+| **T-NEW-4** | `view=` removal redirect guards (§5.6): R3 `find(view=anything)` raises including `view=None`; R4 `run(view=anything)` raises via tombstone sentinel including `view=None`; R5 `evaluate(view=...)` raises via combined guard; `run(rule)` without view/policy succeeds (tombstone does not affect default call). | New `test_sdk_read_policy.py`. |
+| **T-NEW-5** | Service runtime new shape + removal verification: `query_view_facts` accepts inline `dto["policy"]` and `respect_revocations` field; `dto["policy"]` absent or `null` → no display_facts; 5 deleted endpoints dispatch returns "method not registered" (or service-impl-equivalent); `_parse_read_policy` rejects `{"active": true}` wire input (field rename); `_read_policy_to_dict` emits `respect_revocations` (not `active`). | New `test_runtime_query_policy.py`. |
+| **T-NEW-6** | **Absence invariant** (per locked verbatim above): `from kernel.sdk import ViewSpec` raises `ImportError`; `from kernel.core.store.types import ViewSpec` raises `ImportError`. These are runtime import-level static assertions complementing the CI-b grep gate. | New `test_sdk_read_policy.py`. |
+
+**T-SWEEP — existing test file rewrite (case-by-case during Phase 1 test scaffolding):**
+
+| File | Sweep approach |
+|---|---|
+| `test_sdk_frozen_view_read_runtime_boundaries.py` | Boundary semantic still exists (`fg.views` frozen vs `policy=` call-site); rewrite each test to its new equivalent. Old "ViewSpec passed at `view=`" → new "ReadPolicy passed at `policy=`"; old "FrozenAssertionView rejected at `view=`" → new "FrozenAssertionView rejected at `policy=`". |
+| `test_walker_invariants.py` | Case-by-case: if a test specifically exercises `view=` semantics, rewrite to `policy=`; if `view=` is incidental scaffolding, remove the kwarg. Preserve walker-invariant assertions. |
+| `test_sdk_frozen_assertion_view.py` | Keep FrozenAssertionView-only tests intact; remove tests asserting `ViewSpec` dispatch in `_build_view_entry`; add T-NEW-3 tests under same file. |
+| `test_phase3_contracts_v1.py` | Domain contract sweep: if contract relies on `fg.views.<view spec>` shape, rewrite to new shape (`policy=` at the consuming call site, not at the contract definition); if contract no longer applicable post-migration, delete with audit note. |
+
+**T-FILE — test file organization:**
+
+| Action | File | Owns |
+|---|---|---|
+| **New** | `src/kernel/tests/test_sdk_read_policy.py` | T-NEW-1, T-NEW-2, T-NEW-4, T-NEW-6. |
+| **New** | `src/service/tests/test_runtime_query_policy.py` | T-NEW-5. |
+| **Extend** | `src/kernel/tests/test_sdk_frozen_assertion_view.py` | T-NEW-3 (lives with FrozenAssertionView theme). |
+
+**T-CI — independent grep gate script (Q4 LOCKED as CI-b):**
+
+| Aspect | Locked decision |
+|---|---|
+| Location | **New file** `scripts/check_legacy_view_syntax.sh` — independent script. |
+| Content | Implements the §5.8 D8 grep contract: fail on `ViewSpec`, `view_spec`, `view=<policy/named-view-payload>`, or `fg.views.create(...)` with `ReadPolicy`/`ViewSpec` payload, scanning release-facing locations; honor §5.8 exemption set (archive/**, this blueprint, test files asserting rejection). |
+| Release integration | **Deferred to §5.10**. §5.9 does NOT modify `scripts/release.sh`. |
+| Rationale (locked verbatim) | "The grep gate targets legacy SDK docs / examples / service docs syntax — it is repo hygiene, not necessarily a release-script main-path step. Keep `release.sh` stable; let the independent script be reusable in Phase 4, release checklist, and CI; allowlist tuning should not require editing the release script." |
+
+**Why CI-b (not CI-a integrated into `release.sh`):**
+
+- `scripts/release.sh` should remain stable; quickly-changing semantic grep contracts do not belong in its main path (per `feedback_release_workflow_traps`).
+- Independent script is reusable: Phase 4 manual verification, release checklist (§5.10), CI workflow, ad-hoc author review.
+- Future allowlist adjustments (e.g., adding a new archive subdirectory) should not entail editing the release script.
+
+**What this gap does NOT decide:**
+
+- Whether `scripts/check_legacy_view_syntax.sh` is invoked from `scripts/release.sh` or only manually → §5.10 release-checklist integration decision.
+- Whether T-NEW-6 absence-invariant tests get a dedicated test file or live within `test_sdk_read_policy.py` → implementation freedom; current default groups them with `test_sdk_read_policy.py`.
+- Per-test assertion text and fixture shape → Phase 1 test-scaffolding implementation.
+- T-SWEEP per-test delete-vs-rewrite individual decisions → Phase 1 implementation.
 
 ## 6. Invariants
 
