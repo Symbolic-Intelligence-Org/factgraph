@@ -1,6 +1,6 @@
 # Task Blueprint: Uncertainty Transmission Layer
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-11
 - Last Updated: 2026-05-11
 - Related Modules:
@@ -98,7 +98,7 @@ Project-specific adjustments:
 
 - Use the existing Annotation Store as the likely persistence substrate instead of introducing a new uncertainty database.
 - Phase 1 should dual-write raw uncertainty:
-  - `meta_rows` keeps `raw_kind` and `bound` for `AssertionRecordSet.where(meta=...)`, assertion review, and selection ergonomics;
+  - `meta_rows` mirrors `raw_kind` and `bound` for `AssertionRecordSet.where(meta=...)`, assertion review, and selection ergonomics;
   - Annotation Store keeps the canonical semantic copy for engine projection and audit semantics.
 - Store canonical raw uncertainty as annotations:
   - `shared/semantic/raw_kind` with `kind="str"` and value `probabilistic` or `possibilistic`;
@@ -111,6 +111,18 @@ Project-specific adjustments:
 - Add transmission as an adapter-side interpretation layer, not a cross-engine promise that one score means the same thing everywhere.
 - Require policy names to reveal semantic loss when a projection is heuristic, for example `probability_as_certainty` or `possibility_to_probability:midpoint`.
 
+### 5.0 Scope-Freeze Decisions
+
+The first implementation slice is scoped to Track 1, the uncertainty transmission data contract. Track 2 from `rule-policy-function-tree-and-syntax.zh.md` remains design input for a separate blueprint.
+
+Locked decisions:
+
+- **D1 — Legacy uncertainty write keys**: `probability`, `bound_lower`, and `bound_upper` are hard-rejected as user-authored raw uncertainty meta in this Phase 1 contract. They may remain internal adapter projection / output lanes until a later adapter migration replaces them.
+- **D2 — `confidence`**: user-authored `confidence` remains supported as the existing compatibility / summary lane. Phase 1 does not rename or remove it. The broader `confidence` terminology cleanup belongs to Track 2 or a later blueprint.
+- **D3 — Validation placement**: validation for `raw_kind`, `bound`, and the legacy-key rejection belongs in `src/kernel/core/evidence/write_protocol.py`, at meta normalization / preflight time, before ledger mutation or retract side effects.
+- **D4 — Selection semantics**: `AssertionRecordSet.where(meta={"bound": [...]})` uses exact JSON-value matching against the mirrored `meta_rows` value. Phase 1 does not introduce interval containment, overlap, tolerance, or uncertainty-aware query semantics.
+- **D5 — Sequencing**: Track 1 ships first. Track 2 namespace / DSL / policy-layer work stays in the working design note until a separate blueprint scopes it.
+
 ### 5.1 Phase 1 Data Contract Scope
 
 This first implementation slice should stay deliberately small:
@@ -122,15 +134,16 @@ This first implementation slice should stay deliberately small:
   - projected to `shared/semantic/raw_kind`
 - Add `bound` as a recognized user-writeable meta key:
   - kind: `json`
-  - allowed value: a two-element numeric list `[lower, upper]`
-  - validation: no bools; `0.0 <= lower <= upper <= 1.0`
+  - allowed value: a two-element JSON list `[lower, upper]`
+  - validation: numeric `int` or `float` elements are accepted; bools and numeric strings are rejected; `0.0 <= lower <= upper <= 1.0`
+  - normalization: persisted value is a two-element float list, for example `[0.0, 1.0]`
   - persisted to `meta_rows`
   - projected to `shared/semantic/bound`
-- Require `raw_kind` and `bound` to be interpreted together when consumers need uncertainty semantics.
-- Stop treating `probability`, `bound_lower`, and `bound_upper` as accepted user-facing raw uncertainty inputs in this Phase 1 contract.
+- Require `raw_kind` and `bound` to be written together. A write with exactly one of the two keys is invalid.
+- Stop treating `probability`, `bound_lower`, and `bound_upper` as accepted user-facing raw uncertainty inputs in this Phase 1 contract; user writes containing these keys fail validation instead of being silently treated as custom metadata.
 - Keep `confidence` as candidate-output / compatibility summary, not raw uncertainty truth.
 - Do not change ProbLog export, PyReason materialization, or candidate confidence in Phase 1.
-- Add tests only for write validation, `meta_rows`, annotation projection, and assertion filtering.
+- Add tests only for write validation, `meta_rows`, annotation projection, assertion filtering, and unchanged behavior fences for existing adapter/runtime paths.
 
 Storage contract after Phase 1:
 
@@ -189,35 +202,41 @@ This keeps the data-layer contract in business time while still using PyReason's
 
 ## 6. Boundaries And Invariants
 
-- The raw uncertainty contract must not erase engine-specific semantics.
-- `bound` has no standalone meaning without `raw_kind`.
-- Identical storage shape must not imply identical meaning across engines.
-- `valid_from` / `valid_to` are data-layer business time; PyReason `active_from` / `active_to` are adapter-local timestep coordinates.
-- A SemanticsProfile projection is a runtime view, not a durable rewrite of stored facts.
-- Runtime projection outputs must not be written back as canonical raw uncertainty.
-- Since historical compatibility is not required, new docs and tests should make `raw_kind` / `bound` the only preferred data-layer uncertainty contract.
-- Any remaining fallback from `meta.confidence` to probability is current implementation behavior, not a future data contract guarantee.
-- Candidate `confidence_kind` must not be reused as stored raw uncertainty kind without a scoped migration.
+- **Storage authority**: Annotation Store rows under `shared/semantic/raw_kind` and `shared/semantic/bound` are the canonical raw uncertainty copy. `meta_rows` are a mirror for SDK assertion selection, review, and ergonomic filtering.
+- **Pair invariant**: `raw_kind` and `bound` have uncertainty semantics only as a pair. User writes with only one of the two keys are invalid.
+- **Kind invariant**: valid `raw_kind` values are exactly lowercase `probabilistic` and `possibilistic`.
+- **Bound invariant**: valid `bound` values are exactly two-element JSON lists normalized to float values with `0.0 <= lower <= upper <= 1.0`; bools, numeric strings, non-lists, and wrong-length lists are invalid.
+- **Legacy-key invariant**: user-authored `probability`, `bound_lower`, and `bound_upper` meta are invalid in Phase 1. Engine-native annotation lanes with those names may remain internal adapter output/projection lanes.
+- **Confidence invariant**: `confidence` remains the existing compatibility / output summary lane. It is not the canonical raw uncertainty carrier and is not renamed or removed in this blueprint.
+- **Selection invariant**: `AssertionRecordSet.where(meta=...)` matches `bound` by exact normalized JSON value. No interval query semantics are introduced.
+- **Adapter invariant**: ProbLog export, PyReason materialization, candidate confidence, `confidence_kind`, and runtime `SemanticsProfile` behavior are unchanged in Phase 1.
+- **Temporal invariant**: `valid_from` / `valid_to` are data-layer business time; PyReason `active_from` / `active_to` remain adapter-local timestep coordinates.
+- **Projection invariant**: any future `SemanticsProfile` projection is runtime-owned and must not write projection outputs back as the canonical raw uncertainty source.
+- **Track separation invariant**: Rule / Policy namespace cleanup, `Body -> Branch`, `Branch.probability`, engine call-site placement, and Policy/PolicyFinding are deferred to a separate Track 2 blueprint.
 
 ## 7. Acceptance
 
-- [ ] `meta={"raw_kind": "...", "bound": [...]}` writes accepted valid values and rejects invalid values.
-- [ ] `raw_kind` and `bound` are present in `meta_rows` for assertion selection / view ergonomics.
-- [ ] `raw_kind` and `bound` are projected to `shared/semantic/*` annotation rows.
-- [ ] `AssertionRecordSet.where(meta={...})` can filter by `raw_kind` and exact `bound`.
+- [ ] Valid `meta={"raw_kind": "probabilistic", "bound": [0.2, 0.8]}` and `possibilistic` writes succeed.
+- [ ] Invalid `raw_kind`, missing pair member, malformed `bound`, bool elements, numeric-string elements, out-of-range bounds, and `lower > upper` are rejected before ledger mutation.
+- [ ] User-authored `probability`, `bound_lower`, and `bound_upper` meta are rejected with clear validation errors.
+- [ ] Valid writes persist normalized `raw_kind` and `bound` to `meta_rows`.
+- [ ] Valid writes project `raw_kind` and `bound` to `shared/semantic/raw_kind` and `shared/semantic/bound` annotation rows.
+- [ ] `AssertionRecordSet.where(meta={"raw_kind": ...})` and exact `where(meta={"bound": [...]})` can select the written assertions.
+- [ ] Replace/edit validation failures do not retract or mutate the previously active assertion.
+- [ ] Existing `confidence` behavior remains supported and unchanged.
+- [ ] ProbLog export, PyReason materialization, candidate confidence, and valid-time assertion filtering remain unchanged.
 - [ ] New uncertainty examples and docs use `raw_kind` / `bound`, not `probability`, `bound_lower`, or `bound_upper`.
-- [ ] Existing non-uncertainty behavior such as valid-time assertion filtering remains unchanged.
 - [ ] Affected module docs are synchronized.
-- [ ] `docs/README.md` is updated if a new durable documentation entry is introduced.
+- [ ] Track 2 rule/policy/function-tree work is not implemented in this blueprint.
 
 ## 8. Implementation Plan
 
-1. Finalize the Phase 1 data contract in this blueprint and audit before code edits.
-2. Add write-protocol support for `raw_kind` and `bound` as recognized meta keys.
+1. Add focused tests for validation, legacy-key rejection, `meta_rows`, annotation projection, exact assertion filtering, and replace/edit atomicity.
+2. Add write-protocol support for `raw_kind` and normalized `bound` as recognized meta keys.
 3. Add shared annotation projection for `raw_kind` and `bound`.
-4. Add focused tests for validation, meta row persistence, annotation projection, and assertion filtering.
-5. Update SDK / core docs to make `raw_kind` / `bound` the preferred uncertainty contract and distinguish it from candidate confidence and engine-native projection outputs.
-6. Keep SemanticsProfile, ProbLog projection, and PyReason temporal projection documented as later-phase work.
+4. Keep ProbLog export, PyReason materialization, candidate confidence, valid-time filtering, and Track 2 rule/policy syntax behavior unchanged.
+5. Update SDK / core / adapter docs to make `raw_kind` / `bound` the preferred uncertainty authoring contract and distinguish it from candidate confidence and engine-native projection outputs.
+6. Run focused uncertainty tests plus relevant write-protocol, annotation, SDK assertion selection, ProbLog, and PyReason regression tests.
 7. Fill Outcome / Deviations, mark implemented, and archive when code and docs are aligned.
 
 ## 9. Docs To Update
@@ -225,8 +244,10 @@ This keeps the data-layer contract in business time while still using PyReason's
 - `src/kernel/core/docs/01_architecture.en.md`
 - `src/kernel/adapters/docs/02_problog_adapter.md`
 - `src/kernel/adapters/docs/03_pyreason_adapter.md`
+- `src/kernel/sdk/docs/00_user_guide.en.md`
 - `src/kernel/sdk/docs/02_readwrite_and_ingest.en.md`
 - `src/kernel/sdk/docs/03_rules_and_derivations.en.md`
+- `src/kernel/sdk/docs/04_api_surface.en.md`
 - `docs/README.md` if a durable top-level docs entry is added.
 
 ## 10. Outcome / Deviations

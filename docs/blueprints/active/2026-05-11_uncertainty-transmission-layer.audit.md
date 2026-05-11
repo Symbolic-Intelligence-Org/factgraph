@@ -13,6 +13,9 @@
 | 2026-05-11 | draft | Storage placement clarified | `raw_kind` values should be lowercase; canonical raw uncertainty should be Annotation Store rows, not `meta_rows`. |
 | 2026-05-11 | draft | Phase 1 narrowed | User agreed to start with data contract only and defer code until the workflow scopes it. |
 | 2026-05-11 | draft | Compatibility relaxed | User clarified the project is not online, so historical uncertainty compatibility is not required. |
+| 2026-05-11 | draft | Track relationship reviewed | Re-read `possibility-probability-transmission.zh.md`, `rule-policy-function-tree-and-syntax.zh.md`, and this audit. Confirmed Track 1 (`raw_kind` / `bound` uncertainty data contract) can proceed first while Track 2 (rule/policy namespace, DSL, engine placement, and Policy layer) remains a separate future blueprint. |
+| 2026-05-11 | draft | Phase 1 decisions locked | Locked D1-D5: hard-reject user-authored `probability` / `bound_lower` / `bound_upper`; keep `confidence` unchanged as compatibility/output summary; validate in `write_protocol` meta normalization / preflight; make `bound` selection exact JSON matching; implement Track 1 before any Track 2 blueprint. |
+| 2026-05-11 | scoped | Scope frozen | Blueprint moved from `draft` to `scoped`. §5.0 added scope-freeze decisions; §5.1 refined pair/normalization/legacy-key validation; §6 and §7 replaced with testable invariants and acceptance gates; docs list expanded to include SDK user guide and API surface. |
 
 ## Decision Notes
 
@@ -24,3 +27,6 @@
 - 2026-05-11: Use lowercase raw kinds (`probabilistic`, `possibilistic`). Store canonical raw uncertainty under `shared/semantic/raw_kind` and `shared/semantic/bound`; `meta` may remain an SDK input convenience, while `meta_rows` stay compatibility material.
 - 2026-05-11: Phase 1 will only add `raw_kind` / `bound` data contract support. It should not change ProbLog export, PyReason materialization, candidate confidence, or SemanticsProfile runtime projection.
 - 2026-05-11: Do not preserve `probability`, `bound_lower`, or `bound_upper` as parallel user-facing uncertainty write contracts. They may remain internal adapter projection outputs until later phases replace engine materialization.
+- 2026-05-11: Phase 1 treats Annotation Store rows as canonical raw uncertainty and `meta_rows` as a selection/review mirror.
+- 2026-05-11: `raw_kind` and `bound` must be written together. `bound` is normalized to a two-element float list and matched exactly by `AssertionRecordSet.where(meta=...)`.
+- 2026-05-11: `confidence` remains supported as the existing compatibility / output summary lane. Its broader terminology cleanup belongs to the separate rule/policy/function-tree track.
