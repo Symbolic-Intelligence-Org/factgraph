@@ -115,7 +115,7 @@ class ProbLogExportTests(unittest.TestCase):
 
 
 class TestProbLogExportReadsSharedProbability(unittest.TestCase):
-    """ProbLog export reads shared/semantic/probability from write_protocol."""
+    """ProbLog export reads shared/semantic/probability annotations."""
 
     def test_export_reads_shared_semantic_probability(self) -> None:
         from kernel.adapters.problog.problog_export import _claim_probability
@@ -131,7 +131,20 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
             pred_id="item:label",
             e_ref=ref,
             rest_terms=[("string", "val")],
-            meta={"probability": 0.65},
+            meta={"source": "test"},
+        )
+        sdk.ledger.append_annotations(
+            [
+                AnnotationRow(
+                    asrt_id=asrt_id,
+                    namespace="shared",
+                    category="semantic",
+                    key="probability",
+                    kind="float",
+                    value=0.65,
+                    origin="observed",
+                )
+            ]
         )
         prob = _claim_probability(sdk.store, asrt_id)
         self.assertAlmostEqual(prob, 0.65)

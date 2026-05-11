@@ -32,10 +32,13 @@ _CONVENTION_META_KEYS = {
     "source_loc",
     "trace_id",
     "confidence",
-    "probability",
+    "raw_kind",
+    "bound",
     "approved_by",
     "note",
 }
+_LEGACY_UNCERTAINTY_META_KEYS = {"probability", "bound_lower", "bound_upper"}
+_RAW_UNCERTAINTY_KINDS = {"probabilistic", "possibilistic"}
 _SENSITIVE_SEMANTIC_META_KEYS = {
     "derived_rule_id",
     "derived_rule_version",
@@ -62,7 +65,8 @@ _KEY_KIND_MAP = {
     "trace_id": "str",
     "confidence": "float",
     "confidence_source": "str",
-    "probability": "float",
+    "raw_kind": "str",
+    "bound": "json",
     "approved_by": "str",
     "accepted_by": "str",
     "note": "str",
@@ -100,7 +104,8 @@ _SHARED_ANNOTATION_WHITELIST: dict[str, tuple[str, str]] = {
     "approved_by": ("source", "observed"),
     "note": ("source", "observed"),
     "confidence": ("derived", "derived"),
-    "probability": ("semantic", "observed"),
+    "raw_kind": ("semantic", "observed"),
+    "bound": ("semantic", "observed"),
 }
 
 __all__ = [
@@ -259,13 +264,55 @@ def _normalize_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
         if key in _SYSTEM_MANAGED_META_KEYS:
             raise WriteProtocolError(f"meta[{key}] is reserved and system-managed")
     result = dict(meta)
-    probability = result.get("probability")
-    if isinstance(probability, (int, float)) and not isinstance(probability, bool):
-        normalized_probability = float(probability)
-        result["probability"] = normalized_probability
-        if "confidence" not in result:
-            result["confidence"] = normalized_probability
+    _validate_no_legacy_uncertainty_keys(result)
+    _normalize_raw_uncertainty_meta(result)
     return result
+
+
+def _validate_no_legacy_uncertainty_keys(meta: dict[str, Any]) -> None:
+    for key in sorted(_LEGACY_UNCERTAINTY_META_KEYS):
+        if key in meta:
+            raise WriteProtocolError(
+                f"meta[{key}] is no longer accepted as user-authored raw uncertainty; "
+                "use meta[raw_kind] and meta[bound]"
+            )
+
+
+def _normalize_raw_uncertainty_meta(meta: dict[str, Any]) -> None:
+    has_raw_kind = "raw_kind" in meta
+    has_bound = "bound" in meta
+    if has_raw_kind != has_bound:
+        raise WriteProtocolError("meta[raw_kind] and meta[bound] must be provided together")
+    if not has_raw_kind:
+        return
+
+    raw_kind = meta["raw_kind"]
+    if not isinstance(raw_kind, str) or raw_kind not in _RAW_UNCERTAINTY_KINDS:
+        allowed = ", ".join(sorted(_RAW_UNCERTAINTY_KINDS))
+        raise WriteProtocolError(f"meta[raw_kind] must be one of: {allowed}")
+
+    meta["bound"] = _normalize_uncertainty_bound(meta["bound"])
+
+
+def _normalize_uncertainty_bound(value: Any) -> list[float]:
+    if not isinstance(value, list):
+        raise WriteProtocolError("meta[bound] must be a two-element JSON list")
+    if len(value) != 2:
+        raise WriteProtocolError("meta[bound] must be a two-element JSON list")
+
+    lower_raw, upper_raw = value
+    if isinstance(lower_raw, bool) or isinstance(upper_raw, bool):
+        raise WriteProtocolError("meta[bound] values must be numeric and not bool")
+    if not isinstance(lower_raw, (int, float)) or not isinstance(upper_raw, (int, float)):
+        raise WriteProtocolError("meta[bound] values must be numeric")
+
+    lower = float(lower_raw)
+    upper = float(upper_raw)
+    if lower < 0.0 or upper > 1.0:
+        raise WriteProtocolError("meta[bound] values must be within [0,1]")
+    if lower > upper:
+        raise WriteProtocolError("meta[bound] lower must be <= upper")
+    return [lower, upper]
 
 
 def _compute_ingest_key(
@@ -435,7 +482,7 @@ def _validate_meta_value_for_kind(key: str, kind: str, value: Any) -> None:
     if kind == "float":
         if isinstance(value, bool) or not isinstance(value, float):
             raise WriteProtocolError(f"meta[{key}] must be float")
-        if key in {"confidence", "probability"}:
+        if key == "confidence":
             if value <= 0.0 or value > 1.0:
                 raise WriteProtocolError(f"meta[{key}] must be within (0,1]")
         return
