@@ -421,10 +421,10 @@ class TestWhitelistCoverage(unittest.TestCase):
             self.assertEqual(cat, "source", f"key={key} should be category=source")
 
 
-class TestProbabilityWriteLane(unittest.TestCase):
-    """Legacy raw uncertainty write keys are rejected for user-authored meta."""
+class TestRemovedUncertaintyWriteKeys(unittest.TestCase):
+    """Removed raw uncertainty write keys are rejected for user-authored meta."""
 
-    def test_legacy_uncertainty_keys_rejected(self) -> None:
+    def test_removed_uncertainty_keys_rejected(self) -> None:
         for key in ("probability", "bound_lower", "bound_upper"):
             with self.subTest(key=key):
                 with self.assertRaises(WriteProtocolError) as ctx:

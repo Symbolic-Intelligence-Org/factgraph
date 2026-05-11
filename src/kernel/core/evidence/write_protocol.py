@@ -37,7 +37,7 @@ _CONVENTION_META_KEYS = {
     "approved_by",
     "note",
 }
-_LEGACY_UNCERTAINTY_META_KEYS = {"probability", "bound_lower", "bound_upper"}
+_REMOVED_UNCERTAINTY_META_KEYS = {"probability", "bound_lower", "bound_upper"}
 _RAW_UNCERTAINTY_KINDS = {"probabilistic", "possibilistic"}
 _SENSITIVE_SEMANTIC_META_KEYS = {
     "derived_rule_id",
@@ -264,16 +264,16 @@ def _normalize_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
         if key in _SYSTEM_MANAGED_META_KEYS:
             raise WriteProtocolError(f"meta[{key}] is reserved and system-managed")
     result = dict(meta)
-    _validate_no_legacy_uncertainty_keys(result)
+    _validate_no_removed_uncertainty_keys(result)
     _normalize_raw_uncertainty_meta(result)
     return result
 
 
-def _validate_no_legacy_uncertainty_keys(meta: dict[str, Any]) -> None:
-    for key in sorted(_LEGACY_UNCERTAINTY_META_KEYS):
+def _validate_no_removed_uncertainty_keys(meta: dict[str, Any]) -> None:
+    for key in sorted(_REMOVED_UNCERTAINTY_META_KEYS):
         if key in meta:
             raise WriteProtocolError(
-                f"meta[{key}] is no longer accepted as user-authored raw uncertainty; "
+                f"meta[{key}] is not accepted as user-authored raw uncertainty; "
                 "use meta[raw_kind] and meta[bound]"
             )
 

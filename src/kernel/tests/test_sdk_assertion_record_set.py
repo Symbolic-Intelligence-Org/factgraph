@@ -215,12 +215,12 @@ class AssertionRecordSetRawUncertaintyFilterTests(unittest.TestCase):
         self.assertEqual(exact_bound.asrt_id, high)
         self.assertEqual(no_interval_semantics.all(), ())
 
-    def test_sdk_rejects_legacy_probability_meta(self) -> None:
+    def test_sdk_rejects_removed_probability_meta(self) -> None:
         sdk = SDKStore([User])
         ref = sdk.ref(User, user_id="u-risk")
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.add(User.risk, ref, "legacy", meta={"probability": 0.4})
+            sdk.add(User.risk, ref, "removed", meta={"probability": 0.4})
 
         self.assertIn("probability", str(ctx.exception))
 

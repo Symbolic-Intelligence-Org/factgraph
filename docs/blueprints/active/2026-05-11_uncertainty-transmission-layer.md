@@ -73,7 +73,7 @@ The target issue is "formal unification is not semantic unification." A shared n
 - Current known constraints:
   - `AnnotationRow` is the canonical assertion-level annotation carrier.
   - `AnnotationRow.kind` already supports `json`, so `bound` can remain one atomic annotation value instead of being split into lower/upper engine fields.
-  - `meta_rows` are a legacy compatibility layer; canonical semantic consumers should read the Annotation Store.
+  - `meta_rows` are a selection / review mirror for SDK ergonomics; canonical semantic consumers should read the Annotation Store.
   - ProbLog export currently falls back from engine-native probability to shared probability to `meta.confidence`.
   - PyReason session writes `pyreason/semantic/bound_lower` and `bound_upper`, then derives shared compatibility confidence from the lower bound.
   - SDK / write protocol already carry business valid-time metadata as `valid_from` / `valid_to`.
@@ -117,9 +117,9 @@ The first implementation slice is scoped to Track 1, the uncertainty transmissio
 
 Locked decisions:
 
-- **D1 — Legacy uncertainty write keys**: `probability`, `bound_lower`, and `bound_upper` are hard-rejected as user-authored raw uncertainty meta in this Phase 1 contract. They may remain internal adapter projection / output lanes until a later adapter migration replaces them.
+- **D1 — Removed uncertainty write keys**: `probability`, `bound_lower`, and `bound_upper` are directly removed from user-authored raw uncertainty meta in this Phase 1 contract. User writes containing these keys are rejected so they cannot silently become custom metadata. The same names may remain internal adapter projection / output lanes until a later adapter migration replaces them.
 - **D2 — `confidence`**: user-authored `confidence` remains supported as the existing compatibility / summary lane. Phase 1 does not rename or remove it. The broader `confidence` terminology cleanup belongs to Track 2 or a later blueprint.
-- **D3 — Validation placement**: validation for `raw_kind`, `bound`, and the legacy-key rejection belongs in `src/kernel/core/evidence/write_protocol.py`, at meta normalization / preflight time, before ledger mutation or retract side effects.
+- **D3 — Validation placement**: validation for `raw_kind`, `bound`, and the removed-key rejection belongs in `src/kernel/core/evidence/write_protocol.py`, at meta normalization / preflight time, before ledger mutation or retract side effects.
 - **D4 — Selection semantics**: `AssertionRecordSet.where(meta={"bound": [...]})` uses exact JSON-value matching against the mirrored `meta_rows` value. Phase 1 does not introduce interval containment, overlap, tolerance, or uncertainty-aware query semantics.
 - **D5 — Sequencing**: Track 1 ships first. Track 2 namespace / DSL / policy-layer work stays in the working design note until a separate blueprint scopes it.
 
@@ -206,7 +206,7 @@ This keeps the data-layer contract in business time while still using PyReason's
 - **Pair invariant**: `raw_kind` and `bound` have uncertainty semantics only as a pair. User writes with only one of the two keys are invalid.
 - **Kind invariant**: valid `raw_kind` values are exactly lowercase `probabilistic` and `possibilistic`.
 - **Bound invariant**: valid `bound` values are exactly two-element JSON lists normalized to float values with `0.0 <= lower <= upper <= 1.0`; bools, numeric strings, non-lists, and wrong-length lists are invalid.
-- **Legacy-key invariant**: user-authored `probability`, `bound_lower`, and `bound_upper` meta are invalid in Phase 1. Engine-native annotation lanes with those names may remain internal adapter output/projection lanes.
+- **Removed-key invariant**: user-authored `probability`, `bound_lower`, and `bound_upper` meta are invalid in Phase 1. Engine-native annotation lanes with those names may remain internal adapter output/projection lanes.
 - **Confidence invariant**: `confidence` remains the existing compatibility / output summary lane. It is not the canonical raw uncertainty carrier and is not renamed or removed in this blueprint.
 - **Selection invariant**: `AssertionRecordSet.where(meta=...)` matches `bound` by exact normalized JSON value. No interval query semantics are introduced.
 - **Adapter invariant**: ProbLog export, PyReason materialization, candidate confidence, `confidence_kind`, and runtime `SemanticsProfile` behavior are unchanged in Phase 1.
@@ -231,7 +231,7 @@ This keeps the data-layer contract in business time while still using PyReason's
 
 ## 8. Implementation Plan
 
-1. Add focused tests for validation, legacy-key rejection, `meta_rows`, annotation projection, exact assertion filtering, and replace/edit atomicity.
+1. Add focused tests for validation, removed-key rejection, `meta_rows`, annotation projection, exact assertion filtering, and replace/edit atomicity.
 2. Add write-protocol support for `raw_kind` and normalized `bound` as recognized meta keys.
 3. Add shared annotation projection for `raw_kind` and `bound`.
 4. Keep ProbLog export, PyReason materialization, candidate confidence, valid-time filtering, and Track 2 rule/policy syntax behavior unchanged.
