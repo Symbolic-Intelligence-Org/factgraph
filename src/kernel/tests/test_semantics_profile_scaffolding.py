@@ -275,8 +275,18 @@ class PublicIntegrationRejectionTests(unittest.TestCase):
 
 
 class BridgeGuardTests(unittest.TestCase):
-    def test_adapters_do_not_import_semantics_profile_in_b(self) -> None:
-        root = Path(__file__).resolve().parents[1] / "adapters"
+    def test_problog_adapter_imports_semantics_profile_in_c(self) -> None:
+        root = Path(__file__).resolve().parents[1] / "adapters" / "problog"
+        hits = [
+            str(path.relative_to(root))
+            for path in root.rglob("*.py")
+            if "SemanticsProfile" in path.read_text()
+        ]
+
+        self.assertTrue(hits)
+
+    def test_pyreason_adapter_still_does_not_import_semantics_profile_in_c(self) -> None:
+        root = Path(__file__).resolve().parents[1] / "adapters" / "pyreason"
         violations = [
             str(path.relative_to(root))
             for path in root.rglob("*.py")
