@@ -1,12 +1,14 @@
 # Core Semantics Module
 
 `kernel.core.semantics` contains value objects and helpers for runtime
-projection semantics. In Track 3 / B it introduces `SemanticsProfile`
-as scaffolding only:
+projection semantics. Track 3 / B introduced `SemanticsProfile` as a
+validated core value object:
 
 - no SDK namespace export;
 - no service endpoint;
-- no adapter consumption;
+- ProbLog adapter consumption exists for `rule_projection.problog` through
+  the core `Store.evaluate(..., mode="problog", semantics_profile=...)`
+  path;
 - no projected values written back to stored assertions.
 
 The initial public import for advanced/core consumers is:
@@ -21,8 +23,10 @@ no-op boundary. `inspect_semantics_profile(profile)` returns a JSON-like
 summary of which projection lanes are configured without running an
 adapter or mutating the profile.
 
-Adapter migration is intentionally deferred:
+Adapter migration is intentionally staged:
 
-- Track 3 / C will decide ProbLog consumption.
+- Track 3 / C consumes `SemanticsProfile.rule_projection.problog` and
+  normalizes `kind="branch_probability"` entries into the adapter-local
+  `ProbLogRuleExt` bridge. Omitted branches default to `1.0`.
 - Track 3 / D will decide PyReason temporal and interval consumption.
 - Track 3 / E will decide the durable SDK/service runtime call-site.

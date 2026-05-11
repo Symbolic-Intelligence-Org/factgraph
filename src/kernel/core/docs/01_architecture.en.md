@@ -187,9 +187,12 @@ Adapter-specific rule projection is no longer public SDK rule syntax:
   - internal compiled `body_confidences` is only a temporary SDK/runtime bridge; public authoring and service payloads reject it
 - future `SemanticsProfile.rule_projection` owns the durable public
   rule-projection shape
-- Track 3 / B has introduced `kernel.core.semantics.SemanticsProfile` as
-  core scaffolding only. It validates profile shape and supports
-  inspection; no adapter imports or consumes it yet, and no profile-derived
+- Track 3 / B introduced `kernel.core.semantics.SemanticsProfile` as a
+  core value object. Track 3 / C makes ProbLog the first consuming
+  adapter: the core `Store.evaluate(..., mode="problog",
+  semantics_profile=...)` path maps `rule_projection.problog`
+  `branch_probability` entries into `ProbLogRuleExt`. SDK and service
+  profile payloads still reject until Track 3 / E, and no profile-derived
   values are written into assertion storage.
 
 Native `RuleRef` semantics and current boundary:

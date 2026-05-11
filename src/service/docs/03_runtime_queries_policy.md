@@ -1086,10 +1086,11 @@
 - 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供。
 - runtime derivation evaluation 使用 top-level `engine` 选择后端；
   `derivation.mode` 和 top-level `mode` 都会被拒绝。
-- Track 3 / B 已引入 core `SemanticsProfile` scaffolding，但 service
-  runtime 仍不消费 profile。top-level 或 `derivation` 内的
-  `semantics` / `semantics_profile` 会返回 `shape` error，并指向
-  Track 3 / E 的 runtime call-site 设计。
+- Track 3 / B 已引入 core `SemanticsProfile` scaffolding，Track 3 / C
+  已让 core `Store.evaluate(..., mode="problog", semantics_profile=...)`
+  消费 `rule_projection.problog`。service runtime 仍不消费 profile；
+  top-level 或 `derivation` 内的 `semantics` / `semantics_profile`
+  会返回 `shape` error，并指向 Track 3 / E 的 runtime call-site 设计。
 - native `engine="native"` derivation 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：
   - 若已有 filesystem registry，ephemeral rules 在其后 merge
   - 若 `registry_root is None` 但 session 有 ephemeral rules，service 会临时创建一个空 `RuleRegistry()` 并注入

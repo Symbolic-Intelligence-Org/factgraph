@@ -88,10 +88,16 @@ Main flow of `evaluate_problog(...)`:
    - If both an internal `engine_ext` and legacy
      `body_confidences` are present and inconsistent, the bridge
      raises `ValueError`
-   - Track 3 / B provides core `SemanticsProfile` validation and
-     inspection scaffolding only. ProbLog does not consume
-     `SemanticsProfile` yet; Track 3 / C owns projection from
-     `SemanticsProfile.rule_projection.problog` into adapter internals.
+   - Track 3 / C lets the core `Store.evaluate(..., mode="problog",
+     semantics_profile=...)` path provide
+     `SemanticsProfile.rule_projection.problog` entries. The adapter
+     validates `kind="branch_probability"`, `target="branch:{index}"`
+     and probability values in `(0, 1]`, defaults omitted branches to
+     `1.0`, and normalizes the result into `ProbLogRuleExt`.
+   - When `SemanticsProfile.rule_projection.problog`,
+     `ProbLogRuleExt.branch_probabilities`, and legacy
+     `body_confidences` are all present, their materialized branch
+     probability tuples must match.
 4. Assemble `rule_spec` (containing
    `where/head/head_vars/query_vars/engine_ext`)
 5. `export_problog(...)` produces a temporary `query.pl`
@@ -238,10 +244,18 @@ Semantic-delivery addendum:
   the SDK / runtime bridge, but public authoring and service payloads
   reject that key. The adapter / export itself consumes only the typed
   `engine_ext`
-- The durable public replacement is not active in this adapter yet:
-  Track 3 / B only validates / inspects `SemanticsProfile`; Track 3 / C
-  will decide how `SemanticsProfile.rule_projection.problog` normalizes
-  into branch probabilities.
+- Track 3 / C activates core ProbLog consumption of
+  `SemanticsProfile.rule_projection.problog`:
+  - profile `engine` must be `problog` when consumed by this adapter
+  - supported entries use `kind="branch_probability"` and
+    `target="branch:{index}"`
+  - omitted branches default to `1.0`
+  - profile / `ProbLogRuleExt` / legacy `body_confidences` carriers may
+    coexist only when they materialize the same probability tuple
+  - `Store.evaluate(..., mode="native", semantics_profile=...)` rejects
+    rather than silently ignoring the profile
+- SDK and service runtime calls still reject `semantics=` /
+  `semantics_profile=`; Track 3 / E owns the durable public call-site.
 - The output program contains:
   - `edb_fact(...)` facts
   - `rule_body_i` branch rules

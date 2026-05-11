@@ -374,12 +374,16 @@ Field intent:
 - `output_readback`: maps engine output back to candidate summaries, annotations, and business-time intervals.
 - `fallback`: global reject / warn / default behavior for unconfigured cases.
 
-Track 3 / B implementation note: the current code now contains
+Track 3 implementation note: the current code contains
 `kernel.core.semantics.SemanticsProfile` as a frozen core value object
-with shape validation and `inspect_semantics_profile(...)`. This is
-scaffolding only: SDK / service runtime calls reject `semantics=` and
-`semantics_profile=`, and ProbLog / PyReason adapter consumption remains
-deferred to Track 3 / C and D.
+with shape validation and `inspect_semantics_profile(...)`. Track 3 / C
+has made ProbLog the first consuming adapter through the core
+`Store.evaluate(..., mode="problog", semantics_profile=...)` path:
+`SemanticsProfile.rule_projection.problog` entries with
+`kind="branch_probability"` and `target="branch:{index}"` normalize into
+`ProbLogRuleExt.branch_probabilities`. SDK / service runtime calls still
+reject `semantics=` and `semantics_profile=` until Track 3 / E, and
+PyReason adapter consumption remains deferred to Track 3 / D.
 
 Important separation:
 
@@ -402,7 +406,7 @@ Possible path-targeted `rule_projection` sketch:
     "problog": [
       {
         "target": "branch:0",
-        "kind": "branch_weight",
+        "kind": "branch_probability",
         "value": 0.9
       }
     ],

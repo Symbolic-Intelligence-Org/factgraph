@@ -448,9 +448,11 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
   `engine_ext` parameters. Future `SemanticsProfile.rule_projection`
   owns engine-specific rule projection.
 - Track 3 / B exposes `kernel.core.semantics.SemanticsProfile` as a core
-  validation / inspection value object only. `evaluate(..., semantics=...)`
-  and `evaluate(..., semantics_profile=...)` are rejected in the SDK until
-  Track 3 / E defines the durable runtime call-site.
+  validation / inspection value object. Track 3 / C lets core
+  `Store.evaluate(..., mode="problog", semantics_profile=...)` consume
+  `rule_projection.problog`, but SDK `evaluate(..., semantics=...)` and
+  `evaluate(..., semantics_profile=...)` are still rejected until Track 3 / E
+  defines the durable runtime call-site.
 - Public `Rule.condition_weights` remains available as
   certainty/explain projection input. It is not an engine adapter
   parameter, and future runtime configuration for this lane belongs in
