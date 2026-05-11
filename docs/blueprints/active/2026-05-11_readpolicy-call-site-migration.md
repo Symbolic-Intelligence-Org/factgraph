@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (draft seed)
+- **Last Updated:** 2026-05-11 (§5.1 LOCKED — DTO name = `ReadPolicy`)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -153,7 +153,7 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 
 | # | Gap | Primary decision points |
 |---|---|---|
-| §5.1 | **Policy DTO naming.** | `ReadPolicy` vs `DisplayPolicy` vs alternative. Decides class name and import path. |
+| §5.1 | **Policy DTO naming. — LOCKED** | DTO name = `ReadPolicy`. Semantic boundary locked (see §5.1 subsection below). Module location + `__all__` export NOT decided here — see §5.3. |
 | §5.2 | **Policy DTO field set.** | First slice fields = current `active` / `confidence_strategy` / `prefer_source` (carry-over verbatim). All future fields (`tie_breaker`, `merge_rule`, `confidence_propagation`, …) explicitly **deferred** — not occupied as field placeholders. |
 | §5.3 | **DTO module location + public export.** | In-place replace `ViewSpec` at `kernel/core/store/types.py`, or relocate to `kernel/sdk/types.py` (SDK-only)? Is the DTO added to `kernel.sdk.__all__`? Is `ViewSpec` still importable from `kernel.core.store.types`? (High-risk because `src/service/runtime_v1.py` and `kernel.application.protocol` may import ViewSpec — coupled to §5.7.) |
 | §5.4 | **`fg.views` final semantics.** | Post-migration union → single `FrozenAssertionView` return. Decide built-in `default` entry: keep as empty `FrozenAssertionView(name="default", asrt_ids=frozenset())` vs drop the built-in entirely. |
@@ -165,6 +165,36 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 | §5.10 | **Release checklist.** | Confirm next release (rc.2 successor or rc.3) ships the migration. Per §0.7 no compat-window discussion needed; this gap is purely a checklist confirmation (`kernel.sdk.__all__` diff, allowlist sync, deny-pattern grep updates per `feedback_release_workflow_traps`). |
 
 §5.1 is the first gap; subsequent gaps proceed in numerical order unless a downstream dependency forces reordering.
+
+### §5.1 LOCKED — Policy DTO name = `ReadPolicy`
+
+**Final DTO name:** `ReadPolicy`.
+
+**Semantic boundary (locked verbatim):**
+
+> `ReadPolicy` names the read-time resolution/display policy applied after facts are read, not graph membership. It replaces the old `ViewSpec` name for this policy surface; `view` remains reserved for assertion-membership views.
+
+**What this gap locks:**
+
+- The Python class name for the new DTO is `ReadPolicy`.
+- The `policy=` kwarg on `find(...)` / `run(...)` carries a `ReadPolicy` value (final call-site shape at §5.5).
+- The semantic boundary forbids using `ReadPolicy` as a successor to "view" naming; `view` / `fg.views` stay exclusively about frozen assertion-id membership.
+- `ReadPolicy` is positioned to absorb future read-time resolution/display fields (e.g., `tie_breaker`, `merge_rule`, `confidence_propagation`) under one DTO rather than splitting into per-concern policy classes; whether any such field actually ships is **out of scope** for §5.1 and gated by §5.2.
+
+**What this gap does NOT lock:**
+
+- Module location and import path of `ReadPolicy` → §5.3.
+- Field set (which of `active` / `confidence_strategy` / `prefer_source` carry over, and which new fields ship) → §5.2.
+- Whether `ReadPolicy` is exported from `kernel.sdk.__all__` → §5.3.
+- Call-site form of `policy=` (value-only vs inline-dict vs named-string) → §5.5.
+- Old `ViewSpec` removal mechanic → §5.6.
+
+**Why `ReadPolicy` (rejection rationale for the 4 alternatives):**
+
+- `DisplayPolicy` rejected: narrows scope to display surfaces, but `active` and future `tie_breaker` / `merge_rule` are read-time resolution, not display. Lock-in risk of forcing future fields to break out into separate policy classes.
+- `AggregationPolicy` rejected: only covers `confidence_strategy`; cannot account for `active`.
+- `ResolutionPolicy` rejected: "resolution" overlaps with conflict resolution and identity resolution, both already domain terms in the kernel.
+- `ReadDisplayPolicy` rejected: hybrid naming signals fuzzy scope; verbose; inconsistent with factpy short-name style (`SDKStore`, `BatchTx`, `EntitySnapshot`).
 
 ## 6. Invariants
 
