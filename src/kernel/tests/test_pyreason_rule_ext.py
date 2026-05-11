@@ -122,9 +122,8 @@ class CompileRuleTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
-            engine_ext=PyReasonRuleExt(timestep_delay=1),
         )
-        rule_str, name = compile_pyreason_rule(rule)
+        rule_str, name = compile_pyreason_rule(rule, engine_ext=PyReasonRuleExt(timestep_delay=1))
         self.assertEqual(name, "friend_pop")
         self.assertEqual(rule_str, "popular(x) <-1 popular(y), strength(x, y)")
 
@@ -134,9 +133,8 @@ class CompileRuleTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:outdoorsy", x)],
             where=[Pred("owns:since", x, y), Pred("pet:dog_breed", y)],
-            engine_ext=PyReasonRuleExt(timestep_delay=0),
         )
-        rule_str, _ = compile_pyreason_rule(rule)
+        rule_str, _ = compile_pyreason_rule(rule, engine_ext=PyReasonRuleExt(timestep_delay=0))
         self.assertEqual(rule_str, "outdoorsy(x) <-0 since(x, y), dog_breed(y)")
 
     def test_multi_body_atoms(self) -> None:
@@ -150,9 +148,8 @@ class CompileRuleTests(unittest.TestCase):
                 Pred("owns:since", y, z),
                 Pred("owns:since", x, z),
             ],
-            engine_ext=PyReasonRuleExt(timestep_delay=1),
         )
-        rule_str, _ = compile_pyreason_rule(rule)
+        rule_str, _ = compile_pyreason_rule(rule, engine_ext=PyReasonRuleExt(timestep_delay=1))
         self.assertEqual(
             rule_str,
             "popular(x) <-1 popular(y), strength(x, y), since(y, z), since(x, z)",
@@ -164,12 +161,14 @@ class CompileRuleTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
+        )
+        rule_str, _ = compile_pyreason_rule(
+            rule,
             engine_ext=PyReasonRuleExt(
                 timestep_delay=1,
                 body_predicate_bounds={"user:popular": (0.5, 1.0)},
             ),
         )
-        rule_str, _ = compile_pyreason_rule(rule)
         self.assertEqual(rule_str, "popular(x) <-1 popular(y) : [0.5, 1.0], strength(x, y)")
 
     def test_head_bound_compile_to_head_interval_suffix(self) -> None:
@@ -178,12 +177,14 @@ class CompileRuleTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
+        )
+        rule_str, _ = compile_pyreason_rule(
+            rule,
             engine_ext=PyReasonRuleExt(
                 timestep_delay=1,
                 head_bound=(0.8, 0.9),
             ),
         )
-        rule_str, _ = compile_pyreason_rule(rule)
         self.assertEqual(rule_str, "popular(x) : [0.8, 0.9] <-1 popular(y), strength(x, y)")
 
     def test_string_literal_in_term(self) -> None:
@@ -257,10 +258,9 @@ class CompileRuleTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y)],
-            engine_ext=OtherExt(),
         )
         with self.assertRaises(PyReasonCompileError) as ctx:
-            compile_pyreason_rule(rule)
+            compile_pyreason_rule(rule, engine_ext=OtherExt())  # type: ignore[arg-type]
         self.assertIn("PyReasonRuleExt", str(ctx.exception))
 
 
@@ -299,6 +299,9 @@ class RunnerTypedDefTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
+        )
+        compiled_rule = compile_pyreason_rule(
+            rule,
             engine_ext=PyReasonRuleExt(timestep_delay=1, head_bound=(0.8, 0.9)),
         )
         fact_def = PyReasonFactDef(atom="popular(Alice)", name="alice_pop", start=0, end=3, bound=[0.4, 0.6])
@@ -308,7 +311,7 @@ class RunnerTypedDefTests(unittest.TestCase):
                 warnings.simplefilter("ignore")
                 result = run_pyreason(
                     session,
-                    rule_defs=[rule],
+                    rules=[compiled_rule],
                     fact_defs=[fact_def],
                     config=PyReasonRunConfig(timesteps=2, atom_trace=False),
                 )
@@ -339,7 +342,6 @@ class RunnerTypedDefTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
-            engine_ext=PyReasonRuleExt(timestep_delay=1),
         )
 
         with patch.dict(sys.modules, {"pyreason": fake_pyreason}):
@@ -364,7 +366,6 @@ class RunnerTypedDefTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
-            engine_ext=PyReasonRuleExt(timestep_delay=1),
         )
         fact_def = PyReasonFactDef(atom="popular(Alice)", name="alice_pop", start=0, end=3, bound=[0.4, 0.6])
 
@@ -391,6 +392,9 @@ class RunnerTypedDefTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
+        )
+        compiled_rule = compile_pyreason_rule(
+            rule,
             engine_ext=PyReasonRuleExt(
                 timestep_delay=1,
                 body_predicate_bounds={"user:popular": (0.4, 1.0)},
@@ -402,7 +406,7 @@ class RunnerTypedDefTests(unittest.TestCase):
                 warnings.simplefilter("always")
                 run_pyreason(
                     session,
-                    rule_defs=[rule],
+                    rules=[compiled_rule],
                     config=PyReasonRunConfig(timesteps=2, atom_trace=False),
                 )
 
@@ -418,7 +422,6 @@ class RunnerTypedDefTests(unittest.TestCase):
             version="1.0",
             select=[Pred("user:popular", x)],
             where=[Pred("user:popular", y), Pred("friends:strength", x, y)],
-            engine_ext=PyReasonRuleExt(timestep_delay=1),
         )
 
         with patch.dict(sys.modules, {"pyreason": fake_pyreason}):

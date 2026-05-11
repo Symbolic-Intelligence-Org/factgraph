@@ -101,7 +101,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         )
         return sdk
 
-    def _make_derivation(self, *, engine_ext: PyReasonRuleExt | None = None, where=None) -> Derivation:
+    def _make_derivation(self, *, where=None) -> Derivation:
         with sdk_vars("u", "name") as (u, name):
             return Derivation(
                 id="drv.pyreason_popular",
@@ -109,7 +109,6 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
                 where=where if where is not None else [Pred("user:name", u, name)],
                 target="user:popular",
                 head_vars=[u],
-                engine_ext=engine_ext,
             )
 
     @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
@@ -135,13 +134,14 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
     @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_engine_ext_flows_outside_compiled_payload(self, mock_run) -> None:
         sdk = self._make_sdk()
-        derivation = self._make_derivation(engine_ext=PyReasonRuleExt(timestep_delay=2))
+        derivation = self._make_derivation()
 
         compiled = sdk._compile_derivation_input(derivation)
         self.assertEqual(compiled[0]["mode"], "native")
         self.assertNotIn("engine_ext", compiled[0])
+        compiled[0]["engine_ext"] = PyReasonRuleExt(timestep_delay=2)
 
-        sdk.evaluate(derivation, mode="pyreason")
+        sdk.evaluate(compiled[0], mode="pyreason")
 
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(len(rules), 1)
@@ -150,11 +150,10 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
     @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_body_predicate_bounds_flow_to_compiled_rules(self, mock_run) -> None:
         sdk = self._make_sdk()
-        derivation = self._make_derivation(
-            engine_ext=PyReasonRuleExt(body_predicate_bounds={"user:name": (0.5, 1.0)})
-        )
+        compiled = sdk._compile_derivation_input(self._make_derivation())[0]
+        compiled["engine_ext"] = PyReasonRuleExt(body_predicate_bounds={"user:name": (0.5, 1.0)})
 
-        sdk.evaluate(derivation, mode="pyreason")
+        sdk.evaluate(compiled, mode="pyreason")
 
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(rules, [("popular(u) <-0 name(u) : [0.5, 1.0]", "derived_popular")])
@@ -162,9 +161,10 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
     @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_head_bound_flows_to_compiled_rules(self, mock_run) -> None:
         sdk = self._make_sdk()
-        derivation = self._make_derivation(engine_ext=PyReasonRuleExt(head_bound=(0.8, 0.9)))
+        compiled = sdk._compile_derivation_input(self._make_derivation())[0]
+        compiled["engine_ext"] = PyReasonRuleExt(head_bound=(0.8, 0.9))
 
-        sdk.evaluate(derivation, mode="pyreason")
+        sdk.evaluate(compiled, mode="pyreason")
 
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(rules, [("popular(u) : [0.8, 0.9] <-0 name(u)", "derived_popular")])
@@ -210,7 +210,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
     def test_core_accept_persists_claim_and_pending_annotations(self, mock_run) -> None:
         del mock_run
         sdk = self._make_sdk()
-        derivation = self._make_derivation(engine_ext=PyReasonRuleExt(timestep_delay=1))
+        derivation = self._make_derivation()
 
         candidates = sdk.evaluate(derivation, mode="pyreason")
         candidate = candidates[0]
@@ -245,7 +245,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
     def test_post_accept_annotation_persist_binds_pending_templates(self, mock_run) -> None:
         del mock_run
         sdk = self._make_sdk()
-        derivation = self._make_derivation(engine_ext=PyReasonRuleExt(timestep_delay=1))
+        derivation = self._make_derivation()
 
         candidate = sdk.evaluate(derivation, mode="pyreason")[0]
         accept_result = sdk.store.accept(

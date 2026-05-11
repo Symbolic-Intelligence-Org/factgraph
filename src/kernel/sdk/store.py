@@ -1572,12 +1572,10 @@ class SDKStore:
             derivation = args[0]
             runtime_registry = self._resolve_runtime_registry(derivation, explicit_registry=registry)
             compiled_plans = self._compile_derivation_input(derivation)
-            engine_ext = getattr(derivation, "engine_ext", None)
             return self._evaluate_compiled_derivation_plans(
                 compiled_plans,
                 mode=kwargs.pop("mode", None),
                 registry=runtime_registry,
-                engine_ext=engine_ext,
                 engine_options=engine_options,
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
@@ -1600,7 +1598,6 @@ class SDKStore:
         *,
         mode: str | None,
         registry: RuleRegistry | None,
-        engine_ext: object | None = None,
         engine_options: dict[str, Any] | None = None,
     ) -> list[CandidateSet]:
         if not compiled_plans:
@@ -1611,7 +1608,6 @@ class SDKStore:
                 _compiled_derivation_plan_to_application(
                     compiled,
                     mode=resolved_mode,
-                    explicit_engine_ext=engine_ext,
                     engine_options=engine_options,
                 )
                 for compiled in compiled_plans
@@ -2350,7 +2346,6 @@ def _compiled_derivation_plan_to_application(
     compiled: dict[str, Any],
     *,
     mode: str,
-    explicit_engine_ext: object | None,
     engine_options: dict[str, Any] | None,
 ) -> CompiledDerivationPlan:
     body_confidences = _coerce_body_confidences(
@@ -2361,7 +2356,6 @@ def _compiled_derivation_plan_to_application(
         mode=mode,
         where=compiled.get("where"),
         compiled_engine_ext=compiled.get("engine_ext"),
-        explicit_engine_ext=explicit_engine_ext,
         legacy_body_confidences=body_confidences,
     )
     return CompiledDerivationPlan(
@@ -2396,21 +2390,16 @@ def _resolve_engine_ext_for_evaluate_plan(
     mode: Any,
     where: Any,
     compiled_engine_ext: object | None,
-    explicit_engine_ext: object | None,
     legacy_body_confidences: list[float] | None,
 ) -> object | None:
-    if explicit_engine_ext is not None and compiled_engine_ext is not None and explicit_engine_ext != compiled_engine_ext:
-        raise ValueError("Conflicting engine_ext between explicit derivation and compiled plan")
-
-    selected_engine_ext = explicit_engine_ext if explicit_engine_ext is not None else compiled_engine_ext
     if mode != "problog":
-        return selected_engine_ext
+        return compiled_engine_ext
 
     from kernel.adapters.problog.rule_ext import resolve_problog_engine_ext
 
     return resolve_problog_engine_ext(
         where=where,
-        engine_ext=selected_engine_ext,
+        engine_ext=compiled_engine_ext,
         legacy_body_confidences=legacy_body_confidences,
     )
 

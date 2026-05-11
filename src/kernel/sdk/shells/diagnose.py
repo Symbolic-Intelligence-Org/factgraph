@@ -75,7 +75,6 @@ def sdk_diagnose(
         plan = _compiled_derivation_plan_to_application(
             compiled_plans[0],
             mode=engine,
-            explicit_engine_ext=getattr(derivation, "engine_ext", None),
             engine_options=None,
         )
     except ValueError as exc:

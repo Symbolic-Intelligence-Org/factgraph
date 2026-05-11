@@ -6,8 +6,6 @@ from typing import Any
 
 from kernel.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
 from kernel.core.rules.where_ast_validate import WhereASTValidationError, validate_where_ast
-from kernel.core.store.types import EngineExtBase
-
 from ..error_codes import QUERY_ALIAS_CONFLICT, QUERY_UNBOUND_VAR
 from .branch import Branch
 from .errors import SDKDSLError
@@ -55,7 +53,6 @@ class Rule:
     description: str | None = None
     tags: list[str] = field(default_factory=list)
     condition_weights: dict[str, float] = field(default_factory=dict)
-    engine_ext: EngineExtBase | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id:
@@ -104,7 +101,6 @@ class Derivation:
     head: Any = None
     target: str | None = None
     head_vars: list[Any] | None = None
-    engine_ext: EngineExtBase | None = None
     status: str | None = None
     description: str | None = None
     tags: list[str] = field(default_factory=list)

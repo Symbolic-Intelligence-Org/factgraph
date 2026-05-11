@@ -958,6 +958,13 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
                 kind="shape",
                 path="$.body_confidences",
             )
+        if isinstance(dto, dict) and "engine_ext" in dto:
+            raise facade_error(
+                "engine_ext is not accepted in runtime derivation evaluation; "
+                "use future SemanticsProfile.rule_projection",
+                kind="shape",
+                path="$.engine_ext",
+            )
         mode = _resolve_runtime_derivation_engine(dto)
         compiled = _compile_runtime_derivation(dto, schema_ir=session.store.schema_ir)
         limit = _optional_limit(dto.get("limit"), path="$.limit")
@@ -1380,6 +1387,12 @@ def _compile_runtime_derivation(dto: Any, *, schema_ir: dict[str, Any]) -> dict[
             "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
             kind="shape",
             path="$.derivation.body_confidences",
+        )
+    if "engine_ext" in derivation:
+        raise facade_error(
+            "derivation.engine_ext is not accepted; use future SemanticsProfile.rule_projection",
+            kind="shape",
+            path="$.derivation.engine_ext",
         )
     normalized = dict(derivation)
     for key in ("where", "body"):

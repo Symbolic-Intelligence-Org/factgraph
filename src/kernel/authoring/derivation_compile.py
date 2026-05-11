@@ -46,6 +46,11 @@ def compile_authoring_derivation_v1(
             "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
             path="$.body_confidences",
         )
+    if "engine_ext" in authoring_derivation:
+        raise _compile_error(
+            "engine_ext is not accepted in derivation payload; use future SemanticsProfile.rule_projection",
+            path="$.engine_ext",
+        )
     if "temporal_view" in authoring_derivation:
         # TODO: Support derivation-side temporal materialization semantics.
         # Snapshot read views already support .at(t) / .version(v) in sdk.facade.

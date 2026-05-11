@@ -63,9 +63,9 @@ class PyReasonCompileError(Exception):
     """Raised when a WHERE atom cannot be compiled to PyReason syntax."""
 
 
-def compile_pyreason_rule(rule: Rule) -> tuple[str, str]:
+def compile_pyreason_rule(rule: Rule, *, engine_ext: PyReasonRuleExt | None = None) -> tuple[str, str]:
     """Compile a Rule to ``(pyreason_rule_str, rule_name)``."""
-    rule, ext = _resolve_rule_and_ext(rule)
+    rule, ext = _resolve_rule_and_ext(rule, engine_ext=engine_ext)
 
     head = _compile_head(rule, head_bound=ext.head_bound)
     body = _compile_body(
@@ -76,18 +76,17 @@ def compile_pyreason_rule(rule: Rule) -> tuple[str, str]:
     return (f"{head} <-{delay} {body}", rule.id)
 
 
-def _resolve_rule_and_ext(rule: Rule) -> tuple[Rule, PyReasonRuleExt]:
+def _resolve_rule_and_ext(rule: Rule, *, engine_ext: PyReasonRuleExt | None = None) -> tuple[Rule, PyReasonRuleExt]:
     if not isinstance(rule, Rule):
         raise PyReasonCompileError(f"Expected Rule, got {type(rule).__name__}")
 
-    rule_ext = getattr(rule, "engine_ext", None)
-    if rule_ext is None:
+    if engine_ext is None:
         return (rule, PyReasonRuleExt())
-    if not isinstance(rule_ext, PyReasonRuleExt):
+    if not isinstance(engine_ext, PyReasonRuleExt):
         raise PyReasonCompileError(
-            f"Rule.engine_ext must be PyReasonRuleExt or None, got {type(rule_ext).__name__}"
+            f"engine_ext must be PyReasonRuleExt or None, got {type(engine_ext).__name__}"
         )
-    return (rule, rule_ext)
+    return (rule, engine_ext)
 
 
 def _compile_head(

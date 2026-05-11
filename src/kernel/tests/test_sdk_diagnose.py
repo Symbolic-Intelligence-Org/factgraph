@@ -153,7 +153,6 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         app_plan = _compiled_derivation_plan_to_application(
             compiled[0],
             mode="native",
-            explicit_engine_ext=None,
             engine_options=None,
         )
 
