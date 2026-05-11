@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (§5.4 LOCKED — `fg.views` becomes frozen-only; `default` entry dropped)
+- **Last Updated:** 2026-05-11 (§5.5 LOCKED — P1 `policy: ReadPolicy | None` only; `return_display_meta` requires policy)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -157,7 +157,7 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 | §5.2 | **Policy DTO field set. — LOCKED** | `ReadPolicy` carries 3 fields: `respect_revocations` (renamed from misnomer `active`), `confidence_strategy`, `prefer_source`. Future fields DEFERRED. Single consumer `kernel/sdk/store.py:2070` migrates with the rename. See §5.2 subsection below. |
 | §5.3 | **DTO module location + public export. — LOCKED** | `ReadPolicy` defined at `kernel/core/store/types.py` (in-place replace of `ViewSpec`); enters `kernel.sdk.__all__` (35 → 36); `ConfidenceStrategy` stays core-only (not exported). See §5.3 subsection below. |
 | §5.4 | **`fg.views` final semantics. — LOCKED** | `default` entry dropped (not built-in, not reserved); `_views` starts `{}`; `create/update` accept only `asrt_ids=` / `asrts=` (no `view_spec=`); return types narrow to `FrozenAssertionView` / `dict[str, FrozenAssertionView]`. See §5.4 subsection below. |
-| §5.5 | **`policy=` call-site API.** | `find(..., policy=...)` and `run(..., policy=...)` accept Policy DTO value-object only? Accept inline dict (`policy={"confidence_strategy": "max"}`)? Accept named-string (which would resurrect the registry under a new name — **default reject** per §0.3)? Type-validation behavior on invalid input. |
+| §5.5 | **`policy=` call-site API. — LOCKED** | `policy: ReadPolicy \| None = None` on `find` / `run`; `policy=None` skips policy (mirrors current `view=None`); `dict` / `str` / `FrozenAssertionView` rejected; `evaluate(policy=...)` rejected; `return_display_meta=True` requires non-`None` policy. See §5.5 subsection below. |
 | §5.6 | **Old API removal mechanic.** | Per §0.7 default = hard cut. Old `ViewSpec` import: removed entirely vs raise on construction. Old `fg.views.create(name, ViewSpec(...))`: `TypeError` vs `SDKStoreError` with redirect message. Old `view=` kwarg on `find` / `run`: raise vs silent ignore. Final error texts for each path. |
 | §5.7 | **Non-SDK ViewSpec reference sweep.** | Full grep of `ViewSpec` across `src/kernel/application/protocol/`, `src/service/`, `src/kernel/audit/`, `src/kernel/tests/`. For each reference: keep (internal-only) vs migrate (cross-layer) vs delete (dead). |
 | §5.8 | **Docs + examples rewrite.** | SDK docs touched by `ace2563` + `4a794f3`. The new `examples/05_sdk_assertion_views.ipynb` (`58c07fc`, 368 lines) added today with old syntax — must be rewritten or retired. Doc-URL strategy for §5.6 redirect messages. |
@@ -344,6 +344,96 @@ Error messages on missing entries (`get` / `delete` on a non-existent name) are 
 - Old `view=` kwarg removal mechanic and error text → §5.6.
 - Service-runtime `default` handling — keep symmetry, change semantics, or drop → §5.7.
 - Test coverage for the registry narrowing → §5.9.
+
+### §5.5 LOCKED — `policy: ReadPolicy | None` value-only; `return_display_meta` requires non-`None` policy
+
+**Type signature (locked):**
+
+```python
+def find(
+    self,
+    entity_cls: type[Entity],
+    *,
+    policy: ReadPolicy | None = None,
+    limit: int | None = None,
+    **filter_kwargs: Any,
+): ...
+
+def run(
+    self,
+    rule_or_query: Any,
+    *,
+    policy: ReadPolicy | None = None,
+    return_display_meta: bool = False,
+    row_format: str | None = None,
+    registry: RuleRegistry | None = None,
+): ...
+```
+
+**Accepted payloads on `policy=`:**
+
+- `ReadPolicy` instance → applied as policy.
+- `None` → no policy applied (default).
+- Anything else → raises `SDKStoreError`.
+
+**Explicitly rejected payload types** (semantic-level lock; literal error text is implementation freedom):
+
+- `dict` — would require duplicate validation of `ReadPolicy.__post_init__`; breaks typed-DTO boundary; produces two error chains. Construct `ReadPolicy(...)` explicitly.
+- `str` — would resurrect a named-policy registry, violating §0.3 (no registry) and §0.5 (no `fg.projections` equivalent). This is the strongest rejection: any future amendment that re-introduces `policy="name"` lookup must re-litigate §0.3 + §0.5 as a falsifier baseline.
+- `FrozenAssertionView` — cross-namespace error; frozen views live in `fg.views`, policies in `policy=` kwargs. Error message should make the redirect explicit (`fg.views` carries frozen membership; pass `policy=ReadPolicy(...)` here).
+
+**`policy=None` semantic** (mirrors current `view=None`):
+
+- `fg.read.find(User, policy=None)` → returns rows; **does not attach `row.confidence`**.
+- `fg.run(rule, policy=None)` (without `return_display_meta`) → normal rule eval; no display metadata.
+- `fg.run(rule, policy=None, return_display_meta=True)` → **invalid; raises** (see invariant below).
+
+**`return_display_meta` invariant (locked verbatim):**
+
+> `fg.run(rule, return_display_meta=True, policy=None)` is invalid because display metadata requires a `ReadPolicy`. Callers must pass `policy=ReadPolicy(...)` when requesting display metadata.
+
+Source-ground for this invariant: the existing guard at `src/kernel/sdk/store.py:1506-1507`:
+
+```python
+if view_spec is None:
+    raise SDKStoreError("return_display_meta requires view to be provided", path="$.run.return_display_meta")
+```
+
+Post-migration becomes:
+
+```python
+if policy is None:
+    raise SDKStoreError("return_display_meta requires policy", path="$.run.return_display_meta")
+```
+
+The literal text changes; the semantic invariant — `return_display_meta=True ⇒ policy is not None` — is the lock.
+
+**`evaluate(...)` behavior** (mechanical parallel; no new design):
+
+`evaluate(...)` currently rejects any `view=` kwarg (`src/kernel/sdk/store.py:1565`: "derivation evaluation always uses active projection"). Post-migration mirror: `evaluate(...)` rejects any `policy=` kwarg with semantically equivalent message. No new decision; locked here for §5.6 / §5.9 implementation cross-reference.
+
+**Helper-function shape** (implementation freedom; not locked):
+
+`_resolve_view_spec` at `src/kernel/sdk/store.py:1542-1554` currently dispatches across `ViewSpec` / `FrozenAssertionView` / `str` / `None`. Post-migration the logic collapses to "None passthrough + isinstance check". Whether this remains a `_resolve_policy` helper or is inlined at `find` / `run` call sites is an implementation choice — §5.5 does not lock the call-graph.
+
+**Implementation cross-references (Phase 2):**
+
+| Path | Change |
+|---|---|
+| `src/kernel/sdk/store.py:565` | `find` signature: `view: ViewSpec \| str \| None` → `policy: ReadPolicy \| None`. |
+| `src/kernel/sdk/store.py:577-585` | `_resolve_view_spec` call swapped or inlined; `view_spec=resolved_view` → `policy=resolved_policy` in `_build_entity_confidence_by_ref`. |
+| `src/kernel/sdk/store.py:1389` | `run` signature: `view` → `policy`. |
+| `src/kernel/sdk/store.py:1428, 1445, 1461, 1483` | All `_run_dispatch_*` and `_run_rule` `view_spec` param → `policy`. |
+| `src/kernel/sdk/store.py:1506-1507` | `return_display_meta` guard: rephrase to reference `policy` (semantic invariant locked above; literal string free). |
+| `src/kernel/sdk/store.py:1542-1554` | `_resolve_view_spec` simplified or inlined. |
+| `src/kernel/sdk/store.py:1565` | `evaluate` rejection: mirror as `policy=` rejection. |
+
+**What this gap does NOT decide:**
+
+- Old `view=` kwarg removal mechanic (raise vs silent ignore) and exact error redirect text → §5.6.
+- Old `ViewSpec` import / construction removal → §5.6.
+- Service-runtime call-site migration (its parallel `view=` API surface) → §5.7.
+- Tests for each rejection path (`dict` / `str` / `FrozenAssertionView`) and the `return_display_meta` + `policy=None` invariant → §5.9.
 
 ## 6. Invariants
 
