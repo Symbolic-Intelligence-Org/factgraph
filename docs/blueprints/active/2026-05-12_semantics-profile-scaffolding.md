@@ -109,7 +109,7 @@ large adapter rewrite inside the same slice.
 | Layer | Current shape | B relevance |
 | --- | --- | --- |
 | Core types | `EngineExtBase`, `EngineOptionsIR`, `ReadPolicy`; no `SemanticsProfile`. | B needs a new profile type or module; `ReadPolicy` is a precedent for value-object validation but is read-path specific. |
-| SDK evaluate | `SDKStore.evaluate(..., mode=..., engine_options=...)`; rejects `view` / `policy` and removed `temporal_view`. | B must decide whether `semantics=` enters SDK now or whether B stays shape-only. |
+| SDK evaluate | Current public API is `SDKStore.evaluate(..., mode=..., engine_options=...)`; rejects `view` / `policy` and removed `temporal_view`. | B stays shape-only. Future Track 3 / E should prefer `engine=` as the public engine-selection keyword because it names the selected inference backend more directly than historical `mode=`. |
 | SDK compiled plan bridge | `_compiled_derivation_plan_to_application(...)` still resolves internal ProbLog bridge from `body_confidences` and returns `CompiledDerivationPlan(engine_ext, engine_options)`. | B should not break this bridge; later C/D can replace it with profile-derived internals. |
 | Application protocol | `CompiledDerivationPlan.engine_ext`, `.engine_options`; `DerivationEvaluateRequest.engine`. | Natural downstream carrier exists, but adding `semantics_profile` here would affect application DTOs. |
 | Service runtime | Rejects public `body_confidences` and `engine_ext`; then compiles derivation and passes internal `engine_ext` into `Store.evaluate`. | B must decide whether service accepts a top-level `semantics` / `semantics_profile` object now or later. |
@@ -291,6 +291,7 @@ are deferred to E.
 | Module placement | D1: new `kernel.core.semantics` subpackage. |
 | SDK export | D2: no SDK export in B. |
 | `evaluate(semantics=...)` integration | D3: not accepted in B. |
+| Future engine-selection keyword | B does not rename current APIs; Track 3 / E should evaluate `engine=` as the preferred public call-site name over historical `mode=`. |
 | Rule projection strictness | D6: generic shape validation only. |
 | Uncertainty projection policy strictness | D7: locked enum. |
 | Temporal projection mode strictness | D8: `none` only. |
