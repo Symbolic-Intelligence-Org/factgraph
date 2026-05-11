@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-05-11 | draft | Blueprint created | Track 3 / A3 opened after source audit. Draft scope removes public SDK `Rule.engine_ext` / `Derivation.engine_ext`, rejects public authoring/service `engine_ext`, keeps adapter-local extension dataclasses as internal transitional bridges, and defers SemanticsProfile to B/C/D. |
 | 2026-05-11 | scoped | Scope frozen | Locked D1-D9: remove public SDK `Rule.engine_ext` / `Derivation.engine_ext`; keep no alias or tombstone; reject authoring and service `engine_ext` with future SemanticsProfile redirect; retain all current internal bridge layers unchanged; retain ProbLog/PyReason adapter internals but stop teaching them as public SDK rule syntax; accept temporary public functionality gap; enforce dataclass-field absence invariants. |
+| 2026-05-11 | implementing | G1 red baseline tests added | Added `test_engine_ext_decomposition.py` using the A1/A2 forward-asserting red baseline pattern. The suite covers public SDK field absence, constructor rejection, SDK shell object-level read removal, authoring/service rejection, and internal bridge guards. Targeted run `env PYTHONPATH=src python -m unittest kernel.tests.test_engine_ext_decomposition` fails as expected with 8 failures: public `engine_ext` fields still exist, constructors still accept them, SDK evaluate/shells still read object-level `engine_ext`, and authoring/service payloads do not yet reject it. Four internal bridge guard tests already pass. |
 
 ## Decision Notes
 
