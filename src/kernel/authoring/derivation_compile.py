@@ -35,6 +35,11 @@ def compile_authoring_derivation_v1(
         raise _compile_error("version must be non-empty string", path="$.version")
     description = _compile_optional_description(authoring_derivation.get("description"), path="$.description")
     tags = _compile_optional_tags(authoring_derivation.get("tags"), path="$.tags")
+    if "mode" in authoring_derivation:
+        raise _compile_error(
+            "mode is not accepted in derivation payload; use call-site engine selection",
+            path="$.mode",
+        )
     if "temporal_view" in authoring_derivation:
         # TODO: Support derivation-side temporal materialization semantics.
         # Snapshot read views already support .at(t) / .version(v) in sdk.facade.
@@ -535,14 +540,8 @@ def _compile_where(payload: dict[str, Any], *, schema_ir: dict[str, Any] | None 
 
 
 def _compile_mode(payload: dict[str, Any]) -> str:
-    mode = payload.get("mode", "native")
-    if mode == "python":
-        raise _compile_error("mode='python' is removed; use mode='native'", path="$.mode")
-    if mode == "engine":
-        raise _compile_error("mode='engine' is removed; use mode='souffle'", path="$.mode")
-    if mode not in {"native", "souffle", "problog", "pyreason"}:
-        raise _compile_error("mode must be one of: native, souffle, problog, pyreason", path="$.mode")
-    return str(mode)
+    del payload
+    return "native"
 
 
 def _compile_body_confidences(

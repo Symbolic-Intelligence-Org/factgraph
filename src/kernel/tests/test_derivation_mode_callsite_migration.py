@@ -172,7 +172,7 @@ class ServiceDerivationModeTests(unittest.TestCase):
 
             self.assertFalse(resp["ok"], resp)
             self.assertEqual(resp["errors"][0]["path"], "$.derivation.mode")
-            self.assertIn("call-site", resp["errors"][0]["message"])
+            self.assertIn("call-site", resp["errors"][0]["details"]["message"])
         finally:
             close_runtime_session(session_id)
 

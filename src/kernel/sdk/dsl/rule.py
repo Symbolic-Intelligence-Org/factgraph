@@ -104,7 +104,6 @@ class Derivation:
     head: Any = None
     target: str | None = None
     head_vars: list[Any] | None = None
-    mode: str | None = None
     engine_ext: EngineExtBase | None = None
     status: str | None = None
     description: str | None = None
@@ -141,8 +140,6 @@ class Derivation:
             payload["target"] = self.target
         if self.head_vars is not None:
             payload["head_vars"] = [_lower_select_item(item) for item in self.head_vars]
-        if self.mode is not None:
-            payload["mode"] = self.mode
         if self.status is not None:
             payload["status"] = self.status
         if self.description is not None:

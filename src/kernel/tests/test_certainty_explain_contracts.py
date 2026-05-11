@@ -101,7 +101,6 @@ def _export_single_candidate_audit_package_with_provenance(
                         ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
                         ["eq", "$tag", "vip"],
                     ],
-                    "mode": "native",
                 }
             },
         )
@@ -1183,7 +1182,6 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                                 ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
                                 ["eq", "$tag", "vip"],
                             ],
-                            "mode": "native",
                         }
                     },
                 )
@@ -1301,7 +1299,6 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                                 ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
                                 ["eq", "$tag", "vip"],
                             ],
-                            "mode": "native",
                         }
                     },
                 )
@@ -1392,7 +1389,6 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                             "target": "user:tag",
                             "head_vars": ["$u", "$tag"],
                             "where": [["pred", "user:tag", ["$u", "$tag"]]],
-                            "mode": "native",
                         }
                     },
                 )
@@ -1458,7 +1454,6 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                         "target": "user:tag",
                         "head_vars": ["$u", "$tag"],
                         "where": [["pred", "user:tag", ["$u", "$tag"]]],
-                        "mode": "native",
                     }
                 },
             )
@@ -1508,7 +1503,6 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                                 ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
                                 ["eq", "$tag", "vip"],
                             ],
-                            "mode": "native",
                         }
                     },
                 )
@@ -1558,7 +1552,6 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                                 ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
                                 ["eq", "$tag", "vip"],
                             ],
-                            "mode": "native",
                         }
                     },
                 )
@@ -1733,7 +1726,6 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                             "target": "user:tag",
                             "head_vars": ["$u", "$tag"],
                             "where": [["pred", "user:tag", ["$u", "$tag"]]],
-                            "mode": "native",
                         }
                     },
                 )
@@ -1861,7 +1853,6 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                                 ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
                                 ["eq", "$tag", "vip"],
                             ],
-                            "mode": "native",
                         }
                     },
                 )
@@ -1941,7 +1932,6 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                                 ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
                                 ["eq", "$tag", "vip"],
                             ],
-                            "mode": "native",
                         }
                     },
                 )
@@ -2027,7 +2017,6 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                                 ["ruleref", "q.child_rule", "1.0.0", ["$u", "$tag"]],
                                 ["eq", "$tag", "vip"],
                             ],
-                            "mode": "native",
                         }
                     },
                 )

@@ -186,13 +186,13 @@ class ProbLogCandidateEvidenceTreeTests(unittest.TestCase):
             eval_resp = evaluate_runtime_derivation(
                 session_id,
                 {
+                    "engine": "problog",
                     "derivation": {
                         "derivation_id": "drv.problog_runtime_tree",
                         "version": "1.0.0",
                         "target": "user:tag",
                         "head_vars": ["$u", "$tag"],
                         "where": [["pred", "user:tag_seed", ["$u", "$tag"]]],
-                        "mode": "problog",
                     }
                 },
             )

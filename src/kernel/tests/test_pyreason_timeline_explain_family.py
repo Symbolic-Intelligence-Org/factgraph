@@ -101,13 +101,13 @@ class PyReasonTimelineExplainFamilyTests(unittest.TestCase):
         eval_resp = evaluate_runtime_derivation(
             session_id,
             {
+                "engine": "pyreason",
                 "derivation": {
                     "derivation_id": "drv.pyreason_risk",
                     "version": "1.0.0",
                     "target": "vendor:risk_signal",
                     "head_vars": ["$v"],
                     "where": [["pred", "vendor:risk_signal", ["$v", "$val"]]],
-                    "mode": "pyreason",
                 }
             },
         )

@@ -73,7 +73,6 @@ def _native_derivation_dto(*, rule_id: str = "q.user_tag_rows", version: str = "
                 ["ruleref", rule_id, version, ["$u", "$tag"]],
                 ["eq", "$tag", "vip"],
             ],
-            "mode": "native",
         }
     }
 

@@ -84,8 +84,17 @@ class EvidenceGraphAuditDeliveryTests(unittest.TestCase):
         self.assertTrue(open_resp["ok"])
         return open_resp["session"]["session_id"], sdk
 
-    def _accept_first_candidate(self, session_id: str, derivation: dict[str, object]) -> dict[str, object]:
-        eval_resp = evaluate_runtime_derivation(session_id, {"derivation": derivation})
+    def _accept_first_candidate(
+        self,
+        session_id: str,
+        derivation: dict[str, object],
+        *,
+        engine: str = "native",
+    ) -> dict[str, object]:
+        eval_resp = evaluate_runtime_derivation(
+            session_id,
+            {"engine": engine, "derivation": derivation},
+        )
         self.assertTrue(eval_resp["ok"])
         candidate = dict(eval_resp["evaluation"]["candidates"][0])
         accept_resp = accept_runtime_derivation(
@@ -158,8 +167,8 @@ class EvidenceGraphAuditDeliveryTests(unittest.TestCase):
                     "target": "user:popular",
                     "head_vars": ["$u"],
                     "where": [["pred", "user:name", ["$u", "$name"]]],
-                    "mode": "pyreason",
                 },
+                engine="pyreason",
             )
             query, candidate_page = self._export_package_artifacts(session_id, candidate["candidate_id"])
 
@@ -202,8 +211,8 @@ class EvidenceGraphAuditDeliveryTests(unittest.TestCase):
                     "target": "user:tag",
                     "head_vars": ["$u", "$tag"],
                     "where": [["pred", "user:tag_seed", ["$u", "$tag"]]],
-                    "mode": "problog",
                 },
+                engine="problog",
             )
             query, candidate_page = self._export_package_artifacts(session_id, candidate["candidate_id"])
 

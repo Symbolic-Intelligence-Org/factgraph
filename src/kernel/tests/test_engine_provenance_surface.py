@@ -88,13 +88,13 @@ class EngineProvenanceSurfaceTests(unittest.TestCase):
             eval_resp = evaluate_runtime_derivation(
                 session_id,
                 {
+                    "engine": "pyreason",
                     "derivation": {
                         "derivation_id": "drv.pyreason_runtime_provenance",
                         "version": "1.0.0",
                         "target": "user:popular",
                         "head_vars": ["$u"],
                         "where": [["pred", "user:name", ["$u", "$name"]]],
-                        "mode": "pyreason",
                     }
                 },
             )
@@ -145,13 +145,13 @@ class EngineProvenanceSurfaceTests(unittest.TestCase):
             eval_resp = evaluate_runtime_derivation(
                 session_id,
                 {
+                    "engine": "problog",
                     "derivation": {
                         "derivation_id": "drv.problog_runtime_provenance",
                         "version": "1.0.0",
                         "target": "user:tag",
                         "head_vars": ["$u", "$tag"],
                         "where": [["pred", "user:tag_seed", ["$u", "$tag"]]],
-                        "mode": "problog",
                     }
                 },
             )

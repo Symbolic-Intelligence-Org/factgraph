@@ -87,6 +87,7 @@ _ATOM_TAGS = {
     "addc",
     "mulc",
 }
+_EVALUATE_DERIVATION_ENGINES = {"native", "souffle", "problog", "pyreason"}
 
 
 @dataclass
@@ -950,6 +951,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
                 kind="shape",
                 path="$.temporal_view",
             )
+        mode = _resolve_runtime_derivation_engine(dto)
         compiled = _compile_runtime_derivation(dto, schema_ir=session.store.schema_ir)
         limit = _optional_limit(dto.get("limit"), path="$.limit")
         active_registry = None
@@ -972,7 +974,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             target_pred_id=compiled["target_pred_id"],
             head_vars=list(compiled["head_vars"]),
             where=list(compiled["where"]),
-            mode=compiled["mode"],
+            mode=mode,
             head=compiled.get("head"),
             registry=active_registry,
             confidence_kind_resolver=certainty_resolver,
@@ -987,7 +989,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
         returned_candidates = candidates if limit is None else candidates[:limit]
         return ok_response(
             meta={
-                "mode": compiled["mode"],
+                "mode": mode,
                 "candidate_count": len(candidates),
                 "returned_count": len(returned_candidates),
                 "truncated": len(returned_candidates) != len(candidates),
@@ -1359,6 +1361,12 @@ def _compile_runtime_derivation(dto: Any, *, schema_ir: dict[str, Any]) -> dict[
         )
     if not isinstance(derivation, dict):
         raise facade_error("derivation must be object", kind="shape", path="$.derivation")
+    if "mode" in derivation:
+        raise facade_error(
+            "derivation.mode is not accepted; use call-site engine selection",
+            kind="shape",
+            path="$.derivation.mode",
+        )
     normalized = dict(derivation)
     for key in ("where", "body"):
         raw_where = normalized.get(key)
@@ -1372,6 +1380,26 @@ def _compile_runtime_derivation(dto: Any, *, schema_ir: dict[str, Any]) -> dict[
         if key in normalized:
             normalized[key] = _json_where_to_ir(normalized[key])
     return compile_authoring_derivation_v1(normalized, schema_ir=schema_ir)
+
+
+def _resolve_runtime_derivation_engine(dto: Any) -> str:
+    if not isinstance(dto, dict):
+        raise facade_error("dto must be object", kind="shape", path="$")
+    if "mode" in dto:
+        raise facade_error(
+            "top-level mode is not accepted for derivation evaluation; use engine",
+            kind="shape",
+            path="$.mode",
+        )
+    raw = dto.get("engine", "native")
+    if not isinstance(raw, str) or raw not in _EVALUATE_DERIVATION_ENGINES:
+        allowed = ", ".join(sorted(_EVALUATE_DERIVATION_ENGINES))
+        raise facade_error(
+            f"engine must be one of: {allowed}",
+            kind="shape",
+            path="$.engine",
+        )
+    return raw
 
 
 def _runtime_exception_to_error(exc: Exception, *, default_kind: str) -> dict[str, Any]:
