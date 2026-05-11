@@ -1,6 +1,6 @@
 # Task Blueprint: Engine Ext Decomposition
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-11
 - Last Updated: 2026-05-11
 - Related Modules:
@@ -315,9 +315,61 @@ Expected active docs to inspect:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+Final landed behavior:
 
-- Final landed behavior:
-- Deviations from blueprint:
-- Rationale for deviations:
-- Archive notes:
+- Public SDK `Rule.engine_ext` and `Derivation.engine_ext` were removed.
+- No public alias or tombstone field was kept; constructor calls with
+  `engine_ext=` now reject through normal dataclass keyword validation.
+- SDK evaluate and SDK shell paths no longer read object-level
+  `getattr(derivation, "engine_ext", None)`.
+- Authoring derivation payloads reject `engine_ext` with a future
+  `SemanticsProfile.rule_projection` redirect.
+- Service runtime rejects both top-level `engine_ext` and
+  `derivation.engine_ext` with the same SemanticsProfile redirect.
+- Internal bridges remain available: `EngineExtBase`,
+  `CompiledDerivationPlan.engine_ext`, core evaluate bridge, ProbLog
+  extension internals, PyReason extension internals, and the A2
+  `legacy_body_confidences` bridge.
+- `ProbLogRuleExt.branch_probabilities` and `PyReasonRuleExt` remain
+  adapter/internal types only; release-facing docs no longer present them as
+  public SDK rule-constructor syntax.
+- The temporary public functionality gap is explicit: durable public
+  engine-specific rule projection is deferred to SemanticsProfile B/C/D.
+- Release-facing docs no longer teach public
+  `Rule(..., engine_ext=...)` / `Derivation(..., engine_ext=...)` syntax.
+
+Validation:
+
+- G1 red baseline: `kernel.tests.test_engine_ext_decomposition` failed as
+  expected with 8 forward failures and 4 passing internal-bridge guards.
+- G2 implementation: A3 suite 12/12 OK.
+- G2 regression: targeted A3 + ProbLog/PyReason/SDK regression suite 240/240
+  OK when run with the known import primer order.
+- G3 docs sync: release-facing stale-syntax grep gate clean.
+- G3 verification: A3 suite 12/12 OK and `git diff --check` clean.
+
+Commit lineage:
+
+- `f816bf90` draft seed.
+- `6b8f9f4a` G0 scope-freeze.
+- `abae167c` G1 red baseline.
+- `108a73e8` G2 implementation.
+- `d98b5c2f` G3 docs sync.
+
+Deviations from blueprint:
+
+- G2 made a small PyReason adapter-internal refactor:
+  `compile_pyreason_rule(...)` now receives `engine_ext` as an explicit
+  adapter/internal keyword instead of reading it from the public `Rule`
+  object. This keeps D6's PyReason bridge available while satisfying D1/D9.
+- G3 left adapter-internal `compile_pyreason_rule(rule,
+  engine_ext=PyReasonRuleExt(...))` documented in the PyReason adapter guide.
+  That mention is intentionally classified as internal-bridge documentation,
+  not public SDK rule-constructor syntax.
+
+Archive notes:
+
+- A3 closes the largest Track 3 A-slice public-surface cleanup.
+- A4 remains responsible for `condition_weights`.
+- SemanticsProfile B/C/D remain responsible for durable rule projection and
+  adapter migration.
