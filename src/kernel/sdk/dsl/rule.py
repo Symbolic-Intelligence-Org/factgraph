@@ -52,6 +52,8 @@ class Rule:
     status: str | None = None
     description: str | None = None
     tags: list[str] = field(default_factory=list)
+    # Certainty/explain projection input; Track 3 / B moves runtime semantics to
+    # SemanticsProfile.certainty_projection.
     condition_weights: dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
