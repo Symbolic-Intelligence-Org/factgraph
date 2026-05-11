@@ -1,6 +1,6 @@
 # Task Blueprint: Branch Confidence Decomposition
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-11
 - Last Updated: 2026-05-11
 - Related Modules:
@@ -315,9 +315,56 @@ Expected active docs to inspect:
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
+A2 landed as a five-commit scoped unit:
 
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+- `f5702218` draft seed
+- `67555bd1` scope freeze
+- `db742172` red baseline tests
+- `595a84d6` implementation
+- `137ed59f` docs sync
+
+Final behavior:
+
+- Public SDK `Body` was replaced by `Branch`; no public alias remains.
+- `src/kernel/sdk/dsl/body.py` was replaced by
+  `src/kernel/sdk/dsl/branch.py`.
+- `Branch` represents only branch structure. It rejects `confidence`,
+  `engine_ext`, `probability`, and other unknown engine-specific kwargs.
+- Public authoring and service payloads reject `body_confidences`.
+- Internal `body_confidences` remains on `RuleSpec` / `DerivationSpec` as a
+  temporary ProbLog bridge, and `legacy_body_confidences` remains inside the
+  ProbLog adapter bridge.
+- `ProbLogRuleExt.branch_probabilities` remains the temporary public fallback
+  for ProbLog branch probabilities until A3 / Phase C replaces it with
+  SemanticsProfile projection.
+- Release-facing docs now teach `Branch([...])` for OR-branch structure and do
+  not teach public `Body`, `Body.confidence`, or public `body_confidences`
+  syntax.
+
+Validation:
+
+- G1 red baseline added forward-failing tests for the public-surface cut and
+  passing guards for the preserved internal bridge.
+- G2 turned the A2 suite green and added the deferred shape-equivalence gate
+  proving `Branch([...])` lowers to the same branch structure as old
+  `Body([...])`.
+- Targeted A2 + ProbLog + SDK invariant + A1 regression suite passed 72/72.
+- Import-order-compatible artifact/evidence domain suite passed 50/50.
+- G3 stale-syntax grep found zero release-facing `Body` / `Body(...)` /
+  `Body.confidence` hits; remaining `body_confidences` docs hits are limited
+  to rejection or internal-bridge context.
+
+Deviations:
+
+- G2 added the shape-equivalence test during implementation rather than in G1,
+  matching the planned deferral because `Branch` did not exist during red
+  baseline.
+- G2 also cleaned adjacent ECSS domain tests that still carried inner
+  `derivation.mode` remnants from A1; this was local post-A1 hygiene discovered
+  while migrating branch syntax.
+- G3 included a small PyReason wording cleanup from "Body atoms" to
+  "Rule-body atoms" so the stale `Body` grep gate would remain unambiguous.
+
+This blueprint pair is archived with the implemented behavior above. A3 owns
+the next decomposition slice for public `engine_ext`; Phase B/C owns the future
+SemanticsProfile and ProbLog projection path.
