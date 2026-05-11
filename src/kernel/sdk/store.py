@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import os
 import warnings
@@ -63,6 +64,12 @@ if TYPE_CHECKING:
     from kernel.audit.proof_frame_diff import ProofFrameDiff
 
 
+@dataclass(frozen=True)
+class FrozenAssertionView:
+    name: str
+    asrt_ids: frozenset[str]
+
+
 class _SDKViewsManager:
     def __init__(self) -> None:
         # Read-only attribute boundary per post-L redesign §5.4 lock.
@@ -76,23 +83,45 @@ class _SDKViewsManager:
     def __setattr__(self, name: str, value: Any) -> None:
         raise FrozenSnapshotError("FactGraph.views namespace is read-only")
 
-    def create(self, name: str, view_spec: ViewSpec) -> ViewSpec:
+    def create(
+        self,
+        name: str,
+        view_spec: ViewSpec | None = None,
+        *,
+        asrt_ids: Iterable[str] | None = None,
+        asrts: Iterable[Any] | None = None,
+    ) -> ViewSpec | FrozenAssertionView:
         normalized = _normalize_view_name(name)
         if normalized in self._views:
             raise SDKStoreError(f"view already exists: {normalized}")
-        if not isinstance(view_spec, ViewSpec):
-            raise SDKStoreError("view_spec must be ViewSpec")
-        self._views[normalized] = view_spec
-        return view_spec
+        entry = _build_view_entry(
+            normalized,
+            view_spec=view_spec,
+            asrt_ids=asrt_ids,
+            asrts=asrts,
+        )
+        self._views[normalized] = entry
+        return entry
 
-    def update(self, name: str, view_spec: ViewSpec) -> ViewSpec:
+    def update(
+        self,
+        name: str,
+        view_spec: ViewSpec | None = None,
+        *,
+        asrt_ids: Iterable[str] | None = None,
+        asrts: Iterable[Any] | None = None,
+    ) -> ViewSpec | FrozenAssertionView:
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
-        if not isinstance(view_spec, ViewSpec):
-            raise SDKStoreError("view_spec must be ViewSpec")
-        self._views[normalized] = view_spec
-        return view_spec
+        entry = _build_view_entry(
+            normalized,
+            view_spec=view_spec,
+            asrt_ids=asrt_ids,
+            asrts=asrts,
+        )
+        self._views[normalized] = entry
+        return entry
 
     def delete(self, name: str) -> None:
         normalized = _normalize_view_name(name)
@@ -102,14 +131,49 @@ class _SDKViewsManager:
             raise SDKStoreError(f"view not found: {normalized}")
         self._views.pop(normalized, None)
 
-    def get(self, name: str) -> ViewSpec:
+    def get(self, name: str) -> ViewSpec | FrozenAssertionView:
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         return self._views[normalized]
 
-    def list(self) -> dict[str, ViewSpec]:
+    def list(self) -> dict[str, ViewSpec | FrozenAssertionView]:
         return {name: spec for name, spec in self._views.items()}
+
+
+class _SDKAssertionsManager:
+    """Read-only namespace manager for assertion-id lookup."""
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.assertions namespace is read-only")
+
+    def by_id(self, asrt_id: str) -> Any:
+        if not isinstance(asrt_id, str) or not asrt_id:
+            raise SDKStoreError("fg.assertions.by_id(asrt_id) expects non-empty string")
+        return _assertion_record_by_id(self._sdk, asrt_id)
+
+    def by_ids(self, asrt_ids: Iterable[str]) -> Any:
+        if isinstance(asrt_ids, (str, bytes)):
+            raise SDKStoreError("fg.assertions.by_ids(asrt_ids) expects iterable[str], not string")
+        try:
+            normalized = tuple(asrt_ids)
+        except TypeError as exc:
+            raise SDKStoreError("fg.assertions.by_ids(asrt_ids) expects iterable[str]") from exc
+        for value in normalized:
+            if not isinstance(value, str) or not value:
+                raise SDKStoreError("fg.assertions.by_ids(asrt_ids) expects non-empty string ids")
+
+        from .facade import AssertionRecordSet
+
+        records = []
+        for asrt_id in sorted(set(normalized)):
+            record = _assertion_record_by_id(self._sdk, asrt_id)
+            if record is not None:
+                records.append(record)
+        return AssertionRecordSet(records)
 
 
 class _SDKSchemaManager:
@@ -352,6 +416,7 @@ class SDKStore:
         self._entity_spec_by_class: dict[type[Entity], dict[str, Any]] = {}
         self._identity_values_by_e_ref: dict[str, dict[str, Any]] = {}
         self._views_manager = _SDKViewsManager()
+        self._assertions_manager = _SDKAssertionsManager(self)
         self._schema_manager = _SDKSchemaManager(self)
         self._read_manager = _SDKReadManager(self)
         self._write_manager = _SDKWriteManager(self)
@@ -419,6 +484,10 @@ class SDKStore:
     @property
     def views(self) -> _SDKViewsManager:
         return self._views_manager
+
+    @property
+    def assertions(self) -> _SDKAssertionsManager:
+        return self._assertions_manager
 
     @property
     def schema(self) -> _SDKSchemaManager:
@@ -505,7 +574,7 @@ class SDKStore:
             limit=limit,
             **filter_kwargs,
         )
-        resolved_view = self._resolve_view_spec(view)
+        resolved_view = self._resolve_view_spec(view, api_path="fg.read.find")
         if resolved_view is None:
             return rows
 
@@ -1323,8 +1392,11 @@ class SDKStore:
     ) -> list[Any] | tuple[list[Any], list[dict[str, Any]]]:
         if not isinstance(return_display_meta, bool):
             raise SDKStoreError("return_display_meta must be bool", path="$.run.return_display_meta")
-        resolved_view = self._resolve_view_spec(view)
         dispatch_key = self._run_dispatch_key(obj)
+        if dispatch_key == "query" and view is not None:
+            self._validate_query_view_argument(view)
+            raise SDKStoreError("view is not supported for Query in run(); use Rule with run(view=...)")
+        resolved_view = self._resolve_view_spec(view, api_path="fg.run")
         dispatch_map = {
             "query": self._run_dispatch_query,
             "derivation": self._run_dispatch_derivation,
@@ -1467,13 +1539,26 @@ class SDKStore:
             return_mode=return_mode,
         )
 
-    def _resolve_view_spec(self, view: ViewSpec | str | None) -> ViewSpec | None:
+    def _resolve_view_spec(self, view: ViewSpec | str | FrozenAssertionView | None, *, api_path: str) -> ViewSpec | None:
         if view is None:
             return None
         if isinstance(view, ViewSpec):
             return view
+        if isinstance(view, FrozenAssertionView):
+            raise _frozen_assertion_view_error(api_path, view.name)
         if isinstance(view, str):
-            return self._views_manager.get(view)
+            resolved = self._views_manager.get(view)
+            if isinstance(resolved, FrozenAssertionView):
+                raise _frozen_assertion_view_error(api_path, resolved.name)
+            return resolved
+        raise SDKStoreError("view must be ViewSpec, view name string, or None")
+
+    def _validate_query_view_argument(self, view: ViewSpec | str | FrozenAssertionView | Any) -> None:
+        if isinstance(view, (ViewSpec, FrozenAssertionView)):
+            return
+        if isinstance(view, str):
+            self._views_manager.get(view)
+            return
         raise SDKStoreError("view must be ViewSpec, view name string, or None")
 
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
@@ -1812,6 +1897,86 @@ def _normalize_view_name(name: Any) -> str:
     if not isinstance(name, str) or not name.strip():
         raise SDKStoreError("view name must be non-empty string")
     return name.strip()
+
+
+def _build_view_entry(
+    name: str,
+    *,
+    view_spec: ViewSpec | None,
+    asrt_ids: Iterable[str] | None,
+    asrts: Iterable[Any] | None,
+) -> ViewSpec | FrozenAssertionView:
+    payload_count = sum(value is not None for value in (view_spec, asrt_ids, asrts))
+    if payload_count != 1:
+        raise SDKStoreError("provide exactly one view payload: ViewSpec, asrt_ids=..., or asrts=...")
+    if view_spec is not None:
+        if not isinstance(view_spec, ViewSpec):
+            raise SDKStoreError("view_spec must be ViewSpec")
+        return view_spec
+    if asrts is not None:
+        return FrozenAssertionView(
+            name=name,
+            asrt_ids=_normalize_asrt_ids_from_records(asrts),
+        )
+    return FrozenAssertionView(
+        name=name,
+        asrt_ids=_normalize_asrt_ids(asrt_ids),
+    )
+
+
+def _normalize_asrt_ids(values: Iterable[str] | None) -> frozenset[str]:
+    if values is None:
+        raise SDKStoreError("asrt_ids must be iterable[str]")
+    if isinstance(values, (str, bytes)):
+        raise SDKStoreError("asrt_ids must be iterable[str], not string")
+    try:
+        items = tuple(values)
+    except TypeError as exc:
+        raise SDKStoreError("asrt_ids must be iterable[str]") from exc
+    for index, value in enumerate(items):
+        if not isinstance(value, str) or not value:
+            raise SDKStoreError(f"asrt_ids[{index}] must be non-empty string")
+    return frozenset(items)
+
+
+def _normalize_asrt_ids_from_records(records: Iterable[Any]) -> frozenset[str]:
+    if isinstance(records, (str, bytes)):
+        raise SDKStoreError("asrts must be iterable objects with asrt_id, not string")
+    try:
+        items = tuple(records)
+    except TypeError as exc:
+        raise SDKStoreError("asrts must be iterable objects with asrt_id") from exc
+    out: list[str] = []
+    for index, record in enumerate(items):
+        asrt_id = getattr(record, "asrt_id", None)
+        if not isinstance(asrt_id, str) or not asrt_id:
+            raise SDKStoreError(f"asrts[{index}] must expose non-empty string asrt_id")
+        out.append(asrt_id)
+    return frozenset(out)
+
+
+def _assertion_record_by_id(sdk: SDKStore, asrt_id: str) -> Any:
+    claim = sdk.ledger.get_claim(asrt_id)
+    if claim is None:
+        return None
+    schema_pred = _schema_pred_by_pred_id(sdk, claim.pred_id)
+    from .facade import _assertion_record_from_claim
+
+    return _assertion_record_from_claim(sdk, claim, schema_pred=schema_pred)
+
+
+def _schema_pred_by_pred_id(sdk: SDKStore, pred_id: str) -> dict[str, Any]:
+    for pred in sdk.schema_ir.get("predicates", []):
+        if isinstance(pred, dict) and pred.get("pred_id") == pred_id:
+            return pred
+    raise SDKStoreError(f"schema predicate not found for assertion predicate: {pred_id}")
+
+
+def _frozen_assertion_view_error(api_path: str, view_name: str) -> SDKStoreError:
+    return SDKStoreError(
+        f"{api_path}: cannot apply FrozenAssertionView {view_name!r} to snapshot/rule projection; "
+        "use fg.views.get(name).asrt_ids with fg.assertions.by_ids(...) instead"
+    )
 
 
 def _build_entity_confidence_by_ref(

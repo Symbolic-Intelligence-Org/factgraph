@@ -161,6 +161,34 @@ class AssertionRecordSet(tuple):
 
         return type(self)(record for record in self if matches(record))
 
+    def at(self, t: str) -> "AssertionRecordSet":
+        at_time = _validate_iso8601_text(t, context="AssertionRecordSet.at(t)")
+        return type(self)(
+            record
+            for record in self
+            if _is_assertion_visible_at(
+                record,
+                at_time=at_time,
+                field_name="AssertionRecordSet",
+            )
+        )
+
+    def version(self, v: str | int) -> "AssertionRecordSet":
+        expected_version = _validate_version_selector(
+            v,
+            context="AssertionRecordSet.version(v)",
+        )
+        return type(self)(
+            record
+            for record in self
+            if _read_assertion_version(record, field_name="AssertionRecordSet") == expected_version
+        )
+
+    def by_id(self, asrt_id: str) -> "AssertionRecordSet":
+        if not isinstance(asrt_id, str) or not asrt_id:
+            raise SDKStoreError("AssertionRecordSet.by_id(asrt_id) expects non-empty string")
+        return type(self)(record for record in self if record.asrt_id == asrt_id)
+
     def one(self) -> AssertionRecord:
         count = len(self)
         if count != 1:
