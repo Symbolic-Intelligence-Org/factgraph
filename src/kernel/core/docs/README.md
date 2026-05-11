@@ -22,6 +22,9 @@ contributors), not SDK end-users learning the surface.
 - [04_service_layer.md](./04_service_layer.md) — Current state of
   the service layer (the boundary between HTTP/BFF delivery and
   core).
+- [../semantics/docs/README.md](../semantics/docs/README.md) —
+  Core semantics scaffolding: `SemanticsProfile` validation and
+  inspection helpers for future runtime projection work.
 
 > Note: the `04` numeric prefix was historically split between two
 > different topics (`04_public_contract_v1` + `04_service_layer`);

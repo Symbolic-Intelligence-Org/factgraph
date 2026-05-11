@@ -965,6 +965,18 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
                 kind="shape",
                 path="$.engine_ext",
             )
+        if isinstance(dto, dict) and "semantics" in dto:
+            raise facade_error(
+                "semantics is not accepted in runtime derivation evaluation in B; Track 3 / E owns runtime consumption",
+                kind="shape",
+                path="$.semantics",
+            )
+        if isinstance(dto, dict) and "semantics_profile" in dto:
+            raise facade_error(
+                "semantics_profile is not accepted in runtime derivation evaluation in B; Track 3 / E owns runtime consumption",
+                kind="shape",
+                path="$.semantics_profile",
+            )
         mode = _resolve_runtime_derivation_engine(dto)
         compiled = _compile_runtime_derivation(dto, schema_ir=session.store.schema_ir)
         limit = _optional_limit(dto.get("limit"), path="$.limit")
@@ -1393,6 +1405,18 @@ def _compile_runtime_derivation(dto: Any, *, schema_ir: dict[str, Any]) -> dict[
             "derivation.engine_ext is not accepted; use future SemanticsProfile.rule_projection",
             kind="shape",
             path="$.derivation.engine_ext",
+        )
+    if "semantics" in derivation:
+        raise facade_error(
+            "derivation.semantics is not accepted in B; Track 3 / E owns runtime consumption",
+            kind="shape",
+            path="$.derivation.semantics",
+        )
+    if "semantics_profile" in derivation:
+        raise facade_error(
+            "derivation.semantics_profile is not accepted in B; Track 3 / E owns runtime consumption",
+            kind="shape",
+            path="$.derivation.semantics_profile",
         )
     normalized = dict(derivation)
     for key in ("where", "body"):

@@ -1557,6 +1557,12 @@ class SDKStore:
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
         if "view" in kwargs or "policy" in kwargs:
             raise SDKStoreError("evaluate() does not accept view= or policy=; derivation evaluation always uses active projection")
+        if "semantics" in kwargs:
+            raise SDKStoreError("evaluate() does not accept semantics= in B; Track 3 / E owns runtime SemanticsProfile consumption")
+        if "semantics_profile" in kwargs:
+            raise SDKStoreError(
+                "evaluate() does not accept semantics_profile= in B; Track 3 / E owns runtime SemanticsProfile consumption"
+            )
         if "temporal_view" in kwargs:
             # TODO: temporal_view for evaluate() remains blocked.
             # Snapshot read views (.at/.version) are already implemented in sdk.facade.
