@@ -1,6 +1,6 @@
 # Task Blueprint: SemanticsProfile Scaffolding
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -133,9 +133,24 @@ Do not alter stored facts or public rule constructors
 
 ## 5. Proposed Shape
 
-### 5.1 Draft profile fields
+### 5.0 Scope Freeze Decisions
 
-Initial draft shape:
+| ID | Decision |
+| --- | --- |
+| D1 | Module placement is a new core subpackage: `src/kernel/core/semantics/profile.py`, with package exports from `src/kernel/core/semantics/__init__.py`. |
+| D2 | Do not export `SemanticsProfile` from `kernel.sdk.__all__` in B. It is advanced importable through `kernel.core.semantics`. |
+| D3 | Do not accept `semantics=` / `semantics_profile=` in `SDKStore.evaluate(...)`, service runtime derivation evaluation, or application evaluate requests in B. Runtime consumption is Track 3 / E. |
+| D4 | `SemanticsProfile` is a frozen value object (`@dataclass(frozen=True)`) with no mutation helpers. |
+| D5 | Profile schema `version` is locked to `"1.0"` in B. Other versions reject. |
+| D6 | `rule_projection` validation is generic shape validation only: engine buckets map to a list of `{target, kind, value}` entries with non-empty string `target` / `kind`. Engine-specific kind semantics and target resolution are deferred to C/D. |
+| D7 | `uncertainty_projection` policies are a locked enum in B. Initial accepted policies are `identity_probability`, `probability_interval`, `possibility_interval`, `lower`, `midpoint`, `upper`, and `reject`; the projection-level fallback accepts `reject_unconfigured`, `warn_default`, or `use_default`. |
+| D8 | `temporal_projection` accepts only `{"mode": "none"}` or omission in B. Non-`none` temporal modes reject with a Track 3 / D redirect. |
+| D9 | Inspection scope is core-only: `kernel.core.semantics.inspect_semantics_profile(profile)`. No SDK manager, SDK namespace, or service endpoint is added in B. |
+| D10 | A1-A4 public-surface rejection gates and internal bridges remain intact: no adapter consumes `SemanticsProfile`; `CompiledDerivationPlan.engine_ext`, `engine_options`, `legacy_body_confidences`, `ProbLogRuleExt`, `PyReasonRuleExt`, and `condition_weights` behavior remain unchanged. |
+
+### 5.1 Locked profile fields
+
+Initial locked shape:
 
 ```python
 SemanticsProfile(
@@ -167,7 +182,7 @@ Field intent:
 | `output_readback` | How engine output is mapped back to candidate summaries, annotations, and business-time intervals. |
 | `fallback` | Reject / default policy when a profile lacks required projection instructions. |
 
-### 5.2 Draft normalized rule projection shape
+### 5.2 Locked normalized rule projection shape
 
 The public profile should not expose adapter classes. It should use plain
 structured data that can later normalize into adapter-local internals:
@@ -186,10 +201,13 @@ structured data that can later normalize into adapter-local internals:
 }
 ```
 
-Open question for G0: whether B validates only generic path / kind / value
-shape, or also validates engine-specific kinds.
+Per D6, B validates only the generic bucket and triplet shape. It does not
+validate that `branch_probability` is a known ProbLog kind, that
+`interval_threshold` is a known PyReason kind, or that targets resolve
+against a concrete rule. C/D own engine-specific validation and target
+resolution.
 
-### 5.3 Draft uncertainty projection shape
+### 5.3 Locked uncertainty projection shape
 
 The profile should preserve the semantic boundary introduced by Phase 1:
 
@@ -203,12 +221,14 @@ The profile should preserve the semantic boundary introduced by Phase 1:
 }
 ```
 
-Open question for G0: whether built-in policies are locked in B or only
-declared as strings and left for C/D.
+Per D7, policy strings are locked enough to catch typos in B, but no engine
+execution consumes them yet. C/D may extend the accepted enum when they add
+adapter consumption.
 
-### 5.4 Draft temporal projection shape
+### 5.4 Locked temporal projection shape
 
-PyReason temporal projection remains design-only in B:
+PyReason temporal projection remains design-only in B. Only no-op temporal
+projection is accepted:
 
 ```json
 {
@@ -218,7 +238,7 @@ PyReason temporal projection remains design-only in B:
 }
 ```
 
-Future PyReason mode:
+Future PyReason mode is documented but rejected in B:
 
 ```json
 {
@@ -231,10 +251,10 @@ Future PyReason mode:
 }
 ```
 
-Open question for G0: whether B should reject non-`none` temporal modes
-until D, or accept and normalize them without execution.
+Per D8, `valid_time_boundaries`, `fixed_duration_bucket`, and any other
+non-`none` mode reject in B with a Track 3 / D redirect.
 
-### 5.5 Draft inspection scaffolding
+### 5.5 Locked inspection scaffolding
 
 B should provide a way to inspect a profile's normalized projection intent
 without running an adapter or writing projected values:
@@ -261,38 +281,86 @@ explicitly non-canonical:
 }
 ```
 
-Open question for G0: whether B implements this as a pure core helper only,
-or also exposes it through SDK/service.
+Per D9, B implements this only as a pure core helper. SDK and service wrappers
+are deferred to E.
+
+### 5.6 Resolved G0 Questions Map
+
+| Draft question | Resolution |
+| --- | --- |
+| Module placement | D1: new `kernel.core.semantics` subpackage. |
+| SDK export | D2: no SDK export in B. |
+| `evaluate(semantics=...)` integration | D3: not accepted in B. |
+| Rule projection strictness | D6: generic shape validation only. |
+| Uncertainty projection policy strictness | D7: locked enum. |
+| Temporal projection mode strictness | D8: `none` only. |
+| Inspection helper scope | D9: core helper only. |
+| Mutability | D4: frozen dataclass. |
+| Profile schema version | D5: only `"1.0"`. |
+| Internal bridge preservation | D10: all A1-A4 bridges and rejection gates remain intact. |
 
 ## 6. Boundaries And Invariants
 
-Draft invariants for scope-freeze:
+Scope-freeze invariants:
 
-- `SemanticsProfile` must be a runtime value object, not stored assertion
-  data.
-- Normalizing / inspecting a profile must not mutate rules, derivations,
-  assertions, registry payloads, or candidates.
-- Public `Rule` and `Derivation` constructors remain free of
-  engine-specific fields.
+- `SemanticsProfile.__module__` is `kernel.core.semantics.profile`.
+- `SemanticsProfile` is a frozen dataclass.
+- `SemanticsProfile.version` accepts only `"1.0"`.
+- `SemanticsProfile.engine` accepts only `native`, `souffle`, `problog`,
+  or `pyreason`.
+- `SemanticsProfile` is not exported by `kernel.sdk.__all__` in B.
+- `SDKStore.evaluate(..., semantics=...)` and
+  `SDKStore.evaluate(..., semantics_profile=...)` reject rather than silently
+  ignore the profile.
+- Service runtime derivation evaluation rejects top-level `semantics` and
+  `semantics_profile` in B.
+- Application protocol `DerivationEvaluateRequest` does not gain a
+  `semantics` / `semantics_profile` field in B.
+- `rule_projection` accepts only mappings from engine bucket to lists of
+  entries; each entry must contain non-empty string `target` and `kind`.
+- `rule_projection` does not validate engine-specific kind names or resolve
+  targets against a rule in B.
+- `uncertainty_projection` rejects unknown policy strings.
+- `temporal_projection` rejects any mode other than `none`.
+- `inspect_semantics_profile(profile)` returns JSON-like data and does not
+  mutate the profile or any rule/derivation/assertion object.
+- No adapter module imports `SemanticsProfile` in B.
 - Existing A1-A4 rejection gates remain intact.
-- Existing `engine_options` behavior remains intact unless G0 explicitly
-  scopes a compatibility wrapper.
+- Existing `engine_options` behavior remains intact.
 - Existing internal adapter bridges remain intact in B.
 - `condition_weights` behavior and certainty-summary math remain unchanged.
-- B introduces no SemanticsProfile-backed adapter behavior unless G0
-  explicitly expands scope.
+- No profile-derived value is written into stored assertion data.
 
 ## 7. Acceptance
 
-Draft acceptance gates:
-
-- [ ] A source-grounded audit lists every current SemanticsProfile redirect
-  and every current bridge B must not break.
-- [ ] `SemanticsProfile` shape is defined with field validation.
-- [ ] Invalid profile field names, engines, fallback policies, projection
-  kinds, and bound/probability values reject with stable error messages.
-- [ ] Profile normalization / inspection is pure and returns JSON-like data.
-- [ ] No adapter consumes `SemanticsProfile` in B.
+- [ ] G0 locks D1-D10 and records the rationale in the audit log.
+- [ ] G1 red baseline asserts `kernel.core.semantics.profile.SemanticsProfile`
+  and `inspect_semantics_profile` exist and currently fails before G2.
+- [ ] G1 guard tests assert A1-A4 rejection behavior and internal bridges
+  still work.
+- [ ] `SemanticsProfile` is a frozen dataclass in
+  `kernel.core.semantics.profile`.
+- [ ] `kernel.core.semantics` exports `SemanticsProfile` and
+  `inspect_semantics_profile`.
+- [ ] `kernel.sdk.__all__` does not export `SemanticsProfile`.
+- [ ] Invalid profile `version`, `engine`, and `fallback` values reject with
+  stable messages.
+- [ ] Invalid `rule_projection` bucket shape, missing `target`, missing
+  `kind`, non-string `target`, and non-string `kind` reject.
+- [ ] Engine-specific `rule_projection` kinds are not interpreted or resolved
+  in B.
+- [ ] Invalid `uncertainty_projection` policy strings reject.
+- [ ] Non-`none` `temporal_projection.mode` rejects with Track 3 / D redirect.
+- [ ] `inspect_semantics_profile(profile)` returns a JSON-like dict with
+  `engine`, `profile`, `version`, `uses`, `fallback`, and `warnings`.
+- [ ] Inspection is pure: it does not mutate the profile or require a rule,
+  derivation, store, registry, or adapter.
+- [ ] `SDKStore.evaluate(..., semantics=...)` and
+  `SDKStore.evaluate(..., semantics_profile=...)` reject in B.
+- [ ] Service runtime derivation evaluation rejects top-level `semantics` and
+  `semantics_profile` in B.
+- [ ] Application protocol does not gain a profile field in B.
+- [ ] No adapter imports `SemanticsProfile`.
 - [ ] A1-A4 focused suite remains green.
 - [ ] Existing ProbLog/PyReason/condition_weights bridge tests remain green.
 - [ ] Docs explain that B is scaffolding; C/D/E own adapter and SDK runtime
