@@ -28,7 +28,7 @@ authoring preflight, publish, and registry workflows.
     participate in runtime semantics.
 - Public derivation authoring payloads reject engine-specific branch
   probability shortcuts such as `body_confidences`.
-  - The temporary SDK fallback is
-    `ProbLogRuleExt(branch_probabilities=...)`.
+  - Public derivation authoring payloads also reject `engine_ext`.
+  - Adapter-local extension types remain internal compiled bridges only.
   - Future SemanticsProfile rule projection owns the durable public
     shape.

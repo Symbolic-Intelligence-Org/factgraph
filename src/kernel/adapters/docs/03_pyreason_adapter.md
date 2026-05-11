@@ -190,6 +190,7 @@ evaluate surface reuses it inside `engine_eval.py`:
 
 ```python
 from kernel.adapters.pyreason.rule_ext import (
+    compile_pyreason_rule,
     PyReasonFactDef,
     PyReasonRuleExt,
 )
@@ -200,20 +201,23 @@ from kernel.sdk.dsl.rule import Rule
 x = LogicVar("x")
 y = LogicVar("y")
 
+rule = Rule(
+    id="friend_popularity",
+    version="1.0",
+    select=[Pred("user:popular", x)],
+    where=[
+        Pred("user:popular", y),
+        Pred("friends:strength", x, y),
+    ],
+)
+compiled_rule = compile_pyreason_rule(
+    rule,
+    engine_ext=PyReasonRuleExt(timestep_delay=1),
+)
+
 result = run_pyreason(
     session,
-    rule_defs=[
-        Rule(
-            id="friend_popularity",
-            version="1.0",
-            select=[Pred("user:popular", x)],
-            where=[
-                Pred("user:popular", y),
-                Pred("friends:strength", x, y),
-            ],
-            engine_ext=PyReasonRuleExt(timestep_delay=1),
-        )
-    ],
+    rules=[compiled_rule],
     fact_defs=[
         PyReasonFactDef(
             atom="popular(Alice)",
@@ -259,10 +263,11 @@ result = run_pyreason(
   interval, the runner emits a `UserWarning`. The warning points
   at **PyReason's default body-threshold semantics**, not at "a
   bounded seed can never participate in matching".
-- `Rule(..., engine_ext=PyReasonRuleExt(...))` is now the only
-  rule-definition entry point; `compile_pyreason_rule(...)` and
-  `run_pyreason(..., rule_defs=[...])` both consume the shared
-  `Rule` directly
+- Public SDK `Rule` objects do not carry `engine_ext`. Adapter-internal
+  callers that need PyReason-specific delay or interval hints compile
+  rules with `compile_pyreason_rule(rule, engine_ext=PyReasonRuleExt(...))`
+  and pass the resulting `(rule_text, name)` pair to `run_pyreason(...,
+  rules=[...])`.
 - `compile_pyreason_rule(...)` currently supports only
   `PredAtom` + `LogicVar` + literals; `CompareExpr` / `NotExpr` /
   `RuleRefAtom` raise an explicit error
@@ -305,7 +310,6 @@ candidates = sdk.evaluate(
         where=[Pred("user:name", u, name)],
         target="user:popular",
         head_vars=[u],
-        engine_ext=PyReasonRuleExt(timestep_delay=2),
     ),
     mode="pyreason",
     engine_options={"timesteps": 5},
@@ -314,13 +318,13 @@ candidates = sdk.evaluate(
 
 Execution sequence:
 
-1. `SDKStore.evaluate(...)` extracts `engine_ext` from the
-   `Derivation` separately, while keeping the call-time
-   `engine_options` at the evaluate-call layer; neither enters
-   `to_authoring_payload()`
+1. `SDKStore.evaluate(...)` keeps call-time `engine_options` at the
+   evaluate-call layer; they do not enter `to_authoring_payload()`.
+   Public `Rule` / `Derivation` objects do not carry `engine_ext`.
 2. `evaluate_store(...)` / `Store.evaluate_engine(...)` forwards
-   `mode="pyreason"`, `engine_ext`, and `engine_options` to the
-   adapter
+   `mode="pyreason"` and `engine_options` to the adapter. Internal
+   compiled plans may still carry adapter-local `engine_ext` until
+   SemanticsProfile replaces that bridge.
 3. `pyreason_engine_eval(...)`:
    - Materializes Ledger active facts into a `PyReasonSession`
      via `project_view_facts(...)`
@@ -440,9 +444,9 @@ v0 / v1 constraints:
   propagation semantics of the shared DSL
 - Bounded numeric only affects materialization / extraction; it
   does not introduce a value variable into rule syntax
-- `engine_ext` is a definition-time-only shared carrier;
-  currently used by `Rule.engine_ext` and `Derivation.engine_ext`,
-  neither of which enters the persisted payload
+- `engine_ext` is no longer public SDK rule syntax. It remains only as
+  an adapter/internal compiled bridge until future
+  `SemanticsProfile.rule_projection` replaces it.
 - `engine_options` is call-time only; it does not enter
   `Derivation`, `to_authoring_payload()`, or audit artifacts
 - `Store.accept()` does not currently auto-materialize / clear

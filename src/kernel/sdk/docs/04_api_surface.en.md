@@ -441,12 +441,12 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
   - `native` / `souffle` → `None`
   - `problog` → probability `float`
   - `pyreason` → lower-bound `float`
-- `engine_ext`: definition-time engine semantics carrier on
-  `Rule.engine_ext` or `Derivation.engine_ext` (e.g.
-  `PyReasonRuleExt(timestep_delay=1)`); must inherit `EngineExtBase`
 - `engine_options`: call-time runtime config (e.g.
   `fg.evaluate(..., engine_options={"timesteps": 5})`); never enters
   `Derivation` or ledger
+- Public `Rule` / `Derivation` objects do not carry adapter-specific
+  `engine_ext` parameters. Future `SemanticsProfile.rule_projection`
+  owns engine-specific rule projection.
 - Semantic annotations: PyReason produces `pyreason/semantic/*`,
   ProbLog produces `problog/semantic/probability`. Persist post-accept
   via `persist_pyreason_annotations()` or `persist_problog_annotations()`

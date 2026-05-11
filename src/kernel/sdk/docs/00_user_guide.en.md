@@ -574,28 +574,16 @@ results = fg.eval.accept_many(
 - `mode="atomic"` rolls the whole batch back on any failure;
   `"best_effort"` accepts what it can.
 
-### Engine semantics (`engine_ext` vs `engine_options`)
+### Engine runtime options
 
 ```python
-from kernel.adapters.pyreason import PyReasonRuleExt
-
-with vars("u",) as (u,):
-    r = Rule(
-        id="rule_pyr_demo",
-        version="1.0.0",
-        select=[u],
-        where=[User(u)],
-        engine_ext=PyReasonRuleExt(timestep_delay=1),
-    )
-
-# engine_options is call-time only
 fg.eval.evaluate(deriv, mode="pyreason", engine_options={"timesteps": 10})
 ```
 
-`engine_ext` lives **on the rule/derivation definition** (definition-time
-semantics that travel with the rule and enter authoring payload
-serialization). `engine_options` is **call-time** runtime config that
-never enters the `Derivation` or the ledger.
+`engine_options` is **call-time** runtime config. It never enters
+`Rule`, `Derivation`, authoring payloads, or the ledger. Engine-specific
+rule projection is intentionally not carried by public SDK rule objects;
+future `SemanticsProfile.rule_projection` owns that durable public shape.
 
 ### Semantic annotations
 
@@ -902,7 +890,7 @@ full method list.
 
 - **[`03_rules_and_derivations.en.md`](03_rules_and_derivations.en.md)** —
   canonical Rule / Query / Derivation DSL spec (compile-time
-  constraints, `where` syntax, `engine_ext` vs `engine_options`,
+  constraints, `where` syntax, engine runtime options,
   `accept` parameter boundaries)
 - **[`04_api_surface.en.md`](04_api_surface.en.md)** — full API
   reference with every method signature
@@ -935,32 +923,11 @@ Notable changes:
 ### ProbLog branch probability transition
 
 `Branch(...)` represents rule structure only. It does not carry
-probability, confidence, or engine-specific parameters. During the
-Track 3 transition, ProbLog branch probabilities remain available
-through `ProbLogRuleExt.branch_probabilities`:
-
-```python
-from kernel.adapters.problog.rule_ext import ProbLogRuleExt
-from kernel.sdk import Branch, Derivation
-
-where = [
-    Branch([User(u), Pred("user:lang_pref", u, lang)]),
-    Branch([User(u), Pred("user:inferred_lang", u, lang)]),
-]
-
-drv = Derivation(
-    id="drv.lang",
-    version="1.0.0",
-    where=where,
-    head=User.lang(value=lang),
-    engine_ext=ProbLogRuleExt(branch_probabilities=(0.9, 0.6)),
-)
-```
-
-Public `body_confidences` payloads are rejected. The name remains only
-as an internal compiled bridge for the ProbLog adapter until the future
-SemanticsProfile rule projection replaces the transitional `engine_ext`
-path.
+probability, confidence, or engine-specific parameters. Public
+`body_confidences` and `engine_ext` payloads are rejected. The old names
+remain only in rejection messages and adapter/internal bridges until
+future `SemanticsProfile.rule_projection` provides the durable public
+rule-projection shape.
 
 ### Tag semantics on multi-fields
 

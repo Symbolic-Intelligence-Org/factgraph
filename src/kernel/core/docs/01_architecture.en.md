@@ -167,14 +167,19 @@ The shared evaluate dispatch also supports call-time `engine_options`:
 - `mode="native"` with non-empty `engine_options` fails explicitly
 - supported keys, defaults, and normalization remain adapter-owned
 
-Definition-time engine semantics use `engine_ext`:
+Adapter-specific rule projection is no longer public SDK rule syntax:
 
-- shared core only accepts `EngineExtBase` subclasses and forwards them; it does not interpret field meanings
-- `engine_ext` does NOT enter authoring payload / Ledger / audit artifact
-- `pyreason` currently uses `PyReasonRuleExt`
-- `problog` currently uses `ProbLogRuleExt(branch_probabilities=...)`
+- public `Rule` / `Derivation` objects do not carry `engine_ext`
+- public authoring and service payloads reject `engine_ext`
+- shared core still has an internal `EngineExtBase` bridge for compiled
+  plans; it forwards adapter-owned extension objects but does not
+  interpret field meanings
+- `pyreason` internals currently use `PyReasonRuleExt`
+- `problog` internals currently use `ProbLogRuleExt(branch_probabilities=...)`
   - semantics: normalized `where` OR-branch weighting
   - internal compiled `body_confidences` is only a temporary SDK/runtime bridge; public authoring and service payloads reject it
+- future `SemanticsProfile.rule_projection` owns the durable public
+  rule-projection shape
 
 Native `RuleRef` semantics and current boundary:
 

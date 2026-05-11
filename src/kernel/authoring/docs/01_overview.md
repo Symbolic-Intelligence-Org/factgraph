@@ -172,10 +172,10 @@ derivation_payload = {
 - ProbLog branch probability no longer enters through authoring
   payload `body_confidences` or SDK branch-wrapper confidence:
   - public authoring payloads reject `body_confidences`
-  - the temporary public fallback is SDK-side
-    `ProbLogRuleExt(branch_probabilities=...)`
+  - public authoring payloads also reject `engine_ext`
+  - adapter-local extension types remain internal compiled bridges only
   - future SemanticsProfile rule projection will replace this
-    transitional `engine_ext` path
+    transitional bridge
 
 ### 5.1 Minimal input examples (authoring payload)
 

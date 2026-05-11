@@ -19,15 +19,16 @@ All flat methods are also reachable through namespaces:
 Both forms have identical semantics. The flat form is permanently
 supported.
 
-### `engine_ext` vs `engine_options`
+### Engine runtime options
 
-- `engine_ext` is **definition-time** semantics that travel with a
-  `Rule` or `Derivation` (e.g. `Rule(..., engine_ext=PyReasonRuleExt(...))`).
-  It must inherit `EngineExtBase`.
+- Public `Rule` and `Derivation` objects are engine-independent business
+  templates. They do not carry adapter-specific `engine_ext` parameters.
 - `engine_options` is **call-time** runtime configuration passed at
   `evaluate(...)` (e.g. `fg.eval.evaluate(deriv, engine_options={"timesteps": 5})`).
   It never enters the `Derivation` or the ledger. `mode="native"`
   rejects non-empty `engine_options`.
+- Future `SemanticsProfile.rule_projection` owns the durable public shape
+  for engine-specific rule projection.
 
 ## 1. `vars(...)`
 
@@ -81,7 +82,8 @@ rows, display_meta = sdk.run(
 Stable contract:
 - `Rule.id/version` must be non-empty strings.
 - `Rule.select/where` must be non-empty lists.
-- `engine_ext` is available as a definition-time engine semantics carrier and never enters authoring payload serialization.
+- `Rule` is engine-independent public syntax. Adapter-specific rule
+  projection is not carried by public `engine_ext` fields.
 - The `row_format` precedence chain (`call-site > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`) and the `"tuple"` `DeprecationWarning` apply to the **Rule path**. `Query` has its own narrower contract (`"dict"|"instance"`, `"tuple"` rejected) — see §5.
 - Resolving to `"tuple"` emits `DeprecationWarning` (prefer `"dict"`).
 - `return_display_meta=True` requires `policy=ReadPolicy(...)`.
@@ -206,7 +208,7 @@ res = sdk.accept(cands[0], approved_by="alice")
 
 Fields:
 - required: `id`, `version`, `where`
-- optional: `head`, `target`, `head_vars`, `engine_ext`, `status`, `description`, `tags`
+- optional: `head`, `target`, `head_vars`, `status`, `description`, `tags`
 
 Stable contract:
 - `head` shape infers candidate kind (fact/entity).

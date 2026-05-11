@@ -78,14 +78,14 @@ Main flow of `evaluate_problog(...)`:
    head)
 2. Normalize the run timeout via
    `resolve_problog_timeout(engine_options)`
-3. Normalize definition-time semantics via
+3. Normalize adapter-internal rule semantics via
    `resolve_problog_engine_ext(...)`:
-   - Accepts an explicit
+   - Accepts an internal
      `ProbLogRuleExt(branch_probabilities=...)`
    - Internal compiled `body_confidences` may still be bridged
      upstream (in `sdk/store.py` and `service/runtime_v1.py`), but
      public authoring / service payloads reject that key
-   - If both an explicit `engine_ext` and legacy
+   - If both an internal `engine_ext` and legacy
      `body_confidences` are present and inconsistent, the bridge
      raises `ValueError`
 4. Assemble `rule_spec` (containing
@@ -224,7 +224,7 @@ Semantic-delivery addendum:
     lane, not the user-facing raw uncertainty write contract)
   - If both semantic lanes are absent, fall back to
     `meta.confidence` (compatibility / display summary lane)
-- Branch probabilities for `where` are currently carried by
+- Branch probabilities for `where` are currently carried internally by
   `ProbLogRuleExt.branch_probabilities`:
   - `branch_probabilities[i]` corresponds to normalized `where`
     OR branch `i`
@@ -306,8 +306,8 @@ Constraints:
   evidence tree / summary / narrative / NL
 - No ProbLog session API; the shared runtime options currently
   expose only `timeout`
-- The definition-time ProbLog engine extension currently exposes
-  only a minimal contract:
+- The internal ProbLog engine extension currently contains only a
+  minimal contract:
   - `ProbLogRuleExt(branch_probabilities=...)`
   - Expresses only OR-branch weighting, not fact probability,
     candidate probability, or annotation persistence
