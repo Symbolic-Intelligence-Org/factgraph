@@ -1,6 +1,6 @@
 # Task Blueprint: Derivation Mode To Call-Site
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-11
 - Last Updated: 2026-05-11
 - Related Modules:
@@ -12,8 +12,8 @@
 - Related Docs:
   - [docs/references/working/design-points/rule-policy-function-tree-and-syntax.zh.md](../../references/working/design-points/rule-policy-function-tree-and-syntax.zh.md)
   - [docs/references/working/design-points/possibility-probability-transmission.zh.md](../../references/working/design-points/possibility-probability-transmission.zh.md)
-  - [docs/blueprints/archive/2026-05-11_uncertainty-transmission-layer.md](../archive/2026-05-11_uncertainty-transmission-layer.md)
-  - [docs/blueprints/archive/2026-05-11_uncertainty-transmission-layer.audit.md](../archive/2026-05-11_uncertainty-transmission-layer.audit.md)
+  - [docs/blueprints/archive/2026-05-11_uncertainty-transmission-layer.md](./2026-05-11_uncertainty-transmission-layer.md)
+  - [docs/blueprints/archive/2026-05-11_uncertainty-transmission-layer.audit.md](./2026-05-11_uncertainty-transmission-layer.audit.md)
 - Audit Log:
   - [2026-05-11_derivation-mode-to-callsite.audit.md](./2026-05-11_derivation-mode-to-callsite.audit.md)
 
@@ -193,20 +193,20 @@ Evaluate request:
 
 ## 7. Acceptance
 
-- [ ] SDK public docs no longer describe `Derivation(..., mode=...)`.
-- [ ] SDK `Derivation(...)` no longer exposes a public `mode` field.
-- [ ] SDK `Derivation.to_authoring_payload()` no longer emits definition-time
+- [x] SDK public docs no longer describe `Derivation(..., mode=...)`.
+- [x] SDK `Derivation(...)` no longer exposes a public `mode` field.
+- [x] SDK `Derivation.to_authoring_payload()` no longer emits definition-time
       mode.
-- [ ] Structured derivation payloads reject `mode` with a call-site redirect.
-- [ ] SDK object path evaluates through call-site `mode` only.
-- [ ] Service runtime derivation evaluation uses a request-level engine/mode
+- [x] Structured derivation payloads reject `mode` with a call-site redirect.
+- [x] SDK object path evaluates through call-site `mode` only.
+- [x] Service runtime derivation evaluation uses a request-level engine/mode
       resolver instead of `compiled["mode"]`.
-- [ ] Existing call-site `evaluate(..., mode="native"|"souffle"|"problog"|"pyreason")`
+- [x] Existing call-site `evaluate(..., mode="native"|"souffle"|"problog"|"pyreason")`
       behavior remains covered.
-- [ ] Non-native examples use call-site engine selection.
-- [ ] No `SemanticsProfile`, `engine_ext`, `body_confidences`, or
+- [x] Non-native examples use call-site engine selection.
+- [x] No `SemanticsProfile`, `engine_ext`, `body_confidences`, or
       `condition_weights` migration is included.
-- [ ] Affected module docs are updated.
+- [x] Affected module docs are updated.
 
 ## 8. Implementation Plan
 
@@ -245,9 +245,41 @@ Scoped sequence:
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
+最终落地结果：
 
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+- SDK `Derivation` definitions no longer expose or emit definition-time
+  `mode`.
+- Structured authoring derivation payloads reject `mode` with a call-site
+  engine-selection redirect.
+- Compiled derivation payloads retain an internal default `mode="native"` only
+  as a downstream compatibility bridge.
+- SDK call-site `evaluate(..., mode=...)` remains the engine selection surface
+  for `native`, `souffle`, `problog`, and `pyreason`.
+- Service runtime derivation evaluation now reads top-level `engine`, rejects
+  `derivation.mode`, and no longer dispatches from `compiled["mode"]`.
+- Release-facing SDK / adapter docs now teach call-site engine selection.
+
+与 blueprint 不同的地方：
+
+- The scoped D5 wording allowed implementation to either accept or reject
+  top-level service `mode`. The implementation rejects top-level service
+  `mode` and accepts only top-level `engine`.
+- `src/kernel/sdk/docs/03_rules_and_derivations.en.md` and most docs listed in
+  §9 did not need edits because they already used call-site engine selection or
+  did not teach `Derivation(..., mode=...)`.
+
+为什么会有这些调整：
+
+- Rejecting service top-level `mode` keeps the service DTO aligned with
+  `DerivationEvaluateRequest.engine` and avoids extending `mode` semantics
+  before the broader `SemanticsProfile` API shape is designed.
+- Keeping compiled `mode="native"` minimizes downstream churn while removing
+  user-authored definition-time engine selection.
+
+归档说明：
+
+- A1 closed as the first Track 3 public-surface decomposition slice.
+- Deferred slices remain unchanged: `Body.confidence` / `body_confidences`,
+  `engine_ext`, `condition_weights`, `SemanticsProfile`, and adapter migration.
+- Known standalone import-order noise in audit/provenance tests is pre-existing
+  and was not changed by this slice.

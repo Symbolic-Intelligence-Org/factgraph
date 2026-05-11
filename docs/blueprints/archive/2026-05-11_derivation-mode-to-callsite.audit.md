@@ -12,6 +12,7 @@
 | 2026-05-11 | implementing | G1 red baseline tests added | Added `test_derivation_mode_callsite_migration.py` covering D1-D5. Targeted run `env PYTHONPATH=src python -m unittest kernel.tests.test_derivation_mode_callsite_migration` fails as expected with 5 failures: SDK dataclass still exposes `mode`, constructor still accepts `mode`, authoring dict `mode` is still accepted, service still ignores top-level engine, and service still accepts `derivation.mode`. |
 | 2026-05-11 | implementing | G2 implementation landed | Removed public SDK `Derivation.mode`, rejected structured derivation `mode`, retained compiled `native` default, and rewired service runtime derivation evaluation to top-level `engine`. Targeted A1 run `env PYTHONPATH=src python -m unittest kernel.tests.test_derivation_mode_callsite_migration` now passes 7/7; focused migration/adapters/service suite passes 84/84; import-order-compatible explain/declaration checks pass 48/48 and 23/23. |
 | 2026-05-11 | documenting | G3 docs synchronized | Updated SDK user guide and PyReason adapter docs so engine selection is shown at evaluate call-time, not inside `Derivation(...)`. Release-facing stale-syntax grep for `Derivation(..., mode=...)` is clean; remaining hits are working-reference rationale / negative examples only. |
+| 2026-05-11 | implemented | G4 close-out | Filled Outcome / Deviations, marked acceptance complete, archived the blueprint pair, and updated archive inventory. Commit chain: G0 `5bfb637b`, G1 `c822e95e`, G2 `91f9a428`, G3 `9766f2e5`. |
 
 ## Decision Notes
 
