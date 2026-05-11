@@ -57,6 +57,7 @@ Focused investigations that clarify one design concept before it is promoted int
 - [working/design-points/readme.md](./working/design-points/readme.md) — Directory purpose, lifecycle, and note template.
 - [working/design-points/identity-primary-key-coordinate-semantics.md](./working/design-points/identity-primary-key-coordinate-semantics.md) — Working note on `Identity`, `primary_key=True`, `Field`, and entity-reference coordinate semantics.
 - [working/design-points/identity-primary-key-coordinate-semantics.zh.md](./working/design-points/identity-primary-key-coordinate-semantics.zh.md) — Expanded Chinese blog-style working article for iterative design and documentation edits.
+- [working/design-points/possibility-probability-transmission.zh.md](./working/design-points/possibility-probability-transmission.zh.md) — Working note on raw uncertainty semantics, transmission policies, and runtime projection into ProbLog / PyReason-style engine views.
 
 #### `working/load-test-2026-04-11/` —— Layer 4C 全链路 load test bundle（2026-04-11）
 
