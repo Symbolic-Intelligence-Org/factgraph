@@ -222,6 +222,23 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.35::rule_body_0", seen["program"])
 
+    def test_core_store_evaluate_rejects_semantics_profile_outside_problog(self) -> None:
+        sdk = self._make_sdk()
+        compiled = sdk._compile_derivation_input(self._make_derivation())[0]
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=compiled["head_vars"],
+                where=compiled["where"],
+                mode="native",
+                semantics_profile=_profile(),
+            )
+
+        self.assertIn("mode='problog'", str(ctx.exception))
+
 
 class ProbLogSemanticsProfileGuardTests(unittest.TestCase):
     def test_exporter_stays_profile_agnostic(self) -> None:
