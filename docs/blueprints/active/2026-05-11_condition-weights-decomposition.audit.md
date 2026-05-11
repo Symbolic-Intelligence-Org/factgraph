@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-05-11 | draft | Blueprint created | Track 3 / A4 opened after source audit. Draft records that `condition_weights` differs from A1-A3 surfaces: it is current certainty/explain rule metadata with production consumers, not an adapter-specific engine shortcut. G0 must choose retain, hard-remove, or bridge-toward-SemanticsProfile scope. |
 | 2026-05-11 | scoped | Scope frozen | Locked Option C over A/B/D. A4 keeps public `condition_weights` behavior for SDK, authoring, service, and agent surfaces; reclassifies it as certainty/explain projection input; points future migration to `SemanticsProfile.certainty_projection`; preserves the March 2026 boundary that weights stay out of `where` / `where_ast` / evaluator / adapter syntax; and switches G1 to a guard-baseline cadence rather than forward-failing red baseline. |
+| 2026-05-11 | implementing | G1 guard baseline tests added | Added `test_condition_weights_decomposition.py` using A4's guard-only cadence. The suite proves retained SDK field/payload behavior, authoring validation, service compile-preview + registry persistence, agent serialization, confidence-kind routing to `certainty`, and certainty-summary materialization. Validation: A4 guard suite 9/9 OK; declaration metadata + core certainty annotation suite 43/43 OK; A4 + certainty explain contract suite 50/50 OK. No production code changed. |
 
 ## Decision Notes
 
