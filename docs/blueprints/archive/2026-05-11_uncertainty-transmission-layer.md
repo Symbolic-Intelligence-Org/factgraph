@@ -1,6 +1,6 @@
 # Task Blueprint: Uncertainty Transmission Layer
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-11
 - Last Updated: 2026-05-11
 - Related Modules:
@@ -252,9 +252,35 @@ This keeps the data-layer contract in business time while still using PyReason's
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+Final landed behavior:
 
-- Final landed behavior:
-- Deviations from the blueprint:
-- Rationale for adjustments:
-- Archive status:
+- Phase 1 ships the raw uncertainty data contract through paired user-authored `meta={"raw_kind": ..., "bound": [...]}`.
+- Valid `raw_kind` values are `probabilistic` and `possibilistic`.
+- `bound` is a two-number JSON list normalized to floats and validated as `0.0 <= lower <= upper <= 1.0`; bools, strings, non-lists, wrong-length lists, out-of-range values, and inverted intervals are rejected.
+- Valid writes keep `raw_kind` and `bound` in `meta_rows` for assertion review / selection ergonomics and project them canonically to `shared/semantic/raw_kind` and `shared/semantic/bound` annotation rows.
+- User-authored `probability`, `bound_lower`, and `bound_upper` meta keys are removed from the write contract and rejected before ledger mutation or replacement-side retract effects.
+- User-authored `confidence` remains supported as the existing compatibility / output-summary lane; it is not the canonical raw uncertainty carrier.
+- ProbLog export, PyReason materialization, candidate confidence, `confidence_kind`, and runtime `SemanticsProfile` behavior remain unchanged in Phase 1.
+- SDK/core/adapter docs now teach `raw_kind` / `bound` as the user-facing raw uncertainty write contract and describe `probability`, `bound_lower`, and `bound_upper` only as removed write keys or adapter/internal output lanes.
+
+Deviations from the blueprint:
+
+- None from the scoped Phase 1 decisions.
+- The implementation retained adapter/internal probability and bound lanes exactly as scoped: for example, ProbLog can still consume manually or adapter-produced `problog/semantic/probability` / `shared/semantic/probability` annotations, but user writes no longer create that lane through `meta.probability`.
+- `SemanticsProfile` remains a later-phase design placeholder. This blueprint intentionally did not define a runtime profile schema or engine projection behavior.
+
+Rationale for adjustments:
+
+- The project has not shipped a public release, so the implementation used a clean removal for the old user-facing uncertainty write keys instead of preserving compatibility aliases.
+- Validation is preflighted in the write protocol so invalid replacement writes cannot retract or mutate the previously active assertion.
+
+Verification:
+
+- Focused write / SDK assertion-record suite: `PYTHONPATH=src python -m unittest src.kernel.tests.test_write_protocol_annotations src.kernel.tests.test_sdk_assertion_record_set` -> 38 tests OK.
+- ProbLog exporter suite with the known import-order workaround: 9 tests OK.
+- PyReason session suite with the known import-order workaround: 60 tests OK.
+- Docs grep review confirmed release-facing `probability`, `bound_lower`, and `bound_upper` mentions are limited to removed-key, engine-native lane, or output/candidate contexts.
+
+Archive status:
+
+- Implemented and archived on 2026-05-11.

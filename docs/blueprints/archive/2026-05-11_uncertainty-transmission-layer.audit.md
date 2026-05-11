@@ -16,6 +16,7 @@
 | 2026-05-11 | draft | Track relationship reviewed | Re-read `possibility-probability-transmission.zh.md`, `rule-policy-function-tree-and-syntax.zh.md`, and this audit. Confirmed Track 1 (`raw_kind` / `bound` uncertainty data contract) can proceed first while Track 2 (rule/policy namespace, DSL, engine placement, and Policy layer) remains a separate future blueprint. |
 | 2026-05-11 | draft | Phase 1 decisions locked | Locked D1-D5: remove and reject user-authored `probability` / `bound_lower` / `bound_upper`; keep `confidence` unchanged as compatibility/output summary; validate in `write_protocol` meta normalization / preflight; make `bound` selection exact JSON matching; implement Track 1 before any Track 2 blueprint. |
 | 2026-05-11 | scoped | Scope frozen | Blueprint moved from `draft` to `scoped`. §5.0 added scope-freeze decisions; §5.1 refined pair/normalization/removed-key validation; §6 and §7 replaced with testable invariants and acceptance gates; docs list expanded to include SDK user guide and API surface. |
+| 2026-05-11 | implemented | Phase 1 implemented and archived | G1 red-baseline tests landed in `954f03c4`; G2 write-protocol support landed in `f40eaa37`; G2.5 removed-key terminology cleanup landed in `53325530`; G3 docs sync landed in `e2cc7bb8`. Focused write / SDK suite passed 38 tests; ProbLog exporter and PyReason session suites passed with the known import-order workaround. Blueprint marked implemented and moved to archive. |
 
 ## Decision Notes
 
