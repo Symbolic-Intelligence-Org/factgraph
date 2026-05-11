@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (§5.2 LOCKED — field set; rename `active` → `respect_revocations`)
+- **Last Updated:** 2026-05-11 (§5.3 LOCKED — L1 in-place at core; `ReadPolicy` enters `kernel.sdk.__all__`)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -155,7 +155,7 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 |---|---|---|
 | §5.1 | **Policy DTO naming. — LOCKED** | DTO name = `ReadPolicy`. Semantic boundary locked (see §5.1 subsection below). Module location + `__all__` export NOT decided here — see §5.3. |
 | §5.2 | **Policy DTO field set. — LOCKED** | `ReadPolicy` carries 3 fields: `respect_revocations` (renamed from misnomer `active`), `confidence_strategy`, `prefer_source`. Future fields DEFERRED. Single consumer `kernel/sdk/store.py:2070` migrates with the rename. See §5.2 subsection below. |
-| §5.3 | **DTO module location + public export.** | In-place replace `ViewSpec` at `kernel/core/store/types.py`, or relocate to `kernel/sdk/types.py` (SDK-only)? Is the DTO added to `kernel.sdk.__all__`? Is `ViewSpec` still importable from `kernel.core.store.types`? (High-risk because `src/service/runtime_v1.py` and `kernel.application.protocol` may import ViewSpec — coupled to §5.7.) |
+| §5.3 | **DTO module location + public export. — LOCKED** | `ReadPolicy` defined at `kernel/core/store/types.py` (in-place replace of `ViewSpec`); enters `kernel.sdk.__all__` (35 → 36); `ConfidenceStrategy` stays core-only (not exported). See §5.3 subsection below. |
 | §5.4 | **`fg.views` final semantics.** | Post-migration union → single `FrozenAssertionView` return. Decide built-in `default` entry: keep as empty `FrozenAssertionView(name="default", asrt_ids=frozenset())` vs drop the built-in entirely. |
 | §5.5 | **`policy=` call-site API.** | `find(..., policy=...)` and `run(..., policy=...)` accept Policy DTO value-object only? Accept inline dict (`policy={"confidence_strategy": "max"}`)? Accept named-string (which would resurrect the registry under a new name — **default reject** per §0.3)? Type-validation behavior on invalid input. |
 | §5.6 | **Old API removal mechanic.** | Per §0.7 default = hard cut. Old `ViewSpec` import: removed entirely vs raise on construction. Old `fg.views.create(name, ViewSpec(...))`: `TypeError` vs `SDKStoreError` with redirect message. Old `view=` kwarg on `find` / `run`: raise vs silent ignore. Final error texts for each path. |
@@ -254,6 +254,45 @@ This call site migrates to `policy.respect_revocations` during Phase 2 implement
 - Call-site shape of `policy=` (value-only vs inline-dict vs named-string) → §5.5.
 - Old `ViewSpec` import / construction removal mechanic → §5.6.
 - Test coverage for the rename + revocation-respect behavior → §5.9.
+
+### §5.3 LOCKED — `ReadPolicy` at `kernel/core/store/types.py`; re-exported from `kernel.sdk.__all__`
+
+**Location:** `ReadPolicy` is defined at `kernel/core/store/types.py`, **in-place replacing** the existing `ViewSpec` class. No new module is created. (`kernel/sdk/types.py` is not introduced.)
+
+**Public export:**
+
+- `ReadPolicy` enters `kernel.sdk.__all__`. Surface size: **35 → 36**. Users import as `from kernel.sdk import ReadPolicy`.
+- `ConfidenceStrategy` stays at `kernel.core.store.types:14` and is **NOT** added to `kernel.sdk.__all__`. Users who need the literal type for type-hinting can `from kernel.core.store.types import ConfidenceStrategy`, but typical usage is the string literal `"max"` / `"mean"` / `"median"` / `"prefer_source"` directly. Honors `feedback_narrow_public_api` (current scope does not explicitly require user-facing access to the alias).
+
+**Clarifying note (locked verbatim):**
+
+> `ReadPolicy` is a core value object re-exported by the SDK, not an SDK-only facade type. Core projector and service runtime may consume it directly; user-facing examples should import it from `kernel.sdk`.
+
+This locks the **implementation/user-entry split**: the source location (`kernel/core/store/types.py`) is for internal consumers (`kernel/core/view/projector.py`, `kernel/sdk/store.py`, `src/service/runtime_v1.py`); user-facing docs and examples must import from `kernel.sdk` and must not reference `kernel.core.store.types` as a user entry point.
+
+**Rationale recap (source-grounded):**
+
+- `project_display_facts(ledger, view_spec)` at `kernel/core/view/projector.py:205` is a **core-layer** function with two callers (`kernel/sdk/store.py:2005`, `src/service/runtime_v1.py:852,866`). Moving `ReadPolicy` to SDK would require either inline-kwargs signature pollution, a single-consumer Protocol type, or relocating the projector function down to SDK — all worse than letting core continue to define the DTO.
+- `ReadPolicy` is a 3-primitive frozen value object; substrate-shape, not SDK-shell-shape.
+- Existing `from kernel.core.store.types import ViewSpec` consumers (service runtime + projector) become `from kernel.core.store.types import ReadPolicy` — minimum mechanical churn for the §5.7 sweep.
+- `ConfidenceStrategy` is a `Literal` `TypeAlias`; users virtually never need to import the alias name because string literals already type-check against it.
+
+**Implementation cross-references (for Phase 2 after scope-freeze):**
+
+| Path | Change scope |
+|---|---|
+| `kernel/core/store/types.py` | Replace `ViewSpec` class with `ReadPolicy` class (per §5.1 + §5.2). |
+| `kernel/core/view/projector.py:12, 205-212` | Import swap; signature `view_spec: ViewSpec` → `policy: ReadPolicy`; isinstance check class swap; field access `.active` → `.respect_revocations`. |
+| `kernel/sdk/store.py:38, 81, 89-93, 109-113, 134, 140, 565, 1389, 1428, 1445, 1461, 2005, 2066, 2070` | Import swap + all type annotations + `.active` → `.respect_revocations` at line 2070. `default` entry handling is §5.4. |
+| `kernel/sdk/__init__.py` | Add `ReadPolicy` to `__all__`; surface 35 → 36. |
+| `src/service/runtime_v1.py:56, 110, 127, 189, 2614, 2634, 2656, 2663` | Import swap + 9-site type substitution. Parse/serialize body changes (`_parse_view_spec`, `_view_spec_to_dict`, `_resolve_runtime_view_spec`) are §5.7. |
+
+**What this gap does NOT decide:**
+
+- `fg.views` post-migration semantics + `default` entry handling → §5.4.
+- Call-site form of `policy=` → §5.5.
+- Old `ViewSpec` removal mechanic (exception type, redirect text, where the now-unused name disappears from) → §5.6.
+- Service-runtime ViewSpec parse/serialize rewrite (the body of `_parse_view_spec`/`_view_spec_to_dict`) → §5.7.
 
 ## 6. Invariants
 
