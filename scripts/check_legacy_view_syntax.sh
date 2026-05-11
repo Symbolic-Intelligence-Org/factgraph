@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "ERROR: ripgrep (rg) is required by this gate" >&2
+  exit 2
+fi
+
 # Release-facing guard for the ReadPolicy call-site migration.
 #
 # Scope is intentionally narrow: current module docs, OpenAPI, and the
