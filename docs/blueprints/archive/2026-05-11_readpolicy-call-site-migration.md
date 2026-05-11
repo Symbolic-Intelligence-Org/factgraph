@@ -669,7 +669,7 @@ rg "ViewSpec|view_spec|view=.*preferred|fg\.views\.create\(.*ReadPolicy|fg\.view
 - `docs/blueprints/archive/**` — historical design records.
 - `examples/archive/**` — archived examples.
 - `**/archive/**` — any other archive directory.
-- This blueprint itself (`docs/blueprints/active/2026-05-11_readpolicy-call-site-migration.md` + paired audit) and any companion migration-context note that explicitly documents `ViewSpec` as **the removed legacy**, not as a supported syntax.
+- This blueprint itself (`docs/blueprints/archive/2026-05-11_readpolicy-call-site-migration.md` + paired audit) and any companion migration-context note that explicitly documents `ViewSpec` as **the removed legacy**, not as a supported syntax.
 - Test files at `src/kernel/tests/` and `src/service/tests/` that specifically verify rejection of old syntax (§5.9 scope).
 
 **What this gap does NOT decide:**
