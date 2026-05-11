@@ -108,5 +108,55 @@ class FrozenAssertionViewCreationTests(unittest.TestCase):
         self.assertFalse(hasattr(sdk.views, "diff"))
 
 
+class FrozenAssertionViewSingleMeaningTests(unittest.TestCase):
+    def test_views_registry_starts_empty_without_default_entry(self) -> None:
+        sdk, _ = _seed_store()
+
+        self.assertEqual(sdk.views.list(), {})
+
+    def test_default_view_name_is_not_builtin_or_reserved(self) -> None:
+        sdk, ids = _seed_store()
+
+        with self.assertRaises(SDKStoreError) as get_ctx:
+            sdk.views.get("default")
+        self.assertIn("default", str(get_ctx.exception))
+        self.assertIn("not found", str(get_ctx.exception))
+
+        with self.assertRaises(SDKStoreError) as delete_ctx:
+            sdk.views.delete("default")
+        self.assertIn("default", str(delete_ctx.exception))
+        self.assertIn("not found", str(delete_ctx.exception))
+
+        view = sdk.views.create("default", asrt_ids=[ids["name"]])
+        self.assertEqual(type(view).__name__, "FrozenAssertionView")
+        self.assertEqual(view.name, "default")
+        self.assertEqual(view.asrt_ids, frozenset({ids["name"]}))
+
+        sdk.views.delete("default")
+        with self.assertRaises(SDKStoreError):
+            sdk.views.get("default")
+
+    def test_views_create_no_longer_accepts_view_spec_payload(self) -> None:
+        sdk, _ = _seed_store()
+
+        with self.assertRaises((TypeError, SDKStoreError)) as ctx:
+            sdk.views.create("legacy", view_spec=ViewSpec(confidence_strategy="max"))
+        msg = str(ctx.exception)
+        self.assertIn("ViewSpec", msg)
+
+    def test_views_get_and_list_return_only_frozen_assertion_views(self) -> None:
+        sdk, ids = _seed_store()
+        first = sdk.views.create("first", asrt_ids=[ids["name"]])
+        second = sdk.views.create("second", asrts=[_AsrtLike(ids["tag"])])
+
+        self.assertEqual(type(sdk.views.get("first")).__name__, "FrozenAssertionView")
+        self.assertIs(sdk.views.get("first"), first)
+        self.assertIs(sdk.views.get("second"), second)
+        self.assertEqual(
+            {name: type(view).__name__ for name, view in sdk.views.list().items()},
+            {"first": "FrozenAssertionView", "second": "FrozenAssertionView"},
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
