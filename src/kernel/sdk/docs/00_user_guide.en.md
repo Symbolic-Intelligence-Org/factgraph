@@ -162,8 +162,14 @@ admins = fg.read.find(User, name="Alice")
 # Multi-cardinality field uses containment match
 engineers = fg.read.find(User, tags="engineer")
 
-# Apply a named view (see §8) and limit
-recent = fg.read.find(Document, view="last_30_days", limit=20)
+# Apply a read-time policy (see §8) and limit
+from kernel.sdk import ReadPolicy
+
+recent = fg.read.find(
+    Document,
+    policy=ReadPolicy(respect_revocations=True, confidence_strategy="max"),
+    limit=20,
+)
 ```
 
 ### Reference encoding
@@ -651,10 +657,10 @@ diff = fg.audit.diff_proof_frames(
 
 - `explain_fact` returns the active claims for a `(pred_id, e_ref)`
   pair (optionally narrowed by trailing value atoms) plus the
-  currently-chosen `asrt_id` per the active view policy.
+  currently-chosen `asrt_id` per the current read/display policy.
 - `conflicts` enumerates active conflicting assertions on the same
   `(pred_id, e_ref)` pair as `active_asrt_ids`, plus the
-  `chosen_asrt_id` selected by the active view policy.
+  `chosen_asrt_id` selected by the current read/display policy.
 - `diff_proof_frames` compares two recorded derivation rounds and
   returns a `ProofFrameDiff`. The `round_*_events` arguments are the
   full `tuple[RoundEvent, ...]` values captured by the round recorder
@@ -667,50 +673,20 @@ diff = fg.audit.diff_proof_frames(
 
 ## 8. Views and packages
 
-### Views
+### Views and ReadPolicy
 
-The long-term SDK meaning of a view is a named frozen assertion-id
-selection. The current SDK supports that through `FrozenAssertionView`
-entries in `fg.views`: membership is captured at creation time as a
-deduplicated set of `asrt_id` strings.
+The SDK keeps two related ideas separate:
 
-The SDK also keeps legacy `ViewSpec` entries for projection-policy
-compatibility. A `ViewSpec` selects how the SDK aggregates conflicting
-assertions on the same `(pred_id, e_ref)` into a single chosen value when
-reading. Specs are frozen dataclasses, not dicts.
+- `fg.views` stores named frozen assertion-id selections. A
+  `FrozenAssertionView` captures a deduplicated set of `asrt_id` strings
+  at creation time.
+- `ReadPolicy` is a call-site value object for read-time confidence and
+  display aggregation. It is passed with `policy=...`; it is not stored in
+  `fg.views` and has no named registry.
 
-Current status: `active`, `confidence_strategy`, and `prefer_source` are
-still fields on legacy `ViewSpec` objects. They are **not** separate
-runtime keyword arguments to `fg.read.find(...)`, `fg.run(...)`, or
-`fg.evaluate(...)` in this release. The long-term direction is to keep
-view membership (`FrozenAssertionView`) separate from projection policy;
-moving these projection controls to a dedicated runtime-policy surface is
-deferred to a future design pass.
-
-```python
-from kernel.core.store.types import ViewSpec
-
-spec = ViewSpec(
-    active=True,
-    confidence_strategy="max",     # see strategy list below
-    prefer_source=None,            # required when strategy="prefer_source"
-)
-
-fg.views.create("preferred_names", spec)
-fg.views.update("preferred_names", spec)
-fg.views.delete("legacy_view")           # cannot delete the built-in "default"
-fg.views.get("preferred_names")          # → ViewSpec
-all_views = fg.views.list()              # → dict[str, ViewSpec | FrozenAssertionView]
-```
-
-Use a legacy `ViewSpec` in `find` with either the name or the spec:
-
-```python
-fg.read.find(User, name="Alice", view="preferred_names")
-fg.read.find(User, name="Alice", view=spec)
-# Not current syntax:
-# fg.read.find(User, confidence_strategy="max")
-```
+There is no built-in `default` view. The name `"default"` is not reserved:
+if you create a frozen assertion view with that name, it behaves like any
+other user-defined frozen assertion view.
 
 Create a frozen assertion view from exact assertion ids or from objects
 that expose `.asrt_id`:
@@ -723,15 +699,44 @@ review = fg.views.update("review_set", asrts=[target])
 
 view = fg.views.get("review_set")        # → FrozenAssertionView
 records = fg.assertions.by_ids(view.asrt_ids)
+
+fg.views.delete("review_set")
+all_views = fg.views.list()              # → dict[str, FrozenAssertionView]
 ```
 
 Frozen assertion views are read back through `fg.assertions.by_id(...)`
-and `fg.assertions.by_ids(...)`. They are not consumed by snapshot
-projection in this slice: `fg.read.find(User, view="review_set")` raises
-an SDK error that points to `fg.views.get(name).asrt_ids` plus
-`fg.assertions.by_ids(...)`. Rule/runtime projection remains unchanged;
-`fg.run(..., view="review_set", return_display_meta=True)` also rejects a
-frozen assertion view.
+and `fg.assertions.by_ids(...)`. They are not accepted as `find(...)` or
+`run(...)` inputs. To inspect the assertions captured by a view, read the
+membership and then look up records by id:
+
+```python
+view = fg.views.get("review_set")
+records = fg.assertions.by_ids(view.asrt_ids)
+```
+
+Use `ReadPolicy` when you want read-time confidence/display metadata:
+
+```python
+from kernel.sdk import ReadPolicy
+
+policy = ReadPolicy(
+    respect_revocations=True,
+    confidence_strategy="max",     # see strategy list below
+    prefer_source=None,            # required when strategy="prefer_source"
+)
+
+rows = fg.read.find(User, name="Alice", policy=policy)
+rows_with_meta, display_meta = fg.run(
+    rule,
+    policy=policy,
+    return_display_meta=True,
+)
+```
+
+`respect_revocations=True` means confidence/display aggregation skips
+claims that have an active retraction. Set it to `False` only when you
+intentionally want to inspect aggregation over both active and retracted
+claims.
 
 Aggregation strategies (`ConfidenceStrategy` literal):
 - `"max"` — pick the assertion with the highest confidence (default)
@@ -742,9 +747,8 @@ Aggregation strategies (`ConfidenceStrategy` literal):
   preferred set.
 
 `views.create(...)` / `views.update(...)` accept exactly one payload:
-a `ViewSpec`, `asrt_ids=[...]`, or `asrts=[...]`. Passing an ambiguous
-payload or a raw dict raises `SDKStoreError`. Deleting `"default"` raises
-`SDKStoreError("cannot delete built-in view: default")`.
+`asrt_ids=[...]` or `asrts=[...]`. Passing an ambiguous payload, a raw
+dict, or a `ReadPolicy` raises `SDKStoreError`.
 
 ### Packages (Souffle export and replay)
 
