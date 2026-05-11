@@ -103,7 +103,7 @@ from kernel.core.evidence.write_protocol import set_field
 from kernel.core.protocol.idref_v1 import encode_idref_v1
 from kernel.core.view.projector import project_view_facts
 from kernel.sdk import (
-    Body,
+    Branch,
     Derivation,
     Entity,
     Field,

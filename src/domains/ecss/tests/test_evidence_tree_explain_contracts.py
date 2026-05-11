@@ -105,7 +105,7 @@ from kernel.core.evidence.write_protocol import set_field
 from kernel.core.protocol.idref_v1 import encode_idref_v1
 from kernel.core.view.projector import project_view_facts
 from kernel.sdk import (
-    Body,
+    Branch,
     Derivation,
     Entity,
     Field,
@@ -200,7 +200,6 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                                 ["ruleref", "q.user_tag_rows", "1.0.0", ["$u", "$tag"]],
                                 ["eq", "$tag", "vip"],
                             ],
-                            "mode": "native",
                         }
                     },
                 )
@@ -275,7 +274,6 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                         "target": "user:tag",
                         "head_vars": ["$u", "$tag"],
                         "where": [["pred", "user:tag", ["$u", "$tag"]]],
-                        "mode": "native",
                     }
                 },
             )
@@ -377,7 +375,6 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                         "target": "user:tag",
                         "head_vars": ["$u", "$tag"],
                         "where": [["pred", "user:tag", ["$u", "$tag"]]],
-                        "mode": "native",
                     }
                 },
             )
@@ -509,7 +506,6 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                         "target": "user:tag",
                         "head_vars": ["$u", "$tag"],
                         "where": [["pred", "user:tag", ["$u", "$tag"]]],
-                        "mode": "native",
                     }
                 },
             )
@@ -1473,13 +1469,13 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
             eval_resp = evaluate_runtime_derivation(
                 session_id,
                 {
+                    "engine": "souffle",
                     "derivation": {
                         "derivation_id": "drv.engine_degraded_explain",
                         "version": "1.0.0",
                         "target": "user:tag",
                         "head_vars": ["$u", "$tag"],
                         "where": [["pred", "user:tag", ["$u", "$tag"]]],
-                        "mode": "souffle",
                     }
                 },
             )
@@ -1592,13 +1588,13 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
             eval_resp = evaluate_runtime_derivation(
                 session_id,
                 {
+                    "engine": "souffle",
                     "derivation": {
                         "derivation_id": "drv.engine_degraded_tree.audit",
                         "version": "1.0.0",
                         "target": "user:tag",
                         "head_vars": ["$u", "$tag"],
                         "where": [["pred", "user:tag", ["$u", "$tag"]]],
-                        "mode": "souffle",
                     }
                 },
             )
@@ -1729,7 +1725,6 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                         "target": "user:tag",
                         "head_vars": ["$u", "$tag"],
                         "where": [["pred", "user:tag", ["$u", "$tag"]]],
-                        "mode": "native",
                     }
                 },
             )

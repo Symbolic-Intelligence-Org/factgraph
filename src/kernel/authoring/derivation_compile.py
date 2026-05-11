@@ -40,6 +40,12 @@ def compile_authoring_derivation_v1(
             "mode is not accepted in derivation payload; use call-site engine selection",
             path="$.mode",
         )
+    if "body_confidences" in authoring_derivation:
+        raise _compile_error(
+            "body_confidences is not accepted in derivation payload; "
+            "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
+            path="$.body_confidences",
+        )
     if "temporal_view" in authoring_derivation:
         # TODO: Support derivation-side temporal materialization semantics.
         # Snapshot read views already support .at(t) / .version(v) in sdk.facade.
@@ -50,7 +56,6 @@ def compile_authoring_derivation_v1(
             path="$.temporal_view",
         )
     where = _compile_where(authoring_derivation, schema_ir=schema_ir)
-    body_confidences = _compile_body_confidences(authoring_derivation, where=where)
 
     head = _compile_head(authoring_derivation)
     if "materialize_as" in authoring_derivation:
@@ -137,8 +142,6 @@ def compile_authoring_derivation_v1(
     }
     if canonical_head is not None:
         out["head"] = canonical_head
-    if body_confidences is not None:
-        out["body_confidences"] = body_confidences
     if description is not None:
         out["description"] = description
     if tags is not None:
@@ -542,34 +545,6 @@ def _compile_where(payload: dict[str, Any], *, schema_ir: dict[str, Any] | None 
 def _compile_mode(payload: dict[str, Any]) -> str:
     del payload
     return "native"
-
-
-def _compile_body_confidences(
-    payload: dict[str, Any],
-    *,
-    where: list[Any],
-) -> list[float] | None:
-    raw = payload.get("body_confidences")
-    if raw is None:
-        return None
-    if not isinstance(raw, list) or not raw:
-        raise _compile_error("body_confidences must be non-empty list[float] when provided", path="$.body_confidences")
-
-    branch_count = 1
-    if isinstance(where, list) and where and all(isinstance(item, list) for item in where):
-        branch_count = len(where)
-    if len(raw) != branch_count:
-        raise _compile_error("body_confidences length must match where branch count", path="$.body_confidences")
-
-    out: list[float] = []
-    for idx, value in enumerate(raw):
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise _compile_error("body_confidences entries must be float in (0,1]", path=f"$.body_confidences[{idx}]")
-        prob = float(value)
-        if prob <= 0.0 or prob > 1.0:
-            raise _compile_error("body_confidences entries must be within (0,1]", path=f"$.body_confidences[{idx}]")
-        out.append(prob)
-    return out
 
 
 def _identity_field_names(*, schema_ir: dict[str, Any], entity_type: str) -> tuple[list[str], list[str]]:

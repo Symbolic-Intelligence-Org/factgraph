@@ -4,7 +4,7 @@ import ast
 from typing import Any
 
 
-_BODY_MARKER = "__body__"
+_BRANCH_MARKER = "__branch__"
 
 
 class AuthoringRuleDSLParseError(Exception):
@@ -76,16 +76,11 @@ def _parse_rule_expr(node: ast.AST, *, path: str) -> dict[str, Any]:
         if kw.arg in out:
             raise _err(f"duplicate keyword: {kw.arg}", path=f"{path}.{kw.arg}")
         if kw.arg in {"where", "body"}:
-            normalized_where, body_confidences = _normalize_where_with_body_wrappers(
+            normalized_where, _used_branch_wrapper = _normalize_where_with_branch_wrappers(
                 _where_literal(kw.value, path=f"{path}.{kw.arg}", record_var_types={}),
                 path=f"{path}.{kw.arg}",
             )
             out[kw.arg] = normalized_where
-            if body_confidences is not None:
-                existing = out.get("body_confidences")
-                if isinstance(existing, list) and existing != body_confidences:
-                    raise _err("where and body body_confidences conflict", path=f"{path}.{kw.arg}")
-                out["body_confidences"] = body_confidences
         else:
             out[kw.arg] = _literal(kw.value, path=f"{path}.{kw.arg}")
     return out
@@ -143,8 +138,8 @@ def _where_dsl_call(node: ast.Call, *, path: str, record_var_types: dict[str, st
         if isinstance(node.func, ast.Call):
             return _where_rule_ref_call(node, path=path)
         raise _helper_err("unsupported DSL helper call", path=path, detail_code="helper_callable", helper=None)
-    if name == "Body":
-        return _where_body_call(node, path=path, record_var_types=record_var_types)
+    if name == "Branch":
+        return _where_branch_call(node, path=path, record_var_types=record_var_types)
     if node.keywords:
         raise _helper_err(
             "DSL helper calls do not support keyword arguments",
@@ -479,99 +474,70 @@ def _call_name(func: ast.expr) -> str | None:
     return None
 
 
-def _where_body_call(
+def _where_branch_call(
     node: ast.Call,
     *,
     path: str,
     record_var_types: dict[str, str],
-) -> tuple[str, list[Any], float | None]:
+) -> tuple[str, list[Any]]:
     if len(node.args) != 1:
         raise _helper_err(
-            "Body(...) requires exactly one positional atoms list",
+            "Branch(...) requires exactly one positional atoms list",
             path=path,
             detail_code="helper_arity",
-            helper="Body",
+            helper="Branch",
         )
     atoms = _where_literal(node.args[0], path=f"{path}.args[0]", record_var_types=dict(record_var_types))
     if not isinstance(atoms, list) or not atoms:
         raise _helper_err(
-            "Body(...) first argument must be non-empty list",
+            "Branch(...) first argument must be non-empty list",
             path=f"{path}.args[0]",
             detail_code="helper_arg_type",
-            helper="Body",
+            helper="Branch",
             arg_index=0,
         )
 
-    confidence: float | None = None
-    seen_confidence = False
     for kw_idx, kw in enumerate(node.keywords):
         if kw.arg is None:
-            raise _err("Body(...) **kwargs are not supported", path=f"{path}.keywords[{kw_idx}]")
-        if kw.arg != "confidence":
-            raise _err(f"unsupported Body keyword: {kw.arg}", path=f"{path}.{kw.arg}")
-        if seen_confidence:
-            raise _err("duplicate keyword: confidence", path=f"{path}.confidence")
-        seen_confidence = True
-        raw_confidence = _literal(kw.value, path=f"{path}.confidence")
-        if raw_confidence is None:
-            confidence = None
-            continue
-        if isinstance(raw_confidence, bool) or not isinstance(raw_confidence, (int, float)):
-            raise _err("Body.confidence must be float in (0,1]", path=f"{path}.confidence")
-        normalized_confidence = float(raw_confidence)
-        if normalized_confidence <= 0.0 or normalized_confidence > 1.0:
-            raise _err("Body.confidence must be within (0,1]", path=f"{path}.confidence")
-        confidence = normalized_confidence
+            raise _err("Branch(...) **kwargs are not supported", path=f"{path}.keywords[{kw_idx}]")
+        raise _err(f"unsupported Branch keyword: {kw.arg}", path=f"{path}.{kw.arg}")
 
-    return (_BODY_MARKER, atoms, confidence)
+    return (_BRANCH_MARKER, atoms)
 
 
-def _normalize_where_with_body_wrappers(
+def _normalize_where_with_branch_wrappers(
     raw_where: Any,
     *,
     path: str,
-) -> tuple[Any, list[float] | None]:
+) -> tuple[Any, bool]:
     if not isinstance(raw_where, list):
-        return raw_where, None
+        return raw_where, False
     if not raw_where:
-        return raw_where, None
+        return raw_where, False
 
-    body_indexes = [
+    branch_indexes = [
         idx
         for idx, item in enumerate(raw_where)
         if (
             isinstance(item, tuple)
-            and len(item) == 3
-            and item[0] == _BODY_MARKER
+            and len(item) == 2
+            and item[0] == _BRANCH_MARKER
             and isinstance(item[1], list)
         )
     ]
-    if not body_indexes:
-        return raw_where, None
-    if len(body_indexes) != len(raw_where):
-        raise _err("where/body cannot mix Body(...) with bare branch bodies", path=path)
+    if not branch_indexes:
+        return raw_where, False
+    if len(branch_indexes) != len(raw_where):
+        raise _err("where/branch cannot mix Branch(...) with bare branch bodies", path=path)
 
     branches: list[list[Any]] = []
-    confidences_raw: list[float | None] = []
     for idx, item in enumerate(raw_where):
         assert isinstance(item, tuple)
         atoms = item[1]
-        confidence = item[2]
         if not isinstance(atoms, list) or not atoms:
-            raise _err("Body.atoms must be non-empty list", path=f"{path}[{idx}]")
-        if confidence is not None and (isinstance(confidence, bool) or not isinstance(confidence, (int, float))):
-            raise _err("Body.confidence must be float in (0,1]", path=f"{path}[{idx}].confidence")
+            raise _err("Branch.atoms must be non-empty list", path=f"{path}[{idx}]")
         branches.append(atoms)
-        confidences_raw.append(float(confidence) if confidence is not None else None)
-
-    if all(confidence is None for confidence in confidences_raw):
-        return branches, None
-    if any(confidence is None for confidence in confidences_raw):
-        raise _err(
-            "Body(...) confidence must be set on every branch when any branch sets confidence",
-            path=path,
-        )
-    return branches, [float(confidence) for confidence in confidences_raw if confidence is not None]
+    return branches, True
 
 
 def _assert_user_var_name(name: str, *, path: str) -> None:

@@ -9,7 +9,7 @@ from kernel.core.rules.where_ast_validate import WhereASTValidationError, valida
 from kernel.core.store.types import EngineExtBase
 
 from ..error_codes import QUERY_ALIAS_CONFLICT, QUERY_UNBOUND_VAR
-from .body import Body
+from .branch import Branch
 from .errors import SDKDSLError
 from .expr import CompareExpr, ExistsAtom, HeadCall, LogicVar, NotExpr, RuleRefAtom, lower_where
 
@@ -174,7 +174,7 @@ class Query:
     def __post_init__(self) -> None:
         if not isinstance(self.where, list) or not self.where:
             raise SDKDSLError("Query.where must be non-empty list", path="$.where")
-        _validate_query_where_body_confidence(self.where, path="$.where")
+        _validate_query_where_branch_wrapper(self.where, path="$.where")
         if self.on_missing not in {"error", "skip", "null"}:
             raise SDKDSLError("Query.on_missing must be one of: error|skip|null", path="$.on_missing")
         if self.on_type_mismatch not in {"error", "skip", "null"}:
@@ -254,11 +254,11 @@ def _lower_select_item(item: Any) -> Any:
 def _normalize_rule_where_for_payload(where: list[Any]) -> list[Any]:
     if not isinstance(where, list) or not where:
         raise SDKDSLError("Rule.where must be non-empty list")
-    has_body = any(isinstance(item, Body) for item in where)
-    if not has_body:
+    has_branch = any(isinstance(item, Branch) for item in where)
+    if not has_branch:
         return where
-    if not all(isinstance(item, Body) for item in where):
-        raise SDKDSLError("where/body cannot mix Body(...) with bare branches")
+    if not all(isinstance(item, Branch) for item in where):
+        raise SDKDSLError("where/branch cannot mix Branch(...) with bare branches")
     return [list(item.atoms) for item in where]
 
 
@@ -266,7 +266,7 @@ def _dependency_rules_from_where(where: Any) -> list[Rule]:
     found: dict[tuple[str, str], Rule] = {}
 
     def walk(node: Any) -> None:
-        if isinstance(node, Body):
+        if isinstance(node, Branch):
             walk(list(node.atoms))
             return
         if isinstance(node, list):
@@ -322,16 +322,14 @@ def _validate_condition_weights(condition_weights: Any, *, owner: str) -> None:
             raise SDKDSLError(f'{owner}.condition_weights["{key}"] must be positive finite number')
 
 
-def _validate_query_where_body_confidence(node: Any, *, path: str) -> None:
-    if isinstance(node, Body):
-        if node.confidence is not None:
-            raise SDKDSLError("Query.where does not support Body.confidence", path=f"{path}.confidence")
+def _validate_query_where_branch_wrapper(node: Any, *, path: str) -> None:
+    if isinstance(node, Branch):
         for idx, atom in enumerate(node.atoms):
-            _validate_query_where_body_confidence(atom, path=f"{path}.atoms[{idx}]")
+            _validate_query_where_branch_wrapper(atom, path=f"{path}.atoms[{idx}]")
         return
     if isinstance(node, list):
         for idx, item in enumerate(node):
-            _validate_query_where_body_confidence(item, path=f"{path}[{idx}]")
+            _validate_query_where_branch_wrapper(item, path=f"{path}[{idx}]")
         return
     if isinstance(node, tuple):
         if (
@@ -339,11 +337,8 @@ def _validate_query_where_body_confidence(node: Any, *, path: str) -> None:
             and node[0] == "__body__"
             and isinstance(node[1], list)
         ):
-            confidence = node[2]
-            if confidence is not None:
-                raise SDKDSLError("Query.where does not support Body.confidence", path=f"{path}[2]")
             for idx, atom in enumerate(node[1]):
-                _validate_query_where_body_confidence(atom, path=f"{path}[1][{idx}]")
+                _validate_query_where_branch_wrapper(atom, path=f"{path}[1][{idx}]")
 
 
 def _normalize_derivation_head_items(head: Any) -> tuple[HeadCall, ...]:

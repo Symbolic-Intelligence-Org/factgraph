@@ -103,7 +103,7 @@ from kernel.core.evidence.write_protocol import set_field
 from kernel.core.protocol.idref_v1 import encode_idref_v1
 from kernel.core.view.projector import project_view_facts
 from kernel.sdk import (
-    Body,
+    Branch,
     Derivation,
     Entity,
     Field,
@@ -953,17 +953,16 @@ Derivation(
         self.assertEqual(dto["kind"], "derivation_preview")
         self.assertTrue(dto["ok"])
 
-    def test_query_rejects_body_confidence(self) -> None:
+    def test_query_accepts_branch_wrapper(self) -> None:
         sdk = SDKStore([User])
         _seed_users_for_syntax_matrix(sdk)
 
         with sdk_vars("u") as (u,):
-            with self.assertRaises(SDKDSLError) as ctx:
-                Query(
-                    head=[User(u)],
-                    where=[Body([User(u)], confidence=0.9)],
-                )
-        self.assertIn("does not support Body.confidence", str(ctx.exception))
+            query = Query(
+                head=[User(u)],
+                where=[Branch([User(u)])],
+            )
+        self.assertEqual(query.where_ir, [[("pred", "User:exists", ["$u"])]])
 
     def test_run_view_return_display_meta_contract(self) -> None:
         sdk = SDKStore([User])
@@ -974,7 +973,7 @@ Derivation(
                 id="q.names",
                 version="1.0.0",
                 select=[u, nm],
-                where=[Body([Pred("user:name", u, nm)], confidence=0.9)],
+                where=[Branch([Pred("user:name", u, nm)])],
             )
 
         rows = sdk.run(rule, row_format="dict")
@@ -1126,7 +1125,6 @@ Derivation(
                                 ["ruleref", "q.user_tag_rows", "1.0.0", ["$u", "$tag"]],
                                 ["eq", "$tag", "vip"],
                             ],
-                            "mode": "native",
                         }
                     },
                 )
@@ -1197,7 +1195,6 @@ Derivation(
                             ["pred", "user:tag", ["$u", "$tag"]],
                             ["eq", "$tag", "vip"],
                         ],
-                        "mode": "native",
                     }
                 },
             )
@@ -1258,7 +1255,6 @@ Derivation(
                             ["pred", "user:tag", ["$u", "$tag"]],
                             ["eq", "$tag", "staff"],
                         ],
-                        "mode": "native",
                     }
                 },
             )
@@ -1277,7 +1273,6 @@ Derivation(
                             ["pred", "user:tag", ["$u", "$tag"]],
                             ["eq", "$tag", "vip"],
                         ],
-                        "mode": "native",
                     }
                 },
             )

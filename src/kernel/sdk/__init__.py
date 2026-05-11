@@ -27,7 +27,7 @@ from .registry import SDKRegistry
 from .schema import Entity, Field, Identity, Relationship
 from .store import FactGraph, SDKStore
 from kernel.core.store.types import ReadPolicy
-from .dsl import Body, Derivation, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
+from .dsl import Branch, Derivation, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
 from .ingest import IngestResult, ValidationReport
 
 __all__ = [
@@ -48,7 +48,7 @@ __all__ = [
     "IngestResult",
     "ValidationReport",
     "SDKDSLError",
-    "Body",
+    "Branch",
     "Entity",
     "Field",
     "Identity",

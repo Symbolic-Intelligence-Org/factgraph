@@ -951,6 +951,13 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
                 kind="shape",
                 path="$.temporal_view",
             )
+        if isinstance(dto, dict) and "body_confidences" in dto:
+            raise facade_error(
+                "body_confidences is not accepted in runtime derivation evaluation; "
+                "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
+                kind="shape",
+                path="$.body_confidences",
+            )
         mode = _resolve_runtime_derivation_engine(dto)
         compiled = _compile_runtime_derivation(dto, schema_ir=session.store.schema_ir)
         limit = _optional_limit(dto.get("limit"), path="$.limit")
@@ -967,7 +974,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             if active_registry is None:
                 active_registry = RuleRegistry()
             _apply_ephemeral_rules(active_registry, session)
-        runtime_engine_ext = _resolve_runtime_derivation_engine_ext(compiled)
+        runtime_engine_ext = _resolve_runtime_derivation_engine_ext(compiled, mode=mode)
         candidates = session.store.evaluate(
             derivation_id=compiled["derivation_id"],
             version=compiled["version"],
@@ -1007,8 +1014,8 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
         return error_response([err])
 
 
-def _resolve_runtime_derivation_engine_ext(compiled: dict[str, Any]) -> object | None:
-    if compiled.get("mode") != "problog":
+def _resolve_runtime_derivation_engine_ext(compiled: dict[str, Any], *, mode: str) -> object | None:
+    if mode != "problog":
         return compiled.get("engine_ext")
     return resolve_problog_engine_ext(
         where=compiled.get("where"),
@@ -1366,6 +1373,13 @@ def _compile_runtime_derivation(dto: Any, *, schema_ir: dict[str, Any]) -> dict[
             "derivation.mode is not accepted; use call-site engine selection",
             kind="shape",
             path="$.derivation.mode",
+        )
+    if "body_confidences" in derivation:
+        raise facade_error(
+            "derivation.body_confidences is not accepted; "
+            "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
+            kind="shape",
+            path="$.derivation.body_confidences",
         )
     normalized = dict(derivation)
     for key in ("where", "body"):

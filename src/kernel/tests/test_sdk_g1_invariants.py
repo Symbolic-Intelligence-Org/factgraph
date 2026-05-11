@@ -12,7 +12,7 @@ from kernel.sdk import SDKStore
 
 
 EXPECTED_SDK_ALL: tuple[str, ...] = (
-    "Body",
+    "Branch",
     "CardinalityError",
     "Derivation",
     "EditorClosedError",

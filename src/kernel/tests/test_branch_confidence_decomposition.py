@@ -65,6 +65,28 @@ class SDKBranchSurfaceTests(unittest.TestCase):
         self.assertTrue((sdk_dsl_dir / "branch.py").exists())
         self.assertFalse((sdk_dsl_dir / "body.py").exists())
 
+    def test_branch_lowers_to_branch_where_structure(self) -> None:
+        sdk = importlib.import_module("kernel.sdk")
+        branch_cls = getattr(sdk, "Branch", None)
+        self.assertIsNotNone(branch_cls)
+
+        from kernel.sdk.dsl.expr import lower_where
+
+        lowered = lower_where(
+            [
+                branch_cls([Pred("user:tag_seed", "$u", "$tag")]),
+                branch_cls([Pred("user:tag_hint", "$u", "$tag")]),
+            ]
+        )
+
+        self.assertEqual(
+            lowered,
+            [
+                [("pred", "user:tag_seed", ["$u", "$tag"])],
+                [("pred", "user:tag_hint", ["$u", "$tag"])],
+            ],
+        )
+
     def test_branch_rejects_confidence_keyword(self) -> None:
         sdk = importlib.import_module("kernel.sdk")
         branch_cls = getattr(sdk, "Branch", None)

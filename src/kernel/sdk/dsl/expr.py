@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from itertools import count
 from typing import Any
 
-from .body import Body
+from .branch import Branch
 from .errors import SDKDSLError
 
 
@@ -281,7 +281,7 @@ def lower_where(
 ) -> list[Any]:
     if not isinstance(where, list) or not where:
         raise SDKDSLError("where must be non-empty list")
-    where = _normalize_where_body_wrappers(where)
+    where = _normalize_where_branch_wrappers(where)
     if all(isinstance(item, list) for item in where):
         return [lower_where_branch(branch, initial_bindings=initial_bindings) for branch in where]
     return lower_where_branch(where, initial_bindings=initial_bindings)
@@ -303,7 +303,7 @@ def lower_where_branch(
 
 
 def lower_where_atom(atom: Any, bindings: dict[LogicVar, str], *, temp_seq: Any) -> list[Any]:
-    if isinstance(atom, Body):
+    if isinstance(atom, Branch):
         return lower_where_branch(atom.atoms, initial_bindings=bindings)
     if (
         isinstance(atom, tuple)
@@ -419,12 +419,12 @@ def _is_numeric_literal(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _normalize_where_body_wrappers(where: list[Any]) -> list[Any]:
-    has_body = any(isinstance(item, Body) for item in where)
-    if not has_body:
+def _normalize_where_branch_wrappers(where: list[Any]) -> list[Any]:
+    has_branch = any(isinstance(item, Branch) for item in where)
+    if not has_branch:
         return where
-    if not all(isinstance(item, Body) for item in where):
-        raise SDKDSLError("where/body cannot mix Body(...) with bare branches")
+    if not all(isinstance(item, Branch) for item in where):
+        raise SDKDSLError("where/branch cannot mix Branch(...) with bare branches")
     return [list(item.atoms) for item in where]
 
 

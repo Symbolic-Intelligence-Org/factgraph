@@ -40,7 +40,7 @@ from kernel.core.view.confidence import aggregate_confidence
 from kernel.core.view.projector import project_display_facts
 
 from .compile import compile_schema_from_classes
-from .dsl.body import Body
+from .dsl.branch import Branch
 from .error_codes import (
     INVALID_ROW_FORMAT,
     QUERY_INVALID_ROW_FORMAT,
@@ -1701,7 +1701,7 @@ class SDKStore:
         for key in ("where", "body"):
             if key not in payload:
                 continue
-            normalized_where, _, used_wrapper = _normalize_where_body_wrappers(
+            normalized_where, used_wrapper = _normalize_where_branch_wrappers(
                 payload[key],
                 path=f"$.{key}",
             )
@@ -1793,7 +1793,7 @@ class SDKStore:
             for single_payload in payloads:
                 compiled = compile_authoring_derivation_v1(single_payload, schema_ir=self._schema_ir)
                 selected_confidences = _coerce_body_confidences(
-                    single_payload.get("body_confidences", body_confidences),
+                    body_confidences,
                     path="$.body_confidences",
                 )
                 if selected_confidences is not None:
@@ -2192,66 +2192,49 @@ def _authoring_derivation_payload_from_sdk_object(
     derivation: Any,
 ) -> tuple[dict[str, Any], list[float] | None]:
     where_value = getattr(derivation, "where", None)
-    normalized_where, extracted_confidences, used_body_wrapper = _normalize_where_body_wrappers(
+    normalized_where, used_branch_wrapper = _normalize_where_branch_wrappers(
         where_value,
         path="$.where",
     )
-    if not used_body_wrapper:
+    if not used_branch_wrapper:
         payload = derivation.to_authoring_payload()
         return _normalize_authoring_derivation_payload(payload)
 
     payload = _build_authoring_derivation_payload_with_where(
         derivation=derivation,
         normalized_where=normalized_where,
-        body_confidences=extracted_confidences,
     )
     normalized_payload, normalized_confidences = _normalize_authoring_derivation_payload(payload)
-    selected_confidences = normalized_confidences if normalized_confidences is not None else extracted_confidences
-    return normalized_payload, selected_confidences
+    return normalized_payload, normalized_confidences
 
 
 def _normalize_authoring_derivation_payload(
     payload: dict[str, Any],
 ) -> tuple[dict[str, Any], list[float] | None]:
     normalized = dict(payload)
-    explicit_confidences = _coerce_body_confidences(
-        normalized.get("body_confidences"),
-        path="$.body_confidences",
-    )
+    if "body_confidences" in normalized:
+        raise SDKStoreError(
+            "body_confidences is not accepted in public derivation payloads; "
+            "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
+            path="$.body_confidences",
+        )
 
-    where_confidences: list[float] | None = None
-    body_confidences: list[float] | None = None
     for field_name, field_path in (("where", "$.where"), ("body", "$.body")):
         if field_name not in normalized:
             continue
-        field_value, extracted, used_body_wrapper = _normalize_where_body_wrappers(
+        field_value, used_branch_wrapper = _normalize_where_branch_wrappers(
             normalized[field_name],
             path=field_path,
         )
-        if used_body_wrapper:
+        if used_branch_wrapper:
             normalized[field_name] = field_value
-        if field_name == "where":
-            where_confidences = extracted
-        else:
-            body_confidences = extracted
-
-    selected_confidences = _merge_body_confidences(
-        explicit_confidences=explicit_confidences,
-        where_confidences=where_confidences,
-        body_confidences=body_confidences,
-    )
-    if selected_confidences is None:
-        normalized.pop("body_confidences", None)
-    else:
-        normalized["body_confidences"] = list(selected_confidences)
-    return normalized, selected_confidences
+    return normalized, None
 
 
 def _build_authoring_derivation_payload_with_where(
     *,
     derivation: Any,
     normalized_where: Any,
-    body_confidences: list[float] | None,
 ) -> dict[str, Any]:
     from .dsl.expr import lower_where
 
@@ -2282,10 +2265,6 @@ def _build_authoring_derivation_payload_with_where(
             raise SDKStoreError("derivation.head_vars must be list when provided", path="$.head_vars")
         payload["head_vars"] = [_lower_derivation_head_var(item) for item in head_vars]
 
-    mode = getattr(derivation, "mode", None)
-    if mode is not None:
-        payload["mode"] = mode
-
     status = getattr(derivation, "status", None)
     if status is not None:
         payload["status"] = status
@@ -2298,8 +2277,6 @@ def _build_authoring_derivation_payload_with_where(
     if tags is not None:
         payload["tags"] = list(tags) if isinstance(tags, list) else tags
 
-    if body_confidences is not None:
-        payload["body_confidences"] = list(body_confidences)
     return payload
 
 
@@ -2310,78 +2287,27 @@ def _lower_derivation_head_var(value: Any) -> Any:
     return value
 
 
-def _normalize_where_body_wrappers(
+def _normalize_where_branch_wrappers(
     raw_where: Any,
     *,
     path: str,
-) -> tuple[Any, list[float] | None, bool]:
+) -> tuple[Any, bool]:
     if not isinstance(raw_where, list) or not raw_where:
-        return raw_where, None, False
+        return raw_where, False
 
-    has_body_wrapper = any(isinstance(item, Body) for item in raw_where)
-    if not has_body_wrapper:
-        return raw_where, None, False
-    if not all(isinstance(item, Body) for item in raw_where):
-        raise SDKStoreError("where/body cannot mix Body(...) with bare branches", path=path)
+    has_branch_wrapper = any(isinstance(item, Branch) for item in raw_where)
+    if not has_branch_wrapper:
+        return raw_where, False
+    if not all(isinstance(item, Branch) for item in raw_where):
+        raise SDKStoreError("where/branch cannot mix Branch(...) with bare branches", path=path)
 
     branches: list[list[Any]] = []
-    confidence_values: list[float | None] = []
     for idx, branch in enumerate(raw_where):
         atoms = list(branch.atoms)
         if not atoms:
-            raise SDKStoreError("Body.atoms must be non-empty list", path=f"{path}[{idx}]")
+            raise SDKStoreError("Branch.atoms must be non-empty list", path=f"{path}[{idx}]")
         branches.append(atoms)
-        confidence_values.append(branch.confidence)
-
-    selected_confidences = _coerce_body_confidences_from_wrappers(
-        confidence_values,
-        path=path,
-    )
-    return branches, selected_confidences, True
-
-
-def _coerce_body_confidences_from_wrappers(
-    values: list[float | None],
-    *,
-    path: str,
-) -> list[float] | None:
-    if not values:
-        return None
-    if all(value is None for value in values):
-        return None
-    if any(value is None for value in values):
-        raise SDKStoreError(
-            "Body(...) confidence must be set on every branch when any branch sets confidence",
-            path=path,
-        )
-    out: list[float] = []
-    for idx, value in enumerate(values):
-        assert value is not None
-        normalized = float(value)
-        if normalized <= 0.0 or normalized > 1.0:
-            raise SDKStoreError("Body.confidence must be within (0,1]", path=f"{path}[{idx}].confidence")
-        out.append(normalized)
-    return out
-
-
-def _merge_body_confidences(
-    *,
-    explicit_confidences: list[float] | None,
-    where_confidences: list[float] | None,
-    body_confidences: list[float] | None,
-) -> list[float] | None:
-    candidates = [
-        values
-        for values in (explicit_confidences, where_confidences, body_confidences)
-        if values is not None
-    ]
-    if not candidates:
-        return None
-    first = candidates[0]
-    for candidate in candidates[1:]:
-        if candidate != first:
-            raise SDKStoreError("body_confidences conflict between where/body/body_confidences", path="$.body_confidences")
-    return list(first)
+    return branches, True
 
 
 def _coerce_body_confidences(raw_value: Any, *, path: str) -> list[float] | None:
