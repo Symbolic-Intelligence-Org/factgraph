@@ -188,10 +188,16 @@ snap.field("tags").active         # → AssertionRecordSet (tuple-compatible)
 [r.value for r in snap.field("tags").active]   # → ['engineer', ...]
 
 snap.field("name").history        # → AssertionRecordSet (active + revoked)
-snap.field("name").at("2026-05-01T00:00:00Z")  # → AssertionRecordSet visible at t
-snap.field("name").version(3)     # → AssertionRecordSet at version N
+snap.field("name").at("2026-05-01T00:00:00Z")  # active shortcut visible at t
+snap.field("name").version("v3")  # active shortcut at version v3
+snap.field("name").history.at("2026-05-01T00:00:00Z")  # history-level time filter
+snap.field("name").history.by_id(asrt_id)      # exact assertion-id filter
 
-target = snap.field("name").history.where(value="Alice", source="seed").one()
+target = (
+    snap.field("name")
+    .history.where(value="Alice", source="seed")
+    .one()
+)
 fg.write.retract(target.asrt_id)
 
 snap.assertions.name              # equivalent to snap.field("name") — attr access
@@ -203,11 +209,17 @@ snap.ref                          # encoded idref_v1 ref
 
 Notes:
 - `.active` and `.history` are **properties**, not methods (no
-  parentheses). `.at(t)` and `.version(v)` are methods.
-- All four return `AssertionRecordSet`, a tuple-compatible collection of
-  `AssertionRecord` values. Existing tuple-style iteration, indexing, and
-  `len(...)` still work; use `.where(...).one()` for exactly-one selection
-  before retracting an assertion.
+  parentheses). `FieldAssertions.at(t)` and `.version(v)` are active-only
+  compatibility shortcuts for `.active.at(t)` and `.active.version(v)`.
+- `.active`, `.history`, and record-set filters return `AssertionRecordSet`,
+  a tuple-compatible collection of `AssertionRecord` values. Existing
+  tuple-style iteration, indexing, and `len(...)` still work.
+- `AssertionRecordSet` supports `.where(...)`, `.at(t)`, `.version(v)`,
+  `.by_id(asrt_id)`, `.one()`, `.first()`, and `.all()`. Use chained
+  filters plus `.one()` for exactly-one selection before retracting an
+  assertion.
+- `.at(t)` is a business-valid-time filter over assertion metadata
+  `valid_from` / `valid_to`; it does not filter by `ingested_at`.
 - `AssertionRecord` exposes `asrt_id`, `value`, `is_active`,
   `is_revoked`, and `meta` (an `AssertionMeta`).
 - `EntitySnapshot` is read-only; assigning to any attribute raises
@@ -719,8 +731,9 @@ Aggregation strategies (`ConfidenceStrategy` literal):
   `prefer_source`; falls back to `"max"` for sources outside the
   preferred set.
 
-Passing a raw dict to `views.create` raises `SDKStoreError("view_spec
-must be ViewSpec")`. Deleting `"default"` raises
+`views.create(...)` / `views.update(...)` accept exactly one payload:
+a `ViewSpec`, `asrt_ids=[...]`, or `asrts=[...]`. Passing an ambiguous
+payload or a raw dict raises `SDKStoreError`. Deleting `"default"` raises
 `SDKStoreError("cannot delete built-in view: default")`.
 
 ### Packages (Souffle export and replay)

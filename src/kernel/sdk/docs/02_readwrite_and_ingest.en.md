@@ -195,9 +195,11 @@ Stable contract:
 
 - `.active`: currently non-revoked assertions as an `AssertionRecordSet`
 - `.history`: full history (including revoked assertions) as an `AssertionRecordSet`
-- `.at(t)`: business-time filter on active assertions  
+- `.at(t)`: compatibility shortcut for `.active.at(t)`, filtering active
+  assertions by business valid time
   `valid_from <= t` and (`valid_to` missing or `valid_to > t`)
-- `.version(v)`: version filter on active assertions (`version == v`)
+- `.version(v)`: compatibility shortcut for `.active.version(v)`, filtering
+  active assertions by version metadata (`version == v`)
 
 `AssertionRecordSet` is tuple-compatible (`len(...)`, indexing, and
 iteration still work) and adds read-side selection helpers:
@@ -208,10 +210,24 @@ target = snapshot.assertions.name.history.where(
     source="seed",
 ).one()
 sdk.retract(target.asrt_id)
+
+same = snapshot.assertions.name.history.by_id(target.asrt_id).one()
+```
+
+The same helpers work on whatever assertion set you start from:
+
+```python
+snapshot.assertions.name.active.where(source="seed")
+snapshot.assertions.name.history.at("2026-05-01T00:00:00Z")
+snapshot.assertions.name.history.version("v1")
+snapshot.assertions.name.history.by_id(asrt_id)
 ```
 
 Boundaries:
 - Missing `valid_from` is excluded from `.at(t)`.
+- `valid_to` is exclusive when present: `[valid_from, valid_to)`.
+- `.at(t)` filters business valid time from `valid_from` / `valid_to`,
+  not `ingested_at`.
 - Missing `version` is excluded from `.version(v)`.
 - `.at(t)` validates ISO 8601 for both input and assertion meta fields.
 - `.version(v)` accepts only `str|int` (`bool` is invalid).

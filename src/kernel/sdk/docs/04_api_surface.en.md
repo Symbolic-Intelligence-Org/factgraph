@@ -353,10 +353,14 @@ Per-field editor on an `EntityEditor`: `set(value, *, meta=None)`,
 ### `FieldAssertions`, `AssertionRecordSet`, `AssertionRecord`, `AssertionMeta`
 
 `FieldAssertions` exposes a field's active assertions plus history.
-Supports time-slice access via `.at(iso8601_time)` and version slice via
-`.version(v)`. `.active`, `.history`, `.at(...)`, and `.version(...)`
-return `AssertionRecordSet`, a tuple-compatible returned object with
-`.where(...)`, `.one()`, `.all()`, and `.first()` helpers. It is not a
+`.active` and `.history` are properties returning `AssertionRecordSet`.
+`FieldAssertions.at(iso8601_time)` and `.version(v)` are active-only
+compatibility shortcuts for `.active.at(...)` and `.active.version(...)`.
+
+`AssertionRecordSet` is a tuple-compatible returned object with
+`.where(...)`, `.at(...)`, `.version(...)`, `.by_id(...)`, `.one()`,
+`.all()`, and `.first()` helpers. Non-terminal filters return
+`AssertionRecordSet`, so chained selection remains available. It is not a
 top-level `kernel.sdk.__all__` export.
 
 Each entry is an `AssertionRecord` with `asrt_id`, `value`, `is_active`,
@@ -367,7 +371,12 @@ ingested_at, confidence, approved_by, derived_rule_id, candidate_id, ...).
 Example:
 
 ```python
-target = snapshot.field("name").history.where(value="Alice", source="seed").one()
+target = (
+    snapshot.field("name")
+    .history.where(value="Alice", source="seed")
+    .one()
+)
+same = snapshot.field("name").history.by_id(target.asrt_id).one()
 sdk.retract(target.asrt_id)
 ```
 
