@@ -1,6 +1,6 @@
 # Task Blueprint: Condition Weights Decomposition
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-11
 - Last Updated: 2026-05-11
 - Related Modules:
@@ -125,8 +125,7 @@ A4 must either preserve that historical boundary or explicitly supersede it.
 
 ## 5. Proposed Shape
 
-This draft does not lock the final implementation. It frames three possible
-scope-freeze paths.
+This blueprint considered four possible scope-freeze paths.
 
 ### 5.1 Option A: Keep As Rule Metadata, Clarify Boundary
 
@@ -189,65 +188,115 @@ Cons:
 - Requires clear G0 wording so later sessions do not mistake the bridge for a
   permanent endpoint.
 
-### 5.4 Draft Direction
+### 5.4 Option D: Skip A4 And Jump To SemanticsProfile B
 
-The current draft direction is **Option C**, with G0 required to decide whether
-A4 is:
+Do not implement a separate A4 slice. Start B (`SemanticsProfile`) next and
+let the SemanticsProfile shape absorb `condition_weights` / certainty
+projection directly.
 
-1. an implementation slice that removes public `condition_weights`; or
-2. a boundary-clarification slice that preserves current behavior until B.
+Pros:
+
+- Avoids an intermediate docs / guard slice.
+- Lets the final SemanticsProfile data shape decide the replacement
+  vocabulary before any migration language is written.
+
+Cons:
+
+- Leaves A4's current ambiguity unresolved in module docs while B is being
+  designed.
+- Skips the explicit Track 3 follow-up to the March 2026 certainty metadata
+  decision.
+
+### 5.5 Scope Freeze Decisions
+
+G0 locks **Option C** over A/B/D.
+
+Rationale:
+
+- Option A undercommits: it preserves behavior but does not align the wording
+  with Track 3's future SemanticsProfile projection model.
+- Option B is premature: it would break certainty-summary / explain authoring
+  without a replacement public path.
+- Option D is defensible, but A4-C is small and records the boundary before B;
+  B can then inherit an explicit `certainty_projection` migration target rather
+  than rediscovering the March 2026 decision.
+
+Locked decisions:
+
+| ID | Decision |
+| --- | --- |
+| D1 | Retain public SDK `Rule.condition_weights` as a typed `dict[str, float]` field for this slice. |
+| D2 | Retain authoring, service rule-registry, and agent rules-tool payload `condition_weights` entries for this slice. |
+| D3 | Reclassify `condition_weights` in docs as certainty/explain projection input, not engine adapter semantics and not where execution semantics. |
+| D4 | Point future migration language to `SemanticsProfile.certainty_projection`. This appears in docs / migration notes only, not as runtime warnings or rejection errors. |
+| D5 | Preserve the March 2026 boundary: `condition_weights` remains out of `where`, `where_ast`, evaluator IR, ProbLog rule syntax, and PyReason rule syntax. |
+| D6 | Keep certainty-summary math and `derive_certainty_summary(...)` unchanged. |
+| D7 | Treat agent serialization (`agent.tools.rules.RuleSpec.condition_weights`) the same as SDK / authoring: retained, classified as certainty projection input, and documented as future-migrating to SemanticsProfile. |
+| D8 | Use a guard-baseline cadence, not an A1/A2/A3 forward-failing red baseline. Tests must prove retained public syntax and live certainty behavior still work. |
 
 ## 6. Boundaries And Invariants
 
-Draft invariants to tighten at G0:
-
+- SDK `Rule.condition_weights` remains public and retains its current
+  validation: dict keys are non-empty strings and values are positive finite
+  numbers.
+- Authoring compile continues validating `condition_weights` against existing
+  atom-position keys (`b{branch}.a{atom}`).
+- Service rule registry and agent rule tools continue accepting and forwarding
+  `condition_weights`.
+- `_confidence_kind_resolver` continues routing to
+  `confidence_kind="certainty"` when the resolved rule payload has non-empty
+  `condition_weights`.
+- `_certainty_service._lookup_condition_weights_for_candidate(...)` continues
+  resolving weights through support `rule_ref_edge -> registry rule payload`.
+- `materialize_certainty_summary(...)` and `derive_certainty_summary(...)`
+  continue producing the same certainty summaries for weighted rules.
 - `condition_weights` must not enter `where`, `where_ast`, native evaluator
   IR, ProbLog rule syntax, or PyReason rule syntax.
-- If retained, `condition_weights` remains value-semantics metadata consumed
-  by certainty/explain logic only.
-- If removed, public rejections must redirect to future SemanticsProfile
-  certainty projection and tests must cover the temporary functionality gap.
-- Existing certainty-summary math must not change in A4.
 - A4 must not introduce a SemanticsProfile implementation.
 - A4 must not alter A1/A2/A3 public-surface decisions.
 
 ## 7. Acceptance
 
-Draft gates to tighten at G0:
-
-- [ ] G0 locks Option A, B, or C explicitly.
-- [ ] Source audit table is complete enough to identify every public entry
-      and every existing consumer.
-- [ ] Tests reflect the chosen public contract.
-- [ ] Existing certainty-summary / explain tests either remain green or are
-      intentionally updated with documented functionality-gap rationale.
+- [ ] G0 locks Option C explicitly and records why Option D was not chosen.
+- [ ] Guard tests prove `Rule.condition_weights` remains a public SDK field.
+- [ ] Guard tests prove SDK `Rule(..., condition_weights=...)` still emits
+      sorted authoring payload `condition_weights`.
+- [ ] Guard tests prove invalid SDK `condition_weights` still reject.
+- [ ] Guard tests prove authoring compile accepts valid `condition_weights`
+      and rejects keys that do not match existing atom positions.
+- [ ] Guard tests prove service rule compile-preview / registry payloads
+      continue preserving `condition_weights`.
+- [ ] Guard tests prove agent `RuleSpec.condition_weights` serialization
+      continues emitting the field.
+- [ ] Guard tests prove `_confidence_kind_resolver` still routes weighted
+      rules to `confidence_kind="certainty"`.
+- [ ] Guard tests prove certainty-summary materialization remains unchanged
+      for a weighted rule.
 - [ ] No SemanticsProfile implementation appears in A4.
-- [ ] Release-facing docs no longer imply that `condition_weights` is an
-      engine adapter parameter.
-- [ ] If public syntax is retained, docs classify it as certainty/explain
-      metadata with future SemanticsProfile migration notes.
-- [ ] If public syntax is removed, stale-syntax grep proves release-facing docs
-      teach only rejection / migration / internal bridge context.
+- [ ] Release-facing docs classify `condition_weights` as certainty/explain
+      projection input with future `SemanticsProfile.certainty_projection`
+      migration notes.
+- [ ] Release-facing docs do not describe `condition_weights` as an engine
+      adapter parameter or where execution semantics.
 
 ## 8. Implementation Plan
 
-Expected cadence, subject to G0:
+Expected cadence:
 
 1. G0 scope-freeze:
-   - choose Option A/B/C;
-   - lock public entry fates for SDK, authoring, service, and agent;
+   - record Option C over A/B/D;
+   - lock D1-D8;
    - tighten §6 / §7 into testable form;
    - record scope-freeze in audit.
-2. G1 red baseline or guard baseline:
-   - if Option B, add forward-failing public-removal tests;
-   - if Option A/C, add guard tests that prove current certainty behavior and
-     public syntax are intentionally retained.
+2. G1 guard baseline:
+   - add passing guard tests that prove current certainty behavior and public
+     syntax are intentionally retained.
 3. G2 implementation:
-   - implement the chosen public-surface decision;
-   - preserve or intentionally retire certainty-summary paths according to G0.
+   - add any small code-level marker or helper needed by G1/G3;
+   - do not remove public syntax or alter certainty math.
 4. G3 docs sync:
    - update SDK, authoring, service, core, audit, and agent docs as needed;
-   - run chosen stale/retained syntax grep gates.
+   - run certainty-classification grep gates.
 5. G4 close-out:
    - fill Outcome / Deviations;
    - mark blueprint implemented;
