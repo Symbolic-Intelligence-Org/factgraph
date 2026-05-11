@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (§5.9 LOCKED — test coverage plan; independent grep gate script; absence invariant)
+- **Last Updated:** 2026-05-11 (§5.10 LOCKED — release target rc.3; manual grep gate; all 10 §5 gaps complete)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -162,7 +162,7 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 | §5.7 | **Non-SDK ViewSpec reference sweep. — LOCKED** | Service runtime **S2 deep migration**: remove `RuntimeSession.views` + 5 RPC endpoints + `_resolve_runtime_view_spec` + `"default"` + `view_name` lookup; rename `_parse_view_spec` / `_view_spec_to_dict` to `_parse_read_policy` / `_read_policy_to_dict`; wire DTO key `view` → `policy`, wire field `active` → `respect_revocations`. Groups A/B covered by §5.6 / §5.3 / §5.2 cross-refs. See §5.7 subsection below. |
 | §5.8 | **Docs + examples rewrite. — LOCKED** | 5 SDK docs + 1 service doc (renamed to `03_runtime_queries_policy.md`) + `examples/05_sdk_assertion_views.ipynb` rewritten as ~5-commit per-layer batch. `respect_revocations` taught in `01_concepts` + referenced in `02_readwrite`. No doc URL in error messages. **Phase 4 grep gate** enforces release-facing-doc cleanliness with archive/migration exemptions. See §5.8 subsection below. |
 | §5.9 | **Test coverage plan. — LOCKED** | T-NEW 6 groups (DTO / `policy=` surface / `fg.views` single-meaning / `view=` redirect guards / service runtime new shape / **absence invariant**). T-SWEEP 4 existing files case-by-case rewrite. 2 new test files + 1 reuse. **CI-b independent grep gate script** `scripts/check_legacy_view_syntax.sh`; release integration deferred to §5.10. See §5.9 subsection below. |
-| §5.10 | **Release checklist.** | Confirm next release (rc.2 successor or rc.3) ships the migration. Per §0.7 no compat-window discussion needed; this gap is purely a checklist confirmation (`kernel.sdk.__all__` diff, allowlist sync, deny-pattern grep updates per `feedback_release_workflow_traps`). |
+| §5.10 | **Release checklist. — LOCKED** | Target = `0.1.0rc3` (separated from already-tagged-semantic rc.2 which holds frozen-assertion-view). `__all__` 35 → 36 (only `ReadPolicy` added). `scripts/check_legacy_view_syntax.sh` is **manual-only** (Phase 4 verification calls it; `release.sh` unmodified). No `BREAKING CHANGE:` commit footer. See §5.10 subsection below. |
 
 §5.1 is the first gap; subsequent gaps proceed in numerical order unless a downstream dependency forces reordering.
 
@@ -749,6 +749,70 @@ This invariant elevates the cleanup from "behavior still works under new names" 
 - Whether T-NEW-6 absence-invariant tests get a dedicated test file or live within `test_sdk_read_policy.py` → implementation freedom; current default groups them with `test_sdk_read_policy.py`.
 - Per-test assertion text and fixture shape → Phase 1 test-scaffolding implementation.
 - T-SWEEP per-test delete-vs-rewrite individual decisions → Phase 1 implementation.
+
+### §5.10 LOCKED — Release target rc.3; manual grep gate; no BREAKING CHANGE footer
+
+**Target version (locked verbatim):**
+
+> Next release target is `0.1.0rc3`. This migration is kept out of the already-published `0.1.0rc2` meaning so release notes can describe it as a separate API cleanup.
+
+**RC-line separation rationale:**
+
+- `rc.2` (master commit `e46bc08`) carries the **frozen-assertion-view model** shipment (closed by `004d074` archive). Its release-note semantic is already established.
+- This migration is a **public-API cleanup of a different concept** (`ViewSpec` → `ReadPolicy`, `view=` → `policy=`, service runtime wire shape). Bundling it into rc.2 would overload that RC's release-note narrative.
+- An extra `chore(release): bump version to 0.1.0rc3` commit at the start of Phase 2 is the minimum cost for clean release-note separation.
+- Pre-release per §0.7 means rc.3 needs no SemVer-compat negotiation; clean separation is the only motivation.
+
+**`kernel.sdk.__all__` diff (Phase 4 verification gate):**
+
+| Aspect | Locked contract |
+|---|---|
+| Surface count | **35 → 36** (rc.2 baseline 35 → rc.3 target 36). |
+| Net change | Exactly one entry added: `"ReadPolicy"`. |
+| Net removed | **Zero.** No public name leaves `__all__` (`ViewSpec` was never in `__all__`; cf. `project_post_l_redesign_published`). |
+| Verification command | `git diff <rc.2-base>..HEAD -- src/kernel/sdk/__init__.py` must show one-line addition only inside `__all__`; no other public-name churn. |
+| Allowlist sync (per `feedback_release_workflow_traps` trap 1) | If `scripts/release.sh` consults a `kernel.sdk.__all__` allowlist file, that file is updated to include `ReadPolicy` before Phase 4. |
+
+**Grep gate integration (C-ii LOCKED — manual-only):**
+
+`scripts/check_legacy_view_syntax.sh` (per §5.9 LOCKED) is invoked **manually** at Phase 4 verification. `scripts/release.sh` is **not modified** by this blueprint. Phase 4 acceptance gate explicitly requires the grep gate to pass (`exit 0`) against the implementation HEAD.
+
+Rejected C-i (integration into `release.sh`) per the §5.9 CI-b rationale: the grep gate targets quickly-changing semantic-doc hygiene and does not belong in the stable release main path. Rejected C-iii (GitHub Actions workflow) as over-engineering for pre-release without active CI on this repo.
+
+**Commit-message convention (D1 LOCKED — no BREAKING CHANGE footer):**
+
+Migration commits use the existing factpy convention (`feat(scope):`, `fix(scope):`, `docs(scope):`, `chore(release):`). **No `BREAKING CHANGE:` footer** is added. Rationale:
+
+- `git log` shows no historical use of `BREAKING CHANGE:` footers in this repo; introducing a new commit-message convention is a cross-blueprint decision, out of scope here.
+- All Phase 2 commits land before any rc.3 tag; SemVer major-version is not affected.
+- Pre-release per §0.7 makes Conventional-Commits BREAKING-CHANGE signaling redundant.
+
+**Release-trap verification (per `feedback_release_workflow_traps` — Phase 4 acceptance):**
+
+| Trap (from memory) | Applicability | Phase 4 verification action |
+|---|---|---|
+| Allowlist sync after deletions | **Applies** — `ViewSpec` class removal + 5 service RPC endpoints removal. | Dry-run `scripts/release.sh --dry-run`; confirm allowlist files do not reference removed symbols (`ViewSpec`, `_resolve_runtime_view_spec`, `create_runtime_view`, `update_runtime_view`, `delete_runtime_view`, `get_runtime_view`, `list_runtime_views`). |
+| Test-projection imports of excluded modules | **Applies** — service test-projection must not import removed dispatch entries. | Confirm any test-projection allowlist excludes references to the removed service symbols above. |
+| Deny-pattern grep on private path refs | **Applies (defensive check)** — verify `ReadPolicy` is not accidentally matched by a deny-pattern that targeted `View*` or similar prefix. | Dry-run release with implementation tree; observe deny-pattern grep stage exits clean. |
+| Same-day re-tag needs tag + milestone deletion | Not applicable — rc.3 is a fresh tag (not a re-tag). | n/a |
+| typing-extensions corruption | Not applicable — no typing-extensions operations. | n/a |
+| EN README projection | Not applicable — README not touched by this migration. | n/a |
+
+**Implementation cross-references (Phase 2 + Phase 4):**
+
+| Action | Location |
+|---|---|
+| `chore(release): bump version to 0.1.0rc3` commit | At start of Phase 2 implementation (after scope-freeze, before any code-change commit). |
+| Grep gate invocation | Phase 4 verification step; `bash scripts/check_legacy_view_syntax.sh` must exit 0. |
+| `__all__` diff verification | Phase 4 `git diff` step against rc.2 base. |
+| Release-trap dry-run | Phase 4 `scripts/release.sh --dry-run` before any real tag. |
+
+**What this gap does NOT decide:**
+
+- rc.3 tag timestamp / GitHub Release page creation timing → release-time editorial decision (per `project_v0_1_0_rc1_published`-style deferral).
+- rc.3 release-note copy → release-time editorial work.
+- Whether to publish to PyPI at rc.3 or continue holding (per rc.1 precedent) → release-time decision.
+- Order of Phase 1-4 commits inside the impl branch → Phase 2 implementation plan (§8 placeholder).
 
 ## 6. Invariants
 
