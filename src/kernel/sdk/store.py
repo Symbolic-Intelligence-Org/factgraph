@@ -70,7 +70,17 @@ class FrozenAssertionView:
     asrt_ids: frozenset[str]
 
 
+_VIEW_TOMBSTONE = object()
+
+
 class _SDKViewsManager:
+    """Read-only namespace for named frozen assertion-id selections.
+
+    `fg.views` no longer stores read policies and has no built-in
+    `default` entry. The name `default` is just another user-defined frozen
+    assertion view name when callers create it.
+    """
+
     def __init__(self) -> None:
         # Read-only attribute boundary per post-L redesign §5.4 lock.
         # Internal init bypasses ``__setattr__`` via ``object.__setattr__``;
@@ -78,7 +88,7 @@ class _SDKViewsManager:
         # ``FrozenSnapshotError``. Dict mutation against ``self._views``
         # via ``create`` / ``update`` / ``delete`` is unaffected (it
         # mutates the dict, not the attribute).
-        object.__setattr__(self, "_views", {"default": ReadPolicy()})
+        object.__setattr__(self, "_views", {})
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise FrozenSnapshotError("FactGraph.views namespace is read-only")
@@ -86,17 +96,15 @@ class _SDKViewsManager:
     def create(
         self,
         name: str,
-        view_spec: ReadPolicy | None = None,
         *,
         asrt_ids: Iterable[str] | None = None,
         asrts: Iterable[Any] | None = None,
-    ) -> ReadPolicy | FrozenAssertionView:
+    ) -> FrozenAssertionView:
         normalized = _normalize_view_name(name)
         if normalized in self._views:
             raise SDKStoreError(f"view already exists: {normalized}")
         entry = _build_view_entry(
             normalized,
-            view_spec=view_spec,
             asrt_ids=asrt_ids,
             asrts=asrts,
         )
@@ -106,17 +114,15 @@ class _SDKViewsManager:
     def update(
         self,
         name: str,
-        view_spec: ReadPolicy | None = None,
         *,
         asrt_ids: Iterable[str] | None = None,
         asrts: Iterable[Any] | None = None,
-    ) -> ReadPolicy | FrozenAssertionView:
+    ) -> FrozenAssertionView:
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         entry = _build_view_entry(
             normalized,
-            view_spec=view_spec,
             asrt_ids=asrt_ids,
             asrts=asrts,
         )
@@ -125,19 +131,17 @@ class _SDKViewsManager:
 
     def delete(self, name: str) -> None:
         normalized = _normalize_view_name(name)
-        if normalized == "default":
-            raise SDKStoreError("cannot delete built-in view: default")
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         self._views.pop(normalized, None)
 
-    def get(self, name: str) -> ReadPolicy | FrozenAssertionView:
+    def get(self, name: str) -> FrozenAssertionView:
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         return self._views[normalized]
 
-    def list(self) -> dict[str, ReadPolicy | FrozenAssertionView]:
+    def list(self) -> dict[str, FrozenAssertionView]:
         return {name: spec for name, spec in self._views.items()}
 
 
@@ -562,26 +566,28 @@ class SDKStore:
         self,
         entity_cls: type[Entity],
         *,
-        view: ReadPolicy | str | None = None,
+        policy: ReadPolicy | None = None,
         limit: int | None = None,
         **filter_kwargs: Any,
     ):
         from .facade import sdk_find
 
+        if "view" in filter_kwargs:
+            raise SDKStoreError("view= was renamed to policy=ReadPolicy(...)", path="$.find.view")
+        resolved_policy = self._resolve_read_policy(policy, api_path="fg.read.find")
         rows = sdk_find(
             self,
             entity_cls,
             limit=limit,
             **filter_kwargs,
         )
-        resolved_view = self._resolve_read_policy(view, api_path="fg.read.find")
-        if resolved_view is None:
+        if resolved_policy is None:
             return rows
 
         confidence_by_ref = _build_entity_confidence_by_ref(
             self,
             entity_cls=entity_cls,
-            read_policy=resolved_view,
+            read_policy=resolved_policy,
         )
         for row in rows:
             ref = getattr(row, "ref", None)
@@ -1386,17 +1392,19 @@ class SDKStore:
         obj: Any,
         *,
         row_format: str | None = None,
-        view: ReadPolicy | str | None = None,
+        policy: ReadPolicy | None = None,
+        view: Any = _VIEW_TOMBSTONE,
         return_display_meta: bool = False,
         registry: RuleRegistry | None = None,
     ) -> list[Any] | tuple[list[Any], list[dict[str, Any]]]:
         if not isinstance(return_display_meta, bool):
             raise SDKStoreError("return_display_meta must be bool", path="$.run.return_display_meta")
+        if view is not _VIEW_TOMBSTONE:
+            raise SDKStoreError("view= was renamed to policy=ReadPolicy(...)", path="$.run.view")
+        resolved_policy = self._resolve_read_policy(policy, api_path="fg.run")
+        if return_display_meta and resolved_policy is None:
+            raise SDKStoreError("return_display_meta requires policy=ReadPolicy(...)", path="$.run.return_display_meta")
         dispatch_key = self._run_dispatch_key(obj)
-        if dispatch_key == "query" and view is not None:
-            self._validate_query_view_argument(view)
-            raise SDKStoreError("view is not supported for Query in run(); use Rule with run(view=...)")
-        resolved_view = self._resolve_read_policy(view, api_path="fg.run")
         dispatch_map = {
             "query": self._run_dispatch_query,
             "derivation": self._run_dispatch_derivation,
@@ -1405,7 +1413,7 @@ class SDKStore:
         return dispatch_map[dispatch_key](
             obj,
             row_format=row_format,
-            read_policy=resolved_view,
+            read_policy=resolved_policy,
             return_display_meta=return_display_meta,
             registry=registry,
         )
@@ -1430,7 +1438,7 @@ class SDKStore:
         registry: RuleRegistry | None,
     ) -> list[Any]:
         if read_policy is not None:
-            raise SDKStoreError("view is not supported for Query in run(); use Rule with run(view=...)")
+            raise SDKStoreError("policy= is not supported for Query in run(); use Rule with run(policy=ReadPolicy(...))")
         if return_display_meta:
             raise SDKStoreError("return_display_meta is not supported for Query in run()", path="$.run.return_display_meta")
         resolved_row_format = _resolve_query_row_format(row_format)
@@ -1503,8 +1511,6 @@ class SDKStore:
         formatted = _format_rule_rows(rows, select_vars=list(rule_spec.select_vars), row_format=row_format)
         if not return_display_meta:
             return formatted
-        if read_policy is None:
-            raise SDKStoreError("return_display_meta requires view to be provided", path="$.run.return_display_meta")
         display_meta = _build_rule_display_meta(
             formatted,
             row_format=row_format,
@@ -1539,31 +1545,18 @@ class SDKStore:
             return_mode=return_mode,
         )
 
-    def _resolve_read_policy(self, view: ReadPolicy | str | FrozenAssertionView | None, *, api_path: str) -> ReadPolicy | None:
-        if view is None:
+    def _resolve_read_policy(self, policy: ReadPolicy | None, *, api_path: str) -> ReadPolicy | None:
+        if policy is None:
             return None
-        if isinstance(view, ReadPolicy):
-            return view
-        if isinstance(view, FrozenAssertionView):
-            raise _frozen_assertion_view_error(api_path, view.name)
-        if isinstance(view, str):
-            resolved = self._views_manager.get(view)
-            if isinstance(resolved, FrozenAssertionView):
-                raise _frozen_assertion_view_error(api_path, resolved.name)
-            return resolved
-        raise SDKStoreError("view must be ReadPolicy, view name string, or None")
-
-    def _validate_query_view_argument(self, view: ReadPolicy | str | FrozenAssertionView | Any) -> None:
-        if isinstance(view, (ReadPolicy, FrozenAssertionView)):
-            return
-        if isinstance(view, str):
-            self._views_manager.get(view)
-            return
-        raise SDKStoreError("view must be ReadPolicy, view name string, or None")
+        if isinstance(policy, ReadPolicy):
+            return policy
+        if isinstance(policy, FrozenAssertionView):
+            raise SDKStoreError(f"{api_path}: policy= expects ReadPolicy or None, not FrozenAssertionView")
+        raise SDKStoreError(f"{api_path}: policy= expects ReadPolicy or None")
 
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
-        if "view" in kwargs:
-            raise SDKStoreError("view is not supported in evaluate(); derivation evaluation always uses active projection")
+        if "view" in kwargs or "policy" in kwargs:
+            raise SDKStoreError("evaluate() does not accept view= or policy=; derivation evaluation always uses active projection")
         if "temporal_view" in kwargs:
             # TODO: temporal_view for evaluate() remains blocked.
             # Snapshot read views (.at/.version) are already implemented in sdk.facade.
@@ -1902,17 +1895,12 @@ def _normalize_view_name(name: Any) -> str:
 def _build_view_entry(
     name: str,
     *,
-    view_spec: ReadPolicy | None,
     asrt_ids: Iterable[str] | None,
     asrts: Iterable[Any] | None,
-) -> ReadPolicy | FrozenAssertionView:
-    payload_count = sum(value is not None for value in (view_spec, asrt_ids, asrts))
+) -> FrozenAssertionView:
+    payload_count = sum(value is not None for value in (asrt_ids, asrts))
     if payload_count != 1:
-        raise SDKStoreError("provide exactly one view payload: ReadPolicy, asrt_ids=..., or asrts=...")
-    if view_spec is not None:
-        if not isinstance(view_spec, ReadPolicy):
-            raise SDKStoreError("view_spec must be ReadPolicy")
-        return view_spec
+        raise SDKStoreError("provide exactly one view payload: asrt_ids=... or asrts=...")
     if asrts is not None:
         return FrozenAssertionView(
             name=name,
@@ -1970,13 +1958,6 @@ def _schema_pred_by_pred_id(sdk: SDKStore, pred_id: str) -> dict[str, Any]:
         if isinstance(pred, dict) and pred.get("pred_id") == pred_id:
             return pred
     raise SDKStoreError(f"schema predicate not found for assertion predicate: {pred_id}")
-
-
-def _frozen_assertion_view_error(api_path: str, view_name: str) -> SDKStoreError:
-    return SDKStoreError(
-        f"{api_path}: cannot apply FrozenAssertionView {view_name!r} to snapshot/rule projection; "
-        "use fg.views.get(name).asrt_ids with fg.assertions.by_ids(...) instead"
-    )
 
 
 def _build_entity_confidence_by_ref(

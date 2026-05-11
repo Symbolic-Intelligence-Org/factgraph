@@ -22,7 +22,6 @@ freedom.
 from __future__ import annotations
 
 import unittest
-from typing import Any
 
 from kernel.sdk import (
     Entity,
@@ -44,8 +43,8 @@ def _seed_store() -> tuple[SDKStore, dict[str, str]]:
     sdk = SDKStore([User])
     ref = sdk.ref(User, user_id="u-1")
     ids = {
-        "name": sdk.set(User.name, ref, "Alice", meta={"source": "seed"}),
-        "tag": sdk.add(User.tag, ref, "vip", meta={"source": "seed"}),
+        "name": sdk.set(User.name, ref, "Alice", meta={"source": "seed", "confidence": 0.91}),
+        "tag": sdk.add(User.tag, ref, "vip", meta={"source": "seed", "confidence": 0.72}),
     }
     return sdk, ids
 

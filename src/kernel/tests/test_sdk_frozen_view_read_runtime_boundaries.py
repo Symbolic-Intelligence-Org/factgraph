@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from kernel.core.store.types import ReadPolicy
-from kernel.sdk import Entity, Field, Identity, Query, Rule, SDKSchemaError, SDKStore, SDKStoreError, vars
+from kernel.sdk import Entity, Field, Identity, Query, ReadPolicy, Rule, SDKSchemaError, SDKStore, SDKStoreError, vars
 
 
 class User(Entity):
@@ -39,16 +38,13 @@ def _name_query() -> Query:
 
 
 class FrozenViewReadBoundaryTests(unittest.TestCase):
-    def test_legacy_readpolicy_find_path_is_unchanged(self) -> None:
+    def test_readpolicy_find_path_uses_policy_kwarg(self) -> None:
         sdk, _ = _seed_store()
         spec = ReadPolicy(confidence_strategy="max")
-        sdk.views.create("preferred", spec)
 
-        by_name = sdk.read.find(User, view="preferred")
-        by_spec = sdk.read.find(User, view=spec)
+        rows = sdk.read.find(User, policy=spec)
 
-        self.assertEqual([row.name for row in by_name], ["Alice"])
-        self.assertEqual([row.name for row in by_spec], ["Alice"])
+        self.assertEqual([row.name for row in rows], ["Alice"])
 
     def test_get_does_not_accept_view_parameter(self) -> None:
         sdk, _ = _seed_store()
@@ -56,38 +52,34 @@ class FrozenViewReadBoundaryTests(unittest.TestCase):
         with self.assertRaises(SDKSchemaError):
             sdk.read.get(User, user_id="u-1", view="preferred")
 
-    def test_find_rejects_frozen_view_name_with_workaround_message(self) -> None:
+    def test_find_rejects_removed_view_name_with_redirect_message(self) -> None:
         sdk, ids = _seed_store()
         sdk.views.create("review_set", asrt_ids=[ids["name"]])
 
         with self.assertRaises(SDKStoreError) as ctx:
             sdk.read.find(User, view="review_set")
 
-        msg = str(ctx.exception)
-        self.assertIn("fg.read.find", msg)
-        self.assertIn("review_set", msg)
-        self.assertIn("FrozenAssertionView", msg)
-        self.assertIn("by_ids", msg)
+        msg = str(ctx.exception).lower()
+        self.assertIn("view", msg)
+        self.assertIn("policy", msg)
 
-    def test_find_rejects_frozen_view_object_with_same_error_category(self) -> None:
+    def test_find_rejects_removed_view_object_with_redirect_message(self) -> None:
         sdk, ids = _seed_store()
         view = sdk.views.create("review_set", asrt_ids=[ids["name"]])
 
         with self.assertRaises(SDKStoreError) as ctx:
             sdk.read.find(User, view=view)
 
-        msg = str(ctx.exception)
-        self.assertIn("fg.read.find", msg)
-        self.assertIn("FrozenAssertionView", msg)
-        self.assertIn("by_ids", msg)
+        msg = str(ctx.exception).lower()
+        self.assertIn("view", msg)
+        self.assertIn("policy", msg)
 
-    def test_run_legacy_display_meta_path_is_unchanged(self) -> None:
+    def test_run_display_meta_uses_policy_kwarg(self) -> None:
         sdk, _ = _seed_store()
-        sdk.views.create("preferred", ReadPolicy(confidence_strategy="max"))
 
         rows, meta = sdk.run(
             _name_rule(),
-            view="preferred",
+            policy=ReadPolicy(confidence_strategy="max"),
             row_format="dict",
             return_display_meta=True,
         )
@@ -95,18 +87,16 @@ class FrozenViewReadBoundaryTests(unittest.TestCase):
         self.assertIsInstance(rows, list)
         self.assertIsInstance(meta, list)
 
-    def test_run_rejects_frozen_view_name_with_workaround_message(self) -> None:
+    def test_run_rejects_removed_view_name_with_redirect_message(self) -> None:
         sdk, ids = _seed_store()
         sdk.views.create("review_set", asrt_ids=[ids["name"]])
 
         with self.assertRaises(SDKStoreError) as ctx:
             sdk.run(_name_rule(), view="review_set", return_display_meta=True)
 
-        msg = str(ctx.exception)
-        self.assertIn("fg.run", msg)
-        self.assertIn("review_set", msg)
-        self.assertIn("FrozenAssertionView", msg)
-        self.assertIn("by_ids", msg)
+        msg = str(ctx.exception).lower()
+        self.assertIn("view", msg)
+        self.assertIn("policy", msg)
 
     def test_run_query_and_evaluate_view_rejections_remain(self) -> None:
         sdk, ids = _seed_store()
@@ -114,7 +104,7 @@ class FrozenViewReadBoundaryTests(unittest.TestCase):
 
         with self.assertRaises(SDKStoreError) as run_ctx:
             sdk.run(_name_query(), view="review_set")
-        self.assertIn("Query", str(run_ctx.exception))
+        self.assertIn("policy", str(run_ctx.exception).lower())
 
         with self.assertRaises(SDKStoreError) as eval_ctx:
             sdk.evaluate("anything", view="review_set")
