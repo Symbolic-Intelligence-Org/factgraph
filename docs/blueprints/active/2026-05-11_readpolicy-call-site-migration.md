@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Created:** 2026-05-11
-- **Last Updated:** 2026-05-11 (§5.6 LOCKED — old-API removal; explicit redirect guards on `find` / `run` / `evaluate`; `run` uses tombstone sentinel)
+- **Last Updated:** 2026-05-11 (§5.7 LOCKED — service runtime S2 deep migration; policy registry removed; wire renames)
 - **Parent:** post-rc.1 SDK terminology cleanup; no parent blueprint.
 - **Related precedents:**
   - [2026-05-11_frozen-assertion-view-model (archived)](../archive/2026-05-11_frozen-assertion-view-model.md) — established `FrozenAssertionView` and the dual-type `fg.views` registry that this blueprint is now disambiguating.
@@ -159,7 +159,7 @@ Per `feedback_iterative_gap_design`: one §5.x LOCKED at a time; audit-log row p
 | §5.4 | **`fg.views` final semantics. — LOCKED** | `default` entry dropped (not built-in, not reserved); `_views` starts `{}`; `create/update` accept only `asrt_ids=` / `asrts=` (no `view_spec=`); return types narrow to `FrozenAssertionView` / `dict[str, FrozenAssertionView]`. See §5.4 subsection below. |
 | §5.5 | **`policy=` call-site API. — LOCKED** | `policy: ReadPolicy \| None = None` on `find` / `run`; `policy=None` skips policy (mirrors current `view=None`); `dict` / `str` / `FrozenAssertionView` rejected; `evaluate(policy=...)` rejected; `return_display_meta=True` requires non-`None` policy. See §5.5 subsection below. |
 | §5.6 | **Old API removal mechanic. — LOCKED** | `ViewSpec` class deleted; `find` adds `"view" in filter_kwargs` guard; `run` adds **tombstone sentinel** `view: Any = _MISSING` rejecting even `view=None`; `evaluate` uses combined `view`/`policy` rejection. Error texts at semantic level only. See §5.6 subsection below. |
-| §5.7 | **Non-SDK ViewSpec reference sweep.** | Full grep of `ViewSpec` across `src/kernel/application/protocol/`, `src/service/`, `src/kernel/audit/`, `src/kernel/tests/`. For each reference: keep (internal-only) vs migrate (cross-layer) vs delete (dead). |
+| §5.7 | **Non-SDK ViewSpec reference sweep. — LOCKED** | Service runtime **S2 deep migration**: remove `RuntimeSession.views` + 5 RPC endpoints + `_resolve_runtime_view_spec` + `"default"` + `view_name` lookup; rename `_parse_view_spec` / `_view_spec_to_dict` to `_parse_read_policy` / `_read_policy_to_dict`; wire DTO key `view` → `policy`, wire field `active` → `respect_revocations`. Groups A/B covered by §5.6 / §5.3 / §5.2 cross-refs. See §5.7 subsection below. |
 | §5.8 | **Docs + examples rewrite.** | SDK docs touched by `ace2563` + `4a794f3`. The new `examples/05_sdk_assertion_views.ipynb` (`58c07fc`, 368 lines) added today with old syntax — must be rewritten or retired. Doc-URL strategy for §5.6 redirect messages. |
 | §5.9 | **Test coverage plan.** | Policy DTO contract tests (3 fields × validation paths). `policy=` kwarg behavior on `find` / `run`. Removal-redirect tests for each §5.6 deprecated path. Existing ViewSpec test sweep — delete vs rewrite. |
 | §5.10 | **Release checklist.** | Confirm next release (rc.2 successor or rc.3) ships the migration. Per §0.7 no compat-window discussion needed; this gap is purely a checklist confirmation (`kernel.sdk.__all__` diff, allowlist sync, deny-pattern grep updates per `feedback_release_workflow_traps`). |
@@ -516,6 +516,83 @@ All R1–R5 error texts are locked at the **semantic** level only; literal strin
 - Service-runtime parse/serialize body rewrite (`_parse_view_spec`, `_view_spec_to_dict`, `_resolve_runtime_view_spec`) → §5.7.
 - Test coverage for each R1–R5 redirect path (including `run(view=None)` tombstone behavior) → §5.9.
 - Documentation rewrite of any examples currently teaching the old `view=` patterns → §5.8.
+
+### §5.7 LOCKED — Service runtime S2 deep migration; policy registry removed; wire-level renames
+
+**Inventory recap (full non-SDK non-test production-code sweep at HEAD `ace2563`):**
+
+Three groups, 31 lines total:
+
+| Group | Path | Lines | Disposition |
+|---|---|---|---|
+| **A** | `src/kernel/core/store/types.py` | 4 (48, 55, 57, 59) | Covered by §5.6 R1 (class deletion). |
+| **B** | `src/kernel/core/view/projector.py` | 6 (12, 207, 211-212, 216, 234-235) | Covered by §5.3 type-swap + §5.2 field-rename cross-refs. Mechanical. |
+| **C** | `src/service/runtime_v1.py` | 21 across 11 logical sites | **LOCKED here as S2 deep migration.** |
+
+`src/kernel/application/protocol/`, `src/kernel/audit/`, and `src/domains/ecss/` (non-test) carry **zero** `ViewSpec` references — confirmed by exhaustive grep.
+
+**S2 deep migration — defensive note (locked verbatim):**
+
+> Service runtime must not keep a named policy registry after SDK removes one. A service-level policy registry would recreate the same ambiguity that this blueprint removes from `fg.views`.
+
+If a future need for named policies at the wire level emerges, it must be a **new product-level feature scoped in its own blueprint**, not a residual of this migration.
+
+**S2 — removed entirely (no replacement):**
+
+| Path:line | Element removed |
+|---|---|
+| `src/service/runtime_v1.py:110` | `RuntimeSession.views: dict[str, ViewSpec]` field. |
+| `src/service/runtime_v1.py:127` | `RuntimeSession` constructor `views=` parameter. |
+| `src/service/runtime_v1.py:189` | Default initialization `views={"default": ViewSpec()}`. |
+| `src/service/runtime_v1.py:886-899` | `create_runtime_view` RPC endpoint. |
+| `src/service/runtime_v1.py:902-915` | `update_runtime_view` RPC endpoint. |
+| `src/service/runtime_v1.py:918-933` | `delete_runtime_view` RPC endpoint (including the `"default"` special-case guard). |
+| `src/service/runtime_v1.py:935-945` | `get_runtime_view` RPC endpoint. |
+| `src/service/runtime_v1.py:947-958` | `list_runtime_views` RPC endpoint. |
+| `src/service/runtime_v1.py:2614-2631` | `_resolve_runtime_view_spec(session, dto)` function — entire body removed; name-lookup dispatch and `session.views["default"]` fallback are both gone. |
+
+**S2 — renamed and refactored:**
+
+| Path:line | Change |
+|---|---|
+| `src/service/runtime_v1.py:56` | Import: `from kernel.core.store.types import ViewSpec` → `from kernel.core.store.types import ReadPolicy`. |
+| `src/service/runtime_v1.py:846-872` (`query_view_facts` flow) | Replace `_resolve_runtime_view_spec(session, dto)` call with `_parse_read_policy(dto.get("policy"), path="$.policy")`. Response continues to emit policy summary via `_read_policy_to_dict`. The `view_name` branch and `session.views[...]` fallback paths disappear. Existing display-fact projection call (`project_display_facts(...)`) continues to consume the resulting `ReadPolicy` (per §5.3 mechanical type swap). |
+| `src/service/runtime_v1.py:2634-2660` | Function rename `_parse_view_spec` → `_parse_read_policy`. Drop the `isinstance(value, ViewSpec)` passthrough branch (wire input is always JSON dict). Rename incoming JSON field `active` → `respect_revocations` (wire-level rename). Construct `ReadPolicy(...)` instead of `ViewSpec(...)`. |
+| `src/service/runtime_v1.py:2663-2668` | Function rename `_view_spec_to_dict` → `_read_policy_to_dict`. Rename emitted JSON key `active` → `respect_revocations`. |
+
+**Wire-level DTO breaking changes (`feedback_narrow_public_api` aside; pre-release per §0.7):**
+
+| Layer | Before | After |
+|---|---|---|
+| DTO field carrying policy object | `dto["view"]` | `dto["policy"]` |
+| DTO field for named-policy lookup | `dto["view_name"]` | **Removed** — name-lookup no longer supported at the wire level. |
+| DTO field inside policy object | `"active": bool` | `"respect_revocations": bool` |
+| RPC method names | `create_runtime_view`, `update_runtime_view`, `get_runtime_view`, `list_runtime_views`, `delete_runtime_view` | **All five removed.** No replacement; per the defensive note above, no equivalent endpoints are introduced. |
+
+**Why S2 (not S1 shallow rename):**
+
+- **Architectural symmetry**: SDK §5.4 dropped policy registry; service runtime is a thin RPC over SDK semantics; retaining a registry only at the service layer would create a hidden second "registry world" the next ergonomics fix would have to dismantle again.
+- **`feedback_narrow_public_api`**: removing 5 RPC endpoints is a public-surface contraction, aligned with narrow-API discipline; no current scope requires named-policy wire ergonomics.
+- **§0.7 pre-release**: wire-level breaking changes are cheapest now. Postponing means baking a deprecated registry into RC artifacts.
+- **`default` parity with §5.4**: keeping service `"default"` would force a permanent SDK-vs-service ghost where SDK forgot `default` but service remembers it.
+- **`view_name` lookup parity with §5.5**: §5.5 P1 rejected `str` named-string on `policy=`; the wire `view_name` is the same mistake under a different transport.
+
+**Implementation cross-references (Phase 2) — Group C summary:**
+
+The 11 logical service sites collapse into:
+
+1. **5 RPC endpoint definitions removed** (create/update/delete/get/list).
+2. **1 query-flow refactor** (`query_view_facts`): inline policy parse instead of registry resolve.
+3. **2 helper function renames + signature/wire rename** (`_parse_view_spec` → `_parse_read_policy`, `_view_spec_to_dict` → `_read_policy_to_dict`).
+4. **1 RuntimeSession field removal** (with constructor + default-init cascade).
+5. **1 dead helper removal** (`_resolve_runtime_view_spec`).
+6. **1 import swap** (`ViewSpec` → `ReadPolicy`).
+
+**What this gap does NOT decide:**
+
+- Service-runtime tests sweep — including the 5 removed-endpoint tests that must be deleted and the `query_view_facts` policy-inline tests that must be updated → §5.9.
+- Wire-level documentation (if any external service contract docs exist beyond `src/service/docs/` directory contents) → §5.8.
+- Whether `_parse_read_policy` should be split out into a shared validation utility re-used between `ReadPolicy.__post_init__` and the wire-parser → implementation-detail freedom, not §5.7-locked.
 
 ## 6. Invariants
 
