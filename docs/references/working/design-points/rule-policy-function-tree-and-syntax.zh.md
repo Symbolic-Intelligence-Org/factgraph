@@ -180,7 +180,7 @@ rule_user_has_language = Rule(
 rows = fg.rules.run(rule_user_has_language)
 ```
 
-Recommended constraint: `Rule.run` should be documented as deterministic row execution unless an explicit engine / profile surface later says otherwise. Current fields such as `condition_weights`, `engine_ext`, and `Body(..., confidence=...)` should be framed as advanced annotations, not as ordinary `run(rule)` truth semantics.
+Recommended constraint: `Rule.run` should be documented as deterministic row execution unless an explicit engine / semantics profile surface later says otherwise. Current fields such as `condition_weights`, `engine_ext`, and legacy `Body(..., confidence=...)` should be framed as implementation history or advanced internal annotations, not as ordinary `run(rule)` truth semantics.
 
 ### Derivation
 
@@ -230,11 +230,48 @@ The current `Body` wrapper mixes two concepts:
 1. branch structure: one conjunction of atoms inside an OR-shaped `where`;
 2. branch probability / confidence: an engine-specific value currently bridged mainly toward ProbLog branch probabilities.
 
-Recommended public syntax:
+The uncertainty-transmission direction changes the recommendation from earlier drafts:
+
+```text
+Rule syntax should describe logical structure.
+Uncertainty should live on data assertions as raw_kind + bound.
+Engine-specific branch / rule weighting should live in SemanticsProfile or adapter-local engine configuration.
+```
+
+This is not only a naming cleanup. Engine-specific semantics currently attach to different structural locations:
+
+```text
+ProbLog branch probability
+  -> branch
+PyReason body interval threshold
+  -> body predicate / atom
+PyReason head interval
+  -> head
+PyReason runtime timesteps
+  -> execution call
+condition_weights / certainty
+  -> rule condition / evidence summary
+```
+
+Putting all of these on public `Rule` / `Derivation` constructors would produce a fragmented API surface: some semantics on branches, some on atoms, some on heads, some in `engine_options`, some in rule metadata. The preferred design is to keep rule objects as standard business templates and let runtime `SemanticsProfile` carry the engine-specific projection.
+
+An internal representation may still use path-targeted annotations:
+
+```python
+EngineAnnotation(
+    engine="pyreason",
+    target=Path.body_atom(0, 1),
+    kind="interval_threshold",
+    value=(0.5, 1.0),
+)
+```
+
+But this should be an implementation shape under `SemanticsProfile.rule_projection`, not public rule syntax.
+
+Recommended public structure syntax:
 
 ```python
 Branch([A, B, C])
-Branch([A, B, C], probability=0.9)
 ```
 
 Example:
@@ -256,53 +293,89 @@ Rationale:
 
 - `Branch` describes the actual shape: each wrapper is one OR branch whose atoms are ANDed.
 - `Body` sounds like the whole rule body, but the current wrapper actually represents one branch.
-- `probability` is more precise than `confidence` for the current ProbLog branch-probability lane.
+- Public `Branch(probability=...)` would reintroduce an engine-specific uncertainty shortcut at the rule layer, conflicting with the raw uncertainty / transmission split.
 - `confidence` is overloaded elsewhere in the system: fact metadata, candidate confidence, certainty summaries, and view aggregation all already use confidence-like concepts with different meanings.
+- `probability` is not a generic rule-branch attribute. It is meaningful for ProbLog branch weighting, but not for PyReason certainty bounds, possibilistic facts, SMT constraints, or native row execution.
 
 Recommended deterministic behavior:
 
 ```python
-Rule(..., where=[Branch([...], probability=0.9)])
+Rule(..., where=[Branch([...])])
 fg.rules.run(rule)
 ```
 
-should not silently ignore `probability`. It should either:
+should run as deterministic structure over the current projected fact view. If a user attempts to attach branch uncertainty in public rule syntax, the DSL should reject it and point to data-level `raw_kind` / `bound` or a `SemanticsProfile`.
 
-- reject the rule for deterministic `run(rule)`, or
-- require an explicit engine-aware execution surface before the probability is consumed.
-
-Recommended probabilistic behavior:
+Recommended uncertain-data behavior:
 
 ```python
-drv = Derivation(
-    id="drv.probabilistic_language",
-    version="1.0.0",
-    where=[
-        Branch([User(u), u.lang_pref == lang], probability=0.9),
-        Branch([User(u), u.inferred_lang == lang], probability=0.6),
-    ],
-    head=Speaks(user=u, language=lang),
+fg.data.write(
+    Risk.score,
+    asset_ref,
+    "risk_high",
+    meta={
+        "raw_kind": "possibilistic",
+        "bound": [0.35, 0.70],
+        "source": "expert_review",
+    },
 )
 
-candidates = fg.rules.evaluate(drv, engine="problog")
+drv = Derivation(
+    id="drv.risk_review",
+    version="1.0.0",
+    where=[
+        Branch([Asset(a), Risk.score(a, "risk_high")]),
+    ],
+    head=ReviewRequired(asset=a),
+)
+
+profile = SemanticsProfile(
+    engine="pyreason",
+    uncertainty_projection={
+        "possibilistic": "bound_as_certainty",
+        "probabilistic": "probability_as_certainty",
+        "fallback": "reject_unconfigured",
+    },
+)
+
+candidates = fg.rules.evaluate(drv, profile=profile)
 ```
 
-In this path, `Branch(probability=...)` may lower to the engine-specific ProbLog branch-probability extension.
+If ProbLog-specific branch weighting remains necessary, it should be scoped as an engine profile / adapter extension, not as general public `Branch` syntax:
+
+```python
+profile = SemanticsProfile(
+    engine="problog",
+    engine_options={"timeout": 15},
+    rule_projection={
+        "branch_weights": {
+            "drv.risk_review": [0.9, 0.6],
+        }
+    },
+    uncertainty_projection={
+        "probabilistic": "point_or_policy",
+        "possibilistic": "reject",
+    },
+)
+```
 
 Recommended non-goals:
 
-- Do not use `Branch(probability=...)` as a generic certainty / confidence model.
-- Do not reuse `probability` for PyReason certainty or rule-condition weights.
+- Do not use `Branch(probability=...)` as public syntax.
+- Do not reuse `probability` for PyReason certainty, possibilistic uncertainty, SMT hard constraints, or rule-condition weights.
 - Do not let `Query` consume `Branch(probability=...)`; `Query` remains read-side projection.
+- Do not put possibility/probability transformation policy inside `Rule` or `Derivation` definitions.
+- Do not require users to learn engine-specific structural attachment points just to author a standard business rule template.
 
-Potential implementation migration:
+Potential implementation cleanup:
 
 ```text
 Body -> Branch
-Body.confidence -> Branch.probability
+Body.confidence -> removed from public syntax
+ProbLog branch probabilities -> SemanticsProfile / adapter-local extension
 ```
 
-Because there is no release compatibility requirement, the preferred public API can remove `Body` entirely. If an internal bridge is still useful during migration, `Body` should be kept as an internal alias or temporary compatibility shim only, not as documented public syntax.
+Because there is no release compatibility requirement, the preferred public API can remove `Body` entirely. If an internal bridge is still useful while cleaning call sites, `Body` should be kept as an internal alias or temporary shim only, not as documented public syntax.
 
 ## Execution Engine Placement
 
@@ -332,22 +405,25 @@ Recommended layering:
 
 ```text
 Derivation definition
-  id / version / where / head / definition-time engine_ext if needed
+  id / version / where / head as business logic
 
 Execution call
   engine / engine_options / profile
 
 Policy deployment
-  optional default execution profile
+  optional default SemanticsProfile
 ```
 
-If an execution profile abstraction is introduced:
+Legacy or internal `engine_ext` fields should be treated as migration targets, not as the preferred public rule contract. If an engine needs path-specific rule parameters, the profile should own those parameters through `rule_projection`.
+
+If a runtime profile abstraction is introduced, it should align with the uncertainty transmission design and be called `SemanticsProfile` rather than a narrower `ExecutionProfile`:
 
 ```python
-native_profile = ExecutionProfile(engine="native")
-pyreason_profile = ExecutionProfile(
+native_profile = SemanticsProfile(engine="native")
+pyreason_profile = SemanticsProfile(
     engine="pyreason",
     engine_options={"timesteps": 5},
+    uncertainty_projection={"possibilistic": "bound_as_certainty"},
 )
 
 fg.rules.evaluate(drv, profile=native_profile)
@@ -356,7 +432,7 @@ fg.rules.evaluate(drv, profile=native_profile)
 Priority model:
 
 ```text
-call-site engine/profile > policy default profile > system default native
+call-site engine/profile > policy default SemanticsProfile > system default native
 ```
 
 Since there is no release compatibility requirement, the public `Derivation(mode=...)` field should be removed or renamed to an explicitly weaker `default_engine` / `default_profile` only if a default-on-definition use case survives design review. The cleaner default is no engine field on `Derivation`.
@@ -386,7 +462,7 @@ policy = Policy(
             property=...,
         )
     ],
-    default_profile=ExecutionProfile(engine="native"),
+    default_profile=SemanticsProfile(engine="native"),
 )
 ```
 
@@ -536,7 +612,7 @@ Recommended next design work:
 
 1. Decide whether the public namespace should be `fg.rules.*` or `fg.rule.*`; this note uses plural `rules` because it owns a lifecycle, not only one rule object.
 2. Remove `mode` from public `Derivation` design, or rename it only if a default-profile use case is accepted.
-3. Define `ExecutionProfile` only after confirming repeated engine config is common enough; otherwise keep call-site `engine=...`.
+3. Define `SemanticsProfile` only after confirming repeated engine / transmission configuration is common enough; otherwise keep call-site `engine=...` plus explicit options.
 4. Reframe docs:
    - `Query` under read/projection.
    - `Rule` under reusable relation.
@@ -548,7 +624,7 @@ Recommended next design work:
 ## Open Risks
 
 - Naming risk: `Derivation` may continue to be confused with proof derivation. A product-level alias such as `Inference` or `Materialization` may be clearer, but changing the core class name may not be worth the churn.
-- Engine semantics risk: `engine_ext` is definition-time while `engine_options` is call-time; future docs must keep this distinction explicit.
+- Engine semantics risk: existing `engine_ext`-style fields can blur definition-time business logic with runtime adapter projection. Future docs should move public guidance toward `SemanticsProfile.rule_projection` and keep any remaining definition-time extension points explicitly internal or transitional.
 - Policy result risk: `valid` / `invalid` must be defined carefully. In a finite evidence-backed MVP, `valid` may mean "entailed by current engine over supplied premises," not full mathematical validity.
 - Evidence durability risk: policy-level verification may need long-term replay of evidence. Current engine `ProvenanceEnvelope` durability is weaker than native `SupportArtifact` sidecar durability.
 - Scope risk: ARC-style source-document fidelity and natural-language translation should not be implied unless explicitly designed.

@@ -90,6 +90,49 @@ Runtime:
   map outputs back into project-level records
 ```
 
+The same split also addresses scattered engine-specific rule parameters. Earlier designs considered attaching engine annotations directly to `Rule` / `Derivation` structure paths:
+
+```python
+Derivation(
+    id="drv.popular",
+    version="1.0.0",
+    where=[Branch([User(u), Pred("user:active", u)])],
+    head=User.popular(value="true"),
+    annotations=[
+        EngineAnnotation(
+            engine="problog",
+            target=Path.branch(0),
+            kind="probability",
+            value=0.9,
+        ),
+        EngineAnnotation(
+            engine="pyreason",
+            target=Path.body_atom(0, 1),
+            kind="interval_threshold",
+            value=(0.5, 1.0),
+        ),
+        EngineAnnotation(
+            engine="pyreason",
+            target=Path.head(0),
+            kind="interval",
+            value=(0.8, 0.9),
+        ),
+    ],
+)
+```
+
+That shape correctly identifies the attachment problem, but it makes rule definitions heavy. The preferred direction is:
+
+```text
+Standard Rule Template:
+  logical structure only
+
+SemanticsProfile:
+  path-targeted engine annotations and transmission functions
+```
+
+In other words, path-targeted annotations can exist as internal profile data, but the public rule definition should not carry ProbLog branch probability, PyReason body thresholds, PyReason head intervals, or timestep configuration.
+
 Under this split, new user-facing data should not need to say `probability`, `bound_lower`, or `bound_upper` just to satisfy a particular engine. Because the project is not online, those do not need to remain parallel public uncertainty write contracts. They should become runtime projection outputs or adapter-internal details.
 
 Storage placement: canonical raw uncertainty should live in the Annotation Store, not in `meta_rows`. A practical first shape is:
@@ -110,6 +153,39 @@ Phase 1 scope should stop at the data contract:
 - prove `AssertionRecordSet.where(meta=...)` can use them;
 - avoid changing ProbLog export, PyReason materialization, candidate confidence, or runtime projection behavior.
 - update examples and docs so new uncertainty authoring uses `raw_kind` / `bound`, not `probability`, `bound_lower`, or `bound_upper`.
+
+Concrete Phase 1 write shape:
+
+```python
+fg.data.write(
+    Risk.score,
+    asset_ref,
+    "risk_high",
+    meta={
+        "raw_kind": "possibilistic",
+        "bound": [0.35, 0.70],
+        "source": "expert_review",
+        "valid_from": "2026-01-01T00:00:00Z",
+    },
+)
+```
+
+Expected persistence after Phase 1:
+
+```text
+meta_rows:
+  raw_kind = "possibilistic"
+  bound = [0.35, 0.70]
+  source = "expert_review"
+  valid_from = "2026-01-01T00:00:00Z"
+
+annotation_rows:
+  shared/source/source = "expert_review"
+  shared/semantic/raw_kind = "possibilistic"
+  shared/semantic/bound = [0.35, 0.70]
+```
+
+`meta_rows` are intentionally kept in the first slice because SDK assertion views already use them for `AssertionRecordSet.where(meta=...)`, `.at(...)`, `.version(...)`, and review / retract selection ergonomics. Annotation rows carry the semantic copy used by audit and future engine projection.
 
 ## 4. Minimal Raw Kinds
 
@@ -146,6 +222,33 @@ Examples:
   - Engine view may emit `[L, U]` as predicate certainty / truth-compatible bound.
 
 The same numeric pair can have different semantics depending on `raw_kind`; the data contract must preserve that boundary.
+
+Phase 1 validation recommendation:
+
+```text
+raw_kind:
+  required when bound is present
+  str
+  allowed values: probabilistic | possibilistic
+
+bound:
+  required when raw_kind is present
+  JSON list, length = 2
+  values are numeric and not bool
+  0.0 <= lower <= upper <= 1.0
+```
+
+This makes `raw_kind` and `bound` a semantic pair. Allowing one without the other would reintroduce naked scores or untyped intervals.
+
+Degenerate deterministic values should stay a value-level convention, not a third top-level raw kind in Phase 1:
+
+```text
+true-like      -> raw_kind=<chosen lane>, bound=[1, 1]
+false-like     -> raw_kind=<chosen lane>, bound=[0, 0]
+exact score x  -> raw_kind=<chosen lane>, bound=[x, x]
+```
+
+The lane still matters. `bound=[1, 1]` under `probabilistic` means probability-one under the chosen data source semantics; under `possibilistic` it means fully possible / compatible. Consumers must not infer a universal deterministic logic from the pair alone.
 
 ## 6. Default Projection Direction
 
@@ -222,9 +325,15 @@ Semantics profile sketch:
 {
   "name": "pyreason_possibilistic_valid_time_v1",
   "engine": "pyreason",
+  "version": "1",
   "uncertainty_projection": {
-    "possibilistic": "bound_as_certainty",
-    "probabilistic": "probability_as_certainty",
+    "possibilistic": {
+      "policy": "bound_as_certainty"
+    },
+    "probabilistic": {
+      "policy": "probability_as_certainty",
+      "label": "heuristic"
+    },
     "fallback": "reject_unconfigured"
   },
   "temporal_projection": {
@@ -238,6 +347,85 @@ Semantics profile sketch:
   }
 }
 ```
+
+SemanticsProfile should be runtime/deployment configuration, not stored assertion data. Recommended fields:
+
+```text
+name
+engine
+version
+engine_options
+uncertainty_projection
+temporal_projection
+rule_projection
+output_readback
+fallback
+```
+
+Field intent:
+
+- `engine`: selected runtime adapter (`native`, `problog`, `pyreason`, etc.).
+- `engine_options`: direct adapter options such as timeout or timesteps.
+- `uncertainty_projection`: maps `raw_kind + bound` into engine-native input.
+- `temporal_projection`: maps business valid time into engine-native time coordinates.
+- `rule_projection`: optional adapter-specific rule-shape projections such as ProbLog branch weights or PyReason body/head intervals. This may use path-targeted entries internally, but must not become public `Branch(probability=...)` / `engine_ext=...` rule syntax.
+- `output_readback`: maps engine output back to candidate summaries, annotations, and business-time intervals.
+- `fallback`: global reject / warn / default behavior for unconfigured cases.
+
+Important separation:
+
+```text
+Rule / Derivation:
+  logical structure and materialization target
+
+Data:
+  raw_kind / bound / valid_from / valid_to
+
+SemanticsProfile:
+  how this run consumes raw data and rule structure for a selected engine
+```
+
+Possible path-targeted `rule_projection` sketch:
+
+```json
+{
+  "rule_projection": {
+    "problog": [
+      {
+        "target": "branch:0",
+        "kind": "branch_weight",
+        "value": 0.9
+      }
+    ],
+    "pyreason": [
+      {
+        "target": "body_atom:0:1",
+        "kind": "interval_threshold",
+        "value": [0.5, 1.0]
+      },
+      {
+        "target": "head:0",
+        "kind": "interval",
+        "value": [0.8, 0.9]
+      }
+    ]
+  }
+}
+```
+
+This keeps the structure-path idea available for engines that need it while preventing public business rules from accumulating engine-specific knobs.
+
+Runtime heaviness risk:
+
+`evaluate(...)` may become heavier if it must combine a view, raw uncertainty annotations, temporal projection, rule projection, and engine options every time. If this becomes material, introduce an inspection / preprocess step:
+
+```python
+projection = fg.rules.project(drv, profile=profile)
+projection.inspect()
+candidates = fg.rules.evaluate_projection(projection)
+```
+
+The first implementation should not add this API until profiling or user workflow pressure justifies it, but the design should avoid making projection results canonical stored facts.
 
 ## 8.1 PyReason Temporal Projection
 
@@ -253,6 +441,14 @@ Suggested projection:
 6. After inference, map derived facts at timestep `i` back to `[ti, t(i+1))`.
 
 This makes irregular business-time changes natural: timesteps advance when the set of relevant valid-time facts can change. The tradeoff is that `timestep_delay=1` means "next segment", not "one day" or "one hour". If fixed wall-clock duration is needed, the profile should declare a different mode such as `fixed_duration_bucket`.
+
+Open temporal design details:
+
+- A run horizon is required when the final segment would otherwise be open-ended.
+- Missing `valid_from` should either be rejected for temporal projection or mapped through an explicit profile default. Silent defaulting would make replay ambiguous.
+- `valid_to` should remain exclusive, matching current assertion view behavior.
+- Multiple input facts covering the same timestep should keep their separate assertion identity; temporal projection should not merge facts before engine materialization.
+- Readback should record enough profile metadata to explain why a derived fact is valid over a returned interval.
 
 ## 9. Documentation Action Items
 
@@ -272,9 +468,10 @@ If adopted, migrate the durable conclusions into:
 ## 10. Open Risks
 
 - The existing `meta.confidence` fallback in ProbLog export can still silently treat a compatibility confidence as probability. A future blueprint should decide whether to gate, warn, or keep it as legacy behavior.
-- `confidence_kind` currently allows `none|probability|certainty`; it is candidate-output-oriented and should not be overloaded as the stored raw uncertainty kind without a migration plan.
+- `confidence_kind` currently allows `none|probability|certainty`; it is candidate-output-oriented and should not be overloaded as the stored raw uncertainty kind.
 - A calibrated possibility-to-probability projection requires either domain-specific calibration artifacts or a policy registry. A named policy without calibration evidence is only a heuristic.
 - SMT projection needs its own engine adapter contract; this note only sketches the direction.
+- Phase 1 exact `where(meta={"bound": [...]})` filtering is useful for assertion selection but not enough for range queries. Range-aware uncertainty selection should be a separate design.
 
 ## 11. Compressed Principle
 
