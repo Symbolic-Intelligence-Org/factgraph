@@ -33,6 +33,7 @@ from kernel.sdk import (
     Identity,
     Pred,
     Rule,
+    SDKDSLError,
     SDKStore,
     SDKStoreError,
     vars,
@@ -171,13 +172,11 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.derivation")
 
     def test_multi_head_derivation_is_rejected_before_request_construction(self) -> None:
-        with self.assertRaises(SDKStoreError) as ctx:
-            _build_sdk().check_fact_overlay(
-                _multi_head_derivation(), {"$age": 30, "$region": "us"}, EvaluationOverlay()
-            )
+        with self.assertRaises(SDKDSLError) as ctx:
+            _multi_head_derivation()
 
-        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.derivation")
-        self.assertIn("exactly one plan", str(ctx.exception))
+        self.assertEqual(ctx.exception.path, "$.head")
+        self.assertIn("multi-head", str(ctx.exception))
 
     def test_binding_must_be_mapping(self) -> None:
         sdk = _build_sdk()

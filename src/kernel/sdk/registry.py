@@ -116,6 +116,7 @@ class SDKRegistry:
         payload = derivation.to_authoring_payload() if hasattr(derivation, "to_authoring_payload") else derivation
         if not isinstance(payload, dict):
             raise SDKRegistryError("derivation must be SDK Derivation object or authoring derivation payload dict")
+        _reject_multi_head_derivation_payload(payload)
         try:
             compiled = compile_authoring_derivation_v1(payload, schema_ir=schema_ir)
         except Exception as exc:
@@ -224,3 +225,8 @@ class SDKRegistry:
             return self._registry.read_derivation_spec(derivation_id, version)
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
+
+
+def _reject_multi_head_derivation_payload(payload: dict[str, Any]) -> None:
+    if isinstance(payload.get("head"), list):
+        raise SDKRegistryError("multi-head Derivation is not accepted in Track 1; use one Derivation per head")

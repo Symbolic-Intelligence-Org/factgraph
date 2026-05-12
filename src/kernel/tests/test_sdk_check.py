@@ -8,7 +8,7 @@ from unittest.mock import patch
 from kernel.application.capability_helpers import CapabilityHelperError, OriginPackageError
 from kernel.application.protocol import CheckResult
 from kernel.core.rules.rule_ir import RuleCompileError, RuleRegistry
-from kernel.sdk import Derivation, Entity, Field, Identity, Pred, Rule, SDKStore, SDKStoreError, vars
+from kernel.sdk import Derivation, Entity, Field, Identity, Pred, Rule, SDKDSLError, SDKStore, SDKStoreError, vars
 from kernel.sdk.store import _compiled_derivation_plan_to_application
 
 
@@ -150,13 +150,11 @@ class SDKCheckContractTests(unittest.TestCase):
                 self.assertEqual(ctx.exception.path, "$.check.binding")
 
     def test_multi_head_derivation_is_rejected_before_request_construction(self) -> None:
-        sdk = _build_sdk()
+        with self.assertRaises(SDKDSLError) as ctx:
+            _multi_head_derivation()
 
-        with self.assertRaises(SDKStoreError) as ctx:
-            sdk.check(_multi_head_derivation(), {})
-
-        self.assertEqual(ctx.exception.path, "$.check.derivation")
-        self.assertIn("exactly one plan", str(ctx.exception))
+        self.assertEqual(ctx.exception.path, "$.head")
+        self.assertIn("multi-head", str(ctx.exception))
 
     def test_capability_helper_error_remaps_to_sdk_store_error_with_cause(self) -> None:
         sdk = _build_sdk()

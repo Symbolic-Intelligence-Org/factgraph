@@ -245,6 +245,19 @@ class _SDKWriteManager:
         return self._sdk.edit(*args, **kwargs)
 
 
+class _SDKRulesManager:
+    """Read-only namespace manager for rule structure inspection."""
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.rules namespace is read-only")
+
+    def inspect(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.inspect_rule(*args, **kwargs)
+
+
 class _SDKEvalManager:
     """Read-only namespace manager for the `eval` taxonomy group.
 
@@ -430,6 +443,7 @@ class SDKStore:
         self._schema_manager = _SDKSchemaManager(self)
         self._read_manager = _SDKReadManager(self)
         self._write_manager = _SDKWriteManager(self)
+        self._rules_manager = _SDKRulesManager(self)
         self._eval_manager = _SDKEvalManager(self)
         self._what_if_manager = _SDKWhatIfManager(self)
         self._audit_manager = _SDKAuditManager(self)
@@ -517,6 +531,11 @@ class SDKStore:
     def write(self) -> _SDKWriteManager:
         """`write` taxonomy namespace exposing ``set`` / ``add`` / ``retract`` / ``edit``."""
         return self._write_manager
+
+    @property
+    def rules(self) -> _SDKRulesManager:
+        """`rules` taxonomy namespace exposing pure rule/derivation structure inspection."""
+        return self._rules_manager
 
     @property
     def eval(self) -> _SDKEvalManager:
@@ -1577,6 +1596,9 @@ class SDKStore:
             raise SDKStoreError("inspect_semantics(profile) expects SemanticsProfile")
         return inspect_semantics_profile(profile)
 
+    def inspect_rule(self, obj: Any) -> dict[str, Any]:
+        return _inspect_rule_or_derivation(obj)
+
     @staticmethod
     def _reject_shell_semantics(*, semantics: Any, semantics_profile: Any) -> None:
         if semantics is not _PROFILE_KWARG_UNSET:
@@ -2255,15 +2277,7 @@ def _expand_authoring_derivation_heads(payload: dict[str, Any]) -> list[dict[str
         return [dict(payload)]
     if not head:
         raise SDKStoreError("derivation head list must be non-empty", path="$.head")
-
-    expanded: list[dict[str, Any]] = []
-    for idx, head_item in enumerate(head):
-        if not isinstance(head_item, dict):
-            raise SDKStoreError("derivation head list item must be object", path=f"$.head[{idx}]")
-        item_payload = dict(payload)
-        item_payload["head"] = dict(head_item)
-        expanded.append(item_payload)
-    return expanded
+    raise SDKStoreError("multi-head Derivation is not accepted in Track 1; use one Derivation per head", path="$.head")
 
 
 def _authoring_derivation_payload_from_sdk_object(
@@ -2284,6 +2298,76 @@ def _authoring_derivation_payload_from_sdk_object(
     )
     normalized_payload, normalized_confidences = _normalize_authoring_derivation_payload(payload)
     return normalized_payload, normalized_confidences
+
+
+def _inspect_rule_or_derivation(obj: Any) -> dict[str, Any]:
+    from .dsl.rule import Derivation as SDKDerivation
+    from .dsl.rule import Rule as SDKRule
+
+    if isinstance(obj, SDKRule):
+        return {
+            "kind": "Rule",
+            "id": obj.id,
+            "version": obj.version,
+            "heads": [],
+            "branches": _inspect_where_branches(obj.where),
+        }
+    if isinstance(obj, SDKDerivation):
+        return {
+            "kind": "Derivation",
+            "id": obj.id,
+            "version": obj.version,
+            "heads": [head.to_authoring_head() for head in obj.heads],
+            "branches": _inspect_where_branches(obj.where),
+        }
+    raise SDKStoreError("rules.inspect(...) expects SDK Rule or Derivation")
+
+
+def _inspect_where_branches(where: Any) -> list[dict[str, Any]]:
+    if not isinstance(where, list) or not where:
+        raise SDKStoreError("rules.inspect(...) requires non-empty where")
+
+    if all(isinstance(item, Branch) for item in where):
+        raw_branches = [(item.id, list(item.atoms)) for item in where]
+    elif any(isinstance(item, Branch) for item in where):
+        raise SDKStoreError("where/branch cannot mix Branch(...) with bare branches")
+    elif _where_items_are_atoms(where):
+        raw_branches = [(None, list(where))]
+    else:
+        raw_branches = [(None, list(branch)) for branch in where if isinstance(branch, list)]
+        if len(raw_branches) != len(where) or not raw_branches:
+            raise SDKStoreError("rules.inspect(...) where must be atoms or branch lists")
+
+    out: list[dict[str, Any]] = []
+    seen_ids: dict[str, int] = {}
+    for idx, (explicit_id, atoms) in enumerate(raw_branches):
+        fallback_id = f"b{idx}"
+        branch_id = explicit_id if explicit_id is not None else fallback_id
+        if branch_id in seen_ids:
+            raise SDKStoreError(f"duplicate Branch.id {branch_id!r} in inspected where")
+        seen_ids[branch_id] = idx
+        out.append(
+            {
+                "id": branch_id,
+                "fallback_id": fallback_id,
+                "is_explicit_id": explicit_id is not None,
+                "index": idx,
+                "atom_count": len(atoms),
+                "atoms": _lower_inspect_atoms(atoms),
+                "atom_ids": [f"{fallback_id}.a{atom_idx}" for atom_idx, _atom in enumerate(atoms)],
+            }
+        )
+    return out
+
+
+def _where_items_are_atoms(where: list[Any]) -> bool:
+    return bool(where) and all(not isinstance(item, list) and not isinstance(item, Branch) for item in where)
+
+
+def _lower_inspect_atoms(atoms: list[Any]) -> list[Any]:
+    from .dsl.expr import lower_where
+
+    return list(lower_where(atoms))
 
 
 def _normalize_authoring_derivation_payload(

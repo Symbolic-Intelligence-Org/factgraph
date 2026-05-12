@@ -117,7 +117,10 @@ class Derivation:
             raise SDKDSLError("Derivation.where must be non-empty list")
         _validate_optional_description(self.description, owner="Derivation")
         _validate_tags(self.tags, owner="Derivation")
-        object.__setattr__(self, "_heads", _normalize_derivation_head_items(self.head))
+        heads = _normalize_derivation_head_items(self.head)
+        if len(heads) > 1:
+            raise SDKDSLError("Derivation does not accept multi-head definitions in Track 1", path="$.head")
+        object.__setattr__(self, "_heads", heads)
 
     @property
     def heads(self) -> list[HeadCall]:
