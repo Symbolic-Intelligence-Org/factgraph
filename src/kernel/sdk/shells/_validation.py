@@ -20,7 +20,7 @@ Helper inventory:
 Input validators (pure type / shape guards):
 
 - ``validate_derivation`` — G1 + G4 + G2 Fact Overlay (rejects non-SDK
-  ``Derivation``).
+  ``Inference``).
 - ``validate_binding`` — G1 + G4 + G2 Fact Overlay (validates
   ``$``-prefixed variable name mapping).
 - ``validate_evaluation_overlay`` — G2 (rejects non-``EvaluationOverlay``
@@ -55,12 +55,12 @@ from kernel.application.protocol import EvaluationOverlay
 from kernel.core.rules.rule_ir import RuleCompileError
 from kernel.core.store._support import SupportArtifact
 
-from ..dsl import Derivation, Rule
+from ..dsl import Inference, Rule
 from ..errors import SDKStoreError
 
 
 def validate_derivation(derivation: Any, *, path: str) -> None:
-    """Reject anything that is not an SDK ``Derivation`` instance.
+    """Reject anything that is not an SDK ``Inference`` instance.
 
     The ``path`` argument is the ``SDKStoreError.path`` boundary identifier
     that the calling shell wants attached, e.g. ``"$.check.derivation"`` or
@@ -68,8 +68,8 @@ def validate_derivation(derivation: Any, *, path: str) -> None:
     callers — only the path differs.
     """
 
-    if not isinstance(derivation, Derivation):
-        raise SDKStoreError("derivation must be SDK Derivation", path=path)
+    if not isinstance(derivation, Inference):
+        raise SDKStoreError("derivation must be SDK Inference", path=path)
 
 
 def validate_binding(binding: Any, *, path: str) -> dict[str, Any]:

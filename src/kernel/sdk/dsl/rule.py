@@ -96,7 +96,7 @@ class Rule:
 
 
 @dataclass(frozen=True)
-class Derivation:
+class Inference:
     id: str
     version: str
     where: list[Any]
@@ -110,16 +110,16 @@ class Derivation:
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not self.id:
-            raise SDKDSLError("Derivation.id must be non-empty string")
+            raise SDKDSLError("Inference.id must be non-empty string")
         if not isinstance(self.version, str) or not self.version:
-            raise SDKDSLError("Derivation.version must be non-empty string")
+            raise SDKDSLError("Inference.version must be non-empty string")
         if not isinstance(self.where, list) or not self.where:
-            raise SDKDSLError("Derivation.where must be non-empty list")
-        _validate_optional_description(self.description, owner="Derivation")
-        _validate_tags(self.tags, owner="Derivation")
+            raise SDKDSLError("Inference.where must be non-empty list")
+        _validate_optional_description(self.description, owner="Inference")
+        _validate_tags(self.tags, owner="Inference")
         heads = _normalize_derivation_head_items(self.head)
         if len(heads) > 1:
-            raise SDKDSLError("Derivation does not accept multi-head definitions in Track 1", path="$.head")
+            raise SDKDSLError("Inference does not accept multi-head definitions in Track 1", path="$.head")
         object.__setattr__(self, "_heads", heads)
 
     @property
@@ -350,15 +350,15 @@ def _normalize_derivation_head_items(head: Any) -> tuple[HeadCall, ...]:
     else:
         head_items = [head]
     if not head_items:
-        raise SDKDSLError("Derivation.head must be non-empty when provided", path="$.head")
+        raise SDKDSLError("Inference.head must be non-empty when provided", path="$.head")
 
     out: list[HeadCall] = []
     for idx, item in enumerate(head_items):
         path = f"$.head[{idx}]" if isinstance(head, list) else "$.head"
         if not isinstance(item, HeadCall):
-            raise SDKDSLError("Derivation.head item must be a DSL head call", path=path)
+            raise SDKDSLError("Inference.head item must be a DSL head call", path=path)
         if item.callee_kind not in {"pred_ref", "entity_type"}:
-            raise SDKDSLError("Derivation.head item must be Entity(...) or Entity.field(...)", path=path)
+            raise SDKDSLError("Inference.head item must be Entity(...) or Entity.field(...)", path=path)
         out.append(item)
     return tuple(out)
 

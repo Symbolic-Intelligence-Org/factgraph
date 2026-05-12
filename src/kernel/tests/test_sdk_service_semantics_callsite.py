@@ -12,7 +12,7 @@ from kernel.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
 from kernel.adapters.pyreason.session import PyReasonSession
 from kernel.core.evidence.write_protocol import set_field
 from kernel.core.semantics import SemanticsProfile
-from kernel.sdk.dsl import Branch, Derivation, Pred, vars as sdk_vars
+from kernel.sdk.dsl import Branch, Inference, Pred, vars as sdk_vars
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStore, SDKStoreError
 from service.runtime_v1 import (
@@ -83,9 +83,9 @@ def _make_sdk() -> SDKStore:
     return sdk
 
 
-def _problog_derivation() -> Derivation:
+def _problog_derivation() -> Inference:
     with sdk_vars("u", "tag") as (u, tag):
-        return Derivation(
+        return Inference(
             id="drv.e.problog_tag",
             version="v1",
             where=[Pred("user:tag_seed", u, tag)],
@@ -94,9 +94,9 @@ def _problog_derivation() -> Derivation:
         )
 
 
-def _pyreason_derivation() -> Derivation:
+def _pyreason_derivation() -> Inference:
     with sdk_vars("u", "name", "risk") as (u, name, risk):
-        return Derivation(
+        return Inference(
             id="drv.e.pyreason_popular",
             version="v1",
             where=[Branch([Pred("user:name", u, name), Pred("user:risk_score", u, risk)])],

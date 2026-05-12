@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from kernel.authoring.rule_compile import AuthoringRuleCompileError, compile_authoring_rule_v1
-from kernel.sdk import Branch, Derivation, Pred, Rule, SDKRegistry, SDKStore, vars as sdk_vars
+from kernel.sdk import Branch, Inference, Pred, Rule, SDKRegistry, SDKStore, vars as sdk_vars
 from kernel.sdk.dsl.errors import SDKDSLError
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStoreError
@@ -35,9 +35,9 @@ def _rule_with_branches() -> Rule:
         )
 
 
-def _derivation_with_branches() -> Derivation:
+def _derivation_with_branches() -> Inference:
     with sdk_vars("u", "tag") as (u, tag):
-        return Derivation(
+        return Inference(
             id="drv.track1.user_tag",
             version="v1",
             where=[
@@ -49,9 +49,9 @@ def _derivation_with_branches() -> Derivation:
         )
 
 
-def _single_head_derivation() -> Derivation:
+def _single_head_derivation() -> Inference:
     with sdk_vars("u", "tag") as (u, tag):
-        return Derivation(
+        return Inference(
             id="drv.track1.single",
             version="v1",
             where=[Pred("user:tag_seed", u, tag)],
@@ -60,9 +60,9 @@ def _single_head_derivation() -> Derivation:
         )
 
 
-def _multi_head_derivation() -> Derivation:
+def _multi_head_derivation() -> Inference:
     with sdk_vars("u", "tag", "region") as (u, tag, region):
-        return Derivation(
+        return Inference(
             id="drv.track1.multi",
             version="v1",
             where=[Pred("user:tag_seed", u, tag)],
@@ -70,9 +70,9 @@ def _multi_head_derivation() -> Derivation:
         )
 
 
-def _multi_head_derivation_bypass() -> Derivation:
+def _multi_head_derivation_bypass() -> Inference:
     with sdk_vars("u", "tag", "region") as (u, tag, region):
-        derivation = Derivation(
+        derivation = Inference(
             id="drv.track1.multi_bypass",
             version="v1",
             where=[Pred("user:tag_seed", u, tag)],
@@ -155,7 +155,7 @@ class RuleInspectTests(unittest.TestCase):
 
         inspected = sdk.rules.inspect(_derivation_with_branches())
 
-        self.assertEqual(inspected["kind"], "Derivation")
+        self.assertEqual(inspected["kind"], "Inference")
         self.assertEqual(inspected["id"], "drv.track1.user_tag")
         self.assertEqual(inspected["branches"][0]["id"], "seed_path")
         self.assertEqual(inspected["branches"][1]["id"], "b1")

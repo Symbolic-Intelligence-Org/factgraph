@@ -11,7 +11,7 @@ from kernel.authoring.derivation_compile import (
     compile_authoring_derivation_v1,
 )
 from kernel.core.store.types import EngineExtBase
-from kernel.sdk import Branch, Derivation, Pred, Rule
+from kernel.sdk import Branch, Inference, Pred, Rule
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStore
 from service.runtime_v1 import (
@@ -58,7 +58,7 @@ class SDKEngineExtSurfaceTests(unittest.TestCase):
         self.assertNotIn("engine_ext", {field.name for field in fields(Rule)})
 
     def test_derivation_dataclass_has_no_public_engine_ext_field(self) -> None:
-        self.assertNotIn("engine_ext", {field.name for field in fields(Derivation)})
+        self.assertNotIn("engine_ext", {field.name for field in fields(Inference)})
 
     def test_rule_constructor_rejects_engine_ext_keyword(self) -> None:
         with self.assertRaises(TypeError):
@@ -72,7 +72,7 @@ class SDKEngineExtSurfaceTests(unittest.TestCase):
 
     def test_derivation_constructor_rejects_engine_ext_keyword(self) -> None:
         with self.assertRaises(TypeError):
-            Derivation(
+            Inference(
                 id="drv.a3.user_tag",
                 version="v1",
                 where=[Pred("user:tag_seed", "$u", "$tag")],
@@ -82,7 +82,7 @@ class SDKEngineExtSurfaceTests(unittest.TestCase):
             )
 
     def test_authoring_payload_emits_no_engine_ext(self) -> None:
-        derivation = Derivation(
+        derivation = Inference(
             id="drv.a3.user_tag",
             version="v1",
             where=[Branch([Pred("user:tag_seed", "$u", "$tag")])],

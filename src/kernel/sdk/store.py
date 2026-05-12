@@ -654,10 +654,10 @@ class SDKStore:
         semantics: Any = _PROFILE_KWARG_UNSET,
         semantics_profile: Any = _PROFILE_KWARG_UNSET,
     ) -> "CheckResult":
-        """Check one SDK ``Derivation`` against a concrete binding.
+        """Check one SDK ``Inference`` against a concrete binding.
 
         Args:
-            derivation: SDK ``Derivation`` authoring object. ``Rule`` and
+            derivation: SDK ``Inference`` authoring object. ``Rule`` and
                 application ``CompiledDerivationPlan`` inputs are rejected at
                 the SDK boundary.
             binding: Mapping of ``$``-prefixed variable names to Python
@@ -692,10 +692,10 @@ class SDKStore:
         semantics: Any = _PROFILE_KWARG_UNSET,
         semantics_profile: Any = _PROFILE_KWARG_UNSET,
     ) -> "DiagnoseResult":
-        """Diagnose one SDK ``Derivation`` against a concrete binding.
+        """Diagnose one SDK ``Inference`` against a concrete binding.
 
         Args:
-            derivation: SDK ``Derivation`` authoring object. ``Rule`` and
+            derivation: SDK ``Inference`` authoring object. ``Rule`` and
                 application ``CompiledDerivationPlan`` inputs are rejected at
                 the SDK boundary.
             binding: Mapping of ``$``-prefixed variable names to Python
@@ -729,10 +729,10 @@ class SDKStore:
         semantics: Any = _PROFILE_KWARG_UNSET,
         semantics_profile: Any = _PROFILE_KWARG_UNSET,
     ) -> "WhyNotUniverseResult":
-        """Run Why-not for one SDK ``Derivation`` against an explicit candidate universe.
+        """Run Why-not for one SDK ``Inference`` against an explicit candidate universe.
 
         Args:
-            derivation: SDK ``Derivation`` authoring object. ``Rule`` and
+            derivation: SDK ``Inference`` authoring object. ``Rule`` and
                 application ``CompiledDerivationPlan`` inputs are rejected at
                 the SDK boundary (per §5.1 lock).
             candidates: Sequence of candidate rows. Each row is either a
@@ -777,10 +777,10 @@ class SDKStore:
         semantics: Any = _PROFILE_KWARG_UNSET,
         semantics_profile: Any = _PROFILE_KWARG_UNSET,
     ) -> "FactOverlayCheckResult":
-        """Run Fact Overlay Check for one SDK ``Derivation`` + binding + overlay.
+        """Run Fact Overlay Check for one SDK ``Inference`` + binding + overlay.
 
         Args:
-            derivation: SDK ``Derivation`` authoring object. ``Rule`` and
+            derivation: SDK ``Inference`` authoring object. ``Rule`` and
                 application ``CompiledDerivationPlan`` inputs are rejected
                 at the SDK boundary (per §5.1 lock).
             binding: Mapping of ``$``-prefixed variable names to Python
@@ -1494,7 +1494,7 @@ class SDKStore:
     ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
         del derivation, row_format, read_policy, return_display_meta, registry
         raise SDKStoreError(
-            "Derivation is not supported by run(); use sdk.evaluate() instead",
+            "Inference is not supported by run(); use sdk.evaluate() instead",
             code=QUERY_INVALID_ROW_FORMAT,
             path="$.run.obj",
         )
@@ -1604,7 +1604,7 @@ class SDKStore:
         raise SDKStoreError("inspect_semantics(profile) expects SemanticsProfile or SDK public semantics")
 
     def inspect_rule(self, obj: Any) -> dict[str, Any]:
-        return _inspect_rule_or_derivation(obj)
+        return _inspect_rule_or_inference(obj)
 
     @staticmethod
     def _reject_shell_semantics(*, semantics: Any, semantics_profile: Any) -> None:
@@ -1678,7 +1678,7 @@ class SDKStore:
                 "evaluate_compiled() requires SemanticsProfile, not ProbLogSemantics/PyReasonSemantics"
             )
         if derivation is None or not hasattr(derivation, "where"):
-            raise SDKStoreError("SDK public semantics require SDK Rule or Derivation object input")
+            raise SDKStoreError("SDK public semantics require SDK Rule or Inference object input")
         return (engine, _lower_public_semantics(raw_semantics, derivation=derivation))
 
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
@@ -1699,7 +1699,7 @@ class SDKStore:
         raw_semantics = kwargs.pop("semantics", None)
         if args and isinstance(args[0], str):
             raise SDKStoreError(
-                "string derivation DSL is not supported in SDK v1; use Derivation object or structured derivation dict"
+                "string derivation DSL is not supported in SDK v1; use Inference object or structured derivation dict"
             )
         if args and hasattr(args[0], "to_authoring_payload"):
             derivation = args[0]
@@ -1956,7 +1956,7 @@ class SDKStore:
             payload, body_confidences = _normalize_authoring_derivation_payload(payload)
         else:
             raise SDKStoreError(
-                "derivation must be SDK Derivation object, compiled derivation dict, or authoring derivation payload dict"
+                "derivation must be SDK Inference object, compiled derivation dict, or authoring derivation payload dict"
             )
         payloads = _expand_authoring_derivation_heads(payload)
         try:
@@ -2348,7 +2348,7 @@ def _expand_authoring_derivation_heads(payload: dict[str, Any]) -> list[dict[str
         return [dict(payload)]
     if not head:
         raise SDKStoreError("derivation head list must be non-empty", path="$.head")
-    raise SDKStoreError("multi-head Derivation is not accepted in Track 1; use one Derivation per head", path="$.head")
+    raise SDKStoreError("multi-head Inference is not accepted in Track 1; use one Inference per head", path="$.head")
 
 
 def _authoring_derivation_payload_from_sdk_object(
@@ -2500,8 +2500,8 @@ def _default_semantics_name(derivation: Any, *, engine: str) -> str:
     return engine
 
 
-def _inspect_rule_or_derivation(obj: Any) -> dict[str, Any]:
-    from .dsl.rule import Derivation as SDKDerivation
+def _inspect_rule_or_inference(obj: Any) -> dict[str, Any]:
+    from .dsl.rule import Inference as SDKInference
     from .dsl.rule import Rule as SDKRule
 
     if isinstance(obj, SDKRule):
@@ -2512,15 +2512,15 @@ def _inspect_rule_or_derivation(obj: Any) -> dict[str, Any]:
             "heads": [],
             "branches": _inspect_where_branches(obj.where),
         }
-    if isinstance(obj, SDKDerivation):
+    if isinstance(obj, SDKInference):
         return {
-            "kind": "Derivation",
+            "kind": "Inference",
             "id": obj.id,
             "version": obj.version,
             "heads": [head.to_authoring_head() for head in obj.heads],
             "branches": _inspect_where_branches(obj.where),
         }
-    raise SDKStoreError("rules.inspect(...) expects SDK Rule or Derivation")
+    raise SDKStoreError("rules.inspect(...) expects SDK Rule or Inference")
 
 
 def _inspect_where_branches(where: Any) -> list[dict[str, Any]]:
@@ -2896,10 +2896,10 @@ def _is_derivation_run_object(obj: Any) -> bool:
     if isinstance(obj, dict):
         return any(key in obj for key in ("derivation_id", "target_pred_id", "head"))
     try:
-        from .dsl import Derivation
+        from .dsl import Inference
     except Exception:
         return False
-    return isinstance(obj, Derivation)
+    return isinstance(obj, Inference)
 
 
 # Post-L SDK ergonomics redesign (locked at §5.3 / §5.7) — `FactGraph` is

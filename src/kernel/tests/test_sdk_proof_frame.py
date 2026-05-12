@@ -23,7 +23,7 @@ from kernel.application.protocol import (
 from kernel.application.protocol.schema_runtime import FieldPath
 from kernel.core.store._support import SupportArtifact
 from kernel.sdk import (
-    Derivation,
+    Inference,
     Entity,
     Field,
     Identity,
@@ -50,9 +50,9 @@ def _seed_person(sdk: SDKStore, *, name: str, age: int, region: str) -> str:
     return ref
 
 
-def _age_derivation() -> Derivation:
+def _age_derivation() -> Inference:
     with vars("p", "age") as (p, age):
-        return Derivation(
+        return Inference(
             id="sdk.recheck_proof_frame.age",
             version="v1",
             where=[Person(p), p.age == age],

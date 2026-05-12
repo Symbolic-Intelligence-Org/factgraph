@@ -10,7 +10,7 @@ import kernel.application  # noqa: F401
 from kernel.adapters.problog.rule_ext import ProbLogRuleExt, resolve_problog_engine_ext
 from kernel.core.evidence.write_protocol import set_field
 from kernel.core.semantics import SemanticsProfile
-from kernel.sdk.dsl import Derivation, Pred, vars as sdk_vars
+from kernel.sdk.dsl import Inference, Pred, vars as sdk_vars
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStore
 
@@ -172,9 +172,9 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
         )
         return sdk
 
-    def _make_derivation(self) -> Derivation:
+    def _make_derivation(self) -> Inference:
         with sdk_vars("u", "tag") as (u, tag):
-            return Derivation(
+            return Inference(
                 id="drv.c.problog_tag",
                 version="v1",
                 where=[Pred("user:tag_seed", u, tag)],

@@ -10,7 +10,7 @@ import unittest
 from kernel.core.evidence.write_protocol import set_field
 from kernel.core.schema.schema_ir import schema_digest
 from kernel.core.semantics import SemanticsProfile
-from kernel.sdk import Branch, Derivation, FactGraph, Pred, Rule, SDKStore, vars as sdk_vars
+from kernel.sdk import Branch, FactGraph, Pred, Rule, SDKStore, vars as sdk_vars
 from kernel.sdk.schema import Entity, Field, Identity
 
 
@@ -58,17 +58,6 @@ def _rule() -> Rule:
             select=[u, tag],
             where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
             expose=True,
-        )
-
-
-def _derivation() -> Derivation:
-    with sdk_vars("u", "tag") as (u, tag):
-        return Derivation(
-            id="drv.public_inference.tag",
-            version="v1",
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
-            target="user:tag",
-            head_vars=[u, tag],
         )
 
 

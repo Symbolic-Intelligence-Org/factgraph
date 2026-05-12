@@ -15,7 +15,7 @@ from kernel.adapters.pyreason.where_compile import compile_where_ir_to_pyreason
 from kernel.core.evidence.write_protocol import set_field
 from kernel.core.semantics import SemanticsProfile
 from kernel.core.store.types import EngineExtBase
-from kernel.sdk import Branch, Derivation, Pred, SDKStore, vars as sdk_vars
+from kernel.sdk import Branch, Inference, Pred, SDKStore, vars as sdk_vars
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStoreError, _lower_public_semantics
 
@@ -67,9 +67,9 @@ def _make_sdk() -> SDKStore:
     return sdk
 
 
-def _two_branch_derivation() -> Derivation:
+def _two_branch_derivation() -> Inference:
     with sdk_vars("u", "name", "risk") as (u, name, risk):
-        return Derivation(
+        return Inference(
             id="drv.track3post.pyreason_branch_bounds",
             version="v1",
             where=[
@@ -81,9 +81,9 @@ def _two_branch_derivation() -> Derivation:
         )
 
 
-def _single_branch_derivation() -> Derivation:
+def _single_branch_derivation() -> Inference:
     with sdk_vars("u", "name") as (u, name):
-        return Derivation(
+        return Inference(
             id="drv.track3post.pyreason_single",
             version="v1",
             where=[Branch([Pred("user:name", u, name)])],

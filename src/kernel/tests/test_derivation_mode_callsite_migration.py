@@ -1,4 +1,4 @@
-"""Red-baseline tests for Track 3 / A1 Derivation.mode decomposition."""
+"""Red-baseline tests for Track 3 / A1 Inference.mode decomposition."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from kernel.authoring.derivation_compile import (
     compile_authoring_derivation_v1,
 )
 from kernel.core.store._support import PROBLOG_PROVENANCE_KIND
-from kernel.sdk.dsl import Derivation, Pred, vars as sdk_vars
+from kernel.sdk.dsl import Inference, Pred, vars as sdk_vars
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStore
 from service.runtime_v1 import (
@@ -53,12 +53,12 @@ def _runtime_derivation_payload() -> dict[str, object]:
 
 class SDKDerivationModeSurfaceTests(unittest.TestCase):
     def test_derivation_dataclass_has_no_public_mode_field(self) -> None:
-        self.assertNotIn("mode", {field.name for field in fields(Derivation)})
+        self.assertNotIn("mode", {field.name for field in fields(Inference)})
 
     def test_derivation_constructor_rejects_mode_keyword(self) -> None:
         with sdk_vars("u", "tag") as (u, tag):
             with self.assertRaises(TypeError):
-                Derivation(
+                Inference(
                     id="drv.a1.sdk_user_tag",
                     version="v1",
                     where=[Pred("user:tag_seed", u, tag)],
@@ -69,7 +69,7 @@ class SDKDerivationModeSurfaceTests(unittest.TestCase):
 
     def test_derivation_payload_emits_no_definition_time_mode(self) -> None:
         with sdk_vars("u", "tag") as (u, tag):
-            derivation = Derivation(
+            derivation = Inference(
                 id="drv.a1.sdk_user_tag",
                 version="v1",
                 where=[Pred("user:tag_seed", u, tag)],

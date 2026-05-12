@@ -15,7 +15,7 @@ from kernel.core.evidence.write_protocol import set_field
 from kernel.core.store._support import PYREASON_PROVENANCE_KIND
 from kernel.core.store.ledger import Claim
 from kernel.sdk.compile import compile_schema_from_classes
-from kernel.sdk.dsl import Derivation, Pred, vars as sdk_vars
+from kernel.sdk.dsl import Inference, Pred, vars as sdk_vars
 from kernel.sdk.schema import Entity, Field, Identity, Relationship
 from kernel.sdk.store import SDKStore
 
@@ -101,9 +101,9 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         )
         return sdk
 
-    def _make_derivation(self, *, where=None) -> Derivation:
+    def _make_derivation(self, *, where=None) -> Inference:
         with sdk_vars("u", "name") as (u, name):
-            return Derivation(
+            return Inference(
                 id="drv.pyreason_popular",
                 version="v1",
                 where=where if where is not None else [Pred("user:name", u, name)],

@@ -27,7 +27,7 @@ from kernel.application.protocol import (
 )
 from kernel.core.rules.rule_ir import RuleCompileError
 from kernel.sdk import (
-    Derivation,
+    Inference,
     Entity,
     Field,
     Identity,
@@ -52,9 +52,9 @@ class Person(Entity):
     age: int = Field(cardinality="single")
 
 
-def _age_derivation() -> Derivation:
+def _age_derivation() -> Inference:
     with vars("p", "age") as (p, age):
-        return Derivation(
+        return Inference(
             id="sdk.validation.age",
             version="v1",
             where=[Person(p), p.age == age],
@@ -70,7 +70,7 @@ class ValidateDerivationTests(unittest.TestCase):
         with self.assertRaises(SDKStoreError) as ctx:
             validate_derivation({"not": "derivation"}, path="$.diagnose.derivation")
         self.assertEqual(ctx.exception.path, "$.diagnose.derivation")
-        self.assertIn("derivation must be SDK Derivation", str(ctx.exception))
+        self.assertIn("derivation must be SDK Inference", str(ctx.exception))
 
     def test_rejects_none(self) -> None:
         with self.assertRaises(SDKStoreError) as ctx:

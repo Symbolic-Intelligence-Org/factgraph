@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 
 from kernel.adapters.souffle.package import ExportOptions
-from kernel.sdk import Derivation, Entity, Field, Identity, Query, SDKStore, vars as sdk_vars
+from kernel.sdk import Inference, Entity, Field, Identity, Query, SDKStore, vars as sdk_vars
 
 
 class Country(Entity):
@@ -62,7 +62,7 @@ class V01OnboardingJourneyTests(unittest.TestCase):
         self.assertEqual(rows[0]["name"], "Alice")
 
         with sdk_vars("u", "loc", "derived") as (u, loc, derived):
-            derivation = Derivation(
+            derivation = Inference(
                 id="journey.derived_tag",
                 version="1.0.0",
                 where=[User(u), u.locale == loc, u.tag == "admin", derived == "audited"],

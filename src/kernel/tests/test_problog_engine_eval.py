@@ -13,7 +13,7 @@ from kernel.core.store._support import PROBLOG_PROVENANCE_KIND
 from kernel.core.store.runtime import get_engine_evaluator
 from kernel.core.store.types import EngineExtBase
 from kernel.core.evidence.write_protocol import set_field
-from kernel.sdk.dsl import Derivation, Pred, vars as sdk_vars
+from kernel.sdk.dsl import Inference, Pred, vars as sdk_vars
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStore
 
@@ -50,9 +50,9 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         )
         return sdk
 
-    def _make_derivation(self) -> Derivation:
+    def _make_derivation(self) -> Inference:
         with sdk_vars("u", "tag") as (u, tag):
-            return Derivation(
+            return Inference(
                 id="drv.problog_tag",
                 version="v1",
                 where=[Pred("user:tag_seed", u, tag)],

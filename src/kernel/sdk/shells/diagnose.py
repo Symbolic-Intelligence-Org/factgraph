@@ -9,7 +9,7 @@ Public surface contract per blueprint §5 locks:
 - Method:      ``SDKStore.diagnose(...)`` (instance method; not a free function
                in ``kernel.sdk.__all__`` — see §5.4 lock).
 - Signature:   ``diagnose(derivation, binding, *, engine="native", registry=None)``
-               (see §5.7 lock; ``derivation`` is SDK ``Derivation`` only,
+               (see §5.7 lock; ``derivation`` is SDK ``Inference`` only,
                ``binding`` is ``Mapping[str, Any]`` with ``$``-prefixed
                variable-name string keys).
 - Return:      ``DiagnoseResult`` (raw application protocol DTO; documented
@@ -55,7 +55,7 @@ def sdk_diagnose(
     engine: str = "native",
     registry: Any = None,
 ) -> DiagnoseResult:
-    """Run Diagnose for a single SDK ``Derivation`` and binding mapping.
+    """Run Diagnose for a single SDK ``Inference`` and binding mapping.
 
     Returns the application ``DiagnoseResult`` DTO directly. The SDK shell
     keeps Diagnose independent from Check and does not import walker helpers.

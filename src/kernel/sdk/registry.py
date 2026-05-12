@@ -115,7 +115,7 @@ class SDKRegistry:
     def register_derivation(self, derivation: Any, *, schema_ir: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = derivation.to_authoring_payload() if hasattr(derivation, "to_authoring_payload") else derivation
         if not isinstance(payload, dict):
-            raise SDKRegistryError("derivation must be SDK Derivation object or authoring derivation payload dict")
+            raise SDKRegistryError("derivation must be SDK Inference object or authoring derivation payload dict")
         _reject_multi_head_derivation_payload(payload)
         try:
             compiled = compile_authoring_derivation_v1(payload, schema_ir=schema_ir)
@@ -229,4 +229,4 @@ class SDKRegistry:
 
 def _reject_multi_head_derivation_payload(payload: dict[str, Any]) -> None:
     if isinstance(payload.get("head"), list):
-        raise SDKRegistryError("multi-head Derivation is not accepted in Track 1; use one Derivation per head")
+        raise SDKRegistryError("multi-head Inference is not accepted in Track 1; use one Inference per head")

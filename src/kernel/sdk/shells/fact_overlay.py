@@ -13,7 +13,7 @@ verification round polish landed 2026-05-08):
                and G1 + G4 precedent).
 - Signature:   ``check_fact_overlay(derivation, binding, overlay, *,
                engine="native", registry=None)`` (see §5.1 lock;
-               ``derivation`` is SDK ``Derivation`` only, ``binding`` is a
+               ``derivation`` is SDK ``Inference`` only, ``binding`` is a
                ``$``-prefixed mapping validated through the shared SDK
                validators, and ``overlay`` is a raw ``EvaluationOverlay``
                protocol DTO — the SDK rejects ``tuple[FactValueOverride,
@@ -77,7 +77,7 @@ def sdk_fact_overlay_check(
     engine: str = "native",
     registry: Any = None,
 ) -> FactOverlayCheckResult:
-    """Run Fact Overlay Check for one SDK ``Derivation`` + binding + overlay.
+    """Run Fact Overlay Check for one SDK ``Inference`` + binding + overlay.
 
     Returns the application ``FactOverlayCheckResult`` DTO directly. The
     SDK shell does not import sibling SDK shells; the runtime

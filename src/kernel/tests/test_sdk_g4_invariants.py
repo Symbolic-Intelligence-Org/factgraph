@@ -104,7 +104,7 @@ class SDKG4InvariantTests(unittest.TestCase):
         """§5.7 + §6 lock: ``SDKStore.why_not`` docstring records boundary contract."""
         why_not_doc = SDKStore.why_not.__doc__ or ""
 
-        self.assertIn("Derivation", why_not_doc)
+        self.assertIn("Inference", why_not_doc)
         self.assertIn("WhyNotUniverseResult", why_not_doc)
         self.assertIn("SDKStoreError", why_not_doc)
         self.assertIn("candidate", why_not_doc.lower())

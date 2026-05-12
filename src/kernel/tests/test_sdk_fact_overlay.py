@@ -27,7 +27,7 @@ from kernel.application.protocol import (
 from kernel.application.protocol.schema_runtime import FieldPath
 from kernel.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from kernel.sdk import (
-    Derivation,
+    Inference,
     Entity,
     Field,
     Identity,
@@ -58,9 +58,9 @@ def _seed_person(sdk: SDKStore, *, name: str, age: int, region: str) -> str:
     return ref
 
 
-def _age_derivation() -> Derivation:
+def _age_derivation() -> Inference:
     with vars("p", "age") as (p, age):
-        return Derivation(
+        return Inference(
             id="sdk.check_fact_overlay.age",
             version="v1",
             where=[Person(p), p.age == age],
@@ -68,9 +68,9 @@ def _age_derivation() -> Derivation:
         )
 
 
-def _multi_head_derivation() -> Derivation:
+def _multi_head_derivation() -> Inference:
     with vars("p", "age", "region") as (p, age, region):
-        return Derivation(
+        return Inference(
             id="sdk.check_fact_overlay.multi_head",
             version="v1",
             where=[Person(p), p.age == age, p.region == region],
@@ -155,7 +155,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             _build_sdk().check_fact_overlay(rule, {"$age": 30}, EvaluationOverlay())  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.derivation")
-        self.assertIn("Derivation", str(ctx.exception))
+        self.assertIn("Inference", str(ctx.exception))
 
     def test_compiled_plan_is_rejected_at_sdk_surface(self) -> None:
         sdk = _build_sdk()

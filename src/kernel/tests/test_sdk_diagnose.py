@@ -9,7 +9,7 @@ from unittest.mock import patch
 from kernel.application.capability_helpers import CapabilityHelperError, OriginPackageError
 from kernel.application.protocol import DiagnoseResult
 from kernel.core.rules.rule_ir import RuleCompileError, RuleRegistry
-from kernel.sdk import Derivation, Entity, Field, Identity, Pred, Rule, SDKDSLError, SDKStore, SDKStoreError, vars
+from kernel.sdk import Inference, Entity, Field, Identity, Pred, Rule, SDKDSLError, SDKStore, SDKStoreError, vars
 from kernel.sdk.store import _compiled_derivation_plan_to_application
 
 
@@ -30,9 +30,9 @@ def _seed_person(sdk: SDKStore, *, name: str, age: int, region: str) -> str:
     return ref
 
 
-def _age_derivation() -> Derivation:
+def _age_derivation() -> Inference:
     with vars("p", "age") as (p, age):
-        return Derivation(
+        return Inference(
             id="sdk.diagnose.age",
             version="v1",
             where=[Person(p), p.age == age],
@@ -40,9 +40,9 @@ def _age_derivation() -> Derivation:
         )
 
 
-def _region_filtered_age_derivation() -> Derivation:
+def _region_filtered_age_derivation() -> Inference:
     with vars("p", "age", "region") as (p, age, region):
-        return Derivation(
+        return Inference(
             id="sdk.diagnose.age_by_region",
             version="v1",
             where=[Person(p), p.age == age, p.region == region],
@@ -50,9 +50,9 @@ def _region_filtered_age_derivation() -> Derivation:
         )
 
 
-def _multi_head_derivation() -> Derivation:
+def _multi_head_derivation() -> Inference:
     with vars("p", "age", "region") as (p, age, region):
-        return Derivation(
+        return Inference(
             id="sdk.diagnose.multi_head",
             version="v1",
             where=[Person(p), p.age == age, p.region == region],
@@ -145,7 +145,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
             _build_sdk().diagnose(rule, {})  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.diagnose.derivation")
-        self.assertIn("Derivation", str(ctx.exception))
+        self.assertIn("Inference", str(ctx.exception))
 
     def test_compiled_plan_is_rejected_at_sdk_surface(self) -> None:
         sdk = _build_sdk()
@@ -245,7 +245,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
 
     def test_engine_ext_conflict_raises_sdk_store_error(self) -> None:
         """B.2 audit-fix regression: ValueError from `_compiled_derivation_plan_to_application`
-        (e.g., engine_ext conflict between explicit Derivation and compiled plan)
+        (e.g., engine_ext conflict between explicit Inference and compiled plan)
         must remap to ``SDKStoreError`` per §5.3 lock, not leak as ``ValueError``.
         """
         sdk = _build_sdk()

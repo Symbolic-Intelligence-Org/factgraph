@@ -18,7 +18,7 @@ from kernel.authoring.schema_dsl_parse import (
 from service.registry_v1 import read_registry_rule
 from service.rules_v1 import compile_rule_preview
 from kernel.sdk import (
-    Derivation,
+    Inference,
     Entity,
     Field,
     Identity,
@@ -306,7 +306,7 @@ class EmploymentEvent(Entity):
 
         sdk = SDKStore([User])
         with sdk_vars("u", "name") as (u, name):
-            derivation = Derivation(
+            derivation = Inference(
                 id="user_name_derivation",
                 version="v1",
                 where=[Pred("user:name", u, name)],

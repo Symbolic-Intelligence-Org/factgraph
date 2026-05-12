@@ -142,7 +142,7 @@ class SDKG2InvariantTests(unittest.TestCase):
         proof_frame_doc = SDKStore.recheck_proof_frame.__doc__ or ""
 
         for required in (
-            "Derivation",
+            "Inference",
             "EvaluationOverlay",
             "FactOverlayCheckResult",
             "SDKStoreError",

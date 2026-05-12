@@ -14,7 +14,7 @@ from kernel.sdk import SDKStore
 EXPECTED_SDK_ALL: tuple[str, ...] = (
     "Branch",
     "CardinalityError",
-    "Derivation",
+    "Inference",
     "EditorClosedError",
     "Entity",
     "EntityNotFoundError",
@@ -118,12 +118,12 @@ class SDKG1InvariantTests(unittest.TestCase):
         check_doc = SDKStore.check.__doc__ or ""
         diagnose_doc = SDKStore.diagnose.__doc__ or ""
 
-        self.assertIn("Derivation", check_doc)
+        self.assertIn("Inference", check_doc)
         self.assertIn("CheckResult", check_doc)
         self.assertIn("SDKStoreError", check_doc)
         self.assertIn("SupportArtifactView", check_doc)
 
-        self.assertIn("Derivation", diagnose_doc)
+        self.assertIn("Inference", diagnose_doc)
         self.assertIn("DiagnoseResult", diagnose_doc)
         self.assertIn("SDKStoreError", diagnose_doc)
         self.assertIn("not import walker helpers", diagnose_doc)

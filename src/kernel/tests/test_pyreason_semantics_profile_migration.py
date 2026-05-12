@@ -14,7 +14,7 @@ from kernel.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
 from kernel.adapters.pyreason.session import PyReasonSession
 from kernel.core.evidence.write_protocol import set_field
 from kernel.core.semantics import SemanticsProfile
-from kernel.sdk.dsl import Branch, Derivation, Pred, Rule, vars as sdk_vars
+from kernel.sdk.dsl import Branch, Inference, Pred, Rule, vars as sdk_vars
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStore
 
@@ -101,9 +101,9 @@ def _make_sdk_with_valid_times() -> SDKStore:
     return sdk
 
 
-def _make_derivation() -> Derivation:
+def _make_derivation() -> Inference:
     with sdk_vars("u", "name") as (u, name):
-        return Derivation(
+        return Inference(
             id="drv.d.pyreason_popular",
             version="v1",
             where=[Pred("user:name", u, name)],
@@ -413,7 +413,7 @@ class PyReasonSemanticsProfileCoreEvaluateTests(unittest.TestCase):
     def test_core_store_evaluate_semantics_profile_drives_generated_rule(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
         with sdk_vars("u", "name", "risk") as (u, name, risk):
-            derivation = Derivation(
+            derivation = Inference(
                 id="drv.d.pyreason_popular",
                 version="v1",
                 where=[Branch([Pred("user:name", u, name), Pred("user:risk_score", u, risk)])],

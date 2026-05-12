@@ -28,7 +28,7 @@ from kernel.application.protocol import (
 from kernel.core.rules.rule_ir import RuleCompileError
 from kernel.core.store._support import SupportArtifact
 from kernel.sdk import (
-    Derivation,
+    Inference,
     Entity,
     Field,
     Identity,
@@ -56,9 +56,9 @@ def _seed_person(sdk: SDKStore, *, name: str, age: int, region: str) -> str:
     return ref
 
 
-def _age_derivation() -> Derivation:
+def _age_derivation() -> Inference:
     with vars("p", "age") as (p, age):
-        return Derivation(
+        return Inference(
             id="sdk.check_rule_literal_replace.age",
             version="v1",
             where=[Person(p), p.age == age],
@@ -128,7 +128,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         self.assertIn("Rule", str(ctx.exception))
 
     def test_derivation_input_rejected_at_sdk_surface(self) -> None:
-        """Per §5.2 lock, only SDK ``Rule`` is accepted; ``Derivation`` is
+        """Per §5.2 lock, only SDK ``Rule`` is accepted; ``Inference`` is
         a sibling DSL object but not a rule."""
         sdk = _build_sdk()
         alice = _seed_person(sdk, name="alice", age=25, region="us")

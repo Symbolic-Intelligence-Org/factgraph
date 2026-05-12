@@ -9,7 +9,7 @@ Public surface contract per blueprint §5 locks:
 - Method:      ``SDKStore.check(...)`` (instance method; not a free function in
                ``kernel.sdk.__all__`` — see §5.4 lock).
 - Signature:   ``check(derivation, binding, *, engine="native", registry=None)``
-               (see §5.7 lock; ``derivation`` is SDK ``Derivation`` only,
+               (see §5.7 lock; ``derivation`` is SDK ``Inference`` only,
                ``binding`` is ``Mapping[str, Any]`` with ``$``-prefixed
                variable-name string keys; both validated in Phase 1).
 - Return:      ``CheckResult`` (raw application protocol DTO; documented
@@ -49,7 +49,7 @@ def sdk_check(
     engine: str = "native",
     registry: Any = None,
 ) -> CheckResult:
-    """Run Check for a single SDK ``Derivation`` and binding mapping.
+    """Run Check for a single SDK ``Inference`` and binding mapping.
 
     Returns the application ``CheckResult`` DTO directly. The SDK shell does
     not import walker views; callers that need ergonomic evidence traversal

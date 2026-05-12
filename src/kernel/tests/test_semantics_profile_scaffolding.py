@@ -7,7 +7,7 @@ import unittest
 from dataclasses import FrozenInstanceError, fields, is_dataclass
 from pathlib import Path
 
-from kernel.sdk import Derivation, Pred
+from kernel.sdk import Inference, Pred
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStore, SDKStoreError
 from service.runtime_v1 import (
@@ -196,7 +196,7 @@ class PublicIntegrationRejectionTests(unittest.TestCase):
 
     def test_sdk_evaluate_rejects_semantics_keyword(self) -> None:
         sdk = SDKStore([User])
-        derivation = Derivation(
+        derivation = Inference(
             id="drv.b.user_tag",
             version="v1",
             where=[Pred("user:tag_seed", "$u", "$tag")],
@@ -211,7 +211,7 @@ class PublicIntegrationRejectionTests(unittest.TestCase):
 
     def test_sdk_evaluate_rejects_semantics_profile_keyword(self) -> None:
         sdk = SDKStore([User])
-        derivation = Derivation(
+        derivation = Inference(
             id="drv.b.user_tag",
             version="v1",
             where=[Pred("user:tag_seed", "$u", "$tag")],

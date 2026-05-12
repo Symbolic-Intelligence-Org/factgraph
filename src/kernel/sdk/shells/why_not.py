@@ -10,7 +10,7 @@ Public surface contract per blueprint §5 locks:
                precedent).
 - Signature:   ``why_not(derivation, candidates, *, engine="native",
                registry=None)`` (see §5.1 lock; ``derivation`` is SDK
-               ``Derivation`` only, ``candidates`` mirrors A's
+               ``Inference`` only, ``candidates`` mirrors A's
                ``build_why_not_candidate_universe(plan, candidates)`` row
                forms — ``Sequence[Mapping[str, Any] | Sequence[Any]]``).
 - Return:      ``WhyNotUniverseResult`` (raw application protocol DTO;
@@ -53,7 +53,7 @@ def sdk_why_not(
     engine: str = "native",
     registry: Any = None,
 ) -> WhyNotUniverseResult:
-    """Run Why-not for a single SDK ``Derivation`` and explicit candidate universe.
+    """Run Why-not for a single SDK ``Inference`` and explicit candidate universe.
 
     Returns the application ``WhyNotUniverseResult`` DTO directly. The SDK
     shell does not import Check / Diagnose SDK shells and does not wrap result

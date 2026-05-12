@@ -29,7 +29,7 @@ from .semantics import ProbLogSemantics, PyReasonSemantics
 from .store import FactGraph, SDKStore
 from kernel.core.semantics import SemanticsProfile
 from kernel.core.store.types import ReadPolicy
-from .dsl import Branch, Derivation, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
+from .dsl import Branch, Inference, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
 from .ingest import IngestResult, ValidationReport
 
 __all__ = [
@@ -61,7 +61,7 @@ __all__ = [
     "PyReasonSemantics",
     "Rule",
     "RuleRef",
-    "Derivation",
+    "Inference",
     "Query",
     "Pred",
     "Not",

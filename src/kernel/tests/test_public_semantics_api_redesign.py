@@ -11,7 +11,7 @@ from kernel.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
 from kernel.adapters.pyreason.session import PyReasonSession
 from kernel.core.evidence.write_protocol import set_field
 from kernel.core.semantics import SemanticsProfile
-from kernel.sdk import Branch, Derivation, Pred, SDKStore, vars as sdk_vars
+from kernel.sdk import Branch, Inference, Pred, SDKStore, vars as sdk_vars
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStoreError
 from service.runtime_v1 import (
@@ -101,9 +101,9 @@ def _make_sdk() -> SDKStore:
     return sdk
 
 
-def _single_branch_derivation() -> Derivation:
+def _single_branch_derivation() -> Inference:
     with sdk_vars("u", "tag") as (u, tag):
-        return Derivation(
+        return Inference(
             id="drv.track2.single",
             version="v1",
             where=[Pred("user:tag_seed", u, tag)],
@@ -112,9 +112,9 @@ def _single_branch_derivation() -> Derivation:
         )
 
 
-def _two_branch_derivation() -> Derivation:
+def _two_branch_derivation() -> Inference:
     with sdk_vars("u", "tag") as (u, tag):
-        return Derivation(
+        return Inference(
             id="drv.track2.branches",
             version="v1",
             where=[
@@ -126,9 +126,9 @@ def _two_branch_derivation() -> Derivation:
         )
 
 
-def _pyreason_derivation() -> Derivation:
+def _pyreason_derivation() -> Inference:
     with sdk_vars("u", "name", "risk") as (u, name, risk):
-        return Derivation(
+        return Inference(
             id="drv.track2.pyreason",
             version="v1",
             where=[Branch([Pred("user:name", u, name), Pred("user:risk_score", u, risk)], id="sensor_path")],
