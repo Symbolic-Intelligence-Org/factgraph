@@ -1,5 +1,34 @@
 # Current Operational Memory
 
+最后更新:2026-05-13(`v0.1.0-rc.3` published; source `f49ccc58`, release commit `e996aa5b`)
+
+## 当前阶段(2026-05-13 — v0.1.0-rc.3 PUBLISHED)
+
+**Current source state:** `origin/master = f49ccc58`.
+
+**Release state:**
+- `origin/release/0.1.x = e996aa5b`.
+- `v0.1.0-rc.3` annotated tag object = `efb44868`.
+- `v0.1.0-rc.3^{}` = `e996aa5b`.
+- `origin/milestone/rc-0.1.0-rc.3-2026-05-13 = f49ccc58`.
+
+**Verification:**
+- Final dry-run from current HEAD `f49ccc58`: projection `361` files, staging verification `1633` OK / `1` skipped.
+- Live publish completed through `scripts/release.sh v0.1.0-rc.3 --source-ref HEAD --yes`.
+- Post-publish `git ls-remote` confirmed `master`, `release/0.1.x`, `v0.1.0-rc.3`, and the rc.3 milestone branch.
+- Prior milestone branch refs remain present.
+
+**Release surface included:**
+- public `Inference` vocabulary;
+- inference service/registry vocabulary;
+- semantics wrappers and PyReason branch bounds;
+- authoring asset persistence facade;
+- FactGraph workspace lifecycle.
+
+**Memory detail:** [project_v0_1_0_rc3_published.md](./project_v0_1_0_rc3_published.md).
+
+<!-- Historical 2026-05-11 ReadPolicy state follows. -->
+
 最后更新:2026-05-11(`v0.1-readpolicy-call-site-migration-impl-2026-05-11 @ b13adda4`;**ReadPolicy call-site migration implemented + archived**, rc.3 dry-run passed, no push performed)
 
 ## 当前阶段(2026-05-11 — READPOLICY CALL-SITE MIGRATION IMPLEMENTED + ARCHIVED)
