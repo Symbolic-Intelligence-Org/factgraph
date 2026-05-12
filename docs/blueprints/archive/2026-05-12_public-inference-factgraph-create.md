@@ -1,6 +1,6 @@
 # Task Blueprint: Public Inference Naming And FactGraph Create
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -372,12 +372,12 @@ G0 locked the acceptance gates below.
 - [x] G0 locks that service/wire/registry rename is deferred or included.
 - [x] G0 locks whether `evaluate_compiled(...)` / `accept_compiled(...)` remain public, become advanced-only, or are hard-cut.
 - [x] G0 locks whether `standard="derivation_v1"` remains as substrate vocabulary.
-- [ ] G1 inventory enumerates every public method/parameter/error-message/dict-key/doc-file reference to `derivation*` that is in or out of scope.
-- [ ] G1 adds forward-failing tests for the selected public type/export/signature shape.
-- [ ] G1 adds guard tests that Track 3 semantics and Track 1 inspect behavior remain intact.
-- [ ] G2 implements only the scoped public SDK/docs changes.
-- [ ] G3 updates SDK module docs and reference docs.
-- [ ] G4 fills §10, marks implemented, and archives this blueprint pair.
+- [x] G1 inventory enumerates every public method/parameter/error-message/dict-key/doc-file reference to `derivation*` that is in or out of scope.
+- [x] G1 adds forward-failing tests for the selected public type/export/signature shape.
+- [x] G1 adds guard tests that Track 3 semantics and Track 1 inspect behavior remain intact.
+- [x] G2 implements only the scoped public SDK/docs changes.
+- [x] G3 updates SDK module docs and reference docs.
+- [x] G4 fills §10, marks implemented, and archives this blueprint pair.
 
 ## 8. Implementation Plan
 
@@ -417,10 +417,80 @@ Likely docs if G0 selects the recommended path:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+### 10.1 Final Landed Behavior
 
-- Final landed behavior:
-- Validation:
-- Commit lineage:
-- Deviations:
-- Archive notes:
+1. Public SDK value-object naming is now `Inference`, exported from `kernel.sdk`, `kernel.sdk.dsl`, and implemented in `src/kernel/sdk/dsl/rule.py`.
+2. Public `Derivation` and `Derivation*` SDK symbols are not exported and no compatibility alias is kept.
+3. `Inference.to_authoring_payload()` intentionally keeps substrate keys such as `"derivation_id"` and does not emit `"inference_id"`.
+4. `FactGraph.create(schema_classes=[...], ...)` is the canonical lifecycle constructor and delegates to `from_schema_classes(...)`.
+5. `FactGraph.from_schema_classes(...)` remains available as the lower-level class-first constructor substrate.
+6. Public what-if shells now use `inference=` naming: Check, Diagnose, Why-not, and Fact Overlay.
+7. Internal application/runtime/helper names may still use `derivation` where they refer to substrate protocol or proof vocabulary.
+8. Public `fg.eval.evaluate_compiled(...)` and `fg.eval.accept_compiled(...)` were hard-cut from both namespace and root SDK surfaces.
+9. Private compiled-plan capability remains through `_evaluate_compiled_derivation_plans(...)` for `evaluate(...)` lowering and application/substrate use.
+10. Blueprint 1 does not add an empty `fg.inferences` namespace.
+11. Blueprint 1 does not mint `InferenceRef` or `DerivationRef`; future persistence work owns reference types.
+12. `standard="derivation_v1"` remains the provenance substrate standard name.
+13. `accept_many(mode="atomic")` remains unchanged and is deferred to a future SDK keyword/boundary polish slice.
+14. SDK docs now teach `Inference`, `FactGraph.create(...)`, `inference=`, and the compiled-plan SDK hard-cut.
+15. `03_rules_and_derivations.en.md` was renamed to `03_rules_and_inferences.en.md`.
+16. The lifecycle design-point and earlier function-tree note now record Blueprint 1 as the public naming boundary.
+
+### 10.2 Validation
+
+- G1 baseline before implementation: 16 tests, with expected red/guard shape after G1 polish.
+- G2 implementation closed all code gates while preserving Track 1, Track 3, and post-Track-3 behavior.
+- G3 docs sync closed the final docs filename gate.
+- `PYTHONPATH=src python -m unittest kernel.tests.test_public_inference_factgraph_create`: 16 OK.
+- `PYTHONPATH=src python -m unittest discover -s src/kernel/tests`: 2042 OK / 1 skipped.
+- `git diff --check`: clean.
+- Working tree after G3 commit remained clean except protected notebooks.
+
+### 10.3 Commit Lineage
+
+```text
+1d9e737b docs(sdk): sync public inference vocabulary
+c0de0502 feat(sdk): hard-cut compiled evaluation escape hatches
+4a071636 feat(sdk): rename what-if shell input to inference
+03caf4df feat(sdk): add FactGraph create constructor
+1f374ef6 feat(sdk): rename public Derivation to Inference
+01851c12 test(sdk): extend public inference baseline with deferral guards
+e3313b56 test(sdk): add public inference factgraph create baseline
+fc42e5c1 docs(blueprints): scope public inference factgraph create
+```
+
+G4 close-out archives the blueprint pair after these eight commits.
+
+### 10.4 Deviations
+
+No scope deviations.
+
+Implementation followed all G0 decisions:
+
+- public SDK hard-cut to `Inference`;
+- internal/service/registry/application substrate vocabulary preserved;
+- `FactGraph.create(...)` added without removing `from_schema_classes(...)`;
+- compiled SDK escape hatches removed while substrate capability remained private;
+- docs filename renamed in the same slice;
+- service/wire, persistence, schema mutation, query persistence, and explain/evidence remained deferred.
+
+The only notable implementation detail is `_evaluate_compiled_derivation_plans(...)`, which is not a deviation: it is the intentional private substrate path required by I12a.
+
+### 10.5 Archive Notes
+
+Blueprint 1 completes the first lifecycle/asset cleanup slice after the post-Track-3 plan. It establishes the public SDK vocabulary:
+
+- users author `Inference` objects;
+- users construct graphs with `FactGraph.create(...)`;
+- users pass `inference=` to what-if shells;
+- users do not see compiled-plan evaluation as ordinary SDK surface.
+
+The public/internal split remains explicit. `derivation_id`, `derivation_v1`, `CompiledDerivationPlan`, service routes, registry manifests, filesystem paths, and proof/audit vocabulary remain substrate until dedicated follow-up slices decide whether and how to rename them.
+
+Recommended next slices remain independent:
+
+- service/wire/registry vocabulary rename from derivation to inference;
+- FactGraph workspace load/save and domain asset persistence facades;
+- SDK keyword/boundary polish such as `accept_many(mode=...)`;
+- explain/evidence/audit capability under a future `fg.explain.*` surface;
+- schema add/deprecate/migrate and query persistence.
