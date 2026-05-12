@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Workspace Lifecycle
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -211,6 +211,8 @@ Options:
 Recommendation: **W1a**. `path=` is short, reads naturally for save/load, and
 stays distinct from lower-level `ledger_path=` / `registry_root=`.
 
+G0 decision (2026-05-12): **W1a locked**. `path=` is the graph-level lifecycle root across create/save/load.
+
 ### 5.2 Q2 — Workspace Save Scope
 
 Options:
@@ -223,6 +225,8 @@ Options:
 Recommendation: **W2b**. Blueprint 2 made registry-backed authoring assets the
 product facade, so a workspace that omits them is incomplete. Artifacts, views,
 and package metadata have separate lifecycles and should remain out of scope.
+
+G0 decision (2026-05-12): **W2b locked**. Level 4 is the first workspace scope: ledger + schema IR + registry rules/inferences.
 
 ### 5.3 Q3 — Directory Layout
 
@@ -256,6 +260,8 @@ Options:
 Recommendation: **W3a**. It is predictable and small. The registry subtree keeps
 its existing format; `ledger.db` is obvious at the root.
 
+G0 decision (2026-05-12): **W3a locked**. The v1 workspace uses root `ledger.db`, root `factgraph_workspace.json`, and a `registry/` subtree.
+
 ### 5.4 Q4 — Workspace Manifest
 
 Options:
@@ -283,6 +289,9 @@ anchor without overloading ledger meta. `save_scope` is intentionally explicit
 so future Level 5 work can detect whether artifacts/views are part of a
 workspace.
 
+G0 decision (2026-05-12): **W4a locked**. The v1 manifest is required and
+records version, save scope, schema digest, component paths, and timestamps.
+
 ### 5.5 Q5 — Create-Time `path=` Behavior
 
 Options:
@@ -296,6 +305,8 @@ Options:
 Recommendation: **W5a**. Users expect a path-created graph to be file-backed
 from the start. It also avoids copying an in-memory ledger on every save.
 
+G0 decision (2026-05-12): **W5a locked**. `FactGraph.create(..., path=...)` binds both ledger and registry to the workspace defaults.
+
 ### 5.6 Q6 — Explicit Path Override Interaction
 
 Options:
@@ -307,6 +318,8 @@ Options:
 
 Recommendation: **W6a**. It mirrors Blueprint 2's registry conflict pattern and
 prevents ambiguous workspaces.
+
+G0 decision (2026-05-12): **W6a locked**. Explicit lower-level paths may accompany `path=` only when they match workspace defaults.
 
 ### 5.7 Q7 — `fg.save(path=None)` Semantics
 
@@ -321,6 +334,8 @@ Options:
 Recommendation: **W7a**. This supports ergonomic `create(path=...)` / `save()`
 while keeping unbound in-memory graphs explicit. G2 should lock the unbound
 error anchor: `"workspace path not bound; pass fg.save(path=...) or create with FactGraph.create(path=...)"`.
+
+G0 decision (2026-05-12): **W7a locked**. No-arg save requires a bound workspace path; `fg.save(path)` saves and binds future saves.
 
 ### 5.8 Q8 — Ledger Save Mechanics
 
@@ -338,6 +353,8 @@ the workspace target `ledger.db`, save should only flush/checkpoint as needed;
 SQLite backup/copy applies when the source ledger and target workspace ledger
 paths differ, such as `fg.save(other_path)`.
 
+G0 decision (2026-05-12): **W8a locked**. Ledger persistence uses helper-mediated SQLite backup/copy only when source and target differ.
+
 ### 5.9 Q9 — Registry Save Mechanics
 
 Options:
@@ -350,6 +367,8 @@ Options:
 Recommendation: **W9a**. It supports saving graphs that were created with a
 separate `registry_root=` while preserving Blueprint 2's registry as the source
 of persisted rules/inferences.
+
+G0 decision (2026-05-12): **W9a locked**. Registry persistence syncs/copies the bound registry subtree into `workspace/registry` with schema validation.
 
 ### 5.10 Q10 — Registry-Less Save
 
@@ -364,6 +383,8 @@ Recommendation: **W10a**. A graph can legitimately have no saved rules or
 inferences yet. The workspace should still be complete enough to load and later
 save assets.
 
+G0 decision (2026-05-12): **W10a locked**. Registry-less graphs can save a complete empty registry with schema IR.
+
 ### 5.11 Q11 — Load Shape
 
 Options:
@@ -375,6 +396,8 @@ Options:
 
 Recommendation: **W11a**. Current SDK object hydration is class-based. Dynamic
 or schema-IR-only loading should be a later blueprint.
+
+G0 decision (2026-05-12): **W11a locked**. First-slice `FactGraph.load(...)` requires `schema_classes=[...]`.
 
 ### 5.12 Q12 — Load Validation
 
@@ -388,6 +411,8 @@ Options:
 Recommendation: **W12a**. Workspace load should fail loudly if its three schema
 anchors disagree.
 
+G0 decision (2026-05-12): **W12a locked**. Load validates manifest, ledger digest, registry digest, and class schema digest as one schema anchor set.
+
 ### 5.13 Q13 — Artifact Sidecars
 
 Options:
@@ -398,6 +423,8 @@ Options:
 
 Recommendation: **W13a**. Sidecar retention and repair semantics need their own
 scope. Excluding them keeps workspace save/load focused.
+
+G0 decision (2026-05-12): **W13a locked**. Artifact sidecars are excluded from Blueprint 3.
 
 ### 5.14 Q14 — Views
 
@@ -410,6 +437,8 @@ Options:
 Recommendation: **W14a**. Views are currently in-memory only. Persisting them
 requires a separate format and compatibility promise.
 
+G0 decision (2026-05-12): **W14a locked**. `fg.views` remains in-memory and is excluded from workspace persistence.
+
 ### 5.15 Q15 — Audit / Evidence Round Files
 
 Options:
@@ -420,6 +449,8 @@ Options:
 
 Recommendation: **W15a**. Explain/evidence is a separate future thread and
 should not be folded into workspace lifecycle by accident.
+
+G0 decision (2026-05-12): **W15a locked**. Audit/evidence files are excluded from Blueprint 3.
 
 ### 5.16 Q16 — Package Export Boundary
 
@@ -433,6 +464,8 @@ Options:
 Recommendation: **W16a**. Package export is distribution/reproduction; workspace
 save/load is continued editing/running.
 
+G0 decision (2026-05-12): **W16a locked**. Workspace save/load is documented as distinct from package export.
+
 ### 5.17 Q17 — Application-Layer Ownership
 
 Options:
@@ -445,6 +478,8 @@ Options:
 Recommendation: **W17a**. It follows the application-first runtime authority
 pattern and keeps the SDK shell ergonomic.
 
+G0 decision (2026-05-12): **W17a locked**. Workspace layout and validation belong in `kernel.application.workspace_runtime`.
+
 ### 5.18 Q18 — Static/Class Save Helper
 
 Options:
@@ -455,6 +490,8 @@ Options:
 
 Recommendation: **W18a**. Python users expect instance lifecycle methods. A
 static helper adds surface without a clear use case.
+
+G0 decision (2026-05-12): **W18a locked**. Only instance `fg.save(path=None)` is added; no `FactGraph.save(fg, ...)` helper.
 
 ### 5.19 Q19 — `from_schema_classes(...)` Path Parity
 
@@ -469,6 +506,8 @@ Options:
 Recommendation: **W19b**. `FactGraph.create(...)` is the product lifecycle
 constructor. Extending `from_schema_classes(...)` would expand an older
 class-first surface exactly as the lifecycle API is becoming canonical.
+
+G0 decision (2026-05-12): **W19b locked**. `path=` stays on `FactGraph.create(...)`; `from_schema_classes(...)` is not expanded.
 
 ## 6. Boundaries And Invariants
 
@@ -496,12 +535,12 @@ class-first surface exactly as the lifecycle API is becoming canonical.
 
 ## 7. Acceptance
 
-- [ ] G0 locks workspace path parameter and directory layout.
-- [ ] G0 locks save scope.
-- [ ] G0 locks create/save/load behavior for bound and unbound graphs.
-- [ ] G0 locks schema validation anchors.
-- [ ] G0 locks artifacts/views/audit/package exclusions.
-- [ ] G0 locks application-layer ownership.
+- [x] G0 locks workspace path parameter and directory layout.
+- [x] G0 locks save scope.
+- [x] G0 locks create/save/load behavior for bound and unbound graphs.
+- [x] G0 locks schema validation anchors.
+- [x] G0 locks artifacts/views/audit/package exclusions.
+- [x] G0 locks application-layer ownership.
 - [ ] G1 adds red tests for `FactGraph.create(..., path=...)`.
 - [ ] G1 adds red tests for `fg.save(...)`.
 - [ ] G1 adds red tests for `FactGraph.load(...)`.
