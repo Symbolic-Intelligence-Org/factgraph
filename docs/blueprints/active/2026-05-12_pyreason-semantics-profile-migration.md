@@ -1,6 +1,6 @@
 # Task Blueprint: PyReason SemanticsProfile Migration
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -56,8 +56,8 @@ profile kwargs rejected until E.
   `PyReasonRuleExt`:
   - body atom interval thresholds;
   - head interval bounds;
-  - optional rule delay if G0 scopes it.
-- Activate only the recommended minimal PyReason temporal projection modes:
+  - rule delay.
+- Activate only the locked minimal PyReason temporal projection modes:
   `fixed_timesteps` and `valid_time_boundaries`; all other temporal modes
   remain future work.
 - Preserve C's pattern: generic `SemanticsProfile` validation remains in
@@ -127,13 +127,13 @@ explicitly rather than assuming existing hidden behavior.
 
 ### 4.4 Temporal taxonomy
 
-Draft temporal modes for G0:
+Locked temporal modes for D:
 
 | Mode | Source | D scope |
 | --- | --- | --- |
 | `none` | No temporal projection. | Existing B behavior; keep. |
-| `fixed_timesteps` | Explicit positive integer `timesteps`. | Recommended D implementation; 1:1 profile surface for existing `engine_options.timesteps`. |
-| `valid_time_boundaries` | Caller-provided universe plus assertion `valid_from` / `valid_to` boundary timestamps. | Recommended D implementation if G0 locks the boundary algorithm below. |
+| `fixed_timesteps` | Explicit positive integer `timesteps`. | D implementation; 1:1 profile surface for existing `engine_options.timesteps`. |
+| `valid_time_boundaries` | Caller-provided universe plus assertion `valid_from` / `valid_to` boundary timestamps. | D implementation with the boundary algorithm below. |
 | `custom_timeline` | Caller-provided arbitrary mapping / labels. | Record as future; do not implement or lock detailed shape in D. |
 
 The proposed `valid_time_boundaries` algorithm is:
@@ -186,7 +186,7 @@ full recurrence / multi-interval validity redesign.
 
 ### 5.1 Path option
 
-Recommended path: mirror C's core advanced call-site.
+Locked path: mirror C's core advanced call-site.
 
 ```python
 Store.evaluate(..., mode="pyreason", semantics_profile=profile)
@@ -196,7 +196,7 @@ SDK and service `semantics=` / `semantics_profile=` kwargs continue to
 reject until E. This lets D validate profile-to-adapter consumption without
 shipping the durable user-facing call-site prematurely.
 
-### 5.2 Draft PyReason rule projection
+### 5.2 PyReason rule projection
 
 Candidate profile shape:
 
@@ -214,11 +214,7 @@ SemanticsProfile(
 )
 ```
 
-Open question for G0: whether D locks body targets as path-style
-`body_atom:{branch}:{atom}` targets or predicate-style
-`body_predicate:{predicate_id}` targets.
-
-Recommended default: **path-style body atom targets**. They preserve the
+Locked choice: **path-style body atom targets**. They preserve the
 SemanticsProfile projection model introduced in B and avoid exposing
 PyReason's internal predicate-bound dictionary as the profile surface. The
 adapter can resolve each path target against the lowered `where` and then
@@ -226,15 +222,12 @@ materialize the existing `body_predicate_bounds` map. If two body atom
 targets resolve to the same predicate with different intervals, D should
 reject as conflicting.
 
-Open question for G0: whether `timestep_delay` is included in D's
-`rule_projection.pyreason` surface.
-
-Recommended default: **include it** as `{"target": "rule", "kind":
+Locked choice: include `timestep_delay` as `{"target": "rule", "kind":
 "timestep_delay", "value": non_negative_int}` because it is already part of
 `PyReasonRuleExt` and is rule-level projection rather than runtime temporal
 projection.
 
-### 5.3 Draft temporal projection
+### 5.3 Temporal projection
 
 Candidate fixed-step temporal shape:
 
@@ -262,7 +255,7 @@ SemanticsProfile(
 )
 ```
 
-G0 should lock both scoped modes. Current recommendation:
+G0 locks both scoped modes:
 
 - implement `fixed_timesteps` as a direct profile surface for existing
   `engine_options.timesteps`;
@@ -282,100 +275,140 @@ Potential carriers in D:
 | `SemanticsProfile.temporal_projection.valid_time_boundaries` | PyReason fact `active_from` / `active_to` coordinates |
 | `engine_options.timesteps` | PyReason run config `timesteps` |
 
-Draft rule:
+Locked rule:
 
 - Matching profile-derived and explicit internal values are allowed.
 - Conflicting values reject with messages naming the carrier families.
 - Existing internal-only behavior remains unchanged when no profile is
   supplied.
 
-### 5.5 Draft D-decisions to lock at G0
+### 5.5 Scope Freeze Decisions
 
-| ID | Draft decision |
+| ID | Decision |
 | --- | --- |
 | D1 | Use the C2 pattern: core `Store.evaluate(..., mode="pyreason", semantics_profile=...)` becomes the scoped runtime entry; SDK/service remain rejected until E. |
 | D2 | PyReason consumption strictly requires `SemanticsProfile.engine == "pyreason"` at runtime consumption, not at profile construction. |
 | D3 | `rule_projection.pyreason` validates at adapter consumption time, not in the generic profile module. |
-| D4 | Body interval projection uses path-style `body_atom:{branch}:{atom}` targets unless G0 chooses predicate-style targets. |
-| D5 | Head interval projection uses `target="head:0"` and `kind="interval"` unless G0 chooses a different head target spelling. |
-| D6 | Rule delay projection either includes `target="rule"`, `kind="timestep_delay"` in D or explicitly defers delay to a later PyReason slice. |
-| D7 | Temporal projection adds `fixed_timesteps` and `valid_time_boundaries` in D; all other modes continue to reject. |
-| D8 | `fixed_timesteps` maps to PyReason run config `timesteps`; matching `engine_options.timesteps` is allowed and conflicting values reject. |
-| D8a | `valid_time_boundaries` uses caller-provided `universe=[start,end]` plus assertion `valid_from` / `valid_to` boundaries to map ordinal PyReason `active_from` / `active_to`; recurrence and multi-interval validity remain out of scope. |
-| D9 | Carrier conflicts between profile-derived PyReason settings and explicit `PyReasonRuleExt` / `engine_options` reject with carrier-family names; matching carriers are allowed. |
-| D10 | `PyReasonRuleExt` and `engine_options.timesteps` remain supported internal bridges. |
-| D11 | Adapter import guards update: ProbLog and PyReason may import `SemanticsProfile`; other adapters must not begin consuming it in D. |
-| D12 | ProbLog profile consumption from C remains unchanged. |
-| D13 | SDK/service profile rejection from B remains unchanged; E owns public call-site acceptance and the `engine=` naming decision. |
+| D4 | Body interval projection uses path-style `body_atom:{branch}:{atom}` targets. The adapter resolves the target against the lowered `where`; non-`pred` atoms and out-of-range paths reject. |
+| D5 | Head interval projection uses `target="head:0"` and `kind="interval"`. |
+| D6 | Rule delay projection is included in D as `target="rule"`, `kind="timestep_delay"`, `value=<non-negative int>`. |
+| D7 | Temporal projection accepts only `none`, `fixed_timesteps`, and `valid_time_boundaries` in D; all other modes, including `custom_timeline`, continue to reject. |
+| D8 | `fixed_timesteps` requires positive integer `timesteps` and maps to PyReason run config `timesteps`; matching `engine_options.timesteps` is allowed and conflicting values reject. |
+| D9 | `valid_time_boundaries` requires caller-provided `universe=[start,end]` strings. It collects universe boundaries plus selected assertion `valid_from` / `valid_to` strings from the current PyReason EDB materialization scope, sorts/deduplicates them, and maps them to ordinal `active_from` / `active_to`. |
+| D10 | `valid_time_boundaries` treats missing `valid_from` as universe start, missing `valid_to` as open-ended `active_to=None`, and both missing as active for the full universe. Each assertion is a single continuous interval; recurrence and multi-interval validity remain out of scope. |
+| D11 | `valid_time_boundaries` derives PyReason run config `timesteps` as the highest ordinal boundary index. Matching `engine_options.timesteps` is allowed and conflicting values reject. |
+| D12 | Carrier conflicts between profile-derived PyReason settings and explicit `PyReasonRuleExt` / `engine_options` reject with carrier-family names; matching carriers are allowed. |
+| D13 | `PyReasonRuleExt` and `engine_options.timesteps` remain supported internal bridges. |
+| D14 | Adapter import guards update: ProbLog and PyReason may import `SemanticsProfile`; native/Souffle adapters must not begin consuming it in D. |
+| D15 | ProbLog profile consumption from C remains unchanged. SDK/service profile rejection from B remains unchanged; E owns public call-site acceptance and the `engine=` naming decision. |
+
+### 5.6 Resolved G0 Questions Map
+
+| Draft question | Resolution |
+| --- | --- |
+| D path vs E-first | D1 locks the C2-style core advanced call-site before E. |
+| Body target spelling | D4 locks path-style `body_atom:{branch}:{atom}`. |
+| Head target spelling | D5 locks `head:0`. |
+| Rule delay inclusion | D6 includes `timestep_delay` in D. |
+| Temporal modes | D7 locks `fixed_timesteps` and `valid_time_boundaries`; other modes reject. |
+| Fixed-step carrier conflict | D8 and D11 lock matching-allowed / conflict-rejected behavior against `engine_options.timesteps`. |
+| Valid-time collection scope | D9 locks the scope to selected assertions materialized into the current PyReason EDB session, not per-rule collection. |
+| Missing valid-time values | D10 locks universe fallback and open-ended semantics. |
+| Multi-interval validity | D10 defers recurrence and multi-interval data modeling. |
+| Adapter guard update | D14 locks ProbLog + PyReason positive import allowance and native/Souffle non-consumption. |
 
 ## 6. Boundaries And Invariants
 
-- Generic `SemanticsProfile` validation remains shape-only for
-  `rule_projection`; PyReason target resolution happens in the adapter.
-- Core profile temporal validation may expand only to the G0-locked PyReason
-  modes; all other temporal modes still reject.
-- `Store.evaluate(..., semantics_profile=...)` must reject when the profile
-  engine and selected mode do not match.
+- `SemanticsProfile` remains core-only; D does not add SDK namespace export.
+- Generic `SemanticsProfile.rule_projection` validation remains shape-only;
+  PyReason target resolution happens in the adapter.
+- Core profile temporal validation accepts only `none`, `fixed_timesteps`,
+  and `valid_time_boundaries`; `custom_timeline` and unknown modes reject.
+- `Store.evaluate(..., mode="pyreason", semantics_profile=profile)` is the
+  only scoped runtime profile-consumption entry added by D.
+- `Store.evaluate(..., semantics_profile=profile)` rejects when selected
+  mode and `profile.engine` do not match.
 - SDK and service `semantics` / `semantics_profile` payloads continue to
   reject with Track 3 / E redirect text.
-- Existing `PyReasonRuleExt` direct construction and adapter compilation
-  behavior stays green.
+- `body_atom:{branch}:{atom}` targets resolve against lowered `where` and
+  reject invalid shape, non-`pred` atoms, and out-of-range indexes.
+- `head:0` interval projection materializes to `PyReasonRuleExt.head_bound`.
+- `rule` / `timestep_delay` projection materializes to
+  `PyReasonRuleExt.timestep_delay`.
+- `fixed_timesteps` and `engine_options.timesteps` matching values are
+  allowed; conflicts reject with carrier-family names.
+- `valid_time_boundaries` reads `valid_from` / `valid_to` from selected
+  assertion metadata in the current PyReason EDB materialization scope.
+- `valid_time_boundaries` can require the PyReason EDB materializer to use
+  witness-preserving projection so assertion metadata remains available.
+- Missing `valid_from` maps to universe start; missing `valid_to` maps to
+  open-ended `active_to=None`; both missing means full-universe validity.
+- Each assertion is one continuous interval. Periodic or multi-interval
+  validity must be materialized by the caller into multiple assertions or
+  deferred to future data-contract work.
+- Existing `PyReasonRuleExt` direct construction, SDK-rule compilation, and
+  core `engine_ext` behavior stay green.
 - Existing `engine_options.timesteps` behavior stays green when no temporal
   projection is supplied.
-- `valid_time_boundaries` treats each assertion as one continuous interval.
-  Periodic or multi-interval validity must be materialized by the caller
-  into multiple assertions or deferred to future data-contract work.
 - ProbLog's `SemanticsProfile.rule_projection.problog` behavior from C stays
   green.
-- PyReason output readback and candidate confidence behavior do not change.
+- PyReason output readback, candidate confidence, and pending annotation
+  behavior do not change.
 - No stored profile-derived values are written back into facts, registry
   entries, or assertion metadata.
 
 ## 7. Acceptance
 
-Draft acceptance gates for G0 to tighten:
-
-- [ ] G0 locks D1-D13, especially fixed-step and boundary-derived temporal
-  projection shape.
+- [ ] G0 locks D1-D15 and records the valid-time boundary collection scope.
 - [ ] G1 red baseline proves PyReason does not yet consume
   `SemanticsProfile`.
 - [ ] G1 guard baseline proves C's ProbLog profile consumption remains
   green.
 - [ ] `Store.evaluate(..., mode="pyreason", semantics_profile=profile)`
   drives generated PyReason rule intervals after G2.
+- [ ] `Store.evaluate(..., mode="native", semantics_profile=pyreason_profile)`
+  rejects with mode/engine mismatch text.
 - [ ] Profile engine mismatch rejects when `mode="pyreason"` receives a
   non-PyReason profile.
 - [ ] Invalid PyReason rule-projection kind rejects with stable error text.
 - [ ] Invalid body atom target shape rejects with stable error text.
 - [ ] Out-of-range body atom path rejects with stable error text.
+- [ ] Non-`pred` body atom target rejects with stable error text.
 - [ ] Invalid interval values reject with stable error text.
 - [ ] Duplicate or conflicting profile interval targets reject with stable
   error text.
-- [ ] Profile-derived head interval materializes into generated PyReason rule
-  syntax.
 - [ ] Profile-derived body interval threshold materializes into generated
   PyReason rule syntax.
-- [ ] Profile-derived `timestep_delay` either materializes into generated
-  PyReason rule syntax or is explicitly rejected/deferred per G0.
+- [ ] Profile-derived head interval materializes into generated PyReason rule
+  syntax.
+- [ ] Profile-derived `timestep_delay` materializes into generated PyReason
+  rule syntax.
 - [ ] `fixed_timesteps` is accepted by `SemanticsProfile` and maps to
   PyReason run config timesteps.
+- [ ] `fixed_timesteps` conflicts with mismatched
+  `engine_options.timesteps`.
 - [ ] `valid_time_boundaries` explicit universe boundaries plus assertion
   `valid_from` / `valid_to` values map to ordinal PyReason `active_from` /
   `active_to`.
+- [ ] `valid_time_boundaries` handles missing `valid_from`, missing
+  `valid_to`, and both missing according to D10.
+- [ ] `valid_time_boundaries` conflicts with mismatched
+  `engine_options.timesteps`.
 - [ ] Unsupported temporal modes still reject with Track 3 / D or future
   redirect text.
-- [ ] Profile timesteps and `engine_options.timesteps` matching values are
-  allowed and conflicts reject.
 - [ ] Existing `PyReasonRuleExt` tests remain green.
 - [ ] Existing PyReason `engine_options.timesteps` tests remain green.
+- [ ] B's SDK/service profile rejection tests remain green.
 - [ ] C's ProbLog focused tests remain green.
+- [ ] Adapter import guards show ProbLog and PyReason may import
+  `SemanticsProfile`, while native/Souffle do not consume it.
 - [ ] Docs classify D as PyReason consumption, not public SDK/service
   call-site completion.
 
 ## 8. Implementation Plan
 
-1. G0 scope-freeze: lock path target spelling, rule-delay inclusion,
-   temporal mode minimum shape, carrier conflict rules, and guard updates.
+1. G0 scope-freeze: locked path target spelling, rule-delay inclusion,
+   temporal mode shape, carrier conflict rules, and guard updates.
 2. G1 red + guard baseline: add PyReason profile-consumption tests and update
    adapter import guards.
 3. G2 implementation: extend core profile temporal validation, PyReason
