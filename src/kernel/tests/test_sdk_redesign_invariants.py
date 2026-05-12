@@ -239,8 +239,8 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
         taxonomy examples must match actual flat method signatures.
 
         Flat signatures (per `src/kernel/sdk/store.py`):
-        - ``check(derivation, binding, ...)``
-        - ``check_fact_overlay(derivation, binding, overlay, ...)``
+        - ``check(inference, binding, ...)``
+        - ``check_fact_overlay(inference, binding, overlay, ...)``
         - ``check_rule_disable(rule, support_artifact, *, branch_index, atom_index, ...)``
 
         The taxonomy examples MUST keep the same positional argument
@@ -249,12 +249,12 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
         for relpath in ("src/kernel/sdk/docs/04_api_surface.en.md",):
             with self.subTest(doc=relpath):
                 text = self._read(relpath)
-                # Taxonomy what_if.check must take (derivation, binding)
+                # Taxonomy what_if.check must take (inference, binding)
                 # — NOT (rule, binding) which was the pre-fix bug.
                 self.assertIn(
-                    "fg.what_if.check(derivation, binding)",
+                    "fg.what_if.check(inference, binding)",
                     text,
-                    "fg.what_if.check must show (derivation, binding) signature",
+                    "fg.what_if.check must show (inference, binding) signature",
                 )
                 self.assertNotIn(
                     "fg.what_if.check(rule, binding)",
@@ -264,9 +264,9 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
                 # Taxonomy fact_overlay.check must take 3 positional args
                 # — NOT (support, overlay) which was the pre-fix bug.
                 self.assertIn(
-                    "fg.what_if.fact_overlay.check(derivation, binding, overlay)",
+                    "fg.what_if.fact_overlay.check(inference, binding, overlay)",
                     text,
-                    "fg.what_if.fact_overlay.check must show (derivation, binding, overlay) signature",
+                    "fg.what_if.fact_overlay.check must show (inference, binding, overlay) signature",
                 )
                 self.assertNotIn(
                     "fg.what_if.fact_overlay.check(support, overlay)",

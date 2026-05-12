@@ -11,14 +11,14 @@ how the pieces fit together; refer to
 Every interaction with FactPy involves at most four kinds of objects:
 
 ```
-Declaration    →    Candidate    →    Assertion    →    Derivation
-(authoring)        (eval output)      (in ledger)        (proof structure)
+Declaration    →    Candidate    →    Assertion    →    Proof Trace
+(authoring)        (eval output)      (in ledger)        (why/how evidence)
 ```
 
 ### Declaration
 
 A *declaration* is what you write at design time: an `Entity` class,
-a `Field` descriptor, a `Rule`, a `Derivation`. Declarations have no
+a `Field` descriptor, a `Rule`, an `Inference`. Declarations have no
 identity yet — they describe shapes and patterns.
 
 ```python
@@ -52,7 +52,7 @@ candidates[0].support_digest          # sha256 token of the supporting evidence
 ```
 
 The supporting evidence itself (a `SupportArtifact`) is reachable
-*only* via `fg.what_if.check(...)` — see the Derivation block below.
+*only* via `fg.what_if.check(...)` — see the proof-trace block below.
 `CandidateSet` deliberately keeps just the digest so the run/accept
 path stays narrow.
 
@@ -95,7 +95,8 @@ metadata.
 
 A *derivation* in proof terms is the structured trace showing how a
 candidate or assertion came to exist: which rule fired, which body
-literals supported it, which sub-proofs were chained. The typed
+literals supported it, which sub-proofs were chained. This proof
+vocabulary is not the public SDK `Inference` value-object type. The typed
 representation is `SupportArtifact`
 (`kernel.core.store._support`). "ProofFrame" in this doc is an
 informal umbrella for the audit-log shapes that wrap or compare
@@ -335,18 +336,18 @@ prefers to add wrappers after seeing real usage patterns.
 | Assertion view surface | `.chosen` is removed; field assertion collections expose `active`, `history`, `at`, `version`; `AssertionRecordSet` also supports `where`, `at`, `version`, `by_id`, `one`, `first`, `all` |
 | Frozen assertion views | `fg.views` supports named frozen assertion-id selections only; no built-in `default` view and no read-policy registry |
 | Read policy | `ReadPolicy` is passed with `policy=...`; `respect_revocations` controls whether display/confidence aggregation skips actively retracted claims |
-| `sdk.run(...)` dispatch | Rule and Query supported; Derivation is rejected with guidance to use `evaluate()` |
+| `sdk.run(...)` dispatch | Rule and Query supported; Inference is rejected with guidance to use `evaluate()` |
 | `sdk.evaluate(...)` params | `temporal_view` is removed and fails explicitly |
 | Rule `row_format` detail | `"tuple"` still works but emits `DeprecationWarning`; prefer `"dict"` |
 | `SDKBatchTx` context | `__exit__` does not auto-commit or auto-rollback; call explicitly |
 | Wire export restriction | `BatchPlan.export()` / `to_json()` forbids raw `idref_v1` token values |
 | `single` field semantics | `single` is a read-side scalar view; writes do not auto-prune older assertions |
-| Derivation `head` semantics | Primary-key fields in `head` are compile-time hard errors |
+| Inference `head` semantics | Primary-key fields in `head` are compile-time hard errors |
 | Cross-coordinate attr comparison | Only `==` on the same entity type and same `primary_key` field is allowed |
 | `RuleRef` constraints | Target must be `expose=True`; `RuleRef` is forbidden inside `Not(...)` body |
 | Query head constraints | Only `Entity(var)` or `Entity.field(...)`; field projection supports only `single` fields |
 | Branch identity | `Branch([...], id="name")` adds optional structural SDK metadata for `fg.rules.inspect(...)`. Unnamed branches inspect as `b0`, `b1`, ... fallback ids. Branch ids are not serialized into authoring payloads, compiled plans, registries, or adapters. |
-| Single-head derivations | Public SDK `Derivation` accepts one head. Multi-head public derivations are removed in Track 1; define one derivation per head. Capability shells were already single-head surfaces. |
+| Single-head inferences | Public SDK `Inference` accepts one head. Multi-head public inferences are removed in Track 1; define one inference per head. Capability shells were already single-head surfaces. |
 | Public semantics wrappers | Track 2 adds SDK-local `ProbLogSemantics` and `PyReasonSemantics` as preferred Python authoring wrappers for `evaluate(..., semantics=...)`. The SDK can derive `engine=` from these objects, lower them into canonical `SemanticsProfile`, and keep service / compiled paths on the canonical shape. |
 
 ---
@@ -358,7 +359,7 @@ prefers to add wrappers after seeing real usage patterns.
 | `sdk.create(...)` | Deferred |
 | `sdk.save(plain_entity)` / `snapshot.to_entity()` | Deferred |
 | Formal typed ingest schema (`TypedDict` / dataclass) | Deferred |
-| Temporal write semantics in `Rule` / `Derivation` head (`valid_from`, `valid_to`, `version`) | Deferred |
+| Temporal write semantics in `Rule` / `Inference` head (`valid_from`, `valid_to`, `version`) | Deferred |
 | Native multi-head publishing semantics in Registry | Removed from public SDK surface in Track 1; use one derivation per head |
 | Physical SDK file split (`store.py` / `batch.py` / `facade.py`) | Deferred; runtime delegation completed, line-count reduction not |
 | Full exception hierarchy migration | Deferred; application runtime uses DTO error shapes, SDK product-domain errors remain SDK-owned |

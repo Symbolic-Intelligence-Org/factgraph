@@ -1,4 +1,4 @@
-# SDK Rule / Query / Derivation DSL
+# SDK Rule / Query / Inference DSL
 
 Scope: `src/kernel/sdk/dsl` + the `eval` and `what_if` namespaces of
 `FactGraph` / `SDKStore`. For the introductory walkthrough see
@@ -6,12 +6,12 @@ Scope: `src/kernel/sdk/dsl` + the `eval` and `what_if` namespaces of
 [`04_api_surface.en.md`](04_api_surface.en.md); for what-if examples
 see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
 
-In the snippets below, `fg = FactGraph.from_schema_classes([...])`.
+In the snippets below, `fg = FactGraph.create(schema_classes=[...])`.
 All flat methods are also reachable through namespaces:
 
 | Flat | Namespaced | Namespace |
 |---|---|---|
-| `fg.run / evaluate / evaluate_compiled / accept / accept_compiled / accept_many` | `fg.eval.<verb>` | `eval` |
+| `fg.run / evaluate / accept / accept_many` | `fg.eval.<verb>` | `eval` |
 | `fg.check / diagnose / why_not` | `fg.what_if.<verb>` | `what_if` |
 | `fg.check_fact_overlay / recheck_proof_frame` | `fg.what_if.fact_overlay.{check, recheck_proof_frame}` | `what_if.fact_overlay` |
 | `fg.check_rule_disable / check_rule_literal_replace / check_rule_add_condition` | `fg.what_if.rule.{disable, literal_replace, add_condition}` | `what_if.rule` |
@@ -21,11 +21,11 @@ supported.
 
 ### Engine runtime options
 
-- Public `Rule` and `Derivation` objects are engine-independent business
+- Public `Rule` and `Inference` objects are engine-independent business
   templates. They do not carry adapter-specific `engine_ext` parameters.
 - `engine_options` is **call-time** runtime configuration passed at
-  `evaluate(...)` (e.g. `fg.eval.evaluate(deriv, engine_options={"timesteps": 5})`).
-  It never enters the `Derivation` or the ledger. `engine="native"`
+  `evaluate(...)` (e.g. `fg.eval.evaluate(inf, engine_options={"timesteps": 5})`).
+  It never enters the `Inference` or the ledger. `engine="native"`
   rejects non-empty `engine_options`.
 - Track 2 makes `ProbLogSemantics` and `PyReasonSemantics` the
   preferred public SDK wrappers for engine-specific semantics.
@@ -119,7 +119,7 @@ Supported:
 - negation: `Not([...])`
 - comparisons: `== != > >= < <=`
 - OR branches: `where=[[...], [...]]`
-- `Branch` branches: `where=[Branch([...], id="seed_path"), Branch([...])]` (Rule/Derivation)
+- `Branch` branches: `where=[Branch([...], id="seed_path"), Branch([...])]` (Rule/Inference)
 - linear arithmetic inside comparisons (for example `age == (2026 - by)`, `x * 2`)
 
 `Branch` example:
@@ -140,7 +140,7 @@ Limits:
 - `where` cannot mix `Branch(...)` with bare branches (for example `[Branch([...]), [...]]`).
 - `Branch(...)` accepts the branch atom list plus optional keyword-only structural `id=`.
   Probability, confidence, and engine-specific kwargs are rejected.
-- `fg.rules.inspect(rule_or_derivation)` exposes explicit branch ids, positional fallback ids (`b0`, `b1`, ...), and atom ids such as `b0.a0`.
+- `fg.rules.inspect(rule_or_inference)` exposes explicit branch ids, positional fallback ids (`b0`, `b1`, ...), and atom ids such as `b0.a0`.
 - string DSL is unsupported (`sdk.run("...")`, `sdk.evaluate("...")`).
 
 ### 3.1 Field Sugar vs `Pred(...)`
@@ -206,18 +206,18 @@ Stable contract:
 - `on_missing` / `on_type_mismatch` only allow `error|skip|null`.
 - Invalid Query `row_format`, or incompatible head shape for `instance` mode, raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
 
-## 6. Derivation DSL
+## 6. Inference DSL
 
 ```python
 with vars("u", "loc", "nm") as (u, loc, nm):
-    d = Derivation(
+    inf = Inference(
         id="drv.copy_name",
         version="1.0.0",
         where=[User(u), u.locale == loc, u.name == nm],
         head=User.name(locale=loc, name=nm),
     )
 
-cands = sdk.evaluate(d, engine="native")
+cands = sdk.evaluate(inf, engine="native")
 res = sdk.accept(cands[0], approved_by="alice")
 ```
 
@@ -227,10 +227,10 @@ Fields:
 
 Stable contract:
 - `head` shape infers candidate kind (fact/entity).
-- Public SDK `Derivation` is single-head. Multi-head (`head=[H1, H2, ...]`) is rejected in Track 1; define one derivation per head.
-- `Rule/Derivation.where` both support `Branch(...)`; it unwraps to normalized OR-branch structure.
-- `sdk.run(derivation)` is not supported; use `sdk.evaluate(...)`.
-- `sdk.run(derivation)` fails with code `QUERY_INVALID_ROW_FORMAT` (error message directs callers to `evaluate()`).
+- Public SDK `Inference` is single-head. Multi-head (`head=[H1, H2, ...]`) is rejected in Track 1; define one inference per head.
+- `Rule/Inference.where` both support `Branch(...)`; it unwraps to normalized OR-branch structure.
+- `sdk.run(inference)` is not supported; use `sdk.evaluate(...)`.
+- `sdk.run(inference)` fails with code `QUERY_INVALID_ROW_FORMAT` (error message directs callers to `evaluate()`).
 
 ## 7. Compile-Time Hard Constraints (v2)
 
@@ -265,17 +265,17 @@ System-prefixed temporary names are reserved.
 ### 8.1 `sdk.evaluate(...)`
 
 ```python
-cands = sdk.evaluate(drv, engine="native")
+cands = sdk.evaluate(inf, engine="native")
 ```
 
-- `mode`: `native` (default) / `souffle` / `problog` / `pyreason`.
-- SDK lowers `Derivation` DSL objects into compiled plans, then delegates orchestration to application `evaluate_derivation_plans(...)`; SDK remains responsible for mode alias rejection, registry sugar, and outward compatibility.
+- `engine`: `native` (default) / `souffle` / `problog` / `pyreason`.
+- SDK lowers `Inference` DSL objects into compiled plans, then delegates orchestration to application `evaluate_derivation_plans(...)`; SDK remains responsible for mode alias rejection, registry sugar, and outward compatibility.
 - Legacy `mode='python'` / `mode='engine'` **values** fail with explicit rename hints (use `mode='native'` / `mode='souffle'` respectively); enforced at `kernel/core/store/_evaluate.py:50,52`.
 - `souffle` / `problog` / `pyreason` require registered adapters (for example `import kernel.adapters.souffle`, `import kernel.adapters.problog`, `import kernel.adapters.pyreason`).
 - `sdk.evaluate(..., view=...)` and `sdk.evaluate(..., policy=...)` are
   not supported; inference always uses the full active assertion set.
-- `engine_options` is call-time engine run-time configuration, for example `sdk.evaluate(drv, engine="pyreason", engine_options={"timesteps": 5})`.
-- `engine_options` does not enter `Derivation` or `to_authoring_payload()`; `mode="native"` rejects non-empty `engine_options`.
+- `engine_options` is call-time engine run-time configuration, for example `sdk.evaluate(inf, engine="pyreason", engine_options={"timesteps": 5})`.
+- `engine_options` does not enter `Inference` or `to_authoring_payload()`; `mode="native"` rejects non-empty `engine_options`.
 
 ### 8.2 `CandidateSet` key fields
 
@@ -283,7 +283,7 @@ cands = sdk.evaluate(drv, engine="native")
 - `candidate_key`: cross-run stable key
 - `candidate_kind`: `fact` / `entity`
 - `confidence`: `float | None` (`problog` yields a probability; `pyreason` yields a lower-bound; `native/souffle` return `None`)
-- `confidence_kind`: literal `"none"` (native/souffle) / `"probability"` (problog) / `"certainty"` (pyreason); paired with `confidence` to disambiguate the engine semantic. Source: `kernel/core/derivation/candidates.py:10, 27`.
+- `confidence_kind`: literal `"none"` (native/souffle) / `"probability"` (problog) / `"certainty"` (pyreason); paired with `confidence` to disambiguate the engine semantic. Source: `kernel/core/inference/candidates.py:10, 27`.
 - Candidate `confidence` is an output summary, not the canonical raw
   uncertainty carrier. User-authored raw uncertainty belongs on facts as
   `meta={"raw_kind": ..., "bound": [...]}` and is persisted to
@@ -330,12 +330,12 @@ Implemented:
 - If a temporal anchor must support explain drill-down, model it as a predicate assertion or at least bind it to a variable so it surfaces through `pred_witnesses` or `non_fact_steps.details.binding`.
 
 Not open yet:
-- derivation/runtime `temporal_view` parameter.
+- inference/runtime `temporal_view` parameter.
 - dedicated temporal where atom / temporal builtin tag.
-- temporal write semantics in Rule/Derivation head.
+- temporal write semantics in Rule/Inference head.
 
 Explicit behavior:
-- Authoring derivation payload with `temporal_view` fails compile.
+- Authoring inference payload with `temporal_view` fails compile.
 - `sdk.evaluate(..., temporal_view=...)` raises `SDKStoreError`.
 
 ## 10. Minimal End-to-End Examples
@@ -344,14 +344,14 @@ Explicit behavior:
 
 ```python
 with vars("u", "loc", "nm") as (u, loc, nm):
-    drv = Derivation(
+    inf = Inference(
         id="drv.alias",
         version="1.0.0",
         where=[User(u), u.locale == loc, u.name == nm],
         head=User.name(locale=loc, name=nm),
     )
 
-fact = next(c for c in sdk.evaluate(drv) if c.candidate_kind == "fact")
+fact = next(c for c in sdk.evaluate(inf) if c.candidate_kind == "fact")
 sdk.accept(fact, approved_by="alice")
 ```
 
@@ -359,12 +359,12 @@ sdk.accept(fact, approved_by="alice")
 
 ```python
 with vars("u", "lang") as (u, lang):
-    drv = Derivation(
+    inf = Inference(
         id="drv.speaks",
         version="1.0.0",
         where=[User(u), Pred("user:lang_pref", u, lang)],
         head=Speaks(user=u, language=lang),
     )
 
-rows = sdk.accept_many(sdk.evaluate(drv), mode="atomic")
+rows = sdk.accept_many(sdk.evaluate(inf), mode="atomic")
 ```

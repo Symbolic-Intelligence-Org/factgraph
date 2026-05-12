@@ -14,6 +14,7 @@
 | 2026-05-12 | g2-impl | FactGraph.create | Added `FactGraph.create(schema_classes=...)` as a thin classmethod wrapper over `from_schema_classes(...)`, preserving ledger, ledger_path, artifact store, and row-format options. The G1 suite now has 6 expected failures and no errors. |
 | 2026-05-12 | g2-impl | What-if parameter rename | Renamed public what-if shell parameters and boundary errors from `derivation` to `inference` for Check, Diagnose, Why-not, and Fact Overlay while keeping internal derivation compile/runtime helpers unchanged. |
 | 2026-05-12 | g2-impl | Compiled escape hatch hard-cut | Removed public `evaluate_compiled` and `accept_compiled` from both `fg.eval` and the root `FactGraph`/`SDKStore` surface. Private compiled-plan evaluation remains available internally through `_evaluate_compiled_derivation_plans(...)` for `evaluate(...)` lowering. |
+| 2026-05-12 | g3-docs | Public inference docs sync | Renamed SDK rules/derivations docs to `03_rules_and_inferences.en.md`, updated SDK docs to teach public `Inference`, `FactGraph.create(...)`, `inference=` what-if parameters, and compiled-plan SDK hard-cut behavior, while documenting that `derivation_id`, `derivation_v1`, service/registry/application names, and `CompiledDerivationPlan` remain substrate vocabulary. Synced the lifecycle design-point and earlier function-tree note to record Blueprint 1 as the public naming boundary. |
 
 ## Decision Notes
 

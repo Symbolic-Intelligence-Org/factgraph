@@ -18,7 +18,7 @@ For walker views and advanced importables see
 2. [Schema](#2-schema)
 3. [Reading](#3-reading)
 4. [Writing](#4-writing)
-5. [Eval — Rule / Query / Derivation](#5-eval--rule--query--derivation)
+5. [Eval — Rule / Query / Inference](#5-eval--rule--query--inference)
 6. [What-if](#6-what-if)
 7. [Audit](#7-audit)
 8. [Views and packages](#8-views-and-packages)
@@ -55,7 +55,7 @@ class User(Entity):
     name: str = Field(cardinality="single")
     tags: str = Field(cardinality="multi")
 
-fg = FactGraph.from_schema_classes([User])
+fg = FactGraph.create(schema_classes=[User])
 
 ref_alice = fg.read.ref(User, user_id="u-1")
 ref_bob   = fg.read.ref(User, user_id="u-2")
@@ -104,10 +104,10 @@ class Document(Entity):
 
 ### Compile and instantiate
 
-`from_schema_classes` compiles, validates, and constructs in one step:
+`FactGraph.create(...)` compiles, validates, and constructs in one step:
 
 ```python
-fg = FactGraph.from_schema_classes([User, Document])
+fg = FactGraph.create(schema_classes=[User, Document])
 ```
 
 You can also compile separately:
@@ -124,9 +124,9 @@ schema_ir = compile_schema_from_classes([User, Document])
 `Relationship` classes are compile-level schema declarations, not
 entities with identity fields. They declare endpoints with `from_entity`
 and `to_entity`, and any relationship attributes are `Field(...)`
-members. `FactGraph.from_schema_classes(...)` constructs a store from
-entity classes; use `compile_schema_from_classes(...)` when you need to
-inspect relationship schema IR directly.
+members. `FactGraph.create(...)` constructs a store from entity classes;
+use `compile_schema_from_classes(...)` when you need to inspect
+relationship schema IR directly.
 
 ### Provenance validation
 
@@ -389,7 +389,7 @@ fg.write.set(User.name, ref, "Alice", meta={"confidence": 1.2})   # ❌ out of r
 
 ---
 
-## 5. Eval — Rule / Query / Derivation
+## 5. Eval — Rule / Query / Inference
 
 Three primitives:
 
@@ -397,11 +397,11 @@ Three primitives:
 |---|---|---|
 | `Rule` | Single-rule inference (`select` + `where`); produces rows | `fg.eval.run(rule)` → `list[dict]` (default) |
 | `Query` | Read-side projection over the current store; produces rows | `fg.eval.run(query)` → `list[dict]` (default) |
-| `Derivation` | A single derivation (one or more heads); produces accept-ready candidates | `fg.eval.evaluate(deriv, engine=...)` → `list[CandidateSet]` |
+| `Inference` | A single inference (one head); produces accept-ready candidates | `fg.eval.evaluate(inf, engine=...)` → `list[CandidateSet]` |
 
 All three are constructed inside a `with vars(...) as (...):` block.
 For the deeper DSL spec see
-[`03_rules_and_derivations.en.md`](03_rules_and_derivations.en.md).
+[`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md).
 
 ### Query
 
@@ -484,9 +484,9 @@ Rule's `where` accepts:
   `where` cannot mix `Branch(...)` with bare branches.
   The optional keyword-only `id=` is structural metadata for inspection
   and future semantics references. It must be unique within the inspected
-  rule/derivation and does not enter authoring payloads or engine adapters.
+  rule/inference and does not enter authoring payloads or engine adapters.
 
-Inspect rule or derivation structure before attaching runtime semantics:
+Inspect rule or inference structure before attaching runtime semantics:
 
 ```python
 shape = fg.rules.inspect(r)
@@ -495,39 +495,39 @@ shape["branches"][0]["fallback_id"] # "b0"
 shape["branches"][0]["atom_ids"]    # ["b0.a0", "b0.a1", ...]
 ```
 
-Rule `run` is a row dispatcher. Passing a `Derivation` to `run`
+Rule `run` is a row dispatcher. Passing an `Inference` to `run`
 explicitly raises (`use sdk.evaluate() instead`).
 
-### Derivation + evaluate
+### Inference + evaluate
 
-A `Derivation(id, version, where, head=None, ...)` is a
-single derivation that produces accept-ready candidates. `head` is one
-entity or field head. Multi-head public derivations are removed in
-Track 1; use one `Derivation` per head.
+An `Inference(id, version, where, head=None, ...)` is a
+single inference that produces accept-ready candidates. `head` is one
+entity or field head. Multi-head public inferences are removed in
+Track 1; use one `Inference` per head.
 
 ```python
-from kernel.sdk import Derivation
+from kernel.sdk import Inference
 
 with vars("d", "kw") as (d, kw):
-    deriv = Derivation(
+    inf = Inference(
         id="drv.document_keyword",
         version="1.0.0",
         where=[Document(d), d.title == "FactPy guide"],
         head=Document.keywords(value=kw),  # fact-candidate head
     )
 
-candidates = fg.eval.evaluate(deriv, engine="native")           # → list[CandidateSet]
-candidates = fg.eval.evaluate(deriv, engine="problog")          # probabilistic
-candidates = fg.eval.evaluate(deriv, engine="pyreason",
+candidates = fg.eval.evaluate(inf, engine="native")           # → list[CandidateSet]
+candidates = fg.eval.evaluate(inf, engine="problog")          # probabilistic
+candidates = fg.eval.evaluate(inf, engine="pyreason",
                               engine_options={"timesteps": 5})  # temporal
 ```
 
-`engine` is **call-time**, not stored on the `Derivation`. Allowed values:
+`engine` is **call-time**, not stored on the `Inference`. Allowed values:
 `"native"` (default), `"souffle"`, `"problog"`, `"pyreason"`.
 `engine="native"` rejects non-empty `engine_options`. The public SDK
 `mode=` keyword is removed in Track 3 / E; use `engine=`.
 
-For multiple output facts, define separate derivations. This keeps the
+For multiple output facts, define separate inferences. This keeps the
 public runtime call-site aligned with `SemanticsProfile` and with the
 what-if shells, all of which are single-head surfaces.
 
@@ -575,11 +575,11 @@ results = fg.eval.accept_many(
 ### Engine runtime options
 
 ```python
-fg.eval.evaluate(deriv, engine="pyreason", engine_options={"timesteps": 10})
+fg.eval.evaluate(inf, engine="pyreason", engine_options={"timesteps": 10})
 ```
 
 `engine_options` is **call-time** runtime config. It never enters
-`Rule`, `Derivation`, authoring payloads, or the ledger. Engine-specific
+`Rule`, `Inference`, authoring payloads, or the ledger. Engine-specific
 rule projection is intentionally not carried by public SDK rule objects.
 Track 2 adds lightweight public semantics wrappers as the preferred SDK
 authoring shape:
@@ -587,7 +587,7 @@ authoring shape:
 ```python
 from kernel.sdk import Branch, ProbLogSemantics, PyReasonSemantics
 
-deriv = Derivation(
+inf = Inference(
     id="drv.user_tag",
     version="v1",
     where=[
@@ -599,12 +599,12 @@ deriv = Derivation(
 )
 
 fg.eval.evaluate(
-    deriv,
+    inf,
     semantics=ProbLogSemantics(branch_probabilities={"seed_path": 0.7}),
 )
 
 fg.eval.evaluate(
-    pyreason_deriv,
+    inf,
     semantics=PyReasonSemantics(
         timestep_delay=2,
         head_bound=[0.7, 0.9],
@@ -626,7 +626,7 @@ For PyReason, `head_bound` is the default head interval for all branches.
 `branch_bounds` is a per-branch override map keyed by explicit
 `Branch(id=...)` values or fallback positional ids such as `b0` / `b1`.
 Fallback ids are useful for quick experiments, but explicit branch ids are
-more stable when a derivation's branch order changes.
+more stable when an inference's branch order changes.
 
 ### Semantic annotations
 
@@ -713,13 +713,13 @@ diff = fg.audit.diff_proof_frames(
 - `conflicts` enumerates active conflicting assertions on the same
   `(pred_id, e_ref)` pair as `active_asrt_ids`, plus the
   `chosen_asrt_id` selected by the current read/display policy.
-- `diff_proof_frames` compares two recorded derivation rounds and
+- `diff_proof_frames` compares two recorded inference rounds and
   returns a `ProofFrameDiff`. The `round_*_events` arguments are the
   full `tuple[RoundEvent, ...]` values captured by the round recorder
   or loaded from an audit package; `include_unchanged=False` trims the
   diff to changed rows only. `diff_proof_frames` does not read files or
   extract events from `evaluate`. See
-  [06 §Q5](06_what_if_and_proof.en.md#q5-how-did-derivation-change-between-rounds--fgaudit_diff_proof_frames).
+  [06 §Q5](06_what_if_and_proof.en.md#q5-how-did-inference-change-between-rounds--fgaudit_diff_proof_frames).
 
 ---
 
@@ -881,7 +881,7 @@ except SDKStoreError as e:
         print("Caller bug: row_format must be one of dict|instance")
 ```
 
-`SDKDSLError` (raised by Query/Rule/Derivation construction) carries
+`SDKDSLError` (raised by Query/Rule/Inference construction) carries
 the same `code` and `path` attributes; some codes (notably
 `QUERY_UNBOUND_VAR`, `QUERY_ALIAS_CONFLICT`) surface there rather than
 on `SDKStoreError`.
@@ -890,7 +890,7 @@ on `SDKStoreError`.
 
 ## 10. Registry
 
-The registry tracks compiled schemas, rules, and derivations across
+The registry tracks compiled schemas, rules, and inferences across
 versions and apply runs. It writes to a directory on disk
 (`FileAuthoringRegistry` under the hood).
 
@@ -904,7 +904,7 @@ reg = SDKRegistry(root_dir="/var/factpy/registry")           # path-based
 
 reg.apply_schema_classes([User, Document])
 reg.register_rule(my_rule)                # SDK Rule object
-reg.register_derivation(my_derivation)    # SDK Derivation object (single-head)
+reg.register_derivation(my_inference)     # SDK Inference object (single-head)
 
 reg.list_rule_ids()
 reg.list_rule_versions("rule_alice")
@@ -913,8 +913,9 @@ reg.read_rule_spec("rule_alice", "1.0.0")        # both args positional
 
 `register_rule` / `register_derivation` accept either an SDK DSL object
 (uses `.to_authoring_payload()`) or a pre-built authoring payload
-`dict`. Multi-head Derivations are supported — the payload's
-`head` field carries a list when more than one head is present.
+`dict`. Public SDK `Inference` is single-head; lower-level authoring
+payloads remain substrate vocabulary and are handled by registry methods
+with `derivation_*` names until a dedicated wire/registry rename slice.
 
 Apply runs:
 
@@ -931,8 +932,8 @@ full method list.
 
 ## 11. Where to go next
 
-- **[`03_rules_and_derivations.en.md`](03_rules_and_derivations.en.md)** —
-  canonical Rule / Query / Derivation DSL spec (compile-time
+- **[`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md)** —
+  canonical Rule / Query / Inference DSL spec (compile-time
   constraints, `where` syntax, engine runtime options,
   `accept` parameter boundaries)
 - **[`04_api_surface.en.md`](04_api_surface.en.md)** — full API
@@ -962,7 +963,7 @@ Notable changes:
 | `temporal_view` parameter | (removed) | Pass via `meta` and use a custom view |
 | `mode=` keyword on SDK `evaluate` | (removed) | Use `engine=` |
 | `semantics_profile=` keyword on SDK `evaluate` | (removed) | Use `semantics=` |
-| public multi-head `Derivation` | (removed) | Use one `Derivation` per head |
+| public multi-head `Inference` | (removed) | Use one `Inference` per head |
 
 ### ProbLog branch probability transition
 
@@ -984,7 +985,7 @@ fg.eval.evaluate(
 shape for direct profile users and service JSON.
 
 Track 1 adds optional structural branch ids and rule inspection:
-`Branch([...], id="declared_pref")` and `fg.rules.inspect(rule_or_derivation)`.
+`Branch([...], id="declared_pref")` and `fg.rules.inspect(rule_or_inference)`.
 Branch ids are inspect-only SDK metadata; authoring payloads, compiled
 plans, registries, and adapters still receive positional branch structure.
 
@@ -1001,7 +1002,7 @@ currently lowerable PyReason lanes:
 
 ```python
 fg.eval.evaluate(
-    deriv,
+    inf,
     semantics=PyReasonSemantics(
         timestep_delay=2,
         head_bound=[0.7, 0.9],
@@ -1014,7 +1015,7 @@ Track 3-post adds per-branch head interval overrides:
 
 ```python
 fg.eval.evaluate(
-    deriv,
+    inf,
     semantics=PyReasonSemantics(
         head_bound=[0.5, 1.0],
         branch_bounds={
@@ -1025,7 +1026,7 @@ fg.eval.evaluate(
 )
 ```
 
-The SDK resolves branch ids while it still has the SDK `Derivation`
+The SDK resolves branch ids while it still has the SDK `Inference`
 object, lowers them into canonical `rule_projection.pyreason`
 `target="branch:{index}", kind="interval"` entries, and the PyReason
 adapter compiles those entries as per-branch head annotations. Empty

@@ -4,7 +4,7 @@ Scope: `store.py`, `facade.py`, `batch.py`, `ingest.py`. For the
 introductory walkthrough see [`00_user_guide.en.md`](00_user_guide.en.md);
 for the API index see [`04_api_surface.en.md`](04_api_surface.en.md).
 
-In the snippets below, `fg = FactGraph.from_schema_classes([...])`.
+In the snippets below, `fg = FactGraph.create(schema_classes=[...])`.
 All flat methods (`fg.set(...)`, `fg.get(...)`, etc.) are also reachable
 through the namespaced form:
 
@@ -27,26 +27,26 @@ supported.
 | External batch import with diagnostics | `fg.ingest(...)` | Item-level validation, collect-and-stop |
 | Lowest-level direct assertion writes | `fg.write.ref / set / add / retract` | Most flexible, least opinionated |
 
-## 2. Building `SDKStore`
+## 2. Building `FactGraph`
 
 ```python
-sdk = SDKStore.from_schema_classes([User, Country, LivesIn])
+fg = FactGraph.create(schema_classes=[User, Country, LivesIn])
 ```
 
 File-backed ledger:
 
 ```python
-sdk = SDKStore.from_schema_classes(
-    [User, Country, LivesIn],
+fg = FactGraph.create(
+    schema_classes=[User, Country, LivesIn],
     ledger_path="./data/ledger.db",
 )
 ```
 
-To make explain artifacts readable across later `SDKStore` instances as well, you can also provide:
+To make explain artifacts readable across later `FactGraph` instances as well, you can also provide:
 
 ```python
-sdk = SDKStore.from_schema_classes(
-    [User, Country, LivesIn],
+fg = FactGraph.create(
+    schema_classes=[User, Country, LivesIn],
     ledger_path="./data/ledger.db",
     artifact_store_root="./data/artifacts",
 )

@@ -9,7 +9,7 @@ Last Updated: 2026-05-12
 当前 public SDK 已经有一个清晰的 `FactGraph` mental model:
 
 ```python
-fg = FactGraph.from_schema_classes([User, Document])
+fg = FactGraph.create(schema_classes=[User, Document])
 fg.write.add(...)
 fg.read.find(...)
 fg.eval.run(...)
@@ -18,13 +18,13 @@ fg.what_if.check(...)
 
 但 `FactGraph` 的生命周期还没有成为一等公民:
 
-- `FactGraph.from_schema_classes(...)` 实际承担了 create-like 入口,但名字强调 Python class schema 来源,不表达 graph workspace 生命周期。
+- `FactGraph.create(...)` 现在是 public lifecycle constructor; `FactGraph.from_schema_classes(...)` 仍可作为 class-first lower-level constructor substrate。
 - `SDKRegistry` 独立存在,负责 compiled schema / rule / derivation 的持久化,但用户 mental model 里它更像 `FactGraph` 的 save/load/catalog 能力,不是另一个并列世界。
-- `Rule` / `Derivation` 现在主要作为独立 value object 参与 runtime call,这很好;但 durable authoring asset 的 save/load/list 入口还没有自然地长在 `fg` 上。
+- `Rule` / `Inference` 现在主要作为独立 value object 参与 runtime call,这很好;但 durable authoring asset 的 save/load/list 入口还没有自然地长在 `fg` 上。
 - schema 的 add/delete/update/migration 还没有明确 public story。
 - evidence / audit capability 后续会变大,但不应在 lifecycle 设计里被误塞进 registry 或 query/rule namespace。
 - `Query` 没有纳入当前 registry story,这不是原则性决定,只是当前实现还没有 query asset persistence。
-- `Derivation` 作为 public SDK 类型和 proof/audit derivation vocabulary 混在一起。Existing design notes already flagged this: public `Inference` may be clearer for the value object that produces `CandidateSet`s.
+- Blueprint 1 已将 public SDK candidate-producing value object hard-cut 为 `Inference`,同时把 proof/audit/application substrate 的 derivation vocabulary 留给后续 wire/registry/proof cleanup。
 
 这个 note 的目标不是立刻改 API,而是把下一轮 blueprint 的设计边界先放清楚:
 
@@ -33,7 +33,7 @@ fg.what_if.check(...)
 3. `fg.schema.add/delete/update` 应该怎么表达,以及哪些动作第一阶段不应该实现?
 4. explain / evidence capability 和 query asset 应该放在哪里,避免之后命名重做?
 5. 现有 assertion/read/write/view 语法是否保持不受影响?
-6. `Derivation` 是否应该在 public SDK hard-cut 为 `Inference`,同时把 internal/wire `derivation_*` vocabulary 留给后续切片?
+6. public SDK 已 hard-cut 为 `Inference` 后,internal/wire `derivation_*` vocabulary 应该在哪个后续切片统一 rename?
 
 Pre-release framing: 产品尚未正式发布,所以这里不以历史 public compatibility 为硬约束。`SDKRegistry`、`from_schema_classes(...)` 等现有 public-ish surfaces 可以保留为实现过渡底座,也可以在后续 blueprint 中 hard-cut / hide / rename,只要迁移后的 public mental model 更干净。
 
@@ -111,9 +111,9 @@ Important asymmetry:
 
 This supports the claim that registry is a real implementation mechanism. It does **not** imply that `SDKRegistry` should remain a public SDK concept. In a pre-release cleanup, `SDKRegistry` can be internalized, removed from `kernel.sdk.__all__`, or replaced by FactGraph domain facades if that produces a cleaner model.
 
-### 2.4 Current Rule / Derivation object model
+### 2.4 Current Rule / Inference object model
 
-Rules and derivations are independent SDK value objects.
+Rules and inferences are independent SDK value objects.
 
 This is a good property and should not be lost. It enables:
 
@@ -121,8 +121,8 @@ This is a good property and should not be lost. It enables:
 rule = Rule(...)
 fg.eval.run(rule)
 
-deriv = Derivation(...)
-fg.eval.evaluate(deriv, semantics=ProbLogSemantics(...))
+inf = Inference(...)
+fg.eval.evaluate(inf, semantics=ProbLogSemantics(...))
 ```
 
 Durable registration should be optional:
@@ -229,7 +229,7 @@ This means `fg.rules.*` is no longer only aspirational. It already exists as a n
 
 `docs/references/working/design-points/rule-policy-function-tree-and-syntax.zh.md` explicitly flagged a naming risk: `Derivation` can be confused with proof derivation, and product-level aliases such as `Inference` or `Materialization` may be clearer.
 
-This note adopts that as an active design concern. The value object currently named `Derivation` is a candidate/materialization producer: `where + head -> CandidateSet[]`. It is not the proof trace itself. The public SDK should probably use `Inference` for that value object, while internal proof/audit vocabulary can continue to use derivation where it means "how something was derived."
+Blueprint 1 adopts that concern for the public SDK. The candidate/materialization producer is now public `Inference`: `where + head -> CandidateSet[]`. It is not the proof trace itself. Internal proof/audit vocabulary can continue to use derivation where it means "how something was derived."
 
 ## 4. Design Thesis
 
@@ -241,7 +241,7 @@ This note proposes the following working thesis for a future blueprint:
 2. **Registry is a mechanism, not necessarily an advanced public API.**
    The registry substrate may remain internally, but `SDKRegistry` does not have to remain importable or documented as public. The canonical user path should be `FactGraph.load/save` and domain namespaces.
 
-3. **Rule / Derivation / Query are authoring assets, not mandatory registry records.**
+3. **Rule / Inference / Query are authoring assets, not mandatory registry records.**
    They remain value objects for direct runtime use. Saving them is optional.
 
 4. **Domain namespaces should own durable asset operations.**
@@ -267,7 +267,7 @@ This note proposes the following working thesis for a future blueprint:
    If domain namespaces persist authoring assets, they should call a `kernel.application` authoring runtime layer or an equivalent DTO boundary. They should not duplicate filesystem registry logic or reach directly into `FileAuthoringRegistry`.
 
 9. **Public SDK vocabulary can differ from internal substrate vocabulary.**
-   Because the product is pre-release, the public SDK can hard-cut `Derivation` to `Inference` without preserving a public alias. Internal application/authoring/service names may continue to use `derivation_*` until a dedicated wire/registry rename slice cuts them.
+   Because the product is pre-release, Blueprint 1 hard-cuts public SDK `Derivation` to `Inference` without preserving a public alias. Internal application/authoring/service names may continue to use `derivation_*` until a dedicated wire/registry rename slice cuts them.
 
 ## 5. Proposed Conceptual Tree
 
@@ -566,7 +566,7 @@ fg.schema.apply_migration(plan)
 
 This is probably too large for the first lifecycle slice. It is important to design the name now so `add/delete/update` do not trap future behavior into unsafe shortcuts.
 
-## 9. Authoring Assets: Rules, Derivations, Queries
+## 9. Authoring Assets: Rules, Inferences, Queries
 
 ### 9.1 Keep value-object runtime use
 
@@ -576,8 +576,8 @@ This must remain valid:
 rule = Rule(...)
 fg.eval.run(rule)
 
-deriv = Derivation(...)
-fg.eval.evaluate(deriv, semantics=PyReasonSemantics(...))
+inf = Inference(...)
+fg.eval.evaluate(inf, semantics=PyReasonSemantics(...))
 ```
 
 Saving should not be required for evaluation.
@@ -766,9 +766,9 @@ If rules are saved and loaded, Track 3-era fields such as `condition_weights` mu
 
 ### 11.4 Public/internal vocabulary split
 
-Public SDK vocabulary should not keep using `Derivation` for the candidate-producing value object if the G0 rename decision lands. The recommended split is:
+Blueprint 1 lands the public/internal vocabulary split for the candidate-producing value object:
 
-- public SDK: `Inference`, `fg.inferences.*`, and future `InferenceRef`;
+- public SDK: `Inference`; future persistence slices may add `fg.inferences.*` and `InferenceRef` only when they carry real behavior;
 - internal/application/authoring/service substrate: existing `derivation_*` names may remain until a dedicated wire/registry rename slice;
 - proof/audit docs: avoid using bare `Derivation` as a concept heading; prefer `Proof`, `Proof Trace`, or `Support Trace` for "how a result was derived."
 
@@ -816,7 +816,7 @@ These must be answered before a concrete implementation blueprint is scoped:
 7. Should `fg.inferences.save(inf)` introduce a new `InferenceRef`, return a manifest entry dict, or use another reference shape?
 8. Does query persistence belong in the same slice, or should `fg.queries.*` remain design-only until authoring registry supports it?
 9. Which implementation path owns persistence orchestration: direct `SDKRegistry`, direct `FileAuthoringRegistry`, or an application-layer authoring runtime?
-10. Does Blueprint 1 hard-cut public SDK `Derivation` to `Inference`, and does it include SDK docs in the same slice?
+10. Blueprint 1 hard-cuts public SDK `Derivation` to `Inference` and updates SDK docs in the same slice; remaining question is when substrate/wire vocabulary follows.
 11. If public SDK uses `Inference`, when does service/registry wire vocabulary rename from `derivation` to `inference`?
 12. If query persistence is ever added, what is the saved query identity model: explicit id/version, digest-derived id, or both?
 
@@ -848,12 +848,12 @@ Small-to-medium, SDK/docs-focused, no persistence.
 Candidate scope:
 
 1. Add `FactGraph.create(schema_classes=..., ledger_path=..., artifact_store_root=...)` as an additive classmethod wrapper over `from_schema_classes(...)`.
-2. Hard-cut public SDK value-object name from `Derivation` to `Inference`, if G0 confirms the rename.
+2. Hard-cut public SDK value-object name from `Derivation` to `Inference`.
 3. Rename public method parameter names from `derivation` to `inference` where public SDK signatures expose them.
 4. Add `fg.inferences.*` only if it has real functionality; do not create an empty namespace for symmetry.
 5. Add `_SDKInferencesManager.inspect(...)` only if `fg.rules.inspect(rule_or_inference)` is not sufficient. Current Track 1 behavior may make this docs-only.
 6. Decide whether query structural inspection belongs under a future namespace, but do not expose `fg.queries` unless there is real functionality.
-7. Update SDK README, user guide, API surface, and rules/derivations docs in the same slice. Public docs should not lag behind code on the rename.
+7. Update SDK README, user guide, API surface, and rules/inferences docs in the same slice. Public docs should not lag behind code on the rename.
 
 Non-goals:
 
@@ -951,7 +951,7 @@ Because the product is not released, future blueprints should prefer a clean pub
 Recommended order:
 
 1. Source audit current `SDKRegistry`, `FileAuthoringRegistry`, `RuleRef`, query DSL, package export, ledger metadata, and view persistence.
-2. Decide the public `Derivation` -> `Inference` rename before adding persistence APIs. If accepted, ship SDK code + SDK docs together.
+2. Keep the public `Inference` naming and SDK docs aligned before adding persistence APIs.
 3. Rename service/registry wire vocabulary before the persistence facade if the mixed vocabulary would otherwise leak into durable assets.
 4. Add persistence only after the application-layer authoring runtime boundary is scoped.
 5. Add graph workspace save/load only after save scope and layout are locked.

@@ -14,7 +14,7 @@ For walker views and recorder lifecycle see
 ## The Five Questions
 
 The what-if surface is organized around five questions a user typically
-asks about a derivation:
+asks about a inference:
 
 | # | Question | Method |
 |---|---|---|
@@ -23,7 +23,7 @@ asks about a derivation:
 | Q3a | What happens if I changed a fact value? | `fg.what_if.fact_overlay.check` |
 | Q3b | What happens if I changed the rule structure? | `fg.what_if.rule.{disable, literal_replace, add_condition}` |
 | Q4 | Across this finite candidate universe, what does **not** derive, and why? | `fg.what_if.why_not` |
-| Q5 | Between two recorded rounds, how did derivation outcomes change? | `fg.audit.diff_proof_frames` |
+| Q5 | Between two recorded rounds, how did inference outcomes change? | `fg.audit.diff_proof_frames` |
 
 These are independent operations. Each returns a frozen application DTO
 that carries the result and an `evidence_envelope` with the underlying
@@ -33,10 +33,10 @@ proof structure.
 
 ## Running Example
 
-The walkthrough below uses one schema and one Derivation:
+The walkthrough below uses one schema and one Inference:
 
 ```python
-from kernel.sdk import Derivation, Entity, FactGraph, Field, Identity, Relationship, vars
+from kernel.sdk import Inference, Entity, FactGraph, Field, Identity, Relationship, vars
 
 class Country(Entity):
     code: str = Identity(primary_key=True)
@@ -51,11 +51,11 @@ class Speaks(Relationship):
     person: str = Identity(primary_key=True)
     language: str = Identity(primary_key=True)
 
-fg = FactGraph.from_schema_classes([Country, Person, Speaks])
+fg = FactGraph.create(schema_classes=[Country, Person, Speaks])
 
-# Derivation: a Person speaks the official language of the Country they live in.
+# Inference: a Person speaks the official language of the Country they live in.
 with vars("p", "c", "lang") as (p, c, lang):
-    speaks = Derivation(
+    speaks = Inference(
         id="drv.speaks",
         version="1.0.0",
         where=[
@@ -85,8 +85,8 @@ fg.ingest([
 
 We will use this `fg` and `speaks` for the rest of the page.
 
-For the Rule/Query/Derivation DSL deep-dive see
-[`03_rules_and_derivations.en.md`](03_rules_and_derivations.en.md);
+For the Rule/Query/Inference DSL deep-dive see
+[`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md);
 for the canonical ingest item shape see
 [`02_readwrite_and_ingest.en.md` §7.1](02_readwrite_and_ingest.en.md).
 
@@ -104,16 +104,16 @@ result.evidence_envelope   # EvidenceEnvelope | None — engine_payload is a Sup
 ```
 
 `binding` keys are `$`-prefixed variable names matching the
-Derivation's `where` vars (here `$p` and `$lang`). `engine` defaults to
+Inference's `where` vars (here `$p` and `$lang`). `engine` defaults to
 `"native"`; pass `engine="souffle"` etc. to use an adapter.
-Track 1 makes public SDK derivations single-head; define one derivation
+Track 1 makes public SDK inferences single-head; define one inference
 per head before using `check`, `diagnose`, Fact Overlay, or `why_not`.
 Track 3 / E intentionally keeps the what-if shells profile-free:
 `semantics=` and `semantics_profile=` are rejected here. Use
 `fg.eval.evaluate(..., semantics=ProbLogSemantics(...))`,
 `fg.eval.evaluate(..., semantics=PyReasonSemantics(...))`, or the
 advanced/canonical `SemanticsProfile` shape for direct semantics-backed
-derivation evaluation.
+inference evaluation.
 
 **Use when**: you have a specific candidate fact in mind and want a
 yes/no plus the evidence trail.
@@ -239,7 +239,7 @@ recheck.atom_verdicts     # tuple[ProofFrameAtomVerdict, ...] — per-atom verdi
 - `"unknown"` — the overlay touched something the recheck can't
   re-evaluate without re-running the engine.
 
-This shell does not lower a derivation. It walks the held
+This shell does not lower a inference. It walks the held
 `SupportArtifact` and re-evaluates each leaf under the overlay. There
 is no `engine` argument and no registry resolution.
 
@@ -261,7 +261,7 @@ warnings)` — `status` is `"completed" | "unsupported" | "invalid_request"`;
 mutated rule satisfies; `proof_frame` is an optional
 `ProofFrameRecheckResult` for the original support under the mutation.
 
-For Q3b we need a Rule (not a Derivation) plus the prior support:
+For Q3b we need a Rule (not a Inference) plus the prior support:
 
 ```python
 from kernel.sdk import Rule
@@ -397,12 +397,12 @@ which ones derive, which don't, and for each that doesn't, which body
 atom blocked it. Useful for compliance "did anything fall through
 the cracks" checks.
 
-`why_not` rejects `CompiledDerivationPlan` at the SDK boundary; pass
-the SDK `Derivation` directly.
+`why_not` rejects application-level `CompiledDerivationPlan` DTOs at
+the SDK boundary; pass the SDK `Inference` directly.
 
 ---
 
-## Q5: How did derivation change between rounds? — `fg.audit.diff_proof_frames`
+## Q5: How did inference change between rounds? — `fg.audit.diff_proof_frames`
 
 ```python
 from kernel.audit import load_audit_package

@@ -14,7 +14,7 @@ class User(Entity):
     user_id: str = Identity(primary_key=True)
     name: str = Field(cardinality="single")
 
-fg = FactGraph.from_schema_classes([User])
+fg = FactGraph.create(schema_classes=[User])
 
 ref_alice = fg.read.ref(User, user_id="u-1")
 fg.write.set(User.name, ref_alice, "Alice")
@@ -33,7 +33,7 @@ print(snap.name)            # → Alice
 | [`00_user_guide.en.md`](00_user_guide.en.md) | Start here. End-to-end tour with examples for each namespace. |
 | [`01_concepts.en.md`](01_concepts.en.md) | The conceptual model: object lifecycles, layer ownership, frozen DTO boundary, stability tiers. |
 | [`02_readwrite_and_ingest.en.md`](02_readwrite_and_ingest.en.md) | In-depth reference for `read`, `write`, `schema.ingest`, `schema.validate_provenance`. |
-| [`03_rules_and_derivations.en.md`](03_rules_and_derivations.en.md) | In-depth reference for the DSL (`Rule`, `Query`, `Derivation`) and the `eval` namespace. |
+| [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) | In-depth reference for the DSL (`Rule`, `Query`, `Inference`) and the `eval` namespace. |
 | [`04_api_surface.en.md`](04_api_surface.en.md) | Full public API index with every method signature, every export, every error class. |
 | [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | Tutorial for the nine `what_if.*` and `audit.*` methods. |
 | [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) | When and why to use direct imports (walker views, recorder, raw DTOs, engine adapters). |

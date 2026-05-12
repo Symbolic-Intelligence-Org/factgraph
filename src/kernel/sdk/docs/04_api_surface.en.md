@@ -20,21 +20,21 @@ supported.
 ```python
 from kernel.sdk import FactGraph
 
-fg = FactGraph.from_schema_classes([User])
+fg = FactGraph.create(schema_classes=[User])
 
 # Namespaced (preferred for new code)
 fg.read.get(User, user_id="u-1")
 fg.write.add(User.tag, alice, "engineer")
-fg.what_if.check(derivation, binding)
-fg.what_if.fact_overlay.check(derivation, binding, overlay)
+fg.what_if.check(inference, binding)
+fg.what_if.fact_overlay.check(inference, binding, overlay)
 fg.what_if.rule.disable(rule, support, branch_index=0, atom_index=0)
 fg.audit.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 
 # Flat (foundational; permanent)
 fg.get(User, user_id="u-1")
 fg.add(User.tag, alice, "engineer")
-fg.check(derivation, binding)
-fg.check_fact_overlay(derivation, binding, overlay)
+fg.check(inference, binding)
+fg.check_fact_overlay(inference, binding, overlay)
 fg.check_rule_disable(rule, support, branch_index=0, atom_index=0)
 fg.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 ```
@@ -44,7 +44,7 @@ fg.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 | `schema` | `ingest`, `validate_provenance` |
 | `read` | `get`, `find`, `ref` |
 | `write` | `set`, `add`, `retract`, `edit` |
-| `eval` | `run`, `evaluate`, `evaluate_compiled`, `accept`, `accept_compiled`, `accept_many` |
+| `eval` | `run`, `evaluate`, `accept`, `accept_many`, `inspect_semantics` |
 | `what_if` | `check`, `diagnose`, `why_not` |
 | `what_if.fact_overlay` | `check`, `recheck_proof_frame` |
 | `what_if.rule` | `disable`, `literal_replace`, `add_condition` |
@@ -62,8 +62,7 @@ should not be imported directly.
 ## 1. Top-Level Exports
 
 Everything below is importable as `from kernel.sdk import <name>`.
-The export list currently has 36 names; `ReadPolicy` is the only
-read-policy migration addition.
+The export list currently has 39 names.
 
 ### 1.1 Schema, store, registry
 
@@ -75,11 +74,15 @@ read-policy migration addition.
 | `Relationship` | Base class for relationship type declarations |
 | `FactGraph` | Canonical entry point (alias of `SDKStore`) |
 | `SDKStore` | Foundational entry point (same class as `FactGraph`) |
-| `SDKRegistry` | Schema/rule/derivation registry |
+| `SDKRegistry` | Schema/rule/inference registry |
 | `ReadPolicy` | Read-time display/confidence aggregation policy for `policy=...` call sites |
 
 `Entity` instances render via `__repr__` showing identity and field
 values in declaration order; unset `Field` values render as `None`.
+
+`FactGraph.create(schema_classes=[...])` is the canonical constructor.
+`FactGraph.from_schema_classes([...])` remains available as the lower-level
+constructor name.
 
 ### 1.2 DSL
 
@@ -88,7 +91,7 @@ values in declaration order; unset `Field` values render as `None`.
 | `Branch` | Rule `where` branch constructor (alternative conjunction) |
 | `Rule` | Declarative rule (head + body) |
 | `RuleRef` | Reference to a registered rule by id |
-| `Derivation` | Multi-rule derivation envelope |
+| `Inference` | Multi-rule inference envelope |
 | `Query` | Query over the current store |
 | `Pred` | Predicate literal (fact reference) |
 | `Not` | Negation operator for body literals |
@@ -143,8 +146,8 @@ implementation.
 ### 2.1 Constructor
 
 ```python
-FactGraph.from_schema_classes(
-    classes,
+FactGraph.create(
+    schema_classes,
     *,
     ledger=None,
     ledger_path=None,
@@ -156,7 +159,8 @@ FactGraph.from_schema_classes(
 Class-validation errors raise `SDKSchemaError`; constructor-path errors
 raise `SDKStoreError`. `artifact_store_root` enables sidecar-backed
 explain artifact readback (ignored if a fully constructed `store=` is
-supplied).
+supplied). `FactGraph.from_schema_classes(...)` remains available as the
+lower-level class-first constructor name.
 
 ### 2.2 Schema namespace (`fg.schema.*`)
 
@@ -200,15 +204,13 @@ This namespace is read-only and by-id only. It does not ship graph-wide
 | Method | One-liner |
 |---|---|
 | `run(rule_or_query, *, policy=None, row_format=None, return_display_meta=False)` | Evaluate a `Rule`, `RuleRef`, or `Query`; `return_display_meta=True` requires `ReadPolicy` |
-| `evaluate(derivation, *, engine='native', engine_options=None, semantics=None)` | Evaluate a `Derivation`; returns list of `CandidateSet`. If `semantics` is `ProbLogSemantics`, `PyReasonSemantics`, or `SemanticsProfile`, `engine` may be omitted and is derived from the semantics object. |
-| `evaluate_compiled(plans, *, engine='native', engine_options=None, semantics=None)` | Evaluate already-compiled derivation plans. Public wrapper semantics are rejected because branch ids are unavailable; `SemanticsProfile` remains accepted. |
+| `evaluate(inference, *, engine='native', engine_options=None, semantics=None)` | Evaluate an `Inference`; returns list of `CandidateSet`. If `semantics` is `ProbLogSemantics`, `PyReasonSemantics`, or `SemanticsProfile`, `engine` may be omitted and is derived from the semantics object. |
 | `accept(candidate, *, approved_by=None, note=None, dry_run=False, identity_override=None)` | Accept exactly one candidate; performs writes |
-| `accept_compiled(...)` | Accept against already-compiled plans |
 | `accept_many(candidates, *, ...)` | Accept multiple candidates idempotently |
 
 `engine='native'` rejects non-empty `engine_options`. Adapter-owned engines
 (`souffle`, `problog`, `pyreason`) consume `engine_options` at call time
-and never propagate to `Derivation` or ledger.
+and never propagate to `Inference` or ledger.
 
 ### 2.7 What-if namespace (`fg.what_if.*`)
 
@@ -216,15 +218,15 @@ For tutorial usage see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md
 
 | Method | One-liner |
 |---|---|
-| `check(derivation, binding, *, engine='native', registry=None)` | Counterfactual evaluation; returns `CheckResult` |
-| `diagnose(derivation, binding, *, engine='native', registry=None)` | Trace why a fact was derived; returns `DiagnoseResult` |
-| `why_not(derivation, candidates, *, engine='native', registry=None)` | Explain why facts in an explicit candidate universe did not derive; returns `WhyNotUniverseResult` |
+| `check(inference, binding, *, engine='native', registry=None)` | Counterfactual evaluation; returns `CheckResult` |
+| `diagnose(inference, binding, *, engine='native', registry=None)` | Trace why a fact was derived; returns `DiagnoseResult` |
+| `why_not(inference, candidates, *, engine='native', registry=None)` | Explain why facts in an explicit candidate universe did not derive; returns `WhyNotUniverseResult` |
 
 ### 2.8 What-if fact overlay (`fg.what_if.fact_overlay.*`)
 
 | Method | One-liner |
 |---|---|
-| `check(derivation, binding, overlay, *, engine='native', registry=None)` | Re-check derivation with fact-value overrides; returns `FactOverlayCheckResult` |
+| `check(inference, binding, overlay, *, engine='native', registry=None)` | Re-check inference with fact-value overrides; returns `FactOverlayCheckResult` |
 | `recheck_proof_frame(support_artifact, overlay)` | Re-evaluate a held `SupportArtifact` under a new overlay; returns `ProofFrameRecheckResult` |
 
 `overlay` is a `kernel.application.protocol.EvaluationOverlay`. The
@@ -311,8 +313,8 @@ DTOs. Import them directly from `kernel.application.protocol` or
 | `upsert_schema_ir(schema_ir)` | Insert/update compiled schema IR |
 | `register_rule_spec(spec)` | Register a low-level rule spec |
 | `register_rule(rule)` | Register an SDK `Rule` |
-| `register_derivation_spec(spec)` | Register a low-level derivation spec |
-| `register_derivation(derivation)` | Register an SDK `Derivation` (single-head public surface; multi-head is rejected in Track 1) |
+| `register_derivation_spec(spec)` | Register a low-level inference spec |
+| `register_derivation(inference)` | Register an SDK `Inference` (single-head public surface; multi-head is rejected in Track 1) |
 | `get_schema_entry(...)` | Fetch a schema entry by id |
 | `list_rule_ids()` / `list_derivation_ids()` | Enumerate registered ids |
 | `list_rule_versions(id)` / `list_derivation_versions(id)` | Version history |
@@ -321,11 +323,12 @@ DTOs. Import them directly from `kernel.application.protocol` or
 | `get_latest_rule_spec(id)` / `get_latest_derivation_spec(id)` | Latest version lookup |
 | `read_rule_spec(id, version)` / `read_derivation_spec(id, version)` | Specific version read |
 
-`register_derivation` and `fg.eval.evaluate` both require single-head
-public SDK `Derivation` objects in Track 1. For multiple output facts,
-define one derivation per head. Core/application internals may still
-carry tuple-shaped heads for lower-level protocol compatibility, but the
-public SDK boundary is single-head.
+`register_derivation` is retained substrate vocabulary for the registry
+facade. It accepts public SDK `Inference` objects or lower-level authoring
+payloads with `derivation_*` keys. For multiple output facts, define one
+inference per head. Core/application internals may still carry tuple-shaped
+heads for lower-level protocol compatibility, but the public SDK boundary
+is single-head.
 
 ---
 
@@ -417,7 +420,7 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 
 ---
 
-## 6. Query / Derivation Quick Reference
+## 6. Query / Inference Quick Reference
 
 ### 6.1 Query
 
@@ -428,22 +431,22 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 - Query head supports only schema `single` fields
 - Invalid `row_format` or incompatible head raises
   `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`
-- Calling `run(...)` with a `Derivation` raises the same error
+- Calling `run(...)` with an `Inference` raises the same error
 
-### 6.2 Derivation
+### 6.2 Inference
 
-- `fg.evaluate(Derivation(...), engine="native"|"souffle"|"problog"|"pyreason")`
+- `fg.evaluate(Inference(...), engine="native"|"souffle"|"problog"|"pyreason")`
   returns `list[CandidateSet]`
-- Legacy `mode='python'` / `mode='engine'` **values** raise explicit rename errors (use `mode='native'` / `mode='souffle'`)
-- `head=[...]` is rejected in public SDK `Derivation`; use one derivation per head
+- Public SDK `evaluate(...)` does not accept `mode=`; use `engine=`.
+- `head=[...]` is rejected in public SDK `Inference`; use one inference per head
 - `CandidateSet.confidence` semantics depend on engine:
   - `native` / `souffle` → `None`
   - `problog` → probability `float`
   - `pyreason` → lower-bound `float`
 - `engine_options`: call-time runtime config (e.g.
   `fg.evaluate(..., engine_options={"timesteps": 5})`); never enters
-  `Derivation` or ledger
-- Public `Rule` / `Derivation` objects do not carry adapter-specific
+  `Inference` or ledger
+- Public `Rule` / `Inference` objects do not carry adapter-specific
   `engine_ext` parameters. `SemanticsProfile.rule_projection` owns
   engine-specific rule projection.
 - Track 2 exposes `kernel.sdk.ProbLogSemantics` and

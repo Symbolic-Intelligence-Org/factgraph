@@ -624,7 +624,7 @@ Recommended next design work:
 
 ## Open Risks
 
-- Naming risk: `Derivation` may continue to be confused with proof derivation. A product-level alias such as `Inference` or `Materialization` may be clearer, but changing the core class name may not be worth the churn.
+- Naming risk: `Derivation` may continue to be confused with proof derivation. Blueprint 1 of the FactGraph lifecycle work resolves the public SDK value-object name to `Inference`, while internal proof/substrate derivation vocabulary remains a separate cleanup concern.
 - Engine semantics risk: existing `engine_ext`-style fields can blur definition-time business logic with runtime adapter projection. Future docs should move public guidance toward `SemanticsProfile.rule_projection` and keep any remaining definition-time extension points explicitly internal or transitional.
 - Policy result risk: `valid` / `invalid` must be defined carefully. In a finite evidence-backed MVP, `valid` may mean "entailed by current engine over supplied premises," not full mathematical validity.
 - Evidence durability risk: policy-level verification may need long-term replay of evidence. Current engine `ProvenanceEnvelope` durability is weaker than native `SupportArtifact` sidecar durability.

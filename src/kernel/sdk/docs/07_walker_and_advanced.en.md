@@ -19,7 +19,7 @@ Reach for the layers below when you need:
   The SDK accepts and returns Python objects; serializing them back
   out is your responsibility.
 - **LLM-generated payloads** — when the calling code is producing
-  derivations or overlays from string templates, raw application
+  inferences or overlays from string templates, raw application
   protocol DTOs (`EvaluationOverlay`, `RuleLiteralPath`,
   `RuleAddedAtom`, etc.) are the only path for some advanced
   constructs that don't yet have an SDK builder. Construct them
@@ -219,43 +219,18 @@ from kernel.audit.round_events import RoundEvent
 
 ---
 
-## 4. Compiled-plan pass-through
+## 4. Compiled-plan boundary
 
-`fg.eval.evaluate_compiled(...)` and `fg.eval.accept_compiled(...)`
-are thin passthrough wrappers around the lower-level
-`Store.evaluate(...)` / `Store.accept(...)` methods. They **skip SDK
-DSL lowering** — i.e. they expect Store-level keyword arguments
-(`derivation_id`, `version`, `target_pred_id`, `head_vars`, `where`,
-`mode`, etc.), not an SDK `Derivation` object.
+`fg.eval.evaluate_compiled(...)` and `fg.eval.accept_compiled(...)` are
+not part of the public SDK surface. The SDK accepts an `Inference` and
+performs lowering through `fg.eval.evaluate(inf, engine=...)`; compiled
+plan DTOs remain application/substrate objects.
 
-```python
-# Pseudo-shape; consult kernel.core.store.runtime.Store.evaluate for
-# the exact keyword set you need to provide.
-result = fg.eval.evaluate_compiled(
-    derivation_id="drv.copy_name",
-    version="1.0.0",
-    target_pred_id="user:name",
-    head_vars=[...],
-    where=[...],
-    mode="native",
-)
-```
-
-This path is **internal escape hatch territory** — it is not part of
-the stable SDK contract:
-- `_compile_derivation_input(...)` (private, leading underscore) is
-  what the SDK uses internally to lower a `Derivation` for the Store.
-  Calling it directly bypasses the SDK boundary and may break across
-  versions.
-- The right tool for almost all callers is the high-level
-  `fg.eval.evaluate(deriv, engine=...)` (or `fg.eval.accept(...)`),
-  which lowers + caches + delegates in one call.
-
-If you genuinely need to reuse a lowered plan across calls, prefer
-constructing a `kernel.application.protocol.CompiledDerivationPlan`
-directly (frozen DTO) and feeding it through the application-level
-`evaluate_derivation_plans(...)` runner — that path has a stable
-public protocol contract; `evaluate_compiled` does not.
+If you genuinely need to reuse a lowered plan across calls, construct a
+`kernel.application.protocol.CompiledDerivationPlan` directly and feed it
+through the application-level `evaluate_derivation_plans(...)` runner.
+That path is outside the SDK product surface and still uses substrate
+vocabulary such as `derivation_id` by design.
 
 ---
 
