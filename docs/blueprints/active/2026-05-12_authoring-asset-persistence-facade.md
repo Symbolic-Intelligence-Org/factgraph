@@ -301,7 +301,7 @@ parallel persistence facades. The project is pre-release.
 ### Q5 — Rule Save Return Type
 
 - **A5a** Return existing `RuleRef(rule_id, version)`.
-- **A5b** Return a new persisted-asset DTO, e.g. `SavedRuleRef` or `RuleAssetRef`.
+- **A5b** Return a new persisted-asset DTO whose name follows Q17.
 - **A5c** Return raw manifest dict.
 
 Recommendation: **A5b**, unless G0 deliberately wants to overload `RuleRef`.
@@ -310,7 +310,7 @@ that is not the same as a saved asset handle.
 
 ### Q6 — Inference Save Return Type
 
-- **A6a** Add `InferenceRef(inference_id, version)`.
+- **A6a** Add a new persisted-inference ref DTO whose name follows Q17.
 - **A6b** Return raw manifest dict.
 - **A6c** Return plain string id.
 
@@ -361,7 +361,9 @@ helpers while keeping explicit-version load available.
 - **A11a** `fg.rules.save` / `fg.inferences.save` requires schema IR already
   present in the registry and fails otherwise.
 - **A11b** The first save automatically upserts the graph schema IR into the
-  bound registry.
+  bound registry; subsequent saves are idempotent under matching
+  `schema_digest` and raise on mismatch rather than silently overwriting
+  registry schema.
 - **A11c** Add explicit `fg.schema.save()` first; asset save refuses until it is
   called.
 
@@ -379,6 +381,10 @@ objects, so the facade must avoid surprising "missing schema" failures.
 
 Recommendation: **A12a** for this slice. It avoids colliding with current
 `RuleRef` where-clause behavior and keeps the persistence facade focused.
+This means `save → load → run/evaluate` is the explicit round trip for now.
+`fg.eval.run(saved_ref)` / `fg.eval.evaluate(saved_ref)` can be considered in a
+future ergonomic slice after persisted refs and where-clause refs are fully
+disambiguated.
 
 ### Q13 — `fg.inferences` Namespace
 
@@ -414,17 +420,33 @@ current registry surface.
 Recommendation: **A16a**. It directly affects G0 decisions about whether refs
 are runtime selectors or persistence handles.
 
+### Q17 — Persisted Ref Naming Convention
+
+- **A17a** Use symmetric `SavedRuleRef` and `SavedInferenceRef`.
+- **A17b** Use asymmetric `SavedRuleRef` and `InferenceRef`, because `RuleRef`
+  is already occupied but `InferenceRef` is not.
+- **A17c** Use symmetric `RuleAssetRef` and `InferenceAssetRef`.
+
+Recommendation: **A17a**. The `Saved*Ref` prefix names the semantic distinction
+directly: these refs point to registry-persisted assets, not where-clause DSL
+atoms. It avoids overloading `RuleRef` and avoids introducing two naming
+conventions across rules and inferences.
+
 ## 6. Boundaries And Invariants
 
 - Direct value-object runtime remains valid:
   `fg.eval.run(rule)` and `fg.eval.evaluate(inf)` do not require prior save.
 - `RuleRef(...)` where-clause semantics remain valid unless G0 explicitly
   chooses to overload it.
+- Persisted asset refs, if introduced, must be named distinctly from
+  where-clause refs.
 - Existing service/registry inference vocabulary remains intact.
 - `FileAuthoringRegistry` remains the storage substrate.
 - Public lifecycle methods must not leak manifest-entry dicts unless G0 chooses
   raw dict return types.
 - `fg.inferences` must only be added if it has real persistence behavior.
+- `fg.eval.run(saved_ref)` / `fg.eval.evaluate(saved_ref)` is intentionally
+  out of this slice unless G0 overrides Q12.
 - `SDKRegistry` export/docs fate must be explicit; do not accidentally leave two
   public persistence surfaces.
 - `release/0.1.x`, `v0.1.0-rc.1`, `origin/v0.1-oss-prep`, and milestone refs
@@ -435,6 +457,7 @@ are runtime selectors or persistence handles.
 - [ ] G0 locks registry attachment shape.
 - [ ] G0 locks whether `kernel.application.authoring_runtime` is introduced.
 - [ ] G0 locks public ref/return types for rules and inferences.
+- [ ] G0 locks persisted ref naming convention.
 - [ ] G0 locks `SDKRegistry` public fate.
 - [ ] G0 locks load/list/get semantics.
 - [ ] G0 locks schema persistence behavior.
@@ -469,6 +492,7 @@ Draft sequence, subject to G0:
    - wire methods to application runtime.
 4. G2 public surface cleanup:
    - update `kernel.sdk.__all__`;
+   - migrate tests importing `SDKRegistry` if G0 hard-cuts the export;
    - adjust `SDKRegistry` export/docs/tests according to G0;
    - update stale `run(RuleRef)` docs or tests if selected.
 5. G3 docs sync:

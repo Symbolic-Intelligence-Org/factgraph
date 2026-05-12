@@ -7,6 +7,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-12 | draft | Blueprint created | Draft seed created after Blueprint 1 public `Inference` + `FactGraph.create(...)` and the inference wire/registry vocabulary slice both shipped. Source audit split across registry surface, ref/namespace surface, and application/FactGraph binding. Load-bearing findings: `SDKRegistry` is still public and raw-dict-shaped; `FileAuthoringRegistry` has enough low-level primitives but returns compiler-facing inference payloads with `derivation_id`; current `RuleRef` is a where-clause DSL carrier, not a persisted asset handle; `InferenceRef` is absent and explicitly guarded; `SDKStore` has no authoring registry binding; and no `kernel.application.authoring_runtime` exists yet. |
+| 2026-05-12 | draft-polish | Persisted ref naming and schema safeguards added | Added Q17 to lock a naming convention for persisted refs instead of letting Q5/Q6 drift into `SavedRuleRef` + `InferenceRef` asymmetry. Recommended symmetric `SavedRuleRef` / `SavedInferenceRef`. Tightened Q11 so auto schema upsert is idempotent under matching `schema_digest` and raises on mismatch. Documented that `fg.eval.run(saved_ref)` / `fg.eval.evaluate(saved_ref)` is intentionally deferred under Q12. |
 
 ## Decision Notes
 
@@ -15,3 +16,4 @@
 - 2026-05-12 draft: Adding `InferenceRef` is a real public API expansion. Current tests explicitly assert it does not exist; G1 must invert that only if G0 locks it.
 - 2026-05-12 draft: `SDKRegistry` export fate must be explicit. If `fg.rules.*` / `fg.inferences.*` become the product facade, keeping `SDKRegistry` public creates duplicate persistence surfaces.
 - 2026-05-12 draft: The stale docs claim that `fg.eval.run(...)` accepts a direct `RuleRef` should be fixed or explicitly scoped, because code treats `RuleRef` as a where-clause DSL carrier, not a runnable rule selector.
+- 2026-05-12 draft polish: Ref naming should be symmetric. If saved refs are introduced, `SavedRuleRef` / `SavedInferenceRef` better communicates "registry-persisted asset handle" than overloading existing `RuleRef` or mixing naming conventions.
