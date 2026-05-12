@@ -1,6 +1,6 @@
 # Task Blueprint: Inference Wire And Registry Vocabulary
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -194,6 +194,8 @@ Options:
 
 Recommendation: **W1a**. Product is pre-release and Blueprint 1 already hard-cut SDK public naming.
 
+G0 decision (2026-05-12): **W1a locked**. Runtime routes move to `/v1/runtime/sessions/{session_id}/inferences/evaluate` and `/inferences/accept`; `/derivations/*` public aliases are not introduced.
+
 ### 5.2 Q2: Runtime evaluate request key
 
 Options:
@@ -203,6 +205,8 @@ Options:
 - **W2c** Keep `"derivation"` as service substrate.
 
 Recommendation: **W2a**. Route rename without payload rename leaves the most visible inconsistency.
+
+G0 decision (2026-05-12): **W2a locked**. Runtime evaluate accepts top-level `"inference"` and rejects top-level `"derivation"`.
 
 ### 5.3 Q3: Runtime evaluate response envelope
 
@@ -214,6 +218,8 @@ Options:
 
 Recommendation: **W3a** if a shallow response envelope exists to rename; otherwise **W3c**. Do **not** choose W3b in this slice unless G0 intentionally expands into CandidateSet/core protocol rename.
 
+G0 decision (2026-05-12): **W3a locked**. The runtime evaluate envelope follows the route/request vocabulary and returns `evaluation.inference_id`; nested candidate payloads remain on `derivation_id` / `derivation_version` per W4a.
+
 ### 5.4 Q4: Runtime accept candidate fields
 
 Options:
@@ -222,6 +228,8 @@ Options:
 - **W4b** Rename candidate payload fields to `inference_id` / `inference_version`.
 
 Recommendation: **W4a**. Accept works by echoing `CandidateSet`; changing candidate field names reaches core candidate protocol, acceptance, audit, static UI, and many tests.
+
+G0 decision (2026-05-12): **W4a locked**. `/inferences/accept` accepts the candidate payload returned by evaluate unchanged; `CandidateSet` fields remain `derivation_id` / `derivation_version`.
 
 ### 5.5 Q5: Registry service route and DTO
 
@@ -232,6 +240,8 @@ Options:
 - **W5c** Keep registry service derivation vocabulary until persistence facade.
 
 Recommendation: **W5a** if the slice also renames registry storage; **W5c** if G0 defers storage rename. Avoid W5b unless there is a concrete compatibility need.
+
+G0 decision (2026-05-12): **W5a locked**. Registry service hard-cuts to `/v1/registry/inferences/read`, request key `inference_id`, and response key `inference_spec`.
 
 ### 5.6 Q6: Registry manifest and filesystem path
 
@@ -245,6 +255,8 @@ Recommendation: **W6a** if this slice is meant to remove durable mixed vocabular
 
 If W6a is selected, no migration tool is planned for pre-release workspaces. Developer-side guidance should be documented: recreate the registry workspace or rename `registry/derivations/` to `registry/inferences/` and update the manifest shape.
 
+G0 decision (2026-05-12): **W6a locked**. Registry storage moves to `inferences/`, manifest key `inferences`, and manifest item field `inference_id`; pre-release workspaces do not get a migration tool.
+
 ### 5.7 Q7: SDKRegistry method names
 
 Options:
@@ -255,6 +267,8 @@ Options:
 
 Recommendation: **W7a** if W6a is selected; **W7c** if W6c is selected. Avoid aliases in pre-release unless tests reveal heavy internal cost.
 
+G0 decision (2026-05-12): **W7a locked**. Public `SDKRegistry` derivation-named methods are hard-cut to inference-named methods, without aliases.
+
 ### 5.8 Q8: FileAuthoringRegistry method names
 
 Options:
@@ -263,6 +277,8 @@ Options:
 - **W8b** Keep FileAuthoringRegistry methods derivation-named while changing only public SDK/service wrappers.
 
 Recommendation: **W8a** only if W6a is selected. If storage becomes `inferences/`, method names should not keep saying derivation.
+
+G0 decision (2026-05-12): **W8a locked**. `FileAuthoringRegistry` method names move to inference vocabulary with the storage shape.
 
 ### 5.9 Q9: Authoring compiler public payload key
 
@@ -274,6 +290,8 @@ Options:
 
 Recommendation: **W9a** for this slice. Compiler/core substrate remains deep application protocol unless G0 expands scope.
 
+G0 decision (2026-05-12): **W9a locked**. The authoring compiler substrate key remains `derivation_id`; `Inference.to_authoring_payload()` continues to emit the compiler-facing key.
+
 ### 5.10 Q10: Application/core DTO names
 
 Options:
@@ -284,6 +302,8 @@ Options:
 
 Recommendation: **W10a**. This slice is service/registry vocabulary, not proof/candidate protocol rewrite.
 
+G0 decision (2026-05-12): **W10a locked**. Application DTOs, core store parameters, `CompiledDerivationPlan`, and `CandidateSet.derivation_id` remain unchanged.
+
 ### 5.11 Q11: Error kind/path text
 
 Options:
@@ -293,6 +313,8 @@ Options:
 
 Recommendation: **W11a**. Route/key rename must be visible in validation errors.
 
+G0 decision (2026-05-12): **W11a locked**. User-facing validation paths for renamed service request keys use `$.inference...`; internal/core error names may remain derivation-named.
+
 ### 5.12 Q12: Docs scope
 
 Options:
@@ -301,6 +323,8 @@ Options:
 - **W12b** Update only service docs and defer lower-level docs.
 
 Recommendation: **W12a**. This is a vocabulary slice; docs lag would be the main failure mode.
+
+G0 decision (2026-05-12): **W12a locked**. Service, SDK registry, authoring, core service-layer, and lifecycle design-point docs update in this slice.
 
 ### 5.13 Q13: Per-spec JSON file content under W6a
 
@@ -314,17 +338,21 @@ Options:
 
 Recommendation: **W13a**. This gives developer-visible registry workspaces a consistent inference vocabulary while keeping the deeper authoring compiler/core substrate unchanged. The translation boundary is narrow and local to `FileAuthoringRegistry`.
 
+G0 decision (2026-05-12): **W13a locked**. Per-spec registry JSON files use `inference_id`; `FileAuthoringRegistry` translates to/from compiler-facing `derivation_id` at its boundary.
+
 ### 5.14 Decision path summary
 
 The questions above collapse into two coherent paths:
 
+G0 locked **Path A**: `W1a + W2a + W3a + W4a + W5a + W6a + W7a + W8a + W9a + W10a + W11a + W12a + W13a`.
+
 **Path A — aggressive vocabulary cleanup (recommended):**
 
 ```text
-W1a + W2a + W3a/W3c + W4a + W5a + W6a + W7a + W8a + W9a + W10a + W11a + W12a + W13a
+W1a + W2a + W3a + W4a + W5a + W6a + W7a + W8a + W9a + W10a + W11a + W12a + W13a
 ```
 
-This hard-cuts the public service and registry vocabulary to inference, including file-registry manifest/path and per-spec JSON file shape. It leaves only the deep candidate/proof/compiler substrate on derivation vocabulary: compiler inputs/outputs, `CandidateSet.derivation_id`, `CompiledDerivationPlan`, core store parameters, and proof/audit language.
+This hard-cuts the public service and registry vocabulary to inference, including file-registry manifest/path, runtime evaluate envelope, and per-spec JSON file shape. It leaves only the deep candidate/proof/compiler substrate on derivation vocabulary: compiler inputs/outputs, candidate payload fields, `CandidateSet.derivation_id`, `CompiledDerivationPlan`, core store parameters, and proof/audit language.
 
 **Path B — conservative service-only cleanup:**
 
@@ -348,14 +376,14 @@ Avoid the partial middle path unless G0 identifies a specific implementation blo
 
 ## 7. Acceptance
 
-- [ ] G0 locks route rename scope.
-- [ ] G0 locks runtime request/response key behavior.
-- [ ] G0 locks candidate payload field behavior.
-- [ ] G0 locks registry service route/key/response behavior.
-- [ ] G0 locks registry storage path/manifest behavior.
-- [ ] G0 locks SDKRegistry and FileAuthoringRegistry method-name behavior.
-- [ ] G0 locks application/core DTO and CandidateSet boundary.
-- [ ] G0 locks per-spec registry JSON file vocabulary under W6a.
+- [x] G0 locks route rename scope.
+- [x] G0 locks runtime request/response key behavior.
+- [x] G0 locks candidate payload field behavior.
+- [x] G0 locks registry service route/key/response behavior.
+- [x] G0 locks registry storage path/manifest behavior.
+- [x] G0 locks SDKRegistry and FileAuthoringRegistry method-name behavior.
+- [x] G0 locks application/core DTO and CandidateSet boundary.
+- [x] G0 locks per-spec registry JSON file vocabulary under W6a.
 - [ ] G1 adds red tests for selected public service/registry rename surface.
 - [ ] G1 adds guard tests that CandidateSet/application/core substrate remains unchanged if W10a is selected.
 - [ ] G2 implements only the locked route/storage/method/doc-surface changes.
