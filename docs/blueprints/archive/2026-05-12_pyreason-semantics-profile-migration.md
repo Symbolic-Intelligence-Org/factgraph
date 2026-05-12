@@ -1,6 +1,6 @@
 # Task Blueprint: PyReason SemanticsProfile Migration
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -431,10 +431,116 @@ Locked rule:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+### 10.1 Final Landed Behavior
 
-- Final landed behavior:
-- Validation:
-- Commit lineage:
-- Deviations:
-- Archive notes:
+- PyReason is now the second `SemanticsProfile`-consuming adapter after
+  ProbLog.
+- The core-only entry
+  `Store.evaluate(..., mode="pyreason", semantics_profile=profile)` is
+  accepted when `profile.engine == "pyreason"`.
+- Passing a PyReason profile to any non-PyReason mode rejects with
+  mode/profile mismatch text; passing a non-PyReason profile to
+  `mode="pyreason"` rejects with the PyReason engine-match contract.
+- `SemanticsProfile.rule_projection.pyreason` normalizes into
+  `PyReasonRuleExt`, preserving the adapter-local bridge as the final
+  compiler/export target.
+- `body_atom:{branch}:{atom}` with `kind="interval_threshold"` maps to
+  `PyReasonRuleExt.body_predicate_bounds` after adapter-time path and
+  interval validation.
+- `head:0` with `kind="interval"` maps to `PyReasonRuleExt.head_bound`.
+- `rule` with `kind="timestep_delay"` maps to
+  `PyReasonRuleExt.timestep_delay`.
+- Explicit `PyReasonRuleExt` and profile-derived `PyReasonRuleExt`
+  carriers may coexist only when they materialize to the same extension;
+  conflicts reject with carrier-family names.
+- `SemanticsProfile.temporal_projection` now accepts exactly `none`,
+  `fixed_timesteps`, and `valid_time_boundaries`; unknown modes such as
+  `custom_timeline` still reject.
+- `fixed_timesteps` maps 1:1 to `PyReasonRunConfig.timesteps` and
+  conflicts with mismatched `engine_options.timesteps`.
+- `valid_time_boundaries` uses caller-provided `universe=[start, end]`
+  plus selected assertion `valid_from` / `valid_to` metadata to build a
+  sorted ordinal boundary map and emit PyReason `active_from` /
+  `active_to` coordinates.
+- Missing `valid_from` maps to the universe start; missing `valid_to`
+  maps to open-ended `active_to=None`; both missing means full-universe
+  validity.
+- The valid-time-boundary path uses witness-preserving projection
+  internally so assertion metadata remains available without changing the
+  public view projection contract.
+- SDK and service `semantics` / `semantics_profile` payloads still reject;
+  Track 3 / E remains responsible for durable public call-site acceptance
+  and the `engine=` naming decision.
+- C's ProbLog profile consumption remains unchanged, and Souffle remains
+  profile-agnostic. Native has no `src/kernel/adapters/native/` package;
+  native/profile public call-site semantics remain E territory.
+- No profile-derived values are written back into facts, registry entries,
+  assertion metadata, or stored projection tables.
+
+### 10.2 Validation
+
+- G1 baseline before implementation:
+  `test_pyreason_semantics_profile_migration` ran 25 tests with 16
+  expected errors, 5 expected failures, and 4 guards passing; updated
+  `BridgeGuardTests` ran 5 tests with 1 expected failure.
+- D focused suite after G2: 25/25 OK.
+- Adapter import guard after G2: `BridgeGuardTests` 5/5 OK.
+- B scaffolding suite after D temporal expansion: 26/26 OK.
+- C ProbLog profile migration suite: 15/15 OK.
+- A1-A4+B+C+D focused suite: 104/104 OK.
+- PyReason regression suite with known `kernel.application` import primer:
+  61/61 OK.
+- G3 docs grep gates:
+  - stale "PyReason does not consume / deferred to D" wording: 0 hits;
+  - Track 3 / D mentions classify D as current / done;
+  - Track 3 / E mentions preserve future SDK/service call-site scope;
+  - `rule_projection.pyreason` mentions classify core adapter
+    consumption, not SDK/service profile acceptance.
+- `git diff --check` and staged diff checks were clean.
+
+### 10.3 Commit Lineage
+
+- `7f68addc` — draft PyReason SemanticsProfile migration.
+- `7f8502e5` — refine PyReason temporal projection taxonomy before G0.
+- `2def7cfe` — scope D with D1-D15 and 27 gates.
+- `c3e1ff9c` — add red + guard baseline for PyReason profile
+  consumption.
+- `32b6463a` — implement PyReason SemanticsProfile rule and temporal
+  consumption.
+- `bb5165a5` — document PyReason SemanticsProfile consumption.
+
+### 10.4 Deviations
+
+- The draft gained a pre-G0 design-note commit (`7f8502e5`) after the
+  temporal taxonomy discussion split fixed timestep count from
+  valid-time-boundary partitioning. This reduced G0 ambiguity and made D
+  implement `fixed_timesteps` plus a minimal
+  `valid_time_boundaries` algorithm instead of overloading one mode.
+- G2 switched PyReason EDB materialization to use
+  `project_view_facts_with_witness(...)` when temporal projection needs
+  assertion metadata. This was anticipated in G0 audit notes and stayed
+  internal to the PyReason materialization path.
+- B's scaffolding test suite grew from 24 to 26 tests because D expanded
+  the core `SemanticsProfile.temporal_projection` validator to accept
+  `fixed_timesteps` and `valid_time_boundaries`. The unknown-mode reject
+  test now uses `custom_timeline`.
+- The working transmission reference was updated because D changed
+  PyReason temporal projection from a conceptual future direction into
+  current adapter behavior.
+
+### 10.5 Archive Notes
+
+D completes the Track 3 adapter-consumption phase. After C and D, both
+major profile-consuming adapters use the same pattern:
+
+- generic `SemanticsProfile` shape validation in core;
+- adapter-specific target/value validation at consumption time;
+- normalization into adapter-local bridge objects before exporter/compiler
+  code runs;
+- no profile-derived values stored as facts or registry state.
+
+Only Track 3 / E remains. E must decide the durable SDK/service runtime
+call-site, whether public APIs accept `semantics=` or
+`semantics_profile=`, how the B naming note's `engine=` preference
+replaces or aliases historical `mode=`, and how public users inspect or
+preflight profile projections before evaluation.
