@@ -6,14 +6,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-import kernel.adapters.problog  # noqa: F401
+import kernel.application.protocol.common  # noqa: F401 - primes audit/problog import cycle
 from kernel.adapters.problog.accept import persist_problog_annotations
 from kernel.adapters.souffle.package import ExportOptions, export_package
 from kernel.audit.assertions import load_assertion_index
 from kernel.audit.reader import load_audit_package
 from service.static_ui import _render_annotation_panel
 from kernel.core.evidence.write_protocol import set_field
-from kernel.sdk.dsl import Derivation, Pred, vars as sdk_vars
+from kernel.sdk.dsl import Inference, Pred, vars as sdk_vars
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStore
 
@@ -45,9 +45,9 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         )
         return sdk
 
-    def _make_derivation(self) -> Derivation:
+    def _make_derivation(self) -> Inference:
         with sdk_vars("u", "tag") as (u, tag):
-            return Derivation(
+            return Inference(
                 id="drv.problog_tag",
                 version="v1",
                 where=[Pred("user:tag_seed", u, tag)],
@@ -65,7 +65,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidate = sdk.evaluate(self._make_derivation(), mode="problog")[0]
+        candidate = sdk.evaluate(self._make_derivation(), engine="problog")[0]
 
         self.assertEqual(candidate.confidence, 0.42)
         self.assertEqual(candidate.confidence_kind, "probability")
@@ -82,7 +82,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidate = sdk.evaluate(self._make_derivation(), mode="problog")[0]
+        candidate = sdk.evaluate(self._make_derivation(), engine="problog")[0]
         accept_result = sdk.accept(candidate)
 
         written = persist_problog_annotations(
@@ -107,7 +107,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidate = sdk.evaluate(self._make_derivation(), mode="problog")[0]
+        candidate = sdk.evaluate(self._make_derivation(), engine="problog")[0]
         accept_result = sdk.accept(candidate, dry_run=True)
 
         written = persist_problog_annotations(
@@ -127,7 +127,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidate = sdk.evaluate(self._make_derivation(), mode="problog")[0]
+        candidate = sdk.evaluate(self._make_derivation(), engine="problog")[0]
         accept_result = sdk.accept(candidate)
         asrt_id = accept_result.written_assertions[0]["asrt_id"]
         persist_problog_annotations(
