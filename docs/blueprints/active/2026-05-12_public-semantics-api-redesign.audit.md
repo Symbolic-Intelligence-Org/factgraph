@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-05-12 | draft | Blueprint created | Draft seed created after Track 3 and Track 1 publish. Source audit found that SDK can resolve branch ids only while SDK `Rule` / `Derivation` objects are still in hand; service and compiled paths currently carry only canonical `SemanticsProfile`. PyReason per-branch head bounds are mechanically feasible via per-branch rule compilation but not yet represented by `PyReasonRuleExt`. |
 | 2026-05-12 | scoped | Scope freeze | Locked D1-D15. Track 2 is a bounded SDK public-wrapper slice: add `ProbLogSemantics` / `PyReasonSemantics`, derive engine from semantics objects, preserve public `SemanticsProfile`, keep service/compiled paths canonical, and defer PyReason `branch_bounds` carrier reshape to Track 3-post. |
+| 2026-05-12 | g1-red | Red + guard baseline | Added `test_public_semantics_api_redesign.py`. New Track 2 suite currently runs 17 tests with expected 13 errors + 2 failures + 2 guard passes: wrapper classes/exports/engine derivation/inspection are absent, service light-shape rejection text is not yet locked, while native default and compiled `SemanticsProfile` guards pass. Track 1 + B/C/D/E preservation suite remains 103 OK. |
 
 ## Decision Notes
 
