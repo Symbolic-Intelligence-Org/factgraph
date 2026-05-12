@@ -31,7 +31,7 @@ def list_registry_assets(dto: dict[str, Any]) -> dict[str, Any]:
         return ok_response(
             registry={
                 "rule_ids": registry.list_rule_ids(),
-                "derivation_ids": registry.list_derivation_ids(),
+                "inference_ids": registry.list_inference_ids(),
                 "apply_run_ids": registry.list_apply_run_ids(),
             }
         )
@@ -55,21 +55,21 @@ def read_registry_rule(dto: dict[str, Any]) -> dict[str, Any]:
         return error_response([exception_to_error(exc)])
 
 
-def read_registry_derivation(dto: dict[str, Any]) -> dict[str, Any]:
+def read_registry_inference(dto: dict[str, Any]) -> dict[str, Any]:
     try:
         registry = _registry_from_dto(dto)
         if not isinstance(dto, dict):
             raise facade_error("dto must be object", kind="shape", path="$")
-        derivation_id = _require_non_empty_str(dto.get("derivation_id"), path="$.derivation_id")
+        inference_id = _require_non_empty_str(dto.get("inference_id"), path="$.inference_id")
         version = dto.get("version")
         if version is None:
-            payload = registry.get_latest_derivation_spec(derivation_id)
+            payload = registry.get_latest_inference_spec(inference_id)
         else:
-            payload = registry.read_derivation_spec(
-                derivation_id,
+            payload = registry.read_inference_spec(
+                inference_id,
                 _require_non_empty_str(version, path="$.version"),
             )
-        return ok_response(derivation_spec=payload)
+        return ok_response(inference_spec=payload)
     except Exception as exc:
         return error_response([exception_to_error(exc)])
 

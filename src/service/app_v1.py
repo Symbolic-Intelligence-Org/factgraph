@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from service.registry_v1 import (
     list_registry_assets,
-    read_registry_derivation,
+    read_registry_inference,
     read_registry_manifest,
     read_registry_rule,
     read_registry_schema,
@@ -282,9 +282,9 @@ def post_registry_read_rule(payload: dict[str, Any] = Body(...)) -> dict[str, An
     return read_registry_rule(payload)
 
 
-@app.post("/v1/registry/derivations/read", dependencies=AUTH_DEPENDENCIES)
-def post_registry_read_derivation(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return read_registry_derivation(payload)
+@app.post("/v1/registry/inferences/read", dependencies=AUTH_DEPENDENCIES)
+def post_registry_read_inference(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return read_registry_inference(payload)
 
 
 @app.exception_handler(Exception)
