@@ -10,6 +10,14 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from kernel.application import apply_write_plan, plan_write_command
+from kernel.application.authoring_runtime import (
+    AuthoringRuntimeError,
+    SavedRuleRef,
+    get_rule as app_get_rule,
+    list_rules as app_list_rules,
+    load_rule as app_load_rule,
+    save_rule as app_save_rule,
+)
 from kernel.application.derivation_runtime import evaluate_derivation_plans
 from kernel.application.protocol import (
     CompiledDerivationPlan,
@@ -249,7 +257,7 @@ class _SDKWriteManager:
 
 
 class _SDKRulesManager:
-    """Read-only namespace manager for rule structure inspection."""
+    """Read-only namespace manager for rule structure inspection and persistence."""
 
     def __init__(self, sdk: "SDKStore") -> None:
         object.__setattr__(self, "_sdk", sdk)
@@ -259,6 +267,18 @@ class _SDKRulesManager:
 
     def inspect(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.inspect_rule(*args, **kwargs)
+
+    def save(self, rule: Any) -> SavedRuleRef:
+        return self._sdk.save_rule(rule)
+
+    def load(self, rule: SavedRuleRef | str, *, version: str | None = None) -> Any:
+        return self._sdk.load_rule(rule, version=version)
+
+    def list(self) -> list[SavedRuleRef]:
+        return self._sdk.list_rules()
+
+    def get(self, rule_id: str) -> SavedRuleRef:
+        return self._sdk.get_rule(rule_id)
 
 
 class _SDKEvalManager:
@@ -1653,6 +1673,49 @@ class SDKStore:
     def inspect_rule(self, obj: Any) -> dict[str, Any]:
         return _inspect_rule_or_inference(obj)
 
+    def save_rule(self, rule: Any) -> SavedRuleRef:
+        registry = self._require_authoring_registry()
+        if not hasattr(rule, "to_authoring_payload"):
+            raise SDKStoreError("fg.rules.save(...) expects SDK Rule")
+        try:
+            return app_save_rule(
+                registry,
+                rule.to_authoring_payload(),
+                schema_ir=self.schema_ir,
+            )
+        except AuthoringRuntimeError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
+    def load_rule(self, rule: SavedRuleRef | str, *, version: str | None = None) -> Any:
+        registry = self._require_authoring_registry()
+        try:
+            payload = app_load_rule(registry, rule, version=version)
+        except AuthoringRuntimeError as exc:
+            raise SDKStoreError(str(exc)) from exc
+        return _rule_from_authoring_payload(payload)
+
+    def list_rules(self) -> list[SavedRuleRef]:
+        registry = self._require_authoring_registry()
+        try:
+            return app_list_rules(registry)
+        except AuthoringRuntimeError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
+    def get_rule(self, rule_id: str) -> SavedRuleRef:
+        registry = self._require_authoring_registry()
+        try:
+            return app_get_rule(registry, rule_id)
+        except AuthoringRuntimeError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
+    def _require_authoring_registry(self) -> FileAuthoringRegistry:
+        registry = self._authoring_registry
+        if registry is None:
+            raise SDKStoreError(
+                "FactGraph is not bound to an authoring registry; create it with registry_root= or registry="
+            )
+        return registry
+
     @staticmethod
     def _reject_shell_semantics(*, semantics: Any, semantics_profile: Any) -> None:
         if semantics is not _PROFILE_KWARG_UNSET:
@@ -2540,6 +2603,38 @@ def _inspect_rule_or_inference(obj: Any) -> dict[str, Any]:
             "branches": _inspect_where_branches(obj.where),
         }
     raise SDKStoreError("rules.inspect(...) expects SDK Rule or Inference")
+
+
+def _rule_from_authoring_payload(payload: dict[str, Any]) -> Any:
+    from .dsl.rule import Rule as SDKRule
+
+    if not isinstance(payload, dict):
+        raise SDKStoreError("registry rule payload must be object")
+    rule_id = payload.get("rule_id")
+    version = payload.get("version")
+    select = payload.get("select")
+    where = payload.get("where")
+    if not isinstance(rule_id, str) or not rule_id:
+        raise SDKStoreError("registry rule payload missing rule_id")
+    if not isinstance(version, str) or not version:
+        raise SDKStoreError("registry rule payload missing version")
+    if not isinstance(select, list) or not select:
+        raise SDKStoreError("registry rule payload missing select")
+    if not isinstance(where, list) or not where:
+        raise SDKStoreError("registry rule payload missing where")
+    return SDKRule(
+        id=rule_id,
+        version=version,
+        select=list(select),
+        where=list(where),
+        expose=bool(payload.get("expose", False)),
+        status=payload.get("status") if isinstance(payload.get("status"), str) else None,
+        description=payload.get("description") if isinstance(payload.get("description"), str) else None,
+        tags=list(payload.get("tags", [])) if isinstance(payload.get("tags"), list) else [],
+        condition_weights=dict(payload.get("condition_weights", {}))
+        if isinstance(payload.get("condition_weights"), dict)
+        else {},
+    )
 
 
 def _inspect_where_branches(where: Any) -> list[dict[str, Any]]:
