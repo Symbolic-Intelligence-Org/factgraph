@@ -18,9 +18,9 @@ fg.what_if.check(...)
 
 但 `FactGraph` 的生命周期还没有成为一等公民:
 
-- `FactGraph.create(...)` 现在是 public lifecycle constructor; `FactGraph.from_schema_classes(...)` 仍可作为 class-first lower-level constructor substrate。
-- `SDKRegistry` 独立存在,负责 compiled schema / rule / derivation 的持久化,但用户 mental model 里它更像 `FactGraph` 的 save/load/catalog 能力,不是另一个并列世界。
-- `Rule` / `Inference` 现在主要作为独立 value object 参与 runtime call,这很好;但 durable authoring asset 的 save/load/list 入口还没有自然地长在 `fg` 上。
+- `FactGraph.create(...)` 现在是 public lifecycle constructor,并可绑定 `registry_root=` / `registry=` 给 authoring asset persistence 使用; `FactGraph.from_schema_classes(...)` 仍可作为 class-first lower-level constructor substrate。
+- `SDKRegistry` 已从 `kernel.sdk` public export surface hard-cut; `kernel.sdk.registry.SDKRegistry` 仍作为 advanced/internal wrapper 存在。普通用户的 authoring asset lifecycle 入口已经转到 `fg.rules.*` / `fg.inferences.*`。
+- `Rule` / `Inference` 现在仍作为独立 value object 参与 runtime call; durable authoring asset 的 save/load/list/get 入口已经自然地长在 graph-bound namespaces 上。
 - schema 的 add/delete/update/migration 还没有明确 public story。
 - evidence / audit capability 后续会变大,但不应在 lifecycle 设计里被误塞进 registry 或 query/rule namespace。
 - `Query` 没有纳入当前 registry story,这不是原则性决定,只是当前实现还没有 query asset persistence。
@@ -35,7 +35,7 @@ fg.what_if.check(...)
 5. 现有 assertion/read/write/view 语法是否保持不受影响?
 6. public SDK 已 hard-cut 为 `Inference` 后,internal/wire `derivation_*` vocabulary 应该在哪个后续切片统一 rename?
 
-Pre-release framing: 产品尚未正式发布,所以这里不以历史 public compatibility 为硬约束。`SDKRegistry`、`from_schema_classes(...)` 等现有 public-ish surfaces 可以保留为实现过渡底座,也可以在后续 blueprint 中 hard-cut / hide / rename,只要迁移后的 public mental model 更干净。
+Pre-release framing: 产品尚未正式发布,所以这里不以历史 public compatibility 为硬约束。`SDKRegistry` 已经在 Blueprint 2 从 public SDK hard-cut,`from_schema_classes(...)` 仍作为 lower-level constructor substrate 保留。后续 blueprint 仍应优先选择更干净的 public mental model。
 
 ## 2. Source-Grounded Current State
 
@@ -75,12 +75,14 @@ Key facts:
 
 - `FactGraph` is a literal alias of `SDKStore`.
 - `SDKStore.__init__(classes, ...)` still expects Python `Entity` classes.
-- `SDKStore.from_schema_classes(classes, *, ledger=None, ledger_path=None, artifact_store_root=None, default_row_format=None)`:
+- `SDKStore.from_schema_classes(classes, *, ledger=None, ledger_path=None, artifact_store_root=None, registry_root=None, registry=None, default_row_format=None)`:
   - compiles schema from classes;
   - computes `schema_digest`;
   - optionally binds a `Ledger(path=ledger_path)`;
   - stores / checks `ledger` metadata `schema_digest`;
   - optionally binds a file artifact sidecar;
+  - optionally binds a `FileAuthoringRegistry` via `registry_root=` or
+    `registry=`;
   - constructs `SDKStore`.
 
 So `from_schema_classes` is already doing more than "compile classes": it is the current graph construction point for schema + ledger + artifact sidecar. That makes it a natural implementation substrate for `FactGraph.create(...)`. Because the product is pre-release, a future blueprint may still decide to hard-cut it from the canonical public surface once `create/load` are clean.
@@ -89,7 +91,7 @@ So `from_schema_classes` is already doing more than "compile classes": it is the
 
 Current implementation lives in `src/kernel/sdk/registry.py`.
 
-`SDKRegistry` wraps `FileAuthoringRegistry` and currently supports:
+`kernel.sdk.registry.SDKRegistry` wraps `FileAuthoringRegistry` and currently supports:
 
 - path or prebuilt registry construction;
 - `apply_schema_classes(...)`;
@@ -109,7 +111,7 @@ Important asymmetry:
 - Query persistence is not currently present as a first-class registry capability.
 - Runtime code already accepts registry objects in several paths, so `RuleRef(...)` and registered authoring assets are already a real mechanism.
 
-This supports the claim that registry is a real implementation mechanism. It does **not** imply that `SDKRegistry` should remain a public SDK concept. In a pre-release cleanup, `SDKRegistry` can be internalized, removed from `kernel.sdk.__all__`, or replaced by FactGraph domain facades if that produces a cleaner model.
+This supports the claim that registry is a real implementation mechanism. It does **not** imply that `SDKRegistry` should remain a public SDK concept. Blueprint 2 removed `SDKRegistry` from `kernel.sdk.__all__`; the advanced wrapper remains available from `kernel.sdk.registry` while graph-bound `fg.rules.*` / `fg.inferences.*` serve as the normal product facade.
 
 ### 2.4 Current Rule / Inference object model
 
@@ -158,7 +160,10 @@ Follow-up code review surfaced several facts that should be treated as design co
    - `audit.explain_fact/conflicts/diff_proof_frames`
    - `package.export_package/run_package`
 
-   Therefore `fg.rules.save/load/list` and future `fg.inferences.save/load/list` would introduce a new verb family. That may still be right, but it needs an explicit rationale instead of being assumed.
+   Therefore `fg.rules.save/load/list` and `fg.inferences.save/load/list`
+   introduce a new verb family. Blueprint 2 explicitly accepted this because
+   saved authoring assets behave more like durable files than like in-memory
+   `views.create/update/delete` entries.
 
 3. **Ledger metadata is sparse.**
    Current ledger metadata is a key/value table, and the known construction path stores `schema_digest`. It does not store workspace root, registry root, artifact sidecar root, view definitions, or Python class import paths. This is the key constraint on `FactGraph.load(...)`.
@@ -172,8 +177,11 @@ Follow-up code review surfaced several facts that should be treated as design co
 6. **`SDKRegistry.register_inference(...)` can recover schema IR from the registry.**
    If `schema_ir` is omitted, registry code can retry compilation using persisted registry schema IR. This is a real precedent for registry as a durable schema reference, but it is not enough for class-less `FactGraph.load(...)` because the typed SDK still needs Python `Entity` classes or a dynamic facade.
 
-7. **`SDKStore.__init__` has no registry parameter today.**
-   Adding `fg.rules.save(...)` or `fg.inferences.save(...)` requires a registry attachment decision: constructor kwarg, workspace-derived registry, explicit method argument, or application-layer service object. The current `FactGraph` object cannot persist authoring assets by itself.
+7. **`SDKStore.__init__` now has registry attachment parameters.**
+   Blueprint 2 chose constructor attachment: `registry_root=` constructs a
+   `FileAuthoringRegistry`, and `registry=` accepts a prebuilt one. Both can be
+   supplied only when their roots match. Workspace-derived registry remains
+   future Blueprint 3 scope.
 
 8. **`views` is the closest manager precedent, but it is in-memory.**
    `_SDKViewsManager` already has `create/update/delete/get/list`, but those views are not currently a registry-backed persisted asset. This matters because `fg.save(...)` either needs to include views deliberately or preserve today's in-memory-only status.
@@ -181,8 +189,12 @@ Follow-up code review surfaced several facts that should be treated as design co
 9. **`Derivation` public rename has low symbol collision but high substrate reach.**
    Code audit found no existing `Inference` public class/export/file namespace collision. By contrast, `Derivation` appears across SDK DSL, tests, service routes, service payload keys, application protocol names, authoring compile functions, registry manifest keys, and filesystem paths such as `derivations/{id}/{version}.json`. Therefore public SDK rename is feasible, but full-stack substrate rename is a separate slice.
 
-10. **Registry methods return manifest dictionaries today.**
-   `SDKRegistry.register_rule(...)` and `SDKRegistry.register_inference(...)` currently return dict-shaped manifest entries with kind/status/id/version/path/digest-style fields. Future `fg.rules.save(...)` / `fg.inferences.save(...)` should not accidentally inherit that raw return shape unless G0 explicitly chooses it. If public refs are preferred, the application-layer authoring runtime may need an internal DTO that can project either to a public `RuleRef` / `InferenceRef` or to any temporary registry manifest form.
+10. **Public persistence returns typed saved refs.**
+   `SDKRegistry.register_rule(...)` and `SDKRegistry.register_inference(...)`
+   still return dict-shaped manifest entries on the advanced/internal path.
+   Public `fg.rules.save(...)` / `fg.inferences.save(...)` return
+   `SavedRuleRef` / `SavedInferenceRef` instead, so registry manifest structure
+   does not become the product return contract.
 
 11. **Query identity is runtime-derived, not a persisted authoring identity.**
    `Query` is an SDK value object with runtime payload lowering, but no user-managed id/version persistence surface. The current runtime query id is a deterministic digest-like id (`__query__:<digest>`) derived from query shape and schema context, not a durable authoring asset id. That makes `fg.queries.save/load/list` a real design problem, not a cheap namespace parity add.
@@ -319,7 +331,10 @@ FactGraph
 └── package                             # unchanged export/run package story
 ```
 
-This tree is a design target, not an implementation commitment.
+As of Blueprint 2, the `rules.save/load/list/get` and
+`inferences.save/load/list/get` portions of this tree are current behavior.
+Workspace lifecycle, schema mutation, query persistence, and explain/evidence
+remain future-scope.
 
 ## 6. Architectural Layer And Verb Reality
 
@@ -335,7 +350,7 @@ _SDKRulesManager.save()
 
 That shape turns one SDK shell into a wrapper over another SDK shell. It also makes `SDKRegistry` the hidden authority while the docs say it is merely the backing mechanism.
 
-Preferred shape:
+Landed Blueprint 2 shape:
 
 ```text
 _SDKRulesManager.save()
@@ -347,7 +362,7 @@ SDKRegistry.register_rule()
       -> FileAuthoringRegistry / AuthoringRegistry protocol
 ```
 
-The exact module name is future-scope, but the principle should be locked early: domain managers and `SDKRegistry` should be sibling clients of the same application-layer authoring function, not wrappers around each other.
+The application module is `kernel.application.authoring_runtime`. Domain managers call it directly. Any surviving advanced `SDKRegistry` use remains a separate wrapper over lower-level registry mechanics; it is no longer the public SDK authority.
 
 If the future blueprint deletes `SDKRegistry` from the public SDK, this still holds internally during migration: the old registry wrapper should either disappear or become a thin internal client of the application-layer function, not remain as an alternate authority.
 
@@ -647,27 +662,26 @@ Reasons:
 3. It does not naturally answer where queries belong.
 4. It creates a parallel public model next to `fg.rules.inspect(...)`.
 
-Recommended split:
+Landed split:
 
-- normal users: `fg.rules.*`, `fg.inferences.*`, and future `fg.queries.*` only once real persistence exists;
+- normal users: `fg.rules.*` and `fg.inferences.*`; future `fg.queries.*`
+  only once real query persistence exists;
 - backend implementation: registry substrate remains behind the domain facades;
-- optional migration/debug surface: `SDKRegistry` may remain temporarily, but future G0 should feel free to remove it from public exports because the product is unreleased.
+- optional migration/debug surface: `kernel.sdk.registry.SDKRegistry` remains
+  importable, but it is removed from `kernel.sdk.__all__`.
 
 ### 9.5 Return references are part of the public contract
 
-If `fg.rules.save(rule)` ships, the return type should be locked before implementation. A strong candidate is:
+Blueprint 2 locked saved refs as public load handles:
 
 ```python
-rule_ref = fg.rules.save(rule)  # RuleRef(...)
+rule_ref = fg.rules.save(rule)  # SavedRuleRef(rule_id, version)
+inf_ref = fg.inferences.save(inf)  # SavedInferenceRef(inference_id, version)
 ```
 
-because `RuleRef` already exists. The current derivation substrate has no reference type; if the public SDK hard-cuts to `Inference`, parity should introduce `InferenceRef` rather than ever minting a new public `DerivationRef`:
-
-```python
-inf_ref = fg.inferences.save(inf)  # InferenceRef(...) if introduced
-```
-
-Returning raw manifest dicts is easier but leaks registry structure. Returning the original object with hidden metadata is harder to reason about. Future G0 should treat return type as a blocker, not an implementation detail.
+`RuleRef` stays a where-clause carrier and is intentionally not reused as a
+saved-asset handle. `SavedRuleRef` / `SavedInferenceRef` are load handles, not
+runtime selectors; users load them before `run(...)` / `evaluate(...)`.
 
 ## 10. Explain / Evidence / Audit Placement
 
@@ -876,21 +890,26 @@ registry" model.
 
 ### 13.2 Blueprint 2 — Authoring asset persistence facade
 
-Medium-sized, application-layer first.
+Medium-sized, application-layer first. **Landed in Blueprint 2.**
 
-Candidate scope:
+Landed scope:
 
-1. Add `kernel.application.authoring_runtime` or equivalent shared application functions for rule/inference save/load/list.
-2. Add `registry` attachment path to `FactGraph` / `SDKStore`.
-3. Add `fg.rules.save/load/list/get` over the application functions.
-4. Add `fg.inferences.save/load/list/get` parity.
-5. Decide whether to delete `SDKRegistry` from public exports/docs in the same slice. Because the product is unreleased, hard-cut is allowed.
-6. If `SDKRegistry` remains internally, refactor it to share the same application-layer functions where practical.
-7. Lock return types (`RuleRef`, possibly new `InferenceRef`).
-8. If old registry entry dicts survive internally, route them through the same application-layer DTO as public refs instead of letting raw manifest dicts become the new public return contract by accident.
-9. Regression-test that the new `fg.rules/inferences.save` behavior preserves today's registry-backed runtime semantics before any old public registry surface is removed.
+1. Added `kernel.application.authoring_runtime` with registry-facing
+   save/load/list/get helpers.
+2. Added `registry_root=` and `registry=` attachment paths to `FactGraph` /
+   `SDKStore`.
+3. Added `fg.rules.save/load/list/get` over the application functions.
+4. Added `fg.inferences.save/load/list/get` parity.
+5. Removed `SDKRegistry` from public `kernel.sdk` exports/docs; advanced code
+   can still import `kernel.sdk.registry.SDKRegistry`.
+6. Locked return types as `SavedRuleRef` and `SavedInferenceRef` so they do not
+   collide with `RuleRef` where-clause semantics.
+7. Kept saved refs as load handles only. Runtime shorthand such as
+   `fg.eval.run(saved_ref)` remains future ergonomic scope.
+8. Auto-upserts registry schema on first save, is idempotent under matching
+   `schema_digest`, and raises on mismatch.
 
-Non-goals:
+Non-goals preserved:
 
 - graph workspace `save/load`;
 - class-less load;
@@ -970,15 +989,14 @@ The direction looks worthwhile, but it should be treated as a new architecture-f
 
 Because the product is not released, future blueprints should prefer a clean public model over compatibility preservation. Existing surfaces such as `SDKRegistry` and `from_schema_classes(...)` may be used as implementation scaffolding, but they do not need to survive as public API if `FactGraph.create/load/save` and domain asset namespaces make the model clearer.
 
-Recommended order:
+Current order after Blueprint 2:
 
-1. Source audit current `SDKRegistry`, `FileAuthoringRegistry`, `RuleRef`, query DSL, package export, ledger metadata, and view persistence.
-2. Keep the public `Inference` naming and SDK docs aligned before adding persistence APIs.
-3. Rename service/registry wire vocabulary before the persistence facade if the mixed vocabulary would otherwise leak into durable assets.
-4. Add persistence only after the application-layer authoring runtime boundary is scoped.
-5. Add graph workspace save/load only after save scope and layout are locked.
-6. Preserve all assertion and runtime direct-use surfaces as hard invariants.
-7. Revisit schema mutation, query persistence, and explain/evidence capability as separate slices.
+1. Public `Inference` naming is landed.
+2. Service/registry wire vocabulary is landed.
+3. Graph-bound authoring asset persistence facade is landed.
+4. Add graph workspace save/load only after save scope and layout are locked.
+5. Preserve all assertion and runtime direct-use surfaces as hard invariants.
+6. Revisit schema mutation, query persistence, and explain/evidence capability as separate slices.
 
 The high-level shape is:
 
@@ -987,7 +1005,7 @@ FactGraph owns lifecycle.
 Domain namespaces own authoring assets.
 Registry remains the backing mechanism.
 Application runtime owns persistence orchestration.
-Public SDK uses Inference if the rename lands; derivation remains internal/proof vocabulary until wire rename.
+Public SDK uses Inference; derivation remains internal/proof/candidate substrate vocabulary.
 Assertion/runtime surfaces remain stable.
 Explain is the likely user-facing proof surface; evidence carriers remain internal and are not mixed into this slice.
 ```

@@ -182,6 +182,33 @@ Rules:
 - `RuleRef` is forbidden inside `Not(...)` body (compile-time error).
 - `sdk.run(..., registry=None)` auto-registers `RuleRef(RuleObj)` dependencies.
 - If `registry` is explicitly provided, SDK does not auto-fill dependencies.
+- `RuleRef` is a where-clause carrier. It is not the same as
+  `SavedRuleRef`, which is returned by `fg.rules.save(...)`.
+
+## 4.1 Saved Rule and Inference Assets
+
+Bind an authoring registry to the graph when you want durable rule and
+inference assets:
+
+```python
+fg = FactGraph.create(schema_classes=[User], registry_root="./registry")
+
+rule_ref = fg.rules.save(rule)          # SavedRuleRef(rule_id, version)
+inf_ref = fg.inferences.save(inf)       # SavedInferenceRef(inference_id, version)
+
+latest_rule_ref = fg.rules.get(rule.id)
+saved_rules = fg.rules.list()
+
+loaded_rule = fg.rules.load(rule_ref)
+loaded_inf = fg.inferences.load(inf_ref)
+```
+
+`load(...)` returns SDK value objects (`Rule` / `Inference`). Saved refs are not
+runtime selectors; pass the loaded objects to `fg.eval.run(...)` or
+`fg.eval.evaluate(...)`.
+
+`fg.rules.inspect(rule_or_inference)` remains the structural inspection API and
+lives next to the persistence methods.
 
 ## 5. Query DSL
 

@@ -62,9 +62,9 @@ should not be imported directly.
 ## 1. Top-Level Exports
 
 Everything below is importable as `from kernel.sdk import <name>`.
-The export list currently has 39 names.
+The export list currently has 40 names.
 
-### 1.1 Schema, store, registry
+### 1.1 Schema and store
 
 | Symbol | Purpose |
 |---|---|
@@ -74,7 +74,6 @@ The export list currently has 39 names.
 | `Relationship` | Base class for relationship type declarations |
 | `FactGraph` | Canonical entry point (alias of `SDKStore`) |
 | `SDKStore` | Foundational entry point (same class as `FactGraph`) |
-| `SDKRegistry` | Schema/rule/inference registry |
 | `ReadPolicy` | Read-time display/confidence aggregation policy for `policy=...` call sites |
 
 `Entity` instances render via `__repr__` showing identity and field
@@ -90,8 +89,10 @@ constructor name.
 |---|---|
 | `Branch` | Rule `where` branch constructor (alternative conjunction) |
 | `Rule` | Declarative rule (head + body) |
-| `RuleRef` | Reference to a registered rule by id |
+| `RuleRef` | Where-clause reference to a registered/exposed rule; not a saved-asset handle |
+| `SavedRuleRef` | Registry-backed saved rule handle returned by `fg.rules.save/list/get` |
 | `Inference` | Multi-rule inference envelope |
+| `SavedInferenceRef` | Registry-backed saved inference handle returned by `fg.inferences.save/list/get` |
 | `Query` | Query over the current store |
 | `Pred` | Predicate literal (fact reference) |
 | `Not` | Negation operator for body literals |
@@ -152,6 +153,8 @@ FactGraph.create(
     ledger=None,
     ledger_path=None,
     artifact_store_root=None,
+    registry_root=None,
+    registry=None,
     default_row_format=None,
 )
 ```
@@ -159,8 +162,11 @@ FactGraph.create(
 Class-validation errors raise `SDKSchemaError`; constructor-path errors
 raise `SDKStoreError`. `artifact_store_root` enables sidecar-backed
 explain artifact readback (ignored if a fully constructed `store=` is
-supplied). `FactGraph.from_schema_classes(...)` remains available as the
-lower-level class-first constructor name.
+supplied). `registry_root` constructs a file-backed authoring registry for
+`fg.rules.*` / `fg.inferences.*`; `registry` accepts a prebuilt
+`FileAuthoringRegistry`. If both are provided, their roots must match.
+`FactGraph.from_schema_classes(...)` remains available as the lower-level
+class-first constructor name.
 
 ### 2.2 Schema namespace (`fg.schema.*`)
 
@@ -212,7 +218,38 @@ This namespace is read-only and by-id only. It does not ship graph-wide
 (`souffle`, `problog`, `pyreason`) consume `engine_options` at call time
 and never propagate to `Inference` or ledger.
 
-### 2.7 What-if namespace (`fg.what_if.*`)
+`SavedRuleRef` and `SavedInferenceRef` are registry load handles, not runtime
+selectors. Load them first (`fg.rules.load(ref)` or `fg.inferences.load(ref)`)
+to obtain a `Rule` or `Inference`, then pass the loaded value object to
+`run(...)` or `evaluate(...)`.
+
+### 2.7 Rules namespace (`fg.rules.*`)
+
+| Method | One-liner |
+|---|---|
+| `inspect(rule_or_inference)` | Inspect `Rule` / `Inference` branch ids, fallback ids, atom ids, and heads |
+| `save(rule)` | Persist a `Rule` to the graph-bound authoring registry; returns `SavedRuleRef` |
+| `load(ref_or_rule_id, *, version=None)` | Load a saved rule as a SDK `Rule`; `version=` is required when passing a raw id |
+| `list()` | Return `list[SavedRuleRef]` for all saved rule versions |
+| `get(rule_id)` | Return the latest `SavedRuleRef` for a rule id |
+
+Saving auto-upserts the graph schema into the registry when the registry has no
+schema yet. If a registry already has a different `schema_digest`, save raises
+`SDKStoreError` instead of silently overwriting the schema.
+
+### 2.8 Inferences namespace (`fg.inferences.*`)
+
+| Method | One-liner |
+|---|---|
+| `save(inference)` | Persist an `Inference` to the graph-bound authoring registry; returns `SavedInferenceRef` |
+| `load(ref_or_inference_id, *, version=None)` | Load a saved inference as a SDK `Inference`; `version=` is required when passing a raw id |
+| `list()` | Return `list[SavedInferenceRef]` for all saved inference versions |
+| `get(inference_id)` | Return the latest `SavedInferenceRef` for an inference id |
+
+`fg.inferences` is persistence-only. Runtime evaluation remains under
+`fg.eval.evaluate(...)`.
+
+### 2.9 What-if namespace (`fg.what_if.*`)
 
 For tutorial usage see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
 
@@ -222,7 +259,7 @@ For tutorial usage see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md
 | `diagnose(inference, binding, *, engine='native', registry=None)` | Trace why a fact was derived; returns `DiagnoseResult` |
 | `why_not(inference, candidates, *, engine='native', registry=None)` | Explain why facts in an explicit candidate universe did not derive; returns `WhyNotUniverseResult` |
 
-### 2.8 What-if fact overlay (`fg.what_if.fact_overlay.*`)
+### 2.10 What-if fact overlay (`fg.what_if.fact_overlay.*`)
 
 | Method | One-liner |
 |---|---|
@@ -232,7 +269,7 @@ For tutorial usage see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md
 `overlay` is a `kernel.application.protocol.EvaluationOverlay`. The
 `tuple[FactValueOverride, ...]` form is rejected at the SDK boundary.
 
-### 2.9 What-if rule (`fg.what_if.rule.*`)
+### 2.11 What-if rule (`fg.what_if.rule.*`)
 
 All three accept an SDK `Rule` (lowered internally; raw `RuleSpec` IR
 is rejected) and a `SupportArtifact`. `overlay` may be `None` or empty;
@@ -247,7 +284,7 @@ the rule-action overlay is constructed internally.
 `literal_path` is a `kernel.application.protocol.RuleLiteralPath`;
 `added_atom` is a `kernel.application.protocol.RuleAddedAtom`.
 
-### 2.10 Audit namespace (`fg.audit.*`)
+### 2.12 Audit namespace (`fg.audit.*`)
 
 | Method | One-liner |
 |---|---|
@@ -259,14 +296,14 @@ the rule-action overlay is constructed internally.
 via `kernel.audit.load_audit_package` or hold them from a recorder.
 `include_unchanged` is a strict bool — `1` and `0` are rejected.
 
-### 2.11 Package namespace (`fg.package.*`)
+### 2.13 Package namespace (`fg.package.*`)
 
 | Method | One-liner |
 |---|---|
 | `export_package(out_dir, options, **kwargs)` | Export Souffle-format package; `options` is a required `ExportOptions` instance |
 | `run_package(package_dir, *, entrypoints, engine='souffle')` | Execute an exported package |
 
-### 2.12 Views namespace (`fg.views.*`)
+### 2.14 Views namespace (`fg.views.*`)
 
 | Method | One-liner |
 |---|---|
@@ -291,7 +328,7 @@ Read-time display/confidence controls live on `ReadPolicy` and are passed
 with `policy=...` at the `find(...)` or `run(...)` call site. They are
 not stored in `fg.views`.
 
-### 2.13 Result-type non-export
+### 2.15 Result-type non-export
 
 `CheckResult`, `DiagnoseResult`, `WhyNotUniverseResult`,
 `FactOverlayCheckResult`, `ProofFrameRecheckResult`, `RuleDisableResult`,
@@ -303,33 +340,25 @@ DTOs. Import them directly from `kernel.application.protocol` or
 
 ---
 
-## 3. `SDKRegistry` Methods
+## 3. Advanced Registry Access
 
-| Method | Purpose |
-|---|---|
-| `apply_schema_classes(classes)` | Compile and register schema from classes |
-| `apply_authoring_bundle(bundle)` | Apply a full authoring bundle |
-| `read_manifest()` | Read the registry manifest |
-| `upsert_schema_ir(schema_ir)` | Insert/update compiled schema IR |
-| `register_rule_spec(spec)` | Register a low-level rule spec |
-| `register_rule(rule)` | Register an SDK `Rule` |
-| `register_inference_spec(spec)` | Register a low-level inference spec |
-| `register_inference(inference)` | Register an SDK `Inference` (single-head public surface; multi-head is rejected in Track 1) |
-| `get_schema_entry(...)` | Fetch a schema entry by id |
-| `list_rule_ids()` / `list_inference_ids()` | Enumerate registered ids |
-| `list_rule_versions(id)` / `list_inference_versions(id)` | Version history |
-| `list_apply_run_ids()` / `list_apply_runs()` | Enumerate apply runs |
-| `show_apply_run(run_id)` | Inspect a specific apply run |
-| `get_latest_rule_spec(id)` / `get_latest_inference_spec(id)` | Latest version lookup |
-| `read_rule_spec(id, version)` / `read_inference_spec(id, version)` | Specific version read |
+`SDKRegistry` is no longer exported from `kernel.sdk`. The product facade is
+graph-bound persistence through `fg.rules.*` and `fg.inferences.*`.
 
-`register_inference` accepts public SDK `Inference` objects or lower-level
-authoring payloads with compiler-substrate `derivation_*` keys. The registry
-facade persists public asset vocabulary (`inferences/` paths and
-`inference_id` JSON) while translating at the compiler boundary. For multiple
-output facts, define one inference per head. Core/application internals may
-still carry tuple-shaped heads for lower-level protocol compatibility, but
-the public SDK boundary is single-head.
+Advanced tests and migration/debug code may import the wrapper from
+`kernel.sdk.registry`:
+
+```python
+from kernel.sdk.registry import SDKRegistry
+```
+
+Normal SDK code should prefer:
+
+```python
+fg = FactGraph.create(schema_classes=[User], registry_root="./registry")
+rule_ref = fg.rules.save(rule)
+inf_ref = fg.inferences.save(inf)
+```
 
 ---
 

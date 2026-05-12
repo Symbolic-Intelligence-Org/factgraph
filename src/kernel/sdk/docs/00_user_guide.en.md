@@ -890,40 +890,40 @@ on `SDKStoreError`.
 
 ## 10. Registry
 
-The registry tracks compiled schemas, rules, and inferences across
-versions and apply runs. It writes to a directory on disk
-(`FileAuthoringRegistry` under the hood).
+The graph-bound authoring registry tracks schemas, rules, and inferences
+across versions. Bind it at graph construction time:
 
 ```python
-from kernel.sdk import SDKRegistry
+from kernel.sdk import FactGraph
 
-# Construct with one of:
-reg = SDKRegistry(root_dir="/var/factpy/registry")           # path-based
-# or pass a pre-built FileAuthoringRegistry:
-# reg = SDKRegistry(registry=existing_file_authoring_registry)
+fg = FactGraph.create(
+    schema_classes=[User, Document],
+    registry_root="/var/factpy/registry",
+)
 
-reg.apply_schema_classes([User, Document])
-reg.register_rule(my_rule)                # SDK Rule object
-reg.register_derivation(my_inference)     # SDK Inference object (single-head)
+rule_ref = fg.rules.save(my_rule)          # SavedRuleRef(rule_id, version)
+inf_ref = fg.inferences.save(my_inference) # SavedInferenceRef(inference_id, version)
 
-reg.list_rule_ids()
-reg.list_rule_versions("rule_alice")
-reg.read_rule_spec("rule_alice", "1.0.0")        # both args positional
+fg.rules.list()
+fg.rules.get("rule_alice")                 # latest SavedRuleRef
+fg.rules.load(rule_ref)                    # SDK Rule value object
+fg.rules.load("rule_alice", version="1.0.0")
 ```
 
-`register_rule` / `register_derivation` accept either an SDK DSL object
-(uses `.to_authoring_payload()`) or a pre-built authoring payload
-`dict`. Public SDK `Inference` is single-head; lower-level authoring
-payloads remain substrate vocabulary and are handled by registry methods
-with `derivation_*` names until a dedicated wire/registry rename slice.
-
-Apply runs:
+`SavedRuleRef` and `SavedInferenceRef` are registry load handles, not runtime
+selectors. Load first, then run or evaluate the returned value object:
 
 ```python
-reg.list_apply_run_ids()
-reg.list_apply_runs()
-reg.show_apply_run("apply-2026-05-09T10:00:00Z")
+loaded_rule = fg.rules.load(rule_ref)
+rows = fg.eval.run(loaded_rule)
+
+loaded_inf = fg.inferences.load(inf_ref)
+candidates = fg.eval.evaluate(loaded_inf)
 ```
+
+`SDKRegistry` is no longer part of `kernel.sdk.__all__`. Advanced migration or
+debug code can still import `kernel.sdk.registry.SDKRegistry`, but normal SDK
+code should use the graph-bound `fg.rules.*` and `fg.inferences.*` facades.
 
 See [§3 of 04](04_api_surface.en.md#3-sdkregistry-methods) for the
 full method list.

@@ -283,7 +283,14 @@ the registry workspace.
 
 ### 7.3 Consumption by SDK / service
 
-- `SDKRegistry` is the Python-friendly facade for `authoring`
+- `FactGraph.create(..., registry_root=...)` binds a file authoring registry
+  to the SDK graph. `fg.rules.save/load/list/get` and
+  `fg.inferences.save/load/list/get` are the normal public SDK facade.
+- `kernel.application.authoring_runtime` owns the application-layer
+  save/load/list/get orchestration used by the SDK facade.
+- `kernel.sdk.registry.SDKRegistry` remains an advanced/internal wrapper for
+  tests, migration, and lower-level registry workflows. It is not exported from
+  `kernel.sdk`.
 - `service.registry_v1` exposes `FileAuthoringRegistry` over an HTTP
   read interface
 - `service.runtime_v1` may also read schemas / rules from the
@@ -299,8 +306,9 @@ the registry workspace.
     validated and preserved here; core itself assigns them no
     execution semantics
 - `sdk`
-  - `SDKRegistry` provides a more ergonomic wrapper around
-    `authoring`
+  - graph-bound `fg.rules.*` / `fg.inferences.*` provide the public persistence
+    facade over `authoring`
+  - advanced code may still import `kernel.sdk.registry.SDKRegistry`
 - `service`
   - The service layer can expose the authoring registry as a
     front-end-consumable interface
