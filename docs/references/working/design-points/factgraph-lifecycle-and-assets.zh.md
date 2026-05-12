@@ -533,25 +533,37 @@ The names are intuitive, but their semantics are not equal.
 ### 8.1 `fg.schema.add(...)`
 
 Blueprint `2026-05-13_schema-mutation-lifecycle` landed the first conservative
-schema mutation slice:
+schema mutation slice, and `2026-05-13_schema-field-add-lifecycle` extended it
+with additive non-identity field additions:
 
 - public API: `fg.schema.add(EntityCls)` and
   `fg.schema.add(schema_classes=[...])`;
-- scope: additive Entity classes only;
-- return type: `SchemaAddResult(old_digest, new_digest, added_entities)`;
+- scope: additive Entity classes and additive non-identity fields on existing
+  entities;
+- return type: `SchemaAddResult(old_digest, new_digest, added_entities,
+  added_fields)`;
 - behavior: immediate mutation of active SDK/core schema state, ledger
   `schema_digest`, and graph-bound registry schema IR;
 - workspace boundary: workspace manifest digest updates only on explicit
   `fg.save(...)`;
 - idempotency: re-adding an equivalent existing class returns
-  `added_entities=[]`;
+  `added_entities=[]`; re-adding an equivalent field-add replacement returns
+  `added_entities=[]` and `added_fields=[]`;
 - validator: seven-category strict additive check prevents entity removal,
   identity changes, predicate-id changes, relationship-target rewrites, new
-  predicate id collisions, and any existing-field rewrite.
+  predicate id collisions, and existing-field rewrites while allowing new
+  compiler-generated non-identity predicates owned by existing entities.
 
-The first slice does **not** add fields to existing entities, add Relationship
-classes, carry default/nullability migration semantics, or plan destructive
-changes. Those remain future schema-evolution work.
+Field-add uses a replacement Python class with the same class name. After a
+successful field-add, the replacement class is the active SDK declaration;
+reads or writes through superseded entity class objects or descriptors raise a
+clear SDK error. Existing assertions are not backfilled: missing added
+single-cardinality fields read as `None`, and missing added multi-cardinality
+fields read as `()`.
+
+The current schema mutation surface still does **not** add Relationship
+classes, add identity fields, carry default/nullability migration semantics,
+or plan destructive changes. Those remain future schema-evolution work.
 
 ### 8.2 `fg.schema.delete(...)`
 

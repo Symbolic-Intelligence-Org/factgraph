@@ -94,7 +94,7 @@ class-first constructor name and does not accept workspace `path=`.
 | `SavedRuleRef` | Registry-backed saved rule handle returned by `fg.rules.save/list/get` |
 | `Inference` | Multi-rule inference envelope |
 | `SavedInferenceRef` | Registry-backed saved inference handle returned by `fg.inferences.save/list/get` |
-| `SchemaAddResult` | Result returned by additive `fg.schema.add(...)`; fields are `old_digest`, `new_digest`, `added_entities` |
+| `SchemaAddResult` | Result returned by additive `fg.schema.add(...)`; fields are `old_digest`, `new_digest`, `added_entities`, `added_fields` |
 | `Query` | Query over the current store |
 | `Pred` | Predicate literal (fact reference) |
 | `Not` | Negation operator for body literals |
@@ -205,19 +205,27 @@ exports.
 
 | Method | One-liner |
 |---|---|
-| `add(EntityCls, ...)` / `add(schema_classes=[...])` | Add new Entity classes to the active graph schema; returns `SchemaAddResult` |
+| `add(EntityCls, ...)` / `add(schema_classes=[...])` | Add new Entity classes or non-identity fields on existing Entity declarations; returns `SchemaAddResult` |
 | `ingest(items, *, meta=None, allow_sensitive_meta=False)` | Bulk-insert assertions; `meta` merges into every item's meta. Returns `IngestResult` |
 | `validate_provenance(obj, *, standard="derivation_v1")` | Inspect provenance shape without writing; returns `ValidationReport` |
 
 `fg.schema.add(...)` is intentionally additive-only in this slice. It accepts
-new `Entity` classes, validates that every existing entity and predicate
-remains compatible, then updates the in-memory graph schema, core store
-schema, ledger schema digest, and graph-bound registry schema entry. If the
-graph is bound to a workspace, the workspace manifest is not rewritten until a
-later explicit `fg.save(...)`.
+new `Entity` classes and replacement declarations with the same Python class
+name when they add only non-identity fields. It validates that every existing
+entity, identity field, and predicate remains compatible, then updates the
+in-memory graph schema, core store schema, ledger schema digest, and
+graph-bound registry schema entry. If the graph is bound to a workspace, the
+workspace manifest is not rewritten until a later explicit `fg.save(...)`.
+
+Field-add uses a replacement class object. After a field-add succeeds, reads
+or writes through superseded entity classes or their descriptors raise
+`SDKStoreError`; use the post-add class object. Existing assertions are not
+backfilled. Missing added fields use normal read absence semantics: `None` for
+single-cardinality fields and `()` for multi-cardinality fields.
 
 Re-adding an equivalent existing class is an idempotent no-op:
-`SchemaAddResult.added_entities == []`. Destructive schema operations are not
+`SchemaAddResult.added_entities == []` and
+`SchemaAddResult.added_fields == []`. Destructive schema operations are not
 public: `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
 `fg.schema.deprecate` are deferred to future migration-planning work.
 

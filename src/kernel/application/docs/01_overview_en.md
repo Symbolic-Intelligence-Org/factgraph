@@ -82,9 +82,11 @@ It is not responsible for:
 - `schema_mutation_runtime.py`
   - additive schema-extension authority for `fg.schema.add(...)`: validates
     that existing entities and predicates are preserved, plans the next schema
-    IR from additional `Entity` classes, and returns `SchemaAddResult` /
-    `AdditiveExtensionResult` DTOs. Destructive delete/update/migrate planning
-    is deliberately outside this module's first slice.
+    IR from additional `Entity` classes or same-entity replacement classes that
+    add non-identity fields, and returns `SchemaAddResult` /
+    `AdditiveExtensionResult` DTOs including `added_entities` and
+    `added_fields`. Destructive delete/update/migrate planning is deliberately
+    outside this module's first slices.
 - `derivation_runtime.py`
   - `evaluate_derivation_plans(...)`, `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
 - `derivation_check_runtime.py`

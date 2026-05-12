@@ -917,16 +917,45 @@ assert result.added_entities == ["Account"]
 ```
 
 The returned `SchemaAddResult` records `old_digest`, `new_digest`, and
-`added_entities`. Re-adding an equivalent existing class is a no-op and
-returns `added_entities=[]`.
+`added_entities`. It also records `added_fields` for additive field changes.
+Re-adding an equivalent existing class is a no-op and returns
+`added_entities=[]` and `added_fields=[]`.
+
+To add non-identity fields to an existing entity, pass a replacement class with
+the same Python class name and the added field declarations:
+
+```python
+class User(Entity):
+    user_id: str = Identity(primary_key=True)
+    name: str = Field(cardinality="single")
+
+fg = FactGraph.create(schema_classes=[User])
+
+class User(Entity):
+    user_id: str = Identity(primary_key=True)
+    name: str = Field(cardinality="single")
+    nickname: str = Field(cardinality="single")
+    tags: str = Field(cardinality="multi")
+
+result = fg.schema.add(User)
+assert result.added_entities == []
+assert result.added_fields == ["User.nickname", "User.tags"]
+```
+
+Existing assertions are not backfilled. Reads return the existing absence
+semantics: `None` for missing single-cardinality fields and `()` for missing
+multi-cardinality fields. After field-add, use the replacement class object;
+reads or writes through superseded entity classes or descriptors raise
+`SDKStoreError`.
 
 The operation is immediate for the active graph: new classes can be used for
 `fg.ref`, `fg.write`, `fg.read`, `fg.rules.save`, and `fg.inferences.save`
 right away. If the graph is workspace-backed, call `fg.save()` to persist the
 new workspace manifest digest; the manifest is not rewritten implicitly.
 
-Only additive entity-class extension is implemented here. Field rewrites,
-destructive removal, deprecation metadata, and migration planning are deferred:
+Only additive entity-class extension and additive non-identity field extension
+are implemented here. Identity-field changes, field rewrites, destructive
+removal, deprecation metadata, and migration planning are deferred:
 `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
 `fg.schema.deprecate` are intentionally absent.
 
