@@ -285,8 +285,18 @@ class BridgeGuardTests(unittest.TestCase):
 
         self.assertTrue(hits)
 
-    def test_pyreason_adapter_still_does_not_import_semantics_profile_in_c(self) -> None:
+    def test_pyreason_adapter_imports_semantics_profile_in_d(self) -> None:
         root = Path(__file__).resolve().parents[1] / "adapters" / "pyreason"
+        hits = [
+            str(path.relative_to(root))
+            for path in root.rglob("*.py")
+            if "SemanticsProfile" in path.read_text()
+        ]
+
+        self.assertTrue(hits)
+
+    def test_souffle_adapter_still_does_not_import_semantics_profile_in_d(self) -> None:
+        root = Path(__file__).resolve().parents[1] / "adapters" / "souffle"
         violations = [
             str(path.relative_to(root))
             for path in root.rglob("*.py")
