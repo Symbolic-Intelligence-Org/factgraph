@@ -61,6 +61,7 @@ This blueprint scopes the next slice: rename the **service wire and registry ass
 - Do not migrate proof/audit/static UI terminology from derivation to proof trace.
 - Do not rename `CandidateSet.derivation_id` unless G0 deliberately expands scope.
 - Do not rename `CompiledDerivationPlan` / `DerivationEvaluateRequest` unless G0 deliberately expands scope.
+- If G0 selects the recommended candidate-protocol boundary, `/inferences/*` routes will still return candidate payloads containing `derivation_id` / `derivation_version`. This residual mixed vocabulary is intentional substrate preservation and belongs to a future proof/candidate protocol cleanup slice.
 - Do not alter `release/0.1.x`, `v0.1.0-rc.1`, or existing milestone refs.
 
 ## 4. Source Audit
@@ -240,7 +241,9 @@ Options:
 - **W6b** Rename public service/SDKRegistry names only, but keep FileAuthoringRegistry storage on derivation vocabulary.
 - **W6c** Defer all registry vocabulary until Blueprint 2 persistence facade.
 
-Recommendation: **W6a** if this slice is meant to remove durable mixed vocabulary before Blueprint 2. This is the largest G0 decision.
+Recommendation: **W6a** if this slice is meant to remove durable mixed vocabulary before Blueprint 2. This is the largest G0 decision. W6b is intentionally weak: it leaves a second mixed vocabulary layer where service/docs say inference but developer workspaces still contain `registry/derivations/...`.
+
+If W6a is selected, no migration tool is planned for pre-release workspaces. Developer-side guidance should be documented: recreate the registry workspace or rename `registry/derivations/` to `registry/inferences/` and update the manifest shape.
 
 ### 5.7 Q7: SDKRegistry method names
 
@@ -299,12 +302,35 @@ Options:
 
 Recommendation: **W12a**. This is a vocabulary slice; docs lag would be the main failure mode.
 
+### 5.13 Decision path summary
+
+The questions above collapse into two coherent paths:
+
+**Path A — aggressive vocabulary cleanup (recommended):**
+
+```text
+W1a + W2a + W3a/W3c + W4a + W5a + W6a + W7a + W8a + W9a + W10a + W11a + W12a
+```
+
+This hard-cuts the public service and registry vocabulary to inference, including file-registry manifest/path shape. It leaves only the deep candidate/proof substrate on derivation vocabulary: `CandidateSet.derivation_id`, `CompiledDerivationPlan`, core store parameters, and proof/audit language.
+
+**Path B — conservative service-only cleanup:**
+
+```text
+W1a + W2a + W3a/W3c + W4a + W5c + W6c + W7c + W8b + W9a + W10a + W11a + W12a
+```
+
+This hard-cuts runtime service routes and request keys, but leaves registry/service asset vocabulary and storage for the persistence-facade blueprint. It reduces implementation size but preserves more mixed vocabulary.
+
+Avoid the partial middle path unless G0 identifies a specific implementation blocker. In particular, W6b creates public inference naming above a durable `derivations/` filesystem substrate and makes Blueprint 2 harder to reason about.
+
 ## 6. Boundaries And Invariants
 
 - Blueprint 1 public SDK `Inference` stays green.
 - Track 3 and post-Track-3 semantics wrappers stay green.
 - `Inference.to_authoring_payload()` continues to emit the payload expected by the authoring compiler unless G0 explicitly chooses W9b/W9c.
 - Runtime accept still accepts the candidate payload returned by runtime evaluate without client-side field rewriting.
+- If routes move to `/inferences/*`, the returned candidate payload still carries `derivation_id` / `derivation_version` under W4a/W10a. That is a known residual substrate boundary, not an accidental stale field.
 - Proof/audit/static UI uses of "derivation" remain out of scope unless they directly reference service/registry routes touched by this slice.
 - `release/0.1.x`, `v0.1.0-rc.1`, and existing milestone refs remain untouched.
 
@@ -333,6 +359,7 @@ Draft sequence, subject to G0:
    - registry route + key + response behavior;
    - storage manifest/path behavior if W6a locks;
    - guards for CandidateSet and application DTO names if W10a locks.
+   - cleanup of the stale service test import from public `Derivation` to public `Inference`; this is Blueprint 1 fallout and should not depend on any G0 choice.
 2. G2 service wire implementation:
    - `app_v1.py` route changes;
    - `runtime_v1.py` request-key and error-path changes;
@@ -370,4 +397,3 @@ Task completion will fill:
 - Commit lineage:
 - Deviations:
 - Archive notes:
-
