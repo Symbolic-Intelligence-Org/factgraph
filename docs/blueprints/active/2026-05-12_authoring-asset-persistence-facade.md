@@ -1,6 +1,6 @@
 # Task Blueprint: Authoring Asset Persistence Facade
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -267,6 +267,8 @@ Recommendation: **A1a**. If the facade lives under `FactGraph`, persistence
 should be graph-bound. Per-call registry arguments make the namespace feel like
 a thin helper over the old facade.
 
+G0 decision (2026-05-12): **A1a locked**. Persistence belongs on graph-bound namespaces, not per-call registry helpers.
+
 ### Q2 — Registry Constructor Shape
 
 - **A2a** Accept `registry_root: str | Path | None`.
@@ -275,6 +277,8 @@ a thin helper over the old facade.
 
 Recommendation: **A2c**. It preserves testability and lets advanced callers
 inject a registry object, while normal users pass a root path.
+
+G0 decision (2026-05-12): **A2c locked**. `registry_root` is the normal constructor path; `registry` object injection remains available for tests and advanced use.
 
 ### Q3 — Application Runtime Layer
 
@@ -285,6 +289,8 @@ inject a registry object, while normal users pass a root path.
 
 Recommendation: **A3a**. This matches the application-first runtime authority
 pattern and avoids making the SDK shell own authoring persistence semantics.
+
+G0 decision (2026-05-12): **A3a locked**. Add `kernel.application.authoring_runtime` as the shared authoring persistence orchestration layer.
 
 ### Q4 — Public `SDKRegistry` Fate
 
@@ -298,6 +304,8 @@ pattern and avoids making the SDK shell own authoring persistence semantics.
 Recommendation: **A4a** if Q1/Q3 land. The product surface should not have two
 parallel persistence facades. The project is pre-release.
 
+G0 decision (2026-05-12): **A4a locked**. Hard-cut `SDKRegistry` from the public SDK export/docs once graph-bound persistence namespaces land.
+
 ### Q5 — Rule Save Return Type
 
 - **A5a** Return existing `RuleRef(rule_id, version)`.
@@ -308,6 +316,8 @@ Recommendation: **A5b**, unless G0 deliberately wants to overload `RuleRef`.
 Current `RuleRef` has hidden object-backed behavior and where-clause semantics;
 that is not the same as a saved asset handle.
 
+G0 decision (2026-05-12): **A5b locked**. `fg.rules.save(rule)` returns a new persisted-asset DTO named by Q17, not existing `RuleRef` and not a raw manifest dict.
+
 ### Q6 — Inference Save Return Type
 
 - **A6a** Add a new persisted-inference ref DTO whose name follows Q17.
@@ -316,6 +326,8 @@ that is not the same as a saved asset handle.
 
 Recommendation: **A6a**. There is no existing public type to reuse, and raw
 dicts would preserve the old registry facade shape.
+
+G0 decision (2026-05-12): **A6a locked**. `fg.inferences.save(inf)` returns a new persisted-inference ref DTO named by Q17.
 
 ### Q7 — Load Return Type
 
@@ -327,6 +339,8 @@ Recommendation: **A7a** for public namespace methods. If raw dict reads remain
 needed, keep them behind internal registry/application APIs rather than
 teaching them as the primary product surface.
 
+G0 decision (2026-05-12): **A7a locked**. Public `load(...)` returns SDK `Rule`/`Inference` objects, not raw persisted specs.
+
 ### Q8 — List Return Type
 
 - **A8a** `list()` returns typed refs.
@@ -335,6 +349,8 @@ teaching them as the primary product surface.
 
 Recommendation: **A8a** for a compact first public surface. IDs-only makes
 users immediately call `get/latest` for version context.
+
+G0 decision (2026-05-12): **A8a locked**. Public `list()` returns typed persisted refs with id/version context.
 
 ### Q9 — Method Names
 
@@ -346,6 +362,8 @@ Recommendation: **A9a**, but G0 should acknowledge that this introduces a
 new verb family relative to existing managers. `save/load` best matches durable
 authoring asset intent.
 
+G0 decision (2026-05-12): **A9a locked**. Use `save/load/list/get` for durable authoring asset lifecycle, despite introducing a new verb family.
+
 ### Q10 — `get` Semantics
 
 - **A10a** `get(id)` returns latest version; `load(id, version=...)` or
@@ -355,6 +373,8 @@ authoring asset intent.
 
 Recommendation: **A10a**. It maps well to existing latest-version registry
 helpers while keeping explicit-version load available.
+
+G0 decision (2026-05-12): **A10a locked**. `get(id)` returns latest; `load(id, version=...)` or `load(ref)` reads a specific version.
 
 ### Q11 — Schema Persistence Coupling
 
@@ -371,6 +391,8 @@ Recommendation: **A11b** for ergonomics, but this is a real design choice.
 `SDKRegistry.register_inference` currently reads registry schema IR to compile
 objects, so the facade must avoid surprising "missing schema" failures.
 
+G0 decision (2026-05-12): **A11b locked**. First save auto-upserts graph schema IR; subsequent saves are idempotent under matching `schema_digest` and raise on mismatch.
+
 ### Q12 — Direct Runtime With Saved Refs
 
 - **A12a** Saved refs are only load handles; users must `load(ref)` before
@@ -386,6 +408,8 @@ This means `save → load → run/evaluate` is the explicit round trip for now.
 future ergonomic slice after persisted refs and where-clause refs are fully
 disambiguated.
 
+G0 decision (2026-05-12): **A12a locked**. Saved refs are load handles only; direct `fg.eval.run(saved_ref)` and `fg.eval.evaluate(saved_ref)` are deferred.
+
 ### Q13 — `fg.inferences` Namespace
 
 - **A13a** Add `_SDKInferencesManager` with persistence methods only.
@@ -394,6 +418,8 @@ disambiguated.
 
 Recommendation: **A13a**. Inference persistence needs a real namespace now;
 evaluation belongs under `fg.eval`.
+
+G0 decision (2026-05-12): **A13a locked**. Add `_SDKInferencesManager` for persistence only; evaluation remains under `fg.eval`.
 
 ### Q14 — Existing `fg.rules.inspect`
 
@@ -404,6 +430,8 @@ evaluation belongs under `fg.eval`.
 Recommendation: **A14a**. The namespace can own rule/inference structure and
 asset lifecycle together.
 
+G0 decision (2026-05-12): **A14a locked**. Keep `fg.rules.inspect(...)` and add persistence methods alongside it.
+
 ### Q15 — Query Persistence
 
 - **A15a** Explicitly defer query persistence; no `fg.queries` namespace.
@@ -412,6 +440,8 @@ asset lifecycle together.
 Recommendation: **A15a**. Query persistence has a different substrate and no
 current registry surface.
 
+G0 decision (2026-05-12): **A15a locked**. Defer query persistence and do not add `fg.queries` in this slice.
+
 ### Q16 — Docs / Stale `run(RuleRef)` Claim
 
 - **A16a** Fix the stale `run(RuleRef)` API-surface teaching in this slice.
@@ -419,6 +449,8 @@ current registry surface.
 
 Recommendation: **A16a**. It directly affects G0 decisions about whether refs
 are runtime selectors or persistence handles.
+
+G0 decision (2026-05-12): **A16a locked**. Fix the stale direct `run(RuleRef)` docs in this slice.
 
 ### Q17 — Persisted Ref Naming Convention
 
@@ -431,6 +463,8 @@ Recommendation: **A17a**. The `Saved*Ref` prefix names the semantic distinction
 directly: these refs point to registry-persisted assets, not where-clause DSL
 atoms. It avoids overloading `RuleRef` and avoids introducing two naming
 conventions across rules and inferences.
+
+G0 decision (2026-05-12): **A17a locked**. Use symmetric `SavedRuleRef` and `SavedInferenceRef` for persisted asset refs.
 
 ## 6. Boundaries And Invariants
 
@@ -454,13 +488,13 @@ conventions across rules and inferences.
 
 ## 7. Acceptance
 
-- [ ] G0 locks registry attachment shape.
-- [ ] G0 locks whether `kernel.application.authoring_runtime` is introduced.
-- [ ] G0 locks public ref/return types for rules and inferences.
-- [ ] G0 locks persisted ref naming convention.
-- [ ] G0 locks `SDKRegistry` public fate.
-- [ ] G0 locks load/list/get semantics.
-- [ ] G0 locks schema persistence behavior.
+- [x] G0 locks registry attachment shape.
+- [x] G0 locks whether `kernel.application.authoring_runtime` is introduced.
+- [x] G0 locks public ref/return types for rules and inferences.
+- [x] G0 locks persisted ref naming convention.
+- [x] G0 locks `SDKRegistry` public fate.
+- [x] G0 locks load/list/get semantics.
+- [x] G0 locks schema persistence behavior.
 - [ ] G1 adds red tests for `fg.rules.save/load/list/get`.
 - [ ] G1 adds red tests for `fg.inferences.save/load/list/get`.
 - [ ] G1 adds guard tests that direct runtime value-object use remains valid.
