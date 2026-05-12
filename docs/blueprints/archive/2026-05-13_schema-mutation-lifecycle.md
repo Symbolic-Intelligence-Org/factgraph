@@ -1,6 +1,6 @@
 # Task Blueprint: Schema Mutation Lifecycle
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-13
 - Last Updated: 2026-05-13
 - Related Modules:
@@ -370,12 +370,12 @@ G0 decision (2026-05-13): **S15a locked: re-adding already-present equivalent cl
 - [x] G0 locks digest anchor update behavior.
 - [x] G0 locks delete/update/migrate as included or deferred.
 - [x] G0 locks re-add idempotency behavior.
-- [ ] G1 baseline covers additive entity add, rejection of unsafe deltas, and
+- [x] G1 baseline covers additive entity add, rejection of unsafe deltas, and
   lifecycle preservation guards.
-- [ ] G2 implementation keeps SDK/Core schema state refresh atomic.
-- [ ] G2 implementation preserves Blueprint 2 and Blueprint 3 behavior.
-- [ ] G3 docs sync public schema mutation teaching.
-- [ ] G4 fills outcome/deviations and archives the blueprint pair.
+- [x] G2 implementation keeps SDK/Core schema state refresh atomic.
+- [x] G2 implementation preserves Blueprint 2 and Blueprint 3 behavior.
+- [x] G3 docs sync public schema mutation teaching.
+- [x] G4 fills outcome/deviations and archives the blueprint pair.
 
 ## 9. Implementation Plan
 
@@ -415,9 +415,56 @@ G0 decision (2026-05-13): **S15a locked: re-adding already-present equivalent cl
 
 ## 11. Outcome / Deviations
 
-Task completion will fill:
+### Final landed behavior
 
-- Final landed behavior:
-- Validation:
-- Deviations:
-- Archive notes:
+- `fg.schema.add(EntityCls)` and `fg.schema.add(schema_classes=[...])` now add
+  new Entity classes to the active `FactGraph`.
+- The operation returns public `SchemaAddResult(old_digest, new_digest,
+  added_entities)`, exported from `kernel.sdk`.
+- Re-adding an equivalent already-present Entity class is an idempotent no-op
+  with `added_entities=[]`.
+- `kernel.application.schema_mutation_runtime` owns additive validation and
+  transition planning, following the Path C application-first pattern from
+  authoring/workspace lifecycle.
+- The additive validator preserves every existing entity type, identity field,
+  predicate id, predicate stable projection, and relationship target while
+  allowing new entity predicates and entity-ref fields.
+- `fg.schema.add(...)` refreshes SDK and core in-memory schema state together:
+  `_classes`, `_schema_ir`, `_schema_digest`, `Store.schema_ir`, application
+  schema index, and field/entity descriptor indexes.
+- Ledger and graph-bound registry schema digests are preflighted against the
+  old digest, then updated to the new digest after validation succeeds.
+- Workspace manifests remain save-time state: schema add does not rewrite
+  `factgraph_workspace.json` until a later `fg.save(...)`.
+- Post-add `fg.ref`, `fg.write`, `fg.read`, `fg.rules.save`, and
+  `fg.inferences.save` can use the newly-added Entity class immediately.
+- `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
+  `fg.schema.deprecate` remain absent.
+
+### Validation
+
+- G1 baseline: 39 tests, expected red shape `2 failures + 28 errors + 9 guards`.
+- G2.1: schema mutation baseline moved to `1 failure + 19 errors + 19 pass`.
+- G2.2: schema mutation baseline moved to `4 failures + 1 error`.
+- G2.3/G3: `test_schema_mutation_lifecycle.py` passed `39/39`.
+- Lifecycle/assets preservation suites passed `88/88`.
+- SDK invariant suites passed `57/57`.
+- `git diff --check` clean for implementation and docs sync.
+
+### Deviations
+
+- Planned G2.4 collapsed into G2.3. Once ledger/registry digest anchors were
+  wired, the workspace save-time boundary and post-add asset persistence gates
+  were already satisfied by existing Blueprint 2/3 infrastructure.
+- `Ledger.set_ledger_meta(...)` remains insert-only. This slice added
+  `replace_ledger_meta(...)` for lifecycle-managed schema digest replacement
+  instead of changing existing insert-preserve semantics.
+
+### Archive notes
+
+This slice closes the first schema-mutation increment after lifecycle/assets
+completion and rc.3. The public model now supports safe additive Entity growth
+without opening destructive schema migration. Future schema work should start
+from explicit migration planning for field addition, Relationship-class
+addition, deprecation, delete, and update/migrate flows rather than expanding
+`fg.schema.add(...)` implicitly.

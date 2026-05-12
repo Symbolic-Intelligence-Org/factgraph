@@ -13,6 +13,7 @@
 | 2026-05-13 | scoped | G2.2 schema add in-memory refresh | Added `fg.schema.add(...)` via `_SDKSchemaManager`, delegated to `schema_mutation_runtime`, and refreshed SDK/core in-memory schema state (`_classes`, `_schema_ir`, `_schema_digest`, application schema index, field indexes). Schema mutation baseline moved to 4 failures + 1 error, all confined to ledger/registry digest-anchor handling. Preservation suites: 88/88 lifecycle-assets and 57/57 SDK invariants OK. |
 | 2026-05-13 | scoped | G2.3 digest anchors + implementation complete | Added ledger metadata replacement for lifecycle-managed schema digest updates and wired `fg.schema.add(...)` to preflight/update ledger and registry schema digest anchors. This also satisfied workspace save-time and post-add asset persistence gates without additional code. Validation: 39/39 schema mutation, 88/88 lifecycle-assets preservation, and 57/57 SDK invariants OK. |
 | 2026-05-13 | scoped | G3 docs sync | Updated SDK user/API docs, application docs, and lifecycle/assets design-point with landed additive `fg.schema.add(...)` behavior, `SchemaAddResult`, schema mutation runtime ownership, workspace save-time boundary, and deferred destructive schema migration scope. |
+| 2026-05-13 | implemented | G4 close-out | Filled outcome/deviations, marked acceptance complete, archived blueprint pair, and prepared milestone publish. Final validation: 39/39 schema mutation, 88/88 lifecycle-assets preservation, 57/57 SDK invariants OK. |
 
 ## Decision Notes
 
