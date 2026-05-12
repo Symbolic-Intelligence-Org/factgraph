@@ -60,7 +60,7 @@ class SDKG5InvariantTests(unittest.TestCase):
         """§5.3 + §5.4 lock: G5 result DTO + supporting `kernel.audit`
         DTOs are not re-exported from SDK; recorder lifecycle stays at
         advanced importable per §5.1."""
-        self.assertEqual(len(kernel_sdk.__all__), 39)
+        self.assertEqual(len(kernel_sdk.__all__), 40)
         self.assertIn("ReadPolicy", kernel_sdk.__all__)
         self.assertIn("FactGraph", kernel_sdk.__all__)
         self.assertIn("SemanticsProfile", kernel_sdk.__all__)

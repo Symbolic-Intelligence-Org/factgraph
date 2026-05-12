@@ -6,7 +6,8 @@ import tempfile
 import unittest
 
 from kernel.authoring.rule_compile import AuthoringRuleCompileError, compile_authoring_rule_v1
-from kernel.sdk import Branch, Inference, Pred, Rule, SDKRegistry, SDKStore, vars as sdk_vars
+from kernel.sdk import Branch, Inference, Pred, Rule, SDKStore, vars as sdk_vars
+from kernel.sdk.registry import SDKRegistry
 from kernel.sdk.dsl.errors import SDKDSLError
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStoreError

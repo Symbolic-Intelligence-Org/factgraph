@@ -23,7 +23,6 @@ from .error_codes import (
     QUERY_TYPE_MISMATCH,
     QUERY_UNBOUND_VAR,
 )
-from .registry import SDKRegistry
 from .schema import Entity, Field, Identity, Relationship
 from .semantics import ProbLogSemantics, PyReasonSemantics
 from .store import FactGraph, SDKStore
@@ -71,7 +70,6 @@ __all__ = [
     "vars",
     "FactGraph",
     "SDKStore",
-    "SDKRegistry",
     "build_authoring_schema_from_classes",
     "compile_schema_from_classes",
     "schema_preflight_from_classes",

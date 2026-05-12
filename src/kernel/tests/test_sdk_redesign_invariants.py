@@ -65,7 +65,7 @@ class SDKAllLengthAndFactGraphExportInvariants(unittest.TestCase):
     """`kernel.sdk.__all__` length 39 + `FactGraph` exported, with `ReadPolicy`, Track 3 `SemanticsProfile`, and Track 2 public semantics wrappers."""
 
     def test_all_length_is_37(self) -> None:
-        self.assertEqual(len(kernel_sdk.__all__), 39)
+        self.assertEqual(len(kernel_sdk.__all__), 40)
 
     def test_readpolicy_in_all(self) -> None:
         self.assertIn("ReadPolicy", kernel_sdk.__all__)

@@ -15,7 +15,8 @@ from kernel.application.protocol.derivation import CompiledDerivationPlan, Deriv
 from kernel.authoring.registry_fs import FileAuthoringRegistry
 from kernel.core.derivation.candidates import CandidateSet
 from kernel.core.store.runtime import Store
-from kernel.sdk import FactGraph, Inference, Pred, SDKRegistry, vars as sdk_vars
+from kernel.sdk import FactGraph, Inference, Pred, vars as sdk_vars
+from kernel.sdk.registry import SDKRegistry
 from kernel.sdk.schema import Entity, Field, Identity
 from service import registry_v1
 from service.app_v1 import app
