@@ -11,6 +11,7 @@
 | 2026-05-12 | g1-red | Red + guard baseline | Added `test_public_inference_factgraph_create.py`. The suite enumerates the in-scope public SDK rename surface, compiled-plan hard-cut, `FactGraph.create(...)`, `Inference.to_authoring_payload()` substrate-key preservation, `derivation_v1` standard preservation, docs filename rename, and guards for Track 1 rule inspect plus Track 3 semantics helpers. Baseline shape is 14 tests with expected forward failures/errors before G2 implementation. |
 | 2026-05-12 | g1-polish | Deferral guards | Added Q7 and Q10 negative guards to complete the G1 inventory gate: Blueprint 1 must not add an empty `fg.inferences` namespace, and must not mint public `DerivationRef` or `InferenceRef` symbols. |
 | 2026-05-12 | g2-impl | Public class rename | Renamed the public SDK DSL class/export from `Derivation` to `Inference`, updated SDK rule inspection to report `kind="Inference"`, and kept substrate keys such as `derivation_id` unchanged. The G1 suite drops from 8 failures + 4 errors to 6 failures + 1 error; the remaining failures belong to `FactGraph.create`, what-if parameter rename, compiled-plan hard-cut, and G3 docs rename. |
+| 2026-05-12 | g2-impl | FactGraph.create | Added `FactGraph.create(schema_classes=...)` as a thin classmethod wrapper over `from_schema_classes(...)`, preserving ledger, ledger_path, artifact store, and row-format options. The G1 suite now has 6 expected failures and no errors. |
 
 ## Decision Notes
 

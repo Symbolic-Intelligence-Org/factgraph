@@ -458,6 +458,24 @@ class SDKStore:
         return f"SDKStore(entities={len(self._classes)}, schema={self._schema_digest!r})"
 
     @classmethod
+    def create(
+        cls,
+        schema_classes: list[type[Entity]],
+        *,
+        ledger: Ledger | None = None,
+        ledger_path: str | None = None,
+        artifact_store_root: str | None = None,
+        default_row_format: str | None = None,
+    ) -> "SDKStore":
+        return cls.from_schema_classes(
+            schema_classes,
+            ledger=ledger,
+            ledger_path=ledger_path,
+            artifact_store_root=artifact_store_root,
+            default_row_format=default_row_format,
+        )
+
+    @classmethod
     def from_schema_classes(
         cls,
         classes: list[type[Entity]],
