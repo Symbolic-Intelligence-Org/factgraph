@@ -1,6 +1,6 @@
 # Task Blueprint: Schema Mutation Lifecycle
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-13
 - Last Updated: 2026-05-13
 - Related Modules:
@@ -180,6 +180,8 @@ The operation is immediate, additive-only, and class-based:
 Recommendation: **S1a**. It addresses the user's `add` request while avoiding
 destructive compatibility questions that need migration machinery.
 
+G0 decision (2026-05-13): **S1a locked: first slice is additive-only schema extension; destructive and migration semantics are deferred.**
+
 ### Q2. Public API shape
 
 - **S2a** `fg.schema.add(NewEntity, ...)` and
@@ -191,6 +193,8 @@ Recommendation: **S2a**. The user asked for `add`, and additive-only semantics
 make the verb honest in the first slice. Plan/apply is better saved for
 `update/migrate`.
 
+G0 decision (2026-05-13): **S2a locked: public API is `fg.schema.add(...)` with positional entity classes and `schema_classes=[...]`.**
+
 ### Q3. Supported add targets
 
 - **S3a** New entity classes only. Recommended.
@@ -201,6 +205,8 @@ Recommendation: **S3a** for the first implementation. Adding fields to an
 existing Python entity type needs a clear class-version story and field default
 semantics. Entity-only addition is mechanically safer.
 
+G0 decision (2026-05-13): **S3a locked: first implementation supports new entity classes only.**
+
 ### Q4. Immediate mutation vs preview
 
 - **S4a** Immediate in-place mutation after validation. Recommended.
@@ -209,6 +215,8 @@ semantics. Entity-only addition is mechanically safer.
 
 Recommendation: **S4a** for entity-only additive extension. The operation is
 safe enough if the additive validator is strict and state refresh is atomic.
+
+G0 decision (2026-05-13): **S4a locked: successful validation mutates the active graph immediately.**
 
 ### Q5. Digest anchor update behavior
 
@@ -222,6 +230,8 @@ safe enough if the additive validator is strict and state refresh is atomic.
 Recommendation: **S5a**. Ledger and registry digest anchors are part of the
 active graph state; leaving them stale would make subsequent writes fail in
 surprising ways. Workspace manifest remains save-time state.
+
+G0 decision (2026-05-13): **S5a locked: active in-memory schema, core `Store.schema_ir`, SDK indexes, ledger digest, and registry schema update together; workspace manifest remains save-time.**
 
 ### Q6. Additive compatibility validator
 
@@ -243,6 +253,8 @@ surprising ways. Workspace manifest remains save-time state.
 Recommendation: **S6a**. This is the safety boundary that keeps `add(...)` from
 becoming accidental update/delete.
 
+G0 decision (2026-05-13): **S6a locked: strict seven-category additive diff validator prevents accidental update/delete.**
+
 ### Q7. Registry mismatch behavior
 
 - **S7a** Registry absent or old digest: upsert new schema; registry different
@@ -253,6 +265,8 @@ becoming accidental update/delete.
 Recommendation: **S7a**. This mirrors Blueprint 2's digest mismatch safety and
 preserves registry as durable schema reference.
 
+G0 decision (2026-05-13): **S7a locked: registry absent/old digest can be updated; registry mismatch raises.**
+
 ### Q8. Ledger mismatch behavior
 
 - **S8a** Ledger absent or old digest: update to new digest; ledger different
@@ -262,6 +276,8 @@ preserves registry as durable schema reference.
 
 Recommendation: **S8a**. The ledger must not silently move if another graph
 schema wrote it first.
+
+G0 decision (2026-05-13): **S8a locked: ledger absent/old digest can be updated; ledger mismatch raises.**
 
 ### Q9. Workspace behavior
 
@@ -275,6 +291,8 @@ schema wrote it first.
 Recommendation: **S9a**. It preserves the Blueprint 3 separation between graph
 state changes and workspace save.
 
+G0 decision (2026-05-13): **S9a locked: workspace manifest updates only on explicit `fg.save(...)`.**
+
 ### Q10. Delete/deprecate public surface
 
 - **S10a** No `delete`, `remove`, `drop`, or `deprecate` method in this slice.
@@ -285,6 +303,8 @@ state changes and workspace save.
 Recommendation: **S10a**. Empty/rejecting methods are public API noise; real
 deprecation needs durable metadata.
 
+G0 decision (2026-05-13): **S10a locked: no delete/remove/drop/deprecate method in this slice.**
+
 ### Q11. Update/migrate public surface
 
 - **S11a** No `update`, `migrate`, `plan_update`, or `apply_migration` in this
@@ -293,6 +313,8 @@ deprecation needs durable metadata.
 - **S11c** Add a minimal field-add migration.
 
 Recommendation: **S11a**. Migration needs its own blueprint.
+
+G0 decision (2026-05-13): **S11a locked: no update/migrate/plan/apply migration surface in this slice.**
 
 ### Q12. Application layer ownership
 
@@ -304,6 +326,8 @@ Recommendation: **S11a**. Migration needs its own blueprint.
 Recommendation: **S12a**. It follows Blueprint 2 and Blueprint 3's
 application-first runtime authority pattern.
 
+G0 decision (2026-05-13): **S12a locked: `kernel.application.schema_mutation_runtime` owns additive validation and transition helpers.**
+
 ### Q13. Return shape
 
 - **S13a** Return a small `SchemaAddResult(old_digest, new_digest, added_entities)`
@@ -314,6 +338,8 @@ application-first runtime authority pattern.
 Recommendation: **S13a**. The caller needs confirmation without conflating a
 mutation result with the graph object.
 
+G0 decision (2026-05-13): **S13a locked: return `SchemaAddResult(old_digest, new_digest, added_entities)`.**
+
 ### Q14. Docs strategy
 
 - **S14a** Update SDK user guide and API surface in the same slice; module docs
@@ -321,6 +347,8 @@ mutation result with the graph object.
 - **S14b** Code first, docs later.
 
 Recommendation: **S14a**. Public lifecycle behavior must not lag behind code.
+
+G0 decision (2026-05-13): **S14a locked: SDK docs and module docs update in the same slice.**
 
 ### Q15. Re-adding an already present class
 
@@ -333,13 +361,15 @@ Recommendation: **S14a**. Public lifecycle behavior must not lag behind code.
 Recommendation: **S15a**. Idempotency matches Blueprint 2's schema upsert
 behavior and makes repeated setup cells/notebooks safe.
 
+G0 decision (2026-05-13): **S15a locked: re-adding already-present equivalent classes is an idempotent no-op.**
+
 ## 8. Acceptance
 
-- [ ] G0 locks first-slice schema mutation scope.
-- [ ] G0 locks public API shape and supported add targets.
-- [ ] G0 locks digest anchor update behavior.
-- [ ] G0 locks delete/update/migrate as included or deferred.
-- [ ] G0 locks re-add idempotency behavior.
+- [x] G0 locks first-slice schema mutation scope.
+- [x] G0 locks public API shape and supported add targets.
+- [x] G0 locks digest anchor update behavior.
+- [x] G0 locks delete/update/migrate as included or deferred.
+- [x] G0 locks re-add idempotency behavior.
 - [ ] G1 baseline covers additive entity add, rejection of unsafe deltas, and
   lifecycle preservation guards.
 - [ ] G2 implementation keeps SDK/Core schema state refresh atomic.
