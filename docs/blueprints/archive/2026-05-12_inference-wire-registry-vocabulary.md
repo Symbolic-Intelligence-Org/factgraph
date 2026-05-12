@@ -1,6 +1,6 @@
 # Task Blueprint: Inference Wire And Registry Vocabulary
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -433,10 +433,69 @@ Likely docs if W1a/W2a/W5a/W6a lock:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+### 10.1 Final Landed Behavior
 
-- Final landed behavior:
-- Validation:
-- Commit lineage:
-- Deviations:
-- Archive notes:
+- Service runtime routes are now `POST /v1/runtime/sessions/{session_id}/inferences/evaluate` and `POST /v1/runtime/sessions/{session_id}/inferences/accept`; the old `/derivations/*` runtime routes are hard-cut.
+- Runtime evaluate requests use top-level `"inference"` for the public candidate-producing object; top-level `"derivation"` now fails shape validation.
+- Runtime evaluate response envelopes use `evaluation.inference_id` for the public wire envelope.
+- Runtime candidate payloads intentionally continue to carry `derivation_id` and `derivation_version`; accept still round-trips the returned candidate object without client-side field rewriting.
+- Registry service reads inference assets at `POST /v1/registry/inferences/read`.
+- Registry service requests use `inference_id`, and responses use `inference_spec`.
+- `FileAuthoringRegistry` stores inference assets under `inferences/{id}/{version}.json`.
+- Registry manifests use an `inferences` collection with `inference_id` entries.
+- Per-spec registry JSON uses `inference_id`, while compiler-facing payloads continue to use `derivation_id`.
+- `FileAuthoringRegistry` owns the W13a translation seam between persisted `inference_id` JSON and compiler-substrate `derivation_id` payloads.
+- `SDKRegistry` public methods are now `register_inference_spec`, `register_inference`, `list_inference_ids`, `list_inference_versions`, `get_latest_inference_spec`, and `read_inference_spec`.
+- `FileAuthoringRegistry` public methods use the same inference vocabulary for inference asset registration and reads.
+- Application/core substrate names remain unchanged: `CompiledDerivationPlan`, `DerivationEvaluateRequest`, `DerivationAcceptRequest`, `CandidateSet.derivation_id`, `Store.evaluate(..., derivation_id=...)`, and provenance standard `derivation_v1`.
+- OpenAPI, service docs, SDK registry docs, authoring docs, core service-layer docs, and the lifecycle design-point now document the landed inference wire/registry vocabulary.
+
+### 10.2 Validation
+
+- G1 baseline: `test_inference_wire_registry_vocabulary` started at 15 tests with 8 failures, 3 errors, and 4 guard passes.
+- G2 implementation: `test_inference_wire_registry_vocabulary` is 15/15 green after four bottom-up commits.
+- G2 regression: kernel discovery is 2057 OK / 1 skipped.
+- G2 regression: agent discovery is 255 OK / 2 skipped.
+- G2 service note: full service discovery still exposes the pre-existing `test_annotation_consumer_l2` audit import-cycle collection issue; this slice's service Problog annotation test is green.
+- G3 docs: stale public-route/public-method grep for `/derivations/*`, registry derivation route/method names, `derivation_spec`, and top-level `"derivation"` request teaching is clean across the updated release-facing docs.
+- G3 regression: `test_inference_wire_registry_vocabulary` remains 15/15 green.
+- G3 regression: kernel discovery remains 2057 OK / 1 skipped.
+- `git diff --check` is clean.
+
+### 10.3 Commit Lineage
+
+```text
+f7f4444e docs(service): sync inference wire registry vocabulary
+3381335b feat(service): rename runtime routes and request key to inference
+4e0234d0 feat(service): rename registry route to inference vocabulary
+be06b900 feat(sdk): rename registry methods to inference vocabulary
+f0324e83 feat(authoring): rename file registry to inference vocabulary
+3dba1a55 test(service): add inference wire registry baseline
+610c5c59 docs(blueprints): scope inference wire registry vocabulary
+46acd4e0 docs(blueprints): clarify registry json vocabulary boundary
+c5757e6e docs(blueprints): refine inference wire registry draft
+76ba480b docs(blueprints): draft inference wire registry vocabulary
+```
+
+### 10.4 Deviations
+
+- No scope deviations. Path A landed as locked in G0.
+- The docs sync included `docs/api/openapi.yaml` and `src/service/docs/02_runtime_sessions.md` in addition to the initially listed docs because both are public references to the renamed service routes.
+- The implementation used four G2 commits rather than one large implementation commit to keep the storage translation seam, SDK registry facade, registry service route, and runtime route/request changes independently reviewable.
+
+### 10.5 Archive Notes
+
+This slice closes the user-visible wire/registry vocabulary gap left by
+Blueprint 1. Public SDK, service routes, service request keys, registry route
+keys, registry method names, manifest entries, and registry file paths now use
+`Inference` / `inference` vocabulary.
+
+The remaining `derivation_*` names are deliberately deeper substrate:
+candidate/proof/audit protocol, application DTOs, compiler payloads, core store
+parameters, and provenance version identifiers. That boundary keeps the public
+authoring object vocabulary coherent without forcing a much larger
+candidate/proof protocol rename.
+
+Blueprint 2 can now start from a cleaner model: public persistence facade work
+can target `fg.rules.*` and `fg.inferences.*` without first reconciling a
+persistent `derivations/` registry surface.
