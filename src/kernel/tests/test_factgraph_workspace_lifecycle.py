@@ -252,7 +252,7 @@ class WorkspaceSaveTests(unittest.TestCase):
             fg.save()
 
             loaded = FactGraph.load(second_workspace, schema_classes=[User])
-        self.assertTrue((second_workspace / "ledger.db").exists())
+            self.assertTrue((second_workspace / "ledger.db").exists())
         self.assertIsNotNone(loaded.get(User, user_id="Alice"))
 
     def test_save_syncs_separate_registry_root_into_workspace(self) -> None:

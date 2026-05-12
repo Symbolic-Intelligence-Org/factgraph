@@ -23,6 +23,7 @@ from kernel.application.authoring_runtime import (
     save_inference as app_save_inference,
     save_rule as app_save_rule,
 )
+from kernel.application.workspace_runtime import load_workspace as app_load_workspace
 from kernel.application.workspace_runtime import resolve_workspace_paths
 from kernel.application.workspace_runtime import save_workspace as app_save_workspace
 from kernel.application.derivation_runtime import evaluate_derivation_plans
@@ -512,6 +513,20 @@ def _resolve_workspace_constructor_paths(
     return workspace_path, resolved_ledger_path, resolved_registry_root
 
 
+def _validate_workspace_registry_schema(registry_root: str | Path, expected_digest: str) -> None:
+    try:
+        entry = FileAuthoringRegistry(Path(registry_root)).get_schema_entry()
+    except Exception as exc:
+        raise SDKStoreError(f"workspace registry schema digest unavailable: {exc}") from exc
+    if entry is None:
+        raise SDKStoreError("workspace registry schema digest missing")
+    actual_digest = entry.get("schema_digest")
+    if actual_digest != expected_digest:
+        raise SDKStoreError(
+            f"workspace schema digest mismatch: registry={actual_digest!r}, expected={expected_digest!r}"
+        )
+
+
 class SDKStore:
     def __init__(
         self,
@@ -624,6 +639,33 @@ class SDKStore:
             workspace_path=None,
             default_row_format=default_row_format,
         )
+
+    @classmethod
+    def load(
+        cls,
+        path: str | Path,
+        *,
+        schema_classes: list[type[Entity]] | None = None,
+        default_row_format: str | None = None,
+    ) -> "SDKStore":
+        if schema_classes is None:
+            raise SDKStoreError("schema_classes is required for FactGraph.load(...)")
+        schema_ir = compile_schema_from_classes(schema_classes)
+        digest = schema_digest(schema_ir)
+        try:
+            paths = app_load_workspace(path, schema_digest=digest)
+            _validate_workspace_registry_schema(paths.registry, digest)
+            return cls._from_schema_classes_impl(
+                schema_classes,
+                ledger=Ledger(path=paths.ledger),
+                registry_root=paths.registry,
+                workspace_path=paths.root,
+                default_row_format=default_row_format,
+            )
+        except Exception as exc:
+            if isinstance(exc, SDKStoreError):
+                raise
+            raise SDKStoreError(str(exc)) from exc
 
     @classmethod
     def _from_schema_classes_impl(

@@ -13,6 +13,7 @@
 | 2026-05-12 | implementation | G2.1 workspace runtime layer | Added `kernel.application.workspace_runtime` with workspace layout constants, `WorkspacePaths`, manifest construction/validation, ledger backup/checkpoint helper, registry sync helper, and application-layer save/load path orchestration helpers. Exported the module through `kernel.application`; SDK wiring remains for later G2 commits. |
 | 2026-05-12 | implementation | G2.2 workspace path binding | Added `path=` to `FactGraph.create(...)`, deriving workspace `ledger.db` and `registry/` defaults, storing the bound workspace path on `SDKStore`, and rejecting mismatched explicit `ledger_path=` / `registry_root=` inputs. Kept `from_schema_classes(...)` without `path=` per W19b. |
 | 2026-05-12 | implementation | G2.3 workspace save | Added `fg.save(path=None)` over `kernel.application.workspace_runtime`, including the locked unbound-path error, v1 manifest write, ledger backup/checkpoint behavior, registry sync/copy, registry-less schema-only workspace creation, save-to-other-path rebinding, and post-save registry rebinding to `workspace/registry`. |
+| 2026-05-12 | implementation | G2.4 workspace load | Added `FactGraph.load(path, schema_classes=...)`, requiring schema classes, validating manifest/schema digest through `workspace_runtime`, checking registry schema digest, reopening the workspace ledger, and rebinding the loaded graph to the workspace registry/path. |
 
 ## Decision Notes
 
