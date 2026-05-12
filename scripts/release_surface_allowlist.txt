@@ -213,13 +213,13 @@ src/kernel/sdk/compile.py
 src/kernel/sdk/docs/00_user_guide.en.md
 src/kernel/sdk/docs/01_concepts.en.md
 src/kernel/sdk/docs/02_readwrite_and_ingest.en.md
-src/kernel/sdk/docs/03_rules_and_derivations.en.md
+src/kernel/sdk/docs/03_rules_and_inferences.en.md
 src/kernel/sdk/docs/04_api_surface.en.md
 src/kernel/sdk/docs/06_what_if_and_proof.en.md
 src/kernel/sdk/docs/07_walker_and_advanced.en.md
 src/kernel/sdk/docs/README.md
 src/kernel/sdk/dsl/__init__.py
-src/kernel/sdk/dsl/body.py
+src/kernel/sdk/dsl/branch.py
 src/kernel/sdk/dsl/errors.py
 src/kernel/sdk/dsl/expr.py
 src/kernel/sdk/dsl/rule.py
