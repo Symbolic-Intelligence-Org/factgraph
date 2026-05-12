@@ -1,6 +1,6 @@
 # Task Blueprint: Branch Identity, Rule Inspect, And Single-Head Cleanup
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -345,10 +345,57 @@ Expected if this proceeds past G0:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+### 10.1 Final Landed Behavior
 
-- Final landed result:
-- Validation:
-- Commit lineage:
-- Deviations:
-- Archive notes:
+- `Branch([...], id="...")` is now accepted as optional keyword-only structural metadata.
+- `Branch.id` validates as a Python-style identifier and rejects empty, dotted, dashed, numeric-leading, or non-string values.
+- `Branch([...])` without `id` remains valid and preserves existing positional atom-list behavior.
+- `Branch` continues to reject `confidence=`, `probability=`, `engine_ext=`, and other engine-semantic kwargs.
+- `fg.rules.inspect(rule_or_derivation)` is now a public pure SDK API under a read-only `fg.rules` namespace.
+- Inspect supports both SDK `Rule` and SDK `Derivation`.
+- Inspect output exposes `id`, `fallback_id`, `is_explicit_id`, `index`, `atom_count`, `atoms`, and `atom_ids`.
+- Unnamed branches inspect as positional fallback ids `b0`, `b1`, ...
+- Duplicate effective branch ids reject during inspection.
+- Branch metadata is inspect-only in Track 1: no authoring payload, rule IR, compiled plan, registry, or adapter branch-id propagation was added.
+- Public SDK `Derivation` is now single-head at construction.
+- SDK evaluate and registry derivation registration also reject multi-head payloads if one reaches those boundaries.
+- `condition_weights` remains positional (`b0.a0`, `b1.a2`, ...); id-based condition weight keys were not introduced.
+- Release-facing SDK docs now teach branch identity, `fg.rules.inspect(...)`, and single-head derivations.
+
+### 10.2 Validation
+
+- G1 baseline: `test_branch_identity_rule_inspect` ran 15 tests with the expected 8 errors, 4 failures, and 3 guard passes before implementation.
+- G2/G3 target suite: `env PYTHONPATH=src python -m unittest kernel.tests.test_branch_identity_rule_inspect` -> 15/15 OK.
+- Affected SDK/shell suite: Check / Diagnose / Fact Overlay / Why-not / query policy / onboarding suite -> 101/101 OK.
+- Track 3 preservation: B+C+D+E semantics-profile focused suite -> 88/88 OK.
+- Track 3 E follow-up cleanup: stale SDK `__all__` invariant set -> 81/81 OK.
+- Full kernel discovery: `env PYTHONPATH=src python -m unittest discover -s src/kernel/tests` -> 1994 OK / 1 skipped.
+- G3 grep gates clean: no stale public "multi-head accepted" teaching; single-head teaching present; `Branch([...], id=...)` examples present; `fg.rules.inspect` documented.
+- `git diff --check` clean.
+
+### 10.3 Commit Lineage
+
+Predecessor design note:
+
+- `9612651d` — `docs(references): record post-track3 semantics api direction`
+
+Track 1 lineage:
+
+- `6125c386` — `docs(blueprints): draft branch identity rule inspect`
+- `fa09dea6` — `docs(blueprints): scope branch identity rule inspect`
+- `b736f36a` — `test(sdk): add branch identity inspect baseline`
+- `3a53887d` — `feat(sdk): add branch identity inspect`
+- `ef13343a` — `test(sdk): align all invariants with semantics export`
+- `e07ed965` — `docs(sdk): document branch identity inspect`
+
+### 10.4 Deviations
+
+- A standalone mid-cycle cleanup commit (`ef13343a`) updated stale SDK `__all__` invariant tests for Track 3 / E's `SemanticsProfile` export. This was not Track 1 behavior, but it restored full kernel discovery before Track 1 publish.
+- The post-Track-3 design note (`9612651d`) is recorded as predecessor context rather than as a formal Track 1 gate commit. It shaped the Track 1 blueprint but did not change implementation behavior.
+- G3 updated two working design-point references because Track 1 moved parts of the post-Track-3 semantics direction from proposal to current behavior.
+
+### 10.5 Archive Notes
+
+Track 1 closes the Branch identity substrate needed by the post-Track-3 public semantics redesign. The public SDK now has a way to name and inspect branches without putting engine semantics back on `Branch` or changing authoring/core/adapter payloads.
+
+The next dependency in the sequence is Track 2: public engine-specific semantics wrappers such as `ProbLogSemantics` and `PyReasonSemantics`. Those wrappers can resolve branch ids at the SDK boundary and map them to current internal `SemanticsProfile` / adapter projection shapes. The PyReason branch-bound carrier reshape remains gated on Track 2.
