@@ -142,64 +142,66 @@ class FileAuthoringRegistry:
             "digest": sha256_token(data),
         }
 
-    def register_derivation_spec(self, derivation_spec_payload: dict[str, Any]) -> dict[str, Any]:
-        canonical = compile_authoring_derivation_v1(derivation_spec_payload)
-        derivation_id = str(canonical["derivation_id"])
+    def register_inference_spec(self, inference_spec_payload: dict[str, Any]) -> dict[str, Any]:
+        canonical = compile_authoring_derivation_v1(_inference_spec_to_derivation_payload(inference_spec_payload))
+        inference_id = str(canonical["derivation_id"])
         version = str(canonical["version"])
-        data = _canonical_json_bytes(canonical)
-        rel_dir = f"derivations/{_safe_id(derivation_id)}"
+        stored = _derivation_payload_to_inference_spec(canonical)
+        data = _canonical_json_bytes(stored)
+        rel_dir = f"inferences/{_safe_id(inference_id)}"
         rel_path = f"{rel_dir}/{_safe_id(version)}.json"
         abs_path = self.root_dir / rel_path
         write_status = self._write_if_changed(
             abs_path,
             data + b"\n",
             reject_on_conflict=True,
-            conflict_code="registry_derivation_version_conflict",
-            conflict_path=f"$.derivations[{derivation_id}@{version}]",
-            conflict_details={"derivation_id": derivation_id, "version": version},
+            conflict_code="registry_inference_version_conflict",
+            conflict_path=f"$.inferences[{inference_id}@{version}]",
+            conflict_details={"inference_id": inference_id, "version": version},
         )
 
         manifest = self._load_manifest()
-        derivations = _normalize_manifest_items(manifest.get("derivations"))
-        key = f"{derivation_id}@{version}"
-        derivations[key] = {
-            "derivation_id": derivation_id,
+        inferences = _normalize_manifest_items(manifest.get("inferences"))
+        key = f"{inference_id}@{version}"
+        inferences[key] = {
+            "inference_id": inference_id,
             "version": version,
             "path": rel_path,
             "digest": sha256_token(data),
             "target_pred_id": canonical.get("target_pred_id"),
         }
-        manifest["derivations"] = [derivations[k] for k in sorted(derivations)]
+        manifest["inferences"] = [inferences[k] for k in sorted(inferences)]
         self._save_manifest(manifest)
         return {
-            "kind": "derivation",
+            "kind": "inference",
             "status": write_status,
-            "derivation_id": derivation_id,
+            "inference_id": inference_id,
             "version": version,
             "path": rel_path,
             "digest": sha256_token(data),
         }
 
-    def preview_register_derivation_spec(self, derivation_spec_payload: dict[str, Any]) -> dict[str, Any]:
-        canonical = compile_authoring_derivation_v1(derivation_spec_payload)
-        derivation_id = str(canonical["derivation_id"])
+    def preview_register_inference_spec(self, inference_spec_payload: dict[str, Any]) -> dict[str, Any]:
+        canonical = compile_authoring_derivation_v1(_inference_spec_to_derivation_payload(inference_spec_payload))
+        inference_id = str(canonical["derivation_id"])
         version = str(canonical["version"])
-        data = _canonical_json_bytes(canonical)
-        rel_dir = f"derivations/{_safe_id(derivation_id)}"
+        stored = _derivation_payload_to_inference_spec(canonical)
+        data = _canonical_json_bytes(stored)
+        rel_dir = f"inferences/{_safe_id(inference_id)}"
         rel_path = f"{rel_dir}/{_safe_id(version)}.json"
         abs_path = self.root_dir / rel_path
         preview_status = self._preview_write_if_changed(
             abs_path,
             data + b"\n",
             reject_on_conflict=True,
-            conflict_code="registry_derivation_version_conflict",
-            conflict_path=f"$.derivations[{derivation_id}@{version}]",
-            conflict_details={"derivation_id": derivation_id, "version": version},
+            conflict_code="registry_inference_version_conflict",
+            conflict_path=f"$.inferences[{inference_id}@{version}]",
+            conflict_details={"inference_id": inference_id, "version": version},
         )
         return {
-            "kind": "derivation",
+            "kind": "inference",
             "status": preview_status,
-            "derivation_id": derivation_id,
+            "inference_id": inference_id,
             "version": version,
             "path": rel_path,
             "digest": sha256_token(data),
@@ -298,14 +300,14 @@ class FileAuthoringRegistry:
             }
         )
 
-    def list_derivation_ids(self) -> list[str]:
+    def list_inference_ids(self) -> list[str]:
         manifest = self._load_manifest()
-        derivations = _normalize_manifest_items(manifest.get("derivations"))
+        inferences = _normalize_manifest_items(manifest.get("inferences"))
         return sorted(
             {
-                str(item.get("derivation_id"))
-                for item in derivations.values()
-                if isinstance(item.get("derivation_id"), str) and item.get("derivation_id")
+                str(item.get("inference_id"))
+                for item in inferences.values()
+                if isinstance(item.get("inference_id"), str) and item.get("inference_id")
             }
         )
 
@@ -321,15 +323,15 @@ class FileAuthoringRegistry:
         ]
         return sorted(out, key=lambda row: _version_sort_key(row.get("version")))
 
-    def list_derivation_versions(self, derivation_id: str) -> list[dict[str, Any]]:
-        if not isinstance(derivation_id, str) or not derivation_id:
-            raise AuthoringRegistryFSError("derivation_id must be non-empty string")
+    def list_inference_versions(self, inference_id: str) -> list[dict[str, Any]]:
+        if not isinstance(inference_id, str) or not inference_id:
+            raise AuthoringRegistryFSError("inference_id must be non-empty string")
         manifest = self._load_manifest()
-        rows = _normalize_manifest_items(manifest.get("derivations"))
+        rows = _normalize_manifest_items(manifest.get("inferences"))
         out = [
             dict(item)
             for item in rows.values()
-            if isinstance(item.get("derivation_id"), str) and item.get("derivation_id") == derivation_id
+            if isinstance(item.get("inference_id"), str) and item.get("inference_id") == inference_id
         ]
         return sorted(out, key=lambda row: _version_sort_key(row.get("version")))
 
@@ -369,41 +371,41 @@ class FileAuthoringRegistry:
             )
         return _read_json_object(self.root_dir / path)
 
-    def get_latest_derivation_spec(self, derivation_id: str) -> dict[str, Any] | None:
-        versions = self.list_derivation_versions(derivation_id)
+    def get_latest_inference_spec(self, inference_id: str) -> dict[str, Any] | None:
+        versions = self.list_inference_versions(inference_id)
         if not versions:
             return None
         latest = versions[-1]
         path = latest.get("path")
         if not isinstance(path, str) or not path:
             raise AuthoringRegistryFSError(
-                "derivation manifest entry missing path",
-                code="registry_derivation_manifest_entry_invalid",
-                path="$.derivations",
-                details={"derivation_id": derivation_id},
+                "inference manifest entry missing path",
+                code="registry_inference_manifest_entry_invalid",
+                path="$.inferences",
+                details={"inference_id": inference_id},
             )
         payload = _read_json_object(self.root_dir / path)
-        return payload
+        return _inference_spec_to_derivation_payload(payload)
 
-    def read_derivation_spec(self, derivation_id: str, version: str) -> dict[str, Any] | None:
-        if not isinstance(derivation_id, str) or not derivation_id:
-            raise AuthoringRegistryFSError("derivation_id must be non-empty string")
+    def read_inference_spec(self, inference_id: str, version: str) -> dict[str, Any] | None:
+        if not isinstance(inference_id, str) or not inference_id:
+            raise AuthoringRegistryFSError("inference_id must be non-empty string")
         if not isinstance(version, str) or not version:
             raise AuthoringRegistryFSError("version must be non-empty string")
         manifest = self._load_manifest()
-        derivations = _normalize_manifest_items(manifest.get("derivations"))
-        item = derivations.get(f"{derivation_id}@{version}")
+        inferences = _normalize_manifest_items(manifest.get("inferences"))
+        item = inferences.get(f"{inference_id}@{version}")
         if item is None:
             return None
         path = item.get("path")
         if not isinstance(path, str) or not path:
             raise AuthoringRegistryFSError(
-                "derivation manifest entry missing path",
-                code="registry_derivation_manifest_entry_invalid",
-                path="$.derivations",
-                details={"derivation_id": derivation_id, "version": version},
+                "inference manifest entry missing path",
+                code="registry_inference_manifest_entry_invalid",
+                path="$.inferences",
+                details={"inference_id": inference_id, "version": version},
             )
-        return _read_json_object(self.root_dir / path)
+        return _inference_spec_to_derivation_payload(_read_json_object(self.root_dir / path))
 
     def _load_manifest(self) -> dict[str, Any]:
         if not self.manifest_path.exists():
@@ -411,7 +413,7 @@ class FileAuthoringRegistry:
                 "authoring_registry_fs_version": "authoring_registry_fs_v1",
                 "schema": None,
                 "rules": [],
-                "derivations": [],
+                "inferences": [],
             }
         try:
             payload = json.loads(self.manifest_path.read_text(encoding="utf-8"))
@@ -422,7 +424,7 @@ class FileAuthoringRegistry:
         payload.setdefault("authoring_registry_fs_version", "authoring_registry_fs_v1")
         payload.setdefault("schema", None)
         payload.setdefault("rules", [])
-        payload.setdefault("derivations", [])
+        payload.setdefault("inferences", [])
         return payload
 
     def _save_manifest(self, manifest: dict[str, Any]) -> None:
@@ -494,6 +496,32 @@ def _canonical_rule_spec_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise AuthoringRegistryFSError(f"invalid rule spec payload: {exc}") from exc
 
 
+def _inference_spec_to_derivation_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise AuthoringRegistryFSError("inference_spec_payload must be object")
+    out = dict(payload)
+    inference_id = out.pop("inference_id", None)
+    derivation_id = out.get("derivation_id")
+    if inference_id is not None:
+        if derivation_id is not None and derivation_id != inference_id:
+            raise AuthoringRegistryFSError(
+                "inference_id and derivation_id must match when both are provided",
+                code="registry_inference_id_conflict",
+                path="$",
+                details={"inference_id": inference_id, "derivation_id": derivation_id},
+            )
+        out["derivation_id"] = inference_id
+    return out
+
+
+def _derivation_payload_to_inference_spec(payload: dict[str, Any]) -> dict[str, Any]:
+    out = dict(payload)
+    derivation_id = out.pop("derivation_id", None)
+    if derivation_id is not None:
+        out["inference_id"] = derivation_id
+    return out
+
+
 def _normalize_manifest_items(value: Any) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     if not isinstance(value, list):
@@ -503,8 +531,8 @@ def _normalize_manifest_items(value: Any) -> dict[str, dict[str, Any]]:
             continue
         if "rule_id" in item and "version" in item:
             key = f"{item.get('rule_id')}@{item.get('version')}"
-        elif "derivation_id" in item and "version" in item:
-            key = f"{item.get('derivation_id')}@{item.get('version')}"
+        elif "inference_id" in item and "version" in item:
+            key = f"{item.get('inference_id')}@{item.get('version')}"
         else:
             continue
         out[key] = item
