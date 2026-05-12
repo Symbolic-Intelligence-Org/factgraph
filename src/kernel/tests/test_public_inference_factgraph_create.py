@@ -162,6 +162,21 @@ class PublicInferenceDocsTests(unittest.TestCase):
         self.assertFalse((sdk_docs / "03_rules_and_derivations.en.md").exists())
 
 
+class PublicInferenceDeferralGuards(unittest.TestCase):
+    def test_no_fg_inferences_namespace_in_blueprint_1(self) -> None:
+        sdk = SDKStore([User])
+
+        self.assertFalse(hasattr(sdk, "inferences"))
+
+    def test_no_derivation_ref_or_inference_ref_in_kernel_sdk(self) -> None:
+        sdk_module = _sdk_module()
+
+        self.assertNotIn("DerivationRef", sdk_module.__all__)
+        self.assertNotIn("InferenceRef", sdk_module.__all__)
+        self.assertFalse(hasattr(sdk_module, "DerivationRef"))
+        self.assertFalse(hasattr(sdk_module, "InferenceRef"))
+
+
 class PublicInferenceGuardTests(unittest.TestCase):
     def test_rules_inspect_rule_still_works(self) -> None:
         inspected = SDKStore([User]).rules.inspect(_rule())
