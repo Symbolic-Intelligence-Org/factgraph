@@ -257,6 +257,13 @@ Semantic-delivery addendum:
 - Track 3 / E exposes the durable public call-site:
   `fg.eval.evaluate(..., engine="problog", semantics=profile)` and service
   top-level `"semantics": {...}`.
+- Track 2 adds the preferred SDK wrapper:
+  `fg.eval.evaluate(..., semantics=ProbLogSemantics(...))`. The SDK resolves
+  explicit branch ids or `b0` / `b1` fallback ids while the SDK
+  `Rule` / `Derivation` object is still in hand, lowers the wrapper into
+  canonical `SemanticsProfile.rule_projection.problog`, then reuses the
+  Track 3 / C adapter consumption path. Service and compiled paths still use
+  canonical `SemanticsProfile`, not wrapper-shaped JSON.
 - The output program contains:
   - `edb_fact(...)` facts
   - `rule_body_i` branch rules

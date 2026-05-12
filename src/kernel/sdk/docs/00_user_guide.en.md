@@ -580,28 +580,46 @@ fg.eval.evaluate(deriv, engine="pyreason", engine_options={"timesteps": 10})
 
 `engine_options` is **call-time** runtime config. It never enters
 `Rule`, `Derivation`, authoring payloads, or the ledger. Engine-specific
-rule projection is intentionally not carried by public SDK rule objects;
-`SemanticsProfile.rule_projection` owns that durable public shape.
-Track 3 / E exposes `SemanticsProfile` through `kernel.sdk` and accepts it
-at the public runtime call-site:
+rule projection is intentionally not carried by public SDK rule objects.
+Track 2 adds lightweight public semantics wrappers as the preferred SDK
+authoring shape:
 
 ```python
-from kernel.sdk import SemanticsProfile
+from kernel.sdk import Branch, ProbLogSemantics, PyReasonSemantics
 
-profile = SemanticsProfile(
-    name="profile.problog",
-    engine="problog",
-    rule_projection={
-        "problog": [{"target": "branch:0", "kind": "branch_probability", "value": 0.7}]
-    },
+deriv = Derivation(
+    id="drv.user_tag",
+    version="v1",
+    where=[
+        Branch([Pred("user:tag_seed", u, tag)], id="seed_path"),
+        Branch([Pred("user:tag_hint", u, tag)]),
+    ],
+    target="user:tag",
+    head_vars=[u, tag],
 )
 
-fg.eval.evaluate(deriv, engine="problog", semantics=profile)
+fg.eval.evaluate(
+    deriv,
+    semantics=ProbLogSemantics(branch_probabilities={"seed_path": 0.7}),
+)
+
+fg.eval.evaluate(
+    pyreason_deriv,
+    semantics=PyReasonSemantics(
+        timestep_delay=2,
+        head_bound=[0.7, 0.9],
+        temporal_projection={"mode": "fixed_timesteps", "timesteps": 4},
+    ),
+)
 ```
 
-Use `fg.eval.inspect_semantics(profile)` to inspect configured projection
-lanes. The public SDK rejects `semantics_profile=`; that name is reserved
-for core/application internals.
+When `semantics=` is a public wrapper or `SemanticsProfile`, `engine=` is
+derived from the semantics object unless explicitly provided as a mismatch
+guard. `SemanticsProfile` remains exported as the advanced/canonical shape
+for direct profile users and service JSON. Use `fg.eval.inspect_semantics(...)`
+to inspect configured projection lanes and the wrapper's lowered canonical
+profile preview. The public SDK rejects `semantics_profile=`; that name is
+reserved for core/application internals.
 
 ### Semantic annotations
 
@@ -945,9 +963,18 @@ Notable changes:
 probability, confidence, or engine-specific parameters. Public
 `body_confidences` and `engine_ext` payloads are rejected. The old names
 remain only in rejection messages and adapter/internal bridges until
-`SemanticsProfile.rule_projection` provides the durable public
-rule-projection shape. Track 3 / E exposes that shape through
-`fg.eval.evaluate(..., engine="problog", semantics=profile)`.
+Track 2 makes `ProbLogSemantics` the preferred public wrapper for
+branch probabilities:
+
+```python
+fg.eval.evaluate(
+    deriv,
+    semantics=ProbLogSemantics(branch_probabilities={"declared_pref": 0.7}),
+)
+```
+
+`SemanticsProfile.rule_projection.problog` remains the advanced/canonical
+shape for direct profile users and service JSON.
 
 Track 1 adds optional structural branch ids and rule inspection:
 `Branch([...], id="declared_pref")` and `fg.rules.inspect(rule_or_derivation)`.
@@ -962,8 +989,23 @@ It accepts `rule_projection.pyreason` entries for body intervals, head
 intervals, and rule `timestep_delay`, plus `temporal_projection` modes
 `none`, `fixed_timesteps`, and `valid_time_boundaries`.
 
-Track 3 / E exposes the public SDK call-site:
-`fg.eval.evaluate(..., engine="pyreason", semantics=profile)`.
+Track 2 makes `PyReasonSemantics` the preferred public wrapper for
+currently lowerable PyReason lanes:
+
+```python
+fg.eval.evaluate(
+    deriv,
+    semantics=PyReasonSemantics(
+        timestep_delay=2,
+        head_bound=[0.7, 0.9],
+        temporal_projection={"mode": "fixed_timesteps", "timesteps": 4},
+    ),
+)
+```
+
+`branch_bounds` is intentionally not a Track 2 field. Track 3-post owns
+per-branch PyReason head-bound carrier support. `SemanticsProfile` remains
+the advanced/canonical shape for lower-level profile users.
 
 ### Tag semantics on multi-fields
 

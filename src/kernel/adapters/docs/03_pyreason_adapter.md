@@ -276,6 +276,14 @@ result = run_pyreason(
   coordinates. Track 3 / E exposes the durable public call-site:
   `fg.eval.evaluate(..., engine="pyreason", semantics=profile)` and service
   top-level `"semantics": {...}`.
+- Track 2 adds the preferred SDK wrapper for currently lowerable PyReason
+  lanes:
+  `fg.eval.evaluate(..., semantics=PyReasonSemantics(...))`. The wrapper can
+  express `timestep_delay`, global `head_bound`, `temporal_projection`, and
+  `uncertainty_projection`, then lowers into canonical `SemanticsProfile`
+  before adapter consumption. `branch_bounds` is not a Track 2 field because
+  the adapter has no per-branch head-bound carrier yet; Track 3-post owns
+  that carrier and compiler reshape.
 - `compile_pyreason_rule(...)` currently supports only
   `PredAtom` + `LogicVar` + literals; `CompareExpr` / `NotExpr` /
   `RuleRefAtom` raise an explicit error

@@ -10,6 +10,7 @@
 | 2026-05-12 | scoped | Scope freeze | Locked D1-D15. Track 2 is a bounded SDK public-wrapper slice: add `ProbLogSemantics` / `PyReasonSemantics`, derive engine from semantics objects, preserve public `SemanticsProfile`, keep service/compiled paths canonical, and defer PyReason `branch_bounds` carrier reshape to Track 3-post. |
 | 2026-05-12 | g1-red | Red + guard baseline | Added `test_public_semantics_api_redesign.py`. New Track 2 suite currently runs 17 tests with expected 13 errors + 2 failures + 2 guard passes: wrapper classes/exports/engine derivation/inspection are absent, service light-shape rejection text is not yet locked, while native default and compiled `SemanticsProfile` guards pass. Track 1 + B/C/D/E preservation suite remains 103 OK. |
 | 2026-05-12 | implemented | G2 implementation | Added SDK-local `ProbLogSemantics` / `PyReasonSemantics`, SDK lowering to canonical `SemanticsProfile`, engine auto-derivation, wrapper inspection preview, compiled/service/shell boundary rejections, and SDK `__all__` invariant migration. Track 2 suite 17 OK, Track 1+B/C/D/E preservation 103 OK, SDK `__all__` invariant suite 81 OK. |
+| 2026-05-12 | docs | G3 docs sync | Documented `ProbLogSemantics` / `PyReasonSemantics` as the preferred SDK public wrappers, preserved `SemanticsProfile` as advanced/canonical, kept service and compiled paths canonical, and recorded that PyReason `branch_bounds` remains Track 3-post scope. |
 
 ## Decision Notes
 

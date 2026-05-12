@@ -110,8 +110,10 @@ Track 1 makes public SDK derivations single-head; define one derivation
 per head before using `check`, `diagnose`, Fact Overlay, or `why_not`.
 Track 3 / E intentionally keeps the what-if shells profile-free:
 `semantics=` and `semantics_profile=` are rejected here. Use
-`fg.eval.evaluate(..., engine=..., semantics=profile)` for direct
-SemanticsProfile-backed derivation evaluation.
+`fg.eval.evaluate(..., semantics=ProbLogSemantics(...))`,
+`fg.eval.evaluate(..., semantics=PyReasonSemantics(...))`, or the
+advanced/canonical `SemanticsProfile` shape for direct semantics-backed
+derivation evaluation.
 
 **Use when**: you have a specific candidate fact in mind and want a
 yes/no plus the evidence trail.

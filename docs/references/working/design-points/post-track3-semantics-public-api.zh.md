@@ -1,8 +1,8 @@
 # Post-Track-3 Public Semantics API 设计方向
 
-- 状态: working design point(非合同,非 blueprint)
+- 状态: working design point(非合同,非 blueprint);Track 1 与 Track 2 已把部分内容落地
 - 创建: 2026-05-12
-- 上下文: Track 3 完成后(`origin/master @ 4bcb6a25`),identifies the next iteration of the Semantics public API
+- 上下文: Track 3 完成后(`origin/master @ 4bcb6a25`)提出 public Semantics API 方向；Track 1 已落地 branch identity / inspect，Track 2 已落地 public semantics wrappers / engine auto-derivation
 - 相关 archives:
   - [`docs/blueprints/archive/2026-05-12_sdk-service-semantics-callsite.md`](../../../blueprints/archive/2026-05-12_sdk-service-semantics-callsite.md)
   - [`docs/blueprints/archive/2026-05-12_pyreason-semantics-profile-migration.md`](../../../blueprints/archive/2026-05-12_pyreason-semantics-profile-migration.md)
@@ -107,11 +107,11 @@ fg.rules.inspect(rule)
 
 ## 5. Public Semantics API 重塑
 
-### 5.1 命名候选
+### 5.1 命名结论
 
 | 候选 | 优势 | 劣势 |
 |---|---|---|
-| `ProbLogSemantics` / `PyReasonSemantics` ← **推荐** | 对应 public `semantics=` kwarg 直观 | "Semantics" 这词在 Track 3 已经过载 |
+| `ProbLogSemantics` / `PyReasonSemantics` ← **Track 2 已落地** | 对应 public `semantics=` kwarg 直观 | "Semantics" 这词在 Track 3 已经过载 |
 | `ProbLogProjection` / `PyReasonProjection` | 跟 `rule_projection` 概念对齐 | 不那么 self-explanatory |
 | `ProbLogProfile` / `PyReasonProfile` | 跟 `SemanticsProfile` 词族一致 | "Profile" 当前是 internal canonical |
 
@@ -119,7 +119,7 @@ fg.rules.inspect(rule)
 
 - `ProbLogRuleExt` / `PyReasonRuleExt` —— `*Ext` 是 adapter internal bridge 的命名,不应升为 public
 
-### 5.2 ProbLogSemantics 草案 shape
+### 5.2 ProbLogSemantics shape(Track 2 已落地)
 
 ```python
 ProbLogSemantics(
@@ -131,17 +131,16 @@ ProbLogSemantics(
 ```
 
 `branch_probabilities` 用 branch id 索引,不再用 `branch:{index}` 位置。
+SDK 在持有 `Rule` / `Derivation` 对象时解析显式 branch id 或 fallback
+`b0` / `b1`,然后 lower 成 canonical
+`SemanticsProfile.rule_projection.problog`。
 
-### 5.3 PyReasonSemantics 草案 shape
+### 5.3 PyReasonSemantics shape(Track 2 已部分落地)
 
 ```python
 PyReasonSemantics(
     timestep_delay=2,
     head_bound=[0.8, 1.0],                  # 全 branch 默认 head interval,可选
-    branch_bounds={                         # 覆盖具体 branch 的 head interval
-        "sensor_path": [0.8, 1.0],
-        "obstacle_path": [0.2, 0.8],
-    },
     temporal_projection=...,                # 沿用 B 的 lane shape
     uncertainty_projection=...,             # 沿用 B 的 lane shape
 )
@@ -150,10 +149,13 @@ PyReasonSemantics(
 语义:
 
 - `head_bound`: 所有 branch 默认 head interval(可省)
-- `branch_bounds`: 覆盖具体 branch 的 head interval
 - `temporal_projection` / `uncertainty_projection`: 沿用 B 的字段定义(`mode="none"` / `mode="fixed_timesteps"` / `mode="valid_time_boundaries"` 等)
 - **不支持 atom-level 标注**(`body_predicate_bounds` 退到 internal advanced)
 - **不支持 multi-head**(已被 §4 cut)
+
+Track 2 明确没有加入 `branch_bounds` 字段。覆盖具体 branch 的 head
+interval 仍是 Track 3-post 的工作,需要先给 PyReason adapter 增加
+per-branch head-bound carrier 并调整 compile 模型。
 
 ### 5.4 退到 internal advanced 的能力
 
@@ -167,7 +169,7 @@ PyReasonSemantics(
 ### 6.1 规则
 
 ```python
-# 推荐用法(engine 从 semantics 推导):
+# Track 2 推荐用法(engine 从 semantics 推导):
 fg.eval.evaluate(deriv, semantics=PyReasonSemantics(...))
 fg.eval.evaluate(deriv, semantics=ProbLogSemantics(...))
 
@@ -208,7 +210,10 @@ rule_name = base_name if len(branches) == 1 else f"{base_name}_b{branch_idx}"
 
 每条 PyReason rule 已经支持 head annotation(`head : [lo, hi] <-...`)。
 
-### 7.2 `branch_bounds` 编译目标
+### 7.2 `branch_bounds` 编译目标(Track 3-post future)
+
+以下 shape **不是 Track 2 当前 API**；Track 2 的 `PyReasonSemantics`
+不接受 `branch_bounds`。这是 Track 3-post 要验证和实现的目标模型:
 
 ```python
 PyReasonSemantics(branch_bounds={
@@ -258,16 +263,16 @@ A 候选 backward-compatible,推荐。详细 shape 在 future G0 锁定。
 ## 8. 3-Track 顺序与依赖
 
 ```
-Track 1: Branch identity + rule inspect + single-head hard-cut
+[x] Track 1: Branch identity + rule inspect + single-head hard-cut
   ↓ (依赖: branch id 存在,inspect 可用,multi-head 决策)
-Track 2: Public Semantics API 重塑 + engine 自动推导
-  ↓ (依赖: public API shape 锁定)
-Track 3 (post): PyReason branch-bound carrier + compile 模型
+[x] Track 2: Public Semantics API 重塑 + engine 自动推导
+  ↓ (依赖: public API shape 锁定;已完成 wrapper + derive,未包含 branch_bounds)
+[ ] Track 3 (post): PyReason branch-bound carrier + compile 模型
 ```
 
 **严格串行,不能交错。** 反向依赖:
 
-- Track 2 的 `branch_bounds={"sensor_path": ...}` 需要 Track 1 的 `Branch([...], id="sensor_path")`
+- Track 3-post 的 `branch_bounds={"sensor_path": ...}` 需要 Track 1 的 `Branch([...], id="sensor_path")`
 - Track 3 的内部 carrier shape(per-branch dict)需要 Track 2 的 public shape 锁定,否则可能反复改
 
 ## 9. 与现有 archive 的关系
@@ -275,25 +280,25 @@ Track 3 (post): PyReason branch-bound carrier + compile 模型
 | Archive | 当前形态 | Track 1-3 影响 |
 |---|---|---|
 | A2 `branch-confidence-decomposition` | `Body → Branch` 已重命名,Branch 只有 atoms | Track 1 给 Branch 加 id |
-| A3 `engine-ext-decomposition` | 公共 `engine_ext` 已删除 | branch_bounds 是新替代抽象 |
+| A3 `engine-ext-decomposition` | 公共 `engine_ext` 已删除 | Track 2 加 wrapper,Track 3-post 再补 branch_bounds |
 | A4 `condition_weights-decomposition` | condition_weights 保留为 certainty projection input | 与本 doc 正交,不动 |
-| B `semantics-profile-scaffolding` | `SemanticsProfile` value object 已落地 | 退到 internal canonical(或保留作 advanced) |
-| C `problog-semantics-profile-migration` | ProbLog 消费 `rule_projection.problog` | Track 2 改用 `ProbLogSemantics`,C 的 carrier 保留为 internal |
-| D `pyreason-semantics-profile-migration` | PyReason 消费 `rule_projection.pyreason` + `temporal_projection` | Track 2 + 3 重塑 public shape;internal carrier 改造 |
-| E `sdk-service-semantics-callsite` | `evaluate(engine=, semantics=)` 公共 call-site | Track 2 加 engine 自动推导 |
+| B `semantics-profile-scaffolding` | `SemanticsProfile` value object 已落地 | Track 2 保留为 advanced/canonical profile |
+| C `problog-semantics-profile-migration` | ProbLog 消费 `rule_projection.problog` | Track 2 的 `ProbLogSemantics` lower 到 C 的 internal carrier |
+| D `pyreason-semantics-profile-migration` | PyReason 消费 `rule_projection.pyreason` + `temporal_projection` | Track 2 的 `PyReasonSemantics` lower 到 D 支持的 lanes;branch_bounds 留给 Track 3-post |
+| E `sdk-service-semantics-callsite` | `evaluate(engine=, semantics=)` 公共 call-site | Track 2 加 engine 自动推导并保留 service canonical shape |
 
 **A1/A2/A3/A4 archives 全部保持不动。** Track 1-3 都是 forward-compatible 演进,不重写 archive。
 
 ## 10. Open Questions(留给未来 G0)
 
 1. **Branch.id 必需 vs 可选?** 推荐可选,未命名 inspect 显示 `b0/b1`。
-2. **`SemanticsProfile` 命运**: 完全废除 vs 保留作 internal canonical vs `advanced=...` 字段?推荐保留作内部 canonical。
+2. **`SemanticsProfile` 命运**: Track 2 已选择继续公开为 advanced/canonical；future 可以再决定是否降低教学权重。
 3. **Branch id 在 lowered IR / authoring payload / registry 怎么保留?** 需要 source audit。
 4. **`fg.rules.*` namespace 还应包含哪些 public APIs?**(validate? compile? lint?)
 5. **multi-rule per branch 的 `_b{idx}` rule name 是否暴露给用户?** —— 倾向不暴露(internal-only);用户通过 branch id 引用。
 6. **PyReason `branch_head_bounds` 内部表示**: `dict[branch_id_str, tuple]` vs `dict[branch_index_int, tuple]` vs `list[tuple | None]`?
 7. **Engine 默认值**: `evaluate(deriv)` 无 semantics 无 engine 时默认 `native` 还是要求显式?推荐默认 `native`(向后兼容)。
-8. **ProbLog `branch_probabilities` 单值 vs interval**: ProbLog 是单概率,保持单 `float`;不要为了对称把它改成 `tuple`。
+8. **ProbLog `branch_probabilities` 单值 vs interval**: Track 2 已落地为单 `float`;不要为了对称把它改成 `tuple`。
 
 ## 11. 暂不动的边界
 

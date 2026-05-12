@@ -27,12 +27,12 @@ supported.
   `evaluate(...)` (e.g. `fg.eval.evaluate(deriv, engine_options={"timesteps": 5})`).
   It never enters the `Derivation` or the ledger. `engine="native"`
   rejects non-empty `engine_options`.
-- `SemanticsProfile.rule_projection` owns the durable public shape for
-  engine-specific rule projection. Track 3 / E exposes
-  `kernel.sdk.SemanticsProfile`, `fg.eval.inspect_semantics(profile)`,
-  and `fg.eval.evaluate(..., engine=..., semantics=profile)`. Public SDK
-  calls reject `mode=` and `semantics_profile=`; use `engine=` and
-  `semantics=`.
+- Track 2 makes `ProbLogSemantics` and `PyReasonSemantics` the
+  preferred public SDK wrappers for engine-specific semantics.
+  `SemanticsProfile` remains the advanced/canonical profile shape.
+  Public SDK calls reject `mode=` and `semantics_profile=`; use
+  `engine=` and `semantics=`, or omit `engine=` when it can be derived
+  from the semantics object.
 
 ## 1. `vars(...)`
 

@@ -202,6 +202,13 @@ Adapter-specific rule projection is no longer public SDK rule syntax:
   `active_from` / `active_to` coordinates. Track 3 / E exposes this through
   `fg.eval.evaluate(..., engine="pyreason", semantics=profile)` and service
   top-level `"semantics": {...}`.
+- Track 2 adds SDK-local `ProbLogSemantics` and `PyReasonSemantics` wrappers
+  as the preferred Python authoring shape. SDK `evaluate(...)` can derive
+  `engine=` from those wrappers, then lowers them into canonical
+  `SemanticsProfile` before crossing the core/application boundary. Service
+  JSON and compiled evaluation remain canonical `SemanticsProfile` surfaces.
+  PyReason per-branch `branch_bounds` are intentionally deferred to
+  Track 3-post.
 
 Native `RuleRef` semantics and current boundary:
 

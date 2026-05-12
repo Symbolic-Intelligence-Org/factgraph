@@ -1095,6 +1095,11 @@
   `SemanticsProfile(**semantics)` 校验；`semantics_profile` 和
   `derivation.semantics` / `derivation.semantics_profile` 继续返回
   `shape` error。
+- Track 2 的 `ProbLogSemantics` / `PyReasonSemantics` 是 SDK-only wrapper：
+  SDK 会在持有 SDK `Rule` / `Derivation` 对象时解析 branch id 并 lower 成
+  canonical `SemanticsProfile`。Service runtime 不接受 wrapper-style JSON
+  keys，例如 `branch_probabilities` / `timestep_delay` / `head_bound`；
+  service 仍只接受 top-level canonical `SemanticsProfile` shape。
 - native `engine="native"` derivation 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：
   - 若已有 filesystem registry，ephemeral rules 在其后 merge
   - 若 `registry_root is None` 但 session 有 ephemeral rules，service 会临时创建一个空 `RuleRegistry()` 并注入

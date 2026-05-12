@@ -4,9 +4,12 @@
 projection semantics. Track 3 / B introduced `SemanticsProfile` as a
 validated core value object:
 
-- SDK namespace export exists through `kernel.sdk.SemanticsProfile`;
-- service runtime accepts top-level inline `semantics` for derivation
-  evaluation;
+- SDK namespace export exists through `kernel.sdk.SemanticsProfile`
+  for advanced/canonical users; Track 2 also exposes SDK-local
+  `ProbLogSemantics` and `PyReasonSemantics` wrappers that lower into
+  `SemanticsProfile` at the SDK boundary;
+- service runtime accepts top-level inline `semantics` in canonical
+  `SemanticsProfile` JSON shape for derivation evaluation;
 - ProbLog adapter consumption exists for `rule_projection.problog` through
   the core `Store.evaluate(..., mode="problog", semantics_profile=...)`
   path;
@@ -37,9 +40,10 @@ Adapter migration is intentionally staged:
   `SemanticsProfile.temporal_projection` for PyReason. Adapter-specific
   validation still happens at PyReason consumption time, not in the core
   profile constructor.
-- Track 3 / E exposes the durable SDK/service runtime call-site:
-  SDK users pass `fg.eval.evaluate(..., engine=..., semantics=profile)`,
-  and service callers pass top-level JSON `"semantics": {...}`.
+- Track 3 / E exposed the durable SDK/service runtime call-site.
+  Track 2 adds preferred SDK wrappers: `fg.eval.evaluate(...,
+  semantics=ProbLogSemantics(...))` or `PyReasonSemantics(...)`.
+  Service callers still pass canonical top-level JSON `"semantics": {...}`.
 
 Adapter import boundary:
 

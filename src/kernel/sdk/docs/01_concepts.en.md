@@ -347,6 +347,7 @@ prefers to add wrappers after seeing real usage patterns.
 | Query head constraints | Only `Entity(var)` or `Entity.field(...)`; field projection supports only `single` fields |
 | Branch identity | `Branch([...], id="name")` adds optional structural SDK metadata for `fg.rules.inspect(...)`. Unnamed branches inspect as `b0`, `b1`, ... fallback ids. Branch ids are not serialized into authoring payloads, compiled plans, registries, or adapters. |
 | Single-head derivations | Public SDK `Derivation` accepts one head. Multi-head public derivations are removed in Track 1; define one derivation per head. Capability shells were already single-head surfaces. |
+| Public semantics wrappers | Track 2 adds SDK-local `ProbLogSemantics` and `PyReasonSemantics` as preferred Python authoring wrappers for `evaluate(..., semantics=...)`. The SDK can derive `engine=` from these objects, lower them into canonical `SemanticsProfile`, and keep service / compiled paths on the canonical shape. |
 
 ---
 

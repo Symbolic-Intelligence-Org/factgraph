@@ -200,8 +200,8 @@ This namespace is read-only and by-id only. It does not ship graph-wide
 | Method | One-liner |
 |---|---|
 | `run(rule_or_query, *, policy=None, row_format=None, return_display_meta=False)` | Evaluate a `Rule`, `RuleRef`, or `Query`; `return_display_meta=True` requires `ReadPolicy` |
-| `evaluate(derivation, *, engine='native', engine_options=None, semantics=None)` | Evaluate a `Derivation`; returns list of `CandidateSet` |
-| `evaluate_compiled(plans, *, engine='native', engine_options=None, semantics=None)` | Evaluate already-compiled derivation plans |
+| `evaluate(derivation, *, engine='native', engine_options=None, semantics=None)` | Evaluate a `Derivation`; returns list of `CandidateSet`. If `semantics` is `ProbLogSemantics`, `PyReasonSemantics`, or `SemanticsProfile`, `engine` may be omitted and is derived from the semantics object. |
+| `evaluate_compiled(plans, *, engine='native', engine_options=None, semantics=None)` | Evaluate already-compiled derivation plans. Public wrapper semantics are rejected because branch ids are unavailable; `SemanticsProfile` remains accepted. |
 | `accept(candidate, *, approved_by=None, note=None, dry_run=False, identity_override=None)` | Accept exactly one candidate; performs writes |
 | `accept_compiled(...)` | Accept against already-compiled plans |
 | `accept_many(candidates, *, ...)` | Accept multiple candidates idempotently |
@@ -446,11 +446,14 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 - Public `Rule` / `Derivation` objects do not carry adapter-specific
   `engine_ext` parameters. `SemanticsProfile.rule_projection` owns
   engine-specific rule projection.
-- Track 3 / E exposes `kernel.sdk.SemanticsProfile`,
-  `fg.eval.inspect_semantics(profile)`, and
-  `fg.eval.evaluate(..., engine=..., semantics=profile)`. Public SDK calls
-  reject `mode=` and `semantics_profile=`; core/application internals keep
-  using `Store.evaluate(..., mode=..., semantics_profile=...)`.
+- Track 2 exposes `kernel.sdk.ProbLogSemantics` and
+  `kernel.sdk.PyReasonSemantics` as the preferred public SDK wrappers for
+  engine-specific semantics. `kernel.sdk.SemanticsProfile` remains exported
+  as the advanced/canonical profile shape.
+- `fg.eval.inspect_semantics(...)` accepts wrappers or `SemanticsProfile`;
+  wrapper inspection includes a lowered canonical profile preview. Public
+  SDK calls reject `mode=` and `semantics_profile=`; core/application
+  internals keep using `Store.evaluate(..., mode=..., semantics_profile=...)`.
 - Public `Rule.condition_weights` remains available as
   certainty/explain projection input. It is not an engine adapter
   parameter, and future runtime configuration for this lane belongs in
