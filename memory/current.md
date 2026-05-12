@@ -27,6 +27,13 @@
 
 **Memory detail:** [project_v0_1_0_rc3_published.md](./project_v0_1_0_rc3_published.md).
 
+**Important: design not complete.** rc.3 is a release checkpoint, not lifecycle
+/ assets design closure. Remaining independent design lines are recorded in
+[project_lifecycle_assets_remaining_after_rc3.md](./project_lifecycle_assets_remaining_after_rc3.md).
+Recommended next blueprint: schema mutation (`fg.schema.add/deprecate/update`
+or migration vocabulary), with query persistence and explain/evidence kept as
+separate future threads.
+
 <!-- Historical 2026-05-11 ReadPolicy state follows. -->
 
 最后更新:2026-05-11(`v0.1-readpolicy-call-site-migration-impl-2026-05-11 @ b13adda4`;**ReadPolicy call-site migration implemented + archived**, rc.3 dry-run passed, no push performed)
