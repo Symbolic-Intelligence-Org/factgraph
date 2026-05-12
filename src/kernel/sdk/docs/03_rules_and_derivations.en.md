@@ -115,7 +115,7 @@ Supported:
 - negation: `Not([...])`
 - comparisons: `== != > >= < <=`
 - OR branches: `where=[[...], [...]]`
-- `Branch` branches: `where=[Branch([...]), Branch([...])]` (Rule/Derivation)
+- `Branch` branches: `where=[Branch([...], id="seed_path"), Branch([...])]` (Rule/Derivation)
 - linear arithmetic inside comparisons (for example `age == (2026 - by)`, `x * 2`)
 
 `Branch` example:
@@ -124,7 +124,7 @@ Supported:
 from kernel.sdk import Branch
 
 where = [
-    Branch([User(u), Pred("user:lang_pref", u, lang)]),
+    Branch([User(u), Pred("user:lang_pref", u, lang)], id="declared_pref"),
     Branch([User(u), Pred("user:inferred_lang", u, lang)]),
 ]
 ```
@@ -134,7 +134,9 @@ Limits:
 - attr-vs-attr comparisons support only `==`, and require schema-aware compilation.
 - non-linear multiplication (`x * y`) is unsupported.
 - `where` cannot mix `Branch(...)` with bare branches (for example `[Branch([...]), [...]]`).
-- `Branch(...)` accepts only the branch atom list; probability, confidence, and engine-specific kwargs are rejected.
+- `Branch(...)` accepts the branch atom list plus optional keyword-only structural `id=`.
+  Probability, confidence, and engine-specific kwargs are rejected.
+- `fg.rules.inspect(rule_or_derivation)` exposes explicit branch ids, positional fallback ids (`b0`, `b1`, ...), and atom ids such as `b0.a0`.
 - string DSL is unsupported (`sdk.run("...")`, `sdk.evaluate("...")`).
 
 ### 3.1 Field Sugar vs `Pred(...)`
@@ -221,7 +223,7 @@ Fields:
 
 Stable contract:
 - `head` shape infers candidate kind (fact/entity).
-- Multi-head (`head=[H1, H2, ...]`) is supported; `evaluate` returns flattened candidates sharing one `run_id`.
+- Public SDK `Derivation` is single-head. Multi-head (`head=[H1, H2, ...]`) is rejected in Track 1; define one derivation per head.
 - `Rule/Derivation.where` both support `Branch(...)`; it unwraps to normalized OR-branch structure.
 - `sdk.run(derivation)` is not supported; use `sdk.evaluate(...)`.
 - `sdk.run(derivation)` fails with code `QUERY_INVALID_ROW_FORMAT` (error message directs callers to `evaluate()`).

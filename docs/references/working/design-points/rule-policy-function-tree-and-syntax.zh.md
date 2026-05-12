@@ -271,7 +271,7 @@ But this should be an implementation shape under `SemanticsProfile.rule_projecti
 Recommended public structure syntax:
 
 ```python
-Branch([A, B, C])
+Branch([A, B, C], id="business_path")
 ```
 
 Example:
@@ -282,8 +282,8 @@ rule_user_language = Rule(
     version="1.0.0",
     select=[u, lang],
     where=[
-        Branch([User(u), u.lang_pref == lang]),
-        Branch([User(u), u.inferred_lang == lang]),
+        Branch([User(u), u.lang_pref == lang], id="declared_pref"),
+        Branch([User(u), u.inferred_lang == lang], id="inferred_pref"),
     ],
     expose=True,
 )
@@ -292,6 +292,7 @@ rule_user_language = Rule(
 Rationale:
 
 - `Branch` describes the actual shape: each wrapper is one OR branch whose atoms are ANDed.
+- `id` is optional structural metadata for SDK inspection and future public semantics references.
 - `Body` sounds like the whole rule body, but the current wrapper actually represents one branch.
 - Public `Branch(probability=...)` would reintroduce an engine-specific uncertainty shortcut at the rule layer, conflicting with the raw uncertainty / transmission split.
 - `confidence` is overloaded elsewhere in the system: fact metadata, candidate confidence, certainty summaries, and view aggregation all already use confidence-like concepts with different meanings.

@@ -106,6 +106,8 @@ result.evidence_envelope   # EvidenceEnvelope | None — engine_payload is a Sup
 `binding` keys are `$`-prefixed variable names matching the
 Derivation's `where` vars (here `$p` and `$lang`). `engine` defaults to
 `"native"`; pass `engine="souffle"` etc. to use an adapter.
+Track 1 makes public SDK derivations single-head; define one derivation
+per head before using `check`, `diagnose`, Fact Overlay, or `why_not`.
 Track 3 / E intentionally keeps the what-if shells profile-free:
 `semantics=` and `semantics_profile=` are rejected here. Use
 `fg.eval.evaluate(..., engine=..., semantics=profile)` for direct

@@ -477,11 +477,23 @@ Rule's `where` accepts:
   ```python
   from kernel.sdk import Branch
   where = [
-      Branch([User(u), Pred("user:lang_pref", u, lang)]),
-      Branch([User(u), Pred("user:inferred_lang", u, lang)]),
+      Branch([User(u), Pred("user:lang_pref", u, lang)], id="declared_pref"),
+      Branch([User(u), Pred("user:inferred_lang", u, lang)], id="inferred_pref"),
   ]
   ```
   `where` cannot mix `Branch(...)` with bare branches.
+  The optional keyword-only `id=` is structural metadata for inspection
+  and future semantics references. It must be unique within the inspected
+  rule/derivation and does not enter authoring payloads or engine adapters.
+
+Inspect rule or derivation structure before attaching runtime semantics:
+
+```python
+shape = fg.rules.inspect(r)
+shape["branches"][0]["id"]          # "declared_pref"
+shape["branches"][0]["fallback_id"] # "b0"
+shape["branches"][0]["atom_ids"]    # ["b0.a0", "b0.a1", ...]
+```
 
 Rule `run` is a row dispatcher. Passing a `Derivation` to `run`
 explicitly raises (`use sdk.evaluate() instead`).
@@ -489,9 +501,9 @@ explicitly raises (`use sdk.evaluate() instead`).
 ### Derivation + evaluate
 
 A `Derivation(id, version, where, head=None, ...)` is a
-single derivation that produces accept-ready candidates. `head` is
-either a single head (entity or field) or a list `[H1, H2, ...]` for
-multi-head derivations.
+single derivation that produces accept-ready candidates. `head` is one
+entity or field head. Multi-head public derivations are removed in
+Track 1; use one `Derivation` per head.
 
 ```python
 from kernel.sdk import Derivation
@@ -515,21 +527,9 @@ candidates = fg.eval.evaluate(deriv, engine="pyreason",
 `engine="native"` rejects non-empty `engine_options`. The public SDK
 `mode=` keyword is removed in Track 3 / E; use `engine=`.
 
-Multi-head Derivation:
-
-```python
-with vars("d", "kw", "author_ref") as (d, kw, author_ref):
-    deriv = Derivation(
-        id="drv.document_keyword_plus_author",
-        version="1.0.0",
-        where=[Document(d), d.title == "FactPy guide"],
-        head=[
-            Document.keywords(value=kw),
-            Document.author(value=author_ref),
-        ],
-    )
-# evaluate returns flattened candidates sharing one run_id
-```
+For multiple output facts, define separate derivations. This keeps the
+public runtime call-site aligned with `SemanticsProfile` and with the
+what-if shells, all of which are single-head surfaces.
 
 `CandidateSet` exposes `candidate_id`, `candidate_key`, `candidate_kind`
 (`"fact"` or `"entity"`), `payload`, plus a `confidence` paired with
@@ -879,7 +879,7 @@ reg = SDKRegistry(root_dir="/var/factpy/registry")           # path-based
 
 reg.apply_schema_classes([User, Document])
 reg.register_rule(my_rule)                # SDK Rule object
-reg.register_derivation(my_derivation)    # SDK Derivation object (multi-head OK)
+reg.register_derivation(my_derivation)    # SDK Derivation object (single-head)
 
 reg.list_rule_ids()
 reg.list_rule_versions("rule_alice")
@@ -937,6 +937,7 @@ Notable changes:
 | `temporal_view` parameter | (removed) | Pass via `meta` and use a custom view |
 | `mode=` keyword on SDK `evaluate` | (removed) | Use `engine=` |
 | `semantics_profile=` keyword on SDK `evaluate` | (removed) | Use `semantics=` |
+| public multi-head `Derivation` | (removed) | Use one `Derivation` per head |
 
 ### ProbLog branch probability transition
 
@@ -947,6 +948,11 @@ remain only in rejection messages and adapter/internal bridges until
 `SemanticsProfile.rule_projection` provides the durable public
 rule-projection shape. Track 3 / E exposes that shape through
 `fg.eval.evaluate(..., engine="problog", semantics=profile)`.
+
+Track 1 adds optional structural branch ids and rule inspection:
+`Branch([...], id="declared_pref")` and `fg.rules.inspect(rule_or_derivation)`.
+Branch ids are inspect-only SDK metadata; authoring payloads, compiled
+plans, registries, and adapters still receive positional branch structure.
 
 ### PyReason profile transition
 

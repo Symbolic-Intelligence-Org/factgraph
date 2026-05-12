@@ -312,7 +312,7 @@ DTOs. Import them directly from `kernel.application.protocol` or
 | `register_rule_spec(spec)` | Register a low-level rule spec |
 | `register_rule(rule)` | Register an SDK `Rule` |
 | `register_derivation_spec(spec)` | Register a low-level derivation spec |
-| `register_derivation(derivation)` | Register an SDK `Derivation` (single- or multi-head; multi-head heads serialize as `head: [...]`) |
+| `register_derivation(derivation)` | Register an SDK `Derivation` (single-head public surface; multi-head is rejected in Track 1) |
 | `get_schema_entry(...)` | Fetch a schema entry by id |
 | `list_rule_ids()` / `list_derivation_ids()` | Enumerate registered ids |
 | `list_rule_versions(id)` / `list_derivation_versions(id)` | Version history |
@@ -321,12 +321,11 @@ DTOs. Import them directly from `kernel.application.protocol` or
 | `get_latest_rule_spec(id)` / `get_latest_derivation_spec(id)` | Latest version lookup |
 | `read_rule_spec(id, version)` / `read_derivation_spec(id, version)` | Specific version read |
 
-`register_derivation` and `fg.eval.evaluate` both accept multi-head
-Derivations. The single-head constraint applies only at the
-**capability shell** layer — `fg.what_if.{check, diagnose, why_not}`
-reject plans with `len(plan.heads) != 1`
-(`kernel.application.capability_helpers.why_not.py:23` and siblings).
-Registry storage and authoring payload serialization are head-agnostic.
+`register_derivation` and `fg.eval.evaluate` both require single-head
+public SDK `Derivation` objects in Track 1. For multiple output facts,
+define one derivation per head. Core/application internals may still
+carry tuple-shaped heads for lower-level protocol compatibility, but the
+public SDK boundary is single-head.
 
 ---
 
@@ -436,7 +435,7 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 - `fg.evaluate(Derivation(...), engine="native"|"souffle"|"problog"|"pyreason")`
   returns `list[CandidateSet]`
 - Legacy `mode='python'` / `mode='engine'` **values** raise explicit rename errors (use `mode='native'` / `mode='souffle'`)
-- `head=[...]` is supported (flattened output)
+- `head=[...]` is rejected in public SDK `Derivation`; use one derivation per head
 - `CandidateSet.confidence` semantics depend on engine:
   - `native` / `souffle` → `None`
   - `problog` → probability `float`

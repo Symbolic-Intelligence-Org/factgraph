@@ -345,7 +345,8 @@ prefers to add wrappers after seeing real usage patterns.
 | Cross-coordinate attr comparison | Only `==` on the same entity type and same `primary_key` field is allowed |
 | `RuleRef` constraints | Target must be `expose=True`; `RuleRef` is forbidden inside `Not(...)` body |
 | Query head constraints | Only `Entity(var)` or `Entity.field(...)`; field projection supports only `single` fields |
-| Multi-head derivations | `register_derivation(...)` and `fg.eval.evaluate(...)` accept multi-head Derivations (the DSL serializes `head: [...]` as a list when more than one head is present). The single-head constraint lives in capability shells: `fg.what_if.{check, diagnose, why_not}` reject plans with `len(plan.heads) != 1` (`kernel.application.capability_helpers.why_not.py:23` and siblings) |
+| Branch identity | `Branch([...], id="name")` adds optional structural SDK metadata for `fg.rules.inspect(...)`. Unnamed branches inspect as `b0`, `b1`, ... fallback ids. Branch ids are not serialized into authoring payloads, compiled plans, registries, or adapters. |
+| Single-head derivations | Public SDK `Derivation` accepts one head. Multi-head public derivations are removed in Track 1; define one derivation per head. Capability shells were already single-head surfaces. |
 
 ---
 
@@ -357,6 +358,6 @@ prefers to add wrappers after seeing real usage patterns.
 | `sdk.save(plain_entity)` / `snapshot.to_entity()` | Deferred |
 | Formal typed ingest schema (`TypedDict` / dataclass) | Deferred |
 | Temporal write semantics in `Rule` / `Derivation` head (`valid_from`, `valid_to`, `version`) | Deferred |
-| Native multi-head publishing semantics in Registry | Deferred |
+| Native multi-head publishing semantics in Registry | Removed from public SDK surface in Track 1; use one derivation per head |
 | Physical SDK file split (`store.py` / `batch.py` / `facade.py`) | Deferred; runtime delegation completed, line-count reduction not |
 | Full exception hierarchy migration | Deferred; application runtime uses DTO error shapes, SDK product-domain errors remain SDK-owned |

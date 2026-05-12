@@ -289,6 +289,7 @@ Evaluate now also records a lightweight candidate explain backref after candidat
     only retain the adopted branch's proof body
   - when multiple branches satisfy the same final binding, `source-order wins` is applied
   - selected branch identity remains recoverable through the existing `b{branch}.a{atom}:...` key namespace; no new top-level branch field is added
+  - SDK Track 1 adds public structural branch ids and `fg.rules.inspect(...)`; those ids are inspect-only SDK metadata and are not persisted into core rule specs, compiled plans, registry state, or adapter payloads
   - native candidate proof tree unresolved / boundary taxonomy is now frozen as an official contract:
     - `unresolved_support`
       - `child_support_unavailable`

@@ -33,7 +33,7 @@ Track 3 完成后,`SemanticsProfile` 功能完整但作为 public authoring API 
 
 | 优先级 | 形式 | 何时用 |
 |---|---|---|
-| 1 (推荐) | 用户显式 `Branch(id="sensor_path", atoms=[...])` | 任何需要 profile 引用的场景 |
+| 1 (Track 1 已落地) | 用户显式 `Branch([...], id="sensor_path")` | 任何需要 profile 引用的场景 |
 | 2 (fallback) | 系统在 inspect 时显示位置 id `b0/b1/...` | 未命名 branch |
 | 否决 | 随机 UUID | 不可复现,registry/docs/tests 都会变差 |
 
@@ -49,13 +49,13 @@ Track 3 完成后,`SemanticsProfile` 功能完整但作为 public authoring API 
 
 ## 3. Rule Inspect API
 
-当前没有 public rule 结构 inspect API。`fg.eval.inspect_semantics(profile)` inspect 的是 profile lane,不是 rule/branch 结构。
+Track 1 已加入 public rule 结构 inspect API。`fg.eval.inspect_semantics(profile)` inspect 的是 profile lane,`fg.rules.inspect(...)` inspect 的是 rule/branch 结构。
 
 ### 3.1 建议 namespace
 
-`fg.rules.inspect(rule)` —— rules namespace 当前为空,正好作为 first-class public API。
+`fg.rules.inspect(rule)` —— Track 1 已作为 first-class public API 落地。
 
-(备选: `fg.eval.inspect_rule(rule)`,与 `inspect_semantics` 配对。倾向前者。)
+旧备选 `fg.eval.inspect_rule(rule)` 未采用。
 
 ### 3.2 返回结构草案
 
@@ -63,14 +63,19 @@ Track 3 完成后,`SemanticsProfile` 功能完整但作为 public authoring API 
 fg.rules.inspect(rule)
 # →
 {
-    "rule_id": "risk_rule",
+    "kind": "Rule",
+    "id": "risk_rule",
     "version": "v1",
-    "head": {...},                          # 含 head_call 等
+    "heads": [],
     "branches": [
         {
             "id": "sensor_path",            # 显式或生成的 b0
+            "fallback_id": "b0",
+            "is_explicit_id": True,
             "index": 0,
+            "atom_count": 2,
             "atoms": [...],                 # 该 branch 的 atom 结构
+            "atom_ids": ["b0.a0", "b0.a1"],
         },
         {
             "id": "obstacle_path",
@@ -96,7 +101,7 @@ fg.rules.inspect(rule)
 
 ### 4.2 倾向: pre-release hard-cut
 
-- Track 1 G0 决定 hard-cut multi-head,public Rule/Derivation 收敛到单头
+- Track 1 已 hard-cut public multi-head,public Derivation 收敛到单头
 - 同步影响 PyReason: `head_bound` 退化为单值 tuple,不需 `dict` 或 list
 - 与 `feedback_release_workflow_traps`(pre-release 允许 hard-cut)一致
 
@@ -262,7 +267,7 @@ Track 3 (post): PyReason branch-bound carrier + compile 模型
 
 **严格串行,不能交错。** 反向依赖:
 
-- Track 2 的 `branch_bounds={"sensor_path": ...}` 需要 Track 1 的 `Branch(id="sensor_path", ...)`
+- Track 2 的 `branch_bounds={"sensor_path": ...}` 需要 Track 1 的 `Branch([...], id="sensor_path")`
 - Track 3 的内部 carrier shape(per-branch dict)需要 Track 2 的 public shape 锁定,否则可能反复改
 
 ## 9. 与现有 archive 的关系
