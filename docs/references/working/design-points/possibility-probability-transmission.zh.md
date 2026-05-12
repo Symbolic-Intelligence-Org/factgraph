@@ -381,9 +381,15 @@ has made ProbLog the first consuming adapter through the core
 `Store.evaluate(..., mode="problog", semantics_profile=...)` path:
 `SemanticsProfile.rule_projection.problog` entries with
 `kind="branch_probability"` and `target="branch:{index}"` normalize into
-`ProbLogRuleExt.branch_probabilities`. SDK / service runtime calls still
-reject `semantics=` and `semantics_profile=` until Track 3 / E, and
-PyReason adapter consumption remains deferred to Track 3 / D.
+`ProbLogRuleExt.branch_probabilities`. Track 3 / D has made PyReason the
+second consuming adapter through the core
+`Store.evaluate(..., mode="pyreason", semantics_profile=...)` path.
+`SemanticsProfile.rule_projection.pyreason` entries normalize into
+`PyReasonRuleExt` body/head interval and `timestep_delay` fields, while
+`SemanticsProfile.temporal_projection` supports `none`,
+`fixed_timesteps`, and `valid_time_boundaries`. SDK / service runtime
+calls still reject `semantics=` and `semantics_profile=` until Track 3 /
+E.
 
 Important separation:
 
@@ -442,26 +448,26 @@ The first implementation should not add this API until profiling or user workflo
 
 ## 8.1 PyReason Temporal Projection
 
-PyReason's timestep model should stay inside the adapter. The stored facts should use business valid time (`valid_from` / `valid_to`), and the PyReason `SemanticsProfile` should derive integer timesteps at runtime.
+PyReason's timestep model should stay inside the adapter. The stored facts should use business valid time (`valid_from` / `valid_to`), and the PyReason `SemanticsProfile` derives integer timesteps at runtime for the core-only PyReason evaluate path.
 
-Suggested projection:
+Implemented Track 3 / D projection:
 
-1. Collect all relevant `valid_from` and `valid_to` boundaries from the facts used in the run, plus an explicit query horizon when needed.
-2. Sort boundaries into `t0 < t1 < ... < tn`.
-3. Treat timestep `i` as the half-open interval `[ti, t(i+1))`.
-4. Mark a fact active for every segment covered by its business valid interval.
+1. Require `temporal_projection={"mode": "valid_time_boundaries", "universe": [start, end]}`.
+2. Collect all selected PyReason EDB assertion `valid_from` and `valid_to` boundaries from the facts used in the run, plus the explicit universe start/end.
+3. Sort boundaries into `t0 < t1 < ... < tn` and use their ordinal indexes as PyReason coordinates.
+4. Missing `valid_from` maps to the universe start. Missing `valid_to` maps to open-ended `active_to=None`. Both missing means the fact is active for the full universe.
 5. Emit PyReason `active_from` / `active_to` as integer timestep coordinates only in the generated engine view.
-6. After inference, map derived facts at timestep `i` back to `[ti, t(i+1))`.
+6. Derive `PyReasonRunConfig.timesteps` from the highest ordinal boundary index; reject if that conflicts with explicit `engine_options.timesteps`.
 
 This makes irregular business-time changes natural: timesteps advance when the set of relevant valid-time facts can change. The tradeoff is that `timestep_delay=1` means "next segment", not "one day" or "one hour". If fixed wall-clock duration is needed, the profile should declare a different mode such as `fixed_duration_bucket`.
 
-Open temporal design details:
+Track 3 / D limitations and future details:
 
-- A run horizon is required when the final segment would otherwise be open-ended.
-- Missing `valid_from` should either be rejected for temporal projection or mapped through an explicit profile default. Silent defaulting would make replay ambiguous.
+- The run horizon is explicit via `universe=[start, end]`.
 - `valid_to` should remain exclusive, matching current assertion view behavior.
 - Multiple input facts covering the same timestep should keep their separate assertion identity; temporal projection should not merge facts before engine materialization.
 - Readback should record enough profile metadata to explain why a derived fact is valid over a returned interval.
+- Recurrence and multi-interval validity are outside Track 3 / D. Applications can materialize recurring validity into multiple single-interval assertions; a future uncertainty/data-contract slice can revisit a native multi-interval representation.
 
 ## 9. Documentation Action Items
 

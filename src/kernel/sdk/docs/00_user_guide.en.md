@@ -587,9 +587,12 @@ future `SemanticsProfile.rule_projection` owns that durable public shape.
 Track 3 / B exposes `kernel.core.semantics.SemanticsProfile` for core
 validation and inspection. Track 3 / C lets the core
 `Store.evaluate(..., mode="problog", semantics_profile=...)` path consume
-`rule_projection.problog`, but `fg.eval.evaluate(..., semantics=...)`
-and `fg.eval.evaluate(..., semantics_profile=...)` are still rejected
-until Track 3 / E defines the runtime call-site.
+`rule_projection.problog`. Track 3 / D also lets the core
+`Store.evaluate(..., mode="pyreason", semantics_profile=...)` path consume
+`rule_projection.pyreason` and `temporal_projection`. SDK
+`fg.eval.evaluate(..., semantics=...)` and
+`fg.eval.evaluate(..., semantics_profile=...)` are still rejected until
+Track 3 / E defines the public runtime call-site.
 
 ### Semantic annotations
 
@@ -937,6 +940,18 @@ rule-projection shape. Track 3 / C has activated core ProbLog consumption
 of `SemanticsProfile.rule_projection.problog`, but the SDK still rejects
 `semantics=` and `semantics_profile=` until Track 3 / E defines the
 public runtime call-site.
+
+### PyReason profile transition
+
+PyReason now has a core-only `SemanticsProfile` consumption path:
+`Store.evaluate(..., mode="pyreason", semantics_profile=profile)`.
+It accepts `rule_projection.pyreason` entries for body intervals, head
+intervals, and rule `timestep_delay`, plus `temporal_projection` modes
+`none`, `fixed_timesteps`, and `valid_time_boundaries`.
+
+This is not yet an SDK call-site. Public SDK calls continue to use
+`mode="pyreason"` and `engine_options={"timesteps": ...}` until Track 3 /
+E defines the durable SDK/service profile API.
 
 ### Tag semantics on multi-fields
 

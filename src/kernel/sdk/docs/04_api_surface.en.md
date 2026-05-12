@@ -453,6 +453,10 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
   `rule_projection.problog`, but SDK `evaluate(..., semantics=...)` and
   `evaluate(..., semantics_profile=...)` are still rejected until Track 3 / E
   defines the durable runtime call-site.
+- Track 3 / D lets core
+  `Store.evaluate(..., mode="pyreason", semantics_profile=...)` consume
+  `rule_projection.pyreason` and `temporal_projection`. This remains a
+  core/internal entry; SDK profile kwargs still reject until Track 3 / E.
 - Public `Rule.condition_weights` remains available as
   certainty/explain projection input. It is not an engine adapter
   parameter, and future runtime configuration for this lane belongs in

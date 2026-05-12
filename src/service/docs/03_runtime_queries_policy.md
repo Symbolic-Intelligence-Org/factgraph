@@ -1088,7 +1088,9 @@
   `derivation.mode` 和 top-level `mode` 都会被拒绝。
 - Track 3 / B 已引入 core `SemanticsProfile` scaffolding，Track 3 / C
   已让 core `Store.evaluate(..., mode="problog", semantics_profile=...)`
-  消费 `rule_projection.problog`。service runtime 仍不消费 profile；
+  消费 `rule_projection.problog`。Track 3 / D 也已让 core
+  `Store.evaluate(..., mode="pyreason", semantics_profile=...)` 消费
+  `rule_projection.pyreason` 与 `temporal_projection`。service runtime 仍不消费 profile；
   top-level 或 `derivation` 内的 `semantics` / `semantics_profile`
   会返回 `shape` error，并指向 Track 3 / E 的 runtime call-site 设计。
 - native `engine="native"` derivation 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：

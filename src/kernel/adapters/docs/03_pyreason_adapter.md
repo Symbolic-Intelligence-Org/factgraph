@@ -268,10 +268,13 @@ result = run_pyreason(
   rules with `compile_pyreason_rule(rule, engine_ext=PyReasonRuleExt(...))`
   and pass the resulting `(rule_text, name)` pair to `run_pyreason(...,
   rules=[...])`.
-- Track 3 / B provides core `SemanticsProfile` validation and inspection
-  scaffolding only. PyReason does not consume `SemanticsProfile` yet;
-  Track 3 / D owns `rule_projection` interval consumption and
-  `temporal_projection` valid-time-to-timestep mapping.
+- Track 3 / D consumes core `SemanticsProfile` data through
+  `Store.evaluate(..., mode="pyreason", semantics_profile=profile)`.
+  The adapter reads `rule_projection.pyreason` and
+  `temporal_projection`, then normalizes them into adapter-local
+  `PyReasonRuleExt`, `PyReasonRunConfig`, and EDB active-time
+  coordinates. SDK / service profile payloads still reject until
+  Track 3 / E defines the durable public call-site.
 - `compile_pyreason_rule(...)` currently supports only
   `PredAtom` + `LogicVar` + literals; `CompareExpr` / `NotExpr` /
   `RuleRefAtom` raise an explicit error
@@ -326,17 +329,25 @@ Execution sequence:
    evaluate-call layer; they do not enter `to_authoring_payload()`.
    Public `Rule` / `Derivation` objects do not carry `engine_ext`.
 2. `evaluate_store(...)` / `Store.evaluate_engine(...)` forwards
-   `mode="pyreason"` and `engine_options` to the adapter. Internal
-   compiled plans may still carry adapter-local `engine_ext` until
-   SemanticsProfile replaces that bridge. Track 3 / B has only added the
-   core profile value object; runtime consumption remains deferred to D/E.
+   `mode="pyreason"`, `engine_options`, and optional
+   `semantics_profile` to the adapter. Internal compiled plans may still
+   carry adapter-local `engine_ext`; when both `PyReasonRuleExt` and
+   `SemanticsProfile.rule_projection.pyreason` are present, they must
+   materialize to the same PyReason extension or the adapter rejects the
+   run.
 3. `pyreason_engine_eval(...)`:
-   - Materializes Ledger active facts into a `PyReasonSession`
-     via `project_view_facts(...)`
+   - Materializes Ledger active facts into a `PyReasonSession`.
+     Plain runs use `project_view_facts(...)`; valid-time-boundary
+     profile runs use `project_view_facts_with_witness(...)` so
+     assertion `valid_from` / `valid_to` metadata can become
+     `active_from` / `active_to`.
    - Compiles lowered WhereIR into PyReason rule strings via
      `compile_where_ir_to_pyreason(...)`
    - Normalizes run config via
-     `resolve_pyreason_run_config(engine_options)`
+     `resolve_pyreason_run_config(engine_options)`. In
+     `fixed_timesteps` mode, profile `timesteps` maps 1:1 to this
+     run config. In `valid_time_boundaries` mode, the adapter derives
+     `timesteps` from the sorted boundary ordinal map.
    - Calls `run_pyreason(...)`; the shared evaluate path
      internally forces `atom_trace=True` to produce runtime
      provenance
@@ -374,6 +385,57 @@ Constraints:
 - Although `atom_trace` is not exposed on the shared evaluate
   surface, runtime candidate explain forces it on inside the
   adapter to generate `PyReasonTraceV0` / `ProvenanceEnvelope`
+- Track 3 / D adds a core-only profile entry:
+  `Store.evaluate(..., mode="pyreason", semantics_profile=profile)`.
+  Profile consumption requires `profile.engine == "pyreason"` and a
+  matching `mode="pyreason"` call. Passing a PyReason profile to
+  another mode rejects instead of silently ignoring the profile.
+
+### 5C.0a SemanticsProfile consumption
+
+`SemanticsProfile.rule_projection.pyreason` entries are adapter-local
+projection instructions. The generic `SemanticsProfile` value object
+validates shape only; PyReason validates targets and values when the
+profile is consumed.
+
+Supported rule-projection targets in Track 3 / D:
+
+| Target | Kind | Value | Effect |
+| --- | --- | --- | --- |
+| `body_atom:{branch}:{atom}` | `interval_threshold` | `[lower, upper]` with `0 <= lower <= upper <= 1` | Sets `PyReasonRuleExt.body_predicate_bounds` for the referenced body predicate |
+| `head:0` | `interval` | `[lower, upper]` with `0 <= lower <= upper <= 1` | Sets `PyReasonRuleExt.head_bound` |
+| `rule` | `timestep_delay` | non-negative integer | Sets `PyReasonRuleExt.timestep_delay` |
+
+The adapter enforces a carrier-conflict rule:
+
+- profile-only: use the profile-derived `PyReasonRuleExt`;
+- `PyReasonRuleExt`-only: preserve the existing internal bridge;
+- both present and matching: allow;
+- both present and different: reject with carrier-family names.
+
+`compile_pyreason_rule(...)` and `where_compile.py` remain
+profile-agnostic. The adapter normalizes profile data to
+`PyReasonRuleExt` before rule export.
+
+`SemanticsProfile.temporal_projection` accepts these D-time modes:
+
+| Mode | Shape | Effect |
+| --- | --- | --- |
+| `none` | `{"mode": "none"}` | Existing behavior |
+| `fixed_timesteps` | `{"mode": "fixed_timesteps", "timesteps": N}` | Maps 1:1 to `engine_options.timesteps` / `PyReasonRunConfig.timesteps` |
+| `valid_time_boundaries` | `{"mode": "valid_time_boundaries", "universe": [start, end]}` | Collects selected assertion `valid_from` / `valid_to` boundaries plus the explicit universe, sorts and deduplicates them, and maps them to ordinal PyReason time coordinates |
+
+`valid_time_boundaries` uses the current PyReason EDB materialization
+scope. Missing `valid_from` maps to the universe start. Missing
+`valid_to` maps to open-ended `active_to=None`. If both are missing, the
+fact is active for the full universe. The derived `timesteps` value is
+the highest ordinal boundary index. If this derived value conflicts with
+`engine_options.timesteps`, the adapter rejects the run.
+
+Recurring or multi-interval validity is out of scope for D. Applications
+can materialize recurring validity into multiple single-interval
+assertions; a future uncertainty/data-contract slice can revisit a native
+multi-interval representation.
 
 ### 5C.1 Bounded numeric extension (L3b)
 
