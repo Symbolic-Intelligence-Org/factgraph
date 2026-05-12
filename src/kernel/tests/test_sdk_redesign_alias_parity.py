@@ -105,9 +105,7 @@ class EvalNamespaceParityTests(_AliasParityBase):
     flat_to_nested = (
         ("run", "run"),
         ("evaluate", "evaluate"),
-        ("evaluate_compiled", "evaluate_compiled"),
         ("accept", "accept"),
-        ("accept_compiled", "accept_compiled"),
         ("accept_many", "accept_many"),
     )
 

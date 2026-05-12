@@ -242,30 +242,11 @@ class SDKSemanticsCallsiteTests(unittest.TestCase):
 
         self.assertIn("SemanticsProfile.engine='problog' does not match engine='pyreason'", str(ctx.exception))
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
-    def test_sdk_evaluate_compiled_uses_engine_and_semantics(self, mock_run) -> None:
+    def test_sdk_evaluate_compiled_is_removed_from_public_surface(self) -> None:
         sdk = _make_sdk()
-        compiled = sdk._compile_derivation_input(_problog_derivation())[0]
-        seen: dict[str, str] = {}
 
-        def _fake_run(pl_path, *, timeout, trace):
-            seen["program"] = pl_path.read_text(encoding="utf-8")
-            return _mock_problog_output(sdk)
-
-        mock_run.side_effect = _fake_run
-
-        candidates = sdk.eval.evaluate_compiled(
-            derivation_id=compiled["derivation_id"],
-            version=compiled["version"],
-            target_pred_id=compiled["target_pred_id"],
-            head_vars=compiled["head_vars"],
-            where=compiled["where"],
-            engine="problog",
-            semantics=_problog_profile(probability=0.25),
-        )
-
-        self.assertEqual(len(candidates), 1)
-        self.assertIn("0.25::rule_body_0", seen["program"])
+        self.assertFalse(hasattr(sdk.eval, "evaluate_compiled"))
+        self.assertFalse(hasattr(sdk, "evaluate_compiled"))
 
 
 class ApplicationProtocolSemanticsCallsiteTests(unittest.TestCase):

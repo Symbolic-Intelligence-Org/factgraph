@@ -109,7 +109,7 @@ class SDKG4InvariantTests(unittest.TestCase):
         self.assertIn("SDKStoreError", why_not_doc)
         self.assertIn("candidate", why_not_doc.lower())
         for path in (
-            "$.why_not.derivation",
+            "$.why_not.inference",
             "$.why_not.dependencies",
             "$.why_not.candidates",
             "$.why_not.request",

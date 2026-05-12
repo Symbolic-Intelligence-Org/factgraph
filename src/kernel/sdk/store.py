@@ -278,17 +278,11 @@ class _SDKEvalManager:
     def evaluate(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.evaluate(*args, **kwargs)
 
-    def evaluate_compiled(self, *args: Any, **kwargs: Any) -> Any:
-        return self._sdk.evaluate_compiled(*args, **kwargs)
-
     def inspect_semantics(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.inspect_semantics(*args, **kwargs)
 
     def accept(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.accept(*args, **kwargs)
-
-    def accept_compiled(self, *args: Any, **kwargs: Any) -> Any:
-        return self._sdk.accept_compiled(*args, **kwargs)
 
     def accept_many(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.accept_many(*args, **kwargs)
@@ -1660,7 +1654,6 @@ class SDKStore:
         *,
         derivation: Any | None,
         api_path: str,
-        allow_wrappers: bool,
     ) -> tuple[str, SemanticsProfile | None]:
         if raw_semantics is None:
             return (self._resolve_public_engine(raw_engine, api_path=api_path), None)
@@ -1691,10 +1684,6 @@ class SDKStore:
                     f"engine='{engine}' does not match semantics.engine='{semantics_engine}'"
                 )
 
-        if not allow_wrappers:
-            raise SDKStoreError(
-                "evaluate_compiled() requires SemanticsProfile, not ProbLogSemantics/PyReasonSemantics"
-            )
         if derivation is None or not hasattr(derivation, "where"):
             raise SDKStoreError("SDK public semantics require SDK Rule or Inference object input")
         return (engine, _lower_public_semantics(raw_semantics, derivation=derivation))
@@ -1726,7 +1715,6 @@ class SDKStore:
                 raw_semantics,
                 derivation=derivation,
                 api_path="evaluate()",
-                allow_wrappers=True,
             )
             runtime_registry = self._resolve_runtime_registry(derivation, explicit_registry=registry)
             compiled_plans = self._compile_derivation_input(derivation)
@@ -1743,7 +1731,6 @@ class SDKStore:
                 raw_semantics,
                 derivation=None,
                 api_path="evaluate()",
-                allow_wrappers=True,
             )
             compiled_plans = self._compile_derivation_input(args[0])
             return self._evaluate_compiled_derivation_plans(
@@ -1758,7 +1745,6 @@ class SDKStore:
             raw_semantics,
             derivation=None,
             api_path="evaluate()",
-            allow_wrappers=True,
         )
         if registry is not None:
             kwargs["registry"] = registry
@@ -1810,23 +1796,6 @@ class SDKStore:
             return f"{derivation_id}:{uuid4().hex[:8]}"
         return f"derive:{uuid4().hex[:8]}"
 
-    def evaluate_compiled(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
-        if "semantics_profile" in kwargs:
-            raise SDKStoreError("evaluate() does not accept semantics_profile= in SDK; use semantics=")
-        if "mode" in kwargs:
-            raise SDKStoreError("evaluate() does not accept mode= in E; use engine=")
-        engine, semantics_profile = self._resolve_public_engine_and_semantics(
-            kwargs.pop("engine", None),
-            kwargs.pop("semantics", None),
-            derivation=None,
-            api_path="evaluate_compiled()",
-            allow_wrappers=False,
-        )
-        kwargs["mode"] = engine
-        if semantics_profile is not None:
-            kwargs["semantics_profile"] = semantics_profile
-        return self._store.evaluate(*args, **kwargs)
-
     def accept(self, *args: Any, **kwargs: Any) -> AcceptResult:
         if args and isinstance(args[0], CandidateSet):
             if len(args) != 1:
@@ -1842,9 +1811,6 @@ class SDKStore:
                 candidate_set=candidate_set,
                 options=options,
             )
-        return self._store.accept(*args, **kwargs)
-
-    def accept_compiled(self, *args: Any, **kwargs: Any) -> AcceptResult:
         return self._store.accept(*args, **kwargs)
 
     def accept_many(

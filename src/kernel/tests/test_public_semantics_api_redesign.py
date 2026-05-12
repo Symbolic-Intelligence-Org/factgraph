@@ -344,46 +344,11 @@ class InspectSemanticsWrapperTests(unittest.TestCase):
 
 
 class PublicBoundaryTests(unittest.TestCase):
-    def test_evaluate_compiled_rejects_public_wrappers_with_anchor(self) -> None:
+    def test_evaluate_compiled_is_removed_from_public_sdk_surface(self) -> None:
         sdk = _make_sdk()
-        compiled = sdk._compile_derivation_input(_two_branch_derivation())[0]
 
-        with self.assertRaises(SDKStoreError) as ctx:
-            sdk.eval.evaluate_compiled(
-                derivation_id=compiled["derivation_id"],
-                version=compiled["version"],
-                target_pred_id=compiled["target_pred_id"],
-                head_vars=compiled["head_vars"],
-                where=compiled["where"],
-                semantics=_problog_semantics(),
-            )
-
-        self.assertIn(
-            "evaluate_compiled() requires SemanticsProfile, not ProbLogSemantics/PyReasonSemantics",
-            str(ctx.exception),
-        )
-
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
-    def test_evaluate_compiled_still_accepts_semantics_profile(self, mock_run) -> None:
-        sdk = _make_sdk()
-        compiled = sdk._compile_derivation_input(_single_branch_derivation())[0]
-
-        def _fake_run(pl_path, *, timeout, trace):
-            return _mock_problog_output(sdk)
-
-        mock_run.side_effect = _fake_run
-
-        candidates = sdk.eval.evaluate_compiled(
-            derivation_id=compiled["derivation_id"],
-            version=compiled["version"],
-            target_pred_id=compiled["target_pred_id"],
-            head_vars=compiled["head_vars"],
-            where=compiled["where"],
-            engine="problog",
-            semantics=_problog_profile(),
-        )
-
-        self.assertEqual(len(candidates), 1)
+        self.assertFalse(hasattr(sdk.eval, "evaluate_compiled"))
+        self.assertFalse(hasattr(sdk, "evaluate_compiled"))
 
     def test_service_rejects_lightweight_semantics_json_shape(self) -> None:
         reset_runtime_sessions_for_tests()

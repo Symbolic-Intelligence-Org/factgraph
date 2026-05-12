@@ -146,7 +146,7 @@ class SDKG2InvariantTests(unittest.TestCase):
             "EvaluationOverlay",
             "FactOverlayCheckResult",
             "SDKStoreError",
-            "$.check_fact_overlay.derivation",
+            "$.check_fact_overlay.inference",
             "$.check_fact_overlay.binding",
             "$.check_fact_overlay.overlay",
             "$.check_fact_overlay.dependencies",
