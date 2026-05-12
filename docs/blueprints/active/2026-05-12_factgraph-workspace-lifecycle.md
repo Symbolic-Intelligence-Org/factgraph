@@ -260,13 +260,28 @@ its existing format; `ledger.db` is obvious at the root.
 
 Options:
 
-- **W4a — add `factgraph_workspace.json` with version, relative paths, save
-  scope, and schema digest.**
+- **W4a — add `factgraph_workspace.json` with explicit v1 manifest fields.**
+  Minimum shape:
+  ```json
+  {
+    "factgraph_workspace_version": "1",
+    "save_scope": "level_4",
+    "schema_digest": "<digest>",
+    "components": {
+      "ledger": "ledger.db",
+      "registry": "registry/"
+    },
+    "created_at": "<iso-8601>",
+    "last_saved_at": "<iso-8601>"
+  }
+  ```
 - **W4b — no workspace manifest; infer from fixed paths.**
 - **W4c — store workspace metadata only in ledger meta.**
 
 Recommendation: **W4a**. A manifest gives `FactGraph.load(...)` one validation
-anchor without overloading ledger meta.
+anchor without overloading ledger meta. `save_scope` is intentionally explicit
+so future Level 5 work can detect whether artifacts/views are part of a
+workspace.
 
 ### 5.5 Q5 — Create-Time `path=` Behavior
 
@@ -304,7 +319,8 @@ Options:
 - **W7c — always require `path` for save.**
 
 Recommendation: **W7a**. This supports ergonomic `create(path=...)` / `save()`
-while keeping unbound in-memory graphs explicit.
+while keeping unbound in-memory graphs explicit. G2 should lock the unbound
+error anchor: `"workspace path not bound; pass fg.save(path=...) or create with FactGraph.create(path=...)"`.
 
 ### 5.8 Q8 — Ledger Save Mechanics
 
@@ -317,7 +333,10 @@ Options:
 
 Recommendation: **W8a**. It allows `FactGraph.create(..., path=...)` and
 in-memory graphs to converge on the same persisted layout. G2 should implement
-this through a helper, not by ad hoc row replays.
+this through a helper, not by ad hoc row replays. If the bound ledger is already
+the workspace target `ledger.db`, save should only flush/checkpoint as needed;
+SQLite backup/copy applies when the source ledger and target workspace ledger
+paths differ, such as `fg.save(other_path)`.
 
 ### 5.9 Q9 — Registry Save Mechanics
 
@@ -437,6 +456,20 @@ Options:
 Recommendation: **W18a**. Python users expect instance lifecycle methods. A
 static helper adds surface without a clear use case.
 
+### 5.19 Q19 — `from_schema_classes(...)` Path Parity
+
+Options:
+
+- **W19a — add `path=` to `from_schema_classes(...)` as full parity with
+  `FactGraph.create(...)`.**
+- **W19b — keep `path=` on `FactGraph.create(...)` only; leave
+  `from_schema_classes(...)` as the lower-level explicit constructor.**
+- **W19c — remove public `from_schema_classes(...)` in this slice.**
+
+Recommendation: **W19b**. `FactGraph.create(...)` is the product lifecycle
+constructor. Extending `from_schema_classes(...)` would expand an older
+class-first surface exactly as the lifecycle API is becoming canonical.
+
 ## 6. Boundaries And Invariants
 
 - `fg.save(...)` is graph/workspace persistence, not batch transaction staging.
@@ -454,6 +487,12 @@ static helper adds surface without a clear use case.
   selectors.
 - Direct runtime value-object use remains registry-free.
 - Public service/registry inference vocabulary remains unchanged.
+- `fg.save()` on an unchanged bound workspace is idempotent: it may update
+  `last_saved_at` in the workspace manifest, but it must not corrupt or
+  unnecessarily rewrite ledger/registry payloads.
+- `FactGraph.create(..., path=...)` owns the new graph-level path API;
+  `from_schema_classes(...)` remains the explicit lower-level constructor in
+  this slice.
 
 ## 7. Acceptance
 
@@ -488,8 +527,9 @@ Draft sequence, subject to G0:
    - add ledger copy/backup helper;
    - add registry copy/sync helper.
 3. G2 SDK binding:
-   - add `path=` to `FactGraph.create(...)` / `from_schema_classes(...)` if
-     locked;
+   - add `path=` to `FactGraph.create(...)`;
+   - leave `from_schema_classes(...)` as the lower-level explicit constructor
+     unless G0 changes Q19;
    - add `fg.save(path=None)`;
    - add `FactGraph.load(path, schema_classes=[...])`;
    - store bound workspace path on `SDKStore`.

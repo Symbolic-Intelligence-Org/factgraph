@@ -7,9 +7,11 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-12 | draft | Blueprint created | Draft seed created after Blueprint 1 public `Inference`, the inference wire/registry vocabulary slice, and Blueprint 2 authoring asset persistence facade all shipped. Source audit focused on `SDKStore` creation paths, file-backed `Ledger`, `FileAuthoringRegistry`, `FileArtifactSidecar`, `fg.views`, package export, batch `save`, and the absence of an application workspace runtime. Load-bearing constraints: first-slice load still needs Python schema classes; Level 4 workspace scope can include ledger + schema IR + registry assets but should exclude artifacts/views/audit/package; and graph-level `fg.save(...)` must be clearly separate from `_SDKBatchTx.save(...)`. |
+| 2026-05-12 | draft-polish | Manifest and constructor boundary refined | Made the `factgraph_workspace.json` v1 shape explicit, including `save_scope`, relative component paths, and timestamps. Locked the unbound `fg.save()` error anchor for G1 tests, clarified when SQLite backup/copy applies, added an idempotent-save invariant, and added Q19 recommending that `path=` stays on `FactGraph.create(...)` only while `from_schema_classes(...)` remains lower-level. |
 
 ## Decision Notes
 
 - 2026-05-12 draft: The central G0 choice is save scope. Level 3 omits authoring assets that Blueprint 2 just made first-class; Level 5 absorbs artifact/view/audit/package lifecycles that are not ready. The draft recommends Level 4.
 - 2026-05-12 draft: Class-less `FactGraph.load(path)` is intentionally deferred because current SDK hydration still depends on Python `Entity` classes and ledger metadata stores only `schema_digest`.
 - 2026-05-12 draft: Workspace save/load should introduce `kernel.application.workspace_runtime` rather than putting layout/copy logic directly in the SDK shell.
+- 2026-05-12 draft polish: `from_schema_classes(...)` should not be expanded with `path=` in the same slice. `FactGraph.create(...)` is now the canonical lifecycle constructor; the older class-first constructor remains explicit lower-level surface.
