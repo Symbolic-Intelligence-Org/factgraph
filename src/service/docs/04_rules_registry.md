@@ -9,7 +9,7 @@
 - `POST /v1/registry/schema/read`
 - `POST /v1/registry/assets/list`
 - `POST /v1/registry/rules/read`
-- `POST /v1/registry/derivations/read`
+- `POST /v1/registry/inferences/read`
 
 本文记录 service v1 的 rules facade 与 registry 只读接口 DTO 契约。runtime session / writes / query / views / packages 不在本文范围内。
 
@@ -240,11 +240,11 @@
         "digest": "sha256:aaa"
       }
     ],
-    "derivations": [
+    "inferences": [
       {
-        "derivation_id": "drv.country_copy",
+        "inference_id": "drv.country_copy",
         "version": "1.0.0",
-        "path": "derivations/drv.country_copy/1.0.0.json",
+        "path": "inferences/drv.country_copy/1.0.0.json",
         "digest": "sha256:bbb",
         "target_pred_id": "person:country"
       }
@@ -330,7 +330,7 @@
   "meta": {},
   "registry": {
     "rule_ids": ["q_country_rows"],
-    "derivation_ids": ["drv.country_copy"],
+    "inference_ids": ["drv.country_copy"],
     "apply_run_ids": ["apply-1"]
   }
 }
@@ -394,7 +394,7 @@
 - `condition_weights` 保留为 certainty/explain projection input，不是
   engine adapter 参数；未来运行时配置归
   `SemanticsProfile.certainty_projection`。Track 3 / E 已让 runtime
-  derivation evaluate 接受 top-level `semantics` profile，但 registry
+  inference evaluate 接受 top-level `semantics` profile，但 registry
   payload 形态在本阶段不变。
 - 当指定 `rule_id` 或 `rule_id+version` 在 registry 中不存在时，当前 contract 返回 `rule_spec: null`，不是错误 envelope。
 
@@ -403,14 +403,14 @@
 - `shape`
 - `runtime`
 
-## 8. `POST /v1/registry/derivations/read`
+## 8. `POST /v1/registry/inferences/read`
 
 请求（读取最新版本）：
 
 ```json
 {
   "root_dir": "/tmp/registry",
-  "derivation_id": "drv.country_copy"
+  "inference_id": "drv.country_copy"
 }
 ```
 
@@ -419,7 +419,7 @@
 ```json
 {
   "root_dir": "/tmp/registry",
-  "derivation_id": "drv.country_copy",
+  "inference_id": "drv.country_copy",
   "version": "1.0.0"
 }
 ```
@@ -431,8 +431,8 @@
   "ok": true,
   "errors": [],
   "meta": {},
-  "derivation_spec": {
-    "derivation_id": "drv.country_copy",
+  "inference_spec": {
+    "inference_id": "drv.country_copy",
     "version": "1.0.0",
     "target_pred_id": "person:country",
     "head_vars": ["$E", "$V"],
@@ -445,7 +445,13 @@
 说明：
 
 - `version` 可省略；省略时读取最新版本。
-- 当指定 derivation 不存在时，当前 contract 返回 `derivation_spec: null`，不是错误 envelope。
+- 当指定 inference 不存在时，当前 contract 返回 `inference_spec: null`，不是错误 envelope。
+
+注：registry 文件布局在本切片使用 `inferences/{id}/{version}.json`
+和 JSON 内的 `inference_id`。compiler substrate 仍使用
+`derivation_id`；`FileAuthoringRegistry` 在文件边界做双向转换。
+开发工作区若仍有旧 `registry/derivations/`，请手动重命名为
+`registry/inferences/` 或重新生成该工作区。
 
 错误 kinds：
 

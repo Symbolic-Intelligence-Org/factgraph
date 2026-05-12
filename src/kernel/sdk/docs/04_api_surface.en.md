@@ -313,22 +313,23 @@ DTOs. Import them directly from `kernel.application.protocol` or
 | `upsert_schema_ir(schema_ir)` | Insert/update compiled schema IR |
 | `register_rule_spec(spec)` | Register a low-level rule spec |
 | `register_rule(rule)` | Register an SDK `Rule` |
-| `register_derivation_spec(spec)` | Register a low-level inference spec |
-| `register_derivation(inference)` | Register an SDK `Inference` (single-head public surface; multi-head is rejected in Track 1) |
+| `register_inference_spec(spec)` | Register a low-level inference spec |
+| `register_inference(inference)` | Register an SDK `Inference` (single-head public surface; multi-head is rejected in Track 1) |
 | `get_schema_entry(...)` | Fetch a schema entry by id |
-| `list_rule_ids()` / `list_derivation_ids()` | Enumerate registered ids |
-| `list_rule_versions(id)` / `list_derivation_versions(id)` | Version history |
+| `list_rule_ids()` / `list_inference_ids()` | Enumerate registered ids |
+| `list_rule_versions(id)` / `list_inference_versions(id)` | Version history |
 | `list_apply_run_ids()` / `list_apply_runs()` | Enumerate apply runs |
 | `show_apply_run(run_id)` | Inspect a specific apply run |
-| `get_latest_rule_spec(id)` / `get_latest_derivation_spec(id)` | Latest version lookup |
-| `read_rule_spec(id, version)` / `read_derivation_spec(id, version)` | Specific version read |
+| `get_latest_rule_spec(id)` / `get_latest_inference_spec(id)` | Latest version lookup |
+| `read_rule_spec(id, version)` / `read_inference_spec(id, version)` | Specific version read |
 
-`register_derivation` is retained substrate vocabulary for the registry
-facade. It accepts public SDK `Inference` objects or lower-level authoring
-payloads with `derivation_*` keys. For multiple output facts, define one
-inference per head. Core/application internals may still carry tuple-shaped
-heads for lower-level protocol compatibility, but the public SDK boundary
-is single-head.
+`register_inference` accepts public SDK `Inference` objects or lower-level
+authoring payloads with compiler-substrate `derivation_*` keys. The registry
+facade persists public asset vocabulary (`inferences/` paths and
+`inference_id` JSON) while translating at the compiler boundary. For multiple
+output facts, define one inference per head. Core/application internals may
+still carry tuple-shaped heads for lower-level protocol compatibility, but
+the public SDK boundary is single-head.
 
 ---
 

@@ -387,7 +387,7 @@ Avoid the partial middle path unless G0 identifies a specific implementation blo
 - [x] G1 adds red tests for selected public service/registry rename surface.
 - [x] G1 adds guard tests that CandidateSet/application/core substrate remains unchanged if W10a is selected.
 - [x] G2 implements only the locked route/storage/method/doc-surface changes.
-- [ ] G3 updates affected module docs and reference docs.
+- [x] G3 updates affected module docs and reference docs.
 - [ ] G4 fills §10, marks implemented, and archives this blueprint pair.
 
 ## 8. Implementation Plan
@@ -421,12 +421,14 @@ Draft sequence, subject to G0:
 Likely docs if W1a/W2a/W5a/W6a lock:
 
 - `src/service/docs/01_overview.md`
+- `src/service/docs/02_runtime_sessions.md`
 - `src/service/docs/03_runtime_queries_policy.md`
 - `src/service/docs/04_rules_registry.md`
 - `src/service/docs/06_frontend_integration.md`
 - `src/kernel/sdk/docs/04_api_surface.en.md`
 - `src/kernel/authoring/docs/01_overview.md`
 - `src/kernel/core/docs/04_service_layer.md`
+- `docs/api/openapi.yaml`
 - `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`
 
 ## 10. Outcome / Deviations

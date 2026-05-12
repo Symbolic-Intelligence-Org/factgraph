@@ -4,7 +4,7 @@ info:
   version: v1
   description: |
     HTTP facade for factpy-kernel:
-    - Runtime session lifecycle, fact writes, queries with inline read policy, rules/derivations, package export
+    - Runtime session lifecycle, fact writes, queries with inline read policy, rules/inferences, package export
     - Rules authoring validation and compile preview
     - Registry read-only access
     - LLM document extraction
@@ -55,7 +55,7 @@ tags:
   - name: runtime-evidence
     description: Runtime evidence artefact readback (candidate / rule-trace).
   - name: runtime-exec
-    description: Rule run, derivation evaluate/accept, package export.
+    description: Rule run, inference evaluate/accept, package export.
   - name: registry
     description: Registry read-only access.
   - name: extraction
@@ -601,16 +601,16 @@ paths:
         "401": { $ref: "#/components/responses/UnauthorizedError" }
         "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
 
-  /v1/runtime/sessions/{session_id}/derivations/evaluate:
+  /v1/runtime/sessions/{session_id}/inferences/evaluate:
     parameters:
       - $ref: "#/components/parameters/SessionId"
     post:
       tags: [runtime-exec]
-      summary: Evaluate a derivation and return a CandidateSet.
+      summary: Evaluate an inference and return a CandidateSet.
       description: |
         Returns `CandidateSet` v2 structure (candidates with `candidate_id`,
         `candidate_key`, `candidate_kind`). See `02_runtime_sessions.md` §5.2
-        for request/response shape and `derivations/accept` handshake.
+        for request/response shape and `inferences/accept` handshake.
       requestBody:
         required: true
         content:
@@ -621,12 +621,12 @@ paths:
         "401": { $ref: "#/components/responses/UnauthorizedError" }
         "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
 
-  /v1/runtime/sessions/{session_id}/derivations/accept:
+  /v1/runtime/sessions/{session_id}/inferences/accept:
     parameters:
       - $ref: "#/components/parameters/SessionId"
     post:
       tags: [runtime-exec]
-      summary: Accept a derivation candidate returned by evaluate.
+      summary: Accept an inference candidate returned by evaluate.
       description: |
         Client must echo the full candidate payload (do not trim `terms` / identity fields).
       requestBody:
@@ -720,10 +720,10 @@ paths:
         "401": { $ref: "#/components/responses/UnauthorizedError" }
         "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
 
-  /v1/registry/derivations/read:
+  /v1/registry/inferences/read:
     post:
       tags: [registry]
-      summary: Read one derivation spec from a registry root.
+      summary: Read one inference spec from a registry root.
       requestBody:
         required: true
         content:

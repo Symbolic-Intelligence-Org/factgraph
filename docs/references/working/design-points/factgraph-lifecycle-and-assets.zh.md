@@ -98,8 +98,8 @@ Current implementation lives in `src/kernel/sdk/registry.py`.
 - `upsert_schema_ir(...)`;
 - `register_rule_spec(...)`;
 - `register_rule(...)`;
-- `register_derivation_spec(...)`;
-- `register_derivation(...)`;
+- `register_inference_spec(...)`;
+- `register_inference(...)`;
 - schema/rule/derivation lookup and listing helpers;
 - apply-run listing/showing.
 
@@ -169,7 +169,7 @@ Follow-up code review surfaced several facts that should be treated as design co
 5. **Round events live in a separate audit file layer.**
    Audit round events are file-backed separately from ledger rows. A future graph workspace save must decide whether audit/evidence files are in scope; it cannot assume "ledger save" includes audit evidence.
 
-6. **`SDKRegistry.register_derivation(...)` can recover schema IR from the registry.**
+6. **`SDKRegistry.register_inference(...)` can recover schema IR from the registry.**
    If `schema_ir` is omitted, registry code can retry compilation using persisted registry schema IR. This is a real precedent for registry as a durable schema reference, but it is not enough for class-less `FactGraph.load(...)` because the typed SDK still needs Python `Entity` classes or a dynamic facade.
 
 7. **`SDKStore.__init__` has no registry parameter today.**
@@ -182,7 +182,7 @@ Follow-up code review surfaced several facts that should be treated as design co
    Code audit found no existing `Inference` public class/export/file namespace collision. By contrast, `Derivation` appears across SDK DSL, tests, service routes, service payload keys, application protocol names, authoring compile functions, registry manifest keys, and filesystem paths such as `derivations/{id}/{version}.json`. Therefore public SDK rename is feasible, but full-stack substrate rename is a separate slice.
 
 10. **Registry methods return manifest dictionaries today.**
-   `SDKRegistry.register_rule(...)` and `SDKRegistry.register_derivation(...)` currently return dict-shaped manifest entries with kind/status/id/version/path/digest-style fields. Future `fg.rules.save(...)` / `fg.inferences.save(...)` should not accidentally inherit that raw return shape unless G0 explicitly chooses it. If public refs are preferred, the application-layer authoring runtime may need an internal DTO that can project either to a public `RuleRef` / `InferenceRef` or to any temporary registry manifest form.
+   `SDKRegistry.register_rule(...)` and `SDKRegistry.register_inference(...)` currently return dict-shaped manifest entries with kind/status/id/version/path/digest-style fields. Future `fg.rules.save(...)` / `fg.inferences.save(...)` should not accidentally inherit that raw return shape unless G0 explicitly chooses it. If public refs are preferred, the application-layer authoring runtime may need an internal DTO that can project either to a public `RuleRef` / `InferenceRef` or to any temporary registry manifest form.
 
 11. **Query identity is runtime-derived, not a persisted authoring identity.**
    `Query` is an SDK value object with runtime payload lowering, but no user-managed id/version persistence surface. The current runtime query id is a deterministic digest-like id (`__query__:<digest>`) derived from query shape and schema context, not a durable authoring asset id. That makes `fg.queries.save/load/list` a real design problem, not a cheap namespace parity add.
@@ -252,7 +252,7 @@ This note proposes the following working thesis for a future blueprint:
 
    over:
    - `fg.registry.register_rule`
-   - `fg.registry.register_derivation`
+   - `fg.registry.register_inference`
 
 5. **Schema mutation should be explicit and conservative.**
    `schema.add`, `schema.delete`, and `schema.update` sound simple, but schema evolution affects ledger compatibility, identity semantics, migrations, registry manifests, and provenance. First implementation should likely avoid destructive delete.
@@ -448,7 +448,7 @@ Why still require `schema_classes` in the first slice:
 
 - Current `SDKStore` needs Python `Entity` classes to build typed SDK behavior.
 - Ledger metadata currently records `schema_digest`, not enough to reconstruct Python classes.
-- Registry schema IR can help compile saved rules/derivations, but it does not reconstruct typed Python entity classes by itself.
+- Registry schema IR can help compile saved rules/inferences, but it does not reconstruct typed Python entity classes by itself.
 - Class-less load would require a dynamic entity facade or generated classes, which is a separate design.
 
 Future richer shape:
@@ -473,7 +473,7 @@ The core design question is save scope:
 1. ledger only;
 2. ledger + schema digest;
 3. ledger + schema IR;
-4. ledger + schema IR + registry manifest/rules/derivations;
+4. ledger + schema IR + registry manifest/rules/inferences;
 5. full graph workspace: ledger + schema + registry + artifacts + views + package metadata.
 
 This note recommends using "FactGraph workspace" for the larger concept, but not implementing the largest form until file layout is explicitly locked.
@@ -481,7 +481,7 @@ This note recommends using "FactGraph workspace" for the larger concept, but not
 First save/load blueprint should probably choose between:
 
 - **Level 3:** ledger + schema IR;
-- **Level 4:** ledger + schema IR + registry manifest/rules/derivations.
+- **Level 4:** ledger + schema IR + registry manifest/rules/inferences.
 
 Including artifacts, views, and audit/evidence round files is a larger workspace design and should not happen by accident.
 
@@ -603,7 +603,7 @@ fg.inferences.list()
 fg.inferences.load("inference_id")
 ```
 
-This can reuse the existing `SDKRegistry.register_rule(...)` and `SDKRegistry.register_derivation(...)` implementation knowledge, because those methods already accept SDK objects and compile them. It should not be treated as a reason to preserve `SDKRegistry` as public API or to preserve `Derivation` as a public SDK type.
+This can reuse the existing `SDKRegistry.register_rule(...)` and `SDKRegistry.register_inference(...)` implementation knowledge, because those methods already accept SDK objects and compile them. It should not be treated as a reason to preserve `SDKRegistry` as public API.
 
 The public naming difference is important:
 
@@ -615,7 +615,7 @@ But the verb family remains a future G0 decision because current managers use `c
 
 ### 9.3 Query asset lifecycle
 
-`Query` is currently part of the SDK DSL and runtime query stack, but not part of `SDKRegistry` persistence in the same way rules/derivations are.
+`Query` is currently part of the SDK DSL and runtime query stack, but not part of `SDKRegistry` persistence in the same way rules/inferences are.
 
 The current runtime query id is generated from lowered query shape and schema context. It is useful for execution determinism, but it is not the same as a user-managed saved query id. A future query asset design therefore needs to decide whether query identity is explicit, versioned, digest-derived, or some combination.
 
@@ -861,12 +861,18 @@ Non-goals:
 - `fg.save(...)`;
 - `fg.rules.save/load/list`;
 - `fg.inferences.save/load/list`;
-- service route / payload rename from `/derivations/*` to `/inferences/*`;
-- registry filesystem path rename from `derivations/` to `inferences/`;
+- service route / payload rename from `/derivations/*` to `/inferences/*`
+  (landed in the wire/registry vocabulary slice);
+- registry filesystem path rename from `derivations/` to `inferences/`
+  (landed in the wire/registry vocabulary slice);
 - schema mutation;
 - explain/evidence capability.
 
-Recommended follow-up ordering: if Blueprint 1 hard-cuts public SDK to `Inference`, run a dedicated wire/registry rename slice before the persistence facade. That keeps Blueprint 2 from landing on a mixed "public Inference + persistent derivation substrate" model.
+Recommended follow-up ordering: Blueprint 1 hard-cut public SDK to
+`Inference`, and the dedicated wire/registry rename slice landed before the
+persistence facade. Blueprint 2 can now start from a public inference
+vocabulary instead of a mixed "public Inference + persistent derivation
+registry" model.
 
 ### 13.2 Blueprint 2 — Authoring asset persistence facade
 
@@ -899,7 +905,7 @@ Larger, workspace-layout slice.
 Candidate scope:
 
 1. Lock workspace directory layout.
-2. Lock save scope, probably starting with ledger + schema IR + registry manifest/rules/derivations.
+2. Lock save scope, probably starting with ledger + schema IR + registry manifest/rules/inferences.
 3. Add `fg.save(path=None)`.
 4. Add `FactGraph.load(path, schema_classes=[...])`.
 5. Document workspace save/load vs package export.
@@ -914,16 +920,32 @@ Non-goals:
 
 ### 13.4 Inserted slice — Service and registry vocabulary rename
 
-If Blueprint 1 ships public `Inference`, run this before Blueprint 2 unless G0 deliberately accepts a longer mixed-vocabulary period.
+Blueprint 1 shipped public `Inference`. The follow-up wire/registry slice then
+hard-cut the remaining public service and registry vocabulary before Blueprint
+2, avoiding a longer mixed "public Inference + persistent derivation registry"
+period.
 
-Candidate scope:
+Landed scope:
 
-1. Rename service runtime routes from `/derivations/*` to `/inferences/*`, or add the new route and hard-cut old route in the same pre-release slice.
-2. Rename service payload key from `"derivation"` to `"inference"` where it represents the public candidate-producing object.
-3. Rename registry public asset language from derivation to inference.
-4. Decide whether filesystem paths move from `derivations/{id}/{version}.json` to `inferences/{id}/{version}.json`.
-5. Keep internal application protocol names such as `CompiledDerivationPlan` only if G0 classifies them as substrate vocabulary, not public product vocabulary.
-6. Update service docs and registry docs in the same slice.
+1. Service runtime routes are `/inferences/evaluate` and
+   `/inferences/accept`; `/derivations/*` routes are no longer public.
+2. Service runtime request payloads use top-level `"inference"` where they
+   represent the public candidate-producing object.
+3. Runtime evaluation response envelopes use `evaluation.inference_id`.
+   Nested candidate payloads intentionally retain `derivation_id` /
+   `derivation_version` until a future candidate/proof protocol cleanup.
+4. Registry public asset language uses inference: route
+   `/v1/registry/inferences/read`, request key `inference_id`, response key
+   `inference_spec`, manifest key `inferences`, and filesystem path
+   `inferences/{id}/{version}.json`.
+5. Registry spec JSON uses `inference_id`. Compiler-facing payloads still use
+   `derivation_id`; `FileAuthoringRegistry` translates at the storage
+   boundary.
+6. Internal application protocol names such as `CompiledDerivationPlan`,
+   `DerivationEvaluateRequest`, and provenance standard `derivation_v1`
+   remain substrate vocabulary.
+7. Service docs, registry docs, SDK registry docs, and authoring docs were
+   updated in the same slice.
 
 Non-goals:
 

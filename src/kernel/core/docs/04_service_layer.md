@@ -61,10 +61,10 @@ categories:
   view-facts (with inline read policy)
 - **runtime policy**: no named policy registry; `view-facts` accepts
   inline policy only
-- **runtime rule/derivation/package**: rules.run / derivations.evaluate
-  / derivations.accept / packages.export
+- **runtime rule/inference/package**: rules.run / inferences.evaluate
+  / inferences.accept / packages.export
 - **registry**: manifest / schema.read / assets.list / rules.read /
-  derivations.read
+  inferences.read
 
 ## 4. Service-to-core delegation pattern
 
@@ -77,8 +77,8 @@ Service routes go through stable entry points of `kernel.core`;
 | `POST /v1/runtime/sessions/{id}/writes/{set,add,retract}` | `kernel.core.write_protocol.{set,add,retract}_write(...)` |
 | `POST /v1/runtime/sessions/{id}/queries/view-facts` | `kernel.core.store.queries.project_view_facts_with_audit(...)` |
 | `POST /v1/runtime/sessions/{id}/rules/run` | `kernel.core.rules.run_rule(...)` |
-| `POST /v1/runtime/sessions/{id}/derivations/evaluate` | `Store.evaluate(mode=...)` over `native | souffle | problog | pyreason` |
-| `POST /v1/runtime/sessions/{id}/derivations/accept` | `Store.accept_many_candidate_sets(...)` |
+| `POST /v1/runtime/sessions/{id}/inferences/evaluate` | `Store.evaluate(mode=...)` over `native | souffle | problog | pyreason` |
+| `POST /v1/runtime/sessions/{id}/inferences/accept` | `Store.accept_many_candidate_sets(...)` |
 | `POST /v1/runtime/sessions/{id}/packages/export` | adapter export (e.g. `package_kind="audit"`) |
 
 Service rejects the following anti-patterns (which would break core
@@ -145,13 +145,13 @@ envelope concept back into core / application.
 - `policy` is optional and inline; `view_name` and old `view` fields
   are rejected with shape errors
 
-### 7.2 derivation and rule runtime
+### 7.2 inference and rule runtime
 
 - The runtime path also rejects `temporal_view` (explicit shape
   error)
-- `derivations/evaluate` returns candidates that
-  `derivations/accept` then echoes back
-- `derivations/accept` returns a serialized `AcceptResult`
+- `inferences/evaluate` returns candidates that
+  `inferences/accept` then echoes back
+- `inferences/accept` returns a serialized `AcceptResult`
   (including `diagnostics_contract_version`)
 - `rules/compile-preview` and the registry read interface preserve
   declarative metadata such as `description / tags` from the

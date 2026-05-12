@@ -3,7 +3,7 @@
 - Scope: `src/kernel/authoring`
 - Last updated: 2026-03-29
 - Audience: developers who need to understand schema / rule /
-  derivation preflight, publish, and registry workflows
+  inference preflight, publish, and registry workflows
 
 ## 1. Module responsibilities
 
@@ -15,8 +15,8 @@ It primarily handles:
 
 - schema preflight / compile
 - rule preflight / compile
-- derivation preview / compile
-- schema-aware lowering of derivation `head` syntax to canonical IR
+- inference preview / compile
+- schema-aware lowering of inference `head` syntax to canonical IR
 - authoring diagnostics and DTOs
 - registry file read/write
 - publish / apply / session workflow
@@ -119,7 +119,7 @@ class EmploymentEvent(Entity):
     company: str = Field(cardinality="single")
 ```
 
-### 3.2 Rule / derivation payload examples
+### 3.2 Rule / inference compiler payload examples
 
 ```python
 rule_payload = {
@@ -141,6 +141,10 @@ derivation_payload = {
     "where": [...],
 }
 ```
+
+The authoring compiler substrate still names this low-level key
+`derivation_id`. Registry storage translates to public `inference_id` at the
+file boundary.
 
 ## 4. Internal structure (by topic)
 
@@ -219,6 +223,9 @@ payload = {
 }
 ```
 
+These examples are compiler-facing payloads, so they intentionally use
+`derivation_id`. Persisted registry specs use `inference_id`.
+
 ### 5.2 Common compile errors (quick localization)
 
 - `$.materialize_as`: the caller still passed the deprecated
@@ -241,8 +248,8 @@ root_dir/
     schema_ir.json
   rules/
     <rule_id>/<version>.json
-  derivations/
-    <derivation_id>/<version>.json
+  inferences/
+    <inference_id>/<version>.json
   registry_manifest.json
   authoring_apply_events.jsonl
 ```
@@ -250,11 +257,18 @@ root_dir/
 These files form an **authoring asset repository**, not a runtime
 database.
 
+The compiler substrate still accepts and emits low-level payloads with
+`derivation_id`. The file registry translates those payloads at the storage
+boundary, so persisted inference specs use `inference_id` and live under
+`inferences/`. Developer workspaces created before this vocabulary rename
+should rename `registry/derivations/` to `registry/inferences/` or recreate
+the registry workspace.
+
 ## 7. Typical workflows
 
 ### 7.1 Preflight / compile
 
-1. Provide schema / rule / derivation as DSL, DTO, or object
+1. Provide schema / rule / inference as DSL, DTO, or object
    definitions
 2. Run parse / preflight / compile through the
    `schemas / rules / derivations` grouped modules
@@ -263,7 +277,7 @@ database.
 ### 7.2 Publish to a registry
 
 1. Create `FileAuthoringRegistry(root_dir=...)`
-2. Write the schema / rule / derivation versions
+2. Write the schema / rule / inference versions
 3. Update the manifest
 4. Record apply / publish events
 
@@ -274,7 +288,7 @@ database.
   read interface
 - `service.runtime_v1` may also read schemas / rules from the
   registry to support runtime sessions, `/rules/run`, and the native
-  `/derivations/evaluate` `RuleRef` resolution / execution
+  `/inferences/evaluate` `RuleRef` resolution / execution
 
 ## 8. Boundaries with other layers
 

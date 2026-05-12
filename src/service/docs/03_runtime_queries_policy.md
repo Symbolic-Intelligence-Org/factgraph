@@ -3,8 +3,8 @@
 范围：
 
 - `POST /v1/runtime/sessions/{session_id}/rules/run`
-- `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
-- `POST /v1/runtime/sessions/{session_id}/derivations/accept`
+- `POST /v1/runtime/sessions/{session_id}/inferences/evaluate`
+- `POST /v1/runtime/sessions/{session_id}/inferences/accept`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-support`
 - `POST /v1/runtime/sessions/{session_id}/queries/explain-rule-trace`
@@ -20,11 +20,11 @@
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
 - `POST /v1/runtime/sessions/{session_id}/packages/export`
 
-本文记录 service v1 的 runtime query、内联 read policy、rule/derivation 执行与 package export DTO 契约。session open/get/close、writes、claims 和 rules/registry 端点不在本文范围内。
+本文记录 service v1 的 runtime query、内联 read policy、rule/inference 执行与 package export DTO 契约。session open/get/close、writes、claims 和 rules/registry 端点不在本文范围内。
 
 ## 通用约定
 
-- 所有 `/v1/...` runtime query/policy/derivation 端点默认都要求 `X-FactPy-API-Key`。
+- 所有 `/v1/...` runtime query/policy/inference 端点默认都要求 `X-FactPy-API-Key`。
 - 缺失或错误 key 返回 `HTTP 401`，且不会进入 JSON envelope。
 - 认证启用但未配置 `FACTPY_KERNEL_API_KEYS` 时返回 `HTTP 503`，且不会进入 JSON envelope。
 - 只有通过认证后，应用层成功/失败才继续使用 `HTTP 200` JSON envelope。
@@ -32,7 +32,7 @@
 - `session_id` 一律走 path parameter。
 - tuple 在 JSON 中统一序列化为 list。
 - `entity_ref`（如 `idref_v1:...`）直接按普通字符串透传，不额外包装。
-- runtime query/rule/derivation 链路不再接受 `temporal_view`；传入时返回 `shape` error。
+- runtime query/rule/inference 链路不再接受 `temporal_view`；传入时返回 `shape` error。
 - `view-facts` 不再有命名 view registry。需要 read-time confidence/display aggregation 时，在请求体内传 `policy` 对象；`view_name` 和旧的 `view` 字段都会返回 `shape` error。
 
 成功 envelope 示例：
@@ -552,7 +552,7 @@
   - `proof_leaf` 只表示 logical terminal，不携带 `asrt_id`，也不链接 assertion detail page
 - first-round 不新增 `source_kind` / `provenance_kind` 字段；`node_kind` 本身即为 provenance-role carrier
 - `rule_ref` node_kind 同时用于 legacy flat 和 structured edge；consumer 通过 `ruleref_atom_key` 字段有无区分
-- deeper assertion-origin taxonomy（direct write / derivation accept / import）deferred
+- deeper assertion-origin taxonomy（direct write / inference accept / import）deferred
 
 错误 kinds：
 
@@ -1000,13 +1000,13 @@
 - 成功时返回 HTML
 - 失败时仍复用 service 的统一异常处理
 
-## 8. `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
+## 8. `POST /v1/runtime/sessions/{session_id}/inferences/evaluate`
 
 请求：
 
 ```json
 {
-  "derivation": {
+  "inference": {
     "derivation_id": "drv.country_copy",
     "version": "1.0.0",
     "target": "person:country_copy",
@@ -1032,7 +1032,7 @@
     "truncated": false
   },
   "evaluation": {
-    "derivation_id": "drv.country_copy",
+    "inference_id": "drv.country_copy",
     "version": "1.0.0",
     "target_pred_id": "person:country_copy",
     "candidates": [
@@ -1073,19 +1073,19 @@
   - `probability`
   - `certainty`
 - Souffle deterministic 路径当前写 `confidence_kind="none"`；ProbLog 路径在填充 `confidence` 时写 `confidence_kind="probability"`。
-- runtime native derivation 当前会在 create-time 注入 certainty resolver：
+- runtime native inference 当前会在 create-time 注入 certainty resolver：
   - 只有 single resolved child-rule edge 且 child rule payload 含非空 `condition_weights` 时，candidate DTO 才会自动写 `confidence_kind="certainty"`
   - 其余 native 场景继续回落到 `none`
   - SDK parity 当前 deferred；未注入 resolver 的路径保持 `none`
-- native derivation evaluate 当前会填充 `support_kind="native_binding_v1"`。
+- native inference evaluate 当前会填充 `support_kind="native_binding_v1"`。
 - `souffle` evaluate 现在可在 runtime live path 上填充 `support_kind="souffle_witness_v1"`：
   - 前提是 adapter 能通过 `_w` witness 变体为当前 where 产出 assertion witness
   - 此时 `support_digest` 为真实 digest，不再是 zero placeholder
   - runtime `explain` / `explain-tree` 会把它视为 witness-bearing support
 - `override_registry_root` 可选；未提供时默认复用 session 绑定的 `registry_root`。
 - 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供。
-- runtime derivation evaluation 使用 top-level `engine` 选择后端；
-  `derivation.mode` 和 top-level `mode` 都会被拒绝。
+- runtime inference evaluation 使用 top-level `engine` 选择后端；
+  `inference.mode` 和 top-level `mode` 都会被拒绝。
 - Track 3 / B 已引入 core `SemanticsProfile` scaffolding，Track 3 / C
   已让 core `Store.evaluate(..., mode="problog", semantics_profile=...)`
   消费 `rule_projection.problog`。Track 3 / D 也已让 core
@@ -1093,33 +1093,33 @@
   `rule_projection.pyreason` 与 `temporal_projection`。Track 3 / E 让
   service runtime 消费 top-level `semantics` inline dict，并通过
   `SemanticsProfile(**semantics)` 校验；`semantics_profile` 和
-  `derivation.semantics` / `derivation.semantics_profile` 继续返回
+  `inference.semantics` / `inference.semantics_profile` 继续返回
   `shape` error。
 - Track 2 的 `ProbLogSemantics` / `PyReasonSemantics` 是 SDK-only wrapper：
-  SDK 会在持有 SDK `Rule` / `Derivation` 对象时解析 branch id 并 lower 成
+  SDK 会在持有 SDK `Rule` / `Inference` 对象时解析 branch id 并 lower 成
   canonical `SemanticsProfile`。Service runtime 不接受 wrapper-style JSON
   keys，例如 `branch_probabilities` / `timestep_delay` / `head_bound` /
   `branch_bounds`；
   service 仍只接受 top-level canonical `SemanticsProfile` shape。
-- native `engine="native"` derivation 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：
+- native `engine="native"` inference 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：
   - 若已有 filesystem registry，ephemeral rules 在其后 merge
   - 若 `registry_root is None` 但 session 有 ephemeral rules，service 会临时创建一个空 `RuleRegistry()` 并注入
 - 若两边重名，filesystem rule 优先
 - 该 merge 只对 native + `ruleref(...)` 路径承诺生效；Souffle / ProbLog / PyReason 模式不消费 session-scoped ephemeral rules。
-- native derivation where 若使用字符串 `RuleRef("rule_id", version)`，必须通过：
+- native inference where 若使用字符串 `RuleRef("rule_id", version)`，必须通过：
   - `override_registry_root`
   - legacy `registry_root`
   - 或 session-level `registry_root`
   - 或当前 session 已注册的 matching ephemeral rule
   提供显式 registry context；否则运行时会 fail fast。
-- native derivation support 当前可记录 direct `rule_refs`，因此后续 `explain-support` / `explain-tree` 可能看到 minimal `rule_ref` 节点；这还不是递归 child proof。
-- native derivation support 现在会优先记录 structured `rule_ref_edges`，因此后续 `explain-support` / `explain-tree` 已可沿 `child_support_digest` 继续展开 first-round recursive proof。
+- native inference support 当前可记录 direct `rule_refs`，因此后续 `explain-support` / `explain-tree` 可能看到 minimal `rule_ref` 节点；这还不是递归 child proof。
+- native inference support 现在会优先记录 structured `rule_ref_edges`，因此后续 `explain-support` / `explain-tree` 已可沿 `child_support_digest` 继续展开 first-round recursive proof。
 - direct `rule_refs` 继续保留为兼容摘要字段；child row proof 复用既有 native `SupportArtifact` readback，而不是发明第二套 handle。
 - evaluate 失败时，常见 agent-facing恢复分支会在 `errors[0].details` 中追加稳定字段：
   - unknown RuleRef：`error_code="unknown_rule_ref"` + `missing_rule_ref` + `remediation_hint="register_referenced_rule_first_or_check_fs_registry"`
   - RuleRef target not exposed：`error_code="rule_not_expose"` + `rule_ref_id` + `remediation_hint="add_expose_true_to_rule_definition"`
   - unknown predicate：`error_code="unknown_predicate"` + `missing_pred_id` + `remediation_hint="verify_pred_id_via_GET_sessions_schema"`
-- native derivation support 现已在 capture 阶段应用 winning-branch narrowing：
+- native inference support 现已在 capture 阶段应用 winning-branch narrowing：
   - `pred_witnesses`
   - `non_fact_steps`
   - `rule_ref_edges`
@@ -1157,9 +1157,9 @@
 - `runtime_session_not_found`
 - `string_dsl_unsupported`
 - `authoring_derivation_compile`
-- `derivation_evaluate`
+- `inference_evaluate`
 
-## 9. `POST /v1/runtime/sessions/{session_id}/derivations/accept`
+## 9. `POST /v1/runtime/sessions/{session_id}/inferences/accept`
 
 请求：
 

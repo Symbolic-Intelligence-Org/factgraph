@@ -111,7 +111,7 @@ await del(`/v1/runtime/sessions/${sessionId}`);
 
 完整 DTO:[`02_runtime_sessions.md`](./02_runtime_sessions.md)。
 
-### 1.3 Chain C:跑规则 → 评估 derivation → accept candidate
+### 1.3 Chain C:跑规则 → 评估 inference → accept candidate
 
 ```ts
 // 0. 假设 session 已开
@@ -121,9 +121,9 @@ let r = await post(`/v1/runtime/sessions/${sessionId}/rules/run`, {
   version: "1.0.0",
 });
 
-// 2. evaluate 一条 derivation
-r = await post(`/v1/runtime/sessions/${sessionId}/derivations/evaluate`, {
-  derivation: {
+// 2. evaluate 一条 inference
+r = await post(`/v1/runtime/sessions/${sessionId}/inferences/evaluate`, {
+  inference: {
     derivation_id: "drv.country_copy",
     version: "1.0.0",
     target: "person:country_copy",
@@ -134,7 +134,7 @@ r = await post(`/v1/runtime/sessions/${sessionId}/derivations/evaluate`, {
 
 // 3. accept 选中的 candidate —— 必须回传完整 payload
 for (const candidate of r.result.candidates) {
-  await post(`/v1/runtime/sessions/${sessionId}/derivations/accept`, {
+  await post(`/v1/runtime/sessions/${sessionId}/inferences/accept`, {
     candidate,                    // 完整 echo,不要裁 terms / identity
   });
 }
@@ -226,9 +226,9 @@ async function call<T extends Envelope>(
 
 (extraction 路由的状态码语义略有不同,见 agent.service.docs。)
 
-### 3.3 `derivations/accept` 要完整 echo candidate
+### 3.3 `inferences/accept` 要完整 echo candidate
 
-`POST /v1/runtime/sessions/{session_id}/derivations/accept` 的 request body **必须包含 evaluate 返回的完整 candidate payload**(含 `terms` / identity)。裁剪会触发 `shape` 错误。
+`POST /v1/runtime/sessions/{session_id}/inferences/accept` 的 request body **必须包含 evaluate 返回的完整 candidate payload**(含 `terms` / identity)。裁剪会触发 `shape` 错误。
 
 ### 3.5 `rest_terms` 是类型化二元组
 

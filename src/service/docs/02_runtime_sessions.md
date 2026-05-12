@@ -515,7 +515,7 @@ Query 参数：
 说明：
 
 - 该操作只清空当前 session 的 `ephemeral_rules` 列表。
-- 清空后，后续 `rules/run` / native `derivations/evaluate` 不再看到这些临时规则。
+- 清空后，后续 `rules/run` / native `inferences/evaluate` 不再看到这些临时规则。
 
 错误 kinds：
 

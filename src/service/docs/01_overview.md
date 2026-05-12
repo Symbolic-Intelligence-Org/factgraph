@@ -1,7 +1,7 @@
 # Service 模块总览（kernel）
 
 - 范围：`src/service`
-- 最后更新：2026-05-06
+- 最后更新：2026-05-12
 - 目标读者：需要通过 HTTP 对接 runtime / registry 的前后端开发者
 
 前端 / 机读 API 参考：[`06_frontend_integration.md`](./06_frontend_integration.md)（集成指南）+ [`../../../docs/api/openapi.yaml`](../../../docs/api/openapi.yaml)（OpenAPI 3.0 机读契约，43 个 operation 全覆盖；漂移守卫：`scripts/export_openapi.py`，需 `PYTHONPATH=src` 执行）。
@@ -18,11 +18,11 @@
 - facts 写入 / 查询
 - rule validate / compile-preview
 - runtime rule 执行
-- derivation evaluate / accept
+- inference evaluate / accept
 - explain/conflicts/view-facts 查询
 - runtime read policy DTO
 - package 导出
-- registry manifest / schema / assets / rule / derivation 读取
+- registry manifest / schema / assets / rule / inference 读取
 
 它不负责：
 
@@ -51,7 +51,7 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `rules_v1.py`
   - rule validate / compile-preview / profile 列表
 - `runtime_v1.py`
-- runtime session、facts 写入/查询、inline policy、rule/derivation 执行、package 导出
+- runtime session、facts 写入/查询、inline policy、rule/inference 执行、package 导出
 - `registry_v1.py`
   - registry 只读接口
 - `_common.py`
@@ -71,7 +71,7 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `02_runtime_sessions.md`
   - runtime session 生命周期、writes、claims。
 - `03_runtime_queries_policy.md`
-  - runtime query、inline policy、rule/derivation 执行、package export。
+  - runtime query、inline policy、rule/inference 执行、package export。
 - `04_rules_registry.md`
   - rules facade 与 registry 只读接口。
 - `06_frontend_integration.md`
@@ -118,11 +118,11 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
   accepts inline `policy` and no longer exposes named runtime view
   lifecycle routes.
 
-### 4.5 runtime rule/derivation/package
+### 4.5 runtime rule/inference/package
 
 - `POST /v1/runtime/sessions/{session_id}/rules/run`
-- `POST /v1/runtime/sessions/{session_id}/derivations/evaluate`
-- `POST /v1/runtime/sessions/{session_id}/derivations/accept`
+- `POST /v1/runtime/sessions/{session_id}/inferences/evaluate`
+- `POST /v1/runtime/sessions/{session_id}/inferences/accept`
 - `POST /v1/runtime/sessions/{session_id}/packages/export`
 
 ### 4.6 registry
@@ -131,7 +131,7 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `POST /v1/registry/schema/read`
 - `POST /v1/registry/assets/list`
 - `POST /v1/registry/rules/read`
-- `POST /v1/registry/derivations/read`
+- `POST /v1/registry/inferences/read`
 
 注:`POST /v1/extraction/documents` 已不在本 service 内,迁至 `agent.service.app`,见 [`src/agent/service/docs/05_extraction.md`](../../../agent/service/docs/05_extraction.md)。
 
@@ -142,19 +142,19 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 1. 前端调用 `/v1/runtime/sessions/open`
 2. service 打开或创建 `Ledger(path=ledger_path)`，并绑定 schema digest
 3. 返回 `session_id`
-4. 后续前端通过 `session_id` 调写入、查询、运行 rule/derivation、导出 package
+4. 后续前端通过 `session_id` 调写入、查询、运行 rule/inference、导出 package
 
-### 5.2 derivation evaluate/accept（v2）
+### 5.2 inference evaluate/accept（v2）
 
-- `derivations/evaluate` 返回 `CandidateSet` v2 结构（含 `candidate_id/candidate_key/candidate_kind`）。
+- `inferences/evaluate` 返回 `CandidateSet` v2 结构（含 `candidate_id/candidate_key/candidate_kind`）。
 - fact candidate 主 payload 形态为 `terms`；entity candidate 主 payload 形态为 identity 解析字段。
-- `derivations/accept` 要求客户端回传完整 candidate payload；不要裁剪 `terms`/identity 字段。
+- `inferences/accept` 要求客户端回传完整 candidate payload；不要裁剪 `terms`/identity 字段。
 
 最小请求示例（evaluate）：
 
 ```json
 {
-  "derivation": {
+  "inference": {
     "derivation_id": "drv.country_copy",
     "version": "1.0.0",
     "target": "person:country_copy",
@@ -163,6 +163,10 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
   }
 }
 ```
+
+注：请求与 route 使用 public `inference` vocabulary；candidate payload
+仍保留 `derivation_id` / `derivation_version` substrate 字段，供
+accept/proof/audit 链路 round-trip。
 
 最小请求示例（accept）：
 
@@ -208,7 +212,7 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 ### 5.4 registry 读取
 
 1. 前端提供 `root_dir`
-2. service 使用 `FileAuthoringRegistry(root_dir)` 读取 schema / rule / derivation
+2. service 使用 `FileAuthoringRegistry(root_dir)` 读取 schema / rule / inference
 3. 返回结构化 envelope
 
 ## 6. 与其他层的关系
@@ -222,6 +226,6 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 
 ## 7. 当前限制
 
-- 当前仅暴露单条 derivation `accept`，尚未暴露 `accept_many` HTTP 接口
+- 当前仅暴露单条 inference `accept`，尚未暴露 `accept_many` HTTP 接口
 - 错误 envelope 当前统一走 `{ok, errors, meta}`；未捕获异常由 `app_v1` 全局 exception handler 统一包装
 - `HttpRuntimeAPI` 这类 HTTP 调用方若访问启用认证的 kernel，需要自行提供 API key header；`LocalRuntimeAPI` 不经过 HTTP 认证层
