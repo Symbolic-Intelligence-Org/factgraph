@@ -302,22 +302,34 @@ Options:
 
 Recommendation: **W12a**. This is a vocabulary slice; docs lag would be the main failure mode.
 
-### 5.13 Decision path summary
+### 5.13 Q13: Per-spec JSON file content under W6a
+
+W6a renames manifest/path storage to inference vocabulary, while W9a keeps the authoring compiler's substrate input/output on `derivation_id`. The per-spec JSON file content needs an explicit boundary decision.
+
+Options:
+
+- **W13a** Per-spec JSON files under `inferences/{id}/{version}.json` use `inference_id`; `FileAuthoringRegistry` translates between compiler `derivation_id` and registry-file `inference_id` at its boundary.
+- **W13b** Per-spec JSON files keep `derivation_id`; only manifest/path use inference vocabulary.
+- **W13c** Rename the compiler substrate to `inference_id` as well, effectively choosing W9c.
+
+Recommendation: **W13a**. This gives developer-visible registry workspaces a consistent inference vocabulary while keeping the deeper authoring compiler/core substrate unchanged. The translation boundary is narrow and local to `FileAuthoringRegistry`.
+
+### 5.14 Decision path summary
 
 The questions above collapse into two coherent paths:
 
 **Path A — aggressive vocabulary cleanup (recommended):**
 
 ```text
-W1a + W2a + W3a/W3c + W4a + W5a + W6a + W7a + W8a + W9a + W10a + W11a + W12a
+W1a + W2a + W3a/W3c + W4a + W5a + W6a + W7a + W8a + W9a + W10a + W11a + W12a + W13a
 ```
 
-This hard-cuts the public service and registry vocabulary to inference, including file-registry manifest/path shape. It leaves only the deep candidate/proof substrate on derivation vocabulary: `CandidateSet.derivation_id`, `CompiledDerivationPlan`, core store parameters, and proof/audit language.
+This hard-cuts the public service and registry vocabulary to inference, including file-registry manifest/path and per-spec JSON file shape. It leaves only the deep candidate/proof/compiler substrate on derivation vocabulary: compiler inputs/outputs, `CandidateSet.derivation_id`, `CompiledDerivationPlan`, core store parameters, and proof/audit language.
 
 **Path B — conservative service-only cleanup:**
 
 ```text
-W1a + W2a + W3a/W3c + W4a + W5c + W6c + W7c + W8b + W9a + W10a + W11a + W12a
+W1a + W2a + W3a/W3c + W4a + W5c + W6c + W7c + W8b + W9a + W10a + W11a + W12a + W13b
 ```
 
 This hard-cuts runtime service routes and request keys, but leaves registry/service asset vocabulary and storage for the persistence-facade blueprint. It reduces implementation size but preserves more mixed vocabulary.
@@ -343,6 +355,7 @@ Avoid the partial middle path unless G0 identifies a specific implementation blo
 - [ ] G0 locks registry storage path/manifest behavior.
 - [ ] G0 locks SDKRegistry and FileAuthoringRegistry method-name behavior.
 - [ ] G0 locks application/core DTO and CandidateSet boundary.
+- [ ] G0 locks per-spec registry JSON file vocabulary under W6a.
 - [ ] G1 adds red tests for selected public service/registry rename surface.
 - [ ] G1 adds guard tests that CandidateSet/application/core substrate remains unchanged if W10a is selected.
 - [ ] G2 implements only the locked route/storage/method/doc-surface changes.
@@ -357,7 +370,7 @@ Draft sequence, subject to G0:
    - route existence / old-route rejection;
    - request key behavior;
    - registry route + key + response behavior;
-   - storage manifest/path behavior if W6a locks;
+   - storage manifest/path/per-spec JSON behavior if W6a locks;
    - guards for CandidateSet and application DTO names if W10a locks.
    - cleanup of the stale service test import from public `Derivation` to public `Inference`; this is Blueprint 1 fallout and should not depend on any G0 choice.
 2. G2 service wire implementation:
