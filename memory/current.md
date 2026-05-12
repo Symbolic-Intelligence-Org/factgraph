@@ -1,5 +1,47 @@
 # Current Operational Memory
 
+最后更新:2026-05-13(schema mutation lifecycle published; source `f0279791`)
+
+## 当前阶段(2026-05-13 — SCHEMA MUTATION LIFECYCLE PUBLISHED)
+
+**Current source state:** `origin/master = f0279791`.
+
+**Published slice:**
+- `origin/milestone/schema-mutation-lifecycle-2026-05-13 = f0279791`.
+- G0-G4 schema mutation lifecycle slice is implemented, archived, and published.
+- This is the first post-rc.3 slice milestone.
+
+**Release refs remain intact:**
+- `origin/release/0.1.x = e996aa5b`.
+- `v0.1.0-rc.1`, `v0.1.0-rc.2`, and `v0.1.0-rc.3` remain untouched.
+
+**Landed behavior:**
+- `fg.schema.add(EntityCls)` and `fg.schema.add(schema_classes=[...])` are public.
+- `SchemaAddResult(old_digest, new_digest, added_entities)` is exported from `kernel.sdk`.
+- New application layer module: `kernel.application.schema_mutation_runtime`.
+- Additive schema extension updates in-memory SDK/core state immediately.
+- Ledger and registry schema digests are anchored before mutation and updated after validation.
+- Workspace manifests remain save-time state; `fg.save()` records the new digest.
+- `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and `fg.schema.deprecate` remain absent.
+
+**Verification:**
+- `test_schema_mutation_lifecycle.py`: 39/39 OK.
+- Lifecycle/assets preservation: 88/88 OK.
+- SDK invariants: 57/57 OK.
+- Post-publish verification confirmed `origin/master`, the milestone branch ref, release branch, and rc tags.
+
+**Memory detail:** [project_schema_mutation_lifecycle_implemented.md](./project_schema_mutation_lifecycle_implemented.md).
+
+**Remaining independent design lines:**
+- destructive schema lifecycle (`delete` / `deprecate` / `update` / `migrate`);
+- query persistence;
+- explain/evidence user surface;
+- class-less dynamic workspace load;
+- package/workspace convergence;
+- legacy docs hygiene, including `docs/blueprint_history/` disclaimers if needed.
+
+<!-- Historical 2026-05-13 rc.3 publish state follows. -->
+
 最后更新:2026-05-13(`v0.1.0-rc.3` published; source `f49ccc58`, release commit `e996aa5b`)
 
 ## 当前阶段(2026-05-13 — v0.1.0-rc.3 PUBLISHED)

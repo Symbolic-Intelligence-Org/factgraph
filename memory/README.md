@@ -22,6 +22,12 @@
 
 - [current.md](/Users/zhenzhili/hnsm-backend/memory/current.md)
   - 当前 canonical operational memory 入口。
+- [project_v0_1_0_rc3_published.md](/Users/zhenzhili/hnsm-backend/memory/project_v0_1_0_rc3_published.md)
+  - `v0.1.0-rc.3` publish checkpoint.
+- [project_lifecycle_assets_remaining_after_rc3.md](/Users/zhenzhili/hnsm-backend/memory/project_lifecycle_assets_remaining_after_rc3.md)
+  - rc.3 之后仍未完成的 lifecycle/assets 设计线索。
+- [project_schema_mutation_lifecycle_implemented.md](/Users/zhenzhili/hnsm-backend/memory/project_schema_mutation_lifecycle_implemented.md)
+  - `fg.schema.add(...)` additive schema mutation lifecycle publish checkpoint.
 - `session_handoffs/YYYY-MM-DD.md`
   - 按日期保留的 handoff 记录，用于回放某一工作日的 stopping point。
 
