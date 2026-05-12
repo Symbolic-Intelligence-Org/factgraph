@@ -297,7 +297,7 @@ class ServiceSemanticsCallsiteTests(unittest.TestCase):
                         "problog": [{"target": "branch:0", "kind": "branch_probability", "value": 0.35}]
                     },
                 },
-                "derivation": _runtime_derivation_payload(),
+                "inference": _runtime_derivation_payload(),
             },
         )
 
@@ -307,7 +307,7 @@ class ServiceSemanticsCallsiteTests(unittest.TestCase):
     def test_service_rejects_top_level_semantics_profile_keyword(self) -> None:
         resp = evaluate_runtime_derivation(
             self.session_id,
-            {"engine": "problog", "semantics_profile": {"name": "x"}, "derivation": _runtime_derivation_payload()},
+            {"engine": "problog", "semantics_profile": {"name": "x"}, "inference": _runtime_derivation_payload()},
         )
 
         self.assertFalse(resp["ok"], resp)
@@ -318,10 +318,10 @@ class ServiceSemanticsCallsiteTests(unittest.TestCase):
         derivation = dict(_runtime_derivation_payload())
         derivation["semantics"] = {"name": "x"}
 
-        resp = evaluate_runtime_derivation(self.session_id, {"engine": "problog", "derivation": derivation})
+        resp = evaluate_runtime_derivation(self.session_id, {"engine": "problog", "inference": derivation})
 
         self.assertFalse(resp["ok"], resp)
-        self.assertEqual(resp["errors"][0]["path"], "$.derivation.semantics")
+        self.assertEqual(resp["errors"][0]["path"], "$.inference.semantics")
 
     def test_service_rejects_profile_engine_mismatch(self) -> None:
         resp = evaluate_runtime_derivation(
@@ -329,7 +329,7 @@ class ServiceSemanticsCallsiteTests(unittest.TestCase):
             {
                 "engine": "pyreason",
                 "semantics": {"name": "profile.e.service.problog", "engine": "problog"},
-                "derivation": _runtime_derivation_payload(),
+                "inference": _runtime_derivation_payload(),
             },
         )
 

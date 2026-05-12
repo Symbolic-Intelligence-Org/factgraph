@@ -67,7 +67,7 @@ def _build_parser() -> argparse.ArgumentParser:
     registry_list.add_argument(
         "--kind",
         required=True,
-        choices=("rule_ids", "derivation_ids", "apply_run_ids", "rule_versions", "derivation_versions"),
+        choices=("rule_ids", "inference_ids", "apply_run_ids", "rule_versions", "inference_versions"),
     )
     registry_list.add_argument("--id")
 
@@ -76,7 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
     registry_show.add_argument(
         "--kind",
         required=True,
-        choices=("manifest", "schema", "rule", "derivation", "apply-run"),
+        choices=("manifest", "schema", "rule", "inference", "apply-run"),
     )
     registry_show.add_argument("--id")
     registry_show.add_argument("--version")
@@ -180,18 +180,18 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
         list_kind = str(args.kind)
         if list_kind == "rule_ids":
             items = registry.list_rule_ids()
-        elif list_kind == "derivation_ids":
-            items = registry.list_derivation_ids()
+        elif list_kind == "inference_ids":
+            items = registry.list_inference_ids()
         elif list_kind == "apply_run_ids":
             items = registry.list_apply_run_ids()
         elif list_kind == "rule_versions":
             if not args.id:
                 raise AuthoringCLIError("--id is required for --kind rule_versions")
             items = registry.list_rule_versions(args.id)
-        elif list_kind == "derivation_versions":
+        elif list_kind == "inference_versions":
             if not args.id:
-                raise AuthoringCLIError("--id is required for --kind derivation_versions")
-            items = registry.list_derivation_versions(args.id)
+                raise AuthoringCLIError("--id is required for --kind inference_versions")
+            items = registry.list_inference_versions(args.id)
         else:
             raise AuthoringCLIError(f"unsupported registry list kind: {list_kind}")
         return {
@@ -219,15 +219,15 @@ def _dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 if not args.version:
                     raise AuthoringCLIError("--version is required for --kind rule when --latest is not set")
                 item = registry.read_rule_spec(args.id, args.version)
-        elif show_kind == "derivation":
+        elif show_kind == "inference":
             if not args.id:
-                raise AuthoringCLIError("--id is required for --kind derivation")
+                raise AuthoringCLIError("--id is required for --kind inference")
             if args.latest:
-                item = registry.get_latest_derivation_spec(args.id)
+                item = registry.get_latest_inference_spec(args.id)
             else:
                 if not args.version:
-                    raise AuthoringCLIError("--version is required for --kind derivation when --latest is not set")
-                item = registry.read_derivation_spec(args.id, args.version)
+                    raise AuthoringCLIError("--version is required for --kind inference when --latest is not set")
+                item = registry.read_inference_spec(args.id, args.version)
         elif show_kind == "apply-run":
             if not args.id:
                 raise AuthoringCLIError("--id is required for --kind apply-run")

@@ -140,7 +140,7 @@ class ServiceEngineExtTests(unittest.TestCase):
                 {
                     "engine": "native",
                     "engine_ext": {"kind": "problog"},
-                    "derivation": _runtime_derivation_payload(),
+                    "inference": _runtime_derivation_payload(),
                 },
             )
 
@@ -159,12 +159,12 @@ class ServiceEngineExtTests(unittest.TestCase):
                 session_id,
                 {
                     "engine": "native",
-                    "derivation": derivation,
+                    "inference": derivation,
                 },
             )
 
             self.assertFalse(resp["ok"], resp)
-            self.assertEqual(resp["errors"][0]["path"], "$.derivation.engine_ext")
+            self.assertEqual(resp["errors"][0]["path"], "$.inference.engine_ext")
             self.assertIn("SemanticsProfile", resp["errors"][0]["details"]["message"])
         finally:
             close_runtime_session(session_id)

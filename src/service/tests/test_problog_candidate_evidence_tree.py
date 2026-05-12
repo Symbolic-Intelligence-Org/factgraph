@@ -187,7 +187,7 @@ class ProbLogCandidateEvidenceTreeTests(unittest.TestCase):
                 session_id,
                 {
                     "engine": "problog",
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.problog_runtime_tree",
                         "version": "1.0.0",
                         "target": "user:tag",

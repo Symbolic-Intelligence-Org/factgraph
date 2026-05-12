@@ -226,10 +226,10 @@ class HttpRuntimeAPI:
         return self._post_json(f"/sessions/{session_id}/queries/explain-timeline", dto)
 
     def evaluate_derivation(self, session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
-        return self._post_json(f"/sessions/{session_id}/derivations/evaluate", dto)
+        return self._post_json(f"/sessions/{session_id}/inferences/evaluate", dto)
 
     def accept_derivation(self, session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
-        return self._post_json(f"/sessions/{session_id}/derivations/accept", dto)
+        return self._post_json(f"/sessions/{session_id}/inferences/accept", dto)
 
     def close_session(self, session_id: str) -> dict[str, Any]:
         return self._delete_json(f"/sessions/{session_id}")

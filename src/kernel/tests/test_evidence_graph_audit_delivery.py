@@ -93,7 +93,7 @@ class EvidenceGraphAuditDeliveryTests(unittest.TestCase):
     ) -> dict[str, object]:
         eval_resp = evaluate_runtime_derivation(
             session_id,
-            {"engine": engine, "derivation": derivation},
+            {"engine": engine, "inference": derivation},
         )
         self.assertTrue(eval_resp["ok"])
         candidate = dict(eval_resp["evaluation"]["candidates"][0])

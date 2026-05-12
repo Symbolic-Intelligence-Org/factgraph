@@ -47,7 +47,7 @@ def _register_ephemeral_user_tag_rule(
 
 def _native_derivation_dto(*, rule_id: str = "q.user_tag_rows", version: str = "1.0.0") -> dict:
     return {
-        "derivation": {
+        "inference": {
             "derivation_id": "drv.runtime.user_tag_copy",
             "version": "1.0.0",
             "target": "user:tag",
@@ -56,8 +56,8 @@ def _native_derivation_dto(*, rule_id: str = "q.user_tag_rows", version: str = "
                 ["ruleref", rule_id, version, ["$u", "$tag"]],
                 ["eq", "$tag", "vip"],
             ],
-            "mode": "native",
-        }
+        },
+        "engine": "native",
     }
 
 

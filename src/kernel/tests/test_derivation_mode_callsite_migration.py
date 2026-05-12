@@ -145,7 +145,7 @@ class ServiceDerivationModeTests(unittest.TestCase):
                 session_id,
                 {
                     "engine": "problog",
-                    "derivation": _runtime_derivation_payload(),
+                    "inference": _runtime_derivation_payload(),
                 },
             )
 
@@ -166,12 +166,12 @@ class ServiceDerivationModeTests(unittest.TestCase):
                 session_id,
                 {
                     "engine": "native",
-                    "derivation": derivation,
+                    "inference": derivation,
                 },
             )
 
             self.assertFalse(resp["ok"], resp)
-            self.assertEqual(resp["errors"][0]["path"], "$.derivation.mode")
+            self.assertEqual(resp["errors"][0]["path"], "$.inference.mode")
             self.assertIn("call-site", resp["errors"][0]["details"]["message"])
         finally:
             close_runtime_session(session_id)

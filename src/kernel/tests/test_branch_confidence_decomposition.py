@@ -143,7 +143,7 @@ class ServiceBranchConfidenceTests(unittest.TestCase):
                 {
                     "engine": "native",
                     "body_confidences": [0.9],
-                    "derivation": _runtime_derivation_payload(),
+                    "inference": _runtime_derivation_payload(),
                 },
             )
 
@@ -162,12 +162,12 @@ class ServiceBranchConfidenceTests(unittest.TestCase):
                 session_id,
                 {
                     "engine": "native",
-                    "derivation": derivation,
+                    "inference": derivation,
                 },
             )
 
             self.assertFalse(resp["ok"], resp)
-            self.assertEqual(resp["errors"][0]["path"], "$.derivation.body_confidences")
+            self.assertEqual(resp["errors"][0]["path"], "$.inference.body_confidences")
             self.assertIn("ProbLogRuleExt.branch_probabilities", resp["errors"][0]["details"]["message"])
         finally:
             close_runtime_session(session_id)

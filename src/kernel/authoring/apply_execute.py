@@ -483,8 +483,8 @@ def _dispatch_registry_write(
     if section == "rule_preflight" and action_name == "register_rule_spec":
         return registry.register_rule_spec(payload)
     if section == "derivation_preview" and action_name == "preview_derivation":
-        result = registry.register_derivation_spec(payload)
-        result["executed_action"] = "register_derivation_spec"
+        result = registry.register_inference_spec(payload)
+        result["executed_action"] = "register_inference_spec"
         return result
     raise AuthoringRegistryFSError(f"unsupported executable action: {section}/{action_name}")
 
@@ -506,8 +506,8 @@ def _dispatch_registry_prevalidate(
     if section == "rule_preflight" and action_name == "register_rule_spec":
         return registry.preview_register_rule_spec(payload)
     if section == "derivation_preview" and action_name == "preview_derivation":
-        result = registry.preview_register_derivation_spec(payload)
-        result["executed_action"] = "register_derivation_spec"
+        result = registry.preview_register_inference_spec(payload)
+        result["executed_action"] = "register_inference_spec"
         return result
     raise AuthoringRegistryFSError(f"unsupported executable action: {section}/{action_name}")
 

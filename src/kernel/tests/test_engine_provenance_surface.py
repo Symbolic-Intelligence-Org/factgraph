@@ -89,7 +89,7 @@ class EngineProvenanceSurfaceTests(unittest.TestCase):
                 session_id,
                 {
                     "engine": "pyreason",
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.pyreason_runtime_provenance",
                         "version": "1.0.0",
                         "target": "user:popular",
@@ -146,7 +146,7 @@ class EngineProvenanceSurfaceTests(unittest.TestCase):
                 session_id,
                 {
                     "engine": "problog",
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.problog_runtime_provenance",
                         "version": "1.0.0",
                         "target": "user:tag",

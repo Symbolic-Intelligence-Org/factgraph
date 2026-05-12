@@ -175,7 +175,7 @@ class ArtifactSidecarContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     first_session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.tag_copy",
                             "version": "1.0.0",
                             "target": "user:tag",

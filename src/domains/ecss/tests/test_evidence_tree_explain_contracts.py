@@ -191,7 +191,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.runtime.user_tag_tree",
                             "version": "1.0.0",
                             "target": "user:tag",
@@ -268,7 +268,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
             eval_resp = evaluate_runtime_derivation(
                 session_id,
                 {
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.tag_copy",
                         "version": "1.0.0",
                         "target": "user:tag",
@@ -369,7 +369,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
             eval_resp = evaluate_runtime_derivation(
                 first_session_id,
                 {
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.tag_copy.unified",
                         "version": "1.0.0",
                         "target": "user:tag",
@@ -500,7 +500,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
             eval_resp = evaluate_runtime_derivation(
                 session_id,
                 {
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.tag_copy.evidence_tree",
                         "version": "1.0.0",
                         "target": "user:tag",
@@ -1470,7 +1470,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                 session_id,
                 {
                     "engine": "souffle",
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.engine_degraded_explain",
                         "version": "1.0.0",
                         "target": "user:tag",
@@ -1589,7 +1589,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                 session_id,
                 {
                     "engine": "souffle",
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.engine_degraded_tree.audit",
                         "version": "1.0.0",
                         "target": "user:tag",
@@ -1719,7 +1719,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
             eval_resp = evaluate_runtime_derivation(
                 session_id,
                 {
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.tag_copy.unified.route",
                         "version": "1.0.0",
                         "target": "user:tag",

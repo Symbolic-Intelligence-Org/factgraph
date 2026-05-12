@@ -372,7 +372,7 @@ class PublicBoundaryTests(unittest.TestCase):
                         "type": "problog",
                         "branch_probabilities": {"b0": 0.35},
                     },
-                    "derivation": _runtime_derivation_payload(),
+                    "inference": _runtime_derivation_payload(),
                 },
             )
         finally:

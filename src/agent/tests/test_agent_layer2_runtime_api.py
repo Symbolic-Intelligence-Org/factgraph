@@ -11,7 +11,7 @@ from agent.tools._runtime_api import HttpRuntimeAPI, LocalRuntimeAPI
 class AgentLayer2RuntimeAPITests(unittest.TestCase):
     def test_local_runtime_api_evaluate_derivation_dispatches_to_runtime(self) -> None:
         api = LocalRuntimeAPI()
-        payload = {"derivation": {"derivation_id": "drv.x"}}
+        payload = {"inference": {"derivation_id": "drv.x"}}
         expected = {"ok": True, "evaluation": {"candidates": []}}
         with patch(
             "service.runtime_v1.evaluate_runtime_derivation",
@@ -35,17 +35,17 @@ class AgentLayer2RuntimeAPITests(unittest.TestCase):
 
     def test_http_runtime_api_evaluate_derivation_uses_expected_route(self) -> None:
         api = HttpRuntimeAPI("http://localhost:8000/v1/runtime")
-        payload = {"derivation": {"derivation_id": "drv.x"}}
+        payload = {"inference": {"derivation_id": "drv.x"}}
         with patch.object(api, "_post_json", return_value={"ok": True}) as mocked:
             api.evaluate_derivation("rt_123", payload)
-        mocked.assert_called_once_with("/sessions/rt_123/derivations/evaluate", payload)
+        mocked.assert_called_once_with("/sessions/rt_123/inferences/evaluate", payload)
 
     def test_http_runtime_api_accept_derivation_uses_expected_route(self) -> None:
         api = HttpRuntimeAPI("http://localhost:8000/v1/runtime")
         payload = {"candidate": {"candidate_id": "cand_1"}}
         with patch.object(api, "_post_json", return_value={"ok": True}) as mocked:
             api.accept_derivation("rt_123", payload)
-        mocked.assert_called_once_with("/sessions/rt_123/derivations/accept", payload)
+        mocked.assert_called_once_with("/sessions/rt_123/inferences/accept", payload)
 
 
 if __name__ == "__main__":

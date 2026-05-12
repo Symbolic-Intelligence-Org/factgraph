@@ -57,7 +57,7 @@ def _register_ephemeral_user_tag_rule(session_id: str, *, rule_id: str = "q.user
 
 def _native_eval_request(*, rule_id: str = "q.user_tag_rows") -> EvaluateRequest:
     return EvaluateRequest(
-        derivation={
+        inference={
             "derivation_id": "drv.runtime.user_tag_copy",
             "version": "1.0.0",
             "target": "user:tag",
@@ -66,8 +66,8 @@ def _native_eval_request(*, rule_id: str = "q.user_tag_rows") -> EvaluateRequest
                 ["ruleref", rule_id, "1.0.0", ["$u", "$tag"]],
                 ["eq", "$tag", "vip"],
             ],
-            "mode": "native",
-        }
+        },
+        engine="native",
     )
 
 

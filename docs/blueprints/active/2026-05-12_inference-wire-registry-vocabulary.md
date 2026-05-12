@@ -386,7 +386,7 @@ Avoid the partial middle path unless G0 identifies a specific implementation blo
 - [x] G0 locks per-spec registry JSON file vocabulary under W6a.
 - [x] G1 adds red tests for selected public service/registry rename surface.
 - [x] G1 adds guard tests that CandidateSet/application/core substrate remains unchanged if W10a is selected.
-- [ ] G2 implements only the locked route/storage/method/doc-surface changes.
+- [x] G2 implements only the locked route/storage/method/doc-surface changes.
 - [ ] G3 updates affected module docs and reference docs.
 - [ ] G4 fills §10, marks implemented, and archives this blueprint pair.
 

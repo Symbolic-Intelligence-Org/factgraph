@@ -216,13 +216,13 @@ def post_runtime_run_rule(session_id: str, payload: dict[str, Any] = Body(...)) 
     return run_runtime_rule(session_id, payload)
 
 
-@app.post("/v1/runtime/sessions/{session_id}/derivations/evaluate", dependencies=AUTH_DEPENDENCIES)
-def post_runtime_evaluate_derivation(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+@app.post("/v1/runtime/sessions/{session_id}/inferences/evaluate", dependencies=AUTH_DEPENDENCIES)
+def post_runtime_evaluate_inference(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return evaluate_runtime_derivation(session_id, payload)
 
 
-@app.post("/v1/runtime/sessions/{session_id}/derivations/accept", dependencies=AUTH_DEPENDENCIES)
-def post_runtime_accept_derivation(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+@app.post("/v1/runtime/sessions/{session_id}/inferences/accept", dependencies=AUTH_DEPENDENCIES)
+def post_runtime_accept_inference(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return accept_runtime_derivation(session_id, payload)
 
 

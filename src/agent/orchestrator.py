@@ -720,14 +720,14 @@ class ReadReviewOrchestrator:
             outcome = EvaluateOutcome(status="not_requested")
         else:
             request = EvaluateRequest(
-                derivation={
+                inference={
                     "derivation_id": f"agent_rule_eval_{spec.rule_id}",
                     "version": spec.version,
                     "target": evaluate_target_pred_id,
                     "head_vars": list(spec.select_vars),
                     "where": [["ruleref", spec.rule_id, spec.version, list(spec.select_vars)]],
-                    "mode": "native",
                 },
+                engine="native",
                 limit=evaluate_limit,
             )
             try:

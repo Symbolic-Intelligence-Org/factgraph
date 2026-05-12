@@ -1116,7 +1116,7 @@ Derivation(
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.runtime.user_tag_copy",
                             "version": "1.0.0",
                             "target": "user:tag",
@@ -1186,7 +1186,7 @@ Derivation(
             eval_resp = evaluate_runtime_derivation(
                 session_id,
                 {
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.runtime.user_tag_recipe",
                         "version": "1.0.0",
                         "target": "user:tag",
@@ -1246,7 +1246,7 @@ Derivation(
             first_eval = evaluate_runtime_derivation(
                 session_id,
                 {
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.runtime.user_tag_reused",
                         "version": "1.0.0",
                         "target": "user:tag",
@@ -1264,7 +1264,7 @@ Derivation(
             second_eval = evaluate_runtime_derivation(
                 session_id,
                 {
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.runtime.user_tag_reused",
                         "version": "1.0.0",
                         "target": "user:tag",

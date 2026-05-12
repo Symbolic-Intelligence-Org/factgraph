@@ -92,7 +92,7 @@ def _export_single_candidate_audit_package_with_provenance(
         eval_resp = evaluate_runtime_derivation(
             session_id,
             {
-                "derivation": {
+                "inference": {
                     "derivation_id": "drv.provenance.audit",
                     "version": "1.0.0",
                     "target": "user:tag",
@@ -1173,7 +1173,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.certainty.e2e",
                             "version": "1.0.0",
                             "target": "user:tag",
@@ -1290,7 +1290,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.certainty.audit",
                             "version": "1.0.0",
                             "target": "user:tag",
@@ -1383,7 +1383,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.tag_copy",
                             "version": "1.0.0",
                             "target": "user:tag",
@@ -1448,7 +1448,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
             eval_resp = evaluate_runtime_derivation(
                 session_id,
                 {
-                    "derivation": {
+                    "inference": {
                         "derivation_id": "drv.no_registry",
                         "version": "1.0.0",
                         "target": "user:tag",
@@ -1494,7 +1494,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.no_weights",
                             "version": "1.0.0",
                             "target": "user:tag",
@@ -1543,7 +1543,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.certainty.static",
                             "version": "1.0.0",
                             "target": "user:tag",
@@ -1720,7 +1720,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.no_provenance",
                             "version": "1.0.0",
                             "target": "user:tag",
@@ -1844,7 +1844,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.conf_carrier",
                             "version": "1.0.0",
                             "target": "user:tag",
@@ -1923,7 +1923,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.conf_e2e",
                             "version": "1.0.0",
                             "target": "user:tag",
@@ -2008,7 +2008,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 eval_resp = evaluate_runtime_derivation(
                     session_id,
                     {
-                        "derivation": {
+                        "inference": {
                             "derivation_id": "drv.additive.e2e",
                             "version": "1.0.0",
                             "target": "user:tag",

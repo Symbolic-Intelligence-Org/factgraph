@@ -14,11 +14,12 @@ from .explain import ExplainTools
 class EvaluateRequest:
     """Structured runtime evaluate request body."""
 
-    derivation: dict[str, Any]
+    inference: dict[str, Any]
+    engine: str = "native"
     limit: int | None = None
 
     def to_dto(self) -> dict[str, Any]:
-        dto: dict[str, Any] = {"derivation": dict(self.derivation)}
+        dto: dict[str, Any] = {"engine": self.engine, "inference": dict(self.inference)}
         if self.limit is not None:
             dto["limit"] = int(self.limit)
         return dto
@@ -26,7 +27,7 @@ class EvaluateRequest:
 
 @dataclass(frozen=True)
 class EvaluateResult:
-    derivation_id: str
+    inference_id: str
     version: str
     target_pred_id: str
     mode: str
@@ -128,7 +129,7 @@ class EvaluateTools:
             candidates,
         )
         return EvaluateResult(
-            derivation_id=_require_non_empty_str(evaluation.get("derivation_id"), "evaluation.derivation_id"),
+            inference_id=_require_non_empty_str(evaluation.get("inference_id"), "evaluation.inference_id"),
             version=_require_non_empty_str(evaluation.get("version"), "evaluation.version"),
             target_pred_id=_require_non_empty_str(
                 evaluation.get("target_pred_id"),

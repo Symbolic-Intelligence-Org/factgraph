@@ -102,7 +102,7 @@ class PyReasonTimelineExplainFamilyTests(unittest.TestCase):
             session_id,
             {
                 "engine": "pyreason",
-                "derivation": {
+                "inference": {
                     "derivation_id": "drv.pyreason_risk",
                     "version": "1.0.0",
                     "target": "vendor:risk_signal",

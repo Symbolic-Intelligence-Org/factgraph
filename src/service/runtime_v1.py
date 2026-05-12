@@ -948,27 +948,27 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             # Snapshot read views (.at/.version) are already implemented in sdk.facade.
             # Re-enable this only when runtime temporal write semantics are defined.
             raise facade_error(
-                "temporal_view is removed from runtime derivation evaluation",
+                "temporal_view is removed from runtime inference evaluation",
                 kind="shape",
                 path="$.temporal_view",
             )
         if isinstance(dto, dict) and "body_confidences" in dto:
             raise facade_error(
-                "body_confidences is not accepted in runtime derivation evaluation; "
+                "body_confidences is not accepted in runtime inference evaluation; "
                 "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
                 kind="shape",
                 path="$.body_confidences",
             )
         if isinstance(dto, dict) and "engine_ext" in dto:
             raise facade_error(
-                "engine_ext is not accepted in runtime derivation evaluation; "
+                "engine_ext is not accepted in runtime inference evaluation; "
                 "use future SemanticsProfile.rule_projection",
                 kind="shape",
                 path="$.engine_ext",
             )
         if isinstance(dto, dict) and "semantics_profile" in dto:
             raise facade_error(
-                "semantics_profile is not accepted in runtime derivation evaluation; use semantics",
+                "semantics_profile is not accepted in runtime inference evaluation; use semantics",
                 kind="shape",
                 path="$.semantics_profile",
             )
@@ -1018,14 +1018,14 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
                 "truncated": len(returned_candidates) != len(candidates),
             },
             evaluation={
-                "derivation_id": compiled["derivation_id"],
+                "inference_id": compiled["derivation_id"],
                 "version": compiled["version"],
                 "target_pred_id": compiled["target_pred_id"],
                 "candidates": [_candidate_to_dict(item) for item in returned_candidates],
             },
         )
     except Exception as exc:
-        err = _runtime_exception_to_error(exc, default_kind="derivation_evaluate")
+        err = _runtime_exception_to_error(exc, default_kind="inference_evaluate")
         err = _enrich_runtime_error_for_agent(err, exc)
         return error_response([err])
 
@@ -1374,55 +1374,57 @@ def _resolve_rule_registry_root(session: RuntimeSession, dto: dict[str, Any]) ->
 def _compile_runtime_derivation(dto: Any, *, schema_ir: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(dto, dict):
         raise facade_error("dto must be object", kind="shape", path="$")
-    derivation = dto.get("derivation")
-    if isinstance(derivation, str):
+    if "derivation" in dto:
+        raise facade_error("use top-level inference, not derivation", kind="shape", path="$.inference")
+    inference = dto.get("inference")
+    if isinstance(inference, str):
         raise facade_error(
-            "string derivation DSL is not supported in service v1; send structured derivation object",
+            "string inference DSL is not supported in service v1; send structured inference object",
             kind="string_dsl_unsupported",
-            path="$.derivation",
-            details={"strategy": "object_derivation_only", "input_kind": "string"},
+            path="$.inference",
+            details={"strategy": "object_inference_only", "input_kind": "string"},
         )
-    if not isinstance(derivation, dict):
-        raise facade_error("derivation must be object", kind="shape", path="$.derivation")
-    if "mode" in derivation:
+    if not isinstance(inference, dict):
+        raise facade_error("inference must be object", kind="shape", path="$.inference")
+    if "mode" in inference:
         raise facade_error(
-            "derivation.mode is not accepted; use call-site engine selection",
+            "inference.mode is not accepted; use call-site engine selection",
             kind="shape",
-            path="$.derivation.mode",
+            path="$.inference.mode",
         )
-    if "body_confidences" in derivation:
+    if "body_confidences" in inference:
         raise facade_error(
-            "derivation.body_confidences is not accepted; "
+            "inference.body_confidences is not accepted; "
             "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
             kind="shape",
-            path="$.derivation.body_confidences",
+            path="$.inference.body_confidences",
         )
-    if "engine_ext" in derivation:
+    if "engine_ext" in inference:
         raise facade_error(
-            "derivation.engine_ext is not accepted; use future SemanticsProfile.rule_projection",
+            "inference.engine_ext is not accepted; use future SemanticsProfile.rule_projection",
             kind="shape",
-            path="$.derivation.engine_ext",
+            path="$.inference.engine_ext",
         )
-    if "semantics" in derivation:
+    if "semantics" in inference:
         raise facade_error(
-            "derivation.semantics is not accepted in B; Track 3 / E owns runtime consumption",
+            "inference.semantics is not accepted in B; Track 3 / E owns runtime consumption",
             kind="shape",
-            path="$.derivation.semantics",
+            path="$.inference.semantics",
         )
-    if "semantics_profile" in derivation:
+    if "semantics_profile" in inference:
         raise facade_error(
-            "derivation.semantics_profile is not accepted in B; Track 3 / E owns runtime consumption",
+            "inference.semantics_profile is not accepted in B; Track 3 / E owns runtime consumption",
             kind="shape",
-            path="$.derivation.semantics_profile",
+            path="$.inference.semantics_profile",
         )
-    normalized = dict(derivation)
+    normalized = dict(inference)
     for key in ("where", "body"):
         raw_where = normalized.get(key)
         if isinstance(raw_where, str):
             raise facade_error(
                 "string where DSL is not supported in service v1; send structured where IR",
                 kind="string_dsl_unsupported",
-                path=f"$.derivation.{key}",
+                path=f"$.inference.{key}",
                 details={"strategy": "structured_where_ir_only", "input_kind": "string"},
             )
         if key in normalized:
@@ -1435,7 +1437,7 @@ def _resolve_runtime_derivation_engine(dto: Any) -> str:
         raise facade_error("dto must be object", kind="shape", path="$")
     if "mode" in dto:
         raise facade_error(
-            "top-level mode is not accepted for derivation evaluation; use engine",
+            "top-level mode is not accepted for inference evaluation; use engine",
             kind="shape",
             path="$.mode",
         )

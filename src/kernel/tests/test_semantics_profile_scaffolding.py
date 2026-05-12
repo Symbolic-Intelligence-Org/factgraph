@@ -233,7 +233,7 @@ class PublicIntegrationRejectionTests(unittest.TestCase):
         try:
             semantics_resp = evaluate_runtime_derivation(
                 session_id,
-                {"engine": "native", "semantics": {"name": "x"}, "derivation": _runtime_derivation_payload()},
+                {"engine": "native", "semantics": {"name": "x"}, "inference": _runtime_derivation_payload()},
             )
             self.assertFalse(semantics_resp["ok"], semantics_resp)
             self.assertEqual(semantics_resp["errors"][0]["path"], "$.semantics")
@@ -241,7 +241,7 @@ class PublicIntegrationRejectionTests(unittest.TestCase):
 
             profile_resp = evaluate_runtime_derivation(
                 session_id,
-                {"engine": "native", "semantics_profile": {"name": "x"}, "derivation": _runtime_derivation_payload()},
+                {"engine": "native", "semantics_profile": {"name": "x"}, "inference": _runtime_derivation_payload()},
             )
             self.assertFalse(profile_resp["ok"], profile_resp)
             self.assertEqual(profile_resp["errors"][0]["path"], "$.semantics_profile")
@@ -262,11 +262,11 @@ class PublicIntegrationRejectionTests(unittest.TestCase):
                 derivation[key] = {"name": "x"}
                 resp = evaluate_runtime_derivation(
                     session_id,
-                    {"engine": "native", "derivation": derivation},
+                    {"engine": "native", "inference": derivation},
                 )
 
                 self.assertFalse(resp["ok"], resp)
-                self.assertEqual(resp["errors"][0]["path"], f"$.derivation.{key}")
+                self.assertEqual(resp["errors"][0]["path"], f"$.inference.{key}")
                 self.assertIn("Track 3 / E", resp["errors"][0]["details"]["message"])
         finally:
             close_runtime_session(session_id)
