@@ -133,6 +133,9 @@ The operation is immediate, additive-only, and class-based:
    schema.
 4. Reject existing entity type changes, field changes on existing entity types,
    identity changes, predicate rewrites, and removals.
+   New entity types may declare relationships to existing entity types; the
+   resulting predicates are part of the additive set as long as existing schema
+   components are unchanged.
 5. Atomically refresh SDK/Core schema state and digest anchors.
 6. If a ledger is bound, update ledger `schema_digest` from old digest to new
    digest only if it currently equals the old digest.
@@ -156,6 +159,15 @@ The operation is immediate, additive-only, and class-based:
   `fg.schema.migrate(...)` are not created unless G0 widens scope.
 - Hard delete must not be smuggled in through `add(...)` by accepting a
   replacement class list that omits existing schema components.
+- Validation must complete before any state mutation. The implementation should
+  use a preflight/commit split: first validate class inputs, candidate schema
+  shape, additive compatibility, ledger digest, and registry digest; only then
+  update in-memory state, ledger metadata, and registry schema. If a
+  post-validation write still fails, raise `SDKStoreError` with enough context
+  to identify which phase failed.
+- After `fg.schema.add(...)`, follow-on `fg.rules.save(...)` and
+  `fg.inferences.save(...)` must use the new schema digest and must be able to
+  save assets that reference newly added entity classes.
 
 ## 7. G0 Questions
 
@@ -213,9 +225,18 @@ surprising ways. Workspace manifest remains save-time state.
 
 ### Q6. Additive compatibility validator
 
-- **S6a** Candidate schema must preserve every existing entity type, identity
-  field, predicate id, predicate owner, field name, type domain, and cardinality
-  exactly; only new entity types and their predicates may appear. Recommended.
+- **S6a** Candidate schema must pass an explicit additive diff validator.
+  Recommended. The validator checks:
+  1. every existing entity type remains present;
+  2. every existing entity's identity fields remain byte-for-byte equivalent
+     after schema canonicalization;
+  3. every existing predicate id remains present;
+  4. every existing predicate's owner, `py_field_name`, `arg_specs`, value type
+     domain, cardinality, and semantic flags remain equivalent;
+  5. existing relationship targets are not changed;
+  6. new entity types may introduce new predicates, including relationship
+     predicates that target existing entity types;
+  7. new predicate ids must not collide with existing predicate ids.
 - **S6b** Preserve only entity and predicate ids.
 - **S6c** Rely on `ensure_schema_ir(...)` and skip explicit additive diff.
 
@@ -301,12 +322,24 @@ mutation result with the graph object.
 
 Recommendation: **S14a**. Public lifecycle behavior must not lag behind code.
 
+### Q15. Re-adding an already present class
+
+- **S15a** Idempotent no-op: accept the call and return
+  `SchemaAddResult(added_entities=[])` when every supplied class is already
+  present and equivalent. Recommended.
+- **S15b** Reject with "entity already exists".
+- **S15c** Accept only if caller passes `allow_existing=True`.
+
+Recommendation: **S15a**. Idempotency matches Blueprint 2's schema upsert
+behavior and makes repeated setup cells/notebooks safe.
+
 ## 8. Acceptance
 
 - [ ] G0 locks first-slice schema mutation scope.
 - [ ] G0 locks public API shape and supported add targets.
 - [ ] G0 locks digest anchor update behavior.
 - [ ] G0 locks delete/update/migrate as included or deferred.
+- [ ] G0 locks re-add idempotency behavior.
 - [ ] G1 baseline covers additive entity add, rejection of unsafe deltas, and
   lifecycle preservation guards.
 - [ ] G2 implementation keeps SDK/Core schema state refresh atomic.
@@ -317,9 +350,16 @@ Recommendation: **S14a**. Public lifecycle behavior must not lag behind code.
 ## 9. Implementation Plan
 
 1. G1 red/guard baseline:
+   - expected scope is roughly 30-40 tests because the matrix spans additive
+     diff categories, ledger/registry/workspace digest anchors, idempotency,
+     and lifecycle preservation guards;
    - forward tests for `fg.schema.add(NewEntity)`;
    - rejection tests for duplicate entity type and changed existing schema;
+   - strict additive validator tests for entity removal, identity change,
+     predicate owner/name/type/cardinality changes, relationship target changes,
+     and predicate id collisions;
    - digest anchor tests for in-memory, ledger, registry, and workspace save;
+   - idempotent re-add tests;
    - guards for `fg.schema.delete/update/migrate` absence;
    - preservation tests for rules/inferences/workspace lifecycle.
 2. G2 implementation:
@@ -351,4 +391,3 @@ Task completion will fill:
 - Validation:
 - Deviations:
 - Archive notes:
-
