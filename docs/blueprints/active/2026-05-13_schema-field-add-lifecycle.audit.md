@@ -9,6 +9,7 @@
 | 2026-05-13 | draft | Blueprint created | Audit-first draft after schema mutation lifecycle publish. |
 | 2026-05-13 | draft | Draft polish | Added superseded-class detection invariant, DSL prefix boundary, and G1 baseline sizing note. |
 | 2026-05-13 | scoped | G0 scope freeze | Locked 17 field-add decisions: reuse `fg.schema.add`, same-entity replacement class, superseded class rejection, `SchemaAddResult.added_fields`, non-identity only, no defaults/backfill, additive validator extension, digest/workspace reuse, saved asset compatibility, and docs sync. |
+| 2026-05-13 | scoped | G1 red baseline | Added 33-test field-add baseline: 8 failures + 11 errors + 14 guards/pass. Preservation suite remains 184/184 OK. |
 
 ## Decision Notes
 
