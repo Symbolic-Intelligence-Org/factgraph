@@ -143,11 +143,11 @@ class SemanticsProfileValidationTests(unittest.TestCase):
 
         self.assertIn("uncertainty_projection", str(ctx.exception))
 
-    def test_rejects_temporal_projection_mode_other_than_none(self) -> None:
+    def test_rejects_unknown_temporal_projection_mode(self) -> None:
         with self.assertRaises(ValueError) as ctx:
-            _minimal_profile(temporal_projection={"mode": "valid_time_boundaries"})
+            _minimal_profile(temporal_projection={"mode": "custom_timeline", "steps": []})
 
-        self.assertIn("Track 3 / D", str(ctx.exception))
+        self.assertIn("custom_timeline", str(ctx.exception))
 
 
 class SemanticsProfileInspectionTests(unittest.TestCase):

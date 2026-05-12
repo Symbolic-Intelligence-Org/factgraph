@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from kernel.core.semantics import SemanticsProfile
 from kernel.core.store.types import EngineExtBase
 from kernel.sdk.dsl.expr import HeadCall, LogicVar, PredAtom
 from kernel.sdk.dsl.rule import Rule
@@ -63,6 +64,28 @@ class PyReasonCompileError(Exception):
     """Raised when a WHERE atom cannot be compiled to PyReason syntax."""
 
 
+def resolve_pyreason_engine_ext(
+    *,
+    where: list[Any],
+    schema_ir: dict[str, Any],
+    engine_ext: EngineExtBase | None,
+    semantics_profile: SemanticsProfile | None = None,
+) -> PyReasonRuleExt | None:
+    """Resolve PyReason-specific rule projection carriers into ``PyReasonRuleExt``."""
+    profile_ext = _materialize_profile_rule_ext(
+        where=where,
+        schema_ir=schema_ir,
+        semantics_profile=semantics_profile,
+    )
+    explicit_ext = _normalize_pyreason_engine_ext(engine_ext)
+    if profile_ext is not None and explicit_ext is not None and profile_ext != explicit_ext:
+        raise ValueError(
+            "Conflicting PyReason rule projection carriers: "
+            "SemanticsProfile.rule_projection.pyreason and PyReasonRuleExt"
+        )
+    return profile_ext if profile_ext is not None else explicit_ext
+
+
 def compile_pyreason_rule(rule: Rule, *, engine_ext: PyReasonRuleExt | None = None) -> tuple[str, str]:
     """Compile a Rule to ``(pyreason_rule_str, rule_name)``."""
     rule, ext = _resolve_rule_and_ext(rule, engine_ext=engine_ext)
@@ -87,6 +110,171 @@ def _resolve_rule_and_ext(rule: Rule, *, engine_ext: PyReasonRuleExt | None = No
             f"engine_ext must be PyReasonRuleExt or None, got {type(engine_ext).__name__}"
         )
     return (rule, engine_ext)
+
+
+def _normalize_pyreason_engine_ext(engine_ext: EngineExtBase | None) -> PyReasonRuleExt | None:
+    if engine_ext is None:
+        return None
+    if not isinstance(engine_ext, PyReasonRuleExt):
+        raise ValueError(
+            f"PyReason engine_ext must be PyReasonRuleExt or None, got {type(engine_ext).__name__}"
+        )
+    return PyReasonRuleExt(
+        timestep_delay=engine_ext.timestep_delay,
+        body_predicate_bounds=dict(_normalize_body_predicate_bounds(engine_ext.body_predicate_bounds)),
+        head_bound=_validate_bound_pair(engine_ext.head_bound, "head_bound")
+        if engine_ext.head_bound is not None
+        else None,
+    )
+
+
+def _materialize_profile_rule_ext(
+    *,
+    where: list[Any],
+    schema_ir: dict[str, Any],
+    semantics_profile: SemanticsProfile | None,
+) -> PyReasonRuleExt | None:
+    if semantics_profile is None:
+        return None
+    if not isinstance(semantics_profile, SemanticsProfile):
+        raise ValueError(
+            f"semantics_profile must be SemanticsProfile or None, got {type(semantics_profile).__name__}"
+        )
+    if semantics_profile.engine != "pyreason":
+        raise ValueError(
+            f"PyReason consumption expected SemanticsProfile.engine='pyreason', got {semantics_profile.engine!r}"
+        )
+
+    entries = semantics_profile.rule_projection.get("pyreason", [])
+    if not entries:
+        return None
+
+    branches = _extract_profile_branches(where)
+    body_predicate_bounds: dict[str, tuple[float, float]] = {}
+    body_targets_seen: set[tuple[int, int]] = set()
+    head_bound: tuple[float, float] | None = None
+    timestep_delay = 0
+    rule_delay_seen = False
+
+    for idx, entry in enumerate(entries):
+        path = f"SemanticsProfile.rule_projection.pyreason[{idx}]"
+        target = entry.get("target")
+        kind = entry.get("kind")
+        value = entry.get("value")
+        if target == "rule":
+            if kind != "timestep_delay":
+                raise ValueError(f"{path}.kind must be 'timestep_delay' for target='rule'")
+            if rule_delay_seen:
+                raise ValueError(f"{path}.target duplicate rule timestep_delay")
+            timestep_delay = _normalize_profile_timestep_delay(value, path=path)
+            rule_delay_seen = True
+            continue
+        if target == "head:0":
+            if kind != "interval":
+                raise ValueError(f"{path}.kind must be 'interval' for target='head:0'")
+            if head_bound is not None:
+                raise ValueError(f"{path}.target duplicate head:0")
+            head_bound = _normalize_profile_interval(value, path=path)
+            continue
+        if isinstance(target, str) and target.startswith("body_atom:"):
+            if kind != "interval_threshold":
+                raise ValueError(f"{path}.kind must be 'interval_threshold' for body_atom targets")
+            branch_idx, atom_idx = _parse_body_atom_target(target, path=path)
+            if (branch_idx, atom_idx) in body_targets_seen:
+                raise ValueError(f"{path}.target duplicate {target}")
+            body_targets_seen.add((branch_idx, atom_idx))
+            pred_id = _resolve_body_atom_pred_id(
+                branches,
+                branch_idx=branch_idx,
+                atom_idx=atom_idx,
+                path=path,
+            )
+            interval = _normalize_profile_interval(value, path=path)
+            existing = body_predicate_bounds.get(pred_id)
+            if existing is not None and existing != interval:
+                raise ValueError(
+                    f"{path}.target conflicts with another body_atom target for predicate {pred_id!r}"
+                )
+            body_predicate_bounds[pred_id] = interval
+            continue
+        raise ValueError(
+            f"{path}.target must be 'body_atom:{{branch}}:{{atom}}', 'head:0', or 'rule'"
+        )
+
+    return PyReasonRuleExt(
+        timestep_delay=timestep_delay,
+        body_predicate_bounds=body_predicate_bounds,
+        head_bound=head_bound,
+    )
+
+
+def _extract_profile_branches(where: list[Any]) -> list[list[Any]]:
+    if not isinstance(where, list) or not where:
+        raise ValueError("where must be non-empty list")
+    if all(isinstance(item, list) for item in where):
+        branches: list[list[Any]] = []
+        for branch in where:
+            if not branch:
+                raise ValueError("where branch must be non-empty")
+            branches.append(list(branch))
+        return branches
+    return [list(where)]
+
+
+def _parse_body_atom_target(target: str, *, path: str) -> tuple[int, int]:
+    parts = target.split(":")
+    if len(parts) != 3 or parts[0] != "body_atom":
+        raise ValueError(f"{path}.target must use body_atom:{{branch}}:{{atom}}")
+    try:
+        branch_idx = int(parts[1])
+        atom_idx = int(parts[2])
+    except ValueError as exc:
+        raise ValueError(f"{path}.target must use body_atom:{{branch}}:{{atom}}") from exc
+    if branch_idx < 0 or atom_idx < 0:
+        raise ValueError(f"{path}.target body atom indexes must be non-negative")
+    return (branch_idx, atom_idx)
+
+
+def _resolve_body_atom_pred_id(
+    branches: list[list[Any]],
+    *,
+    branch_idx: int,
+    atom_idx: int,
+    path: str,
+) -> str:
+    if branch_idx >= len(branches):
+        raise ValueError(f"{path}.target body atom branch index out of range")
+    branch = branches[branch_idx]
+    if atom_idx >= len(branch):
+        raise ValueError(f"{path}.target body atom index out of range")
+    atom = branch[atom_idx]
+    if not isinstance(atom, tuple) or len(atom) != 3 or atom[0] != "pred":
+        raise ValueError(f"{path}.target body atom must point to pred atom")
+    pred_id = atom[1]
+    if not isinstance(pred_id, str) or not pred_id:
+        raise ValueError(f"{path}.target body atom pred_id must be non-empty string")
+    return pred_id
+
+
+def _normalize_profile_interval(value: Any, *, path: str) -> tuple[float, float]:
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise ValueError(f"{path}.value must be [lower, upper]")
+    lower_raw, upper_raw = value
+    if isinstance(lower_raw, bool) or not isinstance(lower_raw, (int, float)):
+        raise ValueError(f"{path}.value lower bound must be numeric")
+    if isinstance(upper_raw, bool) or not isinstance(upper_raw, (int, float)):
+        raise ValueError(f"{path}.value upper bound must be numeric")
+    lower = float(lower_raw)
+    upper = float(upper_raw)
+    if not 0.0 <= lower <= upper <= 1.0:
+        raise ValueError(f"{path}.value must satisfy 0 <= lower <= upper <= 1")
+    return (lower, upper)
+
+
+def _normalize_profile_timestep_delay(value: Any, *, path: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{path}.value must be non-negative int for timestep_delay")
+    return value
 
 
 def _compile_head(

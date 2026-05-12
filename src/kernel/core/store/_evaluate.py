@@ -61,8 +61,18 @@ def evaluate_store(
         raise ValueError(
             f"engine_options must be dict[str, Any] or None, got {type(engine_options).__name__}"
         )
-    if semantics_profile is not None and mode != "problog":
-        raise ValueError("semantics_profile is only supported for mode='problog' in C")
+    if semantics_profile is not None:
+        profile_engine = getattr(semantics_profile, "engine", None)
+        if mode not in {"problog", "pyreason"}:
+            if profile_engine in {"problog", "pyreason"}:
+                raise ValueError(
+                    f"semantics_profile with SemanticsProfile.engine={profile_engine!r} requires mode='{profile_engine}'"
+                )
+            raise ValueError("semantics_profile is only supported for mode='problog' or mode='pyreason'")
+        if profile_engine != mode:
+            raise ValueError(
+                f"{mode} consumption expected SemanticsProfile.engine='{mode}', got {profile_engine!r}"
+            )
     if mode == "native" and engine_options:
         raise ValueError("engine_options are not supported for mode='native'")
 

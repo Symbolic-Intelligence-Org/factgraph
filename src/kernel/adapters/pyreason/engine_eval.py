@@ -1,10 +1,11 @@
 """PyReason engine evaluator for ``Store.evaluate(mode="pyreason")``."""
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 from uuid import uuid4
 
+from kernel.core.semantics import SemanticsProfile
 from kernel.adapters.pyreason.runner import (
     PyReasonRunConfig,
     _bounded_pred_ids,
@@ -21,13 +22,20 @@ from kernel.core.store import builders as store_builders
 from kernel.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
     PYREASON_PROVENANCE_KIND,
+    ProjectedFact,
     ProvenanceEnvelope,
     compute_provenance_digest,
 )
 from kernel.core.store.types import EngineExtBase
-from kernel.core.view.projector import project_view_facts
+from kernel.core.view.projector import project_view_facts, project_view_facts_with_witness
 
 _ZERO_SUPPORT_DIGEST = f"sha256:{'0' * 64}"
+
+
+@dataclass(frozen=True)
+class _TemporalProjectionState:
+    timesteps: int | None = None
+    active_by_asrt_id: dict[str, tuple[int, int | None]] = field(default_factory=dict)
 
 
 def pyreason_engine_eval(
@@ -42,25 +50,42 @@ def pyreason_engine_eval(
     head: dict[str, Any] | None = None,
     engine_ext: EngineExtBase | None = None,
     engine_options: dict[str, Any] | None = None,
+    semantics_profile: SemanticsProfile | None = None,
 ) -> list[CandidateSet]:
     """Evaluate a derivation through the PyReason adapter."""
     del mode
     del head
-    from kernel.adapters.pyreason.rule_ext import PyReasonRuleExt
+    from kernel.adapters.pyreason.rule_ext import PyReasonRuleExt, resolve_pyreason_engine_ext
 
     if engine_ext is not None and not isinstance(engine_ext, PyReasonRuleExt):
         raise ValueError(
             f"PyReason engine_ext must be PyReasonRuleExt, got {type(engine_ext).__name__}"
         )
 
-    config = replace(resolve_pyreason_run_config(engine_options), atom_trace=True)
-    session = _materialize_edb_session(store, store.schema_ir)
+    resolved_engine_ext = resolve_pyreason_engine_ext(
+        where=where,
+        schema_ir=store.schema_ir,
+        engine_ext=engine_ext,
+        semantics_profile=semantics_profile,
+    )
+    temporal_state = _resolve_temporal_projection_state(
+        store,
+        store.schema_ir,
+        semantics_profile=semantics_profile,
+        engine_options=engine_options,
+    )
+    effective_engine_options = _engine_options_with_temporal_projection(
+        engine_options,
+        temporal_state=temporal_state,
+    )
+    config = replace(resolve_pyreason_run_config(effective_engine_options), atom_trace=True)
+    session = _materialize_edb_session(store, store.schema_ir, temporal_state=temporal_state)
     rules = compile_where_ir_to_pyreason(
         target_pred_id=target_pred_id,
         head_vars=head_vars,
         where=where,
         schema_ir=store.schema_ir,
-        engine_ext=engine_ext,
+        engine_ext=resolved_engine_ext,
     )
     result = run_pyreason(
         session,
@@ -161,6 +186,7 @@ def _attach_pyreason_provenance(
 def _materialize_edb_session(
     store: Any,
     schema_ir: dict[str, Any],
+    temporal_state: _TemporalProjectionState | None = None,
 ) -> PyReasonSession:
     """Project active Ledger facts into a ``PyReasonSession``.
 
@@ -168,41 +194,227 @@ def _materialize_edb_session(
     Predicates marked ``pyreason_bounded`` use point intervals from their value.
     """
     session = PyReasonSession(schema_ir)
-    facts_by_pred = project_view_facts(store.ledger, schema_ir)
     relationship_preds = _relationship_pred_ids(schema_ir)
     bounded = _bounded_pred_ids(schema_ir)
 
-    for pred_id, fact_tuples in facts_by_pred.items():
-        is_relationship = pred_id in relationship_preds
-        for fact_tuple in fact_tuples:
-            if is_relationship:
-                if len(fact_tuple) < 2:
-                    continue
-                from_ref = str(fact_tuple[0])
-                to_ref = str(fact_tuple[1])
-                value = str(fact_tuple[2]) if len(fact_tuple) > 2 else ""
-                edge_bound = _edb_bound_for_value(value) if pred_id in bounded else (1.0, 1.0)
-                session._write_edge_fact_internal(
+    if temporal_state is None:
+        facts_by_pred = project_view_facts(store.ledger, schema_ir)
+        for pred_id, fact_tuples in facts_by_pred.items():
+            is_relationship = pred_id in relationship_preds
+            for fact_tuple in fact_tuples:
+                _write_projected_pyreason_fact(
+                    session,
                     pred_id,
-                    from_ref,
-                    to_ref,
-                    value,
-                    bound=edge_bound,
+                    fact_tuple,
+                    is_relationship=is_relationship,
+                    bounded=bounded,
+                    active_from=0,
+                    active_to=None,
                 )
-                continue
-            if not fact_tuple:
-                continue
-            node_ref = str(fact_tuple[0])
-            value = str(fact_tuple[1]) if len(fact_tuple) > 1 else "true"
-            node_bound = _edb_bound_for_value(value) if pred_id in bounded else (1.0, 1.0)
-            session._write_node_fact_internal(
-                pred_id,
-                node_ref,
-                value,
-                bound=node_bound,
-            )
+        return session
 
+    projected_by_pred = project_view_facts_with_witness(store.ledger, schema_ir)
+    for pred_id, projected_facts in projected_by_pred.items():
+        is_relationship = pred_id in relationship_preds
+        for projected_fact in projected_facts:
+            fact_tuple = projected_fact.fact_tuple
+            active_from, active_to = _active_range_for_projected_fact(
+                projected_fact,
+                temporal_state=temporal_state,
+            )
+            _write_projected_pyreason_fact(
+                session,
+                pred_id,
+                fact_tuple,
+                is_relationship=is_relationship,
+                bounded=bounded,
+                active_from=active_from,
+                active_to=active_to,
+            )
     return session
+
+
+def _write_projected_pyreason_fact(
+    session: PyReasonSession,
+    pred_id: str,
+    fact_tuple: tuple[Any, ...],
+    *,
+    is_relationship: bool,
+    bounded: set[str],
+    active_from: int,
+    active_to: int | None,
+) -> None:
+    if is_relationship:
+        if len(fact_tuple) < 2:
+            return
+        from_ref = str(fact_tuple[0])
+        to_ref = str(fact_tuple[1])
+        value = str(fact_tuple[2]) if len(fact_tuple) > 2 else ""
+        edge_bound = _edb_bound_for_value(value) if pred_id in bounded else (1.0, 1.0)
+        session._write_edge_fact_internal(
+            pred_id,
+            from_ref,
+            to_ref,
+            value,
+            bound=edge_bound,
+            active_from=active_from,
+            active_to=active_to,
+        )
+        return
+    if not fact_tuple:
+        return
+    node_ref = str(fact_tuple[0])
+    value = str(fact_tuple[1]) if len(fact_tuple) > 1 else "true"
+    node_bound = _edb_bound_for_value(value) if pred_id in bounded else (1.0, 1.0)
+    session._write_node_fact_internal(
+        pred_id,
+        node_ref,
+        value,
+        bound=node_bound,
+        active_from=active_from,
+        active_to=active_to,
+    )
+
+
+def _resolve_temporal_projection_state(
+    store: Any,
+    schema_ir: dict[str, Any],
+    *,
+    semantics_profile: SemanticsProfile | None,
+    engine_options: dict[str, Any] | None,
+) -> _TemporalProjectionState | None:
+    if semantics_profile is None:
+        return None
+    if not isinstance(semantics_profile, SemanticsProfile):
+        raise ValueError(
+            f"semantics_profile must be SemanticsProfile or None, got {type(semantics_profile).__name__}"
+        )
+    if semantics_profile.engine != "pyreason":
+        raise ValueError(
+            f"PyReason consumption expected SemanticsProfile.engine='pyreason', got {semantics_profile.engine!r}"
+        )
+
+    projection = semantics_profile.temporal_projection
+    mode = projection.get("mode", "none")
+    if mode == "none":
+        return None
+    if mode == "fixed_timesteps":
+        timesteps = projection["timesteps"]
+        _reject_temporal_timesteps_conflict(
+            timesteps,
+            engine_options=engine_options,
+            carrier="SemanticsProfile.temporal_projection.fixed_timesteps",
+        )
+        return _TemporalProjectionState(timesteps=timesteps)
+    if mode == "valid_time_boundaries":
+        universe = projection["universe"]
+        state = _materialize_valid_time_boundaries(
+            store,
+            schema_ir,
+            universe_start=universe[0],
+            universe_end=universe[1],
+        )
+        if state.timesteps is not None:
+            _reject_temporal_timesteps_conflict(
+                state.timesteps,
+                engine_options=engine_options,
+                carrier="SemanticsProfile.temporal_projection.valid_time_boundaries",
+            )
+        return state
+    raise ValueError(f"Unsupported PyReason temporal_projection.mode: {mode!r}")
+
+
+def _engine_options_with_temporal_projection(
+    engine_options: dict[str, Any] | None,
+    *,
+    temporal_state: _TemporalProjectionState | None,
+) -> dict[str, Any] | None:
+    if temporal_state is None or temporal_state.timesteps is None:
+        return engine_options
+    effective = dict(engine_options or {})
+    effective["timesteps"] = temporal_state.timesteps
+    return effective
+
+
+def _reject_temporal_timesteps_conflict(
+    timesteps: int,
+    *,
+    engine_options: dict[str, Any] | None,
+    carrier: str,
+) -> None:
+    if not isinstance(engine_options, dict) or "timesteps" not in engine_options:
+        return
+    existing = engine_options["timesteps"]
+    if existing != timesteps:
+        raise ValueError(
+            f"Conflicting PyReason timesteps between {carrier} and engine_options.timesteps"
+        )
+
+
+def _materialize_valid_time_boundaries(
+    store: Any,
+    schema_ir: dict[str, Any],
+    *,
+    universe_start: str,
+    universe_end: str,
+) -> _TemporalProjectionState:
+    projected_by_pred = project_view_facts_with_witness(store.ledger, schema_ir)
+    projected_facts = [
+        fact
+        for projected in projected_by_pred.values()
+        for fact in projected
+    ]
+
+    valid_ranges: dict[str, tuple[str | None, str | None]] = {}
+    boundaries = {universe_start, universe_end}
+    for projected_fact in projected_facts:
+        valid_from, valid_to = _valid_range_for_asrt_id(store, projected_fact.asrt_id)
+        valid_ranges[projected_fact.asrt_id] = (valid_from, valid_to)
+        boundaries.add(valid_from if valid_from is not None else universe_start)
+        if valid_to is not None:
+            boundaries.add(valid_to)
+
+    ordered = sorted(boundaries)
+    index_by_boundary = {boundary: idx for idx, boundary in enumerate(ordered)}
+    active_by_asrt_id: dict[str, tuple[int, int | None]] = {}
+    for projected_fact in projected_facts:
+        valid_from, valid_to = valid_ranges[projected_fact.asrt_id]
+        active_from = index_by_boundary[valid_from if valid_from is not None else universe_start]
+        active_to = None if valid_to is None else index_by_boundary[valid_to]
+        active_by_asrt_id[projected_fact.asrt_id] = (active_from, active_to)
+
+    return _TemporalProjectionState(
+        timesteps=max(0, len(ordered) - 1),
+        active_by_asrt_id=active_by_asrt_id,
+    )
+
+
+def _valid_range_for_asrt_id(store: Any, asrt_id: str) -> tuple[str | None, str | None]:
+    valid_from = _meta_value_for_key(store, asrt_id, "valid_from")
+    valid_to = _meta_value_for_key(store, asrt_id, "valid_to")
+    return (valid_from, valid_to)
+
+
+def _meta_value_for_key(store: Any, asrt_id: str, key: str) -> str | None:
+    rows = store.ledger.find_meta(asrt_id=asrt_id, key=key)
+    if not rows:
+        return None
+    value = rows[-1].value
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{key} meta must be string for PyReason valid_time_boundaries")
+    return value
+
+
+def _active_range_for_projected_fact(
+    projected_fact: ProjectedFact,
+    *,
+    temporal_state: _TemporalProjectionState | None,
+) -> tuple[int, int | None]:
+    if temporal_state is None:
+        return (0, None)
+    return temporal_state.active_by_asrt_id.get(projected_fact.asrt_id, (0, None))
 
 
 def _node_fact_to_candidate(
