@@ -4,6 +4,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import os
+from pathlib import Path
 import warnings
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -23,6 +24,7 @@ from kernel.application.protocol import (
 )
 from kernel.application.schema_runtime import build_schema_index, entity_type_from_ref
 from kernel.authoring.derivations import compile_authoring_derivation_v1
+from kernel.authoring.registry_fs import FileAuthoringRegistry
 from kernel.authoring.rules import compile_authoring_rule_v1
 from kernel.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
 from kernel.core.derivation.candidates import CandidateSet
@@ -399,6 +401,25 @@ class _SDKPackageManager:
         return self._sdk.run_package(*args, **kwargs)
 
 
+def _resolve_authoring_registry(
+    *,
+    registry_root: str | Path | None,
+    registry: FileAuthoringRegistry | None,
+) -> FileAuthoringRegistry | None:
+    if registry is not None and not isinstance(registry, FileAuthoringRegistry):
+        raise SDKStoreError("registry must be FileAuthoringRegistry")
+    if registry is not None and registry_root is not None:
+        root = Path(registry_root)
+        if root != registry.root_dir:
+            raise SDKStoreError("registry_root conflicts with registry.root_dir")
+        return registry
+    if registry is not None:
+        return registry
+    if registry_root is not None:
+        return FileAuthoringRegistry(Path(registry_root))
+    return None
+
+
 class SDKStore:
     def __init__(
         self,
@@ -407,6 +428,8 @@ class SDKStore:
         store: Store | None = None,
         schema_ir: dict | None = None,
         artifact_store_root: str | None = None,
+        registry_root: str | Path | None = None,
+        registry: FileAuthoringRegistry | None = None,
         default_row_format: str | None = None,
     ) -> None:
         if not isinstance(classes, list) or not classes:
@@ -428,6 +451,10 @@ class SDKStore:
             )
         self._schema_ir = self._store.schema_ir
         self._schema_digest = schema_digest(self._schema_ir)
+        self._authoring_registry = _resolve_authoring_registry(
+            registry_root=registry_root,
+            registry=registry,
+        )
         self._application_schema_index = build_schema_index(self._schema_ir)
         self._field_pred_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._field_decl_by_descriptor: dict[Field, dict[str, Any]] = {}
@@ -459,6 +486,8 @@ class SDKStore:
         ledger: Ledger | None = None,
         ledger_path: str | None = None,
         artifact_store_root: str | None = None,
+        registry_root: str | Path | None = None,
+        registry: FileAuthoringRegistry | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
         return cls.from_schema_classes(
@@ -466,6 +495,8 @@ class SDKStore:
             ledger=ledger,
             ledger_path=ledger_path,
             artifact_store_root=artifact_store_root,
+            registry_root=registry_root,
+            registry=registry,
             default_row_format=default_row_format,
         )
 
@@ -477,6 +508,8 @@ class SDKStore:
         ledger: Ledger | None = None,
         ledger_path: str | None = None,
         artifact_store_root: str | None = None,
+        registry_root: str | Path | None = None,
+        registry: FileAuthoringRegistry | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
         if ledger is not None and ledger_path is not None:
@@ -503,6 +536,8 @@ class SDKStore:
         return cls(
             classes,
             store=Store(schema_ir=schema_ir, ledger=ledger, artifact_sidecar=_sidecar),
+            registry_root=registry_root,
+            registry=registry,
             default_row_format=default_row_format,
         )
 
