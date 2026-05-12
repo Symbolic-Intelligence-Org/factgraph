@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph Workspace Lifecycle
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -546,9 +546,9 @@ G0 decision (2026-05-12): **W19b locked**. `path=` stays on `FactGraph.create(..
 - [x] G1 adds red tests for `FactGraph.load(...)`.
 - [x] G1 adds guard tests for Blueprint 2 authoring persistence.
 - [x] G1 adds guard tests for package/export and batch save boundaries.
-- [ ] G2 implements only locked workspace lifecycle behavior.
-- [ ] G3 updates SDK, authoring, package, and lifecycle docs.
-- [ ] G4 fills §10, marks implemented, and archives this blueprint pair.
+- [x] G2 implements only locked workspace lifecycle behavior.
+- [x] G3 updates SDK, authoring, package, and lifecycle docs.
+- [x] G4 fills §10, marks implemented, and archives this blueprint pair.
 
 ## 8. Implementation Plan
 
@@ -597,10 +597,97 @@ Draft sequence, subject to G0:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+### 10.1 Final Landed Behavior
 
-- Final landed behavior:
-- Validation:
-- Commit lineage:
-- Deviations:
-- Archive notes:
+Blueprint 3 landed the conservative Level 4 FactGraph workspace lifecycle:
+
+1. `FactGraph.create(..., path=...)` now binds a graph to a workspace root.
+2. The v1 workspace layout is compact:
+   `factgraph_workspace.json`, `ledger.db`, and `registry/`.
+3. The v1 manifest records `factgraph_workspace_version="1"`,
+   `save_scope="level_4"`, `schema_digest`, component paths, `created_at`,
+   and `last_saved_at`.
+4. `path=` derives default `ledger.db` and `registry/` component paths.
+5. Explicit `ledger_path=` / `registry_root=` may accompany `path=` only when
+   they match the workspace defaults.
+6. `fg.save()` saves the bound workspace; unbound graphs raise the locked
+   workspace-path error.
+7. `fg.save(path)` writes to a workspace and rebinds future no-arg saves.
+8. Ledger persistence uses SQLite backup/copy when source and target differ;
+   same-path saves checkpoint/no-op instead.
+9. Registry persistence copies/syncs the bound registry into `workspace/registry`.
+10. Registry-less graphs save an empty schema-backed registry.
+11. `FactGraph.load(path, schema_classes=[...])` restores the workspace and
+    keeps class-less load deferred.
+12. Load validates the manifest digest, ledger schema digest, registry schema
+    digest, and supplied class schema digest as one anchor set.
+13. Artifact sidecars, `fg.views`, audit/evidence round files, query
+    persistence, and package export output remain out of the workspace.
+14. `kernel.application.workspace_runtime` owns layout, manifest, ledger
+    copy/checkpoint, registry sync, and load path validation.
+15. `from_schema_classes(...)` remains lower-level and does not gain `path=`.
+16. `_SDKBatchTx.save(...)` and `fg.package.export_package(...)` keep their
+    existing meanings.
+
+### 10.2 Validation
+
+Validation performed during G2/G3:
+
+- `test_factgraph_workspace_lifecycle`: 29/29 OK.
+- Lifecycle + Blueprint 2 + Blueprint 1 + wire/registry + Track 1 focused
+  preservation: 103/103 OK.
+- SDK export invariant-focused suite: 81/81 OK.
+- `git diff --check`: clean.
+- Docs stale-workspace grep: clean, except intentional lower-level
+  `ledger_path` text under `from_schema_classes(...)`.
+
+### 10.3 Commit Lineage
+
+```text
+11e91152 docs(blueprints): scope factgraph workspace lifecycle
+6beca25e test(sdk): add factgraph workspace lifecycle baseline
+755e3822 feat(application): add workspace runtime layer
+f6ff7d72 feat(sdk): bind FactGraph workspace path
+a735eb3d feat(sdk): add FactGraph workspace save
+581b3631 feat(sdk): add FactGraph workspace load
+ef1c08f7 docs(sdk): document FactGraph workspace lifecycle
+```
+
+G4 archive commit follows this lineage and is not counted above.
+
+### 10.4 Deviations
+
+No scope deviations from the 19 G0 decisions.
+
+Two G1 test polish adjustments landed during G2:
+
+- Registry-safe file paths are read from `registry_manifest.json` rather than
+  assuming raw unsanitized id/version paths.
+- Two temporary-directory assertions were moved inside their context managers,
+  and the registry-less manifest guard now asserts empty `rules` /
+  `inferences` lists rather than absent keys, matching the registry manifest
+  schema.
+
+### 10.5 Archive Notes
+
+Blueprint 3 completes the lifecycle/assets sequence that started after the
+post-Track-3 semantics work:
+
+```text
+[x] Blueprint 1  Public Inference + FactGraph.create
+[x] §13.4        Service/registry wire vocabulary rename
+[x] Blueprint 2  Authoring asset persistence facade
+[x] Blueprint 3  FactGraph workspace lifecycle
+```
+
+The public lifecycle model is now coherent: users create a graph, optionally
+save rules/inferences through graph-bound namespaces, persist the workspace,
+and later load it with explicit schema classes. The remaining lifecycle work is
+orthogonal rather than sequential:
+
+- class-less dynamic load;
+- view persistence;
+- artifact sidecar inclusion;
+- audit/evidence workspace archives;
+- query persistence;
+- package/workspace convergence.
