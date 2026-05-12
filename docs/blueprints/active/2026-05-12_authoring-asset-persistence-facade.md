@@ -495,11 +495,11 @@ G0 decision (2026-05-12): **A17a locked**. Use symmetric `SavedRuleRef` and `Sav
 - [x] G0 locks `SDKRegistry` public fate.
 - [x] G0 locks load/list/get semantics.
 - [x] G0 locks schema persistence behavior.
-- [ ] G1 adds red tests for `fg.rules.save/load/list/get`.
-- [ ] G1 adds red tests for `fg.inferences.save/load/list/get`.
-- [ ] G1 adds guard tests that direct runtime value-object use remains valid.
-- [ ] G1 adds guard tests for service/registry inference vocabulary preservation.
-- [ ] G1 adds negative/positive tests for `SDKRegistry` export fate.
+- [x] G1 adds red tests for `fg.rules.save/load/list/get`.
+- [x] G1 adds red tests for `fg.inferences.save/load/list/get`.
+- [x] G1 adds guard tests that direct runtime value-object use remains valid.
+- [x] G1 adds guard tests for service/registry inference vocabulary preservation.
+- [x] G1 adds negative/positive tests for `SDKRegistry` export fate.
 - [ ] G2 implements only the locked facade/application-layer changes.
 - [ ] G3 updates SDK, authoring, and lifecycle docs.
 - [ ] G4 fills §10, marks implemented, and archives this blueprint pair.

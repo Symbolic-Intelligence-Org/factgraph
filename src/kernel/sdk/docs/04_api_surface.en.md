@@ -203,7 +203,7 @@ This namespace is read-only and by-id only. It does not ship graph-wide
 
 | Method | One-liner |
 |---|---|
-| `run(rule_or_query, *, policy=None, row_format=None, return_display_meta=False)` | Evaluate a `Rule`, `RuleRef`, or `Query`; `return_display_meta=True` requires `ReadPolicy` |
+| `run(rule_or_query, *, policy=None, row_format=None, return_display_meta=False)` | Evaluate a `Rule` or `Query`; `RuleRef` remains a where-clause carrier, not a direct runtime selector; `return_display_meta=True` requires `ReadPolicy` |
 | `evaluate(inference, *, engine='native', engine_options=None, semantics=None)` | Evaluate an `Inference`; returns list of `CandidateSet`. If `semantics` is `ProbLogSemantics`, `PyReasonSemantics`, or `SemanticsProfile`, `engine` may be omitted and is derived from the semantics object. |
 | `accept(candidate, *, approved_by=None, note=None, dry_run=False, identity_override=None)` | Accept exactly one candidate; performs writes |
 | `accept_many(candidates, *, ...)` | Accept multiple candidates idempotently |
