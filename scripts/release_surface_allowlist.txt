@@ -46,6 +46,7 @@ src/kernel/adapters/souffle/where_compile.py
 src/kernel/application/README.md
 src/kernel/application/__init__.py
 src/kernel/application/_derivation_match_helpers.py
+src/kernel/application/authoring_runtime.py
 src/kernel/application/capability_helpers/__init__.py
 src/kernel/application/capability_helpers/_binding.py
 src/kernel/application/capability_helpers/check.py
@@ -96,6 +97,7 @@ src/kernel/application/walker/ir.py
 src/kernel/application/walker/keys.py
 src/kernel/application/walker/views.py
 src/kernel/application/why_not_runtime.py
+src/kernel/application/workspace_runtime.py
 src/kernel/audit/__init__.py
 src/kernel/audit/assertions.py
 src/kernel/audit/authoring_events.py
@@ -179,6 +181,9 @@ src/kernel/core/rules/where_ast_validate.py
 src/kernel/core/rules/where_eval.py
 src/kernel/core/schema/__init__.py
 src/kernel/core/schema/schema_ir.py
+src/kernel/core/semantics/__init__.py
+src/kernel/core/semantics/docs/README.md
+src/kernel/core/semantics/profile.py
 src/kernel/core/store/__init__.py
 src/kernel/core/store/_accept.py
 src/kernel/core/store/_artifact_sidecar.py
@@ -232,6 +237,7 @@ src/kernel/sdk/query_lower.py
 src/kernel/sdk/query_runtime.py
 src/kernel/sdk/registry.py
 src/kernel/sdk/schema.py
+src/kernel/sdk/semantics.py
 src/kernel/sdk/shells/__init__.py
 src/kernel/sdk/shells/_validation.py
 src/kernel/sdk/shells/check.py
