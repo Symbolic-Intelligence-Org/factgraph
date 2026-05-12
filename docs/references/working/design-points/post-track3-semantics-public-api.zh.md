@@ -135,12 +135,16 @@ SDK 在持有 `Rule` / `Derivation` 对象时解析显式 branch id 或 fallback
 `b0` / `b1`,然后 lower 成 canonical
 `SemanticsProfile.rule_projection.problog`。
 
-### 5.3 PyReasonSemantics shape(Track 2 已部分落地)
+### 5.3 PyReasonSemantics shape(Track 2 + Track 3-post 已落地)
 
 ```python
 PyReasonSemantics(
     timestep_delay=2,
     head_bound=[0.8, 1.0],                  # 全 branch 默认 head interval,可选
+    branch_bounds={                         # Track 3-post 已落地: per-branch override
+        "sensor_path": [0.8, 1.0],
+        "b1": [0.2, 0.8],
+    },
     temporal_projection=...,                # 沿用 B 的 lane shape
     uncertainty_projection=...,             # 沿用 B 的 lane shape
 )
@@ -149,13 +153,16 @@ PyReasonSemantics(
 语义:
 
 - `head_bound`: 所有 branch 默认 head interval(可省)
+- `branch_bounds`: 用显式 branch id 或 fallback `b0` / `b1` 索引的
+  per-branch head interval override;有 override 的 branch 覆盖
+  `head_bound`,没有 override 的 branch 继续使用 `head_bound`
 - `temporal_projection` / `uncertainty_projection`: 沿用 B 的字段定义(`mode="none"` / `mode="fixed_timesteps"` / `mode="valid_time_boundaries"` 等)
 - **不支持 atom-level 标注**(`body_predicate_bounds` 退到 internal advanced)
 - **不支持 multi-head**(已被 §4 cut)
 
-Track 2 明确没有加入 `branch_bounds` 字段。覆盖具体 branch 的 head
-interval 仍是 Track 3-post 的工作,需要先给 PyReason adapter 增加
-per-branch head-bound carrier 并调整 compile 模型。
+Track 2 先加入 wrapper 与 engine 自动推导。Track 3-post 随后加入
+`branch_bounds`,给 PyReason adapter 增加 per-branch head-bound carrier,
+并调整 compile 模型。
 
 ### 5.4 退到 internal advanced 的能力
 
@@ -210,10 +217,9 @@ rule_name = base_name if len(branches) == 1 else f"{base_name}_b{branch_idx}"
 
 每条 PyReason rule 已经支持 head annotation(`head : [lo, hi] <-...`)。
 
-### 7.2 `branch_bounds` 编译目标(Track 3-post future)
+### 7.2 `branch_bounds` 编译目标(Track 3-post 已落地)
 
-以下 shape **不是 Track 2 当前 API**；Track 2 的 `PyReasonSemantics`
-不接受 `branch_bounds`。这是 Track 3-post 要验证和实现的目标模型:
+以下 shape 已是当前 public SDK API:
 
 ```python
 PyReasonSemantics(branch_bounds={
@@ -230,6 +236,15 @@ risky(x) : [0.2, 0.8] <-1 other_path(x)                          # derived_risky
 ```
 
 机械可行,跟现有 PyReason rule text 输出能力对齐。
+Track 3-post 的实现路径是:
+
+```text
+PyReasonSemantics.branch_bounds
+  → SDK 按 Branch.id / b0,b1 解析成 branch index
+  → SemanticsProfile.rule_projection.pyreason target="branch:{index}", kind="interval"
+  → PyReasonRuleExt.branch_head_bounds: dict[int, tuple]
+  → where_compile.py per-branch head annotation
+```
 
 ### 7.3 内部 carrier 改造
 
@@ -240,25 +255,20 @@ head_bound: tuple[float, float] | None    # rule-global
 body_predicate_bounds: dict[str, tuple]
 ```
 
-需要新增 per-branch carrier,候选 shapes:
+Track 3-post 已新增 per-branch carrier:
 
 ```python
-# 候选 A: 新字段,与 head_bound 共存
 PyReasonRuleExt(
     head_bound: tuple[float, float] | None,           # 默认
-    branch_head_bounds: dict[str, tuple] | None,      # 新,覆盖
+    branch_head_bounds: dict[int, tuple],             # 按 branch index 覆盖
     body_predicate_bounds: dict[str, tuple],          # 保留 advanced
     timestep_delay: int,
 )
-
-# 候选 B: head_bound 改语义
-PyReasonRuleExt(
-    head_bounds: dict[str, tuple] | None,             # 用 branch id 索引,单 branch 时用 "*" 或 b0
-    ...
-)
 ```
 
-A 候选 backward-compatible,推荐。详细 shape 在 future G0 锁定。
+`head_bound` 与 `branch_head_bounds` 共存。编译时使用
+`branch_head_bounds.get(branch_idx, head_bound)`: branch-specific
+bound 覆盖 global default,空 dict 等价于无 override。
 
 ## 8. 3-Track 顺序与依赖
 
@@ -266,14 +276,14 @@ A 候选 backward-compatible,推荐。详细 shape 在 future G0 锁定。
 [x] Track 1: Branch identity + rule inspect + single-head hard-cut
   ↓ (依赖: branch id 存在,inspect 可用,multi-head 决策)
 [x] Track 2: Public Semantics API 重塑 + engine 自动推导
-  ↓ (依赖: public API shape 锁定;已完成 wrapper + derive,未包含 branch_bounds)
-[ ] Track 3 (post): PyReason branch-bound carrier + compile 模型
+  ↓ (依赖: public API shape 锁定;已完成 wrapper + derive)
+[x] Track 3 (post): PyReason branch-bound carrier + compile 模型
 ```
 
 **严格串行,不能交错。** 反向依赖:
 
-- Track 3-post 的 `branch_bounds={"sensor_path": ...}` 需要 Track 1 的 `Branch([...], id="sensor_path")`
-- Track 3 的内部 carrier shape(per-branch dict)需要 Track 2 的 public shape 锁定,否则可能反复改
+- Track 3-post 的 `branch_bounds={"sensor_path": ...}` 依赖 Track 1 的 `Branch([...], id="sensor_path")`
+- Track 3-post 的内部 carrier shape(per-branch index dict)依赖 Track 2 的 public shape 锁定
 
 ## 9. 与现有 archive 的关系
 
@@ -284,7 +294,7 @@ A 候选 backward-compatible,推荐。详细 shape 在 future G0 锁定。
 | A4 `condition_weights-decomposition` | condition_weights 保留为 certainty projection input | 与本 doc 正交,不动 |
 | B `semantics-profile-scaffolding` | `SemanticsProfile` value object 已落地 | Track 2 保留为 advanced/canonical profile |
 | C `problog-semantics-profile-migration` | ProbLog 消费 `rule_projection.problog` | Track 2 的 `ProbLogSemantics` lower 到 C 的 internal carrier |
-| D `pyreason-semantics-profile-migration` | PyReason 消费 `rule_projection.pyreason` + `temporal_projection` | Track 2 的 `PyReasonSemantics` lower 到 D 支持的 lanes;branch_bounds 留给 Track 3-post |
+| D `pyreason-semantics-profile-migration` | PyReason 消费 `rule_projection.pyreason` + `temporal_projection` | Track 2 的 `PyReasonSemantics` lower 到 D 支持的 lanes;Track 3-post 补齐 `branch_bounds` |
 | E `sdk-service-semantics-callsite` | `evaluate(engine=, semantics=)` 公共 call-site | Track 2 加 engine 自动推导并保留 service canonical shape |
 
 **A1/A2/A3/A4 archives 全部保持不动。** Track 1-3 都是 forward-compatible 演进,不重写 archive。
@@ -296,7 +306,8 @@ A 候选 backward-compatible,推荐。详细 shape 在 future G0 锁定。
 3. **Branch id 在 lowered IR / authoring payload / registry 怎么保留?** 需要 source audit。
 4. **`fg.rules.*` namespace 还应包含哪些 public APIs?**(validate? compile? lint?)
 5. **multi-rule per branch 的 `_b{idx}` rule name 是否暴露给用户?** —— 倾向不暴露(internal-only);用户通过 branch id 引用。
-6. **PyReason `branch_head_bounds` 内部表示**: `dict[branch_id_str, tuple]` vs `dict[branch_index_int, tuple]` vs `list[tuple | None]`?
+6. **PyReason `branch_head_bounds` 内部表示**: Track 3-post 已选择
+   `dict[branch_index_int, tuple]`;SDK branch id 不越过 SDK boundary。
 7. **Engine 默认值**: `evaluate(deriv)` 无 semantics 无 engine 时默认 `native` 还是要求显式?推荐默认 `native`(向后兼容)。
 8. **ProbLog `branch_probabilities` 单值 vs interval**: Track 2 已落地为单 `float`;不要为了对称把它改成 `tuple`。
 

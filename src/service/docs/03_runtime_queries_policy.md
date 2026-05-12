@@ -1098,7 +1098,8 @@
 - Track 2 的 `ProbLogSemantics` / `PyReasonSemantics` 是 SDK-only wrapper：
   SDK 会在持有 SDK `Rule` / `Derivation` 对象时解析 branch id 并 lower 成
   canonical `SemanticsProfile`。Service runtime 不接受 wrapper-style JSON
-  keys，例如 `branch_probabilities` / `timestep_delay` / `head_bound`；
+  keys，例如 `branch_probabilities` / `timestep_delay` / `head_bound` /
+  `branch_bounds`；
   service 仍只接受 top-level canonical `SemanticsProfile` shape。
 - native `engine="native"` derivation 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：
   - 若已有 filesystem registry，ephemeral rules 在其后 merge

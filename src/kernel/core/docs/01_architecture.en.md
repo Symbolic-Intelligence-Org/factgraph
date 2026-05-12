@@ -207,8 +207,11 @@ Adapter-specific rule projection is no longer public SDK rule syntax:
   `engine=` from those wrappers, then lowers them into canonical
   `SemanticsProfile` before crossing the core/application boundary. Service
   JSON and compiled evaluation remain canonical `SemanticsProfile` surfaces.
-  PyReason per-branch `branch_bounds` are intentionally deferred to
-  Track 3-post.
+- Track 3-post completes the PyReason branch-bound lane:
+  `PyReasonSemantics.branch_bounds` resolves SDK branch ids into canonical
+  `rule_projection.pyreason` `branch:{index}` entries, which normalize into
+  the adapter-local `PyReasonRuleExt.branch_head_bounds` carrier and compile
+  as per-branch head annotations.
 
 Native `RuleRef` semantics and current boundary:
 

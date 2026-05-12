@@ -44,6 +44,10 @@ Adapter migration is intentionally staged:
   Track 2 adds preferred SDK wrappers: `fg.eval.evaluate(...,
   semantics=ProbLogSemantics(...))` or `PyReasonSemantics(...)`.
   Service callers still pass canonical top-level JSON `"semantics": {...}`.
+- Track 3-post adds the PyReason branch-bound lane. SDK
+  `PyReasonSemantics(branch_bounds=...)` lowers to canonical
+  `rule_projection.pyreason` `branch:{index}` interval entries; adapter
+  consumption normalizes those entries into `PyReasonRuleExt.branch_head_bounds`.
 
 Adapter import boundary:
 

@@ -33,6 +33,10 @@ supported.
   Public SDK calls reject `mode=` and `semantics_profile=`; use
   `engine=` and `semantics=`, or omit `engine=` when it can be derived
   from the semantics object.
+- Track 3-post lets `PyReasonSemantics.branch_bounds` reference branch
+  ids from `Branch([...], id="...")` or fallback positional ids such as
+  `b0` / `b1`. Branch-specific bounds override the wrapper's global
+  `head_bound` for that branch only.
 
 ## 1. `vars(...)`
 

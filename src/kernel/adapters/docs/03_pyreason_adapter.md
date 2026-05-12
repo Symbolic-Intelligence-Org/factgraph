@@ -281,9 +281,12 @@ result = run_pyreason(
   `fg.eval.evaluate(..., semantics=PyReasonSemantics(...))`. The wrapper can
   express `timestep_delay`, global `head_bound`, `temporal_projection`, and
   `uncertainty_projection`, then lowers into canonical `SemanticsProfile`
-  before adapter consumption. `branch_bounds` is not a Track 2 field because
-  the adapter has no per-branch head-bound carrier yet; Track 3-post owns
-  that carrier and compiler reshape.
+  before adapter consumption.
+- Track 3-post adds `PyReasonSemantics.branch_bounds` and the adapter-local
+  `PyReasonRuleExt.branch_head_bounds` carrier. SDK branch ids lower to
+  canonical `rule_projection.pyreason` `branch:{index}` interval entries.
+  During compilation, a branch-specific bound overrides the global
+  `head_bound`; branches without an override keep the global bound.
 - `compile_pyreason_rule(...)` currently supports only
   `PredAtom` + `LogicVar` + literals; `CompareExpr` / `NotExpr` /
   `RuleRefAtom` raise an explicit error
@@ -409,12 +412,13 @@ projection instructions. The generic `SemanticsProfile` value object
 validates shape only; PyReason validates targets and values when the
 profile is consumed.
 
-Supported rule-projection targets in Track 3 / D:
+Supported rule-projection targets:
 
 | Target | Kind | Value | Effect |
 | --- | --- | --- | --- |
 | `body_atom:{branch}:{atom}` | `interval_threshold` | `[lower, upper]` with `0 <= lower <= upper <= 1` | Sets `PyReasonRuleExt.body_predicate_bounds` for the referenced body predicate |
 | `head:0` | `interval` | `[lower, upper]` with `0 <= lower <= upper <= 1` | Sets `PyReasonRuleExt.head_bound` |
+| `branch:{index}` | `interval` | `[lower, upper]` with `0 <= lower <= upper <= 1` | Sets `PyReasonRuleExt.branch_head_bounds[index]`; this branch-specific head bound overrides `head_bound` for that branch |
 | `rule` | `timestep_delay` | non-negative integer | Sets `PyReasonRuleExt.timestep_delay` |
 
 The adapter enforces a carrier-conflict rule:
@@ -426,7 +430,10 @@ The adapter enforces a carrier-conflict rule:
 
 `compile_pyreason_rule(...)` and `where_compile.py` remain
 profile-agnostic. The adapter normalizes profile data to
-`PyReasonRuleExt` before rule export.
+`PyReasonRuleExt` before rule export. `branch_head_bounds` is an
+adapter-internal carrier, not a public SDK argument; public callers use
+`PyReasonSemantics(branch_bounds=...)` or canonical
+`SemanticsProfile.rule_projection.pyreason` entries.
 
 `SemanticsProfile.temporal_projection` accepts these D-time modes:
 

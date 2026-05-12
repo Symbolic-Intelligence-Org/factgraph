@@ -608,6 +608,7 @@ fg.eval.evaluate(
     semantics=PyReasonSemantics(
         timestep_delay=2,
         head_bound=[0.7, 0.9],
+        branch_bounds={"seed_path": [0.8, 1.0], "b1": [0.2, 0.8]},
         temporal_projection={"mode": "fixed_timesteps", "timesteps": 4},
     ),
 )
@@ -620,6 +621,12 @@ for direct profile users and service JSON. Use `fg.eval.inspect_semantics(...)`
 to inspect configured projection lanes and the wrapper's lowered canonical
 profile preview. The public SDK rejects `semantics_profile=`; that name is
 reserved for core/application internals.
+
+For PyReason, `head_bound` is the default head interval for all branches.
+`branch_bounds` is a per-branch override map keyed by explicit
+`Branch(id=...)` values or fallback positional ids such as `b0` / `b1`.
+Fallback ids are useful for quick experiments, but explicit branch ids are
+more stable when a derivation's branch order changes.
 
 ### Semantic annotations
 
@@ -1003,9 +1010,28 @@ fg.eval.evaluate(
 )
 ```
 
-`branch_bounds` is intentionally not a Track 2 field. Track 3-post owns
-per-branch PyReason head-bound carrier support. `SemanticsProfile` remains
-the advanced/canonical shape for lower-level profile users.
+Track 3-post adds per-branch head interval overrides:
+
+```python
+fg.eval.evaluate(
+    deriv,
+    semantics=PyReasonSemantics(
+        head_bound=[0.5, 1.0],
+        branch_bounds={
+            "sensor_path": [0.8, 1.0],
+            "b1": [0.2, 0.8],
+        },
+    ),
+)
+```
+
+The SDK resolves branch ids while it still has the SDK `Derivation`
+object, lowers them into canonical `rule_projection.pyreason`
+`target="branch:{index}", kind="interval"` entries, and the PyReason
+adapter compiles those entries as per-branch head annotations. Empty
+`branch_bounds={}` is equivalent to omitting branch-specific overrides.
+`SemanticsProfile` remains the advanced/canonical shape for lower-level
+profile users.
 
 ### Tag semantics on multi-fields
 

@@ -450,6 +450,10 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
   `kernel.sdk.PyReasonSemantics` as the preferred public SDK wrappers for
   engine-specific semantics. `kernel.sdk.SemanticsProfile` remains exported
   as the advanced/canonical profile shape.
+- Track 3-post extends `PyReasonSemantics` with
+  `branch_bounds={branch_id: [lower, upper]}`. These bounds override the
+  global `head_bound` for the referenced branch and may use explicit
+  `Branch(id=...)` names or fallback `b0` / `b1` ids.
 - `fg.eval.inspect_semantics(...)` accepts wrappers or `SemanticsProfile`;
   wrapper inspection includes a lowered canonical profile preview. Public
   SDK calls reject `mode=` and `semantics_profile=`; core/application
