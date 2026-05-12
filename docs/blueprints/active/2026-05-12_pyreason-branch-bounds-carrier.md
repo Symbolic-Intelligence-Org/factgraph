@@ -1,6 +1,6 @@
 # Task Blueprint: Track 3-post PyReason Branch Bounds Carrier
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -200,9 +200,14 @@ The existing Track 2 architecture favors wrapper -> canonical
 `SemanticsProfile` -> adapter-local bridge. Deviating from that should require
 an explicit G0 decision.
 
-## 5. Open Design Questions
+## 5. Scope Freeze Decisions
 
-### 5.1 Q1: Public `branch_bounds` shape
+G0 locks Track 3-post as the final, bounded PyReason branch-bound slice.
+It adds the public `PyReasonSemantics.branch_bounds` lane and the internal
+carrier / compiler support needed to make it real. It does not broaden
+service, compiled, atom-level, or multi-head semantics.
+
+### 5.1 D1: Public `branch_bounds` shape
 
 Options:
 
@@ -210,10 +215,12 @@ Options:
 - **P1b** `branch_head_bounds={...}` to mirror the internal carrier name
 - **P1c** keep no public field and require advanced `SemanticsProfile`
 
-Recommendation: **P1a**. The public concept is branch-level semantics, and the
-post-Track-3 design point already uses `branch_bounds`.
+Locked: **P1a**. Add public
+`PyReasonSemantics.branch_bounds: dict[str, tuple[float, float]] | None`.
+The public concept is branch-level semantics, and the post-Track-3 design
+point already uses `branch_bounds`.
 
-### 5.2 Q2: Public key namespace
+### 5.2 D2: Public key namespace
 
 Options:
 
@@ -222,11 +229,11 @@ Options:
 - **P2b** accept explicit branch ids only
 - **P2c** accept positional integers only
 
-Recommendation: **P2a**. It preserves Track 2 symmetry and allows users to
-adopt the feature before naming every branch, while docs can warn that
-fallback ids are positional.
+Locked: **P2a**. Accept explicit branch ids and fallback `b0` / `b1`
+ids, same as `ProbLogSemantics.branch_probabilities`. Docs should still
+warn that fallback ids are positional.
 
-### 5.3 Q3: Internal carrier shape
+### 5.3 D3: Internal carrier shape
 
 Options:
 
@@ -234,11 +241,13 @@ Options:
 - **P3b** `branch_head_bounds: dict[str, tuple[float, float]]`
 - **P3c** `branch_head_bounds: list[tuple[float, float] | None]`
 
-Recommendation: **P3a**. SDK branch ids should not leak past the SDK boundary.
-The compiler already iterates by `branch_idx`, so index-keyed carrier is the
-minimal adapter shape.
+Locked: **P3a**. Add internal
+`PyReasonRuleExt.branch_head_bounds: dict[int, tuple[float, float]]`.
+SDK branch ids do not leak past the SDK boundary. The compiler already
+iterates by `branch_idx`, so an index-keyed carrier is the minimal adapter
+shape.
 
-### 5.4 Q4: Canonical profile target
+### 5.4 D4: Canonical profile target
 
 Options:
 
@@ -248,11 +257,12 @@ Options:
 - **P4c** bypass `SemanticsProfile` and lower wrappers directly to
   `PyReasonRuleExt`
 
-Recommendation: **P4a**. It mirrors ProbLog's branch target and keeps
-wrapper -> profile -> adapter lowering intact. The engine bucket
-(`rule_projection.pyreason`) disambiguates the meaning from ProbLog.
+Locked: **P4a**. Add `target="branch:{index}", kind="interval"` in the
+`rule_projection.pyreason` bucket. It mirrors ProbLog's branch target and
+keeps wrapper -> profile -> adapter lowering intact. The engine bucket
+disambiguates the meaning from ProbLog.
 
-### 5.5 Q5: Conflict rule with global `head_bound`
+### 5.5 D5: Conflict rule with global `head_bound`
 
 Options:
 
@@ -261,32 +271,33 @@ Options:
 - **P5b** branch-specific bounds conflict with any global `head_bound`
 - **P5c** branch-specific bounds must equal global `head_bound` when both present
 
-Recommendation: **P5a**. This makes `head_bound` a default and
-`branch_bounds` an override, matching the design point's intended public
-shape.
+Locked: **P5a**. Branch-specific bounds override global `head_bound` for
+those branches. Global `head_bound` is the default; `branch_bounds` is the
+branch-level override.
 
-### 5.6 Q6: Branch count validation
+### 5.6 D6: Branch count validation
 
 Options:
 
 - **P6a** adapter validates `branch:{index}` range against `where` branch count
 - **P6b** SDK-only validation is enough
 
-Recommendation: **P6a**. `SemanticsProfile` remains advanced/canonical and can
-be constructed directly, so adapter consumption must validate indexes with
-rule context.
+Locked: **P6a**. Adapter consumption validates `branch:{index}` range against
+the rule's branch count. `SemanticsProfile` remains advanced/canonical and
+can be constructed directly, so SDK-only validation is insufficient.
 
-### 5.7 Q7: Single-branch behavior
+### 5.7 D7: Single-branch behavior
 
 Options:
 
 - **P7a** allow `branch_bounds={"b0": ...}` for single-branch derivations
 - **P7b** reject branch-specific bounds unless there are at least two branches
 
-Recommendation: **P7a**. Single-branch still has a branch index and fallback
-id. Rejecting it would create an unnecessary special case.
+Locked: **P7a**. Single-branch derivations allow
+`branch_bounds={"b0": ...}`. Single-branch still has a branch index and
+fallback id.
 
-### 5.8 Q8: Service and compiled paths
+### 5.8 D8: Service and compiled paths
 
 Options:
 
@@ -295,9 +306,48 @@ Options:
   `rule_projection.pyreason` branch target
 - **P8b** add service wrapper-shaped JSON now
 
-Recommendation: **P8a**. Branch id resolution still requires SDK objects.
+Locked: **P8a**. Service wrapper JSON and compiled wrapper semantics still
+reject. Canonical `SemanticsProfile` may carry the new
+`rule_projection.pyreason` branch target. Branch id resolution still
+requires SDK objects.
 
-### 5.9 Q9: Preservation guards
+### 5.9 D9: Wrapper-lowered profile equivalence
+
+Locked: `PyReasonSemantics(branch_bounds={"sensor_path": [0.8, 1.0]})`
+lowered against a derivation where `sensor_path -> branch:0` must produce
+the same canonical profile shape as direct construction:
+
+```python
+SemanticsProfile(
+    engine="pyreason",
+    rule_projection={"pyreason": [
+        {"target": "branch:0", "kind": "interval", "value": [0.8, 1.0]},
+    ]},
+)
+```
+
+This ensures `fg.eval.inspect_semantics(wrapper)` and an equivalent
+direct `SemanticsProfile` preview the same projection lane.
+
+### 5.10 D10: Anchored rejection text contracts
+
+G1 tests should lock stable substrings:
+
+- unknown SDK branch id:
+  `"branch_bounds contains unknown branch id 'X'"`
+- direct profile branch index range:
+  `"rule_projection.pyreason[N] branch index out of range"`
+- invalid branch-bound value:
+  `"branch_bounds[...] value must be [lower, upper]"`
+- Track 2's old constructor-level `branch_bounds` rejection guard is
+  inverted to a positive acceptance test.
+
+### 5.11 D11: Empty `branch_bounds`
+
+Locked: `PyReasonSemantics(branch_bounds={})` is equivalent to omitting
+`branch_bounds`. Empty dict means no branch-specific overrides.
+
+### 5.12 D12: Preservation guards
 
 Track 3-post must preserve:
 
@@ -306,7 +356,14 @@ Track 3-post must preserve:
 - ProbLog semantics and Track 2 engine auto-derivation.
 - Track 1 branch inspect output and fallback ids.
 
-### 5.10 Q10: Docs / memory update
+### 5.13 D13: Track 2 guard inversion
+
+Locked: Track 2 G1's
+`test_pyreason_semantics_rejects_branch_bounds_until_track3_post` guard is
+inverted to a positive Track 3-post acceptance test. This mirrors the
+earlier B -> C and C -> D guard-evolution pattern.
+
+### 5.14 D14: Docs / memory update
 
 G4 should update:
 
@@ -315,6 +372,44 @@ G4 should update:
   branch bounds if implemented.
 - `project_post_track3_semantics_api_direction.md`.
 - A new `project_track3_post_pyreason_branch_bounds_implemented.md` memory.
+
+### 5.15 Consolidated D-decision table
+
+| ID | Decision |
+|---|---|
+| D1 | Add public `PyReasonSemantics.branch_bounds`. |
+| D2 | Accept explicit branch ids and fallback `b0` / `b1` ids. |
+| D3 | Add internal `PyReasonRuleExt.branch_head_bounds: dict[int, tuple]`. |
+| D4 | Lower to canonical `rule_projection.pyreason` target `branch:{index}`, `kind="interval"`. |
+| D5 | Branch-specific bounds override global `head_bound` per branch. |
+| D6 | Adapter validates branch index range with rule context. |
+| D7 | Single-branch derivations allow `branch_bounds={"b0": ...}`. |
+| D8 | Service/compiled wrapper boundaries remain Track 2 canonical-only. |
+| D9 | Wrapper-lowered profile shape equals direct canonical `SemanticsProfile` shape. |
+| D10 | Rejection text anchors locked for G1. |
+| D11 | Empty `branch_bounds={}` is no-op / no override. |
+| D12 | Preservation invariants locked. |
+| D13 | Track 2 branch_bounds rejection guard inverted to positive. |
+| D14 | G4 updates docs and memory to mark Track 3-post complete. |
+
+### 5.16 Resolved G0 Questions Map
+
+| Draft / reviewer question | Locked D |
+|---|---|
+| Q1 public field name | D1 |
+| Q2 public branch-key namespace | D2 |
+| Q3 internal carrier shape | D3 |
+| Q4 canonical profile target | D4 |
+| Q5 global vs branch-bound conflict rule | D5 |
+| Q6 branch count validation | D6 |
+| Q7 single-branch behavior | D7 |
+| Q8 service/compiled boundary | D8 |
+| Reviewer Q11 wrapper-lowered profile equivalence | D9 |
+| Reviewer Q12 anchored rejection text | D10 |
+| Reviewer Q13 empty branch_bounds | D11 |
+| Q9 preservation guards | D12 |
+| Guard evolution | D13 |
+| Q10 docs / memory | D14 |
 
 ## 6. Boundaries And Invariants
 
@@ -328,25 +423,36 @@ G4 should update:
   stored derivation metadata.
 - `body_atom:{branch}:{atom}` remains advanced/canonical only; public
   `PyReasonSemantics` branch bounds are branch-level head interval overrides.
+- `head_bound` remains a global default for all branches unless overridden by
+  branch-specific `branch_bounds`.
+- `branch_head_bounds` is internal and index-keyed; SDK branch id strings do
+  not cross the SDK/core boundary.
 
 ## 7. Acceptance
 
-- [ ] G0 locks Q1-Q10 and records decisions in the audit.
+- [x] G0 locks Q1-Q13 and records decisions in the audit.
 - [ ] G1 red baseline covers public `branch_bounds`, branch-id resolution,
   carrier validation, compiler output, and preservation guards.
 - [ ] `PyReasonSemantics(branch_bounds=...)` accepts explicit branch ids and
-  fallback ids if G0 chooses P1a/P2a.
+  fallback ids.
+- [ ] `PyReasonSemantics(branch_bounds={})` is equivalent to omitting it.
 - [ ] Unknown branch ids reject at the SDK object boundary.
-- [ ] Lowered canonical `SemanticsProfile` carries PyReason branch targets if
-  G0 chooses P4a/P4b.
+- [ ] Lowered canonical `SemanticsProfile` carries PyReason
+  `target="branch:{index}", kind="interval"` entries.
+- [ ] Wrapper lowering and direct `SemanticsProfile` construction are
+  equivalent for the canonical branch target shape.
 - [ ] Direct `SemanticsProfile.rule_projection.pyreason` branch targets are
   validated at adapter consumption time.
 - [ ] `PyReasonRuleExt` carries branch-specific head bounds without leaking
   SDK branch ids.
 - [ ] `where_compile.py` emits per-branch head annotations.
+- [ ] Branch-specific bounds override global `head_bound` for the specified
+  branch and leave other branches on the global default.
+- [ ] Single-branch derivations support fallback `b0`.
 - [ ] Global `head_bound` existing behavior remains green.
 - [ ] ProbLog / Track 2 wrapper behavior remains green.
 - [ ] Service and compiled wrapper boundaries remain green.
+- [ ] Track 2 branch_bounds rejection guard is inverted to positive.
 - [ ] Release-facing docs document `branch_bounds` as current behavior after
   implementation.
 
