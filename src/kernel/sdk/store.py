@@ -12,10 +12,15 @@ from uuid import UUID, uuid4
 from kernel.application import apply_write_plan, plan_write_command
 from kernel.application.authoring_runtime import (
     AuthoringRuntimeError,
+    SavedInferenceRef,
     SavedRuleRef,
+    get_inference as app_get_inference,
     get_rule as app_get_rule,
+    list_inferences as app_list_inferences,
     list_rules as app_list_rules,
+    load_inference as app_load_inference,
     load_rule as app_load_rule,
+    save_inference as app_save_inference,
     save_rule as app_save_rule,
 )
 from kernel.application.derivation_runtime import evaluate_derivation_plans
@@ -281,6 +286,28 @@ class _SDKRulesManager:
         return self._sdk.get_rule(rule_id)
 
 
+class _SDKInferencesManager:
+    """Read-only namespace manager for Inference persistence."""
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.inferences namespace is read-only")
+
+    def save(self, inference: Any) -> SavedInferenceRef:
+        return self._sdk.save_inference(inference)
+
+    def load(self, inference: SavedInferenceRef | str, *, version: str | None = None) -> Any:
+        return self._sdk.load_inference(inference, version=version)
+
+    def list(self) -> list[SavedInferenceRef]:
+        return self._sdk.list_inferences()
+
+    def get(self, inference_id: str) -> SavedInferenceRef:
+        return self._sdk.get_inference(inference_id)
+
+
 class _SDKEvalManager:
     """Read-only namespace manager for the `eval` taxonomy group.
 
@@ -486,6 +513,7 @@ class SDKStore:
         self._read_manager = _SDKReadManager(self)
         self._write_manager = _SDKWriteManager(self)
         self._rules_manager = _SDKRulesManager(self)
+        self._inferences_manager = _SDKInferencesManager(self)
         self._eval_manager = _SDKEvalManager(self)
         self._what_if_manager = _SDKWhatIfManager(self)
         self._audit_manager = _SDKAuditManager(self)
@@ -604,6 +632,11 @@ class SDKStore:
     def rules(self) -> _SDKRulesManager:
         """`rules` taxonomy namespace exposing pure rule/derivation structure inspection."""
         return self._rules_manager
+
+    @property
+    def inferences(self) -> _SDKInferencesManager:
+        """`inferences` taxonomy namespace exposing persisted Inference asset handles."""
+        return self._inferences_manager
 
     @property
     def eval(self) -> _SDKEvalManager:
@@ -1708,6 +1741,41 @@ class SDKStore:
         except AuthoringRuntimeError as exc:
             raise SDKStoreError(str(exc)) from exc
 
+    def save_inference(self, inference: Any) -> SavedInferenceRef:
+        registry = self._require_authoring_registry()
+        if not hasattr(inference, "to_authoring_payload"):
+            raise SDKStoreError("fg.inferences.save(...) expects SDK Inference")
+        try:
+            return app_save_inference(
+                registry,
+                inference.to_authoring_payload(),
+                schema_ir=self.schema_ir,
+            )
+        except AuthoringRuntimeError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
+    def load_inference(self, inference: SavedInferenceRef | str, *, version: str | None = None) -> Any:
+        registry = self._require_authoring_registry()
+        try:
+            payload = app_load_inference(registry, inference, version=version)
+        except AuthoringRuntimeError as exc:
+            raise SDKStoreError(str(exc)) from exc
+        return _inference_from_authoring_payload(payload)
+
+    def list_inferences(self) -> list[SavedInferenceRef]:
+        registry = self._require_authoring_registry()
+        try:
+            return app_list_inferences(registry)
+        except AuthoringRuntimeError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
+    def get_inference(self, inference_id: str) -> SavedInferenceRef:
+        registry = self._require_authoring_registry()
+        try:
+            return app_get_inference(registry, inference_id)
+        except AuthoringRuntimeError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
     def _require_authoring_registry(self) -> FileAuthoringRegistry:
         registry = self._authoring_registry
         if registry is None:
@@ -2612,7 +2680,7 @@ def _rule_from_authoring_payload(payload: dict[str, Any]) -> Any:
         raise SDKStoreError("registry rule payload must be object")
     rule_id = payload.get("rule_id")
     version = payload.get("version")
-    select = payload.get("select")
+    select = payload.get("select", payload.get("select_vars"))
     where = payload.get("where")
     if not isinstance(rule_id, str) or not rule_id:
         raise SDKStoreError("registry rule payload missing rule_id")
@@ -2634,6 +2702,33 @@ def _rule_from_authoring_payload(payload: dict[str, Any]) -> Any:
         condition_weights=dict(payload.get("condition_weights", {}))
         if isinstance(payload.get("condition_weights"), dict)
         else {},
+    )
+
+
+def _inference_from_authoring_payload(payload: dict[str, Any]) -> Any:
+    from .dsl.rule import Inference as SDKInference
+
+    if not isinstance(payload, dict):
+        raise SDKStoreError("registry inference payload must be object")
+    inference_id = payload.get("derivation_id")
+    version = payload.get("version")
+    where = payload.get("where")
+    if not isinstance(inference_id, str) or not inference_id:
+        raise SDKStoreError("registry inference payload missing derivation_id")
+    if not isinstance(version, str) or not version:
+        raise SDKStoreError("registry inference payload missing version")
+    if not isinstance(where, list) or not where:
+        raise SDKStoreError("registry inference payload missing where")
+    return SDKInference(
+        id=inference_id,
+        version=version,
+        where=list(where),
+        head=payload.get("head"),
+        target=payload.get("target") if isinstance(payload.get("target"), str) else None,
+        head_vars=list(payload.get("head_vars")) if isinstance(payload.get("head_vars"), list) else None,
+        status=payload.get("status") if isinstance(payload.get("status"), str) else None,
+        description=payload.get("description") if isinstance(payload.get("description"), str) else None,
+        tags=list(payload.get("tags", [])) if isinstance(payload.get("tags"), list) else [],
     )
 
 

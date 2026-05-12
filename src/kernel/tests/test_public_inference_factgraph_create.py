@@ -152,10 +152,16 @@ class PublicInferenceDocsTests(unittest.TestCase):
 
 
 class PublicInferenceDeferralGuards(unittest.TestCase):
-    def test_no_fg_inferences_namespace_in_blueprint_1(self) -> None:
+    def test_fg_inferences_namespace_is_persistence_only_after_authoring_facade(self) -> None:
         sdk = SDKStore([User])
 
-        self.assertFalse(hasattr(sdk, "inferences"))
+        self.assertTrue(hasattr(sdk, "inferences"))
+        for method in ("save", "load", "list", "get"):
+            with self.subTest(method=method):
+                self.assertTrue(hasattr(sdk.inferences, method))
+        for method in ("inspect", "run", "evaluate", "accept"):
+            with self.subTest(method=method):
+                self.assertFalse(hasattr(sdk.inferences, method))
 
     def test_no_derivation_ref_or_inference_ref_in_kernel_sdk(self) -> None:
         sdk_module = _sdk_module()
