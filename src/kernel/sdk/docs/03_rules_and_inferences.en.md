@@ -191,7 +191,7 @@ Bind an authoring registry to the graph when you want durable rule and
 inference assets:
 
 ```python
-fg = FactGraph.create(schema_classes=[User], registry_root="./registry")
+fg = FactGraph.create(schema_classes=[User], path="./workspace")
 
 rule_ref = fg.rules.save(rule)          # SavedRuleRef(rule_id, version)
 inf_ref = fg.inferences.save(inf)       # SavedInferenceRef(inference_id, version)
@@ -209,6 +209,11 @@ runtime selectors; pass the loaded objects to `fg.eval.run(...)` or
 
 `fg.rules.inspect(rule_or_inference)` remains the structural inspection API and
 lives next to the persistence methods.
+
+When the graph is workspace-backed, `fg.save()` persists the ledger plus the
+schema-backed rule/inference registry. `FactGraph.load("./workspace",
+schema_classes=[User])` restores the workspace and returns loaded refs through
+the same `fg.rules.*` / `fg.inferences.*` facades.
 
 ## 5. Query DSL
 

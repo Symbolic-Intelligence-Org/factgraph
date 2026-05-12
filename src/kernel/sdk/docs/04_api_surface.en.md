@@ -80,8 +80,9 @@ The export list currently has 40 names.
 values in declaration order; unset `Field` values render as `None`.
 
 `FactGraph.create(schema_classes=[...])` is the canonical constructor.
+`FactGraph.load(path, schema_classes=[...])` restores a saved workspace.
 `FactGraph.from_schema_classes([...])` remains available as the lower-level
-constructor name.
+class-first constructor name and does not accept workspace `path=`.
 
 ### 1.2 DSL
 
@@ -150,6 +151,7 @@ implementation.
 FactGraph.create(
     schema_classes,
     *,
+    path=None,
     ledger=None,
     ledger_path=None,
     artifact_store_root=None,
@@ -160,13 +162,43 @@ FactGraph.create(
 ```
 
 Class-validation errors raise `SDKSchemaError`; constructor-path errors
-raise `SDKStoreError`. `artifact_store_root` enables sidecar-backed
+raise `SDKStoreError`. `path=` binds the graph to a compact workspace root and
+derives default `ledger.db` / `registry/` component paths. Explicit
+`ledger_path=` or `registry_root=` may be supplied with `path=` only when they
+match those workspace defaults. `artifact_store_root` enables sidecar-backed
 explain artifact readback (ignored if a fully constructed `store=` is
 supplied). `registry_root` constructs a file-backed authoring registry for
 `fg.rules.*` / `fg.inferences.*`; `registry` accepts a prebuilt
 `FileAuthoringRegistry`. If both are provided, their roots must match.
 `FactGraph.from_schema_classes(...)` remains available as the lower-level
 class-first constructor name.
+
+```python
+FactGraph.load(path, *, schema_classes=[...], default_row_format=None)
+fg.save(path=None)
+```
+
+`fg.save()` writes the bound workspace. `fg.save(path)` writes and rebinds the
+graph to that workspace. An unbound graph raises
+`SDKStoreError("workspace path not bound; pass fg.save(path=...) or create with FactGraph.create(path=...)")`.
+`FactGraph.load(...)` requires Python schema classes and validates four anchors:
+workspace manifest digest, ledger schema digest, registry schema digest, and
+the digest compiled from the supplied classes.
+
+Workspace v1 layout:
+
+```text
+workspace/
+  factgraph_workspace.json
+  ledger.db
+  registry/
+```
+
+`factgraph_workspace.json` records `factgraph_workspace_version="1"`,
+`save_scope="level_4"`, `schema_digest`, component paths, and timestamps.
+Level 4 includes the ledger, schema IR, and saved rules/inferences. It excludes
+artifact sidecars, in-memory views, audit/evidence round files, and package
+exports.
 
 ### 2.2 Schema namespace (`fg.schema.*`)
 
@@ -355,9 +387,10 @@ from kernel.sdk.registry import SDKRegistry
 Normal SDK code should prefer:
 
 ```python
-fg = FactGraph.create(schema_classes=[User], registry_root="./registry")
+fg = FactGraph.create(schema_classes=[User], path="./workspace")
 rule_ref = fg.rules.save(rule)
 inf_ref = fg.inferences.save(inf)
+fg.save()
 ```
 
 ---

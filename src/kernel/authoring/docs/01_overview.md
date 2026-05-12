@@ -286,8 +286,17 @@ the registry workspace.
 - `FactGraph.create(..., registry_root=...)` binds a file authoring registry
   to the SDK graph. `fg.rules.save/load/list/get` and
   `fg.inferences.save/load/list/get` are the normal public SDK facade.
+- `FactGraph.create(..., path=...)` binds the graph to a workspace root. The
+  workspace owns `ledger.db`, `factgraph_workspace.json`, and a nested
+  `registry/` directory. `fg.save()` synchronizes the graph into that layout,
+  while `FactGraph.load(path, schema_classes=[...])` restores it with explicit
+  schema-class validation.
 - `kernel.application.authoring_runtime` owns the application-layer
   save/load/list/get orchestration used by the SDK facade.
+- `kernel.application.workspace_runtime` owns workspace layout, manifest
+  validation, ledger backup/checkpoint behavior, and registry sync/copy
+  orchestration. It deliberately does not include artifact sidecars, in-memory
+  views, audit/evidence round files, or package export output.
 - `kernel.sdk.registry.SDKRegistry` remains an advanced/internal wrapper for
   tests, migration, and lower-level registry workflows. It is not exported from
   `kernel.sdk`.

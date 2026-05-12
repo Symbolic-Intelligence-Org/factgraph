@@ -1,7 +1,7 @@
 # Overview of the Application Module (`kernel`)
 
 - Scope: `src/kernel/application`
-- Last updated: 2026-05-08
+- Last updated: 2026-05-12
 - Target readers: developers who need to understand Python runtime authority, SDK adapter boundaries, and service/agent consumer constraints
 
 ## 1. Module Responsibilities
@@ -16,6 +16,8 @@ It is responsible for:
 - entity write planning / apply
 - query runtime request/result execution
 - normalized ingest request/result execution
+- authoring asset persistence orchestration and FactGraph workspace layout
+  orchestration for SDK-independent save/load paths
 - compiled derivation evaluate / accept orchestration
 - explicit-binding derivation Check (`passed` / `failed` / `unsupported` / `invalid_request`)
 - explicit-binding derivation Diagnose (`passed` / `failed.no_candidate` / `failed.atom_localized` / `unsupported` / `invalid_request`)
@@ -68,6 +70,14 @@ It is not responsible for:
   - `execute_query(...)`
 - `ingest_runtime.py`
   - `apply_ingest_request(...)`
+- `authoring_runtime.py`
+  - application-layer persistence helpers for saved rule/inference assets;
+    returns `SavedRuleRef` / `SavedInferenceRef` handles and keeps registry
+    schema upsert/digest checks out of the SDK facade.
+- `workspace_runtime.py`
+  - FactGraph workspace layout authority: v1 manifest construction/validation,
+    `ledger.db` backup/checkpoint, registry sync/copy, and component path
+    resolution for `fg.save(...)` / `FactGraph.load(...)`.
 - `derivation_runtime.py`
   - `evaluate_derivation_plans(...)`, `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
 - `derivation_check_runtime.py`
@@ -101,6 +111,8 @@ Batch 8 public-surface note (historical Batch 8 state, since updated by L Direct
 - `apply_write_plan(...)`
 - `execute_query(...)`
 - `apply_ingest_request(...)`
+- `save_workspace(...)`
+- `load_workspace(...)`
 - `evaluate_derivation_plans(...)`
 - `check_derivation_binding(...)`
 - `diagnose_derivation_binding(...)`

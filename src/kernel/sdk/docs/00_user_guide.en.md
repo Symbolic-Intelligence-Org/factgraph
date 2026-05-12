@@ -110,6 +110,20 @@ class Document(Entity):
 fg = FactGraph.create(schema_classes=[User, Document])
 ```
 
+Pass `path=` when the graph should own a durable workspace. A workspace stores
+the ledger, schema IR, and authoring registry together:
+
+```python
+fg = FactGraph.create(schema_classes=[User, Document], path="./workspace")
+fg.save()
+
+same_graph = FactGraph.load("./workspace", schema_classes=[User, Document])
+```
+
+`FactGraph.load(...)` requires the same Python `Entity` classes used to create
+the workspace. It validates the manifest, ledger schema digest, registry schema
+digest, and supplied classes before returning a graph.
+
 You can also compile separately:
 
 ```python
@@ -898,7 +912,7 @@ from kernel.sdk import FactGraph
 
 fg = FactGraph.create(
     schema_classes=[User, Document],
-    registry_root="/var/factpy/registry",
+    path="/var/factpy/workspace",
 )
 
 rule_ref = fg.rules.save(my_rule)          # SavedRuleRef(rule_id, version)
@@ -925,8 +939,23 @@ candidates = fg.eval.evaluate(loaded_inf)
 debug code can still import `kernel.sdk.registry.SDKRegistry`, but normal SDK
 code should use the graph-bound `fg.rules.*` and `fg.inferences.*` facades.
 
-See [§3 of 04](04_api_surface.en.md#3-sdkregistry-methods) for the
-full method list.
+The workspace layout is intentionally compact:
+
+```text
+workspace/
+  factgraph_workspace.json
+  ledger.db
+  registry/
+```
+
+`factgraph_workspace.json` uses version `"1"` and save scope `"level_4"`.
+Level 4 includes ledger data, schema IR, and saved rules/inferences. It does
+not include artifact sidecars, in-memory views, audit/evidence round files, or
+package-export output. Use `fg.package.export_package(...)` when you need a
+distribution/reproduction artifact rather than an editable workspace.
+
+See [`04_api_surface.en.md`](04_api_surface.en.md#27-rules-namespace-fgrules)
+for the `fg.rules.*` and `fg.inferences.*` method lists.
 
 ---
 

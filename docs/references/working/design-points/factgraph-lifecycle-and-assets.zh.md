@@ -16,9 +16,11 @@ fg.eval.run(...)
 fg.what_if.check(...)
 ```
 
-但 `FactGraph` 的生命周期还没有成为一等公民:
+Blueprint 3 已让 `FactGraph` 的 workspace 生命周期成为一等公民:
 
-- `FactGraph.create(...)` 现在是 public lifecycle constructor,并可绑定 `registry_root=` / `registry=` 给 authoring asset persistence 使用; `FactGraph.from_schema_classes(...)` 仍可作为 class-first lower-level constructor substrate。
+- `FactGraph.create(...)` 现在是 public lifecycle constructor,并可绑定 `path=` workspace root 或 `registry_root=` / `registry=` 给 authoring asset persistence 使用; `FactGraph.from_schema_classes(...)` 仍可作为 class-first lower-level constructor substrate。
+- `fg.save(path=None)` 写入 v1 workspace layout: `factgraph_workspace.json` + `ledger.db` + `registry/`。
+- `FactGraph.load(path, schema_classes=[...])` 读取 workspace,要求 Python schema classes,并验证 manifest / ledger / registry / provided classes 的 schema digest。
 - `SDKRegistry` 已从 `kernel.sdk` public export surface hard-cut; `kernel.sdk.registry.SDKRegistry` 仍作为 advanced/internal wrapper 存在。普通用户的 authoring asset lifecycle 入口已经转到 `fg.rules.*` / `fg.inferences.*`。
 - `Rule` / `Inference` 现在仍作为独立 value object 参与 runtime call; durable authoring asset 的 save/load/list/get 入口已经自然地长在 graph-bound namespaces 上。
 - schema 的 add/delete/update/migration 还没有明确 public story。
@@ -28,7 +30,7 @@ fg.what_if.check(...)
 
 这个 note 的目标不是立刻改 API,而是把下一轮 blueprint 的设计边界先放清楚:
 
-1. `FactGraph` 是否应该拥有 `create/load/save`?
+1. `FactGraph` 是否应该拥有 `create/load/save`? Blueprint 1 + Blueprint 3 已回答为 yes。
 2. Registry 是否应该降级为实现机制甚至直接退出 public SDK,由 `fg.rules.*`、`fg.inferences.*` 和 future `fg.queries.*` 承担用户-facing asset lifecycle?
 3. `fg.schema.add/delete/update` 应该怎么表达,以及哪些动作第一阶段不应该实现?
 4. explain / evidence capability 和 query asset 应该放在哪里,避免之后命名重做?
@@ -450,7 +452,7 @@ Open design point: whether `FactGraph.create([User, Document])` should allow pos
 
 ### 7.2 `FactGraph.load(...)`
 
-Candidate conservative shape:
+Current conservative shape:
 
 ```python
 fg = FactGraph.load(
@@ -466,7 +468,7 @@ Why still require `schema_classes` in the first slice:
 - Registry schema IR can help compile saved rules/inferences, but it does not reconstruct typed Python entity classes by itself.
 - Class-less load would require a dynamic entity facade or generated classes, which is a separate design.
 
-Future richer shape:
+Deferred richer shape:
 
 ```python
 fg = FactGraph.load("./workspace")  # dynamic schema mode
@@ -909,9 +911,9 @@ Landed scope:
 8. Auto-upserts registry schema on first save, is idempotent under matching
    `schema_digest`, and raises on mismatch.
 
-Non-goals preserved:
+Non-goals preserved by Blueprint 2 at the time:
 
-- graph workspace `save/load`;
+- graph workspace `save/load` (landed later in Blueprint 3);
 - class-less load;
 - query persistence;
 - schema mutation;
@@ -919,15 +921,23 @@ Non-goals preserved:
 
 ### 13.3 Blueprint 3 — FactGraph workspace lifecycle
 
-Larger, workspace-layout slice.
+Blueprint 3 landed the workspace-layout slice.
 
-Candidate scope:
+Landed scope:
 
-1. Lock workspace directory layout.
-2. Lock save scope, probably starting with ledger + schema IR + registry manifest/rules/inferences.
-3. Add `fg.save(path=None)`.
-4. Add `FactGraph.load(path, schema_classes=[...])`.
-5. Document workspace save/load vs package export.
+1. Locked compact workspace layout:
+   - `factgraph_workspace.json`
+   - `ledger.db`
+   - `registry/`
+2. Locked save scope as Level 4: ledger + schema IR + registry manifest/rules/inferences.
+3. Added `fg.save(path=None)`, with no-arg save requiring a bound workspace
+   path and `fg.save(path)` rebinding the graph.
+4. Added `FactGraph.load(path, schema_classes=[...])`, requiring Python
+   schema classes and validating manifest / ledger / registry / provided-class
+   schema digests.
+5. Added `kernel.application.workspace_runtime` as the application-layer
+   layout/manifest/ledger-copy/registry-sync authority.
+6. Documented workspace save/load as distinct from `fg.package.export_package(...)`.
 
 Non-goals:
 
@@ -985,16 +995,26 @@ After the lifecycle sequence, these should be independent:
 
 ## 14. Working Recommendation
 
-The direction looks worthwhile, but it should be treated as a new architecture-facing sequence, not a tiny cleanup.
+The lifecycle/assets direction has now shipped through Blueprint 1, the
+service/registry vocabulary slice, Blueprint 2, and Blueprint 3. Future work
+should treat the current public model as:
 
-Because the product is not released, future blueprints should prefer a clean public model over compatibility preservation. Existing surfaces such as `SDKRegistry` and `from_schema_classes(...)` may be used as implementation scaffolding, but they do not need to survive as public API if `FactGraph.create/load/save` and domain asset namespaces make the model clearer.
+- `FactGraph.create(...)`, `FactGraph.load(...)`, and `fg.save(...)` own graph
+  lifecycle;
+- `fg.rules.*` and `fg.inferences.*` own authoring asset persistence;
+- `kernel.sdk.registry.SDKRegistry` and `FactGraph.from_schema_classes(...)`
+  remain advanced/lower-level scaffolding, not the normal teaching path.
 
-Current order after Blueprint 2:
+Because the product is not released, future blueprints should still prefer a
+clean public model over compatibility preservation when expanding adjacent
+surfaces.
+
+Lifecycle/assets sequence state after Blueprint 3:
 
 1. Public `Inference` naming is landed.
 2. Service/registry wire vocabulary is landed.
 3. Graph-bound authoring asset persistence facade is landed.
-4. Add graph workspace save/load only after save scope and layout are locked.
+4. Graph workspace save/load is landed with compact Level 4 layout.
 5. Preserve all assertion and runtime direct-use surfaces as hard invariants.
 6. Revisit schema mutation, query persistence, and explain/evidence capability as separate slices.
 
