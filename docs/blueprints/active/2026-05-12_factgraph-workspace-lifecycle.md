@@ -541,11 +541,11 @@ G0 decision (2026-05-12): **W19b locked**. `path=` stays on `FactGraph.create(..
 - [x] G0 locks schema validation anchors.
 - [x] G0 locks artifacts/views/audit/package exclusions.
 - [x] G0 locks application-layer ownership.
-- [ ] G1 adds red tests for `FactGraph.create(..., path=...)`.
-- [ ] G1 adds red tests for `fg.save(...)`.
-- [ ] G1 adds red tests for `FactGraph.load(...)`.
-- [ ] G1 adds guard tests for Blueprint 2 authoring persistence.
-- [ ] G1 adds guard tests for package/export and batch save boundaries.
+- [x] G1 adds red tests for `FactGraph.create(..., path=...)`.
+- [x] G1 adds red tests for `fg.save(...)`.
+- [x] G1 adds red tests for `FactGraph.load(...)`.
+- [x] G1 adds guard tests for Blueprint 2 authoring persistence.
+- [x] G1 adds guard tests for package/export and batch save boundaries.
 - [ ] G2 implements only locked workspace lifecycle behavior.
 - [ ] G3 updates SDK, authoring, package, and lifecycle docs.
 - [ ] G4 fills §10, marks implemented, and archives this blueprint pair.
