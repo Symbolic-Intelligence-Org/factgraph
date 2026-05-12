@@ -210,11 +210,10 @@ class PublicSemanticsExportTests(unittest.TestCase):
         self.assertEqual(semantics.timestep_delay, 2)
         self.assertEqual(tuple(semantics.head_bound), (0.7, 0.9))
 
-    def test_pyreason_semantics_rejects_branch_bounds_until_track3_post(self) -> None:
-        with self.assertRaises(TypeError) as ctx:
-            _pyreason_semantics_class()(branch_bounds={"sensor_path": [0.7, 0.9]})
+    def test_pyreason_semantics_accepts_branch_bounds_after_track3_post(self) -> None:
+        semantics = _pyreason_semantics_class()(branch_bounds={"sensor_path": [0.7, 0.9]})
 
-        self.assertIn("branch_bounds", str(ctx.exception))
+        self.assertEqual(semantics.branch_bounds["sensor_path"], (0.7, 0.9))
 
 
 class EngineAutoDerivationTests(unittest.TestCase):

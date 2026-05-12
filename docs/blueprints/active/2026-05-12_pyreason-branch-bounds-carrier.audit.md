@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-05-12 | draft | Blueprint created | Draft seed created after Track 2 publish. Source audit found that Track 2 exposes `PyReasonSemantics` without `branch_bounds`, SDK lowering can already resolve branch ids while SDK objects are in hand, `PyReasonRuleExt` has only global `head_bound`, and `where_compile.py` already emits one PyReason rule per branch using `_b{branch_idx}` names. |
 | 2026-05-12 | scoped | Scope freeze | Locked D1-D14. Track 3-post adds public `PyReasonSemantics.branch_bounds`, resolves explicit/fallback branch ids at the SDK boundary, lowers to canonical `rule_projection.pyreason` `branch:{index}` interval entries, materializes an index-keyed `PyReasonRuleExt.branch_head_bounds` carrier, and compiles per-branch head annotations while preserving service/compiled canonical boundaries. |
+| 2026-05-12 | g1-red | Red + guard baseline | Added `test_pyreason_branch_bounds_carrier.py` and inverted the Track 2 `branch_bounds` guard. New Track 3-post suite runs 16 tests with expected 11 errors + 4 failures + 1 guard pass; Track 2 suite has 1 expected error from the inverted guard; Track 1+B/C/D/E preservation suite remains 103 OK. |
 
 ## Decision Notes
 
