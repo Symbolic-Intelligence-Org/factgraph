@@ -195,11 +195,21 @@ after successful field-add.
 - Missing values for added fields use existing read semantics: `None` for
   single fields and `()` for multi fields.
 - No automatic value backfill occurs.
+- After field-add, SDK reads/writes through superseded `Entity` class objects
+  or `Field` descriptors raise `SDKStoreError("schema declaration was
+  superseded; use the post-add class object")` or an equivalent anchored
+  substring. Detection should happen at SDK boundaries by checking whether the
+  descriptor owner class is the currently active class object for that entity
+  type.
 - Ledger and registry digest anchors follow the schema mutation lifecycle
   slice.
 - Workspace manifest updates only on `fg.save()`.
 - `FactGraph.load(...)` still requires post-add Python schema classes after
   the workspace is saved.
+- DSL predicate-prefix mismatch for CamelCase entity types is a pre-existing
+  audit risk. This slice does not normalize every SDK DSL path, but it must add
+  a focused regression if field-add tests using CamelCase entities expose the
+  mismatch. Broad DSL prefix normalization remains a separate future slice.
 - `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
   `fg.schema.deprecate` remain absent.
 
@@ -387,7 +397,11 @@ separate schema declaration feature.
 
 ## 9. Implementation Plan
 
-1. G1 red baseline for field-add and preservation guards.
+1. G1 red baseline for field-add and preservation guards. Expected size:
+   roughly 30-40 tests covering field-add API, result DTO shape, class
+   replacement, old class/descriptor rejection, missing-value reads, digest
+   anchors, workspace save-time behavior, saved asset compatibility,
+   idempotent re-add, validator extension, and preservation guards.
 2. Extend `schema_mutation_runtime` to compute added fields and class
    replacement plans.
 3. Update SDK `fg.schema.add(...)` state refresh to replace same-entity class

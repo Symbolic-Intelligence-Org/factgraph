@@ -7,6 +7,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-13 | draft | Blueprint created | Audit-first draft after schema mutation lifecycle publish. |
+| 2026-05-13 | draft | Draft polish | Added superseded-class detection invariant, DSL prefix boundary, and G1 baseline sizing note. |
 
 ## Decision Notes
 
