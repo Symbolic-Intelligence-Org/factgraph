@@ -200,13 +200,13 @@ This namespace is read-only and by-id only. It does not ship graph-wide
 | Method | One-liner |
 |---|---|
 | `run(rule_or_query, *, policy=None, row_format=None, return_display_meta=False)` | Evaluate a `Rule`, `RuleRef`, or `Query`; `return_display_meta=True` requires `ReadPolicy` |
-| `evaluate(derivation, *, mode='native', engine_options=None)` | Evaluate a `Derivation`; returns list of `CandidateSet` |
-| `evaluate_compiled(plans, *, mode='native', engine_options=None)` | Evaluate already-compiled derivation plans |
+| `evaluate(derivation, *, engine='native', engine_options=None, semantics=None)` | Evaluate a `Derivation`; returns list of `CandidateSet` |
+| `evaluate_compiled(plans, *, engine='native', engine_options=None, semantics=None)` | Evaluate already-compiled derivation plans |
 | `accept(candidate, *, approved_by=None, note=None, dry_run=False, identity_override=None)` | Accept exactly one candidate; performs writes |
 | `accept_compiled(...)` | Accept against already-compiled plans |
 | `accept_many(candidates, *, ...)` | Accept multiple candidates idempotently |
 
-`mode='native'` rejects non-empty `engine_options`. Adapter-owned engines
+`engine='native'` rejects non-empty `engine_options`. Adapter-owned engines
 (`souffle`, `problog`, `pyreason`) consume `engine_options` at call time
 and never propagate to `Derivation` or ledger.
 
@@ -433,7 +433,7 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 
 ### 6.2 Derivation
 
-- `fg.evaluate(Derivation(...), mode="native"|"souffle"|"problog"|"pyreason")`
+- `fg.evaluate(Derivation(...), engine="native"|"souffle"|"problog"|"pyreason")`
   returns `list[CandidateSet]`
 - Legacy `mode='python'` / `mode='engine'` **values** raise explicit rename errors (use `mode='native'` / `mode='souffle'`)
 - `head=[...]` is supported (flattened output)
@@ -445,18 +445,13 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
   `fg.evaluate(..., engine_options={"timesteps": 5})`); never enters
   `Derivation` or ledger
 - Public `Rule` / `Derivation` objects do not carry adapter-specific
-  `engine_ext` parameters. Future `SemanticsProfile.rule_projection`
-  owns engine-specific rule projection.
-- Track 3 / B exposes `kernel.core.semantics.SemanticsProfile` as a core
-  validation / inspection value object. Track 3 / C lets core
-  `Store.evaluate(..., mode="problog", semantics_profile=...)` consume
-  `rule_projection.problog`, but SDK `evaluate(..., semantics=...)` and
-  `evaluate(..., semantics_profile=...)` are still rejected until Track 3 / E
-  defines the durable runtime call-site.
-- Track 3 / D lets core
-  `Store.evaluate(..., mode="pyreason", semantics_profile=...)` consume
-  `rule_projection.pyreason` and `temporal_projection`. This remains a
-  core/internal entry; SDK profile kwargs still reject until Track 3 / E.
+  `engine_ext` parameters. `SemanticsProfile.rule_projection` owns
+  engine-specific rule projection.
+- Track 3 / E exposes `kernel.sdk.SemanticsProfile`,
+  `fg.eval.inspect_semantics(profile)`, and
+  `fg.eval.evaluate(..., engine=..., semantics=profile)`. Public SDK calls
+  reject `mode=` and `semantics_profile=`; core/application internals keep
+  using `Store.evaluate(..., mode=..., semantics_profile=...)`.
 - Public `Rule.condition_weights` remains available as
   certainty/explain projection input. It is not an engine adapter
   parameter, and future runtime configuration for this lane belongs in

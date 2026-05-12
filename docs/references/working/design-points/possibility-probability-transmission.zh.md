@@ -387,9 +387,12 @@ second consuming adapter through the core
 `SemanticsProfile.rule_projection.pyreason` entries normalize into
 `PyReasonRuleExt` body/head interval and `timestep_delay` fields, while
 `SemanticsProfile.temporal_projection` supports `none`,
-`fixed_timesteps`, and `valid_time_boundaries`. SDK / service runtime
-calls still reject `semantics=` and `semantics_profile=` until Track 3 /
-E.
+`fixed_timesteps`, and `valid_time_boundaries`. Track 3 / E exposes this
+runtime projection publicly: SDK callers use
+`fg.eval.evaluate(..., engine=..., semantics=profile)`, while service
+callers provide top-level `"semantics": {...}`. The public
+`semantics_profile=` name remains rejected and reserved for
+core/application internals.
 
 Important separation:
 

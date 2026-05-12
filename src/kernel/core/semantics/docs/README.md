@@ -4,8 +4,9 @@
 projection semantics. Track 3 / B introduced `SemanticsProfile` as a
 validated core value object:
 
-- no SDK namespace export;
-- no service endpoint;
+- SDK namespace export exists through `kernel.sdk.SemanticsProfile`;
+- service runtime accepts top-level inline `semantics` for derivation
+  evaluation;
 - ProbLog adapter consumption exists for `rule_projection.problog` through
   the core `Store.evaluate(..., mode="problog", semantics_profile=...)`
   path;
@@ -36,7 +37,9 @@ Adapter migration is intentionally staged:
   `SemanticsProfile.temporal_projection` for PyReason. Adapter-specific
   validation still happens at PyReason consumption time, not in the core
   profile constructor.
-- Track 3 / E will decide the durable SDK/service runtime call-site.
+- Track 3 / E exposes the durable SDK/service runtime call-site:
+  SDK users pass `fg.eval.evaluate(..., engine=..., semantics=profile)`,
+  and service callers pass top-level JSON `"semantics": {...}`.
 
 Adapter import boundary:
 
@@ -44,5 +47,5 @@ Adapter import boundary:
   because they consume profile data in C/D.
 - Souffle remains profile-agnostic.
 - Native evaluation is implemented in core, not as a
-  `src/kernel/adapters/native/` package; E owns any durable public
-  call-site shape for native/profile interaction.
+  `src/kernel/adapters/native/` package; public SDK/service calls reject
+  profile use with `engine="native"` and `engine="souffle"`.

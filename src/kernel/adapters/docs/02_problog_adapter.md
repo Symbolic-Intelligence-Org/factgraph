@@ -254,8 +254,9 @@ Semantic-delivery addendum:
     coexist only when they materialize the same probability tuple
   - `Store.evaluate(..., mode="native", semantics_profile=...)` rejects
     rather than silently ignoring the profile
-- SDK and service runtime calls still reject `semantics=` /
-  `semantics_profile=`; Track 3 / E owns the durable public call-site.
+- Track 3 / E exposes the durable public call-site:
+  `fg.eval.evaluate(..., engine="problog", semantics=profile)` and service
+  top-level `"semantics": {...}`.
 - The output program contains:
   - `edb_fact(...)` facts
   - `rule_body_i` branch rules
@@ -296,7 +297,7 @@ evaluate surface:
 
 Constraints:
 
-- `sdk.evaluate(..., mode="problog", engine_options={"timeout": 15})`
+- `sdk.evaluate(..., engine="problog", engine_options={"timeout": 15})`
   takes effect
 - When omitted, the adapter default `timeout=30` is used
 - Unknown keys raise `ValueError`

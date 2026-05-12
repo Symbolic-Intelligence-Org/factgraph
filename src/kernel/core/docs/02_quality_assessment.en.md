@@ -35,7 +35,7 @@ Strengths:
 
 - responsibilities are clearly separated
 - `Store` API stays stable
-- `evaluate(mode=...)` behavior is explicit and historical aliases now fail clearly
+- public SDK `evaluate(engine=...)` behavior is explicit and historical aliases now fail clearly
 - query entrypoints (`explain/conflicts/resolve_mapping`) are separated from candidate construction
 
 Risks:

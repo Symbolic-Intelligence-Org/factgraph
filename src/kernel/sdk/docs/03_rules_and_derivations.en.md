@@ -25,14 +25,14 @@ supported.
   templates. They do not carry adapter-specific `engine_ext` parameters.
 - `engine_options` is **call-time** runtime configuration passed at
   `evaluate(...)` (e.g. `fg.eval.evaluate(deriv, engine_options={"timesteps": 5})`).
-  It never enters the `Derivation` or the ledger. `mode="native"`
+  It never enters the `Derivation` or the ledger. `engine="native"`
   rejects non-empty `engine_options`.
-- Future `SemanticsProfile.rule_projection` owns the durable public shape
-  for engine-specific rule projection. Track 3 / B has introduced the
-  core `kernel.core.semantics.SemanticsProfile` value object for
-  validation and inspection only; `evaluate(..., semantics=...)` and
-  `evaluate(..., semantics_profile=...)` are still rejected until the
-  runtime call-site is designed in Track 3 / E.
+- `SemanticsProfile.rule_projection` owns the durable public shape for
+  engine-specific rule projection. Track 3 / E exposes
+  `kernel.sdk.SemanticsProfile`, `fg.eval.inspect_semantics(profile)`,
+  and `fg.eval.evaluate(..., engine=..., semantics=profile)`. Public SDK
+  calls reject `mode=` and `semantics_profile=`; use `engine=` and
+  `semantics=`.
 
 ## 1. `vars(...)`
 
@@ -211,7 +211,7 @@ with vars("u", "loc", "nm") as (u, loc, nm):
         head=User.name(locale=loc, name=nm),
     )
 
-cands = sdk.evaluate(d, mode="native")
+cands = sdk.evaluate(d, engine="native")
 res = sdk.accept(cands[0], approved_by="alice")
 ```
 
@@ -259,7 +259,7 @@ System-prefixed temporary names are reserved.
 ### 8.1 `sdk.evaluate(...)`
 
 ```python
-cands = sdk.evaluate(drv, mode="native")
+cands = sdk.evaluate(drv, engine="native")
 ```
 
 - `mode`: `native` (default) / `souffle` / `problog` / `pyreason`.
@@ -268,7 +268,7 @@ cands = sdk.evaluate(drv, mode="native")
 - `souffle` / `problog` / `pyreason` require registered adapters (for example `import kernel.adapters.souffle`, `import kernel.adapters.problog`, `import kernel.adapters.pyreason`).
 - `sdk.evaluate(..., view=...)` and `sdk.evaluate(..., policy=...)` are
   not supported; inference always uses the full active assertion set.
-- `engine_options` is call-time engine run-time configuration, for example `sdk.evaluate(drv, mode="pyreason", engine_options={"timesteps": 5})`.
+- `engine_options` is call-time engine run-time configuration, for example `sdk.evaluate(drv, engine="pyreason", engine_options={"timesteps": 5})`.
 - `engine_options` does not enter `Derivation` or `to_authoring_payload()`; `mode="native"` rejects non-empty `engine_options`.
 
 ### 8.2 `CandidateSet` key fields

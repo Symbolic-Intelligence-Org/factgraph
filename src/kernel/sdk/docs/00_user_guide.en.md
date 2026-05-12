@@ -397,7 +397,7 @@ Three primitives:
 |---|---|---|
 | `Rule` | Single-rule inference (`select` + `where`); produces rows | `fg.eval.run(rule)` → `list[dict]` (default) |
 | `Query` | Read-side projection over the current store; produces rows | `fg.eval.run(query)` → `list[dict]` (default) |
-| `Derivation` | A single derivation (one or more heads); produces accept-ready candidates | `fg.eval.evaluate(deriv, mode=...)` → `list[CandidateSet]` |
+| `Derivation` | A single derivation (one or more heads); produces accept-ready candidates | `fg.eval.evaluate(deriv, engine=...)` → `list[CandidateSet]` |
 
 All three are constructed inside a `with vars(...) as (...):` block.
 For the deeper DSL spec see
@@ -504,18 +504,16 @@ with vars("d", "kw") as (d, kw):
         head=Document.keywords(value=kw),  # fact-candidate head
     )
 
-candidates = fg.eval.evaluate(deriv, mode="native")           # → list[CandidateSet]
-candidates = fg.eval.evaluate(deriv, mode="problog")          # probabilistic
-candidates = fg.eval.evaluate(deriv, mode="pyreason",
+candidates = fg.eval.evaluate(deriv, engine="native")           # → list[CandidateSet]
+candidates = fg.eval.evaluate(deriv, engine="problog")          # probabilistic
+candidates = fg.eval.evaluate(deriv, engine="pyreason",
                               engine_options={"timesteps": 5})  # temporal
 ```
 
-`mode` is **call-time**, not stored on the `Derivation`. Allowed
-values: `"native"` (default), `"souffle"`, `"problog"`, `"pyreason"`.
-`mode="native"` rejects non-empty `engine_options`. The legacy
-`mode='python'` and `mode='engine'` **values** are removed; passing
-them raises with rename hints (use `mode='native'` and
-`mode='souffle'` respectively).
+`engine` is **call-time**, not stored on the `Derivation`. Allowed values:
+`"native"` (default), `"souffle"`, `"problog"`, `"pyreason"`.
+`engine="native"` rejects non-empty `engine_options`. The public SDK
+`mode=` keyword is removed in Track 3 / E; use `engine=`.
 
 Multi-head Derivation:
 
@@ -577,22 +575,33 @@ results = fg.eval.accept_many(
 ### Engine runtime options
 
 ```python
-fg.eval.evaluate(deriv, mode="pyreason", engine_options={"timesteps": 10})
+fg.eval.evaluate(deriv, engine="pyreason", engine_options={"timesteps": 10})
 ```
 
 `engine_options` is **call-time** runtime config. It never enters
 `Rule`, `Derivation`, authoring payloads, or the ledger. Engine-specific
 rule projection is intentionally not carried by public SDK rule objects;
-future `SemanticsProfile.rule_projection` owns that durable public shape.
-Track 3 / B exposes `kernel.core.semantics.SemanticsProfile` for core
-validation and inspection. Track 3 / C lets the core
-`Store.evaluate(..., mode="problog", semantics_profile=...)` path consume
-`rule_projection.problog`. Track 3 / D also lets the core
-`Store.evaluate(..., mode="pyreason", semantics_profile=...)` path consume
-`rule_projection.pyreason` and `temporal_projection`. SDK
-`fg.eval.evaluate(..., semantics=...)` and
-`fg.eval.evaluate(..., semantics_profile=...)` are still rejected until
-Track 3 / E defines the public runtime call-site.
+`SemanticsProfile.rule_projection` owns that durable public shape.
+Track 3 / E exposes `SemanticsProfile` through `kernel.sdk` and accepts it
+at the public runtime call-site:
+
+```python
+from kernel.sdk import SemanticsProfile
+
+profile = SemanticsProfile(
+    name="profile.problog",
+    engine="problog",
+    rule_projection={
+        "problog": [{"target": "branch:0", "kind": "branch_probability", "value": 0.7}]
+    },
+)
+
+fg.eval.evaluate(deriv, engine="problog", semantics=profile)
+```
+
+Use `fg.eval.inspect_semantics(profile)` to inspect configured projection
+lanes. The public SDK rejects `semantics_profile=`; that name is reserved
+for core/application internals.
 
 ### Semantic annotations
 
@@ -926,8 +935,8 @@ Notable changes:
 | `fact_key` / `pred_id` on `Pred` | (removed) | Use field accessors instead |
 | `.chosen` on assertion view | (removed) | Use `snapshot.field("X").active` |
 | `temporal_view` parameter | (removed) | Pass via `meta` and use a custom view |
-| `mode='engine'` value in `evaluate` | (removed) | Use `mode='souffle'`; old value raises with rename hint |
-| `mode='python'` value in `evaluate` | (removed) | Use `mode='native'`; old value raises with rename hint |
+| `mode=` keyword on SDK `evaluate` | (removed) | Use `engine=` |
+| `semantics_profile=` keyword on SDK `evaluate` | (removed) | Use `semantics=` |
 
 ### ProbLog branch probability transition
 
@@ -935,11 +944,9 @@ Notable changes:
 probability, confidence, or engine-specific parameters. Public
 `body_confidences` and `engine_ext` payloads are rejected. The old names
 remain only in rejection messages and adapter/internal bridges until
-future `SemanticsProfile.rule_projection` provides the durable public
-rule-projection shape. Track 3 / C has activated core ProbLog consumption
-of `SemanticsProfile.rule_projection.problog`, but the SDK still rejects
-`semantics=` and `semantics_profile=` until Track 3 / E defines the
-public runtime call-site.
+`SemanticsProfile.rule_projection` provides the durable public
+rule-projection shape. Track 3 / E exposes that shape through
+`fg.eval.evaluate(..., engine="problog", semantics=profile)`.
 
 ### PyReason profile transition
 
@@ -949,9 +956,8 @@ It accepts `rule_projection.pyreason` entries for body intervals, head
 intervals, and rule `timestep_delay`, plus `temporal_projection` modes
 `none`, `fixed_timesteps`, and `valid_time_boundaries`.
 
-This is not yet an SDK call-site. Public SDK calls continue to use
-`mode="pyreason"` and `engine_options={"timesteps": ...}` until Track 3 /
-E defines the durable SDK/service profile API.
+Track 3 / E exposes the public SDK call-site:
+`fg.eval.evaluate(..., engine="pyreason", semantics=profile)`.
 
 ### Tag semantics on multi-fields
 

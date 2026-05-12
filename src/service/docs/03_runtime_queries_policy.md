@@ -1090,9 +1090,11 @@
   已让 core `Store.evaluate(..., mode="problog", semantics_profile=...)`
   消费 `rule_projection.problog`。Track 3 / D 也已让 core
   `Store.evaluate(..., mode="pyreason", semantics_profile=...)` 消费
-  `rule_projection.pyreason` 与 `temporal_projection`。service runtime 仍不消费 profile；
-  top-level 或 `derivation` 内的 `semantics` / `semantics_profile`
-  会返回 `shape` error，并指向 Track 3 / E 的 runtime call-site 设计。
+  `rule_projection.pyreason` 与 `temporal_projection`。Track 3 / E 让
+  service runtime 消费 top-level `semantics` inline dict，并通过
+  `SemanticsProfile(**semantics)` 校验；`semantics_profile` 和
+  `derivation.semantics` / `derivation.semantics_profile` 继续返回
+  `shape` error。
 - native `engine="native"` derivation 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：
   - 若已有 filesystem registry，ephemeral rules 在其后 merge
   - 若 `registry_root is None` 但 session 有 ephemeral rules，service 会临时创建一个空 `RuleRegistry()` 并注入

@@ -185,21 +185,23 @@ Adapter-specific rule projection is no longer public SDK rule syntax:
 - `problog` internals currently use `ProbLogRuleExt(branch_probabilities=...)`
   - semantics: normalized `where` OR-branch weighting
   - internal compiled `body_confidences` is only a temporary SDK/runtime bridge; public authoring and service payloads reject it
-- future `SemanticsProfile.rule_projection` owns the durable public
+- `SemanticsProfile.rule_projection` owns the durable public
   rule-projection shape
 - Track 3 / B introduced `kernel.core.semantics.SemanticsProfile` as a
   core value object. Track 3 / C makes ProbLog the first consuming
   adapter: the core `Store.evaluate(..., mode="problog",
   semantics_profile=...)` path maps `rule_projection.problog`
-  `branch_probability` entries into `ProbLogRuleExt`. SDK and service
-  profile payloads still reject until Track 3 / E, and no profile-derived
-  values are written into assertion storage.
+  `branch_probability` entries into `ProbLogRuleExt`. Track 3 / E exposes
+  this through `fg.eval.evaluate(..., engine="problog", semantics=profile)`
+  and service top-level `"semantics": {...}`. No profile-derived values are
+  written into assertion storage.
 - Track 3 / D makes PyReason the second consuming adapter: the core
   `Store.evaluate(..., mode="pyreason", semantics_profile=...)` path maps
   `rule_projection.pyreason` into `PyReasonRuleExt` and maps
   `temporal_projection` into PyReason run timesteps plus EDB
-  `active_from` / `active_to` coordinates. SDK and service profile
-  payloads still reject until Track 3 / E.
+  `active_from` / `active_to` coordinates. Track 3 / E exposes this through
+  `fg.eval.evaluate(..., engine="pyreason", semantics=profile)` and service
+  top-level `"semantics": {...}`.
 
 Native `RuleRef` semantics and current boundary:
 

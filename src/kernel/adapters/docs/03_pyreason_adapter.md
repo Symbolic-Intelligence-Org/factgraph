@@ -12,7 +12,7 @@ The PyReason adapter is factpy's integration with the
 [PyReason](https://github.com/lab-v2/pyreason) graph-reasoning
 engine. It is now wired into the shared evaluate surface:
 `Store.evaluate(mode="pyreason")` /
-`SDKStore.evaluate(derivation, mode="pyreason")` go through
+`SDKStore.evaluate(derivation, engine="pyreason")` go through
 the adapter's EDB materialization, WhereIR compilation, runner,
 and `CandidateSet` output. The adapter-local provenance, session,
 rule extension, runner, and accept helper are still kept as
@@ -273,8 +273,9 @@ result = run_pyreason(
   The adapter reads `rule_projection.pyreason` and
   `temporal_projection`, then normalizes them into adapter-local
   `PyReasonRuleExt`, `PyReasonRunConfig`, and EDB active-time
-  coordinates. SDK / service profile payloads still reject until
-  Track 3 / E defines the durable public call-site.
+  coordinates. Track 3 / E exposes the durable public call-site:
+  `fg.eval.evaluate(..., engine="pyreason", semantics=profile)` and service
+  top-level `"semantics": {...}`.
 - `compile_pyreason_rule(...)` currently supports only
   `PredAtom` + `LogicVar` + literals; `CompareExpr` / `NotExpr` /
   `RuleRefAtom` raise an explicit error
@@ -376,7 +377,7 @@ shared evaluate surface:
 
 Constraints:
 
-- `sdk.evaluate(..., mode="pyreason", engine_options={"timesteps": 5})`
+- `sdk.evaluate(..., engine="pyreason", engine_options={"timesteps": 5})`
   takes effect
 - When omitted, the adapter default `timesteps=2` is used
 - Unknown keys raise `ValueError`
@@ -390,6 +391,8 @@ Constraints:
   Profile consumption requires `profile.engine == "pyreason"` and a
   matching `mode="pyreason"` call. Passing a PyReason profile to
   another mode rejects instead of silently ignoring the profile.
+- Track 3 / E adds the public SDK/service call-site:
+  `fg.eval.evaluate(..., engine="pyreason", semantics=profile)`.
 
 ### 5C.0a SemanticsProfile consumption
 

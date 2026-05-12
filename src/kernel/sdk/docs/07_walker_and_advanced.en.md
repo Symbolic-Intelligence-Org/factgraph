@@ -248,7 +248,7 @@ the stable SDK contract:
   Calling it directly bypasses the SDK boundary and may break across
   versions.
 - The right tool for almost all callers is the high-level
-  `fg.eval.evaluate(deriv, mode=...)` (or `fg.eval.accept(...)`),
+  `fg.eval.evaluate(deriv, engine=...)` (or `fg.eval.accept(...)`),
   which lowers + caches + delegates in one call.
 
 If you genuinely need to reuse a lowered plan across calls, prefer
@@ -271,7 +271,7 @@ import kernel.adapters.problog    # registers "problog" mode
 import kernel.adapters.pyreason   # registers "pyreason" mode
 ```
 
-After import, `fg.eval.evaluate(deriv, mode="souffle")` works. Without
+After import, `fg.eval.evaluate(deriv, engine="souffle")` works. Without
 the import, the call raises `SDKStoreError` with a "no such mode"
 diagnostic.
 

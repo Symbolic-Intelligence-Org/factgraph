@@ -393,8 +393,9 @@
 - `rule_spec` 返回的是 registry 中持久化的 rule asset payload；除逻辑字段外，也会保留 `description`、`tags`、`condition_weights` 等 rule metadata。
 - `condition_weights` 保留为 certainty/explain projection input，不是
   engine adapter 参数；未来运行时配置归
-  `SemanticsProfile.certainty_projection`。Track 3 / B 只提供 profile
-  scaffolding；registry payload 形态在本阶段不变。
+  `SemanticsProfile.certainty_projection`。Track 3 / E 已让 runtime
+  derivation evaluate 接受 top-level `semantics` profile，但 registry
+  payload 形态在本阶段不变。
 - 当指定 `rule_id` 或 `rule_id+version` 在 registry 中不存在时，当前 contract 返回 `rule_spec: null`，不是错误 envelope。
 
 错误 kinds：
