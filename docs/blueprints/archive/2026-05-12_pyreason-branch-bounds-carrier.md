@@ -1,6 +1,6 @@
 # Task Blueprint: Track 3-post PyReason Branch Bounds Carrier
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -431,29 +431,29 @@ G4 should update:
 ## 7. Acceptance
 
 - [x] G0 locks Q1-Q13 and records decisions in the audit.
-- [ ] G1 red baseline covers public `branch_bounds`, branch-id resolution,
+- [x] G1 red baseline covers public `branch_bounds`, branch-id resolution,
   carrier validation, compiler output, and preservation guards.
-- [ ] `PyReasonSemantics(branch_bounds=...)` accepts explicit branch ids and
+- [x] `PyReasonSemantics(branch_bounds=...)` accepts explicit branch ids and
   fallback ids.
-- [ ] `PyReasonSemantics(branch_bounds={})` is equivalent to omitting it.
-- [ ] Unknown branch ids reject at the SDK object boundary.
-- [ ] Lowered canonical `SemanticsProfile` carries PyReason
+- [x] `PyReasonSemantics(branch_bounds={})` is equivalent to omitting it.
+- [x] Unknown branch ids reject at the SDK object boundary.
+- [x] Lowered canonical `SemanticsProfile` carries PyReason
   `target="branch:{index}", kind="interval"` entries.
-- [ ] Wrapper lowering and direct `SemanticsProfile` construction are
+- [x] Wrapper lowering and direct `SemanticsProfile` construction are
   equivalent for the canonical branch target shape.
-- [ ] Direct `SemanticsProfile.rule_projection.pyreason` branch targets are
+- [x] Direct `SemanticsProfile.rule_projection.pyreason` branch targets are
   validated at adapter consumption time.
-- [ ] `PyReasonRuleExt` carries branch-specific head bounds without leaking
+- [x] `PyReasonRuleExt` carries branch-specific head bounds without leaking
   SDK branch ids.
-- [ ] `where_compile.py` emits per-branch head annotations.
-- [ ] Branch-specific bounds override global `head_bound` for the specified
+- [x] `where_compile.py` emits per-branch head annotations.
+- [x] Branch-specific bounds override global `head_bound` for the specified
   branch and leave other branches on the global default.
-- [ ] Single-branch derivations support fallback `b0`.
-- [ ] Global `head_bound` existing behavior remains green.
-- [ ] ProbLog / Track 2 wrapper behavior remains green.
-- [ ] Service and compiled wrapper boundaries remain green.
-- [ ] Track 2 branch_bounds rejection guard is inverted to positive.
-- [ ] Release-facing docs document `branch_bounds` as current behavior after
+- [x] Single-branch derivations support fallback `b0`.
+- [x] Global `head_bound` existing behavior remains green.
+- [x] ProbLog / Track 2 wrapper behavior remains green.
+- [x] Service and compiled wrapper boundaries remain green.
+- [x] Track 2 branch_bounds rejection guard is inverted to positive.
+- [x] Release-facing docs document `branch_bounds` as current behavior after
   implementation.
 
 ## 8. Implementation Plan
@@ -479,9 +479,105 @@ G4 should update:
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
+### 10.1 Final Landed Behavior
 
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+1. `kernel.sdk.PyReasonSemantics` now accepts
+   `branch_bounds={branch_id: [lower, upper]}`.
+2. `branch_bounds` keys may be explicit `Branch(id=...)` values or fallback
+   positional ids such as `b0` / `b1`.
+3. Empty `branch_bounds={}` is a no-op and behaves like omitting
+   branch-specific overrides.
+4. SDK lowering resolves branch ids while the SDK `Derivation` object is
+   still available.
+5. Public branch ids lower to canonical `SemanticsProfile.rule_projection.pyreason`
+   entries with `target="branch:{index}", kind="interval"`.
+6. Direct canonical `SemanticsProfile` users may provide the same branch
+   target shape without using the SDK wrapper.
+7. PyReason adapter consumption materializes branch entries into
+   `PyReasonRuleExt.branch_head_bounds`.
+8. `branch_head_bounds` is index-keyed and adapter-internal; SDK branch id
+   strings do not cross the SDK/core boundary.
+9. Branch-specific head bounds override global `head_bound` for that branch.
+10. Branches without a branch-specific override keep the global `head_bound`.
+11. Single-branch derivations support `branch_bounds={"b0": ...}`.
+12. Service and compiled evaluation preserve Track 2's canonical-only
+    boundary for public wrappers.
+13. Existing PyReason lanes (`head_bound`, `timestep_delay`, temporal
+    projection, body atom advanced profile entries) remain supported.
+14. ProbLog semantics, Track 1 branch inspect, Track 2 wrapper behavior, and
+    Track 3 C/D/E call-site behavior remain green.
+
+### 10.2 Validation
+
+- G1 baseline: Track 3-post suite introduced 16 forward/guard tests with
+  expected 11 errors, 4 failures, and 1 guard pass; Track 2 carried one
+  expected error from the inverted `branch_bounds` guard.
+- G2 implementation:
+  - Track 3-post suite: 16/16 OK.
+  - Track 2 public semantics suite: 17/17 OK.
+  - Track 1+B/C/D/E preservation suite: 103/103 OK.
+  - PyReason regression with `kernel.application` primer: 71/71 OK.
+- G3 docs sync:
+  - Track 3-post + Track 2 combined: 33/33 OK.
+  - Track 1+B/C/D/E preservation suite: 103/103 OK.
+  - `git diff --check` clean.
+  - Grep gates clean: stale Track 3-post future/deferred wording absent from
+    current docs; `branch_bounds` current teaching present; `branch_head_bounds`
+    classified as adapter/internal.
+
+### 10.3 Commit Lineage
+
+```text
+c33bb07d docs(pyreason): document branch bounds carrier
+90f126c5 feat(pyreason): add branch bounds carrier
+35a3ed99 test(pyreason): add branch bounds carrier baseline
+c96905e5 docs(blueprints): scope pyreason branch bounds carrier
+c7b2aab7 docs(blueprints): draft pyreason branch bounds carrier
+```
+
+The G4 archive commit closes the lineage and is not included above.
+
+### 10.4 Deviations
+
+1. G2 stayed smaller than projected. The final production change was about
+   125 net lines because Track 1 branch identity, Track 2 wrapper lowering,
+   and Track 3 / D PyReason profile consumption already provided the needed
+   substrate.
+2. The implementation normalized `PyReasonRuleExt.branch_head_bounds` in
+   `__post_init__` so list inputs become tuple pairs on the frozen carrier.
+   This is stricter than the minimum G1 expectation and keeps direct carrier
+   construction consistent with SDK wrapper normalization.
+3. G3 updated the post-Track-3 working design point more extensively than
+   ordinary release docs because this slice completes the final planned
+   step in that design note.
+
+### 10.5 Archive Notes
+
+Track 3-post completes the 3-track post-Track-3 plan:
+
+- Track 1 added stable branch identity, rule inspection, and the single-head
+  public derivation cut.
+- Track 2 added ergonomic public `ProbLogSemantics` / `PyReasonSemantics`
+  wrappers plus engine auto-derivation.
+- Track 3-post added the missing PyReason branch-level head-bound carrier,
+  carrying `PyReasonSemantics.branch_bounds` through canonical profile
+  lowering, adapter-local normalization, and per-branch compiled rule head
+  annotations.
+
+The resulting architecture is now coherent end to end:
+
+```text
+Branch(id="sensor_path")
+  -> PyReasonSemantics(branch_bounds={"sensor_path": [0.8, 1.0]})
+  -> SemanticsProfile.rule_projection.pyreason target="branch:0"
+  -> PyReasonRuleExt.branch_head_bounds[0]
+  -> derived_rule_b0 head annotation : [0.8, 1.0]
+```
+
+The post-Track-3 sequential plan is complete. Remaining future work is no
+longer dependency-ordered:
+
+- shell profile flow for Check / Diagnose / Fact Overlay / Why-not;
+- multi-interval validity / recurrence data contracts;
+- release packaging for the next rc candidate after `v0.1.0-rc.1`;
+- optional public atom-level PyReason bounds if a concrete user need appears.

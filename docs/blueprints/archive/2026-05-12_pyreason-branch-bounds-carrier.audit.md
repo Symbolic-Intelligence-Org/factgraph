@@ -11,6 +11,7 @@
 | 2026-05-12 | g1-red | Red + guard baseline | Added `test_pyreason_branch_bounds_carrier.py` and inverted the Track 2 `branch_bounds` guard. New Track 3-post suite runs 16 tests with expected 11 errors + 4 failures + 1 guard pass; Track 2 suite has 1 expected error from the inverted guard; Track 1+B/C/D/E preservation suite remains 103 OK. |
 | 2026-05-12 | g2-green | Implementation | Added `PyReasonSemantics.branch_bounds`, SDK branch-id lowering to canonical `branch:{index}` profile entries, `PyReasonRuleExt.branch_head_bounds`, and per-branch PyReason head annotation compilation. Track 3-post 16/16, Track 2 17/17, Track 1+B/C/D/E preservation 103/103, and PyReason regression 71/71 all pass. |
 | 2026-05-12 | docs | G3 docs sync | Documented `PyReasonSemantics.branch_bounds` as current public SDK API, classified `PyReasonRuleExt.branch_head_bounds` as adapter-internal, updated PyReason/core/service docs, and moved the post-Track-3 design-point text from Track 3-post future to landed. |
+| 2026-05-12 | implemented | Closed and archived | Filled §10 outcome/deviations, marked Track 3-post implemented, and archived the blueprint pair. Track 3-post completes the 3-track post-Track-3 plan by carrying PyReason branch bounds from public wrapper through canonical profile, adapter carrier, and compiled head annotation. |
 
 ## Decision Notes
 
