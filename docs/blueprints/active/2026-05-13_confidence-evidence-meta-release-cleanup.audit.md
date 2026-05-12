@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-05-13 | scoped | Blueprint created and scope frozen | Release cleanup focuses on cutting default public/persisted confidence propagation while preserving internal compatibility carriers. |
 | 2026-05-13 | scoped | Scope clarification | Added behavior matrix, parse-compatible internal-carrier contract, duplicate-detection behavior change, adapter fallback removal boundary, and G1 sizing note. |
+| 2026-05-13 | scoped | G1 red baseline | Added 11-test cleanup baseline: 7 forward failures + 4 guards/pass covering accept meta, write-protocol annotation projection, runtime candidate DTO compatibility, ProbLog/PyReason fallback boundaries, evidence tree display, duplicate detection, and internal carrier preservation. Prior lifecycle/schema preservation stack remains 217/217 OK. |
 
 ## Decision Notes
 
