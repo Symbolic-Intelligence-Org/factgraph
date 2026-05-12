@@ -58,6 +58,7 @@ Focused investigations that clarify one design concept before it is promoted int
 - [working/design-points/identity-primary-key-coordinate-semantics.md](./working/design-points/identity-primary-key-coordinate-semantics.md) — Working note on `Identity`, `primary_key=True`, `Field`, and entity-reference coordinate semantics.
 - [working/design-points/identity-primary-key-coordinate-semantics.zh.md](./working/design-points/identity-primary-key-coordinate-semantics.zh.md) — Expanded Chinese blog-style working article for iterative design and documentation edits.
 - [working/design-points/possibility-probability-transmission.zh.md](./working/design-points/possibility-probability-transmission.zh.md) — Working note on raw uncertainty semantics, transmission policies, and runtime projection into ProbLog / PyReason-style engine views.
+- [working/design-points/post-track3-semantics-public-api.zh.md](./working/design-points/post-track3-semantics-public-api.zh.md) — Working note on post-Track-3 public semantics API direction: Branch identity, rule inspect, `*Semantics` wrappers, and PyReason branch-bound projection.
 
 #### `working/load-test-2026-04-11/` —— Layer 4C 全链路 load test bundle（2026-04-11）
 
