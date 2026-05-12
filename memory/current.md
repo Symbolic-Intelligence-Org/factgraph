@@ -1,5 +1,91 @@
 # Current Operational Memory
 
+最后更新:2026-05-13(schema field-add lifecycle published; source `925354c6`)
+
+## 当前阶段(2026-05-13 — SCHEMA FIELD-ADD LIFECYCLE PUBLISHED)
+
+**Current source state:** `origin/master = 925354c6`.
+
+**Published slice:**
+- `origin/milestone/schema-field-add-lifecycle-2026-05-13 = 925354c6`.
+- G0-G4 schema field-add lifecycle slice is implemented, archived, and
+  published.
+- This is the second post-rc.3 schema mutation slice after additive
+  entity-class schema mutation.
+
+**Release refs remain intact:**
+- `origin/release/0.1.x = e996aa5b`.
+- `v0.1.0-rc.1`, `v0.1.0-rc.2`, and `v0.1.0-rc.3` remain untouched.
+
+**Landed behavior:**
+- `fg.schema.add(...)` accepts same-entity replacement classes that add
+  non-identity fields.
+- `SchemaAddResult` now records `added_fields`.
+- Superseded entity classes and field descriptors raise `SDKStoreError`; use
+  the post-add class object.
+- Existing assertions are not backfilled; missing added single fields read as
+  `None`, and missing added multi fields read as `()`.
+- Ledger and registry digest anchors reuse the schema mutation lifecycle.
+- Workspace manifests remain save-time state until explicit `fg.save(...)`.
+
+**Verification:**
+- `test_schema_field_add_lifecycle.py`: 33/33 OK.
+- Combined schema/lifecycle preservation + SDK invariant stack: 217/217 OK.
+- Post-publish verification confirmed `origin/master`, the milestone branch
+  ref, release branch, and rc tags.
+
+**Memory detail:** [project_schema_field_add_lifecycle_implemented.md](./project_schema_field_add_lifecycle_implemented.md).
+
+**Remaining independent design lines:**
+- relationship schema extension;
+- identity changes;
+- field defaults / nullability / backfill;
+- destructive schema lifecycle (`delete` / `deprecate` / `update` / `migrate`);
+- query persistence;
+- explain/evidence user surface;
+- class-less dynamic workspace load.
+
+<!-- Historical 2026-05-13 confidence/evidence pending state follows. -->
+
+最后更新:2026-05-13(confidence/evidence meta cleanup blueprint pending; code changes withdrawn)
+
+## 当前阶段(2026-05-13 — CONFIDENCE / EVIDENCE META CLEANUP PENDING)
+
+**Active blueprint:** `docs/blueprints/active/2026-05-13_confidence-evidence-meta-release-cleanup.md`.
+
+**Audit log:** `docs/blueprints/active/2026-05-13_confidence-evidence-meta-release-cleanup.audit.md`.
+
+**Current status:**
+- Research/audit is complete.
+- Blueprint pair has been restored under `docs/blueprints/active/`.
+- No confidence/evidence cleanup code changes are currently present in the git diff.
+- Earlier attempted code edits were withdrawn; current tracked code diff does not include:
+  - `src/kernel/adapters/problog/problog_export.py`
+  - `src/kernel/adapters/pyreason/session.py`
+  - `src/kernel/core/derivation/accept.py`
+  - `src/kernel/core/evidence/write_protocol.py`
+  - `src/service/runtime_v1.py`
+  - `src/service/static_ui.py`
+
+**Key audit conclusion:**
+`CandidateSet.confidence/confidence_kind` form a legacy propagation chain:
+candidate DTO -> accept assertion meta -> shared annotation -> duplicate checks,
+ProbLog export, evidence tree, certainty summary, static UI, audit/docs/tests.
+This should be cleaned before release, but only after confirming no concurrent
+program is editing the same files.
+
+**Chosen scope:** minimal release cleanup.
+- Keep `CandidateSet.confidence` / `confidence_kind` internally for compatibility.
+- Stop default public/persisted semantics from treating them as canonical
+  assertion confidence.
+- Keep adapter-native diagnostics such as `problog/semantic/probability` and
+  `pyreason/semantic/bound_*`.
+- Defer the full confidence/certainty/probability redesign.
+
+**Memory detail:** [project_confidence_evidence_meta_cleanup_pending.md](./project_confidence_evidence_meta_cleanup_pending.md).
+
+<!-- Historical 2026-05-13 schema mutation lifecycle state follows. -->
+
 最后更新:2026-05-13(schema mutation lifecycle published; source `f0279791`)
 
 ## 当前阶段(2026-05-13 — SCHEMA MUTATION LIFECYCLE PUBLISHED)

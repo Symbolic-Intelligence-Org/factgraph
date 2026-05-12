@@ -28,6 +28,10 @@
   - rc.3 之后仍未完成的 lifecycle/assets 设计线索。
 - [project_schema_mutation_lifecycle_implemented.md](/Users/zhenzhili/hnsm-backend/memory/project_schema_mutation_lifecycle_implemented.md)
   - `fg.schema.add(...)` additive schema mutation lifecycle publish checkpoint.
+- [project_schema_field_add_lifecycle_implemented.md](/Users/zhenzhili/hnsm-backend/memory/project_schema_field_add_lifecycle_implemented.md)
+  - Additive non-identity schema field-add lifecycle publish checkpoint.
+- [project_confidence_evidence_meta_cleanup_pending.md](/Users/zhenzhili/hnsm-backend/memory/project_confidence_evidence_meta_cleanup_pending.md)
+  - Pending pre-release confidence/evidence meta cleanup memory; active blueprint remains the task source.
 - `session_handoffs/YYYY-MM-DD.md`
   - 按日期保留的 handoff 记录，用于回放某一工作日的 stopping point。
 
