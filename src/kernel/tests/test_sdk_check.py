@@ -115,7 +115,7 @@ class SDKCheckContractTests(unittest.TestCase):
         with self.assertRaises(SDKStoreError) as ctx:
             _build_sdk().check(rule, {})  # type: ignore[arg-type]
 
-        self.assertEqual(ctx.exception.path, "$.check.derivation")
+        self.assertEqual(ctx.exception.path, "$.check.inference")
         self.assertIn("Inference", str(ctx.exception))
 
     def test_compiled_plan_is_rejected_at_sdk_surface(self) -> None:
@@ -130,7 +130,7 @@ class SDKCheckContractTests(unittest.TestCase):
         with self.assertRaises(SDKStoreError) as ctx:
             sdk.check(app_plan, {})  # type: ignore[arg-type]
 
-        self.assertEqual(ctx.exception.path, "$.check.derivation")
+        self.assertEqual(ctx.exception.path, "$.check.inference")
 
     def test_binding_items_are_rejected_at_sdk_surface(self) -> None:
         sdk = _build_sdk()
@@ -229,7 +229,7 @@ class SDKCheckContractTests(unittest.TestCase):
             with self.assertRaises(SDKStoreError) as ctx:
                 sdk.check(_age_derivation(), {"$age": 30})
 
-        self.assertEqual(ctx.exception.path, "$.check.derivation")
+        self.assertEqual(ctx.exception.path, "$.check.inference")
         self.assertIsInstance(ctx.exception.__cause__, ValueError)
         self.assertIn("engine_ext", str(ctx.exception))
 

@@ -64,21 +64,21 @@ def _age_derivation() -> Inference:
 
 class ValidateDerivationTests(unittest.TestCase):
     def test_accepts_sdk_derivation(self) -> None:
-        validate_derivation(_age_derivation(), path="$.check.derivation")
+        validate_derivation(_age_derivation(), path="$.check.inference")
 
     def test_rejects_non_derivation_with_provided_path(self) -> None:
         with self.assertRaises(SDKStoreError) as ctx:
-            validate_derivation({"not": "derivation"}, path="$.diagnose.derivation")
-        self.assertEqual(ctx.exception.path, "$.diagnose.derivation")
-        self.assertIn("derivation must be SDK Inference", str(ctx.exception))
+            validate_derivation({"not": "derivation"}, path="$.diagnose.inference")
+        self.assertEqual(ctx.exception.path, "$.diagnose.inference")
+        self.assertIn("inference must be SDK Inference", str(ctx.exception))
 
     def test_rejects_none(self) -> None:
         with self.assertRaises(SDKStoreError) as ctx:
-            validate_derivation(None, path="$.check.derivation")
-        self.assertEqual(ctx.exception.path, "$.check.derivation")
+            validate_derivation(None, path="$.check.inference")
+        self.assertEqual(ctx.exception.path, "$.check.inference")
 
     def test_path_is_forwarded_verbatim(self) -> None:
-        custom_path = "$.future_g4.why_not.derivation"
+        custom_path = "$.future_g4.why_not.inference"
         with self.assertRaises(SDKStoreError) as ctx:
             validate_derivation("not-a-derivation", path=custom_path)
         self.assertEqual(ctx.exception.path, custom_path)

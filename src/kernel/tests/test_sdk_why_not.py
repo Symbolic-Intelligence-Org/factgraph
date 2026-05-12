@@ -122,7 +122,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         with self.assertRaises(SDKStoreError) as ctx:
             _build_sdk().why_not(rule, [])  # type: ignore[arg-type]
 
-        self.assertEqual(ctx.exception.path, "$.why_not.derivation")
+        self.assertEqual(ctx.exception.path, "$.why_not.inference")
         self.assertIn("Inference", str(ctx.exception))
 
     def test_compiled_plan_is_rejected_at_sdk_surface(self) -> None:
@@ -137,7 +137,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         with self.assertRaises(SDKStoreError) as ctx:
             sdk.why_not(app_plan, [])  # type: ignore[arg-type]
 
-        self.assertEqual(ctx.exception.path, "$.why_not.derivation")
+        self.assertEqual(ctx.exception.path, "$.why_not.inference")
 
     def test_multi_head_derivation_is_rejected_before_request_construction(self) -> None:
         with self.assertRaises(SDKDSLError) as ctx:
@@ -214,7 +214,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
             with self.assertRaises(SDKStoreError) as ctx:
                 sdk.why_not(_age_derivation(), [])
 
-        self.assertEqual(ctx.exception.path, "$.why_not.derivation")
+        self.assertEqual(ctx.exception.path, "$.why_not.inference")
         self.assertIsInstance(ctx.exception.__cause__, ValueError)
         self.assertIn("engine_ext", str(ctx.exception))
 

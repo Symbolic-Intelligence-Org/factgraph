@@ -8,8 +8,8 @@ Public surface contract per blueprint §5 locks:
 
 - Method:      ``SDKStore.diagnose(...)`` (instance method; not a free function
                in ``kernel.sdk.__all__`` — see §5.4 lock).
-- Signature:   ``diagnose(derivation, binding, *, engine="native", registry=None)``
-               (see §5.7 lock; ``derivation`` is SDK ``Inference`` only,
+- Signature:   ``diagnose(inference, binding, *, engine="native", registry=None)``
+               (see §5.7 lock; ``inference`` is SDK ``Inference`` only,
                ``binding`` is ``Mapping[str, Any]`` with ``$``-prefixed
                variable-name string keys).
 - Return:      ``DiagnoseResult`` (raw application protocol DTO; documented
@@ -49,7 +49,7 @@ from ..store import _compiled_derivation_plan_to_application
 
 def sdk_diagnose(
     sdk: Any,
-    derivation: Any,
+    inference: Any,
     binding: Mapping[str, Any],
     *,
     engine: str = "native",
@@ -61,14 +61,14 @@ def sdk_diagnose(
     keeps Diagnose independent from Check and does not import walker helpers.
     """
 
-    validate_derivation(derivation, path="$.diagnose.derivation")
+    validate_derivation(inference, path="$.diagnose.inference")
     binding_dict = validate_binding(binding, path="$.diagnose.binding")
 
-    compiled_plans = sdk._compile_derivation_input(derivation)
+    compiled_plans = sdk._compile_derivation_input(inference)
     if len(compiled_plans) != 1:
         raise SDKStoreError(
-            "diagnose derivation must compile to exactly one plan",
-            path="$.diagnose.derivation",
+            "diagnose inference must compile to exactly one plan",
+            path="$.diagnose.inference",
         )
 
     try:
@@ -80,11 +80,11 @@ def sdk_diagnose(
     except ValueError as exc:
         raise SDKStoreError(
             f"invalid diagnose input: {exc}",
-            path="$.diagnose.derivation",
+            path="$.diagnose.inference",
         ) from exc
     resolved_registry = resolve_runtime_registry(
         sdk,
-        derivation,
+        inference,
         explicit_registry=registry,
         path="$.diagnose.dependencies",
     )

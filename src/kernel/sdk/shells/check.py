@@ -8,8 +8,8 @@ Public surface contract per blueprint §5 locks:
 
 - Method:      ``SDKStore.check(...)`` (instance method; not a free function in
                ``kernel.sdk.__all__`` — see §5.4 lock).
-- Signature:   ``check(derivation, binding, *, engine="native", registry=None)``
-               (see §5.7 lock; ``derivation`` is SDK ``Inference`` only,
+- Signature:   ``check(inference, binding, *, engine="native", registry=None)``
+               (see §5.7 lock; ``inference`` is SDK ``Inference`` only,
                ``binding`` is ``Mapping[str, Any]`` with ``$``-prefixed
                variable-name string keys; both validated in Phase 1).
 - Return:      ``CheckResult`` (raw application protocol DTO; documented
@@ -43,7 +43,7 @@ from ..store import _compiled_derivation_plan_to_application
 
 def sdk_check(
     sdk: Any,
-    derivation: Any,
+    inference: Any,
     binding: Mapping[str, Any],
     *,
     engine: str = "native",
@@ -56,14 +56,14 @@ def sdk_check(
     can opt into ``kernel.application.walker`` themselves.
     """
 
-    validate_derivation(derivation, path="$.check.derivation")
+    validate_derivation(inference, path="$.check.inference")
     binding_dict = validate_binding(binding, path="$.check.binding")
 
-    compiled_plans = sdk._compile_derivation_input(derivation)
+    compiled_plans = sdk._compile_derivation_input(inference)
     if len(compiled_plans) != 1:
         raise SDKStoreError(
-            "check derivation must compile to exactly one plan",
-            path="$.check.derivation",
+            "check inference must compile to exactly one plan",
+            path="$.check.inference",
         )
 
     try:
@@ -75,11 +75,11 @@ def sdk_check(
     except ValueError as exc:
         raise SDKStoreError(
             f"invalid check input: {exc}",
-            path="$.check.derivation",
+            path="$.check.inference",
         ) from exc
     resolved_registry = resolve_runtime_registry(
         sdk,
-        derivation,
+        inference,
         explicit_registry=registry,
         path="$.check.dependencies",
     )

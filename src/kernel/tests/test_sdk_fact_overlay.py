@@ -154,7 +154,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         with self.assertRaises(SDKStoreError) as ctx:
             _build_sdk().check_fact_overlay(rule, {"$age": 30}, EvaluationOverlay())  # type: ignore[arg-type]
 
-        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.derivation")
+        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.inference")
         self.assertIn("Inference", str(ctx.exception))
 
     def test_compiled_plan_is_rejected_at_sdk_surface(self) -> None:
@@ -169,7 +169,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         with self.assertRaises(SDKStoreError) as ctx:
             sdk.check_fact_overlay(app_plan, {"$age": 30}, EvaluationOverlay())  # type: ignore[arg-type]
 
-        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.derivation")
+        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.inference")
 
     def test_multi_head_derivation_is_rejected_before_request_construction(self) -> None:
         with self.assertRaises(SDKDSLError) as ctx:
@@ -221,7 +221,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             with self.assertRaises(SDKStoreError) as ctx:
                 sdk.check_fact_overlay(_age_derivation(), {"$age": 30}, EvaluationOverlay())
 
-        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.derivation")
+        self.assertEqual(ctx.exception.path, "$.check_fact_overlay.inference")
         self.assertIsInstance(ctx.exception.__cause__, ValueError)
 
     def test_dependency_rule_compile_error_raises_sdk_store_error(self) -> None:

@@ -63,13 +63,13 @@ def validate_derivation(derivation: Any, *, path: str) -> None:
     """Reject anything that is not an SDK ``Inference`` instance.
 
     The ``path`` argument is the ``SDKStoreError.path`` boundary identifier
-    that the calling shell wants attached, e.g. ``"$.check.derivation"`` or
-    ``"$.diagnose.derivation"``. The error message text is shared across
+    that the calling shell wants attached, e.g. ``"$.check.inference"`` or
+    ``"$.diagnose.inference"``. The error message text is shared across
     callers — only the path differs.
     """
 
     if not isinstance(derivation, Inference):
-        raise SDKStoreError("derivation must be SDK Inference", path=path)
+        raise SDKStoreError("inference must be SDK Inference", path=path)
 
 
 def validate_binding(binding: Any, *, path: str) -> dict[str, Any]:

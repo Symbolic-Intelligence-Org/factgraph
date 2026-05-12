@@ -11,9 +11,9 @@ verification round polish landed 2026-05-08):
 - Method:      ``SDKStore.check_fact_overlay(...)`` (instance method; not
                a free function in ``kernel.sdk.__all__`` — see §5.7 lock
                and G1 + G4 precedent).
-- Signature:   ``check_fact_overlay(derivation, binding, overlay, *,
+- Signature:   ``check_fact_overlay(inference, binding, overlay, *,
                engine="native", registry=None)`` (see §5.1 lock;
-               ``derivation`` is SDK ``Inference`` only, ``binding`` is a
+               ``inference`` is SDK ``Inference`` only, ``binding`` is a
                ``$``-prefixed mapping validated through the shared SDK
                validators, and ``overlay`` is a raw ``EvaluationOverlay``
                protocol DTO — the SDK rejects ``tuple[FactValueOverride,
@@ -25,7 +25,7 @@ verification round polish landed 2026-05-08):
                ``kernel.sdk.__all__``).
 - Errors:      Non-SDK exceptions crossing the SDK boundary remap to
                ``SDKStoreError(...) from exc`` per §5.8 lock with
-               capability-specific paths (``$.check_fact_overlay.derivation``
+               capability-specific paths (``$.check_fact_overlay.inference``
                / ``$.check_fact_overlay.binding`` /
                ``$.check_fact_overlay.overlay`` /
                ``$.check_fact_overlay.dependencies`` /
@@ -70,7 +70,7 @@ from ..store import _compiled_derivation_plan_to_application
 
 def sdk_fact_overlay_check(
     sdk: Any,
-    derivation: Any,
+    inference: Any,
     binding: Mapping[str, Any],
     overlay: Any,
     *,
@@ -86,15 +86,15 @@ def sdk_fact_overlay_check(
     through unchanged.
     """
 
-    validate_derivation(derivation, path="$.check_fact_overlay.derivation")
+    validate_derivation(inference, path="$.check_fact_overlay.inference")
     binding_dict = validate_binding(binding, path="$.check_fact_overlay.binding")
     validate_evaluation_overlay(overlay, path="$.check_fact_overlay.overlay")
 
-    compiled_plans = sdk._compile_derivation_input(derivation)
+    compiled_plans = sdk._compile_derivation_input(inference)
     if len(compiled_plans) != 1:
         raise SDKStoreError(
-            "check_fact_overlay derivation must compile to exactly one plan",
-            path="$.check_fact_overlay.derivation",
+            "check_fact_overlay inference must compile to exactly one plan",
+            path="$.check_fact_overlay.inference",
         )
 
     try:
@@ -106,12 +106,12 @@ def sdk_fact_overlay_check(
     except ValueError as exc:
         raise SDKStoreError(
             f"invalid check_fact_overlay input: {exc}",
-            path="$.check_fact_overlay.derivation",
+            path="$.check_fact_overlay.inference",
         ) from exc
 
     resolved_registry = resolve_runtime_registry(
         sdk,
-        derivation,
+        inference,
         explicit_registry=registry,
         path="$.check_fact_overlay.dependencies",
     )

@@ -8,8 +8,8 @@ Public surface contract per blueprint §5 locks:
 - Method:      ``SDKStore.why_not(...)`` (instance method; not a free function
                in ``kernel.sdk.__all__`` — see §5.4 lock language and G1 §5.4
                precedent).
-- Signature:   ``why_not(derivation, candidates, *, engine="native",
-               registry=None)`` (see §5.1 lock; ``derivation`` is SDK
+- Signature:   ``why_not(inference, candidates, *, engine="native",
+               registry=None)`` (see §5.1 lock; ``inference`` is SDK
                ``Inference`` only, ``candidates`` mirrors A's
                ``build_why_not_candidate_universe(plan, candidates)`` row
                forms — ``Sequence[Mapping[str, Any] | Sequence[Any]]``).
@@ -18,7 +18,7 @@ Public surface contract per blueprint §5 locks:
                ``kernel.sdk.__all__``).
 - Errors:      All non-SDK exceptions crossing the SDK boundary remap to
                ``SDKStoreError(...) from exc`` per §5.6 lock with
-               capability-specific paths (``$.why_not.derivation`` /
+               capability-specific paths (``$.why_not.inference`` /
                ``$.why_not.dependencies`` / ``$.why_not.candidates`` /
                ``$.why_not.request`` / ``$.why_not``).
 - Q1 Sibling:  ``sdk_why_not`` does NOT call the sibling Check or Diagnose
@@ -47,7 +47,7 @@ from ..store import _compiled_derivation_plan_to_application
 
 def sdk_why_not(
     sdk: Any,
-    derivation: Any,
+    inference: Any,
     candidates: Sequence[Mapping[str, Any] | Sequence[Any]],
     *,
     engine: str = "native",
@@ -60,13 +60,13 @@ def sdk_why_not(
     rows or Frontier data.
     """
 
-    validate_derivation(derivation, path="$.why_not.derivation")
+    validate_derivation(inference, path="$.why_not.inference")
 
-    compiled_plans = sdk._compile_derivation_input(derivation)
+    compiled_plans = sdk._compile_derivation_input(inference)
     if len(compiled_plans) != 1:
         raise SDKStoreError(
-            "why_not derivation must compile to exactly one plan",
-            path="$.why_not.derivation",
+            "why_not inference must compile to exactly one plan",
+            path="$.why_not.inference",
         )
 
     try:
@@ -78,12 +78,12 @@ def sdk_why_not(
     except ValueError as exc:
         raise SDKStoreError(
             f"invalid why_not input: {exc}",
-            path="$.why_not.derivation",
+            path="$.why_not.inference",
         ) from exc
 
     resolved_registry = resolve_runtime_registry(
         sdk,
-        derivation,
+        inference,
         explicit_registry=registry,
         path="$.why_not.dependencies",
     )

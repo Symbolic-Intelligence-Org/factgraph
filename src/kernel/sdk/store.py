@@ -664,7 +664,7 @@ class SDKStore:
 
     def check(
         self,
-        derivation: Any,
+        inference: Any,
         binding: Mapping[str, Any],
         *,
         engine: str = "native",
@@ -675,7 +675,7 @@ class SDKStore:
         """Check one SDK ``Inference`` against a concrete binding.
 
         Args:
-            derivation: SDK ``Inference`` authoring object. ``Rule`` and
+            inference: SDK ``Inference`` authoring object. ``Rule`` and
                 application ``CompiledDerivationPlan`` inputs are rejected at
                 the SDK boundary.
             binding: Mapping of ``$``-prefixed variable names to Python
@@ -698,11 +698,11 @@ class SDKStore:
         from .shells.check import sdk_check
 
         self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
-        return sdk_check(self, derivation, binding, engine=engine, registry=registry)
+        return sdk_check(self, inference, binding, engine=engine, registry=registry)
 
     def diagnose(
         self,
-        derivation: Any,
+        inference: Any,
         binding: Mapping[str, Any],
         *,
         engine: str = "native",
@@ -713,7 +713,7 @@ class SDKStore:
         """Diagnose one SDK ``Inference`` against a concrete binding.
 
         Args:
-            derivation: SDK ``Inference`` authoring object. ``Rule`` and
+            inference: SDK ``Inference`` authoring object. ``Rule`` and
                 application ``CompiledDerivationPlan`` inputs are rejected at
                 the SDK boundary.
             binding: Mapping of ``$``-prefixed variable names to Python
@@ -735,11 +735,11 @@ class SDKStore:
         from .shells.diagnose import sdk_diagnose
 
         self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
-        return sdk_diagnose(self, derivation, binding, engine=engine, registry=registry)
+        return sdk_diagnose(self, inference, binding, engine=engine, registry=registry)
 
     def why_not(
         self,
-        derivation: Any,
+        inference: Any,
         candidates: Sequence[Mapping[str, Any] | Sequence[Any]],
         *,
         engine: str = "native",
@@ -750,7 +750,7 @@ class SDKStore:
         """Run Why-not for one SDK ``Inference`` against an explicit candidate universe.
 
         Args:
-            derivation: SDK ``Inference`` authoring object. ``Rule`` and
+            inference: SDK ``Inference`` authoring object. ``Rule`` and
                 application ``CompiledDerivationPlan`` inputs are rejected at
                 the SDK boundary (per §5.1 lock).
             candidates: Sequence of candidate rows. Each row is either a
@@ -770,8 +770,8 @@ class SDKStore:
 
         Raises:
             SDKStoreError: For non-SDK exceptions crossing the SDK boundary.
-                The ``path`` field locates the failure: ``$.why_not.derivation``
-                for SDK input-shape and derivation-lowering failures,
+                The ``path`` field locates the failure: ``$.why_not.inference``
+                for SDK input-shape and inference-lowering failures,
                 ``$.why_not.dependencies`` for dependency registration
                 failures, ``$.why_not.candidates`` for candidate-row
                 validation errors, ``$.why_not.request`` for request DTO
@@ -782,11 +782,11 @@ class SDKStore:
         from .shells.why_not import sdk_why_not
 
         self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
-        return sdk_why_not(self, derivation, candidates, engine=engine, registry=registry)
+        return sdk_why_not(self, inference, candidates, engine=engine, registry=registry)
 
     def check_fact_overlay(
         self,
-        derivation: Any,
+        inference: Any,
         binding: Mapping[str, Any],
         overlay: Any,
         *,
@@ -798,7 +798,7 @@ class SDKStore:
         """Run Fact Overlay Check for one SDK ``Inference`` + binding + overlay.
 
         Args:
-            derivation: SDK ``Inference`` authoring object. ``Rule`` and
+            inference: SDK ``Inference`` authoring object. ``Rule`` and
                 application ``CompiledDerivationPlan`` inputs are rejected
                 at the SDK boundary (per §5.1 lock).
             binding: Mapping of ``$``-prefixed variable names to Python
@@ -821,8 +821,8 @@ class SDKStore:
         Raises:
             SDKStoreError: For non-SDK exceptions crossing the SDK
                 boundary. The ``path`` field locates the failure:
-                ``$.check_fact_overlay.derivation`` for SDK input-shape
-                and derivation-lowering failures,
+                ``$.check_fact_overlay.inference`` for SDK input-shape
+                and inference-lowering failures,
                 ``$.check_fact_overlay.binding`` for binding shape errors,
                 ``$.check_fact_overlay.overlay`` for non-
                 ``EvaluationOverlay`` overlay input (the SDK rejects
@@ -842,7 +842,7 @@ class SDKStore:
 
         self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
         return sdk_fact_overlay_check(
-            self, derivation, binding, overlay, engine=engine, registry=registry
+            self, inference, binding, overlay, engine=engine, registry=registry
         )
 
     def recheck_proof_frame(
