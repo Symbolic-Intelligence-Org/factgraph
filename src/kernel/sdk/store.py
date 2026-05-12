@@ -23,6 +23,7 @@ from kernel.application.authoring_runtime import (
     save_inference as app_save_inference,
     save_rule as app_save_rule,
 )
+from kernel.application.workspace_runtime import resolve_workspace_paths
 from kernel.application.derivation_runtime import evaluate_derivation_plans
 from kernel.application.protocol import (
     CompiledDerivationPlan,
@@ -467,6 +468,49 @@ def _resolve_authoring_registry(
     return None
 
 
+def _normalize_workspace_path(path: str | Path | None) -> Path | None:
+    if path is None:
+        return None
+    if not isinstance(path, (str, Path)):
+        raise SDKStoreError("path must be str | Path")
+    return Path(path)
+
+
+def _path_equivalent(left: str | Path, right: str | Path) -> bool:
+    return Path(left).expanduser().resolve(strict=False) == Path(right).expanduser().resolve(strict=False)
+
+
+def _resolve_workspace_constructor_paths(
+    *,
+    path: str | Path | None,
+    ledger_path: str | None,
+    registry_root: str | Path | None,
+) -> tuple[Path | None, str | None, str | Path | None]:
+    workspace_path = _normalize_workspace_path(path)
+    if workspace_path is None:
+        return None, ledger_path, registry_root
+
+    workspace_paths = resolve_workspace_paths(workspace_path)
+    expected_ledger = workspace_paths.ledger
+    expected_registry = workspace_paths.registry
+
+    if ledger_path is not None:
+        if not _path_equivalent(ledger_path, expected_ledger):
+            raise SDKStoreError("ledger_path conflicts with workspace path")
+        resolved_ledger_path = ledger_path
+    else:
+        resolved_ledger_path = str(expected_ledger)
+
+    if registry_root is not None:
+        if not _path_equivalent(registry_root, expected_registry):
+            raise SDKStoreError("registry_root conflicts with workspace path")
+        resolved_registry_root = registry_root
+    else:
+        resolved_registry_root = expected_registry
+
+    return workspace_path, resolved_ledger_path, resolved_registry_root
+
+
 class SDKStore:
     def __init__(
         self,
@@ -477,6 +521,7 @@ class SDKStore:
         artifact_store_root: str | None = None,
         registry_root: str | Path | None = None,
         registry: FileAuthoringRegistry | None = None,
+        workspace_path: str | Path | None = None,
         default_row_format: str | None = None,
     ) -> None:
         if not isinstance(classes, list) or not classes:
@@ -498,6 +543,7 @@ class SDKStore:
             )
         self._schema_ir = self._store.schema_ir
         self._schema_digest = schema_digest(self._schema_ir)
+        self._workspace_path = _normalize_workspace_path(workspace_path)
         self._authoring_registry = _resolve_authoring_registry(
             registry_root=registry_root,
             registry=registry,
@@ -533,18 +579,25 @@ class SDKStore:
         *,
         ledger: Ledger | None = None,
         ledger_path: str | None = None,
+        path: str | Path | None = None,
         artifact_store_root: str | None = None,
         registry_root: str | Path | None = None,
         registry: FileAuthoringRegistry | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
-        return cls.from_schema_classes(
+        workspace_path, resolved_ledger_path, resolved_registry_root = _resolve_workspace_constructor_paths(
+            path=path,
+            ledger_path=ledger_path,
+            registry_root=registry_root,
+        )
+        return cls._from_schema_classes_impl(
             schema_classes,
             ledger=ledger,
-            ledger_path=ledger_path,
+            ledger_path=resolved_ledger_path,
             artifact_store_root=artifact_store_root,
-            registry_root=registry_root,
+            registry_root=resolved_registry_root,
             registry=registry,
+            workspace_path=workspace_path,
             default_row_format=default_row_format,
         )
 
@@ -558,6 +611,30 @@ class SDKStore:
         artifact_store_root: str | None = None,
         registry_root: str | Path | None = None,
         registry: FileAuthoringRegistry | None = None,
+        default_row_format: str | None = None,
+    ) -> "SDKStore":
+        return cls._from_schema_classes_impl(
+            classes,
+            ledger=ledger,
+            ledger_path=ledger_path,
+            artifact_store_root=artifact_store_root,
+            registry_root=registry_root,
+            registry=registry,
+            workspace_path=None,
+            default_row_format=default_row_format,
+        )
+
+    @classmethod
+    def _from_schema_classes_impl(
+        cls,
+        classes: list[type[Entity]],
+        *,
+        ledger: Ledger | None = None,
+        ledger_path: str | None = None,
+        artifact_store_root: str | None = None,
+        registry_root: str | Path | None = None,
+        registry: FileAuthoringRegistry | None = None,
+        workspace_path: str | Path | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
         if ledger is not None and ledger_path is not None:
@@ -586,6 +663,7 @@ class SDKStore:
             store=Store(schema_ir=schema_ir, ledger=ledger, artifact_sidecar=_sidecar),
             registry_root=registry_root,
             registry=registry,
+            workspace_path=workspace_path,
             default_row_format=default_row_format,
         )
 
