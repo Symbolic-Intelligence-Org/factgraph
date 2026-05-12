@@ -1,6 +1,6 @@
 # Task Blueprint: Track 2 Public Semantics API Redesign
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -190,11 +190,11 @@ Current important suites:
 
 Track 2 G1 should add forward-failing tests without weakening these guards unless G0 explicitly chooses a migration.
 
-## 5. Proposed Shape / Open Questions
+## 5. Scope Freeze Decisions
 
-This draft intentionally leaves the load-bearing choices open for G0.
+G0 locks Track 2 as a bounded SDK public-wrapper slice. It does **not** absorb the PyReason branch-bound carrier reshape; that remains Track 3-post.
 
-### 5.1 Q1: Public type names and placement
+### 5.1 D1: Public type names and placement
 
 Options:
 
@@ -202,9 +202,9 @@ Options:
 - **T1b** `ProbLogProjection` / `PyReasonProjection`
 - **T1c** keep `SemanticsProfile` only, no new public types
 
-Draft recommendation: **T1a**. It matches the public `semantics=` kwarg and avoids reusing `*Ext`, which is already the adapter-internal bridge naming convention.
+Locked: **T1a**. Track 2 introduces `ProbLogSemantics` and `PyReasonSemantics`, exported from `kernel.sdk`. The names match the public `semantics=` kwarg and avoid reusing `*Ext`, which remains adapter-internal bridge naming.
 
-### 5.2 Q2: SemanticsProfile fate
+### 5.2 D2: SemanticsProfile fate
 
 Options:
 
@@ -212,9 +212,9 @@ Options:
 - **T2b** Keep `SemanticsProfile` internal only; remove SDK export.
 - **T2c** Deprecate `SemanticsProfile` in docs but keep runtime compatibility.
 
-Draft recommendation: **T2a** for Track 2. Removing or hiding `SemanticsProfile` would churn the just-shipped Track 3 public call-site. A later release can deprecate it after wrappers are proven.
+Locked: **T2a**. `SemanticsProfile` remains public as the advanced/canonical shape in Track 2. New wrappers become the preferred ergonomic SDK authoring shape, but Track 3 public compatibility is preserved.
 
-### 5.3 Q3: Lowering boundary for branch-id public semantics
+### 5.3 D3: Lowering boundary for branch-id public semantics
 
 Options:
 
@@ -222,9 +222,9 @@ Options:
 - **T3b Fallback positional for compiled**: compiled evaluate accepts wrapper ids only if keys are fallback ids (`b0`, `b1`, ...).
 - **T3c Persist branch ids into compiled payloads**: expand Track 1 P1a boundary.
 
-Draft recommendation: **T3a**. It keeps Track 1's inspect-only boundary intact. Compiled/service paths can keep using `SemanticsProfile` until a later payload design.
+Locked: **T3a**. Branch-id wrappers are SDK-object-only. They are accepted only when evaluating SDK `Rule` / `Derivation` objects, where branch ids are still inspectable. Compiled dicts and service JSON continue requiring `SemanticsProfile`.
 
-### 5.4 Q4: Engine auto-derivation
+### 5.4 D4: Engine auto-derivation
 
 Options:
 
@@ -232,7 +232,7 @@ Options:
 - **T4b** Derive only from new wrappers; `SemanticsProfile` still requires explicit `engine`.
 - **T4c** Do not auto-derive; require explicit `engine=`.
 
-Draft recommendation: **T4a**. It removes the current duplicate-engine UX while preserving explicit `engine=` as an optional mismatch guard.
+Locked: **T4a**. SDK `evaluate(...)` derives `engine` from `ProbLogSemantics`, `PyReasonSemantics`, and `SemanticsProfile` when `engine=` is omitted. Explicit `engine=` remains accepted as a guard and rejects mismatches.
 
 Proposed behavior table:
 
@@ -244,7 +244,7 @@ Proposed behavior table:
 | `engine="X"`, semantics engine `X` | accept |
 | `engine="X"`, semantics engine `Y` | reject mismatch |
 
-### 5.5 Q5: ProbLogSemantics shape
+### 5.5 D5: ProbLogSemantics shape
 
 Draft candidate:
 
@@ -259,16 +259,15 @@ ProbLogSemantics(
 )
 ```
 
-Open decisions:
+Locked shape:
 
-- Is `name` required or generated?
-- Are fallback ids `b0` / `b1` accepted in public branch maps?
-- Do omitted branches default to `1.0` as C currently does?
-- Does `branch_probabilities` accept sequence form for compiled/evaluate_compiled, or dict only?
+- `name` is optional. The SDK generates a stable default if omitted.
+- `branch_probabilities` is dict-only and maps branch ids to probabilities.
+- Keys may be explicit branch ids or fallback ids (`b0`, `b1`, ...).
+- Omitted branches default to `1.0`, matching C.
+- Sequence form is not accepted in Track 2; compiled/evaluate_compiled paths keep using `SemanticsProfile`.
 
-Draft recommendation: optional name, dict only, accept explicit ids and fallback ids, omitted branches default to `1.0`.
-
-### 5.6 Q6: PyReasonSemantics shape and branch_bounds scope
+### 5.6 D6: PyReasonSemantics shape and branch_bounds scope
 
 Draft candidate:
 
@@ -293,9 +292,9 @@ Critical options:
 - **T6b Public field now, reject when non-empty**: include `branch_bounds` in constructor but reject with a Track 3-post redirect.
 - **T6c Merge Track 3-post**: implement `branch_bounds` end-to-end by adding a PyReason per-branch carrier in Track 2.
 
-Draft recommendation: **T6a or T6c, not T6b**. T6b creates a public field that users cannot use. If we want Track 2 small, choose T6a and document branch_bounds as the next slice. If we want the public shape to match the design direction immediately, choose T6c and accept a larger G2.
+Locked: **T6a**. Track 2 supports only currently lowerable PyReason lanes: `timestep_delay`, global `head_bound`, `temporal_projection`, `uncertainty_projection`, and `fallback`. `branch_bounds` is not a Track 2 constructor field; passing it should fail as an unsupported kwarg / TypeError. Track 3-post owns adding `branch_bounds` plus the PyReason per-branch carrier and compile reshape.
 
-### 5.7 Q7: Service JSON shape
+### 5.7 D7: Service JSON shape
 
 Options:
 
@@ -303,9 +302,9 @@ Options:
 - **T7b Service accepts discriminated light shape**: e.g. `{"type": "pyreason", ...}` or `{"engine": "pyreason", ...}`.
 - **T7c Service accepts the same SDK wrapper names via JSON keys**: e.g. `{"pyreason": {...}}`.
 
-Draft recommendation: **T7a** for Track 2 unless a service consumer explicitly needs the lighter shape now. Branch ids are not carried in service derivation payloads, so service branch-id maps would be ambiguous.
+Locked: **T7a**. Service top-level `semantics` JSON remains canonical `SemanticsProfile` shape only. Service does not accept `ProbLogSemantics` / `PyReasonSemantics` light JSON in Track 2 because branch ids are not carried in service derivation payloads.
 
-### 5.8 Q8: evaluate_compiled behavior
+### 5.8 D8: evaluate_compiled behavior
 
 Options:
 
@@ -313,9 +312,9 @@ Options:
 - **T8b** accepts wrappers only when they do not reference branch ids.
 - **T8c** allows fallback positional ids for compiled paths.
 
-Draft recommendation: **T8a** for branch-id wrappers; keep `SemanticsProfile` accepted for compiled paths.
+Locked: **T8a**. `evaluate_compiled(..., semantics=ProbLogSemantics/PyReasonSemantics)` rejects because branch ids cannot resolve from compiled dicts. `SemanticsProfile` remains accepted for compiled paths.
 
-### 5.9 Q9: Inspect helpers
+### 5.9 D9: Inspect helpers
 
 Options:
 
@@ -323,9 +322,9 @@ Options:
 - **T9b** Add `to_semantics_profile(...)` public method on wrappers.
 - **T9c** No new inspect support.
 
-Draft recommendation: **T9a**. It gives users a way to see what the wrapper means without making conversion methods part of the public data model.
+Locked: **T9a**. `fg.eval.inspect_semantics(...)` accepts the new wrappers and returns wrapper metadata plus a lowered canonical profile preview. No public `to_semantics_profile(...)` method is introduced in Track 2.
 
-### 5.10 Q10: SDK shells
+### 5.10 D10: SDK shells
 
 Options:
 
@@ -333,9 +332,9 @@ Options:
 - **T10b** Allow new wrappers in shells.
 - **T10c** Allow only wrappers that can derive engine without profile payloads.
 
-Draft recommendation: **T10a**. Shell profile flow is a separate follow-up from E archive notes.
+Locked: **T10a**. Check / Diagnose / Fact Overlay / Why-not shells continue rejecting `semantics=`. Shell profile flow remains a separate follow-up from E archive notes.
 
-### 5.11 Q11: Backward compatibility for `semantics=SemanticsProfile`
+### 5.11 D11: Backward compatibility for `semantics=SemanticsProfile`
 
 Options:
 
@@ -343,9 +342,9 @@ Options:
 - **T11b** Warn/deprecate in docs but continue accepting.
 - **T11c** Reject `SemanticsProfile` in public SDK.
 
-Draft recommendation: **T11a**. Track 2 can add wrappers without breaking Track 3's newly published API.
+Locked: **T11a**. Public SDK `semantics=SemanticsProfile(...)` remains accepted. Track 2 adds wrappers without breaking the Track 3 public call-site.
 
-### 5.12 Q12: Where new types live internally
+### 5.12 D12: Where new types live internally
 
 Options:
 
@@ -353,38 +352,98 @@ Options:
 - **T12b** Core dataclasses in `src/kernel/core/semantics/public.py`.
 - **T12c** Put wrappers in existing `core/semantics/profile.py`.
 
-Draft recommendation: **T12a**. These are ergonomic public SDK wrappers, not canonical core protocol objects. Core can remain on `SemanticsProfile`.
+Locked: **T12a**. New wrappers live in `src/kernel/sdk/semantics.py` and lower to core `SemanticsProfile`. Core/application protocol stays typed around `SemanticsProfile`.
+
+### 5.13 D13: Rejection text contracts
+
+G1 tests should lock these anchored substrings:
+
+- `engine='X' does not match semantics.engine='Y'` for wrapper/profile mismatch.
+- `evaluate_compiled() requires SemanticsProfile, not ProbLogSemantics/PyReasonSemantics` for compiled wrapper rejection.
+- `service semantics accepts SemanticsProfile shape only in Track 2` for service light-shape rejection if a wrapper-shaped JSON is provided.
+- `PyReasonSemantics branch_bounds is Track 3-post` for docs and any accidental kwarg-handling path. Constructor-level unsupported kwarg TypeError is acceptable, but docs/tests must not imply branch_bounds is usable in Track 2.
+
+### 5.14 D14: SDK exports and invariant test migration
+
+`kernel.sdk.__all__` gains `ProbLogSemantics` and `PyReasonSemantics`. The SDK `__all__` invariant tests updated in `ef13343a` must be migrated again to include both new public types.
+
+### 5.15 D15: Track 3-post forward commitment
+
+If Track 2 lands with D6/T6a, the archive notes and memory must state that PyReason `branch_bounds` is deferred to Track 3-post and becomes the next available semantics slice after Track 2.
+
+### 5.16 Locked D-Decision Table
+
+| ID | Decision |
+|---|---|
+| D1 | Add SDK public `ProbLogSemantics` and `PyReasonSemantics`. |
+| D2 | Keep `SemanticsProfile` public as advanced/canonical. |
+| D3 | Branch-id wrappers are SDK-object-only; compiled/service paths keep `SemanticsProfile`. |
+| D4 | Derive engine from wrappers and `SemanticsProfile` when `engine=` is omitted; explicit mismatch rejects. |
+| D5 | `ProbLogSemantics`: optional name, dict-only branch probabilities, explicit/fallback branch ids, omitted branches default to `1.0`. |
+| D6 | `PyReasonSemantics`: lowerable lanes only; `branch_bounds` is not supported until Track 3-post. |
+| D7 | Service JSON remains canonical `SemanticsProfile` shape only. |
+| D8 | `evaluate_compiled()` rejects wrappers and still accepts `SemanticsProfile`. |
+| D9 | `fg.eval.inspect_semantics(...)` supports wrappers and exposes lowered profile preview. |
+| D10 | SDK what-if shells continue rejecting `semantics=`. |
+| D11 | `semantics=SemanticsProfile(...)` stays accepted. |
+| D12 | Wrappers live in SDK-local `src/kernel/sdk/semantics.py`. |
+| D13 | Rejection text anchors are locked for G1. |
+| D14 | `kernel.sdk.__all__` and invariant tests add two wrapper types. |
+| D15 | Archive/memory record Track 3-post `branch_bounds` as next-up. |
+
+### 5.17 Resolved G0 Questions Map
+
+| Draft question | Locked decision |
+|---|---|
+| Q1 public type names | D1 |
+| Q2 `SemanticsProfile` fate | D2 / D11 |
+| Q3 lowering boundary | D3 |
+| Q4 engine derivation | D4 |
+| Q5 `ProbLogSemantics` shape | D5 |
+| Q6 `PyReasonSemantics.branch_bounds` scope | D6 / D15 |
+| Q7 service JSON | D7 |
+| Q8 `evaluate_compiled` | D8 |
+| Q9 inspection helper | D9 |
+| Q10 shells | D10 |
+| Q11 `SemanticsProfile` compatibility | D11 |
+| Q12 type placement | D12 |
+| Reviewer Q13 rejection anchors | D13 |
+| Reviewer Q14 `__all__` invariants | D14 |
+| Reviewer Q15 Track 3-post commitment | D15 |
 
 ## 6. Boundaries And Invariants
 
 - `Rule` and `Derivation` remain logical templates.
 - `Branch` remains structure + optional identity only; no confidence/probability/engine kwargs.
 - Adapter-specific validation remains at adapter consumption time.
-- `SemanticsProfile` remains the canonical internal runtime shape unless G0 decides otherwise.
+- `SemanticsProfile` remains the canonical internal runtime shape and public advanced SDK shape.
 - C/D adapter consumption must remain green.
 - E public `engine=` + `semantics=` call-site remains green.
 - Track 1 `Branch(id=...)` and `fg.rules.inspect(...)` remain green.
 - Service derivation-level `semantics` remains rejected.
+- Service top-level `semantics` remains canonical `SemanticsProfile` JSON only.
 - Shells remain profile-free unless G0 explicitly changes D6/E behavior.
 - No profile-derived or wrapper-derived values are stored as facts, registry state, or compiled plan metadata.
 
 ## 7. Acceptance
 
-- [ ] G0 locks Q1-Q12 decisions and records them in the audit.
+- [x] G0 locks Q1-Q15 decisions and records them in the audit.
 - [ ] G1 red baseline covers selected public wrapper types, engine auto-derivation, mismatch rejection, and preservation guards.
 - [ ] New public SDK type exports are reflected in `kernel.sdk.__all__` invariants.
 - [ ] `fg.eval.evaluate(...)` behavior matches the locked engine-derivation table.
 - [ ] `semantics=SemanticsProfile` compatibility behavior matches G0.
-- [ ] Branch-id maps resolve only at boundaries where branch ids are available.
+- [ ] Branch-id maps resolve only at SDK object boundaries where branch ids are available.
 - [ ] `evaluate_compiled(...)` behavior matches G0.
 - [ ] Service JSON behavior matches G0.
 - [ ] Shell behavior matches G0.
 - [ ] C/D/E/Track 1 preservation suites remain green.
-- [ ] Release-facing docs no longer present `SemanticsProfile` as the only recommended public authoring shape if wrappers are added.
+- [ ] Release-facing docs present wrappers as preferred public authoring shape while keeping `SemanticsProfile` as advanced/canonical.
+- [ ] `PyReasonSemantics(branch_bounds=...)` is not accepted or documented as usable in Track 2.
+- [ ] Track 3-post `branch_bounds` follow-up is captured in archive notes and memory.
 
 ## 8. Implementation Plan
 
-1. G0: freeze wrapper names, lowering boundary, engine derivation, `SemanticsProfile` compatibility, and PyReason `branch_bounds` scope.
+1. G0: freeze wrapper names, lowering boundary, engine derivation, `SemanticsProfile` compatibility, and PyReason `branch_bounds` scope. Completed with D1-D15.
 2. G1: add forward-failing SDK tests and preservation guards.
 3. G2: implement the selected public wrapper dataclasses, SDK lowering, engine derivation, and inspect support.
 4. G3: sync SDK/core/service/adapter docs and update the working design point from proposal to current behavior for Track 2 landed parts.
