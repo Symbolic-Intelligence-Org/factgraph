@@ -43,6 +43,7 @@ EXPECTED_SDK_ALL: tuple[str, ...] = (
     "SDKSchemaError",
     "SDKStore",
     "SDKStoreError",
+    "SemanticsProfile",
     "ValidationReport",
     "build_authoring_schema_from_classes",
     "compile_schema_from_classes",
@@ -64,8 +65,9 @@ FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
 class SDKG1InvariantTests(unittest.TestCase):
     def test_sdk_all_is_unchanged_and_result_types_are_not_exported(self) -> None:
         self.assertEqual(set(sdk_pkg.__all__), set(EXPECTED_SDK_ALL))
-        self.assertEqual(len(sdk_pkg.__all__), 36)
+        self.assertEqual(len(sdk_pkg.__all__), 37)
         self.assertIn("FactGraph", sdk_pkg.__all__)
+        self.assertIn("SemanticsProfile", sdk_pkg.__all__)
         for name in ("CheckResult", "DiagnoseResult"):
             with self.subTest(name=name):
                 self.assertNotIn(name, sdk_pkg.__all__)
