@@ -617,6 +617,9 @@ def sdk_edit(sdk: "SDKStore", entity_cls: type[Any], **identity_kwargs: Any) -> 
 
 def _validate_entity_cls(sdk: "SDKStore", entity_cls: type[Any]) -> None:
     if entity_cls not in sdk._entity_spec_by_class:
+        raise_if_superseded = getattr(sdk, "_raise_if_superseded_entity_class", None)
+        if callable(raise_if_superseded):
+            raise_if_superseded(entity_cls)
         raise SDKStoreError(f"unknown Entity class: {getattr(entity_cls, '__name__', entity_cls)!r}")
 
 

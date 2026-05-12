@@ -892,11 +892,16 @@ class SDKStore:
             current_classes=self._classes,
             schema_classes=additions,
         )
-        if result.schema_digest == old_digest and not result.added_entities:
+        if (
+            result.schema_digest == old_digest
+            and not result.added_entities
+            and not result.added_fields
+        ):
             return SchemaAddResult(
                 old_digest=old_digest,
                 new_digest=old_digest,
                 added_entities=[],
+                added_fields=[],
             )
 
         self._preflight_schema_digest_anchors(old_digest)
@@ -913,6 +918,7 @@ class SDKStore:
             old_digest=old_digest,
             new_digest=result.schema_digest,
             added_entities=list(result.added_entities),
+            added_fields=list(result.added_fields),
         )
 
     def check(
@@ -1463,6 +1469,7 @@ class SDKStore:
         """
         spec = self._entity_spec_by_class.get(entity_cls)
         if spec is None:
+            self._raise_if_superseded_entity_class(entity_cls)
             raise SDKStoreError(f"unknown Entity class: {getattr(entity_cls, '__name__', entity_cls)!r}")
 
         expected_names = {field["name"] for field in spec["identity_fields"]}
@@ -2435,10 +2442,37 @@ class SDKStore:
             raise SDKStoreError("field must be sdk.Field descriptor (e.g. Person.country)")
         pred = self._field_pred_by_descriptor.get(field)
         if pred is None:
+            self._raise_if_superseded_entity_class(getattr(field, "sdk_owner_cls", None))
             owner_name = getattr(getattr(field, "sdk_owner_cls", None), "__name__", "<unknown>")
             attr_name = getattr(field, "sdk_attr_name", "<unknown>")
             raise SDKStoreError(f"field is not bound in this SDKStore schema: {owner_name}.{attr_name}")
         return pred
+
+    def _raise_if_superseded_entity_class(self, entity_cls: Any) -> None:
+        if not isinstance(entity_cls, type):
+            return
+        try:
+            candidate_spec = entity_cls.sdk_entity_spec()
+        except Exception:
+            return
+        entity_type = candidate_spec.get("entity_type")
+        if not isinstance(entity_type, str):
+            return
+        active_cls = self._active_entity_class_for_type(entity_type)
+        if active_cls is not None and active_cls is not entity_cls:
+            raise SDKStoreError(
+                "schema declaration was superseded; use the post-add class object"
+            )
+
+    def _active_entity_class_for_type(self, entity_type: str) -> type[Entity] | None:
+        for cls in self._classes:
+            try:
+                spec = cls.sdk_entity_spec()
+            except Exception:
+                continue
+            if spec.get("entity_type") == entity_type:
+                return cls
+        return None
 
     def _rest_terms_for_field(
         self,

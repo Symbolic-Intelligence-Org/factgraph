@@ -111,7 +111,7 @@ def validate_workspace_manifest(
         raise WorkspaceRuntimeError("workspace manifest schema_digest must be non-empty string")
     if schema_digest is not None and manifest_digest != schema_digest:
         raise WorkspaceRuntimeError(
-            f"workspace schema digest mismatch: manifest={manifest_digest!r}, expected={schema_digest!r}"
+            f"workspace schema_digest mismatch: manifest={manifest_digest!r}, expected={schema_digest!r}"
         )
     return payload
 
