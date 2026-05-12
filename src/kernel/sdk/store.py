@@ -23,6 +23,10 @@ from kernel.application.authoring_runtime import (
     save_inference as app_save_inference,
     save_rule as app_save_rule,
 )
+from kernel.application.schema_mutation_runtime import (
+    SchemaAddResult,
+    add_schema_classes as app_add_schema_classes,
+)
 from kernel.application.workspace_runtime import load_workspace as app_load_workspace
 from kernel.application.workspace_runtime import resolve_workspace_paths
 from kernel.application.workspace_runtime import save_workspace as app_save_workspace
@@ -221,6 +225,9 @@ class _SDKSchemaManager:
 
     def validate_provenance(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.validate_provenance(*args, **kwargs)
+
+    def add(self, *schema_classes: type[Entity], **kwargs: Any) -> SchemaAddResult:
+        return self._sdk.add_schema_classes(*schema_classes, **kwargs)
 
 
 class _SDKReadManager:
@@ -864,6 +871,44 @@ class SDKStore:
         from .ingest import sdk_validate_provenance
 
         return sdk_validate_provenance(self, obj, standard=standard)
+
+    def add_schema_classes(
+        self,
+        *schema_class_args: type[Entity],
+        schema_classes: list[type[Entity]] | None = None,
+    ) -> SchemaAddResult:
+        if schema_class_args and schema_classes is not None:
+            raise SDKStoreError("pass either positional schema classes or schema_classes=, not both")
+        if schema_classes is None:
+            if len(schema_class_args) == 1:
+                additions = [schema_class_args[0]]
+            else:
+                additions = list(schema_class_args)
+        else:
+            additions = schema_classes
+
+        old_digest = self._schema_digest
+        result = app_add_schema_classes(
+            current_classes=self._classes,
+            schema_classes=additions,
+        )
+        if result.schema_digest == old_digest and not result.added_entities:
+            return SchemaAddResult(
+                old_digest=old_digest,
+                new_digest=old_digest,
+                added_entities=[],
+            )
+
+        self._refresh_schema_state(
+            classes=result.classes,
+            schema_ir=result.schema_ir,
+            schema_digest_value=result.schema_digest,
+        )
+        return SchemaAddResult(
+            old_digest=old_digest,
+            new_digest=result.schema_digest,
+            added_entities=list(result.added_entities),
+        )
 
     def check(
         self,
@@ -2325,6 +2370,23 @@ class SDKStore:
                     raise SDKStoreError(f"schema predicate not found for {spec['entity_type']}.{py_name}")
                 self._field_pred_by_descriptor[descriptor] = pred
                 self._field_decl_by_descriptor[descriptor] = field_decl
+
+    def _refresh_schema_state(
+        self,
+        *,
+        classes: list[type[Entity]],
+        schema_ir: dict[str, Any],
+        schema_digest_value: str,
+    ) -> None:
+        self._classes = list(classes)
+        self._schema_ir = schema_ir
+        self._store.schema_ir = schema_ir
+        self._schema_digest = schema_digest_value
+        self._application_schema_index = build_schema_index(schema_ir)
+        self._field_pred_by_descriptor.clear()
+        self._field_decl_by_descriptor.clear()
+        self._entity_spec_by_class.clear()
+        self._index_schema()
 
     def _schema_pred_for_field(self, field: Field) -> dict[str, Any]:
         if not isinstance(field, Field):
