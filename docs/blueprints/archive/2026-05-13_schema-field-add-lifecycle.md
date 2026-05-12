@@ -1,6 +1,6 @@
 # Task Blueprint: Schema Field Add Lifecycle
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-13
 - Last Updated: 2026-05-13
 - Related Modules:
@@ -435,16 +435,16 @@ a replacement class declaration with the same Python class name.
 
 ## 8. Acceptance
 
-- [ ] G0 locks the field-add API and class replacement semantics.
-- [ ] G1 inventory covers Python class replacement, result shape, missing-value
+- [x] G0 locks the field-add API and class replacement semantics.
+- [x] G1 inventory covers Python class replacement, result shape, missing-value
   reads, descriptor writes, saved asset compatibility, digest anchors, and
   workspace save-time behavior.
-- [ ] G1 baseline includes guards preserving entity-add behavior.
-- [ ] G2 implementation keeps validation preflight before state mutation.
-- [ ] G2 implementation preserves lifecycle/assets invariants from prior
+- [x] G1 baseline includes guards preserving entity-add behavior.
+- [x] G2 implementation keeps validation preflight before state mutation.
+- [x] G2 implementation preserves lifecycle/assets invariants from prior
   slices.
-- [ ] G3 updates affected SDK/application docs.
-- [ ] G4 fills Outcome / Deviations and archives the blueprint pair.
+- [x] G3 updates affected SDK/application docs.
+- [x] G4 fills Outcome / Deviations and archives the blueprint pair.
 
 ## 9. Implementation Plan
 
@@ -470,4 +470,66 @@ a replacement class declaration with the same Python class name.
 
 ## 11. Outcome / Deviations
 
-To be completed at G4.
+Implemented 2026-05-13.
+
+### Final Behavior
+
+- `fg.schema.add(...)` now supports same-entity replacement classes that add
+  non-identity fields.
+- Replacement classes must preserve the existing entity type, identity model,
+  existing predicates, relationship targets, field type domains, and
+  cardinality.
+- Field-add rejects identity-field addition, existing-field rewrites, field
+  removals, predicate collisions, and stale class/descriptor usage.
+- `SchemaAddResult` now returns `added_fields` alongside `added_entities`.
+- Existing assertions are not backfilled. Missing added single-cardinality
+  fields read as `None`; missing added multi-cardinality fields read as `()`.
+- Re-adding an equivalent replacement class is idempotent and returns empty
+  `added_entities` and `added_fields`.
+- Active SDK/core schema state, ledger schema digest, and graph-bound registry
+  schema IR update immediately after validation.
+- Workspace manifests remain save-time: `fg.schema.add(...)` does not rewrite
+  the manifest until explicit `fg.save(...)`.
+- Saved rules/inferences compiled before field-add remain loadable; new saved
+  assets may reference added fields.
+- `FactGraph.load(...)` after saved field-add requires post-add Python classes;
+  pre-add classes fail schema digest validation.
+- `fg.schema.delete/update/migrate/deprecate` remain absent.
+
+### Validation
+
+- Field-add lifecycle suite: 33/33 OK.
+- Schema mutation + lifecycle/assets preservation + SDK invariant stack:
+  217/217 OK.
+- `git diff --check` clean.
+
+### Lineage
+
+```text
+88728ed3 docs(sdk): document schema field add lifecycle
+fae2d142 feat(sdk): wire schema field add replacement
+e88bfad3 feat(application): extend schema mutation for field add
+4a9abdc6 test(sdk): add schema field add lifecycle baseline
+859c3b2c docs(blueprints): scope schema field add lifecycle
+27081d61 docs(blueprints): refine schema field add lifecycle draft
+b8b7ba0c docs(blueprints): draft schema field add lifecycle
+```
+
+### Deviations
+
+- The planned G2.3 verification-only commit was collapsed into G2.2 because
+  G2.2 made the full field-add suite green and the digest/workspace behavior
+  was already covered by existing schema mutation and workspace runtime paths.
+- No broad DSL predicate-prefix normalization was needed. The focused
+  CamelCase field-add regression passed with the existing compiler-generated
+  predicate path.
+
+### Archive Notes
+
+This slice extends the additive schema mutation thread from entity-only add to
+non-identity field-add while preserving the same Path C application-runtime
+authority, three-anchor digest handling, and workspace save-time boundary.
+Remaining schema evolution work is now genuinely migration-shaped:
+relationship schema extension, identity changes, field defaults/backfill,
+delete/deprecate/update/migrate planning, and class-less dynamic load remain
+future slices.

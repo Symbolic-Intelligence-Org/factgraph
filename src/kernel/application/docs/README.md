@@ -28,9 +28,9 @@ compatibility.
   - Current implementation contract for the application-layer walker
     module.
 - `src/kernel/application/schema_mutation_runtime.py`
-  - Additive schema-extension validation and transition planning used by
-    `fg.schema.add(...)`; application-first runtime module, documented in
-    the application overview.
+  - Additive entity and non-identity field extension validation and transition
+    planning used by `fg.schema.add(...)`; application-first runtime module,
+    documented in the application overview.
 
 ## Conventions
 

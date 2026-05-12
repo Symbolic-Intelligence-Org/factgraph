@@ -13,6 +13,7 @@
 | 2026-05-13 | scoped | G2.1 application runtime | Extended schema mutation planning for same-entity field-add and `added_fields`; combined field-add + preservation suite now 217 tests with 6 expected field-add failures. |
 | 2026-05-13 | scoped | G2.2 SDK field-add wiring | Propagated `SchemaAddResult.added_fields`, added superseded class/descriptor rejection at SDK boundaries, and aligned workspace schema mismatch wording; field-add suite 33/33 OK and combined preservation 217/217 OK. |
 | 2026-05-13 | scoped | G3 docs sync | Updated SDK, application, and lifecycle design-point docs for field-add replacement classes, `added_fields`, absence semantics, superseded declarations, and remaining migration deferrals. |
+| 2026-05-13 | implemented | G4 close-out | Completed outcome/deviations, marked acceptance gates complete, archived blueprint pair, and updated archive README. |
 
 ## Decision Notes
 
