@@ -1,6 +1,6 @@
 # Task Blueprint: Track 2 Public Semantics API Redesign
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -428,18 +428,18 @@ If Track 2 lands with D6/T6a, the archive notes and memory must state that PyRea
 ## 7. Acceptance
 
 - [x] G0 locks Q1-Q15 decisions and records them in the audit.
-- [ ] G1 red baseline covers selected public wrapper types, engine auto-derivation, mismatch rejection, and preservation guards.
-- [ ] New public SDK type exports are reflected in `kernel.sdk.__all__` invariants.
-- [ ] `fg.eval.evaluate(...)` behavior matches the locked engine-derivation table.
-- [ ] `semantics=SemanticsProfile` compatibility behavior matches G0.
-- [ ] Branch-id maps resolve only at SDK object boundaries where branch ids are available.
-- [ ] `evaluate_compiled(...)` behavior matches G0.
-- [ ] Service JSON behavior matches G0.
-- [ ] Shell behavior matches G0.
-- [ ] C/D/E/Track 1 preservation suites remain green.
-- [ ] Release-facing docs present wrappers as preferred public authoring shape while keeping `SemanticsProfile` as advanced/canonical.
-- [ ] `PyReasonSemantics(branch_bounds=...)` is not accepted or documented as usable in Track 2.
-- [ ] Track 3-post `branch_bounds` follow-up is captured in archive notes and memory.
+- [x] G1 red baseline covers selected public wrapper types, engine auto-derivation, mismatch rejection, and preservation guards.
+- [x] New public SDK type exports are reflected in `kernel.sdk.__all__` invariants.
+- [x] `fg.eval.evaluate(...)` behavior matches the locked engine-derivation table.
+- [x] `semantics=SemanticsProfile` compatibility behavior matches G0.
+- [x] Branch-id maps resolve only at SDK object boundaries where branch ids are available.
+- [x] `evaluate_compiled(...)` behavior matches G0.
+- [x] Service JSON behavior matches G0.
+- [x] Shell behavior matches G0.
+- [x] C/D/E/Track 1 preservation suites remain green.
+- [x] Release-facing docs present wrappers as preferred public authoring shape while keeping `SemanticsProfile` as advanced/canonical.
+- [x] `PyReasonSemantics(branch_bounds=...)` is not accepted or documented as usable in Track 2.
+- [x] Track 3-post `branch_bounds` follow-up is captured in archive notes and memory.
 
 ## 8. Implementation Plan
 
@@ -463,9 +463,68 @@ If Track 2 lands with D6/T6a, the archive notes and memory must state that PyRea
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
+### 10.1 Final Landed Behavior
 
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+Track 2 implemented the bounded SDK public-wrapper slice locked at G0:
+
+1. `kernel.sdk.ProbLogSemantics` and `kernel.sdk.PyReasonSemantics` are public SDK exports.
+2. `SemanticsProfile` remains public and accepted as the advanced/canonical profile shape.
+3. Public wrappers are SDK-local objects in `src/kernel/sdk/semantics.py`; they do not enter application protocol, service JSON, compiled plans, registries, or adapters.
+4. `fg.eval.evaluate(...)` can derive `engine=` from `ProbLogSemantics`, `PyReasonSemantics`, or `SemanticsProfile`.
+5. Explicit `engine=` remains a mismatch guard and rejects when it conflicts with `semantics.engine`.
+6. `ProbLogSemantics(branch_probabilities={...})` accepts dict-only branch probability maps keyed by explicit branch ids or fallback `b0` / `b1` ids. Omitted branches continue to default to `1.0` after lowering.
+7. `PyReasonSemantics(...)` supports only currently lowerable lanes: `timestep_delay`, global `head_bound`, `temporal_projection`, `uncertainty_projection`, and `fallback`.
+8. `PyReasonSemantics` intentionally has no `branch_bounds` field in Track 2; PyReason per-branch head-bound carrier work remains Track 3-post.
+9. Wrapper lowering resolves branch ids only while SDK `Rule` / `Derivation` objects are available, then produces canonical `SemanticsProfile`.
+10. `fg.eval.evaluate_compiled(..., semantics=ProbLogSemantics(...))` and `PyReasonSemantics(...)` reject because compiled plans do not carry branch ids; `SemanticsProfile` remains accepted.
+11. Service top-level `semantics` JSON remains canonical `SemanticsProfile` shape only. Wrapper-shaped service JSON rejects.
+12. `fg.eval.inspect_semantics(...)` accepts wrappers and returns wrapper metadata plus a lowered canonical profile preview.
+13. Check / Diagnose / Fact Overlay / Why-not shells remain profile-free and continue rejecting `semantics=`.
+14. SDK `__all__` invariants now include the two new public wrapper types.
+15. Track 1 and Track 3 public/runtime compatibility remains intact.
+
+### 10.2 Validation
+
+- G1 red + guard baseline: `test_public_semantics_api_redesign.py` added 17 tests with expected 13 errors + 2 failures + 2 guard passes before implementation.
+- Track 2 target suite after G2: 17/17 OK.
+- Track 1 + B/C/D/E preservation suite: 103/103 OK.
+- SDK `__all__` invariant suite after D14 migration: 81/81 OK.
+- Combined focused suite: 201/201 OK.
+- G3 docs sync grep gates:
+  - `ProbLogSemantics` / `PyReasonSemantics` appear as preferred SDK public wrappers.
+  - `SemanticsProfile` remains described as advanced/canonical.
+  - service and compiled paths remain canonical `SemanticsProfile` surfaces.
+  - `branch_bounds` is documented as Track 3-post, not Track 2.
+- `git diff --check` clean.
+
+### 10.3 Commit Lineage
+
+G4 closes the following landed lineage:
+
+```text
+441650a6 docs(sdk): document public semantics wrappers          ← G3
+dff5836e feat(sdk): add public semantics wrappers                ← G2
+1eaa69e6 test(sdk): add public semantics api baseline            ← G1
+32565b43 docs(blueprints): scope public semantics api redesign   ← G0
+3069beb3 docs(blueprints): draft public semantics api redesign   ← draft seed
+```
+
+### 10.4 Deviations
+
+1. D14 `__all__` invariant migration was bundled into G2 instead of using a separate mid-cycle cleanup commit. Unlike Track 1's `ef13343a`, this migration was directly part of Track 2's public export change, so keeping it in the implementation commit was cleaner.
+2. G2 production code was larger than the draft estimate. The SDK store changes grew because one implementation had to cover the 5-row engine derivation table, wrapper-to-profile lowering for two engines, branch-id lookup, compiled-path rejection, and polymorphic `inspect_semantics(...)`.
+3. G3 touched `src/kernel/sdk/docs/01_concepts.en.md` and `src/kernel/sdk/docs/06_what_if_and_proof.en.md` in addition to the core §9 list. The concepts doc needed a durable wrapper concept anchor, and the what-if/proof doc needed to preserve the shell rejection boundary while pointing users to the new wrapper form.
+
+### 10.5 Archive Notes
+
+Track 2 completes the ergonomic public semantics authoring layer that Track 3 deliberately did not absorb. The final public guidance is:
+
+- Use `ProbLogSemantics(...)` or `PyReasonSemantics(...)` for normal SDK authoring.
+- Omit `engine=` when it can be derived from `semantics=...`; keep explicit `engine=` only as a guard.
+- Use `SemanticsProfile` when callers need the advanced/canonical profile shape, service JSON compatibility, compiled evaluation, or lower-level core/application boundaries.
+
+The remaining post-Track-3 plan has one immediately available slice:
+
+- **Track 3-post**: add PyReason `branch_bounds` by introducing an adapter-local per-branch head-bound carrier and compiling per-branch head annotations. Track 2 intentionally did not add the constructor field, so this future slice can introduce it cleanly once the carrier shape is locked.
+
+No archive or release refs were rewritten. `release/0.1.x` and `v0.1.0-rc.1` remain untouched.
