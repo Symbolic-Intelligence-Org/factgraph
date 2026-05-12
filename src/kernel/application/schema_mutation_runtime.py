@@ -5,7 +5,7 @@ facades adapt these pure helpers into ``fg.schema.add(...)``.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from kernel.core.schema.schema_ir import ensure_schema_ir, schema_digest
@@ -19,15 +19,13 @@ class SchemaAddResult:
     old_digest: str
     new_digest: str
     added_entities: list[str]
+    added_fields: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         _validate_non_empty_text(self.old_digest, field_name="old_digest")
         _validate_non_empty_text(self.new_digest, field_name="new_digest")
-        if not isinstance(self.added_entities, list):
-            raise SDKStoreError("added_entities must be list[str]")
-        for index, entity_type in enumerate(self.added_entities):
-            if not isinstance(entity_type, str) or not entity_type:
-                raise SDKStoreError(f"added_entities[{index}] must be non-empty string")
+        _validate_text_list(self.added_entities, field_name="added_entities")
+        _validate_text_list(self.added_fields, field_name="added_fields")
 
 
 @dataclass(frozen=True)
@@ -36,6 +34,7 @@ class AdditiveExtensionResult:
     schema_digest: str
     classes: list[type[Entity]]
     added_entities: list[str]
+    added_fields: list[str] = field(default_factory=list)
 
 
 def validate_additive_schema_extension(
@@ -72,6 +71,24 @@ def validate_additive_schema_extension(
         if _predicate_stable_projection(current_predicate) != _predicate_stable_projection(candidate_predicate):
             raise SDKStoreError(f"existing field changed for predicate: {pred_id}")
 
+    added_entity_types = set(candidate_entities) - set(current_entities)
+    for pred_id, candidate_predicate in candidate_predicates.items():
+        if pred_id in current_predicates:
+            continue
+        owner_type = candidate_predicate.get("owner_type")
+        if not isinstance(owner_type, str) or not owner_type:
+            raise SDKStoreError(f"new predicate owner_type missing for additive schema extension: {pred_id}")
+        if owner_type in added_entity_types:
+            continue
+        if owner_type not in current_entities:
+            raise SDKStoreError(f"new predicate owner is not an entity type in additive schema extension: {pred_id}")
+        if candidate_predicate.get("is_identity_field") is True:
+            raise SDKStoreError(f"identity field addition is not supported: {pred_id}")
+        if candidate_predicate.get("is_entity_exists") is True:
+            raise SDKStoreError(f"entity-exists predicate addition is not supported for existing entity: {pred_id}")
+        if "relationship_type" in candidate_predicate:
+            raise SDKStoreError(f"relationship predicate addition is not supported in field-add slice: {pred_id}")
+
 
 def add_schema_classes(
     *,
@@ -86,14 +103,24 @@ def add_schema_classes(
 
     next_classes = list(current_classes)
     added_entities: list[str] = []
+    added_fields: list[str] = []
     for entity_type, cls in additions_by_type.items():
         if entity_type in current_by_type:
-            current_schema = compile_schema_from_classes([current_by_type[entity_type]])
+            current_cls = current_by_type[entity_type]
+            current_schema = compile_schema_from_classes([current_cls])
             candidate_schema = compile_schema_from_classes([cls])
             validate_additive_schema_extension(
                 current_schema_ir=current_schema,
                 candidate_schema_ir=candidate_schema,
             )
+            field_additions = _added_fields_for_entity(
+                current_cls=current_cls,
+                candidate_cls=cls,
+                entity_type=entity_type,
+            )
+            if field_additions:
+                next_classes = [cls if existing is current_cls else existing for existing in next_classes]
+                added_fields.extend(field_additions)
             continue
         next_classes.append(cls)
         added_entities.append(entity_type)
@@ -109,12 +136,21 @@ def add_schema_classes(
         schema_digest=schema_digest(candidate_schema_ir),
         classes=next_classes,
         added_entities=added_entities,
+        added_fields=added_fields,
     )
 
 
 def _validate_non_empty_text(value: Any, *, field_name: str) -> None:
     if not isinstance(value, str) or not value:
         raise SDKStoreError(f"{field_name} must be non-empty string")
+
+
+def _validate_text_list(value: Any, *, field_name: str) -> None:
+    if not isinstance(value, list):
+        raise SDKStoreError(f"{field_name} must be list[str]")
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item:
+            raise SDKStoreError(f"{field_name}[{index}] must be non-empty string")
 
 
 def _normalize_entity_classes(value: Any, *, field_name: str) -> list[type[Entity]]:
@@ -127,6 +163,27 @@ def _normalize_entity_classes(value: Any, *, field_name: str) -> list[type[Entit
         if not isinstance(cls, type) or not issubclass(cls, Entity) or cls is Entity:
             raise SDKStoreError(f"{field_name}[{index}] must be Entity subclass")
         out.append(cls)
+    return out
+
+
+def _added_fields_for_entity(
+    *,
+    current_cls: type[Entity],
+    candidate_cls: type[Entity],
+    entity_type: str,
+) -> list[str]:
+    current_fields = {
+        field.get("py_name")
+        for field in current_cls.sdk_entity_spec().get("fields", [])
+        if isinstance(field, dict) and isinstance(field.get("py_name"), str)
+    }
+    out: list[str] = []
+    for field_row in candidate_cls.sdk_entity_spec().get("fields", []):
+        if not isinstance(field_row, dict):
+            continue
+        py_name = field_row.get("py_name")
+        if isinstance(py_name, str) and py_name not in current_fields:
+            out.append(f"{entity_type}.{py_name}")
     return out
 
 

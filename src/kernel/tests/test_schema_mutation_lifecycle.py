@@ -192,7 +192,7 @@ class SchemaMutationAPITests(unittest.TestCase):
         self.assertIn("SchemaAddResult", sdk_module.__all__)
         self.assertEqual(
             [field.name for field in fields(SchemaAddResult)],
-            ["old_digest", "new_digest", "added_entities"],
+            ["old_digest", "new_digest", "added_entities", "added_fields"],
         )
 
     def test_sdk_all_invariant_adds_schema_add_result(self) -> None:
