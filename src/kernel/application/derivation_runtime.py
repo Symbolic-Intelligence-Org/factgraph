@@ -115,6 +115,7 @@ def _evaluate_plan(
                 registry=registry,
                 engine_ext=plan.engine_ext,
                 engine_options=engine_options,
+                semantics_profile=request.semantics_profile,
             )
         )
 
@@ -132,6 +133,7 @@ def _evaluate_plan(
             registry=registry,
             engine_ext=plan.engine_ext,
             engine_options=engine_options,
+            semantics_profile=request.semantics_profile,
         )
         results.extend(head_results)
     return results

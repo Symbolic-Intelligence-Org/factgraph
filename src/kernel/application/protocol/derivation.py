@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from kernel.core.semantics import SemanticsProfile
 from kernel.core.store.types import EngineExtBase
 
 from .common import (
@@ -76,6 +77,7 @@ class DerivationEvaluateRequest:
     plans: tuple[CompiledDerivationPlan, ...]
     run_id: str | None = None
     engine: Literal["souffle", "problog", "pyreason", "native"] = "native"
+    semantics_profile: SemanticsProfile | None = None
 
     def __post_init__(self) -> None:
         _validate_tuple_items(self.plans, field_name="plans", item_type=CompiledDerivationPlan)
@@ -87,6 +89,8 @@ class DerivationEvaluateRequest:
             field_name="engine",
             allowed=("souffle", "problog", "pyreason", "native"),
         )
+        if self.semantics_profile is not None and not isinstance(self.semantics_profile, SemanticsProfile):
+            raise ProtocolShapeError("semantics_profile must be SemanticsProfile or None")
 
 
 @dataclass(frozen=True)

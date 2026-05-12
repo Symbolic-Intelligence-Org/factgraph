@@ -28,6 +28,7 @@ from kernel.core.rules._trace_narrative import render_rule_run_narrative
 from kernel.core.rules.rule_ir import RuleCompileError, RuleRegistry, RuleSpec, run_rule, run_rule_with_trace
 from kernel.core.rules._trace import summarize_rule_trace_artifact_dict
 from kernel.core.schema.schema_ir import schema_digest
+from kernel.core.semantics import SemanticsProfile
 from kernel.core.store import builders
 from kernel.core.store._artifact_sidecar import FileArtifactSidecar
 from kernel.core.store._candidate_evidence_tree import (
@@ -965,19 +966,14 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
                 kind="shape",
                 path="$.engine_ext",
             )
-        if isinstance(dto, dict) and "semantics" in dto:
-            raise facade_error(
-                "semantics is not accepted in runtime derivation evaluation in B; Track 3 / E owns runtime consumption",
-                kind="shape",
-                path="$.semantics",
-            )
         if isinstance(dto, dict) and "semantics_profile" in dto:
             raise facade_error(
-                "semantics_profile is not accepted in runtime derivation evaluation in B; Track 3 / E owns runtime consumption",
+                "semantics_profile is not accepted in runtime derivation evaluation; use semantics",
                 kind="shape",
                 path="$.semantics_profile",
             )
         mode = _resolve_runtime_derivation_engine(dto)
+        semantics_profile = _resolve_runtime_semantics_profile(dto, mode=mode)
         compiled = _compile_runtime_derivation(dto, schema_ir=session.store.schema_ir)
         limit = _optional_limit(dto.get("limit"), path="$.limit")
         active_registry = None
@@ -1005,6 +1001,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             registry=active_registry,
             confidence_kind_resolver=certainty_resolver,
             engine_ext=runtime_engine_ext,
+            semantics_profile=semantics_profile,
         )
         _cache_derivation_recipe(
             session,
@@ -1451,6 +1448,33 @@ def _resolve_runtime_derivation_engine(dto: Any) -> str:
             path="$.engine",
         )
     return raw
+
+
+def _resolve_runtime_semantics_profile(dto: Any, *, mode: str) -> SemanticsProfile | None:
+    if not isinstance(dto, dict) or "semantics" not in dto:
+        return None
+    raw = dto.get("semantics")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise facade_error("semantics must be object", kind="shape", path="$.semantics")
+    if mode not in {"problog", "pyreason"}:
+        raise facade_error(
+            f"engine='{mode}' does not consume SemanticsProfile",
+            kind="shape",
+            path="$.semantics",
+        )
+    try:
+        profile = SemanticsProfile(**raw)
+    except Exception as exc:
+        raise facade_error(str(exc), kind="shape", path="$.semantics") from exc
+    if profile.engine != mode:
+        raise facade_error(
+            f"SemanticsProfile.engine='{profile.engine}' does not match engine='{mode}'",
+            kind="shape",
+            path="$.semantics",
+        )
+    return profile
 
 
 def _runtime_exception_to_error(exc: Exception, *, default_kind: str) -> dict[str, Any]:

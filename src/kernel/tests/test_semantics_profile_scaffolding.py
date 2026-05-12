@@ -188,11 +188,11 @@ class SemanticsProfileInspectionTests(unittest.TestCase):
 
 
 class PublicIntegrationRejectionTests(unittest.TestCase):
-    def test_kernel_sdk_does_not_export_semantics_profile(self) -> None:
+    def test_kernel_sdk_exports_semantics_profile_after_e(self) -> None:
         sdk = importlib.import_module("kernel.sdk")
 
-        self.assertNotIn("SemanticsProfile", sdk.__all__)
-        self.assertFalse(hasattr(sdk, "SemanticsProfile"))
+        self.assertIn("SemanticsProfile", sdk.__all__)
+        self.assertTrue(hasattr(sdk, "SemanticsProfile"))
 
     def test_sdk_evaluate_rejects_semantics_keyword(self) -> None:
         sdk = SDKStore([User])
@@ -224,22 +224,28 @@ class PublicIntegrationRejectionTests(unittest.TestCase):
 
         self.assertIn("semantics_profile", str(ctx.exception))
 
-    def test_service_rejects_top_level_semantics_keys(self) -> None:
+    def test_service_top_level_semantics_boundary_after_e(self) -> None:
         reset_runtime_sessions_for_tests()
         sdk = SDKStore([User])
         open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
         self.assertTrue(open_resp["ok"], open_resp)
         session_id = str(open_resp["session"]["session_id"])
         try:
-            for key in ("semantics", "semantics_profile"):
-                resp = evaluate_runtime_derivation(
-                    session_id,
-                    {"engine": "native", key: {"name": "x"}, "derivation": _runtime_derivation_payload()},
-                )
+            semantics_resp = evaluate_runtime_derivation(
+                session_id,
+                {"engine": "native", "semantics": {"name": "x"}, "derivation": _runtime_derivation_payload()},
+            )
+            self.assertFalse(semantics_resp["ok"], semantics_resp)
+            self.assertEqual(semantics_resp["errors"][0]["path"], "$.semantics")
+            self.assertIn("does not consume SemanticsProfile", semantics_resp["errors"][0]["details"]["message"])
 
-                self.assertFalse(resp["ok"], resp)
-                self.assertEqual(resp["errors"][0]["path"], f"$.{key}")
-                self.assertIn("Track 3 / E", resp["errors"][0]["details"]["message"])
+            profile_resp = evaluate_runtime_derivation(
+                session_id,
+                {"engine": "native", "semantics_profile": {"name": "x"}, "derivation": _runtime_derivation_payload()},
+            )
+            self.assertFalse(profile_resp["ok"], profile_resp)
+            self.assertEqual(profile_resp["errors"][0]["path"], "$.semantics_profile")
+            self.assertIn("use semantics", profile_resp["errors"][0]["details"]["message"])
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
@@ -266,12 +272,14 @@ class PublicIntegrationRejectionTests(unittest.TestCase):
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
 
-    def test_application_protocol_has_no_semantics_profile_field(self) -> None:
-        from kernel.application.protocol.derivation import DerivationEvaluateRequest
+    def test_application_protocol_has_request_level_semantics_profile_after_e(self) -> None:
+        from kernel.application.protocol.derivation import CompiledDerivationPlan, DerivationEvaluateRequest
 
-        field_names = {field.name for field in fields(DerivationEvaluateRequest)}
-        self.assertNotIn("semantics", field_names)
-        self.assertNotIn("semantics_profile", field_names)
+        request_fields = {field.name for field in fields(DerivationEvaluateRequest)}
+        plan_fields = {field.name for field in fields(CompiledDerivationPlan)}
+        self.assertNotIn("semantics", request_fields)
+        self.assertIn("semantics_profile", request_fields)
+        self.assertNotIn("semantics_profile", plan_fields)
 
 
 class BridgeGuardTests(unittest.TestCase):

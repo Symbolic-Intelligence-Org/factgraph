@@ -69,7 +69,7 @@ class V01OnboardingJourneyTests(unittest.TestCase):
                 head=User.tag(locale=loc, tag=derived),
             )
 
-        candidates = sdk.evaluate(derivation, mode="native")
+        candidates = sdk.evaluate(derivation, engine="native")
         self.assertGreaterEqual(len(candidates), 1)
         sdk.accept(candidates[0], approved_by="journey", note="accept derived audit tag")
 

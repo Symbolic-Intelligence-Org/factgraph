@@ -26,6 +26,7 @@ from .error_codes import (
 from .registry import SDKRegistry
 from .schema import Entity, Field, Identity, Relationship
 from .store import FactGraph, SDKStore
+from kernel.core.semantics import SemanticsProfile
 from kernel.core.store.types import ReadPolicy
 from .dsl import Branch, Derivation, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
 from .ingest import IngestResult, ValidationReport
@@ -54,6 +55,7 @@ __all__ = [
     "Identity",
     "Relationship",
     "ReadPolicy",
+    "SemanticsProfile",
     "Rule",
     "RuleRef",
     "Derivation",

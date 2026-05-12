@@ -84,7 +84,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidates = sdk.evaluate(self._make_derivation(), mode="problog")
+        candidates = sdk.evaluate(self._make_derivation(), engine="problog")
 
         self.assertEqual(len(candidates), 1)
         self.assertEqual(mock_run.call_args.kwargs["timeout"], 30)
@@ -102,7 +102,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         candidates = sdk.evaluate(
             self._make_derivation(),
-            mode="problog",
+            engine="problog",
             engine_options={"timeout": 7},
         )
 
@@ -114,7 +114,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         sdk = self._make_sdk()
 
         with self.assertRaises(ValueError) as ctx:
-            sdk.evaluate(self._make_derivation(), mode="problog", engine_options={"timesteps": 5})
+            sdk.evaluate(self._make_derivation(), engine="problog", engine_options={"timesteps": 5})
 
         self.assertIn("Supported keys: timeout", str(ctx.exception))
 
@@ -122,7 +122,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         sdk = self._make_sdk()
 
         with self.assertRaises(ValueError) as ctx:
-            sdk.evaluate(self._make_derivation(), mode="problog", engine_options={"timeout": "slow"})
+            sdk.evaluate(self._make_derivation(), engine="problog", engine_options={"timeout": "slow"})
 
         self.assertIn("positive int", str(ctx.exception))
 
@@ -132,7 +132,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         compiled["engine_ext"] = DummyProbLogExt()
 
         with self.assertRaises(ValueError) as ctx:
-            sdk.evaluate(compiled, mode="problog")
+            sdk.evaluate(compiled, engine="problog")
 
         self.assertIn("ProbLog engine_ext must be ProbLogRuleExt", str(ctx.exception))
 
@@ -150,7 +150,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
         compiled["engine_ext"] = ProbLogRuleExt(branch_probabilities=(0.5,))
 
-        candidates = sdk.evaluate(compiled, mode="problog")
+        candidates = sdk.evaluate(compiled, engine="problog")
 
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.5::rule_body_0", seen["program"])
@@ -168,7 +168,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         mock_run.side_effect = _fake_run
 
-        candidates = sdk.evaluate(compiled, mode="problog")
+        candidates = sdk.evaluate(compiled, engine="problog")
 
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.25::rule_body_0", seen["program"])
@@ -180,7 +180,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         compiled["engine_ext"] = ProbLogRuleExt(branch_probabilities=(0.5,))
 
         with self.assertRaises(ValueError) as ctx:
-            sdk.evaluate(compiled, mode="problog")
+            sdk.evaluate(compiled, engine="problog")
 
         self.assertIn("Conflicting ProbLog branch probabilities", str(ctx.exception))
 
@@ -198,7 +198,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         mock_run.side_effect = _fake_run
 
-        candidates = sdk.evaluate(compiled, mode="problog")
+        candidates = sdk.evaluate(compiled, engine="problog")
 
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.25::rule_body_0", seen["program"])

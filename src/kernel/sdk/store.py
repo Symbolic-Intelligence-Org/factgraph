@@ -27,6 +27,7 @@ from kernel.authoring.rules import compile_authoring_rule_v1
 from kernel.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
 from kernel.core.derivation.candidates import CandidateSet
 from kernel.core.evidence.write_protocol import WriteProtocolError, retract_by_asrt
+from kernel.core.semantics import SemanticsProfile, inspect_semantics_profile
 from kernel.core.schema.schema_ir import schema_digest
 from kernel.adapters.souffle.package import ExportOptions, export_package
 from kernel.core.protocol.idref_v1 import encode_idref_v1
@@ -71,6 +72,8 @@ class FrozenAssertionView:
 
 
 _VIEW_TOMBSTONE = object()
+_PROFILE_KWARG_UNSET = object()
+_SEMANTICS_PROFILE_ENGINES = {"problog", "pyreason"}
 
 
 class _SDKViewsManager:
@@ -263,6 +266,9 @@ class _SDKEvalManager:
 
     def evaluate_compiled(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.evaluate_compiled(*args, **kwargs)
+
+    def inspect_semantics(self, *args: Any, **kwargs: Any) -> Any:
+        return self._sdk.inspect_semantics(*args, **kwargs)
 
     def accept(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.accept(*args, **kwargs)
@@ -625,6 +631,8 @@ class SDKStore:
         *,
         engine: str = "native",
         registry: RuleRegistry | None = None,
+        semantics: Any = _PROFILE_KWARG_UNSET,
+        semantics_profile: Any = _PROFILE_KWARG_UNSET,
     ) -> "CheckResult":
         """Check one SDK ``Derivation`` against a concrete binding.
 
@@ -651,6 +659,7 @@ class SDKStore:
         """
         from .shells.check import sdk_check
 
+        self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
         return sdk_check(self, derivation, binding, engine=engine, registry=registry)
 
     def diagnose(
@@ -660,6 +669,8 @@ class SDKStore:
         *,
         engine: str = "native",
         registry: RuleRegistry | None = None,
+        semantics: Any = _PROFILE_KWARG_UNSET,
+        semantics_profile: Any = _PROFILE_KWARG_UNSET,
     ) -> "DiagnoseResult":
         """Diagnose one SDK ``Derivation`` against a concrete binding.
 
@@ -685,6 +696,7 @@ class SDKStore:
         """
         from .shells.diagnose import sdk_diagnose
 
+        self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
         return sdk_diagnose(self, derivation, binding, engine=engine, registry=registry)
 
     def why_not(
@@ -694,6 +706,8 @@ class SDKStore:
         *,
         engine: str = "native",
         registry: RuleRegistry | None = None,
+        semantics: Any = _PROFILE_KWARG_UNSET,
+        semantics_profile: Any = _PROFILE_KWARG_UNSET,
     ) -> "WhyNotUniverseResult":
         """Run Why-not for one SDK ``Derivation`` against an explicit candidate universe.
 
@@ -729,6 +743,7 @@ class SDKStore:
         """
         from .shells.why_not import sdk_why_not
 
+        self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
         return sdk_why_not(self, derivation, candidates, engine=engine, registry=registry)
 
     def check_fact_overlay(
@@ -739,6 +754,8 @@ class SDKStore:
         *,
         engine: str = "native",
         registry: RuleRegistry | None = None,
+        semantics: Any = _PROFILE_KWARG_UNSET,
+        semantics_profile: Any = _PROFILE_KWARG_UNSET,
     ) -> "FactOverlayCheckResult":
         """Run Fact Overlay Check for one SDK ``Derivation`` + binding + overlay.
 
@@ -785,6 +802,7 @@ class SDKStore:
         """
         from .shells.fact_overlay import sdk_fact_overlay_check
 
+        self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
         return sdk_fact_overlay_check(
             self, derivation, binding, overlay, engine=engine, registry=registry
         )
@@ -1554,15 +1572,47 @@ class SDKStore:
             raise SDKStoreError(f"{api_path}: policy= expects ReadPolicy or None, not FrozenAssertionView")
         raise SDKStoreError(f"{api_path}: policy= expects ReadPolicy or None")
 
+    def inspect_semantics(self, profile: SemanticsProfile) -> dict[str, Any]:
+        if not isinstance(profile, SemanticsProfile):
+            raise SDKStoreError("inspect_semantics(profile) expects SemanticsProfile")
+        return inspect_semantics_profile(profile)
+
+    @staticmethod
+    def _reject_shell_semantics(*, semantics: Any, semantics_profile: Any) -> None:
+        if semantics is not _PROFILE_KWARG_UNSET:
+            raise SDKStoreError("semantics= is not accepted by SDK what_if shells in E; use fg.eval.evaluate(...)")
+        if semantics_profile is not _PROFILE_KWARG_UNSET:
+            raise SDKStoreError(
+                "semantics_profile= is not accepted by SDK what_if shells in E; use fg.eval.evaluate(..., semantics=...)"
+            )
+
+    @staticmethod
+    def _resolve_public_engine(raw_engine: Any, *, api_path: str) -> str:
+        engine = "native" if raw_engine is None else raw_engine
+        allowed = {"native", "souffle", "problog", "pyreason"}
+        if not isinstance(engine, str) or engine not in allowed:
+            raise SDKStoreError(f"{api_path}: engine= must be one of: native, problog, pyreason, souffle")
+        return engine
+
+    @staticmethod
+    def _resolve_public_semantics(raw: Any, *, engine: str, api_path: str) -> SemanticsProfile | None:
+        if raw is None:
+            return None
+        if not isinstance(raw, SemanticsProfile):
+            raise SDKStoreError(f"{api_path}: semantics= expects SemanticsProfile or None")
+        if engine not in _SEMANTICS_PROFILE_ENGINES:
+            raise SDKStoreError(f"engine='{engine}' does not consume SemanticsProfile")
+        if raw.engine != engine:
+            raise SDKStoreError(f"SemanticsProfile.engine='{raw.engine}' does not match engine='{engine}'")
+        return raw
+
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
         if "view" in kwargs or "policy" in kwargs:
             raise SDKStoreError("evaluate() does not accept view= or policy=; derivation evaluation always uses active projection")
-        if "semantics" in kwargs:
-            raise SDKStoreError("evaluate() does not accept semantics= in B; Track 3 / E owns runtime SemanticsProfile consumption")
         if "semantics_profile" in kwargs:
-            raise SDKStoreError(
-                "evaluate() does not accept semantics_profile= in B; Track 3 / E owns runtime SemanticsProfile consumption"
-            )
+            raise SDKStoreError("evaluate() does not accept semantics_profile= in SDK; use semantics=")
+        if "mode" in kwargs:
+            raise SDKStoreError("evaluate() does not accept mode= in E; use engine=")
         if "temporal_view" in kwargs:
             # TODO: temporal_view for evaluate() remains blocked.
             # Snapshot read views (.at/.version) are already implemented in sdk.facade.
@@ -1570,6 +1620,12 @@ class SDKStore:
             raise SDKStoreError("temporal_view is removed from evaluate(); use active/history views on read APIs")
         registry = kwargs.pop("registry", None)
         engine_options = kwargs.pop("engine_options", None)
+        engine = self._resolve_public_engine(kwargs.pop("engine", None), api_path="evaluate()")
+        semantics_profile = self._resolve_public_semantics(
+            kwargs.pop("semantics", None),
+            engine=engine,
+            api_path="evaluate()",
+        )
         if args and isinstance(args[0], str):
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Derivation object or structured derivation dict"
@@ -1580,22 +1636,27 @@ class SDKStore:
             compiled_plans = self._compile_derivation_input(derivation)
             return self._evaluate_compiled_derivation_plans(
                 compiled_plans,
-                mode=kwargs.pop("mode", None),
+                mode=engine,
                 registry=runtime_registry,
                 engine_options=engine_options,
+                semantics_profile=semantics_profile,
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
             compiled_plans = self._compile_derivation_input(args[0])
             return self._evaluate_compiled_derivation_plans(
                 compiled_plans,
-                mode=kwargs.pop("mode", None),
+                mode=engine,
                 registry=registry,
                 engine_options=engine_options,
+                semantics_profile=semantics_profile,
             )
         if registry is not None:
             kwargs["registry"] = registry
         if engine_options is not None:
             kwargs["engine_options"] = engine_options
+        kwargs["mode"] = engine
+        if semantics_profile is not None:
+            kwargs["semantics_profile"] = semantics_profile
         return self._store.evaluate(*args, **kwargs)
 
     def _evaluate_compiled_derivation_plans(
@@ -1605,6 +1666,7 @@ class SDKStore:
         mode: str | None,
         registry: RuleRegistry | None,
         engine_options: dict[str, Any] | None = None,
+        semantics_profile: SemanticsProfile | None = None,
     ) -> list[CandidateSet]:
         if not compiled_plans:
             return []
@@ -1624,6 +1686,7 @@ class SDKStore:
                 else None
             ),
             engine=resolved_mode,
+            semantics_profile=semantics_profile,
         )
         return evaluate_derivation_plans(
             request,
@@ -1638,6 +1701,19 @@ class SDKStore:
         return f"derive:{uuid4().hex[:8]}"
 
     def evaluate_compiled(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
+        if "semantics_profile" in kwargs:
+            raise SDKStoreError("evaluate() does not accept semantics_profile= in SDK; use semantics=")
+        if "mode" in kwargs:
+            raise SDKStoreError("evaluate() does not accept mode= in E; use engine=")
+        engine = self._resolve_public_engine(kwargs.pop("engine", None), api_path="evaluate_compiled()")
+        semantics_profile = self._resolve_public_semantics(
+            kwargs.pop("semantics", None),
+            engine=engine,
+            api_path="evaluate_compiled()",
+        )
+        kwargs["mode"] = engine
+        if semantics_profile is not None:
+            kwargs["semantics_profile"] = semantics_profile
         return self._store.evaluate(*args, **kwargs)
 
     def accept(self, *args: Any, **kwargs: Any) -> AcceptResult:
