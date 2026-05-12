@@ -1,6 +1,6 @@
 # Task Blueprint: SDK / Service SemanticsProfile Call-Site
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -461,10 +461,93 @@ keeping the internal field type-aligned with `SemanticsProfile`.
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+### 10.1 Final Landed Behavior
 
-- Final landed behavior:
-- Validation:
-- Commit lineage:
-- Deviations:
-- Archive notes:
+- SDK evaluation now exposes the final public Track 3 call-site:
+  `fg.eval.evaluate(..., engine=..., semantics=profile)`.
+- SDK compiled evaluation follows the same public selector/profile contract.
+- Public SDK `mode=` is hard-rejected for `evaluate(...)` and
+  `evaluate_compiled(...)`; callers must use `engine=`.
+- Public SDK `semantics_profile=` is hard-rejected; callers must use the
+  shorter `semantics=` keyword.
+- `SemanticsProfile` is exported from `kernel.sdk` because it is now part of
+  the public SDK runtime call-site.
+- `fg.eval.inspect_semantics(profile)` exposes the core inspection helper
+  through the SDK without adding a service inspection endpoint.
+- Service runtime accepts top-level inline `semantics` JSON and constructs
+  `SemanticsProfile(**semantics)`.
+- Service runtime rejects top-level `semantics_profile` and derivation-level
+  `semantics` / `semantics_profile` payloads, keeping engine semantics at the
+  request call-site.
+- `DerivationEvaluateRequest` carries request-level
+  `semantics_profile: SemanticsProfile | None`; compiled derivation plans stay
+  profile-free.
+- Application runtime forwards `semantics_profile` into core
+  `Store.evaluate(..., mode=..., semantics_profile=...)`.
+- SDK and service reject profiles for non-consuming engines (`native`,
+  `souffle`) and reject profile/engine mismatches, preserving the no-silent
+  ignore rule from A3/C/D.
+- Check, Diagnose, Fact Overlay, and Why-not shells intentionally reject
+  profile kwargs in E; a future shell-profile slice can address those UX flows.
+- Public SDK tests and docs use `engine=`; core/internal
+  `Store.evaluate(mode=...)` remains unchanged and documented as internal.
+- No profile-derived data is written into facts, registry state, or compiled
+  plans; adapters continue normalizing profiles into adapter-local bridge
+  objects before export/compile.
+
+### 10.2 Validation
+
+- G1 red baseline: `test_sdk_service_semantics_callsite` had 22 tests with
+  the expected `10` failures and `12` errors before implementation.
+- G2 implementation validation: E suite `22/22 OK`; B+C+D focused suite
+  `66/66 OK`; A1-A4 focused suite `38/38 OK`; SDK shell regression
+  `74/74 OK`; combined focused regression `222/222 OK`.
+- G3 docs validation: B+C+D+E focused suite `88/88 OK`; public stale-teaching
+  grep clean after distinguishing core/internal `Store.evaluate(mode=...)`
+  references from public SDK teaching.
+- G3 grep gates confirmed `engine=` + `semantics=` as the public call-site,
+  Track 3 / E as current/done, and shell profile rejection as intentional.
+
+### 10.3 Commit Lineage
+
+- `9ec97f2f` `docs(blueprints): draft semantics callsite integration`
+- `a747d8f2` `docs(blueprints): scope semantics callsite integration`
+- `c1b8269a` `test(sdk): add red baseline for semantics callsite`
+- `35c5fe94` `feat(sdk): expose semantics profile callsite`
+- `8fc3117e` `docs(sdk): document semantics callsite integration`
+
+### 10.4 Deviations
+
+- E explicitly preserves a public/internal naming split: public SDK/service use
+  `engine=` + `semantics=`, while core/application internals continue using
+  `mode=` + `semantics_profile`. G3 docs keep internal `Store.evaluate(mode=...)`
+  references where they describe core-only APIs.
+- G3 updated `src/kernel/sdk/docs/07_walker_and_advanced.en.md` beyond the
+  initial §9 list to remove stale public SDK `mode=` teaching from an advanced
+  docs page.
+- G3 updated `src/kernel/core/docs/02_quality_assessment.en.md` beyond the
+  initial §9 list because Track 3 / E changed the release-facing quality
+  narrative from future work to completed public call-site behavior.
+- The expected SDK `mode=` to `engine=` migration was smaller than projected:
+  existing public test usage was concentrated in four test files rather than
+  spread across dozens of call-sites.
+
+### 10.5 Archive Notes
+
+E completes Track 3. A1-A4 removed or reclassified public definition-time
+engine semantics, B introduced the profile value object, C and D made ProbLog
+and PyReason consume profiles through core runtime paths, and E exposed the
+durable public SDK/service call-site.
+
+The final Track 3 boundary is:
+
+- `Rule` and `Derivation` remain logical business templates.
+- Public runtime calls use `engine=` and optional `semantics=`.
+- Core/application internals use `mode=` and `semantics_profile`.
+- Adapter-specific validation stays at adapter consumption time.
+- Profiles normalize into adapter-local bridge objects and are not stored as
+  facts, registry data, or compiled-plan metadata.
+
+Only follow-up work remains outside Track 3: optional profile flow through
+Check / Diagnose / Fact Overlay / Why-not shells, multi-interval validity data
+contracts, and release packaging for the next candidate after `v0.1.0-rc.1`.
