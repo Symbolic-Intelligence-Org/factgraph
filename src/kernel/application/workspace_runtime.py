@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from kernel.authoring.registry_fs import FileAuthoringRegistry
+from kernel.core.store.ledger import Ledger
 
 
 WORKSPACE_MANIFEST_NAME = "factgraph_workspace.json"
@@ -115,24 +116,24 @@ def validate_workspace_manifest(
     return payload
 
 
-def copy_ledger_to_workspace(*, source_path: str | Path, target_path: str | Path) -> None:
-    source = Path(source_path)
+def copy_ledger_to_workspace(*, ledger: Ledger, target_path: str | Path) -> None:
+    if not isinstance(ledger, Ledger):
+        raise WorkspaceRuntimeError("ledger must be Ledger")
     target = Path(target_path)
-    if source == target:
-        _checkpoint_ledger(target)
+    source_path = Path(getattr(ledger, "_path", ":memory:"))
+    if str(source_path) != ":memory:" and source_path == target:
+        _checkpoint_ledger(ledger)
         return
-    if not source.exists():
-        raise WorkspaceRuntimeError(f"ledger source not found: {source}")
     target.parent.mkdir(parents=True, exist_ok=True)
-    source_conn = sqlite3.connect(str(source))
+    source_conn = ledger._get_connection()  # noqa: SLF001 - application runtime owns workspace persistence.
     try:
         target_conn = sqlite3.connect(str(target))
         try:
             source_conn.backup(target_conn)
         finally:
             target_conn.close()
-    finally:
-        source_conn.close()
+    except sqlite3.Error as exc:
+        raise WorkspaceRuntimeError(f"failed to copy ledger into workspace: {exc}") from exc
 
 
 def sync_registry_to_workspace(
@@ -160,13 +161,13 @@ def save_workspace(
     path: str | Path,
     *,
     schema_digest: str,
-    ledger_source_path: str | Path,
+    ledger: Ledger,
     source_registry: FileAuthoringRegistry | None,
     schema_ir: dict[str, Any],
 ) -> WorkspacePaths:
     paths = resolve_workspace_paths(path)
     paths.root.mkdir(parents=True, exist_ok=True)
-    copy_ledger_to_workspace(source_path=ledger_source_path, target_path=paths.ledger)
+    copy_ledger_to_workspace(ledger=ledger, target_path=paths.ledger)
     sync_registry_to_workspace(
         source_registry=source_registry,
         target_registry=FileAuthoringRegistry(paths.registry),
@@ -198,14 +199,14 @@ def _load_manifest(path: Path) -> dict[str, Any] | None:
     return payload
 
 
-def _checkpoint_ledger(path: Path) -> None:
-    if not path.exists():
-        return
-    conn = sqlite3.connect(str(path))
+def _checkpoint_ledger(ledger: Ledger) -> None:
+    conn = ledger._get_connection()  # noqa: SLF001 - application runtime owns workspace persistence.
     try:
         conn.execute("PRAGMA wal_checkpoint(FULL)")
-    finally:
-        conn.close()
+    except sqlite3.Error:
+        # In-memory ledgers and some sqlite modes may not support checkpointing;
+        # a same-path save should still be idempotent.
+        return
 
 
 def _now_iso() -> str:

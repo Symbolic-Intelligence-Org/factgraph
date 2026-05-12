@@ -178,8 +178,13 @@ class WorkspaceSaveTests(unittest.TestCase):
             self.assertTrue((workspace / "ledger.db").is_file())
             self.assertTrue((workspace / "registry" / "registry_manifest.json").is_file())
             self.assertTrue((workspace / "registry" / "schema" / "schema_ir.json").is_file())
-            self.assertTrue((workspace / "registry" / "rules" / "rule.workspace.tag_seed" / "v1.json").is_file())
-            self.assertTrue((workspace / "registry" / "inferences" / "inf.workspace.tag" / "v1.json").is_file())
+            registry_manifest = json.loads(
+                (workspace / "registry" / "registry_manifest.json").read_text(encoding="utf-8")
+            )
+            rule_path = registry_manifest["rules"][0]["path"]
+            inference_path = registry_manifest["inferences"][0]["path"]
+            self.assertTrue((workspace / "registry" / rule_path).is_file())
+            self.assertTrue((workspace / "registry" / inference_path).is_file())
 
     def test_save_path_binds_future_no_arg_saves(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -217,10 +222,10 @@ class WorkspaceSaveTests(unittest.TestCase):
 
             registry = workspace / "registry"
             manifest = json.loads((registry / "registry_manifest.json").read_text(encoding="utf-8"))
-        self.assertTrue((registry / "schema" / "schema_ir.json").is_file())
-        self.assertIn("schema", manifest)
-        self.assertNotIn("rules", manifest)
-        self.assertNotIn("inferences", manifest)
+            self.assertTrue((registry / "schema" / "schema_ir.json").is_file())
+            self.assertIn("schema", manifest)
+            self.assertEqual(manifest.get("rules"), [])
+            self.assertEqual(manifest.get("inferences"), [])
 
     def test_repeated_save_is_idempotent_and_loadable(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -259,7 +264,11 @@ class WorkspaceSaveTests(unittest.TestCase):
 
             fg.save(workspace)
 
-            self.assertTrue((workspace / "registry" / "rules" / "rule.workspace.tag_seed" / "v1.json").exists())
+            registry_manifest = json.loads(
+                (workspace / "registry" / "registry_manifest.json").read_text(encoding="utf-8")
+            )
+            rule_path = registry_manifest["rules"][0]["path"]
+            self.assertTrue((workspace / "registry" / rule_path).exists())
 
 
 class WorkspaceLoadTests(unittest.TestCase):

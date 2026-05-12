@@ -24,6 +24,7 @@ from kernel.application.authoring_runtime import (
     save_rule as app_save_rule,
 )
 from kernel.application.workspace_runtime import resolve_workspace_paths
+from kernel.application.workspace_runtime import save_workspace as app_save_workspace
 from kernel.application.derivation_runtime import evaluate_derivation_plans
 from kernel.application.protocol import (
     CompiledDerivationPlan,
@@ -1783,6 +1784,28 @@ class SDKStore:
 
     def inspect_rule(self, obj: Any) -> dict[str, Any]:
         return _inspect_rule_or_inference(obj)
+
+    def save(self, path: str | Path | None = None) -> dict[str, Any]:
+        workspace_path = _normalize_workspace_path(path) or self._workspace_path
+        if workspace_path is None:
+            raise SDKStoreError(
+                "workspace path not bound; pass fg.save(path=...) or create with FactGraph.create(path=...)"
+            )
+        try:
+            paths = app_save_workspace(
+                workspace_path,
+                schema_digest=self._schema_digest,
+                ledger=self.ledger,
+                source_registry=self._authoring_registry,
+                schema_ir=self.schema_ir,
+            )
+        except Exception as exc:
+            if isinstance(exc, SDKStoreError):
+                raise
+            raise SDKStoreError(str(exc)) from exc
+        self._workspace_path = paths.root
+        self._authoring_registry = FileAuthoringRegistry(paths.registry)
+        return {"path": str(paths.root), "manifest": str(paths.manifest)}
 
     def save_rule(self, rule: Any) -> SavedRuleRef:
         registry = self._require_authoring_registry()
