@@ -902,7 +902,37 @@ on `SDKStoreError`.
 
 ---
 
-## 10. Registry
+## 10. Additive Schema Changes
+
+`fg.schema.add(...)` adds new `Entity` classes to the active graph:
+
+```python
+class Account(Entity):
+    account_id: str = Identity(primary_key=True)
+    risk_seed: str = Field(cardinality="single")
+    risk: str = Field(cardinality="single")
+
+result = fg.schema.add(Account)
+assert result.added_entities == ["Account"]
+```
+
+The returned `SchemaAddResult` records `old_digest`, `new_digest`, and
+`added_entities`. Re-adding an equivalent existing class is a no-op and
+returns `added_entities=[]`.
+
+The operation is immediate for the active graph: new classes can be used for
+`fg.ref`, `fg.write`, `fg.read`, `fg.rules.save`, and `fg.inferences.save`
+right away. If the graph is workspace-backed, call `fg.save()` to persist the
+new workspace manifest digest; the manifest is not rewritten implicitly.
+
+Only additive entity-class extension is implemented here. Field rewrites,
+destructive removal, deprecation metadata, and migration planning are deferred:
+`fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
+`fg.schema.deprecate` are intentionally absent.
+
+---
+
+## 11. Registry
 
 The graph-bound authoring registry tracks schemas, rules, and inferences
 across versions. Bind it at graph construction time:
@@ -959,7 +989,7 @@ for the `fg.rules.*` and `fg.inferences.*` method lists.
 
 ---
 
-## 11. Where to go next
+## 12. Where to go next
 
 - **[`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md)** —
   canonical Rule / Query / Inference DSL spec (compile-time
@@ -975,7 +1005,7 @@ for the `fg.rules.*` and `fg.inferences.*` method lists.
 
 ---
 
-## 12. Appendix: migration notes (v2 → v3)
+## 13. Appendix: migration notes (v2 → v3)
 
 The v3 SDK is API-compatible with v2 for the flat method surface.
 Notable changes:

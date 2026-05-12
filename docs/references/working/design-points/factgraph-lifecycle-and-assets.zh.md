@@ -532,22 +532,26 @@ The names are intuitive, but their semantics are not equal.
 
 ### 8.1 `fg.schema.add(...)`
 
-Safest candidate.
+Blueprint `2026-05-13_schema-mutation-lifecycle` landed the first conservative
+schema mutation slice:
 
-Potential meaning:
+- public API: `fg.schema.add(EntityCls)` and
+  `fg.schema.add(schema_classes=[...])`;
+- scope: additive Entity classes only;
+- return type: `SchemaAddResult(old_digest, new_digest, added_entities)`;
+- behavior: immediate mutation of active SDK/core schema state, ledger
+  `schema_digest`, and graph-bound registry schema IR;
+- workspace boundary: workspace manifest digest updates only on explicit
+  `fg.save(...)`;
+- idempotency: re-adding an equivalent existing class returns
+  `added_entities=[]`;
+- validator: seven-category strict additive check prevents entity removal,
+  identity changes, predicate-id changes, relationship-target rewrites, new
+  predicate id collisions, and any existing-field rewrite.
 
-- Add new entity class.
-- Add new field to an existing entity.
-- Add new relation.
-
-Risks:
-
-- schema digest changes;
-- existing ledger rows need compatibility validation;
-- registry schema entry needs versioning;
-- field defaults / nullable semantics may be required.
-
-First slice could support only additive preflight / draft schema update, not mutation-in-place.
+The first slice does **not** add fields to existing entities, add Relationship
+classes, carry default/nullability migration semantics, or plan destructive
+changes. Those remain future schema-evolution work.
 
 ### 8.2 `fg.schema.delete(...)`
 
@@ -1015,8 +1019,9 @@ Lifecycle/assets sequence state after Blueprint 3:
 2. Service/registry wire vocabulary is landed.
 3. Graph-bound authoring asset persistence facade is landed.
 4. Graph workspace save/load is landed with compact Level 4 layout.
-5. Preserve all assertion and runtime direct-use surfaces as hard invariants.
-6. Revisit schema mutation, query persistence, and explain/evidence capability as separate slices.
+5. Additive schema extension is landed through `fg.schema.add(...)`.
+6. Preserve all assertion and runtime direct-use surfaces as hard invariants.
+7. Revisit destructive schema migration, query persistence, and explain/evidence capability as separate slices.
 
 The high-level shape is:
 

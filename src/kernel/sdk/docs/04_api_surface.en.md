@@ -94,6 +94,7 @@ class-first constructor name and does not accept workspace `path=`.
 | `SavedRuleRef` | Registry-backed saved rule handle returned by `fg.rules.save/list/get` |
 | `Inference` | Multi-rule inference envelope |
 | `SavedInferenceRef` | Registry-backed saved inference handle returned by `fg.inferences.save/list/get` |
+| `SchemaAddResult` | Result returned by additive `fg.schema.add(...)`; fields are `old_digest`, `new_digest`, `added_entities` |
 | `Query` | Query over the current store |
 | `Pred` | Predicate literal (fact reference) |
 | `Not` | Negation operator for body literals |
@@ -204,8 +205,21 @@ exports.
 
 | Method | One-liner |
 |---|---|
+| `add(EntityCls, ...)` / `add(schema_classes=[...])` | Add new Entity classes to the active graph schema; returns `SchemaAddResult` |
 | `ingest(items, *, meta=None, allow_sensitive_meta=False)` | Bulk-insert assertions; `meta` merges into every item's meta. Returns `IngestResult` |
 | `validate_provenance(obj, *, standard="derivation_v1")` | Inspect provenance shape without writing; returns `ValidationReport` |
+
+`fg.schema.add(...)` is intentionally additive-only in this slice. It accepts
+new `Entity` classes, validates that every existing entity and predicate
+remains compatible, then updates the in-memory graph schema, core store
+schema, ledger schema digest, and graph-bound registry schema entry. If the
+graph is bound to a workspace, the workspace manifest is not rewritten until a
+later explicit `fg.save(...)`.
+
+Re-adding an equivalent existing class is an idempotent no-op:
+`SchemaAddResult.added_entities == []`. Destructive schema operations are not
+public: `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
+`fg.schema.deprecate` are deferred to future migration-planning work.
 
 ### 2.3 Read namespace (`fg.read.*`)
 

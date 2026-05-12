@@ -16,8 +16,9 @@ It is responsible for:
 - entity write planning / apply
 - query runtime request/result execution
 - normalized ingest request/result execution
-- authoring asset persistence orchestration and FactGraph workspace layout
-  orchestration for SDK-independent save/load paths
+- authoring asset persistence orchestration, FactGraph workspace layout
+  orchestration, and additive schema-mutation validation for SDK-independent
+  lifecycle paths
 - compiled derivation evaluate / accept orchestration
 - explicit-binding derivation Check (`passed` / `failed` / `unsupported` / `invalid_request`)
 - explicit-binding derivation Diagnose (`passed` / `failed.no_candidate` / `failed.atom_localized` / `unsupported` / `invalid_request`)
@@ -78,6 +79,12 @@ It is not responsible for:
   - FactGraph workspace layout authority: v1 manifest construction/validation,
     `ledger.db` backup/checkpoint, registry sync/copy, and component path
     resolution for `fg.save(...)` / `FactGraph.load(...)`.
+- `schema_mutation_runtime.py`
+  - additive schema-extension authority for `fg.schema.add(...)`: validates
+    that existing entities and predicates are preserved, plans the next schema
+    IR from additional `Entity` classes, and returns `SchemaAddResult` /
+    `AdditiveExtensionResult` DTOs. Destructive delete/update/migrate planning
+    is deliberately outside this module's first slice.
 - `derivation_runtime.py`
   - `evaluate_derivation_plans(...)`, `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
 - `derivation_check_runtime.py`
@@ -113,6 +120,8 @@ Batch 8 public-surface note (historical Batch 8 state, since updated by L Direct
 - `apply_ingest_request(...)`
 - `save_workspace(...)`
 - `load_workspace(...)`
+- `validate_additive_schema_extension(...)`
+- `add_schema_classes(...)`
 - `evaluate_derivation_plans(...)`
 - `check_derivation_binding(...)`
 - `diagnose_derivation_binding(...)`
