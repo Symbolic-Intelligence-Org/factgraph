@@ -25,6 +25,7 @@ from .error_codes import (
 )
 from .registry import SDKRegistry
 from .schema import Entity, Field, Identity, Relationship
+from .semantics import ProbLogSemantics, PyReasonSemantics
 from .store import FactGraph, SDKStore
 from kernel.core.semantics import SemanticsProfile
 from kernel.core.store.types import ReadPolicy
@@ -56,6 +57,8 @@ __all__ = [
     "Relationship",
     "ReadPolicy",
     "SemanticsProfile",
+    "ProbLogSemantics",
+    "PyReasonSemantics",
     "Rule",
     "RuleRef",
     "Derivation",

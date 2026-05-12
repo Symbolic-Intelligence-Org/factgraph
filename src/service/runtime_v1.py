@@ -1458,6 +1458,12 @@ def _resolve_runtime_semantics_profile(dto: Any, *, mode: str) -> SemanticsProfi
         return None
     if not isinstance(raw, dict):
         raise facade_error("semantics must be object", kind="shape", path="$.semantics")
+    if any(key in raw for key in ("type", "branch_probabilities", "timestep_delay", "head_bound")):
+        raise facade_error(
+            "service semantics accepts SemanticsProfile shape only in Track 2",
+            kind="shape",
+            path="$.semantics",
+        )
     if mode not in {"problog", "pyreason"}:
         raise facade_error(
             f"engine='{mode}' does not consume SemanticsProfile",

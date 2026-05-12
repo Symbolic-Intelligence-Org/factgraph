@@ -50,6 +50,7 @@ from .errors import CardinalityError, EntityNotFoundError, FrozenSnapshotError, 
 from .query_lower import QueryPlan, lower_query
 from .query_runtime import execute_query_plan
 from .schema import Entity, Field
+from .semantics import ProbLogSemantics, PyReasonSemantics
 
 if TYPE_CHECKING:
     from kernel.application.protocol import (
@@ -1591,10 +1592,16 @@ class SDKStore:
             raise SDKStoreError(f"{api_path}: policy= expects ReadPolicy or None, not FrozenAssertionView")
         raise SDKStoreError(f"{api_path}: policy= expects ReadPolicy or None")
 
-    def inspect_semantics(self, profile: SemanticsProfile) -> dict[str, Any]:
-        if not isinstance(profile, SemanticsProfile):
-            raise SDKStoreError("inspect_semantics(profile) expects SemanticsProfile")
-        return inspect_semantics_profile(profile)
+    def inspect_semantics(self, profile: Any) -> dict[str, Any]:
+        if isinstance(profile, SemanticsProfile):
+            return inspect_semantics_profile(profile)
+        if isinstance(profile, (ProbLogSemantics, PyReasonSemantics)):
+            lowered = _preview_public_semantics(profile)
+            inspected = inspect_semantics_profile(lowered)
+            inspected["semantics_type"] = type(profile).__name__
+            inspected["lowered_profile"] = inspect_semantics_profile(lowered)
+            return inspected
+        raise SDKStoreError("inspect_semantics(profile) expects SemanticsProfile or SDK public semantics")
 
     def inspect_rule(self, obj: Any) -> dict[str, Any]:
         return _inspect_rule_or_derivation(obj)
@@ -1628,6 +1635,52 @@ class SDKStore:
             raise SDKStoreError(f"SemanticsProfile.engine='{raw.engine}' does not match engine='{engine}'")
         return raw
 
+    def _resolve_public_engine_and_semantics(
+        self,
+        raw_engine: Any,
+        raw_semantics: Any,
+        *,
+        derivation: Any | None,
+        api_path: str,
+        allow_wrappers: bool,
+    ) -> tuple[str, SemanticsProfile | None]:
+        if raw_semantics is None:
+            return (self._resolve_public_engine(raw_engine, api_path=api_path), None)
+
+        semantics_engine = _public_semantics_engine(raw_semantics)
+        if semantics_engine is None:
+            raise SDKStoreError(f"{api_path}: semantics= expects SemanticsProfile or SDK public semantics")
+
+        if isinstance(raw_semantics, SemanticsProfile):
+            if raw_engine is None:
+                engine = semantics_engine
+            else:
+                engine = self._resolve_public_engine(raw_engine, api_path=api_path)
+                if engine not in _SEMANTICS_PROFILE_ENGINES:
+                    raise SDKStoreError(f"engine='{engine}' does not consume SemanticsProfile")
+                if raw_semantics.engine != engine:
+                    raise SDKStoreError(
+                        f"SemanticsProfile.engine='{raw_semantics.engine}' does not match engine='{engine}'"
+                    )
+            return (engine, raw_semantics)
+
+        if raw_engine is None:
+            engine = semantics_engine
+        else:
+            engine = self._resolve_public_engine(raw_engine, api_path=api_path)
+            if engine != semantics_engine:
+                raise SDKStoreError(
+                    f"engine='{engine}' does not match semantics.engine='{semantics_engine}'"
+                )
+
+        if not allow_wrappers:
+            raise SDKStoreError(
+                "evaluate_compiled() requires SemanticsProfile, not ProbLogSemantics/PyReasonSemantics"
+            )
+        if derivation is None or not hasattr(derivation, "where"):
+            raise SDKStoreError("SDK public semantics require SDK Rule or Derivation object input")
+        return (engine, _lower_public_semantics(raw_semantics, derivation=derivation))
+
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
         if "view" in kwargs or "policy" in kwargs:
             raise SDKStoreError("evaluate() does not accept view= or policy=; derivation evaluation always uses active projection")
@@ -1642,18 +1695,21 @@ class SDKStore:
             raise SDKStoreError("temporal_view is removed from evaluate(); use active/history views on read APIs")
         registry = kwargs.pop("registry", None)
         engine_options = kwargs.pop("engine_options", None)
-        engine = self._resolve_public_engine(kwargs.pop("engine", None), api_path="evaluate()")
-        semantics_profile = self._resolve_public_semantics(
-            kwargs.pop("semantics", None),
-            engine=engine,
-            api_path="evaluate()",
-        )
+        raw_engine = kwargs.pop("engine", None)
+        raw_semantics = kwargs.pop("semantics", None)
         if args and isinstance(args[0], str):
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Derivation object or structured derivation dict"
             )
         if args and hasattr(args[0], "to_authoring_payload"):
             derivation = args[0]
+            engine, semantics_profile = self._resolve_public_engine_and_semantics(
+                raw_engine,
+                raw_semantics,
+                derivation=derivation,
+                api_path="evaluate()",
+                allow_wrappers=True,
+            )
             runtime_registry = self._resolve_runtime_registry(derivation, explicit_registry=registry)
             compiled_plans = self._compile_derivation_input(derivation)
             return self._evaluate_compiled_derivation_plans(
@@ -1664,6 +1720,13 @@ class SDKStore:
                 semantics_profile=semantics_profile,
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
+            engine, semantics_profile = self._resolve_public_engine_and_semantics(
+                raw_engine,
+                raw_semantics,
+                derivation=None,
+                api_path="evaluate()",
+                allow_wrappers=True,
+            )
             compiled_plans = self._compile_derivation_input(args[0])
             return self._evaluate_compiled_derivation_plans(
                 compiled_plans,
@@ -1672,6 +1735,13 @@ class SDKStore:
                 engine_options=engine_options,
                 semantics_profile=semantics_profile,
             )
+        engine, semantics_profile = self._resolve_public_engine_and_semantics(
+            raw_engine,
+            raw_semantics,
+            derivation=None,
+            api_path="evaluate()",
+            allow_wrappers=True,
+        )
         if registry is not None:
             kwargs["registry"] = registry
         if engine_options is not None:
@@ -1727,11 +1797,12 @@ class SDKStore:
             raise SDKStoreError("evaluate() does not accept semantics_profile= in SDK; use semantics=")
         if "mode" in kwargs:
             raise SDKStoreError("evaluate() does not accept mode= in E; use engine=")
-        engine = self._resolve_public_engine(kwargs.pop("engine", None), api_path="evaluate_compiled()")
-        semantics_profile = self._resolve_public_semantics(
+        engine, semantics_profile = self._resolve_public_engine_and_semantics(
+            kwargs.pop("engine", None),
             kwargs.pop("semantics", None),
-            engine=engine,
+            derivation=None,
             api_path="evaluate_compiled()",
+            allow_wrappers=False,
         )
         kwargs["mode"] = engine
         if semantics_profile is not None:
@@ -2298,6 +2369,100 @@ def _authoring_derivation_payload_from_sdk_object(
     )
     normalized_payload, normalized_confidences = _normalize_authoring_derivation_payload(payload)
     return normalized_payload, normalized_confidences
+
+
+def _public_semantics_engine(value: Any) -> str | None:
+    if isinstance(value, SemanticsProfile):
+        return value.engine
+    if isinstance(value, ProbLogSemantics):
+        return value.engine
+    if isinstance(value, PyReasonSemantics):
+        return value.engine
+    return None
+
+
+def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> SemanticsProfile:
+    if isinstance(value, ProbLogSemantics):
+        return SemanticsProfile(
+            name=value.name or "problog",
+            engine="problog",
+            fallback=value.fallback,
+        )
+    if isinstance(value, PyReasonSemantics):
+        rule_entries: list[dict[str, Any]] = []
+        if value.head_bound is not None:
+            rule_entries.append({"target": "head:0", "kind": "interval", "value": list(value.head_bound)})
+        if value.timestep_delay:
+            rule_entries.append({"target": "rule", "kind": "timestep_delay", "value": value.timestep_delay})
+        return SemanticsProfile(
+            name=value.name or "pyreason",
+            engine="pyreason",
+            rule_projection={"pyreason": rule_entries} if rule_entries else {},
+            temporal_projection=dict(value.temporal_projection),
+            uncertainty_projection=dict(value.uncertainty_projection),
+            fallback=value.fallback,
+        )
+    raise SDKStoreError("unsupported public semantics wrapper")
+
+
+def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
+    if isinstance(value, ProbLogSemantics):
+        branch_indexes = _branch_id_index_for_derivation(derivation)
+        entries: list[dict[str, Any]] = []
+        for branch_id, probability in value.branch_probabilities.items():
+            branch_index = branch_indexes.get(branch_id)
+            if branch_index is None:
+                raise SDKStoreError(f"unknown branch id {branch_id!r} for ProbLogSemantics.branch_probabilities")
+            entries.append(
+                {
+                    "target": f"branch:{branch_index}",
+                    "kind": "branch_probability",
+                    "value": probability,
+                }
+            )
+        return SemanticsProfile(
+            name=value.name or _default_semantics_name(derivation, engine="problog"),
+            engine="problog",
+            rule_projection={"problog": entries} if entries else {},
+            fallback=value.fallback,
+        )
+    if isinstance(value, PyReasonSemantics):
+        rule_entries: list[dict[str, Any]] = []
+        if value.head_bound is not None:
+            rule_entries.append({"target": "head:0", "kind": "interval", "value": list(value.head_bound)})
+        if value.timestep_delay:
+            rule_entries.append({"target": "rule", "kind": "timestep_delay", "value": value.timestep_delay})
+        return SemanticsProfile(
+            name=value.name or _default_semantics_name(derivation, engine="pyreason"),
+            engine="pyreason",
+            rule_projection={"pyreason": rule_entries} if rule_entries else {},
+            temporal_projection=dict(value.temporal_projection),
+            uncertainty_projection=dict(value.uncertainty_projection),
+            fallback=value.fallback,
+        )
+    raise SDKStoreError("unsupported public semantics wrapper")
+
+
+def _branch_id_index_for_derivation(derivation: Any) -> dict[str, int]:
+    where = getattr(derivation, "where", None)
+    branches = _inspect_where_branches(where)
+    out: dict[str, int] = {}
+    for branch in branches:
+        branch_id = branch["id"]
+        fallback_id = branch["fallback_id"]
+        index = branch["index"]
+        if isinstance(branch_id, str) and isinstance(index, int):
+            out[branch_id] = index
+        if isinstance(fallback_id, str) and isinstance(index, int):
+            out[fallback_id] = index
+    return out
+
+
+def _default_semantics_name(derivation: Any, *, engine: str) -> str:
+    derivation_id = getattr(derivation, "id", None)
+    if isinstance(derivation_id, str) and derivation_id:
+        return f"{derivation_id}:{engine}"
+    return engine
 
 
 def _inspect_rule_or_derivation(obj: Any) -> dict[str, Any]:

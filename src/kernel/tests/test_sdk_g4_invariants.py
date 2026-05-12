@@ -41,10 +41,12 @@ class SDKG4InvariantTests(unittest.TestCase):
 
     def test_sdk_all_unchanged_and_why_not_result_not_exported(self) -> None:
         """§5.3 lock: ``WhyNotUniverseResult`` is not re-exported from SDK."""
-        self.assertEqual(len(kernel_sdk.__all__), 37)
+        self.assertEqual(len(kernel_sdk.__all__), 39)
         self.assertIn("ReadPolicy", kernel_sdk.__all__)
         self.assertIn("FactGraph", kernel_sdk.__all__)
         self.assertIn("SemanticsProfile", kernel_sdk.__all__)
+        self.assertIn("ProbLogSemantics", kernel_sdk.__all__)
+        self.assertIn("PyReasonSemantics", kernel_sdk.__all__)
         self.assertNotIn("WhyNotUniverseResult", kernel_sdk.__all__)
         self.assertNotIn("why_not", kernel_sdk.__all__)
         self.assertNotIn("sdk_why_not", kernel_sdk.__all__)
