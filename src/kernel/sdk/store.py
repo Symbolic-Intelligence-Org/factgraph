@@ -899,8 +899,13 @@ class SDKStore:
                 added_entities=[],
             )
 
+        self._preflight_schema_digest_anchors(old_digest)
         self._refresh_schema_state(
             classes=result.classes,
+            schema_ir=result.schema_ir,
+            schema_digest_value=result.schema_digest,
+        )
+        self._update_schema_digest_anchors(
             schema_ir=result.schema_ir,
             schema_digest_value=result.schema_digest,
         )
@@ -2387,6 +2392,43 @@ class SDKStore:
         self._field_decl_by_descriptor.clear()
         self._entity_spec_by_class.clear()
         self._index_schema()
+
+    def _preflight_schema_digest_anchors(self, old_digest: str) -> None:
+        ledger_digest = self.ledger.get_ledger_meta("schema_digest")
+        if ledger_digest is not None and ledger_digest != old_digest:
+            raise SDKStoreError(
+                f"ledger schema_digest mismatch: expected {old_digest!r}, got {ledger_digest!r}"
+            )
+
+        registry = self._authoring_registry
+        if registry is None:
+            return
+        try:
+            entry = registry.get_schema_entry()
+        except Exception as exc:
+            raise SDKStoreError(f"registry schema_digest unavailable: {exc}") from exc
+        if entry is None:
+            return
+        registry_digest = entry.get("schema_digest")
+        if registry_digest != old_digest:
+            raise SDKStoreError(
+                f"registry schema_digest mismatch: expected {old_digest!r}, got {registry_digest!r}"
+            )
+
+    def _update_schema_digest_anchors(
+        self,
+        *,
+        schema_ir: dict[str, Any],
+        schema_digest_value: str,
+    ) -> None:
+        self.ledger.replace_ledger_meta("schema_digest", schema_digest_value)
+        registry = self._authoring_registry
+        if registry is None:
+            return
+        try:
+            registry.upsert_schema_ir(schema_ir)
+        except Exception as exc:
+            raise SDKStoreError(f"registry schema_digest update failed: {exc}") from exc
 
     def _schema_pred_for_field(self, field: Field) -> dict[str, Any]:
         if not isinstance(field, Field):

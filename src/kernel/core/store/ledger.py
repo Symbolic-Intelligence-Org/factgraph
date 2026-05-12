@@ -785,6 +785,17 @@ class Ledger:
                 (key, value),
             )
 
+    def replace_ledger_meta(self, key: str, value: str) -> None:
+        """Insert or replace a ledger_meta value for lifecycle-managed metadata."""
+        with self._write_session() as (conn, _post_commit):
+            conn.execute(
+                """
+                INSERT INTO ledger_meta (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (key, value),
+            )
+
     def _force_replace_meta_rows(self, rows: list[MetaRow]) -> None:
         _validate_meta_rows(rows)
         actual_rows = [
