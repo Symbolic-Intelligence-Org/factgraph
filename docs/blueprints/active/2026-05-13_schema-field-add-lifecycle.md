@@ -1,6 +1,6 @@
 # Task Blueprint: Schema Field Add Lifecycle
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-13
 - Last Updated: 2026-05-13
 - Related Modules:
@@ -225,6 +225,9 @@ after successful field-add.
 Recommendation: **F1a**. It preserves one additive verb and reuses class-based
 schema declarations; `add_field` would require a new mini schema-spec language.
 
+G0 decision (2026-05-13): **F1a locked**. Field-add reuses
+`fg.schema.add(...)` with an updated same-entity class declaration.
+
 ### Q2. Same-entity class semantics
 
 - **F2a** Same `entity_type` candidate replaces the active class declaration
@@ -235,6 +238,9 @@ schema declarations; `add_field` would require a new mini schema-spec language.
 Recommendation: **F2a**. Descriptor indexes need the updated class object.
 Concurrent same-entity classes would complicate `_classes`, schema compilation,
 and descriptor lookup.
+
+G0 decision (2026-05-13): **F2a locked**. Same-`entity_type` candidate classes
+replace the active class declaration after validation.
 
 ### Q3. Old class object behavior after field-add
 
@@ -250,6 +256,9 @@ replacement class is the active SDK declaration for that entity type. Keeping
 old descriptors partially alive would create two public descriptor identities
 for one schema predicate.
 
+G0 decision (2026-05-13): **F3b locked**. Superseded class objects/descriptors
+are rejected at SDK boundaries with the anchored superseded-declaration error.
+
 ### Q4. Result DTO shape
 
 - **F4a** Extend `SchemaAddResult` with `added_fields: list[str]` while keeping
@@ -259,6 +268,9 @@ for one schema predicate.
 
 Recommendation: **F4a**. Same public verb should have one result type, and
 field-add needs a visible result.
+
+G0 decision (2026-05-13): **F4a locked**. `SchemaAddResult` grows
+`added_fields: list[str]` while preserving `added_entities`.
 
 ### Q5. Field eligibility
 
@@ -270,6 +282,9 @@ field-add needs a visible result.
 Recommendation: **F5a**. Identity changes alter entity identity semantics.
 Relationship-class mutation is a separate schema thread.
 
+G0 decision (2026-05-13): **F5a locked**. Existing-entity field-add supports
+non-identity `Field` descriptors only.
+
 ### Q6. Absence/default/backfill semantics
 
 - **F6a** No field defaults and no backfill; missing single reads as `None`,
@@ -279,6 +294,9 @@ Relationship-class mutation is a separate schema thread.
 
 Recommendation: **F6a**. It matches current read behavior and avoids ledger-wide
 migration cost.
+
+G0 decision (2026-05-13): **F6a locked**. No defaults and no backfill; absence
+uses existing read semantics.
 
 ### Q7. Validator adjustment
 
@@ -291,6 +309,9 @@ migration cost.
 Recommendation: **F7a**. This keeps the validator additive while lifting the
 old "any field change on existing entity" restriction.
 
+G0 decision (2026-05-13): **F7a locked**. Existing predicates stay exact;
+only new non-identity predicates are allowed.
+
 ### Q8. Predicate id collision policy
 
 - **F8a** New field predicate ids are compiler-generated only and must not
@@ -299,6 +320,9 @@ old "any field change on existing entity" restriction.
 - **F8c** Auto-rename colliding predicates.
 
 Recommendation: **F8a**. Predicate id stability is a core data contract.
+
+G0 decision (2026-05-13): **F8a locked**. Field predicate ids remain
+compiler-generated and collision-rejected.
 
 ### Q9. Digest anchor behavior
 
@@ -309,6 +333,9 @@ Recommendation: **F8a**. Predicate id stability is a core data contract.
 
 Recommendation: **F9a**. Same active schema mutation, same anchor rules.
 
+G0 decision (2026-05-13): **F9a locked**. Field-add reuses schema mutation
+digest preflight and update behavior.
+
 ### Q10. Workspace behavior
 
 - **F10a** Workspace manifest remains save-time; `fg.schema.add(...)` does not
@@ -316,6 +343,9 @@ Recommendation: **F9a**. Same active schema mutation, same anchor rules.
 - **F10b** Rewrite workspace manifest immediately.
 
 Recommendation: **F10a**. This preserves Blueprint 3's save-time boundary.
+
+G0 decision (2026-05-13): **F10a locked**. Workspace manifest updates only
+through explicit `fg.save(...)`.
 
 ### Q11. Saved asset compatibility
 
@@ -326,6 +356,9 @@ Recommendation: **F10a**. This preserves Blueprint 3's save-time boundary.
 Recommendation: **F11a**. Existing assets compiled against a subset schema
 should remain valid.
 
+G0 decision (2026-05-13): **F11a locked**. Existing saved assets remain
+loadable; newly saved assets may reference added fields.
+
 ### Q12. Workspace load after saved field-add
 
 - **F12a** `FactGraph.load(...)` requires the post-add Python classes after
@@ -333,6 +366,9 @@ should remain valid.
 - **F12b** Reconstruct Python classes from registry schema.
 
 Recommendation: **F12a**. Class-less load remains deferred.
+
+G0 decision (2026-05-13): **F12a locked**. Loading a saved post-field-add
+workspace requires post-add Python schema classes.
 
 ### Q13. Idempotent re-add
 
@@ -342,6 +378,9 @@ Recommendation: **F12a**. Class-less load remains deferred.
 
 Recommendation: **F13a**. It matches entity-add idempotency.
 
+G0 decision (2026-05-13): **F13a locked**. Re-adding an equivalent post-add
+class is a no-op with empty `added_entities` and `added_fields`.
+
 ### Q14. Application layer organization
 
 - **F14a** Extend `kernel.application.schema_mutation_runtime`; do not create a
@@ -350,6 +389,9 @@ Recommendation: **F13a**. It matches entity-add idempotency.
 
 Recommendation: **F14a**. Field-add is the second case in the same additive
 schema mutation authority.
+
+G0 decision (2026-05-13): **F14a locked**. Extend
+`kernel.application.schema_mutation_runtime`; do not create a second runtime.
 
 ### Q15. DSL predicate-id normalization
 
@@ -362,6 +404,9 @@ schema mutation authority.
 Recommendation: **F15a**. Do not expand the slice unless field-add actually
 needs the fix, but do not leave a broken new-field rule path untested.
 
+G0 decision (2026-05-13): **F15a locked**. Add only focused DSL-prefix
+regression/fix work if field-add tests expose the existing mismatch.
+
 ### Q16. Public docs
 
 - **F16a** Same-slice docs update for schema mutation docs and SDK API docs.
@@ -369,6 +414,9 @@ needs the fix, but do not leave a broken new-field rule path untested.
 - **F16b** Defer docs to a follow-up.
 
 Recommendation: **F16a**. Public schema mutation behavior changes.
+
+G0 decision (2026-05-13): **F16a locked**. Module docs update in the same
+slice.
 
 ### Q17. Entity type identity for replacement classes
 
@@ -381,6 +429,9 @@ Recommendation: **F16a**. Public schema mutation behavior changes.
 Recommendation: **F17a**. It matches current compilation behavior. `UserV2`
 is a new entity type today, and adding an entity-type override would be a
 separate schema declaration feature.
+
+G0 decision (2026-05-13): **F17a locked**. Existing entity replacement requires
+a replacement class declaration with the same Python class name.
 
 ## 8. Acceptance
 
