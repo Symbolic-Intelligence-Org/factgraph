@@ -106,16 +106,16 @@ class SDKRegistry:
             raise SDKRegistryError(str(exc)) from exc
         return self.register_rule_spec(compiled)
 
-    def register_derivation_spec(self, derivation_spec_payload: dict[str, Any]) -> dict[str, Any]:
+    def register_inference_spec(self, inference_spec_payload: dict[str, Any]) -> dict[str, Any]:
         try:
-            return self._registry.register_derivation_spec(derivation_spec_payload)
+            return self._registry.register_inference_spec(inference_spec_payload)
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
-    def register_derivation(self, derivation: Any, *, schema_ir: dict[str, Any] | None = None) -> dict[str, Any]:
-        payload = derivation.to_authoring_payload() if hasattr(derivation, "to_authoring_payload") else derivation
+    def register_inference(self, inference: Any, *, schema_ir: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = inference.to_authoring_payload() if hasattr(inference, "to_authoring_payload") else inference
         if not isinstance(payload, dict):
-            raise SDKRegistryError("derivation must be SDK Inference object or authoring derivation payload dict")
+            raise SDKRegistryError("inference must be SDK Inference object or authoring inference payload dict")
         _reject_multi_head_derivation_payload(payload)
         try:
             compiled = compile_authoring_derivation_v1(payload, schema_ir=schema_ir)
@@ -131,7 +131,7 @@ class SDKRegistry:
                     raise SDKRegistryError(str(exc)) from exc
             else:
                 raise SDKRegistryError(str(exc)) from exc
-        return self.register_derivation_spec(compiled)
+        return self.register_inference_spec(compiled)
 
     def _read_registry_schema_ir(self) -> dict[str, Any] | None:
         try:
@@ -166,9 +166,9 @@ class SDKRegistry:
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
-    def list_derivation_ids(self) -> list[str]:
+    def list_inference_ids(self) -> list[str]:
         try:
-            return self._registry.list_derivation_ids()
+            return self._registry.list_inference_ids()
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
@@ -178,9 +178,9 @@ class SDKRegistry:
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
-    def list_derivation_versions(self, derivation_id: str) -> list[dict[str, Any]]:
+    def list_inference_versions(self, inference_id: str) -> list[dict[str, Any]]:
         try:
-            return self._registry.list_derivation_versions(derivation_id)
+            return self._registry.list_inference_versions(inference_id)
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
@@ -208,9 +208,9 @@ class SDKRegistry:
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
-    def get_latest_derivation_spec(self, derivation_id: str) -> dict[str, Any] | None:
+    def get_latest_inference_spec(self, inference_id: str) -> dict[str, Any] | None:
         try:
-            return self._registry.get_latest_derivation_spec(derivation_id)
+            return self._registry.get_latest_inference_spec(inference_id)
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
@@ -220,9 +220,9 @@ class SDKRegistry:
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
-    def read_derivation_spec(self, derivation_id: str, version: str) -> dict[str, Any] | None:
+    def read_inference_spec(self, inference_id: str, version: str) -> dict[str, Any] | None:
         try:
-            return self._registry.read_derivation_spec(derivation_id, version)
+            return self._registry.read_inference_spec(inference_id, version)
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 

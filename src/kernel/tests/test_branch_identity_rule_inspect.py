@@ -207,7 +207,7 @@ class SingleHeadCutTests(unittest.TestCase):
             registry = SDKRegistry(tmp)
 
             with self.assertRaises(Exception) as ctx:
-                registry.register_derivation(_multi_head_derivation_bypass(), schema_ir=sdk.schema_ir)
+                registry.register_inference(_multi_head_derivation_bypass(), schema_ir=sdk.schema_ir)
 
         self.assertIn("multi-head", str(ctx.exception))
 
