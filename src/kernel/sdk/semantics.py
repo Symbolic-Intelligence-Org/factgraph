@@ -45,6 +45,19 @@ def _normalize_interval(value: Any, *, field_name: str) -> tuple[float, float]:
     return (lower, upper)
 
 
+def _normalize_interval_map(value: Any, *, field_name: str) -> dict[str, tuple[float, float]]:
+    raw = _copy_mapping(value, field_name=field_name)
+    out: dict[str, tuple[float, float]] = {}
+    for key, raw_value in raw.items():
+        if not isinstance(key, str) or not key:
+            raise SDKStoreError(f"{field_name} keys must be non-empty branch ids")
+        try:
+            out[key] = _normalize_interval(raw_value, field_name=f"{field_name}[{key!r}]")
+        except SDKStoreError as exc:
+            raise SDKStoreError(f"{field_name}[{key!r}] value must be [lower, upper]") from exc
+    return out
+
+
 @dataclass(frozen=True)
 class ProbLogSemantics:
     branch_probabilities: dict[str, float] = field(default_factory=dict)
@@ -71,6 +84,7 @@ class ProbLogSemantics:
 class PyReasonSemantics:
     timestep_delay: int = 0
     head_bound: tuple[float, float] | None = None
+    branch_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     temporal_projection: dict[str, Any] = field(default_factory=lambda: {"mode": "none"})
     uncertainty_projection: dict[str, Any] = field(default_factory=dict)
     name: str | None = None
@@ -91,6 +105,11 @@ class PyReasonSemantics:
             raise SDKStoreError("PyReasonSemantics.fallback must be non-empty string")
         head_bound = None if self.head_bound is None else _normalize_interval(self.head_bound, field_name="head_bound")
         object.__setattr__(self, "head_bound", head_bound)
+        object.__setattr__(
+            self,
+            "branch_bounds",
+            _normalize_interval_map(self.branch_bounds, field_name="branch_bounds"),
+        )
         object.__setattr__(
             self,
             "temporal_projection",

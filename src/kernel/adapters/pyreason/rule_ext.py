@@ -17,6 +17,7 @@ class PyReasonRuleExt(EngineExtBase):
     timestep_delay: int = 0
     body_predicate_bounds: dict[str, tuple[float, float] | list[float]] = field(default_factory=dict)
     head_bound: tuple[float, float] | list[float] | None = None
+    branch_head_bounds: dict[int, tuple[float, float] | list[float]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if isinstance(self.timestep_delay, bool) or not isinstance(self.timestep_delay, int):
@@ -26,6 +27,11 @@ class PyReasonRuleExt(EngineExtBase):
         _normalize_body_predicate_bounds(self.body_predicate_bounds)
         if self.head_bound is not None:
             _validate_bound_pair(self.head_bound, "head_bound")
+        object.__setattr__(
+            self,
+            "branch_head_bounds",
+            _normalize_branch_head_bounds(self.branch_head_bounds),
+        )
 
 
 @dataclass(frozen=True)
@@ -125,6 +131,7 @@ def _normalize_pyreason_engine_ext(engine_ext: EngineExtBase | None) -> PyReason
         head_bound=_validate_bound_pair(engine_ext.head_bound, "head_bound")
         if engine_ext.head_bound is not None
         else None,
+        branch_head_bounds=dict(_normalize_branch_head_bounds(engine_ext.branch_head_bounds)),
     )
 
 
@@ -151,7 +158,9 @@ def _materialize_profile_rule_ext(
 
     branches = _extract_profile_branches(where)
     body_predicate_bounds: dict[str, tuple[float, float]] = {}
+    branch_head_bounds: dict[int, tuple[float, float]] = {}
     body_targets_seen: set[tuple[int, int]] = set()
+    branch_targets_seen: set[int] = set()
     head_bound: tuple[float, float] | None = None
     timestep_delay = 0
     rule_delay_seen = False
@@ -175,6 +184,17 @@ def _materialize_profile_rule_ext(
             if head_bound is not None:
                 raise ValueError(f"{path}.target duplicate head:0")
             head_bound = _normalize_profile_interval(value, path=path)
+            continue
+        if isinstance(target, str) and target.startswith("branch:"):
+            if kind != "interval":
+                raise ValueError(f"{path}.kind must be 'interval' for branch targets")
+            branch_idx = _parse_branch_target(target, path=path)
+            if branch_idx >= len(branches):
+                raise ValueError(f"rule_projection.pyreason[{idx}] branch index out of range")
+            if branch_idx in branch_targets_seen:
+                raise ValueError(f"{path}.target duplicate {target}")
+            branch_targets_seen.add(branch_idx)
+            branch_head_bounds[branch_idx] = _normalize_profile_interval(value, path=path)
             continue
         if isinstance(target, str) and target.startswith("body_atom:"):
             if kind != "interval_threshold":
@@ -205,6 +225,7 @@ def _materialize_profile_rule_ext(
         timestep_delay=timestep_delay,
         body_predicate_bounds=body_predicate_bounds,
         head_bound=head_bound,
+        branch_head_bounds=branch_head_bounds,
     )
 
 
@@ -233,6 +254,19 @@ def _parse_body_atom_target(target: str, *, path: str) -> tuple[int, int]:
     if branch_idx < 0 or atom_idx < 0:
         raise ValueError(f"{path}.target body atom indexes must be non-negative")
     return (branch_idx, atom_idx)
+
+
+def _parse_branch_target(target: str, *, path: str) -> int:
+    parts = target.split(":")
+    if len(parts) != 2 or parts[0] != "branch":
+        raise ValueError(f"{path}.target must use branch:{{index}}")
+    try:
+        branch_idx = int(parts[1])
+    except ValueError as exc:
+        raise ValueError(f"{path}.target must use branch:{{index}}") from exc
+    if branch_idx < 0:
+        raise ValueError(f"{path}.target branch index must be non-negative")
+    return branch_idx
 
 
 def _resolve_body_atom_pred_id(
@@ -367,6 +401,22 @@ def _normalize_body_predicate_bounds(
         if not isinstance(pred_id, str) or not pred_id:
             raise ValueError("body_predicate_bounds keys must be non-empty strings")
         normalized[pred_id] = _validate_bound_pair(bound, "body_predicate_bounds")
+    return normalized
+
+
+def _normalize_branch_head_bounds(
+    bounds: dict[int, tuple[float, float] | list[float]] | None,
+) -> dict[int, tuple[float, float]]:
+    if bounds is None:
+        return {}
+    if not isinstance(bounds, dict):
+        raise ValueError("branch_head_bounds must be dict[int, [float, float]]")
+
+    normalized: dict[int, tuple[float, float]] = {}
+    for branch_idx, bound in bounds.items():
+        if isinstance(branch_idx, bool) or not isinstance(branch_idx, int) or branch_idx < 0:
+            raise ValueError("branch_head_bounds keys must be non-negative integers")
+        normalized[branch_idx] = _validate_bound_pair(bound, "branch_head_bounds")
     return normalized
 
 

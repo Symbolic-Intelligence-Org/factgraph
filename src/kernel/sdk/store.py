@@ -1599,7 +1599,7 @@ class SDKStore:
             lowered = _preview_public_semantics(profile)
             inspected = inspect_semantics_profile(lowered)
             inspected["semantics_type"] = type(profile).__name__
-            inspected["lowered_profile"] = inspect_semantics_profile(lowered)
+            inspected["lowered_profile"] = _semantics_profile_preview(lowered)
             return inspected
         raise SDKStoreError("inspect_semantics(profile) expects SemanticsProfile or SDK public semantics")
 
@@ -2392,6 +2392,8 @@ def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> Se
         rule_entries: list[dict[str, Any]] = []
         if value.head_bound is not None:
             rule_entries.append({"target": "head:0", "kind": "interval", "value": list(value.head_bound)})
+        for branch_index, interval in _preview_branch_bounds(value.branch_bounds):
+            rule_entries.append({"target": f"branch:{branch_index}", "kind": "interval", "value": list(interval)})
         if value.timestep_delay:
             rule_entries.append({"target": "rule", "kind": "timestep_delay", "value": value.timestep_delay})
         return SemanticsProfile(
@@ -2430,6 +2432,15 @@ def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
         rule_entries: list[dict[str, Any]] = []
         if value.head_bound is not None:
             rule_entries.append({"target": "head:0", "kind": "interval", "value": list(value.head_bound)})
+        branch_indexes = _branch_id_index_for_derivation(derivation)
+        for branch_id, interval in value.branch_bounds.items():
+            branch_index = branch_indexes.get(branch_id)
+            if branch_index is None:
+                known = ", ".join(sorted(branch_indexes)) or "<none>"
+                raise SDKStoreError(
+                    f"branch_bounds contains unknown branch id {branch_id!r}; known branch ids: {known}"
+                )
+            rule_entries.append({"target": f"branch:{branch_index}", "kind": "interval", "value": list(interval)})
         if value.timestep_delay:
             rule_entries.append({"target": "rule", "kind": "timestep_delay", "value": value.timestep_delay})
         return SemanticsProfile(
@@ -2441,6 +2452,30 @@ def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
             fallback=value.fallback,
         )
     raise SDKStoreError("unsupported public semantics wrapper")
+
+
+def _preview_branch_bounds(
+    branch_bounds: dict[str, tuple[float, float]],
+) -> list[tuple[int, tuple[float, float]]]:
+    preview: list[tuple[int, tuple[float, float]]] = []
+    for idx, interval in enumerate(branch_bounds.values()):
+        preview.append((idx, interval))
+    return preview
+
+
+def _semantics_profile_preview(profile: SemanticsProfile) -> dict[str, Any]:
+    return {
+        "name": profile.name,
+        "version": profile.version,
+        "engine": profile.engine,
+        "fallback": profile.fallback,
+        "rule_projection": profile.rule_projection,
+        "engine_options": profile.engine_options,
+        "uncertainty_projection": profile.uncertainty_projection,
+        "temporal_projection": profile.temporal_projection,
+        "certainty_projection": profile.certainty_projection,
+        "output_readback": profile.output_readback,
+    }
 
 
 def _branch_id_index_for_derivation(derivation: Any) -> dict[str, int]:

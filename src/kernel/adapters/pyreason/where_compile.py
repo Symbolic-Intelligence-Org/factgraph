@@ -47,6 +47,7 @@ def compile_where_ir_to_pyreason(
     relationship_preds = _relationship_pred_ids(schema_ir)
     delay = _resolve_delay(engine_ext)
     head_bound = _resolve_head_bound(engine_ext)
+    branch_head_bounds = _resolve_branch_head_bounds(engine_ext)
     body_predicate_bounds = _resolve_body_predicate_bounds(engine_ext)
 
     rules: list[tuple[str, str]] = []
@@ -59,7 +60,7 @@ def compile_where_ir_to_pyreason(
             branch_atoms,
             relationship_preds=relationship_preds,
             delay=delay,
-            head_bound=head_bound,
+            head_bound=branch_head_bounds.get(branch_idx, head_bound),
             body_predicate_bounds=body_predicate_bounds,
         )
         rules.append((rule_str, rule_name))
@@ -201,6 +202,25 @@ def _resolve_head_bound(engine_ext: Any | None) -> tuple[float, float] | None:
         return _validate_bound_pair(head_bound, "head_bound")
     except ValueError as exc:
         raise PyReasonWhereCompileError(str(exc)) from exc
+
+
+def _resolve_branch_head_bounds(engine_ext: Any | None) -> dict[int, tuple[float, float]]:
+    if engine_ext is None:
+        return {}
+    bounds = getattr(engine_ext, "branch_head_bounds", {})
+    if bounds is None:
+        return {}
+    if not isinstance(bounds, dict):
+        raise PyReasonWhereCompileError("branch_head_bounds must be dict[int, [float, float]]")
+    normalized: dict[int, tuple[float, float]] = {}
+    for branch_idx, bound in bounds.items():
+        if isinstance(branch_idx, bool) or not isinstance(branch_idx, int) or branch_idx < 0:
+            raise PyReasonWhereCompileError("branch_head_bounds keys must be non-negative integers")
+        try:
+            normalized[branch_idx] = _validate_bound_pair(bound, "branch_head_bounds")
+        except ValueError as exc:
+            raise PyReasonWhereCompileError(str(exc)) from exc
+    return normalized
 
 
 def _validate_term(term: Any) -> None:
