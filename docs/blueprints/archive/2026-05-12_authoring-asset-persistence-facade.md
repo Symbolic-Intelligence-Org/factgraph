@@ -1,6 +1,6 @@
 # Task Blueprint: Authoring Asset Persistence Facade
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-12
 - Last Updated: 2026-05-12
 - Related Modules:
@@ -500,9 +500,9 @@ G0 decision (2026-05-12): **A17a locked**. Use symmetric `SavedRuleRef` and `Sav
 - [x] G1 adds guard tests that direct runtime value-object use remains valid.
 - [x] G1 adds guard tests for service/registry inference vocabulary preservation.
 - [x] G1 adds negative/positive tests for `SDKRegistry` export fate.
-- [ ] G2 implements only the locked facade/application-layer changes.
-- [ ] G3 updates SDK, authoring, and lifecycle docs.
-- [ ] G4 fills §10, marks implemented, and archives this blueprint pair.
+- [x] G2 implements only the locked facade/application-layer changes.
+- [x] G3 updates SDK, authoring, and lifecycle docs.
+- [x] G4 fills §10, marks implemented, and archives this blueprint pair.
 
 ## 8. Implementation Plan
 
@@ -548,10 +548,93 @@ Draft sequence, subject to G0:
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+### 10.1 Final Landed Behavior
 
-- Final landed behavior:
-- Validation:
-- Commit lineage:
-- Deviations:
-- Archive notes:
+- `FactGraph.create(...)`, `FactGraph.from_schema_classes(...)`, and direct
+  `SDKStore(...)` construction now accept graph-bound authoring registry
+  attachment through `registry_root=` or a prebuilt `registry=` object.
+- Supplying both registry attachment forms is valid only when they point to the
+  same backing root; mismatched roots raise instead of silently choosing one.
+- `kernel.application.authoring_runtime` is the application-layer authority for
+  authoring asset save/load/list/get behavior.
+- `SavedRuleRef` and `SavedInferenceRef` are public SDK value objects and are
+  distinct from the existing where-clause `RuleRef` carrier.
+- `fg.rules.save/load/list/get` persists and retrieves `Rule` assets while
+  preserving `fg.rules.inspect(...)`.
+- `fg.inferences.save/load/list/get` persists and retrieves `Inference` assets;
+  the namespace is persistence-only and does not add runtime/evaluation methods.
+- `save(...)` returns typed saved refs, not raw registry dictionaries.
+- `load(...)` returns SDK value objects (`Rule` / `Inference`), while `list(...)`
+  returns typed saved refs and `get(id)` resolves the latest saved ref.
+- First save auto-upserts matching schema IR into the registry; repeated saves
+  with the same `schema_digest` are idempotent, and digest mismatches raise.
+- `SDKRegistry` is removed from the public `kernel.sdk` export surface. The
+  advanced/internal `kernel.sdk.registry.SDKRegistry` path remains available for
+  low-level tests and maintenance.
+- Saved refs are load handles, not runtime selectors. Direct `fg.eval.run(ref)`
+  / `fg.eval.evaluate(ref)` shorthand remains deferred.
+- Query persistence, workspace lifecycle `fg.save/load`, schema mutation, and
+  explain/evidence work remain outside this slice.
+- Direct runtime usage with value objects (`fg.eval.run(rule)`,
+  `fg.eval.evaluate(inference)`) remains registry-free.
+- The previous public `Inference` vocabulary and service/registry inference
+  wire vocabulary remain intact.
+- The compiler/application/core substrate that still uses derivation-named
+  DTOs and candidate identifiers remains unchanged by design.
+
+### 10.2 Validation
+
+- G1 red baseline: `test_authoring_asset_persistence_facade` added 28 tests
+  with the expected 7 failures, 14 errors, and 7 passing guards.
+- G2.1 introduced saved refs and the application runtime, moving the baseline to
+  6 failures, 10 errors, and 12 passes.
+- G2.2 bound authoring registries to `FactGraph` / `SDKStore`, moving the
+  baseline to 6 failures, 7 errors, and 15 passes.
+- G2.3 added `fg.rules` persistence, moving the baseline to 2 failures,
+  5 errors, and 21 passes.
+- G2.4 added `fg.inferences` persistence and inverted the earlier deferral guard
+  into a persistence-only namespace guard.
+- G2.5 hard-cut public `SDKRegistry`; the authoring facade, Blueprint 1,
+  inference wire/registry, and Track 1 suites passed 74/74, and the SDK export
+  invariant-focused suites passed 97/97.
+- G3 docs sync preserved the same 74/74 and 97/97 validation results.
+- Public-surface grep gates for stale `SDKRegistry` teaching and
+  `register_derivation` vocabulary are clean.
+
+### 10.3 Commit Lineage
+
+- `a30ca666` — draft authoring asset persistence facade.
+- `639e0731` — refine authoring persistence ref decisions.
+- `28d53352` — G0 scope freeze for 17 A-decisions.
+- `7173a07e` — G1 red baseline and preservation guards.
+- `647cfce2` — G2.1 saved refs and application authoring runtime.
+- `afbcd01f` — G2.2 graph-bound registry attachment.
+- `0ac85fef` — G2.3 rules persistence facade.
+- `6ac760c6` — G2.4 inferences persistence facade.
+- `34e29dd0` — G2.5 public `SDKRegistry` hard-cut.
+- `cb3d9f71` — G3 docs sync.
+
+### 10.4 Deviations
+
+- No G0 decision changed during implementation.
+- A planned optional G2.6 for a bespoke saved-ref runtime error message was not
+  implemented. Existing runtime type validation already rejects saved refs, so
+  this remained a UX-message polish item rather than required behavior.
+
+### 10.5 Archive Notes
+
+This slice closes the third block of the lifecycle/assets sequence. The public
+surface now has a graph-bound authoring persistence facade:
+
+```text
+[x] Blueprint 1  Public Inference + FactGraph.create
+[x] §13.4       Inference service/registry vocabulary
+[x] Blueprint 2  Authoring asset persistence facade
+[ ] Blueprint 3  FactGraph workspace lifecycle
+```
+
+Blueprint 3 is now unblocked: `FactGraph` can be constructed with a registry,
+rules and inferences can be persisted through graph namespaces, and low-level
+`SDKRegistry` no longer competes with the product facade. Remaining work is
+orthogonal: workspace save/load, query persistence, schema mutation, and the
+future explain/evidence surface.
