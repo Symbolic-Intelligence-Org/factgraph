@@ -65,7 +65,7 @@ class SDKAllLengthAndFactGraphExportInvariants(unittest.TestCase):
     """`kernel.sdk.__all__` length 39 + `FactGraph` exported, with `ReadPolicy`, Track 3 `SemanticsProfile`, and Track 2 public semantics wrappers."""
 
     def test_all_length_is_37(self) -> None:
-        self.assertEqual(len(kernel_sdk.__all__), 40)
+        self.assertEqual(len(kernel_sdk.__all__), 41)
 
     def test_readpolicy_in_all(self) -> None:
         self.assertIn("ReadPolicy", kernel_sdk.__all__)
@@ -81,6 +81,9 @@ class SDKAllLengthAndFactGraphExportInvariants(unittest.TestCase):
     def test_sdkstore_still_in_all(self) -> None:
         """Per §5.7 non-commitment #1: SDKStore stays in __all__."""
         self.assertIn("SDKStore", kernel_sdk.__all__)
+
+    def test_schema_add_result_in_all(self) -> None:
+        self.assertIn("SchemaAddResult", kernel_sdk.__all__)
 
     def test_factgraph_is_sdkstore_literal_alias(self) -> None:
         """Per §5.7 non-commitment #1: FactGraph is literal alias."""
