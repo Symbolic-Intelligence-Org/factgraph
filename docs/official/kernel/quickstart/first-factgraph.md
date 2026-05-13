@@ -4,6 +4,15 @@ This page builds the smallest useful graph: a schema, two writes, and one read.
 It uses only the in-memory SDK path so you can see the core model before adding
 rules, inferences, workspaces, or persistence.
 
+A `FactGraph` is a place where typed facts live. The schema says what kinds of
+things the graph can talk about. Writes append assertions to the graph ledger.
+Reads resolve those assertions into the current snapshot of an entity.
+
+That is why the first example has three parts: declare the shape of a `User`,
+write a few facts about one user identity, then read back the current view of
+that user. You are not mutating a Python `User` object; you are adding facts to
+the graph.
+
 ## Define a schema
 
 A FactGraph starts from Python classes. Each class represents an entity type.
@@ -47,6 +56,7 @@ fg.write.set(User.name, alice, "Alice")
 fg.write.add(User.tags, alice, "engineer")
 ```
 
+The reference is an opaque handle for "the user whose `user_id` is `u-1`".
 `set` is for `single` fields. `add` is for `multi` fields. Both calls append
 assertions to the graph ledger; they do not mutate a Python `User` object.
 
@@ -64,6 +74,10 @@ print(tuple(snap.tags)) # ('engineer',)
 
 The returned snapshot is read-only. If the entity is not visible in the current
 view, `fg.read.get(...)` returns `None`.
+
+Think of the snapshot as the graph's answer to "what is currently known about
+this identity?" It is not the source of truth itself; the append-only assertions
+in the graph ledger are.
 
 ## Complete example
 

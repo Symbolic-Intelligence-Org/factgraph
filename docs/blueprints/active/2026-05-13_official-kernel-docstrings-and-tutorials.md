@@ -234,6 +234,13 @@ This tree should use plain Markdown and a calm tutorial style: direct examples,
 short explanations, and clear cross-links. It should not duplicate low-level
 module internals.
 
+Substantive tutorial pages must also carry a small amount of conceptual
+explanation. They should not be API transcripts. Each page should establish the
+core mental model for the objects it introduces, name the common misconception
+it is trying to prevent, and then proceed with runnable steps. The balance is
+intentional: tutorial pages get enough "why" to make the syntax meaningful,
+while concepts pages remain the place for deeper design rationale.
+
 ## 6. G0 Questions
 
 These are draft questions. They are not locked until G0 scope freeze.
@@ -304,7 +311,9 @@ G0 decisions (2026-05-13):
   tutorial/readme layer.
 - The Markdown tree uses a Diátaxis-style boundary:
   - Tutorial pages are sequential learning paths and should be runnable from
-    a clean start.
+    a clean start. Each substantive tutorial page must include a concise
+    mental-model explanation for its core objects before or alongside the
+    first code path.
   - Concepts pages explain mental models and design rationale, not API lists.
   - How-to pages are task-oriented recipes.
   - Reference pages enumerate the surface and link back to implementation docs.
@@ -313,7 +322,12 @@ G0 decisions (2026-05-13):
   §5.2 are landed. Between sessions, `memory/current.md` or a handoff must
   record the remaining page checklist.
 - Per-page research is required before writing substantive Markdown pages.
-  Record each Page Brief in the audit log before implementation.
+  Record each Page Brief in the audit log before implementation. The brief must
+  name the page's core mental model and the misconception the page prevents.
+- Per-page research should check current code/tests, module docs, archived
+  blueprints, and relevant `docs/references/working/**` design notes. Working
+  references can inform explanation and vocabulary, but current code, module
+  docs, and archived blueprints remain higher-authority sources.
 - External docs such as Pydantic may inform organization, tone, and navigation,
   but never override local code, module docs, or archived blueprint decisions.
 
@@ -351,9 +365,11 @@ G0 decisions (2026-05-13):
    - rules/inferences/semantics;
    - persistence and errors.
 5. Use per-document cadence for Markdown pages:
-   - research source code, module docs, archived blueprints, and external style
-     references if useful;
+   - research source code, tests, module docs, archived blueprints, relevant
+     working design notes, and external style references if useful;
    - record a Page Brief in the audit log;
+   - write the mental model and misconception boundary before expanding the
+     procedural example;
    - write the page;
    - review against current code and Diátaxis boundary;
    - commit the page or allowed small batch.
@@ -384,10 +400,13 @@ implementation:
 ```text
 Page Brief — <path>
 - Reader goal:
+- Core mental model:
+- Common misconception to prevent:
 - APIs covered:
 - Non-goals:
 - Source files checked:
 - Module docs checked:
+- Design references checked:
 - Archived blueprints checked:
 - Example snippets planned:
 - Validation method:

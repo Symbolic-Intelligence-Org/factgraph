@@ -11,6 +11,12 @@ usually answers three questions:
 This page stays with ordinary entity classes. Relationship classes are covered
 later because they are a more advanced schema declaration.
 
+You can think of the schema as the graph's vocabulary. Entity classes name the
+kinds of things the graph can talk about. Identity fields say how one thing is
+located. Field descriptors say which facts can be asserted about that thing.
+Without the schema, the graph would have facts but no stable language for
+reading or validating them.
+
 ## Entity classes
 
 Every entity class subclasses `Entity`. Identity fields locate the entity.
@@ -41,6 +47,10 @@ fg = FactGraph.create(schema_classes=[Team, User])
 Each entity must have at least one `Identity(primary_key=True)` field. A primary
 identity should be stable, compact, and known before you write facts for the
 entity.
+
+Do not use a display label or a mutable business attribute as the primary
+identity if it can change later. The identity is the coordinate system the graph
+uses to attach assertions to the same entity over time.
 
 ## Single and multi fields
 
@@ -76,6 +86,11 @@ assert user.team == team_ref
 non-identity fields to an existing entity type. To add a field to an existing
 entity, declare a replacement class with the same Python class name and the new
 field included.
+
+This is a graph schema transition, not ordinary Python monkey-patching. After
+the graph accepts the replacement declaration, use the replacement class object
+for reads and writes. The old class and its descriptors represent an earlier
+schema declaration.
 
 ```python
 class User(Entity):
