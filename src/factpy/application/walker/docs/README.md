@@ -2,14 +2,14 @@
 
 ## Scope
 
-`kernel.application.walker` is a Tier 2 advanced-importable traversal surface
+`factpy.application.walker` is a Tier 2 advanced-importable traversal surface
 over application/core DTOs. It is not an SDK facade and does not create an
 outward compatibility promise.
 
 Current implementation status:
 
 - **Implementation Phase 0:** `WalkerError(Exception)` hierarchy is implemented
-  and exported from `kernel.application.walker`.
+  and exported from `factpy.application.walker`.
 - **Implementation Phase 1:** `IRBodyWalker` and `IRAtomView` are implemented
   for `RuleSpec.where` / `CompiledDerivationPlan.body_ir` style IR bodies.
 - **Implementation Phase 2:** `FrozenTupleView` and `frozen_collection(...)`
@@ -32,7 +32,7 @@ Current implementation status:
 body represented as `list` / `tuple` IR:
 
 ```python
-from kernel.application.walker import IRBodyWalker
+from factpy.application.walker import IRBodyWalker
 
 walker = IRBodyWalker([
     ("pred", "Person:age", ["$p", "$age"]),
@@ -51,7 +51,7 @@ items. `.filter(predicate=None, **attrs)` and `.find(predicate=None, **attrs)`
 support predicate filtering plus exact attribute equality:
 
 ```python
-from kernel.application.walker import frozen_collection
+from factpy.application.walker import frozen_collection
 
 rows = frozen_collection(result.atom_verdicts)
 invalidated = rows.filter(verdict="invalidated")
@@ -66,7 +66,7 @@ callers promote with `.as_pred()` or `.as_step()`.
 claim / metadata indexes:
 
 ```python
-from kernel.application.walker import SupportArtifactView
+from factpy.application.walker import SupportArtifactView
 
 view = SupportArtifactView(
     support,
@@ -93,7 +93,7 @@ recursively frozen for surfaced reads and hashing.
 `ProofFrameView` wraps a `ProofFrameRecheckResult`:
 
 ```python
-from kernel.application.walker import ProofFrameView
+from factpy.application.walker import ProofFrameView
 
 proof = ProofFrameView(result)
 invalidated = proof.atom_verdicts.filter(verdict="invalidated")
@@ -106,7 +106,7 @@ as `FrozenTupleView[ProofFrameAtomVerdict]`, and `underlying`, the original
 `ProofFrameDiffView` wraps a `ProofFrameDiff`:
 
 ```python
-from kernel.application.walker import ProofFrameDiffView
+from factpy.application.walker import ProofFrameDiffView
 
 diff_view = ProofFrameDiffView(diff)
 changed_frames = diff_view.frames_with_status_change()
@@ -123,7 +123,7 @@ shortcuts; callers can still use `frame_deltas.filter(...)` /
 
 ## Non-responsibilities
 
-- No SDK shell or `kernel.sdk` import.
+- No SDK shell or `factpy.sdk` import.
 - No live `Store` / `Ledger` lookup during walker traversal or assertion lookup.
 - No DTO mutation and no method attachment to tuple fields.
 - No B3 stream walker, audit package walker, or bounded-stream machinery.
@@ -138,7 +138,7 @@ mechanism design sketch (internal design record) §3 and §8. Reactivation
 requires a real audit / ledger streaming consumer plus the bounded-stream
 construction contract from `#14`.
 
-If reactivated, B3 should add a separate `kernel.audit.walker` package for
+If reactivated, B3 should add a separate `factpy.audit.walker` package for
 audit-layer walker types and may introduce `walker/stream.py`-style stream
 primitives only when needed. Audit walker types must not import application
 walker types; the shared surface is vocabulary (`filter`, `find`, `first`,
@@ -186,14 +186,14 @@ Run:
 
 ```bash
 PYTHONPATH=src python -m unittest \
-  src.kernel.tests.test_walker_keys \
-  src.kernel.tests.test_walker_views_support \
-  src.kernel.tests.test_walker_views_proof_frame \
-  src.kernel.tests.test_walker_views_proof_frame_diff \
-  src.kernel.tests.test_walker_invariants \
-  src.kernel.tests.test_walker_views_frozen_tuple \
-  src.kernel.tests.test_walker_ir \
-  src.kernel.tests.test_walker_errors -v
+  src.factpy.tests.test_walker_keys \
+  src.factpy.tests.test_walker_views_support \
+  src.factpy.tests.test_walker_views_proof_frame \
+  src.factpy.tests.test_walker_views_proof_frame_diff \
+  src.factpy.tests.test_walker_invariants \
+  src.factpy.tests.test_walker_views_frozen_tuple \
+  src.factpy.tests.test_walker_ir \
+  src.factpy.tests.test_walker_errors -v
 ```
 
 ## Related Historical Blueprints

@@ -9,7 +9,7 @@ Public surface contract per blueprint §5 locks (with post-publish
 verification round polish landed 2026-05-08):
 
 - Method:      ``SDKStore.check_fact_overlay(...)`` (instance method; not
-               a free function in ``kernel.sdk.__all__`` — see §5.7 lock
+               a free function in ``factpy.sdk.__all__`` — see §5.7 lock
                and G1 + G4 precedent).
 - Signature:   ``check_fact_overlay(inference, binding, overlay, *,
                engine="native", registry=None)`` (see §5.1 lock;
@@ -22,7 +22,7 @@ verification round polish landed 2026-05-08):
                tolerate it).
 - Return:      ``FactOverlayCheckResult`` (raw application protocol DTO;
                documented passthrough per §5.3 lock; not re-exported from
-               ``kernel.sdk.__all__``).
+               ``factpy.sdk.__all__``).
 - Errors:      Non-SDK exceptions crossing the SDK boundary remap to
                ``SDKStoreError(...) from exc`` per §5.8 lock with
                capability-specific paths (``$.check_fact_overlay.inference``

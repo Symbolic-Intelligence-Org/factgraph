@@ -12,7 +12,7 @@ Asserts:
 - Sub-namespaces under `what_if` (`fact_overlay`, `rule`) exist as
   property-of-property accessors with correct manager types.
 - Manager classes are private (underscore-prefixed) and not exported
-  in `kernel.sdk.__all__`.
+  in `factpy.sdk.__all__`.
 - Read-only enforcement via `__setattr__` raising `FrozenSnapshotError`
   on every manager (mirrors `EntitySnapshot.assertions` precedent).
 - Property accessors are idempotent (same instance per call).
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import unittest
 
-import factpy.sdk as kernel_sdk
+import factpy.sdk as factpy_sdk
 from factpy.sdk import Entity, FactGraph, Field, FrozenSnapshotError, Identity
 from factpy.sdk.store import (
     _SDKAuditManager,
@@ -96,7 +96,7 @@ class WhatIfSubNamespacePresenceTests(unittest.TestCase):
 
 
 class ManagerPrivacyTests(unittest.TestCase):
-    """Manager classes are private and NOT in `kernel.sdk.__all__`."""
+    """Manager classes are private and NOT in `factpy.sdk.__all__`."""
 
     MANAGER_CLASS_NAMES = (
         "_SDKSchemaManager",
@@ -119,13 +119,13 @@ class ManagerPrivacyTests(unittest.TestCase):
                     f"Manager class {name!r} must be private (underscore prefix)",
                 )
 
-    def test_manager_classes_not_in_kernel_sdk_all(self) -> None:
+    def test_manager_classes_not_in_factpy_sdk_all(self) -> None:
         for name in self.MANAGER_CLASS_NAMES:
             with self.subTest(name=name):
                 self.assertNotIn(
                     name,
-                    kernel_sdk.__all__,
-                    f"Manager class {name!r} must not appear in kernel.sdk.__all__",
+                    factpy_sdk.__all__,
+                    f"Manager class {name!r} must not appear in factpy.sdk.__all__",
                 )
 
 

@@ -8,7 +8,7 @@ per the archived G3 blueprint
 Public surface contract per blueprint §5 locks:
 
 - Method:      ``SDKStore.check_rule_literal_replace(...)`` (instance
-               method; not a free function in ``kernel.sdk.__all__``).
+               method; not a free function in ``factpy.sdk.__all__``).
 - Signature:   ``check_rule_literal_replace(rule, support, *,
                branch_index, atom_index, literal_path, old_literal,
                new_literal, overlay=None, note=None)`` per §5.1 / §5.2 /
@@ -23,7 +23,7 @@ Public surface contract per blueprint §5 locks:
                helper).
 - Return:      ``RuleLiteralReplaceResult`` (raw application protocol
                DTO; documented passthrough per §5.3 lock; not
-               re-exported from ``kernel.sdk.__all__``).
+               re-exported from ``factpy.sdk.__all__``).
 - Errors:      Non-SDK exceptions crossing the SDK boundary remap to
                ``SDKStoreError(...) from exc`` per §5.8 lock with
                capability-specific paths

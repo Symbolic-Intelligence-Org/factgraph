@@ -1132,7 +1132,7 @@ class SDKStore:
         Returns:
             The application ``CheckResult`` DTO directly. For ergonomic
             evidence traversal, advanced callers may opt into
-            ``kernel.application.walker.SupportArtifactView`` outside the SDK.
+            ``factpy.application.walker.SupportArtifactView`` outside the SDK.
 
         Raises:
             SDKStoreError: For SDK input-shape errors or application helper
@@ -1210,7 +1210,7 @@ class SDKStore:
             The application ``WhyNotUniverseResult`` DTO directly. The SDK
             shell does not wrap or re-export the result; advanced callers
             can import ``WhyNotUniverseResult`` from
-            ``kernel.application.protocol`` if a typed reference is needed.
+            ``factpy.application.protocol`` if a typed reference is needed.
 
         Raises:
             SDKStoreError: For non-SDK exceptions crossing the SDK boundary.
@@ -1246,7 +1246,7 @@ class SDKStore:
                 application ``CompiledDerivationPlan`` inputs are rejected
                 at the SDK boundary (per §5.1 lock).
             binding: Mapping of ``$``-prefixed variable names to Python
-                values; validated through ``kernel.sdk.shells._validation``.
+                values; validated through ``factpy.sdk.shells._validation``.
             overlay: Raw application ``EvaluationOverlay`` protocol DTO
                 (per §5.1 lock — author-time intent, not a lowered plan).
                 Wrong-type or malformed overlay shape is caught by
@@ -1567,8 +1567,8 @@ class SDKStore:
             round_a_id: Non-empty string identifying the A-side round.
             round_b_id: Non-empty string identifying the B-side round.
             round_a_events: Raw ``tuple[RoundEvent, ...]`` from
-                ``kernel.audit.round_events`` (e.g., loaded via
-                ``kernel.audit.load_audit_package`` or held from a
+                ``factpy.audit.round_events`` (e.g., loaded via
+                ``factpy.audit.load_audit_package`` or held from a
                 fresh recorder). Per §5.3 lock the SDK never wraps
                 ``RoundEvent`` and never reads files internally.
             round_b_events: Raw ``tuple[RoundEvent, ...]`` for the
@@ -1577,7 +1577,7 @@ class SDKStore:
                 empty tuple.
             include_unchanged: Whether to emit deltas for unchanged
                 frames; mirrors the A-side parameter at
-                ``kernel.audit.proof_frame_diff.build_proof_frame_diff``.
+                ``factpy.audit.proof_frame_diff.build_proof_frame_diff``.
 
         Returns:
             The application-canonical ``ProofFrameDiff`` DTO directly.
@@ -1611,7 +1611,7 @@ class SDKStore:
         Notes:
             Recorder lifecycle is intentionally NOT a SDK shell per
             G5 §5.1 — capture stays at advanced-importable
-            ``kernel.audit.round_events`` (``start_round`` /
+            ``factpy.audit.round_events`` (``start_round`` /
             ``record_round_event`` / ``finalize_round``); G5 ships
             only the pure query side (this method).
         """
@@ -1689,7 +1689,7 @@ class SDKStore:
     ) -> str:
         """Append a ``set`` assertion writing ``value`` to a single-cardinality field.
 
-        The write is routed through ``kernel.application``'s write-plan adapter:
+        The write is routed through ``factpy.application``'s write-plan adapter:
         the first time an entity is written, identity predicates and
         ``<T>:exists`` are auto-materialized so that subsequent ``sdk.get`` /
         ``sdk.run`` / inference calls see the entity. ``set`` produces a new

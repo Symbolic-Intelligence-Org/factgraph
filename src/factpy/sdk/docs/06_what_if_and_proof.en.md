@@ -36,7 +36,7 @@ proof structure.
 The walkthrough below uses one schema and one Inference:
 
 ```python
-from kernel.sdk import Inference, Entity, FactGraph, Field, Identity, Relationship, vars
+from factpy.sdk import Inference, Entity, FactGraph, Field, Identity, Relationship, vars
 
 class Country(Entity):
     code: str = Identity(primary_key=True)
@@ -162,7 +162,7 @@ blocked it.
 ## Q3a: What if a fact were different? — `fg.what_if.fact_overlay.check`
 
 ```python
-from kernel.application.protocol import EvaluationOverlay, FactValueOverride
+from factpy.application.protocol import EvaluationOverlay, FactValueOverride
 
 # Counterfactual: what if FR's official language were Spanish?
 # The overlay needs to point at the actual asrt_id that holds the current value.
@@ -264,7 +264,7 @@ mutated rule satisfies; `proof_frame` is an optional
 For Q3b we need a Rule (not a Inference) plus the prior support:
 
 ```python
-from kernel.sdk import Rule
+from factpy.sdk import Rule
 
 with vars("p", "c", "lang") as (p, c, lang):
     speaks_rule = Rule(
@@ -304,7 +304,7 @@ rules); `atom_index` selects the body atom to disable.
 ### Replace a literal
 
 ```python
-from kernel.application.protocol import RuleLiteralPath
+from factpy.application.protocol import RuleLiteralPath
 
 replaced = fg.what_if.rule.literal_replace(
     speaks_rule,
@@ -322,7 +322,7 @@ replaced.proof_frame    # recheck of original support under the replacement
 ```
 
 `literal_path` is a `RuleLiteralPath(kind, index=None)` from
-`kernel.application.protocol`. Allowed `kind` values:
+`factpy.application.protocol`. Allowed `kind` values:
 `"pred_term"`, `"lhs"`, `"rhs"`, `"in_value"`, `"const_operand"`.
 `index` is required when `kind ∈ {"pred_term", "in_value"}` and must
 be `None` otherwise (enforced in `__post_init__`).
@@ -334,7 +334,7 @@ runtime as `ProtocolShapeError` — surface symptom is an
 ### Add a condition
 
 ```python
-from kernel.application.protocol import RuleAddedAtom
+from factpy.application.protocol import RuleAddedAtom
 
 added = fg.what_if.rule.add_condition(
     speaks_rule,
@@ -405,7 +405,7 @@ the SDK boundary; pass the SDK `Inference` directly.
 ## Q5: How did inference change between rounds? — `fg.audit.diff_proof_frames`
 
 ```python
-from kernel.audit import load_audit_package
+from factpy.audit import load_audit_package
 
 # Two recorded rounds are loaded from disk (or held from a recorder).
 bundle_a = load_audit_package("/path/to/round_a/")
@@ -458,10 +458,10 @@ impact analysis.
 
 Q5 consumes events from the recorder. The recorder lifecycle
 (`start_round`, `record_round_event`, `finalize_round`) is intentionally
-**not** part of `kernel.sdk`. Import it directly:
+**not** part of `factpy.sdk`. Import it directly:
 
 ```python
-from kernel.audit.round_events import start_round, record_round_event, finalize_round
+from factpy.audit.round_events import start_round, record_round_event, finalize_round
 ```
 
 See [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) for
@@ -474,10 +474,10 @@ the recorder pattern and rationale.
 For richer in-process navigation of a `ProofFrameDiff` (e.g.
 "give me all frames whose proof status flipped" or
 "iterate every atom delta of kind atom_verdict_changed"), use
-`kernel.application.walker.ProofFrameDiffView`:
+`factpy.application.walker.ProofFrameDiffView`:
 
 ```python
-from kernel.application.walker import ProofFrameDiffView
+from factpy.application.walker import ProofFrameDiffView
 
 view = ProofFrameDiffView(diff)
 

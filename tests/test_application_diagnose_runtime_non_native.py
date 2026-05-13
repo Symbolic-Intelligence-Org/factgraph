@@ -285,10 +285,10 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
             pred_witness_keys=("b0.a0:Person:exists",),
         )
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_support_artifact",
+            "factpy.application.diagnose_runtime._lookup_support_artifact",
             return_value=artifact,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -304,10 +304,10 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
         candidate = _make_souffle_candidate()
         artifact = _make_support_artifact(binding_items=(("$p", "person-1"),))
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_support_artifact",
+            "factpy.application.diagnose_runtime._lookup_support_artifact",
             return_value=artifact,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -322,7 +322,7 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
     def test_souffle_failed_no_candidate_when_evaluator_returns_zero(self) -> None:
         store, request = self._build_request(binding=(("$p", "person-1"),))
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[],
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -337,10 +337,10 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
         store, request = self._build_request(binding=(("$p", "person-1"),))
         candidate = _make_souffle_candidate()
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_support_artifact",
+            "factpy.application.diagnose_runtime._lookup_support_artifact",
             return_value=None,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -381,10 +381,10 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
             return None  # miss_cand is the lookup-miss path
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[no_match_cand, miss_cand],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_support_artifact",
+            "factpy.application.diagnose_runtime._lookup_support_artifact",
             side_effect=_lookup,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -420,10 +420,10 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
             return None
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[match_cand, miss_cand],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_support_artifact",
+            "factpy.application.diagnose_runtime._lookup_support_artifact",
             side_effect=_lookup,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -459,10 +459,10 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
             return lower_artifact
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[higher_cand, lower_cand],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_support_artifact",
+            "factpy.application.diagnose_runtime._lookup_support_artifact",
             side_effect=_lookup,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -481,10 +481,10 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
         candidate = _make_souffle_candidate()
         artifact = _make_support_artifact(binding_items=(("$p", "person-1"),))
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_support_artifact",
+            "factpy.application.diagnose_runtime._lookup_support_artifact",
             return_value=artifact,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -516,10 +516,10 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
         envelope = _make_provenance_envelope(engine="problog")
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            "factpy.application.diagnose_runtime._lookup_provenance_envelope",
             return_value=envelope,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -543,10 +543,10 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
         envelope = _make_provenance_envelope(engine="pyreason")
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            "factpy.application.diagnose_runtime._lookup_provenance_envelope",
             return_value=envelope,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -561,10 +561,10 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
         envelope = _make_provenance_envelope(engine="problog")
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            "factpy.application.diagnose_runtime._lookup_provenance_envelope",
             return_value=envelope,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -580,7 +580,7 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
         store, request = self._build_request("pyreason", binding=(("$p", "person-1"),))
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[],
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -594,10 +594,10 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
         candidate = _make_provenance_candidate(engine="problog")
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            "factpy.application.diagnose_runtime._lookup_provenance_envelope",
             return_value=None,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -636,10 +636,10 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
             return None
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[no_match_cand, miss_cand],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            "factpy.application.diagnose_runtime._lookup_provenance_envelope",
             side_effect=_lookup,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -674,10 +674,10 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
             return None
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[match_cand, miss_cand],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            "factpy.application.diagnose_runtime._lookup_provenance_envelope",
             side_effect=_lookup,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -703,10 +703,10 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
         envelope = _make_provenance_envelope(engine="problog")
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[later_cand, earlier_cand],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            "factpy.application.diagnose_runtime._lookup_provenance_envelope",
             return_value=envelope,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -721,10 +721,10 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
         envelope = _make_provenance_envelope(engine="pyreason")
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            "factpy.application.diagnose_runtime._lookup_provenance_envelope",
             return_value=envelope,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -742,10 +742,10 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
         envelope = _make_provenance_envelope(engine="problog")
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            "factpy.application.diagnose_runtime._lookup_provenance_envelope",
             return_value=envelope,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -765,10 +765,10 @@ class ProbLogPyReasonDiagnoseDispatchTests(unittest.TestCase):
         candidate = _make_provenance_candidate(engine="pyreason")
 
         with patch(
-            "kernel.application.diagnose_runtime.evaluate_derivation_plans",
+            "factpy.application.diagnose_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.diagnose_runtime._lookup_provenance_envelope",
+            "factpy.application.diagnose_runtime._lookup_provenance_envelope",
             return_value=None,
         ):
             result = diagnose_derivation_binding(request, store=store)

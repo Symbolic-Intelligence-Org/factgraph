@@ -98,7 +98,7 @@ class ProvenanceTimelineAuditDeliveryTests(unittest.TestCase):
         self.assertTrue(accept_resp["ok"])
         return candidate
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_pyreason_audit_package_exports_provenance_timelines_jsonl(self, mock_run) -> None:
         """provenance_timelines.jsonl is written and AuditQuery can read it back."""
         session_id, sdk = self._open_session()
@@ -169,7 +169,7 @@ class ProvenanceTimelineAuditDeliveryTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_non_pyreason_candidate_not_in_provenance_timelines(self, mock_run) -> None:
         """Native/problog candidates should NOT appear in provenance_timelines.jsonl."""
         import factpy.adapters.problog  # noqa: F401
@@ -212,7 +212,7 @@ class ProvenanceTimelineAuditDeliveryTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_provenance_timelines_coexist_with_evidence_graphs(self, mock_run) -> None:
         """Both provenance_timelines.jsonl and evidence_graphs.jsonl should be exported for pyreason."""
         session_id, sdk = self._open_session()

@@ -149,7 +149,7 @@ snap = sdk.get(User, user_id="u1", locale="zh")
 ### 5.2 `sdk.find(...)`
 
 ```python
-from kernel.sdk import ReadPolicy
+from factpy.sdk import ReadPolicy
 
 rows = sdk.find(User, age=30, limit=20)
 rows_with_confidence = sdk.find(

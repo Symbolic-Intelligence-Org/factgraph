@@ -225,7 +225,7 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
             engine="native",
         )
 
-        with patch("kernel.application.why_not_runtime.evaluate_native_where") as mocked:
+        with patch("factpy.application.why_not_runtime.evaluate_native_where") as mocked:
             result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "completed")
@@ -246,7 +246,7 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
             engine="native",
         )
 
-        with patch("kernel.application.why_not_runtime.evaluate_native_where") as mocked:
+        with patch("factpy.application.why_not_runtime.evaluate_native_where") as mocked:
             result = check_why_not_universe(request, store=store, registry=None)
 
         self.assertEqual(result.status, "completed")
@@ -479,11 +479,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "kernel.application.why_not_runtime.evaluate_native_where",
+                "factpy.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                "factpy.application.why_not_runtime.diagnose_derivation_binding",
                 side_effect=_fake_diagnose,
             ),
         ):
@@ -508,11 +508,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "kernel.application.why_not_runtime.evaluate_native_where",
+                "factpy.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                "factpy.application.why_not_runtime.diagnose_derivation_binding",
                 return_value=_diagnose_no_candidate(binding, warnings=(warning,)),
             ),
         ):
@@ -537,11 +537,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "kernel.application.why_not_runtime.evaluate_native_where",
+                "factpy.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                "factpy.application.why_not_runtime.diagnose_derivation_binding",
                 return_value=_diagnose_unsupported(binding, errors=(error,)),
             ),
         ):
@@ -576,11 +576,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "kernel.application.why_not_runtime.evaluate_native_where",
+                "factpy.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                "factpy.application.why_not_runtime.diagnose_derivation_binding",
                 return_value=passed,
             ),
             self.assertRaises(WhyNotRuntimeError) as raised,
@@ -610,11 +610,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "kernel.application.why_not_runtime.evaluate_native_where",
+                "factpy.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                "factpy.application.why_not_runtime.diagnose_derivation_binding",
                 return_value=invalid,
             ),
             self.assertRaises(WhyNotRuntimeError) as raised,
@@ -649,11 +649,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "kernel.application.why_not_runtime.evaluate_native_where",
+                "factpy.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                "factpy.application.why_not_runtime.diagnose_derivation_binding",
                 return_value=diagnose_result,
             ),
         ):
@@ -686,10 +686,10 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
                 )
 
                 with patch(
-                    "kernel.application.why_not_runtime.evaluate_derivation_plans",
+                    "factpy.application.why_not_runtime.evaluate_derivation_plans",
                     return_value=(_candidate(),),
                 ), patch(
-                    "kernel.application.why_not_runtime.diagnose_derivation_binding",
+                    "factpy.application.why_not_runtime.diagnose_derivation_binding",
                     side_effect=lambda diagnose_request, **_kwargs: _diagnose_no_candidate(
                         diagnose_request.binding
                     ),
@@ -723,7 +723,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
             engine="problog",
         )
 
-        with patch("kernel.application.why_not_runtime.evaluate_derivation_plans") as mocked:
+        with patch("factpy.application.why_not_runtime.evaluate_derivation_plans") as mocked:
             result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "unsupported")
@@ -740,7 +740,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         )
 
         with patch(
-            "kernel.application.why_not_runtime.evaluate_derivation_plans",
+            "factpy.application.why_not_runtime.evaluate_derivation_plans",
             return_value=(
                 _candidate(
                     support_kind="pyreason_provenance_v1",
@@ -763,10 +763,10 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         )
 
         with patch(
-            "kernel.application.why_not_runtime.evaluate_derivation_plans",
+            "factpy.application.why_not_runtime.evaluate_derivation_plans",
             return_value=(_candidate(terms=[{"kind": "literal_without_value"}]),),
         ), patch(
-            "kernel.application.why_not_runtime.diagnose_derivation_binding",
+            "factpy.application.why_not_runtime.diagnose_derivation_binding",
         ) as diagnose:
             result = check_why_not_universe(request, store=store)
 
@@ -786,10 +786,10 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         )
 
         with patch(
-            "kernel.application.why_not_runtime.evaluate_derivation_plans",
+            "factpy.application.why_not_runtime.evaluate_derivation_plans",
             return_value=(),
         ), patch(
-            "kernel.application.why_not_runtime.diagnose_derivation_binding",
+            "factpy.application.why_not_runtime.diagnose_derivation_binding",
             return_value=_diagnose_unsupported(red_binding, errors=(error,)),
         ):
             result = check_why_not_universe(request, store=store)
@@ -828,7 +828,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         )
 
         with patch(
-            "kernel.application.why_not_runtime.evaluate_derivation_plans",
+            "factpy.application.why_not_runtime.evaluate_derivation_plans",
             return_value=(
                 _candidate(
                     support_digest=support_digest,
@@ -837,7 +837,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
                 ),
             ),
         ), patch(
-            "kernel.application.why_not_runtime.diagnose_derivation_binding",
+            "factpy.application.why_not_runtime.diagnose_derivation_binding",
             side_effect=lambda diagnose_request, **_kwargs: _diagnose_no_candidate(
                 diagnose_request.binding
             ),
@@ -863,7 +863,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         )
 
         with patch(
-            "kernel.application.why_not_runtime.evaluate_derivation_plans",
+            "factpy.application.why_not_runtime.evaluate_derivation_plans",
             return_value=(
                 _candidate(
                     support_digest="sha256:" + ("f" * 64),

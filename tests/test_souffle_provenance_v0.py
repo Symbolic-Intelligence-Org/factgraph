@@ -138,7 +138,7 @@ class SouffleProvenanceV0Tests(unittest.TestCase):
             )
 
             with patch(
-                "kernel.adapters.souffle.provenance.subprocess.run",
+                "factpy.adapters.souffle.provenance.subprocess.run",
                 return_value=completed,
             ) as run_mock:
                 trees = run_provenance_explain(
@@ -186,7 +186,7 @@ class SouffleProvenanceV0Tests(unittest.TestCase):
             )
 
             with patch(
-                "kernel.adapters.souffle.provenance.subprocess.run",
+                "factpy.adapters.souffle.provenance.subprocess.run",
                 return_value=completed,
             ):
                 with self.assertRaises(SouffleProvenanceError):
@@ -232,10 +232,10 @@ class SouffleProvenanceV0Tests(unittest.TestCase):
                 return []
 
             with patch(
-                "kernel.adapters.souffle.runner.find_souffle_binary",
+                "factpy.adapters.souffle.runner.find_souffle_binary",
                 return_value=souffle_bin,
             ), patch(
-                "kernel.adapters.souffle.provenance.run_provenance_explain",
+                "factpy.adapters.souffle.provenance.run_provenance_explain",
                 side_effect=_fake_run,
             ):
                 trees = run_package_provenance(

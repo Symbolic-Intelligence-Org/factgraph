@@ -54,11 +54,11 @@ class Friends(Relationship):
 
 
 def _sdk_module():
-    return importlib.import_module("kernel.sdk")
+    return importlib.import_module("factpy.sdk")
 
 
 def _schema_mutation_runtime():
-    return importlib.import_module("kernel.application.schema_mutation_runtime")
+    return importlib.import_module("factpy.application.schema_mutation_runtime")
 
 
 def _schema_add_result_class():
@@ -464,8 +464,8 @@ class SchemaMutationPreservationTests(unittest.TestCase):
 
     def test_application_runtime_modules_from_prior_slices_remain_importable(self) -> None:
         for module_name in (
-            "kernel.application.authoring_runtime",
-            "kernel.application.workspace_runtime",
+            "factpy.application.authoring_runtime",
+            "factpy.application.workspace_runtime",
         ):
             with self.subTest(module_name=module_name):
                 importlib.import_module(module_name)

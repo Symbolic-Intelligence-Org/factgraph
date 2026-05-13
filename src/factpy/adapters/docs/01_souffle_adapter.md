@@ -1,6 +1,6 @@
-# Souffle Adapter overview (kernel)
+# Souffle Adapter overview (factpy)
 
-- Scope: `src/kernel/adapters/souffle`
+- Scope: `src/factpy/adapters/souffle`
 - Last updated: 2026-03-23
 - Audience: developers who need to understand the Souffle export,
   execution, and query-compile path
@@ -59,7 +59,7 @@ It is not responsible for:
 `core` invokes the engine via a registration mechanism; it does not
 statically depend on a specific adapter:
 
-1. Import `kernel.adapters.souffle`
+1. Import `factpy.adapters.souffle`
 2. `__init__` registers the `souffle` evaluator
 3. `Store.evaluate(mode="souffle")` enters this adapter's
    implementation
@@ -73,8 +73,8 @@ This boundary allows:
 Additional boundaries:
 
 - `Souffle` continues to play only the structural-executor role.
-- The prototype annotation kernel under
-  `src/kernel/core/annotation/` is not part of the adapter itself.
+- The prototype annotation factpy under
+  `src/factpy/core/annotation/` is not part of the adapter itself.
 - During the benchmark / prototype phase, combinations such as
   "Souffle structural results + a core-internal annotation helper"
   are allowed, but this does not change the fact that the formal

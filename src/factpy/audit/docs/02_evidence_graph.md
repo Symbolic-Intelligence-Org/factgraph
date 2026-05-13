@@ -1,6 +1,6 @@
 # EvidenceGraph (audit)
 
-- Scope: `src/kernel/audit/evidence_graph.py`
+- Scope: `src/factpy/audit/evidence_graph.py`
 - Last updated: 2026-04-30
 - Audience: developers implementing cross-engine explainability
   consumers in the audit layer

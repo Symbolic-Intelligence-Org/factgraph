@@ -53,7 +53,7 @@ from factpy.service.auth import require_api_key
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="factpy-kernel service", version="v1")
+app = FastAPI(title="factpy-factpy service", version="v1")
 AUTH_DEPENDENCIES = [Depends(require_api_key)]
 
 

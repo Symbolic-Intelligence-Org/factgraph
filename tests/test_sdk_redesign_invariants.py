@@ -4,7 +4,7 @@ Per blueprint `2026-05-09_post-l-sdk-ergonomics-redesign.md` §5.9 lock:
 5 invariant classes mirroring the G5 invariant pattern, scoped to the
 post-L taxonomy + manager structure + docs lint.
 
-Class 1: `kernel.sdk.__all__` length 36 + `FactGraph` exported.
+Class 1: `factpy.sdk.__all__` length 36 + `FactGraph` exported.
 Class 2: Manager classes private (underscore prefix); not in `__all__`.
 Class 3: No `DeprecationWarning` from flat `SDKStore.<method>` calls
          (parametrized across 6 method families per §5.4 lock; existing
@@ -24,7 +24,7 @@ import unittest
 import warnings
 from pathlib import Path
 
-import factpy.sdk as kernel_sdk
+import factpy.sdk as factpy_sdk
 from factpy.sdk import (
     Entity,
     FactGraph,
@@ -62,32 +62,32 @@ def _new_fg() -> FactGraph:
 
 
 class SDKAllLengthAndFactGraphExportInvariants(unittest.TestCase):
-    """`kernel.sdk.__all__` length 39 + `FactGraph` exported, with `ReadPolicy`, Track 3 `SemanticsProfile`, and Track 2 public semantics wrappers."""
+    """`factpy.sdk.__all__` length 39 + `FactGraph` exported, with `ReadPolicy`, Track 3 `SemanticsProfile`, and Track 2 public semantics wrappers."""
 
     def test_all_length_is_37(self) -> None:
-        self.assertEqual(len(kernel_sdk.__all__), 41)
+        self.assertEqual(len(factpy_sdk.__all__), 41)
 
     def test_readpolicy_in_all(self) -> None:
-        self.assertIn("ReadPolicy", kernel_sdk.__all__)
+        self.assertIn("ReadPolicy", factpy_sdk.__all__)
 
     def test_factgraph_in_all(self) -> None:
-        self.assertIn("FactGraph", kernel_sdk.__all__)
+        self.assertIn("FactGraph", factpy_sdk.__all__)
 
     def test_semantics_profile_in_all(self) -> None:
-        self.assertIn("SemanticsProfile", kernel_sdk.__all__)
-        self.assertIn("ProbLogSemantics", kernel_sdk.__all__)
-        self.assertIn("PyReasonSemantics", kernel_sdk.__all__)
+        self.assertIn("SemanticsProfile", factpy_sdk.__all__)
+        self.assertIn("ProbLogSemantics", factpy_sdk.__all__)
+        self.assertIn("PyReasonSemantics", factpy_sdk.__all__)
 
     def test_sdkstore_still_in_all(self) -> None:
         """Per §5.7 non-commitment #1: SDKStore stays in __all__."""
-        self.assertIn("SDKStore", kernel_sdk.__all__)
+        self.assertIn("SDKStore", factpy_sdk.__all__)
 
     def test_schema_add_result_in_all(self) -> None:
-        self.assertIn("SchemaAddResult", kernel_sdk.__all__)
+        self.assertIn("SchemaAddResult", factpy_sdk.__all__)
 
     def test_factgraph_is_sdkstore_literal_alias(self) -> None:
         """Per §5.7 non-commitment #1: FactGraph is literal alias."""
-        self.assertIs(kernel_sdk.FactGraph, kernel_sdk.SDKStore)
+        self.assertIs(factpy_sdk.FactGraph, factpy_sdk.SDKStore)
 
 
 # Class 2 — Manager classes private + not in `__all__`
@@ -117,10 +117,10 @@ class ManagerClassPrivacyInvariants(unittest.TestCase):
                     f"Manager class {cls.__name__!r} must be private (underscore prefix)",
                 )
 
-    def test_no_manager_class_in_kernel_sdk_all(self) -> None:
+    def test_no_manager_class_in_factpy_sdk_all(self) -> None:
         for cls in self.MANAGERS:
             with self.subTest(cls=cls.__name__):
-                self.assertNotIn(cls.__name__, kernel_sdk.__all__)
+                self.assertNotIn(cls.__name__, factpy_sdk.__all__)
 
 
 # Class 3 — No DeprecationWarning from flat `SDKStore.<method>` calls
@@ -192,7 +192,7 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
 
     def test_readme_quickstart_imports_factgraph(self) -> None:
         text = self._read("README.md")
-        self.assertIn("from kernel.sdk import", text, "README must import from kernel.sdk")
+        self.assertIn("from factpy.sdk import", text, "README must import from factpy.sdk")
         self.assertIn("FactGraph", text, "README must reference FactGraph entrypoint")
 
     def test_readme_l_direction_boundary_is_not_stale(self) -> None:
@@ -210,7 +210,7 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
         post-L redesign — not a flat-vs-nested signal. The lint asserts
         no NEW deprecation appears on flat-method-vs-nested-method.
         """
-        sdk_docs = list((REPO_ROOT / "src/kernel/sdk/docs").glob("*.md"))
+        sdk_docs = list((REPO_ROOT / "src/factpy/sdk/docs").glob("*.md"))
         self.assertGreater(len(sdk_docs), 0)
         for doc in sdk_docs:
             text = doc.read_text()
@@ -230,7 +230,7 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
 
     def test_public_contract_has_taxonomy_cross_ref(self) -> None:
         """Per §5.5.6 lock: public_contract_v1 has FactGraph cross-ref note."""
-        text = self._read("src/kernel/core/docs/04_public_contract_v1.md")
+        text = self._read("src/factpy/core/docs/04_public_contract_v1.md")
         self.assertIn(
             "FactGraph",
             text,
@@ -241,7 +241,7 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
         """Per pre-publish audit Blocker 1: SDK API docs canonical
         taxonomy examples must match actual flat method signatures.
 
-        Flat signatures (per `src/kernel/sdk/store.py`):
+        Flat signatures (per `src/factpy/sdk/store.py`):
         - ``check(inference, binding, ...)``
         - ``check_fact_overlay(inference, binding, overlay, ...)``
         - ``check_rule_disable(rule, support_artifact, *, branch_index, atom_index, ...)``
@@ -249,7 +249,7 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
         The taxonomy examples MUST keep the same positional argument
         names so users copy-pasting from docs get a valid call shape.
         """
-        for relpath in ("src/kernel/sdk/docs/04_api_surface.en.md",):
+        for relpath in ("src/factpy/sdk/docs/04_api_surface.en.md",):
             with self.subTest(doc=relpath):
                 text = self._read(relpath)
                 # Taxonomy what_if.check must take (inference, binding)

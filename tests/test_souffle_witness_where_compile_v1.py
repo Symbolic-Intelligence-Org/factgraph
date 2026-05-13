@@ -104,7 +104,7 @@ class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):
         store = Store(_runtime_schema_ir())
         with TemporaryDirectory() as package_dir:
             with patch(
-                "kernel.adapters.souffle.package._load_query_rule_registry",
+                "factpy.adapters.souffle.package._load_query_rule_registry",
                 return_value=_rule_registry(),
             ) as mock_load_registry:
                 export_package(

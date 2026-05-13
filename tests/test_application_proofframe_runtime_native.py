@@ -221,7 +221,7 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
         )
 
         with patch(
-            "kernel.application.proofframe_runtime.project_view_facts_with_witness",
+            "factpy.application.proofframe_runtime.project_view_facts_with_witness",
             return_value=witness,
         ):
             result = recheck_proof_frame(
@@ -391,24 +391,24 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
 
 class ProofFrameRuntimeExportTests(unittest.TestCase):
     def test_application_package_exports_runtime_entrypoint(self) -> None:
-        from . import application
+        from factpy import application
 
         self.assertIs(application.recheck_proof_frame, recheck_proof_frame)
 
 
 class ProofFrameRuntimeBoundaryTests(unittest.TestCase):
     def test_runtime_does_not_import_sibling_capability_runtimes_or_sdk(self) -> None:
-        source = Path("src/kernel/application/proofframe_runtime.py").read_text()
+        source = Path("src/factpy/application/proofframe_runtime.py").read_text()
 
         self.assertNotIn("fact_overlay_runtime", source)
         self.assertNotIn("_apply_fact_overlay_projection", source)
         self.assertNotIn("derivation_check_runtime", source)
         self.assertNotIn("diagnose_runtime", source)
         self.assertNotIn("why_not_runtime", source)
-        self.assertNotIn("kernel.sdk", source)
+        self.assertNotIn("factpy.sdk", source)
 
     def test_capability_helpers_package_does_not_call_proofframe_runtime(self) -> None:
-        source = Path("src/kernel/application/capability_helpers/proof_frame.py").read_text()
+        source = Path("src/factpy/application/capability_helpers/proof_frame.py").read_text()
 
         self.assertNotIn("proofframe_runtime", source)
         self.assertNotIn("recheck_proof_frame", source)

@@ -423,26 +423,26 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
 
 class RuleDisableRuntimeExportTests(unittest.TestCase):
     def test_application_package_exports_runtime_entrypoint(self) -> None:
-        from . import application
+        from factpy import application
 
         self.assertIs(application.check_rule_disable_action, check_rule_disable_action)
 
 
 class RuleDisableRuntimeBoundaryTests(unittest.TestCase):
     def test_runtime_does_not_import_sibling_capability_runtimes_or_sdk(self) -> None:
-        source = Path("src/kernel/application/rule_disable_runtime.py").read_text()
+        source = Path("src/factpy/application/rule_disable_runtime.py").read_text()
 
         self.assertNotIn("fact_overlay_runtime", source)
         self.assertNotIn("proofframe_runtime", source)
         self.assertNotIn("derivation_check_runtime", source)
         self.assertNotIn("diagnose_runtime", source)
         self.assertNotIn("why_not_runtime", source)
-        self.assertNotIn("kernel.sdk", source)
+        self.assertNotIn("factpy.sdk", source)
 
     def test_sdk_rule_disable_shell_imports_runtime_only_in_shell(self) -> None:
         """G3 Phase 1 retrofit (per `#P1` carve-out, mirroring G2 Phase 0
         retrofits of G1 + G4 archived invariants): the SDK Rule Disable
-        shell at ``kernel/sdk/shells/rule_disable.py`` is now the active
+        shell at ``factpy/sdk/shells/rule_disable.py`` is now the active
         L Direction entry point for Rule Disable. The original "no SDK
         surface" assertion is replaced by a narrower invariant: the
         runtime entrypoint ``check_rule_disable_action`` is imported only
@@ -453,14 +453,14 @@ class RuleDisableRuntimeBoundaryTests(unittest.TestCase):
         so SDK passes only ``branch_index`` / ``atom_index`` / ``note``
         primitives across the boundary).
         """
-        shell_path = Path("src/kernel/sdk/shells/rule_disable.py")
+        shell_path = Path("src/factpy/sdk/shells/rule_disable.py")
         self.assertTrue(
             shell_path.is_file(), f"{shell_path} should exist after G3 Phase 1"
         )
 
         shell_source = shell_path.read_text()
         self.assertIn(
-            "from kernel.application.rule_disable_runtime import check_rule_disable_action",
+            "from factpy.application.rule_disable_runtime import check_rule_disable_action",
             shell_source,
         )
         self.assertNotIn("import RuleDisableAction", shell_source)
@@ -469,7 +469,7 @@ class RuleDisableRuntimeBoundaryTests(unittest.TestCase):
 
         other_sdk_sources = "\n".join(
             path.read_text()
-            for path in Path("src/kernel/sdk").rglob("*.py")
+            for path in Path("src/factpy/sdk").rglob("*.py")
             if path != shell_path
         )
         self.assertNotIn("check_rule_disable_action", other_sdk_sources)
@@ -478,14 +478,14 @@ class RuleDisableRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("RuleDisableAction(", other_sdk_sources)
 
     def test_batch_4_proofframe_protocol_has_no_rule_disable_drift(self) -> None:
-        source = Path("src/kernel/application/protocol/proofframe.py").read_text()
+        source = Path("src/factpy/application/protocol/proofframe.py").read_text()
 
         self.assertNotIn("RuleDisable", source)
         self.assertNotIn("rule_actions", source)
 
     def test_fact_overlay_and_proofframe_runtime_guards_are_narrow(self) -> None:
-        fact_source = Path("src/kernel/application/fact_overlay_runtime.py").read_text()
-        proof_source = Path("src/kernel/application/proofframe_runtime.py").read_text()
+        fact_source = Path("src/factpy/application/fact_overlay_runtime.py").read_text()
+        proof_source = Path("src/factpy/application/proofframe_runtime.py").read_text()
 
         self.assertNotIn("RuleDisableAction", fact_source)
         self.assertIn("RULE_ACTIONS_NOT_SUPPORTED", fact_source)

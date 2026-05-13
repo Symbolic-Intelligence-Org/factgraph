@@ -3,7 +3,7 @@
 Commit 1 scope: thin orchestrator over existing application write primitives.
 
 - IngestSetItem / IngestAddItem -> EntityWriteCommand -> plan_write_command -> apply_write_plan
-- IngestRetractItem -> kernel.core.evidence.write_protocol.retract_by_asrt direct
+- IngestRetractItem -> factpy.core.evidence.write_protocol.retract_by_asrt direct
 - collect_mode='stop' aborts on first error; collect_mode='collect' aggregates and continues
 
 SDK descriptor parsing / coercion is intentionally not performed here — SDK adapters

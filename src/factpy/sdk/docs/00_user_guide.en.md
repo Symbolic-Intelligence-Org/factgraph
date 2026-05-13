@@ -1,6 +1,6 @@
 # FactPy SDK User Guide
 
-The end-to-end tour of `kernel.sdk` for new users. Reading this doc plus
+The end-to-end tour of `factpy.sdk` for new users. Reading this doc plus
 running the snippets is enough to use the SDK confidently for typical
 workloads.
 
@@ -34,7 +34,7 @@ For walker views and advanced importables see
 ### Install
 
 ```bash
-python -m pip install factpy-kernel
+python -m pip install factpy-factpy
 ```
 
 For development from source:
@@ -48,7 +48,7 @@ python -m pip install -e .
 ### Hello FactGraph
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factpy.sdk import Entity, FactGraph, Field, Identity
 
 class User(Entity):
     user_id: str = Identity(primary_key=True)
@@ -89,7 +89,7 @@ least one `Identity(primary_key=True)`; `Field` declares non-identity
 fields with `cardinality="single"` or `"multi"`.
 
 ```python
-from kernel.sdk import Entity, Field, Identity
+from factpy.sdk import Entity, Field, Identity
 
 class User(Entity):
     user_id: str = Identity(primary_key=True)
@@ -127,7 +127,7 @@ digest, and supplied classes before returning a graph.
 You can also compile separately:
 
 ```python
-from kernel.sdk import compile_schema_from_classes, schema_preflight_from_classes
+from factpy.sdk import compile_schema_from_classes, schema_preflight_from_classes
 
 report = schema_preflight_from_classes([User, Document])
 report["ok"]          # False when diagnostics contain schema errors
@@ -177,7 +177,7 @@ admins = fg.read.find(User, name="Alice")
 engineers = fg.read.find(User, tags="engineer")
 
 # Apply a read-time policy (see §8) and limit
-from kernel.sdk import ReadPolicy
+from factpy.sdk import ReadPolicy
 
 recent = fg.read.find(
     Document,
@@ -427,7 +427,7 @@ each item is an entity binding (`Entity(var)`) or a field projection
 (`Entity.field(...)`). `where` is the body (always a list).
 
 ```python
-from kernel.sdk import Query, vars
+from factpy.sdk import Query, vars
 
 # Multi-projection head — list of two items, returns one column per item
 with vars("u", "nm") as (u, nm):
@@ -472,7 +472,7 @@ versioned single-rule inference. Required: `id`, `version`, `select`,
 reference it via `RuleRef`.
 
 ```python
-from kernel.sdk import Rule, vars
+from factpy.sdk import Rule, vars
 
 with vars("u",) as (u,):
     r = Rule(
@@ -491,7 +491,7 @@ Rule's `where` accepts:
 - A flat list of atoms: `[User(u), u.name == "Alice"]`
 - OR a list of `Branch([...])` alternatives:
   ```python
-  from kernel.sdk import Branch
+  from factpy.sdk import Branch
   where = [
       Branch([User(u), Pred("user:lang_pref", u, lang)], id="declared_pref"),
       Branch([User(u), Pred("user:inferred_lang", u, lang)], id="inferred_pref"),
@@ -522,7 +522,7 @@ entity or field head. Multi-head public inferences are removed in
 Track 1; use one `Inference` per head.
 
 ```python
-from kernel.sdk import Inference
+from factpy.sdk import Inference
 
 with vars("d", "kw") as (d, kw):
     inf = Inference(
@@ -603,7 +603,7 @@ Track 2 adds lightweight public semantics wrappers as the preferred SDK
 authoring shape:
 
 ```python
-from kernel.sdk import Branch, ProbLogSemantics, PyReasonSemantics
+from factpy.sdk import Branch, ProbLogSemantics, PyReasonSemantics
 
 inf = Inference(
     id="drv.user_tag",
@@ -653,8 +653,8 @@ produce `problog/semantic/probability`. These are persisted by adapter
 helpers (not flat methods on `fg`):
 
 ```python
-from kernel.adapters.pyreason.accept import persist_pyreason_annotations
-from kernel.adapters.problog.accept  import persist_problog_annotations
+from factpy.adapters.pyreason.accept import persist_pyreason_annotations
+from factpy.adapters.problog.accept  import persist_problog_annotations
 
 accept_result = fg.eval.accept(candidates[0])
 
@@ -696,8 +696,8 @@ The namespaced and flat forms are equivalent.
 
 All return frozen application DTOs (e.g. `CheckResult`,
 `DiagnoseResult`, `FactOverlayCheckResult`, `WhyNotUniverseResult`).
-These DTOs are **not** in `kernel.sdk.__all__` — they live in
-`kernel.application.protocol` and are imported only when the user
+These DTOs are **not** in `factpy.sdk.__all__` — they live in
+`factpy.application.protocol` and are imported only when the user
 needs to typecheck a return value. See 06 for the result shapes.
 
 ---
@@ -787,7 +787,7 @@ records = fg.assertions.by_ids(view.asrt_ids)
 Use `ReadPolicy` when you want read-time confidence/display metadata:
 
 ```python
-from kernel.sdk import ReadPolicy
+from factpy.sdk import ReadPolicy
 
 policy = ReadPolicy(
     respect_revocations=True,
@@ -823,7 +823,7 @@ dict, or a `ReadPolicy` raises `SDKStoreError`.
 ### Packages (Souffle export and replay)
 
 ```python
-from kernel.adapters.souffle.package import ExportOptions
+from factpy.adapters.souffle.package import ExportOptions
 
 fg.package.export_package("/tmp/my_export/", ExportOptions(package_kind="audit"))
 fg.package.run_package(
@@ -868,7 +868,7 @@ except CardinalityError as e:
 
 ### Error code constants
 
-All seven error codes are exported from `kernel.sdk`:
+All seven error codes are exported from `factpy.sdk`:
 
 | Code | Raised when |
 |---|---|
@@ -881,7 +881,7 @@ All seven error codes are exported from `kernel.sdk`:
 | `QUERY_NOT_IMPLEMENTED` | Query reaches a code path that is reserved but not yet wired |
 
 ```python
-from kernel.sdk import (
+from factpy.sdk import (
     INVALID_ROW_FORMAT,
     QUERY_ALIAS_CONFLICT,
     QUERY_INVALID_ROW_FORMAT,
@@ -971,7 +971,7 @@ The graph-bound authoring registry tracks schemas, rules, and inferences
 across versions. Bind it at graph construction time:
 
 ```python
-from kernel.sdk import FactGraph
+from factpy.sdk import FactGraph
 
 fg = FactGraph.create(
     schema_classes=[User, Document],
@@ -998,8 +998,8 @@ loaded_inf = fg.inferences.load(inf_ref)
 candidates = fg.eval.evaluate(loaded_inf)
 ```
 
-`SDKRegistry` is no longer part of `kernel.sdk.__all__`. Advanced migration or
-debug code can still import `kernel.sdk.registry.SDKRegistry`, but normal SDK
+`SDKRegistry` is no longer part of `factpy.sdk.__all__`. Advanced migration or
+debug code can still import `factpy.sdk.registry.SDKRegistry`, but normal SDK
 code should use the graph-bound `fg.rules.*` and `fg.inferences.*` facades.
 
 The workspace layout is intentionally compact:

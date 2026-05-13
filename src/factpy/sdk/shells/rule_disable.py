@@ -8,7 +8,7 @@ archived G3 blueprint
 Public surface contract per blueprint §5 locks:
 
 - Method:      ``SDKStore.check_rule_disable(...)`` (instance method;
-               not a free function in ``kernel.sdk.__all__`` — see
+               not a free function in ``factpy.sdk.__all__`` — see
                §5.7 lock and G1 + G4 + G2 precedent).
 - Signature:   ``check_rule_disable(rule, support, *, branch_index,
                atom_index, overlay=None, note=None)`` per §5.1 / §5.2 /
@@ -20,7 +20,7 @@ Public surface contract per blueprint §5 locks:
                constructed internally by the A helper).
 - Return:      ``RuleDisableResult`` (raw application protocol DTO;
                documented passthrough per §5.3 lock; not re-exported
-               from ``kernel.sdk.__all__``).
+               from ``factpy.sdk.__all__``).
 - Errors:      Non-SDK exceptions crossing the SDK boundary remap to
                ``SDKStoreError(...) from exc`` per §5.8 lock with
                capability-specific paths

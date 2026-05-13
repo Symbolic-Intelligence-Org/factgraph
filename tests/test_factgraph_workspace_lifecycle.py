@@ -327,7 +327,7 @@ class WorkspaceLoadTests(unittest.TestCase):
 
 class ApplicationWorkspaceRuntimeTests(unittest.TestCase):
     def test_workspace_runtime_exports_application_functions(self) -> None:
-        module = importlib.import_module("kernel.application.workspace_runtime")
+        module = importlib.import_module("factpy.application.workspace_runtime")
 
         for name in (
             "save_workspace",

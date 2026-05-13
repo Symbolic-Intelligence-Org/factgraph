@@ -304,7 +304,7 @@ class Store:
             evaluator = get_engine_evaluator(mode)
         if evaluator is None:
             raise WhereValidationError(
-                f"{mode} evaluator not registered; import kernel.adapters.{mode} first"
+                f"{mode} evaluator not registered; import factpy.adapters.{mode} first"
             )
         call_kwargs: dict[str, Any] = {
             "derivation_id": derivation_id,

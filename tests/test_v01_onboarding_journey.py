@@ -1,7 +1,7 @@
 """
 v0.1 user journey probe (D7 acceptance driver).
 
-kernel-only + native-only + test-backed pseudo demo. NOT in release-surface
+factpy-only + native-only + test-backed pseudo demo. NOT in release-surface
 allowlist; only used as hardening acceptance gate.
 
 Covers: schema with primary + secondary identity -> SDKStore ->

@@ -213,7 +213,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "kernel.sdk.shells.fact_overlay._compiled_derivation_plan_to_application",
+            "factpy.sdk.shells.fact_overlay._compiled_derivation_plan_to_application",
             side_effect=ValueError(
                 "Conflicting engine_ext between explicit derivation and compiled plan"
             ),
@@ -261,7 +261,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "kernel.sdk.shells.fact_overlay.check_fact_overlay_binding",
+            "factpy.sdk.shells.fact_overlay.check_fact_overlay_binding",
             return_value=_empty_result(),
         ) as mock_runtime:
             sdk.check_fact_overlay(
@@ -281,7 +281,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         expected = object()
 
         with patch.object(sdk, "_resolve_runtime_registry", return_value=expected) as mock_resolve, patch(
-            "kernel.sdk.shells.fact_overlay.check_fact_overlay_binding",
+            "factpy.sdk.shells.fact_overlay.check_fact_overlay_binding",
             return_value=_empty_result(),
         ) as mock_runtime:
             sdk.check_fact_overlay(
@@ -291,7 +291,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         mock_resolve.assert_called_once_with(derivation, explicit_registry=registry)
         self.assertIs(mock_runtime.call_args.kwargs["registry"], expected)
 
-    def test_fact_overlay_check_result_not_exported_from_kernel_sdk_all(self) -> None:
+    def test_fact_overlay_check_result_not_exported_from_factpy_sdk_all(self) -> None:
         import factpy.sdk as sdk_pkg
 
         self.assertNotIn("FactOverlayCheckResult", sdk_pkg.__all__)
@@ -305,7 +305,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "kernel.sdk.shells.fact_overlay.check_fact_overlay_binding",
+            "factpy.sdk.shells.fact_overlay.check_fact_overlay_binding",
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -319,14 +319,14 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         ``sdk_diagnose`` / ``sdk_why_not`` / ``sdk_proof_frame_recheck`` internally."""
         sdk = _build_sdk()
 
-        with patch("kernel.sdk.shells.check.sdk_check") as mock_check, patch(
-            "kernel.sdk.shells.diagnose.sdk_diagnose"
+        with patch("factpy.sdk.shells.check.sdk_check") as mock_check, patch(
+            "factpy.sdk.shells.diagnose.sdk_diagnose"
         ) as mock_diagnose, patch(
-            "kernel.sdk.shells.why_not.sdk_why_not"
+            "factpy.sdk.shells.why_not.sdk_why_not"
         ) as mock_why_not, patch(
-            "kernel.sdk.shells.proof_frame.sdk_proof_frame_recheck"
+            "factpy.sdk.shells.proof_frame.sdk_proof_frame_recheck"
         ) as mock_proof_frame, patch(
-            "kernel.sdk.shells.fact_overlay.check_fact_overlay_binding",
+            "factpy.sdk.shells.fact_overlay.check_fact_overlay_binding",
             return_value=_empty_result(),
         ):
             sdk.check_fact_overlay(_age_derivation(), {"$age": 30}, EvaluationOverlay())
@@ -337,7 +337,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         mock_proof_frame.assert_not_called()
 
     def test_q3_sibling_fact_overlay_module_does_not_import_sibling_sdk_shells(self) -> None:
-        """§5.8 Q3 Sibling static check: kernel.sdk.shells.fact_overlay source has no sibling references."""
+        """§5.8 Q3 Sibling static check: factpy.sdk.shells.fact_overlay source has no sibling references."""
         import factpy.sdk.shells.fact_overlay as fact_overlay_module
 
         source = inspect.getsource(fact_overlay_module)
@@ -346,10 +346,10 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             "from .diagnose",
             "from .why_not",
             "from .proof_frame",
-            "from kernel.sdk.shells.check",
-            "from kernel.sdk.shells.diagnose",
-            "from kernel.sdk.shells.why_not",
-            "from kernel.sdk.shells.proof_frame",
+            "from factpy.sdk.shells.check",
+            "from factpy.sdk.shells.diagnose",
+            "from factpy.sdk.shells.why_not",
+            "from factpy.sdk.shells.proof_frame",
             "sdk_check(",
             "sdk_diagnose(",
             "sdk_why_not(",

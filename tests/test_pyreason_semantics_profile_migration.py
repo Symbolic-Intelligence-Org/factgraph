@@ -289,7 +289,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         self.assertEqual(profile.temporal_projection["mode"], "valid_time_boundaries")
         self.assertEqual(profile.temporal_projection["universe"], ["2026-01-01", "2026-12-31"])
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_fixed_timesteps_profile_drives_pyreason_run_config(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
         compiled = sdk._compile_derivation_input(_make_derivation())[0]
@@ -327,7 +327,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         self.assertIn("SemanticsProfile.temporal_projection.fixed_timesteps", message)
         self.assertIn("engine_options.timesteps", message)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_valid_time_boundaries_map_valid_meta_to_active_steps(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
         compiled = sdk._compile_derivation_input(_make_derivation())[0]
@@ -353,7 +353,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         config = mock_run.call_args.kwargs["config"]
         self.assertEqual(config.timesteps, 5)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_valid_time_boundaries_without_fact_times_uses_universe_only(self, mock_run) -> None:
         sdk = SDKStore([User])
         alice_ref = sdk.ref(User, user_id="Alice")
@@ -410,7 +410,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
 
 
 class PyReasonSemanticsProfileCoreEvaluateTests(unittest.TestCase):
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_core_store_evaluate_semantics_profile_drives_generated_rule(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
         with sdk_vars("u", "name", "risk") as (u, name, risk):
@@ -495,7 +495,7 @@ class PyReasonSemanticsProfileGuardTests(unittest.TestCase):
 
         self.assertEqual(compiled, ("popular(u) : [0.8, 0.9] <-2 name(u, name) : [0.5, 1.0]", "rule.pyreason_guard"))
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_existing_engine_options_timesteps_without_profile_survives(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
         compiled = sdk._compile_derivation_input(_make_derivation())[0]

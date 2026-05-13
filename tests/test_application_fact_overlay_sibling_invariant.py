@@ -19,8 +19,8 @@ from factpy.application import fact_overlay_runtime as _fact_overlay_runtime_mod
 
 _BANNED_MODULES = frozenset(
     {
-        "kernel.application.derivation_check_runtime",
-        "kernel.application.protocol.derivation_check",
+        "factpy.application.derivation_check_runtime",
+        "factpy.application.protocol.derivation_check",
     }
 )
 

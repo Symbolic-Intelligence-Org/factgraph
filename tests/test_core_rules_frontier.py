@@ -16,12 +16,12 @@ from factpy.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factpy.core.rules.ruleref_substrate import evaluate_native_where
 
 _BANNED_IMPORT_PREFIXES = (
-    "kernel.application",
-    "kernel.sdk",
-    "kernel.adapters",
-    "kernel.core.derivation.candidates",
-    "kernel.core.store._support",
-    "kernel.core.store.runtime",
+    "factpy.application",
+    "factpy.sdk",
+    "factpy.adapters",
+    "factpy.core.derivation.candidates",
+    "factpy.core.store._support",
+    "factpy.core.store.runtime",
 )
 
 _BANNED_SYMBOLS = frozenset(

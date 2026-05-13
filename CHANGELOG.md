@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to FactPy Kernel will be documented in this file.
+All notable changes to FactPy factpy will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -13,15 +13,15 @@ First public preview release candidate.
 
 ### Added
 
-- **FactPy Kernel SDK** (`kernel.sdk`): ergonomic OpenAI-style namespaced API
+- **FactPy factpy SDK** (`factpy.sdk`): ergonomic OpenAI-style namespaced API
   (`schema`, `read`, `write`, `eval`, `what_if`, `audit`, `package`, `views`)
   layered over a flat `SDKStore` foundation. `FactGraph` is a literal alias of
   `SDKStore` — both surfaces are permanently supported.
-- **Application layer** (`kernel.application`): explicit DTO contracts and
+- **Application layer** (`factpy.application`): explicit DTO contracts and
   pure functions for every runtime capability (Check, Diagnose, Fact Overlay,
   Why-not, Frontier, ProofFrame Recheck, Rule overlays, ProofFrame Diff,
   round events, package).
-- **Walker view layer** (`kernel.application.walker`): deterministic, frozen,
+- **Walker view layer** (`factpy.application.walker`): deterministic, frozen,
   audit-friendly views over runtime artifacts for SDK-side consumption.
 - **L Direction capability shells**:
   - G1: `SDKStore.check()` / `SDKStore.diagnose()`
@@ -32,9 +32,9 @@ First public preview release candidate.
   - G5: `SDKStore.diff_proof_frames()`
 - **Engine adapters**: native, Souffle, ProbLog, PyReason — selectable at
   evaluation time.
-- **Schema authoring** (`kernel.authoring`) with declarative `Entity`,
+- **Schema authoring** (`factpy.authoring`) with declarative `Entity`,
   `Identity`, `Field`, `Relationship`, `Rule`, `Pred` primitives.
-- **Audit subsystem** (`kernel.audit`) with proof-frame and provenance graph
+- **Audit subsystem** (`factpy.audit`) with proof-frame and provenance graph
   queries.
 - **Release tooling**: `scripts/release.sh` encapsulates the 3-layer
   (master → milestone → release-branch → tag) projection workflow with
@@ -49,14 +49,14 @@ First public preview release candidate.
 ### Fixed
 
 - `SDKStore.retract()` now wraps the underlying `WriteProtocolError` from
-  `kernel.core.evidence.write_protocol` into `SDKStoreError`, with the
+  `factpy.core.evidence.write_protocol` into `SDKStoreError`, with the
   original exception preserved as `__cause__`. Unknown assertion ids
   carry `code="ASSERTION_NOT_FOUND"`. The SDK-boundary error contract is
   now consistent across all write operations.
 
 ### Documentation
 
-- **SDK docs cycle**: full audit + rewrite of `src/kernel/sdk/docs/`
+- **SDK docs cycle**: full audit + rewrite of `src/factpy/sdk/docs/`
   against source-of-truth code across all 8 files (00 user guide
   through 07 walker, plus README and the 03 rules/derivations
   canonical reference). Corrected fictional API claims, DTO field
@@ -73,7 +73,7 @@ First public preview release candidate.
   core/01_architecture, core/02_quality_assessment,
   core/03_progress_roadmap); translated 15 Chinese-only docs to
   English; fixed cross-link hygiene (absolute filesystem paths →
-  relative paths; stale `.md` → `.en.md` references). The kernel now
+  relative paths; stale `.md` → `.en.md` references). The factpy now
   ships EN-only documentation across every module.
 - **Translation drift audit**: restored temporal hedging in
   spike-status adapter docs (PyReason §5C.1 propagation /
@@ -81,10 +81,10 @@ First public preview release candidate.
   core/annotation §2 certainty-lane status) so that
   observed-up-to-here behaviors are not promoted to permanent design
   claims.
-- **Top-level kernel landing**: added `src/kernel/README.md` as a
+- **Top-level factpy landing**: added `src/factpy/README.md` as a
   human-facing module navigation page, paralleling the existing
   `AGENTS.md` for AI agent guidance.
-- Translated 4 deprecation docstrings in `kernel.core.store.ledger`
+- Translated 4 deprecation docstrings in `factpy.core.store.ledger`
   from Chinese to English (preserving deprecation semantics).
 
 ## Earlier History

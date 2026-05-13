@@ -101,6 +101,6 @@ class ProofFrameNarrativeTests(unittest.TestCase):
         )
 
     def test_application_package_exports_renderer(self) -> None:
-        from . import application
+        from factpy import application
 
         self.assertIs(application.render_proof_frame_narrative, render_proof_frame_narrative)

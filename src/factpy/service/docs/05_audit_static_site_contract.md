@@ -9,14 +9,14 @@
 ## 1. Inputs
 
 - `package_dir`
-  - Directory containing an audit package accepted by `kernel.audit.load_audit_package(...)`
+  - Directory containing an audit package accepted by `factpy.audit.load_audit_package(...)`
   - Must have `manifest.json` with `package_kind == "audit"`
 - `out_dir`
   - Destination directory for rendered HTML and JSON index files
   - Created if missing
   - Treated as caller-owned output
 
-The renderer consumes `kernel.audit` reader/query/DTO APIs and domain-backed compliance query APIs. It does not own package export or domain semantics.
+The renderer consumes `factpy.audit` reader/query/DTO APIs and domain-backed compliance query APIs. It does not own package export or domain semantics.
 
 ## 2. Generated Layout
 

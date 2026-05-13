@@ -350,7 +350,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "kernel.sdk.shells.rule_literal_replace.build_rule_literal_replace_request",
+            "factpy.sdk.shells.rule_literal_replace.build_rule_literal_replace_request",
             side_effect=CapabilityHelperError("simulated helper rejection"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -373,7 +373,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "kernel.sdk.shells.rule_literal_replace.build_rule_literal_replace_request",
+            "factpy.sdk.shells.rule_literal_replace.build_rule_literal_replace_request",
             side_effect=ProtocolShapeError("bad request shape"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -396,7 +396,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "kernel.sdk.shells.rule_literal_replace.check_rule_literal_replace_action",
+            "factpy.sdk.shells.rule_literal_replace.check_rule_literal_replace_action",
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -413,7 +413,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.check_rule_literal_replace")
         self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
 
-    def test_rule_literal_replace_result_not_exported_from_kernel_sdk_all(
+    def test_rule_literal_replace_result_not_exported_from_factpy_sdk_all(
         self,
     ) -> None:
         import factpy.sdk as sdk_pkg
@@ -439,14 +439,14 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
                 status="unsupported",
                 variant_rows=(),
                 proof_frame=None,
-                errors=(__import__("kernel.application.protocol", fromlist=["ErrorDTO"]).ErrorDTO(
+                errors=(__import__("factpy.application.protocol", fromlist=["ErrorDTO"]).ErrorDTO(
                     code="STUB", message="stub", path=("stub",)
                 ),),
                 warnings=(),
             )
 
         with patch(
-            "kernel.sdk.shells.rule_literal_replace.check_rule_literal_replace_action",
+            "factpy.sdk.shells.rule_literal_replace.check_rule_literal_replace_action",
             side_effect=fake_runtime,
         ):
             sdk.check_rule_literal_replace(
@@ -476,16 +476,16 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         support = _capture_support(sdk, alice, 25)
 
-        with patch("kernel.sdk.shells.check.sdk_check") as mock_check, patch(
-            "kernel.sdk.shells.diagnose.sdk_diagnose"
+        with patch("factpy.sdk.shells.check.sdk_check") as mock_check, patch(
+            "factpy.sdk.shells.diagnose.sdk_diagnose"
         ) as mock_diagnose, patch(
-            "kernel.sdk.shells.why_not.sdk_why_not"
+            "factpy.sdk.shells.why_not.sdk_why_not"
         ) as mock_why_not, patch(
-            "kernel.sdk.shells.fact_overlay.sdk_fact_overlay_check"
+            "factpy.sdk.shells.fact_overlay.sdk_fact_overlay_check"
         ) as mock_fact_overlay, patch(
-            "kernel.sdk.shells.proof_frame.sdk_proof_frame_recheck"
+            "factpy.sdk.shells.proof_frame.sdk_proof_frame_recheck"
         ) as mock_proof_frame, patch(
-            "kernel.sdk.shells.rule_disable.sdk_rule_disable"
+            "factpy.sdk.shells.rule_disable.sdk_rule_disable"
         ) as mock_rule_disable:
             sdk.check_rule_literal_replace(
                 _adult_rule(),
@@ -516,13 +516,13 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             "from .proof_frame",
             "from .rule_disable",
             "from .rule_add_condition",
-            "from kernel.sdk.shells.check",
-            "from kernel.sdk.shells.diagnose",
-            "from kernel.sdk.shells.why_not",
-            "from kernel.sdk.shells.fact_overlay",
-            "from kernel.sdk.shells.proof_frame",
-            "from kernel.sdk.shells.rule_disable",
-            "from kernel.sdk.shells.rule_add_condition",
+            "from factpy.sdk.shells.check",
+            "from factpy.sdk.shells.diagnose",
+            "from factpy.sdk.shells.why_not",
+            "from factpy.sdk.shells.fact_overlay",
+            "from factpy.sdk.shells.proof_frame",
+            "from factpy.sdk.shells.rule_disable",
+            "from factpy.sdk.shells.rule_add_condition",
             "sdk_check(",
             "sdk_diagnose(",
             "sdk_why_not(",

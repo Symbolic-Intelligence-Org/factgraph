@@ -22,7 +22,7 @@
 
 - 所有 `/v1/...` runtime session 端点默认都要求 `X-FactPy-API-Key`。
 - 缺失或错误 key 返回 `HTTP 401`，且不会进入 JSON envelope。
-- 认证启用但未配置 `FACTPY_KERNEL_API_KEYS` 时返回 `HTTP 503`，且不会进入 JSON envelope。
+- 认证启用但未配置 `FACTPY_factpy_API_KEYS` 时返回 `HTTP 503`，且不会进入 JSON envelope。
 - 只有通过认证后，应用层成功/失败才继续使用 `HTTP 200` JSON envelope。
 - 成功：`ok=true`，失败：`ok=false` 且 `errors[]` 非空。
 - `session_id` 一律走 path parameter。

@@ -1,4 +1,4 @@
-"""Runtime tests for `kernel.application.derivation_check_runtime`.
+"""Runtime tests for `factpy.application.derivation_check_runtime`.
 
 Covers (per blueprint Step 2 plan + Step 0.B/0.C contract):
 
@@ -524,9 +524,9 @@ class AntiRegressionTests(unittest.TestCase):
         )
 
         with patch(
-            "kernel.application.derivation_check_runtime.build_support_artifact_for_binding",
+            "factpy.application.derivation_check_runtime.build_support_artifact_for_binding",
             wraps=__import__(
-                "kernel.core.store._support_capture",
+                "factpy.core.store._support_capture",
                 fromlist=["build_support_artifact_for_binding"],
             ).build_support_artifact_for_binding,
         ) as spy:
@@ -572,7 +572,7 @@ class AntiRegressionTests(unittest.TestCase):
 
         boom = RuntimeError("evaluator exploded")
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_native_where",
+            "factpy.application.derivation_check_runtime.evaluate_native_where",
             side_effect=boom,
         ):
             with self.assertRaises(RuntimeError) as ctx:
@@ -717,10 +717,10 @@ class SouffleCheckTests(unittest.TestCase):
             pred_witness_keys=("b0.a0:Person:exists",),
         )
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.derivation_check_runtime._lookup_support_artifact",
+            "factpy.application.derivation_check_runtime._lookup_support_artifact",
             return_value=artifact,
         ):
             result = check_derivation_binding(request, store=store)
@@ -741,10 +741,10 @@ class SouffleCheckTests(unittest.TestCase):
         candidate = _make_souffle_candidate()
         artifact = _make_support_artifact(binding_items=(("$p", "person-1"),))
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.derivation_check_runtime._lookup_support_artifact",
+            "factpy.application.derivation_check_runtime._lookup_support_artifact",
             return_value=artifact,
         ):
             result = check_derivation_binding(request, store=store)
@@ -759,7 +759,7 @@ class SouffleCheckTests(unittest.TestCase):
         NOT unsupported."""
         request, store, _ = self._build_request(binding=(("$p", "person-1"),))
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[],
         ):
             result = check_derivation_binding(request, store=store)
@@ -786,10 +786,10 @@ class SouffleCheckTests(unittest.TestCase):
             return None
 
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[bad_candidate, good_candidate],
         ), patch(
-            "kernel.application.derivation_check_runtime._lookup_support_artifact",
+            "factpy.application.derivation_check_runtime._lookup_support_artifact",
             side_effect=_lookup,
         ):
             result = check_derivation_binding(request, store=store)
@@ -824,10 +824,10 @@ class SouffleCheckTests(unittest.TestCase):
             return lower_artifact
 
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[higher_branch_cand, lower_branch_cand],
         ), patch(
-            "kernel.application.derivation_check_runtime._lookup_support_artifact",
+            "factpy.application.derivation_check_runtime._lookup_support_artifact",
             side_effect=_lookup,
         ):
             result = check_derivation_binding(request, store=store)
@@ -904,7 +904,7 @@ class PrecheckHeadVarNormalizationTests(unittest.TestCase):
             engine="problog",
         )
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[],
         ):
             result = check_derivation_binding(request, store=store)
@@ -1018,10 +1018,10 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
                 )
                 envelope_payload = _make_provenance_envelope(engine=engine)
                 with patch(
-                    "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+                    "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
                     return_value=[candidate],
                 ), patch(
-                    "kernel.application.derivation_check_runtime._lookup_provenance_envelope",
+                    "factpy.application.derivation_check_runtime._lookup_provenance_envelope",
                     return_value=envelope_payload,
                 ):
                     result = check_derivation_binding(request, store=store)
@@ -1047,10 +1047,10 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
         )
         envelope_payload = _make_provenance_envelope(engine="problog")
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "kernel.application.derivation_check_runtime._lookup_provenance_envelope",
+            "factpy.application.derivation_check_runtime._lookup_provenance_envelope",
             return_value=envelope_payload,
         ):
             result = check_derivation_binding(request, store=store)
@@ -1065,7 +1065,7 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
             engine="problog", binding=(("$p", "person-1"),)
         )
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[],
         ):
             result = check_derivation_binding(request, store=store)
@@ -1097,10 +1097,10 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
             return None
 
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[bad_candidate, good_candidate],
         ), patch(
-            "kernel.application.derivation_check_runtime._lookup_provenance_envelope",
+            "factpy.application.derivation_check_runtime._lookup_provenance_envelope",
             side_effect=_lookup,
         ):
             result = check_derivation_binding(request, store=store)
@@ -1127,10 +1127,10 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
         )
         envelope_payload = _make_provenance_envelope(engine="problog")
         with patch(
-            "kernel.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[candidate_b, candidate_a],
         ), patch(
-            "kernel.application.derivation_check_runtime._lookup_provenance_envelope",
+            "factpy.application.derivation_check_runtime._lookup_provenance_envelope",
             return_value=envelope_payload,
         ):
             result = check_derivation_binding(request, store=store)

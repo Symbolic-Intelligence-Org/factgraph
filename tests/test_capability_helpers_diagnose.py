@@ -140,7 +140,7 @@ class BuildDiagnoseRequestTests(unittest.TestCase):
             build_diagnose_request(_plan(), {"$payload": recursive})
 
     def test_phase_2_exports_from_application_and_helper_package(self) -> None:
-        from . import application
+        from factpy import application
         from factpy.application import capability_helpers
 
         self.assertIs(application.build_diagnose_request, build_diagnose_request)

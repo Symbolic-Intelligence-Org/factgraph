@@ -273,20 +273,20 @@ class CapabilityHelperInvariantTests(unittest.TestCase):
     def test_production_helpers_do_not_import_sdk(self) -> None:
         for path, source in _helper_sources().items():
             with self.subTest(path=path.name):
-                self.assertNotIn("kernel.sdk", source)
-                self.assertNotIn("from kernel import sdk", source)
+                self.assertNotIn("factpy.sdk", source)
+                self.assertNotIn("from factpy import sdk", source)
                 self.assertNotIn("import sdk", source)
 
     def test_production_helpers_do_not_call_sibling_runtimes_or_recorders(self) -> None:
         forbidden = (
-            "from kernel.application.derivation_check_runtime",
-            "from kernel.application.diagnose_runtime",
-            "from kernel.application.fact_overlay_runtime",
-            "from kernel.application.proofframe_runtime",
-            "from kernel.application.rule_disable_runtime",
-            "from kernel.application.rule_literal_replace_runtime",
-            "from kernel.application.rule_add_condition_runtime",
-            "from kernel.application.why_not_runtime",
+            "from factpy.application.derivation_check_runtime",
+            "from factpy.application.diagnose_runtime",
+            "from factpy.application.fact_overlay_runtime",
+            "from factpy.application.proofframe_runtime",
+            "from factpy.application.rule_disable_runtime",
+            "from factpy.application.rule_literal_replace_runtime",
+            "from factpy.application.rule_add_condition_runtime",
+            "from factpy.application.why_not_runtime",
             "check_derivation_binding",
             "diagnose_derivation_binding",
             "check_fact_overlay_binding",

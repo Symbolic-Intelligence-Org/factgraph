@@ -55,14 +55,14 @@ EXPECTED_SDK_ALL: tuple[str, ...] = (
     "vars",
 )
 
-G1_MODULES = ("kernel.sdk.shells.check", "kernel.sdk.shells.diagnose")
+G1_MODULES = ("factpy.sdk.shells.check", "factpy.sdk.shells.diagnose")
 FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
-    "kernel.application.capability_helpers._binding",
+    "factpy.application.capability_helpers._binding",
     "_reject_sdk_origin",
-    "from kernel.application.walker",
-    "import kernel.application.walker",
-    "from kernel.application.walker import",
-    "kernel.audit",
+    "from factpy.application.walker",
+    "import factpy.application.walker",
+    "from factpy.application.walker import",
+    "factpy.audit",
 )
 
 
@@ -85,7 +85,7 @@ class SDKG1InvariantTests(unittest.TestCase):
         self.assertFalse(hasattr(SDKStore, "explain"))
 
     def test_g1_modules_live_in_shells_subpackage(self) -> None:
-        """Retrofit per G2 §5.5 #P1 carve-out: G1 shells migrated into kernel/sdk/shells/."""
+        """Retrofit per G2 §5.5 #P1 carve-out: G1 shells migrated into factpy/sdk/shells/."""
         sdk_dir = Path(inspect.getfile(SDKStore)).parent
         self.assertTrue((sdk_dir / "shells").is_dir())
         self.assertTrue((sdk_dir / "shells" / "__init__.py").is_file())

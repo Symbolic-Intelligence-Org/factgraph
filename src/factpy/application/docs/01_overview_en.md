@@ -1,6 +1,6 @@
-# Overview of the Application Module (`kernel`)
+# Overview of the Application Module (`factpy`)
 
-- Scope: `src/kernel/application`
+- Scope: `src/factpy/application`
 - Last updated: 2026-05-12
 - Target readers: developers who need to understand Python runtime authority, SDK adapter boundaries, and service/agent consumer constraints
 
@@ -109,9 +109,9 @@ It is not responsible for:
 
 ## 3. Public Runtime Surface
 
-`src/kernel/application/__init__.py` currently exports 65 public symbols. The main executor entry points are:
+`src/factpy/application/__init__.py` currently exports 65 public symbols. The main executor entry points are:
 
-Batch 8 public-surface note (historical Batch 8 state, since updated by L Direction G1-G5 + post-L SDK ergonomics redesign): `kernel.application` is an **advanced importable** runtime authority in the kernel package. It is appropriate for automation, wire bridges, and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade. Batch 8 itself did not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes; subsequent L Direction milestones (G1 Check + Diagnose, G4 Why-not, G2 Fact Overlay + ProofFrame Recheck, G3 rule overlays, G5 ProofFrame Diff) added narrow SDK shells over those runtimes, and the post-L redesign also exposes them through the `FactGraph` taxonomy — see [04_api_surface §0](../../sdk/docs/04_api_surface.en.md) and the cross-ref note further down this overview.
+Batch 8 public-surface note (historical Batch 8 state, since updated by L Direction G1-G5 + post-L SDK ergonomics redesign): `factpy.application` is an **advanced importable** runtime authority in the factpy package. It is appropriate for automation, wire bridges, and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade. Batch 8 itself did not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes; subsequent L Direction milestones (G1 Check + Diagnose, G4 Why-not, G2 Fact Overlay + ProofFrame Recheck, G3 rule overlays, G5 ProofFrame Diff) added narrow SDK shells over those runtimes, and the post-L redesign also exposes them through the `FactGraph` taxonomy — see [04_api_surface §0](../../sdk/docs/04_api_surface.en.md) and the cross-ref note further down this overview.
 
 - `execute_read_request(...)`
 - `hydrate_entity(...)`
@@ -198,16 +198,16 @@ Current SDK runtime delegation:
 - `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
 - `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
 - `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
-- `sdk.check(...)` / `sdk.diagnose(...)` (G1), `sdk.why_not(...)` (G4), `sdk.check_fact_overlay(...)` / `sdk.recheck_proof_frame(...)` (G2), `sdk.check_rule_disable(...)` / `sdk.check_rule_literal_replace(...)` / `sdk.check_rule_add_condition(...)` (G3), and `sdk.diff_proof_frames(...)` (G5) are the L Direction SDK shell consumers of the capability helper / application protocol / audit packages. G1 + G4 lower SDK `Derivation` inputs and call `build_check_request(...)` / `build_diagnose_request(...)` / `build_why_not_candidate_universe(...)` before delegating to `check_derivation_binding(...)` / `diagnose_derivation_binding(...)` / `check_why_not_universe(...)`. G2 Fact Overlay reuses the same SDK `Derivation` lowering path and constructs `FactOverlayCheckRequest(...)` directly with a raw `EvaluationOverlay` (no A-side helper); G2 ProofFrame Recheck takes a raw `SupportArtifact` + raw `EvaluationOverlay` and constructs `ProofFrameRecheckRequest(...)` directly (no derivation lowering, no registry resolution, no engine arg). G3 lowers SDK `Rule` inputs through `_compile_rule_input(...)` to `RuleSpec`, accepts raw `SupportArtifact` + raw `RuleLiteralPath` / `RuleAddedAtom`, and calls `build_rule_disable_request(...)` / `build_rule_literal_replace_request(...)` / `build_rule_add_condition_request(...)` before delegating to `check_rule_disable_action(...)` / `check_rule_literal_replace_action(...)` / `check_rule_add_condition_action(...)`. G5 ProofFrame Diff is the simplest shape: pure pass-through over `kernel.audit.proof_frame_diff.build_proof_frame_diff(...)` taking two raw `tuple[RoundEvent, ...]` (`kernel.audit.round_events.RoundEvent`) + raw `tuple[WarningDTO, ...]` and returning raw `ProofFrameDiff` (`kernel.audit.proof_frame_diff.ProofFrameDiff`); no derivation/rule lowering, no registry, no engine, no IO. All nine L methods reuse `kernel.sdk.shells._validation` validators — `validate_derivation(...)` (G1+G4+G2 Fact Overlay), `validate_evaluation_overlay(...)` (G2 Fact Overlay + G2 ProofFrame Recheck), `validate_rule(...)` / `validate_support_artifact(...)` / `validate_optional_evaluation_overlay(...)` (G3) — except G5 which uses inline `isinstance` validation per §5.5 (only one G5 shell consumes `RoundEvent` tuples; no extraction trigger fires). All nine remap non-SDK exceptions to `SDKStoreError(...) from exc` with capability-specific paths.
-- **L cross-boundary DTO layer rule (locked at G5 §5.3 / §6):** raw cross-boundary DTOs at the SDK boundary must be "frozen canonical DTOs above `kernel.core` using `kernel.application.protocol` vocabulary". This includes both `kernel.application.protocol` frozen DTOs (G2/G3) and `kernel.audit` frozen DTOs (G5: `RoundEvent`, `ProofFrameDiff`, etc.); excludes `kernel.core.*` substrate IR (e.g., `RuleSpec`, which the G3 SDK shells lower internally rather than accept directly).
-- **Round events recorder lifecycle stays at advanced importable per G5 §5.1.** `kernel.audit.round_events.start_round` / `record_round_event` / `finalize_round` are the canonical entry points; the existing user-facing round-story full demo example already imports them directly. The recorder is mutable / stateful / persistence-adjacent and would be the first L method returning a non-frozen object — explicitly out of scope for L Direction SDK shells. Round event projection helpers (`project_check_event_payload(...)` etc.) likewise stay at `kernel.audit`.
-- Round events recorder lifecycle and the remaining capability ergonomics helpers are currently exposed at the application / advanced-importable layer only. ProofFrame diff is now reachable through the G5 SDK shell (`SDKStore.diff_proof_frames(...)`) — only its underlying capture side (`start_round` / `record_round_event` / `finalize_round`) stays at `kernel.audit.round_events`. Frontier trace stays advanced importable per G4 §5.4 — the evaluator drift gate forbids application-layer or SDK-layer opt-in until a separate scoped blueprint reopens the boundary.
+- `sdk.check(...)` / `sdk.diagnose(...)` (G1), `sdk.why_not(...)` (G4), `sdk.check_fact_overlay(...)` / `sdk.recheck_proof_frame(...)` (G2), `sdk.check_rule_disable(...)` / `sdk.check_rule_literal_replace(...)` / `sdk.check_rule_add_condition(...)` (G3), and `sdk.diff_proof_frames(...)` (G5) are the L Direction SDK shell consumers of the capability helper / application protocol / audit packages. G1 + G4 lower SDK `Derivation` inputs and call `build_check_request(...)` / `build_diagnose_request(...)` / `build_why_not_candidate_universe(...)` before delegating to `check_derivation_binding(...)` / `diagnose_derivation_binding(...)` / `check_why_not_universe(...)`. G2 Fact Overlay reuses the same SDK `Derivation` lowering path and constructs `FactOverlayCheckRequest(...)` directly with a raw `EvaluationOverlay` (no A-side helper); G2 ProofFrame Recheck takes a raw `SupportArtifact` + raw `EvaluationOverlay` and constructs `ProofFrameRecheckRequest(...)` directly (no derivation lowering, no registry resolution, no engine arg). G3 lowers SDK `Rule` inputs through `_compile_rule_input(...)` to `RuleSpec`, accepts raw `SupportArtifact` + raw `RuleLiteralPath` / `RuleAddedAtom`, and calls `build_rule_disable_request(...)` / `build_rule_literal_replace_request(...)` / `build_rule_add_condition_request(...)` before delegating to `check_rule_disable_action(...)` / `check_rule_literal_replace_action(...)` / `check_rule_add_condition_action(...)`. G5 ProofFrame Diff is the simplest shape: pure pass-through over `factpy.audit.proof_frame_diff.build_proof_frame_diff(...)` taking two raw `tuple[RoundEvent, ...]` (`factpy.audit.round_events.RoundEvent`) + raw `tuple[WarningDTO, ...]` and returning raw `ProofFrameDiff` (`factpy.audit.proof_frame_diff.ProofFrameDiff`); no derivation/rule lowering, no registry, no engine, no IO. All nine L methods reuse `factpy.sdk.shells._validation` validators — `validate_derivation(...)` (G1+G4+G2 Fact Overlay), `validate_evaluation_overlay(...)` (G2 Fact Overlay + G2 ProofFrame Recheck), `validate_rule(...)` / `validate_support_artifact(...)` / `validate_optional_evaluation_overlay(...)` (G3) — except G5 which uses inline `isinstance` validation per §5.5 (only one G5 shell consumes `RoundEvent` tuples; no extraction trigger fires). All nine remap non-SDK exceptions to `SDKStoreError(...) from exc` with capability-specific paths.
+- **L cross-boundary DTO layer rule (locked at G5 §5.3 / §6):** raw cross-boundary DTOs at the SDK boundary must be "frozen canonical DTOs above `factpy.core` using `factpy.application.protocol` vocabulary". This includes both `factpy.application.protocol` frozen DTOs (G2/G3) and `factpy.audit` frozen DTOs (G5: `RoundEvent`, `ProofFrameDiff`, etc.); excludes `factpy.core.*` substrate IR (e.g., `RuleSpec`, which the G3 SDK shells lower internally rather than accept directly).
+- **Round events recorder lifecycle stays at advanced importable per G5 §5.1.** `factpy.audit.round_events.start_round` / `record_round_event` / `finalize_round` are the canonical entry points; the existing user-facing round-story full demo example already imports them directly. The recorder is mutable / stateful / persistence-adjacent and would be the first L method returning a non-frozen object — explicitly out of scope for L Direction SDK shells. Round event projection helpers (`project_check_event_payload(...)` etc.) likewise stay at `factpy.audit`.
+- Round events recorder lifecycle and the remaining capability ergonomics helpers are currently exposed at the application / advanced-importable layer only. ProofFrame diff is now reachable through the G5 SDK shell (`SDKStore.diff_proof_frames(...)`) — only its underlying capture side (`start_round` / `record_round_event` / `finalize_round`) stays at `factpy.audit.round_events`. Frontier trace stays advanced importable per G4 §5.4 — the evaluator drift gate forbids application-layer or SDK-layer opt-in until a separate scoped blueprint reopens the boundary.
 
 SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
 
 ## 5.5 Durable Round Persistence Boundary
 
-Application capability runtimes return stable protocol DTOs, but they do not emit audit events internally. Batch 6 round persistence is owned by `kernel.audit.round_events` and is invoked by an external caller/recorder after a capability result exists.
+Application capability runtimes return stable protocol DTOs, but they do not emit audit events internally. Batch 6 round persistence is owned by `factpy.audit.round_events` and is invoked by an external caller/recorder after a capability result exists.
 
 Current persistable first-slice result surfaces are:
 
@@ -217,7 +217,7 @@ Current persistable first-slice result surfaces are:
 - Why-not Universe Diagnose
 - ProofFrame Rechecker
 
-Frontier projection and rule-action result events are deferred. This preserves the application boundary: no `kernel.application.*runtime` module imports `kernel.audit`, and no SDK/service/agent surface is introduced for round persistence.
+Frontier projection and rule-action result events are deferred. This preserves the application boundary: no `factpy.application.*runtime` module imports `factpy.audit`, and no SDK/service/agent surface is introduced for round persistence.
 
 ## 6. Conservative Boundaries
 
@@ -231,10 +231,10 @@ Frontier projection and rule-action result events are deferred. This preserves t
 
 ## 7. Test Entry Points
 
-Core application and SDK adapter coverage is included in the kernel test segment:
+Core application and SDK adapter coverage is included in the factpy test segment:
 
 ```bash
-python -m unittest discover -s src/kernel/tests -p 'test_*.py'
+python -m unittest discover -s src/factpy/tests -p 'test_*.py'
 ```
 
 Key focused tests:
@@ -305,4 +305,4 @@ Key focused tests:
 ## 8. Related Documents
 
 - [docs/architecture_principles.md](../../../../docs/architecture_principles.md)
-- [src/kernel/sdk/docs/README.md](../../sdk/docs/README.md)
+- [src/factpy/sdk/docs/README.md](../../sdk/docs/README.md)

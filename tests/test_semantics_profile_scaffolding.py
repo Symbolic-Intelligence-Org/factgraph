@@ -25,7 +25,7 @@ class User(Entity):
 
 
 def _semantics_module():
-    return importlib.import_module("kernel.core.semantics.profile")
+    return importlib.import_module("factpy.core.semantics.profile")
 
 
 def _profile_class():
@@ -61,10 +61,10 @@ class SemanticsProfileShapeTests(unittest.TestCase):
     def test_semantics_profile_importable_from_core_semantics(self) -> None:
         SemanticsProfile = _profile_class()
 
-        self.assertEqual(SemanticsProfile.__module__, "kernel.core.semantics.profile")
+        self.assertEqual(SemanticsProfile.__module__, "factpy.core.semantics.profile")
 
     def test_core_semantics_package_exports_profile_and_inspector(self) -> None:
-        package = importlib.import_module("kernel.core.semantics")
+        package = importlib.import_module("factpy.core.semantics")
 
         self.assertIs(getattr(package, "SemanticsProfile"), _profile_class())
         self.assertIs(getattr(package, "inspect_semantics_profile"), _inspect_func())
@@ -188,8 +188,8 @@ class SemanticsProfileInspectionTests(unittest.TestCase):
 
 
 class PublicIntegrationRejectionTests(unittest.TestCase):
-    def test_kernel_sdk_exports_semantics_profile_after_e(self) -> None:
-        sdk = importlib.import_module("kernel.sdk")
+    def test_factpy_sdk_exports_semantics_profile_after_e(self) -> None:
+        sdk = importlib.import_module("factpy.sdk")
 
         self.assertIn("SemanticsProfile", sdk.__all__)
         self.assertTrue(hasattr(sdk, "SemanticsProfile"))

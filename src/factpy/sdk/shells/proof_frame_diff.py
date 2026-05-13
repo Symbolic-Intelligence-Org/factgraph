@@ -8,20 +8,20 @@ archived G5 blueprint
 Public surface contract per blueprint §5 locks:
 
 - Method:      ``SDKStore.diff_proof_frames(...)`` (instance method;
-               not a free function in ``kernel.sdk.__all__`` — see
+               not a free function in ``factpy.sdk.__all__`` — see
                §5.7 lock and G1 + G4 + G2 + G3 precedent).
 - Signature:   ``diff_proof_frames(round_a_id, round_b_id,
                round_a_events, round_b_events, *, warnings=(),
                include_unchanged=False)`` per §5.3 lock; raw
                ``tuple[RoundEvent, ...]`` × 2 mirroring
-               ``kernel.audit.proof_frame_diff.build_proof_frame_diff(...)``
+               ``factpy.audit.proof_frame_diff.build_proof_frame_diff(...)``
                1:1. SDK shell does no IO; users load events via
-               ``kernel.audit.load_audit_package`` or hold them from
+               ``factpy.audit.load_audit_package`` or hold them from
                a fresh recorder.
 - Return:      ``ProofFrameDiff`` (raw application-canonical DTO from
-               ``kernel.audit.proof_frame_diff``; documented passthrough
+               ``factpy.audit.proof_frame_diff``; documented passthrough
                per §5.4 lock; not re-exported from
-               ``kernel.sdk.__all__``).
+               ``factpy.sdk.__all__``).
 - Errors:      Non-SDK exceptions crossing the SDK boundary remap to
                ``SDKStoreError(...) from exc`` per §5.8 lock with
                8 capability-specific paths
@@ -39,8 +39,8 @@ Public surface contract per blueprint §5 locks:
                ``ProtocolShapeError`` path (no intermediate request
                DTO), no ``.dependencies`` path (no derivation
                lowering / rule registry), no ``CapabilityHelperError``
-               path (diff is pure ``kernel.audit``, not a
-               ``kernel.application.capability_helpers`` builder).
+               path (diff is pure ``factpy.audit``, not a
+               ``factpy.application.capability_helpers`` builder).
 - Sibling:     ``sdk_diff_proof_frames`` does NOT call any sibling SDK
                shell (``sdk_check`` / ``sdk_diagnose`` / ``sdk_why_not``
                / ``sdk_fact_overlay_check`` / ``sdk_proof_frame_recheck``
@@ -52,8 +52,8 @@ Public surface contract per blueprint §5 locks:
 Cross-cutting precedent layer rule (encoded in §6 invariants):
 ``RoundEvent``, ``WarningDTO``, and ``ProofFrameDiff`` cross the SDK
 boundary as raw frozen DTOs because they are "frozen canonical DTO
-above ``kernel.core`` using ``kernel.application.protocol``
-vocabulary". Substrate IR (``kernel.core.*``) remains excluded.
+above ``factpy.core`` using ``factpy.application.protocol``
+vocabulary". Substrate IR (``factpy.core.*``) remains excluded.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ def sdk_diff_proof_frames(
 
     Returns the application ``ProofFrameDiff`` DTO directly. The SDK
     shell is pure (no IO; no Store / registry / engine arg), mirroring
-    ``kernel.audit.proof_frame_diff.build_proof_frame_diff(...)`` 1:1.
+    ``factpy.audit.proof_frame_diff.build_proof_frame_diff(...)`` 1:1.
     """
 
     del sdk  # SDK shell is pure; sdk handle reserved for future symmetry

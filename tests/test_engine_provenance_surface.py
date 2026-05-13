@@ -59,7 +59,7 @@ class EngineProvenanceSurfaceTests(unittest.TestCase):
         self.assertTrue(open_resp["ok"])
         return open_resp["session"]["session_id"], sdk
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_pyreason_candidate_explain_returns_provenance_envelope(self, mock_run) -> None:
         session_id, sdk = self._open_session()
         alice_ref = sdk.ref(User, user_id="Alice")
@@ -114,7 +114,7 @@ class EngineProvenanceSurfaceTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_problog_candidate_explain_returns_provenance_envelope(self, mock_run) -> None:
         session_id, sdk = self._open_session()
         alice_ref = sdk.ref(User, user_id="Alice")

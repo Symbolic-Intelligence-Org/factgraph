@@ -1,4 +1,4 @@
-"""Core semantic API for FactPy kernel."""
+"""Core semantic API for FactPy factpy."""
 
 from factpy.core.derivation.accept import AcceptOptions, AcceptResult, accept_candidate_set
 from factpy.core.derivation.candidates import CandidateSet

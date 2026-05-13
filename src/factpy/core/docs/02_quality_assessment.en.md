@@ -1,6 +1,6 @@
 # Core Quality Assessment (code snapshot)
 
-- Scope: `src/kernel/core`
+- Scope: `src/factpy/core`
 - Last updated: 2026-03-10
 - Assessment baseline: current source structure and public entrypoints, not historical versions
 

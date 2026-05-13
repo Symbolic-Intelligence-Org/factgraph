@@ -6,7 +6,7 @@ Implements the ``SDKStore.why_not`` facade method per the archived G4 blueprint
 Public surface contract per blueprint §5 locks:
 
 - Method:      ``SDKStore.why_not(...)`` (instance method; not a free function
-               in ``kernel.sdk.__all__`` — see §5.4 lock language and G1 §5.4
+               in ``factpy.sdk.__all__`` — see §5.4 lock language and G1 §5.4
                precedent).
 - Signature:   ``why_not(inference, candidates, *, engine="native",
                registry=None)`` (see §5.1 lock; ``inference`` is SDK
@@ -15,7 +15,7 @@ Public surface contract per blueprint §5 locks:
                forms — ``Sequence[Mapping[str, Any] | Sequence[Any]]``).
 - Return:      ``WhyNotUniverseResult`` (raw application protocol DTO;
                documented passthrough per §5.3 lock; not re-exported from
-               ``kernel.sdk.__all__``).
+               ``factpy.sdk.__all__``).
 - Errors:      All non-SDK exceptions crossing the SDK boundary remap to
                ``SDKStoreError(...) from exc`` per §5.6 lock with
                capability-specific paths (``$.why_not.inference`` /

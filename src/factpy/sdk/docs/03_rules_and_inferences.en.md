@@ -1,6 +1,6 @@
 # SDK Rule / Query / Inference DSL
 
-Scope: `src/kernel/sdk/dsl` + the `eval` and `what_if` namespaces of
+Scope: `src/factpy/sdk/dsl` + the `eval` and `what_if` namespaces of
 `FactGraph` / `SDKStore`. For the introductory walkthrough see
 [`00_user_guide.en.md`](00_user_guide.en.md); for the API index see
 [`04_api_surface.en.md`](04_api_surface.en.md); for what-if examples
@@ -73,7 +73,7 @@ with vars("li", "u", "c") as (li, u, c):
 
 rows = sdk.run(rule, row_format="dict")
 
-from kernel.sdk import ReadPolicy
+from factpy.sdk import ReadPolicy
 
 rows, display_meta = sdk.run(
     rule,
@@ -125,7 +125,7 @@ Supported:
 `Branch` example:
 
 ```python
-from kernel.sdk import Branch
+from factpy.sdk import Branch
 
 where = [
     Branch([User(u), Pred("user:lang_pref", u, lang)], id="declared_pref"),
@@ -302,8 +302,8 @@ cands = sdk.evaluate(inf, engine="native")
 
 - `engine`: `native` (default) / `souffle` / `problog` / `pyreason`.
 - SDK lowers `Inference` DSL objects into compiled plans, then delegates orchestration to application `evaluate_derivation_plans(...)`; SDK remains responsible for mode alias rejection, registry sugar, and outward compatibility.
-- Legacy `mode='python'` / `mode='engine'` **values** fail with explicit rename hints (use `mode='native'` / `mode='souffle'` respectively); enforced at `kernel/core/store/_evaluate.py:50,52`.
-- `souffle` / `problog` / `pyreason` require registered adapters (for example `import kernel.adapters.souffle`, `import kernel.adapters.problog`, `import kernel.adapters.pyreason`).
+- Legacy `mode='python'` / `mode='engine'` **values** fail with explicit rename hints (use `mode='native'` / `mode='souffle'` respectively); enforced at `factpy/core/store/_evaluate.py:50,52`.
+- `souffle` / `problog` / `pyreason` require registered adapters (for example `import factpy.adapters.souffle`, `import factpy.adapters.problog`, `import factpy.adapters.pyreason`).
 - `sdk.evaluate(..., view=...)` and `sdk.evaluate(..., policy=...)` are
   not supported; inference always uses the full active assertion set.
 - `engine_options` is call-time engine run-time configuration, for example `sdk.evaluate(inf, engine="pyreason", engine_options={"timesteps": 5})`.

@@ -12,8 +12,8 @@ class ServiceAuthConfigTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "FACTPY_KERNEL_API_KEYS": "k1, k2 ",
-                "FACTPY_KERNEL_AUTH_DISABLED": "false",
+                "FACTPY_factpy_API_KEYS": "k1, k2 ",
+                "FACTPY_factpy_AUTH_DISABLED": "false",
             },
             clear=False,
         ):
@@ -25,7 +25,7 @@ class ServiceAuthConfigTests(unittest.TestCase):
     def test_load_auth_config_disabled(self) -> None:
         with patch.dict(
             os.environ,
-            {"FACTPY_KERNEL_AUTH_DISABLED": "true"},
+            {"FACTPY_factpy_AUTH_DISABLED": "true"},
             clear=False,
         ):
             config = load_auth_config()

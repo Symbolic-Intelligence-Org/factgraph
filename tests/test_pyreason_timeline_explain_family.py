@@ -121,7 +121,7 @@ class PyReasonTimelineExplainFamilyTests(unittest.TestCase):
 
         return session_id, candidate
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_explain_tree_returns_error_for_pyreason(self, mock_run) -> None:
         """explain-tree is tree-only; PyReason should still return error."""
         session_id, candidate = self._setup_accepted_pyreason_candidate(mock_run)
@@ -131,7 +131,7 @@ class PyReasonTimelineExplainFamilyTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_explain_timeline_returns_timeline(self, mock_run) -> None:
         session_id, candidate = self._setup_accepted_pyreason_candidate(mock_run)
         try:
@@ -142,7 +142,7 @@ class PyReasonTimelineExplainFamilyTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_explain_timeline_summary_returns_summary(self, mock_run) -> None:
         session_id, candidate = self._setup_accepted_pyreason_candidate(mock_run)
         try:
@@ -158,7 +158,7 @@ class PyReasonTimelineExplainFamilyTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_explain_timeline_narrative_returns_narrative(self, mock_run) -> None:
         session_id, candidate = self._setup_accepted_pyreason_candidate(mock_run)
         try:
@@ -174,7 +174,7 @@ class PyReasonTimelineExplainFamilyTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_explain_summary_polymorphic_returns_timeline_summary(self, mock_run) -> None:
         """explain-summary (shared endpoint) dispatches to timeline for PyReason."""
         session_id, candidate = self._setup_accepted_pyreason_candidate(mock_run)
@@ -186,7 +186,7 @@ class PyReasonTimelineExplainFamilyTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_explain_narrative_polymorphic_returns_timeline_narrative(self, mock_run) -> None:
         """explain-narrative (shared endpoint) dispatches to timeline for PyReason."""
         session_id, candidate = self._setup_accepted_pyreason_candidate(mock_run)
@@ -200,7 +200,7 @@ class PyReasonTimelineExplainFamilyTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_explain_nl_returns_timeline_nl_for_pyreason(self, mock_run) -> None:
         """explain-nl (shared endpoint) dispatches to timeline NL for PyReason.
 

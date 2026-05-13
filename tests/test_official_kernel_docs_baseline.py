@@ -4,7 +4,7 @@ import inspect
 import unittest
 from pathlib import Path
 
-import factpy.sdk as kernel_sdk
+import factpy.sdk as factpy_sdk
 from factpy.sdk import Entity, FactGraph, Field, Identity
 
 
@@ -14,9 +14,9 @@ BLUEPRINT_AUDIT = (
     / "docs"
     / "blueprints"
     / "archive"
-    / "2026-05-13_official-kernel-docstrings-and-tutorials.audit.md"
+    / "2026-05-13_official-factpy-docstrings-and-tutorials.audit.md"
 )
-OFFICIAL_DOCS_ROOT = REPO_ROOT / "docs" / "official" / "kernel"
+OFFICIAL_DOCS_ROOT = REPO_ROOT / "docs" / "official" / "factpy"
 
 
 class _DocGateUser(Entity):
@@ -36,10 +36,10 @@ def _assert_has_docstring(testcase: unittest.TestCase, obj: object, label: str) 
 
 class TestDocstringCoverageGate(unittest.TestCase):
     def test_all_public_exports_have_docstring(self) -> None:
-        for name in kernel_sdk.__all__:
+        for name in factpy_sdk.__all__:
             with self.subTest(name=name):
-                self.assertTrue(hasattr(kernel_sdk, name), f"kernel.sdk missing export {name!r}")
-                _assert_has_docstring(self, getattr(kernel_sdk, name), f"kernel.sdk.{name}")
+                self.assertTrue(hasattr(factpy_sdk, name), f"factpy.sdk missing export {name!r}")
+                _assert_has_docstring(self, getattr(factpy_sdk, name), f"factpy.sdk.{name}")
 
     def test_selected_factgraph_namespace_methods_have_docstring(self) -> None:
         fg = _new_factgraph()
@@ -95,9 +95,9 @@ class TestDocstringCoverageGate(unittest.TestCase):
                 _assert_has_docstring(self, obj, label)
 
     def test_private_helpers_are_not_in_docstring_gate_scope(self) -> None:
-        for name in kernel_sdk.__all__:
+        for name in factpy_sdk.__all__:
             with self.subTest(name=name):
-                self.assertFalse(name.startswith("_"), "kernel.sdk.__all__ must not export private helpers")
+                self.assertFalse(name.startswith("_"), "factpy.sdk.__all__ must not export private helpers")
 
 
 class TestOfficialDocsTreeGate(unittest.TestCase):

@@ -221,7 +221,7 @@ class EngineEvalRegistrationTests(unittest.TestCase):
 
 
 class EngineEvalTests(unittest.TestCase):
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_pending_annotations_cached_on_store(self, mock_run: Any) -> None:
         derived = PyReasonSession(_test_schema_ir())
         derived._write_node_fact_internal("user:popular", "idref_v1:User:Alice", "true", bound=[0.8, 0.9])
@@ -262,7 +262,7 @@ class EngineEvalTests(unittest.TestCase):
         pending = store._engine_pending_annotations[candidates[0].run_id]
         self.assertGreaterEqual(len(pending), 2)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_edge_candidate_includes_to_ref_in_key(self, mock_run: Any) -> None:
         derived = PyReasonSession(_test_schema_ir())
         derived._write_edge_fact_internal(
@@ -352,7 +352,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
             ]
         )
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_default_timesteps_used_when_engine_options_missing(self, mock_run: Any) -> None:
         mock_run.return_value = PyReasonRunResult(
             interpretation=None,
@@ -376,7 +376,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
         self.assertEqual(config.timesteps, 2)
         self.assertTrue(config.atom_trace)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_engine_options_timesteps_override_default(self, mock_run: Any) -> None:
         mock_run.return_value = PyReasonRunResult(
             interpretation=None,
@@ -401,7 +401,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
         self.assertEqual(config.timesteps, 5)
         self.assertTrue(config.atom_trace)
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_engine_ext_body_predicate_bounds_flow_into_compiled_rules(self, mock_run: Any) -> None:
         mock_run.return_value = PyReasonRunResult(
             interpretation=None,
@@ -425,7 +425,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(rules, [("popular(e) <-0 name(e) : [0.5, 1.0]", "derived_popular")])
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_engine_ext_head_bound_flows_into_compiled_rules(self, mock_run: Any) -> None:
         mock_run.return_value = PyReasonRunResult(
             interpretation=None,

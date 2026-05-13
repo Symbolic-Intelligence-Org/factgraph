@@ -1,4 +1,4 @@
-name: factpy-kernel-tests
+name: factpy-factpy-tests
 
 on:
   push:
@@ -21,30 +21,30 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install kernel package and monorepo dev dependencies
+      - name: Install factpy package and monorepo dev dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements/dev.txt
 
-      - name: Ruff (kernel gate)
+      - name: Ruff (factpy gate)
         run: |
-          python -m ruff check src/kernel
+          python -m ruff check src/factpy
 
       - name: Ruff (service/tools audit)
         continue-on-error: true
         run: |
           python -m ruff check src/service tools
 
-      - name: Mypy (kernel/service audit)
+      - name: Mypy (factpy/service audit)
         continue-on-error: true
         run: |
-          python -m mypy src/kernel src/service
+          python -m mypy src/factpy src/service
 
       - name: Test (where AST gate on, 5 dirs)
         env:
           PYTHONPATH: src
         run: |
-          python -m unittest discover -s src/kernel/tests -p 'test_*.py'
+          python -m unittest discover -s src/factpy/tests -p 'test_*.py'
           python -m unittest discover -s src/agent/tests -p 'test_*.py'
           python -m unittest discover -s src/service/tests -p 'test_*.py'
           python -m unittest discover -s src/domains/ecss/tests -p 'test_*.py'
@@ -55,7 +55,7 @@ jobs:
           FACTPY_WHERE_AST_VALIDATE: "0"
           PYTHONPATH: src
         run: |
-          python -m unittest discover -s src/kernel/tests -p 'test_*.py'
+          python -m unittest discover -s src/factpy/tests -p 'test_*.py'
           python -m unittest discover -s src/agent/tests -p 'test_*.py'
           python -m unittest discover -s src/service/tests -p 'test_*.py'
           python -m unittest discover -s src/domains/ecss/tests -p 'test_*.py'
@@ -65,19 +65,19 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          if find src/kernel/tests src/agent/tests src/service/tests src/domains/ecss/tests tools/benchmarks/tests -maxdepth 1 -type f -name 'test_*strict*.py' 2>/dev/null | grep -q .; then
-            for d in src/kernel/tests src/agent/tests src/service/tests src/domains/ecss/tests tools/benchmarks/tests; do
+          if find src/factpy/tests src/agent/tests src/service/tests src/domains/ecss/tests tools/benchmarks/tests -maxdepth 1 -type f -name 'test_*strict*.py' 2>/dev/null | grep -q .; then
+            for d in src/factpy/tests src/agent/tests src/service/tests src/domains/ecss/tests tools/benchmarks/tests; do
               python -m unittest discover -s "$d" -p 'test_*strict*.py'
             done
           else
             echo "No strict profile smoke tests found across the 5 test directories; skipping."
           fi
 
-      - name: Coverage report (kernel/service, non-threshold)
+      - name: Coverage report (factpy/service, non-threshold)
         continue-on-error: true
         env:
           PYTHONPATH: src
         run: |
-          python -m coverage run -m unittest discover -s src/kernel/tests -p 'test_*.py'
+          python -m coverage run -m unittest discover -s src/factpy/tests -p 'test_*.py'
           python -m coverage run --append -m unittest discover -s src/service/tests -p 'test_*.py'
           python -m coverage report

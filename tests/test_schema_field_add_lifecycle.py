@@ -161,11 +161,11 @@ def _seed_fg(*, registry_root: Path | None = None, path: Path | None = None):
 
 
 def _schema_add_result_class():
-    return getattr(importlib.import_module("kernel.sdk"), "SchemaAddResult")
+    return getattr(importlib.import_module("factpy.sdk"), "SchemaAddResult")
 
 
 def _schema_mutation_runtime():
-    return importlib.import_module("kernel.application.schema_mutation_runtime")
+    return importlib.import_module("factpy.application.schema_mutation_runtime")
 
 
 def _read_manifest(workspace: Path) -> dict[str, object]:

@@ -1,6 +1,6 @@
 # Contributing
 
-FactPy Kernel uses a blueprint-driven workflow for non-trivial changes.
+FactPy factpy uses a blueprint-driven workflow for non-trivial changes.
 
 ## Before You Change Code
 
@@ -20,10 +20,10 @@ python -m pip install -e ".[dev]"
 
 ## Test Baseline
 
-Run the kernel test suite from the repository root:
+Run the factpy test suite from the repository root:
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
+PYTHONPATH=src python -m unittest discover -s src/factpy/tests -p "test_*.py"
 ```
 
 Current baseline: 709 tests, 1 skip.
@@ -31,12 +31,12 @@ Current baseline: 709 tests, 1 skip.
 ## Quality Checks
 
 ```bash
-python -m ruff check src/kernel/application
-python -m ruff check src/kernel
-python -m mypy src/kernel
+python -m ruff check src/factpy/application
+python -m ruff check src/factpy
+python -m mypy src/factpy
 ```
 
-Only the narrow `kernel.application` ruff check is expected to be clean today. Broader kernel ruff and mypy output is tracked as audit/report input until follow-up cleanup work makes those checks blocking.
+Only the narrow `factpy.application` ruff check is expected to be clean today. Broader factpy ruff and mypy output is tracked as audit/report input until follow-up cleanup work makes those checks blocking.
 
 ## Pull Request Expectations
 
@@ -74,7 +74,7 @@ The script enforces:
 - Clean working tree.
 - Source ref exists; tag does not exist yet (locally or on origin).
 - Projection allowlist + deny patterns + bad-link checks all pass.
-- (Unless `--skip-verify`) `pip install -e .` + full kernel test suite pass on
+- (Unless `--skip-verify`) `pip install -e .` + full factpy test suite pass on
   the projected content.
 
 The release branch (`release/X.Y.x`) is created on first release of a minor

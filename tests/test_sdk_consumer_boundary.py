@@ -11,7 +11,7 @@ PRODUCTION_ROOTS = ("src/service", "src/agent")
 PRODUCTION_SDK_IMPORT_ALLOWLIST: dict[tuple[str, str], str] = {
     (
         "src/agent/extraction/api.py",
-        "from kernel.sdk.compile import compile_schema_from_classes",
+        "from factpy.sdk.compile import compile_schema_from_classes",
     ): "authoring helper used to compile Entity classes into schema_ir",
 }
 
@@ -24,7 +24,7 @@ class SDKConsumerBoundaryTests(unittest.TestCase):
             actual,
             set(PRODUCTION_SDK_IMPORT_ALLOWLIST),
             "Production service/agent SDK imports must be explicitly allowlisted. "
-            "Runtime operations should go through kernel.application; add only "
+            "Runtime operations should go through factpy.application; add only "
             "authoring or ergonomic exceptions with rationale.",
         )
 
@@ -41,19 +41,19 @@ def _scan_production_sdk_imports() -> set[tuple[str, str]]:
             tree = ast.parse(source, filename=rel_text)
             lines = source.splitlines()
             for node in ast.walk(tree):
-                if _is_kernel_sdk_import(node):
+                if _is_factpy_sdk_import(node):
                     out.add((rel_text, lines[node.lineno - 1].strip()))
     return out
 
 
-def _is_kernel_sdk_import(node: ast.AST) -> bool:
+def _is_factpy_sdk_import(node: ast.AST) -> bool:
     if isinstance(node, ast.Import):
-        return any(alias.name == "kernel.sdk" or alias.name.startswith("kernel.sdk.") for alias in node.names)
+        return any(alias.name == "factpy.sdk" or alias.name.startswith("factpy.sdk.") for alias in node.names)
     if isinstance(node, ast.ImportFrom):
         module = node.module or ""
-        if module == "kernel.sdk" or module.startswith("kernel.sdk."):
+        if module == "factpy.sdk" or module.startswith("factpy.sdk."):
             return True
-        return module == "kernel" and any(alias.name == "sdk" for alias in node.names)
+        return module == "factpy" and any(alias.name == "sdk" for alias in node.names)
     return False
 
 

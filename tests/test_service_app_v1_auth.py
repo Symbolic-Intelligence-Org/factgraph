@@ -27,8 +27,8 @@ class ServiceAppV1AuthTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "FACTPY_KERNEL_API_KEYS": "",
-                "FACTPY_KERNEL_AUTH_DISABLED": "false",
+                "FACTPY_factpy_API_KEYS": "",
+                "FACTPY_factpy_AUTH_DISABLED": "false",
             },
             clear=False,
         ):
@@ -40,7 +40,7 @@ class ServiceAppV1AuthTests(unittest.TestCase):
     def test_disabled_auth_allows_request(self) -> None:
         with patch.dict(
             os.environ,
-            {"FACTPY_KERNEL_AUTH_DISABLED": "true"},
+            {"FACTPY_factpy_AUTH_DISABLED": "true"},
             clear=False,
         ):
             with TestClient(app) as client:
@@ -52,8 +52,8 @@ class ServiceAppV1AuthTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "FACTPY_KERNEL_API_KEYS": "valid-key",
-                "FACTPY_KERNEL_AUTH_DISABLED": "false",
+                "FACTPY_factpy_API_KEYS": "valid-key",
+                "FACTPY_factpy_AUTH_DISABLED": "false",
             },
             clear=False,
         ):
@@ -67,8 +67,8 @@ class ServiceAppV1AuthTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "FACTPY_KERNEL_API_KEYS": "valid-key",
-                "FACTPY_KERNEL_AUTH_DISABLED": "false",
+                "FACTPY_factpy_API_KEYS": "valid-key",
+                "FACTPY_factpy_AUTH_DISABLED": "false",
             },
             clear=False,
         ):

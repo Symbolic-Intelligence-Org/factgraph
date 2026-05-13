@@ -95,7 +95,7 @@ class BuildProofFrameRecheckRequestTests(unittest.TestCase):
             build_proof_frame_recheck_request(_support(), overlay=_overlay(new_value=_sdk_rule()))
 
     def test_phase_3_exports_from_application_and_helper_package(self) -> None:
-        from . import application
+        from factpy import application
         from factpy.application import capability_helpers
 
         self.assertIs(

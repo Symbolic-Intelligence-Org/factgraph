@@ -8,7 +8,7 @@ the archived G3 blueprint
 Public surface contract per blueprint §5 locks:
 
 - Method:      ``SDKStore.check_rule_add_condition(...)`` (instance
-               method; not a free function in ``kernel.sdk.__all__``).
+               method; not a free function in ``factpy.sdk.__all__``).
 - Signature:   ``check_rule_add_condition(rule, support, *,
                branch_index, added_atom, overlay=None, note=None)``
                per §5.1 / §5.2 / §5.4 locks. ``rule`` is an SDK ``Rule``
@@ -24,7 +24,7 @@ Public surface contract per blueprint §5 locks:
                an existing locator.
 - Return:      ``RuleAddConditionResult`` (raw application protocol
                DTO; documented passthrough per §5.3 lock; not
-               re-exported from ``kernel.sdk.__all__``).
+               re-exported from ``factpy.sdk.__all__``).
 - Errors:      Non-SDK exceptions crossing the SDK boundary remap to
                ``SDKStoreError(...) from exc`` per §5.8 lock with
                capability-specific paths

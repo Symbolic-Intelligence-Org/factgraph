@@ -17,9 +17,9 @@ class AuthConfig:
 
     @classmethod
     def from_env(cls) -> "AuthConfig":
-        raw = os.environ.get("FACTPY_KERNEL_API_KEYS", "")
+        raw = os.environ.get("FACTPY_factpy_API_KEYS", "")
         allowed_keys = tuple(k.strip() for k in raw.split(",") if k.strip())
-        disabled = os.environ.get("FACTPY_KERNEL_AUTH_DISABLED", "").lower() == "true"
+        disabled = os.environ.get("FACTPY_factpy_AUTH_DISABLED", "").lower() == "true"
         return cls(allowed_keys=allowed_keys, disabled=disabled)
 
     @property

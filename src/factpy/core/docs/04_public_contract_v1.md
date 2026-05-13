@@ -37,7 +37,7 @@ Entry points:
 - `SDKStore.evaluate(...)`
 
 > **post-L SDK ergonomics redesign cross-ref (§5.5.6):** since the
-> post-L redesign, `FactGraph` enters `kernel.sdk.__all__` as a
+> post-L redesign, `FactGraph` enters `factpy.sdk.__all__` as a
 > literal alias of `SDKStore`; the contract entry points above are
 > equally reachable via `FactGraph.eval.run(...)` /
 > `FactGraph.eval.evaluate(...)`. The flat `SDKStore.<method>` form
@@ -110,14 +110,14 @@ Removed aliases:
 If the corresponding evaluator is not registered:
 
 - raise `WhereValidationError`
-- error-message format: `"{mode} evaluator not registered; import kernel.adapters.{mode} first"`
+- error-message format: `"{mode} evaluator not registered; import factpy.adapters.{mode} first"`
 
 ## 4. AcceptResult diagnostics contract (v1)
 
 Source:
 
-- `kernel.core.derivation.accept.AcceptResult`
-- `kernel.core.store._accept.accept_store_candidate(...)`
+- `factpy.core.derivation.accept.AcceptResult`
+- `factpy.core.store._accept.accept_store_candidate(...)`
 
 ### 3.1 Version field
 
@@ -205,7 +205,7 @@ Pre-failure notes:
 
 Source:
 
-- `kernel.core.view.projector.ProjectorAudit`
+- `factpy.core.view.projector.ProjectorAudit`
 - `project_view_facts_with_audit(...)`
 
 Version:
@@ -232,7 +232,7 @@ Notes:
 Current compatibility entry points (kept but new dependencies are
 discouraged):
 
-- `kernel.core.store.api`
+- `factpy.core.store.api`
 - `Store.evaluate_dummy(...)` (deprecated)
 
 Change-process constraints:

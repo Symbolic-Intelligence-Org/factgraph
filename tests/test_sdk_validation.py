@@ -1,7 +1,7 @@
 """Unit tests for the shared SDK shell input validators.
 
 Exercises the shared validators in
-``kernel.sdk.shells._validation`` directly: behavior parity vs the
+``factpy.sdk.shells._validation`` directly: behavior parity vs the
 inlined G1 validators they replaced (Q1 follow-up to Round 4 audit) for
 ``validate_derivation`` / ``validate_binding``; G2 polish-round
 ``validate_evaluation_overlay``; and G3 Phase 0 hygiene additions
@@ -10,7 +10,7 @@ inlined G1 validators they replaced (Q1 follow-up to Round 4 audit) for
 contract that lets multiple SDK shell methods (Check, Diagnose, Why-not,
 G2 Fact Overlay + ProofFrame Recheck, G3 rule-overlay shells) share
 validators without duplicating logic, and the post-G2 Phase 0 hygiene
-location under ``kernel/sdk/shells/``.
+location under ``factpy/sdk/shells/``.
 """
 
 from __future__ import annotations

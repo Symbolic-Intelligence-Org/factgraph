@@ -2,7 +2,7 @@
 Compatibility shim for the legacy core.store.api module path.
 
 Prefer importing Store and register_engine_evaluator from
-``kernel.core.store.runtime`` or ``kernel.core.store``.
+``factpy.core.store.runtime`` or ``factpy.core.store``.
 """
 
 from __future__ import annotations

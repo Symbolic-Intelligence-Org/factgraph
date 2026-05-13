@@ -152,7 +152,7 @@ class ProbLogCandidateEvidenceTreeTests(unittest.TestCase):
         self.assertEqual(failed_child["status"], "fail")
         self.assertEqual(failed_child["check_kind"], "missing")
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_runtime_explain_tree_summary_narrative_and_nl_work_after_accept(self, mock_run) -> None:
         session_id, sdk = self._open_session()
         alice_ref = sdk.ref(User, user_id="Alice")

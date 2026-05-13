@@ -18,7 +18,7 @@ from factpy.core.annotation import (  # noqa: E402
 )
 
 
-class EvidenceAnnotationKernelTests(unittest.TestCase):
+class EvidenceAnnotationfactpyTests(unittest.TestCase):
     def test_derive_struct_candidates_proto_handles_both_rule_shapes(self) -> None:
         struct_facts = [
             {"subject_id": "ent001", "relation": "depends_on", "object_id": "ent002"},

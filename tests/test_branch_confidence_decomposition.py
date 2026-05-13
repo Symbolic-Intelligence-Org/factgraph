@@ -49,15 +49,15 @@ def _runtime_derivation_payload() -> dict[str, object]:
 
 
 class SDKBranchSurfaceTests(unittest.TestCase):
-    def test_kernel_sdk_exports_branch_not_body(self) -> None:
-        sdk = importlib.import_module("kernel.sdk")
+    def test_factpy_sdk_exports_branch_not_body(self) -> None:
+        sdk = importlib.import_module("factpy.sdk")
 
         self.assertIn("Branch", sdk.__all__)
         self.assertNotIn("Body", sdk.__all__)
         self.assertTrue(hasattr(sdk, "Branch"))
         self.assertFalse(hasattr(sdk, "Body"))
         with self.assertRaises(ImportError):
-            exec("from kernel.sdk import Body", {})
+            exec("from factpy.sdk import Body", {})
 
     def test_sdk_dsl_file_is_renamed_to_branch(self) -> None:
         sdk_dsl_dir = Path(__file__).resolve().parents[1] / "sdk" / "dsl"
@@ -66,7 +66,7 @@ class SDKBranchSurfaceTests(unittest.TestCase):
         self.assertFalse((sdk_dsl_dir / "body.py").exists())
 
     def test_branch_lowers_to_branch_where_structure(self) -> None:
-        sdk = importlib.import_module("kernel.sdk")
+        sdk = importlib.import_module("factpy.sdk")
         branch_cls = getattr(sdk, "Branch", None)
         self.assertIsNotNone(branch_cls)
 
@@ -88,7 +88,7 @@ class SDKBranchSurfaceTests(unittest.TestCase):
         )
 
     def test_branch_rejects_confidence_keyword(self) -> None:
-        sdk = importlib.import_module("kernel.sdk")
+        sdk = importlib.import_module("factpy.sdk")
         branch_cls = getattr(sdk, "Branch", None)
         self.assertIsNotNone(branch_cls)
 
@@ -96,7 +96,7 @@ class SDKBranchSurfaceTests(unittest.TestCase):
             branch_cls([Pred("user:tag_seed", "$u", "$tag")], confidence=0.9)
 
     def test_branch_rejects_engine_specific_keywords(self) -> None:
-        sdk = importlib.import_module("kernel.sdk")
+        sdk = importlib.import_module("factpy.sdk")
         branch_cls = getattr(sdk, "Branch", None)
         self.assertIsNotNone(branch_cls)
 

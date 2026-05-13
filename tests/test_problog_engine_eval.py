@@ -80,7 +80,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         evaluator = get_engine_evaluator("problog")
         self.assertIs(evaluator, evaluate_problog)
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_default_timeout_used_when_engine_options_missing(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
@@ -93,7 +93,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         self.assertEqual(candidates[0].support_kind, PROBLOG_PROVENANCE_KIND)
         self.assertNotEqual(candidates[0].support_digest, f"sha256:{'0' * 64}")
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_engine_options_timeout_override_default(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
@@ -137,7 +137,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         self.assertIn("ProbLog engine_ext must be ProbLogRuleExt", str(ctx.exception))
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_problog_rule_ext_is_accepted_and_drives_export(self, mock_run) -> None:
         sdk = self._make_sdk()
         seen: dict[str, str] = {}
@@ -156,7 +156,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.5::rule_body_0", seen["program"])
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_legacy_body_confidences_are_bridged_to_engine_ext(self, mock_run) -> None:
         sdk = self._make_sdk()
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
@@ -185,7 +185,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         self.assertIn("Conflicting ProbLog branch probabilities", str(ctx.exception))
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_matching_body_confidences_and_engine_ext_are_allowed(self, mock_run) -> None:
         sdk = self._make_sdk()
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]

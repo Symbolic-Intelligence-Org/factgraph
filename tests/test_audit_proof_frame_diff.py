@@ -223,7 +223,7 @@ class AuditProofFrameDiffTests(unittest.TestCase):
         offenders: list[str] = []
         for path in app_dir.glob("*runtime*.py"):
             text = path.read_text(encoding="utf-8")
-            if "kernel.audit" in text or "from kernel import audit" in text:
+            if "factpy.audit" in text or "from factpy import audit" in text:
                 offenders.append(path.name)
         self.assertEqual(offenders, [])
 

@@ -1,4 +1,4 @@
-"""Internal prototype annotation kernel capabilities."""
+"""Internal prototype annotation factpy capabilities."""
 
 from factpy.core.annotation._certainty import (
     AGGREGATION_STRATEGIES,

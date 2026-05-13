@@ -158,8 +158,8 @@ class WalkerInvariantTests(unittest.TestCase):
     def test_walker_package_does_not_import_sdk(self) -> None:
         for path, source in _walker_sources().items():
             with self.subTest(path=path.name):
-                self.assertNotIn("kernel.sdk", source)
-                self.assertNotIn("from kernel import sdk", source)
+                self.assertNotIn("factpy.sdk", source)
+                self.assertNotIn("from factpy import sdk", source)
                 self.assertNotIn("import sdk", source)
 
     def test_unbounded_stream_error_has_no_b1_b2_raise_site(self) -> None:

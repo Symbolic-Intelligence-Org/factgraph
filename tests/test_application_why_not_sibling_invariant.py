@@ -16,8 +16,8 @@ from factpy.application.protocol import derivation_why_not as _why_not_protocol_
 
 _BANNED_CHECK_MODULES = frozenset(
     {
-        "kernel.application.derivation_check_runtime",
-        "kernel.application.protocol.derivation_check",
+        "factpy.application.derivation_check_runtime",
+        "factpy.application.protocol.derivation_check",
         "derivation_check_runtime",
         "derivation_check",
     }

@@ -1,5 +1,5 @@
 [project]
-dependencies = ["httpx>=0.28.1,<0.29", "fastapi>=0.136.1,<0.137"]
+dependencies = ["httpx>=0.28.1,<0.29", "fastapi>=0.136.1,<0.137", "networkx>=3.6.1,<4"]
 name = "FactPy"
 requires-python = ">= 3.11"
 version = "0.1.0"
@@ -24,7 +24,7 @@ build = { features = ["build"], no-default-feature = true }
 publish = { features = ["publish"], no-default-feature = true }
 
 [tool.pixi.feature.test.tasks]
-test = "pytest"
+test = "pytest tests/*.py"
 
 [tool.pixi.feature.build.tasks]
 build = { cmd = "python -m build", depends-on = ["test"] }

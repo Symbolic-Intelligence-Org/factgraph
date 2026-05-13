@@ -66,7 +66,7 @@ def execute_query(
 ) -> QueryRuntimeResponse:
     """Execute a runtime-normalized query against the given store.
 
-    The where_ir is passed through to kernel.core.rules.ruleref_substrate.evaluate_native_where;
+    The where_ir is passed through to factpy.core.rules.ruleref_substrate.evaluate_native_where;
     SDK adapters or future neutral authoring lowerers are responsible for producing
     a runtime-normalized where_ir from authoring DSL.
 

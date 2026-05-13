@@ -198,7 +198,7 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
             ]
         )
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_core_store_evaluate_semantics_profile_drives_exported_probability(self, mock_run) -> None:
         sdk = self._make_sdk()
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]

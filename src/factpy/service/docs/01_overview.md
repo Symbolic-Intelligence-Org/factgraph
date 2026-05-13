@@ -1,4 +1,4 @@
-# Service 模块总览（kernel）
+# Service 模块总览（factpy）
 
 - 范围：`src/service`
 - 最后更新：2026-05-12
@@ -34,13 +34,13 @@
 
 Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer capabilities 在 v0.1 **不**通过本 service HTTP 路由暴露:
 
-- Check / Diagnose / Fact Overlay / Why-not(`kernel.application` advanced importable)
-- ProofFrame Rechecker(`kernel.application.proofframe_runtime`)
-- Rule Disable / Literal Replace / Add Condition(`kernel.application.rule_*_runtime`)
-- Round events 持久化 + 查询(`kernel.audit.round_events`)
-- ProofFrame diff(`kernel.audit.proof_frame_diff`)
+- Check / Diagnose / Fact Overlay / Why-not(`factpy.application` advanced importable)
+- ProofFrame Rechecker(`factpy.application.proofframe_runtime`)
+- Rule Disable / Literal Replace / Add Condition(`factpy.application.rule_*_runtime`)
+- Round events 持久化 + 查询(`factpy.audit.round_events`)
+- ProofFrame diff(`factpy.audit.proof_frame_diff`)
 
-这些 capabilities 按 Batch 8 公开 surface 决议(见 [`docs/blueprints/archive/2026-05-06_public-surface.md`](../../../docs/blueprints/archive/2026-05-06_public-surface.md))保留为 **advanced importable surface**,通过 Python in-process 调用 `kernel.application` / `kernel.audit` 使用;v0.1 **不**新增对应 HTTP route 或 SDK shell。
+这些 capabilities 按 Batch 8 公开 surface 决议(见 [`docs/blueprints/archive/2026-05-06_public-surface.md`](../../../docs/blueprints/archive/2026-05-06_public-surface.md))保留为 **advanced importable surface**,通过 Python in-process 调用 `factpy.application` / `factpy.audit` 使用;v0.1 **不**新增对应 HTTP route 或 SDK shell。
 
 如需通过 HTTP 暴露,reactivation 触发条件:explicit user-facing workflow demand + delivery / auth / session 单独 blueprint 设计。
 
@@ -83,10 +83,10 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 ### 4.0 认证边界
 
 - 所有 `/v1/...` 路由默认都要求 `X-FactPy-API-Key`。
-- 若 `FACTPY_KERNEL_AUTH_DISABLED=true`，本地开发可显式跳过认证。
+- 若 `FACTPY_factpy_AUTH_DISABLED=true`，本地开发可显式跳过认证。
 - 认证失败会在 route handler 之前返回：
   - `HTTP 401`：缺失或错误 key
-  - `HTTP 503`：认证启用但未配置 `FACTPY_KERNEL_API_KEYS`
+  - `HTTP 503`：认证启用但未配置 `FACTPY_factpy_API_KEYS`
 - 只有通过认证后，service 才继续沿用各 DTO 文档里的 `HTTP 200` envelope 合同。
 
 ### 4.1 rules
@@ -229,4 +229,4 @@ accept/proof/audit 链路 round-trip。
 
 - 当前仅暴露单条 inference `accept`，尚未暴露 `accept_many` HTTP 接口
 - 错误 envelope 当前统一走 `{ok, errors, meta}`；未捕获异常由 `app_v1` 全局 exception handler 统一包装
-- `HttpRuntimeAPI` 这类 HTTP 调用方若访问启用认证的 kernel，需要自行提供 API key header；`LocalRuntimeAPI` 不经过 HTTP 认证层
+- `HttpRuntimeAPI` 这类 HTTP 调用方若访问启用认证的 factpy，需要自行提供 API key header；`LocalRuntimeAPI` 不经过 HTTP 认证层

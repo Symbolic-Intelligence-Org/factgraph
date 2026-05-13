@@ -299,7 +299,7 @@ class SDKRuleDisableContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "kernel.sdk.shells.rule_disable.build_rule_disable_request",
+            "factpy.sdk.shells.rule_disable.build_rule_disable_request",
             side_effect=CapabilityHelperError("simulated helper rejection"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -321,7 +321,7 @@ class SDKRuleDisableContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "kernel.sdk.shells.rule_disable.build_rule_disable_request",
+            "factpy.sdk.shells.rule_disable.build_rule_disable_request",
             side_effect=ProtocolShapeError("bad request shape"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -344,7 +344,7 @@ class SDKRuleDisableContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "kernel.sdk.shells.rule_disable.check_rule_disable_action",
+            "factpy.sdk.shells.rule_disable.check_rule_disable_action",
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -358,7 +358,7 @@ class SDKRuleDisableContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.check_rule_disable")
         self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
 
-    def test_rule_disable_result_not_exported_from_kernel_sdk_all(self) -> None:
+    def test_rule_disable_result_not_exported_from_factpy_sdk_all(self) -> None:
         import factpy.sdk as sdk_pkg
 
         self.assertNotIn("RuleDisableResult", sdk_pkg.__all__)
@@ -383,14 +383,14 @@ class SDKRuleDisableContractTests(unittest.TestCase):
                 status="unsupported",
                 variant_rows=(),
                 proof_frame=None,
-                errors=(__import__("kernel.application.protocol", fromlist=["ErrorDTO"]).ErrorDTO(
+                errors=(__import__("factpy.application.protocol", fromlist=["ErrorDTO"]).ErrorDTO(
                     code="STUB", message="stub", path=("stub",)
                 ),),
                 warnings=(),
             )
 
         with patch(
-            "kernel.sdk.shells.rule_disable.check_rule_disable_action",
+            "factpy.sdk.shells.rule_disable.check_rule_disable_action",
             side_effect=fake_runtime,
         ):
             sdk.check_rule_disable(
@@ -415,18 +415,18 @@ class SDKRuleDisableContractTests(unittest.TestCase):
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         support = _capture_support(sdk, alice, 25)
 
-        with patch("kernel.sdk.shells.check.sdk_check") as mock_check, patch(
-            "kernel.sdk.shells.diagnose.sdk_diagnose"
+        with patch("factpy.sdk.shells.check.sdk_check") as mock_check, patch(
+            "factpy.sdk.shells.diagnose.sdk_diagnose"
         ) as mock_diagnose, patch(
-            "kernel.sdk.shells.why_not.sdk_why_not"
+            "factpy.sdk.shells.why_not.sdk_why_not"
         ) as mock_why_not, patch(
-            "kernel.sdk.shells.fact_overlay.sdk_fact_overlay_check"
+            "factpy.sdk.shells.fact_overlay.sdk_fact_overlay_check"
         ) as mock_fact_overlay, patch(
-            "kernel.sdk.shells.proof_frame.sdk_proof_frame_recheck"
+            "factpy.sdk.shells.proof_frame.sdk_proof_frame_recheck"
         ) as mock_proof_frame, patch(
-            "kernel.sdk.shells.rule_literal_replace.sdk_rule_literal_replace"
+            "factpy.sdk.shells.rule_literal_replace.sdk_rule_literal_replace"
         ) as mock_rule_literal_replace, patch(
-            "kernel.sdk.shells.rule_add_condition.sdk_rule_add_condition"
+            "factpy.sdk.shells.rule_add_condition.sdk_rule_add_condition"
         ) as mock_rule_add_condition:
             sdk.check_rule_disable(
                 _adult_rule(),
@@ -444,7 +444,7 @@ class SDKRuleDisableContractTests(unittest.TestCase):
         mock_rule_add_condition.assert_not_called()
 
     def test_sibling_rule_disable_module_does_not_import_sibling_sdk_shells(self) -> None:
-        """§5.8 Sibling static check: kernel.sdk.shells.rule_disable
+        """§5.8 Sibling static check: factpy.sdk.shells.rule_disable
         source has no sibling SDK shell references (G1 + G4 + G2 +
         future G3 sister modules)."""
         import factpy.sdk.shells.rule_disable as rule_disable_module
@@ -458,13 +458,13 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             "from .proof_frame",
             "from .rule_literal_replace",
             "from .rule_add_condition",
-            "from kernel.sdk.shells.check",
-            "from kernel.sdk.shells.diagnose",
-            "from kernel.sdk.shells.why_not",
-            "from kernel.sdk.shells.fact_overlay",
-            "from kernel.sdk.shells.proof_frame",
-            "from kernel.sdk.shells.rule_literal_replace",
-            "from kernel.sdk.shells.rule_add_condition",
+            "from factpy.sdk.shells.check",
+            "from factpy.sdk.shells.diagnose",
+            "from factpy.sdk.shells.why_not",
+            "from factpy.sdk.shells.fact_overlay",
+            "from factpy.sdk.shells.proof_frame",
+            "from factpy.sdk.shells.rule_literal_replace",
+            "from factpy.sdk.shells.rule_add_condition",
             "sdk_check(",
             "sdk_diagnose(",
             "sdk_why_not(",

@@ -1,8 +1,8 @@
 # Frontend Integration Guide(service v1)
 
-面向对接 kernel HTTP service 的前端/BFF 开发者。本文档把分散在 `01_overview.md` / `02_runtime_sessions.md` / `03_runtime_queries_policy.md` / `04_rules_registry.md` 里的信息,整合成"怎么真正调"。
+面向对接 factpy HTTP service 的前端/BFF 开发者。本文档把分散在 `01_overview.md` / `02_runtime_sessions.md` / `03_runtime_queries_policy.md` / `04_rules_registry.md` 里的信息,整合成"怎么真正调"。
 
-> **范围**:本文档**只覆盖 kernel runtime / rules / registry 路由**(`service.app_v1`)。extraction HTTP integration(`POST /v1/extraction/documents`)在 namespace split 后归 agent.service,见 [`src/agent/service/docs/`](../../../agent/service/docs/)。
+> **范围**:本文档**只覆盖 factpy runtime / rules / registry 路由**(`service.app_v1`)。extraction HTTP integration(`POST /v1/extraction/documents`)在 namespace split 后归 agent.service,见 [`src/agent/service/docs/`](../../../agent/service/docs/)。
 
 **机读契约**:`docs/api/openapi.yaml` 在 service 拆分后归属待定(见 OS-prep blueprint),当前文档与 live FastAPI spec 的同步状态以本目录文档为准。
 
@@ -12,8 +12,8 @@
 
 - 本地:`http://localhost:8000`
 - 每个请求必须带 header:`X-FactPy-API-Key: <key>`
-- 服务端从环境变量 `FACTPY_KERNEL_API_KEYS`(逗号分隔)读取允许的 keys
-- 本地开发可设 `FACTPY_KERNEL_AUTH_DISABLED=true` 跳过认证
+- 服务端从环境变量 `FACTPY_factpy_API_KEYS`(逗号分隔)读取允许的 keys
+- 本地开发可设 `FACTPY_factpy_AUTH_DISABLED=true` 跳过认证
 
 ### 0.2 Envelope 结构
 
@@ -77,7 +77,7 @@ OpenAPI spec 把这两种响应作为 `UnauthorizedError` / `AuthNotConfiguredEr
 |---|---|---|
 | 200 | 几乎所有成功 + 大部分业务失败 | Envelope |
 | 401 | 缺 / 错 `X-FactPy-API-Key` | `{detail: string}` |
-| 503 | `FACTPY_KERNEL_API_KEYS` 未配置 | `{detail: string}` |
+| 503 | `FACTPY_factpy_API_KEYS` 未配置 | `{detail: string}` |
 
 (extraction route 的 422/500 状态码语义在 agent.service.docs。)
 

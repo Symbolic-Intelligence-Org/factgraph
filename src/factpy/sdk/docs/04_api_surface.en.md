@@ -1,6 +1,6 @@
 # SDK API Surface Reference
 
-The exact public surface of `kernel.sdk`. For tutorials see
+The exact public surface of `factpy.sdk`. For tutorials see
 [`00_user_guide.en.md`](00_user_guide.en.md). For what-if and proof
 workflows see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
 
@@ -18,7 +18,7 @@ as flat methods on the same instance; both shapes are permanently
 supported.
 
 ```python
-from kernel.sdk import FactGraph
+from factpy.sdk import FactGraph
 
 fg = FactGraph.create(schema_classes=[User])
 
@@ -54,14 +54,14 @@ fg.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 
 Namespace accessors return private manager objects. The managers are
 read-only — assigning attributes (`fg.what_if.foo = ...`) raises
-`FrozenSnapshotError`. They are not part of `kernel.sdk.__all__` and
+`FrozenSnapshotError`. They are not part of `factpy.sdk.__all__` and
 should not be imported directly.
 
 ---
 
 ## 1. Top-Level Exports
 
-Everything below is importable as `from kernel.sdk import <name>`.
+Everything below is importable as `from factpy.sdk import <name>`.
 The export list currently has 40 names.
 
 ### 1.1 Schema and store
@@ -320,7 +320,7 @@ For tutorial usage see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md
 | `check(inference, binding, overlay, *, engine='native', registry=None)` | Re-check inference with fact-value overrides; returns `FactOverlayCheckResult` |
 | `recheck_proof_frame(support_artifact, overlay)` | Re-evaluate a held `SupportArtifact` under a new overlay; returns `ProofFrameRecheckResult` |
 
-`overlay` is a `kernel.application.protocol.EvaluationOverlay`. The
+`overlay` is a `factpy.application.protocol.EvaluationOverlay`. The
 `tuple[FactValueOverride, ...]` form is rejected at the SDK boundary.
 
 ### 2.11 What-if rule (`fg.what_if.rule.*`)
@@ -335,8 +335,8 @@ the rule-action overlay is constructed internally.
 | `literal_replace(rule, support, *, branch_index, atom_index, literal_path, old_literal, new_literal, overlay=None, note=None)` | Re-check with a literal replaced; returns `RuleLiteralReplaceResult` |
 | `add_condition(rule, support, *, branch_index, added_atom, overlay=None, note=None)` | Re-check with a condition appended (no `atom_index`); returns `RuleAddConditionResult` |
 
-`literal_path` is a `kernel.application.protocol.RuleLiteralPath`;
-`added_atom` is a `kernel.application.protocol.RuleAddedAtom`.
+`literal_path` is a `factpy.application.protocol.RuleLiteralPath`;
+`added_atom` is a `factpy.application.protocol.RuleAddedAtom`.
 
 ### 2.12 Audit namespace (`fg.audit.*`)
 
@@ -347,7 +347,7 @@ the rule-action overlay is constructed internally.
 | `diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events, *, warnings=(), include_unchanged=False)` | Compare two recorded rounds; returns `ProofFrameDiff` |
 
 `diff_proof_frames` is pure (no store/registry/engine/IO). Load events
-via `kernel.audit.load_audit_package` or hold them from a recorder.
+via `factpy.audit.load_audit_package` or hold them from a recorder.
 `include_unchanged` is a strict bool — `1` and `0` are rejected.
 
 ### 2.13 Package namespace (`fg.package.*`)
@@ -370,7 +370,7 @@ via `kernel.audit.load_audit_package` or hold them from a recorder.
 | `list()` | Return `dict[str, FrozenAssertionView]` of all views |
 
 `FrozenAssertionView` is a returned-object surface with
-`asrt_ids: frozenset[str]`; it is not exported from `kernel.sdk.__all__`.
+`asrt_ids: frozenset[str]`; it is not exported from `factpy.sdk.__all__`.
 `fg.views` has no built-in `default` entry; `"default"` is just another
 user-defined frozen assertion view name when created explicitly. Frozen
 assertion views are not accepted as snapshot input to `fg.read.find(...)`
@@ -388,22 +388,22 @@ not stored in `fg.views`.
 `FactOverlayCheckResult`, `ProofFrameRecheckResult`, `RuleDisableResult`,
 `RuleLiteralReplaceResult`, `RuleAddConditionResult`, and
 `ProofFrameDiff` are returned by `fg.what_if.*` and `fg.audit.*` but
-**are not in `kernel.sdk.__all__`**. They are passthrough application
-DTOs. Import them directly from `kernel.application.protocol` or
-`kernel.audit` if your code needs to type-annotate them.
+**are not in `factpy.sdk.__all__`**. They are passthrough application
+DTOs. Import them directly from `factpy.application.protocol` or
+`factpy.audit` if your code needs to type-annotate them.
 
 ---
 
 ## 3. Advanced Registry Access
 
-`SDKRegistry` is no longer exported from `kernel.sdk`. The product facade is
+`SDKRegistry` is no longer exported from `factpy.sdk`. The product facade is
 graph-bound persistence through `fg.rules.*` and `fg.inferences.*`.
 
 Advanced tests and migration/debug code may import the wrapper from
-`kernel.sdk.registry`:
+`factpy.sdk.registry`:
 
 ```python
-from kernel.sdk.registry import SDKRegistry
+from factpy.sdk.registry import SDKRegistry
 ```
 
 Normal SDK code should prefer:
@@ -455,7 +455,7 @@ compatibility shortcuts for `.active.at(...)` and `.active.version(...)`.
 `.where(...)`, `.at(...)`, `.version(...)`, `.by_id(...)`, `.one()`,
 `.all()`, and `.first()` helpers. Non-terminal filters return
 `AssertionRecordSet`, so chained selection remains available. It is not a
-top-level `kernel.sdk.__all__` export.
+top-level `factpy.sdk.__all__` export.
 
 Each entry is an `AssertionRecord` with `asrt_id`, `value`, `is_active`,
 `is_revoked`, and `meta: AssertionMeta`.
@@ -534,9 +534,9 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 - Public `Rule` / `Inference` objects do not carry adapter-specific
   `engine_ext` parameters. `SemanticsProfile.rule_projection` owns
   engine-specific rule projection.
-- Track 2 exposes `kernel.sdk.ProbLogSemantics` and
-  `kernel.sdk.PyReasonSemantics` as the preferred public SDK wrappers for
-  engine-specific semantics. `kernel.sdk.SemanticsProfile` remains exported
+- Track 2 exposes `factpy.sdk.ProbLogSemantics` and
+  `factpy.sdk.PyReasonSemantics` as the preferred public SDK wrappers for
+  engine-specific semantics. `factpy.sdk.SemanticsProfile` remains exported
   as the advanced/canonical profile shape.
 - Track 3-post extends `PyReasonSemantics` with
   `branch_bounds={branch_id: [lower, upper]}`. These bounds override the
@@ -577,16 +577,16 @@ Sugar keyword arguments: `approved_by`, `note`, `dry_run`,
 
 ## 7. What's Not in the SDK
 
-These are reachable via direct imports, not through `kernel.sdk`:
+These are reachable via direct imports, not through `factpy.sdk`:
 
 | Capability | Importable from |
 |---|---|
-| Round events recorder lifecycle (`start_round`, `record_round_event`, `finalize_round`) | `kernel.audit.round_events` |
-| Frontier trace | `kernel.core.rules.frontier` |
-| Walker views (`ProofFrameDiffView`, etc.) | `kernel.application.walker` |
-| Raw cross-boundary DTOs (`EvaluationOverlay`, `RuleLiteralPath`, `RuleAddedAtom`, `RoundEvent`) | `kernel.application.protocol`, `kernel.audit` |
-| Audit package loading | `kernel.audit.load_audit_package` |
-| Engine adapter registration | `kernel.adapters.{souffle,problog,pyreason}` |
+| Round events recorder lifecycle (`start_round`, `record_round_event`, `finalize_round`) | `factpy.audit.round_events` |
+| Frontier trace | `factpy.core.rules.frontier` |
+| Walker views (`ProofFrameDiffView`, etc.) | `factpy.application.walker` |
+| Raw cross-boundary DTOs (`EvaluationOverlay`, `RuleLiteralPath`, `RuleAddedAtom`, `RoundEvent`) | `factpy.application.protocol`, `factpy.audit` |
+| Audit package loading | `factpy.audit.load_audit_package` |
+| Engine adapter registration | `factpy.adapters.{souffle,problog,pyreason}` |
 
 See [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) for
 when and why to drop down to these surfaces.

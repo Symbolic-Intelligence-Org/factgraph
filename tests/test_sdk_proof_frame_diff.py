@@ -15,10 +15,10 @@ import inspect
 import unittest
 from unittest.mock import patch
 
-# Import kernel.sdk first to warm the kernel.application + kernel.audit
-# import chain (otherwise importing kernel.audit.proof_frame_diff cold
+# Import factpy.sdk first to warm the factpy.application + factpy.audit
+# import chain (otherwise importing factpy.audit.proof_frame_diff cold
 # triggers a circular import via
-# kernel.application.capability_helpers.round_events ← kernel.audit.round_events).
+# factpy.application.capability_helpers.round_events ← factpy.audit.round_events).
 from factpy.sdk import Entity, Field, Identity, SDKStore, SDKStoreError  # noqa: I001
 from factpy.audit.proof_frame_diff import ProofFrameDiff, ProofFrameDiffError
 from factpy.audit.round_events import (
@@ -299,7 +299,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         round_b = _empty_round("round-b")
 
         with patch(
-            "kernel.sdk.shells.proof_frame_diff.build_proof_frame_diff",
+            "factpy.sdk.shells.proof_frame_diff.build_proof_frame_diff",
             side_effect=ProofFrameDiffError("simulated payload error"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -317,7 +317,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         round_b = _empty_round("round-b")
 
         with patch(
-            "kernel.sdk.shells.proof_frame_diff.build_proof_frame_diff",
+            "factpy.sdk.shells.proof_frame_diff.build_proof_frame_diff",
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -326,7 +326,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.diff_proof_frames")
         self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
 
-    def test_proof_frame_diff_dtos_not_exported_from_kernel_sdk_all(self) -> None:
+    def test_proof_frame_diff_dtos_not_exported_from_factpy_sdk_all(self) -> None:
         import factpy.sdk as sdk_pkg
 
         for name in (
@@ -381,20 +381,20 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         round_a = _empty_round("round-a")
         round_b = _empty_round("round-b")
 
-        with patch("kernel.sdk.shells.check.sdk_check") as mock_check, patch(
-            "kernel.sdk.shells.diagnose.sdk_diagnose"
+        with patch("factpy.sdk.shells.check.sdk_check") as mock_check, patch(
+            "factpy.sdk.shells.diagnose.sdk_diagnose"
         ) as mock_diagnose, patch(
-            "kernel.sdk.shells.why_not.sdk_why_not"
+            "factpy.sdk.shells.why_not.sdk_why_not"
         ) as mock_why_not, patch(
-            "kernel.sdk.shells.fact_overlay.sdk_fact_overlay_check"
+            "factpy.sdk.shells.fact_overlay.sdk_fact_overlay_check"
         ) as mock_fact_overlay, patch(
-            "kernel.sdk.shells.proof_frame.sdk_proof_frame_recheck"
+            "factpy.sdk.shells.proof_frame.sdk_proof_frame_recheck"
         ) as mock_proof_frame, patch(
-            "kernel.sdk.shells.rule_disable.sdk_rule_disable"
+            "factpy.sdk.shells.rule_disable.sdk_rule_disable"
         ) as mock_rule_disable, patch(
-            "kernel.sdk.shells.rule_literal_replace.sdk_rule_literal_replace"
+            "factpy.sdk.shells.rule_literal_replace.sdk_rule_literal_replace"
         ) as mock_rule_literal_replace, patch(
-            "kernel.sdk.shells.rule_add_condition.sdk_rule_add_condition"
+            "factpy.sdk.shells.rule_add_condition.sdk_rule_add_condition"
         ) as mock_rule_add_condition:
             sdk.diff_proof_frames("round-a", "round-b", round_a, round_b)
 
@@ -410,7 +410,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
     def test_sibling_diff_proof_frames_module_does_not_import_sibling_sdk_shells(
         self,
     ) -> None:
-        """§5.8 Sibling static check: kernel.sdk.shells.proof_frame_diff
+        """§5.8 Sibling static check: factpy.sdk.shells.proof_frame_diff
         source has no sibling SDK shell references (all 8 prior
         sisters)."""
         import factpy.sdk.shells.proof_frame_diff as proof_frame_diff_module
@@ -425,14 +425,14 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
             "from .rule_disable",
             "from .rule_literal_replace",
             "from .rule_add_condition",
-            "from kernel.sdk.shells.check",
-            "from kernel.sdk.shells.diagnose",
-            "from kernel.sdk.shells.why_not",
-            "from kernel.sdk.shells.fact_overlay",
-            "from kernel.sdk.shells.proof_frame",
-            "from kernel.sdk.shells.rule_disable",
-            "from kernel.sdk.shells.rule_literal_replace",
-            "from kernel.sdk.shells.rule_add_condition",
+            "from factpy.sdk.shells.check",
+            "from factpy.sdk.shells.diagnose",
+            "from factpy.sdk.shells.why_not",
+            "from factpy.sdk.shells.fact_overlay",
+            "from factpy.sdk.shells.proof_frame",
+            "from factpy.sdk.shells.rule_disable",
+            "from factpy.sdk.shells.rule_literal_replace",
+            "from factpy.sdk.shells.rule_add_condition",
             "sdk_check(",
             "sdk_diagnose(",
             "sdk_why_not(",

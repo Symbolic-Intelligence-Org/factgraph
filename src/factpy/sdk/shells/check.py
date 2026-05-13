@@ -7,19 +7,19 @@ implements the ``SDKStore.check`` facade method.
 Public surface contract per blueprint §5 locks:
 
 - Method:      ``SDKStore.check(...)`` (instance method; not a free function in
-               ``kernel.sdk.__all__`` — see §5.4 lock).
+               ``factpy.sdk.__all__`` — see §5.4 lock).
 - Signature:   ``check(inference, binding, *, engine="native", registry=None)``
                (see §5.7 lock; ``inference`` is SDK ``Inference`` only,
                ``binding`` is ``Mapping[str, Any]`` with ``$``-prefixed
                variable-name string keys; both validated in Phase 1).
 - Return:      ``CheckResult`` (raw application protocol DTO; documented
                passthrough per §5.2 lock; not re-exported from
-               ``kernel.sdk.__all__``). For ergonomic evidence traversal,
+               ``factpy.sdk.__all__``). For ergonomic evidence traversal,
                advanced callers can wrap ``result.evidence_envelope`` data
-               with ``kernel.application.walker.SupportArtifactView`` from
+               with ``factpy.application.walker.SupportArtifactView`` from
                outside the SDK boundary.
 - Errors:      ``CapabilityHelperError`` and ``OriginPackageError`` from
-               ``kernel.application.capability_helpers`` are caught and
+               ``factpy.application.capability_helpers`` are caught and
                re-raised as ``SDKStoreError`` with ``__cause__`` chaining
                (per §5.3 lock; exact ``code`` / ``path`` filled in Phase 1).
 """
@@ -53,7 +53,7 @@ def sdk_check(
 
     Returns the application ``CheckResult`` DTO directly. The SDK shell does
     not import walker views; callers that need ergonomic evidence traversal
-    can opt into ``kernel.application.walker`` themselves.
+    can opt into ``factpy.application.walker`` themselves.
     """
 
     validate_derivation(inference, path="$.check.inference")

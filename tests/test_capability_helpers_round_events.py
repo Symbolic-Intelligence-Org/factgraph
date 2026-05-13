@@ -306,7 +306,7 @@ class BuildRoundEventPayloadTests(unittest.TestCase):
             )
 
     def test_phase_5_exports_from_application_and_helper_package(self) -> None:
-        from . import application
+        from factpy import application
         from factpy.application import capability_helpers
 
         self.assertIs(application.build_round_event_payload, build_round_event_payload)

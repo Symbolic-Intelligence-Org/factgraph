@@ -1,4 +1,4 @@
-"""Native runtime tests for `kernel.application.diagnose_runtime` (§8 Step 2)."""
+"""Native runtime tests for `factpy.application.diagnose_runtime` (§8 Step 2)."""
 from __future__ import annotations
 
 import unittest
@@ -252,7 +252,7 @@ class NativeAtomLocalizationTests(unittest.TestCase):
         from unittest.mock import patch
 
         with patch(
-            "kernel.application.diagnose_runtime._localize_failed_atom",
+            "factpy.application.diagnose_runtime._localize_failed_atom",
             return_value=None,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -381,7 +381,7 @@ class DiagnoseSevenFourAntiRegressionTests(unittest.TestCase):
         )
 
         with patch(
-            "kernel.core.store._support_capture._atom_satisfies",
+            "factpy.core.store._support_capture._atom_satisfies",
             side_effect=AssertionError("_atom_satisfies must not be used by Diagnose localization"),
         ):
             result = diagnose_derivation_binding(request, store=store)

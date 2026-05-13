@@ -1,14 +1,14 @@
-# Service layer current state (kernel-core perspective)
+# Service layer current state (factpy-core perspective)
 
 - Scope: the dependency relationship between the HTTP/BFF delivery
-  layer and `kernel.core`
+  layer and `factpy.core`
 - Last updated: 2026-05-06 (post Round Story Completion routemap
   closure @ `6b32972`)
 - Perspective: this document describes the service layer **from the
   core perspective** — how core expects service to call it and
   which core invariants service must respect. Detailed service-side
   routes / DTOs are documented by the service module's own overview
-  (monorepo; not in the kernel-only package).
+  (monorepo; not in the factpy-only package).
 
 ## 1. Entry points and dependencies
 
@@ -24,7 +24,7 @@ python -m uvicorn service.app_v1:app --reload
 
 ## 2. Layer position
 
-Service sits above `kernel.core` as the HTTP / BFF delivery facade.
+Service sits above `factpy.core` as the HTTP / BFF delivery facade.
 
 Service is responsible for:
 
@@ -50,7 +50,7 @@ Service is not responsible for (these are owned by core):
 ## 3. Current v1 route overview
 
 The detailed route list + DTOs live in §4 of the service module's
-own overview doc (monorepo; not in the kernel-only package). This
+own overview doc (monorepo; not in the factpy-only package). This
 section does not duplicate the route list; it only lists the
 categories:
 
@@ -68,15 +68,15 @@ categories:
 
 ## 4. Service-to-core delegation pattern
 
-Service routes go through stable entry points of `kernel.core`;
+Service routes go through stable entry points of `factpy.core`;
 **service does not reimplement core semantics**. Typical delegation:
 
 | Service route | Core / application entry point |
 |---|---|
 | `POST /v1/runtime/sessions/open` | `Ledger(path=...)` construction |
-| `POST /v1/runtime/sessions/{id}/writes/{set,add,retract}` | `kernel.core.write_protocol.{set,add,retract}_write(...)` |
-| `POST /v1/runtime/sessions/{id}/queries/view-facts` | `kernel.core.store.queries.project_view_facts_with_audit(...)` |
-| `POST /v1/runtime/sessions/{id}/rules/run` | `kernel.core.rules.run_rule(...)` |
+| `POST /v1/runtime/sessions/{id}/writes/{set,add,retract}` | `factpy.core.write_protocol.{set,add,retract}_write(...)` |
+| `POST /v1/runtime/sessions/{id}/queries/view-facts` | `factpy.core.store.queries.project_view_facts_with_audit(...)` |
+| `POST /v1/runtime/sessions/{id}/rules/run` | `factpy.core.rules.run_rule(...)` |
 | `POST /v1/runtime/sessions/{id}/inferences/evaluate` | `Store.evaluate(mode=...)` over `native | souffle | problog | pyreason` |
 | `POST /v1/runtime/sessions/{id}/inferences/accept` | `Store.accept_many_candidate_sets(...)` |
 | `POST /v1/runtime/sessions/{id}/packages/export` | adapter export (e.g. `package_kind="audit"`) |
@@ -90,7 +90,7 @@ invariants):
   overlay extensions go through application runtime, not service)
 - maintaining a schema-digest cache at the service layer (owned by
   core's `Store`)
-- consuming `kernel.application.protocol.*` internal dataclasses
+- consuming `factpy.application.protocol.*` internal dataclasses
   directly (only via application runtime entry points)
 
 ## 5. DTO adapter responsibility
@@ -110,7 +110,7 @@ JSON request/response into core / application protocol DTOs:
 
 DTO adapter shared helpers:
 
-- `kernel.application.protocol.common._validate_*` (protocol DTO
+- `factpy.application.protocol.common._validate_*` (protocol DTO
   validation)
 - `service._common.{ok, error}` (envelope wrapping)
 
@@ -125,7 +125,7 @@ service:
 |---|---|---|
 | `ProtocolShapeError` (application protocol DTO validation failure) | `errors[0].kind="shape"`, `path` points at the field | 200 |
 | `AuditQueryError` (generic audit query error) | `errors[0].kind="audit"` | 200 |
-| `AuditOptionalDomainError` (missing domain bundle, kernel-only wheel) | `errors[0].kind="audit_optional_domain"` | 200 |
+| `AuditOptionalDomainError` (missing domain bundle, factpy-only wheel) | `errors[0].kind="audit_optional_domain"` | 200 |
 | Authentication failure | (does not enter the envelope; HTTP error directly) | 401 / 503 |
 | Other uncaught exceptions | `app_v1` global handler wraps them as `errors[0].kind="runtime"`, `details.message=str(exc)` | 200 |
 
@@ -171,15 +171,15 @@ handler (HTTP 200):
 ## 8. Cross-references
 
 - Service's own complete documentation: the service module's own
-  overview doc (monorepo; not in the kernel-only package)
+  overview doc (monorepo; not in the factpy-only package)
 - Core public contract:
   [`04_public_contract_v1.md`](./04_public_contract_v1.md)
 - Application advanced-importable surface:
-  [`src/kernel/application/docs/01_overview_en.md`](../../application/docs/01_overview_en.md)
+  [`src/factpy/application/docs/01_overview_en.md`](../../application/docs/01_overview_en.md)
 - Audit package contract:
-  [`src/kernel/audit/docs/03_audit_package_contract.md`](../../audit/docs/03_audit_package_contract.md)
+  [`src/factpy/audit/docs/03_audit_package_contract.md`](../../audit/docs/03_audit_package_contract.md)
 - Batch 8 public-surface decision: archived `public-surface`
-  blueprint inside the routemap (monorepo; not in the kernel-only
+  blueprint inside the routemap (monorepo; not in the factpy-only
   package)
 
 ## 9. Notes
@@ -195,4 +195,4 @@ handler (HTTP 200):
   Diagnose / Fact Overlay / Why-not / ProofFrame / rule actions /
   round events / proof_frame_diff all go through the advanced
   importable surface (in-process Python calls into
-  `kernel.application` / `kernel.audit`).
+  `factpy.application` / `factpy.audit`).

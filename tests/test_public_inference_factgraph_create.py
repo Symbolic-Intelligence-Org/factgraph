@@ -23,7 +23,7 @@ class User(Entity):
 
 
 def _sdk_module():
-    return importlib.import_module("kernel.sdk")
+    return importlib.import_module("factpy.sdk")
 
 
 def _inference_class():
@@ -74,7 +74,7 @@ def _inference():
 
 
 class PublicInferenceExportTests(unittest.TestCase):
-    def test_kernel_sdk_exports_inference_and_not_derivation(self) -> None:
+    def test_factpy_sdk_exports_inference_and_not_derivation(self) -> None:
         sdk_module = _sdk_module()
 
         self.assertIn("Inference", sdk_module.__all__)
@@ -82,8 +82,8 @@ class PublicInferenceExportTests(unittest.TestCase):
         self.assertNotIn("Derivation", sdk_module.__all__)
         self.assertFalse(hasattr(sdk_module, "Derivation"))
 
-    def test_kernel_sdk_dsl_exports_inference_and_not_derivation(self) -> None:
-        dsl_module = importlib.import_module("kernel.sdk.dsl")
+    def test_factpy_sdk_dsl_exports_inference_and_not_derivation(self) -> None:
+        dsl_module = importlib.import_module("factpy.sdk.dsl")
 
         self.assertIn("Inference", dsl_module.__all__)
         self.assertTrue(hasattr(dsl_module, "Inference"))
@@ -145,7 +145,7 @@ class PublicInferencePayloadTests(unittest.TestCase):
 class PublicInferenceDocsTests(unittest.TestCase):
     def test_sdk_rules_doc_file_renamed_to_inferences(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
-        sdk_docs = repo_root / "src" / "kernel" / "sdk" / "docs"
+        sdk_docs = repo_root / "src" / "factpy" / "sdk" / "docs"
 
         self.assertTrue((sdk_docs / "03_rules_and_inferences.en.md").exists())
         self.assertFalse((sdk_docs / "03_rules_and_derivations.en.md").exists())
@@ -163,7 +163,7 @@ class PublicInferenceDeferralGuards(unittest.TestCase):
             with self.subTest(method=method):
                 self.assertFalse(hasattr(sdk.inferences, method))
 
-    def test_no_derivation_ref_or_inference_ref_in_kernel_sdk(self) -> None:
+    def test_no_derivation_ref_or_inference_ref_in_factpy_sdk(self) -> None:
         sdk_module = _sdk_module()
 
         self.assertNotIn("DerivationRef", sdk_module.__all__)

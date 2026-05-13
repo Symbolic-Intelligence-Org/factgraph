@@ -34,7 +34,7 @@ class User(Entity):
 
 
 def _sdk_module():
-    return importlib.import_module("kernel.sdk")
+    return importlib.import_module("factpy.sdk")
 
 
 def _problog_semantics_class():
@@ -190,7 +190,7 @@ def _first_error_message(resp: dict[str, object]) -> str:
 
 
 class PublicSemanticsExportTests(unittest.TestCase):
-    def test_kernel_sdk_exports_public_semantics_wrappers(self) -> None:
+    def test_factpy_sdk_exports_public_semantics_wrappers(self) -> None:
         sdk_module = _sdk_module()
 
         self.assertIn("ProbLogSemantics", sdk_module.__all__)
@@ -224,7 +224,7 @@ class EngineAutoDerivationTests(unittest.TestCase):
 
         self.assertEqual(len(candidates), 1)
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_no_engine_with_problog_semantics_derives_problog(self, mock_run) -> None:
         sdk = _make_sdk()
         seen: dict[str, str] = {}
@@ -240,7 +240,7 @@ class EngineAutoDerivationTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.35::rule_body_0", seen["program"])
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_explicit_matching_engine_with_problog_semantics_is_allowed(self, mock_run) -> None:
         sdk = _make_sdk()
         seen: dict[str, str] = {}
@@ -268,7 +268,7 @@ class EngineAutoDerivationTests(unittest.TestCase):
 
         self.assertIn("engine='pyreason' does not match semantics.engine='problog'", str(ctx.exception))
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_semantics_profile_without_engine_derives_profile_engine(self, mock_run) -> None:
         sdk = _make_sdk()
         seen: dict[str, str] = {}
@@ -284,7 +284,7 @@ class EngineAutoDerivationTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.25::rule_body_0", seen["program"])
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_pyreason_empty)
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_pyreason_empty)
     def test_no_engine_with_pyreason_semantics_derives_pyreason(self, mock_run) -> None:
         sdk = _make_sdk()
 
@@ -300,7 +300,7 @@ class EngineAutoDerivationTests(unittest.TestCase):
 
 
 class BranchIdLoweringTests(unittest.TestCase):
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_problog_semantics_resolves_explicit_and_fallback_branch_ids(self, mock_run) -> None:
         sdk = _make_sdk()
         seen: dict[str, str] = {}

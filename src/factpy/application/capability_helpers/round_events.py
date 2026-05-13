@@ -59,7 +59,7 @@ def build_round_event_payload(
     request: Any,
     result: Any,
 ) -> dict[str, JSONValue]:
-    """Build a capability result payload for ``kernel.audit.round_events``."""
+    """Build a capability result payload for ``factpy.audit.round_events``."""
 
     _reject_sdk_origin(request, path="request")
     _reject_sdk_origin(result, path="result")

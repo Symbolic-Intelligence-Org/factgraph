@@ -21,7 +21,7 @@ from factpy.core.rules._trace import summarize_rule_trace_artifact_dict
 from .assertions import AuditAssertionReadError, load_assertion_index
 # Note: AuditComplianceError / build_compliance_matrix_rows moved with compliance.py to
 # domains.ecss.compliance during the namespace split. Imported lazily inside
-# list_compliance_matrix to keep kernel free of an import-time dependency on domains.
+# list_compliance_matrix to keep factpy free of an import-time dependency on domains.
 from .reader import AuditPackageData
 from .proof_frame_diff import ProofFrameDiff, ProofFrameDiffError, build_proof_frame_diff
 from .round_events import RoundEvent, RoundSummary, summarize_round_events
@@ -38,7 +38,7 @@ class AuditOptionalDomainError(AuditQueryError):
 
 _ECSS_COMPLIANCE_OPTIONAL_DOMAIN_MESSAGE = (
     "AuditQuery.list_compliance_matrix requires the optional domains.ecss package. "
-    "The factpy-kernel v0.1 wheel is kernel-only and does not include domains; "
+    "The factpy-factpy v0.1 wheel is factpy-only and does not include domains; "
     "use the monorepo/domain package, or call domains.ecss.compliance."
     "build_compliance_matrix_rows when that domain package is installed."
 )
@@ -441,7 +441,7 @@ class AuditQuery:
             raise AuditQueryError("milestone must be non-empty string when provided")
 
         # Lazy import: ECSS compliance lives in domains.ecss after the namespace split;
-        # importing here avoids kernel.audit needing domains at module load time.
+        # importing here avoids factpy.audit needing domains at module load time.
         AuditComplianceError, build_compliance_matrix_rows = _load_ecss_compliance_helpers()
 
         try:

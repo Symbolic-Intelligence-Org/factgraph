@@ -1,19 +1,19 @@
 """Shared boundary helpers for SDK shell methods.
 
-Used by ``kernel.sdk.shells.check`` / ``kernel.sdk.shells.diagnose`` (G1),
-``kernel.sdk.shells.why_not`` (G4), ``kernel.sdk.shells.fact_overlay`` /
-``kernel.sdk.shells.proof_frame`` (G2), and
-``kernel.sdk.shells.rule_disable`` /
-``kernel.sdk.shells.rule_literal_replace`` /
-``kernel.sdk.shells.rule_add_condition`` (G3). Each helper accepts a
+Used by ``factpy.sdk.shells.check`` / ``factpy.sdk.shells.diagnose`` (G1),
+``factpy.sdk.shells.why_not`` (G4), ``factpy.sdk.shells.fact_overlay`` /
+``factpy.sdk.shells.proof_frame`` (G2), and
+``factpy.sdk.shells.rule_disable`` /
+``factpy.sdk.shells.rule_literal_replace`` /
+``factpy.sdk.shells.rule_add_condition`` (G3). Each helper accepts a
 caller-specific ``SDKStoreError.path`` boundary identifier so a single
 implementation serves multiple shells. Lives at
-``kernel/sdk/shells/_validation.py`` after G2 Phase 0 hygiene migrated
-all SDK shell modules into the ``kernel/sdk/shells/`` subpackage.
+``factpy/sdk/shells/_validation.py`` after G2 Phase 0 hygiene migrated
+all SDK shell modules into the ``factpy/sdk/shells/`` subpackage.
 
 The module is private (``_validation``) and the functions are imported
 locally by sibling shell modules — nothing here is part of
-``kernel.sdk.__all__`` (per blueprint §5.2 / §5.4 / §6 narrow public API).
+``factpy.sdk.__all__`` (per blueprint §5.2 / §5.4 / §6 narrow public API).
 
 Helper inventory:
 

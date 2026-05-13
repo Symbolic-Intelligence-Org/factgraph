@@ -1,15 +1,15 @@
 # FactPy Service 文档
 
-本目录记录 `src/service` 的当前实现口径,面向需要通过 HTTP 对接 kernel runtime 与 registry 的开发者。
+本目录记录 `src/service` 的当前实现口径,面向需要通过 HTTP 对接 factpy runtime 与 registry 的开发者。
 
 注:extraction HTTP surface(`POST /v1/extraction/documents`)在 namespace split 后已迁至 `agent.service`,文档见 [`src/agent/service/docs/`](../../agent/service/docs/)。
 
 当前 `app_v1` 的 `/v1/...` 路由都经过 API key 认证层保护:
 
 - 请求头:`X-FactPy-API-Key`
-- 若 `FACTPY_KERNEL_AUTH_DISABLED=true`,本地开发可显式跳过认证
+- 若 `FACTPY_factpy_AUTH_DISABLED=true`,本地开发可显式跳过认证
 - 缺失或错误 key 返回 `HTTP 401`
-- 认证启用但未配置 `FACTPY_KERNEL_API_KEYS` 时返回 `HTTP 503`
+- 认证启用但未配置 `FACTPY_factpy_API_KEYS` 时返回 `HTTP 503`
 - 只有通过认证后,service 才继续返回既有的 `HTTP 200` JSON envelope
 
 ## 当前文档

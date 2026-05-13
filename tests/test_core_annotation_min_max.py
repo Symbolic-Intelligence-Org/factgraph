@@ -9,7 +9,7 @@ from factpy.core.annotation import (
 )
 
 
-class MinMaxAnnotationKernelTests(unittest.TestCase):
+class MinMaxAnnotationfactpyTests(unittest.TestCase):
     def test_prefers_higher_confidence_path_over_direct_edge(self) -> None:
         edge_facts = [
             {"source_id": "e000", "target_id": "e001", "confidence": 0.9},

@@ -27,8 +27,8 @@ from factpy.application import diagnose_runtime as _diagnose_runtime_module
 # DTOs into Diagnose's substrate — forbidden per Q1 Sibling supersede.
 _BANNED_MODULES = frozenset(
     {
-        "kernel.application.derivation_check_runtime",
-        "kernel.application.protocol.derivation_check",
+        "factpy.application.derivation_check_runtime",
+        "factpy.application.protocol.derivation_check",
     }
 )
 

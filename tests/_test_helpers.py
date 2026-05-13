@@ -1,4 +1,4 @@
-"""Shared fixtures for kernel contract tests.
+"""Shared fixtures for factpy contract tests.
 
 This module is intentionally prefixed with ``_`` so unittest discovery does
 not treat it as a test file.

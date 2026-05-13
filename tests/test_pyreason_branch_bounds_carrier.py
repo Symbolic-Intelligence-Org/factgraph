@@ -327,7 +327,7 @@ class PyReasonBranchBoundsCompileTests(unittest.TestCase):
 
 
 class PyReasonBranchBoundsIntegrationTests(unittest.TestCase):
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_pyreason_empty)
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_pyreason_empty)
     def test_evaluate_with_branch_bounds_drives_compiled_rules(self, mock_run: Any) -> None:
         sdk = _make_sdk()
         semantics = _pyreason_semantics(branch_bounds={"sensor_path": [0.8, 1.0], "b1": [0.2, 0.8]})

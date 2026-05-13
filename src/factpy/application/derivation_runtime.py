@@ -7,7 +7,7 @@ accept_many output without wrapping them in application-specific DTOs.
   using store.evaluate_engine as the EngineEvaluatorFn, and returns the flattened
   list of CandidateSet objects.
 - accept_derivation_candidate_sets passes through to
-  kernel.core.derivation.accept.accept_many_candidate_sets.
+  factpy.core.derivation.accept.accept_many_candidate_sets.
 
 Commit 2a parity:
 - ``CompiledDerivationPlan.head_spec`` (HeadSpecIR dict) is forwarded as the
@@ -75,7 +75,7 @@ def evaluate_derivation_plans(
     """Evaluate compiled derivation plans against the store.
 
     For each plan the executor iterates over the plan's heads and calls
-    kernel.core.store._evaluate.evaluate_store once per head, using
+    factpy.core.store._evaluate.evaluate_store once per head, using
     ``store.evaluate_engine`` as the EngineEvaluatorFn. The flattened list of
     CandidateSet objects is returned to the caller (no application-side wrapping).
     """
@@ -161,7 +161,7 @@ def accept_derivation_candidate_set(
 ) -> AcceptResult:
     """Accept a single CandidateSet against the store ledger.
 
-    Thin wrapper over kernel.core.derivation.accept.accept_candidate_set. Only the
+    Thin wrapper over factpy.core.derivation.accept.accept_candidate_set. Only the
     fields supported by core ``AcceptOptions`` are forwarded; ``idempotent_duplicate_ok``
     is intentionally NOT part of ``AcceptOptions`` and applies only to the
     ``accept_many`` flow.
@@ -193,7 +193,7 @@ def accept_derivation_candidate_sets(
 ) -> list[dict[str, Any]]:
     """Accept many CandidateSets against the store ledger.
 
-    Pass-through to kernel.core.derivation.accept.accept_many_candidate_sets;
+    Pass-through to factpy.core.derivation.accept.accept_many_candidate_sets;
     callers receive the raw list[dict[str, Any]] result without application-side
     rewrapping.
     """

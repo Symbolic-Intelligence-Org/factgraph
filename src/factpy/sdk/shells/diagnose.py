@@ -7,25 +7,25 @@ implements the ``SDKStore.diagnose`` facade method.
 Public surface contract per blueprint §5 locks:
 
 - Method:      ``SDKStore.diagnose(...)`` (instance method; not a free function
-               in ``kernel.sdk.__all__`` — see §5.4 lock).
+               in ``factpy.sdk.__all__`` — see §5.4 lock).
 - Signature:   ``diagnose(inference, binding, *, engine="native", registry=None)``
                (see §5.7 lock; ``inference`` is SDK ``Inference`` only,
                ``binding`` is ``Mapping[str, Any]`` with ``$``-prefixed
                variable-name string keys).
 - Return:      ``DiagnoseResult`` (raw application protocol DTO; documented
                passthrough per §5.2 lock; not re-exported from
-               ``kernel.sdk.__all__``). Advanced callers that need locator
+               ``factpy.sdk.__all__``). Advanced callers that need locator
                parsing can opt into application-layer helpers such as
-               ``kernel.application.walker.parse_atom_key`` when they have a
+               ``factpy.application.walker.parse_atom_key`` when they have a
                compatible atom-key string.
 - Errors:      ``CapabilityHelperError`` and ``OriginPackageError`` from
-               ``kernel.application.capability_helpers`` are caught and
+               ``factpy.application.capability_helpers`` are caught and
                re-raised as ``SDKStoreError`` with ``__cause__`` chaining
                (per §5.3 lock).
 - Q1 Sibling:  Diagnose owns its own dispatch and does NOT call the sibling
                Check SDK shell internally — mirrors the application-layer Q1
                Sibling discipline at
-               ``kernel.application.protocol.derivation_diagnose`` module
+               ``factpy.application.protocol.derivation_diagnose`` module
                docstring ("Diagnose owns its full dispatch and does NOT call
                ``check_derivation_binding(...)``").
 """

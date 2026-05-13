@@ -133,7 +133,7 @@ class EvidenceGraphAuditDeliveryTests(unittest.TestCase):
             ).read_text(encoding="utf-8")
             return query, candidate_page
 
-    @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
     def test_pyreason_audit_package_exports_and_renders_evidence_graph(self, mock_run) -> None:
         session_id, sdk = self._open_session()
         alice_ref = sdk.ref(User, user_id="Alice")
@@ -186,7 +186,7 @@ class EvidenceGraphAuditDeliveryTests(unittest.TestCase):
         finally:
             close_runtime_session(session_id)
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factpy.adapters.problog.engine_eval.run_problog")
     def test_problog_audit_package_exports_and_renders_evidence_graph(self, mock_run) -> None:
         session_id, sdk = self._open_session()
         alice_ref = sdk.ref(User, user_id="Alice")

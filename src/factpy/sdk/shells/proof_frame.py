@@ -8,7 +8,7 @@ archived G2 blueprint
 Public surface contract per blueprint §5 locks:
 
 - Method:      ``SDKStore.recheck_proof_frame(...)`` (instance method;
-               not a free function in ``kernel.sdk.__all__`` — see §5.7
+               not a free function in ``factpy.sdk.__all__`` — see §5.7
                lock and G1 + G4 + Fact Overlay precedent).
 - Signature:   ``recheck_proof_frame(support_artifact, overlay)`` (see
                §5.2 lock; ``support_artifact`` is a raw
@@ -19,7 +19,7 @@ Public surface contract per blueprint §5 locks:
                derivation plan.
 - Return:      ``ProofFrameRecheckResult`` (raw application protocol
                DTO; documented passthrough per §5.4 lock; not
-               re-exported from ``kernel.sdk.__all__``).
+               re-exported from ``factpy.sdk.__all__``).
 - Errors:      Non-SDK exceptions crossing the SDK boundary remap to
                ``SDKStoreError(...) from exc`` per §5.8 lock with
                capability-specific paths
@@ -43,7 +43,7 @@ Public surface contract per blueprint §5 locks:
 
 Both validators (``validate_support_artifact`` and
 ``validate_evaluation_overlay``) live in
-``kernel.sdk.shells._validation``. The overlay validator was extracted
+``factpy.sdk.shells._validation``. The overlay validator was extracted
 during the G2 post-publish verification round 2026-05-08 (Fact Overlay
 and ProofFrame Recheck share the same ``EvaluationOverlay`` boundary
 check). The support-artifact validator was promoted from local at G3

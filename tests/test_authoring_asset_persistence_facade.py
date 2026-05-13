@@ -36,7 +36,7 @@ class Account(Entity):
 
 
 def _sdk_module():
-    return importlib.import_module("kernel.sdk")
+    return importlib.import_module("factpy.sdk")
 
 
 def _saved_rule_ref_class():
@@ -257,7 +257,7 @@ class RegistryBindingTests(unittest.TestCase):
 
 class ApplicationAuthoringRuntimeTests(unittest.TestCase):
     def test_authoring_runtime_exports_application_functions(self) -> None:
-        module = importlib.import_module("kernel.application.authoring_runtime")
+        module = importlib.import_module("factpy.application.authoring_runtime")
 
         for name in (
             "save_rule",
@@ -419,7 +419,7 @@ class SubstratePreservationGuards(unittest.TestCase):
         self.assertIn("derivation_id", candidate_fields)
         self.assertIn("derivation_version", candidate_fields)
         self.assertEqual(DerivationEvaluateRequest.__name__, "DerivationEvaluateRequest")
-        self.assertFalse(hasattr(importlib.import_module("kernel.application.protocol.derivation"), "InferenceEvaluateRequest"))
+        self.assertFalse(hasattr(importlib.import_module("factpy.application.protocol.derivation"), "InferenceEvaluateRequest"))
         self.assertIn("plans", request_fields)
         self.assertIn("derivation_id", plan_fields)
 

@@ -11,7 +11,7 @@ This file is the §7 G1.1 deliverable for blueprint
 
 All `ReadPolicy` imports are dynamic (inside test bodies) so file collection
 does not depend on the not-yet-implemented class. `ViewSpec` is never
-imported at top level either, since `from kernel.core.store.types import
+imported at top level either, since `from factpy.core.store.types import
 ViewSpec` will raise `ImportError` post-migration.
 
 Error-message assertions are at the **semantic** level (`assertIn` on
@@ -61,7 +61,7 @@ class AbsenceInvariantTests(unittest.TestCase):
     depend on the still-importable pre-migration class.
     """
 
-    def test_viewspec_not_importable_from_kernel_sdk(self) -> None:
+    def test_viewspec_not_importable_from_factpy_sdk(self) -> None:
         with self.assertRaises(ImportError):
             from factpy.sdk import ViewSpec  # noqa: F401
 
@@ -78,7 +78,7 @@ class AbsenceInvariantTests(unittest.TestCase):
 class ReadPolicyDTOContractTests(unittest.TestCase):
     """`ReadPolicy` is a frozen dataclass with 3 fields and locked validation.
 
-    All tests dynamically import `ReadPolicy` from `kernel.sdk` so the file
+    All tests dynamically import `ReadPolicy` from `factpy.sdk` so the file
     collects cleanly while `ReadPolicy` does not yet exist.
     """
 

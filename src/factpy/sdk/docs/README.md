@@ -1,14 +1,14 @@
 # FactPy SDK Documentation
 
-`kernel.sdk` is the Python product surface of FactPy: schema authoring,
+`factpy.sdk` is the Python product surface of FactPy: schema authoring,
 ergonomic facade, DSL primitives, outward result shapes, and a stable
 public error hierarchy. The canonical runtime authority lives in
-`kernel.application`; the SDK delegates to it.
+`factpy.application`; the SDK delegates to it.
 
 ## Quick Start
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factpy.sdk import Entity, FactGraph, Field, Identity
 
 class User(Entity):
     user_id: str = Identity(primary_key=True)
@@ -29,7 +29,7 @@ print(snap.name)            # → Alice
 ## Doc Map
 
 The user-facing official quickstart lives at
-[`docs/official/kernel/index.md`](/Users/zhenzhili/hnsm-backend/docs/official/kernel/index.md).
+[`docs/official/factpy/index.md`](/Users/zhenzhili/hnsm-backend/docs/official/factpy/index.md).
 The module docs below remain the implementation-truth layer for maintainers and
 advanced users.
 
@@ -45,7 +45,7 @@ advanced users.
 
 ## Stability and Versioning
 
-- `kernel.sdk.__all__` is the product surface. Removing or renaming an
+- `factpy.sdk.__all__` is the product surface. Removing or renaming an
   exported name requires a major version bump.
 - The `FactGraph` namespaced form (`fg.read.get`, `fg.what_if.check`,
   etc.) is the recommended shape for new code.
