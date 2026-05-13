@@ -15,7 +15,7 @@ from factpy.core.evidence.write_protocol import set_field
 from factpy.core.store._support import PYREASON_PROVENANCE_KIND
 from factpy.core.store.ledger import Claim
 from factpy.sdk.compile import compile_schema_from_classes
-from kernel.sdk.dsl import vars as sdk_vars
+from factpy.sdk.dsl import vars as sdk_vars
 from factpy.sdk.dsl import Inference, Pred
 from factpy.sdk.schema import Entity, Field, Identity, Relationship
 from factpy.sdk.store import SDKStore

@@ -14,7 +14,7 @@ from factpy.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
 from factpy.adapters.pyreason.session import PyReasonSession
 from factpy.core.evidence.write_protocol import set_field
 from factpy.core.semantics import SemanticsProfile
-from kernel.sdk.dsl import vars as sdk_vars
+from factpy.sdk.dsl import vars as sdk_vars
 from factpy.sdk.dsl import Branch, Inference, Pred, Rule
 from factpy.sdk.schema import Entity, Field, Identity
 from factpy.sdk.store import SDKStore

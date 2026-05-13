@@ -13,7 +13,7 @@ from factpy.core.store._support import PROBLOG_PROVENANCE_KIND
 from factpy.core.store.runtime import get_engine_evaluator
 from factpy.core.store.types import EngineExtBase
 from factpy.core.evidence.write_protocol import set_field
-from kernel.sdk.dsl import vars as sdk_vars
+from factpy.sdk.dsl import vars as sdk_vars
 from factpy.sdk.dsl import Inference, Pred
 from factpy.sdk.schema import Entity, Field, Identity
 from factpy.sdk.store import SDKStore

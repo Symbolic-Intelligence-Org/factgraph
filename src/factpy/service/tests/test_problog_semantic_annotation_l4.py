@@ -14,7 +14,7 @@ from factpy.audit.reader import load_audit_package
 from factpy.sdk.dsl import Inference, Pred
 from factpy.service.static_ui import _render_annotation_panel
 from factpy.core.evidence.write_protocol import set_field
-from kernel.sdk.dsl import vars as sdk_vars
+from factpy.sdk.dsl import vars as sdk_vars
 from factpy.sdk.schema import Entity, Field, Identity
 from factpy.sdk.store import SDKStore
 

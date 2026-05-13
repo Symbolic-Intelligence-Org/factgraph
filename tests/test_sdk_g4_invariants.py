@@ -20,7 +20,7 @@ import pathlib
 import unittest
 from importlib import import_module
 
-from . import sdk as kernel_sdk
+from factpy import sdk as kernel_sdk
 from factpy.sdk import SDKStore
 
 

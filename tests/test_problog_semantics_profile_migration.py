@@ -10,7 +10,7 @@ import factpy.application as application  # noqa: F401
 from factpy.adapters.problog.rule_ext import ProbLogRuleExt, resolve_problog_engine_ext
 from factpy.core.evidence.write_protocol import set_field
 from factpy.core.semantics import SemanticsProfile
-from kernel.sdk.dsl import vars as sdk_vars
+from factpy.sdk.dsl import vars as sdk_vars
 from factpy.sdk.dsl import Inference, Pred
 from factpy.sdk.schema import Entity, Field, Identity
 from factpy.sdk.store import SDKStore
