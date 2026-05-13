@@ -446,9 +446,10 @@ Per-field editor on an `EntityEditor`: `set(value, *, meta=None)`,
 ### `FieldAssertions`, `AssertionRecordSet`, `AssertionRecord`, `AssertionMeta`
 
 `FieldAssertions` exposes a field's active assertions plus history.
-`.active` and `.history` are properties returning `AssertionRecordSet`.
-`FieldAssertions.at(iso8601_time)` and `.version(v)` are active-only
-compatibility shortcuts for `.active.at(...)` and `.active.version(...)`.
+`.active()` returns currently non-revoked records as `AssertionRecordSet`;
+`.all()` returns active plus revoked records. `FieldAssertions.at(iso8601_time)`
+and `.version(v)` are active-only shortcuts for `.active().at(...)` and
+`.active().version(...)`.
 
 `AssertionRecordSet` is a tuple-compatible returned object with
 `.where(...)`, `.at(...)`, `.version(...)`, `.by_id(...)`, `.one()`,
@@ -457,7 +458,9 @@ compatibility shortcuts for `.active.at(...)` and `.active.version(...)`.
 top-level `kernel.sdk.__all__` export.
 
 Each entry is an `AssertionRecord` with `asrt_id`, `value`, `is_active`,
-`is_revoked`, and `meta: AssertionMeta`.
+context fields (`entity_type`, `field_name`, `pred_id`, `e_ref`), and
+`meta: AssertionMeta`. Use `not record.is_active` for revoked/inactive
+records.
 `AssertionMeta` carries provenance fields (source, trace_id,
 ingested_at, raw_kind, bound, approved_by, derived_rule_id,
 candidate_id, ...). `raw_kind` / `bound` are mirrored in `meta_rows` for
@@ -469,10 +472,10 @@ Example:
 ```python
 target = (
     snapshot.field("name")
-    .history.where(value="Alice", source="seed")
+    .all().where(value="Alice", source="seed")
     .one()
 )
-same = snapshot.field("name").history.by_id(target.asrt_id).one()
+same = snapshot.field("name").all().by_id(target.asrt_id).one()
 sdk.retract(target.asrt_id)
 ```
 

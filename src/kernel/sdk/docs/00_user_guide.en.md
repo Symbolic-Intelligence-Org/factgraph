@@ -65,7 +65,7 @@ fg.write.set(User.name, ref_bob,   "Bob")
 fg.write.add(User.tags, ref_alice, "engineer")
 
 snap = fg.read.get(User, user_id="u-1")
-print(snap.name, [r.value for r in snap.field("tags").active])
+print(snap.name, [r.value for r in snap.field("tags").active()])
 # → Alice ['engineer']
 ```
 
@@ -198,23 +198,23 @@ compare it as a textual identity; treat it as a stable handle.
 snap = fg.read.get(User, user_id="u-1")
 
 snap.name                         # current single-field value
-snap.field("tags").active         # → AssertionRecordSet (tuple-compatible)
-[r.value for r in snap.field("tags").active]   # → ['engineer', ...]
+snap.field("tags").active()         # → AssertionRecordSet (tuple-compatible)
+[r.value for r in snap.field("tags").active()]   # → ['engineer', ...]
 
-snap.field("name").history        # → AssertionRecordSet (active + revoked)
+snap.field("name").all()        # → AssertionRecordSet (active + revoked)
 snap.field("name").at("2026-05-01T00:00:00Z")  # active shortcut visible at t
 snap.field("name").version("v3")  # active shortcut at version v3
-snap.field("name").history.at("2026-05-01T00:00:00Z")  # history-level time filter
-snap.field("name").history.by_id(asrt_id)      # exact assertion-id filter
+snap.field("name").all().at("2026-05-01T00:00:00Z")  # history-level time filter
+snap.field("name").all().by_id(asrt_id)      # exact assertion-id filter
 
 target = (
     snap.field("name")
-    .history.where(value="Alice", source="seed")
+    .all().where(value="Alice", source="seed")
     .one()
 )
 fg.write.retract(target.asrt_id)
 
-snap.assertions.name              # equivalent to snap.field("name") — attr access
+snap.assertions.field("name")     # equivalent field-scoped assertion manager
 snap.identity                     # dict of identity values (when identity_available=True)
 snap.identity_available           # bool — False if snapshot lacks full identity
 snap.entity_type                  # "User"
@@ -222,10 +222,11 @@ snap.ref                          # encoded idref_v1 ref
 ```
 
 Notes:
-- `.active` and `.history` are **properties**, not methods (no
-  parentheses). `FieldAssertions.at(t)` and `.version(v)` are active-only
-  compatibility shortcuts for `.active.at(t)` and `.active.version(v)`.
-- `.active`, `.history`, and record-set filters return `AssertionRecordSet`,
+- `.active()` and `.all()` are methods. `active()` returns currently
+  non-revoked records; `all()` returns active plus revoked records.
+- `FieldAssertions.at(t)` and `.version(v)` are active-only shortcuts for
+  `.active().at(t)` and `.active().version(v)`.
+- `.active()`, `.all()`, and record-set filters return `AssertionRecordSet`,
   a tuple-compatible collection of `AssertionRecord` values. Existing
   tuple-style iteration, indexing, and `len(...)` still work.
 - `AssertionRecordSet` supports `.where(...)`, `.at(t)`, `.version(v)`,
@@ -234,8 +235,10 @@ Notes:
   assertion.
 - `.at(t)` is a business-valid-time filter over assertion metadata
   `valid_from` / `valid_to`; it does not filter by `ingested_at`.
-- `AssertionRecord` exposes `asrt_id`, `value`, `is_active`,
-  `is_revoked`, and `meta` (an `AssertionMeta`).
+- `AssertionRecord` exposes `asrt_id`, `value`, `is_active`, context
+  fields (`entity_type`, `field_name`, `pred_id`, `e_ref`), and `meta`
+  (an `AssertionMeta`). Use `not record.is_active` for revoked/inactive
+  records.
 - `EntitySnapshot` is read-only; assigning to any attribute raises
   `FrozenSnapshotError`.
 
@@ -749,7 +752,7 @@ Create a frozen assertion view from exact assertion ids or from objects
 that expose `.asrt_id`:
 
 ```python
-target = snap.field("name").history.where(source="seed").one()
+target = snap.field("name").all().where(source="seed").one()
 
 review = fg.views.create("review_set", asrt_ids=[target.asrt_id])
 review = fg.views.update("review_set", asrts=[target])
@@ -1006,7 +1009,7 @@ Notable changes:
 | `temporal` field on `Field` | (removed) | Temporal semantics moved to `meta` |
 | `dims` field on `Field` | (removed) | Multi-dimensional fields not supported |
 | `fact_key` / `pred_id` on `Pred` | (removed) | Use field accessors instead |
-| `.chosen` on assertion view | (removed) | Use `snapshot.field("X").active` |
+| `.chosen` on assertion view | (removed) | Use `snapshot.field("X").active()` |
 | `temporal_view` parameter | (removed) | Pass via `meta` and use a custom view |
 | `mode=` keyword on SDK `evaluate` | (removed) | Use `engine=` |
 | `semantics_profile=` keyword on SDK `evaluate` | (removed) | Use `semantics=` |

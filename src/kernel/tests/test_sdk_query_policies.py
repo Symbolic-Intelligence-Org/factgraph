@@ -185,8 +185,8 @@ class QuerySnapshotCompatibilityTests(unittest.TestCase):
 
         snapshot = sdk.run(_person_entity_query(), row_format="instance")[0]
 
-        self.assertEqual(snapshot.field("nickname").active, ())
-        self.assertEqual(snapshot.field("nickname").history, ())
+        self.assertEqual(snapshot.field("nickname").active(), ())
+        self.assertEqual(snapshot.field("nickname").all(), ())
 
 
 if __name__ == "__main__":

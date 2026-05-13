@@ -96,7 +96,7 @@ selections appear to the user.
 | `fg.schema` | `add(*entity_classes)`, `ingest(...)`, `validate_provenance(obj, *, standard="derivation_v1")` | `add(...)` returns `SchemaAddResult`. It is additive only: new entities and new non-identity fields. Delete, rename, identity changes, and migrations are not part of the current surface. |
 | `fg.read` | `ref(EntityCls, **identity)`, `get(EntityCls, **identity)`, `find(EntityCls, **partial_filters)` | Returns managed refs, full-coordinate snapshots, and matching-snapshot collections. |
 | `fg.write` | `set(field, ref, value, meta=None)`, `add(field, ref, value, meta=None)`, `retract(asrt_id, meta=None)`, `edit(...)` | Appends ledger assertions or retractions. Returns assertion ids. `set` is for single-cardinality fields; `add` is for multi-cardinality fields. |
-| `fg.assertions` | `by_id(asrt_id)`, `by_ids(asrt_ids)` | Direct assertion-record readback. Not a graph-wide query namespace. See [Assertion records and views](assertions.md) for the full assertion model. |
+| `fg.assertions` | `by_id(asrt_id)`, `by_ids(asrt_ids)`, `field(Field)`, `active()`, `all()` | Graph-scoped assertion-record readback and selection. See [Assertion records and views](assertions.md) for the full assertion model. |
 
 ```text
 schema declaration -> managed ref -> assertion write -> snapshot read
@@ -205,8 +205,11 @@ same project; some are out of scope for `factpy-kernel` entirely.
   entry points.
 - `fg.write.set(...)`, `fg.write.add(...)`, and `fg.write.retract(...)` append
   ledger assertions or retractions.
-- `fg.assertions.by_id(...)` and `fg.assertions.by_ids(...)` look up exact
-  assertion records.
+- `fg.assertions.by_id(...)`, `fg.assertions.by_ids(...)`,
+  `fg.assertions.field(Field)`, `fg.assertions.active()`, and
+  `fg.assertions.all()` read assertion records. Chain `.where(...)`,
+  `.at(...)`, `.version(...)`, and `.by_id(...)` after a returned
+  `AssertionRecordSet`.
 - `fg.views.create/update/delete/get/list` manages frozen assertion-id
   selections.
 - `fg.rules.inspect(...)` previews structure for rules, inferences, and

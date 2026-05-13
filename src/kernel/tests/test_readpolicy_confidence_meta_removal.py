@@ -160,7 +160,7 @@ class WriteConfidenceMetaRemovalTests(unittest.TestCase):
         snap = sdk.get(User, user_id="u-1")
         self.assertIsNotNone(snap)
         assert snap is not None
-        record = snap.field("name").active.one()
+        record = snap.field("name").active().one()
 
         sdk.ledger.append_meta(
             [
@@ -176,7 +176,7 @@ class WriteConfidenceMetaRemovalTests(unittest.TestCase):
         refreshed = sdk.get(User, user_id="u-1")
         self.assertIsNotNone(refreshed)
         assert refreshed is not None
-        refreshed_record = refreshed.field("name").active.one()
+        refreshed_record = refreshed.field("name").active().one()
         self.assertEqual(refreshed_record.meta.raw["confidence"], 0.42)
 
 
@@ -187,7 +187,7 @@ class FirstClassConfidenceRemovalTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        record = snap.field("name").active.one()
+        record = snap.field("name").active().one()
 
         self.assertFalse(hasattr(record.meta, "confidence"))
 
@@ -197,7 +197,7 @@ class FirstClassConfidenceRemovalTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        records = snap.field("tag").active
+        records = snap.field("tag").active()
 
         with self.assertRaises(TypeError):
             records.where(confidence=0.5)  # type: ignore[call-arg]

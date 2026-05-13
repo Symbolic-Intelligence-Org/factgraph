@@ -36,7 +36,7 @@ class SDKFacadeApplicationDelegateTests(unittest.TestCase):
         self.assertEqual(snap.tag, ("admin",))
         self.assertTrue(snap.identity_available)
         self.assertEqual(snap.identity, {"user_id": "u1", "locale": "zh"})
-        self.assertEqual([row.asrt_id for row in snap.assertions.tag.active], [tag_asrt])
+        self.assertEqual([row.asrt_id for row in snap.assertions.field("tag").active()], [tag_asrt])
 
     def test_sdk_find_preserves_filtering_and_identity_visibility(self) -> None:
         sdk = SDKStore([Country, User])

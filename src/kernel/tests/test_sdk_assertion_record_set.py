@@ -75,12 +75,12 @@ class AssertionRecordSetShapeTests(unittest.TestCase):
 
         at_now = datetime.now(timezone.utc).isoformat()
         collections = (
-            snap.field("tag").active,
-            snap.field("tag").history,
+            snap.field("tag").active(),
+            snap.field("tag").all(),
             snap.field("tag").at(at_now),
             snap.field("tag").version("tag-v1"),
-            snap.assertions.tag.active,
-            snap.assertions.tag.history,
+            snap.assertions.field("tag").active(),
+            snap.assertions.field("tag").all(),
         )
 
         for records in collections:
@@ -97,7 +97,7 @@ class AssertionRecordSetShapeTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        records = snap.field("tag").active
+        records = snap.field("tag").active()
 
         self.assertIsInstance(records, tuple)
         self.assertEqual(len(records), 2)
@@ -111,7 +111,7 @@ class AssertionRecordSetShapeTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        records = snap.field("tag").active
+        records = snap.field("tag").active()
         sliced = records[:1]
         concatenated = records[:1] + records[1:]
         multiplied = records[:1] * 2
@@ -134,7 +134,8 @@ class AssertionRecordSetFilterTests(unittest.TestCase):
 
         record = (
             snap.field("tag")
-            .active.where(
+            .active()
+            .where(
                 value="vip",
                 source="seed",
                 trace_id="trace-tag-1",
@@ -153,9 +154,9 @@ class AssertionRecordSetFilterTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        all_records = snap.field("tag").active.where()
-        source_none = snap.field("tag").active.where(source=None)
-        meta_filter = snap.field("tag").active.where(meta={"batch": "unlabeled"})
+        all_records = snap.field("tag").active().where()
+        source_none = snap.field("tag").active().where(source=None)
+        meta_filter = snap.field("tag").active().where(meta={"batch": "unlabeled"})
 
         self.assertEqual(len(all_records), 2)
         self.assertEqual(source_none.one().asrt_id, ids["tag_unlabeled"])
@@ -167,7 +168,7 @@ class AssertionRecordSetFilterTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        records = snap.field("tag").active
+        records = snap.field("tag").active()
 
         self.assertEqual(records.where(value="vip").one().asrt_id, ids["tag_vip"])
         self.assertIsNone(records.where(value="missing").first())
@@ -202,9 +203,9 @@ class AssertionRecordSetRawUncertaintyFilterTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        probabilistic = snap.field("risk").active.where(meta={"raw_kind": "probabilistic"}).one()
-        exact_bound = snap.field("risk").active.where(meta={"bound": [0.4, 0.9]}).one()
-        no_interval_semantics = snap.field("risk").active.where(meta={"bound": [0.4, 0.9000001]})
+        probabilistic = snap.field("risk").active().where(meta={"raw_kind": "probabilistic"}).one()
+        exact_bound = snap.field("risk").active().where(meta={"bound": [0.4, 0.9]}).one()
+        no_interval_semantics = snap.field("risk").active().where(meta={"bound": [0.4, 0.9000001]})
 
         self.assertEqual(probabilistic.asrt_id, low)
         self.assertEqual(exact_bound.asrt_id, high)
@@ -227,7 +228,7 @@ class AssertionRecordSetBoundaryTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        target = snap.field("tag").active[0]
+        target = snap.field("tag").active()[0]
 
         with self.assertRaises(SDKStoreError):
             sdk.retract(target)

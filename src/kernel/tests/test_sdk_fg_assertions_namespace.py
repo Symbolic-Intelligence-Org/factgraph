@@ -58,21 +58,32 @@ class FGAssertionsNamespaceTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             sdk.assertions.by_ids([ids["name"]], strict=True)
 
-    def test_no_graph_wide_assertion_query_methods_ship(self) -> None:
-        sdk, _ = _seed_store()
+    def test_graph_wide_assertion_collection_methods_ship(self) -> None:
+        sdk, ids = _seed_store()
 
-        for name in ("active", "history", "where", "at", "version"):
+        active = sdk.assertions.active()
+        all_records = sdk.assertions.all()
+        field_records = sdk.assertions.field(User.tag).active()
+
+        self.assertEqual(active.where(value="Alice").one().asrt_id, ids["name"])
+        self.assertEqual(all_records.where(value="vip").one().asrt_id, ids["tag"])
+        self.assertEqual(field_records.one().asrt_id, ids["tag"])
+        for name in ("where", "at", "version", "history"):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(sdk.assertions, name))
 
-    def test_record_shape_remains_existing_assertion_record(self) -> None:
+    def test_record_shape_includes_assertion_context(self) -> None:
         sdk, ids = _seed_store()
 
         record = sdk.assertions.by_id(ids["name"])
         self.assertIsNotNone(record)
         assert record is not None
 
-        for attr in ("entity_type", "field_name", "pred_id", "ref", "identity"):
+        self.assertEqual(record.entity_type, "User")
+        self.assertEqual(record.field_name, "name")
+        self.assertEqual(record.pred_id, "user:name")
+        self.assertTrue(record.e_ref.startswith("idref_v1:User:"))
+        for attr in ("ref", "identity", "is_revoked"):
             with self.subTest(attr=attr):
                 self.assertFalse(hasattr(record, attr))
 

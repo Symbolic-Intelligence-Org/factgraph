@@ -89,7 +89,10 @@ class AssertionRecord:
     asrt_id: str
     value: Any
     is_active: bool
-    is_revoked: bool
+    entity_type: str
+    field_name: str
+    pred_id: str
+    e_ref: str
     meta: AssertionMeta
 
 
@@ -209,12 +212,10 @@ class FieldAssertions:
         self._active_records = AssertionRecordSet(active_records)
         self._history_records = AssertionRecordSet(history_records)
 
-    @property
     def active(self) -> AssertionRecordSet:
         return self._active_records
 
-    @property
-    def history(self) -> AssertionRecordSet:
+    def all(self) -> AssertionRecordSet:
         return self._history_records
 
     def at(self, t: str) -> AssertionRecordSet:
@@ -245,17 +246,75 @@ class FieldAssertions:
 
 
 class AssertionNamespace:
-    def __init__(self, field_map: dict[str, FieldAssertions]) -> None:
+    def __init__(self, field_map: dict[str, FieldAssertions], *, entity_type: str) -> None:
         object.__setattr__(self, "_field_map", dict(field_map))
+        object.__setattr__(self, "_entity_type", entity_type)
 
-    def __getattr__(self, field_name: str) -> FieldAssertions:
+    def field(self, field: Any) -> FieldAssertions:
+        entity_type = object.__getattribute__(self, "_entity_type")
+        field_name = _field_name_for_snapshot_assertions(field, entity_type=entity_type)
         field_map = object.__getattribute__(self, "_field_map")
         if field_name not in field_map:
-            raise AttributeError(field_name)
+            raise SDKStoreError(f"snapshot assertions field not found: {field_name}")
         return field_map[field_name]
+
+    def active(self) -> AssertionRecordSet:
+        field_map = object.__getattribute__(self, "_field_map")
+        return AssertionRecordSet(
+            record
+            for field_assertions in field_map.values()
+            for record in field_assertions.active()
+        )
+
+    def all(self) -> AssertionRecordSet:
+        field_map = object.__getattribute__(self, "_field_map")
+        return AssertionRecordSet(
+            record
+            for field_assertions in field_map.values()
+            for record in field_assertions.all()
+        )
+
+    def by_id(self, asrt_id: str) -> AssertionRecord | None:
+        if not isinstance(asrt_id, str) or not asrt_id:
+            raise SDKStoreError("snapshot.assertions.by_id(asrt_id) expects non-empty string")
+        return self.all().by_id(asrt_id).first()
+
+    def by_ids(self, asrt_ids: Any) -> AssertionRecordSet:
+        if isinstance(asrt_ids, (str, bytes)):
+            raise SDKStoreError("snapshot.assertions.by_ids(asrt_ids) expects iterable[str], not string")
+        try:
+            normalized = tuple(asrt_ids)
+        except TypeError as exc:
+            raise SDKStoreError("snapshot.assertions.by_ids(asrt_ids) expects iterable[str]") from exc
+        for value in normalized:
+            if not isinstance(value, str) or not value:
+                raise SDKStoreError("snapshot.assertions.by_ids(asrt_ids) expects non-empty string ids")
+        wanted = set(normalized)
+        return AssertionRecordSet(record for record in self.all() if record.asrt_id in wanted)
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise FrozenSnapshotError("AssertionNamespace is read-only")
+
+
+def _field_name_for_snapshot_assertions(field: Any, *, entity_type: str) -> str:
+    if isinstance(field, str):
+        if not field:
+            raise SDKStoreError("snapshot.assertions.field(name) expects non-empty string")
+        return field
+    from .schema import Field as SDKField
+
+    if isinstance(field, SDKField):
+        owner_cls = getattr(field, "sdk_owner_cls", None)
+        owner_name = getattr(owner_cls, "__name__", None)
+        if isinstance(owner_name, str) and owner_name != entity_type:
+            raise SDKStoreError(
+                f"snapshot.assertions.field(...) received {owner_name}.{getattr(field, 'sdk_attr_name', '<unknown>')} "
+                f"for {entity_type} snapshot"
+            )
+        field_name = getattr(field, "sdk_attr_name", None)
+        if isinstance(field_name, str) and field_name:
+            return field_name
+    raise SDKStoreError("snapshot.assertions.field(...) expects field name string or sdk.Field descriptor")
 
 
 class EntitySnapshot:
@@ -274,7 +333,7 @@ class EntitySnapshot:
         object.__setattr__(self, "_field_values", dict(field_values))
         object.__setattr__(self, "_identity_values", dict(identity_values or {}))
         object.__setattr__(self, "identity_available", bool(identity_available))
-        object.__setattr__(self, "assertions", AssertionNamespace(field_assertions))
+        object.__setattr__(self, "assertions", AssertionNamespace(field_assertions, entity_type=entity_type))
 
     @property
     def identity(self) -> dict[str, Any]:
@@ -309,7 +368,7 @@ class EntitySnapshot:
         return f"EntitySnapshot(entity_type={self.entity_type!r}, ref={self.ref!r}{preview})"
 
     def field(self, name: str) -> FieldAssertions:
-        return getattr(self.assertions, name)
+        return self.assertions.field(name)
 
 
 class FieldEditor:
@@ -751,6 +810,7 @@ def _dto_to_sdk_snapshot(
     entity_cls: type[Any],
     known_identity_values: dict[str, Any] | None = None,
 ) -> EntitySnapshot:
+    e_ref = _dto_ref_to_sdk_ref(dto.ref, sdk=sdk)
     field_values = {
         field_name: _dto_value_to_sdk_value(field_dto.value, sdk=sdk)
         for field_name, field_dto in dto.fields.items()
@@ -760,13 +820,14 @@ def _dto_to_sdk_snapshot(
             assertions_dto,
             sdk=sdk,
             entity_cls=entity_cls,
+            e_ref=e_ref,
         )
         for field_name, assertions_dto in dto.assertions.items()
     }
     identity_values = dict(known_identity_values or {})
     identity_available = known_identity_values is not None
     return EntitySnapshot(
-        ref=_dto_ref_to_sdk_ref(dto.ref, sdk=sdk),
+        ref=e_ref,
         entity_type=dto.ref.entity_type,
         field_values=field_values,
         field_assertions=field_assertions,
@@ -780,22 +841,55 @@ def _dto_assertions_to_sdk(
     *,
     sdk: "SDKStore",
     entity_cls: type[Any],
+    e_ref: str,
 ) -> FieldAssertions:
     cardinality = _sdk_field_cardinality(entity_cls, dto.field.field_name)
+    pred_id = _pred_id_for_entity_field(sdk, entity_cls, dto.field.field_name)
     return FieldAssertions(
         field_name=dto.field.field_name,
         cardinality=cardinality,
-        active_records=tuple(_dto_assertion_record_to_sdk(record, sdk=sdk) for record in dto.active),
-        history_records=tuple(_dto_assertion_record_to_sdk(record, sdk=sdk) for record in dto.history),
+        active_records=tuple(
+            _dto_assertion_record_to_sdk(
+                record,
+                sdk=sdk,
+                entity_type=dto.field.entity_type,
+                field_name=dto.field.field_name,
+                pred_id=pred_id,
+                e_ref=e_ref,
+            )
+            for record in dto.active
+        ),
+        history_records=tuple(
+            _dto_assertion_record_to_sdk(
+                record,
+                sdk=sdk,
+                entity_type=dto.field.entity_type,
+                field_name=dto.field.field_name,
+                pred_id=pred_id,
+                e_ref=e_ref,
+            )
+            for record in dto.history
+        ),
     )
 
 
-def _dto_assertion_record_to_sdk(dto: AssertionRecordDTO, *, sdk: "SDKStore") -> AssertionRecord:
+def _dto_assertion_record_to_sdk(
+    dto: AssertionRecordDTO,
+    *,
+    sdk: "SDKStore",
+    entity_type: str,
+    field_name: str,
+    pred_id: str,
+    e_ref: str,
+) -> AssertionRecord:
     return AssertionRecord(
         asrt_id=dto.assertion_id,
         value=_dto_value_to_sdk_value(dto.value, sdk=sdk),
         is_active=dto.active,
-        is_revoked=not dto.active,
+        entity_type=entity_type,
+        field_name=field_name,
+        pred_id=pred_id,
+        e_ref=e_ref,
         meta=AssertionMeta.from_raw(dict(dto.meta)),
     )
 
@@ -817,6 +911,26 @@ def _dto_ref_to_sdk_ref(ref: AppEntityRef, *, sdk: "SDKStore") -> str:
 def _sdk_field_cardinality(entity_cls: type[Any], field_name: str) -> str:
     descriptor = getattr(entity_cls, field_name, None)
     return str(getattr(descriptor, "cardinality", "single"))
+
+
+def _pred_id_for_entity_field(sdk: "SDKStore", entity_cls: type[Any], field_name: str) -> str:
+    descriptor = getattr(entity_cls, field_name, None)
+    schema_pred = sdk._field_pred_by_descriptor.get(descriptor)
+    if isinstance(schema_pred, dict):
+        pred_id = schema_pred.get("pred_id")
+        if isinstance(pred_id, str) and pred_id:
+            return pred_id
+    for pred in sdk.schema_ir.get("predicates", []):
+        if not isinstance(pred, dict):
+            continue
+        if pred.get("owner_type") != getattr(entity_cls, "__name__", None):
+            continue
+        if pred.get("py_field_name") != field_name:
+            continue
+        pred_id = pred.get("pred_id")
+        if isinstance(pred_id, str) and pred_id:
+            return pred_id
+    raise SDKStoreError(f"schema predicate missing pred_id for field {field_name}")
 
 
 def _sdk_store_error_from_dto(error: Any) -> SDKStoreError:
@@ -875,11 +989,16 @@ def _assertion_record_from_claim(sdk: "SDKStore", claim: "Claim", *, schema_pred
     value = _decode_claim_rest_terms(schema_pred, claim.rest_terms)
     raw_meta = _meta_raw_for_assertion(sdk, claim.asrt_id)
     active = is_active(sdk.ledger, claim.asrt_id)
+    entity_type = schema_pred.get("owner_type")
+    field_name = schema_pred.get("py_field_name")
     return AssertionRecord(
         asrt_id=claim.asrt_id,
         value=value,
         is_active=active,
-        is_revoked=not active,
+        entity_type=entity_type if isinstance(entity_type, str) else "",
+        field_name=field_name if isinstance(field_name, str) else "",
+        pred_id=claim.pred_id,
+        e_ref=claim.e_ref,
         meta=AssertionMeta.from_raw(raw_meta),
     )
 

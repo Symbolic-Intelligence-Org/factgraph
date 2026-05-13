@@ -180,7 +180,7 @@ class _SDKViewsManager:
 
 
 class _SDKAssertionsManager:
-    """Read-only namespace manager for assertion-id lookup."""
+    """Read-only namespace manager for graph-scoped assertion records."""
 
     def __init__(self, sdk: "SDKStore") -> None:
         object.__setattr__(self, "_sdk", sdk)
@@ -212,6 +212,42 @@ class _SDKAssertionsManager:
             if record is not None:
                 records.append(record)
         return AssertionRecordSet(records)
+
+    def active(self) -> Any:
+        from .facade import AssertionRecordSet
+
+        return AssertionRecordSet(record for record in self.all() if record.is_active)
+
+    def all(self) -> Any:
+        from .facade import AssertionRecordSet, _assertion_record_from_claim, _claim_sort_key
+
+        records = [
+            _assertion_record_from_claim(self._sdk, claim, schema_pred=_schema_pred_by_pred_id(self._sdk, claim.pred_id))
+            for claim in sorted(self._sdk.ledger.find_claims(), key=lambda claim: _claim_sort_key(self._sdk, claim))
+        ]
+        return AssertionRecordSet(records)
+
+    def field(self, field: Field) -> Any:
+        if not isinstance(field, Field):
+            raise SDKStoreError("fg.assertions.field(...) expects sdk.Field descriptor; string names are ambiguous")
+        schema_pred = self._sdk._schema_pred_for_field(field)
+        pred_id = schema_pred.get("pred_id")
+        if not isinstance(pred_id, str) or not pred_id:
+            raise SDKStoreError("schema predicate missing pred_id for field")
+
+        from .facade import FieldAssertions, _assertion_record_from_claim, _claim_sort_key
+
+        claims = self._sdk.ledger.find_claims(pred_id=pred_id)
+        history_records = tuple(
+            _assertion_record_from_claim(self._sdk, claim, schema_pred=schema_pred)
+            for claim in sorted(claims, key=lambda claim: _claim_sort_key(self._sdk, claim))
+        )
+        return FieldAssertions(
+            field_name=str(getattr(field, "sdk_attr_name", schema_pred.get("py_field_name", ""))),
+            cardinality=str(schema_pred.get("cardinality", getattr(field, "cardinality", "single"))),
+            active_records=tuple(record for record in history_records if record.is_active),
+            history_records=history_records,
+        )
 
 
 class _SDKSchemaManager:

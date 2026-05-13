@@ -67,9 +67,9 @@ class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        january = snap.field("tag").history.at("2026-01-15T00:00:00Z")
-        march_boundary = snap.field("tag").history.at("2026-03-01T00:00:00Z")
-        missing_valid_from = snap.field("tag").history.by_id(ids["tag_missing_valid_from"])
+        january = snap.field("tag").all().at("2026-01-15T00:00:00Z")
+        march_boundary = snap.field("tag").all().at("2026-03-01T00:00:00Z")
+        missing_valid_from = snap.field("tag").all().by_id(ids["tag_missing_valid_from"])
 
         self.assertEqual(january.by_id(ids["tag_vip"]).one().value, "vip")
         self.assertEqual(march_boundary.by_id(ids["tag_vip"]).all(), ())
@@ -82,7 +82,7 @@ class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
         assert snap is not None
 
         with self.assertRaises(SDKStoreError):
-            snap.field("tag").history.at("not-a-time")
+            snap.field("tag").all().at("not-a-time")
 
     def test_version_and_by_id_filter_current_set(self) -> None:
         sdk, ids = _seed_store()
@@ -90,12 +90,12 @@ class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        versioned = snap.field("name").history.version("name-v1")
-        by_id = snap.field("name").history.by_id(ids["name_old"])
+        versioned = snap.field("name").all().version("name-v1")
+        by_id = snap.field("name").all().by_id(ids["name_old"])
 
         self.assertEqual(versioned.one().asrt_id, ids["name_old"])
         self.assertEqual(by_id.one().value, "Alice")
-        self.assertEqual(snap.field("name").history.by_id("missing").all(), ())
+        self.assertEqual(snap.field("name").all().by_id("missing").all(), ())
 
     def test_non_terminal_filters_preserve_type_and_chainability(self) -> None:
         sdk, ids = _seed_store()
@@ -103,7 +103,7 @@ class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        records = snap.field("tag").history
+        records = snap.field("tag").all()
         chained = (
             records.where(source="seed")
             .at("2026-01-15T00:00:00Z")
@@ -124,13 +124,13 @@ class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
 
         self.assertEqual(
             [record.asrt_id for record in field.at("2026-02-15T00:00:00Z")],
-            [record.asrt_id for record in field.active.at("2026-02-15T00:00:00Z")],
+            [record.asrt_id for record in field.active().at("2026-02-15T00:00:00Z")],
         )
         self.assertEqual(
             [record.asrt_id for record in field.version("name-v2")],
-            [record.asrt_id for record in field.active.version("name-v2")],
+            [record.asrt_id for record in field.active().version("name-v2")],
         )
-        self.assertEqual(field.active.by_id(ids["name_new"]).one().value, "Alicia")
+        self.assertEqual(field.active().by_id(ids["name_new"]).one().value, "Alicia")
 
 
 if __name__ == "__main__":

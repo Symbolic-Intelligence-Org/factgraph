@@ -64,12 +64,12 @@ assertions. Each carries an `asrt_id`, a value, a `meta` dict, and
 provenance (source, trace_id, ingested_at, etc.).
 
 ```python
-snap.field("name").active             # property -> AssertionRecordSet of current records
-snap.field("name").history            # property -> AssertionRecordSet of active + revoked records
-snap.field("name").history.at("2026-05-01T00:00:00Z")  # valid at business time t
-snap.field("name").history.version("v1")               # version metadata filter
-snap.field("name").history.by_id(asrt_id)              # exact assertion-id filter
-[r.value for r in snap.field("name").active]           # the underlying values
+snap.field("name").active()             # AssertionRecordSet of current records
+snap.field("name").all()                # AssertionRecordSet of active + revoked records
+snap.field("name").all().at("2026-05-01T00:00:00Z")  # valid at business time t
+snap.field("name").all().version("v1")               # version metadata filter
+snap.field("name").all().by_id(asrt_id)              # exact assertion-id filter
+[r.value for r in snap.field("name").active()]           # the underlying values
 ```
 
 Assertions are **append-only**. Retracting an assertion creates a
