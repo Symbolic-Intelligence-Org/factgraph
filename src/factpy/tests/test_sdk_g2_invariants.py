@@ -1,0 +1,175 @@
+"""Cross-cutting invariants for G2 Fact Overlay + ProofFrame Recheck SDK shells.
+
+Mirrors G1's `test_sdk_g1_invariants.py` and G4's
+`test_sdk_g4_invariants.py` 6-class structure under the post-G2-Phase-0
+`kernel/sdk/shells/` subpackage layout. Active classes:
+
+1. `test_sdk_all_unchanged_and_g2_result_types_not_exported` — §5.3 / §5.4
+2. `test_g2_methods_are_instance_methods_and_no_scenario_method_shipped` — §5.7
+3. `test_g2_modules_live_in_shells_subpackage` — §5.5 + §5.6
+4. `test_g2_modules_do_not_import_internal_or_walker_layers` — §6 layer isolation
+5. `test_store_methods_remain_thin_delegate_methods` — §6 thin-delegate
+6. `test_store_method_docstrings_record_boundary_contracts` — §5.7 + §6 docstring
+"""
+
+from __future__ import annotations
+
+import inspect
+import pathlib
+import unittest
+from importlib import import_module
+
+from . import sdk as kernel_sdk
+from factpy.sdk import SDKStore
+
+
+G2_MODULES = (
+    "kernel.sdk.shells.fact_overlay",
+    "kernel.sdk.shells.proof_frame",
+)
+FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
+    "kernel.application.capability_helpers._binding",
+    "_reject_sdk_origin",
+    "from kernel.application.walker",
+    "import kernel.application.walker",
+    "from kernel.application.walker import",
+    "kernel.audit",
+    "kernel.core.rules.frontier",
+)
+
+
+class SDKG2InvariantTests(unittest.TestCase):
+    """G2 invariants — must hold across all G2 phases."""
+
+    def test_sdk_all_unchanged_and_g2_result_types_not_exported(self) -> None:
+        """§5.3 + §5.4 lock: G2 result DTOs are not re-exported from SDK."""
+        self.assertEqual(len(kernel_sdk.__all__), 41)
+        self.assertIn("SchemaAddResult", kernel_sdk.__all__)
+        self.assertIn("ReadPolicy", kernel_sdk.__all__)
+        self.assertIn("FactGraph", kernel_sdk.__all__)
+        self.assertIn("SemanticsProfile", kernel_sdk.__all__)
+        self.assertIn("ProbLogSemantics", kernel_sdk.__all__)
+        self.assertIn("PyReasonSemantics", kernel_sdk.__all__)
+        for name in (
+            "FactOverlayCheckResult",
+            "ProofFrameRecheckResult",
+            "EvaluationOverlay",
+            "FactValueOverride",
+            "FactRemoveAction",
+            "ProofFrameAtomVerdict",
+            "check_fact_overlay",
+            "recheck_proof_frame",
+            "sdk_fact_overlay_check",
+            "sdk_proof_frame_recheck",
+        ):
+            with self.subTest(name=name):
+                self.assertNotIn(name, kernel_sdk.__all__)
+                self.assertFalse(hasattr(kernel_sdk, name))
+
+    def test_g2_methods_are_instance_methods_and_no_scenario_method_shipped(self) -> None:
+        """§5.7 lock: G2 methods are SDKStore instance methods, not free functions."""
+        self.assertTrue(callable(getattr(SDKStore, "check_fact_overlay", None)))
+        self.assertTrue(callable(getattr(SDKStore, "recheck_proof_frame", None)))
+        for scenario_name in (
+            "explain",
+            "fact_overlay",
+            "overlay_check",
+            "proof_frame",
+            "recheck",
+        ):
+            with self.subTest(name=scenario_name):
+                self.assertFalse(hasattr(SDKStore, scenario_name))
+
+    def test_g2_modules_live_in_shells_subpackage(self) -> None:
+        """§5.5 + §5.6 lock: G2 shells live at ``kernel/sdk/shells/{fact_overlay,proof_frame}.py``.
+
+        Also enforces that the shared SDK shell validators
+        (``_validation.py``) sit under ``kernel/sdk/shells/`` post-G2
+        Phase 0 hygiene migration; the flat ``kernel/sdk/_validation.py``
+        location must not exist.
+        """
+        sdk_dir = pathlib.Path(kernel_sdk.__file__).parent
+        self.assertTrue((sdk_dir / "shells").is_dir())
+        self.assertTrue((sdk_dir / "shells" / "__init__.py").is_file())
+        self.assertTrue((sdk_dir / "shells" / "fact_overlay.py").is_file())
+        self.assertTrue((sdk_dir / "shells" / "proof_frame.py").is_file())
+        self.assertTrue((sdk_dir / "shells" / "_validation.py").is_file())
+        self.assertFalse((sdk_dir / "fact_overlay.py").exists())
+        self.assertFalse((sdk_dir / "proof_frame.py").exists())
+        self.assertFalse((sdk_dir / "_validation.py").exists())
+
+    def test_g2_modules_do_not_import_internal_or_walker_layers(self) -> None:
+        """§6 lock: G2 SDK shells must not import application internals, walker, audit, or frontier."""
+        for module_name in G2_MODULES:
+            module = import_module(module_name)
+            source = pathlib.Path(inspect.getfile(module)).read_text(encoding="utf-8")
+            for forbidden in FORBIDDEN_PRODUCTION_IMPORT_TEXT:
+                with self.subTest(module=module_name, forbidden=forbidden):
+                    self.assertNotIn(forbidden, source)
+
+    def test_store_methods_remain_thin_delegate_methods(self) -> None:
+        """§6 thin-delegate lock: G2 SDKStore methods are pure delegates.
+
+        Asserts on call/instantiation patterns rather than bare class
+        names so that legitimate docstring references to types (e.g.,
+        "Wrong-type overlay shape is caught by ``FactOverlayCheckRequest``
+        construction") are not flagged.
+        """
+        fact_overlay_source = inspect.getsource(SDKStore.check_fact_overlay)
+        proof_frame_source = inspect.getsource(SDKStore.recheck_proof_frame)
+
+        self.assertIn(
+            "from .shells.fact_overlay import sdk_fact_overlay_check", fact_overlay_source
+        )
+        self.assertIn("return sdk_fact_overlay_check(", fact_overlay_source)
+        # No request DTO instantiation, no runtime call, no validator call.
+        self.assertNotIn("FactOverlayCheckRequest(", fact_overlay_source)
+        self.assertNotIn("check_fact_overlay_binding(", fact_overlay_source)
+        self.assertNotIn("validate_derivation(", fact_overlay_source)
+        self.assertNotIn("validate_binding(", fact_overlay_source)
+
+        self.assertIn(
+            "from .shells.proof_frame import sdk_proof_frame_recheck", proof_frame_source
+        )
+        self.assertIn("return sdk_proof_frame_recheck(", proof_frame_source)
+        self.assertNotIn("ProofFrameRecheckRequest(", proof_frame_source)
+        self.assertNotIn("recheck_proof_frame(request", proof_frame_source)
+        self.assertNotIn("_validate_support_artifact(", proof_frame_source)
+        self.assertNotIn("_validate_overlay(", proof_frame_source)
+
+    def test_store_method_docstrings_record_boundary_contracts(self) -> None:
+        """§5.7 + §6 lock: G2 SDKStore method docstrings record boundary contracts + paths."""
+        fact_overlay_doc = SDKStore.check_fact_overlay.__doc__ or ""
+        proof_frame_doc = SDKStore.recheck_proof_frame.__doc__ or ""
+
+        for required in (
+            "Inference",
+            "EvaluationOverlay",
+            "FactOverlayCheckResult",
+            "SDKStoreError",
+            "$.check_fact_overlay.inference",
+            "$.check_fact_overlay.binding",
+            "$.check_fact_overlay.overlay",
+            "$.check_fact_overlay.dependencies",
+            "$.check_fact_overlay.request",
+            "$.check_fact_overlay",
+        ):
+            with self.subTest(doc="check_fact_overlay", required=required):
+                self.assertIn(required, fact_overlay_doc)
+
+        for required in (
+            "SupportArtifact",
+            "EvaluationOverlay",
+            "ProofFrameRecheckResult",
+            "SDKStoreError",
+            "$.recheck_proof_frame.support_artifact",
+            "$.recheck_proof_frame.overlay",
+            "$.recheck_proof_frame.request",
+            "$.recheck_proof_frame",
+        ):
+            with self.subTest(doc="recheck_proof_frame", required=required):
+                self.assertIn(required, proof_frame_doc)
+
+
+if __name__ == "__main__":
+    unittest.main()

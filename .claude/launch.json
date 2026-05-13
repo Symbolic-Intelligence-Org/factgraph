@@ -1,1 +1,0 @@
-{"version":"0.0.1","configurations":[{"name":"esa-demo-site","runtimeExecutable":"python3","runtimeArgs":["-m","http.server","8099","--directory","/Users/zhenzhili/hnsm-backend/esa_demo_output/site"],"port":8099}]}
