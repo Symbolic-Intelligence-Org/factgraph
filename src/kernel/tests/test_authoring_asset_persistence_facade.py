@@ -88,7 +88,7 @@ def _make_fg() -> SDKStore:
         pred_id="user:tag_seed",
         e_ref=alice_ref,
         rest_terms=[("string", "vip")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     return fg
 

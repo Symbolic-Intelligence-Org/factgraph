@@ -38,7 +38,6 @@ class AssertionMeta:
     source: str | None
     trace_id: str | None
     ingested_at: datetime | None
-    confidence: float | None
     approved_by: str | None
     note: str | None
     derived_rule_id: str | None
@@ -70,15 +69,10 @@ class AssertionMeta:
         ingested_at = None
         if isinstance(raw.get("ingested_at"), int) and not isinstance(raw.get("ingested_at"), bool):
             ingested_at = datetime.fromtimestamp(raw["ingested_at"] / 1_000_000_000, tz=timezone.utc)
-        confidence = None
-        conf = raw.get("confidence")
-        if isinstance(conf, (int, float)) and not isinstance(conf, bool):
-            confidence = float(conf)
         return cls(
             source=source,
             trace_id=trace_id,
             ingested_at=ingested_at,
-            confidence=confidence,
             approved_by=approved_by,
             note=note,
             derived_rule_id=derived_rule_id,
@@ -135,7 +129,6 @@ class AssertionRecordSet(tuple):
         value: Any = _ASSERTION_FILTER_MISSING,
         source: Any = _ASSERTION_FILTER_MISSING,
         trace_id: Any = _ASSERTION_FILTER_MISSING,
-        confidence: Any = _ASSERTION_FILTER_MISSING,
         version: Any = _ASSERTION_FILTER_MISSING,
         meta: dict[str, Any] | None = None,
     ) -> "AssertionRecordSet":
@@ -148,8 +141,6 @@ class AssertionRecordSet(tuple):
             if source is not _ASSERTION_FILTER_MISSING and record.meta.source != source:
                 return False
             if trace_id is not _ASSERTION_FILTER_MISSING and record.meta.trace_id != trace_id:
-                return False
-            if confidence is not _ASSERTION_FILTER_MISSING and record.meta.confidence != confidence:
                 return False
             if version is not _ASSERTION_FILTER_MISSING and record.meta.raw.get("version") != version:
                 return False

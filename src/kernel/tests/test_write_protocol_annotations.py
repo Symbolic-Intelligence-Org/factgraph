@@ -1,7 +1,7 @@
 """Tests for write_protocol annotation projection (Step 2).
 
 Covers: shared annotation whitelist projection via set_field/add_field/replace_field,
-non-whitelisted keys stay in meta_rows only, confidence category/origin/derivation,
+non-whitelisted keys stay in meta_rows only, removed uncertainty keys,
 revocation shared annotation dual-write, and dual-write consistency.
 """
 from __future__ import annotations
@@ -43,20 +43,17 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
         self.assertEqual(annos[0].origin, "observed")
         self.assertIsNone(annos[0].derivation)
 
-    def test_confidence_stays_meta_only(self) -> None:
+    def test_confidence_user_meta_is_rejected(self) -> None:
         ledger = Ledger()
-        asrt_id = set_field(
-            ledger,
-            "user:name",
-            _eref("alice"),
-            [("string", "Alice")],
-            meta={"confidence": 0.85},
-        )
-        annos = ledger.find_annotations(asrt_id=asrt_id, namespace="shared", category="derived")
-        self.assertEqual(annos, [])
-        meta = ledger.find_meta(asrt_id=asrt_id, key="confidence")
-        self.assertEqual(len(meta), 1)
-        self.assertEqual(meta[0].value, 0.85)
+        removed = {"confidence": 0.85}
+        with self.assertRaises(WriteProtocolError):
+            set_field(
+                ledger,
+                "user:name",
+                _eref("alice"),
+                [("string", "Alice")],
+                meta=removed,
+            )
 
     def test_multiple_whitelisted_keys(self) -> None:
         ledger = Ledger()
@@ -69,7 +66,6 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
                 "source": "handbook",
                 "source_loc": "ch3.2",
                 "trace_id": "t001",
-                "confidence": 0.9,
                 "approved_by": "reviewer_A",
                 "note": "verified manually",
             },
@@ -97,7 +93,6 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
                 "source": "s",
                 "source_loc": "sl",
                 "trace_id": "t",
-                "confidence": 0.5,
                 "approved_by": "a",
                 "note": "n",
             },
@@ -149,21 +144,17 @@ class TestNonWhitelistedKeysExcluded(unittest.TestCase):
 class TestDualWriteConsistency(unittest.TestCase):
     """meta_rows and annotation_rows contain consistent values."""
 
-    def test_confidence_in_both_stores(self) -> None:
+    def test_removed_confidence_not_written_to_either_store(self) -> None:
         ledger = Ledger()
-        asrt_id = set_field(
-            ledger,
-            "p:test",
-            _eref("e"),
-            [("string", "v")],
-            meta={"confidence": 0.75},
-        )
-        meta_conf = ledger.find_meta(asrt_id=asrt_id, key="confidence")
-        self.assertEqual(len(meta_conf), 1)
-        self.assertEqual(meta_conf[0].value, 0.75)
-
-        anno_conf = ledger.find_annotations(asrt_id=asrt_id, key="confidence")
-        self.assertEqual(anno_conf, [])
+        removed = {"confidence": 0.75}
+        with self.assertRaises(WriteProtocolError):
+            set_field(
+                ledger,
+                "p:test",
+                _eref("e"),
+                [("string", "v")],
+                meta=removed,
+            )
 
     def test_source_in_both_stores(self) -> None:
         ledger = Ledger()
@@ -313,7 +304,7 @@ class TestAddFieldAndReplaceField(unittest.TestCase):
             "user:tag",
             _eref("alice"),
             [("string", "vip")],
-            meta={"source": "crm", "confidence": 0.9},
+            meta={"source": "crm"},
         )
         annos = ledger.find_annotations(asrt_id=asrt_id)
         self.assertEqual(len(annos), 1)
@@ -378,7 +369,7 @@ class TestRetractAnnotationProjection(unittest.TestCase):
         revoker_id = retract_by_asrt(
             ledger,
             asrt_id,
-            meta={"source": "review", "confidence": 0.4, "confidence_source": "manual:review"},
+            meta={"source": "review"},
         )
         self.assertIsNotNone(revoker_id)
 
@@ -448,8 +439,9 @@ class TestReplaceFieldAtomicity(unittest.TestCase):
         return ledger, asrt_id
 
     def test_invalid_meta_preserves_old_assertion(self) -> None:
-        """confidence='bad' should raise before revoking the old assertion."""
+        """Removed confidence meta should raise before revoking the old assertion."""
         ledger, old_asrt_id = self._setup_existing()
+        removed = {"confidence": "bad"}
 
         with self.assertRaises(WriteProtocolError):
             replace_field(
@@ -458,7 +450,7 @@ class TestReplaceFieldAtomicity(unittest.TestCase):
                 _eref("alice"),
                 old_rest_terms=[("string", "Alice")],
                 new_rest_terms=[("string", "Alice Updated")],
-                meta={"confidence": "bad"},
+                meta=removed,
             )
 
         # Old assertion must still be active (not revoked).

@@ -58,9 +58,6 @@ from kernel.core.store._artifact_sidecar import FileArtifactSidecar
 from kernel.adapters.souffle.runner import run_package
 from kernel.core.store.runtime import Store
 from kernel.core.store.ledger import Ledger
-from kernel.core.store.types import ReadPolicy
-from kernel.core.view.confidence import aggregate_confidence
-from kernel.core.view.projector import project_display_facts
 
 from .compile import compile_schema_from_classes
 from .dsl.branch import Branch
@@ -95,8 +92,10 @@ class FrozenAssertionView:
 
 
 _VIEW_TOMBSTONE = object()
+_POLICY_TOMBSTONE = object()
 _PROFILE_KWARG_UNSET = object()
 _SEMANTICS_PROFILE_ENGINES = {"problog", "pyreason"}
+_READPOLICY_REMOVED_MESSAGE = "ReadPolicy was removed. Use raw_kind / bound for uncertainty inputs."
 
 
 class _SDKViewsManager:
@@ -1005,36 +1004,21 @@ class SDKStore:
         self,
         entity_cls: type[Entity],
         *,
-        policy: ReadPolicy | None = None,
+        policy: Any = _POLICY_TOMBSTONE,
         limit: int | None = None,
         **filter_kwargs: Any,
     ):
         from .facade import sdk_find
 
         if "view" in filter_kwargs:
-            raise SDKStoreError("view= was renamed to policy=ReadPolicy(...)", path="$.find.view")
-        resolved_policy = self._resolve_read_policy(policy, api_path="fg.read.find")
-        rows = sdk_find(
+            raise SDKStoreError("view= is not supported by fg.read.find()", path="$.find.view")
+        self._reject_removed_read_policy(policy, api_path="fg.read.find")
+        return sdk_find(
             self,
             entity_cls,
             limit=limit,
             **filter_kwargs,
         )
-        if resolved_policy is None:
-            return rows
-
-        confidence_by_ref = _build_entity_confidence_by_ref(
-            self,
-            entity_cls=entity_cls,
-            read_policy=resolved_policy,
-        )
-        for row in rows:
-            ref = getattr(row, "ref", None)
-            if isinstance(ref, str):
-                object.__setattr__(row, "confidence", confidence_by_ref.get(ref))
-            else:
-                object.__setattr__(row, "confidence", None)
-        return rows
 
     def edit(self, entity_cls: type[Entity], **identity_kwargs: Any):
         from .facade import sdk_edit
@@ -1893,18 +1877,18 @@ class SDKStore:
         obj: Any,
         *,
         row_format: str | None = None,
-        policy: ReadPolicy | None = None,
+        policy: Any = _POLICY_TOMBSTONE,
         view: Any = _VIEW_TOMBSTONE,
         return_display_meta: bool = False,
         registry: RuleRegistry | None = None,
-    ) -> list[Any] | tuple[list[Any], list[dict[str, Any]]]:
+    ) -> list[Any]:
         if not isinstance(return_display_meta, bool):
             raise SDKStoreError("return_display_meta must be bool", path="$.run.return_display_meta")
         if view is not _VIEW_TOMBSTONE:
-            raise SDKStoreError("view= was renamed to policy=ReadPolicy(...)", path="$.run.view")
-        resolved_policy = self._resolve_read_policy(policy, api_path="fg.run")
-        if return_display_meta and resolved_policy is None:
-            raise SDKStoreError("return_display_meta requires policy=ReadPolicy(...)", path="$.run.return_display_meta")
+            raise SDKStoreError("view= is not supported by fg.run()", path="$.run.view")
+        self._reject_removed_read_policy(policy, api_path="fg.run")
+        if return_display_meta:
+            raise SDKStoreError(_READPOLICY_REMOVED_MESSAGE, path="$.run.return_display_meta")
         dispatch_key = self._run_dispatch_key(obj)
         dispatch_map = {
             "query": self._run_dispatch_query,
@@ -1914,8 +1898,6 @@ class SDKStore:
         return dispatch_map[dispatch_key](
             obj,
             row_format=row_format,
-            read_policy=resolved_policy,
-            return_display_meta=return_display_meta,
             registry=registry,
         )
 
@@ -1934,14 +1916,8 @@ class SDKStore:
         query: Any,
         *,
         row_format: str | None,
-        read_policy: ReadPolicy | None,
-        return_display_meta: bool,
         registry: RuleRegistry | None,
     ) -> list[Any]:
-        if read_policy is not None:
-            raise SDKStoreError("policy= is not supported for Query in run(); use Rule with run(policy=ReadPolicy(...))")
-        if return_display_meta:
-            raise SDKStoreError("return_display_meta is not supported for Query in run()", path="$.run.return_display_meta")
         resolved_row_format = _resolve_query_row_format(row_format)
         runtime_registry = self._resolve_runtime_registry(query, explicit_registry=registry)
         return self._run_query(query, row_format=resolved_row_format, registry=runtime_registry)
@@ -1951,11 +1927,9 @@ class SDKStore:
         derivation: Any,
         *,
         row_format: str | None,
-        read_policy: ReadPolicy | None,
-        return_display_meta: bool,
         registry: RuleRegistry | None,
     ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
-        del derivation, row_format, read_policy, return_display_meta, registry
+        del derivation, row_format, registry
         raise SDKStoreError(
             "Inference is not supported by run(); use sdk.evaluate() instead",
             code=QUERY_INVALID_ROW_FORMAT,
@@ -1967,10 +1941,8 @@ class SDKStore:
         rule: Any,
         *,
         row_format: str | None,
-        read_policy: ReadPolicy | None,
-        return_display_meta: bool,
         registry: RuleRegistry | None,
-    ) -> list[tuple[Any, ...]] | list[dict[str, Any]] | tuple[list[Any], list[dict[str, Any]]]:
+    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
         resolved_row_format = _resolve_row_format(
             call_site=row_format,
             store_default=self._default_row_format,
@@ -1979,8 +1951,6 @@ class SDKStore:
         return self._run_rule(
             rule,
             row_format=resolved_row_format,
-            read_policy=read_policy,
-            return_display_meta=return_display_meta,
             registry=registry,
         )
 
@@ -1989,10 +1959,8 @@ class SDKStore:
         rule: Any,
         *,
         row_format: str,
-        read_policy: ReadPolicy | None,
-        return_display_meta: bool,
         registry: RuleRegistry | None,
-    ) -> list[tuple[Any, ...]] | list[dict[str, Any]] | tuple[list[Any], list[dict[str, Any]]]:
+    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
         if isinstance(rule, str):
             raise SDKStoreError(
                 "string rule DSL is not supported in SDK v1; use Rule object, RuleSpec, or structured rule dict"
@@ -2009,16 +1977,7 @@ class SDKStore:
         if registry is None:
             self._register_rule_dependencies(active_registry, rule)
         rows = run_rule(self._store, rule_spec, active_registry)
-        formatted = _format_rule_rows(rows, select_vars=list(rule_spec.select_vars), row_format=row_format)
-        if not return_display_meta:
-            return formatted
-        display_meta = _build_rule_display_meta(
-            formatted,
-            row_format=row_format,
-            read_policy=read_policy,
-            ledger=self.ledger,
-        )
-        return formatted, display_meta
+        return _format_rule_rows(rows, select_vars=list(rule_spec.select_vars), row_format=row_format)
 
     def _run_query(
         self,
@@ -2046,14 +2005,10 @@ class SDKStore:
             return_mode=return_mode,
         )
 
-    def _resolve_read_policy(self, policy: ReadPolicy | None, *, api_path: str) -> ReadPolicy | None:
-        if policy is None:
-            return None
-        if isinstance(policy, ReadPolicy):
-            return policy
-        if isinstance(policy, FrozenAssertionView):
-            raise SDKStoreError(f"{api_path}: policy= expects ReadPolicy or None, not FrozenAssertionView")
-        raise SDKStoreError(f"{api_path}: policy= expects ReadPolicy or None")
+    def _reject_removed_read_policy(self, policy: Any, *, api_path: str) -> None:
+        if policy is _POLICY_TOMBSTONE:
+            return
+        raise SDKStoreError(f"{api_path}: {_READPOLICY_REMOVED_MESSAGE}")
 
     def inspect_semantics(self, profile: Any) -> dict[str, Any]:
         if isinstance(profile, SemanticsProfile):
@@ -2248,7 +2203,9 @@ class SDKStore:
 
     def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
         if "view" in kwargs or "policy" in kwargs:
-            raise SDKStoreError("evaluate() does not accept view= or policy=; derivation evaluation always uses active projection")
+            raise SDKStoreError(
+                "evaluate() does not accept view=; policy= was removed for read APIs and is not accepted for inference evaluation"
+            )
         if "semantics_profile" in kwargs:
             raise SDKStoreError("evaluate() does not accept semantics_profile= in SDK; use semantics=")
         if "mode" in kwargs:
@@ -2752,160 +2709,6 @@ def _schema_pred_by_pred_id(sdk: SDKStore, pred_id: str) -> dict[str, Any]:
         if isinstance(pred, dict) and pred.get("pred_id") == pred_id:
             return pred
     raise SDKStoreError(f"schema predicate not found for assertion predicate: {pred_id}")
-
-
-def _build_entity_confidence_by_ref(
-    sdk: SDKStore,
-    *,
-    entity_cls: type[Entity],
-    read_policy: ReadPolicy,
-) -> dict[str, float | None]:
-    spec = sdk._entity_spec_by_class.get(entity_cls)
-    if not isinstance(spec, dict):
-        return {}
-    entity_type = spec.get("entity_type")
-    if not isinstance(entity_type, str) or not entity_type:
-        return {}
-
-    pred_ids: set[str] = set()
-    for pred in sdk.schema_ir.get("predicates", []):
-        if not isinstance(pred, dict):
-            continue
-        if pred.get("owner_type") != entity_type:
-            continue
-        pred_id = pred.get("pred_id")
-        if isinstance(pred_id, str) and pred_id:
-            pred_ids.add(pred_id)
-
-    display_facts = project_display_facts(sdk.ledger, read_policy)
-    rows_by_ref: dict[str, list[dict[str, Any]]] = {}
-    for pred_id in pred_ids:
-        for item in display_facts.get(pred_id, []):
-            if not isinstance(item, dict):
-                continue
-            fact = item.get("fact")
-            if not isinstance(fact, tuple) or not fact:
-                continue
-            e_ref = fact[0]
-            if not isinstance(e_ref, str):
-                continue
-            rows_by_ref.setdefault(e_ref, []).append(
-                {
-                    "confidence": item.get("confidence"),
-                    "source": None,
-                }
-            )
-
-    return {
-        e_ref: aggregate_confidence(
-            rows,
-            strategy=read_policy.confidence_strategy,
-            prefer_source=read_policy.prefer_source,
-        )
-        for e_ref, rows in rows_by_ref.items()
-    }
-
-
-def _build_rule_display_meta(
-    rows: list[tuple[Any, ...]] | list[dict[str, Any]],
-    *,
-    row_format: str,
-    read_policy: ReadPolicy,
-    ledger: Ledger,
-) -> list[dict[str, Any]]:
-    confidence_rows_by_ref = _collect_confidence_rows_by_e_ref(ledger, read_policy=read_policy)
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        refs = _extract_row_entity_refs(row, row_format=row_format)
-        confidence_rows: list[dict[str, Any]] = []
-        for ref in refs:
-            confidence_rows.extend(confidence_rows_by_ref.get(ref, []))
-        aggregated = aggregate_confidence(
-            confidence_rows,
-            strategy=read_policy.confidence_strategy,
-            prefer_source=read_policy.prefer_source,
-        )
-        out.append(
-            {
-                "confidence": aggregated,
-                "confidence_strategy": read_policy.confidence_strategy,
-                "source_breakdown": _build_source_breakdown(confidence_rows),
-            }
-        )
-    return out
-
-
-def _collect_confidence_rows_by_e_ref(
-    ledger: Ledger,
-    *,
-    read_policy: ReadPolicy,
-) -> dict[str, list[dict[str, Any]]]:
-    rows_by_ref: dict[str, list[dict[str, Any]]] = {}
-    for claim in ledger.claims:
-        if read_policy.respect_revocations and ledger.has_active_revocation(claim.asrt_id):
-            continue
-        meta_rows = ledger.find_meta(asrt_id=claim.asrt_id)
-        meta = {row.key: row.value for row in meta_rows}
-        rows_by_ref.setdefault(claim.e_ref, []).append(
-            {
-                "source": meta.get("source"),
-                "confidence": meta.get("confidence"),
-            }
-        )
-    return rows_by_ref
-
-
-def _extract_row_entity_refs(
-    row: tuple[Any, ...] | dict[str, Any],
-    *,
-    row_format: str,
-) -> set[str]:
-    values: list[Any]
-    if row_format == "dict":
-        if not isinstance(row, dict):
-            raise SDKStoreError("internal error: row_format='dict' produced non-dict row", path="$.run.result")
-        values = list(row.values())
-    elif row_format == "tuple":
-        if not isinstance(row, tuple):
-            raise SDKStoreError("internal error: row_format='tuple' produced non-tuple row", path="$.run.result")
-        values = list(row)
-    else:
-        raise SDKStoreError("row_format must be 'tuple' or 'dict'", code=INVALID_ROW_FORMAT, path="$.run.row_format")
-
-    return {
-        value
-        for value in values
-        if isinstance(value, str) and value.startswith("idref_v1:")
-    }
-
-
-def _build_source_breakdown(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    grouped: dict[str | None, list[float]] = {}
-    counts: dict[str | None, int] = {}
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        source_raw = row.get("source")
-        source = source_raw if isinstance(source_raw, str) and source_raw else None
-        counts[source] = counts.get(source, 0) + 1
-        confidence_raw = row.get("confidence")
-        if isinstance(confidence_raw, (int, float)) and not isinstance(confidence_raw, bool):
-            grouped.setdefault(source, []).append(float(confidence_raw))
-        else:
-            grouped.setdefault(source, [])
-
-    out: list[dict[str, Any]] = []
-    for source in sorted(counts.keys(), key=lambda item: "" if item is None else item):
-        confidence_values = grouped.get(source, [])
-        out.append(
-            {
-                "source": source,
-                "count": counts[source],
-                "max_confidence": max(confidence_values) if confidence_values else None,
-                "mean_confidence": (sum(confidence_values) / len(confidence_values)) if confidence_values else None,
-            }
-        )
-    return out
 
 
 def _default_uuid4_for_tag(tag: str) -> str:

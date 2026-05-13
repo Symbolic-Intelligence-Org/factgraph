@@ -136,8 +136,8 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
     def test_no_new_public_sdk_names_or_read_helpers_are_added(self) -> None:
         sdk = _seed_store()
 
-        self.assertEqual(len(sdk_module.__all__), 41)
-        self.assertIn("ReadPolicy", sdk_module.__all__)
+        self.assertEqual(len(sdk_module.__all__), 40)
+        self.assertNotIn("ReadPolicy", sdk_module.__all__)
         self.assertIn("SemanticsProfile", sdk_module.__all__)
         self.assertIn("ProbLogSemantics", sdk_module.__all__)
         self.assertIn("PyReasonSemantics", sdk_module.__all__)

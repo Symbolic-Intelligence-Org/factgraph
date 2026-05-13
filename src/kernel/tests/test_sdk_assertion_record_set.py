@@ -26,7 +26,6 @@ def _seed_store() -> tuple[SDKStore, str, dict[str, str]]:
             meta={
                 "source": "seed",
                 "trace_id": "trace-name-1",
-                "confidence": 0.91,
                 "version": "name-v1",
                 "batch": "initial",
             },
@@ -38,7 +37,6 @@ def _seed_store() -> tuple[SDKStore, str, dict[str, str]]:
             meta={
                 "source": "correction",
                 "trace_id": "trace-name-2",
-                "confidence": 0.86,
                 "version": "name-v2",
                 "batch": "cleanup",
             },
@@ -50,7 +48,6 @@ def _seed_store() -> tuple[SDKStore, str, dict[str, str]]:
             meta={
                 "source": "seed",
                 "trace_id": "trace-tag-1",
-                "confidence": 0.72,
                 "version": "tag-v1",
                 "batch": "initial",
             },
@@ -61,7 +58,6 @@ def _seed_store() -> tuple[SDKStore, str, dict[str, str]]:
             "unlabeled",
             meta={
                 "trace_id": "trace-tag-2",
-                "confidence": 0.42,
                 "version": "tag-v2",
                 "batch": "unlabeled",
             },
@@ -142,7 +138,6 @@ class AssertionRecordSetFilterTests(unittest.TestCase):
                 value="vip",
                 source="seed",
                 trace_id="trace-tag-1",
-                confidence=0.72,
                 version="tag-v1",
                 meta={"batch": "initial"},
             )
@@ -243,8 +238,8 @@ class AssertionRecordSetBoundaryTests(unittest.TestCase):
     def test_no_new_public_sdk_export_or_read_namespace_method(self) -> None:
         sdk, _, _ = _seed_store()
 
-        self.assertEqual(len(sdk_module.__all__), 41)
-        self.assertIn("ReadPolicy", sdk_module.__all__)
+        self.assertEqual(len(sdk_module.__all__), 40)
+        self.assertNotIn("ReadPolicy", sdk_module.__all__)
         self.assertIn("SemanticsProfile", sdk_module.__all__)
         self.assertIn("ProbLogSemantics", sdk_module.__all__)
         self.assertIn("PyReasonSemantics", sdk_module.__all__)

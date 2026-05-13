@@ -413,18 +413,20 @@ class CertaintyExplainContractsTests(unittest.TestCase):
             result["paragraphs"][4],
         )
 
-    def test_confidence_meta_requires_float_in_range(self) -> None:
+    def test_confidence_meta_is_removed_from_user_writes(self) -> None:
         sdk = SDKStore([User])
         ref = sdk.ref(User, user_id="u-conf", locale="zh")
 
+        removed_int = {"confidence": 1}
         with self.assertRaises(SDKStoreError) as ctx_int:
-            sdk.set(User.name, ref, "Alice", meta={"confidence": 1})
-        self.assertIn("meta[confidence] must be float", str(ctx_int.exception))
+            sdk.set(User.name, ref, "Alice", meta=removed_int)
+        self.assertIn("meta[confidence] was removed", str(ctx_int.exception))
         self.assertEqual(ctx_int.exception.code, "WRITE_APPLY_FAILED")
 
+        removed_range = {"confidence": 1.5}
         with self.assertRaises(SDKStoreError) as ctx_range:
-            sdk.set(User.name, ref, "Alice", meta={"confidence": 1.5})
-        self.assertIn("within (0,1]", str(ctx_range.exception))
+            sdk.set(User.name, ref, "Alice", meta=removed_range)
+        self.assertIn("meta[confidence] was removed", str(ctx_range.exception))
         self.assertEqual(ctx_range.exception.code, "WRITE_APPLY_FAILED")
 
     def test_candidate_confidence_kind_defaults_validates_and_preserves_identity(self) -> None:
@@ -1835,7 +1837,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                         "pred_id": "user:tag",
                         "e_ref": user_ref,
                         "rest_terms": [["string", "vip"]],
-                        "meta": {"confidence": 0.7},
+                        "meta": {},
                     },
                     kind="add",
                 )
@@ -1912,7 +1914,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                         "pred_id": "user:tag",
                         "e_ref": user_ref,
                         "rest_terms": [["string", "vip"]],
-                        "meta": {"confidence": 0.6},
+                        "meta": {},
                     },
                     kind="add",
                 )
@@ -1997,7 +1999,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                         "pred_id": "user:tag",
                         "e_ref": user_ref,
                         "rest_terms": [["string", "vip"]],
-                        "meta": {"confidence": 0.7},
+                        "meta": {},
                     },
                     kind="add",
                 )

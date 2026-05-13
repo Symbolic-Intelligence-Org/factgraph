@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from kernel.core.policy.active import is_active
-from kernel.core.policy.chosen import choose_one
 from kernel.core.store.ledger import Claim, Ledger
 from kernel.core.view.projector import build_args_for_claim
 
@@ -25,7 +24,6 @@ class MappingCandidate:
     key_tuple: tuple[Any, ...]
     value_tuple: tuple[Any, ...]
     source: str | None
-    confidence: float | None
     ingested_at: int
 
 
@@ -158,13 +156,11 @@ def _candidate_from_claim(
     value_tuple = tuple(args[idx] for idx in value_positions)
     ingested_at = _required_meta_time(ledger, claim.asrt_id, "ingested_at")
     source = _optional_meta_str(ledger, claim.asrt_id, "source")
-    confidence = _optional_confidence(ledger, claim.asrt_id)
     return MappingCandidate(
         asrt_id=claim.asrt_id,
         key_tuple=key_tuple,
         value_tuple=value_tuple,
         source=source,
-        confidence=confidence,
         ingested_at=ingested_at,
     )
 
@@ -198,7 +194,9 @@ def _normalize_tie_break(raw: Any) -> tuple[str, dict[str, Any]]:
     else:
         raise MappingResolveError("tie_break must be null|string|object")
 
-    if mode not in {"error", "latest_by_ingested_at_then_min_assertion_id", "prefer_source", "max_confidence"}:
+    if mode == "max_confidence":
+        raise MappingResolveError("max_confidence tie_break was removed")
+    if mode not in {"error", "latest_by_ingested_at_then_min_assertion_id", "prefer_source"}:
         raise MappingResolveError(f"unsupported tie_break mode: {mode}")
     return mode, conf
 
@@ -230,20 +228,6 @@ def _choose_with_tie_break(
         )
         return rank_sorted[0]
 
-    if mode == "max_confidence":
-        with_conf = [c for c in candidates if c.confidence is not None]
-        if not with_conf:
-            raise MappingResolveError("max_confidence requires numeric confidence meta")
-        max_conf = max(c.confidence for c in with_conf if c.confidence is not None)
-        bucket = [c for c in with_conf if c.confidence == max_conf]
-        if len(bucket) == 1:
-            return bucket[0]
-        chosen_asrt = choose_one(ledger, [c.asrt_id for c in bucket])
-        for c in bucket:
-            if c.asrt_id == chosen_asrt:
-                return c
-        raise MappingResolveError("internal error resolving max_confidence tie")
-
     raise MappingResolveError(f"unsupported tie_break mode: {mode}")
 
 
@@ -265,16 +249,6 @@ def _optional_meta_str(ledger: Ledger, asrt_id: str, key: str) -> str | None:
     if not isinstance(value, str):
         return None
     return value
-
-
-def _optional_confidence(ledger: Ledger, asrt_id: str) -> float | None:
-    rows = ledger.find_meta(asrt_id=asrt_id, key="confidence", kind="float")
-    if not rows:
-        return None
-    value = rows[-1].value
-    if isinstance(value, float):
-        return value
-    return None
 
 
 def _invert_for_min_asrt(asrt_id: str) -> tuple[int, ...]:

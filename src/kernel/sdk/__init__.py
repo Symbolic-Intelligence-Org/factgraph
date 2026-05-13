@@ -29,7 +29,6 @@ from .store import FactGraph, SDKStore
 from kernel.application.authoring_runtime import SavedInferenceRef, SavedRuleRef
 from kernel.application.schema_mutation_runtime import SchemaAddResult
 from kernel.core.semantics import SemanticsProfile
-from kernel.core.store.types import ReadPolicy
 from .dsl import Branch, Inference, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
 from .ingest import IngestResult, ValidationReport
 
@@ -56,7 +55,6 @@ __all__ = [
     "Field",
     "Identity",
     "Relationship",
-    "ReadPolicy",
     "SemanticsProfile",
     "ProbLogSemantics",
     "PyReasonSemantics",

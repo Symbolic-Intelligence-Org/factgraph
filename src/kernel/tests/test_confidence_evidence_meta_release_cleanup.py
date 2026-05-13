@@ -6,9 +6,9 @@ import unittest
 
 from kernel.core.derivation.accept import AcceptOptions, accept_candidate_set
 from kernel.core.derivation.candidates import CandidateSet
-from kernel.core.evidence.write_protocol import set_field
+from kernel.core.evidence.write_protocol import WriteProtocolError, set_field
 from kernel.core.store._candidate_evidence_tree import build_candidate_evidence_tree
-from kernel.core.store.ledger import AnnotationRow, Ledger
+from kernel.core.store.ledger import AnnotationRow, Ledger, MetaRow
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStore
 from kernel.adapters.problog.problog_export import _claim_probability
@@ -88,26 +88,17 @@ class AcceptConfidenceCleanupTests(unittest.TestCase):
 
 
 class WriteProtocolConfidenceCleanupTests(unittest.TestCase):
-    def test_generic_confidence_meta_is_not_shared_annotation(self) -> None:
+    def test_generic_confidence_meta_is_removed_from_user_writes(self) -> None:
         ledger = Ledger()
-        asrt_id = set_field(
-            ledger,
-            "user:tag",
-            _eref(),
-            [("string", "vip")],
-            meta={"source": "manual", "confidence": 0.85},
-        )
-
-        self.assertEqual(
-            ledger.find_annotations(
-                asrt_id=asrt_id,
-                namespace="shared",
-                category="derived",
-                key="confidence",
-            ),
-            [],
-        )
-        self.assertEqual([row.value for row in ledger.find_meta(asrt_id=asrt_id, key="confidence")], [0.85])
+        removed = {"confidence": 0.85}
+        with self.assertRaisesRegex(WriteProtocolError, "confidence"):
+            set_field(
+                ledger,
+                "user:tag",
+                _eref(),
+                [("string", "vip")],
+                meta=removed,
+            )
 
     def test_source_annotation_projection_is_preserved(self) -> None:
         ledger = Ledger()
@@ -150,7 +141,17 @@ class AdapterConfidenceCleanupTests(unittest.TestCase):
             "user:tag",
             _eref(),
             [("string", "vip")],
-            meta={"confidence": 0.25},
+            meta={},
+        )
+        sdk.ledger.append_meta(
+            [
+                MetaRow(
+                    asrt_id=asrt_id,
+                    key="confidence",
+                    kind="float",
+                    value=0.25,
+                )
+            ]
         )
 
         self.assertEqual(_claim_probability(sdk.store, asrt_id), 1.0)

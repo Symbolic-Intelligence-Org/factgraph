@@ -38,14 +38,14 @@ def _make_sdk() -> SDKStore:
         pred_id="user:name",
         e_ref=alice_ref,
         rest_terms=[("string", "Alice")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     set_field(
         sdk.ledger,
         pred_id="user:tag_seed",
         e_ref=alice_ref,
         rest_terms=[("string", "vip")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     return sdk
 

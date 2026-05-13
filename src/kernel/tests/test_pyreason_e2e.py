@@ -83,21 +83,21 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
             pred_id="user:name",
             e_ref=alice_ref,
             rest_terms=[("string", "Alice")],
-            meta={"source": "test", "confidence": 1.0},
+            meta={"source": "test"},
         )
         set_field(
             sdk.ledger,
             pred_id="user:name",
             e_ref=bob_ref,
             rest_terms=[("string", "Bob")],
-            meta={"source": "test", "confidence": 1.0},
+            meta={"source": "test"},
         )
         set_field(
             sdk.ledger,
             pred_id="friends:strength",
             e_ref=alice_ref,
             rest_terms=[("entity_ref", bob_ref), ("string", "0.9")],
-            meta={"source": "test", "confidence": 1.0},
+            meta={"source": "test"},
         )
         return sdk
 

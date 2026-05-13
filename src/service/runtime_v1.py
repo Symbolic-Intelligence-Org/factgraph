@@ -54,9 +54,7 @@ from kernel.core.store._support import (
 from kernel.core.store._confidence_kind_resolver import CertaintyConfidenceKindResolver
 from kernel.core.store.runtime import Store
 from kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
-from kernel.core.store.types import ReadPolicy
 from kernel.core.view.projector import (
-    project_display_facts,
     project_view_facts,
     project_view_facts_with_audit,
 )
@@ -841,14 +839,14 @@ def project_runtime_view_facts(session_id: str, dto: dict[str, Any]) -> dict[str
                 path="$.temporal_view",
             )
         include_audit = _resolve_include_audit(dto.get("include_audit"), path="$.include_audit")
-        policy = _resolve_runtime_read_policy(dto)
+        _reject_runtime_read_policy(dto)
         if include_audit:
             projected_facts, audit = project_view_facts_with_audit(
                 session.store.ledger,
                 session.store.schema_ir,
             )
             view = {
-                "facts": _to_jsonable(_runtime_policy_facts(session.store.ledger, projected_facts, policy)),
+                "facts": _to_jsonable(projected_facts),
                 "audit": asdict(audit),
             }
         else:
@@ -857,10 +855,8 @@ def project_runtime_view_facts(session_id: str, dto: dict[str, Any]) -> dict[str
                 session.store.schema_ir,
             )
             view = {
-                "facts": _to_jsonable(_runtime_policy_facts(session.store.ledger, projected_facts, policy)),
+                "facts": _to_jsonable(projected_facts),
             }
-        if policy is not None:
-            view["policy"] = _read_policy_to_dict(policy)
         return ok_response(
             meta={
                 "pred_count": len(projected_facts),
@@ -2594,7 +2590,6 @@ def _mapping_resolution_to_dict(resolution: MappingResolution) -> dict[str, Any]
                 "key_tuple": _to_jsonable(candidate.key_tuple),
                 "value_tuple": _to_jsonable(candidate.value_tuple),
                 "source": candidate.source,
-                "confidence": candidate.confidence,
                 "ingested_at": candidate.ingested_at,
             }
             for candidate in resolution.candidates
@@ -2624,75 +2619,25 @@ def _mapping_conflict_to_error(exc: MappingConflictError) -> dict[str, Any]:
     }
 
 
-def _resolve_runtime_read_policy(dto: dict[str, Any]) -> ReadPolicy | None:
+def _reject_runtime_read_policy(dto: dict[str, Any]) -> None:
     if "view_name" in dto:
         raise facade_error(
-            "view_name was removed; pass policy inline with the policy key",
+            "view_name was removed; runtime view-facts always uses active projection",
             kind="shape",
             path="$.view_name",
         )
     if "view" in dto:
         raise facade_error(
-            "view was renamed to policy for runtime view-facts",
+            "view was removed; runtime view-facts always uses active projection",
             kind="shape",
             path="$.view",
         )
-    if "policy" not in dto or dto.get("policy") is None:
-        return None
-    return _parse_read_policy(dto.get("policy"), path="$.policy")
-
-
-def _runtime_policy_facts(
-    ledger: Ledger,
-    projected_facts: dict[str, list[dict[str, Any]]],
-    policy: ReadPolicy | None,
-) -> dict[str, list[dict[str, Any]]]:
-    if policy is None:
-        return projected_facts
-    return project_display_facts(ledger, policy)
-
-
-def _parse_read_policy(value: Any, *, path: str) -> ReadPolicy:
-    if isinstance(value, ReadPolicy):
-        return value
-    if not isinstance(value, dict):
-        raise facade_error("policy must be object", kind="shape", path=path)
-    if "active" in value:
+    if "policy" in dto:
         raise facade_error(
-            "policy.active was renamed to policy.respect_revocations",
+            "ReadPolicy was removed. Use raw_kind / bound for uncertainty inputs.",
             kind="shape",
-            path=f"{path}.active",
+            path="$.policy",
         )
-
-    respect_revocations_raw = value.get("respect_revocations", True)
-    if not isinstance(respect_revocations_raw, bool):
-        raise facade_error("policy.respect_revocations must be bool", kind="shape", path=f"{path}.respect_revocations")
-
-    strategy_raw = value.get("confidence_strategy", "max")
-    if not isinstance(strategy_raw, str) or strategy_raw not in {"max", "mean", "median", "prefer_source"}:
-        raise facade_error(
-            "policy.confidence_strategy must be one of: max, mean, median, prefer_source",
-            kind="shape",
-            path=f"{path}.confidence_strategy",
-        )
-
-    prefer_source_raw = value.get("prefer_source")
-    if prefer_source_raw is not None and (not isinstance(prefer_source_raw, str) or not prefer_source_raw):
-        raise facade_error("policy.prefer_source must be non-empty string or null", kind="shape", path=f"{path}.prefer_source")
-
-    return ReadPolicy(
-        respect_revocations=respect_revocations_raw,
-        confidence_strategy=strategy_raw,
-        prefer_source=prefer_source_raw,
-    )
-
-
-def _read_policy_to_dict(read_policy: ReadPolicy) -> dict[str, Any]:
-    return {
-        "respect_revocations": read_policy.respect_revocations,
-        "confidence_strategy": read_policy.confidence_strategy,
-        "prefer_source": read_policy.prefer_source,
-    }
 
 
 def _resolve_include_audit(value: Any, *, path: str) -> bool:

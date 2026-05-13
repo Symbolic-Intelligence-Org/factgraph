@@ -75,28 +75,28 @@ def _make_sdk() -> SDKStore:
         pred_id="user:name",
         e_ref=alice_ref,
         rest_terms=[("string", "Alice")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     set_field(
         sdk.ledger,
         pred_id="user:risk_score",
         e_ref=alice_ref,
         rest_terms=[("float64", 0.7)],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     set_field(
         sdk.ledger,
         pred_id="user:tag_seed",
         e_ref=alice_ref,
         rest_terms=[("string", "vip")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     set_field(
         sdk.ledger,
         pred_id="user:tag_hint",
         e_ref=alice_ref,
         rest_terms=[("string", "trial")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     return sdk
 
@@ -195,7 +195,7 @@ class PublicSemanticsExportTests(unittest.TestCase):
 
         self.assertIn("ProbLogSemantics", sdk_module.__all__)
         self.assertIn("PyReasonSemantics", sdk_module.__all__)
-        self.assertEqual(len(sdk_module.__all__), 41)
+        self.assertEqual(len(sdk_module.__all__), 40)
 
     def test_problog_semantics_exposes_engine_metadata(self) -> None:
         semantics = _problog_semantics()

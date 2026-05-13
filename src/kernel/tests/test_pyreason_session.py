@@ -127,12 +127,13 @@ class PyReasonSessionInternalTests(unittest.TestCase):
 
     def test_explicit_confidence_is_dropped_from_generic_meta(self) -> None:
         s = self._session()
+        generic = {"confidence": 0.85}
         s._write_node_fact_internal(
             "user:name",
             "ref",
             "Alice",
             bound=[0.7, 0.9],
-            meta={"confidence": 0.85},
+            meta=generic,
         )
         self.assertNotIn("confidence", s.node_facts[0]["meta"])
         self.assertNotIn("confidence_source", s.node_facts[0]["meta"])

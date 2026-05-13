@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 
 from kernel.adapters.problog.problog_export import ProbLogExportError, export_problog
 from kernel.core.evidence.write_protocol import set_field
-from kernel.core.store.ledger import AnnotationRow
+from kernel.core.store.ledger import AnnotationRow, MetaRow
 from kernel.sdk.schema import Entity, Field, Identity
 from kernel.sdk.store import SDKStore
 
@@ -22,12 +22,22 @@ class ProbLogExportTests(unittest.TestCase):
     def _make_sdk(self) -> SDKStore:
         sdk = SDKStore([User])
         alice_ref = sdk.ref(User, user_id="Alice")
-        set_field(
+        asrt_id = set_field(
             sdk.ledger,
             pred_id="user:name",
             e_ref=alice_ref,
             rest_terms=[("string", "Alice")],
-            meta={"source": "test", "confidence": 0.25},
+            meta={"source": "test"},
+        )
+        sdk.ledger.append_meta(
+            [
+                MetaRow(
+                    asrt_id=asrt_id,
+                    key="confidence",
+                    kind="float",
+                    value=0.25,
+                )
+            ]
         )
         return sdk
 
@@ -168,7 +178,17 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
             pred_id="item:label",
             e_ref=ref,
             rest_terms=[("string", "val")],
-            meta={"confidence": 0.5},
+            meta={},
+        )
+        sdk.ledger.append_meta(
+            [
+                MetaRow(
+                    asrt_id=asrt_id,
+                    key="confidence",
+                    kind="float",
+                    value=0.5,
+                )
+            ]
         )
         # Overwrite confidence with bool via raw annotation
         sdk.ledger.append_annotations([

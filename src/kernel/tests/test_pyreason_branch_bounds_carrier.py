@@ -48,21 +48,21 @@ def _make_sdk() -> SDKStore:
         pred_id="user:name",
         e_ref=alice_ref,
         rest_terms=[("string", "Alice")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     set_field(
         sdk.ledger,
         pred_id="user:risk_score",
         e_ref=alice_ref,
         rest_terms=[("float64", 0.7)],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     set_field(
         sdk.ledger,
         pred_id="user:tag_hint",
         e_ref=alice_ref,
         rest_terms=[("string", "trial")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     return sdk
 

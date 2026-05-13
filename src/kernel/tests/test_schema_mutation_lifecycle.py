@@ -132,14 +132,14 @@ def _seed_fg(*, registry_root: Path | None = None, path: Path | None = None):
         pred_id="user:name",
         e_ref=alice_ref,
         rest_terms=[("string", "Alice")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     set_field(
         fg.ledger,
         pred_id="user:tag_seed",
         e_ref=alice_ref,
         rest_terms=[("string", "vip")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     return fg
 
@@ -199,7 +199,7 @@ class SchemaMutationAPITests(unittest.TestCase):
         sdk_module = _sdk_module()
 
         self.assertIn("SchemaAddResult", sdk_module.__all__)
-        self.assertEqual(len(sdk_module.__all__), 41)
+        self.assertEqual(len(sdk_module.__all__), 40)
 
 
 class SchemaMutationApplicationRuntimeTests(unittest.TestCase):

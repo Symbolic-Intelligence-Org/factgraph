@@ -31,13 +31,12 @@ _CONVENTION_META_KEYS = {
     "source",
     "source_loc",
     "trace_id",
-    "confidence",
     "raw_kind",
     "bound",
     "approved_by",
     "note",
 }
-_REMOVED_UNCERTAINTY_META_KEYS = {"probability", "bound_lower", "bound_upper"}
+_REMOVED_UNCERTAINTY_META_KEYS = {"probability", "bound_lower", "bound_upper", "confidence", "confidence_source"}
 _RAW_UNCERTAINTY_KINDS = {"probabilistic", "possibilistic"}
 _SENSITIVE_SEMANTIC_META_KEYS = {
     "derived_rule_id",
@@ -63,8 +62,6 @@ _KEY_KIND_MAP = {
     "source": "str",
     "source_loc": "str",
     "trace_id": "str",
-    "confidence": "float",
-    "confidence_source": "str",
     "raw_kind": "str",
     "bound": "json",
     "approved_by": "str",
@@ -271,6 +268,10 @@ def _normalize_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
 def _validate_no_removed_uncertainty_keys(meta: dict[str, Any]) -> None:
     for key in sorted(_REMOVED_UNCERTAINTY_META_KEYS):
         if key in meta:
+            if key in {"confidence", "confidence_source"}:
+                raise WriteProtocolError(
+                    f"meta[{key}] was removed. Use raw_kind / bound for uncertainty inputs."
+                )
             raise WriteProtocolError(
                 f"meta[{key}] is not accepted as user-authored raw uncertainty; "
                 "use meta[raw_kind] and meta[bound]"
@@ -426,12 +427,8 @@ def _annotation_rows_for_claim(
 
 
 def _annotation_derivation_for_key(key: str, meta: dict[str, Any]) -> str | None:
-    if key != "confidence":
-        return None
-    source = meta.get("confidence_source")
-    if isinstance(source, str) and source:
-        return source
-    return "meta:confidence"
+    del key, meta
+    return None
 
 
 def _user_meta_rows(asrt_id: str, meta: dict[str, Any]) -> list[MetaRow]:
@@ -481,9 +478,6 @@ def _validate_meta_value_for_kind(key: str, kind: str, value: Any) -> None:
     if kind == "float":
         if isinstance(value, bool) or not isinstance(value, float):
             raise WriteProtocolError(f"meta[{key}] must be float")
-        if key == "confidence":
-            if value <= 0.0 or value > 1.0:
-                raise WriteProtocolError(f"meta[{key}] must be within (0,1]")
         return
     if kind == "bool":
         if not isinstance(value, bool):
