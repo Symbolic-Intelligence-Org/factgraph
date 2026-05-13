@@ -189,8 +189,17 @@ same project; some are out of scope for `factpy-kernel` entirely.
   `fg.rules.*` and `fg.inferences.*` namespaces.
 - Substrate `derivation_*` names in protocol, registry, and proof internals;
   public SDK uses `Inference`.
-- Long-form proof / evidence rendering. The quickstart evidence boundary stops
-  at `fg.audit.explain_fact(...)` and `fg.audit.conflicts(...)`.
+- Round capture (`start_round`, `record_round_event`, `finalize_round` in
+  `kernel.audit.round_events`) and audit package loading
+  (`kernel.audit.load_audit_package`); the SDK ships the query-side
+  `fg.audit.diff_proof_frames(...)` but not the recorder lifecycle.
+- Walker views over evidence results (`ProofFrameView`,
+  `SupportArtifactView`, `ProofFrameDiffView` in `kernel.application.walker`);
+  the SDK methods return raw frozen DTOs.
+- Frontier introspection (`kernel.core.rules.frontier`); Why-not requires an
+  explicit candidate universe.
+- Long-form proof / evidence rendering pipelines beyond the structured DTOs
+  returned by `fg.what_if.*` and `fg.audit.*`.
 
 ## Syntax checklist
 
