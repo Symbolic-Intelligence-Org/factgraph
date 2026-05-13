@@ -175,3 +175,18 @@
 - Example snippets planned: None; this is a reference table page. It links users back to quickstart/concepts pages for runnable examples.
 - Validation method: Compare the export count and names with `kernel.sdk.__all__`, run the official docs baseline, and keep `git diff --check` clean.
 - External style reference: Pydantic-style reference navigation only; all API names and groupings come from local source, tests, and module docs.
+
+### `concepts/factgraph.md`
+
+- Reader goal: Understand what a `FactGraph` is: a schema-bound facade over an append-only assertion ledger, not a mutable object table.
+- Core mental model: Writes append assertions to the ledger; reads resolve current snapshots from active assertion history; views name frozen assertion-id sets, not read policies.
+- Common misconception to prevent: `fg.write.set(...)` is not in-place mutation, `single` fields do not erase earlier assertions, and `fg.write.retract(...)` takes an assertion id rather than an entity ref or value.
+- APIs covered: `FactGraph`, `fg.read.ref`, `fg.write.set`, `fg.write.add`, `fg.read.get`, `EntitySnapshot.field(...)`, `AssertionRecordSet.active`, `AssertionRecordSet.history`, `fg.write.retract`, `fg.views.create/get/list`, `fg.assertions.by_ids`, `ReadPolicy`.
+- Non-goals: Rules/inferences, semantics engines, workspace persistence, service routes, proof/evidence internals, package export, and full confidence/certainty design.
+- Source files checked: `src/kernel/sdk/store.py`, `src/kernel/sdk/facade.py`, `src/kernel/core/evidence/write_protocol.py`, `src/kernel/tests/test_sdk_assertion_record_set.py`, `src/kernel/tests/test_sdk_read_policy.py`, `src/kernel/tests/test_sdk_frozen_assertion_view.py`.
+- Module docs checked: `src/kernel/sdk/docs/01_concepts.en.md`, `src/kernel/sdk/docs/02_readwrite_and_ingest.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`.
+- Design references checked: `docs/references/working/design-points/read-write-snapshot-assertion-selection.zh.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-11_frozen-assertion-view-model.md`, `docs/blueprints/archive/2026-05-10_assertion-selection-crud-ergonomics.md`, `docs/blueprints/archive/2026-05-13_confidence-evidence-meta-release-cleanup.md`.
+- Example snippets planned: Write two single-field assertions, inspect snapshot history, retract one multi-field assertion, create a frozen assertion view, read assertion records by id, and show `ReadPolicy` as a call-site object.
+- Validation method: Extract Python blocks and run them with `PYTHONPATH=src python`, verifying append-only history, current snapshot resolution, retraction active/history split, frozen view membership, and `ReadPolicy` construction.
+- External style reference: Pydantic-style concepts page pacing only; all FactGraph, ledger, snapshot, and view behavior comes from local source, tests, module docs, and archived blueprints.
