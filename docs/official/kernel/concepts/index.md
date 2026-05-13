@@ -6,6 +6,7 @@ Mental model and design rationale for `factpy-kernel`.
 - [FactGraph, ledger, and snapshots](factgraph.md)
 - [Rules, inferences, and candidate facts](rules-and-inferences.md)
 - [Persistence and workspaces](persistence-and-workspaces.md)
+- [Semantics as evaluation configuration](semantics.md)
 
 More pages are being added as the official docs are built. The quickstart pages
 cover the working path; this section deepens the design model behind it.

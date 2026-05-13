@@ -220,3 +220,18 @@
 - Example snippets planned: Save and load a rule handle, save and load an inference handle, save a path-bound workspace, inspect workspace layout files, and load the workspace with schema classes.
 - Validation method: Extract Python blocks and run them with `PYTHONPATH=src python`, verifying saved-ref shapes, load-before-runtime, workspace layout files, and loaded graph round-trip behavior.
 - External style reference: Pydantic-style concepts page pacing only; all persistence and workspace behavior comes from local source, tests, module docs, design notes, and archived blueprints.
+
+### `concepts/semantics.md`
+
+- Reader goal: Understand where public semantics wrappers fit in the inference lifecycle and why they stay outside `Inference` templates.
+- Core mental model: `Inference` describes what could be derived; `ProbLogSemantics`, `PyReasonSemantics`, or `SemanticsProfile` describe how an engine should evaluate that template at call time.
+- Common misconception to prevent: Semantics wrappers do not write facts, do not persist into rule templates, and do not replace the `evaluate -> CandidateSet -> accept` lifecycle.
+- APIs covered: `ProbLogSemantics`, `PyReasonSemantics`, `SemanticsProfile`, `Branch(id=...)`, `fg.rules.inspect`, `fg.eval.inspect_semantics`, `fg.eval.evaluate`.
+- Non-goals: ProbLog/PyReason mathematical semantics, service JSON payloads, compiled plan internals, adapter-local carriers, atom-level PyReason bounds, and custom engine implementation.
+- Source files checked: `src/kernel/sdk/semantics.py`, `src/kernel/core/semantics/profile.py`, `src/kernel/sdk/store.py`, `src/kernel/tests/test_public_semantics_api_redesign.py`, `src/kernel/tests/test_pyreason_branch_bounds_carrier.py`.
+- Module docs checked: `src/kernel/core/semantics/docs/README.md`, `src/kernel/sdk/docs/03_rules_and_inferences.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`, `src/kernel/adapters/docs/02_problog_adapter.md`, `src/kernel/adapters/docs/03_pyreason_adapter.md`.
+- Design references checked: `docs/references/working/design-points/post-track3-semantics-public-api.zh.md`, `docs/references/working/design-points/rule-policy-function-tree-and-syntax.zh.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-12_public-semantics-api-redesign.md`, `docs/blueprints/archive/2026-05-12_pyreason-branch-bounds-carrier.md`, `docs/blueprints/archive/2026-05-12_sdk-service-semantics-callsite.md`, `docs/blueprints/archive/2026-05-12_branch-identity-rule-inspect.md`.
+- Example snippets planned: Define an inference with explicit branch id, inspect branch ids, inspect ProbLog/PyReason wrappers, inspect a canonical profile, and prove normal native evaluation still follows evaluate/accept.
+- Validation method: Extract Python blocks and run them with `PYTHONPATH=src python`, verifying wrapper engines, lowered preview structure, PyReason branch-bound projection entries, canonical profile inspection, and unchanged candidate lifecycle.
+- External style reference: Pydantic-style concepts page pacing only; all semantics behavior comes from local source, tests, module docs, design notes, and archived blueprints.
