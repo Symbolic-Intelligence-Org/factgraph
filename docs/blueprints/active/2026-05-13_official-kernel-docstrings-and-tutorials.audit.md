@@ -16,6 +16,7 @@
 | 2026-05-13 | scoped | G2.4 schema/read-write docstring anchors started | Added hover docs for `SchemaAddResult`, `fg.schema.add`, `fg.read.find`, and `fg.write.retract` to anchor schema and read/write tutorials. |
 | 2026-05-13 | scoped | G2.5 tutorial mental-model pass started | Strengthened the Page Brief contract and revised the first two quickstart pages to explain FactGraph/fact/assertion/ref/snapshot/schema concepts before syntax. |
 | 2026-05-13 | scoped | G2.6 Page Brief gate updated | Extended the official docs baseline to require Page Brief fields for core mental model, common misconception, and design references. |
+| 2026-05-13 | scoped | G2.7 read/write quickstart page started | Added a read/write tutorial brief and drafted `quickstart/read-write.md` from current assertion, snapshot, ref, find, and retract behavior. |
 
 ## Decision Notes
 
@@ -65,3 +66,18 @@
 - Example snippets planned: Define `Team` and `User`, store a reference from `User.team` to `Team`, read single/multi/reference fields, then add a non-identity `nickname` field with a replacement `User` class.
 - Validation method: Extracted all Python blocks and ran them in order with `PYTHONPATH=src python`, verifying reference writes, missing added-field reads, and `SchemaAddResult.added_fields`.
 - External style reference: Pydantic-style progressive schema teaching only; current local code, tests, module docs, and archived blueprints define behavior.
+
+### `quickstart/read-write.md`
+
+- Reader goal: Understand how ordinary writes become append-only assertions, how reads resolve those assertions into snapshots, and how to inspect or retract individual assertions.
+- Core mental model: The ledger stores assertion records; `fg.read.get(...)` and `fg.read.find(...)` build current snapshots from active assertions rather than returning mutable database rows.
+- Common misconception to prevent: `fg.write.set(...)` is not an in-place update, `fg.write.retract(...)` takes an assertion id rather than an entity ref, and `fg.read.ref(...)` should be treated as opaque.
+- APIs covered: `fg.read.ref`, `fg.write.set`, `fg.write.add`, `fg.read.get`, `fg.read.find`, `fg.write.retract`, `EntitySnapshot.field(...)`, `AssertionRecordSet.active`, `AssertionRecordSet.history`.
+- Non-goals: Batch transactions, edit context managers, ingest, read policies, views, audit/explain APIs, rules, inferences, workspace persistence, and service routes.
+- Source files checked: `src/kernel/sdk/store.py`, `src/kernel/sdk/facade.py`, `src/kernel/tests/test_sdk_set_add_application_delegate.py`, `src/kernel/tests/test_sdk_assertion_record_set.py`, `src/kernel/tests/test_sdk_find_partial_identity.py`, `src/kernel/tests/test_sdk_read_policy.py`.
+- Module docs checked: `src/kernel/sdk/docs/00_user_guide.en.md`, `src/kernel/sdk/docs/01_concepts.en.md`, `src/kernel/sdk/docs/02_readwrite_and_ingest.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`.
+- Design references checked: `docs/references/working/design-points/read-write-snapshot-assertion-selection.zh.md`, `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`, `docs/references/working/design-points/identity-primary-key-coordinate-semantics.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-13_confidence-evidence-meta-release-cleanup.md`, `docs/blueprints/archive/2026-05-13_schema-field-add-lifecycle.md`, `docs/blueprints/archive/2026-05-12_factgraph-workspace-lifecycle.md`.
+- Example snippets planned: Write a single field twice, add multi-field values, read a current snapshot, inspect assertion history, find entities by field filters, and retract one assertion by id.
+- Validation method: Extract the complete example and run it with `PYTHONPATH=src python`, verifying latest single-field resolution, multi-field containment, assertion history, find filters, and retraction behavior.
+- External style reference: Pydantic-style tutorial progression and recap only; all semantics come from local source, module docs, tests, and archived blueprints.
