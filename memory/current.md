@@ -1,5 +1,60 @@
 # Current Operational Memory
 
+最后更新:2026-05-13(confidence/evidence meta release cleanup published; source `843cf515`)
+
+## 当前阶段(2026-05-13 — CONFIDENCE / EVIDENCE META RELEASE CLEANUP PUBLISHED)
+
+**Current source state:** `origin/master = 843cf515`.
+
+**Published slice:**
+- `origin/milestone/confidence-evidence-meta-release-cleanup-2026-05-13 = 843cf515`.
+- G0-G4 confidence / evidence meta release cleanup slice is implemented,
+  archived, and published.
+- This is a defensive pre-release cleanup that cuts legacy generic confidence
+  propagation while preserving adapter-native uncertainty lanes.
+
+**Release refs remain intact:**
+- `origin/release/0.1.x = e996aa5b`.
+- `v0.1.0-rc.1`, `v0.1.0-rc.2`, and `v0.1.0-rc.3` remain untouched.
+
+**Landed behavior:**
+- `CandidateSet.confidence` and `CandidateSet.confidence_kind` remain
+  internal/session compatibility carriers.
+- Runtime accept remains parse-compatible with old candidate payloads that echo
+  `confidence` / `confidence_kind`.
+- `accept(...)` no longer writes candidate confidence fields into assertion
+  meta by default.
+- Generic `meta.confidence` remains a ledger meta row but is not projected into
+  shared derived annotations.
+- Legacy confidence differences do not affect duplicate detection.
+- ProbLog export no longer falls back to generic `meta.confidence`.
+- PyReason sessions keep adapter-native bound annotations and filter generic
+  confidence metadata from shared projections.
+- Service candidate DTOs and candidate inventory omit legacy confidence fields
+  by default.
+- Candidate evidence trees do not lift generic assertion `meta.confidence` into
+  default evidence/certainty display.
+
+**Verification:**
+- Confidence cleanup baseline: 11/11 OK.
+- Full kernel discovery: 2198 OK / 1 skipped.
+- Post-publish verification confirmed `origin/master`, the milestone branch
+  ref, release branch, and rc tags.
+
+**Memory detail:** [project_confidence_evidence_meta_release_cleanup_implemented.md](./project_confidence_evidence_meta_release_cleanup_implemented.md).
+
+**Remaining independent design lines:**
+- future explicit confidence/certainty/probability redesign if needed;
+- explain/evidence user surface;
+- query persistence;
+- relationship schema extension;
+- identity changes;
+- field defaults / nullability / backfill;
+- destructive schema lifecycle (`delete` / `deprecate` / `update` / `migrate`);
+- class-less dynamic workspace load.
+
+<!-- Historical 2026-05-13 schema field-add lifecycle state follows. -->
+
 最后更新:2026-05-13(schema field-add lifecycle published; source `925354c6`)
 
 ## 当前阶段(2026-05-13 — SCHEMA FIELD-ADD LIFECYCLE PUBLISHED)
@@ -44,45 +99,6 @@
 - query persistence;
 - explain/evidence user surface;
 - class-less dynamic workspace load.
-
-<!-- Historical 2026-05-13 confidence/evidence pending state follows. -->
-
-最后更新:2026-05-13(confidence/evidence meta cleanup blueprint pending; code changes withdrawn)
-
-## 当前阶段(2026-05-13 — CONFIDENCE / EVIDENCE META CLEANUP PENDING)
-
-**Active blueprint:** `docs/blueprints/active/2026-05-13_confidence-evidence-meta-release-cleanup.md`.
-
-**Audit log:** `docs/blueprints/active/2026-05-13_confidence-evidence-meta-release-cleanup.audit.md`.
-
-**Current status:**
-- Research/audit is complete.
-- Blueprint pair has been restored under `docs/blueprints/active/`.
-- No confidence/evidence cleanup code changes are currently present in the git diff.
-- Earlier attempted code edits were withdrawn; current tracked code diff does not include:
-  - `src/kernel/adapters/problog/problog_export.py`
-  - `src/kernel/adapters/pyreason/session.py`
-  - `src/kernel/core/derivation/accept.py`
-  - `src/kernel/core/evidence/write_protocol.py`
-  - `src/service/runtime_v1.py`
-  - `src/service/static_ui.py`
-
-**Key audit conclusion:**
-`CandidateSet.confidence/confidence_kind` form a legacy propagation chain:
-candidate DTO -> accept assertion meta -> shared annotation -> duplicate checks,
-ProbLog export, evidence tree, certainty summary, static UI, audit/docs/tests.
-This should be cleaned before release, but only after confirming no concurrent
-program is editing the same files.
-
-**Chosen scope:** minimal release cleanup.
-- Keep `CandidateSet.confidence` / `confidence_kind` internally for compatibility.
-- Stop default public/persisted semantics from treating them as canonical
-  assertion confidence.
-- Keep adapter-native diagnostics such as `problog/semantic/probability` and
-  `pyreason/semantic/bound_*`.
-- Defer the full confidence/certainty/probability redesign.
-
-**Memory detail:** [project_confidence_evidence_meta_cleanup_pending.md](./project_confidence_evidence_meta_cleanup_pending.md).
 
 <!-- Historical 2026-05-13 schema mutation lifecycle state follows. -->
 

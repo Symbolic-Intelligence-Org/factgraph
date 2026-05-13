@@ -30,8 +30,8 @@
   - `fg.schema.add(...)` additive schema mutation lifecycle publish checkpoint.
 - [project_schema_field_add_lifecycle_implemented.md](/Users/zhenzhili/hnsm-backend/memory/project_schema_field_add_lifecycle_implemented.md)
   - Additive non-identity schema field-add lifecycle publish checkpoint.
-- [project_confidence_evidence_meta_cleanup_pending.md](/Users/zhenzhili/hnsm-backend/memory/project_confidence_evidence_meta_cleanup_pending.md)
-  - Pending pre-release confidence/evidence meta cleanup memory; active blueprint remains the task source.
+- [project_confidence_evidence_meta_release_cleanup_implemented.md](/Users/zhenzhili/hnsm-backend/memory/project_confidence_evidence_meta_release_cleanup_implemented.md)
+  - Confidence / evidence meta release cleanup publish checkpoint.
 - `session_handoffs/YYYY-MM-DD.md`
   - 按日期保留的 handoff 记录，用于回放某一工作日的 stopping point。
 
