@@ -1,0 +1,60 @@
+name: Publish to TestPyPi
+
+on:
+    push: 
+        tags:
+            -   "v*"
+
+jobs:
+    build:
+        name: Build dist
+        runs-on: ubuntu-latest
+
+        steps:
+            # checking out the repo
+            -   uses: actions/checkout@v6
+                with:
+                    persist-credentials: false
+            
+            # pixi tasks
+            -   uses: prefix-dev/setup-pixi@v0.9.5
+
+                with:
+                    # just for testing
+                    cache: false
+                    # environments: >-
+                    #     release
+            
+            # the build-task depends on the test-task. 
+            # this, however is inivisible on this level.
+            -   run: pixi run build
+
+            -   uses: actions/upload-artifact@v6
+                with:
+                    name: python-package-distributions
+                    path: dist/
+    
+    publish:
+        name: Publish to TestPyPi
+        needs:
+            - build
+        runs-on: ubuntu-latest
+ 
+        environment:
+            name: testpypi
+            url: https://test.pypi.org/p/
+        
+        permissions:
+            id-token: write
+        
+        steps:
+            - name: Downlaod all the dists
+              uses: actions/download-artifact@v6
+              with:
+                name: python-package-distributions
+                path: dist/
+
+            - name: Publish dist to TestPyPi
+              uses: pypa/gh-action-pypi-publish@release/v1
+              with:
+                repository-url: https://test.pypi.org/legacy/
