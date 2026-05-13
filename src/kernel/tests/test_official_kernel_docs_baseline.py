@@ -110,6 +110,7 @@ class TestOfficialDocsTreeGate(unittest.TestCase):
             OFFICIAL_DOCS_ROOT / "quickstart" / "first-factgraph.md",
             OFFICIAL_DOCS_ROOT / "quickstart" / "schema.md",
             OFFICIAL_DOCS_ROOT / "quickstart" / "read-write.md",
+            OFFICIAL_DOCS_ROOT / "quickstart" / "assertions.md",
             OFFICIAL_DOCS_ROOT / "quickstart" / "rules-and-inferences.md",
             OFFICIAL_DOCS_ROOT / "quickstart" / "semantics.md",
             OFFICIAL_DOCS_ROOT / "quickstart" / "persistence.md",
