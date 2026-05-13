@@ -11,6 +11,7 @@
 | 2026-05-13 | scoped | G0 scope frozen | Locked release-docs cleanup scope to README, examples README, service docs, OpenAPI scope wording, and focused stale-grep gates; no code or release-ref changes. |
 | 2026-05-13 | scoped | README/examples updated | Refreshed root README around `FactGraph.create`, `Inference`, 10 SDK namespaces, and examples README around current SDK shells. |
 | 2026-05-13 | scoped | Service/OpenAPI updated | Removed stale confidence echo from service examples, corrected runtime DTO title, and removed extraction route/tag/components from kernel OpenAPI. |
+| 2026-05-13 | implemented | G4 close-out | Filled Outcome / Deviations, verified stale-grep gate, OpenAPI parse/ref check, and `git diff --check`; ready to archive. |
 
 ## Decision Notes
 

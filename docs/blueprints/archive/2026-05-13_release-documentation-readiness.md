@@ -1,6 +1,6 @@
 # Task Blueprint: Release Documentation Readiness
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-13
 - Last Updated: 2026-05-13
 - Related Modules:
@@ -153,16 +153,16 @@ Treat this as a release-docs cleanup slice:
 
 ## 7. Acceptance
 
-- [ ] Root README current with public SDK names and entrypoints.
-- [ ] Examples README current with current SDK shell / advanced importable
+- [x] Root README current with public SDK names and entrypoints.
+- [x] Examples README current with current SDK shell / advanced importable
   boundary.
-- [ ] SDK docs checked for release-facing stale terms.
-- [ ] Service docs checked for confidence DTO and inference vocabulary drift.
-- [ ] OpenAPI description/tags/doc paths synchronized with current service
+- [x] SDK docs checked for release-facing stale terms.
+- [x] Service docs checked for confidence DTO and inference vocabulary drift.
+- [x] OpenAPI description/tags/doc paths synchronized with current service
   scope.
-- [ ] Focused stale-grep gates pass or remaining hits are explicitly internal /
+- [x] Focused stale-grep gates pass or remaining hits are explicitly internal /
   substrate / historical.
-- [ ] No code behavior changes.
+- [x] No code behavior changes.
 
 ## 7.1 G0 Candidate Gates
 
@@ -213,4 +213,53 @@ framed as candidate/internal substrate fields.
 
 ## 10. Outcome / Deviations
 
-Task completion notes will be filled after implementation and verification.
+Implemented 2026-05-13.
+
+Final behavior:
+
+- `README.md` now teaches the current public SDK surface:
+  `FactGraph.create(schema_classes=[...])`, `Inference`, 10 top-level
+  namespaces, authoring facades, schema mutation, and workspace lifecycle.
+- `examples/README.md` no longer describes the pre-L surface as having no SDK
+  shells; it distinguishes current SDK shells from advanced importable
+  application/audit capabilities.
+- `src/service/docs/01_overview.md` no longer shows default candidate DTOs with
+  legacy `confidence` / `confidence_kind`, and frames remaining
+  `derivation_id` / `derivation_version` fields as candidate substrate.
+- `src/service/docs/03_runtime_queries_policy.md` now leads with public
+  `Inference` vocabulary while explicitly preserving compiler/candidate
+  substrate `derivation_id` fields where they remain current behavior.
+- `docs/api/openapi.yaml` no longer advertises extraction as part of the kernel
+  service; the extraction route, tag, and now-unused extraction schemas were
+  removed, and the service docs path was corrected.
+
+Validation:
+
+- Focused stale-grep gate passed with zero hits:
+  `FactGraph.from_schema_classes`, `Query / Derivation`, `8 taxonomy`,
+  `no SDK shells`, `src/factpy_kernel`, `01_architecture.md`,
+  `"confidence": null`, `/v1/extraction/documents`,
+  `LLM document extraction`, and `05_extraction`.
+- Remaining `derivation_id` / `derivation_version` hits are confined to
+  service candidate / compiler substrate examples and are explicitly framed as
+  substrate fields.
+- `docs/api/openapi.yaml` parses successfully and has no missing internal
+  schema `$ref`s.
+- `git diff --check` passed.
+
+Commit lineage:
+
+```text
+09e6364e docs(blueprints): scope release documentation readiness
+5b832e65 docs(release): refresh README public surface
+0b19b3af docs(service): align release documentation scope
+```
+
+Deviations:
+
+- `docs/README.md` and SDK module docs did not require edits after the focused
+  grep/read audit; the release-facing drift was isolated to the root README,
+  examples README, service overview/runtime docs, and OpenAPI.
+- OpenAPI extraction route and schemas were removed rather than merely marked
+  moved, because the current kernel service docs already state that document
+  extraction lives outside this service.
