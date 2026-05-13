@@ -96,7 +96,7 @@ class Rule:
             "rule_id": self.id,
             "version": self.version,
             "select": [_lower_select_item(item) for item in self.select],
-            "where": lower_where(normalized_where),
+            "where": _lower_or_preserve_authoring_where(normalized_where),
         }
         if self.expose:
             payload["expose"] = True
@@ -164,7 +164,7 @@ class Inference:
         payload: dict[str, Any] = {
             "derivation_id": self.id,
             "version": self.version,
-            "where": lower_where(self.where),
+            "where": _lower_or_preserve_authoring_where(self.where),
         }
         if self._heads:
             if len(self._heads) == 1:
@@ -308,6 +308,48 @@ def _normalize_rule_where_for_payload(where: list[Any]) -> list[Any]:
     if not all(isinstance(item, Branch) for item in where):
         raise SDKDSLError("where/branch cannot mix Branch(...) with bare branches")
     return [list(item.atoms) for item in where]
+
+
+def _lower_or_preserve_authoring_where(where: list[Any]) -> list[Any]:
+    if _looks_like_authoring_where_ir(where):
+        return _restore_authoring_where_ir(where)
+    return lower_where(where)
+
+
+def _looks_like_authoring_where_ir(where: Any) -> bool:
+    if not isinstance(where, list) or not where:
+        return False
+    if all(_looks_like_authoring_atom(item) for item in where):
+        return True
+    return all(
+        isinstance(branch, list)
+        and bool(branch)
+        and all(_looks_like_authoring_atom(item) for item in branch)
+        for branch in where
+    )
+
+
+def _looks_like_authoring_atom(item: Any) -> bool:
+    return (
+        isinstance(item, (list, tuple))
+        and bool(item)
+        and isinstance(item[0], str)
+    )
+
+
+def _restore_authoring_where_ir(where: list[Any]) -> list[Any]:
+    if all(_looks_like_authoring_atom(item) for item in where):
+        return [_restore_authoring_atom(item) for item in where]
+    return [
+        [_restore_authoring_atom(item) for item in branch]
+        for branch in where
+    ]
+
+
+def _restore_authoring_atom(item: Any) -> Any:
+    if isinstance(item, tuple):
+        return item
+    return tuple(item)
 
 
 def _dependency_rules_from_where(where: Any) -> list[Rule]:

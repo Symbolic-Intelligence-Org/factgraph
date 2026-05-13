@@ -166,6 +166,29 @@ class PersistenceFacadeBehaviorTests(unittest.TestCase):
         self.assertIsInstance(loaded_rule, Rule)
         self.assertIsInstance(loaded_inference, Inference)
 
+    def test_loaded_rule_and_inference_remain_runtime_usable(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            fg = FactGraph.create(schema_classes=[User], registry_root=tmp_dir)
+            alice_ref = fg.ref(User, user_id="Alice")
+            set_field(
+                fg.ledger,
+                pred_id="user:tag_seed",
+                e_ref=alice_ref,
+                rest_terms=[("string", "vip")],
+                meta={"source": "test"},
+            )
+            rule_ref = fg.rules.save(_rule())
+            inference_ref = fg.inferences.save(_inference())
+
+            loaded_rule = fg.rules.load(rule_ref)
+            loaded_inference = fg.inferences.load(inference_ref)
+            rows = fg.eval.run(loaded_rule)
+            candidates = fg.eval.evaluate(loaded_inference)
+
+        self.assertEqual(rows, [{"u": alice_ref, "tag": "vip"}])
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].target, "user:tag")
+
     def test_list_returns_typed_refs(self) -> None:
         SavedRuleRef = _saved_rule_ref_class()
         SavedInferenceRef = _saved_inference_ref_class()
