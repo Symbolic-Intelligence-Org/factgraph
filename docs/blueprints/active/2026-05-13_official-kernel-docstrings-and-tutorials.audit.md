@@ -22,6 +22,7 @@
 | 2026-05-13 | scoped | G2.9 schema quickstart batch identity note | Added a concise forward pointer clarifying that batch handles start from primary identity and may bind non-primary identity dimensions later. |
 | 2026-05-13 | scoped | G2.10 rules/inferences docstring anchors | Added hover docs for rule/inference/query DSL objects plus `fg.eval.run`, `fg.eval.evaluate`, `fg.eval.accept`, and `fg.rules.inspect` before drafting the rules tutorial page. |
 | 2026-05-13 | scoped | G2.11 rules/inferences quickstart page started | Added a Page Brief and drafted `quickstart/rules-and-inferences.md` around Rule read-only queries, Inference candidate generation, explicit accept, and branch inspection. |
+| 2026-05-13 | scoped | G2.12 official docs index skeleton | Added five lightweight index pages for the official kernel docs root plus quickstart, concepts, how-to, and reference sections. |
 
 ## Decision Notes
 
