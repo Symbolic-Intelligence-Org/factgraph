@@ -190,3 +190,18 @@
 - Example snippets planned: Write two single-field assertions, inspect snapshot history, retract one multi-field assertion, create a frozen assertion view, read assertion records by id, and show `ReadPolicy` as a call-site object.
 - Validation method: Extract Python blocks and run them with `PYTHONPATH=src python`, verifying append-only history, current snapshot resolution, retraction active/history split, frozen view membership, and `ReadPolicy` construction.
 - External style reference: Pydantic-style concepts page pacing only; all FactGraph, ledger, snapshot, and view behavior comes from local source, tests, module docs, and archived blueprints.
+
+### `concepts/rules-and-inferences.md`
+
+- Reader goal: Understand the conceptual boundary between `Rule`, `Inference`, `CandidateSet`, `accept`, `RuleRef`, and saved authoring refs before using larger rule systems.
+- Core mental model: Rules read current snapshots; inferences propose candidate assertions; acceptance is the only step that appends inferred facts to the ledger.
+- Common misconception to prevent: `fg.eval.evaluate(...)` does not write, `RuleRef` is not a persisted rule handle, and engine-specific semantics are call-site evaluation configuration rather than part of the rule template.
+- APIs covered: `Rule`, `Inference`, `Branch`, `Pred`, `vars`, `fg.eval.run`, `fg.eval.evaluate`, `fg.eval.accept`, `fg.rules.inspect`, `RuleRef`, `SavedRuleRef`, `SavedInferenceRef`.
+- Non-goals: Advanced `RuleRef` composition examples, query persistence, proof/evidence internals, service routes, ProbLog/PyReason mathematics, and policy/theory verification.
+- Source files checked: `src/kernel/sdk/dsl/rule.py`, `src/kernel/sdk/dsl/branch.py`, `src/kernel/sdk/dsl/expr.py`, `src/kernel/sdk/store.py`, `src/kernel/application/derivation_runtime.py`.
+- Module docs checked: `src/kernel/sdk/docs/03_rules_and_inferences.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`, `src/kernel/core/semantics/docs/README.md`.
+- Design references checked: `docs/references/working/design-points/rule-policy-function-tree-and-syntax.zh.md`, `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-12_public-inference-factgraph-create.md`, `docs/blueprints/archive/2026-05-12_branch-identity-rule-inspect.md`, `docs/blueprints/archive/2026-05-12_public-semantics-api-redesign.md`, `docs/blueprints/archive/2026-05-12_authoring-asset-persistence-facade.md`.
+- Example snippets planned: Run a rule, evaluate an inference, prove no write before accept, accept the candidate, inspect branch structure, and distinguish `RuleRef` from saved refs.
+- Validation method: Extract Python blocks and run them with `PYTHONPATH=src python`, verifying rule rows, read-before-accept state, accepted candidate writes, and inspect metadata.
+- External style reference: Pydantic-style concepts page pacing only; all rule, inference, candidate, and saved-ref boundaries come from local source, tests, module docs, design notes, and archived blueprints.
