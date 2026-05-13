@@ -227,6 +227,13 @@ class _SDKSchemaManager:
         return self._sdk.validate_provenance(*args, **kwargs)
 
     def add(self, *schema_classes: type[Entity], **kwargs: Any) -> SchemaAddResult:
+        """Add entity classes or non-identity fields to the active schema.
+
+        Accepts positional `Entity` classes or `schema_classes=[...]`.
+        Additions are immediate for the in-memory graph and return a
+        `SchemaAddResult` with the old digest, new digest, added entity names,
+        and added field names. Destructive schema changes are rejected.
+        """
         return self._sdk.add_schema_classes(*schema_classes, **kwargs)
 
 
@@ -248,6 +255,12 @@ class _SDKReadManager:
         return self._sdk.get(*args, **kwargs)
 
     def find(self, *args: Any, **kwargs: Any) -> Any:
+        """Find entity snapshots by exact field filters.
+
+        Delegates to `FactGraph.find(EntityCls, **filters)`. Single fields use
+        exact-value matching; multi fields use containment matching. Optional
+        `policy=` and `limit=` arguments are forwarded to the read facade.
+        """
         return self._sdk.find(*args, **kwargs)
 
     def ref(self, *args: Any, **kwargs: Any) -> Any:
@@ -285,6 +298,12 @@ class _SDKWriteManager:
         return self._sdk.add(*args, **kwargs)
 
     def retract(self, *args: Any, **kwargs: Any) -> Any:
+        """Retract a previously written assertion by assertion id.
+
+        Pass an `asrt_id` returned by `fg.write.set(...)` or
+        `fg.write.add(...)`. Retraction is append-only: the original assertion
+        remains in the ledger and the retraction changes read-time visibility.
+        """
         return self._sdk.retract(*args, **kwargs)
 
     def edit(self, *args: Any, **kwargs: Any) -> Any:

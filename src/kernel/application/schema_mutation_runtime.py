@@ -16,6 +16,14 @@ from kernel.sdk.schema import Entity
 
 @dataclass(frozen=True)
 class SchemaAddResult:
+    """Result returned by additive `fg.schema.add(...)` calls.
+
+    `old_digest` and `new_digest` identify the schema transition. New entity
+    types appear in `added_entities`; new non-identity fields on existing
+    entity types appear in `added_fields` as strings such as
+    `"User.nickname"`.
+    """
+
     old_digest: str
     new_digest: str
     added_entities: list[str]
