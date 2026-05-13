@@ -20,6 +20,8 @@
 | 2026-05-13 | scoped | G2.8 schema quickstart identity-coordinate pass | Reworked `quickstart/schema.md` around Identity coordinate semantics, primary-key logical anchors, Field fact content, and n-ary identity guidance from design references. |
 | 2026-05-13 | scoped | G2.9 primary-anchor batch note added | Expanded `quickstart/schema.md` with the primary-first batch handle / non-primary `bind(...)` mechanism so `primary_key=True` has a concrete user-facing meaning. |
 | 2026-05-13 | scoped | G2.9 schema quickstart batch identity note | Added a concise forward pointer clarifying that batch handles start from primary identity and may bind non-primary identity dimensions later. |
+| 2026-05-13 | scoped | G2.10 rules/inferences docstring anchors | Added hover docs for rule/inference/query DSL objects plus `fg.eval.run`, `fg.eval.evaluate`, `fg.eval.accept`, and `fg.rules.inspect` before drafting the rules tutorial page. |
+| 2026-05-13 | scoped | G2.11 rules/inferences quickstart page started | Added a Page Brief and drafted `quickstart/rules-and-inferences.md` around Rule read-only queries, Inference candidate generation, explicit accept, and branch inspection. |
 
 ## Decision Notes
 
@@ -84,3 +86,18 @@
 - Example snippets planned: Write a single field twice, add multi-field values, read a current snapshot, inspect assertion history, find entities by field filters, and retract one assertion by id.
 - Validation method: Extract the complete example and run it with `PYTHONPATH=src python`, verifying latest single-field resolution, multi-field containment, assertion history, find filters, and retraction behavior.
 - External style reference: Pydantic-style tutorial progression and recap only; all semantics come from local source, module docs, tests, and archived blueprints.
+
+### `quickstart/rules-and-inferences.md`
+
+- Reader goal: Learn the difference between a read-only `Rule` and an `Inference` that proposes new facts, then run, inspect, evaluate, and accept a minimal example.
+- Core mental model: Rules ask the graph what is already true in the current snapshot; inferences propose candidate assertions from existing facts, and only `fg.eval.accept(...)` appends accepted candidates to the ledger.
+- Common misconception to prevent: `fg.eval.evaluate(...)` does not write to the graph, `RuleRef` is not a saved-rule handle, and semantic engines are evaluate-time configuration rather than the first thing to learn.
+- APIs covered: `Rule`, `Inference`, `Branch`, `Pred`, `vars`, `fg.eval.run`, `fg.eval.evaluate`, `fg.eval.accept`, `fg.rules.inspect`.
+- Non-goals: Persistence with `SavedRuleRef` / `SavedInferenceRef`, advanced `RuleRef` composition, ProbLog/PyReason semantics, public `SemanticsProfile`, query persistence, what-if shells, and service routes.
+- Source files checked: `src/kernel/sdk/dsl/rule.py`, `src/kernel/sdk/dsl/branch.py`, `src/kernel/sdk/dsl/expr.py`, `src/kernel/sdk/dsl/vars.py`, `src/kernel/sdk/store.py`, `src/kernel/tests/test_schema_mutation_lifecycle.py`, `src/kernel/tests/test_factgraph_workspace_lifecycle.py`.
+- Module docs checked: `src/kernel/sdk/docs/00_user_guide.en.md`, `src/kernel/sdk/docs/03_rules_and_inferences.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`, `src/kernel/adapters/docs/02_problog_adapter.md`, `src/kernel/adapters/docs/03_pyreason_adapter.md`.
+- Design references checked: `docs/references/working/design-points/rule-policy-function-tree-and-syntax.zh.md`, `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-12_public-inference-factgraph-create.md`, `docs/blueprints/archive/2026-05-12_branch-identity-rule-inspect.md`, `docs/blueprints/archive/2026-05-12_public-semantics-api-redesign.md`, `docs/blueprints/archive/2026-05-12_pyreason-branch-bounds-carrier.md`, `docs/blueprints/archive/2026-05-11_branch-confidence-decomposition.md`.
+- Example snippets planned: Seed a fact, define a `Rule` over that fact, run it, define an `Inference` with the same body and a target predicate, evaluate to a `CandidateSet`, accept the candidate, read the written field, and inspect branch metadata.
+- Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying rule rows, no write before accept, accepted candidate facts, and explicit branch ids in `fg.rules.inspect(...)`.
+- External style reference: Pydantic-style tutorial progression and short recap only; all rule/inference behavior comes from local source, tests, module docs, and archived blueprints.
