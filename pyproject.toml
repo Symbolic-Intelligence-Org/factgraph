@@ -1,5 +1,5 @@
 [project]
-dependencies = []
+dependencies = ["httpx>=0.28.1,<0.29", "fastapi>=0.136.1,<0.137"]
 name = "FactPy"
 requires-python = ">= 3.11"
 version = "0.1.0"
