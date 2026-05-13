@@ -9,6 +9,7 @@
 | 2026-05-13 | draft | Blueprint created | Initial draft for official kernel documentation slice: public SDK docstrings first, then canonical Markdown tutorial tree under `docs/official/kernel/`. |
 | 2026-05-13 | draft | Draft clarified | Added explicit selected-method docstring checklist, docstring gate scope, initial coverage snapshot, Diátaxis section boundaries, and deferred Markdown doctest harness. |
 | 2026-05-13 | draft | Per-document cadence added | Added D15/D16, G1 gate specifics, Page Brief template, per-document commit cadence, and multi-session completion boundary. |
+| 2026-05-13 | scoped | G0 scope frozen | Locked 16 decisions: docstring coverage/style/gate, `docs/official/kernel/`, English-first Diátaxis tree, strict kernel-only boundary, per-page Page Briefs, external style references as non-factual, and multi-session completion. |
 
 ## Decision Notes
 
@@ -20,3 +21,6 @@
   of the `factpy-kernel` public release surface.
 - 2026-05-13: Public API docstrings are treated as part of the user
   documentation layer because IDE hover text is a first-contact learning path.
+- 2026-05-13: Documentation-slice cadence is scoped differently from
+  capability and cleanup slices: G1 has docstring/tree/audit-template gates;
+  G2 proceeds by logical docstring batches and per-page Markdown briefs.

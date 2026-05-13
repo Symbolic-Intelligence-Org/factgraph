@@ -1,6 +1,6 @@
 # Task Blueprint: Official Kernel Docstrings And Tutorials
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-13
 - Last Updated: 2026-05-13
 - Related Modules:
@@ -256,6 +256,31 @@ These are draft questions. They are not locked until G0 scope freeze.
 | D14 | Old docs compatibility | D14a: no compatibility requirement; D14b: migration chapter for old unpublished docs | D14a |
 | D15 | Per-page preparation | D15a: every substantive official MD page starts with a lightweight Page Brief recorded in the audit log; D15b: one global research pass only; D15c: no per-page research record | D15a |
 | D16 | External style references | D16a: use Pydantic-like projects only for structure/tone, never as a fact source; D16b: do not reference external docs; D16c: mirror one external project's information architecture closely | D16a |
+
+G0 decisions (2026-05-13):
+
+- D1b locked: docstring coverage includes all `kernel.sdk.__all__` exports plus
+  the selected `FactGraph` / namespace methods in §5.1.1.
+- D2b locked: docstrings may use Google-style `Args`, `Returns`, and `Raises`
+  sections when that improves hover clarity.
+- D3a locked: examples stay out of docstrings except tiny one-liners; tutorial
+  examples belong in Markdown pages.
+- D4a locked: `inspect.getdoc(...)` non-empty coverage becomes the G1 gate.
+- D5a locked: the official docs path is `docs/official/kernel/`.
+- D6a locked: official docs are English first.
+- D7a locked: the tree follows tutorials / concepts / how-to / reference.
+- D8a locked: official docs are strict kernel-only.
+- D9a locked: snippets should be runnable or explicitly marked conceptual.
+- D10a locked: current code, module docs, and archived blueprints are the source
+  hierarchy; old docs are not implementation truth.
+- D11a locked: implementation order is docstrings first, Markdown second.
+- D12a locked: `docs/README.md` will index the new durable docs entry.
+- D13a locked: advanced importables are explained as boundaries, not first-page
+  tutorial surface.
+- D14a locked: old unpublished docs create no compatibility requirement.
+- D15a locked: every substantive Markdown page starts with a Page Brief in the
+  audit log.
+- D16a locked: external projects may inform structure and tone only, never facts.
 
 ## 7. Boundaries And Invariants
 
