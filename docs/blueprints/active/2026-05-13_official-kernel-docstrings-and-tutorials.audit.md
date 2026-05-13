@@ -27,6 +27,7 @@
 | 2026-05-13 | scoped | G2.13 persistence round-trip bug fixed | While validating the persistence tutorial examples, found saved `Rule`/`Inference` load returned SDK value objects whose already-lowered `where` IR failed when executed again. Preserved/restored authoring IR in DSL payload generation and added a focused regression test. |
 | 2026-05-13 | scoped | G2.14 persistence quickstart page started | Added a Page Brief and drafted `quickstart/persistence.md` around saved authoring handles, load-before-run, workspace save/load, and the per-asset vs whole-workspace distinction. |
 | 2026-05-13 | scoped | G2.15 semantics docstring anchors | Added hover docs for public semantics wrappers, canonical `SemanticsProfile`, and `fg.eval.inspect_semantics` before drafting the semantics quickstart page. |
+| 2026-05-13 | scoped | G2.16 semantics quickstart page started | Added a Page Brief and drafted `quickstart/semantics.md` around evaluate-time engine configuration, public wrappers, canonical profiles, branch ids, and the unchanged CandidateSet-to-accept lifecycle. |
 
 ## Decision Notes
 
@@ -126,3 +127,18 @@
 - Example snippets planned: Create a path-backed graph, save/load a rule and inference, show `get(...)` returning latest saved refs, run/evaluate loaded value objects, save the workspace, inspect Level-4 layout files, and load the workspace with schema classes.
 - Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying saved-ref shapes, load-before-run, accepted inference facts, workspace files, and `FactGraph.load(..., schema_classes=[...])`.
 - External style reference: Pydantic-style tutorial progression and short recap only; all persistence behavior comes from local source, module docs, tests, and archived blueprints.
+
+### `quickstart/semantics.md`
+
+- Reader goal: Understand how to choose and inspect evaluate-time semantics configuration without changing the rule/inference lifecycle learned in the previous pages.
+- Core mental model: `Inference` describes what could be derived; `ProbLogSemantics`, `PyReasonSemantics`, or `SemanticsProfile` describe how a runtime engine should evaluate that inference at call time.
+- Common misconception to prevent: Semantics wrappers do not write to the ledger, do not belong inside the `Inference` template, and do not replace the `evaluate -> CandidateSet -> accept` lifecycle.
+- APIs covered: `ProbLogSemantics`, `PyReasonSemantics`, `SemanticsProfile`, `fg.eval.inspect_semantics`, `fg.eval.evaluate` as the call-site concept, `Branch(id=...)` as the stable branch-key source.
+- Non-goals: ProbLog or PyReason mathematical semantics, service JSON semantics payloads, compiled-plan internals, direct adapter carriers, atom-level PyReason bounds, and advanced custom `SemanticsProfile` authoring.
+- Source files checked: `src/kernel/sdk/semantics.py`, `src/kernel/core/semantics/profile.py`, `src/kernel/sdk/store.py`, `src/kernel/tests/test_public_semantics_api_redesign.py`, `src/kernel/tests/test_pyreason_branch_bounds_carrier.py`.
+- Module docs checked: `src/kernel/sdk/docs/00_user_guide.en.md`, `src/kernel/sdk/docs/03_rules_and_inferences.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`, `src/kernel/core/semantics/docs/README.md`, `src/kernel/adapters/docs/02_problog_adapter.md`, `src/kernel/adapters/docs/03_pyreason_adapter.md`.
+- Design references checked: `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`, `docs/references/working/design-points/rule-policy-function-tree-and-syntax.zh.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-12_public-semantics-api-redesign.md`, `docs/blueprints/archive/2026-05-12_pyreason-branch-bounds-carrier.md`, `docs/blueprints/archive/2026-05-12_sdk-service-semantics-callsite.md`, `docs/blueprints/archive/2026-05-12_branch-identity-rule-inspect.md`.
+- Example snippets planned: Define one inference with an explicit branch id, inspect ProbLog and PyReason wrapper previews, show PyReason branch-bound profile entries, inspect an advanced `SemanticsProfile`, and keep the accepted-fact lifecycle separate.
+- Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying wrapper engines, inspect output, PyReason lowered profile entries, explicit branch ids, and the unchanged read-before-accept state.
+- External style reference: Pydantic-style tutorial progression and short recap only; all semantics behavior comes from local source, tests, module docs, and archived blueprints.
