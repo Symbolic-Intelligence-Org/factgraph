@@ -199,11 +199,12 @@ EvidenceGraph addendum:
 
 Semantic-delivery addendum:
 
-- shared compatibility lane:
-  - `accept` still writes `candidate.confidence` into
-    `meta.confidence`
-  - `confidence_kind="probability"` is also still preserved in
-    meta
+- internal compatibility lane:
+  - ProbLog may still set `CandidateSet.confidence` and
+    `CandidateSet.confidence_kind="probability"` as session-local output
+    carriers
+  - `accept` does not persist those legacy carrier fields into assertion
+    meta by default
 - shared raw uncertainty lane:
   - user-authored uncertainty uses
     `meta={"raw_kind": "probabilistic", "bound": [lower, upper]}`
@@ -232,8 +233,8 @@ Semantic-delivery addendum:
   - If the engine-native annotation is absent, read from
     `shared/semantic/probability` (adapter/internal shared probability
     lane, not the user-facing raw uncertainty write contract)
-  - If both semantic lanes are absent, fall back to
-    `meta.confidence` (compatibility / display summary lane)
+  - Generic `meta.confidence` is ignored for export; if both semantic
+    lanes are absent, the adapter uses the deterministic default `1.0`
 - Branch probabilities for `where` are currently carried internally by
   `ProbLogRuleExt.branch_probabilities`:
   - `branch_probabilities[i]` corresponds to normalized `where`
@@ -369,11 +370,11 @@ Fixed: `persist_problog_annotations` now iterates over `written`
 to build an index→asrt_id mapping and binds each template to the
 correct `asrt_id` by `fact_index` (same pattern as F-PR-5).
 
-### ~~F-PL-4 `_claim_probability` bool-only meta.confidence raises instead of falling back (severity: low)~~ — RESOLVED
+### ~~F-PL-4 `_claim_probability` bool-only meta.confidence raises instead of falling back (severity: low)~~ — SUPERSEDED
 
-Fixed: when all `meta.confidence` values are `bool` (skipped via
-`continue`), the function falls back to `return 1.0` rather than
-raising `ProbLogExportError`.
+Release cleanup removed generic `meta.confidence` as a probability fallback.
+`_claim_probability` now reads adapter-native probability annotations and
+otherwise returns the deterministic default `1.0`.
 
 ### ~~F-PL-5 `_split_top_level_args` duplicated implementation (severity: info)~~ — RESOLVED
 

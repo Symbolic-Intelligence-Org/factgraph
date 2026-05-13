@@ -138,8 +138,11 @@ flowchart LR
 
 Whitelist (`_SHARED_ANNOTATION_WHITELIST`):
 - `shared/source`: `source`, `source_loc`, `trace_id`, `approved_by`, `note`
-- `shared/derived`: `confidence` (`origin="derived"`, `derivation` from `meta["confidence_source"]`, fallback `meta:confidence`)
 - `shared/semantic`: `raw_kind` (`origin="observed"`) and `bound` (`origin="observed"`) as the canonical raw uncertainty lane
+
+Generic `meta.confidence` remains a legacy/display meta row only. It is not
+projected into shared annotations by default, and it is not a canonical
+uncertainty lane for adapter export or evidence display.
 
 Raw uncertainty notes:
 
@@ -153,8 +156,7 @@ Raw uncertainty notes:
 - for ProbLog fact export, the current adapter read priority is:
   1. `problog/semantic/probability`
   2. `shared/semantic/probability`
-  3. `meta.confidence`
-  4. default `1.0`
+  3. default `1.0`
 - `shared/semantic/probability` remains an adapter/internal annotation lane,
   not the user-facing raw uncertainty write contract
 
@@ -259,6 +261,9 @@ Evaluate now also records a lightweight candidate explain backref after candidat
       projection input, not as engine adapter semantics
     - SDK parity is currently deferred; paths without an injected resolver continue to stay `none`
   - ProbLog writes `confidence_kind="probability"` when setting `candidate.confidence`
+  - these fields are internal/session carriers; service candidate DTOs do
+    not expose them by default, and accept treats echoed legacy values as
+    parse-compatible internal data only
   - `confidence_kind` does not enter `candidate_key` / `candidate_id` / `support_digest` computation, nor does it change evaluate / accept / chosen behavior
 - `Store.get_candidate_support_digest(candidate_id)`, `Store.get_candidate_support_kind(candidate_id)`, and `Store.get_candidate_confidence_kind(candidate_id)` all recover only the first hop inside the current `Store` instance
 - when `Store(..., artifact_sidecar=...)` is configured, only the native `support_digest -> SupportArtifact` second hop can be re-read from later `Store` instances sharing the same sidecar root
@@ -379,14 +384,15 @@ Evaluate now also records a lightweight candidate explain backref after candidat
         - `AuditQuery.get_candidate_evidence_tree_narrative` passes materialized certainty_summary, producing narrative with `certainty_lines`
         - static site candidate evidence page renders a certainty section
         - `condition_weights` only exist on registry filesystem; offline audit does not perform query-time computation
-    - **Known gap — fact-level confidence carrier**:
-      - `write_protocol.py` already supports `meta={"confidence": 0.9}` write; value stored in ledger `meta_rows` table
-      - however `_runtime_assertion_detail_for_tree()` reads assertions but **skips all meta**
-      - as a result `assertion_fact` and `predicate_witness_group` nodes carry no confidence
-      - `_condition_confidence(node)` always returns `None`; impact degrades to `weight × 1.0`
-      - fix path: assertion detail → tree node → condition_confidence — three wiring points
-      - does not affect computation model (`derive_certainty_summary` already correctly consumes the confidence field)
-      - does not affect future chain/recursive propagation enablement (orthogonal concern)
+    - **Generic confidence boundary**:
+      - `write_protocol.py` still validates and stores legacy
+        `meta={"confidence": 0.9}` in `meta_rows`
+      - candidate evidence trees do not lift that generic meta into
+        `assertion_fact` or `predicate_witness_group`
+      - certainty impact therefore uses adapter/runtime-owned certainty
+        inputs, or degrades to `weight × 1.0`
+      - this is an intentional release cleanup boundary; future public
+        confidence semantics require a dedicated blueprint
   - these three layers follow the same 4-layer explain pattern as `rule_run`:
     - raw tree
     - summary
@@ -569,7 +575,8 @@ Additional notes:
 - `derive_certainty_summary(..., aggregation="bottleneck"|"additive")`
 - `rank_certainty_conditions(...)`
 - `CertaintyConfidenceKindResolver` create-time routing
-- evidence tree carrier: `assertion_fact.confidence` + `predicate_witness_group.condition_confidence`
+- evidence tree carrier: adapter/runtime-owned certainty metadata; generic
+  assertion `meta.confidence` is not lifted into the tree by default
 - delivery chain: runtime summary/narrative/NL (dual strategy) → audit/static (bottleneck only)
 
 **Certainty semantic changes are contract changes and require a blueprint.** Only bug fixes, performance work, and docs clarifications are accepted without a blueprint.

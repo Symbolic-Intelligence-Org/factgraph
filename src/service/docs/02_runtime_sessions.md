@@ -601,8 +601,7 @@ Query 参数：
       {
         "candidate_id": "cand_v2:abc",
         "pred_id": "person:country",
-        "support_kind": "native_binding_v1",
-        "confidence_kind": "none"
+        "support_kind": "native_binding_v1"
       }
     ],
     "total": 1
@@ -617,8 +616,9 @@ Query 参数：
   - `candidate_id`
   - `pred_id`
   - `support_kind`
-  - `confidence_kind`
 - `pred_id` 来自 store 在 candidate remember 路径上维护的 `_candidate_pred_index`。
+- Legacy candidate `confidence` / `confidence_kind` carriers are internal
+  compatibility fields and are not returned by the inventory DTO.
 - v1 **不返回 accepted 状态**：
   - accepted / revoked 等状态目前属于 ledger 层信息
   - 该 endpoint 刻意保持 store-scoped inventory，不做跨层查询

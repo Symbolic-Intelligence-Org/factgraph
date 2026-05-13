@@ -645,9 +645,9 @@
 - `candidate` summary 响应当前还允许附加 response-level sibling `certainty_summary`（**certainty v1 contract frozen** — 语义改动必须经 blueprint）：
   - 不嵌入 `summary` dict
   - 不改变上述基础 12 字段 core set
-  - `confidence_kind != "certainty"` 时固定为 `null`
-  - `confidence_kind == "certainty"` 时，service 会尝试：
-    - 从 `candidate_id` 回取 `confidence_kind`
+  - 当 store 内部 candidate carrier 不是 `confidence_kind="certainty"` 时固定为 `null`
+  - 当 store 内部 candidate carrier 是 `confidence_kind="certainty"` 时，service 会尝试：
+    - 从 `candidate_id` 回取内部 `confidence_kind`
     - 从 `support.rule_ref_edges` 定位单条 structured child rule edge
     - 用该 edge 的 `rule_ref_id@version` 到 registry 读取 `condition_weights`
     - 在唯一 `referenced_support` subtree 上调用 annotation prototype `derive_certainty_summary(...)`
@@ -658,14 +658,14 @@
   - 若 rule payload 存在但未声明 `condition_weights`，则 `certainty_summary` 仍可返回；此时所有 condition 都是 unweighted
   - 对 runtime native derivation 而言，eligible candidate 的 `confidence_kind="certainty"` 现在由 evaluate create-time routing 自动写入；不再依赖调用侧 patch
 - `certainty_summary` 的 stable shape 为：
-  - `confidence_kind`
+  - internal `confidence_kind`
   - `condition_count`
   - `weighted_condition_count`
   - `conditions[]`
     - `atom_key`
     - `node_kind`
     - `weight`
-    - `impact`（bottleneck: 绝对 `weight × confidence`；additive: 归一化 contribution `(weight/Σweights) × confidence`）
+    - `impact`（bottleneck: 绝对 `weight × condition_confidence`；additive: 归一化 contribution `(weight/Σweights) × condition_confidence`；缺少 certainty 输入时使用 `1.0`）
   - `aggregate_certainty`（bottleneck: `min(impacts)`；additive: `sum(impacts)`）
   - `aggregation`（`"bottleneck"` 或 `"additive"`）
 - candidate explain 端点（summary/narrative/NL）接受可选 `certainty_aggregation` 参数：
@@ -1056,9 +1056,7 @@
         "support_digest": "sha256:6f3e4f9c2d1b8a7e6c5d4b3a291817161514131211100f0e0d0c0b0a09080706",
         "support_kind": "native_binding_v1",
         "generated_at": 1730000000000000000,
-        "state": "generated",
-        "confidence": null,
-        "confidence_kind": "none"
+        "state": "generated"
       }
     ]
   }
@@ -1068,13 +1066,12 @@
 说明：
 
 - `evaluate` 返回完整 candidate 对象，供后续 `accept` 原样 round-trip。
-- candidate DTO 现在包含 additive `confidence_kind`：
-  - `none`
-  - `probability`
-  - `certainty`
-- Souffle deterministic 路径当前写 `confidence_kind="none"`；ProbLog 路径在填充 `confidence` 时写 `confidence_kind="probability"`。
+- candidate DTO 不再默认暴露 legacy `confidence` / `confidence_kind`
+  字段；这些值只保留为 store 内部/session carrier。
+- Souffle deterministic 路径内部仍可保留 `confidence_kind="none"`；
+  ProbLog / PyReason 路径可在 `CandidateSet` 上保留 adapter summary。
 - runtime native inference 当前会在 create-time 注入 certainty resolver：
-  - 只有 single resolved child-rule edge 且 child rule payload 含非空 `condition_weights` 时，candidate DTO 才会自动写 `confidence_kind="certainty"`
+  - 只有 single resolved child-rule edge 且 child rule payload 含非空 `condition_weights` 时，store 内部 candidate carrier 才会自动标记 `confidence_kind="certainty"`
   - 其余 native 场景继续回落到 `none`
   - SDK parity 当前 deferred；未注入 resolver 的路径保持 `none`
 - native inference evaluate 当前会填充 `support_kind="native_binding_v1"`。
@@ -1185,9 +1182,7 @@
     "support_digest": "sha256:6f3e4f9c2d1b8a7e6c5d4b3a291817161514131211100f0e0d0c0b0a09080706",
     "support_kind": "native_binding_v1",
     "generated_at": 1730000000000000000,
-    "state": "generated",
-    "confidence": null,
-    "confidence_kind": "none"
+    "state": "generated"
   },
   "options": {
     "approved_by": "alice",
@@ -1230,7 +1225,9 @@
 说明：
 
 - 客户端应原样回传 `evaluate` 返回的 candidate 对象，不要裁剪字段。
-- 为兼容旧客户端，若 `candidate.confidence_kind` 缺失，service 默认按 `"none"` 处理。
+- 为兼容旧客户端，accept 仍会解析 echoed `candidate.confidence` /
+  `candidate.confidence_kind` 字段；这些字段只 hydrate 内部 carrier，
+  不会写入 assertion meta 或 adapter semantic lanes。
 - fact candidate 必须保留完整 `payload.terms`。
 - entity candidate 必须保留 identity 相关字段（如 `entity_type / identity_fields / resolved_identity / missing_identity_fields / proposed_entity_ref`）。
 - `options.identity_override` 可选，用于 entity candidate 的 identity 覆盖。
@@ -1361,7 +1358,6 @@
         "key_tuple": ["idref_v1:Person:source_id=m1"],
         "value_tuple": ["idref_v1:Person:source_id=c1"],
         "source": "seed",
-        "confidence": null,
         "ingested_at": 1730000000000000000
       }
     ],
@@ -1740,7 +1736,7 @@
   `condition_weights` 不作为 engine adapter 参数导出；它是 runtime
   certainty/explain projection input，未来运行时配置归
   `SemanticsProfile.certainty_projection`。
-  routing 与 delivery 分开：candidate 必须先在 evaluate 时被标成 `confidence_kind="certainty"`，export 才会继续物化 certainty summary。
+  routing 与 delivery 分开：candidate 必须先在 evaluate 时被内部标成 `confidence_kind="certainty"`，export 才会继续物化 certainty summary。
   `provenance_trees.jsonl` 导出 runtime export-time replay 的 Souffle proof tree dict（每行 `{candidate_id, provenance_tree}`）；缺少 recipe、query export 失败、Souffle explain 失败或无法匹配 output row 的 candidate 会被静默跳过，不影响整个 package export。
   `provenance_statuses.jsonl` 导出同一轮 replay 的 per-candidate status rows（含 `engine`、`truncated`、可选 `reason`）；它让离线 audit consumer 能区分“有 provenance”、“没有 provenance”以及“为什么没有”，而不是把所有缺失都折叠成静默空白。
   `evidence_graphs.jsonl` 导出统一 explain DTO（每行 `{candidate_id, evidence_graph}`）；当前来源包括 Souffle proof tree replay、PyReason provenance envelope event log、以及 ProbLog provenance envelope proof trace。旧 package 没有这个文件时，static UI 仍会对 Souffle 保留基于 `provenance_trees.jsonl` 的 fallback。

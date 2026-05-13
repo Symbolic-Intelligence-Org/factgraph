@@ -356,7 +356,7 @@ Every write accepts an optional `meta` dict. Keys recognized by the SDK:
 |---|---|---|
 | `source` | str | Where this assertion came from |
 | `trace_id` | str | Trace identifier for cross-system correlation |
-| `confidence` | float in (0, 1] | Compatibility / display confidence summary; `int` is not auto-promoted |
+| `confidence` | float in (0, 1] | Legacy/display metadata only; `int` is not auto-promoted |
 | `raw_kind` | `"probabilistic"` or `"possibilistic"` | Raw uncertainty kind; must be paired with `bound` |
 | `bound` | two-element JSON list `[lower, upper]` | Raw uncertainty bound; normalized to floats and matched exactly by assertion filters |
 | `approved_by` | str | Reviewer identifier (for governance) |
@@ -369,6 +369,8 @@ Unknown keys are preserved on the assertion as opaque metadata.
 user-authored write meta; use `raw_kind` and `bound` instead. Engine adapters
 may still produce annotations such as `problog/semantic/probability` or
 `pyreason/semantic/bound_lower` as output/projection lanes.
+Generic `confidence` is not a shared semantic annotation, not a ProbLog
+probability fallback, and not a PyReason bound source.
 
 Raw uncertainty validation:
 
@@ -545,9 +547,10 @@ For multiple output facts, define separate inferences. This keeps the
 public runtime call-site aligned with `SemanticsProfile` and with the
 what-if shells, all of which are single-head surfaces.
 
-`CandidateSet` exposes `candidate_id`, `candidate_key`, `candidate_kind`
-(`"fact"` or `"entity"`), `payload`, plus a `confidence` paired with
-`confidence_kind`:
+`CandidateSet` keeps internal/session `confidence` and `confidence_kind`
+carriers for engine summaries, but service candidate DTOs do not expose those
+legacy fields by default. Public code should treat candidates as identity,
+payload, support, and evidence handles:
 
 | Engine | `confidence` | `confidence_kind` |
 |---|---|---|
@@ -581,8 +584,9 @@ results = fg.eval.accept_many(
 
 - Re-accepting the same candidate is idempotent (returns
   `result.kind="duplicate"`) when `idempotent_duplicate_ok=True`.
-- Same claim with a different `confidence` (or other meta) creates a
-  separate assertion, not a replacement.
+- Same claim with different business metadata such as `source` can create a
+  separate assertion. Legacy candidate confidence differences alone do not
+  change duplicate detection.
 - `mode="atomic"` rolls the whole batch back on any failure;
   `"best_effort"` accepts what it can.
 

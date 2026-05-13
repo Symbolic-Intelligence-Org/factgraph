@@ -120,8 +120,6 @@ Each buffered fact also produces an annotation-ready dict
 | `pyreason` | `semantic` | `bound_upper` | Interval upper bound |
 | `pyreason` | `semantic` | `active_from` | Written when non-default |
 | `pyreason` | `semantic` | `active_to` | Written when non-`None` |
-| `shared` | `derived` | `confidence` | Derived summary = lower bound |
-| `shared` | `derived` | `confidence_source` | Currently fixed at `pyreason:lower_bound` |
 | `shared` | `source` | `source` / `analyst` / `method` | Forwarded from shared meta |
 
 These `pyreason/semantic/bound_lower` and `bound_upper` rows are
@@ -130,15 +128,12 @@ shared user-facing raw uncertainty contract is
 `meta={"raw_kind": "probabilistic"|"possibilistic", "bound": [lower, upper]}`,
 which persists as `shared/semantic/raw_kind` and `shared/semantic/bound`.
 
-The session also auto-fills shared confidence metadata:
+Shared confidence boundary:
 
-- When `confidence` is not explicitly provided, it defaults to
-  `confidence = lower_bound`
-- When `confidence_source` is not explicitly provided:
-  - The default lower-bound path writes
-    `pyreason:lower_bound`
-  - If the caller explicitly overrides `confidence`, it writes
-    `meta:confidence`
+Release cleanup removed generic shared confidence auto-fill. The session keeps
+adapter-native `pyreason/semantic/bound_*` rows and forwards source metadata,
+but generic `confidence` / `confidence_source` input is not projected into
+shared derived annotations or PyReason bounds.
 
 ### 5A.3 Accept helper
 
@@ -676,11 +671,11 @@ Fixed: `_validate_bound` now adds an
 `if any(isinstance(v, bool) for v in bound)` guard before
 `float()` conversion; bool values now raise `ValueError`.
 
-### ~~F-PR-3 `_resolve_shared_meta` confidence=0.0 asymmetric (severity: medium)~~ — RESOLVED
+### ~~F-PR-3 `_resolve_shared_meta` confidence=0.0 asymmetric (severity: medium)~~ — SUPERSEDED
 
-Fixed: the explicit confidence validation range was changed
-from `(0, 1]` to `[0, 1]`, aligned with the auto-derivation
-path.
+Release cleanup removed generic confidence projection from PyReason shared
+metadata. `_resolve_shared_meta(...)` now filters generic confidence fields
+instead of validating them as adapter semantics.
 
 ### ~~F-PR-4 `pred_id.split(":", 1)[1]` assumes pred_id contains a colon (severity: low)~~ — RESOLVED
 

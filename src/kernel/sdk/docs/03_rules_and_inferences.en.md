@@ -314,15 +314,14 @@ cands = sdk.evaluate(inf, engine="native")
 - `candidate_id`: per-run handle
 - `candidate_key`: cross-run stable key
 - `candidate_kind`: `fact` / `entity`
-- `confidence`: `float | None` (`problog` yields a probability; `pyreason` yields a lower-bound; `native/souffle` return `None`)
-- `confidence_kind`: literal `"none"` (native/souffle) / `"probability"` (problog) / `"certainty"` (pyreason); paired with `confidence` to disambiguate the engine semantic. Source: `kernel/core/inference/candidates.py:10, 27`.
-- Candidate `confidence` is an output summary, not the canonical raw
-  uncertainty carrier. User-authored raw uncertainty belongs on facts as
+- `confidence` / `confidence_kind`: internal/session output carriers only.
+  ProbLog and PyReason may set them on `CandidateSet`, but service DTOs do not
+  expose them by default and `accept(...)` does not persist them as assertion
+  meta.
+- Candidate `confidence` is not the canonical raw uncertainty carrier.
+  User-authored raw uncertainty belongs on facts as
   `meta={"raw_kind": ..., "bound": [...]}` and is persisted to
   `shared/semantic/raw_kind` plus `shared/semantic/bound`.
-- `confidence` belongs to engine output / display lanes and should not be
-  reused as Scenario A requirement-threshold probability; that path should use
-  fact-backed uncertainty predicates plus the existing comparison syntax.
 - `payload`:
   - fact: `{"pred_id": ..., "terms": [...]}`
   - entity: `{"entity_type": ..., "resolved_identity": ..., ...}`
@@ -345,8 +344,10 @@ Parameter boundaries:
 - `meta_overrides` only supports `approved_by` / `note` / `dry_run` / `identity_override`; unknown keys fail.
 - If the same sugar key is provided in both `meta_overrides` and top-level keyword args, SDK raises duplicate-option error.
 - Repeated accept on the same candidate is idempotent no-op (`duplicate`).
-- Same claim with different business-semantic meta (for example `confidence`, `source`) is allowed to coexist.
-- Within one `run_id` batch, same-claim/different-confidence candidates are usually not expected; coexistence mainly appears across batches/sources.
+- Same claim with different business-semantic meta such as `source` is
+  allowed to coexist.
+- Legacy candidate confidence differences alone do not affect duplicate
+  detection.
 
 ## 9. Temporal Boundary (Current Status)
 
