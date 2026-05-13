@@ -28,6 +28,7 @@
 | 2026-05-13 | scoped | G2.14 persistence quickstart page started | Added a Page Brief and drafted `quickstart/persistence.md` around saved authoring handles, load-before-run, workspace save/load, and the per-asset vs whole-workspace distinction. |
 | 2026-05-13 | scoped | G2.15 semantics docstring anchors | Added hover docs for public semantics wrappers, canonical `SemanticsProfile`, and `fg.eval.inspect_semantics` before drafting the semantics quickstart page. |
 | 2026-05-13 | scoped | G2.16 semantics quickstart page started | Added a Page Brief and drafted `quickstart/semantics.md` around evaluate-time engine configuration, public wrappers, canonical profiles, branch ids, and the unchanged CandidateSet-to-accept lifecycle. |
+| 2026-05-13 | scoped | G2.17 docstring gate closed | Added the remaining hover docs for schema compile helpers, bulk accept, what-if, audit, package, and views; `test_official_kernel_docs_baseline.py` now passes. |
 
 ## Decision Notes
 

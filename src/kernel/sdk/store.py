@@ -126,6 +126,11 @@ class _SDKViewsManager:
         asrt_ids: Iterable[str] | None = None,
         asrts: Iterable[Any] | None = None,
     ) -> FrozenAssertionView:
+        """Create a named frozen assertion view.
+
+        A view stores assertion ids only. It does not store a read policy and
+        it is not included in `fg.save(...)` workspace persistence.
+        """
         normalized = _normalize_view_name(name)
         if normalized in self._views:
             raise SDKStoreError(f"view already exists: {normalized}")
@@ -144,6 +149,7 @@ class _SDKViewsManager:
         asrt_ids: Iterable[str] | None = None,
         asrts: Iterable[Any] | None = None,
     ) -> FrozenAssertionView:
+        """Replace the assertion ids for an existing frozen view."""
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -156,18 +162,21 @@ class _SDKViewsManager:
         return entry
 
     def delete(self, name: str) -> None:
+        """Delete a named frozen assertion view."""
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         self._views.pop(normalized, None)
 
     def get(self, name: str) -> FrozenAssertionView:
+        """Return a named frozen assertion view."""
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         return self._views[normalized]
 
     def list(self) -> dict[str, FrozenAssertionView]:
+        """Return all frozen assertion views keyed by view name."""
         return {name: spec for name, spec in self._views.items()}
 
 
@@ -452,6 +461,12 @@ class _SDKEvalManager:
         return self._sdk.accept(*args, **kwargs)
 
     def accept_many(self, *args: Any, **kwargs: Any) -> Any:
+        """Accept multiple candidate sets or accept requests.
+
+        `mode="atomic"` is the default. This is the bulk form of
+        `fg.eval.accept(...)` for callers that already have several candidate
+        sets or request dictionaries.
+        """
         return self._sdk.accept_many(*args, **kwargs)
 
 
@@ -465,9 +480,11 @@ class _SDKWhatIfFactOverlayManager:
         raise FrozenSnapshotError("FactGraph.what_if.fact_overlay namespace is read-only")
 
     def check(self, *args: Any, **kwargs: Any) -> Any:
+        """Check a proposed fact overlay without committing it."""
         return self._sdk.check_fact_overlay(*args, **kwargs)
 
     def recheck_proof_frame(self, *args: Any, **kwargs: Any) -> Any:
+        """Re-run a fact-overlay check from a recorded proof frame."""
         return self._sdk.recheck_proof_frame(*args, **kwargs)
 
 
@@ -481,12 +498,15 @@ class _SDKWhatIfRuleManager:
         raise FrozenSnapshotError("FactGraph.what_if.rule namespace is read-only")
 
     def disable(self, *args: Any, **kwargs: Any) -> Any:
+        """Check a what-if result with one rule disabled."""
         return self._sdk.check_rule_disable(*args, **kwargs)
 
     def literal_replace(self, *args: Any, **kwargs: Any) -> Any:
+        """Check a what-if result with one rule literal replaced."""
         return self._sdk.check_rule_literal_replace(*args, **kwargs)
 
     def add_condition(self, *args: Any, **kwargs: Any) -> Any:
+        """Check a what-if result with an extra rule condition."""
         return self._sdk.check_rule_add_condition(*args, **kwargs)
 
 
@@ -508,12 +528,15 @@ class _SDKWhatIfManager:
         raise FrozenSnapshotError("FactGraph.what_if namespace is read-only")
 
     def check(self, *args: Any, **kwargs: Any) -> Any:
+        """Run a one-shot what-if check for an inference."""
         return self._sdk.check(*args, **kwargs)
 
     def diagnose(self, *args: Any, **kwargs: Any) -> Any:
+        """Diagnose why a requested inference outcome did or did not appear."""
         return self._sdk.diagnose(*args, **kwargs)
 
     def why_not(self, *args: Any, **kwargs: Any) -> Any:
+        """Ask for missing support paths for a desired inference result."""
         return self._sdk.why_not(*args, **kwargs)
 
     @property
@@ -541,12 +564,15 @@ class _SDKAuditManager:
         raise FrozenSnapshotError("FactGraph.audit namespace is read-only")
 
     def explain_fact(self, *args: Any, **kwargs: Any) -> Any:
+        """Explain the recorded support for a fact in the current graph."""
         return self._sdk.explain_fact(*args, **kwargs)
 
     def conflicts(self, *args: Any, **kwargs: Any) -> Any:
+        """Return conflict diagnostics for the current graph state."""
         return self._sdk.conflicts(*args, **kwargs)
 
     def diff_proof_frames(self, *args: Any, **kwargs: Any) -> Any:
+        """Compare two recorded proof-frame outcomes."""
         return self._sdk.diff_proof_frames(*args, **kwargs)
 
 
@@ -560,9 +586,15 @@ class _SDKPackageManager:
         raise FrozenSnapshotError("FactGraph.package namespace is read-only")
 
     def export_package(self, *args: Any, **kwargs: Any) -> Any:
+        """Export a runnable package from the graph.
+
+        Package export is separate from `fg.save(...)`: it creates an execution
+        artifact, not a FactGraph workspace.
+        """
         return self._sdk.export_package(*args, **kwargs)
 
     def run_package(self, *args: Any, **kwargs: Any) -> Any:
+        """Run an exported package with the selected engine."""
         return self._sdk.run_package(*args, **kwargs)
 
 
