@@ -184,6 +184,11 @@ The workspace is a level-4 graph snapshot:
 Artifact sidecars, views, audit reports, and service state are not part of this
 workspace format.
 
+The workspace manifest records the save scope and schema digest. Loading checks
+the manifest, ledger, registry schema metadata, and the `schema_classes=[...]`
+you provide. That is why the loader asks for Python schema classes instead of
+guessing a dynamic class model.
+
 ## Load the workspace
 
 Load requires the schema classes. Class-less dynamic load is not part of the
@@ -319,13 +324,20 @@ with TemporaryDirectory() as tmp_dir:
     assert restored_rows == [{"u": alice, "tag": "engineer"}]
 ```
 
-## What to remember
+## Syntax checklist
 
-- Rules and inferences are value objects.
-- `SavedRuleRef` and `SavedInferenceRef` are registry handles.
-- `get(...)` returns the latest saved handle; `load(...)` returns the value
-  object.
+- Use `FactGraph.create(schema_classes=[...], path=workspace)` for a
+  path-backed graph.
+- Use `fg.rules.save(rule)` and `fg.inferences.save(inference)` for per-asset
+  registry persistence.
+- `fg.rules.get(id)` and `fg.inferences.get(id)` return the latest saved ref.
+- Use `fg.rules.load(ref)` and `fg.inferences.load(ref)` to get runtime value
+  objects.
 - Runtime methods consume loaded `Rule` and `Inference` objects, not saved refs.
-- `fg.save()` saves the workspace, not just one authoring asset.
-- `FactGraph.load(...)` requires `schema_classes=[...]`.
+- Use `fg.save()` for the Level-4 workspace: manifest, ledger, schema IR, and
+  registry rules/inferences.
+- Use `FactGraph.load(path, schema_classes=[...])` to restore a workspace.
+- Class-less load is not part of the current public surface.
+- Views, artifacts, audit packages, service state, and package exports are not
+  part of the workspace format.
 - Workspace persistence and package export are different surfaces.

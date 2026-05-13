@@ -31,6 +31,10 @@
 | 2026-05-13 | scoped | G2.17 docstring gate closed | Added the remaining hover docs for schema compile helpers, bulk accept, what-if, audit, package, and views; `test_official_kernel_docs_baseline.py` now passes. |
 | 2026-05-13 | scoped | G2.18 schema identity concept page started | Added a Page Brief and drafted `concepts/schema-and-identity.md` to deepen the coordinate / primary-anchor / Field fact model introduced in quickstart/schema.md. |
 | 2026-05-13 | scoped | G2.19 SDK surface reference page started | Added a Page Brief and drafted `reference/sdk-surface.md` as a scan-friendly map of public `kernel.sdk` exports and `FactGraph` namespaces. |
+| 2026-05-13 | scoped | G2.20 quickstart-only scope adjustment | User confirmed the official docs should be quickstart-only. Concepts/reference/how-to content is folded back into quickstart pages, and each substantive quickstart page gains a Syntax checklist. |
+| 2026-05-13 | implemented | G4 archive-ready close-out | Final quickstart-only tree landed, temporary concepts/how-to/reference official docs removed, baseline updated, quickstart code blocks extracted/executed successfully, focused preservation suites passed, and the blueprint is ready for archive. |
+| 2026-05-13 | implemented | G4 evidence gap polish | Added quickstart-level evidence guidance: assertion records and metadata as first evidence anchors, `fg.audit.explain_fact(...)` / `fg.audit.conflicts(...)` as fact-level inspection, and `EvidenceGraph` as an advanced audit-layer surface. |
+| 2026-05-13 | implemented | G4 assertion selection polish | Re-read `read-write-snapshot-assertion-selection.zh.md` and expanded `quickstart/read-write.md` with the full snapshot/assertion selection ladder: scalar snapshot values, `snap.field(...)`, `snap.assertions.<field>`, `FieldAssertions.active/history/at/version`, `AssertionRecordSet.where/at/version/by_id/one/first/all`, and the by-id-only boundary of `fg.assertions`. |
 
 ## Decision Notes
 
@@ -53,6 +57,12 @@
   `Rule`/`Inference` value objects could not be executed because already
   lowered `where` IR was lowered again. The fix and regression test landed
   before the tutorial page was committed.
+- 2026-05-13: Scope adjustment after G2.19: the official docs should not
+  retain a Diátaxis four-section tree. The final tree is quickstart-only so
+  new users get one complete path. Concept/reference/how-to material may inform
+  the quickstart, but the final official tree keeps only `index.md` plus
+  `quickstart/**`. Syntax completeness is handled by per-page Syntax
+  checklists and `quickstart/namespace-map.md`.
 
 ## Page Briefs
 
@@ -91,8 +101,8 @@
 - Reader goal: Understand how ordinary writes become append-only assertions, how reads resolve those assertions into snapshots, and how to inspect or retract individual assertions.
 - Core mental model: The ledger stores assertion records; `fg.read.get(...)` and `fg.read.find(...)` build current snapshots from active assertions rather than returning mutable database rows.
 - Common misconception to prevent: `fg.write.set(...)` is not an in-place update, `fg.write.retract(...)` takes an assertion id rather than an entity ref, and `fg.read.ref(...)` should be treated as opaque.
-- APIs covered: `fg.read.ref`, `fg.write.set`, `fg.write.add`, `fg.read.get`, `fg.read.find`, `fg.write.retract`, `EntitySnapshot.field(...)`, `AssertionRecordSet.active`, `AssertionRecordSet.history`.
-- Non-goals: Batch transactions, edit context managers, ingest, read policies, views, audit/explain APIs, rules, inferences, workspace persistence, and service routes.
+- APIs covered: `fg.read.ref`, `fg.write.set`, `fg.write.add`, `fg.read.get`, `fg.read.find`, `ReadPolicy`, `fg.write.retract`, `EntitySnapshot.field(...)`, `EntitySnapshot.assertions.<field>`, `FieldAssertions.active/history/at/version`, `AssertionRecordSet.where/at/version/by_id/one/first/all`, `fg.views.create/get/list`, `fg.assertions.by_id`, and `fg.assertions.by_ids`.
+- Non-goals: Batch transactions, edit context managers, ingest, audit/explain APIs, rules, inferences, workspace persistence, package export, and service routes.
 - Source files checked: `src/kernel/sdk/store.py`, `src/kernel/sdk/facade.py`, `src/kernel/tests/test_sdk_set_add_application_delegate.py`, `src/kernel/tests/test_sdk_assertion_record_set.py`, `src/kernel/tests/test_sdk_find_partial_identity.py`, `src/kernel/tests/test_sdk_read_policy.py`.
 - Module docs checked: `src/kernel/sdk/docs/00_user_guide.en.md`, `src/kernel/sdk/docs/01_concepts.en.md`, `src/kernel/sdk/docs/02_readwrite_and_ingest.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`.
 - Design references checked: `docs/references/working/design-points/read-write-snapshot-assertion-selection.zh.md`, `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`, `docs/references/working/design-points/identity-primary-key-coordinate-semantics.md`.
@@ -106,14 +116,14 @@
 - Reader goal: Learn the difference between a read-only `Rule` and an `Inference` that proposes new facts, then run, inspect, evaluate, and accept a minimal example.
 - Core mental model: Rules ask the graph what is already true in the current snapshot; inferences propose candidate assertions from existing facts, and only `fg.eval.accept(...)` appends accepted candidates to the ledger.
 - Common misconception to prevent: `fg.eval.evaluate(...)` does not write to the graph, `RuleRef` is not a saved-rule handle, and semantic engines are evaluate-time configuration rather than the first thing to learn.
-- APIs covered: `Rule`, `Inference`, `Branch`, `Pred`, `vars`, `fg.eval.run`, `fg.eval.evaluate`, `fg.eval.accept`, `fg.rules.inspect`.
+- APIs covered: `Rule`, `Query`, `Inference`, `Branch`, `Pred`, `vars`, `fg.eval.run`, `fg.eval.evaluate`, `fg.eval.accept`, `fg.rules.inspect`.
 - Non-goals: Persistence with `SavedRuleRef` / `SavedInferenceRef`, advanced `RuleRef` composition, ProbLog/PyReason semantics, public `SemanticsProfile`, query persistence, what-if shells, and service routes.
 - Source files checked: `src/kernel/sdk/dsl/rule.py`, `src/kernel/sdk/dsl/branch.py`, `src/kernel/sdk/dsl/expr.py`, `src/kernel/sdk/dsl/vars.py`, `src/kernel/sdk/store.py`, `src/kernel/tests/test_schema_mutation_lifecycle.py`, `src/kernel/tests/test_factgraph_workspace_lifecycle.py`.
 - Module docs checked: `src/kernel/sdk/docs/00_user_guide.en.md`, `src/kernel/sdk/docs/03_rules_and_inferences.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`, `src/kernel/adapters/docs/02_problog_adapter.md`, `src/kernel/adapters/docs/03_pyreason_adapter.md`.
 - Design references checked: `docs/references/working/design-points/rule-policy-function-tree-and-syntax.zh.md`, `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`.
 - Archived blueprints checked: `docs/blueprints/archive/2026-05-12_public-inference-factgraph-create.md`, `docs/blueprints/archive/2026-05-12_branch-identity-rule-inspect.md`, `docs/blueprints/archive/2026-05-12_public-semantics-api-redesign.md`, `docs/blueprints/archive/2026-05-12_pyreason-branch-bounds-carrier.md`, `docs/blueprints/archive/2026-05-11_branch-confidence-decomposition.md`.
-- Example snippets planned: Seed a fact, define a `Rule` over that fact, run it, define an `Inference` with the same body and a target predicate, evaluate to a `CandidateSet`, accept the candidate, read the written field, and inspect branch metadata.
-- Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying rule rows, no write before accept, accepted candidate facts, and explicit branch ids in `fg.rules.inspect(...)`.
+- Example snippets planned: Seed a fact, define a `Rule` over that fact, run it, add a one-off `Query` projection, define an `Inference` with the same body and a target predicate, evaluate to a `CandidateSet`, accept the candidate, read the written field, and inspect branch metadata.
+- Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying rule rows, query projection rows, no write before accept, accepted candidate facts, and explicit branch ids in `fg.rules.inspect(...)`.
 - External style reference: Pydantic-style tutorial progression and short recap only; all rule/inference behavior comes from local source, tests, module docs, and archived blueprints.
 
 ### `quickstart/persistence.md`
@@ -145,6 +155,26 @@
 - Example snippets planned: Define one inference with an explicit branch id, inspect ProbLog and PyReason wrapper previews, show PyReason branch-bound profile entries, inspect an advanced `SemanticsProfile`, and keep the accepted-fact lifecycle separate.
 - Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying wrapper engines, inspect output, PyReason lowered profile entries, explicit branch ids, and the unchanged read-before-accept state.
 - External style reference: Pydantic-style tutorial progression and short recap only; all semantics behavior comes from local source, tests, module docs, and archived blueprints.
+
+### `quickstart/namespace-map.md`
+
+- Reader goal: See the full public `FactGraph` namespace structure in one place after completing the quickstart path.
+- Core mental model: `FactGraph` is the entry point; namespaces group workflows, while flat methods remain supported but are not the tutorial spine.
+- Common misconception to prevent: `SDKRegistry`, service routes, agent workflows, extraction pipelines, and domain bundles are not the beginner kernel API surface.
+- APIs covered: `fg.schema`, `fg.read`, `fg.write`, `fg.assertions`, `fg.rules`, `fg.inferences`, `fg.eval`, `fg.what_if`, `fg.audit`, `fg.package`, and `fg.views`.
+- Non-goals: Parameter-by-parameter reference, service docs, agent docs, extraction docs, HTTP routes, internal registry layout, and complete examples for each namespace.
+- Source files checked: `src/kernel/sdk/store.py`, `src/kernel/sdk/__init__.py`, `src/kernel/sdk/docs/04_api_surface.en.md`, `src/kernel/tests/test_official_kernel_docs_baseline.py`.
+- Module docs checked: `src/kernel/sdk/docs/00_user_guide.en.md`, `src/kernel/sdk/docs/01_concepts.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`.
+- Design references checked: `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`, `docs/references/working/design-points/rule-policy-function-tree-and-syntax.zh.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-09_post-l-sdk-ergonomics-redesign.md`, `docs/blueprints/archive/2026-05-12_public-inference-factgraph-create.md`, `docs/blueprints/archive/2026-05-12_authoring-asset-persistence-facade.md`, `docs/blueprints/archive/2026-05-12_factgraph-workspace-lifecycle.md`, `docs/blueprints/archive/2026-05-13_schema-mutation-lifecycle.md`.
+- Example snippets planned: One minimal `FactGraph.create(...)` snippet and syntax tables for namespace groups; no full executable workflow because earlier quickstart pages carry runnable examples.
+- Validation method: Run the official docs baseline and `git diff --check`; manually compare namespace names against `src/kernel/sdk/docs/04_api_surface.en.md` and `src/kernel/sdk/store.py`.
+- External style reference: Pydantic-style navigation/reference page only; all namespace names come from local source and module docs.
+
+> The Page Briefs below were drafted before the G2.20 quickstart-only scope
+> adjustment. Their content was folded into the quickstart pages where useful;
+> the final official tree no longer contains `concepts/`, `how-to/`, or
+> `reference/`.
 
 ### `concepts/schema-and-identity.md`
 

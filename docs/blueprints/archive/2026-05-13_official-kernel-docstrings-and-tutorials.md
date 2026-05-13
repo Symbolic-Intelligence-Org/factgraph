@@ -39,8 +39,9 @@ This task therefore has two layers:
 
 1. **Docstring layer** — concise hover documentation for public SDK exports and
    selected `FactGraph` namespace methods.
-2. **Official Markdown tutorial layer** — a new kernel-only documentation tree
-   that teaches current APIs and design concepts in a Pydantic-like structure.
+2. **Official Markdown tutorial layer** — a new kernel-only quickstart tree
+   that teaches current APIs, design concepts, and syntax checklists in one
+   sequential path.
 
 ## 2. Goals
 
@@ -196,7 +197,7 @@ They should not become long tutorials.
 
 ### 5.2 Track B — Official Kernel Markdown Docs
 
-Create a new canonical tutorial tree:
+Create a new canonical quickstart-only tutorial tree:
 
 ```text
 docs/official/kernel/
@@ -209,37 +210,19 @@ docs/official/kernel/
     rules-and-inferences.md
     semantics.md
     persistence.md
-  concepts/
-    factgraph.md
-    schema-ledger-assertions.md
-    rules-queries-inferences.md
-    semantics.md
-    persistence.md
-    public-vs-advanced.md
-  how-to/
-    define-schema.md
-    mutate-schema.md
-    save-load-workspace.md
-    save-rules-inferences.md
-    use-problog.md
-    use-pyreason.md
-    inspect-rules.md
-  reference/
-    sdk-surface.md
     namespace-map.md
-    errors.md
 ```
 
 This tree should use plain Markdown and a calm tutorial style: direct examples,
 short explanations, and clear cross-links. It should not duplicate low-level
 module internals.
 
-Substantive tutorial pages must also carry a small amount of conceptual
-explanation. They should not be API transcripts. Each page should establish the
-core mental model for the objects it introduces, name the common misconception
-it is trying to prevent, and then proceed with runnable steps. The balance is
-intentional: tutorial pages get enough "why" to make the syntax meaningful,
-while concepts pages remain the place for deeper design rationale.
+Substantive quickstart pages must carry the relevant conceptual explanation
+and syntax checklist in the same page. The docs do not maintain separate
+concepts/how-to/reference sections in this slice: the official user path is the
+quickstart. Each substantive page should establish the core mental model, name
+the common misconception it prevents, teach runnable steps, and end with a
+compact syntax checklist for the APIs introduced on that page.
 
 ## 6. G0 Questions
 
@@ -275,7 +258,11 @@ G0 decisions (2026-05-13):
 - D4a locked: `inspect.getdoc(...)` non-empty coverage becomes the G1 gate.
 - D5a locked: the official docs path is `docs/official/kernel/`.
 - D6a locked: official docs are English first.
-- D7a locked: the tree follows tutorials / concepts / how-to / reference.
+- D7a originally locked: the tree follows tutorials / concepts / how-to /
+  reference.
+- D7 override locked (2026-05-13): official docs are quickstart-only. Concepts,
+  how-to, and reference pages created during G2 are folded back into quickstart
+  pages and removed from the final official tree.
 - D8a locked: official docs are strict kernel-only.
 - D9a locked: snippets should be runnable or explicitly marked conceptual.
 - D10a locked: current code, module docs, and archived blueprints are the source
@@ -309,14 +296,15 @@ G0 decisions (2026-05-13):
   explicitly; a future slice may add executable Markdown validation.
 - Existing module docs remain implementation truth; official docs are the
   tutorial/readme layer.
-- The Markdown tree uses a Diátaxis-style boundary:
-  - Tutorial pages are sequential learning paths and should be runnable from
-    a clean start. Each substantive tutorial page must include a concise
-    mental-model explanation for its core objects before or alongside the
-    first code path.
-  - Concepts pages explain mental models and design rationale, not API lists.
-  - How-to pages are task-oriented recipes.
-  - Reference pages enumerate the surface and link back to implementation docs.
+- The Markdown tree is quickstart-only:
+  - quickstart pages are sequential learning paths and should be runnable from
+    a clean start;
+  - each substantive page includes the relevant mental model and common
+    misconception before or alongside the first code path;
+  - each substantive page ends with a Syntax checklist for the API surface it
+    introduced;
+  - `quickstart/namespace-map.md` is the global map for namespaces and advanced
+    surfaces.
 - Multi-session completion is expected. This blueprint must not archive to
   `implemented` until the locked docstring batches and all Markdown pages from
   §5.2 are landed. Between sessions, `memory/current.md` or a handoff must
@@ -330,20 +318,25 @@ G0 decisions (2026-05-13):
   docs, and archived blueprints remain higher-authority sources.
 - External docs such as Pydantic may inform organization, tone, and navigation,
   but never override local code, module docs, or archived blueprint decisions.
+- Official docs do not keep separate `concepts/`, `how-to/`, or `reference/`
+  sections in the final tree. Content from temporary pages in those sections
+  must be folded into quickstart pages before the temporary files are removed.
 
 ## 8. Acceptance
 
-- [ ] G0 locks docstring coverage, style, and test gate.
-- [ ] G0 locks official docs path, structure, language, and kernel-only scope.
-- [ ] G0 locks Page Brief and external-style-reference rules.
-- [ ] Public SDK docstring baseline exists and fails before implementation.
-- [ ] Docstring implementation passes the baseline.
-- [ ] Official Markdown tree exists under the locked path.
-- [ ] Official docs tree structure baseline exists and fails before implementation.
-- [ ] Audit log contains the Page Brief template before the first Markdown page.
-- [ ] `docs/README.md` indexes the official docs entry.
-- [ ] Tutorial docs use current API names and avoid old public surface.
-- [ ] No code behavior changes.
+- [x] G0 locks docstring coverage, style, and test gate.
+- [x] G0 locks official docs path, quickstart-only structure, language, and
+      kernel-only scope.
+- [x] G0 locks Page Brief and external-style-reference rules.
+- [x] Public SDK docstring baseline exists and fails before implementation.
+- [x] Docstring implementation passes the baseline.
+- [x] Official quickstart tree exists under the locked path.
+- [x] Official docs tree structure baseline validates the quickstart-only tree.
+- [x] Audit log contains the Page Brief template before the first Markdown page.
+- [x] `docs/README.md` indexes the official docs entry.
+- [x] Quickstart docs use current API names and avoid old public surface.
+- [x] Each substantive quickstart page includes a Syntax checklist.
+- [x] No code behavior changes.
 
 ## 9. Implementation Plan
 
@@ -356,8 +349,8 @@ G0 decisions (2026-05-13):
    - `inspect.getdoc(...)` gate for all 41 `kernel.sdk.__all__` exports plus
      §5.1.1 selected methods;
    - official docs tree structure gate for `docs/official/kernel/`, root
-     `index.md`, `quickstart/`, `concepts/`, `how-to/`, `reference/`, and each
-     subdirectory `index.md`;
+     `index.md`, `quickstart/`, `quickstart/index.md`, and the locked
+     quickstart pages;
    - audit-log Page Brief template gate.
 4. Add docstrings in focused groups:
    - schema/value objects;
@@ -373,19 +366,18 @@ G0 decisions (2026-05-13):
    - write the page;
    - review against current code and Diátaxis boundary;
    - commit the page or allowed small batch.
-6. Create `docs/official/kernel/` skeleton and initial tutorial pages.
+6. Create `docs/official/kernel/` skeleton and quickstart pages.
 7. Add docs index entry.
 8. Run focused grep gates and docstring/docs-tree tests.
 9. Fill Outcome / Deviations and archive only after all locked docstring batches
-   and Markdown pages are complete.
+   and quickstart pages are complete.
 
 ### 9.1 Per-Document Cadence
 
-- Substantive page (roughly >=200 lines or covers >=2 distinct user concepts):
+- Substantive quickstart page (roughly >=200 lines or covers >=2 distinct user concepts):
   one page per commit, one Page Brief per page.
 - Index / landing page (navigation only): may batch with sibling index pages.
-- Reference pages may batch when mechanically similar; otherwise one page per
-  commit.
+- Syntax checklists may be batched into their owning page.
 - Docstring changes may batch by logical group:
   - schema/value objects;
   - `FactGraph` entrypoints and namespace methods;
@@ -422,4 +414,57 @@ Page Brief — <path>
 
 ## 11. Outcome / Deviations
 
-Task completion notes will be filled after implementation and verification.
+Implemented.
+
+Outcome:
+
+- Added compact public docstrings for the locked `kernel.sdk.__all__` exports
+  and selected `FactGraph` namespace methods.
+- Created the official kernel docs tree at `docs/official/kernel/`.
+- Adjusted the original four-section Markdown plan to quickstart-only after
+  user scope confirmation:
+
+  ```text
+  docs/official/kernel/
+    index.md
+    quickstart/
+      index.md
+      first-factgraph.md
+      schema.md
+      read-write.md
+      rules-and-inferences.md
+      semantics.md
+      persistence.md
+      namespace-map.md
+  ```
+
+- Folded the useful concept/reference material back into the quickstart pages
+  and removed the temporary `concepts/`, `how-to/`, and `reference/` official
+  docs directories.
+- Added per-page Syntax checklists for the substantive quickstart pages.
+- Added a quickstart-level evidence explanation in `read-write.md`: assertion
+  ids and metadata as the first evidence anchors, `fg.audit.explain_fact(...)`
+  / `fg.audit.conflicts(...)` as fact-level inspection, and `EvidenceGraph` as
+  an advanced audit-layer surface.
+- Expanded the read/write quickstart's assertion selection model from the
+  design-point ladder: `EntitySnapshot` scalar values, `snap.field(...)`,
+  `snap.assertions.<field>`, `FieldAssertions`, `AssertionRecordSet` filters,
+  terminal selectors, frozen views, and graph-level by-id assertion readback.
+- Updated `docs/README.md`, `src/kernel/sdk/docs/README.md`, and the official
+  docs baseline test to reflect the final quickstart-only tree.
+
+Verification:
+
+- Extracted and executed every Python block under
+  `docs/official/kernel/quickstart/*.md`: all pages passed.
+- `PYTHONPATH=src python -m unittest src/kernel/tests/test_official_kernel_docs_baseline.py`: 7/7 OK.
+- Focused schema/read-write/rules/persistence/semantics preservation suites:
+  276/276 OK.
+
+Deviations:
+
+- D7 originally locked a four-section Diátaxis tree. The user later explicitly
+  changed scope to quickstart-only. The scope change is recorded in the audit
+  log at G2.20 and reflected in the final baseline.
+- Temporary concept/reference pages created during G2 were removed after their
+  useful material was folded into quickstart pages.

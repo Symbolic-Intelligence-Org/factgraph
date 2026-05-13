@@ -34,6 +34,7 @@ from kernel.sdk import (
     Identity,
     Inference,
     Pred,
+    Query,
     Rule,
     vars,
 )
@@ -92,6 +93,30 @@ assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 
 The second assertion matters. The rule found the `tag_seed` fact, but it did
 not write a `tag` fact.
+
+## Use Query for one-off projections
+
+Use `Query` when you want an ad-hoc result shape without saving a reusable
+rule. It uses the same body language, but the head describes the projected
+columns directly.
+
+```python
+with vars("u", "tag") as (u, tag):
+    seeded_tag_query = Query(
+        head=[User(u), User.tag_seed(value=tag)],
+        where=[User(u), u.tag_seed == tag],
+    )
+
+
+query_rows = fg.eval.run(seeded_tag_query)
+
+assert len(query_rows) == 1
+assert query_rows[0]["u"].ref == alice
+assert query_rows[0]["tag"] == "engineer"
+```
+
+Queries are read-time projections. They are useful for one-off shapes. The
+durable authoring surfaces are saved rules and saved inferences.
 
 ## Evaluate an Inference
 
@@ -191,6 +216,7 @@ That topic is covered later. In the quickstart, keep the model simple:
 - `Inference` proposes.
 - `CandidateSet` waits for review.
 - `accept` writes.
+- `SavedRuleRef` and `SavedInferenceRef` must be loaded before runtime use.
 
 ## Where semantics engines fit
 
@@ -215,6 +241,7 @@ from kernel.sdk import (
     Identity,
     Inference,
     Pred,
+    Query,
     Rule,
     vars,
 )
@@ -244,6 +271,16 @@ rows = fg.eval.run(seeded_tags)
 assert rows == [{"u": alice, "tag": "engineer"}]
 
 with vars("u", "tag") as (u, tag):
+    seeded_tag_query = Query(
+        head=[User(u), User.tag_seed(value=tag)],
+        where=[User(u), u.tag_seed == tag],
+    )
+
+query_rows = fg.eval.run(seeded_tag_query)
+
+assert query_rows[0]["tag"] == "engineer"
+
+with vars("u", "tag") as (u, tag):
     tags_from_seed = Inference(
         id="inf.tags_from_seed",
         version="v1",
@@ -270,14 +307,23 @@ assert inspected["branches"][0]["id"] == "seed_path"
 assert inspected["branches"][0]["fallback_id"] == "b0"
 ```
 
-## What to remember
+## Syntax checklist
 
-- A `Rule` is a read-only reusable pattern over current facts.
-- An `Inference` proposes new facts.
-- `fg.eval.evaluate(...)` does not write to the ledger.
-- `fg.eval.accept(...)` appends accepted candidate assertions.
-- `Branch(..., id=...)` gives rule structure a stable name.
-- `fg.rules.inspect(...)` is for shape and branch metadata, not execution.
+- Use `vars(...)` to create logic variables for DSL bodies.
+- Use `Pred("entity:field", ...)` for explicit predicate literals.
+- Use `Branch([...], id="...")` when branch identity matters.
+- Use `Rule(id=..., select=[...], where=[...])` for reusable read patterns.
+- Run rules with `fg.eval.run(rule)`; running a rule does not write.
+- Use `Query(head=..., where=[...])` for ad-hoc read projections.
+- Use `Inference(id=..., where=[...], target=..., head_vars=[...])` for
+  proposed facts.
+- Evaluate inferences with `fg.eval.evaluate(inference)`; evaluation does not
+  write.
+- Accept candidates with `fg.eval.accept(candidate)` or
+  `fg.eval.accept_many(candidates)`.
+- Inspect rule or inference structure with `fg.rules.inspect(...)`.
 - `RuleRef` is a body-composition tool, not a saved-rule handle.
+- `SavedRuleRef` and `SavedInferenceRef` are registry handles; load them
+  before passing value objects to runtime methods.
 - Semantic engines are evaluation configuration; the evaluate/accept lifecycle
   stays the same.

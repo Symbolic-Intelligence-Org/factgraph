@@ -104,7 +104,7 @@ assert snap.name == "Alice"
 assert tuple(snap.tags) == ("engineer",)
 ```
 
-## What to remember
+## Syntax checklist
 
 - A schema is made from `Entity` classes.
 - `Identity` fields locate entities.

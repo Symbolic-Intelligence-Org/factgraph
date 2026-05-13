@@ -30,6 +30,8 @@
   - Current design-point entry: [Rule / Query / Inference head semantics](/Users/zhenzhili/hnsm-backend/docs/references/working/design-points/rule-query-inference-head-semantics.zh.md) records a post-release optimization direction, not current implementation truth.
 - [../examples/README.md](/Users/zhenzhili/hnsm-backend/examples/README.md)
   - 仓库示例与 notebook 的维护索引；说明哪些 demo 是当前口径、哪些是低层 spike、哪些是导出产物。
+- [official/kernel/index.md](/Users/zhenzhili/hnsm-backend/docs/official/kernel/index.md)
+  - `factpy-kernel` 官方用户 quickstart 文档入口；kernel-only, 不包含 service、agent、extraction 或 domain bundle 文档。
 - [memory/README.md](/Users/zhenzhili/hnsm-backend/memory/README.md)
   - 仓库级 operational memory 说明；定义 handoff 与 `current.md` 的边界。
 - [memory/current.md](/Users/zhenzhili/hnsm-backend/memory/current.md)

@@ -97,6 +97,29 @@ belong on `Field(...)`. Coordinate dimensions should be modeled as n-ary
 identity fields. Field values are the facts attached to the resulting
 coordinate.
 
+## How schema becomes graph facts
+
+The SDK stores facts in a normalized graph form. You declare Python classes, but
+the graph works with predicate ids, entity references, assertion rows, and
+values.
+
+You normally do not write that lower-level form yourself. The schema compiler
+does the splitting:
+
+```text
+User.display_name -> predicate id "user:display_name"
+User.tags         -> predicate id "user:tags"
+(User, user_id, locale) -> idref_v1 entity coordinate
+fg.write.set(User.display_name, user_ref, "Alice")
+  -> one assertion row for predicate "user:display_name"
+```
+
+This normalized fact shape is useful because schema, reads, writes, rules,
+inferences, and audit all agree on the same predicate and assertion model. The
+quickstart calls it the graph fact model; internal design notes may call this
+GNF. The user-facing rule is simpler: declare `Entity`, `Identity`, and
+`Field`, then let the SDK split them into graph predicates and assertion rows.
+
 ## Single, multi, and entity references
 
 Use `cardinality="single"` when the field should read as one current value.
@@ -278,19 +301,22 @@ assert updated.nickname is None
 assert tuple(updated.skills) == ()
 ```
 
-## What to remember
+## Syntax checklist
 
-- `Identity` fields define the entity coordinate.
-- All `Identity` fields participate in the generated `idref_v1` reference.
-- `primary_key=True` marks the logical anchor; it is not the only identity
-  field used by the ref.
-- `Field(...)` values are mutable facts attached to a complete coordinate.
-- Use `fg.read.get(...)` for one full coordinate.
-- Use `fg.read.find(...)` for partial identity filters such as a primary
-  anchor.
-- Batch handles start with primary identity and use `bind(...)` only for
-  non-primary identity dimensions before writing.
-- Entity-reference fields store managed refs returned by `fg.read.ref(...)`.
-- `fg.schema.add(...)` can add entity types and non-identity fields.
-- Field deletes, rewrites, renames, type changes, and identity changes are not
-  part of the current additive schema surface.
+- Define graph vocabulary with `class User(Entity): ...`.
+- Use `Identity(primary_key=True)` for the logical primary anchor.
+- Use non-primary `Identity(...)` for domain dimensions under that anchor.
+- Every `Identity` field participates in the complete `idref_v1` coordinate.
+- Use `Field(cardinality="single")` for one active value at a coordinate.
+- Use `Field(cardinality="multi")` for multiple active values at a coordinate.
+- Use managed refs from `fg.read.ref(...)`; do not hand-build `idref_v1`.
+- Use `fg.read.get(Entity, **full_identity)` for one full coordinate.
+- Use `fg.read.find(Entity, **partial_filters)` for matching snapshots.
+- In batches, start from primary identity with `tx.entity(...)` and complete
+  non-primary dimensions with `bind(...)` before writing.
+- Add schema with `fg.schema.add(NewEntity)` or same-name replacement classes.
+- Field-add can only add non-identity fields; old class descriptors are
+  superseded by the replacement class.
+- New `single` fields read as `None`; new `multi` fields read as `()`.
+- Deletes, renames, type changes, cardinality changes, identity changes,
+  defaults, and backfill are not part of the current additive schema surface.

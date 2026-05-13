@@ -44,6 +44,7 @@ from kernel.sdk import (
     ProbLogSemantics,
     PyReasonSemantics,
     SemanticsProfile,
+    SDKStoreError,
     vars,
 )
 
@@ -122,6 +123,20 @@ Engine-specific evaluation uses the same public call site:
 Whether the evaluator is native, ProbLog, or PyReason, `evaluate(...)` produces
 candidates. It does not write accepted facts.
 
+If you pass `engine=...` explicitly, it must match the wrapper:
+
+```python
+try:
+    fg.eval.evaluate(tags_from_seed, engine="pyreason", semantics=problog)
+except SDKStoreError as exc:
+    assert "does not match" in str(exc)
+else:
+    raise AssertionError("mismatched engine should be rejected")
+```
+
+Most code should omit `engine=` when using a public wrapper. The SDK derives
+the engine from `ProbLogSemantics` or `PyReasonSemantics`.
+
 ## Inspect PyReason semantics
 
 `PyReasonSemantics` configures PyReason-specific time and interval behavior.
@@ -158,6 +173,10 @@ Branches without a branch-specific bound keep the global value.
 `inspect_semantics(...)` can preview the wrapper shape without running an
 engine. During real evaluation, branch ids are resolved against the concrete
 `Inference`. That is why explicit branch ids are useful.
+
+The user-facing branch id is lowered to the adapter's branch index. In the
+preview above, `"seed_path"` becomes `"branch:0"` because it is the first branch
+in the inference.
 
 ## Use SemanticsProfile when you need the canonical form
 
@@ -228,6 +247,7 @@ from kernel.sdk import (
     Pred,
     ProbLogSemantics,
     PyReasonSemantics,
+    SDKStoreError,
     vars,
 )
 
@@ -262,6 +282,13 @@ pyreason = PyReasonSemantics(
 assert fg.eval.inspect_semantics(problog)["engine"] == "problog"
 assert fg.eval.inspect_semantics(pyreason)["engine"] == "pyreason"
 
+try:
+    fg.eval.evaluate(inference, engine="pyreason", semantics=problog)
+except SDKStoreError as exc:
+    assert "does not match" in str(exc)
+else:
+    raise AssertionError("mismatched engine should be rejected")
+
 candidates = fg.eval.evaluate(inference)
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 
@@ -269,13 +296,19 @@ fg.eval.accept(candidates[0])
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ("engineer",)
 ```
 
-## What to remember
+## Syntax checklist
 
 - Semantics are evaluate-time configuration.
-- `ProbLogSemantics` and `PyReasonSemantics` are the preferred public wrappers.
-- `SemanticsProfile` is the advanced canonical form.
-- Branch-level semantics should use explicit `Branch(id=...)` names.
+- Use `ProbLogSemantics(...)` for ProbLog branch probabilities.
+- Use `PyReasonSemantics(...)` for PyReason delays, head bounds, and branch
+  bounds.
+- Use `SemanticsProfile(...)` only when you need the canonical lower-level
+  profile.
 - `fg.eval.inspect_semantics(...)` inspects configuration; it does not run an
   engine.
+- The SDK derives `engine=` from public wrappers; explicit mismatches are
+  rejected.
+- Branch-level semantics should use explicit `Branch(id=...)` names.
+- Branch ids are lowered to adapter branch indexes such as `branch:0`.
 - `evaluate(...)` still returns candidates, and `accept(...)` still writes
   accepted facts.

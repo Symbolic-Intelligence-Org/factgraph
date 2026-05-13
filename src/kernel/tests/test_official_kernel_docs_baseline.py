@@ -13,7 +13,7 @@ BLUEPRINT_AUDIT = (
     REPO_ROOT
     / "docs"
     / "blueprints"
-    / "active"
+    / "archive"
     / "2026-05-13_official-kernel-docstrings-and-tutorials.audit.md"
 )
 OFFICIAL_DOCS_ROOT = REPO_ROOT / "docs" / "official" / "kernel"
@@ -107,16 +107,23 @@ class TestOfficialDocsTreeGate(unittest.TestCase):
             OFFICIAL_DOCS_ROOT / "index.md",
             OFFICIAL_DOCS_ROOT / "quickstart",
             OFFICIAL_DOCS_ROOT / "quickstart" / "index.md",
-            OFFICIAL_DOCS_ROOT / "concepts",
-            OFFICIAL_DOCS_ROOT / "concepts" / "index.md",
-            OFFICIAL_DOCS_ROOT / "how-to",
-            OFFICIAL_DOCS_ROOT / "how-to" / "index.md",
-            OFFICIAL_DOCS_ROOT / "reference",
-            OFFICIAL_DOCS_ROOT / "reference" / "index.md",
+            OFFICIAL_DOCS_ROOT / "quickstart" / "first-factgraph.md",
+            OFFICIAL_DOCS_ROOT / "quickstart" / "schema.md",
+            OFFICIAL_DOCS_ROOT / "quickstart" / "read-write.md",
+            OFFICIAL_DOCS_ROOT / "quickstart" / "rules-and-inferences.md",
+            OFFICIAL_DOCS_ROOT / "quickstart" / "semantics.md",
+            OFFICIAL_DOCS_ROOT / "quickstart" / "persistence.md",
+            OFFICIAL_DOCS_ROOT / "quickstart" / "namespace-map.md",
         )
         for path in paths:
             with self.subTest(path=str(path.relative_to(REPO_ROOT))):
                 self.assertTrue(path.exists(), f"expected official docs path to exist: {path}")
+
+    def test_official_docs_tree_is_quickstart_only(self) -> None:
+        for name in ("concepts", "how-to", "reference"):
+            path = OFFICIAL_DOCS_ROOT / name
+            with self.subTest(path=str(path.relative_to(REPO_ROOT))):
+                self.assertFalse(path.exists(), f"official docs should be quickstart-only: {path}")
 
 
 class TestPageBriefTemplateGate(unittest.TestCase):

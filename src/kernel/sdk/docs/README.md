@@ -28,6 +28,11 @@ print(snap.name)            # → Alice
 
 ## Doc Map
 
+The user-facing official quickstart lives at
+[`docs/official/kernel/index.md`](/Users/zhenzhili/hnsm-backend/docs/official/kernel/index.md).
+The module docs below remain the implementation-truth layer for maintainers and
+advanced users.
+
 | Doc | When to read |
 |---|---|
 | [`00_user_guide.en.md`](00_user_guide.en.md) | Start here. End-to-end tour with examples for each namespace. |

@@ -1,35 +1,38 @@
 # Current Operational Memory
 
-最后更新:2026-05-13(official kernel quickstart mainline complete locally; source `456c60fb`, not pushed)
+最后更新:2026-05-13(official kernel docs quickstart-only consolidation implemented locally; source pending commit, not pushed)
 
-## 当前阶段(2026-05-13 — OFFICIAL KERNEL DOCS QUICKSTART MAINLINE COMPLETE LOCALLY)
+## 当前阶段(2026-05-13 — OFFICIAL KERNEL DOCS QUICKSTART-ONLY CONSOLIDATION IMPLEMENTED LOCALLY)
 
-**Current local source state:** `HEAD = 456c60fb`.
+**Current local source state:** working tree includes the implemented quickstart-only official docs consolidation; commit pending at time of this memory update.
 
-**Remote baseline:** `origin/master = 0395acab`.
+**Remote baseline:** `origin/master = 293b98a5` before this consolidation commit.
 
 **Local publish state:**
-- Local branch is 26 commits ahead of `origin/master`.
 - Worktree has one pre-existing dirty notebook:
   `examples/archive/01_sdk_basics.ipynb`.
-- The official docs slice is still active/scoped; do not archive it yet.
+- The official docs slice is implemented and archived locally, but not pushed.
 
 **Official docs slice state:**
-- Active blueprint:
-  `docs/blueprints/active/2026-05-13_official-kernel-docstrings-and-tutorials.md`.
-- Audit:
-  `docs/blueprints/active/2026-05-13_official-kernel-docstrings-and-tutorials.audit.md`.
+- Archived blueprint:
+  `docs/blueprints/archive/2026-05-13_official-kernel-docstrings-and-tutorials.md`.
+- Archived audit:
+  `docs/blueprints/archive/2026-05-13_official-kernel-docstrings-and-tutorials.audit.md`.
 - G0 decisions locked docstrings-first, official Markdown under
-  `docs/official/kernel/`, Diátaxis-style sections, Page Brief discipline,
-  kernel-only release boundary, and multi-session completion.
+  `docs/official/kernel/`, Page Brief discipline, kernel-only release
+  boundary, and multi-session completion. G2.20 scope adjustment changed the
+  Markdown tree to quickstart-only.
 
-**Quickstart mainline complete:**
+**Final official kernel docs tree:**
+- `docs/official/kernel/index.md`
+- `docs/official/kernel/quickstart/index.md`
 - `docs/official/kernel/quickstart/first-factgraph.md`
 - `docs/official/kernel/quickstart/schema.md`
 - `docs/official/kernel/quickstart/read-write.md`
 - `docs/official/kernel/quickstart/rules-and-inferences.md`
-- `docs/official/kernel/quickstart/persistence.md`
 - `docs/official/kernel/quickstart/semantics.md`
+- `docs/official/kernel/quickstart/persistence.md`
+- `docs/official/kernel/quickstart/namespace-map.md`
 
 **Important docs-as-validation outcome:**
 - While validating `quickstart/persistence.md`, the tutorial round-trip exposed
@@ -39,22 +42,16 @@
 - Regression added to `test_authoring_asset_persistence_facade.py`.
 
 **Latest validation:**
-- `quickstart/semantics.md`: 8 Python blocks extracted and executed OK.
-- Semantics focused suites: 32/32 OK.
-- Official docs baseline remains intentionally red: 6 tests, 22 failures,
-  0 errors.
-- `git diff --check`: OK after the semantics page.
+- All Python blocks in `docs/official/kernel/quickstart/*.md` extracted and
+  executed OK.
+- Official docs baseline: 7/7 OK.
+- Focused schema/read-write/rules/persistence/semantics preservation suites:
+  276/276 OK.
 
 **Remaining official docs work:**
-- Docstring gate still has 22 known failures:
-  schema helper exports, `fg.eval.accept_many`, what-if namespaces, audit,
-  package, and views.
-- Next recommended content:
-  1. update handoff + push current docs checkpoint;
-  2. continue with `concepts/schema-and-identity.md` or reference surface;
-  3. complete remaining docstring batches;
-  4. later archive the docs blueprint only after docstrings + official docs
-     tree are complete.
+- Commit and push the implemented quickstart-only consolidation.
+- Optional future docs work should be a new scoped docs slice, not a continuation
+  of the archived official-kernel-docstrings-and-tutorials blueprint.
 
 <!-- Historical 2026-05-13 confidence/evidence cleanup state follows. -->
 
