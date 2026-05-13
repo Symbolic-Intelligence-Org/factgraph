@@ -1,6 +1,6 @@
 # Task Blueprint: ReadPolicy and Legacy Confidence Meta Removal
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-13
 - Last Updated: 2026-05-13
 - Related Modules:
@@ -288,9 +288,31 @@ Survey commands were run on 2026-05-13 from the repository root.
 
 ## 10. Outcome / Deviations
 
-Fill this section after implementation:
-
-- Final result:
-- Deviations from the blueprint:
-- Reason for any adjustments:
-- Archive notes:
+- Final result: `ReadPolicy`, SDK/service `policy=` display paths,
+  `return_display_meta`, first-class assertion `confidence`,
+  `.where(confidence=...)`, display confidence aggregation, and
+  `max_confidence` tie-break support were removed. User-authored
+  `meta.confidence` and `meta.confidence_source` now reject; raw uncertainty
+  uses `raw_kind` / `bound`. Candidate, adapter, and certainty-internal
+  confidence carriers remain preserved.
+- Deviations from the blueprint: Docs sync expanded to include
+  `src/kernel/core/docs/04_service_layer.md`,
+  `src/service/docs/02_runtime_sessions.md`,
+  `src/service/docs/06_frontend_integration.md`, and
+  `src/service/docs/README.md` after grep found stale service-policy wording.
+  The tracked official `read-write.md` cleanup was committed as an index-only
+  hunk because unrelated quickstart rewrites were already dirty in the working
+  tree.
+- Reason for any adjustments: The extra docs carried the same removed inline
+  policy contract and needed to stay aligned with the service/runtime hard cut.
+  The index-only official docs commit preserved git isolation for the
+  pre-existing docs stream.
+- Archive notes: Targeted close verification passed:
+  `PYTHONPATH=src python -m unittest -v kernel.tests.test_readpolicy_confidence_meta_removal kernel.tests.test_sdk_read_policy service.tests.test_runtime_query_policy kernel.tests.test_sdk_frozen_view_read_runtime_boundaries kernel.tests.test_confidence_evidence_meta_release_cleanup kernel.tests.test_write_protocol_annotations kernel.tests.test_problog_export kernel.tests.test_sdk_assertion_record_set kernel.tests.test_official_kernel_docs_baseline`
+  (100 tests OK). Public docs grep found no stale `ReadPolicy` /
+  display-confidence surface except explicit removed-surface wording.
+  Cold-import import-order circularity remains when running
+  `kernel.tests.test_pyreason_session` or
+  `kernel.tests.test_certainty_explain_contracts` in isolation; this is a
+  pre-existing adapter/audit import-order issue, while preservation behavior is
+  covered by integrated suites.

@@ -14,6 +14,7 @@
 | 2026-05-13 | scoped | Phase 2 implementation added | Removed the runtime `ReadPolicy` DTO/export, SDK/service policy display paths, first-class assertion confidence, display aggregation, and `max_confidence`; rejected user-authored `meta.confidence` / `meta.confidence_source`; migrated affected test fixtures. |
 | 2026-05-13 | scoped | Phase 3 docs sync expanded | Documentation grep found stale inline policy references outside the original docs list (`core/docs/04_service_layer.md`, `service/docs/02_runtime_sessions.md`, `service/docs/06_frontend_integration.md`, and `service/docs/README.md`); blueprint docs inventory expanded before committing docs sync. |
 | 2026-05-13 | scoped | Phase 3 docs sync verified | Updated SDK/core/service/adapter docs and the tracked official read-write quickstart cleanup hunk; `rg` found no stale public `ReadPolicy`/display-confidence docs except explicit removed-surface wording, and `kernel.tests.test_readpolicy_confidence_meta_removal + kernel.tests.test_official_kernel_docs_baseline` passed 25/25. |
+| 2026-05-13 | implemented | Close verification completed | Filled Outcome / Deviations after targeted close gate passed 100/100 and docs grep remained clean; archived the blueprint as implemented. |
 
 ## Decision Notes
 
