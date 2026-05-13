@@ -141,6 +141,12 @@ assert {row.display_name for row in rows} == {"Alice", "Alice ZH"}
 Each row returned by `find` is still a full-coordinate snapshot. There is no
 separate primary-only entity reference.
 
+Batch writes use the same model. A batch entity handle must start with the
+primary identity anchor, then it may bind non-primary identity dimensions before
+writing. The primary identity itself is not delayed; only the remaining
+coordinate dimensions can be completed later. Batch handles are covered in a
+later guide.
+
 ## Adding fields later
 
 `fg.schema.add(...)` is additive. It can add a new entity type or add

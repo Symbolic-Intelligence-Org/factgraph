@@ -18,6 +18,7 @@
 | 2026-05-13 | scoped | G2.6 Page Brief gate updated | Extended the official docs baseline to require Page Brief fields for core mental model, common misconception, and design references. |
 | 2026-05-13 | scoped | G2.7 read/write quickstart page started | Added a read/write tutorial brief and drafted `quickstart/read-write.md` from current assertion, snapshot, ref, find, and retract behavior. |
 | 2026-05-13 | scoped | G2.8 schema quickstart identity-coordinate pass | Reworked `quickstart/schema.md` around Identity coordinate semantics, primary-key logical anchors, Field fact content, and n-ary identity guidance from design references. |
+| 2026-05-13 | scoped | G2.9 schema quickstart batch identity note | Added a concise forward pointer clarifying that batch handles start from primary identity and may bind non-primary identity dimensions later. |
 
 ## Decision Notes
 
