@@ -48,6 +48,20 @@ class _DeclaredMember:
 
 
 class Identity(_DeclaredMember):
+    """Declare an identity field on an `Entity`.
+
+    Identity fields are part of an entity's stable identity and are used to
+    build `idref_v1` references. Every `Entity` must declare at least one
+    `Identity(primary_key=True)`.
+
+    Args:
+        default: Optional default value used when a reference omits this
+            identity value.
+        default_factory: Optional built-in factory name; currently used for
+            generated identity values such as `"uuid4"`.
+        primary_key: Marks this identity field as part of the primary key.
+    """
+
     def __init__(
         self,
         *,
@@ -75,6 +89,18 @@ class Identity(_DeclaredMember):
 
 
 class Field(_DeclaredMember):
+    """Declare a non-identity field on an `Entity`.
+
+    Use `Field(cardinality="single")` for a replaceable current value and
+    `Field(cardinality="multi")` for accumulated values. Fields do not support
+    defaults or backfill; missing added fields read as `None` for single fields
+    and `()` for multi fields.
+
+    Args:
+        cardinality: Either `"single"` or `"multi"`.
+        description: Optional human-readable field description for schema IR.
+    """
+
     def __init__(
         self,
         *,
@@ -175,6 +201,13 @@ class EntityMeta(type):
 
 
 class Entity(metaclass=EntityMeta):
+    """Base class for Python schema entity declarations.
+
+    Subclass `Entity` and declare annotated `Identity` and `Field` descriptors.
+    The metaclass compiles those annotations into `__sdk_entity_spec__`, which
+    `FactGraph.create(schema_classes=[...])` uses to build the graph schema.
+    """
+
     def __init__(self, **kwargs: Any) -> None:
         for key, value in kwargs.items():
             if not hasattr(type(self), key):

@@ -240,12 +240,22 @@ class _SDKReadManager:
         raise FrozenSnapshotError("FactGraph.read namespace is read-only")
 
     def get(self, *args: Any, **kwargs: Any) -> Any:
+        """Read one entity snapshot by identity values.
+
+        Delegates to `FactGraph.get(EntityCls, **identity)` and returns the
+        current snapshot, or `None` when the entity is not visible.
+        """
         return self._sdk.get(*args, **kwargs)
 
     def find(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.find(*args, **kwargs)
 
     def ref(self, *args: Any, **kwargs: Any) -> Any:
+        """Build an entity reference from identity values without writing.
+
+        Use the returned `idref_v1` token as the entity handle for
+        `fg.write.set(...)` and `fg.write.add(...)`.
+        """
         return self._sdk.ref(*args, **kwargs)
 
 
@@ -259,9 +269,19 @@ class _SDKWriteManager:
         raise FrozenSnapshotError("FactGraph.write namespace is read-only")
 
     def set(self, *args: Any, **kwargs: Any) -> Any:
+        """Write a single-cardinality field value.
+
+        Delegates to `FactGraph.set(field, e_ref, value, meta=None)` and
+        returns the assertion id for the appended write.
+        """
         return self._sdk.set(*args, **kwargs)
 
     def add(self, *args: Any, **kwargs: Any) -> Any:
+        """Append a value to a multi-cardinality field.
+
+        Delegates to `FactGraph.add(field, e_ref, value, meta=None)` and
+        returns the assertion id for the appended write.
+        """
         return self._sdk.add(*args, **kwargs)
 
     def retract(self, *args: Any, **kwargs: Any) -> Any:
@@ -535,6 +555,15 @@ def _validate_workspace_registry_schema(registry_root: str | Path, expected_dige
 
 
 class SDKStore:
+    """Main SDK graph object, exported to users as `FactGraph`.
+
+    `FactGraph` is a literal alias of this class and is the recommended public
+    name. It owns the compiled schema, append-only ledger, optional authoring
+    registry, optional workspace path, and user-facing namespaces such as
+    `schema`, `read`, `write`, `rules`, `inferences`, `eval`, `what_if`,
+    `audit`, `package`, and `views`.
+    """
+
     def __init__(
         self,
         classes: list[type[Entity]],
@@ -608,6 +637,31 @@ class SDKStore:
         registry: FileAuthoringRegistry | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
+        """Create a `FactGraph` from Python `Entity` classes.
+
+        This is the normal SDK constructor. Pass `path=` when the graph should
+        own a durable workspace that can later be saved with `fg.save()` and
+        restored with `FactGraph.load(...)`.
+
+        Args:
+            schema_classes: Non-empty list of `Entity` subclasses.
+            ledger: Optional existing ledger object.
+            ledger_path: Optional SQLite ledger path; mutually exclusive with
+                `ledger`.
+            path: Optional workspace directory. When provided, default ledger
+                and registry paths are derived from it.
+            artifact_store_root: Optional artifact sidecar root.
+            registry_root: Optional authoring registry directory.
+            registry: Optional `FileAuthoringRegistry` instance.
+            default_row_format: Optional default output row format for rule
+                evaluation.
+
+        Returns:
+            A `FactGraph` / `SDKStore` bound to the compiled schema.
+
+        Raises:
+            SDKStoreError: If constructor paths or schema classes are invalid.
+        """
         workspace_path, resolved_ledger_path, resolved_registry_root = _resolve_workspace_constructor_paths(
             path=path,
             ledger_path=ledger_path,
@@ -1507,7 +1561,7 @@ class SDKStore:
         The write is routed through ``kernel.application``'s write-plan adapter:
         the first time an entity is written, identity predicates and
         ``<T>:exists`` are auto-materialized so that subsequent ``sdk.get`` /
-        ``sdk.run`` / derivation calls see the entity. ``set`` produces a new
+        ``sdk.run`` / inference calls see the entity. ``set`` produces a new
         assertion (the ledger is append-only); the chosen view reflects the
         latest assertion.
 
