@@ -1,6 +1,6 @@
 # Task Blueprint: Confidence / Evidence Meta Release Cleanup
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-13
 - Last Updated: 2026-05-13
 - Related Modules:
@@ -119,10 +119,10 @@ the explicit adapter-native semantic lanes.
 
 ## 7. Acceptance
 
-- [ ] Code behavior satisfies the task goals
-- [ ] No scope crosses the boundaries above
-- [ ] Affected module docs are synchronized
-- [ ] If a durable docs entry is added, `docs/README.md` is updated
+- [x] Code behavior satisfies the task goals
+- [x] No scope crosses the boundaries above
+- [x] Affected module docs are synchronized
+- [x] No durable docs entry was added; `docs/README.md` was not changed by this slice
 
 ## 8. Implementation Plan
 
@@ -154,4 +154,52 @@ preservation guards for adapter-native semantics.
 
 ## 10. Outcome / Deviations
 
-Task completion notes will be filled after implementation and verification.
+Implemented on 2026-05-13.
+
+### Final Behavior
+
+- `accept(...)` no longer writes `CandidateSet.confidence` or
+  `confidence_kind` into assertion meta by default.
+- Old accept payloads that echo `confidence` / `confidence_kind` remain
+  parse-compatible and hydrate only the internal candidate carrier.
+- Legacy confidence differences do not affect duplicate detection.
+- Generic `meta.confidence` stays a ledger meta row, but no longer becomes a
+  shared derived annotation by default.
+- ProbLog export reads adapter-native probability annotations and otherwise
+  defaults to `1.0`; it does not fall back to generic `meta.confidence`.
+- PyReason sessions keep adapter-native bound annotations and source metadata,
+  but filter generic confidence / confidence_source from shared metadata.
+- Service candidate DTOs and candidate inventory omit legacy confidence fields
+  by default.
+- Candidate evidence trees do not lift generic assertion `meta.confidence` into
+  default evidence/certainty display.
+
+### Validation
+
+- Confidence cleanup baseline: 11/11 OK.
+- Full kernel discovery: 2198 OK / 1 skipped.
+- `git diff --check`: clean.
+- Stale public/docs grep for default confidence propagation: remaining hits are
+  internal/legacy carrier or adapter-native boundary notes.
+
+### Commit Lineage
+
+```text
+fd7a4db6 docs(blueprints): clarify confidence evidence cleanup scope
+5717c10f test(core): add confidence evidence cleanup baseline
+9be04319 fix(core): stop default confidence meta propagation
+632c7093 docs: sync confidence evidence cleanup contract
+```
+
+### Deviations
+
+None. The slice stayed a defensive release cleanup and did not introduce a new
+confidence model, result DTO, or public API.
+
+### Archive Notes
+
+This slice intentionally reverses several older confidence propagation paths
+from March-era prototype work. `CandidateSet.confidence` and
+`confidence_kind` remain internal/session carriers, while public and persisted
+semantics now require explicit adapter-native probability/bound lanes or a
+future dedicated confidence blueprint.

@@ -23,7 +23,7 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-05-13 (Schema mutation lifecycle archived — additive `fg.schema.add(...)` landed)
+最后更新：2026-05-13 (Confidence / evidence meta release cleanup archived)
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
@@ -242,3 +242,4 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 | 2026-05-13 | v0.1.0-rc.3-release | implemented | Release-prep dry-run for `v0.1.0-rc.3`: confirmed rc.3 is the next candidate after existing rc.2, synced the release surface allowlist for lifecycle/assets renames and semantics/runtime modules, and verified `scripts/release.sh v0.1.0-rc.3 --source-ref HEAD --dry-run --yes` from clean source `fa982858`. Projection produced 361 files; staging verification passed 1633 OK / 1 skipped; dry-run release commit would be `d048c6ac`; no refs were pushed. |
 | 2026-05-13 | schema-mutation-lifecycle | implemented | Additive schema mutation first slice: added `fg.schema.add(EntityCls)` / `fg.schema.add(schema_classes=[...])`, public `SchemaAddResult`, and `kernel.application.schema_mutation_runtime` with strict seven-category additive validation. Active SDK/core schema state, ledger schema digest, and graph-bound registry schema IR update immediately; workspace manifest digest updates only on explicit `fg.save(...)`. Re-adding equivalent classes is no-op; delete/deprecate/update/migrate remain deferred. Schema mutation suite 39 OK, lifecycle/assets preservation 88 OK, SDK invariants 57 OK. |
 | 2026-05-13 | schema-field-add-lifecycle | implemented | Additive schema mutation second slice: `fg.schema.add(...)` now accepts same-entity replacement classes that add non-identity fields, returns `SchemaAddResult.added_fields`, rejects superseded classes/descriptors, preserves no-backfill absence semantics (`None` / `()`), and reuses ledger/registry digest anchors plus workspace save-time behavior. Field-add suite 33 OK, schema/lifecycle preservation + SDK invariant stack 217 OK, docs synced. |
+| 2026-05-13 | confidence-evidence-meta-release-cleanup | implemented | Defensive release cleanup: legacy `CandidateSet.confidence` / `confidence_kind` and generic `meta.confidence` remain internal/legacy carriers only; accept no longer persists them to assertion meta, write protocol no longer projects them to shared annotations, service candidate DTOs omit them by default, ProbLog/PyReason use adapter-native semantic lanes, and candidate evidence trees do not lift generic confidence into default evidence/certainty display. Confidence cleanup baseline 11 OK; full kernel discovery 2198 OK / 1 skipped. |
