@@ -29,6 +29,7 @@
 | 2026-05-13 | scoped | G2.15 semantics docstring anchors | Added hover docs for public semantics wrappers, canonical `SemanticsProfile`, and `fg.eval.inspect_semantics` before drafting the semantics quickstart page. |
 | 2026-05-13 | scoped | G2.16 semantics quickstart page started | Added a Page Brief and drafted `quickstart/semantics.md` around evaluate-time engine configuration, public wrappers, canonical profiles, branch ids, and the unchanged CandidateSet-to-accept lifecycle. |
 | 2026-05-13 | scoped | G2.17 docstring gate closed | Added the remaining hover docs for schema compile helpers, bulk accept, what-if, audit, package, and views; `test_official_kernel_docs_baseline.py` now passes. |
+| 2026-05-13 | scoped | G2.18 schema identity concept page started | Added a Page Brief and drafted `concepts/schema-and-identity.md` to deepen the coordinate / primary-anchor / Field fact model introduced in quickstart/schema.md. |
 
 ## Decision Notes
 
@@ -143,3 +144,18 @@
 - Example snippets planned: Define one inference with an explicit branch id, inspect ProbLog and PyReason wrapper previews, show PyReason branch-bound profile entries, inspect an advanced `SemanticsProfile`, and keep the accepted-fact lifecycle separate.
 - Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying wrapper engines, inspect output, PyReason lowered profile entries, explicit branch ids, and the unchanged read-before-accept state.
 - External style reference: Pydantic-style tutorial progression and short recap only; all semantics behavior comes from local source, tests, module docs, and archived blueprints.
+
+### `concepts/schema-and-identity.md`
+
+- Reader goal: Build a stable mental model for `Identity(primary_key=True)`, non-primary `Identity()`, `Field(...)`, full-coordinate refs, and primary-anchor reads/writes before using larger schemas.
+- Core mental model: All `Identity` fields define the complete entity coordinate and encode into `idref_v1`; `primary_key=True` marks the logical anchor used by SDK ergonomics and authoring, while `Field(...)` values are mutable facts under one complete coordinate.
+- Common misconception to prevent: A primary key is not the only identity field, non-primary identity is not a normal mutable field, and `fg.read.find(...)` does not return a primary-only entity object.
+- APIs covered: `Entity`, `Identity`, `Field`, `FactGraph.create`, `fg.read.ref`, `fg.read.get`, `fg.read.find`, `fg.write.set`, `fg.batch`, `tx.entity`, `handle.bind`, `fg.schema.add`, `SchemaAddResult.added_fields`.
+- Non-goals: Relationship schema modeling, rule authoring identity lowering, identity migration, schema delete/update/migrate, field defaults/backfill, primary-only ref tokens, and storage internals beyond the user-visible `idref_v1` boundary.
+- Source files checked: `src/kernel/sdk/schema.py`, `src/kernel/sdk/store.py`, `src/kernel/sdk/facade.py`, `src/kernel/application/schema_runtime.py`, `src/kernel/application/schema_mutation_runtime.py`, `src/kernel/tests/test_sdk_batch_primary_identity.py`, `src/kernel/tests/test_sdk_find_partial_identity.py`, `src/kernel/tests/test_schema_field_add_lifecycle.py`.
+- Module docs checked: `src/kernel/sdk/docs/00_user_guide.en.md`, `src/kernel/sdk/docs/01_concepts.en.md`, `src/kernel/sdk/docs/02_readwrite_and_ingest.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`.
+- Design references checked: `docs/references/working/design-points/identity-primary-key-coordinate-semantics.md`, `docs/references/working/design-points/identity-primary-key-coordinate-semantics.zh.md`, `docs/references/working/design-points/read-write-snapshot-assertion-selection.zh.md`, `docs/blueprint_history/从dims到n元Identity的设计演进.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-10_primary-identity-domain-semantics.md`, `docs/blueprints/archive/2026-05-10_primary-anchor-domain-read.md`, `docs/blueprints/archive/2026-05-13_schema-mutation-lifecycle.md`, `docs/blueprints/archive/2026-05-13_schema-field-add-lifecycle.md`.
+- Example snippets planned: Show same primary / different non-primary identity refs, attach Field facts under coordinates, compare `get` and `find`, demonstrate primary-first batch binding, and add a non-identity field with a replacement class.
+- Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying distinct refs, full-coordinate reads, partial-identity find results, batch primary-first binding, and field-add missing-value semantics.
+- External style reference: Pydantic-style concepts page pacing only; all schema and identity behavior comes from local source, tests, module docs, design notes, and archived blueprints.
