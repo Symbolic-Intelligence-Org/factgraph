@@ -18,6 +18,7 @@
 | 2026-05-13 | scoped | G2.6 Page Brief gate updated | Extended the official docs baseline to require Page Brief fields for core mental model, common misconception, and design references. |
 | 2026-05-13 | scoped | G2.7 read/write quickstart page started | Added a read/write tutorial brief and drafted `quickstart/read-write.md` from current assertion, snapshot, ref, find, and retract behavior. |
 | 2026-05-13 | scoped | G2.8 schema quickstart identity-coordinate pass | Reworked `quickstart/schema.md` around Identity coordinate semantics, primary-key logical anchors, Field fact content, and n-ary identity guidance from design references. |
+| 2026-05-13 | scoped | G2.9 primary-anchor batch note added | Expanded `quickstart/schema.md` with the primary-first batch handle / non-primary `bind(...)` mechanism so `primary_key=True` has a concrete user-facing meaning. |
 | 2026-05-13 | scoped | G2.9 schema quickstart batch identity note | Added a concise forward pointer clarifying that batch handles start from primary identity and may bind non-primary identity dimensions later. |
 
 ## Decision Notes
@@ -59,14 +60,14 @@
 - Reader goal: Learn how to choose primary identity anchors, non-primary identity dimensions, single fields, multi fields, and entity-reference fields before writing larger schemas.
 - Core mental model: The schema is both vocabulary and coordinate system: all `Identity` fields define the complete entity coordinate, `primary_key=True` marks a logical anchor, and `Field(...)` values are mutable facts attached to that coordinate.
 - Common misconception to prevent: `primary_key=True` is not a database-style sole identity determinant; non-primary `Identity()` fields still participate in `idref_v1`, while `Field(...)` values do not.
-- APIs covered: `Entity`, `Identity`, `Field`, `FactGraph.create`, `fg.read.ref`, `fg.write.set`, `fg.write.add`, `fg.read.get`, `fg.read.find`, `fg.schema.add`, `SchemaAddResult.added_fields`.
+- APIs covered: `Entity`, `Identity`, `Field`, `FactGraph.create`, `fg.read.ref`, `fg.write.set`, `fg.write.add`, `fg.read.get`, `fg.read.find`, `fg.batch`, `tx.entity`, `handle.bind`, `fg.schema.add`, `SchemaAddResult.added_fields`.
 - Non-goals: Relationship classes, rule/inference authoring, semantic adapters, workspace persistence, schema delete/update/migrate, low-level schema IR, and service routes.
 - Source files checked: `src/kernel/sdk/schema.py`, `src/kernel/sdk/store.py`, `src/kernel/sdk/facade.py`, `src/kernel/tests/test_schema_mutation_lifecycle.py`, `src/kernel/tests/test_schema_field_add_lifecycle.py`.
 - Module docs checked: `src/kernel/sdk/docs/00_user_guide.en.md`, `src/kernel/sdk/docs/01_concepts.en.md`, `src/kernel/sdk/docs/02_readwrite_and_ingest.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`.
 - Design references checked: `docs/references/working/design-points/identity-primary-key-coordinate-semantics.md`, `docs/references/working/design-points/identity-primary-key-coordinate-semantics.zh.md`, `docs/references/working/design-points/read-write-snapshot-assertion-selection.zh.md`, `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`, `docs/blueprint_history/从dims到n元Identity的设计演进.md`.
 - Archived blueprints checked: `docs/blueprints/archive/2026-05-10_primary-identity-domain-semantics.md`, `docs/blueprints/archive/2026-05-10_primary-anchor-domain-read.md`, `docs/blueprints/archive/2026-05-13_schema-mutation-lifecycle.md`, `docs/blueprints/archive/2026-05-13_schema-field-add-lifecycle.md`, `docs/blueprints/archive/2026-05-12_factgraph-workspace-lifecycle.md`.
-- Example snippets planned: Define `Team` and `User` with primary and non-primary identities, show distinct complete-coordinate refs, write a managed entity-ref field, read one full coordinate with `get`, enumerate primary-anchor coordinates with `find`, then add non-identity fields with a replacement `User` class.
-- Validation method: Extracted all Python blocks and ran them in order with `PYTHONPATH=src python`, verifying full-coordinate refs, partial identity `find`, reference writes, missing added-field reads, and `SchemaAddResult.added_fields`.
+- Example snippets planned: Define `Team` and `User` with primary and non-primary identities, show distinct complete-coordinate refs, write a managed entity-ref field, read one full coordinate with `get`, enumerate primary-anchor coordinates with `find`, show primary-first batch handle binding, then add non-identity fields with a replacement `User` class.
+- Validation method: Extracted all Python blocks and ran them in order with `PYTHONPATH=src python`, verifying full-coordinate refs, partial identity `find`, reference writes, primary-first batch `bind(...)`, missing added-field reads, and `SchemaAddResult.added_fields`.
 - External style reference: Pydantic-style progressive schema teaching only; current local code, tests, module docs, and archived blueprints define behavior.
 
 ### `quickstart/read-write.md`

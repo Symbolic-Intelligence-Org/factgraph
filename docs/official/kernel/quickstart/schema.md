@@ -141,11 +141,32 @@ assert {row.display_name for row in rows} == {"Alice", "Alice ZH"}
 Each row returned by `find` is still a full-coordinate snapshot. There is no
 separate primary-only entity reference.
 
-Batch writes use the same model. A batch entity handle must start with the
-primary identity anchor, then it may bind non-primary identity dimensions before
-writing. The primary identity itself is not delayed; only the remaining
-coordinate dimensions can be completed later. Batch handles are covered in a
-later guide.
+## Why the primary anchor matters
+
+For ordinary `fg.write.*` calls, you pass the full identity directly to
+`fg.read.ref(...)`. The special role of `primary_key=True` becomes visible in
+batch writes, where an entity handle can be built in two steps.
+
+The first step must provide the primary identity anchor. The later `bind(...)`
+step may complete non-primary coordinate dimensions.
+
+```python
+with fg.batch() as tx:
+    batch_user = tx.entity(User, user_id="u-2")
+    batch_user.bind(locale="en")
+    batch_user.display_name.set("Bob")
+    tx.commit(objects=[batch_user])
+
+batch_snap = fg.read.get(User, user_id="u-2", locale="en")
+
+assert batch_snap is not None
+assert batch_snap.display_name == "Bob"
+```
+
+This does not create a primary-only `idref_v1`. It creates an SDK handle that
+is anchored by `user_id`, then completes the coordinate with `locale` before
+writing. You cannot start from `locale` alone, and `bind(...)` is not the place
+to add or change primary identity fields.
 
 ## Adding fields later
 
@@ -267,6 +288,8 @@ assert tuple(updated.skills) == ()
 - Use `fg.read.get(...)` for one full coordinate.
 - Use `fg.read.find(...)` for partial identity filters such as a primary
   anchor.
+- Batch handles start with primary identity and use `bind(...)` only for
+  non-primary identity dimensions before writing.
 - Entity-reference fields store managed refs returned by `fg.read.ref(...)`.
 - `fg.schema.add(...)` can add entity types and non-identity fields.
 - Field deletes, rewrites, renames, type changes, and identity changes are not
