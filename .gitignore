@@ -57,3 +57,4 @@ dora_demo_output/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+.vscode
