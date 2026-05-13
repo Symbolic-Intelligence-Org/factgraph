@@ -30,6 +30,7 @@
 | 2026-05-13 | scoped | G2.16 semantics quickstart page started | Added a Page Brief and drafted `quickstart/semantics.md` around evaluate-time engine configuration, public wrappers, canonical profiles, branch ids, and the unchanged CandidateSet-to-accept lifecycle. |
 | 2026-05-13 | scoped | G2.17 docstring gate closed | Added the remaining hover docs for schema compile helpers, bulk accept, what-if, audit, package, and views; `test_official_kernel_docs_baseline.py` now passes. |
 | 2026-05-13 | scoped | G2.18 schema identity concept page started | Added a Page Brief and drafted `concepts/schema-and-identity.md` to deepen the coordinate / primary-anchor / Field fact model introduced in quickstart/schema.md. |
+| 2026-05-13 | scoped | G2.19 SDK surface reference page started | Added a Page Brief and drafted `reference/sdk-surface.md` as a scan-friendly map of public `kernel.sdk` exports and `FactGraph` namespaces. |
 
 ## Decision Notes
 
@@ -159,3 +160,18 @@
 - Example snippets planned: Show same primary / different non-primary identity refs, attach Field facts under coordinates, compare `get` and `find`, demonstrate primary-first batch binding, and add a non-identity field with a replacement class.
 - Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying distinct refs, full-coordinate reads, partial-identity find results, batch primary-first binding, and field-add missing-value semantics.
 - External style reference: Pydantic-style concepts page pacing only; all schema and identity behavior comes from local source, tests, module docs, design notes, and archived blueprints.
+
+### `reference/sdk-surface.md`
+
+- Reader goal: Provide a scan-friendly public surface map so users can find the right SDK object or namespace after learning from the quickstart.
+- Core mental model: `kernel.sdk` is the public import surface; `FactGraph` is the facade object; namespaces group workflows rather than implementation modules.
+- Common misconception to prevent: Advanced helpers such as schema compiler functions are public escape hatches, not the starting path; namespace methods are preferred over flat/root call-throughs.
+- APIs covered: all 41 `kernel.sdk.__all__` exports and the selected `FactGraph` namespace methods from blueprint §5.1.1.
+- Non-goals: Full parameter-by-parameter API reference, service routes, internals, adapter implementation APIs, and examples for every method.
+- Source files checked: `src/kernel/sdk/__init__.py`, `src/kernel/sdk/compile.py`, `src/kernel/sdk/store.py`, `src/kernel/tests/test_official_kernel_docs_baseline.py`.
+- Module docs checked: `src/kernel/sdk/docs/04_api_surface.en.md`, `src/kernel/sdk/docs/00_user_guide.en.md`, `src/kernel/sdk/docs/03_rules_and_inferences.en.md`.
+- Design references checked: `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`, `docs/references/working/design-points/rule-policy-function-tree-and-syntax.zh.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-12_public-inference-factgraph-create.md`, `docs/blueprints/archive/2026-05-12_authoring-asset-persistence-facade.md`, `docs/blueprints/archive/2026-05-12_factgraph-workspace-lifecycle.md`, `docs/blueprints/archive/2026-05-13_schema-mutation-lifecycle.md`, `docs/blueprints/archive/2026-05-13_schema-field-add-lifecycle.md`.
+- Example snippets planned: None; this is a reference table page. It links users back to quickstart/concepts pages for runnable examples.
+- Validation method: Compare the export count and names with `kernel.sdk.__all__`, run the official docs baseline, and keep `git diff --check` clean.
+- External style reference: Pydantic-style reference navigation only; all API names and groupings come from local source, tests, and module docs.
