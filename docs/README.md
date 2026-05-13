@@ -27,6 +27,7 @@
   - 模块文档最小结构要求、写作约定、触发更新的场景、起点模板。
 - [references/README.md](/Users/zhenzhili/hnsm-backend/docs/references/README.md)
   - 外部比较、桥接提炼、design-point research notes 和工作参考材料的管理规则；可作为 blueprint 输入材料，但不是当前实现真相。
+  - Current design-point entry: [Rule / Query / Inference head semantics](/Users/zhenzhili/hnsm-backend/docs/references/working/design-points/rule-query-inference-head-semantics.zh.md) records a post-release optimization direction, not current implementation truth.
 - [../examples/README.md](/Users/zhenzhili/hnsm-backend/examples/README.md)
   - 仓库示例与 notebook 的维护索引；说明哪些 demo 是当前口径、哪些是低层 spike、哪些是导出产物。
 - [memory/README.md](/Users/zhenzhili/hnsm-backend/memory/README.md)
