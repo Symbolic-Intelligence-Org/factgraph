@@ -1,6 +1,6 @@
 # Task Blueprint: ReadPolicy and Legacy Confidence Meta Removal
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-13
 - Last Updated: 2026-05-13
 - Related Modules:
