@@ -119,13 +119,13 @@ class PyReasonSessionInternalTests(unittest.TestCase):
         s._write_node_fact_internal("user:name", "ref", "val", bound=[0.0, 0.5])
         self.assertEqual(s.node_facts[0]["bound"], (0.0, 0.5))
 
-    def test_confidence_auto_derived_from_bound_lower(self) -> None:
+    def test_confidence_not_auto_derived_from_bound_lower(self) -> None:
         s = self._session()
         s._write_node_fact_internal("user:name", "ref", "Alice", bound=[0.7, 0.9])
-        self.assertAlmostEqual(s.node_facts[0]["meta"]["confidence"], 0.7)
-        self.assertEqual(s.node_facts[0]["meta"]["confidence_source"], "pyreason:lower_bound")
+        self.assertNotIn("confidence", s.node_facts[0]["meta"])
+        self.assertNotIn("confidence_source", s.node_facts[0]["meta"])
 
-    def test_explicit_confidence_preserved(self) -> None:
+    def test_explicit_confidence_is_dropped_from_generic_meta(self) -> None:
         s = self._session()
         s._write_node_fact_internal(
             "user:name",
@@ -134,13 +134,13 @@ class PyReasonSessionInternalTests(unittest.TestCase):
             bound=[0.7, 0.9],
             meta={"confidence": 0.85},
         )
-        self.assertAlmostEqual(s.node_facts[0]["meta"]["confidence"], 0.85)
-        self.assertEqual(s.node_facts[0]["meta"]["confidence_source"], "meta:confidence")
+        self.assertNotIn("confidence", s.node_facts[0]["meta"])
+        self.assertNotIn("confidence_source", s.node_facts[0]["meta"])
 
-    def test_edge_fact_confidence_auto_derived(self) -> None:
+    def test_edge_fact_does_not_auto_derive_confidence(self) -> None:
         s = self._session()
         s._write_edge_fact_internal("friends:strength", "a", "b", "0.9", bound=[0.5, 0.8])
-        self.assertAlmostEqual(s.edge_facts[0]["meta"]["confidence"], 0.5)
+        self.assertNotIn("confidence", s.edge_facts[0]["meta"])
 
     def test_node_and_edge_facts_separate(self) -> None:
         s = self._session()
@@ -180,7 +180,7 @@ class PyReasonSessionInternalTests(unittest.TestCase):
         m = s.node_facts[0]["meta"]
         self.assertEqual(m["source"], "ESA Report")
         self.assertEqual(m["analyst"], "Dr. Weber")
-        self.assertIn("confidence", m)
+        self.assertNotIn("confidence", m)
 
     def test_all_facts_meta_includes_all(self) -> None:
         s = self._session()
@@ -406,13 +406,13 @@ class AnnotationTemplateTests(unittest.TestCase):
         s = self._session()
         s._write_node_fact_internal("user:name", "Alice", "Alice", bound=[0.6, 0.9])
         templates = s.annotation_templates
-        self.assertGreaterEqual(len(templates), 4)
+        self.assertGreaterEqual(len(templates), 2)
 
         keys = {t["key"] for t in templates}
         self.assertIn("bound_lower", keys)
         self.assertIn("bound_upper", keys)
-        self.assertIn("confidence", keys)
-        self.assertIn("confidence_source", keys)
+        self.assertNotIn("confidence", keys)
+        self.assertNotIn("confidence_source", keys)
 
     def test_bound_values_correct(self) -> None:
         s = self._session()
@@ -423,16 +423,12 @@ class AnnotationTemplateTests(unittest.TestCase):
         self.assertEqual(by_key["bound_lower"]["namespace"], "pyreason")
         self.assertEqual(by_key["bound_lower"]["category"], "semantic")
 
-    def test_confidence_derived_from_lower_bound(self) -> None:
+    def test_confidence_template_not_derived_from_lower_bound(self) -> None:
         s = self._session()
         s._write_node_fact_internal("user:name", "Alice", "Alice", bound=[0.6, 0.9])
         by_key = {t["key"]: t for t in s.annotation_templates}
-        conf = by_key["confidence"]
-        self.assertEqual(conf["value"], 0.6)
-        self.assertEqual(conf["namespace"], "shared")
-        self.assertEqual(conf["category"], "derived")
-        self.assertEqual(conf["origin"], "derived")
-        self.assertEqual(conf["derivation"], "pyreason:lower_bound")
+        self.assertNotIn("confidence", by_key)
+        self.assertNotIn("confidence_source", by_key)
 
     def test_active_from_omitted_when_default(self) -> None:
         s = self._session()
@@ -468,7 +464,7 @@ class AnnotationTemplateTests(unittest.TestCase):
         s = self._session()
         s._write_edge_fact_internal("friends:strength", "Alice", "Bob", "0.9", bound=[0.9, 0.9])
         templates = s.annotation_templates
-        self.assertGreaterEqual(len(templates), 4)
+        self.assertGreaterEqual(len(templates), 2)
         self.assertTrue(all(t["fact_kind"] == "edge" for t in templates))
 
     def test_templates_have_placeholder_asrt_id(self) -> None:
@@ -502,11 +498,11 @@ class AnnotationTemplateTests(unittest.TestCase):
             )
             tx.commit()
         templates = s.annotation_templates
-        self.assertGreaterEqual(len(templates), 8)
+        self.assertGreaterEqual(len(templates), 4)
         node_templates = [t for t in templates if t["fact_kind"] == "node"]
         edge_templates = [t for t in templates if t["fact_kind"] == "edge"]
-        self.assertGreaterEqual(len(node_templates), 4)
-        self.assertGreaterEqual(len(edge_templates), 4)
+        self.assertGreaterEqual(len(node_templates), 2)
+        self.assertGreaterEqual(len(edge_templates), 2)
 
 
     # --- F-PR-2: _validate_bound bool guard ---
@@ -529,7 +525,7 @@ class AnnotationTemplateTests(unittest.TestCase):
         from kernel.adapters.pyreason.session import _resolve_shared_meta
 
         result = _resolve_shared_meta({"confidence": 0.0}, lower_bound=0.5)
-        self.assertEqual(result["confidence"], 0.0)
+        self.assertNotIn("confidence", result)
 
     # --- F-PR-4: _pred_short_name fallback ---
 

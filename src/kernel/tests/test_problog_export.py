@@ -68,12 +68,13 @@ class ProbLogExportTests(unittest.TestCase):
         self.assertIn("0.8::edb_fact(", program)
         self.assertNotIn("0.25::edb_fact(", program)
 
-    def test_export_falls_back_to_meta_confidence(self) -> None:
+    def test_export_ignores_meta_confidence_fallback(self) -> None:
         sdk = self._make_sdk()
 
         program = self._export_program(sdk)
 
-        self.assertIn("0.25::edb_fact(", program)
+        self.assertIn("1::edb_fact(", program)
+        self.assertNotIn("0.25::edb_fact(", program)
 
     def test_export_defaults_to_deterministic_without_probability_data(self) -> None:
         sdk = SDKStore([User])
@@ -152,8 +153,8 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
 
     # --- F-PL-4: bool-only confidence fallback ---
 
-    def test_claim_probability_bool_only_confidence_returns_default(self) -> None:
-        """F-PL-4: when all meta.confidence values are bool, fallback to 1.0."""
+    def test_claim_probability_ignores_meta_confidence(self) -> None:
+        """Generic meta.confidence is no longer a ProbLog probability fallback."""
         from kernel.adapters.problog.problog_export import _claim_probability
 
         class Item(Entity):
@@ -181,16 +182,8 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
                 origin="observed",
             ),
         ])
-        # _claim_probability checks problog/semantic/probability first (none),
-        # then shared/semantic/probability (none), then meta.confidence
-        # The meta has 0.5 (float), so it returns 0.5 — not the bool row.
-        # To properly test F-PL-4, we need ALL confidence values to be bool.
-        # We can't easily overwrite meta rows, so test via a direct store mock instead.
         prob = _claim_probability(sdk.store, asrt_id)
-        # The real meta.confidence=0.5 is still there, so this returns 0.5.
-        # The F-PL-4 fix ensures that if we only had bool values, we'd get 1.0
-        # instead of a raise. We verify the fallback path doesn't raise.
-        self.assertAlmostEqual(prob, 0.5)
+        self.assertAlmostEqual(prob, 1.0)
 
 
 class ProbLogImportTests(unittest.TestCase):

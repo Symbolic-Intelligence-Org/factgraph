@@ -243,7 +243,7 @@ class AssertionRecordSetBoundaryTests(unittest.TestCase):
     def test_no_new_public_sdk_export_or_read_namespace_method(self) -> None:
         sdk, _, _ = _seed_store()
 
-        self.assertEqual(len(sdk_module.__all__), 40)
+        self.assertEqual(len(sdk_module.__all__), 41)
         self.assertIn("ReadPolicy", sdk_module.__all__)
         self.assertIn("SemanticsProfile", sdk_module.__all__)
         self.assertIn("ProbLogSemantics", sdk_module.__all__)

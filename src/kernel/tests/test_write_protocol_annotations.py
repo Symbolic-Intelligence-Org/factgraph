@@ -43,7 +43,7 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
         self.assertEqual(annos[0].origin, "observed")
         self.assertIsNone(annos[0].derivation)
 
-    def test_confidence_projected_as_shared_derived(self) -> None:
+    def test_confidence_stays_meta_only(self) -> None:
         ledger = Ledger()
         asrt_id = set_field(
             ledger,
@@ -53,12 +53,10 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
             meta={"confidence": 0.85},
         )
         annos = ledger.find_annotations(asrt_id=asrt_id, namespace="shared", category="derived")
-        self.assertEqual(len(annos), 1)
-        self.assertEqual(annos[0].key, "confidence")
-        self.assertEqual(annos[0].value, 0.85)
-        self.assertEqual(annos[0].kind, "float")
-        self.assertEqual(annos[0].origin, "derived")
-        self.assertEqual(annos[0].derivation, "meta:confidence")
+        self.assertEqual(annos, [])
+        meta = ledger.find_meta(asrt_id=asrt_id, key="confidence")
+        self.assertEqual(len(meta), 1)
+        self.assertEqual(meta[0].value, 0.85)
 
     def test_multiple_whitelisted_keys(self) -> None:
         ledger = Ledger()
@@ -77,7 +75,7 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
             },
         )
         annos = ledger.find_annotations(asrt_id=asrt_id)
-        self.assertEqual(len(annos), 6)
+        self.assertEqual(len(annos), 5)
 
         source_annos = ledger.find_annotations(asrt_id=asrt_id, category="source")
         self.assertEqual(len(source_annos), 5)
@@ -85,8 +83,7 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
         self.assertEqual(source_keys, {"source", "source_loc", "trace_id", "approved_by", "note"})
 
         derived_annos = ledger.find_annotations(asrt_id=asrt_id, category="derived")
-        self.assertEqual(len(derived_annos), 1)
-        self.assertEqual(derived_annos[0].key, "confidence")
+        self.assertEqual(derived_annos, [])
 
     def test_all_whitelist_keys_are_namespace_shared(self) -> None:
         """Every annotation produced by write_protocol must be namespace='shared'."""
@@ -166,8 +163,7 @@ class TestDualWriteConsistency(unittest.TestCase):
         self.assertEqual(meta_conf[0].value, 0.75)
 
         anno_conf = ledger.find_annotations(asrt_id=asrt_id, key="confidence")
-        self.assertEqual(len(anno_conf), 1)
-        self.assertEqual(anno_conf[0].value, 0.75)
+        self.assertEqual(anno_conf, [])
 
     def test_source_in_both_stores(self) -> None:
         ledger = Ledger()
@@ -320,9 +316,9 @@ class TestAddFieldAndReplaceField(unittest.TestCase):
             meta={"source": "crm", "confidence": 0.9},
         )
         annos = ledger.find_annotations(asrt_id=asrt_id)
-        self.assertEqual(len(annos), 2)
+        self.assertEqual(len(annos), 1)
         keys = {a.key for a in annos}
-        self.assertEqual(keys, {"source", "confidence"})
+        self.assertEqual(keys, {"source"})
 
     def test_replace_field_new_assertion_has_annotations(self) -> None:
         ledger = Ledger()
@@ -390,9 +386,7 @@ class TestRetractAnnotationProjection(unittest.TestCase):
         by_key = {row.key: row for row in annos}
         self.assertEqual(by_key["source"].origin, "observed")
         self.assertEqual(by_key["source"].value, "review")
-        self.assertEqual(by_key["confidence"].origin, "derived")
-        self.assertEqual(by_key["confidence"].derivation, "manual:review")
-        self.assertEqual(by_key["confidence"].value, 0.4)
+        self.assertNotIn("confidence", by_key)
 
 
 class TestWhitelistCoverage(unittest.TestCase):
@@ -410,10 +404,8 @@ class TestWhitelistCoverage(unittest.TestCase):
         for key, (category, origin) in _SHARED_ANNOTATION_WHITELIST.items():
             self.assertIn(origin, ANNOTATION_ORIGINS, f"whitelist key={key} has invalid origin={origin}")
 
-    def test_confidence_is_derived_not_source(self) -> None:
-        cat, origin = _SHARED_ANNOTATION_WHITELIST["confidence"]
-        self.assertEqual(cat, "derived")
-        self.assertEqual(origin, "derived")
+    def test_confidence_is_not_shared_annotation_key(self) -> None:
+        self.assertNotIn("confidence", _SHARED_ANNOTATION_WHITELIST)
 
     def test_source_keys_are_source_category(self) -> None:
         for key in ("source", "source_loc", "trace_id", "approved_by", "note"):

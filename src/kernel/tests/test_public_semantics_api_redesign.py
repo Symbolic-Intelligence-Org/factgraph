@@ -195,7 +195,7 @@ class PublicSemanticsExportTests(unittest.TestCase):
 
         self.assertIn("ProbLogSemantics", sdk_module.__all__)
         self.assertIn("PyReasonSemantics", sdk_module.__all__)
-        self.assertEqual(len(sdk_module.__all__), 40)
+        self.assertEqual(len(sdk_module.__all__), 41)
 
     def test_problog_semantics_exposes_engine_metadata(self) -> None:
         semantics = _problog_semantics()

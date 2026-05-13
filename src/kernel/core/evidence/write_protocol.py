@@ -103,7 +103,6 @@ _SHARED_ANNOTATION_WHITELIST: dict[str, tuple[str, str]] = {
     "trace_id": ("source", "observed"),
     "approved_by": ("source", "observed"),
     "note": ("source", "observed"),
-    "confidence": ("derived", "derived"),
     "raw_kind": ("semantic", "observed"),
     "bound": ("semantic", "observed"),
 }

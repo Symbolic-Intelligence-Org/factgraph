@@ -145,20 +145,7 @@ def _claim_probability(store: Store, asrt_id: str) -> float:
                 f"shared/semantic/probability must be numeric for asrt_id={asrt_id}"
             )
 
-    candidates = store.ledger.find_meta(asrt_id=asrt_id, key="confidence")
-    if not candidates:
-        return 1.0
-
-    for row in reversed(candidates):
-        value = row.value
-        if isinstance(value, bool):
-            continue
-        if isinstance(value, (int, float)):
-            prob = float(value)
-            if prob <= 0.0 or prob > 1.0:
-                raise ProbLogExportError(f"meta.confidence out of range for asrt_id={asrt_id}: {prob}")
-            return prob
-    return 1.0  # F-PL-4: all meta.confidence values are bool; fallback to default
+    return 1.0
 
 
 def _claim_value_term(rest_terms: list[tuple[str, Any]]) -> str:

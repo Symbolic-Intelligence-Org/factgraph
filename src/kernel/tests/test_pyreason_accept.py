@@ -171,12 +171,8 @@ class AcceptPyReasonSessionTests(unittest.TestCase):
         asrt_id = result.node_asrt_ids[0]
         shared = ledger.find_annotations(asrt_id=asrt_id, namespace="shared")
         shared_keys = {a.key for a in shared}
-        self.assertIn("confidence", shared_keys)
+        self.assertNotIn("confidence", shared_keys)
         self.assertIn("source", shared_keys)
-        all_confidence = [a for a in shared if a.key == "confidence"]
-        self.assertEqual(len(all_confidence), 1)
-        self.assertEqual(all_confidence[0].origin, "derived")
-        self.assertEqual(all_confidence[0].derivation, "pyreason:lower_bound")
 
     def test_rejects_invalid_template_origin(self) -> None:
         ledger, session = self._setup()

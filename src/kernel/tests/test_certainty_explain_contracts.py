@@ -1305,7 +1305,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 self.assertTrue(eval_resp["ok"])
                 candidate = dict(eval_resp["evaluation"]["candidates"][0])
                 candidate_id = candidate["candidate_id"]
-                self.assertEqual(candidate["confidence_kind"], "certainty")
+                self.assertNotIn("confidence_kind", candidate)
 
                 runtime_summary_resp = explain_runtime_summary(
                     session_id,
@@ -1459,7 +1459,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
             )
             self.assertTrue(eval_resp["ok"])
             candidate = eval_resp["evaluation"]["candidates"][0]
-            self.assertEqual(candidate["confidence_kind"], "none")
+            self.assertNotIn("confidence_kind", candidate)
         finally:
             close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
@@ -1508,7 +1508,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 )
                 self.assertTrue(eval_resp["ok"])
                 candidate = eval_resp["evaluation"]["candidates"][0]
-                self.assertEqual(candidate["confidence_kind"], "none")
+                self.assertNotIn("confidence_kind", candidate)
             finally:
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
@@ -1558,7 +1558,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 self.assertTrue(eval_resp["ok"])
                 candidate = dict(eval_resp["evaluation"]["candidates"][0])
                 candidate_id = candidate["candidate_id"]
-                self.assertEqual(candidate["confidence_kind"], "certainty")
+                self.assertNotIn("confidence_kind", candidate)
 
                 accept_resp = accept_runtime_derivation(
                     session_id,
@@ -1878,11 +1878,9 @@ class CertaintyExplainContractsTests(unittest.TestCase):
 
                 assertion = predicate_witness_group["children"][0]
                 self.assertEqual(assertion["node_kind"], "assertion_fact")
-                self.assertIn("confidence", assertion)
-                self.assertAlmostEqual(assertion["confidence"], 0.7)
+                self.assertNotIn("confidence", assertion)
 
-                self.assertIn("condition_confidence", predicate_witness_group)
-                self.assertAlmostEqual(predicate_witness_group["condition_confidence"], 0.7)
+                self.assertNotIn("condition_confidence", predicate_witness_group)
             finally:
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
@@ -1949,8 +1947,8 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 self.assertEqual(certainty_summary["condition_count"], 1)
                 condition = certainty_summary["conditions"][0]
                 self.assertAlmostEqual(condition["weight"], 0.8)
-                self.assertAlmostEqual(condition["impact"], 0.48)
-                self.assertAlmostEqual(certainty_summary["aggregate_certainty"], 0.48)
+                self.assertAlmostEqual(condition["impact"], 0.8)
+                self.assertAlmostEqual(certainty_summary["aggregate_certainty"], 0.8)
 
                 narrative_resp = explain_runtime_narrative(
                     session_id,
@@ -1958,7 +1956,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 )
                 self.assertTrue(narrative_resp["ok"])
                 certainty_lines = narrative_resp["narrative"].get("certainty_lines", [])
-                self.assertTrue(any("0.48" in line for line in certainty_lines))
+                self.assertTrue(any("0.8" in line for line in certainty_lines))
 
                 nl_resp = explain_runtime_nl(
                     session_id,
@@ -1967,7 +1965,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 self.assertTrue(nl_resp["ok"])
                 paragraphs = nl_resp["explain_nl"]["paragraphs"]
                 self.assertEqual(len(paragraphs), 5)
-                self.assertIn("0.48", paragraphs[4])
+                self.assertIn("0.8", paragraphs[4])
             finally:
                 close_runtime_session(session_id)
                 reset_runtime_sessions_for_tests()
@@ -2030,7 +2028,7 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 self.assertTrue(summary_default["ok"])
                 certainty_default = summary_default["certainty_summary"]
                 self.assertEqual(certainty_default["aggregation"], "bottleneck")
-                self.assertAlmostEqual(certainty_default["aggregate_certainty"], 0.56)
+                self.assertAlmostEqual(certainty_default["aggregate_certainty"], 0.8)
 
                 summary_additive = explain_runtime_summary(
                     session_id,
@@ -2043,8 +2041,8 @@ class CertaintyExplainContractsTests(unittest.TestCase):
                 self.assertTrue(summary_additive["ok"])
                 certainty_additive = summary_additive["certainty_summary"]
                 self.assertEqual(certainty_additive["aggregation"], "additive")
-                self.assertAlmostEqual(certainty_additive["aggregate_certainty"], 0.7)
-                self.assertAlmostEqual(certainty_additive["conditions"][0]["impact"], 0.7)
+                self.assertAlmostEqual(certainty_additive["aggregate_certainty"], 1.0)
+                self.assertAlmostEqual(certainty_additive["conditions"][0]["impact"], 1.0)
 
                 narrative_resp = explain_runtime_narrative(
                     session_id,

@@ -182,13 +182,6 @@ def _build_predicate_witness_group(
         "assertion_count": len(leaves),
         "children": leaves,
     }
-    child_confidences = [
-        leaf["confidence"]
-        for leaf in leaves
-        if "confidence" in leaf and isinstance(leaf["confidence"], (int, float))
-    ]
-    if child_confidences:
-        node["condition_confidence"] = max(child_confidences)
     return node
 
 
@@ -281,9 +274,6 @@ def _build_assertion_leaf(asrt_id: str, *, assertion_lookup: AssertionDetailLook
         "claim_args": claim_args,
         "children": [],
     }
-    confidence = detail.get("confidence")
-    if confidence is not None:
-        node["confidence"] = confidence
     fact_meta = _extract_fact_meta(detail)
     if fact_meta is not None:
         node["fact_meta"] = fact_meta

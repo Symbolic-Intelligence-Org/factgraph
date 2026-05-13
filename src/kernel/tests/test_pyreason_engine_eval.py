@@ -260,7 +260,7 @@ class EngineEvalTests(unittest.TestCase):
         self.assertTrue(hasattr(store, "_engine_pending_annotations"))
         self.assertIn(candidates[0].run_id, store._engine_pending_annotations)
         pending = store._engine_pending_annotations[candidates[0].run_id]
-        self.assertGreaterEqual(len(pending), 4)
+        self.assertGreaterEqual(len(pending), 2)
 
     @patch("kernel.adapters.pyreason.engine_eval.run_pyreason")
     def test_edge_candidate_includes_to_ref_in_key(self, mock_run: Any) -> None:

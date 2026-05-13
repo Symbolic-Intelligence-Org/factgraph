@@ -78,30 +78,6 @@ def _generate_annotation_templates(
             "origin": "observed",
             "derivation": None,
         },
-        {
-            "asrt_id": "",
-            "fact_index": fact_index,
-            "fact_kind": fact_kind,
-            "namespace": "shared",
-            "category": "derived",
-            "key": "confidence",
-            "kind": "float",
-            "value": lo,
-            "origin": "derived",
-            "derivation": "pyreason:lower_bound",
-        },
-        {
-            "asrt_id": "",
-            "fact_index": fact_index,
-            "fact_kind": fact_kind,
-            "namespace": "shared",
-            "category": "derived",
-            "key": "confidence_source",
-            "kind": "str",
-            "value": "pyreason:lower_bound",
-            "origin": "derived",
-            "derivation": "pyreason:lower_bound",
-        },
     ]
     if active_from != 0:
         templates.append(
@@ -618,24 +594,11 @@ def _validate_active_to(value: int | None) -> int | None:
 
 def _resolve_shared_meta(meta: dict[str, Any] | None, *, lower_bound: float) -> dict[str, Any]:
     if meta is None:
-        return {
-            "confidence": lower_bound,
-            "confidence_source": "pyreason:lower_bound",
-        }
+        return {}
     if not isinstance(meta, dict):
         raise ValueError("meta must be dict when provided")
 
     resolved = dict(meta)
-    confidence = resolved.get("confidence")
-    if confidence is None:
-        resolved["confidence"] = lower_bound
-    else:
-        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
-            raise ValueError("meta['confidence'] must be float when provided")
-        normalized = float(confidence)
-        if not (0.0 <= normalized <= 1.0):
-            raise ValueError("meta['confidence'] must be in [0, 1]")
-        resolved["confidence"] = normalized
-    if "confidence_source" not in resolved:
-        resolved["confidence_source"] = "meta:confidence" if confidence is not None else "pyreason:lower_bound"
+    resolved.pop("confidence", None)
+    resolved.pop("confidence_source", None)
     return resolved

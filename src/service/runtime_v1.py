@@ -1273,7 +1273,6 @@ def list_runtime_candidates(
                     "candidate_id": candidate_id,
                     "pred_id": pred_id,
                     "support_kind": session.store.get_candidate_support_kind(candidate_id) or "",
-                    "confidence_kind": session.store.get_candidate_confidence_kind(candidate_id) or "none",
                 }
             )
         return ok_response(
@@ -2259,12 +2258,6 @@ def _runtime_assertion_detail_for_tree(ledger: Ledger, asrt_id: str) -> dict[str
         },
         "claim_args": claim_args,
     }
-    confidence_rows = ledger.find_meta(asrt_id=asrt_id, key="confidence", kind="float")
-    if confidence_rows:
-        try:
-            result["confidence"] = float(confidence_rows[0].value)
-        except (TypeError, ValueError):
-            pass
     _FACT_META_STR_KEYS = ("source", "source_loc", "approved_by", "trace_id", "note")
     flat_meta: dict[str, str] = {}
     for _key in _FACT_META_STR_KEYS:
@@ -2406,8 +2399,6 @@ def _candidate_to_dict(candidate: CandidateSet) -> dict[str, Any]:
         "support_kind": candidate.support_kind,
         "generated_at": candidate.generated_at,
         "state": candidate.state,
-        "confidence": candidate.confidence,
-        "confidence_kind": candidate.confidence_kind,
     }
 
 
