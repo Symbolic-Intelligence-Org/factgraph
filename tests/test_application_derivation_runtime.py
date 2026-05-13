@@ -3,24 +3,24 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
-from factpy.application import (
+from factgraph.application import (
     DerivationRuntimeError,
     accept_derivation_candidate_sets,
     build_schema_index,
     evaluate_derivation_plans,
 )
-from factpy.application.derivation_runtime import _attach_run_id
-from factpy.application.protocol import (
+from factgraph.application.derivation_runtime import _attach_run_id
+from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     DerivationAcceptRequest,
     DerivationEvaluateRequest,
     ProtocolShapeError,
 )
-from factpy.core.derivation.candidates import CandidateSet
-from factpy.core.store import Store
-from factpy.core.store.types import EngineExtBase
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.store import Store
+from factgraph.core.store.types import EngineExtBase
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 @dataclass(frozen=True)

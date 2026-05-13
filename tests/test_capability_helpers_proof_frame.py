@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import (
+from factgraph.application import (
     CapabilityHelperError,
     OriginPackageError,
     build_proof_frame_recheck_request,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     EvaluationOverlay,
     FactValueOverride,
     ProofFrameRecheckRequest,
 )
-from factpy.core.store._support import PredWitness, SupportArtifact
-from factpy.sdk import Pred, Rule, vars as sdk_vars
+from factgraph.core.store._support import PredWitness, SupportArtifact
+from factgraph.sdk import Pred, Rule, vars as sdk_vars
 
 
 def _support(*, binding_items: tuple[tuple[str, object], ...] | None = None) -> SupportArtifact:
@@ -95,8 +95,8 @@ class BuildProofFrameRecheckRequestTests(unittest.TestCase):
             build_proof_frame_recheck_request(_support(), overlay=_overlay(new_value=_sdk_rule()))
 
     def test_phase_3_exports_from_application_and_helper_package(self) -> None:
-        from factpy import application
-        from factpy.application import capability_helpers
+        from factgraph import application
+        from factgraph.application import capability_helpers
 
         self.assertIs(
             application.build_proof_frame_recheck_request,

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import (
+from factgraph.application import (
     CapabilityHelperError,
     OriginPackageError,
     build_round_event_payload,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     CheckRequest,
     CheckResult,
     CompiledDerivationPlan,
@@ -28,15 +28,15 @@ from factpy.application.protocol import (
     WhyNotUniverseRequest,
     WhyNotUniverseResult,
 )
-from factpy.audit.round_events import (
+from factgraph.audit.round_events import (
     project_check_event_payload,
     project_diagnose_event_payload,
     project_fact_overlay_event_payload,
     project_proof_frame_event_payload,
     project_why_not_event_payload,
 )
-from factpy.core.store._support import PredWitness, SupportArtifact, normalize_binding_items
-from factpy.sdk import Pred, Rule, vars as sdk_vars
+from factgraph.core.store._support import PredWitness, SupportArtifact, normalize_binding_items
+from factgraph.sdk import Pred, Rule, vars as sdk_vars
 
 
 def _binding() -> tuple[tuple[str, object], ...]:
@@ -306,8 +306,8 @@ class BuildRoundEventPayloadTests(unittest.TestCase):
             )
 
     def test_phase_5_exports_from_application_and_helper_package(self) -> None:
-        from factpy import application
-        from factpy.application import capability_helpers
+        from factgraph import application
+        from factgraph.application import capability_helpers
 
         self.assertIs(application.build_round_event_payload, build_round_event_payload)
         self.assertIs(capability_helpers.build_round_event_payload, build_round_event_payload)

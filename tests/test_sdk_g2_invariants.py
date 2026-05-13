@@ -2,7 +2,7 @@
 
 Mirrors G1's `test_sdk_g1_invariants.py` and G4's
 `test_sdk_g4_invariants.py` 6-class structure under the post-G2-Phase-0
-`factpy/sdk/shells/` subpackage layout. Active classes:
+`factgraph/sdk/shells/` subpackage layout. Active classes:
 
 1. `test_sdk_all_unchanged_and_g2_result_types_not_exported` — §5.3 / §5.4
 2. `test_g2_methods_are_instance_methods_and_no_scenario_method_shipped` — §5.7
@@ -19,22 +19,22 @@ import pathlib
 import unittest
 from importlib import import_module
 
-from factpy import sdk as factpy_sdk
-from factpy.sdk import SDKStore
+from factgraph import sdk as factgraph_sdk
+from factgraph.sdk import SDKStore
 
 
 G2_MODULES = (
-    "factpy.sdk.shells.fact_overlay",
-    "factpy.sdk.shells.proof_frame",
+    "factgraph.sdk.shells.fact_overlay",
+    "factgraph.sdk.shells.proof_frame",
 )
 FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
-    "factpy.application.capability_helpers._binding",
+    "factgraph.application.capability_helpers._binding",
     "_reject_sdk_origin",
-    "from factpy.application.walker",
-    "import factpy.application.walker",
-    "from factpy.application.walker import",
-    "factpy.audit",
-    "factpy.core.rules.frontier",
+    "from factgraph.application.walker",
+    "import factgraph.application.walker",
+    "from factgraph.application.walker import",
+    "factgraph.audit",
+    "factgraph.core.rules.frontier",
 )
 
 
@@ -43,13 +43,13 @@ class SDKG2InvariantTests(unittest.TestCase):
 
     def test_sdk_all_unchanged_and_g2_result_types_not_exported(self) -> None:
         """§5.3 + §5.4 lock: G2 result DTOs are not re-exported from SDK."""
-        self.assertEqual(len(factpy_sdk.__all__), 41)
-        self.assertIn("SchemaAddResult", factpy_sdk.__all__)
-        self.assertIn("ReadPolicy", factpy_sdk.__all__)
-        self.assertIn("FactGraph", factpy_sdk.__all__)
-        self.assertIn("SemanticsProfile", factpy_sdk.__all__)
-        self.assertIn("ProbLogSemantics", factpy_sdk.__all__)
-        self.assertIn("PyReasonSemantics", factpy_sdk.__all__)
+        self.assertEqual(len(factgraph_sdk.__all__), 41)
+        self.assertIn("SchemaAddResult", factgraph_sdk.__all__)
+        self.assertIn("ReadPolicy", factgraph_sdk.__all__)
+        self.assertIn("FactGraph", factgraph_sdk.__all__)
+        self.assertIn("SemanticsProfile", factgraph_sdk.__all__)
+        self.assertIn("ProbLogSemantics", factgraph_sdk.__all__)
+        self.assertIn("PyReasonSemantics", factgraph_sdk.__all__)
         for name in (
             "FactOverlayCheckResult",
             "ProofFrameRecheckResult",
@@ -63,8 +63,8 @@ class SDKG2InvariantTests(unittest.TestCase):
             "sdk_proof_frame_recheck",
         ):
             with self.subTest(name=name):
-                self.assertNotIn(name, factpy_sdk.__all__)
-                self.assertFalse(hasattr(factpy_sdk, name))
+                self.assertNotIn(name, factgraph_sdk.__all__)
+                self.assertFalse(hasattr(factgraph_sdk, name))
 
     def test_g2_methods_are_instance_methods_and_no_scenario_method_shipped(self) -> None:
         """§5.7 lock: G2 methods are SDKStore instance methods, not free functions."""
@@ -81,14 +81,14 @@ class SDKG2InvariantTests(unittest.TestCase):
                 self.assertFalse(hasattr(SDKStore, scenario_name))
 
     def test_g2_modules_live_in_shells_subpackage(self) -> None:
-        """§5.5 + §5.6 lock: G2 shells live at ``factpy/sdk/shells/{fact_overlay,proof_frame}.py``.
+        """§5.5 + §5.6 lock: G2 shells live at ``factgraph/sdk/shells/{fact_overlay,proof_frame}.py``.
 
         Also enforces that the shared SDK shell validators
-        (``_validation.py``) sit under ``factpy/sdk/shells/`` post-G2
-        Phase 0 hygiene migration; the flat ``factpy/sdk/_validation.py``
+        (``_validation.py``) sit under ``factgraph/sdk/shells/`` post-G2
+        Phase 0 hygiene migration; the flat ``factgraph/sdk/_validation.py``
         location must not exist.
         """
-        sdk_dir = pathlib.Path(factpy_sdk.__file__).parent
+        sdk_dir = pathlib.Path(factgraph_sdk.__file__).parent
         self.assertTrue((sdk_dir / "shells").is_dir())
         self.assertTrue((sdk_dir / "shells" / "__init__.py").is_file())
         self.assertTrue((sdk_dir / "shells" / "fact_overlay.py").is_file())

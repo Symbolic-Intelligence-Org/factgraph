@@ -17,16 +17,16 @@ import inspect
 import unittest
 from unittest.mock import patch
 
-from factpy.application.capability_helpers import build_fact_value_override
-from factpy.application.protocol import (
+from factgraph.application.capability_helpers import build_fact_value_override
+from factgraph.application.protocol import (
     ErrorDTO,
     EvaluationOverlay,
     FactOverlayCheckResult,
     FactValueOverride,
 )
-from factpy.application.protocol.schema_runtime import FieldPath
-from factpy.core.rules.rule_ir import RuleCompileError, RuleRegistry
-from factpy.sdk import (
+from factgraph.application.protocol.schema_runtime import FieldPath
+from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
+from factgraph.sdk import (
     Inference,
     Entity,
     Field,
@@ -38,7 +38,7 @@ from factpy.sdk import (
     SDKStoreError,
     vars,
 )
-from factpy.sdk.store import _compiled_derivation_plan_to_application
+from factgraph.sdk.store import _compiled_derivation_plan_to_application
 
 
 class Person(Entity):
@@ -213,7 +213,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "factpy.sdk.shells.fact_overlay._compiled_derivation_plan_to_application",
+            "factgraph.sdk.shells.fact_overlay._compiled_derivation_plan_to_application",
             side_effect=ValueError(
                 "Conflicting engine_ext between explicit derivation and compiled plan"
             ),
@@ -261,7 +261,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "factpy.sdk.shells.fact_overlay.check_fact_overlay_binding",
+            "factgraph.sdk.shells.fact_overlay.check_fact_overlay_binding",
             return_value=_empty_result(),
         ) as mock_runtime:
             sdk.check_fact_overlay(
@@ -281,7 +281,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         expected = object()
 
         with patch.object(sdk, "_resolve_runtime_registry", return_value=expected) as mock_resolve, patch(
-            "factpy.sdk.shells.fact_overlay.check_fact_overlay_binding",
+            "factgraph.sdk.shells.fact_overlay.check_fact_overlay_binding",
             return_value=_empty_result(),
         ) as mock_runtime:
             sdk.check_fact_overlay(
@@ -291,8 +291,8 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         mock_resolve.assert_called_once_with(derivation, explicit_registry=registry)
         self.assertIs(mock_runtime.call_args.kwargs["registry"], expected)
 
-    def test_fact_overlay_check_result_not_exported_from_factpy_sdk_all(self) -> None:
-        import factpy.sdk as sdk_pkg
+    def test_fact_overlay_check_result_not_exported_from_factgraph_sdk_all(self) -> None:
+        import factgraph.sdk as sdk_pkg
 
         self.assertNotIn("FactOverlayCheckResult", sdk_pkg.__all__)
         self.assertFalse(hasattr(sdk_pkg, "FactOverlayCheckResult"))
@@ -305,7 +305,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "factpy.sdk.shells.fact_overlay.check_fact_overlay_binding",
+            "factgraph.sdk.shells.fact_overlay.check_fact_overlay_binding",
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -319,14 +319,14 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         ``sdk_diagnose`` / ``sdk_why_not`` / ``sdk_proof_frame_recheck`` internally."""
         sdk = _build_sdk()
 
-        with patch("factpy.sdk.shells.check.sdk_check") as mock_check, patch(
-            "factpy.sdk.shells.diagnose.sdk_diagnose"
+        with patch("factgraph.sdk.shells.check.sdk_check") as mock_check, patch(
+            "factgraph.sdk.shells.diagnose.sdk_diagnose"
         ) as mock_diagnose, patch(
-            "factpy.sdk.shells.why_not.sdk_why_not"
+            "factgraph.sdk.shells.why_not.sdk_why_not"
         ) as mock_why_not, patch(
-            "factpy.sdk.shells.proof_frame.sdk_proof_frame_recheck"
+            "factgraph.sdk.shells.proof_frame.sdk_proof_frame_recheck"
         ) as mock_proof_frame, patch(
-            "factpy.sdk.shells.fact_overlay.check_fact_overlay_binding",
+            "factgraph.sdk.shells.fact_overlay.check_fact_overlay_binding",
             return_value=_empty_result(),
         ):
             sdk.check_fact_overlay(_age_derivation(), {"$age": 30}, EvaluationOverlay())
@@ -337,8 +337,8 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         mock_proof_frame.assert_not_called()
 
     def test_q3_sibling_fact_overlay_module_does_not_import_sibling_sdk_shells(self) -> None:
-        """§5.8 Q3 Sibling static check: factpy.sdk.shells.fact_overlay source has no sibling references."""
-        import factpy.sdk.shells.fact_overlay as fact_overlay_module
+        """§5.8 Q3 Sibling static check: factgraph.sdk.shells.fact_overlay source has no sibling references."""
+        import factgraph.sdk.shells.fact_overlay as fact_overlay_module
 
         source = inspect.getsource(fact_overlay_module)
         for forbidden in (
@@ -346,10 +346,10 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             "from .diagnose",
             "from .why_not",
             "from .proof_frame",
-            "from factpy.sdk.shells.check",
-            "from factpy.sdk.shells.diagnose",
-            "from factpy.sdk.shells.why_not",
-            "from factpy.sdk.shells.proof_frame",
+            "from factgraph.sdk.shells.check",
+            "from factgraph.sdk.shells.diagnose",
+            "from factgraph.sdk.shells.why_not",
+            "from factgraph.sdk.shells.proof_frame",
             "sdk_check(",
             "sdk_diagnose(",
             "sdk_why_not(",

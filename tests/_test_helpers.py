@@ -1,4 +1,4 @@
-"""Shared fixtures for factpy contract tests.
+"""Shared fixtures for factgraph contract tests.
 
 This module is intentionally prefixed with ``_`` so unittest discovery does
 not treat it as a test file.
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from factpy.sdk import (
+from factgraph.sdk import (
     Entity,
     Field,
     Identity,
@@ -34,7 +34,7 @@ def _register_exposed_user_tag_rule(
     rule_id: str = "q.child_rule",
     condition_weights: dict[str, float] | None = None,
 ) -> None:
-    from factpy.authoring import FileAuthoringRegistry
+    from factgraph.authoring import FileAuthoringRegistry
 
     registry = FileAuthoringRegistry(Path(registry_root))
     registry.upsert_schema_ir(sdk.schema_ir)

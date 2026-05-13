@@ -4,14 +4,14 @@ from dataclasses import fields
 from pathlib import Path
 import unittest
 
-from factpy.audit import AuditPackageData, AuditQuery, AuditQueryError
-from factpy.audit.proof_frame_diff import (
+from factgraph.audit import AuditPackageData, AuditQuery, AuditQueryError
+from factgraph.audit.proof_frame_diff import (
     AtomDelta,
     EventReference,
     FrameIdentity,
     ProofFrameDiff,
 )
-from factpy.audit.round_events import RoundEvent
+from factgraph.audit.round_events import RoundEvent
 
 
 class AuditProofFrameDiffTests(unittest.TestCase):
@@ -223,7 +223,7 @@ class AuditProofFrameDiffTests(unittest.TestCase):
         offenders: list[str] = []
         for path in app_dir.glob("*runtime*.py"):
             text = path.read_text(encoding="utf-8")
-            if "factpy.audit" in text or "from factpy import audit" in text:
+            if "factgraph.audit" in text or "from factgraph import audit" in text:
                 offenders.append(path.name)
         self.assertEqual(offenders, [])
 

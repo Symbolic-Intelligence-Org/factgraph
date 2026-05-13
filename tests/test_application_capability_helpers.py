@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import unittest
 from typing import Any
 
-from factpy.application import (
+from factgraph.application import (
     CapabilityHelperError,
     build_evaluation_overlay,
     build_fact_remove_action,
@@ -18,7 +18,7 @@ from factpy.application import (
     field_predicate,
     resolve_selector,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     EntitySelector,
@@ -27,12 +27,12 @@ from factpy.application.protocol import (
     FieldPath,
     WhyNotUniverseRequest,
 )
-from factpy.core.evidence.write_protocol import add_field, set_field
-from factpy.core.rules.frontier import evaluate_native_where_frontier
-from factpy.core.store import Store
-from factpy.core.store._support import normalize_binding_items
-from factpy.core.view.projector import project_view_facts
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.core.evidence.write_protocol import add_field, set_field
+from factgraph.core.rules.frontier import evaluate_native_where_frontier
+from factgraph.core.store import Store
+from factgraph.core.store._support import normalize_binding_items
+from factgraph.core.view.projector import project_view_facts
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Person(Entity):

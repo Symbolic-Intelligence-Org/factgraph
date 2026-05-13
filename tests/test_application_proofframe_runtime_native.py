@@ -8,14 +8,14 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from factpy.application import (
+from factgraph.application import (
     build_schema_index,
     entity_info,
     field_predicate,
     recheck_proof_frame,
     resolve_selector,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     EntitySelector,
     EvaluationOverlay,
     FactRemoveAction,
@@ -24,16 +24,16 @@ from factpy.application.protocol import (
     RuleDisableAction,
     aggregate_proof_frame_status,
 )
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.store import Store
-from factpy.core.store._support import (
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.store import Store
+from factgraph.core.store._support import (
     NonFactStep,
     PredWitness,
     ProjectedFact,
     RuleRefEdge,
     SupportArtifact,
 )
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Person(Entity):
@@ -221,7 +221,7 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
         )
 
         with patch(
-            "factpy.application.proofframe_runtime.project_view_facts_with_witness",
+            "factgraph.application.proofframe_runtime.project_view_facts_with_witness",
             return_value=witness,
         ):
             result = recheck_proof_frame(
@@ -391,24 +391,24 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
 
 class ProofFrameRuntimeExportTests(unittest.TestCase):
     def test_application_package_exports_runtime_entrypoint(self) -> None:
-        from factpy import application
+        from factgraph import application
 
         self.assertIs(application.recheck_proof_frame, recheck_proof_frame)
 
 
 class ProofFrameRuntimeBoundaryTests(unittest.TestCase):
     def test_runtime_does_not_import_sibling_capability_runtimes_or_sdk(self) -> None:
-        source = Path("src/factpy/application/proofframe_runtime.py").read_text()
+        source = Path("src/factgraph/application/proofframe_runtime.py").read_text()
 
         self.assertNotIn("fact_overlay_runtime", source)
         self.assertNotIn("_apply_fact_overlay_projection", source)
         self.assertNotIn("derivation_check_runtime", source)
         self.assertNotIn("diagnose_runtime", source)
         self.assertNotIn("why_not_runtime", source)
-        self.assertNotIn("factpy.sdk", source)
+        self.assertNotIn("factgraph.sdk", source)
 
     def test_capability_helpers_package_does_not_call_proofframe_runtime(self) -> None:
-        source = Path("src/factpy/application/capability_helpers/proof_frame.py").read_text()
+        source = Path("src/factgraph/application/capability_helpers/proof_frame.py").read_text()
 
         self.assertNotIn("proofframe_runtime", source)
         self.assertNotIn("recheck_proof_frame", source)

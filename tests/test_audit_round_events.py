@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from tempfile import TemporaryDirectory
 import unittest
 
-from factpy.application.protocol.derivation_diagnose import DiagnoseAtomLocator
-from factpy.audit import AuditQuery, load_audit_package
-from factpy.audit.round_events import (
+from factgraph.application.protocol.derivation_diagnose import DiagnoseAtomLocator
+from factgraph.audit import AuditQuery, load_audit_package
+from factgraph.audit.round_events import (
     RoundEventError,
     RoundRecorder,
     finalize_round,
@@ -20,7 +20,7 @@ from factpy.audit.round_events import (
     record_round_event,
     start_round,
 )
-from factpy.core.store._support import normalize_binding_items
+from factgraph.core.store._support import normalize_binding_items
 
 
 class AuditRoundEventTests(unittest.TestCase):
@@ -294,7 +294,7 @@ class AuditRoundEventTests(unittest.TestCase):
         offenders: list[str] = []
         for path in app_dir.glob("*runtime*.py"):
             text = path.read_text(encoding="utf-8")
-            if "factpy.audit" in text or "from factpy import audit" in text:
+            if "factgraph.audit" in text or "from factgraph import audit" in text:
                 offenders.append(path.name)
         self.assertEqual(offenders, [])
 

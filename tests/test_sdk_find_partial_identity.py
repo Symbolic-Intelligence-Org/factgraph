@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import unittest
 
-import factpy.sdk as sdk_module
-from factpy.application import execute_read_request
-from factpy.application.protocol import EntityReadRequest
-from factpy.sdk import Entity, Field, Identity, SDKSchemaError, SDKStore
+import factgraph.sdk as sdk_module
+from factgraph.application import execute_read_request
+from factgraph.application.protocol import EntityReadRequest
+from factgraph.sdk import Entity, Field, Identity, SDKSchemaError, SDKStore
 
 
 class User(Entity):

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.sdk import Entity, Field, Identity
-from factpy.sdk.schema import SDKSchemaError
+from factgraph.sdk import Entity, Field, Identity
+from factgraph.sdk.schema import SDKSchemaError
 
 
 class IdentityPrimaryKeyRequiredTests(unittest.TestCase):

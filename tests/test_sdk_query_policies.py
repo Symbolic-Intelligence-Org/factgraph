@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import field_predicate
-from factpy.core.evidence.write_protocol import set_field
-from factpy.sdk import Entity, Field, Identity, Pred, Query, SDKStore, SDKStoreError, vars
-from factpy.sdk.error_codes import QUERY_MISSING_REF, QUERY_TYPE_MISMATCH
-from factpy.sdk.facade import EntitySnapshot
+from factgraph.application import field_predicate
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.sdk import Entity, Field, Identity, Pred, Query, SDKStore, SDKStoreError, vars
+from factgraph.sdk.error_codes import QUERY_MISSING_REF, QUERY_TYPE_MISMATCH
+from factgraph.sdk.facade import EntitySnapshot
 
 
 class User(Entity):

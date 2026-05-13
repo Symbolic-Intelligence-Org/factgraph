@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application._derivation_match_helpers import (
+from factgraph.application._derivation_match_helpers import (
     _all_body_vars,
     _binding_matches,
 )

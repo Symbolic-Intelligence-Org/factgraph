@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application.walker import AtomKeyView, WalkerFrozenError, WalkerParseError, parse_atom_key
+from factgraph.application.walker import AtomKeyView, WalkerFrozenError, WalkerParseError, parse_atom_key
 
 
 class AtomKeyViewParseTests(unittest.TestCase):
@@ -116,8 +116,8 @@ class AtomKeyViewContractTests(unittest.TestCase):
         self.assertEqual(hash(a), hash(b))
 
     def test_phase_3_key_types_reexport_from_application_package(self) -> None:
-        from factpy.application import AtomKeyView as AppAtomKeyView
-        from factpy.application import parse_atom_key as app_parse_atom_key
+        from factgraph.application import AtomKeyView as AppAtomKeyView
+        from factgraph.application import parse_atom_key as app_parse_atom_key
 
         self.assertIs(AppAtomKeyView, AtomKeyView)
         self.assertIs(app_parse_atom_key, parse_atom_key)

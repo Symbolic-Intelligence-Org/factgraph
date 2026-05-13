@@ -7,8 +7,8 @@ import typing
 import unittest
 from dataclasses import FrozenInstanceError
 
-from factpy.application import protocol as protocol_pkg
-from factpy.application.protocol import (
+from factgraph.application import protocol as protocol_pkg
+from factgraph.application.protocol import (
     ErrorDTO,
     EvaluationOverlay,
     ProofFrameAtomVerdict,
@@ -19,9 +19,9 @@ from factpy.application.protocol import (
     RuleDisableResult,
     RuleDisableStatus,
 )
-from factpy.application.protocol import rule_disable as rule_disable_protocol
-from factpy.core.rules.rule_ir import RuleSpec
-from factpy.core.store._support import PredWitness, SupportArtifact
+from factgraph.application.protocol import rule_disable as rule_disable_protocol
+from factgraph.core.rules.rule_ir import RuleSpec
+from factgraph.core.store._support import PredWitness, SupportArtifact
 
 
 def _rule_spec() -> RuleSpec:

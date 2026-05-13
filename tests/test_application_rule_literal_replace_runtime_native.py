@@ -7,14 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from factpy.application import (
+from factgraph.application import (
     build_schema_index,
     check_rule_literal_replace_action,
     entity_info,
     field_predicate,
     resolve_selector,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     EntitySelector,
     EvaluationOverlay,
     FactValueOverride,
@@ -23,11 +23,11 @@ from factpy.application.protocol import (
     RuleLiteralReplaceAction,
     RuleLiteralReplaceRequest,
 )
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.rules.rule_ir import RuleSpec
-from factpy.core.store import Store
-from factpy.core.store._support import NonFactStep, PredWitness, RuleRefEdge, SupportArtifact
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.rules.rule_ir import RuleSpec
+from factgraph.core.store import Store
+from factgraph.core.store._support import NonFactStep, PredWitness, RuleRefEdge, SupportArtifact
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Person(Entity):
@@ -471,7 +471,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
 
 class RuleLiteralReplaceRuntimeExportTests(unittest.TestCase):
     def test_application_package_exports_runtime_entrypoint(self) -> None:
-        from factpy import application
+        from factgraph import application
 
         self.assertIs(
             application.check_rule_literal_replace_action,
@@ -481,7 +481,7 @@ class RuleLiteralReplaceRuntimeExportTests(unittest.TestCase):
 
 class RuleLiteralReplaceRuntimeBoundaryTests(unittest.TestCase):
     def test_runtime_does_not_import_sibling_capability_runtimes_or_sdk(self) -> None:
-        source = Path("src/factpy/application/rule_literal_replace_runtime.py").read_text()
+        source = Path("src/factgraph/application/rule_literal_replace_runtime.py").read_text()
 
         self.assertNotIn("fact_overlay_runtime", source)
         self.assertNotIn("proofframe_runtime", source)
@@ -489,13 +489,13 @@ class RuleLiteralReplaceRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("derivation_check_runtime", source)
         self.assertNotIn("diagnose_runtime", source)
         self.assertNotIn("why_not_runtime", source)
-        self.assertNotIn("factpy.sdk", source)
+        self.assertNotIn("factgraph.sdk", source)
 
     def test_sdk_rule_literal_replace_shell_imports_runtime_only_in_shell(self) -> None:
         """G3 Phase 2 retrofit (per `#P1` carve-out, mirroring G2 Phase 0
         retrofits of G1 + G4 archived invariants and G3 Phase 1 retrofit
         of the Rule Disable boundary test): the SDK Rule Literal Replace
-        shell at ``factpy/sdk/shells/rule_literal_replace.py`` is now the
+        shell at ``factgraph/sdk/shells/rule_literal_replace.py`` is now the
         active L Direction entry point. The original "no SDK surface"
         assertion is replaced by a narrower invariant: the runtime
         entrypoint ``check_rule_literal_replace_action`` is imported
@@ -505,14 +505,14 @@ class RuleLiteralReplaceRuntimeBoundaryTests(unittest.TestCase):
         A helper ``build_rule_literal_replace_request`` constructs the
         action internally).
         """
-        shell_path = Path("src/factpy/sdk/shells/rule_literal_replace.py")
+        shell_path = Path("src/factgraph/sdk/shells/rule_literal_replace.py")
         self.assertTrue(
             shell_path.is_file(), f"{shell_path} should exist after G3 Phase 2"
         )
 
         shell_source = shell_path.read_text()
         self.assertIn(
-            "from factpy.application.rule_literal_replace_runtime import (",
+            "from factgraph.application.rule_literal_replace_runtime import (",
             shell_source,
         )
         self.assertIn("check_rule_literal_replace_action", shell_source)
@@ -522,7 +522,7 @@ class RuleLiteralReplaceRuntimeBoundaryTests(unittest.TestCase):
 
         other_sdk_sources = "\n".join(
             path.read_text()
-            for path in Path("src/factpy/sdk").rglob("*.py")
+            for path in Path("src/factgraph/sdk").rglob("*.py")
             if path != shell_path
         )
         self.assertNotIn("check_rule_literal_replace_action", other_sdk_sources)
@@ -531,15 +531,15 @@ class RuleLiteralReplaceRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("RuleLiteralReplaceAction(", other_sdk_sources)
 
     def test_frontier_protected_entrypoints_do_not_drift(self) -> None:
-        ruleref_source = Path("src/factpy/core/rules/ruleref_substrate.py").read_text()
-        proof_protocol = Path("src/factpy/application/protocol/proofframe.py").read_text()
+        ruleref_source = Path("src/factgraph/core/rules/ruleref_substrate.py").read_text()
+        proof_protocol = Path("src/factgraph/application/protocol/proofframe.py").read_text()
 
         self.assertNotIn("literal_replacements", ruleref_source)
         self.assertNotIn("RuleLiteralReplace", proof_protocol)
 
     def test_fact_overlay_and_proofframe_runtime_guards_remain_generic(self) -> None:
-        fact_source = Path("src/factpy/application/fact_overlay_runtime.py").read_text()
-        proof_source = Path("src/factpy/application/proofframe_runtime.py").read_text()
+        fact_source = Path("src/factgraph/application/fact_overlay_runtime.py").read_text()
+        proof_source = Path("src/factgraph/application/proofframe_runtime.py").read_text()
 
         self.assertNotIn("RuleLiteralReplaceAction", fact_source)
         self.assertIn("RULE_ACTIONS_NOT_SUPPORTED", fact_source)

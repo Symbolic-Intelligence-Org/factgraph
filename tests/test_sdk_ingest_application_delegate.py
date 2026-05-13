@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import entity_info, field_predicate
-from factpy.sdk import Entity, Field, Identity, SDKStore
+from factgraph.application import entity_info, field_predicate
+from factgraph.sdk import Entity, Field, Identity, SDKStore
 
 
 class Country(Entity):

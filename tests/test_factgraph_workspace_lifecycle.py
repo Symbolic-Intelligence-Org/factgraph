@@ -9,10 +9,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from factpy.adapters.souffle.package import ExportOptions
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.schema.schema_ir import schema_digest
-from factpy.sdk import (
+from factgraph.adapters.souffle.package import ExportOptions
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.schema.schema_ir import schema_digest
+from factgraph.sdk import (
     Branch,
     FactGraph,
     Inference,
@@ -22,8 +22,8 @@ from factpy.sdk import (
     SDKStore,
     vars as sdk_vars,
 )
-from factpy.sdk.store import SDKStoreError
-from factpy.sdk.schema import Entity, Field, Identity
+from factgraph.sdk.store import SDKStoreError
+from factgraph.sdk.schema import Entity, Field, Identity
 
 
 class User(Entity):
@@ -327,7 +327,7 @@ class WorkspaceLoadTests(unittest.TestCase):
 
 class ApplicationWorkspaceRuntimeTests(unittest.TestCase):
     def test_workspace_runtime_exports_application_functions(self) -> None:
-        module = importlib.import_module("factpy.application.workspace_runtime")
+        module = importlib.import_module("factgraph.application.workspace_runtime")
 
         for name in (
             "save_workspace",

@@ -3,7 +3,7 @@
 Mirrors G1's `test_sdk_g1_invariants.py`, G4's
 `test_sdk_g4_invariants.py`, G2's `test_sdk_g2_invariants.py`, and
 G3's `test_sdk_g3_invariants.py` 6-class structure under the
-`factpy/sdk/shells/` subpackage layout (now hosting 9 modules
+`factgraph/sdk/shells/` subpackage layout (now hosting 9 modules
 post-G5).
 
 Active classes:
@@ -12,8 +12,8 @@ Active classes:
 2. `test_g5_method_is_instance_method_and_no_scenario_method_shipped` — §5.7
 3. `test_g5_module_lives_in_shells_subpackage` — §5.5 + §5.6
 4. `test_g5_module_does_not_import_internal_or_walker_layers` — §6 layer
-   isolation (with the explicit `factpy.audit.proof_frame_diff` +
-   `factpy.audit.round_events` allowlist per §6 G5 carve)
+   isolation (with the explicit `factgraph.audit.proof_frame_diff` +
+   `factgraph.audit.round_events` allowlist per §6 G5 carve)
 5. `test_store_method_remains_thin_delegate` — §6 thin-delegate
 6. `test_store_method_docstring_records_boundary_contract` — §5.7 + §6 docstring
 """
@@ -25,31 +25,31 @@ import pathlib
 import unittest
 from importlib import import_module
 
-from factpy import sdk as factpy_sdk
-from factpy.sdk import SDKStore
+from factgraph import sdk as factgraph_sdk
+from factgraph.sdk import SDKStore
 
 
 G5_MODULES = (
-    "factpy.sdk.shells.proof_frame_diff",
+    "factgraph.sdk.shells.proof_frame_diff",
 )
 # Forbidden production imports for G5. NOTE: per §6 G5 carve,
-# `factpy.audit.proof_frame_diff` and `factpy.audit.round_events` are
+# `factgraph.audit.proof_frame_diff` and `factgraph.audit.round_events` are
 # the explicit allowed A-side dependencies for G5 (the diff function
-# and `RoundEvent` type both live at `factpy.audit`). The audit-allowlist
+# and `RoundEvent` type both live at `factgraph.audit`). The audit-allowlist
 # check below enforces that ONLY those two modules are imported from
-# the broader `factpy.audit` namespace, distinct from broader audit
+# the broader `factgraph.audit` namespace, distinct from broader audit
 # privates which remain forbidden.
 FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
-    "factpy.application.capability_helpers._binding",
+    "factgraph.application.capability_helpers._binding",
     "_reject_sdk_origin",
-    "from factpy.application.walker",
-    "import factpy.application.walker",
-    "from factpy.application.walker import",
-    "factpy.core.rules.frontier",
+    "from factgraph.application.walker",
+    "import factgraph.application.walker",
+    "from factgraph.application.walker import",
+    "factgraph.core.rules.frontier",
 )
 ALLOWED_AUDIT_IMPORT_PREFIXES_G5 = (
-    "factpy.audit.proof_frame_diff",
-    "factpy.audit.round_events",
+    "factgraph.audit.proof_frame_diff",
+    "factgraph.audit.round_events",
 )
 
 
@@ -57,16 +57,16 @@ class SDKG5InvariantTests(unittest.TestCase):
     """G5 invariants — must hold across all G5 phases."""
 
     def test_sdk_all_unchanged_and_g5_result_types_not_exported(self) -> None:
-        """§5.3 + §5.4 lock: G5 result DTO + supporting `factpy.audit`
+        """§5.3 + §5.4 lock: G5 result DTO + supporting `factgraph.audit`
         DTOs are not re-exported from SDK; recorder lifecycle stays at
         advanced importable per §5.1."""
-        self.assertEqual(len(factpy_sdk.__all__), 41)
-        self.assertIn("SchemaAddResult", factpy_sdk.__all__)
-        self.assertIn("ReadPolicy", factpy_sdk.__all__)
-        self.assertIn("FactGraph", factpy_sdk.__all__)
-        self.assertIn("SemanticsProfile", factpy_sdk.__all__)
-        self.assertIn("ProbLogSemantics", factpy_sdk.__all__)
-        self.assertIn("PyReasonSemantics", factpy_sdk.__all__)
+        self.assertEqual(len(factgraph_sdk.__all__), 41)
+        self.assertIn("SchemaAddResult", factgraph_sdk.__all__)
+        self.assertIn("ReadPolicy", factgraph_sdk.__all__)
+        self.assertIn("FactGraph", factgraph_sdk.__all__)
+        self.assertIn("SemanticsProfile", factgraph_sdk.__all__)
+        self.assertIn("ProbLogSemantics", factgraph_sdk.__all__)
+        self.assertIn("PyReasonSemantics", factgraph_sdk.__all__)
         for name in (
             # §5.4 result DTO + §5.3 input/supporting DTOs
             "ProofFrameDiff",
@@ -87,8 +87,8 @@ class SDKG5InvariantTests(unittest.TestCase):
             "finalize_round",
         ):
             with self.subTest(name=name):
-                self.assertNotIn(name, factpy_sdk.__all__)
-                self.assertFalse(hasattr(factpy_sdk, name))
+                self.assertNotIn(name, factgraph_sdk.__all__)
+                self.assertFalse(hasattr(factgraph_sdk, name))
 
     def test_g5_method_is_instance_method_and_no_scenario_method_shipped(
         self,
@@ -113,11 +113,11 @@ class SDKG5InvariantTests(unittest.TestCase):
 
     def test_g5_module_lives_in_shells_subpackage(self) -> None:
         """§5.5 + §5.6 lock: G5 shell lives at
-        ``factpy/sdk/shells/proof_frame_diff.py``. Flat
-        ``factpy/sdk/proof_frame_diff.py`` location must not exist.
-        Total `factpy/sdk/shells/` module count is 9 post-G5 (8 prior
+        ``factgraph/sdk/shells/proof_frame_diff.py``. Flat
+        ``factgraph/sdk/proof_frame_diff.py`` location must not exist.
+        Total `factgraph/sdk/shells/` module count is 9 post-G5 (8 prior
         shells + new G5 shell)."""
-        sdk_dir = pathlib.Path(factpy_sdk.__file__).parent
+        sdk_dir = pathlib.Path(factgraph_sdk.__file__).parent
         self.assertTrue((sdk_dir / "shells").is_dir())
         self.assertTrue((sdk_dir / "shells" / "__init__.py").is_file())
         self.assertTrue((sdk_dir / "shells" / "proof_frame_diff.py").is_file())
@@ -125,13 +125,13 @@ class SDKG5InvariantTests(unittest.TestCase):
 
     def test_g5_module_does_not_import_internal_or_walker_layers(self) -> None:
         """§6 lock: G5 SDK shell must not import application
-        internals, walker, frontier, or `factpy.audit` privates.
+        internals, walker, frontier, or `factgraph.audit` privates.
 
-        Per §6 G5 carve: `factpy.audit.proof_frame_diff` and
-        `factpy.audit.round_events` ARE allowed as the explicit A-side
+        Per §6 G5 carve: `factgraph.audit.proof_frame_diff` and
+        `factgraph.audit.round_events` ARE allowed as the explicit A-side
         dependencies (the diff function and `RoundEvent` type live
-        there). Other `factpy.audit.*` modules (e.g.,
-        `factpy.audit.assertions`, `.query`, `.reader`,
+        there). Other `factgraph.audit.*` modules (e.g.,
+        `factgraph.audit.assertions`, `.query`, `.reader`,
         `.evidence_graph`) remain forbidden.
         """
         for module_name in G5_MODULES:
@@ -140,18 +140,18 @@ class SDKG5InvariantTests(unittest.TestCase):
             for forbidden in FORBIDDEN_PRODUCTION_IMPORT_TEXT:
                 with self.subTest(module=module_name, forbidden=forbidden):
                     self.assertNotIn(forbidden, source)
-            # Audit-import allowlist: any `factpy.audit.*` import line
+            # Audit-import allowlist: any `factgraph.audit.*` import line
             # must reference one of the two allowed modules.
             for line_no, line in enumerate(source.splitlines(), start=1):
                 stripped = line.strip()
                 if not (stripped.startswith("from ") or stripped.startswith("import ")):
                     continue
-                if "factpy.audit" not in line:
+                if "factgraph.audit" not in line:
                     continue
                 with self.subTest(module=module_name, line_no=line_no):
                     self.assertTrue(
                         any(allowed in line for allowed in ALLOWED_AUDIT_IMPORT_PREFIXES_G5),
-                        f"unexpected `factpy.audit` import in {module_name} "
+                        f"unexpected `factgraph.audit` import in {module_name} "
                         f"line {line_no}: {stripped!r} — allowed prefixes are "
                         f"{ALLOWED_AUDIT_IMPORT_PREFIXES_G5}",
                     )

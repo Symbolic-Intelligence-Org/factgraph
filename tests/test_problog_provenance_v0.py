@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.adapters.problog.provenance import (
+from factgraph.adapters.problog.provenance import (
     ProbLogTraceV0,
     parse_problog_trace,
     problog_trace_to_dict,

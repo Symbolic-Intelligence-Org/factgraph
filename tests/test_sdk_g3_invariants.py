@@ -2,7 +2,7 @@
 
 Mirrors G1's `test_sdk_g1_invariants.py`, G4's
 `test_sdk_g4_invariants.py`, and G2's `test_sdk_g2_invariants.py`
-6-class structure under the active `factpy/sdk/shells/` subpackage
+6-class structure under the active `factgraph/sdk/shells/` subpackage
 layout (activated at G2 Phase 0; now hosting 8 modules).
 
 Active classes:
@@ -22,23 +22,23 @@ import pathlib
 import unittest
 from importlib import import_module
 
-from factpy import sdk as factpy_sdk
-from factpy.sdk import SDKStore
+from factgraph import sdk as factgraph_sdk
+from factgraph.sdk import SDKStore
 
 
 G3_MODULES = (
-    "factpy.sdk.shells.rule_disable",
-    "factpy.sdk.shells.rule_literal_replace",
-    "factpy.sdk.shells.rule_add_condition",
+    "factgraph.sdk.shells.rule_disable",
+    "factgraph.sdk.shells.rule_literal_replace",
+    "factgraph.sdk.shells.rule_add_condition",
 )
 FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
-    "factpy.application.capability_helpers._binding",
+    "factgraph.application.capability_helpers._binding",
     "_reject_sdk_origin",
-    "from factpy.application.walker",
-    "import factpy.application.walker",
-    "from factpy.application.walker import",
-    "factpy.audit",
-    "factpy.core.rules.frontier",
+    "from factgraph.application.walker",
+    "import factgraph.application.walker",
+    "from factgraph.application.walker import",
+    "factgraph.audit",
+    "factgraph.core.rules.frontier",
 )
 
 
@@ -47,13 +47,13 @@ class SDKG3InvariantTests(unittest.TestCase):
 
     def test_sdk_all_unchanged_and_g3_result_types_not_exported(self) -> None:
         """§5.3 + §5.4 lock: G3 result DTOs are not re-exported from SDK."""
-        self.assertEqual(len(factpy_sdk.__all__), 41)
-        self.assertIn("SchemaAddResult", factpy_sdk.__all__)
-        self.assertIn("ReadPolicy", factpy_sdk.__all__)
-        self.assertIn("FactGraph", factpy_sdk.__all__)
-        self.assertIn("SemanticsProfile", factpy_sdk.__all__)
-        self.assertIn("ProbLogSemantics", factpy_sdk.__all__)
-        self.assertIn("PyReasonSemantics", factpy_sdk.__all__)
+        self.assertEqual(len(factgraph_sdk.__all__), 41)
+        self.assertIn("SchemaAddResult", factgraph_sdk.__all__)
+        self.assertIn("ReadPolicy", factgraph_sdk.__all__)
+        self.assertIn("FactGraph", factgraph_sdk.__all__)
+        self.assertIn("SemanticsProfile", factgraph_sdk.__all__)
+        self.assertIn("ProbLogSemantics", factgraph_sdk.__all__)
+        self.assertIn("PyReasonSemantics", factgraph_sdk.__all__)
         for name in (
             "RuleDisableResult",
             "RuleDisableAction",
@@ -74,8 +74,8 @@ class SDKG3InvariantTests(unittest.TestCase):
             "sdk_rule_add_condition",
         ):
             with self.subTest(name=name):
-                self.assertNotIn(name, factpy_sdk.__all__)
-                self.assertFalse(hasattr(factpy_sdk, name))
+                self.assertNotIn(name, factgraph_sdk.__all__)
+                self.assertFalse(hasattr(factgraph_sdk, name))
 
     def test_g3_methods_are_instance_methods_and_no_scenario_method_shipped(
         self,
@@ -102,12 +102,12 @@ class SDKG3InvariantTests(unittest.TestCase):
 
     def test_g3_modules_live_in_shells_subpackage(self) -> None:
         """§5.5 + §5.6 lock: G3 shells live at
-        ``factpy/sdk/shells/{rule_disable,rule_literal_replace,rule_add_condition}.py``.
+        ``factgraph/sdk/shells/{rule_disable,rule_literal_replace,rule_add_condition}.py``.
 
-        Also enforces that the flat ``factpy/sdk/<x>.py`` location must
+        Also enforces that the flat ``factgraph/sdk/<x>.py`` location must
         not exist.
         """
-        sdk_dir = pathlib.Path(factpy_sdk.__file__).parent
+        sdk_dir = pathlib.Path(factgraph_sdk.__file__).parent
         self.assertTrue((sdk_dir / "shells").is_dir())
         self.assertTrue((sdk_dir / "shells" / "__init__.py").is_file())
         self.assertTrue((sdk_dir / "shells" / "rule_disable.py").is_file())

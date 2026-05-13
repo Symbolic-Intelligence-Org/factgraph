@@ -1,7 +1,7 @@
 """Unit tests for the shared SDK shell input validators.
 
 Exercises the shared validators in
-``factpy.sdk.shells._validation`` directly: behavior parity vs the
+``factgraph.sdk.shells._validation`` directly: behavior parity vs the
 inlined G1 validators they replaced (Q1 follow-up to Round 4 audit) for
 ``validate_derivation`` / ``validate_binding``; G2 polish-round
 ``validate_evaluation_overlay``; and G3 Phase 0 hygiene additions
@@ -10,7 +10,7 @@ inlined G1 validators they replaced (Q1 follow-up to Round 4 audit) for
 contract that lets multiple SDK shell methods (Check, Diagnose, Why-not,
 G2 Fact Overlay + ProofFrame Recheck, G3 rule-overlay shells) share
 validators without duplicating logic, and the post-G2 Phase 0 hygiene
-location under ``factpy/sdk/shells/``.
+location under ``factgraph/sdk/shells/``.
 """
 
 from __future__ import annotations
@@ -19,14 +19,14 @@ import unittest
 
 from unittest.mock import MagicMock
 
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     EvaluationOverlay,
     FactRemoveAction,
     FactValueOverride,
     RuleDisableAction,
 )
-from factpy.core.rules.rule_ir import RuleCompileError
-from factpy.sdk import (
+from factgraph.core.rules.rule_ir import RuleCompileError
+from factgraph.sdk import (
     Inference,
     Entity,
     Field,
@@ -36,7 +36,7 @@ from factpy.sdk import (
     SDKStoreError,
     vars,
 )
-from factpy.sdk.shells._validation import (
+from factgraph.sdk.shells._validation import (
     resolve_runtime_registry,
     validate_binding,
     validate_derivation,

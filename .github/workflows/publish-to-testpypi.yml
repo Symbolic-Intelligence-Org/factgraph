@@ -42,7 +42,7 @@ jobs:
  
         environment:
             name: testpypi
-            url: https://test.pypi.org/p/
+            url: https://test.pypi.org/p/factgraph
         
         permissions:
             id-token: write

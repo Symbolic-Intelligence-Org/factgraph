@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-import factpy.application.walker.ir as ir_module
-from factpy.application.walker import (
+import factgraph.application.walker.ir as ir_module
+from factgraph.application.walker import (
     IRAtomView,
     IRBodyWalker,
     WalkerFrozenError,
@@ -192,8 +192,8 @@ class IRBodyWalkerLookupTests(unittest.TestCase):
 
 class IRAtomViewContractTests(unittest.TestCase):
     def test_phase_1_types_reexport_from_application_package(self) -> None:
-        from factpy.application import IRAtomView as AppIRAtomView
-        from factpy.application import IRBodyWalker as AppIRBodyWalker
+        from factgraph.application import IRAtomView as AppIRAtomView
+        from factgraph.application import IRBodyWalker as AppIRBodyWalker
 
         self.assertIs(AppIRAtomView, IRAtomView)
         self.assertIs(AppIRBodyWalker, IRBodyWalker)

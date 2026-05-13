@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.core.store.ledger import (
+from factgraph.core.store.ledger import (
     ANNOTATION_CATEGORIES,
     ANNOTATION_ORIGINS,
     META_KINDS,

@@ -6,22 +6,22 @@ import inspect
 from pathlib import Path
 import unittest
 
-from factpy.core.rules import frontier as _frontier_module
-from factpy.core.rules.frontier import (
+from factgraph.core.rules import frontier as _frontier_module
+from factgraph.core.rules.frontier import (
     NativeWhereFrontierEvaluation,
     NativeWhereFrontierRow,
     evaluate_native_where_frontier,
 )
-from factpy.core.rules.rule_ir import RuleRegistry, RuleSpec
-from factpy.core.rules.ruleref_substrate import evaluate_native_where
+from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
+from factgraph.core.rules.ruleref_substrate import evaluate_native_where
 
 _BANNED_IMPORT_PREFIXES = (
-    "factpy.application",
-    "factpy.sdk",
-    "factpy.adapters",
-    "factpy.core.derivation.candidates",
-    "factpy.core.store._support",
-    "factpy.core.store.runtime",
+    "factgraph.application",
+    "factgraph.sdk",
+    "factgraph.adapters",
+    "factgraph.core.derivation.candidates",
+    "factgraph.core.store._support",
+    "factgraph.core.store.runtime",
 )
 
 _BANNED_SYMBOLS = frozenset(

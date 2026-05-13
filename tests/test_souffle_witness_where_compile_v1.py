@@ -5,18 +5,18 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from factpy.authoring.registry_fs import FileAuthoringRegistry
-from factpy.adapters.souffle.package import ExportOptions, export_package
-from factpy.adapters.souffle.pred_norm import normalize_pred_id
-from factpy.adapters.souffle.where_compile import (
+from factgraph.authoring.registry_fs import FileAuthoringRegistry
+from factgraph.adapters.souffle.package import ExportOptions, export_package
+from factgraph.adapters.souffle.pred_norm import normalize_pred_id
+from factgraph.adapters.souffle.where_compile import (
     build_query_witness_layout,
     compile_where_to_query_dl,
 )
-from factpy.core.rules.ruleref_common import internal_rule_pred_id
-from factpy.core.rules.rule_ir import RuleRegistry, RuleSpec
-from factpy.core.rules.where_eval import WhereValidationError
-from factpy.core.store.runtime import Store
-from factpy.sdk import Pred, Rule, RuleRef, SDKStore, vars as sdk_vars
+from factgraph.core.rules.ruleref_common import internal_rule_pred_id
+from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
+from factgraph.core.rules.where_eval import WhereValidationError
+from factgraph.core.store.runtime import Store
+from factgraph.sdk import Pred, Rule, RuleRef, SDKStore, vars as sdk_vars
 from tests._test_helpers import User, _schema_ir as _runtime_schema_ir
 
 
@@ -104,7 +104,7 @@ class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):
         store = Store(_runtime_schema_ir())
         with TemporaryDirectory() as package_dir:
             with patch(
-                "factpy.adapters.souffle.package._load_query_rule_registry",
+                "factgraph.adapters.souffle.package._load_query_rule_registry",
                 return_value=_rule_registry(),
             ) as mock_load_registry:
                 export_package(

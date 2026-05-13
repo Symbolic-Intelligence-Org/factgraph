@@ -7,14 +7,14 @@ import unittest
 from typing import Any
 from unittest.mock import patch
 
-from factpy.application import (
+from factgraph.application import (
     build_schema_index,
     check_fact_overlay_binding,
     entity_info,
     field_predicate,
     resolve_selector,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     EntitySelector,
@@ -25,13 +25,13 @@ from factpy.application.protocol import (
     OverlayCheckPhase,
     RuleDisableAction,
 )
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.rules.rule_ir import RuleRegistry
-from factpy.core.store._support import ProjectedFact
-from factpy.core.store import Store
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.rules.rule_ir import RuleRegistry
+from factgraph.core.store._support import ProjectedFact
+from factgraph.core.store import Store
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
-from factpy.application.fact_overlay_runtime import (
+from factgraph.application.fact_overlay_runtime import (
     _apply_fact_overlay_projection,
     _build_overlay_diff,
     _validate_fact_overlay_actions,
@@ -774,7 +774,7 @@ class FactOverlayRuntimeNativeDoubleRunTests(unittest.TestCase):
             overlay=(_override(seeded),),
         )
 
-        from factpy.application import fact_overlay_runtime
+        from factgraph.application import fact_overlay_runtime
 
         calls: list[dict[str, object]] = []
         original = fact_overlay_runtime.evaluate_native_where
@@ -915,7 +915,7 @@ class FactOverlayRuntimeNativeDoubleRunTests(unittest.TestCase):
             overlay=(invalid_override,),
         )
 
-        from factpy.application import fact_overlay_runtime
+        from factgraph.application import fact_overlay_runtime
 
         with patch.object(fact_overlay_runtime, "evaluate_native_where") as spy:
             result = check_fact_overlay_binding(request, store=store)
@@ -938,7 +938,7 @@ class FactOverlayRuntimeNativeDoubleRunTests(unittest.TestCase):
             overlay=(_override(seeded),),
         )
 
-        from factpy.application import fact_overlay_runtime
+        from factgraph.application import fact_overlay_runtime
 
         with patch.object(
             fact_overlay_runtime,

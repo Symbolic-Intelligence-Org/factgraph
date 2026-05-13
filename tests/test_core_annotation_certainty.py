@@ -11,7 +11,7 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from factpy.core.annotation import (  # noqa: E402
+from factgraph.core.annotation import (  # noqa: E402
     CertaintySummary,
     ConditionImpact,
     RankedCondition,
@@ -69,7 +69,7 @@ def _nfc(step_key: str, *, confidence: float | None = None) -> dict:
     return node
 
 
-class CertaintyAnnotationfactpyTests(unittest.TestCase):
+class CertaintyAnnotationfactgraphTests(unittest.TestCase):
     def test_certainty_lane_produces_summary(self) -> None:
         tree = _make_tree(_pwg("b0.a0:user:name"))
         result = derive_certainty_summary(tree, {"b0.a0": 0.8}, "certainty")

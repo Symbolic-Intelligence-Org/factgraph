@@ -4,21 +4,21 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-import factpy.adapters.pyreason  # noqa: F401
-from factpy.adapters.pyreason.accept import persist_pyreason_annotations
-from factpy.adapters.pyreason.rule_ext import PyReasonRuleExt
-from factpy.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
-from factpy.adapters.pyreason.session import PyReasonSession
-from factpy.adapters.pyreason.where_compile import PyReasonWhereCompileError
-from factpy.core.derivation.accept import AcceptOptions
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.store._support import PYREASON_PROVENANCE_KIND
-from factpy.core.store.ledger import Claim
-from factpy.sdk.compile import compile_schema_from_classes
-from factpy.sdk.dsl import vars as sdk_vars
-from factpy.sdk.dsl import Inference, Pred
-from factpy.sdk.schema import Entity, Field, Identity, Relationship
-from factpy.sdk.store import SDKStore
+import factgraph.adapters.pyreason  # noqa: F401
+from factgraph.adapters.pyreason.accept import persist_pyreason_annotations
+from factgraph.adapters.pyreason.rule_ext import PyReasonRuleExt
+from factgraph.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
+from factgraph.adapters.pyreason.session import PyReasonSession
+from factgraph.adapters.pyreason.where_compile import PyReasonWhereCompileError
+from factgraph.core.derivation.accept import AcceptOptions
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
+from factgraph.core.store.ledger import Claim
+from factgraph.sdk.compile import compile_schema_from_classes
+from factgraph.sdk.dsl import vars as sdk_vars
+from factgraph.sdk.dsl import Inference, Pred
+from factgraph.sdk.schema import Entity, Field, Identity, Relationship
+from factgraph.sdk.store import SDKStore
 
 
 class User(Entity):
@@ -112,7 +112,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
                 head_vars=[u],
             )
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_sdk_evaluate_derivation_returns_candidates(self, mock_run) -> None:
         sdk = self._make_sdk()
         derivation = self._make_derivation()
@@ -132,7 +132,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertEqual(candidate.confidence, 0.8)
         mock_run.assert_called_once()
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_engine_ext_flows_outside_compiled_payload(self, mock_run) -> None:
         sdk = self._make_sdk()
         derivation = self._make_derivation()
@@ -148,7 +148,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertEqual(len(rules), 1)
         self.assertIn("<-2", rules[0][0])
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_body_predicate_bounds_flow_to_compiled_rules(self, mock_run) -> None:
         sdk = self._make_sdk()
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
@@ -159,7 +159,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(rules, [("popular(u) <-0 name(u) : [0.5, 1.0]", "derived_popular")])
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_head_bound_flows_to_compiled_rules(self, mock_run) -> None:
         sdk = self._make_sdk()
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
@@ -170,7 +170,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(rules, [("popular(u) : [0.8, 0.9] <-0 name(u)", "derived_popular")])
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_engine_options_are_call_time_only_and_forwarded(self, mock_run) -> None:
         sdk = self._make_sdk()
         derivation = self._make_derivation()
@@ -193,7 +193,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
 
         self.assertIn("Supported keys: timesteps", str(ctx.exception))
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_runner_receives_materialized_edb_from_ledger(self, mock_run) -> None:
         sdk = self._make_sdk()
         derivation = self._make_derivation()
@@ -207,7 +207,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertEqual(node_pred_ids, {"user:name"})
         self.assertEqual(session.edge_facts[0]["pred_id"], "friends:strength")
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_core_accept_persists_claim_and_pending_annotations(self, mock_run) -> None:
         del mock_run
         sdk = self._make_sdk()
@@ -242,7 +242,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
             ),
         )
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_post_accept_annotation_persist_binds_pending_templates(self, mock_run) -> None:
         del mock_run
         sdk = self._make_sdk()
@@ -274,7 +274,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertIn("bound_lower", saved_keys)
         self.assertIn("bound_upper", saved_keys)
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_persist_helper_writes_annotations(self, mock_run) -> None:
         del mock_run
         sdk = self._make_sdk()
@@ -300,7 +300,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         saved = sdk.ledger.find_annotations(asrt_id=asrt_id, namespace="pyreason")
         self.assertGreaterEqual(len(saved), 2)
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_sdk_evaluate_rejects_unsupported_where_atom(self, mock_run) -> None:
         sdk = self._make_sdk()
         derivation = self._make_derivation(where=[("eq", "$u", "Alice")])

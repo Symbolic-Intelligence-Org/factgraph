@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
-from factpy.application.walker import (
+from factgraph.application.walker import (
     FrozenTupleView,
     WalkerFrozenError,
     WalkerLookupError,
@@ -157,8 +157,8 @@ class FrozenTupleViewContractTests(unittest.TestCase):
         self.assertNotEqual(a, c)
 
     def test_phase_2_types_reexport_from_application_package(self) -> None:
-        from factpy.application import FrozenTupleView as AppFrozenTupleView
-        from factpy.application import frozen_collection as app_frozen_collection
+        from factgraph.application import FrozenTupleView as AppFrozenTupleView
+        from factgraph.application import frozen_collection as app_frozen_collection
 
         self.assertIs(AppFrozenTupleView, FrozenTupleView)
         self.assertIs(app_frozen_collection, frozen_collection)

@@ -11,13 +11,13 @@ import ast
 import unittest
 from pathlib import Path
 
-from factpy.application import why_not_runtime as _why_not_runtime_module
-from factpy.application.protocol import derivation_why_not as _why_not_protocol_module
+from factgraph.application import why_not_runtime as _why_not_runtime_module
+from factgraph.application.protocol import derivation_why_not as _why_not_protocol_module
 
 _BANNED_CHECK_MODULES = frozenset(
     {
-        "factpy.application.derivation_check_runtime",
-        "factpy.application.protocol.derivation_check",
+        "factgraph.application.derivation_check_runtime",
+        "factgraph.application.protocol.derivation_check",
         "derivation_check_runtime",
         "derivation_check",
     }

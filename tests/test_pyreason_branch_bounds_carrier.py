@@ -7,17 +7,17 @@ from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import patch
 
-import factpy.application as application  # noqa: F401
-from factpy.adapters.pyreason.rule_ext import PyReasonRuleExt, resolve_pyreason_engine_ext
-from factpy.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
-from factpy.adapters.pyreason.session import PyReasonSession
-from factpy.adapters.pyreason.where_compile import compile_where_ir_to_pyreason
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.semantics import SemanticsProfile
-from factpy.core.store.types import EngineExtBase
-from factpy.sdk import Branch, Inference, Pred, SDKStore, vars as sdk_vars
-from factpy.sdk.schema import Entity, Field, Identity
-from factpy.sdk.store import SDKStoreError, _lower_public_semantics
+import factgraph.application as application  # noqa: F401
+from factgraph.adapters.pyreason.rule_ext import PyReasonRuleExt, resolve_pyreason_engine_ext
+from factgraph.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
+from factgraph.adapters.pyreason.session import PyReasonSession
+from factgraph.adapters.pyreason.where_compile import compile_where_ir_to_pyreason
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.semantics import SemanticsProfile
+from factgraph.core.store.types import EngineExtBase
+from factgraph.sdk import Branch, Inference, Pred, SDKStore, vars as sdk_vars
+from factgraph.sdk.schema import Entity, Field, Identity
+from factgraph.sdk.store import SDKStoreError, _lower_public_semantics
 
 
 class User(Entity):
@@ -93,7 +93,7 @@ def _single_branch_derivation() -> Inference:
 
 
 def _pyreason_semantics(**kwargs: Any) -> Any:
-    from factpy.sdk import PyReasonSemantics
+    from factgraph.sdk import PyReasonSemantics
 
     return PyReasonSemantics(**kwargs)
 
@@ -327,7 +327,7 @@ class PyReasonBranchBoundsCompileTests(unittest.TestCase):
 
 
 class PyReasonBranchBoundsIntegrationTests(unittest.TestCase):
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_pyreason_empty)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_pyreason_empty)
     def test_evaluate_with_branch_bounds_drives_compiled_rules(self, mock_run: Any) -> None:
         sdk = _make_sdk()
         semantics = _pyreason_semantics(branch_bounds={"sensor_path": [0.8, 1.0], "b1": [0.2, 0.8]})

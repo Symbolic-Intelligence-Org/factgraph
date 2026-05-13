@@ -11,10 +11,10 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-import factpy.application.walker as walker_package
-from factpy.application.protocol.common import WarningDTO
-from factpy.application.protocol.proofframe import ProofFrameAtomVerdict, ProofFrameRecheckResult
-from factpy.application.walker import (
+import factgraph.application.walker as walker_package
+from factgraph.application.protocol.common import WarningDTO
+from factgraph.application.protocol.proofframe import ProofFrameAtomVerdict, ProofFrameRecheckResult
+from factgraph.application.walker import (
     AssertionView,
     FrozenTupleView,
     IRBodyWalker,
@@ -23,8 +23,8 @@ from factpy.application.walker import (
     SupportArtifactView,
     WalkerFrozenError,
 )
-from factpy.application.walker.keys import parse_atom_key
-from factpy.audit.proof_frame_diff import (
+from factgraph.application.walker.keys import parse_atom_key
+from factgraph.audit.proof_frame_diff import (
     AtomDelta,
     EventReference,
     FrameDelta,
@@ -32,8 +32,8 @@ from factpy.audit.proof_frame_diff import (
     FrameStatusChange,
     ProofFrameDiff,
 )
-from factpy.core.store._support import NonFactStep, PredWitness, SupportArtifact
-from factpy.core.store.ledger import Claim
+from factgraph.core.store._support import NonFactStep, PredWitness, SupportArtifact
+from factgraph.core.store.ledger import Claim
 
 
 def _claim() -> Claim:
@@ -158,8 +158,8 @@ class WalkerInvariantTests(unittest.TestCase):
     def test_walker_package_does_not_import_sdk(self) -> None:
         for path, source in _walker_sources().items():
             with self.subTest(path=path.name):
-                self.assertNotIn("factpy.sdk", source)
-                self.assertNotIn("from factpy import sdk", source)
+                self.assertNotIn("factgraph.sdk", source)
+                self.assertNotIn("from factgraph import sdk", source)
                 self.assertNotIn("import sdk", source)
 
     def test_unbounded_stream_error_has_no_b1_b2_raise_site(self) -> None:

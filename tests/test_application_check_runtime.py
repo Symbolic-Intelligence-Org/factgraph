@@ -1,4 +1,4 @@
-"""Runtime tests for `factpy.application.derivation_check_runtime`.
+"""Runtime tests for `factgraph.application.derivation_check_runtime`.
 
 Covers (per blueprint Step 2 plan + Step 0.B/0.C contract):
 
@@ -22,7 +22,7 @@ import unittest
 from typing import Any
 from unittest.mock import patch
 
-from factpy.application import (
+from factgraph.application import (
     CheckRuntimeError,
     build_schema_index,
     check_derivation_binding,
@@ -30,18 +30,18 @@ from factpy.application import (
     field_predicate,
     resolve_selector,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     CheckRequest,
     CheckResult,
     CompiledDerivationPlan,
     CompiledHeadCall,
     EntitySelector,
 )
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.rules.rule_ir import RuleRegistry, RuleSpec
-from factpy.core.store import Store
-from factpy.core.store._support import SupportArtifact, normalize_binding_items
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
+from factgraph.core.store import Store
+from factgraph.core.store._support import SupportArtifact, normalize_binding_items
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Person(Entity):
@@ -524,9 +524,9 @@ class AntiRegressionTests(unittest.TestCase):
         )
 
         with patch(
-            "factpy.application.derivation_check_runtime.build_support_artifact_for_binding",
+            "factgraph.application.derivation_check_runtime.build_support_artifact_for_binding",
             wraps=__import__(
-                "factpy.core.store._support_capture",
+                "factgraph.core.store._support_capture",
                 fromlist=["build_support_artifact_for_binding"],
             ).build_support_artifact_for_binding,
         ) as spy:
@@ -572,7 +572,7 @@ class AntiRegressionTests(unittest.TestCase):
 
         boom = RuntimeError("evaluator exploded")
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_native_where",
+            "factgraph.application.derivation_check_runtime.evaluate_native_where",
             side_effect=boom,
         ):
             with self.assertRaises(RuntimeError) as ctx:
@@ -651,7 +651,7 @@ def _make_souffle_candidate(
     target: str = "Person:exists",
 ) -> Any:
     """Step 4.2 fixture: minimal CandidateSet shaped like a Souffle output."""
-    from factpy.core.derivation.candidates import CandidateSet
+    from factgraph.core.derivation.candidates import CandidateSet
 
     key_digest = "sha256:" + ("0" * 64)
     return CandidateSet(
@@ -677,7 +677,7 @@ def _make_support_artifact(
     kind: str = "souffle_witness_v1",
 ) -> Any:
     """Step 4.2 fixture: minimal SupportArtifact for souffle path mocking."""
-    from factpy.core.store._support import PredWitness, SupportArtifact
+    from factgraph.core.store._support import PredWitness, SupportArtifact
 
     return SupportArtifact(
         kind=kind,
@@ -717,10 +717,10 @@ class SouffleCheckTests(unittest.TestCase):
             pred_witness_keys=("b0.a0:Person:exists",),
         )
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "factpy.application.derivation_check_runtime._lookup_support_artifact",
+            "factgraph.application.derivation_check_runtime._lookup_support_artifact",
             return_value=artifact,
         ):
             result = check_derivation_binding(request, store=store)
@@ -741,10 +741,10 @@ class SouffleCheckTests(unittest.TestCase):
         candidate = _make_souffle_candidate()
         artifact = _make_support_artifact(binding_items=(("$p", "person-1"),))
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "factpy.application.derivation_check_runtime._lookup_support_artifact",
+            "factgraph.application.derivation_check_runtime._lookup_support_artifact",
             return_value=artifact,
         ):
             result = check_derivation_binding(request, store=store)
@@ -759,7 +759,7 @@ class SouffleCheckTests(unittest.TestCase):
         NOT unsupported."""
         request, store, _ = self._build_request(binding=(("$p", "person-1"),))
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[],
         ):
             result = check_derivation_binding(request, store=store)
@@ -786,10 +786,10 @@ class SouffleCheckTests(unittest.TestCase):
             return None
 
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[bad_candidate, good_candidate],
         ), patch(
-            "factpy.application.derivation_check_runtime._lookup_support_artifact",
+            "factgraph.application.derivation_check_runtime._lookup_support_artifact",
             side_effect=_lookup,
         ):
             result = check_derivation_binding(request, store=store)
@@ -824,10 +824,10 @@ class SouffleCheckTests(unittest.TestCase):
             return lower_artifact
 
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[higher_branch_cand, lower_branch_cand],
         ), patch(
-            "factpy.application.derivation_check_runtime._lookup_support_artifact",
+            "factgraph.application.derivation_check_runtime._lookup_support_artifact",
             side_effect=_lookup,
         ):
             result = check_derivation_binding(request, store=store)
@@ -843,13 +843,13 @@ class SouffleHelperUnitTests(unittest.TestCase):
     """Unit-level tests for Step 4.2 souffle helpers."""
 
     def test_parse_branch_index_basic(self) -> None:
-        from factpy.application.derivation_check_runtime import _parse_branch_index
+        from factgraph.application.derivation_check_runtime import _parse_branch_index
 
         self.assertEqual(_parse_branch_index("b0.a1:Person:exists"), 0)
         self.assertEqual(_parse_branch_index("b12.a3:eq"), 12)
 
     def test_parse_branch_index_returns_none_on_garbage(self) -> None:
-        from factpy.application.derivation_check_runtime import _parse_branch_index
+        from factgraph.application.derivation_check_runtime import _parse_branch_index
 
         self.assertIsNone(_parse_branch_index(""))
         self.assertIsNone(_parse_branch_index("not-a-key"))
@@ -862,7 +862,7 @@ class SouffleHelperUnitTests(unittest.TestCase):
 
     def test_derive_branch_index_returns_none_when_inconsistent(self) -> None:
         """Defensive fallback: if pred_witnesses span multiple branches, return None."""
-        from factpy.application.derivation_check_runtime import (
+        from factgraph.application.derivation_check_runtime import (
             _derive_branch_index_from_artifact,
         )
 
@@ -873,7 +873,7 @@ class SouffleHelperUnitTests(unittest.TestCase):
         self.assertIsNone(_derive_branch_index_from_artifact(artifact))
 
     def test_derive_branch_index_from_pred_atom_keys(self) -> None:
-        from factpy.application.derivation_check_runtime import (
+        from factgraph.application.derivation_check_runtime import (
             _derive_branch_index_from_artifact,
         )
 
@@ -904,7 +904,7 @@ class PrecheckHeadVarNormalizationTests(unittest.TestCase):
             engine="problog",
         )
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[],
         ):
             result = check_derivation_binding(request, store=store)
@@ -943,7 +943,7 @@ def _make_provenance_candidate(
     terms: list[Any] | None = None,
 ) -> Any:
     """Step 4.3 fixture: minimal CandidateSet for ProbLog/PyReason path."""
-    from factpy.core.derivation.candidates import CandidateSet
+    from factgraph.core.derivation.candidates import CandidateSet
 
     support_kind = f"{engine}_provenance_v1"
     digest = support_digest or "sha256:" + ("c" * 64)
@@ -971,7 +971,7 @@ def _make_provenance_envelope(
     payload: dict[str, Any] | None = None,
 ) -> Any:
     """Step 4.3 fixture: minimal ProvenanceEnvelope."""
-    from factpy.core.store._support import ProvenanceEnvelope
+    from factgraph.core.store._support import ProvenanceEnvelope
 
     return ProvenanceEnvelope(
         candidate_id=candidate_id,
@@ -1018,10 +1018,10 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
                 )
                 envelope_payload = _make_provenance_envelope(engine=engine)
                 with patch(
-                    "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+                    "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
                     return_value=[candidate],
                 ), patch(
-                    "factpy.application.derivation_check_runtime._lookup_provenance_envelope",
+                    "factgraph.application.derivation_check_runtime._lookup_provenance_envelope",
                     return_value=envelope_payload,
                 ):
                     result = check_derivation_binding(request, store=store)
@@ -1047,10 +1047,10 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
         )
         envelope_payload = _make_provenance_envelope(engine="problog")
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[candidate],
         ), patch(
-            "factpy.application.derivation_check_runtime._lookup_provenance_envelope",
+            "factgraph.application.derivation_check_runtime._lookup_provenance_envelope",
             return_value=envelope_payload,
         ):
             result = check_derivation_binding(request, store=store)
@@ -1065,7 +1065,7 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
             engine="problog", binding=(("$p", "person-1"),)
         )
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[],
         ):
             result = check_derivation_binding(request, store=store)
@@ -1097,10 +1097,10 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
             return None
 
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[bad_candidate, good_candidate],
         ), patch(
-            "factpy.application.derivation_check_runtime._lookup_provenance_envelope",
+            "factgraph.application.derivation_check_runtime._lookup_provenance_envelope",
             side_effect=_lookup,
         ):
             result = check_derivation_binding(request, store=store)
@@ -1127,10 +1127,10 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
         )
         envelope_payload = _make_provenance_envelope(engine="problog")
         with patch(
-            "factpy.application.derivation_check_runtime.evaluate_derivation_plans",
+            "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
             return_value=[candidate_b, candidate_a],
         ), patch(
-            "factpy.application.derivation_check_runtime._lookup_provenance_envelope",
+            "factgraph.application.derivation_check_runtime._lookup_provenance_envelope",
             return_value=envelope_payload,
         ):
             result = check_derivation_binding(request, store=store)
@@ -1146,7 +1146,7 @@ class ProvenanceExtractionUnitTests(unittest.TestCase):
     """Step 4.3 helper unit tests: term-value extraction + head_var alignment."""
 
     def test_extract_term_value_from_dict_entity_ref(self) -> None:
-        from factpy.application.derivation_check_runtime import _extract_term_value
+        from factgraph.application.derivation_check_runtime import _extract_term_value
 
         self.assertEqual(
             _extract_term_value({"kind": "entity_ref", "value": "person-1"}),
@@ -1154,7 +1154,7 @@ class ProvenanceExtractionUnitTests(unittest.TestCase):
         )
 
     def test_extract_term_value_from_dict_literal(self) -> None:
-        from factpy.application.derivation_check_runtime import _extract_term_value
+        from factgraph.application.derivation_check_runtime import _extract_term_value
 
         self.assertEqual(
             _extract_term_value({"kind": "literal", "tag": "string", "value": "hello"}),
@@ -1166,13 +1166,13 @@ class ProvenanceExtractionUnitTests(unittest.TestCase):
         )
 
     def test_extract_term_value_from_tuple(self) -> None:
-        from factpy.application.derivation_check_runtime import _extract_term_value
+        from factgraph.application.derivation_check_runtime import _extract_term_value
 
         self.assertEqual(_extract_term_value(("string", "hello")), "hello")
         self.assertEqual(_extract_term_value(("int", 42)), 42)
 
     def test_extract_term_value_marks_candidate_ref_unrepresentable(self) -> None:
-        from factpy.application.derivation_check_runtime import (
+        from factgraph.application.derivation_check_runtime import (
             _extract_term_value,
             _UNREPRESENTABLE_TERM,
         )
@@ -1183,7 +1183,7 @@ class ProvenanceExtractionUnitTests(unittest.TestCase):
         )
 
     def test_extract_head_var_binding_aligns_by_position(self) -> None:
-        from factpy.application.derivation_check_runtime import _extract_head_var_binding
+        from factgraph.application.derivation_check_runtime import _extract_head_var_binding
 
         candidate = _make_provenance_candidate(
             engine="problog",
@@ -1202,7 +1202,7 @@ class ProvenanceExtractionUnitTests(unittest.TestCase):
         self.assertNotIn("age_role", binding)
 
     def test_extract_head_var_binding_skips_candidate_ref_term(self) -> None:
-        from factpy.application.derivation_check_runtime import _extract_head_var_binding
+        from factgraph.application.derivation_check_runtime import _extract_head_var_binding
 
         candidate = _make_provenance_candidate(
             engine="problog",
@@ -1220,7 +1220,7 @@ class ProvenanceExtractionUnitTests(unittest.TestCase):
         self.assertNotIn("$p", binding)
 
     def test_extract_head_var_binding_returns_empty_on_shape_mismatch(self) -> None:
-        from factpy.application.derivation_check_runtime import _extract_head_var_binding
+        from factgraph.application.derivation_check_runtime import _extract_head_var_binding
 
         # 2 head_vars, only 1 term → mismatch
         candidate = _make_provenance_candidate(

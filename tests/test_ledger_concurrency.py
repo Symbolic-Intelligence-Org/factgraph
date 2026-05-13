@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from factpy.core.store.ledger import Claim, Ledger
+from factgraph.core.store.ledger import Claim, Ledger
 
 
 def _claim(*, asrt_id: str, e_ref: str) -> Claim:

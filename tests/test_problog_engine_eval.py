@@ -6,17 +6,17 @@ import unittest
 from dataclasses import dataclass
 from unittest.mock import patch
 
-import factpy.adapters.problog  # noqa: F401
-from factpy.adapters.problog.engine_eval import evaluate_problog
-from factpy.adapters.problog.rule_ext import ProbLogRuleExt
-from factpy.core.store._support import PROBLOG_PROVENANCE_KIND
-from factpy.core.store.runtime import get_engine_evaluator
-from factpy.core.store.types import EngineExtBase
-from factpy.core.evidence.write_protocol import set_field
-from factpy.sdk.dsl import vars as sdk_vars
-from factpy.sdk.dsl import Inference, Pred
-from factpy.sdk.schema import Entity, Field, Identity
-from factpy.sdk.store import SDKStore
+import factgraph.adapters.problog  # noqa: F401
+from factgraph.adapters.problog.engine_eval import evaluate_problog
+from factgraph.adapters.problog.rule_ext import ProbLogRuleExt
+from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
+from factgraph.core.store.runtime import get_engine_evaluator
+from factgraph.core.store.types import EngineExtBase
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.sdk.dsl import vars as sdk_vars
+from factgraph.sdk.dsl import Inference, Pred
+from factgraph.sdk.schema import Entity, Field, Identity
+from factgraph.sdk.store import SDKStore
 
 
 class User(Entity):
@@ -80,7 +80,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         evaluator = get_engine_evaluator("problog")
         self.assertIs(evaluator, evaluate_problog)
 
-    @patch("factpy.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_default_timeout_used_when_engine_options_missing(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
@@ -93,7 +93,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         self.assertEqual(candidates[0].support_kind, PROBLOG_PROVENANCE_KIND)
         self.assertNotEqual(candidates[0].support_digest, f"sha256:{'0' * 64}")
 
-    @patch("factpy.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_engine_options_timeout_override_default(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
@@ -137,7 +137,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         self.assertIn("ProbLog engine_ext must be ProbLogRuleExt", str(ctx.exception))
 
-    @patch("factpy.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_problog_rule_ext_is_accepted_and_drives_export(self, mock_run) -> None:
         sdk = self._make_sdk()
         seen: dict[str, str] = {}
@@ -156,7 +156,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.5::rule_body_0", seen["program"])
 
-    @patch("factpy.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_legacy_body_confidences_are_bridged_to_engine_ext(self, mock_run) -> None:
         sdk = self._make_sdk()
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
@@ -185,7 +185,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         self.assertIn("Conflicting ProbLog branch probabilities", str(ctx.exception))
 
-    @patch("factpy.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_matching_body_confidences_and_engine_ext_are_allowed(self, mock_run) -> None:
         sdk = self._make_sdk()
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]

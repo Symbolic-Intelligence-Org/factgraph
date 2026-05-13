@@ -8,8 +8,8 @@ import unittest
 from typing import Any
 from unittest.mock import patch
 
-import factpy.application.why_not_runtime as why_not_runtime
-from factpy.application import (
+import factgraph.application.why_not_runtime as why_not_runtime
+from factgraph.application import (
     WhyNotRuntimeError,
     build_schema_index,
     check_why_not_universe,
@@ -17,7 +17,7 @@ from factpy.application import (
     field_predicate,
     resolve_selector,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     DiagnoseAtomLocator,
@@ -27,16 +27,16 @@ from factpy.application.protocol import (
     WarningDTO,
     WhyNotUniverseRequest,
 )
-from factpy.core.derivation.candidates import CandidateSet
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.rules.rule_ir import RuleRegistry, RuleSpec
-from factpy.core.store import Store
-from factpy.core.store._support import (
+from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
+from factgraph.core.store import Store
+from factgraph.core.store._support import (
     SupportArtifact,
     compute_support_digest,
     normalize_binding_items,
 )
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Person(Entity):
@@ -225,7 +225,7 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
             engine="native",
         )
 
-        with patch("factpy.application.why_not_runtime.evaluate_native_where") as mocked:
+        with patch("factgraph.application.why_not_runtime.evaluate_native_where") as mocked:
             result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "completed")
@@ -246,7 +246,7 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
             engine="native",
         )
 
-        with patch("factpy.application.why_not_runtime.evaluate_native_where") as mocked:
+        with patch("factgraph.application.why_not_runtime.evaluate_native_where") as mocked:
             result = check_why_not_universe(request, store=store, registry=None)
 
         self.assertEqual(result.status, "completed")
@@ -479,11 +479,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "factpy.application.why_not_runtime.evaluate_native_where",
+                "factgraph.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "factpy.application.why_not_runtime.diagnose_derivation_binding",
+                "factgraph.application.why_not_runtime.diagnose_derivation_binding",
                 side_effect=_fake_diagnose,
             ),
         ):
@@ -508,11 +508,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "factpy.application.why_not_runtime.evaluate_native_where",
+                "factgraph.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "factpy.application.why_not_runtime.diagnose_derivation_binding",
+                "factgraph.application.why_not_runtime.diagnose_derivation_binding",
                 return_value=_diagnose_no_candidate(binding, warnings=(warning,)),
             ),
         ):
@@ -537,11 +537,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "factpy.application.why_not_runtime.evaluate_native_where",
+                "factgraph.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "factpy.application.why_not_runtime.diagnose_derivation_binding",
+                "factgraph.application.why_not_runtime.diagnose_derivation_binding",
                 return_value=_diagnose_unsupported(binding, errors=(error,)),
             ),
         ):
@@ -576,11 +576,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "factpy.application.why_not_runtime.evaluate_native_where",
+                "factgraph.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "factpy.application.why_not_runtime.diagnose_derivation_binding",
+                "factgraph.application.why_not_runtime.diagnose_derivation_binding",
                 return_value=passed,
             ),
             self.assertRaises(WhyNotRuntimeError) as raised,
@@ -610,11 +610,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "factpy.application.why_not_runtime.evaluate_native_where",
+                "factgraph.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "factpy.application.why_not_runtime.diagnose_derivation_binding",
+                "factgraph.application.why_not_runtime.diagnose_derivation_binding",
                 return_value=invalid,
             ),
             self.assertRaises(WhyNotRuntimeError) as raised,
@@ -649,11 +649,11 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
 
         with (
             patch(
-                "factpy.application.why_not_runtime.evaluate_native_where",
+                "factgraph.application.why_not_runtime.evaluate_native_where",
                 return_value=SimpleNamespace(bindings=()),
             ),
             patch(
-                "factpy.application.why_not_runtime.diagnose_derivation_binding",
+                "factgraph.application.why_not_runtime.diagnose_derivation_binding",
                 return_value=diagnose_result,
             ),
         ):
@@ -686,10 +686,10 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
                 )
 
                 with patch(
-                    "factpy.application.why_not_runtime.evaluate_derivation_plans",
+                    "factgraph.application.why_not_runtime.evaluate_derivation_plans",
                     return_value=(_candidate(),),
                 ), patch(
-                    "factpy.application.why_not_runtime.diagnose_derivation_binding",
+                    "factgraph.application.why_not_runtime.diagnose_derivation_binding",
                     side_effect=lambda diagnose_request, **_kwargs: _diagnose_no_candidate(
                         diagnose_request.binding
                     ),
@@ -723,7 +723,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
             engine="problog",
         )
 
-        with patch("factpy.application.why_not_runtime.evaluate_derivation_plans") as mocked:
+        with patch("factgraph.application.why_not_runtime.evaluate_derivation_plans") as mocked:
             result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "unsupported")
@@ -740,7 +740,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         )
 
         with patch(
-            "factpy.application.why_not_runtime.evaluate_derivation_plans",
+            "factgraph.application.why_not_runtime.evaluate_derivation_plans",
             return_value=(
                 _candidate(
                     support_kind="pyreason_provenance_v1",
@@ -763,10 +763,10 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         )
 
         with patch(
-            "factpy.application.why_not_runtime.evaluate_derivation_plans",
+            "factgraph.application.why_not_runtime.evaluate_derivation_plans",
             return_value=(_candidate(terms=[{"kind": "literal_without_value"}]),),
         ), patch(
-            "factpy.application.why_not_runtime.diagnose_derivation_binding",
+            "factgraph.application.why_not_runtime.diagnose_derivation_binding",
         ) as diagnose:
             result = check_why_not_universe(request, store=store)
 
@@ -786,10 +786,10 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         )
 
         with patch(
-            "factpy.application.why_not_runtime.evaluate_derivation_plans",
+            "factgraph.application.why_not_runtime.evaluate_derivation_plans",
             return_value=(),
         ), patch(
-            "factpy.application.why_not_runtime.diagnose_derivation_binding",
+            "factgraph.application.why_not_runtime.diagnose_derivation_binding",
             return_value=_diagnose_unsupported(red_binding, errors=(error,)),
         ):
             result = check_why_not_universe(request, store=store)
@@ -828,7 +828,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         )
 
         with patch(
-            "factpy.application.why_not_runtime.evaluate_derivation_plans",
+            "factgraph.application.why_not_runtime.evaluate_derivation_plans",
             return_value=(
                 _candidate(
                     support_digest=support_digest,
@@ -837,7 +837,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
                 ),
             ),
         ), patch(
-            "factpy.application.why_not_runtime.diagnose_derivation_binding",
+            "factgraph.application.why_not_runtime.diagnose_derivation_binding",
             side_effect=lambda diagnose_request, **_kwargs: _diagnose_no_candidate(
                 diagnose_request.binding
             ),
@@ -863,7 +863,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         )
 
         with patch(
-            "factpy.application.why_not_runtime.evaluate_derivation_plans",
+            "factgraph.application.why_not_runtime.evaluate_derivation_plans",
             return_value=(
                 _candidate(
                     support_digest="sha256:" + ("f" * 64),

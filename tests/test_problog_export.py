@@ -6,11 +6,11 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from factpy.adapters.problog.problog_export import ProbLogExportError, export_problog
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.store.ledger import AnnotationRow
-from factpy.sdk.schema import Entity, Field, Identity
-from factpy.sdk.store import SDKStore
+from factgraph.adapters.problog.problog_export import ProbLogExportError, export_problog
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.store.ledger import AnnotationRow
+from factgraph.sdk.schema import Entity, Field, Identity
+from factgraph.sdk.store import SDKStore
 
 
 class User(Entity):
@@ -119,7 +119,7 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
     """ProbLog export reads shared/semantic/probability annotations."""
 
     def test_export_reads_shared_semantic_probability(self) -> None:
-        from factpy.adapters.problog.problog_export import _claim_probability
+        from factgraph.adapters.problog.problog_export import _claim_probability
 
         class Item(Entity):
             item_id: str = Identity(primary_key=True)
@@ -155,7 +155,7 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
 
     def test_claim_probability_ignores_meta_confidence(self) -> None:
         """Generic meta.confidence is no longer a ProbLog probability fallback."""
-        from factpy.adapters.problog.problog_export import _claim_probability
+        from factgraph.adapters.problog.problog_export import _claim_probability
 
         class Item(Entity):
             item_id: str = Identity(primary_key=True)
@@ -193,7 +193,7 @@ class ProbLogImportTests(unittest.TestCase):
 
     def test_split_result_line_colon_in_goal(self) -> None:
         """F-PL-2: rsplit at rightmost colon is safe because rhs must be float."""
-        from factpy.adapters.problog.problog_import import _split_result_line
+        from factgraph.adapters.problog.problog_import import _split_result_line
 
         # Tab-separated (primary path): always safe
         result = _split_result_line("foo:bar(x)\t0.75")
@@ -218,8 +218,8 @@ class ProbLogImportTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import MagicMock
 
-        from factpy.adapters.problog.accept import persist_problog_annotations
-        from factpy.core.store.ledger import Ledger
+        from factgraph.adapters.problog.accept import persist_problog_annotations
+        from factgraph.core.store.ledger import Ledger
 
         ledger = MagicMock(spec=Ledger)
         store = SimpleNamespace(

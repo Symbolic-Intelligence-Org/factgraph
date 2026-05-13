@@ -6,11 +6,11 @@ import inspect
 import unittest
 from unittest.mock import patch
 
-from factpy.application.capability_helpers import CapabilityHelperError, OriginPackageError
-from factpy.application.protocol import DiagnoseResult
-from factpy.core.rules.rule_ir import RuleCompileError, RuleRegistry
-from factpy.sdk import Inference, Entity, Field, Identity, Pred, Rule, SDKDSLError, SDKStore, SDKStoreError, vars
-from factpy.sdk.store import _compiled_derivation_plan_to_application
+from factgraph.application.capability_helpers import CapabilityHelperError, OriginPackageError
+from factgraph.application.protocol import DiagnoseResult
+from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
+from factgraph.sdk import Inference, Entity, Field, Identity, Pred, Rule, SDKDSLError, SDKStore, SDKStoreError, vars
+from factgraph.sdk.store import _compiled_derivation_plan_to_application
 
 
 class Person(Entity):
@@ -100,7 +100,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         )
 
         with patch(
-            "factpy.sdk.shells.diagnose.diagnose_derivation_binding",
+            "factgraph.sdk.shells.diagnose.diagnose_derivation_binding",
             return_value=expected,
         ):
             result = sdk.diagnose(_age_derivation(), {"$age": 30})
@@ -188,7 +188,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
     def test_capability_helper_error_remaps_to_sdk_store_error_with_cause(self) -> None:
         sdk = _build_sdk()
 
-        with patch("factpy.sdk.shells.diagnose.build_diagnose_request") as mock_builder:
+        with patch("factgraph.sdk.shells.diagnose.build_diagnose_request") as mock_builder:
             mock_builder.side_effect = CapabilityHelperError("bad helper input")
             with self.assertRaises(SDKStoreError) as ctx:
                 sdk.diagnose(_age_derivation(), {"$age": 30})
@@ -199,7 +199,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
     def test_origin_package_error_remaps_to_sdk_store_error_with_cause(self) -> None:
         sdk = _build_sdk()
 
-        with patch("factpy.sdk.shells.diagnose.build_diagnose_request") as mock_builder:
+        with patch("factgraph.sdk.shells.diagnose.build_diagnose_request") as mock_builder:
             mock_builder.side_effect = OriginPackageError("sdk object leaked")
             with self.assertRaises(SDKStoreError) as ctx:
                 sdk.diagnose(_age_derivation(), {"$age": 30})
@@ -210,8 +210,8 @@ class SDKDiagnoseContractTests(unittest.TestCase):
     def test_engine_is_passed_to_builder(self) -> None:
         sdk = _build_sdk()
 
-        with patch("factpy.sdk.shells.diagnose.build_diagnose_request") as mock_builder, patch(
-            "factpy.sdk.shells.diagnose.diagnose_derivation_binding"
+        with patch("factgraph.sdk.shells.diagnose.build_diagnose_request") as mock_builder, patch(
+            "factgraph.sdk.shells.diagnose.diagnose_derivation_binding"
         ) as mock_runtime:
             mock_builder.side_effect = RuntimeError("stop after observing engine")
             with self.assertRaises(RuntimeError):
@@ -227,7 +227,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         expected = object()
 
         with patch.object(sdk, "_resolve_runtime_registry", return_value=expected) as mock_resolve, patch(
-            "factpy.sdk.shells.diagnose.diagnose_derivation_binding"
+            "factgraph.sdk.shells.diagnose.diagnose_derivation_binding"
         ) as mock_runtime:
             mock_runtime.return_value = DiagnoseResult(
                 status="failed",
@@ -251,7 +251,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "factpy.sdk.shells.diagnose._compiled_derivation_plan_to_application",
+            "factgraph.sdk.shells.diagnose._compiled_derivation_plan_to_application",
             side_effect=ValueError(
                 "Conflicting engine_ext between explicit derivation and compiled plan"
             ),
@@ -298,8 +298,8 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         self.assertIsInstance(ctx.exception.__cause__, SDKStoreError)
         self.assertIn("malformed dep payload", str(ctx.exception))
 
-    def test_diagnose_result_not_exported_from_factpy_sdk_all(self) -> None:
-        import factpy.sdk as sdk_pkg
+    def test_diagnose_result_not_exported_from_factgraph_sdk_all(self) -> None:
+        import factgraph.sdk as sdk_pkg
 
         self.assertNotIn("DiagnoseResult", sdk_pkg.__all__)
         self.assertFalse(hasattr(sdk_pkg, "DiagnoseResult"))
@@ -309,8 +309,8 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         sdk = _build_sdk()
         person_ref = _seed_person(sdk, name="alice", age=30, region="us")
 
-        with patch("factpy.sdk.shells.check.sdk_check") as mock_check, patch(
-            "factpy.sdk.shells.diagnose.diagnose_derivation_binding"
+        with patch("factgraph.sdk.shells.check.sdk_check") as mock_check, patch(
+            "factgraph.sdk.shells.diagnose.diagnose_derivation_binding"
         ) as mock_runtime:
             mock_runtime.return_value = DiagnoseResult(
                 status="failed",
@@ -325,14 +325,14 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         mock_check.assert_not_called()
 
     def test_q1_sibling_diagnose_module_does_not_import_sdk_check(self) -> None:
-        """§5.1 + Q1 Sibling static check: factpy.sdk.shells.diagnose source has no sdk_check reference."""
-        import factpy.sdk.shells.diagnose as diag_module
+        """§5.1 + Q1 Sibling static check: factgraph.sdk.shells.diagnose source has no sdk_check reference."""
+        import factgraph.sdk.shells.diagnose as diag_module
 
         source = inspect.getsource(diag_module)
         self.assertNotIn("sdk_check", source)
         self.assertNotIn("from .check", source)
-        self.assertNotIn("from factpy.sdk.check", source)
-        self.assertNotIn("from factpy.sdk.shells.check", source)
+        self.assertNotIn("from factgraph.sdk.check", source)
+        self.assertNotIn("from factgraph.sdk.shells.check", source)
 
 
 if __name__ == "__main__":

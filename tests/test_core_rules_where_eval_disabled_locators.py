@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.core.rules.where_eval import (
+from factgraph.core.rules.where_eval import (
     WhereAddedCondition,
     WhereLiteralReplacement,
     WhereValidationError,
     evaluate_where,
 )
-from factpy.core.rules.where_ast_validate import (
+from factgraph.core.rules.where_ast_validate import (
     WhereASTValidationError,
     atom_binds_new_variables,
 )

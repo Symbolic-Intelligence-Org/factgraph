@@ -1,27 +1,27 @@
-"""Native runtime tests for `factpy.application.diagnose_runtime` (§8 Step 2)."""
+"""Native runtime tests for `factgraph.application.diagnose_runtime` (§8 Step 2)."""
 from __future__ import annotations
 
 import unittest
 from typing import Any
 from unittest.mock import patch
 
-from factpy.application import (
+from factgraph.application import (
     build_schema_index,
     diagnose_derivation_binding,
     entity_info,
     field_predicate,
     resolve_selector,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     DiagnoseRequest,
     EntitySelector,
 )
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.rules.rule_ir import RuleRegistry, RuleSpec
-from factpy.core.store import Store
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
+from factgraph.core.store import Store
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Person(Entity):
@@ -252,7 +252,7 @@ class NativeAtomLocalizationTests(unittest.TestCase):
         from unittest.mock import patch
 
         with patch(
-            "factpy.application.diagnose_runtime._localize_failed_atom",
+            "factgraph.application.diagnose_runtime._localize_failed_atom",
             return_value=None,
         ):
             result = diagnose_derivation_binding(request, store=store)
@@ -331,7 +331,7 @@ class NativeRuleRefHappyPathTests(unittest.TestCase):
 
 class NativeAtomExtensionPrimitiveTests(unittest.TestCase):
     def test_extend_env_with_atom_enumerates_new_variable(self) -> None:
-        from factpy.application.diagnose_runtime import _extend_env_with_atom
+        from factgraph.application.diagnose_runtime import _extend_env_with_atom
 
         store, index = _build_store()
         encoded = _seed_person(store, index, "alice", 25, "us")
@@ -349,7 +349,7 @@ class NativeAtomExtensionPrimitiveTests(unittest.TestCase):
         self.assertEqual(extensions, [{"$p": encoded, "$age": 25}])
 
     def test_extend_env_with_atom_returns_empty_on_bound_mismatch(self) -> None:
-        from factpy.application.diagnose_runtime import _extend_env_with_atom
+        from factgraph.application.diagnose_runtime import _extend_env_with_atom
 
         store, index = _build_store()
         encoded = _seed_person(store, index, "alice", 25, "us")
@@ -381,7 +381,7 @@ class DiagnoseSevenFourAntiRegressionTests(unittest.TestCase):
         )
 
         with patch(
-            "factpy.core.store._support_capture._atom_satisfies",
+            "factgraph.core.store._support_capture._atom_satisfies",
             side_effect=AssertionError("_atom_satisfies must not be used by Diagnose localization"),
         ):
             result = diagnose_derivation_binding(request, store=store)

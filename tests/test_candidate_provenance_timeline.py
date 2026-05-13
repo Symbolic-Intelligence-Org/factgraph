@@ -9,7 +9,7 @@ import unittest
 from dataclasses import dataclass
 from typing import Any
 
-from factpy.core.store._candidate_provenance_timeline import (
+from factgraph.core.store._candidate_provenance_timeline import (
     CandidateProvenanceTimeline,
     TimelineChain,
     TimelineEvent,

@@ -9,13 +9,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from factpy.authoring.registry_fs import FileAuthoringRegistry
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.schema.schema_ir import schema_digest
-from factpy.sdk import Branch, FactGraph, Inference, Pred, Rule, vars as sdk_vars
-from factpy.sdk.compile import compile_schema_from_classes
-from factpy.sdk.schema import Entity, Field, Identity
-from factpy.sdk.store import SDKStoreError
+from factgraph.authoring.registry_fs import FileAuthoringRegistry
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.schema.schema_ir import schema_digest
+from factgraph.sdk import Branch, FactGraph, Inference, Pred, Rule, vars as sdk_vars
+from factgraph.sdk.compile import compile_schema_from_classes
+from factgraph.sdk.schema import Entity, Field, Identity
+from factgraph.sdk.store import SDKStoreError
 
 
 def _user_class(*, extra_fields: dict[str, Field] | None = None) -> type[Entity]:
@@ -161,11 +161,11 @@ def _seed_fg(*, registry_root: Path | None = None, path: Path | None = None):
 
 
 def _schema_add_result_class():
-    return getattr(importlib.import_module("factpy.sdk"), "SchemaAddResult")
+    return getattr(importlib.import_module("factgraph.sdk"), "SchemaAddResult")
 
 
 def _schema_mutation_runtime():
-    return importlib.import_module("factpy.application.schema_mutation_runtime")
+    return importlib.import_module("factgraph.application.schema_mutation_runtime")
 
 
 def _read_manifest(workspace: Path) -> dict[str, object]:

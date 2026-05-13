@@ -11,7 +11,7 @@ This file is the §7 G1.1 deliverable for blueprint
 
 All `ReadPolicy` imports are dynamic (inside test bodies) so file collection
 does not depend on the not-yet-implemented class. `ViewSpec` is never
-imported at top level either, since `from factpy.core.store.types import
+imported at top level either, since `from factgraph.core.store.types import
 ViewSpec` will raise `ImportError` post-migration.
 
 Error-message assertions are at the **semantic** level (`assertIn` on
@@ -23,14 +23,14 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.sdk import (
+from factgraph.sdk import (
     Entity,
     Field,
     Identity,
     SDKStore,
     SDKStoreError,
 )
-from factpy.sdk.store import FrozenAssertionView
+from factgraph.sdk.store import FrozenAssertionView
 
 
 class User(Entity):
@@ -61,13 +61,13 @@ class AbsenceInvariantTests(unittest.TestCase):
     depend on the still-importable pre-migration class.
     """
 
-    def test_viewspec_not_importable_from_factpy_sdk(self) -> None:
+    def test_viewspec_not_importable_from_factgraph_sdk(self) -> None:
         with self.assertRaises(ImportError):
-            from factpy.sdk import ViewSpec  # noqa: F401
+            from factgraph.sdk import ViewSpec  # noqa: F401
 
     def test_viewspec_not_importable_from_core_store_types(self) -> None:
         with self.assertRaises(ImportError):
-            from factpy.core.store.types import ViewSpec  # noqa: F401
+            from factgraph.core.store.types import ViewSpec  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -78,12 +78,12 @@ class AbsenceInvariantTests(unittest.TestCase):
 class ReadPolicyDTOContractTests(unittest.TestCase):
     """`ReadPolicy` is a frozen dataclass with 3 fields and locked validation.
 
-    All tests dynamically import `ReadPolicy` from `factpy.sdk` so the file
+    All tests dynamically import `ReadPolicy` from `factgraph.sdk` so the file
     collects cleanly while `ReadPolicy` does not yet exist.
     """
 
     def test_default_construction_yields_locked_defaults(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         policy = ReadPolicy()
         self.assertEqual(policy.respect_revocations, True)
@@ -91,46 +91,46 @@ class ReadPolicyDTOContractTests(unittest.TestCase):
         self.assertIsNone(policy.prefer_source)
 
     def test_respect_revocations_must_be_bool_not_int_one(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         with self.assertRaises(ValueError) as exc:
             ReadPolicy(respect_revocations=1)  # type: ignore[arg-type]
         self.assertIn("respect_revocations", str(exc.exception))
 
     def test_respect_revocations_int_zero_rejected(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         with self.assertRaises(ValueError):
             ReadPolicy(respect_revocations=0)  # type: ignore[arg-type]
 
     def test_confidence_strategy_rejects_unknown_literal(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         with self.assertRaises(ValueError) as exc:
             ReadPolicy(confidence_strategy="bogus")  # type: ignore[arg-type]
         self.assertIn("confidence_strategy", str(exc.exception))
 
     def test_confidence_strategy_accepts_each_literal(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         for strategy in ("max", "mean", "median", "prefer_source"):
             ReadPolicy(confidence_strategy=strategy)  # type: ignore[arg-type]
 
     def test_prefer_source_none_and_non_empty_string_accepted(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         ReadPolicy(prefer_source=None)
         ReadPolicy(prefer_source="seed")
 
     def test_prefer_source_empty_string_rejected(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         with self.assertRaises(ValueError) as exc:
             ReadPolicy(prefer_source="")
         self.assertIn("prefer_source", str(exc.exception))
 
     def test_prefer_source_rejects_non_string(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         with self.assertRaises(ValueError):
             ReadPolicy(prefer_source=42)  # type: ignore[arg-type]
@@ -138,14 +138,14 @@ class ReadPolicyDTOContractTests(unittest.TestCase):
     def test_frozen_dataclass_rejects_setattr(self) -> None:
         from dataclasses import FrozenInstanceError
 
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         policy = ReadPolicy()
         with self.assertRaises(FrozenInstanceError):
             policy.respect_revocations = False  # type: ignore[misc]
 
     def test_equality_and_hashable(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         a = ReadPolicy(confidence_strategy="max", prefer_source="seed")
         b = ReadPolicy(confidence_strategy="max", prefer_source="seed")
@@ -170,7 +170,7 @@ class PolicyAcceptanceFindTests(unittest.TestCase):
     """
 
     def test_find_accepts_readpolicy_attaches_confidence(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         sdk, _ = _seed_store()
         rows = sdk.read.find(User, policy=ReadPolicy(confidence_strategy="max"))
@@ -270,7 +270,7 @@ class EvaluateRejectsPolicyTests(unittest.TestCase):
     """
 
     def test_evaluate_rejects_policy_kwarg(self) -> None:
-        from factpy.sdk import ReadPolicy
+        from factgraph.sdk import ReadPolicy
 
         sdk, _ = _seed_store()
         with self.assertRaises(SDKStoreError) as exc:

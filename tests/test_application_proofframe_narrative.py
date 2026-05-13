@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import render_proof_frame_narrative
-from factpy.application.protocol import (
+from factgraph.application import render_proof_frame_narrative
+from factgraph.application.protocol import (
     EvaluationOverlay,
     FactRemoveAction,
     FactValueOverride,
@@ -101,6 +101,6 @@ class ProofFrameNarrativeTests(unittest.TestCase):
         )
 
     def test_application_package_exports_renderer(self) -> None:
-        from factpy import application
+        from factgraph import application
 
         self.assertIs(application.render_proof_frame_narrative, render_proof_frame_narrative)

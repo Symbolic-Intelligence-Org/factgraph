@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application.protocol.proofframe import (
+from factgraph.application.protocol.proofframe import (
     ProofFrameAtomVerdict,
     ProofFrameRecheckResult,
 )
-from factpy.application.walker import (
+from factgraph.application.walker import (
     FrozenTupleView,
     ProofFrameView,
     WalkerFrozenError,
@@ -112,7 +112,7 @@ class ProofFrameViewTests(unittest.TestCase):
         self.assertNotEqual(a, c)
 
     def test_phase_4_type_reexports_from_application_package(self) -> None:
-        from factpy.application import ProofFrameView as AppProofFrameView
+        from factgraph.application import ProofFrameView as AppProofFrameView
 
         self.assertIs(AppProofFrameView, ProofFrameView)
 

@@ -6,8 +6,8 @@ import dataclasses
 import unittest
 from dataclasses import FrozenInstanceError
 
-from factpy.application import protocol as protocol_pkg
-from factpy.application.protocol import (
+from factgraph.application import protocol as protocol_pkg
+from factgraph.application.protocol import (
     EvaluationOverlay,
     FactValueOverride,
     ProofFrameAtomVerdict,
@@ -16,8 +16,8 @@ from factpy.application.protocol import (
     ProtocolShapeError,
     aggregate_proof_frame_status,
 )
-from factpy.application.protocol import proofframe as proofframe_protocol
-from factpy.core.store._support import PredWitness, SupportArtifact
+from factgraph.application.protocol import proofframe as proofframe_protocol
+from factgraph.core.store._support import PredWitness, SupportArtifact
 
 
 def _artifact(**kwargs: object) -> SupportArtifact:

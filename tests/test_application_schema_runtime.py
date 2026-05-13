@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import (
+from factgraph.application import (
     SchemaResolutionError,
     build_schema_index,
     field_predicate,
     field_value_type,
     resolve_selector,
 )
-from factpy.application.protocol import EntitySelector
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.application.protocol import EntitySelector
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Country(Entity):

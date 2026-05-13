@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 import unittest
 
-from factpy.adapters.souffle.provenance import (
+from factgraph.adapters.souffle.provenance import (
     parse_souffle_proof_json,
     souffle_proof_tree_to_evidence_graph,
 )
-from factpy.audit import EDGE_SUPPORTS, LAYOUT_TREE, render_evidence_graph_html
-from factpy.core.store._support import SOUFFLE_WITNESS_KIND
+from factgraph.audit import EDGE_SUPPORTS, LAYOUT_TREE, render_evidence_graph_html
+from factgraph.core.store._support import SOUFFLE_WITNESS_KIND
 
 
 _PASSIVATION_JSON = r"""

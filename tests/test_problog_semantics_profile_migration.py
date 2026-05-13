@@ -6,14 +6,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import factpy.application as application  # noqa: F401
-from factpy.adapters.problog.rule_ext import ProbLogRuleExt, resolve_problog_engine_ext
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.semantics import SemanticsProfile
-from factpy.sdk.dsl import vars as sdk_vars
-from factpy.sdk.dsl import Inference, Pred
-from factpy.sdk.schema import Entity, Field, Identity
-from factpy.sdk.store import SDKStore
+import factgraph.application as application  # noqa: F401
+from factgraph.adapters.problog.rule_ext import ProbLogRuleExt, resolve_problog_engine_ext
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.semantics import SemanticsProfile
+from factgraph.sdk.dsl import vars as sdk_vars
+from factgraph.sdk.dsl import Inference, Pred
+from factgraph.sdk.schema import Entity, Field, Identity
+from factgraph.sdk.store import SDKStore
 
 
 class User(Entity):
@@ -198,7 +198,7 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
             ]
         )
 
-    @patch("factpy.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_core_store_evaluate_semantics_profile_drives_exported_probability(self, mock_run) -> None:
         sdk = self._make_sdk()
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
@@ -243,7 +243,7 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
 
 class ProbLogSemanticsProfileGuardTests(unittest.TestCase):
     def test_exporter_stays_profile_agnostic(self) -> None:
-        import factpy.adapters.problog.problog_export as problog_export
+        import factgraph.adapters.problog.problog_export as problog_export
 
         source = Path(problog_export.__file__).read_text(encoding="utf-8")
         self.assertNotIn("SemanticsProfile", source)

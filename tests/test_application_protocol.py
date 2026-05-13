@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     EntityReadRequest,
     EntityRef,
     EntitySelector,

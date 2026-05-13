@@ -20,19 +20,19 @@ import pathlib
 import unittest
 from importlib import import_module
 
-from factpy import sdk as factpy_sdk
-from factpy.sdk import SDKStore
+from factgraph import sdk as factgraph_sdk
+from factgraph.sdk import SDKStore
 
 
-G4_MODULES = ("factpy.sdk.shells.why_not",)
+G4_MODULES = ("factgraph.sdk.shells.why_not",)
 FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
-    "factpy.application.capability_helpers._binding",
+    "factgraph.application.capability_helpers._binding",
     "_reject_sdk_origin",
-    "from factpy.application.walker",
-    "import factpy.application.walker",
-    "from factpy.application.walker import",
-    "factpy.audit",
-    "factpy.core.rules.frontier",
+    "from factgraph.application.walker",
+    "import factgraph.application.walker",
+    "from factgraph.application.walker import",
+    "factgraph.audit",
+    "factgraph.core.rules.frontier",
 )
 
 
@@ -41,42 +41,42 @@ class SDKG4InvariantTests(unittest.TestCase):
 
     def test_sdk_all_unchanged_and_why_not_result_not_exported(self) -> None:
         """§5.3 lock: ``WhyNotUniverseResult`` is not re-exported from SDK."""
-        self.assertEqual(len(factpy_sdk.__all__), 41)
-        self.assertIn("SchemaAddResult", factpy_sdk.__all__)
-        self.assertIn("ReadPolicy", factpy_sdk.__all__)
-        self.assertIn("FactGraph", factpy_sdk.__all__)
-        self.assertIn("SemanticsProfile", factpy_sdk.__all__)
-        self.assertIn("ProbLogSemantics", factpy_sdk.__all__)
-        self.assertIn("PyReasonSemantics", factpy_sdk.__all__)
-        self.assertNotIn("WhyNotUniverseResult", factpy_sdk.__all__)
-        self.assertNotIn("why_not", factpy_sdk.__all__)
-        self.assertNotIn("sdk_why_not", factpy_sdk.__all__)
-        self.assertFalse(hasattr(factpy_sdk, "WhyNotUniverseResult"))
+        self.assertEqual(len(factgraph_sdk.__all__), 41)
+        self.assertIn("SchemaAddResult", factgraph_sdk.__all__)
+        self.assertIn("ReadPolicy", factgraph_sdk.__all__)
+        self.assertIn("FactGraph", factgraph_sdk.__all__)
+        self.assertIn("SemanticsProfile", factgraph_sdk.__all__)
+        self.assertIn("ProbLogSemantics", factgraph_sdk.__all__)
+        self.assertIn("PyReasonSemantics", factgraph_sdk.__all__)
+        self.assertNotIn("WhyNotUniverseResult", factgraph_sdk.__all__)
+        self.assertNotIn("why_not", factgraph_sdk.__all__)
+        self.assertNotIn("sdk_why_not", factgraph_sdk.__all__)
+        self.assertFalse(hasattr(factgraph_sdk, "WhyNotUniverseResult"))
 
     def test_sdk_store_why_not_is_instance_method(self) -> None:
         """§5.4 lock: ``why_not`` is an SDKStore instance method, not a free function.
 
         Post-G2 Phase 0 hygiene: the shell module lives at
-        ``factpy.sdk.shells.why_not``, not at ``factpy.sdk.why_not``.
-        ``factpy.sdk.why_not`` therefore should not exist either as a
+        ``factgraph.sdk.shells.why_not``, not at ``factgraph.sdk.why_not``.
+        ``factgraph.sdk.why_not`` therefore should not exist either as a
         callable free function or as a submodule attribute.
         """
         self.assertTrue(hasattr(SDKStore, "why_not"))
         self.assertTrue(callable(SDKStore.why_not))
-        self.assertFalse(hasattr(factpy_sdk, "why_not"))
+        self.assertFalse(hasattr(factgraph_sdk, "why_not"))
 
     def test_no_frontier_sdk_module_or_method_exists(self) -> None:
         """§5.4 lock: G4 ships no Frontier SDK method or module (flat or under shells/)."""
-        sdk_dir = pathlib.Path(factpy_sdk.__file__).parent
+        sdk_dir = pathlib.Path(factgraph_sdk.__file__).parent
         self.assertFalse((sdk_dir / "frontier.py").exists())
         self.assertFalse((sdk_dir / "shells" / "frontier.py").exists())
-        self.assertFalse(hasattr(factpy_sdk, "frontier"))
+        self.assertFalse(hasattr(factgraph_sdk, "frontier"))
         self.assertFalse(hasattr(SDKStore, "frontier"))
         self.assertFalse(hasattr(SDKStore, "frontier_view_facts"))
 
     def test_g4_modules_live_in_shells_subpackage(self) -> None:
-        """Retrofit per G2 §5.5 #P1 carve-out: ``why_not.py`` migrated into ``factpy/sdk/shells/``."""
-        sdk_dir = pathlib.Path(factpy_sdk.__file__).parent
+        """Retrofit per G2 §5.5 #P1 carve-out: ``why_not.py`` migrated into ``factgraph/sdk/shells/``."""
+        sdk_dir = pathlib.Path(factgraph_sdk.__file__).parent
         self.assertTrue((sdk_dir / "shells").is_dir())
         self.assertTrue((sdk_dir / "shells" / "__init__.py").is_file())
         self.assertTrue((sdk_dir / "shells" / "why_not.py").is_file())

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.core.evidence.write_protocol import WriteProtocolError
-from factpy.sdk import Entity, Field, Identity, SDKStore
-from factpy.sdk.errors import CardinalityError, SDKStoreError
+from factgraph.core.evidence.write_protocol import WriteProtocolError
+from factgraph.sdk import Entity, Field, Identity, SDKStore
+from factgraph.sdk.errors import CardinalityError, SDKStoreError
 
 
 class Country(Entity):

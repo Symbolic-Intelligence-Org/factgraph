@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from uuid import UUID
 
-from factpy.sdk import Entity, Field, Identity, SDKSchemaError, SDKStore, SDKStoreError
+from factgraph.sdk import Entity, Field, Identity, SDKSchemaError, SDKStore, SDKStoreError
 
 
 class User(Entity):

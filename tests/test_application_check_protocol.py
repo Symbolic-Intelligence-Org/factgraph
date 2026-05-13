@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     CheckRequest,
     CheckResult,
     CompiledDerivationPlan,
@@ -11,7 +11,7 @@ from factpy.application.protocol import (
     EvidenceEnvelope,
     ProtocolShapeError,
 )
-from factpy.core.store._support import (
+from factgraph.core.store._support import (
     ProvenanceEnvelope,
     SupportArtifact,
     provenance_envelope_from_dict,

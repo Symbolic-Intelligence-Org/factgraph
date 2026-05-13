@@ -7,17 +7,17 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-import factpy.application as application  # noqa: F401
-import factpy.adapters.pyreason  # noqa: F401
-from factpy.adapters.pyreason.rule_ext import PyReasonRuleExt, compile_pyreason_rule
-from factpy.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
-from factpy.adapters.pyreason.session import PyReasonSession
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.semantics import SemanticsProfile
-from factpy.sdk.dsl import vars as sdk_vars
-from factpy.sdk.dsl import Branch, Inference, Pred, Rule
-from factpy.sdk.schema import Entity, Field, Identity
-from factpy.sdk.store import SDKStore
+import factgraph.application as application  # noqa: F401
+import factgraph.adapters.pyreason  # noqa: F401
+from factgraph.adapters.pyreason.rule_ext import PyReasonRuleExt, compile_pyreason_rule
+from factgraph.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
+from factgraph.adapters.pyreason.session import PyReasonSession
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.semantics import SemanticsProfile
+from factgraph.sdk.dsl import vars as sdk_vars
+from factgraph.sdk.dsl import Branch, Inference, Pred, Rule
+from factgraph.sdk.schema import Entity, Field, Identity
+from factgraph.sdk.store import SDKStore
 
 
 class User(Entity):
@@ -28,7 +28,7 @@ class User(Entity):
 
 
 def _resolve_pyreason_engine_ext():
-    from factpy.adapters.pyreason import rule_ext
+    from factgraph.adapters.pyreason import rule_ext
 
     return getattr(rule_ext, "resolve_pyreason_engine_ext")
 
@@ -289,7 +289,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         self.assertEqual(profile.temporal_projection["mode"], "valid_time_boundaries")
         self.assertEqual(profile.temporal_projection["universe"], ["2026-01-01", "2026-12-31"])
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_fixed_timesteps_profile_drives_pyreason_run_config(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
         compiled = sdk._compile_derivation_input(_make_derivation())[0]
@@ -327,7 +327,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         self.assertIn("SemanticsProfile.temporal_projection.fixed_timesteps", message)
         self.assertIn("engine_options.timesteps", message)
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_valid_time_boundaries_map_valid_meta_to_active_steps(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
         compiled = sdk._compile_derivation_input(_make_derivation())[0]
@@ -353,7 +353,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         config = mock_run.call_args.kwargs["config"]
         self.assertEqual(config.timesteps, 5)
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_valid_time_boundaries_without_fact_times_uses_universe_only(self, mock_run) -> None:
         sdk = SDKStore([User])
         alice_ref = sdk.ref(User, user_id="Alice")
@@ -410,7 +410,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
 
 
 class PyReasonSemanticsProfileCoreEvaluateTests(unittest.TestCase):
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_core_store_evaluate_semantics_profile_drives_generated_rule(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
         with sdk_vars("u", "name", "risk") as (u, name, risk):
@@ -495,7 +495,7 @@ class PyReasonSemanticsProfileGuardTests(unittest.TestCase):
 
         self.assertEqual(compiled, ("popular(u) : [0.8, 0.9] <-2 name(u, name) : [0.5, 1.0]", "rule.pyreason_guard"))
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_existing_engine_options_timesteps_without_profile_survives(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
         compiled = sdk._compile_derivation_input(_make_derivation())[0]
@@ -514,7 +514,7 @@ class PyReasonSemanticsProfileGuardTests(unittest.TestCase):
         self.assertEqual(config.timesteps, 6)
 
     def test_problog_semantics_profile_consumption_survives(self) -> None:
-        from factpy.adapters.problog.rule_ext import ProbLogRuleExt, resolve_problog_engine_ext
+        from factgraph.adapters.problog.rule_ext import ProbLogRuleExt, resolve_problog_engine_ext
 
         resolved = resolve_problog_engine_ext(
             where=[[("pred", "user:name", ["$u", "$name"])]],
@@ -532,7 +532,7 @@ class PyReasonSemanticsProfileGuardTests(unittest.TestCase):
         self.assertEqual(resolved.branch_probabilities, (0.5,))
 
     def test_pyreason_exporter_remains_profile_agnostic(self) -> None:
-        import factpy.adapters.pyreason.where_compile as where_compile
+        import factgraph.adapters.pyreason.where_compile as where_compile
 
         source = Path(where_compile.__file__).read_text(encoding="utf-8")
         self.assertNotIn("SemanticsProfile", source)

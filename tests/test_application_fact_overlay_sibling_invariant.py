@@ -15,12 +15,12 @@ import ast
 import unittest
 from pathlib import Path
 
-from factpy.application import fact_overlay_runtime as _fact_overlay_runtime_module
+from factgraph.application import fact_overlay_runtime as _fact_overlay_runtime_module
 
 _BANNED_MODULES = frozenset(
     {
-        "factpy.application.derivation_check_runtime",
-        "factpy.application.protocol.derivation_check",
+        "factgraph.application.derivation_check_runtime",
+        "factgraph.application.protocol.derivation_check",
     }
 )
 

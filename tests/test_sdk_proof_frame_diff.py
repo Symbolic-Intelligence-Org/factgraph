@@ -15,13 +15,13 @@ import inspect
 import unittest
 from unittest.mock import patch
 
-# Import factpy.sdk first to warm the factpy.application + factpy.audit
-# import chain (otherwise importing factpy.audit.proof_frame_diff cold
+# Import factgraph.sdk first to warm the factgraph.application + factgraph.audit
+# import chain (otherwise importing factgraph.audit.proof_frame_diff cold
 # triggers a circular import via
-# factpy.application.capability_helpers.round_events ← factpy.audit.round_events).
-from factpy.sdk import Entity, Field, Identity, SDKStore, SDKStoreError  # noqa: I001
-from factpy.audit.proof_frame_diff import ProofFrameDiff, ProofFrameDiffError
-from factpy.audit.round_events import (
+# factgraph.application.capability_helpers.round_events ← factgraph.audit.round_events).
+from factgraph.sdk import Entity, Field, Identity, SDKStore, SDKStoreError  # noqa: I001
+from factgraph.audit.proof_frame_diff import ProofFrameDiff, ProofFrameDiffError
+from factgraph.audit.round_events import (
     ROUND_EVENT_SCHEMA_VERSION,
     RoundEvent,
     make_round_finalized_event,
@@ -299,7 +299,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         round_b = _empty_round("round-b")
 
         with patch(
-            "factpy.sdk.shells.proof_frame_diff.build_proof_frame_diff",
+            "factgraph.sdk.shells.proof_frame_diff.build_proof_frame_diff",
             side_effect=ProofFrameDiffError("simulated payload error"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -317,7 +317,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         round_b = _empty_round("round-b")
 
         with patch(
-            "factpy.sdk.shells.proof_frame_diff.build_proof_frame_diff",
+            "factgraph.sdk.shells.proof_frame_diff.build_proof_frame_diff",
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -326,8 +326,8 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.diff_proof_frames")
         self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
 
-    def test_proof_frame_diff_dtos_not_exported_from_factpy_sdk_all(self) -> None:
-        import factpy.sdk as sdk_pkg
+    def test_proof_frame_diff_dtos_not_exported_from_factgraph_sdk_all(self) -> None:
+        import factgraph.sdk as sdk_pkg
 
         for name in (
             "ProofFrameDiff",
@@ -381,20 +381,20 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         round_a = _empty_round("round-a")
         round_b = _empty_round("round-b")
 
-        with patch("factpy.sdk.shells.check.sdk_check") as mock_check, patch(
-            "factpy.sdk.shells.diagnose.sdk_diagnose"
+        with patch("factgraph.sdk.shells.check.sdk_check") as mock_check, patch(
+            "factgraph.sdk.shells.diagnose.sdk_diagnose"
         ) as mock_diagnose, patch(
-            "factpy.sdk.shells.why_not.sdk_why_not"
+            "factgraph.sdk.shells.why_not.sdk_why_not"
         ) as mock_why_not, patch(
-            "factpy.sdk.shells.fact_overlay.sdk_fact_overlay_check"
+            "factgraph.sdk.shells.fact_overlay.sdk_fact_overlay_check"
         ) as mock_fact_overlay, patch(
-            "factpy.sdk.shells.proof_frame.sdk_proof_frame_recheck"
+            "factgraph.sdk.shells.proof_frame.sdk_proof_frame_recheck"
         ) as mock_proof_frame, patch(
-            "factpy.sdk.shells.rule_disable.sdk_rule_disable"
+            "factgraph.sdk.shells.rule_disable.sdk_rule_disable"
         ) as mock_rule_disable, patch(
-            "factpy.sdk.shells.rule_literal_replace.sdk_rule_literal_replace"
+            "factgraph.sdk.shells.rule_literal_replace.sdk_rule_literal_replace"
         ) as mock_rule_literal_replace, patch(
-            "factpy.sdk.shells.rule_add_condition.sdk_rule_add_condition"
+            "factgraph.sdk.shells.rule_add_condition.sdk_rule_add_condition"
         ) as mock_rule_add_condition:
             sdk.diff_proof_frames("round-a", "round-b", round_a, round_b)
 
@@ -410,10 +410,10 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
     def test_sibling_diff_proof_frames_module_does_not_import_sibling_sdk_shells(
         self,
     ) -> None:
-        """§5.8 Sibling static check: factpy.sdk.shells.proof_frame_diff
+        """§5.8 Sibling static check: factgraph.sdk.shells.proof_frame_diff
         source has no sibling SDK shell references (all 8 prior
         sisters)."""
-        import factpy.sdk.shells.proof_frame_diff as proof_frame_diff_module
+        import factgraph.sdk.shells.proof_frame_diff as proof_frame_diff_module
 
         source = inspect.getsource(proof_frame_diff_module)
         for forbidden in (
@@ -425,14 +425,14 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
             "from .rule_disable",
             "from .rule_literal_replace",
             "from .rule_add_condition",
-            "from factpy.sdk.shells.check",
-            "from factpy.sdk.shells.diagnose",
-            "from factpy.sdk.shells.why_not",
-            "from factpy.sdk.shells.fact_overlay",
-            "from factpy.sdk.shells.proof_frame",
-            "from factpy.sdk.shells.rule_disable",
-            "from factpy.sdk.shells.rule_literal_replace",
-            "from factpy.sdk.shells.rule_add_condition",
+            "from factgraph.sdk.shells.check",
+            "from factgraph.sdk.shells.diagnose",
+            "from factgraph.sdk.shells.why_not",
+            "from factgraph.sdk.shells.fact_overlay",
+            "from factgraph.sdk.shells.proof_frame",
+            "from factgraph.sdk.shells.rule_disable",
+            "from factgraph.sdk.shells.rule_literal_replace",
+            "from factgraph.sdk.shells.rule_add_condition",
             "sdk_check(",
             "sdk_diagnose(",
             "sdk_why_not(",

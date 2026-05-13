@@ -6,18 +6,18 @@ from dataclasses import dataclass
 from typing import Any
 from unittest.mock import patch
 
-from factpy.adapters.pyreason.engine_eval import (
+from factgraph.adapters.pyreason.engine_eval import (
     _materialize_edb_session,
     pyreason_engine_eval,
 )
-from factpy.adapters.pyreason.rule_ext import PyReasonRuleExt
-from factpy.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
-from factpy.adapters.pyreason.session import PyReasonSession
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.store._support import PYREASON_PROVENANCE_KIND
-from factpy.core.store.ledger import Ledger
-from factpy.core.store.runtime import get_engine_evaluator
-from factpy.core.store.types import EngineExtBase
+from factgraph.adapters.pyreason.rule_ext import PyReasonRuleExt
+from factgraph.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
+from factgraph.adapters.pyreason.session import PyReasonSession
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
+from factgraph.core.store.ledger import Ledger
+from factgraph.core.store.runtime import get_engine_evaluator
+from factgraph.core.store.types import EngineExtBase
 
 
 @dataclass(frozen=True)
@@ -214,14 +214,14 @@ class MaterializeEDBTests(unittest.TestCase):
 
 class EngineEvalRegistrationTests(unittest.TestCase):
     def test_registration_on_import(self) -> None:
-        import factpy.adapters.pyreason  # noqa: F401
+        import factgraph.adapters.pyreason  # noqa: F401
 
         evaluator = get_engine_evaluator("pyreason")
         self.assertIs(evaluator, pyreason_engine_eval)
 
 
 class EngineEvalTests(unittest.TestCase):
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason")
     def test_pending_annotations_cached_on_store(self, mock_run: Any) -> None:
         derived = PyReasonSession(_test_schema_ir())
         derived._write_node_fact_internal("user:popular", "idref_v1:User:Alice", "true", bound=[0.8, 0.9])
@@ -262,7 +262,7 @@ class EngineEvalTests(unittest.TestCase):
         pending = store._engine_pending_annotations[candidates[0].run_id]
         self.assertGreaterEqual(len(pending), 2)
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason")
     def test_edge_candidate_includes_to_ref_in_key(self, mock_run: Any) -> None:
         derived = PyReasonSession(_test_schema_ir())
         derived._write_edge_fact_internal(
@@ -298,7 +298,7 @@ class EngineEvalTests(unittest.TestCase):
 
 class EngineOptionsDispatchTests(unittest.TestCase):
     def test_evaluate_store_forwards_engine_options_to_adapter(self) -> None:
-        from factpy.core.store._evaluate import evaluate_store
+        from factgraph.core.store._evaluate import evaluate_store
 
         captured: dict[str, Any] = {}
 
@@ -322,7 +322,7 @@ class EngineOptionsDispatchTests(unittest.TestCase):
         self.assertEqual(captured["engine_options"], {"timesteps": 5})
 
     def test_native_mode_rejects_non_empty_engine_options(self) -> None:
-        from factpy.core.store._evaluate import evaluate_store
+        from factgraph.core.store._evaluate import evaluate_store
 
         with self.assertRaises(ValueError) as ctx:
             evaluate_store(
@@ -352,7 +352,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
             ]
         )
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason")
     def test_default_timesteps_used_when_engine_options_missing(self, mock_run: Any) -> None:
         mock_run.return_value = PyReasonRunResult(
             interpretation=None,
@@ -376,7 +376,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
         self.assertEqual(config.timesteps, 2)
         self.assertTrue(config.atom_trace)
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason")
     def test_engine_options_timesteps_override_default(self, mock_run: Any) -> None:
         mock_run.return_value = PyReasonRunResult(
             interpretation=None,
@@ -401,7 +401,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
         self.assertEqual(config.timesteps, 5)
         self.assertTrue(config.atom_trace)
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason")
     def test_engine_ext_body_predicate_bounds_flow_into_compiled_rules(self, mock_run: Any) -> None:
         mock_run.return_value = PyReasonRunResult(
             interpretation=None,
@@ -425,7 +425,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(rules, [("popular(e) <-0 name(e) : [0.5, 1.0]", "derived_popular")])
 
-    @patch("factpy.adapters.pyreason.engine_eval.run_pyreason")
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason")
     def test_engine_ext_head_bound_flows_into_compiled_rules(self, mock_run: Any) -> None:
         mock_run.return_value = PyReasonRunResult(
             interpretation=None,
@@ -480,7 +480,7 @@ class PyReasonEngineOptionsTests(unittest.TestCase):
 
 class EngineExtTypeGuardTests(unittest.TestCase):
     def test_non_engine_ext_base_raises_at_core(self) -> None:
-        from factpy.core.store._evaluate import evaluate_store
+        from factgraph.core.store._evaluate import evaluate_store
 
         with self.assertRaises(ValueError) as ctx:
             evaluate_store(

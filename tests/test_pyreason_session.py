@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.adapters.pyreason.session import (
+from factgraph.adapters.pyreason.session import (
     PyReasonBatchTx,
     PyReasonEntityHandle,
     PyReasonSession,
     _owner_prefix,
 )
-from factpy.sdk.schema import Entity, Field, Identity, Relationship
+from factgraph.sdk.schema import Entity, Field, Identity, Relationship
 
 
 class User(Entity):
@@ -509,7 +509,7 @@ class AnnotationTemplateTests(unittest.TestCase):
 
     def test_validate_bound_rejects_bool_values(self) -> None:
         """F-PR-2: _validate_bound must reject booleans in bound tuple."""
-        from factpy.adapters.pyreason.session import _validate_bound
+        from factgraph.adapters.pyreason.session import _validate_bound
 
         with self.assertRaises(ValueError) as ctx:
             _validate_bound([True, 0.5])
@@ -522,7 +522,7 @@ class AnnotationTemplateTests(unittest.TestCase):
 
     def test_resolve_shared_meta_accepts_confidence_zero(self) -> None:
         """F-PR-3: explicit confidence=0.0 must not raise."""
-        from factpy.adapters.pyreason.session import _resolve_shared_meta
+        from factgraph.adapters.pyreason.session import _resolve_shared_meta
 
         result = _resolve_shared_meta({"confidence": 0.0}, lower_bound=0.5)
         self.assertNotIn("confidence", result)
@@ -531,7 +531,7 @@ class AnnotationTemplateTests(unittest.TestCase):
 
     def test_pred_short_name_no_colon_returns_original(self) -> None:
         """F-PR-4: pred_id without colon must return as-is."""
-        from factpy.adapters.pyreason._helpers import _pred_short_name
+        from factgraph.adapters.pyreason._helpers import _pred_short_name
 
         self.assertEqual(_pred_short_name("noprefix"), "noprefix")
         self.assertEqual(_pred_short_name("has:colon"), "colon")
@@ -544,8 +544,8 @@ class AnnotationTemplateTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import MagicMock
 
-        from factpy.adapters.pyreason.accept import persist_pyreason_annotations
-        from factpy.core.store.ledger import Ledger
+        from factgraph.adapters.pyreason.accept import persist_pyreason_annotations
+        from factgraph.core.store.ledger import Ledger
 
         ledger = MagicMock(spec=Ledger)
         store = SimpleNamespace(

@@ -7,8 +7,8 @@ import typing
 import unittest
 from dataclasses import FrozenInstanceError
 
-from factpy.application import protocol as protocol_pkg
-from factpy.application.protocol import (
+from factgraph.application import protocol as protocol_pkg
+from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     ErrorDTO,
@@ -27,7 +27,7 @@ from factpy.application.protocol import (
     RuleLiteralPath,
     RuleLiteralReplaceAction,
 )
-from factpy.application.protocol import derivation_fact_overlay as overlay_protocol
+from factgraph.application.protocol import derivation_fact_overlay as overlay_protocol
 
 
 def _head(target: str = "doc:eligible", vars_: tuple[str, ...] = ("$doc",)) -> CompiledHeadCall:

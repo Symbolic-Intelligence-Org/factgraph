@@ -13,14 +13,14 @@ import inspect
 from pathlib import Path
 import unittest
 
-from factpy.core.rules import frontier as _frontier_module
-from factpy.core.rules.frontier import (
+from factgraph.core.rules import frontier as _frontier_module
+from factgraph.core.rules.frontier import (
     NativeWhereFrontierEvaluation,
     NativeWhereFrontierRow,
     evaluate_native_where_frontier,
 )
-from factpy.core.rules.rule_ir import RuleRegistry, RuleSpec
-from factpy.core.rules.ruleref_substrate import NativeWhereEvaluation, evaluate_native_where
+from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
+from factgraph.core.rules.ruleref_substrate import NativeWhereEvaluation, evaluate_native_where
 
 _BANNED_KWARGS = frozenset(
     {
@@ -38,12 +38,12 @@ _BANNED_KWARGS = frozenset(
 
 _BANNED_IMPORT_PREFIXES = frozenset(
     {
-        "factpy.application",
-        "factpy.sdk",
-        "factpy.adapters",
-        "factpy.core.derivation.candidates",
-        "factpy.core.store._support",
-        "factpy.core.store.runtime",
+        "factgraph.application",
+        "factgraph.sdk",
+        "factgraph.adapters",
+        "factgraph.core.derivation.candidates",
+        "factgraph.core.store._support",
+        "factgraph.core.store.runtime",
     }
 )
 
@@ -96,7 +96,7 @@ _BANNED_WRITE_CALLS = frozenset(
 _ADAPTER_NAMES = frozenset({"souffle", "problog", "pyreason"})
 _FRONTIER_MODULES = frozenset(
     {
-        "factpy.core.rules.frontier",
+        "factgraph.core.rules.frontier",
         "frontier",
     }
 )
@@ -164,7 +164,7 @@ def _frontier_application_opt_in_offenders(tree: ast.AST, path: Path) -> list[tu
             continue
         if isinstance(node, ast.ImportFrom):
             module = node.module or ""
-            if module == "factpy.core.rules":
+            if module == "factgraph.core.rules":
                 for alias in node.names:
                     if alias.name == "frontier" or alias.name in _FRONTIER_PUBLIC_SYMBOLS:
                         offenders.append((str(path), f"{module}.{alias.name}"))
@@ -266,7 +266,7 @@ class EvaluatorFrontierSurfaceGateTests(unittest.TestCase):
         adapter_imports = [
             module
             for module in imported_modules
-            if module == "factpy.adapters" or module.startswith("factpy.adapters.")
+            if module == "factgraph.adapters" or module.startswith("factgraph.adapters.")
         ]
         self.assertEqual(adapter_imports, [])
         self.assertEqual({name for name in _ADAPTER_NAMES if name in source}, set())
@@ -420,11 +420,11 @@ class EvaluatorFrontierBoundaryGateTests(unittest.TestCase):
 
     def test_10_application_opt_in_gate_catches_module_qualified_access(self) -> None:
         samples = [
-            "import factpy.core.rules.frontier as f\nf.evaluate_native_where_frontier({}, [])\n",
-            "from factpy.core.rules import frontier\nfrontier.evaluate_native_where_frontier({}, [])\n",
-            "from factpy.core.rules import frontier\nx: frontier.NativeWhereFrontierRow | None = None\n",
+            "import factgraph.core.rules.frontier as f\nf.evaluate_native_where_frontier({}, [])\n",
+            "from factgraph.core.rules import frontier\nfrontier.evaluate_native_where_frontier({}, [])\n",
+            "from factgraph.core.rules import frontier\nx: frontier.NativeWhereFrontierRow | None = None\n",
             (
-                "from factpy.core.rules.frontier import NativeWhereFrontierRow\n"
+                "from factgraph.core.rules.frontier import NativeWhereFrontierRow\n"
                 "row: NativeWhereFrontierRow | None = None\n"
             ),
         ]

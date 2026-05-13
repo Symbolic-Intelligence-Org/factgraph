@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import (
+from factgraph.application import (
     CapabilityHelperError,
     OriginPackageError,
     build_diagnose_request,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     DiagnoseRequest,
     ProtocolShapeError,
 )
-from factpy.core.store._support import normalize_binding_items
-from factpy.sdk import Pred, Rule, vars as sdk_vars
+from factgraph.core.store._support import normalize_binding_items
+from factgraph.sdk import Pred, Rule, vars as sdk_vars
 
 
 def _plan(*, heads: tuple[CompiledHeadCall, ...] | None = None) -> CompiledDerivationPlan:
@@ -140,8 +140,8 @@ class BuildDiagnoseRequestTests(unittest.TestCase):
             build_diagnose_request(_plan(), {"$payload": recursive})
 
     def test_phase_2_exports_from_application_and_helper_package(self) -> None:
-        from factpy import application
-        from factpy.application import capability_helpers
+        from factgraph import application
+        from factgraph.application import capability_helpers
 
         self.assertIs(application.build_diagnose_request, build_diagnose_request)
         self.assertIs(capability_helpers.build_diagnose_request, build_diagnose_request)

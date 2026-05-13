@@ -1,6 +1,6 @@
 [project]
 dependencies = ["httpx>=0.28.1,<0.29", "fastapi>=0.136.1,<0.137", "networkx>=3.6.1,<4"]
-name = "FactPy"
+name = "factgraph"
 requires-python = ">= 3.11"
 version = "0.1.0"
 
@@ -13,7 +13,7 @@ channels = ["conda-forge"]
 platforms = ["osx-arm64", "linux-64"]
 
 [tool.pixi.pypi-dependencies]
-factpy = { path = ".", editable = true }
+factgraph = { path = ".", editable = true }
 
 [tool.pixi.tasks]
 
@@ -39,6 +39,6 @@ publish-to-pypi = { cmd = "python -m twine upload --repository testpypi dist/*",
 python = "*"
 
 [dependency-groups]
-test = ["pytest"]
+test = ["pytest>=9.0.3,<10"]
 build = ["build"]
 publish = ["twine"]

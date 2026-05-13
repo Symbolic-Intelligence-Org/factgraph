@@ -20,15 +20,15 @@ import ast
 import unittest
 from pathlib import Path
 
-from factpy.application import diagnose_runtime as _diagnose_runtime_module
+from factgraph.application import diagnose_runtime as _diagnose_runtime_module
 
 # Modules that the Diagnose runtime must never import from.
 # Importing any of these would bring Check runtime symbols or Check-protocol
 # DTOs into Diagnose's substrate — forbidden per Q1 Sibling supersede.
 _BANNED_MODULES = frozenset(
     {
-        "factpy.application.derivation_check_runtime",
-        "factpy.application.protocol.derivation_check",
+        "factgraph.application.derivation_check_runtime",
+        "factgraph.application.protocol.derivation_check",
     }
 )
 

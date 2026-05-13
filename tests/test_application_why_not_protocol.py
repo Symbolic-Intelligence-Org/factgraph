@@ -9,8 +9,8 @@ import typing
 import unittest
 from dataclasses import FrozenInstanceError
 
-from factpy.application import protocol as protocol_pkg
-from factpy.application.protocol import (
+from factgraph.application import protocol as protocol_pkg
+from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     ErrorDTO,
@@ -27,8 +27,8 @@ from factpy.application.protocol import (
     WhyNotUniverseRequest,
     WhyNotUniverseResult,
 )
-from factpy.application.protocol import derivation_why_not as why_not_protocol
-from factpy.core.store._support import ProvenanceEnvelope, SupportArtifact
+from factgraph.application.protocol import derivation_why_not as why_not_protocol
+from factgraph.core.store._support import ProvenanceEnvelope, SupportArtifact
 
 
 def _head(

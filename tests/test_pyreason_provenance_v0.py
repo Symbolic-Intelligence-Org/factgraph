@@ -14,7 +14,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - environment-dependent
     pd = None  # type: ignore[assignment]
 
-from factpy.adapters.pyreason.provenance import (
+from factgraph.adapters.pyreason.provenance import (
     PyReasonTraceV0,
     parse_pyreason_trace,
     pyreason_trace_to_dict,

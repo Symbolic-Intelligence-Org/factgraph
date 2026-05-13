@@ -17,8 +17,8 @@ import inspect
 import unittest
 from unittest.mock import patch
 
-from factpy.application.capability_helpers.errors import CapabilityHelperError
-from factpy.application.protocol import (
+from factgraph.application.capability_helpers.errors import CapabilityHelperError
+from factgraph.application.protocol import (
     EvaluationOverlay,
     FactValueOverride,
     ProtocolShapeError,
@@ -26,9 +26,9 @@ from factpy.application.protocol import (
     RuleAddConditionResult,
     RuleAddedAtom,
 )
-from factpy.core.rules.rule_ir import RuleCompileError
-from factpy.core.store._support import SupportArtifact
-from factpy.sdk import (
+from factgraph.core.rules.rule_ir import RuleCompileError
+from factgraph.core.store._support import SupportArtifact
+from factgraph.sdk import (
     Inference,
     Entity,
     Field,
@@ -324,7 +324,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "factpy.sdk.shells.rule_add_condition.build_rule_add_condition_request",
+            "factgraph.sdk.shells.rule_add_condition.build_rule_add_condition_request",
             side_effect=CapabilityHelperError("simulated helper rejection"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -344,7 +344,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "factpy.sdk.shells.rule_add_condition.build_rule_add_condition_request",
+            "factgraph.sdk.shells.rule_add_condition.build_rule_add_condition_request",
             side_effect=ProtocolShapeError("bad request shape"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -364,7 +364,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "factpy.sdk.shells.rule_add_condition.check_rule_add_condition_action",
+            "factgraph.sdk.shells.rule_add_condition.check_rule_add_condition_action",
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -378,8 +378,8 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.check_rule_add_condition")
         self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
 
-    def test_rule_add_condition_result_not_exported_from_factpy_sdk_all(self) -> None:
-        import factpy.sdk as sdk_pkg
+    def test_rule_add_condition_result_not_exported_from_factgraph_sdk_all(self) -> None:
+        import factgraph.sdk as sdk_pkg
 
         self.assertNotIn("RuleAddConditionResult", sdk_pkg.__all__)
         self.assertFalse(hasattr(sdk_pkg, "RuleAddConditionResult"))
@@ -402,14 +402,14 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
                 status="unsupported",
                 variant_rows=(),
                 proof_frame=None,
-                errors=(__import__("factpy.application.protocol", fromlist=["ErrorDTO"]).ErrorDTO(
+                errors=(__import__("factgraph.application.protocol", fromlist=["ErrorDTO"]).ErrorDTO(
                     code="STUB", message="stub", path=("stub",)
                 ),),
                 warnings=(),
             )
 
         with patch(
-            "factpy.sdk.shells.rule_add_condition.check_rule_add_condition_action",
+            "factgraph.sdk.shells.rule_add_condition.check_rule_add_condition_action",
             side_effect=fake_runtime,
         ):
             sdk.check_rule_add_condition(
@@ -433,18 +433,18 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         support = _capture_support(sdk, alice, 25)
 
-        with patch("factpy.sdk.shells.check.sdk_check") as mock_check, patch(
-            "factpy.sdk.shells.diagnose.sdk_diagnose"
+        with patch("factgraph.sdk.shells.check.sdk_check") as mock_check, patch(
+            "factgraph.sdk.shells.diagnose.sdk_diagnose"
         ) as mock_diagnose, patch(
-            "factpy.sdk.shells.why_not.sdk_why_not"
+            "factgraph.sdk.shells.why_not.sdk_why_not"
         ) as mock_why_not, patch(
-            "factpy.sdk.shells.fact_overlay.sdk_fact_overlay_check"
+            "factgraph.sdk.shells.fact_overlay.sdk_fact_overlay_check"
         ) as mock_fact_overlay, patch(
-            "factpy.sdk.shells.proof_frame.sdk_proof_frame_recheck"
+            "factgraph.sdk.shells.proof_frame.sdk_proof_frame_recheck"
         ) as mock_proof_frame, patch(
-            "factpy.sdk.shells.rule_disable.sdk_rule_disable"
+            "factgraph.sdk.shells.rule_disable.sdk_rule_disable"
         ) as mock_rule_disable, patch(
-            "factpy.sdk.shells.rule_literal_replace.sdk_rule_literal_replace"
+            "factgraph.sdk.shells.rule_literal_replace.sdk_rule_literal_replace"
         ) as mock_rule_literal_replace:
             sdk.check_rule_add_condition(
                 _adult_rule(),
@@ -462,7 +462,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         mock_rule_literal_replace.assert_not_called()
 
     def test_sibling_module_does_not_import_sibling_sdk_shells(self) -> None:
-        import factpy.sdk.shells.rule_add_condition as rule_add_condition_module
+        import factgraph.sdk.shells.rule_add_condition as rule_add_condition_module
 
         source = inspect.getsource(rule_add_condition_module)
         for forbidden in (
@@ -473,13 +473,13 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             "from .proof_frame",
             "from .rule_disable",
             "from .rule_literal_replace",
-            "from factpy.sdk.shells.check",
-            "from factpy.sdk.shells.diagnose",
-            "from factpy.sdk.shells.why_not",
-            "from factpy.sdk.shells.fact_overlay",
-            "from factpy.sdk.shells.proof_frame",
-            "from factpy.sdk.shells.rule_disable",
-            "from factpy.sdk.shells.rule_literal_replace",
+            "from factgraph.sdk.shells.check",
+            "from factgraph.sdk.shells.diagnose",
+            "from factgraph.sdk.shells.why_not",
+            "from factgraph.sdk.shells.fact_overlay",
+            "from factgraph.sdk.shells.proof_frame",
+            "from factgraph.sdk.shells.rule_disable",
+            "from factgraph.sdk.shells.rule_literal_replace",
             "sdk_check(",
             "sdk_diagnose(",
             "sdk_why_not(",

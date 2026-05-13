@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.core.annotation import (
+from factgraph.core.annotation import (
     build_min_max_provenance_entries,
     derive_min_max_path_confidence,
     serialize_min_max_conclusions,
 )
 
 
-class MinMaxAnnotationfactpyTests(unittest.TestCase):
+class MinMaxAnnotationfactgraphTests(unittest.TestCase):
     def test_prefers_higher_confidence_path_over_direct_edge(self) -> None:
         edge_facts = [
             {"source_id": "e000", "target_id": "e001", "confidence": 0.9},

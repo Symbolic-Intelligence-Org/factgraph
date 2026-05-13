@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from factpy.adapters.souffle.provenance import (
+from factgraph.adapters.souffle.provenance import (
     SouffleProofTreeV0,
     SouffleProvenanceError,
     parse_souffle_proof_json,
@@ -138,7 +138,7 @@ class SouffleProvenanceV0Tests(unittest.TestCase):
             )
 
             with patch(
-                "factpy.adapters.souffle.provenance.subprocess.run",
+                "factgraph.adapters.souffle.provenance.subprocess.run",
                 return_value=completed,
             ) as run_mock:
                 trees = run_provenance_explain(
@@ -186,7 +186,7 @@ class SouffleProvenanceV0Tests(unittest.TestCase):
             )
 
             with patch(
-                "factpy.adapters.souffle.provenance.subprocess.run",
+                "factgraph.adapters.souffle.provenance.subprocess.run",
                 return_value=completed,
             ):
                 with self.assertRaises(SouffleProvenanceError):
@@ -232,10 +232,10 @@ class SouffleProvenanceV0Tests(unittest.TestCase):
                 return []
 
             with patch(
-                "factpy.adapters.souffle.runner.find_souffle_binary",
+                "factgraph.adapters.souffle.runner.find_souffle_binary",
                 return_value=souffle_bin,
             ), patch(
-                "factpy.adapters.souffle.provenance.run_provenance_explain",
+                "factgraph.adapters.souffle.provenance.run_provenance_explain",
                 side_effect=_fake_run,
             ):
                 trees = run_package_provenance(

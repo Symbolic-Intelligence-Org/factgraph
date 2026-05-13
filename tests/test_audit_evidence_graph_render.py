@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.audit import (
+from factgraph.audit import (
     EDGE_DERIVES,
     EDGE_UPDATES,
     LAYOUT_TIMELINE,

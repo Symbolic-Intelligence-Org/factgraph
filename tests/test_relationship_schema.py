@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.sdk import Entity, Identity, Field, Relationship
-from factpy.sdk.compile import compile_schema_from_classes, build_authoring_schema_from_classes
-from factpy.sdk.schema import SDKSchemaError
+from factgraph.sdk import Entity, Identity, Field, Relationship
+from factgraph.sdk.compile import compile_schema_from_classes, build_authoring_schema_from_classes
+from factgraph.sdk.schema import SDKSchemaError
 
 
 class User(Entity):

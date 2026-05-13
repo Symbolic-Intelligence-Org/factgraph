@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.audit import (
+from factgraph.audit import (
     EDGE_SUPPORTS,
     LAYOUT_TREE,
     NODE_CONCLUSION,
@@ -245,7 +245,7 @@ class AuditEvidenceGraphTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from factpy.audit.reader import AuditReadError, _read_evidence_graphs
+        from factgraph.audit.reader import AuditReadError, _read_evidence_graphs
 
         graph_dict = evidence_graph_to_dict(
             EvidenceGraph(

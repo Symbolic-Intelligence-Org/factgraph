@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application.protocol.common import WarningDTO
-from factpy.application.walker import (
+from factgraph.application.protocol.common import WarningDTO
+from factgraph.application.walker import (
     FrozenTupleView,
     ProofFrameDiffView,
     WalkerFrozenError,
 )
-from factpy.audit.proof_frame_diff import (
+from factgraph.audit.proof_frame_diff import (
     AtomDelta,
     EventReference,
     FrameDelta,
@@ -212,7 +212,7 @@ class ProofFrameDiffViewTests(unittest.TestCase):
         self.assertIsInstance(hash(same), int)
 
     def test_phase_5_type_reexports_from_application_package(self) -> None:
-        from factpy.application import ProofFrameDiffView as AppProofFrameDiffView
+        from factgraph.application import ProofFrameDiffView as AppProofFrameDiffView
 
         self.assertIs(AppProofFrameDiffView, ProofFrameDiffView)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.sdk import Entity, Field, Identity, Query, ReadPolicy, Rule, SDKSchemaError, SDKStore, SDKStoreError, vars
+from factgraph.sdk import Entity, Field, Identity, Query, ReadPolicy, Rule, SDKSchemaError, SDKStore, SDKStoreError, vars
 
 
 class User(Entity):

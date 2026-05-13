@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.adapters.souffle.pred_norm import normalize_pred_id
-from factpy.adapters.souffle.souffle_view_gen import generate_view_dl, witness_rel_name
+from factgraph.adapters.souffle.pred_norm import normalize_pred_id
+from factgraph.adapters.souffle.souffle_view_gen import generate_view_dl, witness_rel_name
 
 
 class SouffleWitnessViewGenV1Tests(unittest.TestCase):

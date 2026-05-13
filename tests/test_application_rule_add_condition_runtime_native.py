@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from factpy.application import (
+from factgraph.application import (
     build_schema_index,
     check_rule_add_condition_action,
     check_rule_disable_action,
@@ -16,7 +16,7 @@ from factpy.application import (
     field_predicate,
     resolve_selector,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     EntitySelector,
     EvaluationOverlay,
     FactValueOverride,
@@ -27,11 +27,11 @@ from factpy.application.protocol import (
     RuleDisableRequest,
     RuleLiteralReplaceRequest,
 )
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.rules.rule_ir import RuleSpec
-from factpy.core.store import Store
-from factpy.core.store._support import NonFactStep, PredWitness, RuleRefEdge, SupportArtifact
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.rules.rule_ir import RuleSpec
+from factgraph.core.store import Store
+from factgraph.core.store._support import NonFactStep, PredWitness, RuleRefEdge, SupportArtifact
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Person(Entity):
@@ -427,7 +427,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
 
 class RuleAddConditionRuntimeExportTests(unittest.TestCase):
     def test_application_package_exports_runtime_entrypoint(self) -> None:
-        from factpy import application
+        from factgraph import application
 
         self.assertIs(
             application.check_rule_add_condition_action,
@@ -461,7 +461,7 @@ class RuleAddConditionCrossRuntimeGuardTests(unittest.TestCase):
 
 class RuleAddConditionRuntimeBoundaryTests(unittest.TestCase):
     def test_runtime_does_not_import_sibling_capability_runtimes_or_sdk(self) -> None:
-        source = Path("src/factpy/application/rule_add_condition_runtime.py").read_text()
+        source = Path("src/factgraph/application/rule_add_condition_runtime.py").read_text()
 
         self.assertNotIn("fact_overlay_runtime", source)
         self.assertNotIn("proofframe_runtime", source)
@@ -470,14 +470,14 @@ class RuleAddConditionRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("derivation_check_runtime", source)
         self.assertNotIn("diagnose_runtime", source)
         self.assertNotIn("why_not_runtime", source)
-        self.assertNotIn("factpy.sdk", source)
+        self.assertNotIn("factgraph.sdk", source)
 
     def test_sdk_rule_add_condition_shell_imports_runtime_only_in_shell(self) -> None:
         """G3 Phase 3 retrofit (per `#P1` carve-out, mirroring G2 Phase 0
         retrofits of G1 + G4 archived invariants and G3 Phase 1 / Phase 2
         retrofits of the Rule Disable + Rule Literal Replace boundary
         tests): the SDK Rule Add Condition shell at
-        ``factpy/sdk/shells/rule_add_condition.py`` is now the active L
+        ``factgraph/sdk/shells/rule_add_condition.py`` is now the active L
         Direction entry point. The original "no SDK surface" assertion
         is replaced by a narrower invariant: the runtime entrypoint
         ``check_rule_add_condition_action`` is imported only by the
@@ -487,14 +487,14 @@ class RuleAddConditionRuntimeBoundaryTests(unittest.TestCase):
         ``build_rule_add_condition_request`` constructs the action
         internally).
         """
-        shell_path = Path("src/factpy/sdk/shells/rule_add_condition.py")
+        shell_path = Path("src/factgraph/sdk/shells/rule_add_condition.py")
         self.assertTrue(
             shell_path.is_file(), f"{shell_path} should exist after G3 Phase 3"
         )
 
         shell_source = shell_path.read_text()
         self.assertIn(
-            "from factpy.application.rule_add_condition_runtime import (",
+            "from factgraph.application.rule_add_condition_runtime import (",
             shell_source,
         )
         self.assertIn("check_rule_add_condition_action", shell_source)
@@ -504,7 +504,7 @@ class RuleAddConditionRuntimeBoundaryTests(unittest.TestCase):
 
         other_sdk_sources = "\n".join(
             path.read_text()
-            for path in Path("src/factpy/sdk").rglob("*.py")
+            for path in Path("src/factgraph/sdk").rglob("*.py")
             if path != shell_path
         )
         self.assertNotIn("check_rule_add_condition_action", other_sdk_sources)
@@ -513,11 +513,11 @@ class RuleAddConditionRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("RuleAddConditionAction(", other_sdk_sources)
 
     def test_frontier_protected_entrypoints_do_not_drift(self) -> None:
-        ruleref_source = Path("src/factpy/core/rules/ruleref_substrate.py").read_text()
-        proof_protocol = Path("src/factpy/application/protocol/proofframe.py").read_text()
-        proof_runtime = Path("src/factpy/application/proofframe_runtime.py").read_text()
-        fact_runtime = Path("src/factpy/application/fact_overlay_runtime.py").read_text()
-        where_source = Path("src/factpy/core/rules/where_eval.py").read_text()
+        ruleref_source = Path("src/factgraph/core/rules/ruleref_substrate.py").read_text()
+        proof_protocol = Path("src/factgraph/application/protocol/proofframe.py").read_text()
+        proof_runtime = Path("src/factgraph/application/proofframe_runtime.py").read_text()
+        fact_runtime = Path("src/factgraph/application/fact_overlay_runtime.py").read_text()
+        where_source = Path("src/factgraph/core/rules/where_eval.py").read_text()
 
         self.assertNotIn("added_conditions", ruleref_source)
         self.assertNotIn("RuleAddCondition", proof_protocol)

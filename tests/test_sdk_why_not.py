@@ -6,12 +6,12 @@ import inspect
 import unittest
 from unittest.mock import patch
 
-from factpy.application.capability_helpers import CapabilityHelperError
-from factpy.application.protocol import ProtocolShapeError, WhyNotUniverseResult
-from factpy.application.why_not_runtime import WhyNotRuntimeError
-from factpy.core.rules.rule_ir import RuleCompileError, RuleRegistry
-from factpy.sdk import Inference, Entity, Field, Identity, Pred, Rule, SDKDSLError, SDKStore, SDKStoreError, vars
-from factpy.sdk.store import _compiled_derivation_plan_to_application
+from factgraph.application.capability_helpers import CapabilityHelperError
+from factgraph.application.protocol import ProtocolShapeError, WhyNotUniverseResult
+from factgraph.application.why_not_runtime import WhyNotRuntimeError
+from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
+from factgraph.sdk import Inference, Entity, Field, Identity, Pred, Rule, SDKDSLError, SDKStore, SDKStoreError, vars
+from factgraph.sdk.store import _compiled_derivation_plan_to_application
 
 
 class Person(Entity):
@@ -168,7 +168,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
     def test_capability_helper_error_remaps_to_sdk_store_error_with_cause(self) -> None:
         sdk = _build_sdk()
 
-        with patch("factpy.sdk.shells.why_not.build_why_not_candidate_universe") as mock_builder:
+        with patch("factgraph.sdk.shells.why_not.build_why_not_candidate_universe") as mock_builder:
             mock_builder.side_effect = CapabilityHelperError("bad candidate input")
             with self.assertRaises(SDKStoreError) as ctx:
                 sdk.why_not(_age_derivation(), [])
@@ -179,7 +179,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
     def test_engine_is_passed_to_request(self) -> None:
         sdk = _build_sdk()
 
-        with patch("factpy.sdk.shells.why_not.check_why_not_universe", return_value=_empty_result()) as mock_runtime:
+        with patch("factgraph.sdk.shells.why_not.check_why_not_universe", return_value=_empty_result()) as mock_runtime:
             result = sdk.why_not(_age_derivation(), [], engine="souffle")
 
         self.assertEqual(result.status, "completed")
@@ -193,7 +193,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         expected = object()
 
         with patch.object(sdk, "_resolve_runtime_registry", return_value=expected) as mock_resolve, patch(
-            "factpy.sdk.shells.why_not.check_why_not_universe",
+            "factgraph.sdk.shells.why_not.check_why_not_universe",
             return_value=_empty_result(),
         ) as mock_runtime:
             result = sdk.why_not(derivation, [], registry=registry)
@@ -206,7 +206,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "factpy.sdk.shells.why_not._compiled_derivation_plan_to_application",
+            "factgraph.sdk.shells.why_not._compiled_derivation_plan_to_application",
             side_effect=ValueError(
                 "Conflicting engine_ext between explicit derivation and compiled plan"
             ),
@@ -256,7 +256,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "factpy.sdk.shells.why_not.WhyNotUniverseRequest",
+            "factgraph.sdk.shells.why_not.WhyNotUniverseRequest",
             side_effect=ProtocolShapeError("engine must be one of"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -269,7 +269,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "factpy.sdk.shells.why_not.check_why_not_universe",
+            "factgraph.sdk.shells.why_not.check_why_not_universe",
             side_effect=WhyNotRuntimeError(
                 "runtime invariant failed",
                 code="WHY_NOT_TEST_FAILURE",
@@ -281,8 +281,8 @@ class SDKWhyNotContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.why_not")
         self.assertIsInstance(ctx.exception.__cause__, WhyNotRuntimeError)
 
-    def test_why_not_result_not_exported_from_factpy_sdk_all(self) -> None:
-        import factpy.sdk as sdk_pkg
+    def test_why_not_result_not_exported_from_factgraph_sdk_all(self) -> None:
+        import factgraph.sdk as sdk_pkg
 
         self.assertNotIn("WhyNotUniverseResult", sdk_pkg.__all__)
         self.assertFalse(hasattr(sdk_pkg, "WhyNotUniverseResult"))
@@ -290,10 +290,10 @@ class SDKWhyNotContractTests(unittest.TestCase):
     def test_q1_sibling_why_not_does_not_call_sdk_check_or_diagnose_at_runtime(self) -> None:
         sdk = _build_sdk()
 
-        with patch("factpy.sdk.shells.check.sdk_check") as mock_check, patch(
-            "factpy.sdk.shells.diagnose.sdk_diagnose"
+        with patch("factgraph.sdk.shells.check.sdk_check") as mock_check, patch(
+            "factgraph.sdk.shells.diagnose.sdk_diagnose"
         ) as mock_diagnose, patch(
-            "factpy.sdk.shells.why_not.check_why_not_universe",
+            "factgraph.sdk.shells.why_not.check_why_not_universe",
             return_value=_empty_result(),
         ):
             sdk.why_not(_age_derivation(), [])
@@ -302,15 +302,15 @@ class SDKWhyNotContractTests(unittest.TestCase):
         mock_diagnose.assert_not_called()
 
     def test_q1_sibling_why_not_module_does_not_import_sdk_check_or_diagnose(self) -> None:
-        import factpy.sdk.shells.why_not as why_not_module
+        import factgraph.sdk.shells.why_not as why_not_module
 
         source = inspect.getsource(why_not_module)
         self.assertNotIn("from .check", source)
         self.assertNotIn("from .diagnose", source)
-        self.assertNotIn("from factpy.sdk.check", source)
-        self.assertNotIn("from factpy.sdk.diagnose", source)
-        self.assertNotIn("from factpy.sdk.shells.check", source)
-        self.assertNotIn("from factpy.sdk.shells.diagnose", source)
+        self.assertNotIn("from factgraph.sdk.check", source)
+        self.assertNotIn("from factgraph.sdk.diagnose", source)
+        self.assertNotIn("from factgraph.sdk.shells.check", source)
+        self.assertNotIn("from factgraph.sdk.shells.diagnose", source)
         self.assertNotIn("sdk_check(", source)
         self.assertNotIn("sdk_diagnose(", source)
 

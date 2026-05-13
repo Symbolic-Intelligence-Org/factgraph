@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import (
+from factgraph.application import (
     QueryRuntimeError,
     build_schema_index,
     entity_info,
@@ -10,7 +10,7 @@ from factpy.application import (
     field_predicate,
     resolve_selector,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     EntitySelector,
     FieldPath,
     ProtocolShapeError,
@@ -19,9 +19,9 @@ from factpy.application.protocol import (
     QueryRuntimeRequest,
     QueryRuntimeResponse,
 )
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.store import Store
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.store import Store
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Person(Entity):
@@ -195,13 +195,13 @@ class QueryTypeMismatchPolicyTests(unittest.TestCase):
     """Commit 2a Q2/Q3: on_type_mismatch policy enforcement against entity_type."""
 
     def _seed_two_persons(self) -> tuple[Store, object, str, str]:
-        from factpy.application import (
+        from factgraph.application import (
             entity_info,
             field_predicate,
             resolve_selector,
         )
-        from factpy.application.protocol import EntitySelector
-        from factpy.core.evidence.write_protocol import set_field
+        from factgraph.application.protocol import EntitySelector
+        from factgraph.core.evidence.write_protocol import set_field
 
         schema_ir = compile_schema_from_classes([Person])
         store = Store(schema_ir)
@@ -244,7 +244,7 @@ class QueryTypeMismatchPolicyTests(unittest.TestCase):
         )
 
     def test_matching_entity_type_returns_rows(self) -> None:
-        from factpy.application import entity_info, execute_query
+        from factgraph.application import entity_info, execute_query
 
         store, index, _, _ = self._seed_two_persons()
         info = entity_info(index, "Person")
@@ -258,7 +258,7 @@ class QueryTypeMismatchPolicyTests(unittest.TestCase):
         self.assertGreater(len(response.rows), 0)
 
     def test_mismatched_entity_type_with_error_policy_yields_error_dto(self) -> None:
-        from factpy.application import entity_info, execute_query
+        from factgraph.application import entity_info, execute_query
 
         store, index, _, _ = self._seed_two_persons()
         info = entity_info(index, "Person")
@@ -273,7 +273,7 @@ class QueryTypeMismatchPolicyTests(unittest.TestCase):
         self.assertEqual(response.errors[0].code, "QUERY_TYPE_MISMATCH")
 
     def test_mismatched_entity_type_with_skip_policy_drops_rows(self) -> None:
-        from factpy.application import entity_info, execute_query
+        from factgraph.application import entity_info, execute_query
 
         store, index, _, _ = self._seed_two_persons()
         info = entity_info(index, "Person")
@@ -287,7 +287,7 @@ class QueryTypeMismatchPolicyTests(unittest.TestCase):
         self.assertEqual(response.rows, ())
 
     def test_mismatched_entity_type_with_null_policy_yields_null_alias(self) -> None:
-        from factpy.application import entity_info, execute_query
+        from factgraph.application import entity_info, execute_query
 
         store, index, _, _ = self._seed_two_persons()
         info = entity_info(index, "Person")
@@ -303,8 +303,8 @@ class QueryTypeMismatchPolicyTests(unittest.TestCase):
             self.assertIsNone(row["p"])
 
     def test_unknown_entity_type_hydrate_error_uses_missing_policy(self) -> None:
-        from factpy.application import entity_info, execute_query
-        from factpy.core.evidence.write_protocol import set_field
+        from factgraph.application import entity_info, execute_query
+        from factgraph.core.evidence.write_protocol import set_field
 
         store, index, _, _ = self._seed_two_persons()
         info = entity_info(index, "Person")

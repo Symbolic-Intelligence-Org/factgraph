@@ -1,0 +1,308 @@
+# Overview of the Application Module (`factgraph`)
+
+- Scope: `src/factgraph/application`
+- Last updated: 2026-05-12
+- Target readers: developers who need to understand Python runtime authority, SDK adapter boundaries, and service/agent consumer constraints
+
+## 1. Module Responsibilities
+
+`application` is the canonical Python runtime authority above `core`. It owns runtime-normalized entity read/write, query, ingest, and compiled derivation evaluate/accept operations, expressed as SDK-independent protocol DTOs and executors.
+
+It is responsible for:
+
+- application protocol DTOs and error/warning DTO shapes
+- schema runtime indexing, selector/ref resolution, and field/type lookup
+- entity hydration / read requests
+- entity write planning / apply
+- query runtime request/result execution
+- normalized ingest request/result execution
+- authoring asset persistence orchestration, FactGraph workspace layout
+  orchestration, and additive schema-mutation validation for SDK-independent
+  lifecycle paths
+- compiled derivation evaluate / accept orchestration
+- explicit-binding derivation Check (`passed` / `failed` / `unsupported` / `invalid_request`)
+- explicit-binding derivation Diagnose (`passed` / `failed.no_candidate` / `failed.atom_localized` / `unsupported` / `invalid_request`)
+- explicit-binding Fact Overlay Check (`before` / `after` / `diff` under temporary fact replace/remove overlays, native-only MVP)
+- narrow ProofFrame Rechecker (`still_valid` / `invalidated` / `unknown` over one native `SupportArtifact` under fact replace/remove overlay, with deterministic single-frame narrative)
+- native Rule Disable (`completed` / `unsupported` / `invalid_request`) over one temporary rule-condition disable action,returning variant rows plus original-frame ProofFrame output
+- native Rule Literal Replace (`completed` / `unsupported` / `invalid_request`) over one temporary Const-to-Const native where literal replacement,returning variant rows plus original-frame ProofFrame output
+- native Rule Add Condition (`completed` / `unsupported` / `invalid_request`) over one temporary filter-only native where atom insertion,returning variant rows plus original-frame ProofFrame output with a synthetic added-atom verdict
+- explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
+- capability ergonomics helpers for Check / Diagnose / ProofFrame request construction, rule-overlay request construction, round-event payload projection, Fact Overlay replace/remove construction, `EvaluationOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
+- application-layer walker views for SDK-independent traversal over selected DTO / IR structures (`IRBodyWalker`, `FrozenTupleView`, `AtomKeyView`, `SupportArtifactView`, `AssertionView`, `ProofFrameView`, and `ProofFrameDiffView` in the current slice)
+
+It is not responsible for:
+
+- the Python facade shape of `SDKStore` / `SDKBatchTx` / `EntitySnapshot` / `EntityEditor`
+- SDK `Field` descriptors, metaclasses, DSL sugar, or `Query` / `Derivation` authoring objects
+- HTTP routes, sessions, or registry delivery
+- package export/run delivery surfaces
+- the named view registry (`sdk.views`)
+
+## 2. Module Structure
+
+- `protocol/`
+  - `common.py`: `ErrorDTO` / `WarningDTO` / JSON value validation
+  - `schema_runtime.py`: `EntitySelector` / `EntityRef` / `FieldPath`
+  - `entity_read.py`: read request/response, snapshot, field value/assertion DTOs
+  - `entity_write.py`: write command/plan/result DTOs
+  - `query.py`: `QueryRuntimeRequest` / `QueryRuntimeResponse` / return contract
+  - `ingest.py`: normalized ingest item/request/result DTOs
+  - `derivation.py`: compiled derivation evaluate/accept request DTOs
+  - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`)
+  - `derivation_diagnose.py`: explicit-binding Diagnose protocol DTOs (`DiagnoseRequest` / `DiagnoseResult` / `DiagnoseAtomLocator`)
+  - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs and shared overlay actions (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `EvaluationOverlay` / `FactValueOverride` / `FactRemoveAction` / `RuleDisableAction` / `RuleLiteralReplaceAction` / `RuleAddConditionAction`)
+  - `proofframe.py`: ProofFrame Rechecker protocol DTOs (`ProofFrameRecheckRequest` / `ProofFrameRecheckResult` / `ProofFrameAtomVerdict` / `ProofFrameStatus`)
+  - `rule_disable.py`: Rule Disable protocol DTOs (`RuleDisableRequest` / `RuleDisableResult` / `RuleDisableStatus`)
+  - `rule_literal_replace.py`: Rule Literal Replace protocol DTOs (`RuleLiteralReplaceRequest` / `RuleLiteralReplaceResult` / `RuleLiteralReplaceStatus`)
+  - `rule_add_condition.py`: Rule Add Condition protocol DTOs (`RuleAddConditionRequest` / `RuleAddConditionResult` / `RuleAddConditionStatus`)
+  - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotRedRow` / `WhyNotRowDiagnostic` / `WhyNotAtomLocator`)
+- `schema_runtime.py`
+  - schema index, identity materialization, ref encoding, field/type lookup
+- `capability_helpers/`
+  - application-layer ergonomic helper package: `build_check_request(...)`, `build_diagnose_request(...)`, `build_proof_frame_recheck_request(...)`, `build_rule_disable_request(...)`, `build_rule_literal_replace_request(...)`, `build_rule_add_condition_request(...)`, `build_round_event_payload(...)`, `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
+- `walker/`
+  - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`, `FrozenTupleView` / `frozen_collection(...)` for already-frozen tuple collections, `AtomKeyView` / `parse_atom_key(...)`, `SupportArtifactView` / `AssertionView` for `SupportArtifact` assertion cross-references, `ProofFrameView` for `ProofFrameRecheckResult`, and `ProofFrameDiffView` for `ProofFrameDiff`. B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
+- `entity_view.py`
+  - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
+- `entity_write.py`
+  - `plan_write_command(...)`, `apply_write_plan(...)`
+- `query_runtime.py`
+  - `execute_query(...)`
+- `ingest_runtime.py`
+  - `apply_ingest_request(...)`
+- `authoring_runtime.py`
+  - application-layer persistence helpers for saved rule/inference assets;
+    returns `SavedRuleRef` / `SavedInferenceRef` handles and keeps registry
+    schema upsert/digest checks out of the SDK facade.
+- `workspace_runtime.py`
+  - FactGraph workspace layout authority: v1 manifest construction/validation,
+    `ledger.db` backup/checkpoint, registry sync/copy, and component path
+    resolution for `fg.save(...)` / `FactGraph.load(...)`.
+- `schema_mutation_runtime.py`
+  - additive schema-extension authority for `fg.schema.add(...)`: validates
+    that existing entities and predicates are preserved, plans the next schema
+    IR from additional `Entity` classes or same-entity replacement classes that
+    add non-identity fields, and returns `SchemaAddResult` /
+    `AdditiveExtensionResult` DTOs including `added_entities` and
+    `added_fields`. Destructive delete/update/migrate planning is deliberately
+    outside this module's first slices.
+- `derivation_runtime.py`
+  - `evaluate_derivation_plans(...)`, `accept_derivation_candidate_set(...)`, `accept_derivation_candidate_sets(...)`
+- `derivation_check_runtime.py`
+  - `check_derivation_binding(...)`: verifies a complete or partial binding against a single compiled derivation plan; native/souffle/problog/pyreason are handled through representability-gated final-result matching.
+- `diagnose_runtime.py`
+  - `diagnose_derivation_binding(...)`: diagnoses a complete or partial binding against a single compiled derivation plan; native can localize the failed atom, while souffle/problog/pyreason return coarse pass/fail/unsupported classifications through evidence-aware dispatch.
+- `fact_overlay_runtime.py`
+  - `check_fact_overlay_binding(...)`: checks a requested binding under temporary fact replace/remove overlays without writing the ledger; native runs baseline plus overlay-applied phases and returns before/after/diff summaries, while souffle/problog/pyreason return `ENGINE_OVERLAY_NOT_SUPPORTED`.
+- `proofframe_runtime.py`
+  - `recheck_proof_frame(...)`: rechecks one native `SupportArtifact` under an `EvaluationOverlay` without re-running derivation evaluation; returns per-atom verdicts and aggregate frame status. Non-native support artifacts and rule-ref frames return frame-level `unknown`; `not` steps are strictly deferred to `unknown`.
+  - `render_proof_frame_narrative(...)`: deterministic English single-frame narrative formatter over a `ProofFrameRecheckResult`.
+- `rule_disable_runtime.py`
+  - `check_rule_disable_action(...)`: evaluates one native `RuleSpec` under exactly one temporary `RuleDisableAction`; returns normalized variant rows plus a `ProofFrameRecheckResult` for the original frame. RuleRef-bearing inputs are unsupported,variant support capture is deferred,and no ledger or registry mutation occurs.
+- `rule_literal_replace_runtime.py`
+  - `check_rule_literal_replace_action(...)`: evaluates one native `RuleSpec` under exactly one temporary `RuleLiteralReplaceAction`; supports existing Const leaves in predicate terms,comparison/filter sides,`in` members,and `addc` / `mulc` constants. RuleRef-bearing inputs are unsupported,variant support capture is deferred,and no ledger or registry mutation occurs.
+- `rule_add_condition_runtime.py`
+  - `check_rule_add_condition_action(...)`: evaluates one native `RuleSpec` under exactly one temporary `RuleAddConditionAction`; supports adding one filter-only atom over variables already bound in the selected branch. The runtime returns normalized variant rows plus an original-frame `ProofFrameRecheckResult` with a synthetic `b{branch}.add{action}:{kind}` atom verdict. RuleRef-bearing inputs,new-variable binding planner behavior,`not`,variant support capture,and multi-action ordering are deferred;no ledger or registry mutation occurs.
+- `why_not_runtime.py`
+  - `check_why_not_universe(...)`: assembles a red/green board for an explicit finite head-binding universe, then diagnoses each red row through `diagnose_derivation_binding(...)` while returning Why-not-owned row diagnostics.
+
+## 3. Public Runtime Surface
+
+`src/factgraph/application/__init__.py` currently exports 65 public symbols. The main executor entry points are:
+
+Batch 8 public-surface note (historical Batch 8 state, since updated by L Direction G1-G5 + post-L SDK ergonomics redesign): `factgraph.application` is an **advanced importable** runtime authority in the factgraph package. It is appropriate for automation, wire bridges, and callers that want SDK-independent DTOs. It is not the ergonomic SDK product facade. Batch 8 itself did not add SDK shells or HTTP routes for the Batches 3-7 capability runtimes; subsequent L Direction milestones (G1 Check + Diagnose, G4 Why-not, G2 Fact Overlay + ProofFrame Recheck, G3 rule overlays, G5 ProofFrame Diff) added narrow SDK shells over those runtimes, and the post-L redesign also exposes them through the `FactGraph` taxonomy — see [04_api_surface §0](../../sdk/docs/04_api_surface.en.md) and the cross-ref note further down this overview.
+
+- `execute_read_request(...)`
+- `hydrate_entity(...)`
+- `hydrate_entities(...)`
+- `plan_write_command(...)`
+- `apply_write_plan(...)`
+- `execute_query(...)`
+- `apply_ingest_request(...)`
+- `save_workspace(...)`
+- `load_workspace(...)`
+- `validate_additive_schema_extension(...)`
+- `add_schema_classes(...)`
+- `evaluate_derivation_plans(...)`
+- `check_derivation_binding(...)`
+- `diagnose_derivation_binding(...)`
+- `check_fact_overlay_binding(...)`
+- `check_rule_add_condition_action(...)`
+- `check_rule_disable_action(...)`
+- `check_rule_literal_replace_action(...)`
+- `recheck_proof_frame(...)`
+- `render_proof_frame_narrative(...)`
+- `check_why_not_universe(...)`
+- `accept_derivation_candidate_set(...)`
+- `accept_derivation_candidate_sets(...)`
+
+The main schema/runtime helpers are:
+
+- `build_check_request(...)`
+- `build_diagnose_request(...)`
+- `build_proof_frame_recheck_request(...)`
+- `build_rule_disable_request(...)`
+- `build_rule_literal_replace_request(...)`
+- `build_rule_add_condition_request(...)`
+- `build_round_event_payload(...)`
+- `build_fact_value_override(...)`
+- `build_fact_remove_action(...)`
+- `build_evaluation_overlay(...)`
+- `build_why_not_candidate_universe(...)`
+- `build_frontier_view_facts(...)`
+- `build_schema_index(...)`
+- `resolve_selector(...)`
+- `materialize_identity(...)`
+- `encode_entity_ref(...)`
+- `entity_info(...)`
+- `field_predicate(...)`
+- `field_value_type(...)`
+- `entity_type_from_ref(...)`
+
+The current walker entry points are:
+
+- `AssertionView`
+- `AtomKeyView`
+- `FrozenTupleView`
+- `IRBodyWalker`
+- `IRAtomView`
+- `ProofFrameDiffView`
+- `ProofFrameView`
+- `SupportArtifactView`
+- `frozen_collection(...)`
+- `parse_atom_key(...)`
+
+## 4. Relationship with Other Layers
+
+- `core`
+  - owns low-level ledger/store/rule/evidence primitives.
+  - application composes these primitives into stable Python runtime contracts.
+- `sdk`
+  - owns product surface, authoring DSL, Python ergonomics, facade objects, and compatibility aliases.
+  - adapts SDK outward types into application DTOs and maps application results back to SDK outward types.
+- `service` / `agent`
+  - must not add production SDK runtime imports.
+  - the current allowed production SDK import is the agent extraction authoring helper `compile_schema_from_classes`.
+- `adapters` / `domains`
+  - some out-of-scope SDK consumers remain, such as PyReason adapter DSL coupling and ECSS SDK helpers. These are tracked as future primitive-contract or domain-facade work.
+
+## 5. SDK Adapter Status
+
+Current SDK runtime delegation:
+
+> **post-L SDK ergonomics redesign cross-ref (§5.5 Tier 2 SDK-presentation note):** the flat `sdk.<method>(...)` enumeration below describes the SDK shell delegation contract — application runtime is the canonical authority. From the post-L redesign these flat methods are also reachable through the `FactGraph` taxonomy (`fg.read.get(...)` / `fg.what_if.check(...)` / `fg.what_if.fact_overlay.check(...)` / `fg.what_if.rule.disable(...)` / `fg.audit.diff_proof_frames(...)` etc.); the underlying delegation chain to application runtime is unchanged. Flat `SDKStore.<method>` form is retained below as the foundational contract anchor. Detailed design is captured in the post-L SDK ergonomics redesign blueprint (internal design record; §5.2 / §5.4).
+
+- `sdk.get(...)` / `sdk.find(...)` use application read/hydration DTOs.
+- `SDKBatchTx.preview()` and `BatchPlan.apply()` delegate to application write planning/apply when staged operations can be represented by application protocol.
+- `sdk.run(Query(...))` lowers SDK `Query` to application `QueryRuntimeRequest`, then maps application `EntitySnapshotDTO` rows back to SDK `EntitySnapshot` / dict / instance shapes.
+- `sdk.ingest(...)` keeps SDK descriptor parsing and diagnostics, then delegates cache-resolvable normalized set/add/retract items to `apply_ingest_request(...)`; cache misses fall back to the legacy SDK write path.
+- `sdk.evaluate(...)` / compiled derivation evaluate delegate compiled plans to `evaluate_derivation_plans(...)`.
+- `sdk.check(...)` / `sdk.diagnose(...)` (G1), `sdk.why_not(...)` (G4), `sdk.check_fact_overlay(...)` / `sdk.recheck_proof_frame(...)` (G2), `sdk.check_rule_disable(...)` / `sdk.check_rule_literal_replace(...)` / `sdk.check_rule_add_condition(...)` (G3), and `sdk.diff_proof_frames(...)` (G5) are the L Direction SDK shell consumers of the capability helper / application protocol / audit packages. G1 + G4 lower SDK `Derivation` inputs and call `build_check_request(...)` / `build_diagnose_request(...)` / `build_why_not_candidate_universe(...)` before delegating to `check_derivation_binding(...)` / `diagnose_derivation_binding(...)` / `check_why_not_universe(...)`. G2 Fact Overlay reuses the same SDK `Derivation` lowering path and constructs `FactOverlayCheckRequest(...)` directly with a raw `EvaluationOverlay` (no A-side helper); G2 ProofFrame Recheck takes a raw `SupportArtifact` + raw `EvaluationOverlay` and constructs `ProofFrameRecheckRequest(...)` directly (no derivation lowering, no registry resolution, no engine arg). G3 lowers SDK `Rule` inputs through `_compile_rule_input(...)` to `RuleSpec`, accepts raw `SupportArtifact` + raw `RuleLiteralPath` / `RuleAddedAtom`, and calls `build_rule_disable_request(...)` / `build_rule_literal_replace_request(...)` / `build_rule_add_condition_request(...)` before delegating to `check_rule_disable_action(...)` / `check_rule_literal_replace_action(...)` / `check_rule_add_condition_action(...)`. G5 ProofFrame Diff is the simplest shape: pure pass-through over `factgraph.audit.proof_frame_diff.build_proof_frame_diff(...)` taking two raw `tuple[RoundEvent, ...]` (`factgraph.audit.round_events.RoundEvent`) + raw `tuple[WarningDTO, ...]` and returning raw `ProofFrameDiff` (`factgraph.audit.proof_frame_diff.ProofFrameDiff`); no derivation/rule lowering, no registry, no engine, no IO. All nine L methods reuse `factgraph.sdk.shells._validation` validators — `validate_derivation(...)` (G1+G4+G2 Fact Overlay), `validate_evaluation_overlay(...)` (G2 Fact Overlay + G2 ProofFrame Recheck), `validate_rule(...)` / `validate_support_artifact(...)` / `validate_optional_evaluation_overlay(...)` (G3) — except G5 which uses inline `isinstance` validation per §5.5 (only one G5 shell consumes `RoundEvent` tuples; no extraction trigger fires). All nine remap non-SDK exceptions to `SDKStoreError(...) from exc` with capability-specific paths.
+- **L cross-boundary DTO layer rule (locked at G5 §5.3 / §6):** raw cross-boundary DTOs at the SDK boundary must be "frozen canonical DTOs above `factgraph.core` using `factgraph.application.protocol` vocabulary". This includes both `factgraph.application.protocol` frozen DTOs (G2/G3) and `factgraph.audit` frozen DTOs (G5: `RoundEvent`, `ProofFrameDiff`, etc.); excludes `factgraph.core.*` substrate IR (e.g., `RuleSpec`, which the G3 SDK shells lower internally rather than accept directly).
+- **Round events recorder lifecycle stays at advanced importable per G5 §5.1.** `factgraph.audit.round_events.start_round` / `record_round_event` / `finalize_round` are the canonical entry points; the existing user-facing round-story full demo example already imports them directly. The recorder is mutable / stateful / persistence-adjacent and would be the first L method returning a non-frozen object — explicitly out of scope for L Direction SDK shells. Round event projection helpers (`project_check_event_payload(...)` etc.) likewise stay at `factgraph.audit`.
+- Round events recorder lifecycle and the remaining capability ergonomics helpers are currently exposed at the application / advanced-importable layer only. ProofFrame diff is now reachable through the G5 SDK shell (`SDKStore.diff_proof_frames(...)`) — only its underlying capture side (`start_round` / `record_round_event` / `finalize_round`) stays at `factgraph.audit.round_events`. Frontier trace stays advanced importable per G4 §5.4 — the evaluator drift gate forbids application-layer or SDK-layer opt-in until a separate scoped blueprint reopens the boundary.
+
+SDK outward behavior remains the compatibility contract for end users; application is the runtime authority behind that facade.
+
+## 5.5 Durable Round Persistence Boundary
+
+Application capability runtimes return stable protocol DTOs, but they do not emit audit events internally. Batch 6 round persistence is owned by `factgraph.audit.round_events` and is invoked by an external caller/recorder after a capability result exists.
+
+Current persistable first-slice result surfaces are:
+
+- Check
+- Diagnose
+- Fact Overlay Check
+- Why-not Universe Diagnose
+- ProofFrame Rechecker
+
+Frontier projection and rule-action result events are deferred. This preserves the application boundary: no `factgraph.application.*runtime` module imports `factgraph.audit`, and no SDK/service/agent surface is introduced for round persistence.
+
+## 6. Conservative Boundaries
+
+- Application protocol does not accept SDK-only types.
+- Query lowering and authoring validation remain SDK responsibilities.
+- Ingest descriptor parsing, item precheck diagnostics, and user-facing `IngestResult` remain SDK responsibilities.
+- Batch export/replay and wire plan compatibility remain SDK responsibilities.
+- `sdk.set(...)` / `sdk.add(...)` / `sdk.retract(...)` remain low-level SDK convenience methods.
+- Application write planning is single-target; multi-root atomic batch remains expressed by SDK batch staging.
+- Full exception hierarchy migration is deferred. Query/ingest/derivation runtime paths use application DTO error shapes while SDK product-domain errors remain SDK-owned.
+
+## 7. Test Entry Points
+
+Core application and SDK adapter coverage is included in the factgraph test segment:
+
+```bash
+python -m unittest discover -s src/factgraph/tests -p 'test_*.py'
+```
+
+Key focused tests:
+
+- `test_application_schema_runtime.py`
+- `test_application_entity_view.py`
+- `test_application_entity_write.py`
+- `test_application_query_runtime.py`
+- `test_application_ingest_runtime.py`
+- `test_application_derivation_runtime.py`
+- `test_application_check_protocol.py`
+- `test_application_check_runtime.py`
+- `test_application_diagnose_protocol.py`
+- `test_application_diagnose_runtime_native.py`
+- `test_application_diagnose_runtime_non_native.py`
+- `test_application_diagnose_sibling_invariant.py`
+- `test_application_capability_helpers.py`
+- `test_capability_helpers_check.py`
+- `test_capability_helpers_diagnose.py`
+- `test_capability_helpers_proof_frame.py`
+- `test_capability_helpers_rule_overlays.py`
+- `test_capability_helpers_round_events.py`
+- `test_capability_helpers_invariants.py`
+- `test_application_fact_overlay_protocol.py`
+- `test_application_fact_overlay_runtime_native.py`
+- `test_application_fact_overlay_sibling_invariant.py`
+- `test_application_proofframe_protocol.py`
+- `test_application_proofframe_runtime_native.py`
+- `test_application_proofframe_narrative.py`
+- `test_walker_errors.py`
+- `test_walker_ir.py`
+- `test_walker_views_frozen_tuple.py`
+- `test_walker_keys.py`
+- `test_walker_views_support.py`
+- `test_walker_views_proof_frame.py`
+- `test_walker_views_proof_frame_diff.py`
+- `test_walker_invariants.py`
+- `test_application_rule_disable_protocol.py`
+- `test_application_rule_disable_runtime_native.py`
+- `test_application_rule_literal_replace_protocol.py`
+- `test_application_rule_literal_replace_runtime_native.py`
+- `test_application_rule_add_condition_protocol.py`
+- `test_application_rule_add_condition_runtime_native.py`
+- `test_application_why_not_protocol.py`
+- `test_application_why_not_runtime.py`
+- `test_application_why_not_sibling_invariant.py`
+- `test_sdk_facade_application_delegate.py`
+- `test_sdk_batch_application_delegate.py`
+- `test_sdk_query_policies.py`
+- `test_sdk_ingest_application_delegate.py`
+- `test_sdk_check.py`
+- `test_sdk_diagnose.py`
+- `test_sdk_why_not.py`
+- `test_sdk_fact_overlay.py`
+- `test_sdk_proof_frame.py`
+- `test_sdk_rule_disable.py`
+- `test_sdk_rule_literal_replace.py`
+- `test_sdk_rule_add_condition.py`
+- `test_sdk_proof_frame_diff.py`
+- `test_sdk_g1_invariants.py`
+- `test_sdk_g4_invariants.py`
+- `test_sdk_g2_invariants.py`
+- `test_sdk_g3_invariants.py`
+- `test_sdk_g5_invariants.py`
+- `test_sdk_validation.py`
+- `test_sdk_consumer_boundary.py`
+
+## 8. Related Documents
+
+- [docs/architecture_principles.md](../../../../docs/architecture_principles.md)
+- [src/factgraph/sdk/docs/README.md](../../sdk/docs/README.md)

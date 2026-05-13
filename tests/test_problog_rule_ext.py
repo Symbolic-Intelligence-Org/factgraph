@@ -5,13 +5,13 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
-from factpy.adapters.problog.rule_ext import (
+from factgraph.adapters.problog.rule_ext import (
     ProbLogRuleExt,
     branch_count_for_where,
     materialize_problog_branch_probabilities,
     resolve_problog_engine_ext,
 )
-from factpy.core.store.types import EngineExtBase
+from factgraph.core.store.types import EngineExtBase
 
 
 @dataclass(frozen=True)

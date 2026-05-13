@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import (
+from factgraph.application import (
     CapabilityHelperError,
     OriginPackageError,
     build_rule_add_condition_request,
     build_rule_disable_request,
     build_rule_literal_replace_request,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     EvaluationOverlay,
     FactValueOverride,
     RuleAddConditionAction,
@@ -23,9 +23,9 @@ from factpy.application.protocol import (
     RuleLiteralReplaceAction,
     RuleLiteralReplaceRequest,
 )
-from factpy.core.rules.rule_ir import RuleSpec
-from factpy.core.store._support import PredWitness, SupportArtifact
-from factpy.sdk import Pred, Rule, vars as sdk_vars
+from factgraph.core.rules.rule_ir import RuleSpec
+from factgraph.core.store._support import PredWitness, SupportArtifact
+from factgraph.sdk import Pred, Rule, vars as sdk_vars
 
 
 def _rule_spec(*, where: list[object] | None = None) -> RuleSpec:
@@ -502,8 +502,8 @@ class BuildRuleAddConditionRequestTests(unittest.TestCase):
 
 class RuleOverlayHelperExportTests(unittest.TestCase):
     def test_phase_4_exports_from_application_and_helper_package(self) -> None:
-        from factpy import application
-        from factpy.application import capability_helpers
+        from factgraph import application
+        from factgraph.application import capability_helpers
 
         self.assertIs(
             application.build_rule_disable_request,

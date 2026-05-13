@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import unittest
 
-import factpy.sdk as sdk_module
-from factpy.sdk import Entity, Field, Identity, SDKStore, SDKStoreError
+import factgraph.sdk as sdk_module
+from factgraph.sdk import Entity, Field, Identity, SDKStore, SDKStoreError
 
 
 class User(Entity):

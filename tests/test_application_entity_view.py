@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import (
+from factgraph.application import (
     build_schema_index,
     entity_info,
     execute_read_request,
@@ -10,10 +10,10 @@ from factpy.application import (
     hydrate_entity,
     resolve_selector,
 )
-from factpy.application.protocol import EntityReadRequest, EntityRef, EntitySelector
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.store import Store
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.application.protocol import EntityReadRequest, EntityRef, EntitySelector
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.store import Store
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Country(Entity):

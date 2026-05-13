@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.core.evidence.write_protocol import (
+from factgraph.core.evidence.write_protocol import (
     WriteProtocolError,
     _SHARED_ANNOTATION_WHITELIST,
     add_field,
@@ -16,7 +16,7 @@ from factpy.core.evidence.write_protocol import (
     retract_by_asrt,
     set_field,
 )
-from factpy.core.store.ledger import Ledger
+from factgraph.core.store.ledger import Ledger
 
 
 def _eref(token: str) -> str:
@@ -393,13 +393,13 @@ class TestWhitelistCoverage(unittest.TestCase):
     """Verify whitelist is complete and categories are correct."""
 
     def test_whitelist_categories_are_valid(self) -> None:
-        from factpy.core.store.ledger import ANNOTATION_CATEGORIES
+        from factgraph.core.store.ledger import ANNOTATION_CATEGORIES
 
         for key, (category, origin) in _SHARED_ANNOTATION_WHITELIST.items():
             self.assertIn(category, ANNOTATION_CATEGORIES, f"whitelist key={key} has invalid category={category}")
 
     def test_whitelist_origins_are_valid(self) -> None:
-        from factpy.core.store.ledger import ANNOTATION_ORIGINS
+        from factgraph.core.store.ledger import ANNOTATION_ORIGINS
 
         for key, (category, origin) in _SHARED_ANNOTATION_WHITELIST.items():
             self.assertIn(origin, ANNOTATION_ORIGINS, f"whitelist key={key} has invalid origin={origin}")

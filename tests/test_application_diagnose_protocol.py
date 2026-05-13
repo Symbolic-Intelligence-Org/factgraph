@@ -8,7 +8,7 @@ from __future__ import annotations
 import typing
 import unittest
 
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     DiagnoseAtomLocator,
@@ -20,7 +20,7 @@ from factpy.application.protocol import (
     EvidenceEnvelope,
     ProtocolShapeError,
 )
-from factpy.core.store._support import ProvenanceEnvelope, SupportArtifact
+from factgraph.core.store._support import ProvenanceEnvelope, SupportArtifact
 
 
 def _head(target: str = "doc:eligible", vars_: tuple[str, ...] = ("$doc",)) -> CompiledHeadCall:

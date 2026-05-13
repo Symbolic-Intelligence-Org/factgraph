@@ -7,18 +7,18 @@ import unittest
 import warnings
 from unittest.mock import patch
 
-from factpy.adapters.pyreason.rule_ext import (
+from factgraph.adapters.pyreason.rule_ext import (
     PyReasonCompileError,
     PyReasonFactDef,
     PyReasonRuleExt,
     compile_pyreason_rule,
 )
-from factpy.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
-from factpy.adapters.pyreason.session import PyReasonSession
-from factpy.core.store.types import EngineExtBase
-from factpy.sdk.dsl.errors import SDKDSLError
-from factpy.sdk.dsl.expr import CompareExpr, HeadCall, LogicVar, Pred
-from factpy.sdk.dsl.rule import Rule
+from factgraph.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
+from factgraph.adapters.pyreason.session import PyReasonSession
+from factgraph.core.store.types import EngineExtBase
+from factgraph.sdk.dsl.errors import SDKDSLError
+from factgraph.sdk.dsl.expr import CompareExpr, HeadCall, LogicVar, Pred
+from factgraph.sdk.dsl.rule import Rule
 
 
 x = LogicVar("x")

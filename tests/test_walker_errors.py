@@ -10,7 +10,7 @@ import unittest
 
 class TestWalkerErrorHierarchyImport(unittest.TestCase):
     def test_all_seven_classes_importable_from_package(self) -> None:
-        from factpy.application.walker import (
+        from factgraph.application.walker import (
             UnboundedStreamError,
             WalkerError,
             WalkerFrozenError,
@@ -32,7 +32,7 @@ class TestWalkerErrorHierarchyImport(unittest.TestCase):
             self.assertTrue(isinstance(cls, type))
 
     def test_all_subclasses_extend_walker_error(self) -> None:
-        from factpy.application.walker import (
+        from factgraph.application.walker import (
             UnboundedStreamError,
             WalkerError,
             WalkerFrozenError,
@@ -53,7 +53,7 @@ class TestWalkerErrorHierarchyImport(unittest.TestCase):
             self.assertTrue(issubclass(cls, WalkerError))
 
     def test_walker_error_extends_exception_not_value_error(self) -> None:
-        from factpy.application.walker import WalkerError
+        from factgraph.application.walker import WalkerError
 
         self.assertTrue(issubclass(WalkerError, Exception))
         # Per blueprint §4.1 Round 2: WalkerError does NOT extend ValueError.
@@ -61,7 +61,7 @@ class TestWalkerErrorHierarchyImport(unittest.TestCase):
         self.assertFalse(issubclass(WalkerError, ValueError))
 
     def test_each_subclass_can_be_raised_and_caught_as_walker_error(self) -> None:
-        from factpy.application.walker import (
+        from factgraph.application.walker import (
             WalkerError,
             WalkerFrozenError,
             WalkerLookupError,
@@ -85,7 +85,7 @@ class TestWalkerErrorHierarchyImport(unittest.TestCase):
 
 class TestWalkerErrorPackageExports(unittest.TestCase):
     def test_all_seven_error_classes_listed_in_package_all(self) -> None:
-        from factpy.application import walker
+        from factgraph.application import walker
 
         expected_error_names = {
             "UnboundedStreamError",
@@ -99,8 +99,8 @@ class TestWalkerErrorPackageExports(unittest.TestCase):
         self.assertLessEqual(expected_error_names, set(walker.__all__))
 
     def test_package_error_exports_are_errors_module_classes(self) -> None:
-        from factpy.application import walker
-        from factpy.application.walker import errors
+        from factgraph.application import walker
+        from factgraph.application.walker import errors
 
         for name in (
             "UnboundedStreamError",

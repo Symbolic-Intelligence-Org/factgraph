@@ -7,8 +7,8 @@ import unittest
 from importlib import import_module
 from pathlib import Path
 
-import factpy.sdk as sdk_pkg
-from factpy.sdk import SDKStore
+import factgraph.sdk as sdk_pkg
+from factgraph.sdk import SDKStore
 
 
 EXPECTED_SDK_ALL: tuple[str, ...] = (
@@ -55,14 +55,14 @@ EXPECTED_SDK_ALL: tuple[str, ...] = (
     "vars",
 )
 
-G1_MODULES = ("factpy.sdk.shells.check", "factpy.sdk.shells.diagnose")
+G1_MODULES = ("factgraph.sdk.shells.check", "factgraph.sdk.shells.diagnose")
 FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
-    "factpy.application.capability_helpers._binding",
+    "factgraph.application.capability_helpers._binding",
     "_reject_sdk_origin",
-    "from factpy.application.walker",
-    "import factpy.application.walker",
-    "from factpy.application.walker import",
-    "factpy.audit",
+    "from factgraph.application.walker",
+    "import factgraph.application.walker",
+    "from factgraph.application.walker import",
+    "factgraph.audit",
 )
 
 
@@ -85,7 +85,7 @@ class SDKG1InvariantTests(unittest.TestCase):
         self.assertFalse(hasattr(SDKStore, "explain"))
 
     def test_g1_modules_live_in_shells_subpackage(self) -> None:
-        """Retrofit per G2 §5.5 #P1 carve-out: G1 shells migrated into factpy/sdk/shells/."""
+        """Retrofit per G2 §5.5 #P1 carve-out: G1 shells migrated into factgraph/sdk/shells/."""
         sdk_dir = Path(inspect.getfile(SDKStore)).parent
         self.assertTrue((sdk_dir / "shells").is_dir())
         self.assertTrue((sdk_dir / "shells" / "__init__.py").is_file())

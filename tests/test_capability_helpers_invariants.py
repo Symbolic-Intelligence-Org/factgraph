@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 import unittest
 
-import factpy.application as application
-from factpy.application import capability_helpers
-from factpy.application.protocol import (
+import factgraph.application as application
+from factgraph.application import capability_helpers
+from factgraph.application.protocol import (
     CheckRequest,
     CheckResult,
     CompiledDerivationPlan,
@@ -25,9 +25,9 @@ from factpy.application.protocol import (
     RuleLiteralPath,
     WhyNotUniverseResult,
 )
-from factpy.core.rules.rule_ir import RuleSpec
-from factpy.core.store._support import PredWitness, SupportArtifact, normalize_binding_items
-from factpy.sdk import Pred, Rule, vars as sdk_vars
+from factgraph.core.rules.rule_ir import RuleSpec
+from factgraph.core.store._support import PredWitness, SupportArtifact, normalize_binding_items
+from factgraph.sdk import Pred, Rule, vars as sdk_vars
 
 
 HELPER_EXPORTS = (
@@ -273,20 +273,20 @@ class CapabilityHelperInvariantTests(unittest.TestCase):
     def test_production_helpers_do_not_import_sdk(self) -> None:
         for path, source in _helper_sources().items():
             with self.subTest(path=path.name):
-                self.assertNotIn("factpy.sdk", source)
-                self.assertNotIn("from factpy import sdk", source)
+                self.assertNotIn("factgraph.sdk", source)
+                self.assertNotIn("from factgraph import sdk", source)
                 self.assertNotIn("import sdk", source)
 
     def test_production_helpers_do_not_call_sibling_runtimes_or_recorders(self) -> None:
         forbidden = (
-            "from factpy.application.derivation_check_runtime",
-            "from factpy.application.diagnose_runtime",
-            "from factpy.application.fact_overlay_runtime",
-            "from factpy.application.proofframe_runtime",
-            "from factpy.application.rule_disable_runtime",
-            "from factpy.application.rule_literal_replace_runtime",
-            "from factpy.application.rule_add_condition_runtime",
-            "from factpy.application.why_not_runtime",
+            "from factgraph.application.derivation_check_runtime",
+            "from factgraph.application.diagnose_runtime",
+            "from factgraph.application.fact_overlay_runtime",
+            "from factgraph.application.proofframe_runtime",
+            "from factgraph.application.rule_disable_runtime",
+            "from factgraph.application.rule_literal_replace_runtime",
+            "from factgraph.application.rule_add_condition_runtime",
+            "from factgraph.application.why_not_runtime",
             "check_derivation_binding",
             "diagnose_derivation_binding",
             "check_fact_overlay_binding",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application.walker import (
+from factgraph.application.walker import (
     AssertionView,
     AtomKeyView,
     FrozenTupleView,
@@ -13,8 +13,8 @@ from factpy.application.walker import (
     WalkerReferenceError,
     WalkerSnapshotError,
 )
-from factpy.core.store._support import NonFactStep, PredWitness, SupportArtifact
-from factpy.core.store.ledger import Claim, MetaRow
+from factgraph.core.store._support import NonFactStep, PredWitness, SupportArtifact
+from factgraph.core.store.ledger import Claim, MetaRow
 
 
 def _support_artifact() -> SupportArtifact:
@@ -235,8 +235,8 @@ class SupportArtifactViewTests(unittest.TestCase):
         self.assertFalse(hasattr(view, "raw"))
 
     def test_phase_3_support_types_reexport_from_application_package(self) -> None:
-        from factpy.application import AssertionView as AppAssertionView
-        from factpy.application import SupportArtifactView as AppSupportArtifactView
+        from factgraph.application import AssertionView as AppAssertionView
+        from factgraph.application import SupportArtifactView as AppSupportArtifactView
 
         self.assertIs(AppAssertionView, AssertionView)
         self.assertIs(AppSupportArtifactView, SupportArtifactView)

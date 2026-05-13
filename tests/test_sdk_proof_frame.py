@@ -14,15 +14,15 @@ import inspect
 import unittest
 from unittest.mock import patch
 
-from factpy.application.capability_helpers import build_fact_value_override
-from factpy.application.protocol import (
+from factgraph.application.capability_helpers import build_fact_value_override
+from factgraph.application.protocol import (
     EvaluationOverlay,
     ProofFrameRecheckResult,
     ProtocolShapeError,
 )
-from factpy.application.protocol.schema_runtime import FieldPath
-from factpy.core.store._support import SupportArtifact
-from factpy.sdk import (
+from factgraph.application.protocol.schema_runtime import FieldPath
+from factgraph.core.store._support import SupportArtifact
+from factgraph.sdk import (
     Inference,
     Entity,
     Field,
@@ -146,7 +146,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "factpy.sdk.shells.proof_frame.ProofFrameRecheckRequest",
+            "factgraph.sdk.shells.proof_frame.ProofFrameRecheckRequest",
             side_effect=ProtocolShapeError("bad request shape"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -161,7 +161,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with patch(
-            "factpy.sdk.shells.proof_frame.recheck_proof_frame",
+            "factgraph.sdk.shells.proof_frame.recheck_proof_frame",
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
@@ -170,8 +170,8 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame")
         self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
 
-    def test_proof_frame_recheck_result_not_exported_from_factpy_sdk_all(self) -> None:
-        import factpy.sdk as sdk_pkg
+    def test_proof_frame_recheck_result_not_exported_from_factgraph_sdk_all(self) -> None:
+        import factgraph.sdk as sdk_pkg
 
         self.assertNotIn("ProofFrameRecheckResult", sdk_pkg.__all__)
         self.assertFalse(hasattr(sdk_pkg, "ProofFrameRecheckResult"))
@@ -196,7 +196,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
             )
 
         with patch(
-            "factpy.sdk.shells.proof_frame.recheck_proof_frame",
+            "factgraph.sdk.shells.proof_frame.recheck_proof_frame",
             side_effect=fake_runtime,
         ):
             sdk.recheck_proof_frame(support, EvaluationOverlay())
@@ -212,12 +212,12 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         support = _capture_support(sdk, alice, 25)
 
-        with patch("factpy.sdk.shells.check.sdk_check") as mock_check, patch(
-            "factpy.sdk.shells.diagnose.sdk_diagnose"
+        with patch("factgraph.sdk.shells.check.sdk_check") as mock_check, patch(
+            "factgraph.sdk.shells.diagnose.sdk_diagnose"
         ) as mock_diagnose, patch(
-            "factpy.sdk.shells.why_not.sdk_why_not"
+            "factgraph.sdk.shells.why_not.sdk_why_not"
         ) as mock_why_not, patch(
-            "factpy.sdk.shells.fact_overlay.sdk_fact_overlay_check"
+            "factgraph.sdk.shells.fact_overlay.sdk_fact_overlay_check"
         ) as mock_fact_overlay:
             sdk.recheck_proof_frame(support, EvaluationOverlay())
 
@@ -227,9 +227,9 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         mock_fact_overlay.assert_not_called()
 
     def test_q3_q4_sibling_proof_frame_module_does_not_import_sibling_sdk_shells(self) -> None:
-        """§5.8 Sibling static check: factpy.sdk.shells.proof_frame source
+        """§5.8 Sibling static check: factgraph.sdk.shells.proof_frame source
         has no sibling SDK shell references."""
-        import factpy.sdk.shells.proof_frame as proof_frame_module
+        import factgraph.sdk.shells.proof_frame as proof_frame_module
 
         source = inspect.getsource(proof_frame_module)
         for forbidden in (
@@ -237,10 +237,10 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
             "from .diagnose",
             "from .why_not",
             "from .fact_overlay",
-            "from factpy.sdk.shells.check",
-            "from factpy.sdk.shells.diagnose",
-            "from factpy.sdk.shells.why_not",
-            "from factpy.sdk.shells.fact_overlay",
+            "from factgraph.sdk.shells.check",
+            "from factgraph.sdk.shells.diagnose",
+            "from factgraph.sdk.shells.why_not",
+            "from factgraph.sdk.shells.fact_overlay",
             "sdk_check(",
             "sdk_diagnose(",
             "sdk_why_not(",

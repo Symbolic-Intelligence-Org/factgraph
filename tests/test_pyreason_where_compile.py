@@ -4,14 +4,14 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass, field
 
-from factpy.adapters.pyreason.where_compile import (
+from factgraph.adapters.pyreason.where_compile import (
     PyReasonWhereCompileError,
     _clean_var,
     _pred_short_name,
     _validate_atom,
     compile_where_ir_to_pyreason,
 )
-from factpy.core.store.types import EngineExtBase
+from factgraph.core.store.types import EngineExtBase
 
 
 @dataclass(frozen=True)

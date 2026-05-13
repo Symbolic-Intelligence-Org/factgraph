@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import (
+from factgraph.application import (
     IngestRuntimeError,
     apply_ingest_request,
     build_schema_index,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     EntitySelector,
     FieldPath,
     IngestAddItem,
@@ -17,8 +17,8 @@ from factpy.application.protocol import (
     IngestSetItem,
     ProtocolShapeError,
 )
-from factpy.core.store import Store
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.core.store import Store
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Tag(Entity):

@@ -3,9 +3,9 @@ from __future__ import annotations
 import inspect
 import unittest
 
-import factpy.sdk as sdk_module
-from factpy.core.view.projector import project_view_facts
-from factpy.sdk import Entity, FactGraph, Field, Identity
+import factgraph.sdk as sdk_module
+from factgraph.core.view.projector import project_view_facts
+from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):

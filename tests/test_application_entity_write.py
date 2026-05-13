@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.application import (
+from factgraph.application import (
     apply_write_plan,
     build_schema_index,
     execute_read_request,
@@ -11,7 +11,7 @@ from factpy.application import (
     plan_write_command,
     resolve_selector,
 )
-from factpy.application.protocol import (
+from factgraph.application.protocol import (
     EntityReadRequest,
     EntitySelector,
     EntityWriteCommand,
@@ -19,9 +19,9 @@ from factpy.application.protocol import (
     FieldMutation,
     FieldPath,
 )
-from factpy.core.evidence.write_protocol import set_field
-from factpy.core.store import Store
-from factpy.sdk import Entity, Field, Identity, compile_schema_from_classes
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.store import Store
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Country(Entity):
@@ -44,7 +44,7 @@ def _build_store() -> tuple[Store, object]:
 
 
 def _write_entity_exists(store: Store, index, ref) -> None:
-    from factpy.application import entity_info
+    from factgraph.application import entity_info
 
     info = entity_info(index, ref.entity_type)
     set_field(store.ledger, info.exists_predicate_id, ref.encoded_ref or "", [])

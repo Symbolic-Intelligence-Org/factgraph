@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.adapters.problog.provenance import (
+from factgraph.adapters.problog.provenance import (
     parse_problog_trace,
     problog_trace_to_evidence_graph,
 )
-from factpy.audit import EDGE_DERIVES, LAYOUT_TREE
-from factpy.core.store._support import PROBLOG_PROVENANCE_KIND
+from factgraph.audit import EDGE_DERIVES, LAYOUT_TREE
+from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
 
 
 _SUCCESS_TRACE = """

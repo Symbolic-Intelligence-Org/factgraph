@@ -16,7 +16,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from factpy.sdk import Entity, Field, FactGraph, Identity, SDKStore
+from factgraph.sdk import Entity, Field, FactGraph, Identity, SDKStore
 
 
 class Person(Entity):

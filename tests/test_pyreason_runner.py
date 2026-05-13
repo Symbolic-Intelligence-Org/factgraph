@@ -5,7 +5,7 @@ import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
-from factpy.adapters.pyreason.runner import (
+from factgraph.adapters.pyreason.runner import (
     PyReasonRunConfig,
     PyReasonRunResult,
     _PYREASON_LOCK,
@@ -14,7 +14,7 @@ from factpy.adapters.pyreason.runner import (
     build_pyreason_graph,
     run_pyreason,
 )
-from factpy.adapters.pyreason.session import PyReasonSession
+from factgraph.adapters.pyreason.session import PyReasonSession
 
 
 def _test_schema_ir() -> dict[str, object]:

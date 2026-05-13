@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.sdk import Entity, Field, Identity, SDKDSLError, SDKStore
-from factpy.sdk.errors import SDKError
+from factgraph.sdk import Entity, Field, Identity, SDKDSLError, SDKStore
+from factgraph.sdk.errors import SDKError
 
 
 class SDKErrorHierarchyTests(unittest.TestCase):

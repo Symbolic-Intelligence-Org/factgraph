@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.adapters.pyreason.provenance import (
+from factgraph.adapters.pyreason.provenance import (
     PyReasonTraceEventV0,
     PyReasonTraceV0,
     pyreason_trace_to_evidence_graph,
 )
-from factpy.audit import EDGE_UPDATES, LAYOUT_TIMELINE
-from factpy.core.store._support import PYREASON_PROVENANCE_KIND
+from factgraph.audit import EDGE_UPDATES, LAYOUT_TIMELINE
+from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
 
 
 class PyReasonEvidenceGraphTests(unittest.TestCase):

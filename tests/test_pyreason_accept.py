@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import unittest
 
-from factpy.adapters.pyreason.accept import (
+from factgraph.adapters.pyreason.accept import (
     AcceptResult,
     accept_pyreason_session,
 )
-from factpy.adapters.pyreason.session import PyReasonSession
-from factpy.core.store.ledger import Ledger
-from factpy.sdk.schema import Entity, Field, Identity, Relationship
+from factgraph.adapters.pyreason.session import PyReasonSession
+from factgraph.core.store.ledger import Ledger
+from factgraph.sdk.schema import Entity, Field, Identity, Relationship
 
 
 class User(Entity):
