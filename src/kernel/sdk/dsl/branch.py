@@ -11,6 +11,14 @@ _BRANCH_ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 @dataclass(frozen=True)
 class Branch:
+    """Named alternative body inside a rule or inference.
+
+    A rule with multiple branches expresses alternative pathways: each branch
+    is a conjunction of atoms, and the branch list acts like OR over those
+    conjunctions. Supplying `id=` gives inspection and semantics APIs a stable
+    branch name.
+    """
+
     atoms: list[Any]
     _: KW_ONLY
     id: str | None = None

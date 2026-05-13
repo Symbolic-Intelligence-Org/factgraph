@@ -14,6 +14,14 @@ from .expr import CompareExpr, ExistsAtom, HeadCall, LogicVar, NotExpr, RuleRefA
 
 @dataclass(frozen=True)
 class RuleRef:
+    """Reference another rule from a `where` clause.
+
+    `RuleRef` is a rule-body carrier: calling it with logic variables creates
+    an atom that can appear in another `Rule`, `Inference`, or `Query`.
+    It is not a saved-asset handle; use `SavedRuleRef` for registry load/list
+    workflows.
+    """
+
     rule_id: str
     version: str
 
@@ -44,6 +52,19 @@ class RuleRef:
 
 @dataclass(frozen=True)
 class Rule:
+    """Declarative query over existing facts.
+
+    A `Rule` selects variables from a `where` body and can be executed with
+    `fg.eval.run(rule)`. It reads the current graph projection and does not
+    write new assertions to the ledger.
+
+    Args:
+        id: Stable rule id used by persistence and inspection.
+        version: Version string for this rule definition.
+        select: Variables or terms returned by the rule.
+        where: Body atoms, branches, or rule references to match.
+    """
+
     id: str
     version: str
     select: list[Any]
@@ -97,6 +118,19 @@ class Rule:
 
 @dataclass(frozen=True)
 class Inference:
+    """Declarative rule that proposes new fact candidates.
+
+    `Inference` uses a `where` body plus a head/target declaration to derive
+    candidate facts. `fg.eval.evaluate(inference)` returns candidate sets;
+    candidates enter the ledger only after `fg.eval.accept(...)`.
+
+    Args:
+        id: Stable inference id used by persistence and runtime output.
+        version: Version string for this inference definition.
+        where: Body atoms or branches that must match before proposing facts.
+        head: Optional DSL head call describing the fact to propose.
+    """
+
     id: str
     version: str
     where: list[Any]
@@ -163,6 +197,19 @@ class ReturnContractEntry:
 
 @dataclass(frozen=True)
 class Query:
+    """Ad-hoc read query with a custom result shape.
+
+    `Query` is useful for one-off reads that need a body plus explicit head
+    aliases. Unlike `Rule` and `Inference`, it is not the primary durable
+    authoring asset surface.
+
+    Args:
+        head: Values or aliases to return.
+        where: Body atoms that bind variables used by the head.
+        on_missing: Missing-value behavior: `error`, `skip`, or `null`.
+        on_type_mismatch: Type-mismatch behavior: `error`, `skip`, or `null`.
+    """
+
     head: Any
     where: list[Any]
     on_missing: str = "error"

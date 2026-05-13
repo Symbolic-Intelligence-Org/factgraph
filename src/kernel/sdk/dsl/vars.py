@@ -48,5 +48,11 @@ def _build_named_vars(names: tuple[str, ...] | list[str]) -> tuple[LogicVar, ...
 
 
 def vars(*names: str) -> _VarsContext:
-    return _VarsContext(*names)
+    """Create logic variables for rule, inference, and query bodies.
 
+    Use as a context manager: `with vars("u", "tag") as (u, tag): ...`.
+    Calling `vars()` with no names returns a factory inside the context, so
+    `with vars() as V: u, tag = V("u", "tag")` is also supported.
+    """
+
+    return _VarsContext(*names)

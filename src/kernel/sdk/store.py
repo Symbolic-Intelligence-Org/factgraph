@@ -320,6 +320,12 @@ class _SDKRulesManager:
         raise FrozenSnapshotError("FactGraph.rules namespace is read-only")
 
     def inspect(self, *args: Any, **kwargs: Any) -> Any:
+        """Inspect a rule or inference without executing it.
+
+        Returns structural metadata such as kind, branches, fallback branch
+        ids, and body atom identifiers. This is a read-only view for debugging
+        rule shape and branch semantics.
+        """
         return self._sdk.inspect_rule(*args, **kwargs)
 
     def save(self, rule: Any) -> SavedRuleRef:
@@ -371,15 +377,32 @@ class _SDKEvalManager:
         raise FrozenSnapshotError("FactGraph.eval namespace is read-only")
 
     def run(self, *args: Any, **kwargs: Any) -> Any:
+        """Run a `Rule` or `Query` against the current graph projection.
+
+        `run` returns matching rows and does not write assertions. Use it for
+        reads over existing facts; use `evaluate` for inference candidates.
+        """
         return self._sdk.run(*args, **kwargs)
 
     def evaluate(self, *args: Any, **kwargs: Any) -> Any:
+        """Evaluate an `Inference` and return candidate fact sets.
+
+        Evaluation is read-only: candidates are proposed but not committed to
+        the ledger. Pass the returned `CandidateSet` to `accept` when a
+        candidate should become an assertion.
+        """
         return self._sdk.evaluate(*args, **kwargs)
 
     def inspect_semantics(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.inspect_semantics(*args, **kwargs)
 
     def accept(self, *args: Any, **kwargs: Any) -> Any:
+        """Accept candidate facts into the ledger.
+
+        The common path is `fg.eval.accept(candidate_set)` after
+        `fg.eval.evaluate(inference)`. This is the step that appends accepted
+        candidate assertions to the graph.
+        """
         return self._sdk.accept(*args, **kwargs)
 
     def accept_many(self, *args: Any, **kwargs: Any) -> Any:

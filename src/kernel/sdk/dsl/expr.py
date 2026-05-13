@@ -261,12 +261,25 @@ def build_field_head_call(field_descriptor: Any, kwargs: dict[str, Any]) -> Head
 
 
 def Not(body: list[Any]) -> NotExpr:
+    """Negate a body fragment inside a `where` clause.
+
+    Use `Not([...])` for absence or anti-join style checks. The wrapped body
+    may correlate with variables already bound by earlier atoms.
+    """
+
     if not isinstance(body, list) or not body:
         raise SDKDSLError("Not(...) requires non-empty list body")
     return NotExpr(body=list(body))
 
 
 def Pred(pred_id: str, *terms: Any) -> PredAtom:
+    """Create a predicate atom for a `where` clause.
+
+    Args:
+        pred_id: Predicate id such as `"User:exists"` or `"User:tag"`.
+        *terms: Logic variables or literal terms passed to the predicate.
+    """
+
     if not isinstance(pred_id, str) or not pred_id:
         raise SDKDSLError("Pred(...) pred_id must be non-empty string")
     if not terms:
