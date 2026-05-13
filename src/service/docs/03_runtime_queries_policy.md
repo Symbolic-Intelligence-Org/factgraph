@@ -20,7 +20,7 @@
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
 - `POST /v1/runtime/sessions/{session_id}/packages/export`
 
-本文记录 service v1 的 runtime query、内联 read policy、rule/inference 执行与 package export DTO 契约。session open/get/close、writes、claims 和 rules/registry 端点不在本文范围内。
+本文记录 service v1 的 runtime query、rule/inference 执行与 package export DTO 契约。session open/get/close、writes、claims 和 rules/registry 端点不在本文范围内。
 
 ## 通用约定
 
@@ -33,7 +33,8 @@
 - tuple 在 JSON 中统一序列化为 list。
 - `entity_ref`（如 `idref_v1:...`）直接按普通字符串透传，不额外包装。
 - runtime query/rule/inference 链路不再接受 `temporal_view`；传入时返回 `shape` error。
-- `view-facts` 不再有命名 view registry。需要 read-time confidence/display aggregation 时，在请求体内传 `policy` 对象；`view_name` 和旧的 `view` 字段都会返回 `shape` error。
+- `view-facts` 不再有命名 view registry，也不接受 inline read policy。
+  `policy`、`view_name` 和旧的 `view` 字段都会返回 `shape` error。
 
 成功 envelope 示例：
 
@@ -1426,20 +1427,7 @@
 
 ## 13. `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
 
-请求（使用内联 policy）：
-
-```json
-{
-  "policy": {
-    "respect_revocations": true,
-    "confidence_strategy": "max",
-    "prefer_source": null
-  },
-  "include_audit": true
-}
-```
-
-请求（不应用 read policy，只返回 active projection facts）：
+请求（返回 active projection facts）：
 
 ```json
 {
@@ -1462,11 +1450,6 @@
       "person:country": [["idref_v1:Person:source_id=u1", "de"]],
       "person:name": [["idref_v1:Person:source_id=u1", "Alice"]]
     },
-    "policy": {
-      "respect_revocations": true,
-      "confidence_strategy": "max",
-      "prefer_source": null
-    },
     "audit": {
       "contract_version": 1
     }
@@ -1476,13 +1459,9 @@
 
 说明：
 
-- `policy` 可选；缺失或 `null` 表示不应用 read policy，响应中不返回 `view.policy`。
-- `policy.respect_revocations` 默认 `true`；为 `true` 时，display/confidence aggregation 会跳过已有 active retraction 的 claim。
-- `policy.confidence_strategy` 接受 `max | mean | median | prefer_source`。
-- `policy.prefer_source` 只能是非空字符串或 `null`；仅在 `confidence_strategy="prefer_source"` 时有意义。
-- `view_name` 已移除；传入时返回 `$.view_name` 的 `shape` error，并提示改用内联 `policy`。
-- 旧字段 `view` 已重命名为 `policy`；传入时返回 `$.view` 的 `shape` error。
-- 旧字段 `policy.active` 已重命名为 `policy.respect_revocations`；传入 `active` 返回 `$.policy.active` 的 `shape` error。
+- `policy` 已移除；传入时返回 `$.policy` 的 `shape` error。
+- `view_name` 已移除；传入时返回 `$.view_name` 的 `shape` error。
+- 旧字段 `view` 已移除；传入时返回 `$.view` 的 `shape` error。
 - `include_audit` 默认 `false`；为 `true` 时响应中返回 `view.audit`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。
 - `meta.pred_count` 是投影结果中的 predicate 数量；`meta.total_tuple_count` 是所有 predicate rows 总和。

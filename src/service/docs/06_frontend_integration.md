@@ -258,7 +258,7 @@ npx openapi-typescript docs/api/openapi.yaml -o src/api/types.ts
 
 - [`01_overview.md`](./01_overview.md) — service 模块总览 + 完整路由清单
 - [`02_runtime_sessions.md`](./02_runtime_sessions.md) — runtime session / writes / claims DTO 细节
-- [`03_runtime_queries_policy.md`](./03_runtime_queries_policy.md) — runtime queries / inline policy DTO 细节
+- [`03_runtime_queries_policy.md`](./03_runtime_queries_policy.md) — runtime queries / rule and inference DTO 细节
 - [`04_rules_registry.md`](./04_rules_registry.md) — rules / registry DTO 细节
 - [`../../../agent/service/docs/05_extraction.md`](../../../agent/service/docs/05_extraction.md) — `POST /v1/extraction/documents` DTO 细节(归属 agent.service)
 

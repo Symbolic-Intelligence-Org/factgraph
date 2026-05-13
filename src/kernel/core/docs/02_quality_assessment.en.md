@@ -60,7 +60,8 @@ Strengths:
 
 - `single/multi` semantics are clear
 - `project_view_facts_with_audit` provides lightweight audit statistics
-- `project_display_facts` provides a presentation-oriented aggregation layer
+- `project_view_facts_with_audit` keeps projection audit metadata separate
+  from the projected fact rows
 
 Risks:
 

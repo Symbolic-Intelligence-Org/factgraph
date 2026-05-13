@@ -140,7 +140,8 @@ bug fixes / performance / docs clarification:
   - Eligible only on a child-proof subtree (single structured
     `rule_ref_edge` + no nested `referenced_support`)
 - **Evidence tree carrier contract**
-  - `assertion_fact.confidence` — read from `meta.confidence`
+  - `assertion_fact.confidence` — adapter/runtime-owned confidence when
+    available; generic assertion `meta.confidence` is not lifted
   - `predicate_witness_group.condition_confidence = max(child confidences)`
   - The tree is only a carrier; it does not bake in scoring
     semantics

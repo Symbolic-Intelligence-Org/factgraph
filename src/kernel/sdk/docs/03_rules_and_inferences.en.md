@@ -72,19 +72,6 @@ with vars("li", "u", "c") as (li, u, c):
     )
 
 rows = sdk.run(rule, row_format="dict")
-
-from kernel.sdk import ReadPolicy
-
-rows, display_meta = sdk.run(
-    rule,
-    row_format="dict",
-    policy=ReadPolicy(
-        respect_revocations=True,
-        confidence_strategy="max",
-        prefer_source=None,
-    ),
-    return_display_meta=True,
-)
 ```
 
 Stable contract:
@@ -99,13 +86,8 @@ Stable contract:
   `SemanticsProfile.certainty_projection`.
 - The `row_format` precedence chain (`call-site > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`) and the `"tuple"` `DeprecationWarning` apply to the **Rule path**. `Query` has its own narrower contract (`"dict"|"instance"`, `"tuple"` rejected) — see §5.
 - Resolving to `"tuple"` emits `DeprecationWarning` (prefer `"dict"`).
-- `return_display_meta=True` requires `policy=ReadPolicy(...)`.
-  Without `return_display_meta`, `policy=None` is valid and no display
-  metadata is produced.
-- `ReadPolicy.respect_revocations=True` means display/confidence
-  aggregation skips actively retracted claims. `confidence_strategy`
-  chooses the aggregation strategy (`"max"`, `"mean"`, `"median"`, or
-  `"prefer_source"`).
+- `policy=` and `return_display_meta=True` are removed from `run(...)`;
+  read-time confidence/display aggregation is not a public SDK surface.
 
 ## 3. `where` Syntax and Limits
 

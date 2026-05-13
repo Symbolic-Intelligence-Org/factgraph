@@ -233,8 +233,9 @@ Semantic-delivery addendum:
   - If the engine-native annotation is absent, read from
     `shared/semantic/probability` (adapter/internal shared probability
     lane, not the user-facing raw uncertainty write contract)
-  - Generic `meta.confidence` is ignored for export; if both semantic
-    lanes are absent, the adapter uses the deterministic default `1.0`
+  - Generic `confidence` meta is not a public probability input; if both
+    semantic lanes are absent, the adapter uses the deterministic default
+    `1.0`
 - Branch probabilities for `where` are currently carried internally by
   `ProbLogRuleExt.branch_probabilities`:
   - `branch_probabilities[i]` corresponds to normalized `where`

@@ -20,7 +20,6 @@
 - runtime rule 执行
 - inference evaluate / accept
 - explain/conflicts/view-facts 查询
-- runtime read policy DTO
 - package 导出
 - registry manifest / schema / assets / rule / inference 读取
 
@@ -51,7 +50,7 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `rules_v1.py`
   - rule validate / compile-preview / profile 列表
 - `runtime_v1.py`
-- runtime session、facts 写入/查询、inline policy、rule/inference 执行、package 导出
+- runtime session、facts 写入/查询、rule/inference 执行、package 导出
 - `registry_v1.py`
   - registry 只读接口
 - `_common.py`
@@ -71,7 +70,7 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `02_runtime_sessions.md`
   - runtime session 生命周期、writes、claims。
 - `03_runtime_queries_policy.md`
-  - runtime query、inline policy、rule/inference 执行、package export。
+  - runtime query、rule/inference 执行、package export。
 - `04_rules_registry.md`
   - rules facade 与 registry 只读接口。
 - `06_frontend_integration.md`
@@ -112,20 +111,14 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `POST /v1/runtime/sessions/{session_id}/queries/resolve-mapping`
 - `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
 
-### 4.4 runtime read policy
-
-- `POST /v1/runtime/sessions/{session_id}/queries/view-facts`
-  accepts inline `policy` and no longer exposes named runtime view
-  lifecycle routes.
-
-### 4.5 runtime rule/inference/package
+### 4.4 runtime rule/inference/package
 
 - `POST /v1/runtime/sessions/{session_id}/rules/run`
 - `POST /v1/runtime/sessions/{session_id}/inferences/evaluate`
 - `POST /v1/runtime/sessions/{session_id}/inferences/accept`
 - `POST /v1/runtime/sessions/{session_id}/packages/export`
 
-### 4.6 registry
+### 4.5 registry
 
 - `POST /v1/registry/manifest`
 - `POST /v1/registry/schema/read`
@@ -206,8 +199,8 @@ accept/proof/audit 链路 round-trip。
 ### 5.3 runtime policy / view-facts
 
 - runtime service 不保存命名 policy registry，也不初始化 `default` 视图。
-- `view-facts` 支持内联 `policy`，并可选返回 projector audit。
-- 旧 `view_name` 与 `view` 字段会返回 shape error；需要在 `policy` 对象内传 `respect_revocations` / `confidence_strategy` / `prefer_source`。
+- `view-facts` 只返回 active projection facts，并可选返回 projector audit。
+- `policy`、`view_name` 与 `view` 字段会返回 shape error。
 - `temporal_view` 已从 runtime view / rule / derivation 链路移除；传入会返回 shape error。
 
 ### 5.4 registry 读取

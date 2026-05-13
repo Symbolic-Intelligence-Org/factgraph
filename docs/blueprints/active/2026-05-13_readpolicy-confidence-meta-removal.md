@@ -273,11 +273,15 @@ Survey commands were run on 2026-05-13 from the repository root.
 - `src/kernel/sdk/docs/04_api_surface.en.md`
 - `src/kernel/core/docs/01_architecture.en.md`
 - `src/kernel/core/docs/02_quality_assessment.en.md`
+- `src/kernel/core/docs/04_service_layer.md`
 - `src/kernel/core/annotation/docs/README.md`
 - `src/kernel/adapters/docs/02_problog_adapter.md`
 - `src/kernel/adapters/docs/03_pyreason_adapter.md`
 - `src/service/docs/01_overview.md`
+- `src/service/docs/02_runtime_sessions.md`
 - `src/service/docs/03_runtime_queries_policy.md`
+- `src/service/docs/06_frontend_integration.md`
+- `src/service/docs/README.md`
 - `docs/official/kernel/quickstart/read-write.md`
 - `docs/official/kernel/quickstart/assertions.md`
 - `docs/official/kernel/quickstart/namespace-map.md`

@@ -12,6 +12,8 @@
 | 2026-05-13 | scoped | Scope frozen for Phase 1 | Locked hard-cut scope for Phase 1 red-baseline tests: remove `ReadPolicy`, `policy=`, `return_display_meta`, user-authored `meta.confidence` / `meta.confidence_source`, first-class assertion confidence, and `max_confidence`; preserve candidate and engine confidence carriers. |
 | 2026-05-13 | scoped | Phase 1 red baseline added | Added `kernel.tests.test_readpolicy_confidence_meta_removal`; the scaffold executes 18 tests with current result 14 expected failures / 4 passing preservation guards. |
 | 2026-05-13 | scoped | Phase 2 implementation added | Removed the runtime `ReadPolicy` DTO/export, SDK/service policy display paths, first-class assertion confidence, display aggregation, and `max_confidence`; rejected user-authored `meta.confidence` / `meta.confidence_source`; migrated affected test fixtures. |
+| 2026-05-13 | scoped | Phase 3 docs sync expanded | Documentation grep found stale inline policy references outside the original docs list (`core/docs/04_service_layer.md`, `service/docs/02_runtime_sessions.md`, `service/docs/06_frontend_integration.md`, and `service/docs/README.md`); blueprint docs inventory expanded before committing docs sync. |
+| 2026-05-13 | scoped | Phase 3 docs sync verified | Updated SDK/core/service/adapter docs and the tracked official read-write quickstart cleanup hunk; `rg` found no stale public `ReadPolicy`/display-confidence docs except explicit removed-surface wording, and `kernel.tests.test_readpolicy_confidence_meta_removal + kernel.tests.test_official_kernel_docs_baseline` passed 25/25. |
 
 ## Decision Notes
 

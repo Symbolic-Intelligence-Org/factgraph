@@ -37,7 +37,7 @@ src/kernel/core/
   store/                   # Store facade + ledger + evaluate/query/builders
   evidence/                # append-only write protocol (set/add/retract/replace)
   policy/                  # active/chosen/policy_ir
-  view/                    # view projection (facts + display + audit)
+  view/                    # fact projection + audit
   rules/                   # where AST/validator + plain evaluator + shared RuleRef substrate + rule runtime
   derivation/              # CandidateSet generation/accept (including batch accept_many)
   mapping/                 # mapping conflict resolution and decisions
@@ -55,7 +55,7 @@ src/kernel/core/
 | `store.ledger` | append-only SQLite ledger and in-memory index cache | `append_assertion`, `append_revocation`, `find_*` |
 | `evidence.write_protocol` | write/retract/replace and ingest-key idempotency | `set_field`, `add_field`, `retract_by_asrt`, `replace_field` |
 | `policy.active/chosen` | active checks and chosen selection | `is_active`, `compute_chosen_for_predicate` |
-| `view.projector` | core fact projection and audit statistics | `project_view_facts`, `project_view_facts_with_audit`, `project_display_facts` |
+| `view.projector` | core fact projection and audit statistics | `project_view_facts`, `project_view_facts_with_audit` |
 | `rules.where_ast*` | where AST parsing and validation | `parse_where_ir_to_ast`, `validate_where_ast` |
 | `rules.where_eval` | where interpreter for the native path | `evaluate_where` |
 | `rules.ruleref_substrate` | shared native `RuleRef` execution substrate for `query + derivation` | `evaluate_native_where` |
@@ -140,9 +140,10 @@ Whitelist (`_SHARED_ANNOTATION_WHITELIST`):
 - `shared/source`: `source`, `source_loc`, `trace_id`, `approved_by`, `note`
 - `shared/semantic`: `raw_kind` (`origin="observed"`) and `bound` (`origin="observed"`) as the canonical raw uncertainty lane
 
-Generic `meta.confidence` remains a legacy/display meta row only. It is not
-projected into shared annotations by default, and it is not a canonical
-uncertainty lane for adapter export or evidence display.
+Generic `confidence` and `confidence_source` are removed user-authored write
+meta keys. Raw legacy meta rows, if present through lower-level ledger access,
+remain opaque `meta_rows`; they are not projected into shared annotations and
+are not canonical uncertainty lanes for adapter export or evidence display.
 
 Raw uncertainty notes:
 
@@ -385,14 +386,13 @@ Evaluate now also records a lightweight candidate explain backref after candidat
         - static site candidate evidence page renders a certainty section
         - `condition_weights` only exist on registry filesystem; offline audit does not perform query-time computation
     - **Generic confidence boundary**:
-      - `write_protocol.py` still validates and stores legacy
-        `meta={"confidence": 0.9}` in `meta_rows`
+      - user-authored `meta={"confidence": 0.9}` and
+        `meta={"confidence_source": "..."}` are rejected
       - candidate evidence trees do not lift that generic meta into
         `assertion_fact` or `predicate_witness_group`
       - certainty impact therefore uses adapter/runtime-owned certainty
         inputs, or degrades to `weight × 1.0`
-      - this is an intentional release cleanup boundary; future public
-        confidence semantics require a dedicated blueprint
+      - future public confidence semantics require a dedicated blueprint
   - these three layers follow the same 4-layer explain pattern as `rule_run`:
     - raw tree
     - summary
@@ -576,7 +576,7 @@ Additional notes:
 - `rank_certainty_conditions(...)`
 - `CertaintyConfidenceKindResolver` create-time routing
 - evidence tree carrier: adapter/runtime-owned certainty metadata; generic
-  assertion `meta.confidence` is not lifted into the tree by default
+  assertion `meta.confidence` is not lifted into the tree
 - delivery chain: runtime summary/narrative/NL (dual strategy) → audit/static (bottleneck only)
 
 **Certainty semantic changes are contract changes and require a blueprint.** Only bug fixes, performance work, and docs clarifications are accepted without a blueprint.

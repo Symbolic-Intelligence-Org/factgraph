@@ -58,9 +58,9 @@ categories:
 - **runtime session**: open / get / delete + writes (set / add /
   retract) + claims
 - **runtime queries**: explain-fact / conflicts / resolve-mapping /
-  view-facts (with inline read policy)
-- **runtime policy**: no named policy registry; `view-facts` accepts
-  inline policy only
+  view-facts
+- **runtime policy**: no named policy registry and no inline read-policy
+  surface
 - **runtime rule/inference/package**: rules.run / inferences.evaluate
   / inferences.accept / packages.export
 - **registry**: manifest / schema.read / assets.list / rules.read /
@@ -142,8 +142,8 @@ envelope concept back into core / application.
   `ProjectorAudit` from the core projector
 - `temporal_view` has been removed; passing it returns a shape
   error
-- `policy` is optional and inline; `view_name` and old `view` fields
-  are rejected with shape errors
+- `policy`, `view_name`, and old `view` fields are rejected with shape
+  errors
 
 ### 7.2 inference and rule runtime
 

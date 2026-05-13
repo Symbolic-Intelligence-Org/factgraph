@@ -149,14 +149,7 @@ snap = sdk.get(User, user_id="u1", locale="zh")
 ### 5.2 `sdk.find(...)`
 
 ```python
-from kernel.sdk import ReadPolicy
-
 rows = sdk.find(User, age=30, limit=20)
-rows_with_confidence = sdk.find(
-    User,
-    age=30,
-    policy=ReadPolicy(respect_revocations=True, confidence_strategy="max"),
-)
 ```
 
 Stable contract:
@@ -164,19 +157,11 @@ Stable contract:
 - Filter keys must be entity identity or field names.
 - Identity filters may be partial, including primary-only filters; combine
   them with field filters when you need AND semantics.
-- `policy: ReadPolicy | None = None` controls read-time display /
-  confidence aggregation. `None` means no policy is applied and rows are
-  returned without attached confidence metadata.
-- `ReadPolicy.respect_revocations` defaults to `True`: confidence/display
-  aggregation skips claims that have active retractions. Set it to
-  `False` only when you intentionally want aggregation to ignore
-  retraction markers.
-- `ReadPolicy.confidence_strategy` accepts `"max"`, `"mean"`, `"median"`,
-  or `"prefer_source"`; `prefer_source` is required for the
-  `"prefer_source"` strategy.
 - `view=` is not accepted on `find(...)`. Frozen assertion views are read
   back via `fg.views.get(name).asrt_ids` plus
   `fg.assertions.by_ids(...)`, not by passing a view to snapshot reads.
+- `policy=` is removed. Read-time confidence/display aggregation is not a
+  public SDK surface.
 - `temporal_view` parameter is not supported.
 
 Filter semantics:
@@ -320,7 +305,7 @@ The Annotation Store is the canonical semantic annotation layer for facts. `meta
 
 ### Write Paths
 
-1. **Shared path (automatic)**: `write_protocol.set_field()` projects whitelisted meta keys (for example `source`, `confidence`, `raw_kind`, and `bound`) into `annotation_rows`
+1. **Shared path (automatic)**: `write_protocol.set_field()` projects whitelisted meta keys (for example `source`, `raw_kind`, and `bound`) into `annotation_rows`
 2. **PyReason path**: `persist_pyreason_annotations(ledger, run_id, store, accept_result)` writes `pyreason/semantic/bound_lower`, `bound_upper`, etc. post-accept
 3. **ProbLog path**: `persist_problog_annotations(ledger, run_id, store, accept_result)` writes `problog/semantic/probability` post-accept
 
@@ -367,9 +352,8 @@ Adapter notes:
 - ProbLog export reads in this order:
   1. `problog/semantic/probability`
   2. `shared/semantic/probability`
-  3. `meta.confidence`
-  4. default `1.0`
+  3. default `1.0`
 - `shared/semantic/probability` can still exist as an adapter/internal
   annotation, but it is not the user-facing raw uncertainty write contract
-- `meta.confidence` remains a compatibility / display summary and is not the
-  canonical raw uncertainty carrier
+- `confidence` and `confidence_source` are removed user-authored write meta
+  keys; use `raw_kind` and `bound` for uncertainty inputs

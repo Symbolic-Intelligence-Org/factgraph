@@ -74,7 +74,6 @@ The export list currently has 40 names.
 | `Relationship` | Base class for relationship type declarations |
 | `FactGraph` | Canonical entry point (alias of `SDKStore`) |
 | `SDKStore` | Foundational entry point (same class as `FactGraph`) |
-| `ReadPolicy` | Read-time display/confidence aggregation policy for `policy=...` call sites |
 
 `Entity` instances render via `__repr__` showing identity and field
 values in declaration order; unset `Field` values render as `None`.
@@ -234,7 +233,7 @@ public: `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
 | Method | One-liner |
 |---|---|
 | `get(entity_cls, **identity)` | Fetch single entity by identity or `None` |
-| `find(entity_cls, *, policy=None, limit=None, **filters)` | Filter entities; optional `ReadPolicy` attaches read-time confidence metadata |
+| `find(entity_cls, *, limit=None, **filters)` | Filter entities |
 | `ref(entity_cls, **identity)` | Encode an entity reference string |
 
 ### 2.4 Write namespace (`fg.write.*`)
@@ -263,7 +262,7 @@ This namespace is read-only and by-id only. It does not ship graph-wide
 
 | Method | One-liner |
 |---|---|
-| `run(rule_or_query, *, policy=None, row_format=None, return_display_meta=False)` | Evaluate a `Rule` or `Query`; `RuleRef` remains a where-clause carrier, not a direct runtime selector; `return_display_meta=True` requires `ReadPolicy` |
+| `run(rule_or_query, *, row_format=None)` | Evaluate a `Rule` or `Query`; `RuleRef` remains a where-clause carrier, not a direct runtime selector |
 | `evaluate(inference, *, engine='native', engine_options=None, semantics=None)` | Evaluate an `Inference`; returns list of `CandidateSet`. If `semantics` is `ProbLogSemantics`, `PyReasonSemantics`, or `SemanticsProfile`, `engine` may be omitted and is derived from the semantics object. |
 | `accept(candidate, *, approved_by=None, note=None, dry_run=False, identity_override=None)` | Accept exactly one candidate; performs writes |
 | `accept_many(candidates, *, ...)` | Accept multiple candidates idempotently |
@@ -378,9 +377,9 @@ or display-meta input to `fg.run(...)`; use
 `fg.assertions.by_ids(fg.views.get(name).asrt_ids)` for record-level
 readback.
 
-Read-time display/confidence controls live on `ReadPolicy` and are passed
-with `policy=...` at the `find(...)` or `run(...)` call site. They are
-not stored in `fg.views`.
+Read-time confidence/display aggregation is not a public SDK surface.
+`fg.read.find(...)`, `fg.eval.run(...)`, and `fg.eval.evaluate(...)` do
+not accept frozen views or read policies as input.
 
 ### 2.15 Result-type non-export
 
@@ -460,7 +459,7 @@ top-level `kernel.sdk.__all__` export.
 Each entry is an `AssertionRecord` with `asrt_id`, `value`, `is_active`,
 `is_revoked`, and `meta: AssertionMeta`.
 `AssertionMeta` carries provenance fields (source, trace_id,
-ingested_at, confidence, raw_kind, bound, approved_by, derived_rule_id,
+ingested_at, raw_kind, bound, approved_by, derived_rule_id,
 candidate_id, ...). `raw_kind` / `bound` are mirrored in `meta_rows` for
 exact assertion filtering; the canonical semantic copy lives in
 `shared/semantic/raw_kind` and `shared/semantic/bound` annotation rows.

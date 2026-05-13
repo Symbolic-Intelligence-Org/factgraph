@@ -176,14 +176,8 @@ admins = fg.read.find(User, name="Alice")
 # Multi-cardinality field uses containment match
 engineers = fg.read.find(User, tags="engineer")
 
-# Apply a read-time policy (see §8) and limit
-from kernel.sdk import ReadPolicy
-
-recent = fg.read.find(
-    Document,
-    policy=ReadPolicy(respect_revocations=True, confidence_strategy="max"),
-    limit=20,
-)
+# Limit result count
+recent = fg.read.find(Document, limit=20)
 ```
 
 ### Reference encoding
@@ -356,7 +350,6 @@ Every write accepts an optional `meta` dict. Keys recognized by the SDK:
 |---|---|---|
 | `source` | str | Where this assertion came from |
 | `trace_id` | str | Trace identifier for cross-system correlation |
-| `confidence` | float in (0, 1] | Legacy/display metadata only; `int` is not auto-promoted |
 | `raw_kind` | `"probabilistic"` or `"possibilistic"` | Raw uncertainty kind; must be paired with `bound` |
 | `bound` | two-element JSON list `[lower, upper]` | Raw uncertainty bound; normalized to floats and matched exactly by assertion filters |
 | `approved_by` | str | Reviewer identifier (for governance) |
@@ -369,8 +362,8 @@ Unknown keys are preserved on the assertion as opaque metadata.
 user-authored write meta; use `raw_kind` and `bound` instead. Engine adapters
 may still produce annotations such as `problog/semantic/probability` or
 `pyreason/semantic/bound_lower` as output/projection lanes.
-Generic `confidence` is not a shared semantic annotation, not a ProbLog
-probability fallback, and not a PyReason bound source.
+`confidence` and `confidence_source` are removed user-authored write keys.
+Use `raw_kind` and `bound` for uncertainty inputs.
 
 Raw uncertainty validation:
 
@@ -385,12 +378,11 @@ fg.write.set(User.name, ref, "Alice", meta={"bound": [0.2, 0.8]})          # ❌
 fg.write.set(User.name, ref, "Alice", meta={"probability": 0.8})           # ❌ removed write key
 ```
 
-`confidence` validation:
+Removed uncertainty write keys:
 
 ```python
-fg.write.set(User.name, ref, "Alice", meta={"confidence": 0.85})  # ✅
-fg.write.set(User.name, ref, "Alice", meta={"confidence": 1})     # ❌ int rejected
-fg.write.set(User.name, ref, "Alice", meta={"confidence": 1.2})   # ❌ out of range
+fg.write.set(User.name, ref, "Alice", meta={"confidence": 0.85})          # ❌ removed write key
+fg.write.set(User.name, ref, "Alice", meta={"confidence_source": "ml"})   # ❌ removed write key
 ```
 
 ### Which write entry point?
@@ -743,16 +735,11 @@ diff = fg.audit.diff_proof_frames(
 
 ## 8. Views and packages
 
-### Views and ReadPolicy
+### Views
 
-The SDK keeps two related ideas separate:
-
-- `fg.views` stores named frozen assertion-id selections. A
-  `FrozenAssertionView` captures a deduplicated set of `asrt_id` strings
-  at creation time.
-- `ReadPolicy` is a call-site value object for read-time confidence and
-  display aggregation. It is passed with `policy=...`; it is not stored in
-  `fg.views` and has no named registry.
+`fg.views` stores named frozen assertion-id selections. A
+`FrozenAssertionView` captures a deduplicated set of `asrt_id` strings
+at creation time.
 
 There is no built-in `default` view. The name `"default"` is not reserved:
 if you create a frozen assertion view with that name, it behaves like any
@@ -784,41 +771,9 @@ view = fg.views.get("review_set")
 records = fg.assertions.by_ids(view.asrt_ids)
 ```
 
-Use `ReadPolicy` when you want read-time confidence/display metadata:
-
-```python
-from kernel.sdk import ReadPolicy
-
-policy = ReadPolicy(
-    respect_revocations=True,
-    confidence_strategy="max",     # see strategy list below
-    prefer_source=None,            # required when strategy="prefer_source"
-)
-
-rows = fg.read.find(User, name="Alice", policy=policy)
-rows_with_meta, display_meta = fg.run(
-    rule,
-    policy=policy,
-    return_display_meta=True,
-)
-```
-
-`respect_revocations=True` means confidence/display aggregation skips
-claims that have an active retraction. Set it to `False` only when you
-intentionally want to inspect aggregation over both active and retracted
-claims.
-
-Aggregation strategies (`ConfidenceStrategy` literal):
-- `"max"` — pick the assertion with the highest confidence (default)
-- `"mean"` — average of all confidences
-- `"median"` — median confidence
-- `"prefer_source"` — pick assertions from the source named in
-  `prefer_source`; falls back to `"max"` for sources outside the
-  preferred set.
-
 `views.create(...)` / `views.update(...)` accept exactly one payload:
 `asrt_ids=[...]` or `asrts=[...]`. Passing an ambiguous payload, a raw
-dict, or a `ReadPolicy` raises `SDKStoreError`.
+dict, or unsupported view payload raises `SDKStoreError`.
 
 ### Packages (Souffle export and replay)
 

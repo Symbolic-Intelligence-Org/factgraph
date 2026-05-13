@@ -14,7 +14,7 @@ Writes need an entity reference. Build it from the entity identity with
 `fg.read.ref(...)`.
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity, ReadPolicy
+from kernel.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
@@ -69,7 +69,7 @@ tag_reviewer = fg.write.add(
     User.tags,
     alice,
     "reviewer",
-    meta={"source": "import", "trace_id": "seed-002", "confidence": 0.92},
+    meta={"source": "import", "trace_id": "seed-002"},
 )
 ```
 
@@ -165,9 +165,8 @@ assert tag_records.where(value="missing").first() is None
 assert tag_records.where(value="missing").all() == ()
 ```
 
-`.where(...)` can filter by `value`, `source`, `trace_id`, `confidence`,
-`version`, or arbitrary raw metadata with `meta={...}`. Multiple filters are
-ANDed together.
+`.where(...)` can filter by `value`, `source`, `trace_id`, `version`, or
+arbitrary raw metadata with `meta={...}`. Multiple filters are ANDed together.
 
 `.one()` is for destructive or review steps that need exactly one assertion.
 It raises if the set has zero or multiple records. `.first()` is for browsing.
@@ -190,18 +189,12 @@ reviewers = fg.read.find(User, tags="reviewer")
 
 assert {row.name for row in reviewers} == {"Alice Chen", "Bob"}
 
-policy = ReadPolicy(confidence_strategy="max")
-reviewers_with_policy = fg.read.find(User, tags="reviewer", policy=policy)
-
-assert {row.name for row in reviewers_with_policy} == {"Alice Chen", "Bob"}
 ```
 
 `find` is still a read surface, not a rule engine or query language. It is for
 snapshot filtering over entity identities and field values. Rules, inferences,
 and saved query surfaces are separate topics.
 
-`ReadPolicy(...)` is a call-site read option. It is not a saved view and it does
-not change the ledger.
 
 ## Retracting an assertion
 
@@ -251,8 +244,8 @@ assert {record.asrt_id for record in records} == {name_v1, tag_engineer}
 ```
 
 Use `fg.assertions.by_id(...)` or `fg.assertions.by_ids(...)` to read the
-records captured by a view. Use `ReadPolicy(...)` when you want a read-time
-policy for snapshot selection. The two surfaces solve different problems.
+records captured by a view. Frozen views are id-set containers, not read-policy
+objects.
 
 ## Evidence starts with assertion anchors
 
@@ -297,7 +290,7 @@ understand ordinary write/read/assertion workflows.
 ## Complete example
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity, ReadPolicy
+from kernel.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
@@ -337,7 +330,7 @@ tag_reviewer = fg.write.add(
     User.tags,
     alice,
     "reviewer",
-    meta={"source": "import", "trace_id": "seed-002", "confidence": 0.92},
+    meta={"source": "import", "trace_id": "seed-002"},
 )
 
 snap = fg.read.get(User, user_id="u-1")
@@ -381,11 +374,8 @@ fg.write.set(User.name, bob, "Bob")
 fg.write.add(User.tags, bob, "reviewer")
 
 reviewers = fg.read.find(User, tags="reviewer")
-policy = ReadPolicy(confidence_strategy="max")
-reviewers_with_policy = fg.read.find(User, tags="reviewer", policy=policy)
 
 assert {row.name for row in reviewers} == {"Alice Chen", "Bob"}
-assert {row.name for row in reviewers_with_policy} == {"Alice Chen", "Bob"}
 
 target = snap.field("tags").active.where(value="reviewer").one()
 fg.write.retract(target.asrt_id)
@@ -423,7 +413,6 @@ assert conflicting["pred_id"] == "user:name"
 - Writes return assertion ids for exact ledger records.
 - `fg.read.get(...)` returns the current snapshot for a full identity.
 - `fg.read.find(...)` returns matching snapshots.
-- `ReadPolicy(...)` is a call-site read option, not a saved view.
 - `snap.name` and `snap.tags` are current snapshot values.
 - `snap.field("name")` dynamically opens the assertion records for one field.
 - `snap.assertions.name` opens the same field records through static attribute
