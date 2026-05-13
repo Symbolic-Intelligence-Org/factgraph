@@ -39,18 +39,21 @@ fixture shape as the notebooks and asserts on the aggregate
 `EXPECTED_PHASE_SUMMARY`. Use it for smoke verification, or as the single
 source to read when you want the full story in one place.
 
-## Public-surface boundary (Batch 8)
+## Public-surface boundary
 
-The demos exercise the v0.1 public-surface decision verbatim:
+The demos exercise the v0.1 public-surface decision and the later SDK shell
+facades:
 
 - `kernel.sdk` is the product surface (schema authoring + ledger).
-- `kernel.application.*` and `kernel.audit.*` are advanced-importable
-  Python APIs — every Q1–Q5 capability, the ProofFrame rechecker, the three
-  rule overlays, the round recorder, and the ProofFrame diff are imported
-  directly from these packages.
-- v0.1 ships **no** SDK shells or service routes for Batch 3–7. The script
-  and notebooks deliberately demonstrate the advanced-importable path;
-  there is no "wrapped" surface to wait for.
+- `FactGraph` / `SDKStore` expose narrow SDK shells for Check, Diagnose,
+  Fact Overlay, Why-not, ProofFrame Recheck, the three rule overlays, and
+  ProofFrame Diff.
+- `kernel.application.*` and `kernel.audit.*` remain advanced-importable
+  Python APIs. The notebooks may import them directly when they demonstrate
+  lower-level audit or round-persistence machinery, but new product examples
+  should prefer the `FactGraph` namespace when an SDK shell exists.
+- Runtime service routes remain narrower than the Python SDK. Do not infer an
+  HTTP route from an SDK shell unless `src/service/docs/` documents it.
 
 ## Historical examples
 

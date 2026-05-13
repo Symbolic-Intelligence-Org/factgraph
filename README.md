@@ -7,7 +7,7 @@ The v0.1 open-source / PyPI surface of `factpy-kernel` contains only the `kernel
 - an append-only fact ledger and field/assertion write semantics
 - the canonical Python runtime authority: `kernel.application`
 - the Python product surface: `kernel.sdk`
-- rule / query / derivation authoring and runtime adapters
+- rule / query / inference authoring and runtime adapters
 - audit package reader, query, DTO, and evidence graph surfaces
 
 The v0.1 public source and PyPI wheel are both scoped to the kernel-only surface. LLM extraction, HTTP delivery, domain bundles, and other companion surfaces are not part of the `factpy-kernel` v0.1 release.
@@ -41,7 +41,7 @@ class User(Entity):
     name: str = Field(cardinality="single")
 
 
-fg = FactGraph.from_schema_classes([User])
+fg = FactGraph.create(schema_classes=[User])
 
 alice = fg.read.ref(User, user_id="u-1")
 fg.write.set(User.name, alice, "Alice")
@@ -50,7 +50,7 @@ snapshot = fg.read.get(User, user_id="u-1")
 print(snapshot.name)  # Alice
 ```
 
-`FactGraph` is the v0.1 SDK top-level entrypoint. Its 8 taxonomy namespaces (`schema` / `read` / `write` / `eval` / `what_if` / `audit` / `package` / `views`) teach the conceptual layering at first contact. `FactGraph` is a literal alias of `SDKStore`; the flat form `fg.ref(...)` / `fg.set(...)` / `fg.get(...)` is supported alongside the nested form as **foundational API** — neither deprecated nor scheduled for removal.
+`FactGraph` is the v0.1 SDK top-level entrypoint. Its 10 taxonomy namespaces (`schema` / `read` / `write` / `rules` / `inferences` / `eval` / `what_if` / `audit` / `package` / `views`) teach the conceptual layering at first contact. `FactGraph` is a literal alias of `SDKStore`; the flat form `fg.ref(...)` / `fg.set(...)` / `fg.get(...)` is supported alongside the nested form as **foundational API** — neither deprecated nor scheduled for removal.
 
 `kernel.sdk` is the user-facing Python product surface. Runtime authority lives in `kernel.application`; the SDK adapts ergonomic APIs, schema/DSL authoring, snapshots, batches, editors, and compatibility errors into the application runtime contract.
 
@@ -58,7 +58,7 @@ print(snapshot.name)  # Alice
 
 | Scenario | Recommended entry | Why |
 |---|---|---|
-| Human-authored Python product code defining `Entity` / `Field` and running queries or derivations | `kernel.sdk` | Provides descriptors, DSL sugar, snapshots, batches, editors, and user-facing exceptions |
+| Human-authored Python product code defining `Entity` / `Field` and running queries or inferences | `kernel.sdk` | Provides descriptors, DSL sugar, snapshots, batches, editors, and user-facing exceptions |
 | Automation process / HTTP bridge / wire protocol receiving JSON-like requests | `kernel.application` protocol + executor | Accepts SDK-independent DTOs and does not require SDK `Field` descriptors or Python DSL objects |
 | Lowest-level ledger / evidence / rule primitives | `kernel.core` | Intended for runtime implementers, not as the normal user entrypoint |
 | Reading an exported audit package | `kernel.audit` | Offline reader/query/DTO/evidence consumer surface |
@@ -77,7 +77,7 @@ L Direction G1-G5 added narrow SDK shells for Check, Diagnose, Why-not, Fact Ove
 
 | Area | Entry | Notes |
 |---|---|---|
-| SDK product API | `kernel.sdk` | Entity / Field / Identity / FactGraph (with alias SDKStore) / Query / Derivation user entrypoints |
+| SDK product API | `kernel.sdk` | Entity / Field / Identity / FactGraph (with alias SDKStore) / Query / Inference user entrypoints |
 | Runtime authority | `kernel.application` | read/write/query/ingest/derivation protocol DTOs and executors |
 | Core primitives | `kernel.core` | ledger, rules, evidence, candidate support, low-level store semantics |
 | Authoring | `kernel.authoring` | rule/schema authoring helpers and validation surfaces |
@@ -88,7 +88,7 @@ Current implementation docs:
 
 - [src/kernel/sdk/docs/README.md](src/kernel/sdk/docs/README.md)
 - [src/kernel/application/docs/README.md](src/kernel/application/docs/README.md)
-- [src/kernel/core/docs/01_architecture.md](src/kernel/core/docs/01_architecture.md)
+- [src/kernel/core/docs/01_architecture.en.md](src/kernel/core/docs/01_architecture.en.md)
 - [src/kernel/audit/docs/README.md](src/kernel/audit/docs/README.md)
 - [src/kernel/adapters/docs/README.md](src/kernel/adapters/docs/README.md)
 - [src/kernel/authoring/docs/README.md](src/kernel/authoring/docs/README.md)
