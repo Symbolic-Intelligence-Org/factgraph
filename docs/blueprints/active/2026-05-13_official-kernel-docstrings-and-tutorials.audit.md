@@ -205,3 +205,18 @@
 - Example snippets planned: Run a rule, evaluate an inference, prove no write before accept, accept the candidate, inspect branch structure, and distinguish `RuleRef` from saved refs.
 - Validation method: Extract Python blocks and run them with `PYTHONPATH=src python`, verifying rule rows, read-before-accept state, accepted candidate writes, and inspect metadata.
 - External style reference: Pydantic-style concepts page pacing only; all rule, inference, candidate, and saved-ref boundaries come from local source, tests, module docs, design notes, and archived blueprints.
+
+### `concepts/persistence-and-workspaces.md`
+
+- Reader goal: Understand the difference between saving authoring assets and saving a complete FactGraph workspace.
+- Core mental model: The registry stores reusable rule/inference definitions; the workspace stores the Level-4 graph state: schema metadata, ledger database, registry, and workspace manifest.
+- Common misconception to prevent: `SavedRuleRef` / `SavedInferenceRef` are not runtime objects, `fg.rules.get(...)` returns a handle rather than a `Rule`, and `fg.save()` is not the same operation as `fg.rules.save(...)`.
+- APIs covered: `SavedRuleRef`, `SavedInferenceRef`, `fg.rules.save/load/list/get`, `fg.inferences.save/load/list/get`, `FactGraph.create(path=...)`, `fg.save`, `FactGraph.load`.
+- Non-goals: Class-less load, package export, service routes, artifact sidecar persistence, view persistence, query persistence, and schema migration.
+- Source files checked: `src/kernel/application/authoring_runtime.py`, `src/kernel/application/workspace_runtime.py`, `src/kernel/authoring/registry_fs.py`, `src/kernel/sdk/store.py`, `src/kernel/tests/test_authoring_asset_persistence_facade.py`, `src/kernel/tests/test_factgraph_workspace_lifecycle.py`.
+- Module docs checked: `src/kernel/authoring/docs/01_overview.md`, `src/kernel/sdk/docs/03_rules_and_inferences.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`.
+- Design references checked: `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-12_authoring-asset-persistence-facade.md`, `docs/blueprints/archive/2026-05-12_factgraph-workspace-lifecycle.md`, `docs/blueprints/archive/2026-05-12_inference-wire-registry-vocabulary.md`.
+- Example snippets planned: Save and load a rule handle, save and load an inference handle, save a path-bound workspace, inspect workspace layout files, and load the workspace with schema classes.
+- Validation method: Extract Python blocks and run them with `PYTHONPATH=src python`, verifying saved-ref shapes, load-before-runtime, workspace layout files, and loaded graph round-trip behavior.
+- External style reference: Pydantic-style concepts page pacing only; all persistence and workspace behavior comes from local source, tests, module docs, design notes, and archived blueprints.
