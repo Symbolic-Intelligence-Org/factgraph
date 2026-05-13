@@ -23,6 +23,7 @@
 | 2026-05-13 | scoped | G2.10 rules/inferences docstring anchors | Added hover docs for rule/inference/query DSL objects plus `fg.eval.run`, `fg.eval.evaluate`, `fg.eval.accept`, and `fg.rules.inspect` before drafting the rules tutorial page. |
 | 2026-05-13 | scoped | G2.11 rules/inferences quickstart page started | Added a Page Brief and drafted `quickstart/rules-and-inferences.md` around Rule read-only queries, Inference candidate generation, explicit accept, and branch inspection. |
 | 2026-05-13 | scoped | G2.12 official docs index skeleton | Added five lightweight index pages for the official kernel docs root plus quickstart, concepts, how-to, and reference sections. |
+| 2026-05-13 | scoped | G2.13 persistence/workspace docstring anchors | Added hover docs for `SavedRuleRef`, `SavedInferenceRef`, `fg.rules.*`, `fg.inferences.*`, `fg.save`, and `FactGraph.load` before drafting the persistence quickstart page. |
 
 ## Decision Notes
 

@@ -19,6 +19,13 @@ class AuthoringRuntimeError(ValueError):
 
 @dataclass(frozen=True)
 class SavedRuleRef:
+    """Registry handle for a saved rule asset.
+
+    Returned by `fg.rules.save(...)`, `fg.rules.list()`, and
+    `fg.rules.get(...)`. It is a load handle, not a runtime selector: call
+    `fg.rules.load(ref)` to retrieve a `Rule` before running it.
+    """
+
     rule_id: str
     version: str
 
@@ -29,6 +36,13 @@ class SavedRuleRef:
 
 @dataclass(frozen=True)
 class SavedInferenceRef:
+    """Registry handle for a saved inference asset.
+
+    Returned by `fg.inferences.save(...)`, `fg.inferences.list()`, and
+    `fg.inferences.get(...)`. It is a load handle, not a runtime selector:
+    call `fg.inferences.load(ref)` before evaluation.
+    """
+
     inference_id: str
     version: str
 

@@ -329,15 +329,35 @@ class _SDKRulesManager:
         return self._sdk.inspect_rule(*args, **kwargs)
 
     def save(self, rule: Any) -> SavedRuleRef:
+        """Persist a `Rule` in the graph's authoring registry.
+
+        Returns a `SavedRuleRef` load handle. The graph must be bound to an
+        authoring registry through `registry_root=`, `registry=`, or
+        `FactGraph.create(path=...)`.
+        """
         return self._sdk.save_rule(rule)
 
     def load(self, rule: SavedRuleRef | str, *, version: str | None = None) -> Any:
+        """Load a saved rule as a `Rule` value object.
+
+        Pass a `SavedRuleRef`, or pass `rule_id` plus `version=...`. The
+        returned `Rule` can be used with `fg.eval.run(...)`.
+        """
         return self._sdk.load_rule(rule, version=version)
 
     def list(self) -> list[SavedRuleRef]:
+        """List saved rules in the authoring registry.
+
+        Returns `SavedRuleRef` handles; load one before executing it.
+        """
         return self._sdk.list_rules()
 
     def get(self, rule_id: str) -> SavedRuleRef:
+        """Return the latest saved-rule handle for `rule_id`.
+
+        This returns a `SavedRuleRef`, not a `Rule`. Call
+        `fg.rules.load(ref)` to retrieve the executable value object.
+        """
         return self._sdk.get_rule(rule_id)
 
 
@@ -351,15 +371,35 @@ class _SDKInferencesManager:
         raise FrozenSnapshotError("FactGraph.inferences namespace is read-only")
 
     def save(self, inference: Any) -> SavedInferenceRef:
+        """Persist an `Inference` in the graph's authoring registry.
+
+        Returns a `SavedInferenceRef` load handle. The graph must be bound to
+        an authoring registry through `registry_root=`, `registry=`, or
+        `FactGraph.create(path=...)`.
+        """
         return self._sdk.save_inference(inference)
 
     def load(self, inference: SavedInferenceRef | str, *, version: str | None = None) -> Any:
+        """Load a saved inference as an `Inference` value object.
+
+        Pass a `SavedInferenceRef`, or pass `inference_id` plus `version=...`.
+        The returned `Inference` can be used with `fg.eval.evaluate(...)`.
+        """
         return self._sdk.load_inference(inference, version=version)
 
     def list(self) -> list[SavedInferenceRef]:
+        """List saved inferences in the authoring registry.
+
+        Returns `SavedInferenceRef` handles; load one before evaluating it.
+        """
         return self._sdk.list_inferences()
 
     def get(self, inference_id: str) -> SavedInferenceRef:
+        """Return the latest saved-inference handle for `inference_id`.
+
+        This returns a `SavedInferenceRef`, not an `Inference`. Call
+        `fg.inferences.load(ref)` to retrieve the evaluable value object.
+        """
         return self._sdk.get_inference(inference_id)
 
 
@@ -751,6 +791,17 @@ class SDKStore:
         schema_classes: list[type[Entity]] | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
+        """Load a saved FactGraph workspace from disk.
+
+        Workspace load restores the ledger and authoring registry, then
+        validates the workspace schema digest against the supplied
+        `schema_classes`. Class-less dynamic load is not supported.
+
+        Args:
+            path: Workspace directory created by `fg.save(...)`.
+            schema_classes: Entity classes matching the saved workspace schema.
+            default_row_format: Optional default output row format.
+        """
         if schema_classes is None:
             raise SDKStoreError("schema_classes is required for FactGraph.load(...)")
         schema_ir = compile_schema_from_classes(schema_classes)
@@ -1981,6 +2032,13 @@ class SDKStore:
         return _inspect_rule_or_inference(obj)
 
     def save(self, path: str | Path | None = None) -> dict[str, Any]:
+        """Persist this graph as a FactGraph workspace.
+
+        A workspace contains the ledger, schema metadata, authoring registry,
+        and a workspace manifest. If `path` is omitted, the graph must already
+        be bound to a workspace path through `FactGraph.create(path=...)` or an
+        earlier `fg.save(path)`.
+        """
         workspace_path = _normalize_workspace_path(path) or self._workspace_path
         if workspace_path is None:
             raise SDKStoreError(
