@@ -9,6 +9,8 @@ import warnings
 from dataclasses import dataclass
 from typing import Any
 
+import networkx as nx
+
 from factpy.adapters.pyreason._helpers import _parse_edge_component, _pred_short_name
 from factpy.adapters.pyreason.provenance import (
     PyReasonTraceV0,
@@ -92,7 +94,6 @@ def build_pyreason_graph(session: PyReasonSession, schema_ir: dict[str, Any] | N
     When an edge fact carries a non-default interval, the current adapter
     lowers it to a lower-bound summary on the graph attribute.
     """
-    import networkx as nx
     del schema_ir
 
     graph = nx.DiGraph()
@@ -345,7 +346,7 @@ def run_pyreason(
     config: PyReasonRunConfig | None = None,
 ) -> PyReasonRunResult:
     """Run PyReason reasoning on a populated session."""
-    import factpy.adapters.pyreason as pr
+    import pyreason as pr
 
     if config is None:
         config = PyReasonRunConfig()

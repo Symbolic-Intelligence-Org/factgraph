@@ -144,7 +144,7 @@ class PublicInferencePayloadTests(unittest.TestCase):
 
 class PublicInferenceDocsTests(unittest.TestCase):
     def test_sdk_rules_doc_file_renamed_to_inferences(self) -> None:
-        repo_root = Path(__file__).resolve().parents[3]
+        repo_root = Path(__file__).resolve().parents[1]
         sdk_docs = repo_root / "src" / "factpy" / "sdk" / "docs"
 
         self.assertTrue((sdk_docs / "03_rules_and_inferences.en.md").exists())
