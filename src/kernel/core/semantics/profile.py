@@ -23,6 +23,19 @@ FALLBACK_POLICIES = frozenset({"reject_unconfigured", "warn_default", "use_defau
 
 @dataclass(frozen=True)
 class SemanticsProfile:
+    """Canonical semantics profile consumed by runtime adapters.
+
+    Most SDK users should start with `ProbLogSemantics` or `PyReasonSemantics`.
+    `SemanticsProfile` is the lower-level, engine-explicit form used when a
+    caller needs direct control over projections and adapter buckets.
+
+    Args:
+        name: Stable profile name.
+        engine: Runtime engine name, such as `"native"`, `"problog"`, or
+            `"pyreason"`.
+        rule_projection: Per-engine rule annotations consumed by adapters.
+    """
+
     name: str
     engine: str
     version: str = SUPPORTED_VERSION

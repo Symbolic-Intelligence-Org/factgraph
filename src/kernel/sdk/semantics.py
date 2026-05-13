@@ -60,6 +60,18 @@ def _normalize_interval_map(value: Any, *, field_name: str) -> dict[str, tuple[f
 
 @dataclass(frozen=True)
 class ProbLogSemantics:
+    """Public ProbLog semantics wrapper for inference evaluation.
+
+    Pass to `fg.eval.evaluate(inference, semantics=...)` to configure ProbLog
+    branch probabilities without constructing a raw `SemanticsProfile`. The SDK
+    derives `engine="problog"` from this wrapper.
+
+    Args:
+        branch_probabilities: Mapping from branch id to probability in `(0, 1]`.
+        name: Optional profile name used in the lowered canonical profile.
+        fallback: Policy for unconfigured semantics.
+    """
+
     branch_probabilities: dict[str, float] = field(default_factory=dict)
     name: str | None = None
     fallback: str = "reject_unconfigured"
@@ -82,6 +94,18 @@ class ProbLogSemantics:
 
 @dataclass(frozen=True)
 class PyReasonSemantics:
+    """Public PyReason semantics wrapper for inference evaluation.
+
+    Pass to `fg.eval.evaluate(inference, semantics=...)` to configure PyReason
+    time delay and interval bounds. The SDK derives `engine="pyreason"` from
+    this wrapper.
+
+    Args:
+        timestep_delay: Non-negative timestep delay for compiled rules.
+        head_bound: Optional global `[lower, upper]` interval for rule heads.
+        branch_bounds: Optional per-branch interval overrides keyed by branch id.
+    """
+
     timestep_delay: int = 0
     head_bound: tuple[float, float] | None = None
     branch_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)

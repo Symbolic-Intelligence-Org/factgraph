@@ -434,6 +434,12 @@ class _SDKEvalManager:
         return self._sdk.evaluate(*args, **kwargs)
 
     def inspect_semantics(self, *args: Any, **kwargs: Any) -> Any:
+        """Inspect semantics configuration without evaluating an inference.
+
+        Accepts `SemanticsProfile`, `ProbLogSemantics`, or `PyReasonSemantics`
+        and returns a JSON-like structural preview. Public wrappers include
+        their lowered canonical profile preview.
+        """
         return self._sdk.inspect_semantics(*args, **kwargs)
 
     def accept(self, *args: Any, **kwargs: Any) -> Any:

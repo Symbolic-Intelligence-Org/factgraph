@@ -26,6 +26,7 @@
 | 2026-05-13 | scoped | G2.13 persistence/workspace docstring anchors | Added hover docs for `SavedRuleRef`, `SavedInferenceRef`, `fg.rules.*`, `fg.inferences.*`, `fg.save`, and `FactGraph.load` before drafting the persistence quickstart page. |
 | 2026-05-13 | scoped | G2.13 persistence round-trip bug fixed | While validating the persistence tutorial examples, found saved `Rule`/`Inference` load returned SDK value objects whose already-lowered `where` IR failed when executed again. Preserved/restored authoring IR in DSL payload generation and added a focused regression test. |
 | 2026-05-13 | scoped | G2.14 persistence quickstart page started | Added a Page Brief and drafted `quickstart/persistence.md` around saved authoring handles, load-before-run, workspace save/load, and the per-asset vs whole-workspace distinction. |
+| 2026-05-13 | scoped | G2.15 semantics docstring anchors | Added hover docs for public semantics wrappers, canonical `SemanticsProfile`, and `fg.eval.inspect_semantics` before drafting the semantics quickstart page. |
 
 ## Decision Notes
 
@@ -43,6 +44,11 @@
 - 2026-05-13: Substantive official pages must not be API transcripts. Each
   page should establish a concise mental model, identify a likely
   misconception, and then teach the current API path.
+- 2026-05-13: Docs-as-validation is part of this slice. The persistence
+  tutorial draft exposed a real authoring round-trip bug where loaded
+  `Rule`/`Inference` value objects could not be executed because already
+  lowered `where` IR was lowered again. The fix and regression test landed
+  before the tutorial page was committed.
 
 ## Page Briefs
 
