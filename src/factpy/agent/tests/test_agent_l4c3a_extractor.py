@@ -8,7 +8,7 @@ from unittest.mock import patch
 from factpy.agent import AgentScope, ExtractionConfig
 from factpy.agent.documents import DocumentSegment
 from factpy.agent.extraction.extractor import ExtractionAgent
-from factpy.tests._test_helpers import _schema_ir
+from tests._test_helpers import _schema_ir
 
 
 class _FakeCompletions:

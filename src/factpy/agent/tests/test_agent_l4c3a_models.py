@@ -13,7 +13,7 @@ from factpy.agent import (
     FactDraftSpec,
     build_response_model,
 )
-from factpy.tests._test_helpers import _schema_ir
+from tests._test_helpers import _schema_ir
 
 
 class AgentLayer4C3aModelsTests(unittest.TestCase):

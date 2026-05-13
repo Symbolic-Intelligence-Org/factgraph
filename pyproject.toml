@@ -1,47 +1,18 @@
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "factpy-kernel"
-version = "0.1.0rc3"
-description = "FactPy kernel for append-only facts, policy/view projection, and logic export."
-readme = "README.md"
-requires-python = ">=3.10"
-license = {text = "Apache-2.0"}
-classifiers = [
-    "License :: OSI Approved :: Apache Software License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-]
-dependencies = ["pydantic>=2", "diskcache>=5"]
+dependencies = []
+name = "FactPy"
+requires-python = ">= 3.11"
+version = "0.1.0"
 
-[project.optional-dependencies]
-dev = ["ruff>=0.15,<1", "mypy>=1.20,<2", "coverage[toml]>=7,<8"]
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
 
-[tool.setuptools]
-include-package-data = false
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64"]
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["kernel*"]
-exclude = ["kernel.tests*"]
+[tool.pixi.pypi-dependencies]
+factpy = { path = ".", editable = true }
 
-[tool.ruff]
-target-version = "py310"
-line-length = 100
-
-[tool.mypy]
-python_version = "3.10"
-ignore_missing_imports = true
-warn_unused_configs = true
-
-[tool.coverage.run]
-branch = true
-source = ["src/kernel", "src/service"]
-omit = ["*/tests/*"]
-
-[tool.coverage.report]
-show_missing = true
-skip_empty = true
+[tool.pixi.tasks]

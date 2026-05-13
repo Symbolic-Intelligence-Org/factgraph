@@ -16,7 +16,7 @@ from factpy.agent import (
     RuntimeBootstrapSpec,
     ValidateResult,
 )
-from factpy.tests._test_helpers import _schema_ir
+from tests._test_helpers import _schema_ir
 
 
 class _FakeRuleRuntimeAPI:

@@ -17,7 +17,7 @@ from factpy.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factpy.core.rules.where_eval import WhereValidationError
 from factpy.core.store.runtime import Store
 from factpy.sdk import Pred, Rule, RuleRef, SDKStore, vars as sdk_vars
-from factpy.tests._test_helpers import User, _schema_ir as _runtime_schema_ir
+from tests._test_helpers import User, _schema_ir as _runtime_schema_ir
 
 
 class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):

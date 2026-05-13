@@ -7,7 +7,7 @@ import unittest
 from factpy.agent import AgentScope
 from factpy.agent.documents import DocumentSegment
 from factpy.agent.extraction.validation import validate_proposal
-from factpy.tests._test_helpers import _schema_ir
+from tests._test_helpers import _schema_ir
 
 
 def _segment() -> DocumentSegment:
@@ -112,7 +112,7 @@ class FieldTagFallbackTests(unittest.TestCase):
     def test_tag_matching_arg_name_is_accepted_and_normalized(self) -> None:
         """When tag == arg_spec.name (not type_domain), validator should accept and normalize."""
         from factpy.agent.extraction.validation import _validate_field_types
-        from factpy.tests._test_helpers import _schema_ir
+        from tests._test_helpers import _schema_ir
 
         schema_ir = _schema_ir()
         pred = next(p for p in schema_ir["predicates"] if len(p.get("arg_specs", [])) >= 2)
@@ -130,7 +130,7 @@ class FieldTagFallbackTests(unittest.TestCase):
     def test_tag_neither_type_domain_nor_arg_name_is_rejected(self) -> None:
         """When tag is neither type_domain nor arg name, validator should reject."""
         from factpy.agent.extraction.validation import _validate_field_types
-        from factpy.tests._test_helpers import _schema_ir
+        from tests._test_helpers import _schema_ir
 
         schema_ir = _schema_ir()
         pred = next(p for p in schema_ir["predicates"] if len(p.get("arg_specs", [])) >= 2)

@@ -146,7 +146,7 @@ from factpy.service.runtime_v1 import (
     run_runtime_rule,
     write_runtime_fact,
 )
-from factpy.tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
+from tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
 
 
 class ArtifactSidecarContractsTests(unittest.TestCase):

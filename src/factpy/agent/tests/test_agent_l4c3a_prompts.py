@@ -13,7 +13,7 @@ from factpy.agent.extraction.prompts import (
     format_gleaning_context,
     truncate_prompt_text,
 )
-from factpy.tests._test_helpers import _schema_ir
+from tests._test_helpers import _schema_ir
 
 
 class AgentLayer4C3aPromptTests(unittest.TestCase):

@@ -33,7 +33,7 @@ from factpy.service.runtime_v1 import (
     open_runtime_session,
     reset_runtime_sessions_for_tests,
 )
-from factpy.tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
+from tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
 from factpy.sdk import SDKStore
 
 

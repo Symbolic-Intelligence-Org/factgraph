@@ -13,7 +13,7 @@ from factpy.agent import (
     RuleSpec,
     RuntimeBootstrapSpec,
 )
-from factpy.tests._test_helpers import _schema_ir
+from tests._test_helpers import _schema_ir
 
 
 class _FakeRoutingRuntimeAPI:

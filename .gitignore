@@ -54,3 +54,6 @@ venv/
 .claude/skills/unfreeze
 esa_demo_output/
 dora_demo_output/
+# pixi environments
+.pixi/*
+!.pixi/config.toml

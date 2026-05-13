@@ -36,7 +36,7 @@ from factpy.service.runtime_v1 import (
     reset_runtime_sessions_for_tests,
     write_runtime_fact,
 )
-from factpy.tests._test_helpers import (
+from tests._test_helpers import (
     User,
     _register_exposed_user_tag_rule,
     _schema_ir,

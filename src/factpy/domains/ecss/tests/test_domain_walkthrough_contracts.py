@@ -152,7 +152,7 @@ from factpy.service.runtime_v1 import (
     run_runtime_rule,
     write_runtime_fact,
 )
-from factpy.tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
+from tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
 
 
 AML_TRANSACTION_EVENT_PRED_ID = "aml:transaction_event"

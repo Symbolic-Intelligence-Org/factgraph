@@ -44,7 +44,7 @@ from factpy.service.runtime_v1 import (
     write_runtime_fact,
 )
 
-from factpy.tests._test_helpers import (
+from tests._test_helpers import (
     User,
     _register_exposed_user_tag_rule,
     _seed_users_for_syntax_matrix,

@@ -33,7 +33,7 @@ from factpy.service.runtime_v1 import (
     open_runtime_session,
     reset_runtime_sessions_for_tests,
 )
-from factpy.tests._test_helpers import _schema_ir
+from tests._test_helpers import _schema_ir
 
 
 def _open_session(open_dto: dict[str, object]) -> str:
