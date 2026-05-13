@@ -7,12 +7,10 @@ info:
     - Runtime session lifecycle, fact writes, queries with inline read policy, rules/inferences, package export
     - Rules authoring validation and compile preview
     - Registry read-only access
-    - LLM document extraction
 
     **Envelope contract.** Most `/v1/*` operations return `HTTP 200` with a JSON envelope
     (`ok`, `errors`, `meta`, ...). Application-layer failures are signalled via
-    `ok=false` + non-empty `errors[]`. Exception: `POST /v1/extraction/documents`
-    maps validation errors to `HTTP 422` and pipeline errors to `HTTP 500`.
+    `ok=false` + non-empty `errors[]`.
 
     **Authentication.** All `/v1/*` operations require header `X-FactPy-API-Key`.
     `HTTP 401` = missing or invalid key. `HTTP 503` = server-side
@@ -21,14 +19,14 @@ info:
     response components. Set `FACTPY_KERNEL_AUTH_DISABLED=true` to skip auth for
     local development.
 
-    Human-readable integration guide: `src/factpy_kernel/service/docs/06_frontend_integration.md`.
+    Human-readable integration guide: `src/service/docs/06_frontend_integration.md`.
     Per-endpoint DTO narratives: `service/docs/02_runtime_sessions.md` /
-    `03_runtime_queries_policy.md` / `04_rules_registry.md` / `05_extraction.md`.
+    `03_runtime_queries_policy.md` / `04_rules_registry.md`.
 
     **Current precision boundary.** This spec is **route / auth / envelope complete**
     — every `/v1/*` operation is listed with `ApiKeyAuth` + 401 + 503 refs, and the
-    `Envelope` / `Error` / `ExtractionResult` / `WriteRequest` schemas are precise.
-    However, **~35 of the 43 operations still describe their request / response
+    `Envelope` / `Error` / `WriteRequest` schemas are precise.
+    However, many operations still describe their request / response
     payload as a generic `type: object`**; precise field-level shape for those lives
     in the DTO narratives above. A schema-first consumer (e.g. `openapi-typescript`
     auto-gen, Swagger UI "try it out") will get `Record<string, unknown>` for those
@@ -58,8 +56,6 @@ tags:
     description: Rule run, inference evaluate/accept, package export.
   - name: registry
     description: Registry read-only access.
-  - name: extraction
-    description: LLM document extraction.
 
 security:
   - ApiKeyAuth: []
@@ -734,54 +730,6 @@ paths:
         "401": { $ref: "#/components/responses/UnauthorizedError" }
         "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
 
-  # ── extraction ─────────────────────────────────────────────────────────
-  /v1/extraction/documents:
-    post:
-      tags: [extraction]
-      summary: Upload a document and return extracted structured facts.
-      description: |
-        `multipart/form-data` request. Returns HTTP 200 on success, HTTP 422 on
-        request validation failure (malformed options JSON / missing schema_ir),
-        HTTP 500 on pipeline failure (staging / extraction / resolution).
-        Full DTO contract: `service/docs/05_extraction.md`.
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file, options]
-              properties:
-                file:
-                  type: string
-                  format: binary
-                  description: Document file to extract (PDF / DOCX / MD / TXT).
-                options:
-                  type: string
-                  description: |
-                    JSON-encoded object. Required field `schema_ir` (non-empty
-                    object, compiled via `compile_schema_from_classes`).
-                    Optional: `model`, `entity_descriptions`, `enable_gleaning`,
-                    `enable_alias_merge`, `max_batch_size`, `require_source`.
-      responses:
-        "200":
-          description: Extraction succeeded.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ExtractionResultEnvelope" }
-        "422":
-          description: Request validation failed (bad options / missing schema_ir).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
-        "500":
-          description: Extraction pipeline failed (staging / extraction / resolution).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -850,7 +798,7 @@ components:
       properties:
         kind:
           type: string
-          description: Error category (e.g. `shape`, `validation`, `runtime`, `extraction`).
+          description: Error category (e.g. `shape`, `validation`, `runtime`).
         path:
           type: string
           description: JSON-pointer-like path into the request where the error originated, or `$` when global.
@@ -925,79 +873,3 @@ components:
                 opened_at_ns: { type: integer }
                 counts:
                   type: object
-
-    ExtractionResult:
-      type: object
-      properties:
-        doc_name: { type: string }
-        doc_id: { type: string }
-        model: { type: string }
-        staging_segments: { type: integer }
-        gleaning_segments_reexamined: { type: integer }
-        entities:
-          type: array
-          items: { $ref: "#/components/schemas/ExtractionEntity" }
-        facts:
-          type: array
-          items: { $ref: "#/components/schemas/FactDraftSpec" }
-        metrics:
-          type: object
-          properties:
-            total_segments: { type: integer }
-            success_segment_count: { type: integer }
-            error_segment_count: { type: integer }
-            total_proposal_count: { type: integer }
-            total_valid_count: { type: integer }
-            total_rejection_count: { type: integer }
-            batch_duration_ms: { type: integer }
-        merge_events:
-          type: array
-          items: { $ref: "#/components/schemas/MergeEvent" }
-
-    ExtractionEntity:
-      type: object
-      properties:
-        entity_type: { type: string }
-        identity:
-          type: object
-          additionalProperties: true
-        fact_count: { type: integer }
-
-    FactDraftSpec:
-      type: object
-      properties:
-        entity_type: { type: string }
-        entity_identity:
-          type: object
-          additionalProperties: true
-        pred_id: { type: string }
-        field_values:
-          type: array
-          items:
-            type: array
-            description: "[type_domain, value]"
-            nullable: true
-            oneOf:
-              - type: string
-              - type: number
-              - type: boolean
-        confidence:
-          type: number
-          nullable: true
-
-    MergeEvent:
-      type: object
-      properties:
-        fact_key_repr: { type: string }
-        primary_segment_id: { type: string }
-        merged_segment_id: { type: string }
-        entity_type: { type: string }
-        pred_id: { type: string }
-        alias_merge: { type: boolean }
-
-    ExtractionResultEnvelope:
-      allOf:
-        - $ref: "#/components/schemas/Envelope"
-        - type: object
-          properties:
-            result: { $ref: "#/components/schemas/ExtractionResult" }

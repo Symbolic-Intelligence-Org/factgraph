@@ -9,6 +9,8 @@
 | 2026-05-13 | draft | Blueprint created | Release-facing docs audit found README, examples README, service docs, and OpenAPI drift after rc.3, schema mutation, schema field-add, and confidence cleanup. |
 | 2026-05-13 | draft | Source audit expanded | Verified current SDK export/namespace count (`__all__` 41; 10 top-level namespaces) and added candidate stale-grep gates for G0 scope freeze. |
 | 2026-05-13 | scoped | G0 scope frozen | Locked release-docs cleanup scope to README, examples README, service docs, OpenAPI scope wording, and focused stale-grep gates; no code or release-ref changes. |
+| 2026-05-13 | scoped | README/examples updated | Refreshed root README around `FactGraph.create`, `Inference`, 10 SDK namespaces, and examples README around current SDK shells. |
+| 2026-05-13 | scoped | Service/OpenAPI updated | Removed stale confidence echo from service examples, corrected runtime DTO title, and removed extraction route/tag/components from kernel OpenAPI. |
 
 ## Decision Notes
 

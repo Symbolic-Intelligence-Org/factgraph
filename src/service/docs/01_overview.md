@@ -76,7 +76,7 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
   - rules facade 与 registry 只读接口。
 - `06_frontend_integration.md`
   - 前端/BFF 集成指南;envelope 解包模板、典型调用链路、HTTP 状态码速查表。
-- extraction HTTP surface 已迁至 agent.service:见 [`src/agent/service/docs/05_extraction.md`](../../../agent/service/docs/05_extraction.md)。
+- 文档抽取 HTTP surface 已迁至 agent service；本模块不再维护对应 route。
 
 ## 4. 当前路由（v1）
 
@@ -133,7 +133,7 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `POST /v1/registry/rules/read`
 - `POST /v1/registry/inferences/read`
 
-注:`POST /v1/extraction/documents` 已不在本 service 内,迁至 `agent.service.app`,见 [`src/agent/service/docs/05_extraction.md`](../../../agent/service/docs/05_extraction.md)。
+注:文档抽取 HTTP surface 已不在本 service 内,迁至 `agent.service.app`。
 
 ## 5. 典型运行链路
 
@@ -185,8 +185,6 @@ accept/proof/audit 链路 round-trip。
     "support_kind": "none",
     "generated_at": 0,
     "state": "generated",
-    "confidence": null,
-    "confidence_kind": "none",
     "payload": {
       "pred_id": "person:country_copy",
       "terms": [
@@ -201,6 +199,9 @@ accept/proof/audit 链路 round-trip。
 常见错误：
 - `$.candidate.payload`：payload 不是 v2 形态（例如客户端裁剪了 `terms`）。
 - `$.candidate.candidate_kind`：缺少或非法（必须是 `fact` / `entity`）。
+- 为兼容旧客户端，accept 仍可解析 echoed legacy `confidence` /
+  `confidence_kind` 字段；这些字段只 hydrate 内部 carrier，不会默认写入
+  assertion meta、service DTO 或 evidence tree。
 
 ### 5.3 runtime policy / view-facts
 

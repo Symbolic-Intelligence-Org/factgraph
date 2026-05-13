@@ -1,4 +1,4 @@
-# Runtime Query, Policy And Derivation DTO（service v1）
+# Runtime Query, Policy And Inference DTO（service v1）
 
 范围：
 
@@ -656,7 +656,7 @@
     未来运行时配置归 `SemanticsProfile.certainty_projection`
   - 若出现多 rule_ref_edges、nested referenced_support、unresolved child support、缺失 registry_root、rule payload 缺失等情况，则 graceful degrade 为 `certainty_summary=null`
   - 若 rule payload 存在但未声明 `condition_weights`，则 `certainty_summary` 仍可返回；此时所有 condition 都是 unweighted
-  - 对 runtime native derivation 而言，eligible candidate 的 `confidence_kind="certainty"` 现在由 evaluate create-time routing 自动写入；不再依赖调用侧 patch
+  - 对 runtime native inference 而言，eligible candidate 的 `confidence_kind="certainty"` 现在由 evaluate create-time routing 自动写入；不再依赖调用侧 patch
 - `certainty_summary` 的 stable shape 为：
   - internal `confidence_kind`
   - `condition_count`
@@ -1065,7 +1065,11 @@
 
 说明：
 
+- 请求顶层使用 public `inference` vocabulary；嵌套的 `derivation_id`
+  是 compiler-facing authoring payload 的 substrate key。
 - `evaluate` 返回完整 candidate 对象，供后续 `accept` 原样 round-trip。
+- candidate DTO 中的 `derivation_id` / `derivation_version` 也是
+  candidate/internal substrate 字段，不是 public `Derivation` value object。
 - candidate DTO 不再默认暴露 legacy `confidence` / `confidence_kind`
   字段；这些值只保留为 store 内部/session carrier。
 - Souffle deterministic 路径内部仍可保留 `confidence_kind="none"`；
@@ -1225,6 +1229,8 @@
 说明：
 
 - 客户端应原样回传 `evaluate` 返回的 candidate 对象，不要裁剪字段。
+- candidate DTO 的 `derivation_id` / `derivation_version` 是
+  accept/proof/audit round-trip substrate 字段。
 - 为兼容旧客户端，accept 仍会解析 echoed `candidate.confidence` /
   `candidate.confidence_kind` 字段；这些字段只 hydrate 内部 carrier，
   不会写入 assertion meta 或 adapter semantic lanes。
