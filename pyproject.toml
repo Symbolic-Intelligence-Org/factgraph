@@ -10,9 +10,35 @@ requires = ["hatchling"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["osx-arm64"]
+platforms = ["osx-arm64", "linux-64"]
 
 [tool.pixi.pypi-dependencies]
 factpy = { path = ".", editable = true }
 
 [tool.pixi.tasks]
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+test = { features = ["test"], solve-group = "default" }
+build = { features = ["build"], no-default-feature = true }
+publish = { features = ["publish"], no-default-feature = true }
+
+[tool.pixi.feature.test.tasks]
+test = "pytest"
+
+[tool.pixi.feature.build.tasks]
+build = { cmd = "python -m build", depends-on = ["test"] }
+
+[tool.pixi.feature.build.dependencies]
+python = "*"
+
+[tool.pixi.feature.publish.tasks]
+publish-to-pypi = { cmd = "python -m twine upload --repository testpypi dist/*", depends-on = ["build"] }
+
+[tool.pixi.feature.publish.dependencies]
+python = "*"
+
+[dependency-groups]
+test = ["pytest"]
+build = ["build"]
+publish = ["twine"]
