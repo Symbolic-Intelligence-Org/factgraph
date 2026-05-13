@@ -532,8 +532,7 @@ implement them:
 - `fg.read.find(view=...)` and `fg.eval.run(rule, view=...)` -- `view=` is
   not a parameter. Frozen views do not scope reads, rules, or inference
   evaluation; they are id-set containers only.
-- `fg.eval.evaluate(inference, view=...)` and
-  `fg.eval.evaluate(inference, policy=...)` -- inference evaluation always
+- `fg.eval.evaluate(inference, view=...)` -- inference evaluation always
   runs against active projection.
 - Richer graph-level record context (`entity_type`, `pred_id`, field name)
   inside `by_ids(...)` results -- the record shape stays uniform.
@@ -636,8 +635,8 @@ assert seed_record.meta.source == "seed"
 - `raw_kind` and `bound` are also mirrored into shared annotation rows
   (`shared/semantic/raw_kind`, `shared/semantic/bound`) with
   `origin="observed"`.
-- `confidence` and `confidence_source` are removed user-authored write meta
-  keys. Use `raw_kind` and `bound` for uncertainty inputs.
+- For uncertainty inputs, use `raw_kind` and `bound` (not `confidence` or
+  `confidence_source`, which are rejected meta keys).
 - `probability`, `bound_lower`, and `bound_upper` are rejected as
   user-authored meta. They were per-engine projections and are not write
   inputs.
