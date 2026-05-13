@@ -25,6 +25,7 @@
 | 2026-05-13 | scoped | G2.12 official docs index skeleton | Added five lightweight index pages for the official kernel docs root plus quickstart, concepts, how-to, and reference sections. |
 | 2026-05-13 | scoped | G2.13 persistence/workspace docstring anchors | Added hover docs for `SavedRuleRef`, `SavedInferenceRef`, `fg.rules.*`, `fg.inferences.*`, `fg.save`, and `FactGraph.load` before drafting the persistence quickstart page. |
 | 2026-05-13 | scoped | G2.13 persistence round-trip bug fixed | While validating the persistence tutorial examples, found saved `Rule`/`Inference` load returned SDK value objects whose already-lowered `where` IR failed when executed again. Preserved/restored authoring IR in DSL payload generation and added a focused regression test. |
+| 2026-05-13 | scoped | G2.14 persistence quickstart page started | Added a Page Brief and drafted `quickstart/persistence.md` around saved authoring handles, load-before-run, workspace save/load, and the per-asset vs whole-workspace distinction. |
 
 ## Decision Notes
 
@@ -104,3 +105,18 @@
 - Example snippets planned: Seed a fact, define a `Rule` over that fact, run it, define an `Inference` with the same body and a target predicate, evaluate to a `CandidateSet`, accept the candidate, read the written field, and inspect branch metadata.
 - Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying rule rows, no write before accept, accepted candidate facts, and explicit branch ids in `fg.rules.inspect(...)`.
 - External style reference: Pydantic-style tutorial progression and short recap only; all rule/inference behavior comes from local source, tests, module docs, and archived blueprints.
+
+### `quickstart/persistence.md`
+
+- Reader goal: Persist reusable rules and inferences as authoring assets, then save and load a complete workspace containing schema, ledger, and registry state.
+- Core mental model: Persistence has two tiers: per-asset registry persistence (`fg.rules.save/load`, `fg.inferences.save/load`) and whole-workspace persistence (`fg.save`, `FactGraph.load`). Saved refs are handles; loaded value objects are what runtime methods consume.
+- Common misconception to prevent: `fg.rules.get(...)` returns the latest `SavedRuleRef`, not a `Rule`; `SavedRuleRef` is not a runtime selector; `FactGraph.load(path)` requires `schema_classes=[...]`.
+- APIs covered: `SavedRuleRef`, `SavedInferenceRef`, `fg.rules.save`, `fg.rules.list`, `fg.rules.get`, `fg.rules.load`, `fg.inferences.save`, `fg.inferences.list`, `fg.inferences.get`, `fg.inferences.load`, `FactGraph.create(path=...)`, `fg.save`, `FactGraph.load`.
+- Non-goals: Class-less dynamic load, schema migration across workspaces, package export, service routes, conflict-resolution UI, advanced registry versioning, and semantic engine persistence.
+- Source files checked: `src/kernel/application/authoring_runtime.py`, `src/kernel/application/workspace_runtime.py`, `src/kernel/authoring/registry_fs.py`, `src/kernel/sdk/store.py`, `src/kernel/tests/test_authoring_asset_persistence_facade.py`, `src/kernel/tests/test_factgraph_workspace_lifecycle.py`.
+- Module docs checked: `src/kernel/sdk/docs/00_user_guide.en.md`, `src/kernel/sdk/docs/03_rules_and_inferences.en.md`, `src/kernel/sdk/docs/04_api_surface.en.md`, `src/kernel/authoring/docs/01_overview.md`.
+- Design references checked: `docs/references/working/design-points/factgraph-lifecycle-and-assets.zh.md`, `docs/references/working/design-points/rule-policy-function-tree-and-syntax.zh.md`.
+- Archived blueprints checked: `docs/blueprints/archive/2026-05-12_authoring-asset-persistence-facade.md`, `docs/blueprints/archive/2026-05-12_factgraph-workspace-lifecycle.md`, `docs/blueprints/archive/2026-05-12_inference-wire-registry-vocabulary.md`, `docs/blueprints/archive/2026-05-12_public-inference-factgraph-create.md`.
+- Example snippets planned: Create a path-backed graph, save/load a rule and inference, show `get(...)` returning latest saved refs, run/evaluate loaded value objects, save the workspace, inspect Level-4 layout files, and load the workspace with schema classes.
+- Validation method: Extract all Python blocks and run them in order with `PYTHONPATH=src python`, verifying saved-ref shapes, load-before-run, accepted inference facts, workspace files, and `FactGraph.load(..., schema_classes=[...])`.
+- External style reference: Pydantic-style tutorial progression and short recap only; all persistence behavior comes from local source, module docs, tests, and archived blueprints.
