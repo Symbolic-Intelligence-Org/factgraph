@@ -15,6 +15,7 @@
 | 2026-05-13 | scoped | G2.3 schema quickstart page started | Added a schema-focused tutorial page brief and drafted `quickstart/schema.md` from current schema, read/write, and schema mutation behavior. |
 | 2026-05-13 | scoped | G2.4 schema/read-write docstring anchors started | Added hover docs for `SchemaAddResult`, `fg.schema.add`, `fg.read.find`, and `fg.write.retract` to anchor schema and read/write tutorials. |
 | 2026-05-13 | scoped | G2.5 tutorial mental-model pass started | Strengthened the Page Brief contract and revised the first two quickstart pages to explain FactGraph/fact/assertion/ref/snapshot/schema concepts before syntax. |
+| 2026-05-13 | scoped | G2.6 Page Brief gate updated | Extended the official docs baseline to require Page Brief fields for core mental model, common misconception, and design references. |
 
 ## Decision Notes
 

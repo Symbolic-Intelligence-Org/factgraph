@@ -122,10 +122,13 @@ class TestOfficialDocsTreeGate(unittest.TestCase):
 class TestPageBriefTemplateGate(unittest.TestCase):
     REQUIRED_FIELDS = (
         "Reader goal",
+        "Core mental model",
+        "Common misconception to prevent",
         "APIs covered",
         "Non-goals",
         "Source files checked",
         "Module docs checked",
+        "Design references checked",
         "Archived blueprints checked",
         "Example snippets planned",
         "Validation method",
