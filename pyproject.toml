@@ -34,6 +34,7 @@ factgraph = { path = ".", editable = true }
 [tool.pixi.pypi-options]
 index-url = "https://pypi.org/simple"
 extra-index-urls = ["https://test.pypi.org/simple"]
+index-strategy = "unsafe-best-match"
 
 [tool.pixi.tasks]
 
