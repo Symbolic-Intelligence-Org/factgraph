@@ -1,18 +1,12 @@
 [project]
 dependencies = ["httpx>=0.28.1,<0.29", "fastapi>=0.136.1,<0.137", "networkx>=3.6.1,<4"]
 name = "factgraph"
-description = ""
+description = "A deterministic reasoning kernel with append-only ledger, evidence-preserving derivations, and pluggable engines (PyReason, ProbLog, Souffle)."
 requires-python = ">= 3.11"
 dynamic = ["version"]
 readme = "README.md"
 
 keywords = ["knowledge-graph", "symbolic-reasoning", "rule-engine", "inference", "provenance", "explainability", "audit"]
-
-maintainers = [
-  {name = "Zhenzhi Li", email = "z.li@symbolic-intelligence.de"},
-  {name = "Raphael Feikert et al.", email = "r.feikert@symbolic-intelligence.de"},
-
-]
 
 [tool.hatch.version]
 source = "vcs"
