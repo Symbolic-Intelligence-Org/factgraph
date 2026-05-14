@@ -31,6 +31,10 @@ platforms = ["osx-arm64", "linux-64"]
 [tool.pixi.pypi-dependencies]
 factgraph = { path = ".", editable = true }
 
+[tool.pixi.pypi-options]
+index-url = "https://pypi.org/simple"
+extra-index-urls = ["https://test.pypi.org/simple"]
+
 [tool.pixi.tasks]
 
 [tool.pixi.environments]
@@ -58,3 +62,4 @@ python = "*"
 test = ["pytest>=9.0.3,<10"]
 build = ["build", "hatch-vcs>=0.5.0,<0.6"]
 publish = ["twine"]
+
