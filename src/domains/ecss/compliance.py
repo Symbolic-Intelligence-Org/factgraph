@@ -13,7 +13,7 @@ from domains.ecss.vcd import (
     extend_schema_ir_with_ecss_vcd_predicates,
 )
 
-from kernel.audit.assertions import AuditAssertionIndex
+from factgraph.audit.assertions import AuditAssertionIndex
 
 
 class AuditComplianceError(Exception):

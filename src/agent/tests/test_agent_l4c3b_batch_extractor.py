@@ -17,7 +17,7 @@ from agent import (
     FactDraftSpec,
 )
 from agent.documents import DocumentSegment
-from kernel.tests._test_helpers import _schema_ir
+from factgraph.tests._test_helpers import _schema_ir
 
 
 def _segment(index: int, *, doc_id: str = "doc_1") -> DocumentSegment:

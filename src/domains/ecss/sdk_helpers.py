@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from kernel.core.evidence.write_protocol import add_field, set_field
-from kernel.core.protocol.idref_v1 import encode_idref_v1
+from factgraph.core.evidence.write_protocol import add_field, set_field
+from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from domains.ecss.vcd import (
     ECSS_COMPLIANCE_STATUS_PRED_ID,
     ECSS_REQUIREMENT_PRED_ID,
@@ -16,8 +16,8 @@ from domains.ecss.vcd import (
     extend_schema_ir_with_ecss_vcd_predicates,
 )
 
-from kernel.sdk.errors import SDKStoreError
-from kernel.sdk.store import SDKStore
+from factgraph.sdk.errors import SDKStoreError
+from factgraph.sdk.store import SDKStore
 
 
 def apply_ecss_vcd_schema(schema_ir: dict[str, Any]) -> dict[str, Any]:

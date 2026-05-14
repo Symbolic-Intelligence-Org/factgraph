@@ -5,7 +5,7 @@ from time import time_ns
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
-from kernel.core.schema.schema_ir import schema_digest
+from factgraph.core.schema.schema_ir import schema_digest
 
 from .errors import AgentContractError, AgentScopeViolation
 
@@ -110,7 +110,7 @@ class AgentScope:
 
 @dataclass
 class AgentSession:
-    """Agent-side session, loosely bound to a kernel runtime session."""
+    """Agent-side session, loosely bound to a factgraph runtime session."""
 
     agent_session_id: str = field(default_factory=lambda: f"agent_{uuid4().hex[:12]}")
     runtime_session_id: str | None = None

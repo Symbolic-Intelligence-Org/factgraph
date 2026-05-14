@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from kernel.authoring.rules import AuthoringRuleCompileError, compile_authoring_rule_v1
-from kernel.core.rules.backend_profile import (
+from factgraph.authoring.rules import AuthoringRuleCompileError, compile_authoring_rule_v1
+from factgraph.core.rules.backend_profile import (
     BackendProfile,
     PROFILE_DEFAULT,
     PROFILE_SOUFFLE_STRICT,
 )
-from kernel.core.rules.rule_ast import RuleASTError, parse_query_rule_ir_to_ast
-from kernel.core.rules.rule_ast_validate import RuleASTValidationError, validate_query_rule_ast
+from factgraph.core.rules.rule_ast import RuleASTError, parse_query_rule_ir_to_ast
+from factgraph.core.rules.rule_ast_validate import RuleASTValidationError, validate_query_rule_ast
 
 from ._common import error_response, exception_to_error, facade_error, ok_response
 

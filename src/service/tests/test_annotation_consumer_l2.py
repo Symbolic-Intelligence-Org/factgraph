@@ -15,7 +15,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from kernel.audit.assertions import AuditAssertionIndex, load_assertion_index
+from factgraph.audit.assertions import AuditAssertionIndex, load_assertion_index
 from service.static_ui import _render_annotation_panel
 
 

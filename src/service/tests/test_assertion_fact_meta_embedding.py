@@ -13,17 +13,17 @@ from collections.abc import Mapping
 from typing import Any
 
 from service.static_ui import render_candidate_evidence_html
-from kernel.core.store._candidate_evidence_tree import (
+from factgraph.core.store._candidate_evidence_tree import (
     _build_assertion_leaf,
     _extract_fact_meta,
 )
-from kernel.core.store._candidate_evidence_tree_narrative import (
+from factgraph.core.store._candidate_evidence_tree_narrative import (
     render_candidate_evidence_tree_narrative,
 )
-from kernel.core.store._candidate_evidence_tree_nl import (
+from factgraph.core.store._candidate_evidence_tree_nl import (
     render_candidate_evidence_tree_nl_explain,
 )
-from kernel.core.store._candidate_evidence_tree_summary import (
+from factgraph.core.store._candidate_evidence_tree_summary import (
     summarize_candidate_evidence_tree_dict,
 )
 

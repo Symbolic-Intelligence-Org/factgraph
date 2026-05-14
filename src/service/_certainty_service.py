@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from kernel.authoring.registry_fs import FileAuthoringRegistry
-from kernel.core.store._certainty_materializer import materialize_certainty_summary
-from kernel.core.store._confidence_kind_resolver import check_certainty_artifact_eligibility
-from kernel.core.store.runtime import Store
+from factgraph.authoring.registry_fs import FileAuthoringRegistry
+from factgraph.core.store._certainty_materializer import materialize_certainty_summary
+from factgraph.core.store._confidence_kind_resolver import check_certainty_artifact_eligibility
+from factgraph.core.store.runtime import Store
 
 
 def _lookup_condition_weights_for_candidate(

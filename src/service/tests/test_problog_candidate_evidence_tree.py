@@ -3,25 +3,25 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-import kernel.adapters.problog  # noqa: F401
-from kernel.adapters.problog.provenance import (
+import factgraph.adapters.problog  # noqa: F401
+from factgraph.adapters.problog.provenance import (
     parse_problog_trace,
     problog_trace_to_candidate_evidence_tree,
 )
 from service.static_ui import render_candidate_evidence_html
-from kernel.core.store._candidate_evidence_tree_narrative import (
+from factgraph.core.store._candidate_evidence_tree_narrative import (
     render_candidate_evidence_tree_narrative,
 )
-from kernel.core.store._candidate_evidence_tree_nl import (
+from factgraph.core.store._candidate_evidence_tree_nl import (
     render_candidate_evidence_tree_nl_explain,
 )
-from kernel.core.store._candidate_evidence_tree_summary import (
+from factgraph.core.store._candidate_evidence_tree_summary import (
     summarize_candidate_evidence_tree_dict,
 )
-from kernel.core.store._support import PROBLOG_PROVENANCE_KIND
-from kernel.sdk.compile import compile_schema_from_classes
-from kernel.sdk.schema import Entity, Field, Identity
-from kernel.sdk.store import SDKStore
+from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
+from factgraph.sdk.compile import compile_schema_from_classes
+from factgraph.sdk.schema import Entity, Field, Identity
+from factgraph.sdk.store import SDKStore
 from service.runtime_v1 import (
     accept_runtime_derivation,
     close_runtime_session,
@@ -152,7 +152,7 @@ class ProbLogCandidateEvidenceTreeTests(unittest.TestCase):
         self.assertEqual(failed_child["status"], "fail")
         self.assertEqual(failed_child["check_kind"], "missing")
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_runtime_explain_tree_summary_narrative_and_nl_work_after_accept(self, mock_run) -> None:
         session_id, sdk = self._open_session()
         alice_ref = sdk.ref(User, user_id="Alice")

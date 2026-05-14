@@ -3,8 +3,8 @@
 可独立部署:`uvicorn agent.service.app:app`
 也可被外层 mount(取决于部署形态)。
 
-依赖方向:agent.service → service(top-level package,不是 kernel.service)
-                       → kernel(传递依赖经 service)
+依赖方向:agent.service → service(top-level package,不是 factgraph.service)
+                       → factgraph(传递依赖经 service)
 """
 
 from __future__ import annotations

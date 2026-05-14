@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from kernel.authoring import FileAuthoringRegistry
+from factgraph.authoring import FileAuthoringRegistry
 
 from ._common import error_response, exception_to_error, facade_error, ok_response
 from ._registry_io import load_registry_schema_ir
