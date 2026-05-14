@@ -7,6 +7,7 @@
   - `scripts/release.sh` (existing; to be complemented, not replaced)
   - `scripts/dual-push.sh` (new; to be implemented post-scope)
   - `scripts/verify-shared-region-parity.sh` (new; invariant check)
+  - `scripts/check-release-stabilization-boundary.sh` (new; Gap 9.C2)
   - `pyproject.toml` (divergent file; not synced)
 - Related Docs:
   - [Friend's gist branching model](https://gist.github.com/digitaljhelms/4287848)
@@ -148,7 +149,7 @@ Naming summary:
    git merge --no-ff feature/X
    git push origin master
    ```
-   hnsm `master` is the **development integration line**; it collects every merged feature and has **no release semantics**. Release semantics live entirely on factgraph (§5.3+). Note: this `git push origin master` step is intentionally a plain push, NOT `scripts/dual-push.sh master` — hnsm master never projects to factgraph (factgraph `main` is updated only via release/v* merge on the factgraph side, §5.4).
+   hnsm `master` is the **development integration line**; it collects every merged feature and has **no release semantics**. Release semantics live entirely on factgraph (§5.3+). Note: this `git push origin master` step is intentionally a plain push, NOT `scripts/dual-push.sh master` — hnsm master never projects to factgraph (factgraph `main` is updated only via release/v* merge on the factgraph side, §5.3 step 5).
 7. Delete the hnsm `feature/X` branch on origin after merge (optional). If the feature was also dual-pushed, the factgraph `feature/X` lives on until it feeds a `release/v*` and the next release/v* cycle deletes its predecessor (§5.4).
 
 **Rebase / amend hygiene (Gap 2 + Gap 3 interlock):**
@@ -170,7 +171,9 @@ Recommended discipline: treat `feature/X` as append-only after first `dual-push`
    ```bash
    git push factgraph --delete release/v0.1.0-rc.3
    ```
-   If the previous `release/v*` is NOT merged or tag is missing → refuse. Require explicit `dual-push.sh --force-delete-stalled-release release/v0.1.0-rc.3` to override (use only on aborted release lines, never on a release that's mid-stabilization).
+   If the previous `release/v*` is NOT merged or tag is missing:
+   - **Active stabilization in progress** (commits exist, work ongoing, intent unchanged): DO NOT use `--force-delete-stalled-release`. The branch is not stalled. The right path is the parking flow (§5.5 step 5 for hotfix-driven parking; same parking pattern can be used in non-hotfix contexts if needed). Active stabilization is preserved under `stabilization/<X>-paused` outside the `release/v*` namespace and restored later.
+   - **Truly stalled / abandoned** (rc decision reversed, work obsolete): `dual-push.sh --force-delete-stalled-release release/v0.1.0-rc.3 --reason "<text>"` (§5.6). Required `--reason` writes to a deviation log. Caller explicitly acknowledges the branch will not be resumed.
 3. **Create the new `release/v*` on factgraph only**, seeded from the chosen factgraph `feature/X` HEAD:
    ```bash
    git -C <local-hnsm-clone> fetch factgraph
@@ -226,6 +229,8 @@ The developer does NOT execute these tag/publish actions. If a release manager i
 
 (Refined at Gap 8.E, 2026-05-14: hotfix uses the same `feature → release/v* → main → tag → publish` shape, scaled-down. Hotfix-parent SHA on hnsm-backend is looked up via the factgraph release tag's commit footer (Gap 7).)
 
+**Tag-format note**: examples in this section use `v0.1.0-rc.3` / `v0.1.0-rc.3.1` style. The actual schema is undecided per §8.Q9 (existing factgraph tags are `v0.1.0rc1` / `v0.1.0rc2` without the dot/dash; hnsm-backend uses `v0.1.0-rc.x`). All examples here are illustrative; the workflow is independent of the chosen tag string format as long as tags are parseable as plain refs.
+
 **Developer phase:**
 
 1. **Lookup hnsm-backend anchor SHA from the factgraph release tag's footer**:
@@ -247,45 +252,97 @@ The developer does NOT execute these tag/publish actions. If a release manager i
 
 4. **If the hotfix touches shared region** (the usual case for code/test fixes): `scripts/dual-push.sh hotfix/X` — projects to factgraph `hotfix/X` (footer back-references the new hnsm hotfix HEAD). Verify parity: `scripts/verify-shared-region-parity.sh hotfix/X`.
 
-   **If the hotfix only touches divergent / release-metadata files on factgraph** (rare; e.g., a CHANGELOG correction post-release): no hnsm-side originate is needed; do the fix directly on factgraph as part of §5.5 step 5 below.
+   **If the hotfix only touches divergent / release-metadata files on factgraph** (rare; e.g., a CHANGELOG correction post-release): no hnsm-side originate is needed; do the fix directly on factgraph as part of §5.5 step 6 below.
 
-5. **Create or use a `release/v0.1.0-rc.3.1` branch on factgraph** (factgraph-only, per §5.3 lifecycle):
-   - Delete the previous `release/v*` if any (with the Gap 8.D guard).
+5. **Check for active `release/v*` and park it if needed** (Gap 9.A3, 2026-05-14):
+
+   If a `release/v*` already exists on factgraph for a NEXT release (e.g., `release/v0.1.0-rc.4`) and is in **active stabilization** — defined as: NOT merged into factgraph `main` AND NO tag yet pointing at its HEAD — the hotfix path MUST park it before proceeding. Reasons (per Gap 9.A3 user decision):
+
+   - Active stabilization is **not stalled**. `--force-delete-stalled-release` (§5.6) MUST NOT be used here.
+   - Two parallel `release/v*` branches would violate the §6.1.7 single-line invariant.
+   - Pushing the hotfix into the active rc would mix release lineages.
+
+   Parking procedure:
+   ```bash
+   git fetch factgraph
+   # 1. Snapshot the active rc into stabilization/ namespace (outside release/v* scope per §6.1.7).
+   git push factgraph factgraph/release/v0.1.0-rc.4:refs/heads/stabilization/v0.1.0-rc.4-paused
+   # 2. Verify the parked ref exists.
+   git fetch factgraph
+   git rev-parse factgraph/stabilization/v0.1.0-rc.4-paused
+   # 3. Delete the active release/v0.1.0-rc.4 now that it is safely preserved.
+   git push factgraph --delete release/v0.1.0-rc.4
+   ```
+
+   If no active `release/v*` exists, skip this step.
+
+6. **Create the hotfix `release/v0.1.0-rc.3.1` branch on factgraph** (factgraph-only, per §5.3 lifecycle):
+   - Delete the previous merged-and-tagged `release/v*` if any (per §5.3 step 2 guards; this is the normal case where the prior released-rc branch is still kept alive).
    - Seed `release/v0.1.0-rc.3.1` from the factgraph commit corresponding to the original `v0.1.0-rc.3` tag (so the hotfix is layered onto the exact released state):
      ```bash
      git -C <...> push factgraph factgraph/refs/tags/v0.1.0-rc.3^{commit}:refs/heads/release/v0.1.0-rc.3.1
      ```
    - Merge factgraph `hotfix/X` into `release/v0.1.0-rc.3.1` on factgraph (or fast-forward if linear).
 
-6. (Optional divergent stabilization, same stratification as §5.3 step 4.)
+7. (Optional divergent stabilization on `release/v0.1.0-rc.3.1`, same stratification as §5.3 step 4.)
 
-7. **Merge `release/v0.1.0-rc.3.1` → factgraph `main`**.
+8. **Merge `release/v0.1.0-rc.3.1` → factgraph `main`**.
 
-8. **Locally on hnsm: merge `hotfix/X` back into hnsm master** so the dev integration line absorbs the fix:
+9. **Locally on hnsm: merge `hotfix/X` back into hnsm master** so the dev integration line absorbs the fix:
    ```bash
    git checkout master && git merge --no-ff hotfix/X && git push origin master
    ```
 
-9. **Developer phase ends here.** Release manager picks up per §5.10:
-   - Tag factgraph `main` with `v0.1.0-rc.3.1`.
-   - Push tag.
-   - PyPI publish.
+10. **Developer phase ends here for the hotfix release.** Release manager picks up per §5.10:
+    - Tag factgraph `main` with `v0.1.0-rc.3.1`.
+    - Push tag.
+    - PyPI publish.
 
-10. (If there is an active `release/v0.1.0-rc.4` for the next release at the time of this hotfix, the next stabilization commit on it must absorb the hotfix — e.g., via `git merge factgraph/main` on the factgraph release/v0.1.0-rc.4 branch.)
+11. Delete `hotfix/X` on both remotes after the `release/v0.1.0-rc.3.1` merge to factgraph `main`.
 
-11. Delete `hotfix/X` on both remotes after the release/v0.1.0-rc.3.1 merge to main.
+12. **Resume parked active rc** (Gap 9.A3 — only if a `release/vNEXT` was parked at step 5):
+
+    After the release manager has tagged + published `v0.1.0-rc.3.1`:
+    ```bash
+    git fetch factgraph
+    # 1. Recreate release/vNEXT from the parking branch.
+    git push factgraph factgraph/stabilization/v0.1.0-rc.4-paused:refs/heads/release/v0.1.0-rc.4
+    # 2. Absorb the hotfix by merging factgraph/main (now containing v0.1.0-rc.3.1).
+    git fetch factgraph
+    git checkout -B fg-rc4 factgraph/release/v0.1.0-rc.4
+    git merge --no-ff factgraph/main
+    git push factgraph HEAD:release/v0.1.0-rc.4
+    # 3. Re-verify shared-region parity (the rc.4 branch may need additional dual-push
+    #    of the original hnsm feature branch if hnsm has moved on; see §5.3 step 4
+    #    shared-region pattern).
+    scripts/verify-shared-region-parity.sh release/v0.1.0-rc.4
+    # 4. Delete the parking branch.
+    git push factgraph --delete stabilization/v0.1.0-rc.4-paused
+    ```
+
+    From this point, the original `release/v0.1.0-rc.4` stabilization continues from its restored state, with the hotfix applied. Subsequent stabilization commits + final merge to main + tag proceed normally per §5.3 / §5.10.
+
+    Note: if the hotfix made the original rc.4 plan obsolete (e.g., the hotfix already covered what rc.4 intended), the developer may choose to skip resumption and let the parked branch live in `stabilization/` namespace until explicitly cleaned up. This is an editorial decision, not a workflow rule.
 
 ### 5.6 Tooling
 
 #### scripts/dual-push.sh
 
 ```
-Usage:
-  scripts/dual-push.sh <branch> [--squash | --keep-granular] [--force-rewrite] [--repair] [--dry-run]
-  scripts/dual-push.sh --hotfix-from <factgraph-tag>  [--into <hotfix-branch-name>]
-  scripts/dual-push.sh --force-delete-stalled-release <release/v*-branch>
+Usage (three forms):
 
-Allowed <branch> targets: feature/*, hotfix/*  (shared-region working branches).
+  1. Projection push (primary form):
+       scripts/dual-push.sh <branch> [--squash | --keep-granular] [--force-rewrite] [--repair] [--dry-run]
+
+  2. Hotfix-anchor lookup + checkout (convenience for §5.5 step 1-2):
+       scripts/dual-push.sh --hotfix-from <factgraph-tag> [--into <hotfix-branch-name>]
+
+  3. Stalled-release deletion (escape; for truly abandoned release/v* per §5.6 sub-command spec):
+       scripts/dual-push.sh --force-delete-stalled-release <release/v*-branch> --reason "<text>"
+
+In form 1, allowed <branch> targets: feature/*, hotfix/* (shared-region working branches).
+Forms 2 and 3 are sub-commands with their own argument shape; the "allowed targets" /
+"disallowed targets" rules below apply only to form 1.
 Disallowed:
   - master  (hnsm `master` is plain git push origin master, NEVER projects to factgraph;
              factgraph `main` is updated via release/v* merge on factgraph side, NEVER
@@ -358,6 +415,48 @@ Sub-command `--hotfix-from <factgraph-tag>`:
   5. git checkout -b <hotfix-branch-name> <hnsm-anchor-sha> on hnsm-backend.
   6. Print follow-up instructions: commit fix → dual-push.sh <hotfix-branch-name>
      → merge to master → tag factgraph.
+
+Sub-command `--force-delete-stalled-release <release/v*-branch> --reason "<text>"`:
+  (Detailed at Gap 9.E1, 2026-05-14.)
+
+  Required flags:
+    --reason "<text>"        Required free-form rationale (recorded in deviation log).
+
+  Pre-conditions checked (ALL must hold; otherwise refuse):
+    1. The branch exists on factgraph (`git ls-remote factgraph refs/heads/<release/v*>`).
+    2. The branch is NOT merged into factgraph's default branch:
+         git merge-base --is-ancestor factgraph/<release/v*> factgraph/<default>
+       If merged → REFUSE with "branch already merged; use plain `git push
+       factgraph --delete <branch>` to remove it (no flag needed)".
+    3. No tag points at the branch's HEAD:
+         git tag --points-at factgraph/<release/v*>
+       If a tag exists → REFUSE with "release is tagged; the branch is not
+       stalled, it's released. Plain delete is correct."
+    4. `--reason` is non-empty.
+
+  Active-stabilization guard:
+    These pre-conditions only catch the "merged or tagged" cases. A branch with
+    stabilization commits but no merge / no tag could be either stalled OR
+    actively in flight. The script CANNOT distinguish those by inspection alone.
+    Caller acknowledges via the --reason text that the branch is stalled, not
+    active. If the caller is unsure, the parking flow (§5.5 step 5) is the
+    safe alternative for active branches.
+
+  Behavior on pass:
+    1. Print the branch SHA and the planned deletion plan:
+         "About to delete factgraph release/v0.1.0-rc.X @ <sha40>"
+         "Reason: <text>"
+    2. Append a deviation entry (timestamped) to
+       .git/dual-sync/release-deletions.log:
+         <ISO-timestamp> | <branch> | <sha40> | <reason>
+    3. Execute: git push factgraph --delete <release/v*-branch>
+    4. Print confirmation + path to deviation log.
+
+  Non-goals:
+    - Does NOT delete factgraph tags (tags are immutable, §6.1.8).
+    - Does NOT delete corresponding hnsm-side branches (hnsm has no release/v*).
+    - Does NOT recover the deleted branch; recovery requires the developer
+      to push the SHA back from a local reflog or other anchor.
 ```
 
 #### scripts/verify-shared-region-parity.sh
@@ -371,6 +470,69 @@ Behavior:
   AND hnsm's tests tree hash == factgraph's tests tree hash.
   Exits 1 with a clear report on drift (including which subtree, expected vs actual hash).
   Also verifies factgraph HEAD has well-formed footer (warning if missing).
+```
+
+#### scripts/check-release-stabilization-boundary.sh
+
+(Added at Gap 9.C2, 2026-05-14. Replaces the unspecified "pre-push tree check" referenced from §5.3 step 4.)
+
+```
+Usage:
+  scripts/check-release-stabilization-boundary.sh <ref-or-range>
+  scripts/check-release-stabilization-boundary.sh --staged           # check the staging area
+  scripts/check-release-stabilization-boundary.sh --against <base>   # check HEAD..<base>
+
+Purpose:
+  Enforces §6.1.3: when a developer directly edits a factgraph release/v*
+  branch, only divergent / release-metadata files are allowed. Any
+  modification to shared-region paths (src/factgraph/**, tests/**) is rejected,
+  because shared-region commits MUST originate in hnsm-backend (§5.3 step 4
+  shared-region pattern).
+
+Allowed (divergent / release-metadata) paths:
+  - pyproject.toml
+  - README.md
+  - LICENSE
+  - CHANGELOG.md
+  - CODE_OF_CONDUCT.md
+  - CONTRIBUTING.md
+  - pixi.lock
+  - .github/**
+  (This list mirrors the divergent file inventory from §4 and §6.1.5.)
+
+Forbidden paths (must not appear in the diff):
+  - src/factgraph/**
+  - tests/**
+
+Behavior:
+  1. Resolve the inspection set:
+     - default: working-tree changes vs HEAD
+     - --staged: staged changes vs HEAD
+     - --against <base>: <base>..HEAD range
+     - <ref-or-range>: arbitrary git-rev-range
+  2. Compute the list of changed paths via `git diff --name-only`.
+  3. For each changed path, classify as ALLOWED / FORBIDDEN by prefix-match.
+     Unknown paths (not in either list) are FORBIDDEN by default (safe-fail).
+  4. Exits 0 if all changes are ALLOWED.
+  5. Exits 1 with a structured report listing each FORBIDDEN path and its
+     classification reason. Suggests the proper origin path (hnsm-backend
+     feature branch + dual-push.sh) for shared-region fixes.
+
+Intended use:
+  - Run manually before `git push factgraph HEAD:release/v*` for direct
+    stabilization edits (§5.3 step 4 divergent path).
+  - Optionally wired into a local pre-push hook on the developer's hnsm
+    clone (hook implementation is out of scope for this blueprint; the
+    script itself is the testable contract).
+  - G3 acceptance covers the script directly; G4 acceptance verifies it
+    blocks shared-region direct edits in the synthetic flow.
+
+Non-goals:
+  - Not server-side enforcement. GitHub branch protection rules may
+    complement this script but are configured separately and are NOT
+    part of this blueprint.
+  - Not a replacement for verify-shared-region-parity.sh. Parity verifies
+    end-state equality; this script verifies edit-origin boundary.
 ```
 
 ### 5.7 Durable Sync State (footer protocol)
@@ -448,7 +610,7 @@ After bootstrap:
   It is NOT part of the active workflow after bootstrap.
 
 If the factgraph repo's release naming and hnsm's tag naming need to be
-reconciled (`v0.1.0-rc.x` vs `v1.0.1-rc.1` style), that is tracked as §8 Q7
+reconciled (`v0.1.0-rc.x` vs `v1.0.1-rc.1` style), that is tracked as §8 Q9
 and does NOT block this blueprint's scope-freeze.
 
 ### 5.9 Sync-debt handling
@@ -474,6 +636,8 @@ Failure mode policy: **repair, never rollback**.
 ### 5.10 Release-manager handoff contract
 
 (Added at Gap 8.F, 2026-05-14. This section is **not part of the developer workflow**; it captures what the developer hands over and what the release manager owes back, so each side can act independently.)
+
+**Tag-format note** (same as §5.5): examples use `v0.1.0-rc.4` style for clarity. Actual tag schema is §8.Q9.
 
 **Trigger (developer side):** developer has finished §5.3 step 5 — `release/v0.1.0-rc.4` (factgraph-only) is merged into factgraph `main`. The release/v* branch is still alive on factgraph and contains the full stabilization history.
 
@@ -535,7 +699,11 @@ Failure mode policy: **repair, never rollback**.
 4. **Reverts are one-way**: any revert of a previously-projected shared-region change originates in hnsm-backend as a new commit, then projects to factgraph. Manual revert on factgraph is forbidden — factgraph's shared region is always a projection result, never an authored state.
 5. **Divergent files never enter the projection set**: `pyproject.toml`, `README.md`, `LICENSE`, `CHANGELOG.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `pixi.lock`, `.github/` are owned by factgraph (factgraph-side edits live in factgraph commits only; hnsm-side edits to the same files live in hnsm commits only and never project).
 6. **Asymmetric default branches with split semantics** (Gap 8.A+B, supersedes pre-Gap-8 §6.1.6): hnsm-backend default is `master` (dev integration line, no release semantics; collects every merged feature); factgraph default is `main` (release-only line, updated only via merging in `release/v*`). Neither default is ever a direct target of `dual-push.sh`. `release/v*` does not exist on hnsm-backend; it lives only on factgraph.
-7. **At most one `release/v*` open on factgraph at a time** (Gap 8.D, supersedes pre-Gap-8 §6.1.7 delete-on-merge semantics): the active `release/v*` is preserved after its merge into factgraph `main` and tag. It is deleted only when the NEXT `release/v*` is being created. The creation script (`dual-push.sh` or manual procedure per §5.3 step 2) MUST verify the previous `release/v*` is (a) merged into factgraph `main` AND (b) has a corresponding tag, before deleting. Failing either guard requires explicit `--force-delete-stalled-release` override. `--allow-multiple-release` remains available as a separate one-time escape for parallel-rc scenarios that are otherwise prohibited.
+7. **At most one `release/v*` open on factgraph at a time** (Gap 8.D + Gap 9.A3, 2026-05-14):
+   - The active `release/v*` is preserved after its merge into factgraph `main` and tag. It is deleted only when the NEXT `release/v*` is being created.
+   - Creation procedure (§5.3 step 2) MUST verify the previous `release/v*` is (a) merged into factgraph `main` AND (b) has a corresponding tag, before deleting.
+   - **Parking exception (Gap 9.A3):** if an active stabilization `release/v*` exists and must yield to a hotfix release, the active rc is parked under `stabilization/<branch-name>-paused` (a separate namespace, NOT `release/v*`) before deletion. Parked stabilization branches do NOT count against this invariant. After the hotfix release completes, the parked branch may be restored to `release/v*` (and absorb the hotfix via merge from `main`). See §5.5 step 5 + step 12 for the parking + resume procedure.
+   - **`--force-delete-stalled-release` is reserved for truly stalled / abandoned `release/v*`** — branches where the rc decision has been reversed and the work will NOT be resumed. Required `--reason` text. NOT for active stabilization. See §5.6.
 8. **Tags are immutable**.
 9. **Hotfix-parent SHA lookup goes through the factgraph release tag's footer**, not through any hnsm-side tag. hnsm release tags are not required. The footer's `From-hnsm-backend: <sha>` is the authoritative back-reference; SHA reachability is guaranteed by hnsm `master` collecting every feature merge (§6.1.6) so any commit that ever made it to master remains reachable post-release.
 10. **Developer / release-manager separation** (Gap 8.F): tag creation and PyPI publish are release-manager-owned actions, NOT part of the developer workflow. Developer phase ends at `merge release/v* → factgraph main` (§5.3). The handoff contract is in §5.10. Crossing this boundary on the developer side is an explicit escalation, not a default path.
@@ -574,6 +742,11 @@ Scoped (after Gap 1-6 resolution on 2026-05-14). Acceptance is **synthetic verif
     - G0.8.D: factgraph `release/v*` kept-last-1 with delete-on-next-create + tag-and-merged guard + `--force-delete-stalled-release` escape. Supersedes Gap 5.1.
     - G0.8.E: hotfix uses the same `feature → release/v* → main → tag → publish` shape, scaled-down.
     - G0.8.F: explicit dev/release-manager separation. Dev phase ends at `release/v* → factgraph main` merge. Tag + PyPI publish are release-manager-owned (§5.10 handoff contract).
+  - [x] G0.9 (Gap 9, 2026-05-14, scope-freeze readiness review): three substantive design fills + polish:
+    - G0.9.A3: hotfix-during-active-rc resolved via **park → hotfix release → resume** flow. Active rc moves to `stabilization/<X>-paused` namespace (outside `release/v*`, so §6.1.7 single-line invariant intact). `--force-delete-stalled-release` explicitly disallowed for active stabilization. §5.5 step 5 (park) + step 12 (resume) added.
+    - G0.9.C2: standalone script `scripts/check-release-stabilization-boundary.sh` defined for §5.3 step 4's previously-unspecified "pre-push tree check". Acceptance gate G3.b verifies it. G4 integrates it into the synthetic flow.
+    - G0.9.E1: `--force-delete-stalled-release` behavior fully spec'd — required `--reason "<text>"`, merged-and-tagged refusal, active-stabilization guard via caller acknowledgement, deviation log entry in `.git/dual-sync/release-deletions.log`.
+    - Polish: §5.2 cross-ref §5.4→§5.3 step 5 (A1), §5.8 §8 Q7→Q9 (A5), §5.6 Usage three-form split (A4), §5.5 + §5.10 tag-format-illustrative disclaimer (F1), audit "Open before scoped" section refreshed (F2).
 
 - [ ] **G1: Bootstrap factgraph main** (§5.8 procedure executed end-to-end):
   - `factgraph/main` branch exists at `2bcd153f` (seeded from `factgraph/release/v1.0.1-rc.1`).
@@ -591,13 +764,28 @@ Scoped (after Gap 1-6 resolution on 2026-05-14). Acceptance is **synthetic verif
   - Stale-footer detection (rebase hnsm branch; verify refuse without `--force-rewrite`; verify `--force-rewrite` rebuilds projection from `factgraph/<default-branch>` and force-pushes with `--force-with-lease`).
   - Sync-debt recovery (simulate factgraph push failure, verify plain rerun OR `--repair` catches up without git rewrite).
   - `--hotfix-from <factgraph-tag>`: footer parsing, hnsm anchor reachability check, refuse on missing footer.
-  - `--force-delete-stalled-release <release/v*>`: refuses without flag when guards fail (not merged, or no tag); succeeds with flag.
+  - `--force-delete-stalled-release <release/v*> --reason "<text>"`:
+    - Refuse if the branch is merged into factgraph default (merged-and-merged path needs plain delete, not this flag).
+    - Refuse if a tag points at the branch (tagged path needs plain delete).
+    - Refuse if `--reason` is missing or empty.
+    - On pass: prints branch SHA, appends entry to `.git/dual-sync/release-deletions.log`, executes `git push factgraph --delete`.
   - `--dry-run` prints intended actions without mutating anything.
   - Same-name footer cross-check (try `dual-push.sh feature/X` when factgraph `feature/X` HEAD's `From-hnsm-backend-branch` says `feature/Y`; verify refusal).
 
-- [ ] **G3: `scripts/verify-shared-region-parity.sh` implemented** as a standalone tool AND integrated as `dual-push.sh`'s step 1 self-check helper. Returns 0 on parity, 1 with structured drift report otherwise. Tested at every gate in G4.
+- [ ] **G3: Auxiliary scripts implemented** (two tools):
 
-- [ ] **G4: Synthetic end-to-end dry-run** of a complete release cycle on synthetic refs only — does NOT push origin or factgraph in production-impacting ways. The flow must match Gap 8 design (dev / release-manager split, asymmetric defaults, factgraph-only release/v*):
+  G3.a: `scripts/verify-shared-region-parity.sh` — standalone tool AND integrated as `dual-push.sh`'s step 1 self-check helper. Returns 0 on parity, 1 with structured drift report otherwise. Tested at every gate in G4.
+
+  G3.b: `scripts/check-release-stabilization-boundary.sh` (added at Gap 9.C2) — standalone tool enforcing §6.1.3 for direct edits to factgraph `release/v*`. Self-tests:
+  - Working tree with only divergent-allowlist changes (CHANGELOG, pyproject, pixi.lock, .github/) → exits 0.
+  - Working tree with `src/factgraph/**` change → exits 1, structured report names the path.
+  - Working tree with `tests/**` change → exits 1.
+  - `--staged` mode: same checks against staging area, not working tree.
+  - `--against <base>` mode: checks `<base>..HEAD` range, not working tree.
+  - Unknown path classification defaults to FORBIDDEN (safe-fail).
+  - Suggests the proper hnsm-backend originate path in the failure message.
+
+- [ ] **G4: Synthetic end-to-end dry-run** of a complete release cycle on synthetic refs only — does NOT push origin or factgraph in production-impacting ways. The flow must match Gap 8 + Gap 9 design (dev / release-manager split, asymmetric defaults, factgraph-only release/v*, parking exception for active rc during hotfix, boundary-check script enforced):
 
   Developer phase (the script + manual sequence covers this end-to-end):
   - Open synthetic `feature/test-dual-push` on hnsm-backend, touching one file in `src/factgraph` and one in `tests/`.
@@ -605,7 +793,9 @@ Scoped (after Gap 1-6 resolution on 2026-05-14). Acceptance is **synthetic verif
   - Verify `verify-shared-region-parity.sh feature/test-dual-push` is green.
   - Merge `feature/test-dual-push` into hnsm `master` locally; plain `git push origin master` (Gap 8.B).
   - Create `release/v-test-1` on factgraph only (synthetic, name picked to be obviously test-only), seeded from `factgraph/feature/test-dual-push`. Confirm hnsm-backend has no `release/v-test-1` branch.
-  - Stabilization stratification check: attempt a divergent-files-only commit on factgraph `release/v-test-1` (CHANGELOG); attempt a shared-region edit directly on factgraph (must fail or be rejected by tooling).
+  - **Stabilization stratification check** (script-enforced per Gap 9.C2):
+    - Run `scripts/check-release-stabilization-boundary.sh` against a staged divergent-only commit (CHANGELOG) on `release/v-test-1` → exit 0.
+    - Run the same script against a staged shared-region change (`src/factgraph/foo.py`) → exit 1 with structured report. Verify the report points to the hnsm originate path as the proper fix.
   - Stabilization shared-region fix: small hnsm `feature/test-fixup`, dual-push, merge into factgraph `release/v-test-1`. Verify footer parity.
   - Verify single-line invariant refuses a second concurrent `release/v-test-2` while `release/v-test-1` is alive and untagged.
   - Merge `release/v-test-1` → `factgraph main` (factgraph-side operation).
@@ -615,9 +805,23 @@ Scoped (after Gap 1-6 resolution on 2026-05-14). Acceptance is **synthetic verif
   - Tag factgraph: `v-test-1` (synthetic). Verify shared-region tree at the tagged commit matches hnsm master at the corresponding anchor (read via tag footer).
   - Tag is NOT pushed to factgraph remote (kept local only) and may be deleted after the gate.
 
-  Next-cycle / hotfix verification:
-  - Verify hotfix lookup path: `dual-push.sh --hotfix-from v-test-1` correctly reads the tag footer, finds the hnsm anchor, and creates the hotfix branch from it (dry-run if avoiding actual branch creation).
-  - Verify Gap 8.D delete-on-next-create: starting `release/v-test-2` removes `release/v-test-1` (since merged + tagged); attempting same on a release/v* that was never tagged refuses without `--force-delete-stalled-release`.
+  Next-cycle delete-on-create verification:
+  - `release/v-test-2` creation (merged + tagged v-test-1 path): plain delete works.
+  - `release/v-test-2` creation while `release/v-test-1` is NOT yet tagged (only merged) — refuse plain delete; require either resolution: tag first, OR `--force-delete-stalled-release v-test-1 --reason "..."`.
+  - `--force-delete-stalled-release v-test-1 --reason ""` (empty reason) — refuse.
+  - `--force-delete-stalled-release v-test-1 --reason "abandoned: test"` — succeed; verify `.git/dual-sync/release-deletions.log` has the entry.
+
+  Hotfix with active-rc parking verification (Gap 9.A3):
+  - Set up state: `v-test-1` tagged on factgraph main; `release/v-test-2` created on factgraph but NOT merged + NOT tagged (active stabilization).
+  - Trigger synthetic hotfix on `v-test-1` line:
+    - `dual-push.sh --hotfix-from v-test-1` correctly reads the tag footer, finds the hnsm anchor, creates `hotfix/X` branch from it (dry-run if avoiding actual branch creation).
+    - At §5.5 step 5, verify that creating `release/v-test-1.1` while `release/v-test-2` is active is REFUSED (parking required first).
+    - Execute parking: `git push factgraph factgraph/release/v-test-2:refs/heads/stabilization/v-test-2-paused`, then `git push factgraph --delete release/v-test-2`.
+    - Verify single-line invariant intact: no `release/v*` on factgraph; `stabilization/v-test-2-paused` exists but does NOT count.
+    - Create `release/v-test-1.1` from the v-test-1 tagged commit; merge hotfix into it.
+    - Merge `release/v-test-1.1` → factgraph main; tag v-test-1.1 (synthetic, local).
+    - Resume parked rc: recreate `release/v-test-2` from `stabilization/v-test-2-paused`, merge factgraph main (containing v-test-1.1) into it. Verify hotfix absorbed.
+    - Delete `stabilization/v-test-2-paused`.
   - Clean up all synthetic refs.
 
 - [ ] **G5: Docs + memory sync**:
