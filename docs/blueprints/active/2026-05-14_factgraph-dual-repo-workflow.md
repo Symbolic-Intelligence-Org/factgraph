@@ -24,6 +24,16 @@ On 2026-05-14 the codebase finished a structural split between two GitHub repos:
 - **hnsm-backend** (`Symbolic-Intelligence-Org/hnsm-backend.git`) — private full-content repo. Contains `src/factgraph`, `src/agent`, `src/service`, `src/domains`, `docs/`, blueprints, internal scripts, memory, etc. No longer the publish target.
 - **factgraph** (`Symbolic-Intelligence-Org/factgraph.git`) — public release repo. Contains only `src/factgraph` + `tests/` + release-form scaffolding (`pyproject.toml`, `pixi.lock`, `LICENSE`, `README.md`, `CHANGELOG.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `.github/`).
 
+**Topology** (made explicit at Gap 7, 2026-05-14): developers use **one local clone of hnsm-backend** with two configured Git remotes — `origin` pointing at hnsm-backend, and `factgraph` pointing at the public release repo. There is no separate "factgraph clone" used for daily development. factgraph is purely a remote target.
+
+```
+local hnsm-backend  <─bidirectional─>  origin/hnsm-backend     (full development truth)
+local hnsm-backend  ──one-way projection──►  factgraph         (shared region only)
+factgraph tag                          ──►  PyPI publish       (release authority)
+```
+
+`git fetch factgraph` is used to read remote state (branches, tags, footers of existing projection commits) but never absorbs business changes back into hnsm-backend. Divergent files (`pyproject.toml`, `pixi.lock`, etc.) are edited on factgraph and never flow back.
+
 Today the first cross-repo commit landed as a one-off manual operation (`feature/factgraph-post-rc1-2026-05-14 @ 35ad6662` on the factgraph remote, built from a `/tmp` worktree rooted at `factgraph_test/release/v1.0.1-rc.1`). Going forward this needs a stable, repeatable workflow covering: branch naming, sync cadence, release path through `release/v*` and `master`, tagging, hotfix handling, and divergence rules.
 
 Without an explicit workflow:
@@ -40,7 +50,7 @@ Without an explicit workflow:
 3. Define the release pipeline: `feature/* → release/v* → master → tag master → publish`. Force a deliberate "is this ready for release" gate at the feature → release/v* merge.
 4. Hotfix path: `hotfix/X` branches from latest tag on `master`, merges back to `master`, gets a new patch tag (gist-style fast lane, no `release/v*` detour).
 5. Sync cadence: **per-push**. When a developer pushes hnsm-backend with shared-region changes, the same push action projects to factgraph. Atomic at push time, not commit time.
-6. Version authority: **factgraph**. factgraph's `pyproject.toml` uses `hatch-vcs` to derive version from the tag. hnsm-backend's `pyproject.toml` carries a manually-bumped version that mirrors what factgraph will tag (advisory, not authoritative).
+6. Version + tag authority: **factgraph**. factgraph's `pyproject.toml` uses `hatch-vcs` to derive version from the tag, and the tag itself is created on factgraph (not on hnsm-backend). hnsm-backend does not carry the same tag by default. Optional `milestone/v*` branch refs on hnsm-backend may be used as forensic anchors (per `feedback_milestone_branch_refs`) but are not load-bearing on the release pipeline. hnsm-backend's `pyproject.toml` version remains advisory only — not source of truth for PyPI.
 7. PyPI publish: both `rc` and `final` tags publish to PyPI from the factgraph repo (matches the v0.1.0-rc.1 precedent).
 8. Tooling: a `scripts/dual-push.sh` script implementing the projection, plus a `scripts/verify-shared-region-parity.sh` invariant checker. Both live in hnsm-backend.
 
@@ -131,34 +141,66 @@ Recommended discipline: treat `feature/X` as append-only after first `dual-push`
 
 ### 5.4 Release / tag / publish
 
+(Refined at Gap 7, 2026-05-14: tag authority single-sourced on factgraph; hnsm does not get a same-name tag.)
+
 1. Verify `scripts/verify-shared-region-parity.sh release/v0.1.0-rc.4` shows `src/factgraph` + `tests/` tree hashes identical between hnsm-backend and factgraph.
 2. On hnsm-backend: `git checkout master && git merge --ff-only release/v0.1.0-rc.4` (FF preferred to keep master linear).
-3. `scripts/dual-push.sh master`.
-4. Tag each repo at its own `master` HEAD; both tags share the same name and the same shared-region tree hash, but the underlying commit objects differ (different parents, different non-shared content):
-   - `git -C hnsm-backend tag -a v0.1.0-rc.4 -m "..."`
-   - `git -C factgraph tag -a v0.1.0-rc.4 -m "..."`
-5. `git push origin v0.1.0-rc.4` (hnsm-backend) and `git push factgraph v0.1.0-rc.4`.
-6. From the factgraph local checkout: `python -m build && twine upload dist/*` (PyPI publish).
-7. Delete `release/v0.1.0-rc.4` on both repos (origin + local). The tag is the durable historical pointer; the branch ref is operational state and is removed on every release to keep the remote `release/v*` set always representing only the active stabilization line (or empty between releases). Reactivation of a deleted release branch is forbidden — start a new one if needed.
+3. `scripts/dual-push.sh master` (pushes hnsm origin master + projects to factgraph master).
+4. **Tag only on factgraph** (factgraph is the release authority; hatch-vcs derives PyPI version from this tag):
+   ```bash
+   git -C <local-hnsm-clone> tag -a v0.1.0-rc.4 \
+       --message "..." \
+       factgraph/master
+   git push factgraph v0.1.0-rc.4
+   ```
+   The tag points at the factgraph master HEAD commit. The factgraph commit's footer (`From-hnsm-backend: <hnsm-sha>`) serves as the durable back-pointer to the hnsm-backend commit that produced this release; no hnsm-side tag is required.
+5. (Optional, recommended for forensic / incident anchor) Create a hnsm-backend milestone branch ref pointing at the hnsm release commit:
+   ```bash
+   git -C <local-hnsm-clone> branch milestone/v0.1.0-rc.4 master
+   git -C <local-hnsm-clone> push origin milestone/v0.1.0-rc.4
+   ```
+   This follows the existing `feedback_milestone_branch_refs` convention. It is not load-bearing on the release; hotfix lookup uses footer (§5.5), not the milestone branch.
+6. From a local clone with factgraph configured: `python -m build && twine upload dist/*` (PyPI publish). The hatch-vcs plugin picks up `v0.1.0-rc.4` automatically.
+7. Delete `release/v0.1.0-rc.4` on both remotes. The factgraph tag is the durable historical pointer; the release branch ref is operational state and is removed on every release to keep the remote `release/v*` set always representing only the active stabilization line (or empty between releases). Reactivation of a deleted release branch is forbidden — start a new one if needed.
 
 ### 5.5 Hotfix path
 
-1. `git checkout -b hotfix/X v0.1.0-rc.3` (latest tag) on hnsm-backend.
-2. Fix. Commit(s).
-3. `scripts/dual-push.sh hotfix/X` — projects shared region to factgraph hotfix/X.
-4. Verify shared-region parity.
-5. Merge to master on both repos: `git checkout master && git merge --no-ff hotfix/X`.
-6. Dual-push master.
-7. Tag both repos: `v0.1.0-rc.3.1`. Push tags.
-8. Publish from factgraph (PyPI).
-9. (If there's an active `release/v0.1.0-rc.4` branch already, the next stabilization commit on it must `git merge master` to absorb the hotfix.)
+(Refined at Gap 7, 2026-05-14: hotfix parent SHA on hnsm-backend is looked up via the factgraph release tag's commit footer; no hnsm-side tag is required.)
+
+1. **Lookup hnsm-backend anchor SHA from the factgraph release tag's footer**:
+   ```bash
+   git fetch factgraph
+   factgraph_tag=v0.1.0-rc.3
+   hnsm_anchor=$(git log -1 --format=%B factgraph/refs/tags/$factgraph_tag \
+       | sed -n 's/^From-hnsm-backend: //p')
+   ```
+   Or use the convenience flag: `scripts/dual-push.sh --hotfix-from $factgraph_tag` (see §5.6) which performs the lookup + checkout in one step.
+
+2. Branch on hnsm-backend at the anchor:
+   ```bash
+   git checkout -b hotfix/X $hnsm_anchor
+   ```
+   The anchor SHA is guaranteed reachable from hnsm master (master is FF-only per §6.1.6, so once a release/v* merged in, its tip lives in master history forever even after release/v* deletion).
+
+3. Fix. Commit(s) on hnsm-backend `hotfix/X`.
+4. `scripts/dual-push.sh hotfix/X` — projects shared region to factgraph `hotfix/X` (footer back-reference will point to the new hnsm hotfix HEAD).
+5. Verify shared-region parity: `scripts/verify-shared-region-parity.sh hotfix/X`.
+6. Merge to master on both repos: `git checkout master && git merge --no-ff hotfix/X`.
+7. `scripts/dual-push.sh master`.
+8. Tag factgraph (only): `git tag -a v0.1.0-rc.3.1 -m "..." factgraph/master && git push factgraph v0.1.0-rc.3.1`.
+9. (Optional) milestone branch on hnsm: `git branch milestone/v0.1.0-rc.3.1 master && git push origin milestone/v0.1.0-rc.3.1`.
+10. Publish from factgraph (PyPI).
+11. (If there's an active `release/v0.1.0-rc.4` branch already, the next stabilization commit on it must `git merge master` to absorb the hotfix into the ongoing stabilization line.)
+12. Delete `hotfix/X` on both remotes after merge.
 
 ### 5.6 Tooling
 
 #### scripts/dual-push.sh
 
 ```
-Usage: scripts/dual-push.sh <branch> [--squash | --keep-granular] [--force-rewrite] [--repair] [--dry-run]
+Usage:
+  scripts/dual-push.sh <branch> [--squash | --keep-granular] [--force-rewrite] [--repair] [--dry-run]
+  scripts/dual-push.sh --hotfix-from <factgraph-tag>  [--into <hotfix-branch-name>]
 
 Behavior:
   1. Sync-debt self-check (before any push):
@@ -205,6 +247,18 @@ Behavior:
        sync-debt status and exit non-zero with instructions to retry via
        `dual-push.sh --repair <branch>` once the cause is resolved.
   8. Refresh .git/dual-sync/<branch> cache with the new <last-sync-sha>.
+
+Sub-command `--hotfix-from <factgraph-tag>`:
+  1. git fetch factgraph
+  2. Resolve factgraph/refs/tags/<factgraph-tag> commit; read its footer
+     From-hnsm-backend: <hnsm-anchor-sha>. Refuse if footer is missing.
+  3. Verify <hnsm-anchor-sha> is reachable from hnsm/master. Refuse otherwise
+     with a "anchor lost from master history" error (would indicate a
+     corrupted release lineage, very rare).
+  4. Default --into is hotfix/<factgraph-tag>-fix. Allow override.
+  5. git checkout -b <hotfix-branch-name> <hnsm-anchor-sha> on hnsm-backend.
+  6. Print follow-up instructions: commit fix → dual-push.sh <hotfix-branch-name>
+     → merge to master → tag factgraph.
 ```
 
 #### scripts/verify-shared-region-parity.sh
@@ -323,13 +377,14 @@ Failure mode policy: **repair, never rollback**.
 ### 6.1 Invariants (always hold)
 
 1. **Shared region tree-hash parity at sync points**: every commit on a factgraph branch has `src/factgraph` + `tests/` tree hashes identical to the corresponding hnsm-backend branch HEAD at the time of projection.
-2. **Tag parity by name + shared-region tree, NOT by commit SHA**: e.g., `v0.1.0-rc.4` exists in both repos with identical name and identical shared-region tree hash at the tagged commit. The commit object SHAs differ across repos by design (different parents, different non-shared content). Verification: `git ls-tree <tag> src/factgraph tests` must match across repos for any given tag.
+2. **Tag authority single-sourced on factgraph** (refined at Gap 7, 2026-05-14): the factgraph `vX.Y.Z[-rc.N]` tag is the release truth. PyPI version is derived from it via `hatch-vcs`. hnsm-backend does NOT carry the same tag by default. Optional `milestone/v*` branch refs on hnsm-backend serve as forensic anchors but are not load-bearing. The factgraph tag's commit footer (`From-hnsm-backend: <sha>`) is the durable back-pointer from a release to the hnsm-backend commit that produced it.
 3. **factgraph never originates shared-region commits**: no shared-region change is authored on factgraph. All `src/factgraph` or `tests/` modifications originate in hnsm-backend and arrive in factgraph via projection.
 4. **Reverts are one-way**: any revert of a previously-projected shared-region change originates in hnsm-backend as a new commit, then projects to factgraph. Manual revert on factgraph is forbidden — factgraph's shared region is always a projection result, never an authored state.
 5. **Divergent files never enter the projection set**: `pyproject.toml`, `README.md`, `LICENSE`, `CHANGELOG.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `pixi.lock`, `.github/` are owned by factgraph (factgraph-side edits live in factgraph commits only; hnsm-side edits to the same files live in hnsm commits only and never project).
 6. **master is release-only**: no direct commits to master on either repo. Only fast-forward (or merge --no-ff) from `release/v*` or `hotfix/*`.
 7. **One active `release/v*` at a time** (hard, script-enforced): `dual-push.sh` queries `git ls-remote factgraph 'refs/heads/release/v*'` before any operation on a `release/v*` branch. If any other open `release/v*` exists, the script refuses unless `--allow-multiple-release` is passed (intended as a one-time escape, not a normal mode). `release/v*` branches are deleted on both remotes the moment they merge to master (§5.4 step 7); the tag is the durable historical pointer.
 8. **Tags are immutable**.
+9. **Hotfix-parent SHA lookup goes through the factgraph release tag's footer**, not through any hnsm-side tag. hnsm release tags are not required. The footer's `From-hnsm-backend: <sha>` is the authoritative back-reference; SHA reachability is guaranteed by master being FF-only (§6.1.6) so any commit that ever made it to master remains reachable post-release-branch-deletion.
 
 ### 6.2 Boundaries (what this blueprint does not regulate)
 
@@ -357,6 +412,7 @@ Scoped (after Gap 1-6 resolution on 2026-05-14). Acceptance is **synthetic verif
   - [x] G0.4 (Gap 4, 2026-05-14): failure mode = **repair, never rollback**. Sync-debt is a state, not an error. Locked into §5.6 step 7 + `--repair` flag + §5.9.
   - [x] G0.5 (Gap 5, 2026-05-14): release/v* deleted after merge to master; tag is durable. factgraph master bootstrap from `release/v1.0.1-rc.1 @ 2bcd153f`. Single-line `release/v*` is script-enforced hard invariant. Tag-naming schema alignment deferred to §8.Q7.
   - [x] G0.6 (Gap 6, 2026-05-14): G1-G5 acceptance sharpened to synthetic verification only; real first release deferred to separate blueprint.
+  - [x] G0.7 (Gap 7, 2026-05-14): topology made explicit (one local hnsm clone, two remotes — `origin` + `factgraph`); tag authority single-sourced on factgraph (no required hnsm-side tag); hotfix-parent SHA lookup via factgraph tag's `From-hnsm-backend` footer (no hnsm tag dependency); `dual-push.sh --hotfix-from <factgraph-tag>` convenience added. Locked into §1, §2.6, §5.4, §5.5, §5.6, §6.1.2, §6.1.9.
 
 - [ ] **G1: Bootstrap factgraph master** (§5.8 procedure executed end-to-end):
   - `factgraph/master` branch exists at `2bcd153f`.
@@ -384,7 +440,8 @@ Scoped (after Gap 1-6 resolution on 2026-05-14). Acceptance is **synthetic verif
   - Verify single-line invariant refuses a second concurrent `release/v-test-2`.
   - Stabilization commit on `release/v-test-1` (CHANGELOG-only on factgraph + pyproject bump on hnsm).
   - Merge `release/v-test-1` → `master` on both repos (FF on hnsm; factgraph projection per workflow).
-  - Tag both `v-test-1` (synthetic). Verify tag parity by name + shared-region tree hash; tags are NOT pushed to remotes (kept local only) and may be deleted after the gate.
+  - Tag factgraph only: `v-test-1` (synthetic, factgraph-side). Verify shared-region tree at the tagged commit matches hnsm master at the corresponding anchor (read via tag footer). Tag is NOT pushed to factgraph remote (kept local only) and may be deleted after the gate.
+  - Verify hotfix lookup path: `dual-push.sh --hotfix-from v-test-1` correctly reads the tag footer, finds the hnsm anchor, and creates the hotfix branch from it (dry-run if avoiding actual branch creation).
   - Verify deletion of `release/v-test-1` on both remotes.
   - Clean up all synthetic refs.
 
