@@ -7,7 +7,7 @@ import unittest
 from agent.tools._runtime_api import LocalRuntimeAPI
 from agent.tools.explain import ExplainTools
 from agent.tools.kg_read import KGReadTools
-from kernel.sdk import SDKStore
+from factgraph.sdk import SDKStore
 from service.runtime_v1 import (
     close_runtime_session,
     evaluate_runtime_derivation,
@@ -16,7 +16,7 @@ from service.runtime_v1 import (
     reset_runtime_sessions_for_tests,
     write_runtime_fact,
 )
-from kernel.tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
+from factgraph.tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
 
 
 def _open_session() -> str:

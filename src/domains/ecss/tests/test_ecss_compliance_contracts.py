@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from kernel.adapters.souffle.package import ExportOptions, export_package
-from kernel.audit import (
+from factgraph.adapters.souffle.package import ExportOptions, export_package
+from factgraph.audit import (
     AuditQuery,
     build_candidate_evidence_tree_narrative_dto,
     build_candidate_evidence_tree_summary_dto,
@@ -32,9 +32,9 @@ from domains.ecss.compliance import (
     extend_schema_ir_with_ecss_vcd_predicates,
 )
 from service.static_ui import render_audit_static_site
-from kernel.audit.assertions import load_assertion_index
+from factgraph.audit.assertions import load_assertion_index
 from service.static_ui import _slug_id
-from kernel.authoring import (
+from factgraph.authoring import (
     AuthoringDerivationCompileError,
     FileAuthoringRegistry,
     build_derivation_preview_dto,
@@ -43,7 +43,7 @@ from kernel.authoring import (
     parse_authoring_schema_dsl_v1,
     parse_authoring_derivation_dsl_v1,
 )
-from kernel.authoring.where_schema_lowering import (
+from factgraph.authoring.where_schema_lowering import (
     WhereSchemaLoweringError,
     lower_blueprint_where_sugar_with_schema_v1,
 )
@@ -63,13 +63,13 @@ from domains.ecss import (
     extend_schema_ir_with_ecss_uncertainty_predicates,
     extend_schema_ir_with_ecss_temporal_predicates,
 )
-from kernel.core.rules.rule_ir import (
+from factgraph.core.rules.rule_ir import (
     RuleCompileError,
     RuleRegistry,
     RuleSpec,
     run_rule_with_trace,
 )
-from kernel.core.rules._trace import (
+from factgraph.core.rules._trace import (
     RuleTraceArtifact,
     RuleTraceInvocation,
     RuleTraceRuleRefLink,
@@ -77,32 +77,32 @@ from kernel.core.rules._trace import (
     rule_trace_artifact_to_dict,
     summarize_rule_trace_artifact_dict,
 )
-from kernel.core.rules._trace_nl import render_rule_run_nl_explain
-from kernel.core.rules._trace_narrative import render_rule_run_narrative
-from kernel.core.rules.ruleref_types import NativeRuleRefResolution, NativeRuleRefRowSupport
-from kernel.core.rules.where_eval import WhereValidationError, _plan_body_atoms
-from kernel.core.store import Store, register_engine_evaluator
-import kernel.core.store._builders as store_builders
-from kernel.core.store._artifact_sidecar import FileArtifactSidecar, GCResult
-from kernel.core.store._candidate_evidence_tree_narrative import render_candidate_evidence_tree_narrative
-from kernel.core.store._candidate_evidence_tree_nl import render_candidate_evidence_tree_nl_explain
-from kernel.core.store._candidate_evidence_tree_summary import summarize_candidate_evidence_tree_dict
-from kernel.core.store._support_capture import (
+from factgraph.core.rules._trace_nl import render_rule_run_nl_explain
+from factgraph.core.rules._trace_narrative import render_rule_run_narrative
+from factgraph.core.rules.ruleref_types import NativeRuleRefResolution, NativeRuleRefRowSupport
+from factgraph.core.rules.where_eval import WhereValidationError, _plan_body_atoms
+from factgraph.core.store import Store, register_engine_evaluator
+import factgraph.core.store._builders as store_builders
+from factgraph.core.store._artifact_sidecar import FileArtifactSidecar, GCResult
+from factgraph.core.store._candidate_evidence_tree_narrative import render_candidate_evidence_tree_narrative
+from factgraph.core.store._candidate_evidence_tree_nl import render_candidate_evidence_tree_nl_explain
+from factgraph.core.store._candidate_evidence_tree_summary import summarize_candidate_evidence_tree_dict
+from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
     find_winning_branch_index,
 )
-from kernel.core.store._support import (
+from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
     ProjectedFact,
     compute_support_digest,
     support_artifact_from_dict,
     support_artifact_to_dict,
 )
-from kernel.core.evidence.write_protocol import set_field
-from kernel.core.protocol.idref_v1 import encode_idref_v1
-from kernel.core.view.projector import project_view_facts
-from kernel.sdk import (
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.protocol.idref_v1 import encode_idref_v1
+from factgraph.core.view.projector import project_view_facts
+from factgraph.sdk import (
     Branch,
     Derivation,
     Entity,
@@ -124,7 +124,7 @@ from domains.ecss.sdk_helpers import (
     make_ecss_requirement_ref,
     write_ecss_requirement_bundle,
 )
-from kernel.sdk.ingest import CONVENTION_META_KEYS, SENSITIVE_SEMANTIC_META_KEYS
+from factgraph.sdk.ingest import CONVENTION_META_KEYS, SENSITIVE_SEMANTIC_META_KEYS
 from service.app_v1 import app
 from service.runtime_v1 import (
     _require_session,
@@ -146,7 +146,7 @@ from service.runtime_v1 import (
     run_runtime_rule,
     write_runtime_fact,
 )
-from kernel.tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
+from factgraph.tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
 
 
 class EcssComplianceContractsTests(unittest.TestCase):
@@ -224,7 +224,7 @@ class EcssComplianceContractsTests(unittest.TestCase):
 
         obligation_ref = encode_idref_v1("ECSSObligation", [("obligation_id", "string", "OB-001")])
         with patch(
-            "kernel.core.evidence.write_protocol.now_epoch_nanos",
+            "factgraph.core.evidence.write_protocol.now_epoch_nanos",
             side_effect=[100, 110, 120],
         ):
             obligation_asrt_id = set_field(
@@ -303,7 +303,7 @@ class EcssComplianceContractsTests(unittest.TestCase):
         interval_overlap = encode_idref_v1("ECSSInterval", [("interval_id", "string", "I-OVERLAP")])
 
         with patch(
-            "kernel.core.evidence.write_protocol.now_epoch_nanos",
+            "factgraph.core.evidence.write_protocol.now_epoch_nanos",
             side_effect=[100, 110, 120, 130, 140, 150],
         ):
             set_field(sdk.store.ledger, ECSS_INTERVAL_START_PRED_ID, interval_outer, [("time", 0)])
@@ -376,7 +376,7 @@ class EcssComplianceContractsTests(unittest.TestCase):
 
         assessment_ref = encode_idref_v1("ECSSRiskAssessment", [("assessment_id", "string", "RA-001")])
         with patch(
-            "kernel.core.evidence.write_protocol.now_epoch_nanos",
+            "factgraph.core.evidence.write_protocol.now_epoch_nanos",
             side_effect=[100, 110, 120, 130],
         ):
             collision_prob_asrt_id = set_field(
@@ -481,7 +481,7 @@ class EcssComplianceContractsTests(unittest.TestCase):
 
         assessment_ref = encode_idref_v1("ECSSAssessment", [("assessment_id", "string", "A-COMPOSITE-001")])
         with patch(
-            "kernel.core.evidence.write_protocol.now_epoch_nanos",
+            "factgraph.core.evidence.write_protocol.now_epoch_nanos",
             side_effect=[100, 110, 120, 130, 140, 150, 160],
         ):
             event_asrt_id = set_field(
@@ -897,7 +897,7 @@ def _seed_ecss_compliance_facts(store: Store) -> dict[str, str]:
     req2_ref = encode_idref_v1("ECSSRequirement", [("req_id", "string", "REQ-002")])
 
     with patch(
-        "kernel.core.evidence.write_protocol.now_epoch_nanos",
+        "factgraph.core.evidence.write_protocol.now_epoch_nanos",
         side_effect=[100, 110, 120, 130, 140, 150, 160, 170, 180],
     ):
         requirement_asrt_id = set_field(

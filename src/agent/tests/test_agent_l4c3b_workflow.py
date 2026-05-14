@@ -34,7 +34,7 @@ from service.runtime_v1 import (
     open_runtime_session,
     reset_runtime_sessions_for_tests,
 )
-from kernel.tests._test_helpers import _schema_ir
+from factgraph.tests._test_helpers import _schema_ir
 
 
 class _FakeCompletions:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from kernel.core.protocol.idref_v1 import encode_idref_v1
+from factgraph.core.protocol.idref_v1 import encode_idref_v1
 
 from ..errors import AgentContractError
 

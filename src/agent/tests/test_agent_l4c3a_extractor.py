@@ -8,7 +8,7 @@ from unittest.mock import patch
 from agent import AgentScope, ExtractionConfig
 from agent.documents import DocumentSegment
 from agent.extraction.extractor import ExtractionAgent
-from kernel.tests._test_helpers import _schema_ir
+from factgraph.tests._test_helpers import _schema_ir
 
 
 class _FakeCompletions:

@@ -15,7 +15,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from kernel.sdk.compile import compile_schema_from_classes
+from factgraph.sdk.compile import compile_schema_from_classes
 
 from ..documents import DocumentStaging, StagingError
 from ..session import AgentScope

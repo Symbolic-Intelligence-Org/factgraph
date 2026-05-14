@@ -11,55 +11,55 @@ from time import time_ns
 from typing import Any
 from uuid import uuid4
 
-from kernel.adapters.problog.rule_ext import resolve_problog_engine_ext
-from kernel.adapters.souffle.package import ExportOptions, export_package
-from kernel.authoring.registry_fs import FileAuthoringRegistry
-from kernel.authoring.derivation_compile import (
+from factgraph.adapters.problog.rule_ext import resolve_problog_engine_ext
+from factgraph.adapters.souffle.package import ExportOptions, export_package
+from factgraph.authoring.registry_fs import FileAuthoringRegistry
+from factgraph.authoring.derivation_compile import (
     AuthoringDerivationCompileError,
     compile_authoring_derivation_v1,
 )
-from kernel.authoring.rules import compile_authoring_rule_v1
-from kernel.core.derivation.accept import AcceptOptions, AcceptResult
-from kernel.core.derivation.candidates import CONFIDENCE_KINDS, CandidateSet
-from kernel.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
-from kernel.core.mapping.canon import MappingConflictError, MappingResolution
-from kernel.core.rules._trace_nl import render_rule_run_nl_explain
-from kernel.core.rules._trace_narrative import render_rule_run_narrative
-from kernel.core.rules.rule_ir import RuleCompileError, RuleRegistry, RuleSpec, run_rule, run_rule_with_trace
-from kernel.core.rules._trace import summarize_rule_trace_artifact_dict
-from kernel.core.schema.schema_ir import schema_digest
-from kernel.core.semantics import SemanticsProfile
-from kernel.core.store import builders
-from kernel.core.store._artifact_sidecar import FileArtifactSidecar
-from kernel.core.store._candidate_evidence_tree import (
+from factgraph.authoring.rules import compile_authoring_rule_v1
+from factgraph.core.derivation.accept import AcceptOptions, AcceptResult
+from factgraph.core.derivation.candidates import CONFIDENCE_KINDS, CandidateSet
+from factgraph.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
+from factgraph.core.mapping.canon import MappingConflictError, MappingResolution
+from factgraph.core.rules._trace_nl import render_rule_run_nl_explain
+from factgraph.core.rules._trace_narrative import render_rule_run_narrative
+from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry, RuleSpec, run_rule, run_rule_with_trace
+from factgraph.core.rules._trace import summarize_rule_trace_artifact_dict
+from factgraph.core.schema.schema_ir import schema_digest
+from factgraph.core.semantics import SemanticsProfile
+from factgraph.core.store import builders
+from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
+from factgraph.core.store._candidate_evidence_tree import (
     build_candidate_evidence_tree,
     build_degraded_candidate_evidence_tree,
 )
-from kernel.core.store._candidate_evidence_tree_narrative import (
+from factgraph.core.store._candidate_evidence_tree_narrative import (
     render_candidate_evidence_tree_narrative,
 )
-from kernel.core.store._candidate_evidence_tree_nl import (
+from factgraph.core.store._candidate_evidence_tree_nl import (
     render_candidate_evidence_tree_nl_explain,
 )
-from kernel.core.store._candidate_evidence_tree_summary import (
+from factgraph.core.store._candidate_evidence_tree_summary import (
     summarize_candidate_evidence_tree_dict,
 )
-from kernel.core.store._support import (
+from factgraph.core.store._support import (
     _DEGRADED_SUPPORT_KINDS,
     _PROVENANCE_BEARING_SUPPORT_KINDS,
     _WITNESS_BEARING_SUPPORT_KINDS,
     PYREASON_PROVENANCE_KIND,
     SOUFFLE_WITNESS_KIND,
 )
-from kernel.core.store._confidence_kind_resolver import CertaintyConfidenceKindResolver
-from kernel.core.store.runtime import Store
-from kernel.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
-from kernel.core.view.projector import (
+from factgraph.core.store._confidence_kind_resolver import CertaintyConfidenceKindResolver
+from factgraph.core.store.runtime import Store
+from factgraph.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
+from factgraph.core.view.projector import (
     project_view_facts,
     project_view_facts_with_audit,
 )
-from kernel.audit import build_rule_trace_detail_payload
-from kernel.audit.evidence_graph import evidence_graph_to_dict
+from factgraph.audit import build_rule_trace_detail_payload
+from factgraph.audit.evidence_graph import evidence_graph_to_dict
 from service.static_ui import render_candidate_evidence_html, render_rule_trace_detail_html
 
 from ._common import error_response, exception_to_error, facade_error, ok_response
@@ -379,7 +379,7 @@ def explain_runtime_summary(session_id: str, dto: dict[str, Any]) -> dict[str, A
                 timeline_resp = _explain_timeline_candidate(session, id_)
                 timeline = timeline_resp.get("timeline")
                 if timeline is not None:
-                    from kernel.core.store._candidate_provenance_timeline import (
+                    from factgraph.core.store._candidate_provenance_timeline import (
                         summarize_candidate_provenance_timeline,
                     )
 
@@ -435,7 +435,7 @@ def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str,
                 timeline_resp = _explain_timeline_candidate(session, id_)
                 timeline = timeline_resp.get("timeline")
                 if timeline is not None:
-                    from kernel.core.store._candidate_provenance_timeline import (
+                    from factgraph.core.store._candidate_provenance_timeline import (
                         render_candidate_provenance_timeline_narrative,
                     )
 
@@ -496,7 +496,7 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
                 timeline_resp = _explain_timeline_candidate(session, id_)
                 timeline = timeline_resp.get("timeline")
                 if timeline is not None:
-                    from kernel.core.store._candidate_provenance_timeline import (
+                    from factgraph.core.store._candidate_provenance_timeline import (
                         render_candidate_provenance_timeline_narrative,
                         render_candidate_provenance_timeline_nl_explain,
                         summarize_candidate_provenance_timeline,
@@ -561,7 +561,7 @@ def explain_runtime_steps(session_id: str, dto: dict[str, Any]) -> dict[str, Any
         support_kind = session.store.get_candidate_support_kind(candidate_id)
 
         if support_kind == PYREASON_PROVENANCE_KIND:
-            from kernel.core.store._candidate_provenance_timeline import (
+            from factgraph.core.store._candidate_provenance_timeline import (
                 build_candidate_provenance_steps,
             )
 
@@ -575,7 +575,7 @@ def explain_runtime_steps(session_id: str, dto: dict[str, Any]) -> dict[str, Any
                 )
             steps = build_candidate_provenance_steps(timeline)
         else:
-            from kernel.core.store._candidate_evidence_tree_steps import (
+            from factgraph.core.store._candidate_evidence_tree_steps import (
                 build_candidate_evidence_steps,
             )
 
@@ -636,7 +636,7 @@ def explain_runtime_timeline_summary(session_id: str, dto: dict[str, Any]) -> di
         timeline = timeline_resp.get("timeline")
         if timeline is None:
             raise facade_error("timeline not available", kind="explain_timeline")
-        from kernel.core.store._candidate_provenance_timeline import (
+        from factgraph.core.store._candidate_provenance_timeline import (
             summarize_candidate_provenance_timeline,
         )
 
@@ -668,7 +668,7 @@ def explain_runtime_timeline_narrative(session_id: str, dto: dict[str, Any]) -> 
         timeline = timeline_resp.get("timeline")
         if timeline is None:
             raise facade_error("timeline not available", kind="explain_timeline")
-        from kernel.core.store._candidate_provenance_timeline import (
+        from factgraph.core.store._candidate_provenance_timeline import (
             render_candidate_provenance_timeline_narrative,
         )
 
@@ -684,11 +684,11 @@ def explain_runtime_timeline_narrative(session_id: str, dto: dict[str, Any]) -> 
 
 def _explain_timeline_candidate(session: Any, candidate_id: str) -> dict[str, Any]:
     """Internal helper: build timeline for a pyreason candidate."""
-    from kernel.adapters.pyreason.provenance import pyreason_trace_from_dict
-    from kernel.core.store._candidate_provenance_timeline import (
+    from factgraph.adapters.pyreason.provenance import pyreason_trace_from_dict
+    from factgraph.core.store._candidate_provenance_timeline import (
         build_candidate_provenance_timeline,
     )
-    from kernel.core.store._support import PYREASON_PROVENANCE_KIND
+    from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
 
     support_digest = session.store.get_candidate_support_digest(candidate_id)
     if support_digest is None:
@@ -1541,11 +1541,11 @@ def _runtime_explain_not_supported(*, candidate_id: str, support_kind: str) -> E
 
 
 def _get_candidate_tree(session: RuntimeSession, candidate_id: str) -> dict[str, Any]:
-    from kernel.adapters.problog.provenance import (
+    from factgraph.adapters.problog.provenance import (
         problog_trace_from_dict,
         problog_trace_to_candidate_evidence_tree,
     )
-    from kernel.core.store._support import PROBLOG_PROVENANCE_KIND
+    from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
 
     support_digest = session.store.get_candidate_support_digest(candidate_id)
     if support_digest is None:
@@ -1843,11 +1843,11 @@ def _materialize_provenance_trees(
     """Materialize Souffle provenance plus per-candidate status rows."""
     import tempfile
 
-    from kernel.adapters.souffle.provenance import run_package_provenance
-    from kernel.adapters.souffle.package import _load_query_rule_registry
-    from kernel.adapters.souffle.runner import run_package
-    from kernel.adapters.souffle.tsv_v1 import tsv_cell_v1_decode
-    from kernel.adapters.souffle.where_compile import (
+    from factgraph.adapters.souffle.provenance import run_package_provenance
+    from factgraph.adapters.souffle.package import _load_query_rule_registry
+    from factgraph.adapters.souffle.runner import run_package
+    from factgraph.adapters.souffle.tsv_v1 import tsv_cell_v1_decode
+    from factgraph.adapters.souffle.where_compile import (
         _expand_ruleref_relations_for_query_export,
         _schema_pred_type_domains,
         extract_where_variables,
@@ -2018,15 +2018,15 @@ def _materialize_evidence_graphs(
     provenance_trees: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     """Materialize additive audit-package EvidenceGraph rows where possible."""
-    from kernel.adapters.problog.provenance import (
+    from factgraph.adapters.problog.provenance import (
         problog_trace_from_dict,
         problog_trace_to_evidence_graph,
     )
-    from kernel.adapters.pyreason.provenance import (
+    from factgraph.adapters.pyreason.provenance import (
         pyreason_trace_from_dict,
         pyreason_trace_to_evidence_graph,
     )
-    from kernel.adapters.souffle.provenance import (
+    from factgraph.adapters.souffle.provenance import (
         souffle_proof_tree_from_dict,
         souffle_proof_tree_to_evidence_graph,
     )
@@ -2091,11 +2091,11 @@ def _materialize_provenance_timelines(
     session: RuntimeSession,
 ) -> dict[str, dict[str, Any]]:
     """Materialize additive audit-package CandidateProvenanceTimeline rows where possible."""
-    from kernel.adapters.pyreason.provenance import pyreason_trace_from_dict
-    from kernel.core.store._candidate_provenance_timeline import (
+    from factgraph.adapters.pyreason.provenance import pyreason_trace_from_dict
+    from factgraph.core.store._candidate_provenance_timeline import (
         build_candidate_provenance_timeline,
     )
-    from kernel.core.store._support import PYREASON_PROVENANCE_KIND
+    from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
 
     timelines: dict[str, dict[str, Any]] = {}
     for row in _accepted_candidate_claim_rows(session):

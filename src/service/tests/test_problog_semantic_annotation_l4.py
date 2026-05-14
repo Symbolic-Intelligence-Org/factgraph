@@ -6,16 +6,16 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-import kernel.application.protocol.common  # noqa: F401 - primes audit/problog import cycle
-from kernel.adapters.problog.accept import persist_problog_annotations
-from kernel.adapters.souffle.package import ExportOptions, export_package
-from kernel.audit.assertions import load_assertion_index
-from kernel.audit.reader import load_audit_package
+import factgraph.application.protocol.common  # noqa: F401 - primes audit/problog import cycle
+from factgraph.adapters.problog.accept import persist_problog_annotations
+from factgraph.adapters.souffle.package import ExportOptions, export_package
+from factgraph.audit.assertions import load_assertion_index
+from factgraph.audit.reader import load_audit_package
 from service.static_ui import _render_annotation_panel
-from kernel.core.evidence.write_protocol import set_field
-from kernel.sdk.dsl import Inference, Pred, vars as sdk_vars
-from kernel.sdk.schema import Entity, Field, Identity
-from kernel.sdk.store import SDKStore
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.sdk.dsl import Inference, Pred, vars as sdk_vars
+from factgraph.sdk.schema import Entity, Field, Identity
+from factgraph.sdk.store import SDKStore
 
 
 class User(Entity):
@@ -60,7 +60,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         # query vars lexicographically: $tag before $u for this rule.
         return f'answer("vip","{sdk.ref(User, user_id="Alice")}"): 0.42'
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_evaluate_caches_pending_probability_annotation(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
@@ -77,7 +77,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         self.assertEqual(template["key"], "probability")
         self.assertEqual(template["value"], 0.42)
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_persist_problog_annotations_writes_annotation_and_clears_pending(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
@@ -102,7 +102,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         self.assertEqual(annotations[0].origin, "derived")
         self.assertNotIn(candidate.run_id, getattr(sdk.store, "_problog_pending_annotations", {}))
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_persist_problog_annotations_keeps_pending_on_dry_run(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
@@ -122,7 +122,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         self.assertIn(candidate.run_id, pending_by_run)
         self.assertIn(candidate.candidate_id, pending_by_run[candidate.run_id])
 
-    @patch("kernel.adapters.problog.engine_eval.run_problog")
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_audit_export_and_static_panel_consume_problog_annotation(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)

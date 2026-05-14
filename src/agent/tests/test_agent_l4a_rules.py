@@ -16,7 +16,7 @@ from agent import (
     RuntimeBootstrapSpec,
     ValidateResult,
 )
-from kernel.tests._test_helpers import _schema_ir
+from factgraph.tests._test_helpers import _schema_ir
 
 
 class _FakeRuleRuntimeAPI:

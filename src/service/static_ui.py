@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from kernel.audit.authoring_events import load_authoring_apply_events, summarize_authoring_apply_events
-from kernel.audit.assertions import load_assertion_index
-from kernel.audit.dto import (
+from factgraph.audit.authoring_events import load_authoring_apply_events, summarize_authoring_apply_events
+from factgraph.audit.assertions import load_assertion_index
+from factgraph.audit.dto import (
     build_authoring_apply_run_detail_dto,
     build_candidate_evidence_tree_narrative_dto,
     build_candidate_evidence_tree_dto,
@@ -20,9 +20,9 @@ from kernel.audit.dto import (
     build_run_detail_dto,
     build_run_list_dto,
 )
-from kernel.audit.evidence_graph import EvidenceGraph, render_evidence_graph_html
-from kernel.audit.query import AuditQuery
-from kernel.audit.reader import load_audit_package
+from factgraph.audit.evidence_graph import EvidenceGraph, render_evidence_graph_html
+from factgraph.audit.query import AuditQuery
+from factgraph.audit.reader import load_audit_package
 
 
 def _json_safe(value: Any) -> Any:
@@ -938,7 +938,7 @@ def _try_build_evidence_graph_from_provenance(
     if not isinstance(root_dict, dict):
         return None
     try:
-        from kernel.adapters.souffle.provenance import (
+        from factgraph.adapters.souffle.provenance import (
             souffle_proof_tree_from_dict,
             souffle_proof_tree_to_evidence_graph,
         )

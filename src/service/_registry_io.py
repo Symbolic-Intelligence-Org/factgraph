@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from kernel.authoring import FileAuthoringRegistry
+from factgraph.authoring import FileAuthoringRegistry
 
 from ._common import facade_error
 
