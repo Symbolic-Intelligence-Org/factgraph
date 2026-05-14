@@ -1,10 +1,10 @@
 # Core Semantics Module
 
-`kernel.core.semantics` contains value objects and helpers for runtime
+`factgraph.core.semantics` contains value objects and helpers for runtime
 projection semantics. Track 3 / B introduced `SemanticsProfile` as a
 validated core value object:
 
-- SDK namespace export exists through `kernel.sdk.SemanticsProfile`
+- SDK namespace export exists through `factgraph.sdk.SemanticsProfile`
   for advanced/canonical users; Track 2 also exposes SDK-local
   `ProbLogSemantics` and `PyReasonSemantics` wrappers that lower into
   `SemanticsProfile` at the SDK boundary;
@@ -21,7 +21,7 @@ validated core value object:
 The initial public import for advanced/core consumers is:
 
 ```python
-from kernel.core.semantics import SemanticsProfile, inspect_semantics_profile
+from factgraph.core.semantics import SemanticsProfile, inspect_semantics_profile
 ```
 
 `SemanticsProfile` validates profile shape, generic rule-projection
@@ -51,9 +51,9 @@ Adapter migration is intentionally staged:
 
 Adapter import boundary:
 
-- ProbLog and PyReason may import `kernel.core.semantics.SemanticsProfile`
+- ProbLog and PyReason may import `factgraph.core.semantics.SemanticsProfile`
   because they consume profile data in C/D.
 - Souffle remains profile-agnostic.
 - Native evaluation is implemented in core, not as a
-  `src/kernel/adapters/native/` package; public SDK/service calls reject
+  `src/factgraph/adapters/native/` package; public SDK/service calls reject
   profile use with `engine="native"` and `engine="souffle"`.

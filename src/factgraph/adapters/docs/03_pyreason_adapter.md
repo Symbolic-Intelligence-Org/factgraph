@@ -1,6 +1,6 @@
-# PyReason Adapter (kernel)
+# PyReason Adapter (factgraph)
 
-- Scope: `src/kernel/adapters/pyreason`
+- Scope: `src/factgraph/adapters/pyreason`
 - Last updated: 2026-03-29
 - Status: execution-surface V1 (engine_options: timesteps) +
   bounded materialization L3b + runtime provenance explain +
@@ -140,7 +140,7 @@ shared derived annotations or PyReason bounds.
 A minimal adapter-local accept path exists:
 
 ```python
-from kernel.adapters.pyreason.accept import accept_pyreason_session
+from factgraph.adapters.pyreason.accept import accept_pyreason_session
 
 result = accept_pyreason_session(ledger, session)
 ```
@@ -184,14 +184,14 @@ There is still a reusable lower-level execution path; the shared
 evaluate surface reuses it inside `engine_eval.py`:
 
 ```python
-from kernel.adapters.pyreason.rule_ext import (
+from factgraph.adapters.pyreason.rule_ext import (
     compile_pyreason_rule,
     PyReasonFactDef,
     PyReasonRuleExt,
 )
-from kernel.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
-from kernel.sdk.dsl.expr import LogicVar, Pred
-from kernel.sdk.dsl.rule import Rule
+from factgraph.adapters.pyreason.runner import PyReasonRunConfig, run_pyreason
+from factgraph.sdk.dsl.expr import LogicVar, Pred
+from factgraph.sdk.dsl.rule import Rule
 
 x = LogicVar("x")
 y = LogicVar("y")
@@ -315,7 +315,7 @@ Cleanup contract:
 The current shared execution path is:
 
 ```python
-import kernel.adapters.pyreason
+import factgraph.adapters.pyreason
 
 candidates = sdk.evaluate(
     Derivation(

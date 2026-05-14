@@ -1,7 +1,7 @@
 # PyReason Adapter Module
 
 This directory is reserved for module-level implementation notes
-for `src/kernel/adapters/pyreason`.
+for `src/factgraph/adapters/pyreason`.
 
 Current stage:
 
@@ -9,5 +9,5 @@ Current stage:
 - Does not enter the formal `core/`, `service/`, or `audit/`
   contracts
 - The implementation truth still lives in
-  `src/kernel/adapters/docs/03_pyreason_adapter.md`; this README
+  `src/factgraph/adapters/docs/03_pyreason_adapter.md`; this README
   serves only as a module entry point.

@@ -1,6 +1,6 @@
 # Core Module Docs
 
-`src/kernel/core/` is FactPy's substrate layer — it provides the
+`src/factgraph/core/` is FactPy's substrate layer — it provides the
 Store / Ledger / native evaluator / engine adapters / projection
 semantics that every higher layer depends on. The documents in this
 directory target advanced importable consumers (integrators /
@@ -34,14 +34,14 @@ contributors), not SDK end-users learning the surface.
 
 - This directory is **not the SDK getting-started guide** — the SDK
   user guide lives at
-  [`src/kernel/sdk/docs/00_user_guide.en.md`](../../sdk/docs/00_user_guide.en.md).
+  [`src/factgraph/sdk/docs/00_user_guide.en.md`](../../sdk/docs/00_user_guide.en.md).
 - This directory is **not the application capability docs** — Check
   / Diagnose / Fact Overlay / ProofFrame / rule actions / Why-not
   live in
-  [`src/kernel/application/docs/`](../../application/docs/).
+  [`src/factgraph/application/docs/`](../../application/docs/).
 - This directory is **not the audit consumer docs** — audit package
   + round events + ProofFrame diff live in
-  [`src/kernel/audit/docs/`](../../audit/docs/).
+  [`src/factgraph/audit/docs/`](../../audit/docs/).
 - This directory is **not the routemap closure narrative** — the
   round-story closure narrative is recorded in §10 Outcome of the
   round-story-completion-plan blueprint (an internal design record).

@@ -1,22 +1,22 @@
 # FactPy Audit Docs
 
 This directory records the current implementation contract for
-`src/kernel/audit`, targeting developers who need to read audit
+`src/factgraph/audit`, targeting developers who need to read audit
 packages, run offline audit queries, build DTOs, or consume the
 evidence graph. Full static-site rendering belongs to the external
-delivery layer, not to the kernel-only package.
+delivery layer, not to the factgraph-only package.
 
 ## Current documents
 
-- `src/kernel/audit/docs/01_overview.en.md`
+- `src/factgraph/audit/docs/01_overview.en.md`
   - audit module responsibilities, public entry points, audit
     workflow, round event log, and boundaries with runtime / registry.
-- `src/kernel/audit/docs/02_evidence_graph.md`
+- `src/factgraph/audit/docs/02_evidence_graph.md`
   - Unified explainability DTO and standalone renderer in the audit
     layer: the role of `EvidenceGraph`, the minimal data model, JSON
     round-trip helpers, the `evidence_graphs.jsonl` package contract,
     HTML fragment renderer, and current boundaries.
-- `src/kernel/audit/docs/03_audit_package_contract.md`
+- `src/factgraph/audit/docs/03_audit_package_contract.md`
   - Required / optional files of the audit package, the
     `round_events.jsonl` contract, query-derived surfaces, ECSS
     compliance ownership boundary, and minimal provenance carrier

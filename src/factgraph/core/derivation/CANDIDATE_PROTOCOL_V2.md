@@ -215,5 +215,5 @@ Schema/protocol breakings relevant to migration:
 
 For the full upgrade checklist, see:
 
-- `src/kernel/sdk/docs/03_rules_and_derivations.md` (section 6.3)
-- `src/kernel/sdk/docs/03_rules_and_derivations.en.md` (section 6.3)
+- `src/factgraph/sdk/docs/03_rules_and_derivations.md` (section 6.3)
+- `src/factgraph/sdk/docs/03_rules_and_derivations.en.md` (section 6.3)

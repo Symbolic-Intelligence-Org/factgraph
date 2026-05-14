@@ -1,4 +1,4 @@
-# kernel Docs Rules
+# factgraph Docs Rules
 
 ## Current Truth
 
@@ -31,7 +31,7 @@ No update needed for:
 
 ## New Modules
 
-- If you add a new top-level module under `src/kernel/`, create a `docs/README.md` for it in the same change unless the user explicitly says not to.
+- If you add a new top-level module under `src/factgraph/`, create a `docs/README.md` for it in the same change unless the user explicitly says not to.
 - The new README must satisfy all six items in the convention from the start.
 
 ## Relation To Blueprints

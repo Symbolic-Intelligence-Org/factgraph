@@ -1,14 +1,14 @@
 # Core Development Progress and Roadmap
 
-- Scope: `src/kernel/core`
+- Scope: `src/factgraph/core`
 - Last updated: 2026-05-06 (post Round Story Completion routemap closure @ `6b32972`)
 - Baseline: current source behavior, not historical versions
 
 ## 0. Post-Routemap Status (2026-05-06)
 
-The Round Story Completion routemap (2026-05-05 → 2026-05-06, 9 main batches + 3 sub-batches) closed at `6b32972`. The routemap added new capabilities primarily under `kernel.application/` and `kernel.audit/`; `kernel.core/` work during the routemap window was constrained by the application-first invariant and limited to native evaluator parameter extensions that support upper-layer capabilities.
+The Round Story Completion routemap (2026-05-05 → 2026-05-06, 9 main batches + 3 sub-batches) closed at `6b32972`. The routemap added new capabilities primarily under `factgraph.application/` and `factgraph.audit/`; `factgraph.core/` work during the routemap window was constrained by the application-first invariant and limited to native evaluator parameter extensions that support upper-layer capabilities.
 
-The full closure narrative and deferred items are recorded in the round-story-completion-plan master plan (§10 Outcome) inside the monorepo; this kernel-only package does not bundle routemap blueprints.
+The full closure narrative and deferred items are recorded in the round-story-completion-plan master plan (§10 Outcome) inside the monorepo; this factgraph-only package does not bundle routemap blueprints.
 
 ## 1. Current Status Snapshot
 
@@ -85,7 +85,7 @@ Goals: fix benchmark scenarios and recording format; make performance changes tr
 
 The following directions were explicitly deferred in the routemap; if their reactivation triggers fire, core may need adjustment:
 
-- Batch 4 ProofFrame symmetric `rule_refs` hardening — currently RuleRef-bearing artifacts return an `unsupported`-equivalent in the ProofFrame Rechecker; hardening may affect ruleref reverse propagation in `kernel.core.store._support`.
+- Batch 4 ProofFrame symmetric `rule_refs` hardening — currently RuleRef-bearing artifacts return an `unsupported`-equivalent in the ProofFrame Rechecker; hardening may affect ruleref reverse propagation in `factgraph.core.store._support`.
 - Frontier event family / rule action event kinds — persistence reactivation does not directly touch core, but round-event parameter extensions (per Batch 6 §5.5.4) may affect audit-side schema.
 - L5 cross-run aggregation — Batch 7 §5.5.3 #11 reactivation requires a module-mapping mechanism, potentially requiring core to expose a `module_id` derivation interface.
 - Multi-action rule runtime / variable binding planner / RuleRef-recursive overlay — these reactivations would all touch `evaluate_where(...)` parameters and the AST validator surface.
@@ -95,4 +95,4 @@ The following directions were explicitly deferred in the routemap; if their reac
 1. stabilize semantics before optimizing performance
 2. reduce compatibility surface before expanding API surface
 3. for external contract changes: update docs first, then implementation, then regression coverage
-4. **(post-routemap)** Application-first runtime authority is preserved: new capabilities remain DTO + pure fn in `kernel.application/`; core only exposes stable substrate (per `project_application_first_runtime_authority.md` memory anchor).
+4. **(post-routemap)** Application-first runtime authority is preserved: new capabilities remain DTO + pure fn in `factgraph.application/`; core only exposes stable substrate (per `project_application_first_runtime_authority.md` memory anchor).

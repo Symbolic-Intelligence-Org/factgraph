@@ -1,6 +1,6 @@
-# Authoring module overview (kernel)
+# Authoring module overview (factgraph)
 
-- Scope: `src/kernel/authoring`
+- Scope: `src/factgraph/authoring`
 - Last updated: 2026-03-29
 - Audience: developers who need to understand schema / rule /
   inference preflight, publish, and registry workflows
@@ -32,24 +32,24 @@ It does not handle:
 `authoring` has completed its first consolidation phase. New code
 should enter from the following grouped modules:
 
-- `kernel.authoring.schemas`
+- `factgraph.authoring.schemas`
   - `schema_preflight(...)`
   - `compile_authoring_schema_v1(...)`
   - `parse_authoring_schema_dsl_v1(...)`
-- `kernel.authoring.rules`
+- `factgraph.authoring.rules`
   - `rule_preflight(...)`
   - `compile_authoring_rule_v1(...)`
   - `parse_authoring_rule_dsl_v1(...)`
-- `kernel.authoring.derivations`
+- `factgraph.authoring.derivations`
   - `derivation_dry_run_preview(...)`
   - `compile_authoring_derivation_v1(...)`
   - `parse_authoring_derivation_dsl_v1(...)`
-- `kernel.authoring.registry_workflow`
+- `factgraph.authoring.registry_workflow`
   - `FileAuthoringRegistry`
   - DTO builders and workflow entry points for session / publish /
     apply
 
-`kernel.authoring.__init__` already aggregates these public entry
+`factgraph.authoring.__init__` already aggregates these public entry
 points. The older leaf modules still exist but are better treated as
 implementation detail or compatibility paths than as new dependency
 entry points.
@@ -291,15 +291,15 @@ the registry workspace.
   `registry/` directory. `fg.save()` synchronizes the graph into that layout,
   while `FactGraph.load(path, schema_classes=[...])` restores it with explicit
   schema-class validation.
-- `kernel.application.authoring_runtime` owns the application-layer
+- `factgraph.application.authoring_runtime` owns the application-layer
   save/load/list/get orchestration used by the SDK facade.
-- `kernel.application.workspace_runtime` owns workspace layout, manifest
+- `factgraph.application.workspace_runtime` owns workspace layout, manifest
   validation, ledger backup/checkpoint behavior, and registry sync/copy
   orchestration. It deliberately does not include artifact sidecars, in-memory
   views, audit/evidence round files, or package export output.
-- `kernel.sdk.registry.SDKRegistry` remains an advanced/internal wrapper for
+- `factgraph.sdk.registry.SDKRegistry` remains an advanced/internal wrapper for
   tests, migration, and lower-level registry workflows. It is not exported from
-  `kernel.sdk`.
+  `factgraph.sdk`.
 - `service.registry_v1` exposes `FileAuthoringRegistry` over an HTTP
   read interface
 - `service.runtime_v1` may also read schemas / rules from the
@@ -317,12 +317,12 @@ the registry workspace.
 - `sdk`
   - graph-bound `fg.rules.*` / `fg.inferences.*` provide the public persistence
     facade over `authoring`
-  - advanced code may still import `kernel.sdk.registry.SDKRegistry`
+  - advanced code may still import `factgraph.sdk.registry.SDKRegistry`
 - `service`
   - The service layer can expose the authoring registry as a
     front-end-consumable interface
 - `ecss`
-  - `kernel.ecss` provides shared domain presets (e.g. ECSS VCD
+  - `domains.ecss` provides shared domain presets (e.g. ECSS VCD
     predicates, Scenario A's first-round temporal / uncertainty
     predicates)
   - `authoring` can consume these presets into the schema / registry

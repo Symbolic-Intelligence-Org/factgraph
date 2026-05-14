@@ -1,6 +1,6 @@
 # SDK Concepts
 
-The conceptual model behind `kernel.sdk`. Read this once to understand
+The conceptual model behind `factgraph.sdk`. Read this once to understand
 how the pieces fit together; refer to
 [`04_api_surface.en.md`](04_api_surface.en.md) for the exact API.
 
@@ -88,11 +88,11 @@ candidate or assertion came to exist: which rule fired, which body
 literals supported it, which sub-proofs were chained. This proof
 vocabulary is not the public SDK `Inference` value-object type. The typed
 representation is `SupportArtifact`
-(`kernel.core.store._support`). "ProofFrame" in this doc is an
+(`factgraph.core.store._support`). "ProofFrame" in this doc is an
 informal umbrella for the audit-log shapes that wrap or compare
 support artifacts — concretely `ProofFrameRecheckResult`
-(`kernel.application.protocol.proofframe`) and `ProofFrameDiff`
-(`kernel.audit.proof_frame_diff`). There is no class literally
+(`factgraph.application.protocol.proofframe`) and `ProofFrameDiff`
+(`factgraph.audit.proof_frame_diff`). There is no class literally
 named `ProofFrame`.
 
 ```python
@@ -138,7 +138,7 @@ they are not accepted as `fg.read.find(...)`, `fg.eval.run(...)`, or
 │                     │                                       │
 │                     ▼                                       │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  kernel.sdk (FactGraph / SDKStore)                   │  │
+│  │  factgraph.sdk (FactGraph / SDKStore)                   │  │
 │  │  • Schema authoring (Entity, Field, Identity)        │  │
 │  │  • Ergonomic facade (read.get, write.add, eval.run)  │  │
 │  │  • DSL lowering (Rule → RuleSpec)                    │  │
@@ -148,7 +148,7 @@ they are not accepted as `fg.read.find(...)`, `fg.eval.run(...)`, or
 │                    │ delegates runtime to                  │
 │                    ▼                                       │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  kernel.application (canonical runtime authority)    │  │
+│  │  factgraph.application (canonical runtime authority)    │  │
 │  │  • Read/write planning + execution                   │  │
 │  │  • Compiled derivation evaluate / accept             │  │
 │  │  • What-if shells (Check, Diagnose, ...)             │  │
@@ -157,7 +157,7 @@ they are not accepted as `fg.read.find(...)`, `fg.eval.run(...)`, or
 │                    │ uses                                  │
 │                    ▼                                       │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  kernel.core (substrate)                             │  │
+│  │  factgraph.core (substrate)                             │  │
 │  │  • Ledger / store / rules / evidence                 │  │
 │  │  • Native evaluator                                  │  │
 │  └──────────────────────────────────────────────────────┘  │
@@ -166,17 +166,17 @@ they are not accepted as `fg.read.find(...)`, `fg.eval.run(...)`, or
 
 The split exists so that:
 
-- **Service / agent code** never imports from `kernel.sdk` for
-  runtime operations — it uses `kernel.application` directly. The SDK
+- **Service / agent code** never imports from `factgraph.sdk` for
+  runtime operations — it uses `factgraph.application` directly. The SDK
   is for product code that wants ergonomics.
 - **Cross-language consumers** (wire bridges, JSON APIs) work against
-  `kernel.application` DTOs, not SDK objects.
+  `factgraph.application` DTOs, not SDK objects.
 - **Test boundaries** are clear: SDK tests verify the facade; application
   tests verify the runtime authority.
 
 For most users this split is invisible — `fg.write.add(...)` Just
-Works. The split matters when you're building tooling on top of the
-kernel.
+Works. The split matters when you're building tooling on top of
+factgraph.
 
 ---
 
@@ -196,24 +196,24 @@ types**. Other internal types stay inside their layer.
 | `RoundEvent`, `WarningDTO` | `audit.diff_proof_frames` |
 | `ProofFrameDiff`, `FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference` | Returned by `audit.diff_proof_frames` |
 
-These mostly live in `kernel.application.protocol` and `kernel.audit`.
+These mostly live in `factgraph.application.protocol` and `factgraph.audit`.
 They are frozen dataclasses with `__post_init__` validation —
 constructing one with bad shape raises `ProtocolShapeError`.
 
 > Footnote on `SupportArtifact`: defined in
-> `kernel.core.store._support` (substrate-private module) but referenced
+> `factgraph.core.store._support` (substrate-private module) but referenced
 > as a frozen DTO at the protocol boundary
-> (`kernel.application.protocol.derivation_check.EvidenceEnvelope.engine_payload`).
+> (`factgraph.application.protocol.derivation_check.EvidenceEnvelope.engine_payload`).
 > The `_support` location reflects that it's also produced by the
-> native evaluator inside `kernel.core`.
+> native evaluator inside `factgraph.core`.
 
 ### Stays internal
 
 | Type | Why not exposed |
 |---|---|
-| `kernel.core.rules.rule_ir.RuleSpec` | Substrate IR; SDK accepts SDK `Rule` and lowers internally |
+| `factgraph.core.rules.rule_ir.RuleSpec` | Substrate IR; SDK accepts SDK `Rule` and lowers internally |
 | Engine-specific intermediate plans | Engine-private optimization detail |
-| Ledger row formats | `kernel.core.ledger` private |
+| Ledger row formats | `factgraph.core.ledger` private |
 
 The SDK explicitly **rejects** raw `RuleSpec` at its boundary. Pass
 SDK `Rule` objects; the SDK lowers them via `_compile_rule_input(...)`.
@@ -228,9 +228,9 @@ Behaviors in the docs are labeled with one of:
 |---|---|
 | **stable contract** | Public API. Will not change in a breaking way without a deprecation cycle. Safe to assert against in tests. |
 | **current behavior** | Implemented but not yet promoted to stable. May evolve in minor versions. Useful for in-house code; double-check on upgrade. |
-| **current boundary** | A deliberate non-feature. The kernel team chose not to support this. Building around it is fragile. |
+| **current boundary** | A deliberate non-feature. The factgraph team chose not to support this. Building around it is fragile. |
 
-`kernel.sdk.__all__` is itself a stable contract: removing or
+`factgraph.sdk.__all__` is itself a stable contract: removing or
 renaming an exported name requires a major version bump.
 
 ---
@@ -242,11 +242,11 @@ direct import; see [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md
 
 | Capability | Where to import |
 |---|---|
-| Round events recorder lifecycle | `kernel.audit.round_events` |
-| Frontier trace | `kernel.core.rules.frontier` |
-| Walker views (`ProofFrameDiffView`, etc.) | `kernel.application.walker` |
-| Engine adapter registration | `kernel.adapters.{souffle,problog,pyreason}` |
-| Optional domain bundles (e.g. ECSS) | Direct import at the call site (`import kernel.adapters.ecss as ecss`); guard with `try/except ImportError` if the bundle may be absent |
+| Round events recorder lifecycle | `factgraph.audit.round_events` |
+| Frontier trace | `factgraph.core.rules.frontier` |
+| Walker views (`ProofFrameDiffView`, etc.) | `factgraph.application.walker` |
+| Engine adapter registration | `factgraph.adapters.{souffle,problog,pyreason}` |
+| Optional domain bundles (e.g. ECSS) | Direct import at the call site (`import factgraph.adapters.ecss as ecss`); guard with `try/except ImportError` if the bundle may be absent |
 
 The SDK does not auto-wrap these surfaces. The boundary is intentional:
 each wrapper commits the SDK to a stable contract, and the team
@@ -258,11 +258,11 @@ prefers to add wrappers after seeing real usage patterns.
 
 | Layer | Responsibility |
 |---|---|
-| `kernel.application` | Canonical Python runtime authority; owns read/write/query/ingest/compiled derivation runtime DTOs and executors |
-| `kernel.sdk` | Python product surface; owns schema/DSL authoring, facade, snapshot/editor/batch outward objects, compatibility errors |
-| `kernel.audit` | Audit DTOs (`RoundEvent`, `ProofFrameDiff`), package loader, recorder lifecycle |
-| `kernel.core` | Low-level ledger / store / rules / evidence semantics |
-| `kernel.adapters` | Engine adapters (Souffle, ProbLog, PyReason) |
+| `factgraph.application` | Canonical Python runtime authority; owns read/write/query/ingest/compiled derivation runtime DTOs and executors |
+| `factgraph.sdk` | Python product surface; owns schema/DSL authoring, facade, snapshot/editor/batch outward objects, compatibility errors |
+| `factgraph.audit` | Audit DTOs (`RoundEvent`, `ProofFrameDiff`), package loader, recorder lifecycle |
+| `factgraph.core` | Low-level ledger / store / rules / evidence semantics |
+| `factgraph.adapters` | Engine adapters (Souffle, ProbLog, PyReason) |
 | service / agent code | Delivery / product consumers; production runtime code does not add SDK runtime imports |
 
 ---
@@ -271,9 +271,9 @@ prefers to add wrappers after seeing real usage patterns.
 
 | Topic | Behavior |
 |---|---|
-| SDK product surface | `kernel.sdk.__all__` exposes only user-facing surface; no application internals |
+| SDK product surface | `factgraph.sdk.__all__` exposes only user-facing surface; no application internals |
 | Application protocol | Does not accept SDK facade objects, SDK `Field` descriptors, or SDK DSL objects |
-| service / agent imports | **Convention** (not enforced in code today): production runtime code does not add `kernel.sdk` runtime imports beyond `compile_schema_from_classes`. Authoring tools and tests are exempt. |
+| service / agent imports | **Convention** (not enforced in code today): production runtime code does not add `factgraph.sdk` runtime imports beyond `compile_schema_from_classes`. Authoring tools and tests are exempt. |
 | Legacy field semantics | `functional`, `temporal`, `dims`, `fact_key` are removed |
 | `vars()` runtime unpack | `with vars() as (a, b)` is unsupported; use named or factory forms |
 | String DSL | `sdk.run("...")` / `sdk.evaluate("...")` are unsupported |

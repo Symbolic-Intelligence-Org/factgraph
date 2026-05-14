@@ -1,6 +1,6 @@
 # Walker and Advanced Importables
 
-`kernel.sdk` is the ergonomic product surface, but the kernel exposes
+`factgraph.sdk` is the ergonomic product surface, but factgraph exposes
 a wider set of capabilities through direct imports. This page covers
 when and why to drop down.
 
@@ -24,7 +24,7 @@ Reach for the layers below when you need:
   `RuleAddedAtom`, etc.) are the only path for some advanced
   constructs that don't yet have an SDK builder. Construct them
   directly — the constructors are precise about their fields, so
-  read `kernel.application.protocol` before composing.
+  read `factgraph.application.protocol` before composing.
 - **Walker-driven analysis** — proof-frame diffs and large
   `SupportArtifact` trees are easier to navigate via walker views
   than via direct attribute access.
@@ -35,7 +35,7 @@ Reach for the layers below when you need:
 - **Engine adapter registration** — the SDK does not auto-discover
   adapters; you register the ones you need.
 
-Each of these is reachable via direct import from the relevant kernel
+Each of these is reachable via direct import from the relevant factgraph
 package. The SDK never auto-wraps these surfaces, so cost is paid only
 when you actually need them.
 
@@ -48,7 +48,7 @@ artifacts. The most common one is `ProofFrameDiffView` for navigating
 the result of `fg.audit.diff_proof_frames(...)`.
 
 ```python
-from kernel.application.walker import ProofFrameDiffView
+from factgraph.application.walker import ProofFrameDiffView
 
 diff = fg.audit.diff_proof_frames(
     round_a_id, round_b_id, round_a_events, round_b_events,
@@ -96,7 +96,7 @@ The recorder produces the event tuples that
 `fg.audit.diff_proof_frames(...)` consumes. Lifecycle:
 
 ```python
-from kernel.audit.round_events import (
+from factgraph.audit.round_events import (
     start_round,
     record_round_event,
     finalize_round,
@@ -135,7 +135,7 @@ Wrapping it as `fg.audit.recorder()` would add a layer without value.
 ### Loading recorded rounds
 
 ```python
-from kernel.audit import load_audit_package
+from factgraph.audit import load_audit_package
 
 bundle = load_audit_package("/var/factpy/rounds/round-2026-05-09T10:00:00Z")
 events = bundle.round_events              # tuple[RoundEvent, ...]
@@ -147,7 +147,7 @@ manifest = bundle.manifest                # dict from manifest.json
 (NOT a dict — subscript access raises). It carries many other
 attributes too (`run_ledger`, `candidate_ledger`,
 `accept_write_ledger`, `support_artifacts`, `evidence_graphs`, etc.);
-read `kernel.audit.reader` for the full field list.
+read `factgraph.audit.reader` for the full field list.
 
 ---
 
@@ -158,7 +158,7 @@ The SDK accepts these as input arguments to `fact_overlay.check`,
 directly:
 
 ```python
-from kernel.application.protocol import (
+from factgraph.application.protocol import (
     EvaluationOverlay,
     FactValueOverride,         # FactOverlayAction = FactValueOverride | FactRemoveAction
     FactRemoveAction,
@@ -207,13 +207,13 @@ These are frozen dataclasses; they validate inputs in `__post_init__`
 and raise `ProtocolShapeError` on bad shapes. The constructors are
 precise about field types — `tuple` not `list`, exact literal sets,
 non-empty strings — so read the dataclass at
-`kernel/application/protocol/derivation_fact_overlay.py` before
+`factgraph/application/protocol/derivation_fact_overlay.py` before
 composing one in production code.
 
 `RoundEvent` and related audit DTOs:
 
 ```python
-from kernel.audit.round_events import RoundEvent
+from factgraph.audit.round_events import RoundEvent
 # (Most users obtain RoundEvents from the recorder, not by construction.)
 ```
 
@@ -227,7 +227,7 @@ performs lowering through `fg.eval.evaluate(inf, engine=...)`; compiled
 plan DTOs remain application/substrate objects.
 
 If you genuinely need to reuse a lowered plan across calls, construct a
-`kernel.application.protocol.CompiledDerivationPlan` directly and feed it
+`factgraph.application.protocol.CompiledDerivationPlan` directly and feed it
 through the application-level `evaluate_derivation_plans(...)` runner.
 That path is outside the SDK product surface and still uses substrate
 vocabulary such as `derivation_id` by design.
@@ -241,9 +241,9 @@ or PyReason, import the adapter package — registration happens at
 import time:
 
 ```python
-import kernel.adapters.souffle    # registers "souffle" mode
-import kernel.adapters.problog    # registers "problog" mode
-import kernel.adapters.pyreason   # registers "pyreason" mode
+import factgraph.adapters.souffle    # registers "souffle" mode
+import factgraph.adapters.problog    # registers "problog" mode
+import factgraph.adapters.pyreason   # registers "pyreason" mode
 ```
 
 After import, `fg.eval.evaluate(deriv, engine="souffle")` works. Without
@@ -263,7 +263,7 @@ by what-if and audit internals. It is not part of the SDK surface
 but is reachable via:
 
 ```python
-from kernel.core.rules.frontier import (
+from factgraph.core.rules.frontier import (
     evaluate_native_where_frontier,
     NativeWhereFrontierEvaluation,
     NativeWhereFrontierRow,
@@ -292,5 +292,5 @@ there's evidence of repeat use.
 
 The boundary is intentional: not everything that's reachable should
 be ergonomically wrapped. Wrappers commit the SDK to a stable contract,
-and the kernel team prefers to add them after seeing real-world usage
+and the factgraph team prefers to add them after seeing real-world usage
 patterns.

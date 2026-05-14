@@ -1,7 +1,7 @@
 # FactPy Application Docs
 
 This directory records the current implementation contract for
-`src/kernel/application`. `application` is the canonical Python
+`src/factgraph/application`. `application` is the canonical Python
 runtime authority on top of `core`; `sdk` is responsible for the
 Python product surface, DSL authoring, and outward facade
 compatibility.
@@ -10,8 +10,8 @@ compatibility.
 >
 > If you are writing ordinary Python product code and want to use
 > `Entity` / `Field` / `Identity` classes, the Query DSL, snapshots,
-> batches, or user-facing exceptions, read `src/kernel/sdk/docs/`
-> first and start from `kernel.sdk`.
+> batches, or user-facing exceptions, read `src/factgraph/sdk/docs/`
+> first and start from `factgraph.sdk`.
 >
 > This directory targets integration / automation / pipeline / RPC
 > bridge authors: callers who may only hold JSON-like payloads,
@@ -22,12 +22,12 @@ compatibility.
 
 ## Current documents
 
-- `src/kernel/application/docs/01_overview_en.md`
+- `src/factgraph/application/docs/01_overview_en.md`
   - English overview of the application module.
-- `src/kernel/application/walker/docs/README.md`
+- `src/factgraph/application/walker/docs/README.md`
   - Current implementation contract for the application-layer walker
     module.
-- `src/kernel/application/schema_mutation_runtime.py`
+- `src/factgraph/application/schema_mutation_runtime.py`
   - Additive entity and non-identity field extension validation and transition
     planning used by `fg.schema.add(...)`; application-first runtime module,
     documented in the application overview.

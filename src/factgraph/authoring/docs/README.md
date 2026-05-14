@@ -1,12 +1,12 @@
 # FactPy Authoring Docs
 
 This directory records the current implementation contract for
-`src/kernel/authoring`, targeting developers who need to understand
+`src/factgraph/authoring`, targeting developers who need to understand
 authoring preflight, publish, and registry workflows.
 
 ## Current documents
 
-- `src/kernel/authoring/docs/01_overview.md`
+- `src/factgraph/authoring/docs/01_overview.md`
   - Authoring module responsibilities, public entry points, registry
     file layout, and boundaries with SDK / service / core.
 

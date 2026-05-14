@@ -1,6 +1,6 @@
-# Core Architecture Overview (kernel)
+# Core Architecture Overview (factgraph)
 
-- Scope: `src/kernel/core`
+- Scope: `src/factgraph/core`
 - Last updated: 2026-05-05
 - Code baseline: `Store.evaluate` supports `native|souffle|problog|pyreason`; `Ledger` is a SQLite write-through cache + `annotation_rows` (Annotation Store); `ProjectorAudit` is v2
 - Audience: developers who need to understand core semantic boundaries, key entrypoints, and extension points
@@ -9,9 +9,9 @@
 
 This document describes only the `core` semantic kernel. It does not cover implementation details of:
 
-- `src/kernel/adapters` (engine adapters and export)
-- `src/kernel/sdk` (higher-level Python API)
-- `src/kernel/authoring` (compile and workflow)
+- `src/factgraph/adapters` (engine adapters and export)
+- `src/factgraph/sdk` (higher-level Python API)
+- `src/factgraph/authoring` (compile and workflow)
 - HTTP/BFF delivery layer (routes and DTOs)
 
 Additional boundary notes:
@@ -30,7 +30,7 @@ Additional boundary notes:
 ## 2. Current Directory Structure (core)
 
 ```text
-src/kernel/core/
+src/factgraph/core/
   __init__.py              # stable core public facade
   protocol/                # typed tuple / digest / idref encoding protocols
   schema/                  # SchemaIR validation and digest
@@ -85,7 +85,7 @@ src/kernel/core/
 
 ## 4. Core Data Model (Ledger)
 
-`src/kernel/core/store/ledger.py` defines the append-only data structures:
+`src/factgraph/core/store/ledger.py` defines the append-only data structures:
 
 - `Claim`: primary assertion row (`asrt_id`, `pred_id`, `e_ref`, `rest_terms`)
 - `ClaimArg`: row-expanded arguments (`idx`, `val_atom`, `tag`)
@@ -190,7 +190,7 @@ Adapter-specific rule projection is no longer public SDK rule syntax:
   - internal compiled `body_confidences` is only a temporary SDK/runtime bridge; public authoring and service payloads reject it
 - `SemanticsProfile.rule_projection` owns the durable public
   rule-projection shape
-- Track 3 / B introduced `kernel.core.semantics.SemanticsProfile` as a
+- Track 3 / B introduced `factgraph.core.semantics.SemanticsProfile` as a
   core value object. Track 3 / C makes ProbLog the first consuming
   adapter: the core `Store.evaluate(..., mode="problog",
   semantics_profile=...)` path maps `rule_projection.problog`
@@ -537,9 +537,9 @@ Environment variable:
 
 Current adapter-side behavior:
 
-- importing `kernel.adapters.souffle` registers `souffle`
-- importing `kernel.adapters.problog` registers `problog`
-- importing `kernel.adapters.pyreason` registers `pyreason`
+- importing `factgraph.adapters.souffle` registers `souffle`
+- importing `factgraph.adapters.problog` registers `problog`
+- importing `factgraph.adapters.pyreason` registers `pyreason`
 
 Additional notes:
 
@@ -568,7 +568,7 @@ Additional notes:
 
 ## 8.1 Annotation Prototype Boundary
 
-`src/kernel/core/annotation/` is currently an internal / prototype module.
+`src/factgraph/core/annotation/` is currently an internal / prototype module.
 
 **Certainty v1 is frozen** (see `annotation/docs/README.md` §5 for full contract):
 

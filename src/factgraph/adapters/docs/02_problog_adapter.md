@@ -1,6 +1,6 @@
-# ProbLog Adapter overview (kernel)
+# ProbLog Adapter overview (factgraph)
 
-- Scope: `src/kernel/adapters/problog`
+- Scope: `src/factgraph/adapters/problog`
 - Last updated: 2026-03-29
 - Audience: developers who need to understand the ProbLog export,
   execution, and result-readback path
@@ -65,7 +65,7 @@ It is not responsible for:
 Same as the Souffle adapter: ProbLog is registered with `Store`
 via mode:
 
-1. Import `kernel.adapters.problog`
+1. Import `factgraph.adapters.problog`
 2. `__init__` registers the evaluator under the name `problog`
 3. Calling `Store.evaluate(mode="problog")` enters
    `evaluate_problog(...)`

@@ -1,8 +1,8 @@
 # Annotation
 
-- Scope: `src/kernel/core/annotation`
+- Scope: `src/factgraph/core/annotation`
 - Status: experimental / internal API
-- Already consumed internally by kernel/core/store; breaking changes
+- Already consumed internally by factgraph/core/store; breaking changes
   are not allowed, but the public API is not promised
 - Last updated: 2026-04-27
 
@@ -98,7 +98,7 @@ implementation site.
 
 - External benchmark / reference harness
   - Continues as the oracle / golden reference implementation
-- `src/kernel/core/annotation/*`
+- `src/factgraph/core/annotation/*`
   - Acts as the new prototype implementation
 
 The two must remain independent so that the same code does not

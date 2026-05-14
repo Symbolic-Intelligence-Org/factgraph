@@ -1,10 +1,10 @@
 # Audit Package Contract
 
-- Scope: `src/kernel/audit`
+- Scope: `src/factgraph/audit`
 - Last updated: 2026-05-06
-- Owner: `kernel.audit` reader / query / DTO surface
+- Owner: `factgraph.audit` reader / query / DTO surface
 
-`kernel.audit` consumes exported audit packages. It does not export packages, render the full static site, query live runtime state, or own domain-specific ECSS row semantics.
+`factgraph.audit` consumes exported audit packages. It does not export packages, render the full static site, query live runtime state, or own domain-specific ECSS row semantics.
 
 ## 1. Package Root
 
@@ -97,7 +97,7 @@ The following are not separate durable package files today. They are derived by 
 
 This distinction matters for compatibility: old packages can still load when optional durable files are absent, but derived surfaces may return empty results or raise a query/DTO error if their required source carrier is unavailable.
 
-Batch 8 public-surface note:these query-derived surfaces are `kernel.audit` advanced importable APIs. They are part of the kernel audit reader/query layer,not SDK product facade methods and not service routes.
+Batch 8 public-surface note:these query-derived surfaces are `factgraph.audit` advanced importable APIs. They are part of the factgraph audit reader/query layer,not SDK product facade methods and not service routes.
 
 ### 4.1 ProofFrame Diff
 
@@ -125,7 +125,7 @@ Important boundaries:
 
 `AuditQuery.list_compliance_matrix(...)` is a compatibility convenience query over an audit package, but ECSS row assembly is owned by `domains.ecss.compliance`.
 
-In the kernel-only v0.1 wheel, `domains.ecss` is not part of the installed package set. Calling this convenience without the optional domain package raises `AuditOptionalDomainError` with an actionable message. Kernel consumers should treat this surface as domain-backed and optional, not as a guaranteed kernel-only contract.
+In the factgraph-only v0.1 wheel, `domains.ecss` is not part of the installed package set. Calling this convenience without the optional domain package raises `AuditOptionalDomainError` with an actionable message. Kernel consumers should treat this surface as domain-backed and optional, not as a guaranteed factgraph-only contract.
 
 The audit layer:
 
@@ -156,7 +156,7 @@ Future provenance work should add fields or mappings explicitly rather than rely
 
 ## 7. Ownership Boundary
 
-- `kernel.audit`: package read/query/DTO/evidence graph consumer contracts
+- `factgraph.audit`: package read/query/DTO/evidence graph consumer contracts
 - `service.static_ui`: full static HTML site rendering and rendered site manifest/index contracts
 - `domains.ecss.compliance`: ECSS compliance row semantics
 - `adapters` / runtime service: package export and optional provenance materialization

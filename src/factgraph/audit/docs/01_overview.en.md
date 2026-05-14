@@ -1,20 +1,20 @@
-# Audit Module Overview (kernel)
+# Audit Module Overview (factgraph)
 
-- Scope: `src/kernel/audit`
+- Scope: `src/factgraph/audit`
 - Last updated: 2026-05-06
 - Audience: developers consuming an audit package, running offline audit queries, or constructing audit DTOs
 
 ## 1. Module Responsibilities
 
-> **Boundary — v0.1 kernel-only wheel**
+> **Boundary — v0.1 factgraph-only wheel**
 >
-> This document describes how `kernel.audit` integrates with downstream consumers. The following modules are referenced below but are **not part of the v0.1 kernel-only wheel**:
+> This document describes how `factgraph.audit` integrates with downstream consumers. The following modules are referenced below but are **not part of the v0.1 factgraph-only wheel**:
 >
 > - `service.static_ui` — full audit static-site rendering (monorepo / future deliverable)
 > - `domains.ecss.compliance` — ECSS row assembly + compliance matrix (optional domain bundle)
 > - `domains.ecss.vcd` — ECSS VCD predicate preset (optional domain bundle)
 >
-> Calling these modules directly from a kernel-only install raises `ModuleNotFoundError`. `AuditQuery.list_compliance_matrix(...)` raises `AuditOptionalDomainError` to give an actionable signal instead of letting users hit a bare import failure.
+> Calling these modules directly from a factgraph-only install raises `ModuleNotFoundError`. `AuditQuery.list_compliance_matrix(...)` raises `AuditOptionalDomainError` to give an actionable signal instead of letting users hit a bare import failure.
 
 `audit` is the **audit-consumption layer**. It reads exported audit packages and exposes query, DTO, and evidence-graph consumption capabilities.
 
@@ -69,11 +69,11 @@ Backing modules:
 - `evidence_graph.py`
 - `round_events.py`
 
-Batch 8 public-surface note: `kernel.audit` is an **advanced importable** audit consumer surface in the kernel package. Round event recording, round-event queries, and ProofFrame diff are documented audit/query APIs, but they are not mirrored as SDK facade methods in v0.1. Service / static-site delivery remains outside the kernel-only public package.
+Batch 8 public-surface note: `factgraph.audit` is an **advanced importable** audit consumer surface in the factgraph package. Round event recording, round-event queries, and ProofFrame diff are documented audit/query APIs, but they are not mirrored as SDK facade methods in v0.1. Service / static-site delivery remains outside the factgraph-only public package.
 
 Related contract documents:
 
-- `src/kernel/audit/docs/03_audit_package_contract.md`
+- `src/factgraph/audit/docs/03_audit_package_contract.md`
   - audit package files, reader / query derived surfaces, minimum provenance carrier mapping
 - delivery-layer static site contract
   - rendered static site, `site_manifest.json`, `ui_index.json` delivery contract
@@ -127,7 +127,7 @@ Explicitly deferred:
 - 5a / 5b / 5c rule action result event family
 - Batch 7 diff / cross-run aggregation index
 
-The recorder uses the caller-supplied `round_id` plus a per-round monotonic `sequence`. Capability runtimes do not import `kernel.audit`; the caller explicitly records events after each capability returns.
+The recorder uses the caller-supplied `round_id` plus a per-round monotonic `sequence`. Capability runtimes do not import `factgraph.audit`; the caller explicitly records events after each capability returns.
 
 The reader is intentionally lenient on `round_events.jsonl`:
 
@@ -160,7 +160,7 @@ This diff does not persist a new index, does not re-run capabilities, does not c
 
 When an audit package contains requirement-scoped assertions, `AuditQuery` exposes offline ECSS VCD / compliance-matrix query entrypoints. Row assembly semantics are owned by `domains.ecss.compliance`; the `audit` side only loads the package, builds the assertion index, and exposes query convenience through a lazy import.
 
-In the kernel-only v0.1 wheel, `domains.ecss` is not part of the install. This entrypoint is preserved as a monorepo / optional-domain compatibility surface; if `domains.ecss` is missing, the call raises `AuditOptionalDomainError` rather than treating `domains` as a kernel-required dependency:
+In the factgraph-only v0.1 wheel, `domains.ecss` is not part of the install. This entrypoint is preserved as a monorepo / optional-domain compatibility surface; if `domains.ecss` is missing, the call raises `AuditOptionalDomainError` rather than treating `domains` as a factgraph-required dependency:
 
 1. Use requirement / compliance predicates on the write side, for example:
    - `ecss:requirement`
@@ -180,7 +180,7 @@ In the kernel-only v0.1 wheel, `domains.ecss` is not part of the install. This e
 2. Call `service.static_ui.render_audit_static_site(package_dir, out_dir)`
 3. Output static HTML and assets
 
-Full static-site rendering does not belong to the `kernel.audit` module. `service.static_ui` consumes `kernel.audit` reader / query / DTO and domain-backed compliance rows, and owns rendered-site contracts such as `site_manifest.json` / `ui_index.json`.
+Full static-site rendering does not belong to the `factgraph.audit` module. `service.static_ui` consumes `factgraph.audit` reader / query / DTO and domain-backed compliance rows, and owns rendered-site contracts such as `site_manifest.json` / `ui_index.json`.
 
 Current static site page filenames / hrefs use a filesystem-safe reversible slug rather than raw percent-encoded ids. The generated site can therefore be browsed directly through ordinary static file servers without depending on special handling of `%xx` paths.
 
@@ -285,7 +285,7 @@ Candidate NL explain is currently outside the audit first-round scope; the stati
 - `ecss`
   - the canonical preset owner for requirement / compliance predicates is `domains.ecss.vcd`
   - the ECSS compliance row-assembly owner is `domains.ecss.compliance`
-  - audit lazily imports and exposes `AuditQuery.list_compliance_matrix(...)` but does not own ECSS row semantics; on a kernel-only wheel where `domains.ecss` is missing, this entrypoint raises `AuditOptionalDomainError`
+  - audit lazily imports and exposes `AuditQuery.list_compliance_matrix(...)` but does not own ECSS row semantics; on a factgraph-only wheel where `domains.ecss` is missing, this entrypoint raises `AuditOptionalDomainError`
 - `explainability`
   - the compliance matrix is responsible only for requirement-level delivery; finer assertion / support evidence drill-down is still owned by the assertion detail / explainability substrate
   - rule trace static delivery only consumes the existing `RuleTraceArtifact` from the package and does not add live explain endpoints

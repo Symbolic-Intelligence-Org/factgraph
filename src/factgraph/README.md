@@ -1,8 +1,8 @@
-# FactPy Kernel
+# factgraph
 
-`kernel` is the FactPy kernel implementation: a Python package that
-provides schema authoring, fact storage, rule/derivation evaluation,
-counterfactual analysis, and audit/proof primitives.
+`factgraph` is a Python package that provides schema authoring, fact
+storage, rule/derivation evaluation, counterfactual analysis, and
+audit/proof primitives.
 
 ## Where to start
 
@@ -25,7 +25,7 @@ counterfactual analysis, and audit/proof primitives.
 
 ## Architecture in one sentence
 
-User code → `kernel.sdk` (ergonomic facade) → `kernel.application` (canonical runtime) → `kernel.core` (substrate). Engine adapters plug into `core` via registration; audit DTOs and proof structures cross all layers as frozen types.
+User code → `factgraph.sdk` (ergonomic facade) → `factgraph.application` (canonical runtime) → `factgraph.core` (substrate). Engine adapters plug into `core` via registration; audit DTOs and proof structures cross all layers as frozen types.
 
 For the longer architectural narrative see
 [`core/docs/01_architecture.en.md`](core/docs/01_architecture.en.md)
