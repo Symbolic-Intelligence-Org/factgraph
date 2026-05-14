@@ -2,11 +2,27 @@
 dependencies = ["httpx>=0.28.1,<0.29", "fastapi>=0.136.1,<0.137", "networkx>=3.6.1,<4"]
 name = "factgraph"
 requires-python = ">= 3.11"
-version = "0.1.0"
+dynamic = ["version"]
+
+authors = [
+  {name = "Zhenzhi Li", email = "z.li@symbolic-intelligence.de"},
+  {name = "Raphael Feikert", email = "r.feikert@symbolic-intelligence.de"},
+]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/factgraph"]
+
+[project.urls]
+Homepage = "https://symbolic-intelligence.de"
+Documentation = "https://factgraph.docs.symbolic-intelligence.de"
+Repository = "https://github.com/me/spam.git"
 
 [build-system]
 build-backend = "hatchling.build"
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
@@ -40,5 +56,5 @@ python = "*"
 
 [dependency-groups]
 test = ["pytest>=9.0.3,<10"]
-build = ["build"]
+build = ["build", "hatch-vcs>=0.5.0,<0.6"]
 publish = ["twine"]
