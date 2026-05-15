@@ -1,18 +1,26 @@
-# FactGraph
+# factgraph
 
-FactGraph is a Python framework for symbolic knowledge graphs, rule-based inference, provenance, and explainable fact auditing.
+`factgraph` is a Python library for append-only facts, rule-based inference, and auditable reasoning.
 
-It lets you declare typed entity schemas, write facts into an append-only ledger, evaluate symbolic rules and inferences, inspect candidate evidence, and persist complete graph workspaces.
+It provides a typed fact ledger, a small logic DSL, explicit inference review, assertion-level inspection, named assertion views, and evidence-oriented APIs. The purpose is not only to represent what is currently true, but also to preserve how facts were asserted, derived, revised, and explained.
 
-## Installation
+## Overview
+
+Many applications treat state as mutable data: a value changes, and the previous state disappears unless a separate audit system is added later.
+
+`factgraph` uses an append-only model. Facts are written as assertions into a ledger. Current application state is resolved from the active assertions. Rules and inferences can reason over those facts, propose derived facts, and produce candidates that must be explicitly accepted before they become part of the ledger.
+
+```text
+schema -> assertions -> snapshots -> rules/inferences -> candidates -> accepted facts -> evidence
+```
+
+## Install
 
 ```bash
 pip install factgraph
 ```
 
-FactGraph requires Python 3.11 or newer.
-
-## Minimal example
+## Quickstart
 
 ```python
 from factgraph.sdk import Entity, FactGraph, Field, Identity
@@ -21,202 +29,205 @@ from factgraph.sdk import Entity, FactGraph, Field, Identity
 class User(Entity):
     user_id: str = Identity(primary_key=True)
     name: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
+    role_seed: str = Field(cardinality="single")
+    roles: str = Field(cardinality="multi")
 
 
 fg = FactGraph.create(schema_classes=[User])
 
 alice = fg.read.ref(User, user_id="u-1")
-fg.write.set(User.name, alice, "Alice")
-fg.write.add(User.tags, alice, "engineer")
+
+name_id = fg.write.set(User.name, alice, "Alice")
+fg.write.set(User.role_seed, alice, "engineer")
 
 snap = fg.read.get(User, user_id="u-1")
 
+assert snap is not None
 assert snap.name == "Alice"
-assert tuple(snap.tags) == ("engineer",)
+assert snap.role_seed == "engineer"
 ```
 
-## Core idea
+A write returns an assertion id. A read returns a snapshot resolved from the current active assertions.
 
-FactGraph is not a mutable table. Writes append assertions to a ledger. Reads resolve the active assertions into read-only snapshots. This makes fact history, retractions, provenance, and audit workflows first-class instead of incidental.
+## Assertions And Views
+
+Assertions are the durable records behind facts. Every write returns an `asrt_id`, which can be used for precise lookup, review, retraction, or grouping.
+
+Graph-level assertion access lives under `fg.assertions`:
+
+```python
+record = fg.assertions.by_id(name_id)
+
+assert record is not None
+assert record.value == "Alice"
+assert record.asrt_id == name_id
+```
+
+Snapshot-level assertion access lives under `snap.assertions`:
+
+```python
+name_record = snap.assertions.field("name").active().by_id(name_id).one()
+
+assert name_record.value == "Alice"
+assert name_record.asrt_id == name_id
+```
+
+The key distinction is:
+
+| Surface | Purpose |
+|---|---|
+| `fg.assertions` | Graph-level assertion lookup and selection |
+| `snap.assertions` | Assertion access scoped to one entity snapshot |
+| `snap.field("name")` | Field-level assertion selection shortcut |
+
+Retractions are explicit and id-based:
+
+```python
+fg.write.retract(name_id)
+```
+
+The original assertion is not deleted. It remains in history and is no longer active.
+
+Views are named selections of assertion ids. They are created from assertion ids or from objects that carry an `.asrt_id` attribute.
+
+```python
+review_view = fg.views.create(
+    "name_review",
+    asrt_ids=[name_id],
+)
+
+records = fg.assertions.by_ids(review_view.asrt_ids)
+
+assert review_view.asrt_ids == frozenset({name_id})
+assert records.one().value == "Alice"
+```
+
+A view is therefore an assertion-level object:
 
 ```text
-schema declaration -> entity reference -> assertion write -> snapshot read
+assertion ids -> named view -> selected assertion records
 ```
 
-## Public API shape
+Views are useful for review sets, audit selections, and evidence workflows. They do not change the active fact projection and are not passed as `view=` parameters to `fg.eval.evaluate(...)`.
 
-FactGraph uses a namespaced SDK surface. Flat methods remain possible where supported, but the namespaced form is the recommended path.
+## Reasoning
 
-| Namespace | Purpose |
-| --- | --- |
-| `FactGraph.create(...)` / `FactGraph.load(...)` | Create, save, and restore graph workspaces. |
-| `fg.schema` | Add schema classes and validate provenance objects. |
-| `fg.read` | Create entity references, fetch snapshots, and find entities. |
-| `fg.write` | Append facts and retract assertion ids. |
-| `fg.assertions` | Read assertion records by id, field, active state, or full ledger view. |
-| `fg.views` | Manage named frozen selections of assertion ids. |
-| `fg.rules` | Inspect, save, load, list, and get reusable rules. |
-| `fg.inferences` | Save, load, list, and get reusable inference templates. |
-| `fg.eval` | Run rules, evaluate inferences, inspect semantics, and accept candidates. |
-| `fg.what_if` | Perform read-only counterfactual checks and diagnostics. |
-| `fg.audit` | Explain persisted facts and compare recorded proof frames. |
-| `fg.package` | Export and run portable graph packages. |
+`factgraph` includes a small logic DSL for describing patterns over facts.
 
-## Schema declaration
-
-Schemas are regular Python classes. `Identity` fields define entity identity; `Field` descriptors define facts the graph can store about that entity.
+A `Rule` reads matching facts. An `Inference` proposes new facts. Evaluation is read-only; it produces candidates. Accepting a candidate is the step that writes derived facts into the ledger.
 
 ```python
-from factgraph.sdk import Entity, Field, Identity
+from factgraph.sdk import Branch, Inference, Pred, vars
 
-
-class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    email: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
-```
-
-Single-cardinality fields keep one current value. Multi-cardinality fields collect values. In both cases, writes append ledger assertions rather than mutating Python objects.
-
-## Assertions and retractions
-
-Every write returns an assertion id. Keep the id when you need precise inspection or retraction.
-
-```python
-email_asrt = fg.write.set(User.email, alice, "alice@example.com")
-tag_asrt = fg.write.add(User.tags, alice, "reviewer")
-
-record = fg.assertions.by_id(email_asrt)
-fg.write.retract(tag_asrt)
-```
-
-This is the basis for audit-friendly edits: the read side finds which assertion matters, and the write side revokes that exact assertion id.
-
-## Rules and inferences
-
-Rules read what is already true. Inferences propose new facts. Accepting a candidate writes the proposed fact into the ledger.
-
-```python
-from factgraph.sdk import Branch, Inference, Pred, Rule, vars
-
-
-with vars("u", "tag") as (u, tag):
-    seeded_tags = Rule(
-        id="rule.seeded_tags",
+with vars("u", "role") as (u, role):
+    roles_from_seed = Inference(
+        id="inf.roles_from_seed",
         version="v1",
-        select=[u, tag],
-        where=[Branch([Pred("user:tags", u, tag)], id="seed_path")],
+        where=[
+            Branch(
+                [Pred("user:role_seed", u, role)],
+                id="seed_path",
+            )
+        ],
+        target="user:roles",
+        head_vars=[u, role],
     )
 
-rows = fg.eval.run(seeded_tags)
+candidates = fg.eval.evaluate(roles_from_seed)
+
+assert len(candidates) == 1
+assert tuple(fg.read.get(User, user_id="u-1").roles) == ()
+
+fg.eval.accept(candidates[0])
+
+assert tuple(fg.read.get(User, user_id="u-1").roles) == ("engineer",)
 ```
 
-An inference has the same body shape but also names a target predicate and head variables:
-
-```python
-with vars("u", "tag") as (u, tag):
-    infer_tag = Inference(
-        id="inf.tags_from_seed",
-        version="v1",
-        where=[Branch([Pred("user:tags", u, tag)], id="seed_path")],
-        target="user:tags",
-        head_vars=[u, tag],
-    )
-
-candidate_sets = fg.eval.evaluate(infer_tag)
-
-for candidate_set in candidate_sets:
-    for candidate in candidate_set.candidates:
-        fg.eval.accept(candidate)
-```
-
-## Inference semantics
-
-Engine-specific semantics are evaluation-time configuration. They do not live inside the inference template and do not change the candidate lifecycle.
+The reasoning lifecycle is explicit:
 
 ```text
 Inference -> evaluate -> CandidateSet -> accept -> ledger assertion
 ```
 
-FactGraph exposes public wrappers such as `ProbLogSemantics` and `PyReasonSemantics`, plus the lower-level `SemanticsProfile` form for adapter-level control.
+This separation allows applications to inspect, compare, approve, or reject derived facts before committing them.
 
-```python
-from factgraph.sdk import ProbLogSemantics
+## Logic DSL
 
-semantics = ProbLogSemantics(branch_probabilities={"seed_path": 0.8})
-inspection = fg.eval.inspect_semantics(semantics)
-```
+Rules, queries, and inferences are built from body atoms:
 
-## What-if and audit
+- `Pred(...)` matches a predicate in the ledger.
+- `Entity(var)` requires an entity to exist.
+- `var.field == value` matches a typed field.
+- `Not([...])` expresses absence.
+- `Branch([...], id="...")` names an alternative reasoning path.
+- `vars(...)` creates scoped logic variables.
 
-`fg.what_if` is for live counterfactual exploration. It does not write to the ledger.
+The same structure supports reusable rules, ad-hoc queries, and inference definitions.
 
-`fg.audit` is for persisted-record explanation, conflicts, and cross-round comparison.
+## Semantics
 
-```python
-check = fg.what_if.check(...)
-diagnosis = fg.what_if.diagnose(...)
-explanation = fg.audit.explain_fact("user:tags", "user:u-1", "engineer")
-```
+Inference evaluation can use different semantics without changing the ledger lifecycle.
 
-Use `what_if` when asking what could happen. Use `audit` when asking what already happened and why.
+`factgraph` exposes public semantics objects for engine-specific configuration:
+
+- `ProbLogSemantics` for ProbLog-style branch probabilities
+- `PyReasonSemantics` for PyReason-style time delays and interval bounds
+- `SemanticsProfile` for lower-level canonical configuration
+
+Semantics are evaluate-time configuration. They do not live inside the inference template.
+
+## Evidence And What-If
+
+Reasoning systems need inspection surfaces, not just results. `factgraph` includes APIs for checking and explaining whether a fact or inference is supported.
+
+The `fg.what_if` namespace provides read-only counterfactual tools:
+
+- `check(...)` asks whether a concrete inference binding holds.
+- `diagnose(...)` localizes why a check failed.
+- `why_not(...)` compares a finite candidate universe.
+- fact overlays ask what would happen if selected facts changed.
+- rule overlays ask what would happen if selected rule atoms changed.
+
+The `fg.audit` namespace supports persisted explanation and proof comparison, including fact explanations and proof-frame diffs.
+
+## API Surfaces
+
+| Surface | Purpose |
+|---|---|
+| `fg.schema` | Add schema elements |
+| `fg.read` | Create entity refs, read snapshots, find entities |
+| `fg.write` | Set, add, and retract facts |
+| `fg.assertions` | Inspect graph-level assertion records |
+| `snap.assertions` | Inspect assertion records for one snapshot |
+| `fg.views` | Create named assertion-id selections |
+| `fg.rules` | Save, load, and inspect rules |
+| `fg.inferences` | Save and load inference definitions |
+| `fg.eval` | Run rules, evaluate inferences, accept candidates |
+| `fg.what_if` | Check, diagnose, and explore counterfactuals |
+| `fg.audit` | Explain persisted facts and compare proof frames |
 
 ## Persistence
 
-A path-backed graph can save and load a complete workspace. A workspace contains the ledger, schema metadata, registry, and workspace manifest.
+Graphs can be kept in memory or backed by a workspace path.
 
 ```python
-from pathlib import Path
-
-workspace = Path("./factgraph-workspace")
-fg = FactGraph.create(schema_classes=[User], path=workspace)
-
+fg = FactGraph.create(schema_classes=[User], path="workspace")
 fg.save()
 
-restored = FactGraph.load(workspace, schema_classes=[User])
+restored = FactGraph.load("workspace", schema_classes=[User])
 ```
 
-Reusable authoring assets are saved through their own namespaces:
-
-```python
-rule_ref = fg.rules.save(seeded_tags)
-loaded_rule = fg.rules.load(rule_ref)
-```
-
-## Documentation path
-
-A recommended reading order for new users:
-
-1. Your first FactGraph
-2. Define a schema
-3. Read and write facts
-4. Assertion records and views
-5. Rules and inferences
-6. Configure inference semantics
-7. Evidence: what-if and audit
-8. Save rules, inferences, and workspaces
-9. Namespace map
+A workspace stores the ledger, schema metadata, registry, and manifest.
 
 ## Development
 
-This repository uses Pixi for reproducible local environments.
-
 ```bash
-pixi install
 pixi run test
 pixi run build
 ```
 
-Do not commit `.pixi/`; commit `pyproject.toml` and `pixi.lock`.
-
-## Project links
-
-- Homepage: https://symbolic-intelligence.de
-- Documentation: https://factgraph.docs.symbolic-intelligence.de
-- Repository: https://github.com/Symbolic-Intelligence-Org/factgraph
-- Issues: https://github.com/Symbolic-Intelligence-Org/factgraph/issues
-
 ## License
 
-See `LICENSE`.
+Licensed under the Apache License, Version 2.0.
+
+Copyright 2026 Symbolic Intelligence GbR.
