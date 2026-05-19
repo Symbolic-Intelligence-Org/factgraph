@@ -33,6 +33,16 @@ Files read completely (not grep snippets) as the audit ground truth:
 | SDK | facade DTOs (AssertionRecord SDK shape) | [src/factgraph/sdk/facade.py](../../src/factgraph/sdk/facade.py) |
 | SDK | query runtime adapter | [src/factgraph/sdk/query_runtime.py](../../src/factgraph/sdk/query_runtime.py) |
 
+### Supplemental shipped-code audit surface
+
+Added during Phase 1 inventory because primary files cite these helpers directly. These files were also read completely before use.
+
+| Layer | File | Why included |
+|---|---|---|
+| core store | [src/factgraph/core/store/_support.py](../../src/factgraph/core/store/_support.py) | `project_view_facts_with_witness(...)` returns `ProjectedFact`; support/provenance digest shapes affect evidence/evaluate seam wording |
+| core policy | [src/factgraph/core/policy/active.py](../../src/factgraph/core/policy/active.py) | `project_view_facts(...)` and read hydration use `is_active(...)`; active universe depends on revocation state |
+| core write protocol | [src/factgraph/core/evidence/write_protocol.py](../../src/factgraph/core/evidence/write_protocol.py) | SDK write/retract path delegates here; required for D4 and append-only/retraction triage |
+
 ### Secondary / dependency-only surface
 
 Enumerated, NOT deeply audited in this round:
@@ -154,36 +164,400 @@ Listed for awareness; **not audited** in this round.
 | S5 | failure envelope stale / out-of-scope evidence ref → §13 | `evidence-tree-rainbird-style-v1.zh.md` |  |
 | S6 | `rule_set_digest` evaluate-time computation, attach API unchanged | `rule-expression-and-proof-attempt.zh.md` |  |
 
-## 7. Shipped Code Surface Inventory (populated during audit)
+## 7. Shipped Code Surface Inventory
 
-Brief summary of what each primary audit file actually exports + key shapes. Populated as audit proceeds; serves as shared reference for triage rows in §3 + §4.
+High-density summary of what each primary audit file actually exports + key shapes. Built from full reads (per §2.2 provenance protocol rule 2). Shared reference for §3 / §4 / §5 triage rows.
 
-### 7.1 `core/store/ledger.py`
-*(to populate)*
+### 7.1 `core/protocol/digests.py` (17 lines)
 
-### 7.2 `core/store/runtime.py`
-*(to populate)*
+Foundational hash helpers used everywhere identity is computed.
 
-### 7.3 `core/schema/schema_ir.py`
-*(to populate)*
+- `sha256_hex(data: bytes) -> str` — hex digest
+- `sha256_token(data: bytes) -> str` — `"sha256:<hex>"` token form
+- `b32_nopad_lower(data: bytes) -> str` — base32 lowercase no-padding, used by idref_v1 encoder
 
-### 7.4 `core/view/projector.py`
-*(to populate)*
+### 7.2 `core/protocol/idref_v1.py` (74 lines)
 
-### 7.5 `core/protocol/digests.py + idref_v1.py + tup_v1.py`
-*(to populate)*
+Canonical entity-ref encoding protocol. Produces opaque idref strings used throughout the SDK + ledger.
 
-### 7.6 `application/workspace_runtime.py`
-*(to populate)*
+- `IDREF_V1_PREFIX = b"factpy\x00idref_v1\x00"` — magic prefix
+- `ENTITY_TYPE_RE = r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$"` — entity_type validation
+- `canonical_bytes_idref_v1(entity_type, identity_fields: list[(name, type_domain, value)]) -> bytes` — byte-level canonical encoder
+- `encode_idref_v1(entity_type, identity_fields) -> str` — returns `"idref_v1:<entity_type>:<base32-sha256>"`
+- Uses tup_v1 `encode_value_bytes` + `TAG_CODE_BY_NAME` for per-tag value bytes
 
-### 7.7 `application/entity_view.py + query_runtime.py + protocol/entity_read.py`
-*(to populate)*
+### 7.3 `core/protocol/tup_v1.py` (211 lines)
 
-### 7.8 `sdk/store.py` — views / read / evaluate / save / load
-*(to populate)*
+Canonical tuple-encoding protocol — **the authoritative shipped canonicalization for fact terms**.
 
-### 7.9 `sdk/facade.py + sdk/query_runtime.py`
-*(to populate)*
+- `TUP_V1_PREFIX = b"factpy\x00tup_v1\x00"` — magic prefix
+- **`CANONICAL_TAGS = ("entity_ref", "string", "int", "float64", "bool", "bytes", "time", "uuid")`** — 8 tags (the authoritative set; schema_ir.py mirrors)
+- `TAG_CODE_BY_NAME` — per-tag byte codes 0x01-0x08
+- Per-tag strict encoders (byte form for hashing):
+  - `entity_ref` — UTF-8 bytes;must start with `idref_v1:`
+  - `string` — UTF-8 bytes
+  - `int` — int64 range-checked;canonical ASCII text repr
+  - `float64` — 8-byte big-endian IEEE 754;rejects non-finite;normalizes -0.0 → 0.0
+  - `bool` — 1-byte 0x00 / 0x01
+  - `bytes` — raw bytes(accepts bytes/bytearray/memoryview)
+  - `time` — int64 epoch nanos,8-byte BE signed
+  - `uuid` — 16-byte from canonical lowercase 8-4-4-4-12 hex
+- `canonical_bytes_tup_v1(rest_terms: list[(tag, value)]) -> bytes` — byte encoder for fact tuples
+- `claim_args_from_rest_terms(rest_terms) -> list[(idx, val_atom, tag)]` — SQLite storage form (different encoding from hash form):
+  - `entity_ref` / `string` → UTF-8 str
+  - `int` → int
+  - `float64` → `"0x<16hex>"` string(canonical bit form)
+  - `bool` → bool
+  - `bytes` → **urlsafe base64 nopad str**(different from canonical_meta `_to_jsonable` envelope)
+  - `time` → int (epoch nanos)
+  - `uuid` → canonical 8-4-4-4-12 str
+
+### 7.4 `core/schema/schema_ir.py` (229 lines)
+
+Schema IR validation + canonical schema digest.
+
+- `CANONICAL_TAGS = {"entity_ref", "string", "int", "float64", "bool", "bytes", "time", "uuid"}` — mirror of tup_v1 CANONICAL_TAGS (set form)
+- `REQUIRED_TOP_LEVEL_KEYS = ("schema_ir_version", "entities", "predicates", "projection", "protocol_version", "generated_at")`
+- `REQUIRED_PROTOCOL_KEYS = ("idref_v1", "tup_v1", "export_v1")`
+- `load_schema_ir(path) -> dict` — file read + validate
+- `ensure_schema_ir(schema_ir) -> dict` — full schema validator
+- `canonicalize_schema_ir_jcs(schema_ir) -> bytes` — JCS-style canonical bytes(sort_keys + compact separators + ensure_ascii=False);rejects floats anywhere in payload
+- **`schema_digest(schema_ir) -> str`** — returns `sha256:<hex>` token form
+- Internal validators per top-level key (entities / predicates / projection / protocol_version)
+
+### 7.5 `core/store/ledger.py` (1164 lines)
+
+The shipped persistence layer. SQLite-backed + write-through in-memory indexes.
+
+**5 frozen dataclasses (storage row shapes)**:
+- `Claim(asrt_id, pred_id, e_ref, rest_terms: list[(tag, value)])` — **the fact assertion shape**
+- `ClaimArg(asrt_id, idx, val_atom, tag)` — per-position decomposition for indexing
+- `MetaRow(asrt_id, key, kind, value)` — per-key meta decomposition
+- `AnnotationRow(asrt_id, namespace, category, key, kind, value, origin, derivation)` — extended annotations
+- `Revokes(revoker_asrt_id, revoked_asrt_id)` — revocation pair
+- Plus `Idempotency(ingest_key, on_conflict)` + `AppendResult(asrt_id, written)`
+
+**Constants**:
+- `META_KINDS = {"str", "int", "float", "bool", "time", "json"}` — 6 kinds (DIFFERENT from tup_v1 CANONICAL_TAGS;`bytes` is NOT a meta kind — encoded as "json" via `_to_jsonable` envelope)
+- `ANNOTATION_ORIGINS = {"observed", "derived"}`
+- `ANNOTATION_CATEGORIES = {"source", "semantic", "derived", "operational"}`
+- `_JSON_BYTES_KEY = "__factpy_bytes_b64__"` — envelope sentinel
+
+**SQLite tables (6 + 1)**:
+- `claims(seq AUTOINCREMENT PK, asrt_id UNIQUE, pred_id, e_ref, rest_terms TEXT)` — rest_terms stored as JSON list of [tag, value]
+- `claim_args(id AUTOINCREMENT PK, asrt_id, idx, val_atom TEXT, tag)` — per-position decomposition (redundant with claims.rest_terms;optimized for query)
+- `meta_rows(id AUTOINCREMENT PK, asrt_id, key, kind, value TEXT)` — per-key meta
+- `revokes(id AUTOINCREMENT PK, revoker_asrt_id, revoked_asrt_id)`
+- `ingest_keys(ingest_key PK, asrt_id, kind)` — idempotency dedupe
+- `ledger_meta(key PK, value TEXT)` — **lifecycle metadata** (e.g., shipped `schema_digest` lives here)
+- `annotation_rows(id AUTOINCREMENT PK, asrt_id, namespace, category, key, kind, value, origin, derivation, UNIQUE(asrt_id, ns, cat, key))`
+
+**Persistence helpers**:
+- `_to_jsonable(value)` (line 204) — bytes → `{__factpy_bytes_b64__: <base64>}` envelope;tuple → list;dict → dict;passthrough scalars
+- `_from_jsonable(value)` — inverse
+- `_enc / _dec` — JSON encode/decode wrappers using `_to_jsonable`
+- `_enc_rest_terms / _dec_rest_terms` — list of [tag, jsonable(value)]
+
+**Ledger class API (main entry: `Ledger(path=":memory:")`)**:
+- `append_assertion(claim, claim_args, meta_rows, annotation_rows, idempotency, asrt_id)` — main write;**`asrt_id` parameter optional → falls back to `_new_asrt_id() = uuid.uuid4().hex`** (line 1066 — NOT content-addressed)
+- `append_revocation(revokes, meta_rows, idempotency, revoker_asrt_id)` — revoke another asrt
+- 4 deprecated methods (`append_claim` / `append_claim_args` / `append_meta` / `append_revokes`) — kept for compatibility
+- `append_annotations(rows)` — separate annotation path
+- `get_claim` / `find_claims(pred_id, e_ref)` / `find_claim_args` / `find_meta` / `find_annotations` / `has_active_revocation` / `find_revoker`
+- Properties: `claims` / `claim_args` / `meta_rows` / `annotation_rows` / `revokes`
+- **`get_ledger_meta(key) / set_ledger_meta(key, value) / replace_ledger_meta(key, value)`** — for `ledger_meta` table (this is where shipped stashes per-ledger lifecycle metadata,including `schema_digest`)
+- Connection management: per-thread for file ledgers (WAL mode), single conn for `:memory:`
+- `_write_session()` context manager — `BEGIN IMMEDIATE` + post-commit hooks
+
+**Validation functions (lines 1074-1156)**:
+- `_validate_claim_identity`: asrt_id (optional) / pred_id / e_ref must be non-empty str
+- `_validate_meta_rows`: kind in META_KINDS (6), key non-empty, asrt_id non-empty
+- `_validate_annotation_rows`: origin in ANNOTATION_ORIGINS, category in ANNOTATION_CATEGORIES, kind in META_KINDS, derivation rules
+- `_normalize_term(term)`: validates (tag: str, value) tuple — **does NOT validate tag is in CANONICAL_TAGS** (compatibility laxness)
+
+### 7.6 `core/store/runtime.py` (436 lines)
+
+`Store` is the runtime hub. Owns `(schema_ir, ledger)` + per-process engine evaluator registry.
+
+- `register_engine_evaluator(evaluator, name)` / `get_engine_evaluator(name)` — global registry per-engine (`"souffle"`, `"problog"`, `"pyreason"`, `"native"`)
+- `Store(schema_ir, ledger, engine_evaluator, artifact_sidecar)`:
+  - owns `schema_ir`, `ledger`
+  - 6 in-memory indexes: `_support_artifacts / _provenance_envelopes / _candidate_support_index / _candidate_support_kind_index / _candidate_confidence_kind_index / _candidate_pred_index / _rule_trace_artifacts`
+  - `_engine_overrides: {mode: evaluator_fn}` — per-Store override
+- `evaluate(derivation_id, version, target_pred_id, head_vars, where, mode="native", head, registry, confidence_kind_resolver, engine_ext, engine_options, semantics_profile)` — delegates to `evaluate_store`
+- `evaluate_engine(...)` — internal adapter entry (dispatches via `_engine_overrides` → global registry)
+- `accept / accept_many` — candidate acceptance into ledger
+- `explain_support(support_digest)` / `explain_provenance(support_digest)` / `explain_rule_trace(rule_run_id)` — artifact-based explain readback
+- `explain_fact(pred_id, e_ref, *val_atoms)` / `conflicts(pred_id, e_ref)` / `resolve_mapping(pred_id, policy_mode)`
+- **No `db_id` / `tx_id` / `view_digest` concept** — Store is process-scoped, not durable identity
+- **`evaluate()` signature has no `view=` parameter** — view scope is not a Store-level concept
+- Uses `canonical_bytes_tup_v1` + `sha256_token` for `tup_digest` in `evaluate_dummy` (deprecated)
+- Support digest validation: `assert support_digest.startswith("sha256:")` throughout
+
+### 7.7 `core/view/projector.py` (200 lines)
+
+**Name-collision warning**: this is **engine fact projection**, NOT design doc's `SubsetView`.
+
+- `ViewProjectionError` exception
+- `ProjectorAudit` dataclass — projection statistics (predicate_count / active_claim_count / selected_claim_count / dropped_by_policy_count)
+- `_project_view_facts_impl(ledger, schema_ir, audit)` — main projection helper
+- `build_args_for_claim(ledger, claim) -> tuple` — **constructs `(e_ref, *val_atoms)` flat tuple** from `Claim.e_ref` + sorted `ClaimArg.val_atom` rows. **This IS the "fact_tuple" shape — just constructed at projection time, not stored as a single shape.**
+- `project_view_facts(ledger, schema_ir) -> dict[pred_id, list[tuple]]` — main entry;cardinality-aware:
+  - single — uses `compute_chosen_for_predicate` (policy chosen value)
+  - multi — uses all active claims
+- `project_view_facts_with_witness(ledger, schema_ir) -> dict[pred_id, list[ProjectedFact]]` — projection with asrt_id witness (uses `ProjectedFact(asrt_id, fact_tuple)` from `_support.py`)
+- `project_view_facts_with_audit(ledger, schema_ir) -> tuple[..., ProjectorAudit]` — with audit stats
+- Active filter: `is_active(ledger, claim.asrt_id)` from `core.policy.active`
+
+### 7.8 `application/workspace_runtime.py` (232 lines)
+
+The shipped workspace persistence layer — Blueprint 3 `level_4` layout.
+
+**Constants**:
+- `WORKSPACE_MANIFEST_NAME = "factgraph_workspace.json"`
+- `WORKSPACE_VERSION = "1"` (string)
+- `WORKSPACE_SAVE_SCOPE = "level_4"`
+- `WORKSPACE_LEDGER = "ledger.db"`
+- `WORKSPACE_REGISTRY = "registry/"`
+
+**Current shipped layout** (top-level under workspace root):
+```
+<workspace>/
+├── factgraph_workspace.json        # 6-field manifest
+├── ledger.db                       # SQLite
+└── registry/                       # FileAuthoringRegistry (rules + inferences + schema)
+```
+
+**API**:
+- `WorkspacePaths(root, manifest, ledger, registry)` — frozen dataclass
+- `resolve_workspace_paths(path) -> WorkspacePaths`
+- `workspace_manifest_payload(schema_digest, created_at, last_saved_at) -> dict` — 6-field manifest:`{factgraph_workspace_version, save_scope, schema_digest, components.{ledger, registry}, created_at, last_saved_at}`
+- `save_workspace_manifest(path, schema_digest) -> dict`
+- `validate_workspace_manifest(path, schema_digest=None) -> dict` — checks all 6 fields strictly
+- `copy_ledger_to_workspace(ledger, target_path)` — SQLite backup (in-memory checkpoint OR `.backup()` for file)
+- `sync_registry_to_workspace(source_registry, target_registry, schema_ir)` — copytree
+- `save_workspace(path, schema_digest, ledger, source_registry, schema_ir) -> WorkspacePaths` — main save entry
+- `load_workspace(path, schema_digest) -> WorkspacePaths` — main load entry;requires both ledger + registry to exist
+- `_load_manifest / _checkpoint_ledger / _now_iso` — helpers
+
+### 7.9 `application/entity_view.py` (569 lines)
+
+Application-layer entity hydration.
+
+- `EntityViewError(ValueError)` — typed error with code/path/details DTO conversion
+- `hydrate_entity(e_ref, store, index, include_assertions, include_history) -> EntitySnapshotDTO` — single entity
+- `hydrate_entities(e_refs, store, index, ...) -> list[EntitySnapshotDTO]` — batch
+- **`execute_read_request(request, store, index) -> EntityReadResponse`** — main read entry (mode="get" / "find")
+- Uses `project_view_facts(store.ledger, store.schema_ir)` to materialize fact universe
+- `at_time_ns` + `version` request params → **rejected** at execute time:`TEMPORAL_READ_NOT_IMPLEMENTED` / `VERSIONED_READ_NOT_IMPLEMENTED` (line 524-537)
+- Internal: `_hydrate_entity_snapshot` / `_recover_entity_ref` / `_recover_identity_from_predicates` / `_rows_to_field_value` / `_hydrate_value` / `_build_field_assertions` / `_assertion_record_from_claim` / `_entity_visible` / `_enumerate_entity_refs` / `_snapshot_matches_filters` / `_validate_filter_paths` (rejects identity-field filters)
+- **No `view=` parameter at this layer**
+
+### 7.10 `application/query_runtime.py` (241 lines)
+
+Application-layer query executor.
+
+- `QueryRuntimeError(ValueError)` — typed error
+- `execute_query(request, store, index, registry) -> QueryRuntimeResponse` — main entry
+- Uses `project_view_facts(store.ledger, store.schema_ir)` + `evaluate_native_where(view_facts, where_ir, registry)` from `core.rules.ruleref_substrate`
+- 2 return slot kinds:`"entity"` (hydrates EntitySnapshotDTO via `hydrate_entity`) / `"scalar"` (value passthrough); other kinds → `QUERY_UNSUPPORTED_SLOT`
+- Policy handlers: `on_missing` / `on_type_mismatch` ∈ `{"error", "skip", "null"}`
+- **No `view=` parameter**
+
+### 7.11 `application/protocol/entity_read.py` (202 lines)
+
+Application protocol DTOs (frozen dataclasses with __post_init__ validation).
+
+- `FieldValue: TypeAlias = JSONValue | EntityRef`
+- `FieldValueDTO(field, value_kind ∈ {"scalar", "entity_ref"}, cardinality ∈ {"single", "multi"}, value)`
+- **`AssertionRecordDTO(assertion_id, value, active=True, meta={})`** — 4 fields (note: `assertion_id` not `asrt_id`)
+- `FieldAssertionsDTO(field, active, history)`
+- `EntitySnapshotDTO(ref, fields, assertions, identity_available=True, warnings=())`
+- `EntityReadRequest(mode ∈ {"get", "find"}, entity_type, selector, field_filters, limit, include_assertions=False, include_history=False, at_time_ns, version)` — `at_time_ns` and `version` are mutually exclusive but BOTH rejected at execute time
+- `EntityReadResponse(mode, entity_type, items, errors, warnings)`
+
+### 7.12 `sdk/store.py` (3432 lines) — `FactGraph = SDKStore`
+
+The user-facing SDK class. Many namespace managers + capability methods. **All `view=` parameters explicitly rejected at SDK boundary**.
+
+**Key shapes**:
+- **`FrozenAssertionView(name: str, asrt_ids: frozenset[str])`** (line 88-92) — **only 2 fields**. NOT the 6-anchor design shape (`name / db_id / base_tx_id / schema_digest / asrt_ids / view_digest`).
+- 11 namespace managers (all read-only via `FrozenSnapshotError` on `__setattr__`):
+  - `_SDKViewsManager`(line 101) — `create / update / delete / get / list`;views stored in dict, **NOT persisted** to workspace (line 132)
+  - `_SDKAssertionsManager`(line 182) — graph-scoped assertion access
+  - `_SDKSchemaManager` / `_SDKReadManager` / `_SDKWriteManager` / `_SDKRulesManager` / `_SDKInferencesManager` / `_SDKEvalManager` / `_SDKWhatIfManager` (+ 2 sub-managers `_SDKWhatIfFactOverlayManager` / `_SDKWhatIfRuleManager`) / `_SDKAuditManager` / `_SDKPackageManager`
+
+**Constructor / persistence (lines 722-938)**:
+- `SDKStore.__init__(classes, store, schema_ir, artifact_store_root, registry_root, registry, workspace_path, default_row_format)`
+- `SDKStore.create(schema_classes, ledger, ledger_path, path, artifact_store_root, registry_root, registry, default_row_format)` — main user constructor
+- `SDKStore.from_schema_classes(classes, ledger, ledger_path, artifact_store_root, registry_root, registry, default_row_format)` — lower-level
+- **`SDKStore.load(path, schema_classes, default_row_format)`**(line 860-895) — validates registry schema digest match (current shipped pattern uses registry digest validation, not pure file)
+- `SDKStore.save(path)`(line 2063-2090) — calls `app_save_workspace(workspace_path, schema_digest, ledger, source_registry, schema_ir)`;rebinds `_authoring_registry` to workspace registry path after save (line 2089)
+
+**Public reads / writes**:
+- `get(entity_cls, **identity_kwargs)` — delegates to `sdk_get` → `execute_read_request`
+- **`find(entity_cls, *, policy, limit, **filter_kwargs)`**(line 1039-1057) — **rejects `view=`** (line 1049-1050:`"view= is not supported by fg.read.find()"`);delegates to `sdk_find`
+- `edit(entity_cls, **identity_kwargs)` — delegates to `sdk_edit`
+- `ref(entity_cls, **identity_values) -> str` — managed e_ref creation (caches identity in `_identity_values_by_e_ref`)
+- `set(field, e_ref, value, meta)` / `add(field, e_ref, value, meta)` — single-cardinality set / multi-cardinality append;both route through `_apply_field_mutation` → `plan_write_command` + `apply_write_plan` (application layer)
+- `retract(asrt_id, meta) -> str | None` — delegates to `core.evidence.write_protocol.retract_by_asrt`
+
+**Capability shells (rule-overlay / fact-overlay / proof-frame / why-not / diff)**:
+- `check / diagnose / why_not` — direct on `_what_if`
+- `check_fact_overlay / recheck_proof_frame` — G2
+- `check_rule_disable / check_rule_literal_replace / check_rule_add_condition` — G3
+- `diff_proof_frames` — G5 (in `audit` namespace per §5.2.1 placement)
+
+**Run / evaluate / accept**:
+- **`run(obj, row_format, policy, view, return_display_meta, registry)`**(line 1911-1938) — **rejects `view=`** (line 1923-1924);dispatch by obj type: Query / Inference (rejected — use evaluate) / Rule
+- **`evaluate(*args, **kwargs)`**(line 2240-2307) — **rejects `view=`**(line 2241-2244);rejects `semantics_profile=` in SDK (use `semantics=`);rejects `mode=` in E (use `engine=`);rejects `temporal_view`;handles SDK Inference / authoring derivation dict / compiled plan dict
+- `accept(candidate_set, **kwargs) -> AcceptResult` / `accept_many(requests, mode, idempotent_duplicate_ok)`
+
+**Schema lifecycle**:
+- `add_schema_classes(*schema_class_args, schema_classes) -> SchemaAddResult` — additive schema mutation;updates ledger_meta `schema_digest` + registry schema entry
+
+**Rule / Inference persistence**:
+- `save_rule(rule) -> SavedRuleRef` / `load_rule(rule, version) -> Rule` / `list_rules() -> list[SavedRuleRef]` / `get_rule(rule_id) -> SavedRuleRef`
+- `save_inference / load_inference / list_inferences / get_inference`
+- All require `_authoring_registry`(`_require_authoring_registry()` raises otherwise)
+
+**Internal helpers**:
+- `_compile_rule_input` / `_compile_derivation_input` — author payload normalization
+- `_index_schema` / `_refresh_schema_state` / `_preflight_schema_digest_anchors` / `_update_schema_digest_anchors` — schema digest sync across ledger + registry
+- `_resolve_public_engine / _resolve_public_semantics / _resolve_public_engine_and_semantics` — engine + semantics dispatch
+- `_coerce_sdk_value_to_tag(tag, value)` — strict per-tag value coercion (entity_ref / string / int / bool / bytes / time / uuid / float64)
+- `_default_uuid4_for_tag(tag)` — uuid4 factory for uuid / string identity defaults
+- `_normalize_view_name / _build_view_entry / _normalize_asrt_ids / _normalize_asrt_ids_from_records` — views helpers
+- `_assertion_record_by_id(sdk, asrt_id)` — SDK AssertionRecord lookup
+- `_schema_pred_by_pred_id / _schema_pred_for_field / _raise_if_superseded_entity_class / _active_entity_class_for_type`
+
+**Public type alias**: `FactGraph = SDKStore`(line 3432)
+
+### 7.13 `sdk/facade.py` (1150 lines)
+
+SDK-facing entity / assertion / field-editor wrappers.
+
+**Key shapes**:
+- `AssertionMeta(source, trace_id, ingested_at, approved_by, note, derived_rule_id, derived_rule_version, candidate_id, candidate_key, candidate_kind, raw)` — typed meta wrapper
+- **`AssertionRecord(asrt_id, value, is_active, entity_type, field_name, pred_id, e_ref, meta: AssertionMeta)`** — **8 fields**;**SDK-level shape**(distinct from `Claim` / `AssertionRecordDTO`)
+- `AssertionRecordSet(tuple)` — filter methods: `where(...) / at(t) / version(v) / by_id(asrt_id) / one() / all() / first()`
+- `FieldAssertions(field_name, cardinality, active_records, history_records)` — `.active() / .all() / .at(t) / .version(v)`
+- `AssertionNamespace(field_map, entity_type)` — `.field(...) / .active() / .all() / .by_id / .by_ids`;`FrozenSnapshotError` on __setattr__
+- `EntitySnapshot(ref, entity_type, _field_values, _identity_values, identity_available, assertions: AssertionNamespace)` — `FrozenSnapshotError` on __setattr__
+- `FieldEditor / IdentityEditor / EntityEditor` — write-side editor wrappers
+
+**Top-level functions** (used by SDKStore):
+- `sdk_get(sdk, entity_cls, **identity_kwargs) -> EntitySnapshot | None` — `execute_read_request` with mode="get"
+- `sdk_find(sdk, entity_cls, limit, **filter_kwargs) -> list[EntitySnapshot]`
+- `sdk_edit(sdk, entity_cls, **identity_kwargs) -> EntityEditor`
+
+**DTO ↔ SDK converters**:
+- `_dto_to_sdk_snapshot(dto, sdk, entity_cls, known_identity_values) -> EntitySnapshot`
+- `_dto_assertions_to_sdk(dto, sdk, entity_cls, e_ref) -> FieldAssertions`
+- `_dto_assertion_record_to_sdk(dto, sdk, entity_type, field_name, pred_id, e_ref) -> AssertionRecord`
+- `_assertion_record_from_claim(sdk, claim, schema_pred) -> AssertionRecord` (line 988-1003) — bridges shipped `Claim` → SDK `AssertionRecord`
+
+**Time / version helpers** (SDK-level, NOT supported in application layer):
+- `_validate_iso8601_text / _is_valid_iso8601_text / _validate_version_selector`
+- `_is_assertion_visible_at / _read_assertion_time_meta / _read_assertion_version` — uses `meta.raw["valid_from"]` / `meta.raw["valid_to"]` / `meta.raw["version"]`
+
+### 7.14 `sdk/query_runtime.py` (297 lines)
+
+SDK-level query plan executor.
+
+- `execute_query_plan(sdk, plan, registry) -> list[Any]` — main entry
+- Lowers via `core.rules.rule_ast.lower_query_rule_ast_to_ir`
+- Delegates to `application.query_runtime.execute_query`
+- Maps application `QueryRuntimeResponse.rows` → SDK row format (dict / instance mode);uses `_dto_to_sdk_snapshot` from facade
+- Internal: `_build_app_slot` / `_parse_field_path` / `_primary_entity_type` / `_sdk_error_from_app_dto` / `_sdk_path_from_app_path` / `_map_app_row_to_sdk_row` / `_ensure_query_field_assertions` / `_dedup_rows` / `_rows_to_instances` / `_row_dedup_key` / `_to_hashable` / `_entity_cls_for_type` / `_entity_field_specs_for_type`
+- **No `view=` parameter**
+
+### 7.15 `core/store/_support.py` (424 lines)
+
+Support/provenance DTOs and digest helpers used by evaluate/explain support artifacts.
+
+- `ProjectedFact(asrt_id, fact_tuple)` — witness row shape returned by `project_view_facts_with_witness(...)`; validates non-empty `asrt_id` + tuple `fact_tuple`
+- `PredWitness(pred_atom_key, asrt_ids)` — sorted unique assertion ids for a predicate atom
+- `NonFactStep(step_key, kind, status, details)` — non-fact support steps
+- `RuleRefEdge(...)` — rule-ref edge support with `child_support_digest` or unresolved reason
+- `SupportArtifact(kind, root_result_kind, binding_items, pred_witnesses, non_fact_steps, rule_refs, rule_ref_edges)` — canonical support artifact
+- `BindingSupportCapture(binding_items, support_digest, support_kind)` — binding/digest capture
+- `ProvenanceEnvelope(candidate_id, engine, payload_type, payload)` — engine provenance wrapper
+- `support_artifact_to_dict/from_dict`, `support_artifact_bytes`, `compute_support_digest`
+- `provenance_envelope_to_dict/from_dict`, `provenance_envelope_bytes`, `compute_provenance_digest`
+- Bytes encoding here is **hex envelope**: `_to_jsonable(bytes) -> {"__bytes_hex__": value.hex()}`. This is distinct from ledger meta bytes envelope and tup_v1 raw/urlsafe bytes paths.
+
+### 7.16 `core/policy/active.py` (11 lines)
+
+Tiny policy helper defining shipped "active assertion" semantics.
+
+- `is_active(ledger, asrt_id) -> bool` — validates `Ledger` + non-empty `asrt_id`, then returns `not ledger.has_active_revocation(asrt_id)`
+- Active universe is therefore revocation-aware. It is not a database snapshot/version concept.
+
+### 7.17 `core/evidence/write_protocol.py` (526 lines)
+
+Shipped write protocol used by SDK `set` / `add` / `retract`. Despite module name `core.evidence`, this is the current application write substrate.
+
+- `new_assertion_id() -> str` — `uuid4().hex`; another shipped non-content-addressed assertion-id generator
+- `now_epoch_nanos() -> int`
+- `set_field(ledger, pred_id, e_ref, rest_terms, meta) -> str` — validates inputs, computes an `ingest_key`, then writes a new assertion through `Ledger.append_assertion(...)`
+- `add_field(...) -> str` — alias to `set_field`
+- `retract_by_asrt(ledger, revoked_asrt_id, meta) -> str | None` — append-only retraction path. If a revoker already exists, returns it; otherwise creates a revocation row via `Ledger.append_revocation(...)`
+- `replace_field(...) -> tuple[str | None, str]` — retract old active matching claim, then write new assertion
+- `_validate_write_inputs(...)` — validates `pred_id`, `e_ref`, and `rest_terms` using `canonical_bytes_tup_v1(rest_terms)`, so fact-term validation is already based on shipped tup_v1
+- `_compute_ingest_key(...) -> sha256:<hex>` — content-addressed idempotency key over `"ingest_key_v2"`, pred_id, e_ref, rest_terms, source material, and temporal material. **This is not `asrt_id`**.
+- `_KEY_KIND_MAP` + `_infer_meta_kind` define user/system meta kind handling; user meta values are limited to str/int/float/bool/time/json-like paths depending on key/value
+
+---
+
+### Cross-cutting findings
+
+**1. Four `AssertionRecord`-like shapes coexist**:
+| Layer | File | Shape | Fields |
+|---|---|---|---|
+| Storage row | ledger.py | `Claim` | 4: asrt_id / pred_id / e_ref / rest_terms |
+| Application DTO | application/protocol/entity_read.py | `AssertionRecordDTO` | 4: assertion_id / value / active / meta |
+| SDK ergonomic | sdk/facade.py | `AssertionRecord` | 8: asrt_id / value / is_active / entity_type / field_name / pred_id / e_ref / meta |
+| Design doc §5.4 | (design doc only) | `AssertionRecord` | 7: asrt_id / pred_id / fact_tuple / schema_digest / assertion_digest / tx_id / meta |
+
+Field naming inconsistent: `asrt_id` vs `assertion_id`, `active` vs `is_active`.
+
+**2. Four bytes encodings coexist**:
+| Encoding | Used by | Form |
+|---|---|---|
+| Raw bytes (for hashing) | `tup_v1.encode_value_bytes(tag="bytes", v)` | passthrough bytes |
+| Urlsafe base64 nopad | `tup_v1._val_atom_for_claim_arg(tag="bytes", v)` (SQLite storage) | str |
+| Envelope `{__factpy_bytes_b64__: <std-base64>}` | `ledger._to_jsonable` (meta_rows storage) | dict |
+| Envelope `{__bytes_hex__: <hex>}` | `_support._to_jsonable` (support/provenance artifacts) | dict |
+
+**3. `view=` rejected at 3 SDK boundaries**:
+- `find()` line 1049 — `view= is not supported by fg.read.find()`
+- `run()` line 1923 — `view= is not supported by fg.run()`
+- `evaluate()` line 2241 — `evaluate() does not accept view=`
+
+Design doc §12 wants `view=` supported at these sites. This is a (c) shape conflict at API surface.
+
+**4. "view" name collision**:
+- `core/view/projector.py` `view` = engine fact projection (`project_view_facts`)
+- `sdk/store.py` `FrozenAssertionView` + `_SDKViewsManager` = named asrt_id subsets
+- Design `SubsetView` / `FrozenAssertionView` = 6-field anchored view with view_digest
+
+Three distinct meanings of "view" in shipped + design.
+
+**5. `asrt_id` generation is uuid-based, not content-addressed**:
+- `_new_asrt_id() = uuid.uuid4().hex` (ledger.py line 1066) — fallback when caller doesn't provide
+- No content-addressed `asrt_id` formula shipped
+- No `db_id` / `tx_id` concept
+
+**6. `schema_digest` lives in `ledger_meta(key="schema_digest", value=...)` SQLite table**:
+- Shipped pattern uses `ledger.set_ledger_meta / replace_ledger_meta` for schema digest persistence
+- Workspace manifest also carries schema_digest as a 2nd anchor (double-write)
+- Registry also carries schema digest (3rd anchor) — `_preflight_schema_digest_anchors` checks all 3 match before schema mutation
+
+**7. `FrozenAssertionView` shipped vs design — 2 fields vs 6 fields**:
+- Shipped: `(name, asrt_ids)`
+- Design: `(name, db_id, base_tx_id, schema_digest, asrt_ids, view_digest)`
+- Major shape conflict;design adds 4 identity anchors absent in shipped
 
 ## 8. Open Questions for User
 
