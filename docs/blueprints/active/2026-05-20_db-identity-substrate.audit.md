@@ -10,6 +10,7 @@
 | 2026-05-20 | draft | Review polish applied | Added meta canonicalization boundary, opaque `path=` boundary, `commit_assertions` atomicity deferral, and engine projection non-identity invariant. |
 | 2026-05-20 | draft | Preflight amendment applied | Consumed preflight findings PF-1/PF-2/PF-3 before any `scoped` decision. |
 | 2026-05-20 | scoped | Preflight amendment and self-check passed | PF-1/PF-2/PF-3 covered;no remaining preflight blocker. |
+| 2026-05-20 | implemented | DB identity substrate implemented | Landed in `6e4642d7`;Outcome / Deviations records modules, tests, Q alignment, and known implementation choices. |
 
 ## Decision Notes
 
@@ -76,3 +77,18 @@ Amendment:
 - add `src/factgraph/core/store/_support.py` and `src/factgraph/core/view/projector.py` to the related module surface;
 - state that `ProjectedFact.fact_tuple` is not the canonical tagged identity `fact_tuple`;
 - add acceptance that identity code must not import `ProjectedFact` or use `build_args_for_claim(...)`.
+
+### 2026-05-20 — Implementation closure
+
+Implementation commit `6e4642d7` landed the scoped slice without expanding into workspace, view, attach, registry, evidence, or rule-expression surfaces.
+
+Verification summary:
+
+- `PYTHONPATH=src python -m unittest tests.test_db_identity_substrate` passed 7/7 tests.
+- `python -m ruff check src/factgraph/core/store/database.py tests/test_db_identity_substrate.py src/factgraph/core/store/__init__.py` passed.
+- scope grep over implementation and tests found no `evaluate(view=...)`, `read.find(view=...)`, `EvidenceGraph.metadata`, `rule_set_digest`, `ProjectedFact`, or `build_args_for_claim(...)` usage.
+
+Known implementation choices are recorded in blueprint §10:
+
+- `commit_assertions(...)` is not yet a single all-or-nothing transaction across multiple appended assertions;
+- `Database.__init__(...)` remains public, with `head()` enforcing required metadata.

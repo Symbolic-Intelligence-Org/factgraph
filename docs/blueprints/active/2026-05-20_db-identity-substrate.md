@@ -1,6 +1,6 @@
 # Task Blueprint: DB Identity Substrate
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-20
 - Last Updated: 2026-05-20
 - Related Modules:
@@ -257,9 +257,46 @@ This section is intentionally a draft until implementation preflight completes. 
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+Implemented in `6e4642d7` on `v0.1-impl-db-identity-substrate-2026-05-20`.
 
-- final landed modules and public/internal boundaries;
-- any implementation deviations from Q1/Q3/Q7;
-- any compatibility paths left intentionally legacy;
-- archive / follow-up notes for workspace layout, view, attach, registry, or cross-doc redraft work.
+Landed modules:
+
+- `src/factgraph/core/store/database.py`
+  - `Database`
+  - `DatabaseValue`
+  - canonical durable `AssertionRecord`
+  - `AssertionInput`
+  - `MetaEntry`
+  - `canonical_bytes_dbtx_v1(...)`
+  - `canonical_bytes_dbdata_v1(...)`
+  - `canonical_bytes_assertion_v1(...)`
+- `src/factgraph/core/store/__init__.py` exports for the Database identity substrate.
+- `src/factgraph/core/store/docs/README.md` and `src/factgraph/core/docs/README.md` docs updates.
+- `tests/test_db_identity_substrate.py` focused tests.
+
+Q alignment:
+
+- Q1 honored: `Database` is a new boundary above `Ledger`;`Ledger` remains the storage / compatibility substrate.
+- Q3 honored: `factpy\0dbtx_v1\0`, `factpy\0dbdata_v1\0`, and `factpy\0assertion_v1\0` byte protocols derive `tx_id`, `data_digest`, `assertion_digest`, and `asrt_id`.
+- Q5 honored: no-view `DatabaseValue.data_digest` uses the active-only assertion universe.
+- Q7 honored: canonical durable `AssertionRecord` is the 7-field Database-owned shape; shipped storage/application/SDK records remain separate projections.
+
+Compatibility paths left intentionally legacy:
+
+- shipped `Ledger.append_assertion(...)` / `append_revocation(...)`;
+- shipped SDK `set/add/retract`;
+- `write_protocol.set_field(...)`, `retract_by_asrt(...)`, and `replace_field(...)`;
+- UUID-style legacy assertion ids for non-Database write paths.
+
+Implementation choices / deviations to carry forward:
+
+- `Database.commit_assertions(...)` currently performs multiple `Ledger.append_assertion(...)` calls and updates `head_tx_id` / `head_data_digest` after those writes. It is not yet a single all-or-nothing transaction across all appended assertions; a mid-commit failure can leave partial ledger rows before the head metadata update. This is within the blueprint's explicit atomicity deferral but must be addressed or accepted in a later storage-hardening slice.
+- `Database.__init__(ledger=..., db_id=..., schema_digest=...)` is public and can be called directly. Incomplete direct construction still fails at `head()` when required ledger metadata is absent, but a future polish may make construction private or add an explicit `from_ledger(...)` factory.
+
+Out-of-scope follow-up remains:
+
+- workspace physical layout (`db/objects/`, `db/refs/`, manifest reshape);
+- view shape / persistence;
+- `FactGraph.attach(...)`;
+- registry / SavedRule migration;
+- cross-doc evidence / rule-expression seams.
