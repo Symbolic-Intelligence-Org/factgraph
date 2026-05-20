@@ -129,7 +129,7 @@ The target Database workspace subtree is:
 └── views/
 ```
 
-This slice owns `db/` and the manifest relationship to `db/`. It may create or reserve the `views/` component path only as a manifest/layout placeholder. Actual view object persistence belongs to the view slice.
+This slice owns `db/` and the manifest relationship to `db/`. It may create or reserve the `views/` component path only as a manifest/layout placeholder. Concrete creation of an empty `views/` directory versus reserving only the manifest entry is an implementation-preflight decision; actual view object persistence belongs to the view slice.
 
 ### 5.2 `db/meta.json`
 
@@ -180,6 +180,10 @@ Rules:
 - It is the only mutable Database ref file in this slice.
 - Updates must be atomic at the file-write level.
 - If implementation cannot guarantee atomic writes on a target filesystem, that limitation must be recorded before moving to `scoped`.
+
+Slice 2 implementation must adapt the DB identity substrate's `Database.create(...)`, `Database.open(...)`, `Database.head()`, and `Database.commit_assertions(...)` storage placement so the durable head pointer is read from and written to `db/refs/head.txt` rather than `ledger_meta`. The identity computation formulas from slice 1 (`canonical_bytes_dbtx_v1(...)`, `canonical_bytes_dbdata_v1(...)`, and `canonical_bytes_assertion_v1(...)`) are not changed.
+
+Cross-file atomicity across transaction object write, `head.txt` update, and `db/assertions.db` mutation is an implementation-preflight question. This blueprint locks per-file atomic head-write rules and records that the slice inherits the DB identity substrate's current `commit_assertions(...)` atomicity limitation until a storage-hardening decision changes it.
 
 ### 5.6 `db/assertions.db`
 
@@ -232,6 +236,7 @@ Compatibility expectations:
 
 - Existing `factgraph_workspace.json` + `ledger.db` + `registry/` workspaces remain loadable or fail with a clear migration error.
 - New-layout workspaces must not be mistaken for legacy level-4 workspaces.
+- `Database.create(...)` / `Database.open(...)` path semantics under the new layout must be decided before `scoped`: workspace root path, direct `db/` path, or another explicit storage-handle convention. The decision must preserve the DB identity substrate's opaque-path boundary while making new-layout save/load behavior unambiguous.
 - Migration must not silently discard `registry/rules/`, `registry/inferences/`, `registry_manifest.json`, or `authoring_apply_events.jsonl`.
 - If dual-format load/save is implemented, the format detection rules must be explicit and tested.
 
@@ -242,10 +247,13 @@ Compatibility expectations:
 - `db/assertions.db` is mutable index state and is not an identity source.
 - Compiled schema snapshots move to Database objects;authoring source remains user code.
 - Final manifest does not duplicate Database identity or snapshot identity.
+- DB identity formulas remain unchanged while head storage moves from `ledger_meta` to `db/refs/head.txt`.
+- New-layout `Database.create(...)` / `Database.open(...)` path semantics must be explicit before implementation starts.
 - `components.registry` removal is governed by Q6/Q8 phases;do not remove it early.
 - View persistence is out of scope except for reserving the target `views/` component concept.
 - No public `view=` APIs, evidence metadata carriers, or rule-expression carriers are introduced.
 - Legacy `Ledger` can remain the SQLite implementation substrate, but root-level `ledger.db` is not the target layout.
+- Cross-file atomicity across object/ref/index writes is a preflight decision, not assumed by the draft.
 - If implementation keeps same-path save idempotence or SQLite checkpoint behavior, those are compatibility details, not identity semantics.
 
 ## 7. Acceptance
@@ -259,6 +267,8 @@ Compatibility expectations:
 - [ ] Transaction objects persist under Database-owned tx object paths and carry the full `tx_id`.
 - [ ] Object writes are content-addressed and write-once;tests cover existing-object idempotence and conflict behavior.
 - [ ] `db/refs/head.txt` is updated atomically or the implementation records why atomicity is not yet satisfied.
+- [ ] `Database.head()` and successful `Database.commit_assertions(...)` use the new-layout head ref storage rather than ledger metadata for the durable head pointer.
+- [ ] New-layout `Database.create(...)` / `Database.open(...)` path semantics are explicit and tested.
 - [ ] `db/assertions.db` is treated as rebuildable mutable index, not identity source.
 - [ ] Final manifest target shape excludes top-level `db_id`, `schema_digest`, `data_digest`, and `tx_id`.
 - [ ] Manifest transition behavior around `components.registry` follows Q6 and does not hard-remove registry during Q8 Phase 1.

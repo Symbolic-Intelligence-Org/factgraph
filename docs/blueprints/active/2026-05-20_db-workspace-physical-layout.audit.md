@@ -61,3 +61,12 @@ This prevents the slice from accidentally turning workspace layout work into a p
 The design text uses semantic placeholders like `db/objects/tx/<tx_id>.json` and `db/objects/schema/<schema_digest>.json`.
 
 This draft does not yet choose whether physical filenames contain full tokens such as `tx:<hex>` / `sha256:<hex>` or filesystem-safe derived hex segments. It only locks that object content must carry the full token form. Filename encoding is a preflight decision before moving to `scoped`.
+
+### 2026-05-20 — Draft review amendments
+
+Review identified four precision updates before preflight:
+
+- slice 2 must adapt the DB identity substrate's `Database.create(...)`, `Database.open(...)`, `Database.head()`, and `Database.commit_assertions(...)` head storage from `ledger_meta` to `db/refs/head.txt` without changing identity formulas;
+- new-layout `Database.create(...)` / `Database.open(...)` path semantics must be explicit before `scoped` because the slice changes the storage layout beneath the previously opaque `path=` boundary;
+- concrete creation of an empty `views/` directory versus reserving only a manifest component is an implementation-preflight choice, while view object writes remain out of scope;
+- cross-file atomicity across transaction object, head ref, and SQLite index writes is an implementation-preflight question;the draft locks only per-file head write rules and carries forward the DB identity substrate's known commit atomicity limitation.
