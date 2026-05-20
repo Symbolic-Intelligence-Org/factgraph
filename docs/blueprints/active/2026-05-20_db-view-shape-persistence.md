@@ -11,6 +11,7 @@
 - Related Docs:
   - [docs/audit/2026-05-20_database-view-design-vs-shipped-runtime.md](../../audit/2026-05-20_database-view-design-vs-shipped-runtime.md)
   - [docs/audit/2026-05-20_post-q-db-view-synthesis.md](../../audit/2026-05-20_post-q-db-view-synthesis.md)
+  - [docs/audit/2026-05-20_db-view-persistence-preflight.md](../../audit/2026-05-20_db-view-persistence-preflight.md)
   - [docs/blueprints/archive/2026-05-20_db-identity-substrate.md](../archive/2026-05-20_db-identity-substrate.md)
   - [docs/blueprints/archive/2026-05-20_db-workspace-physical-layout.md](../archive/2026-05-20_db-workspace-physical-layout.md)
   - [docs/decisions/2026-05-20_q3-tx-identity-primitives-decision.md](../../decisions/2026-05-20_q3-tx-identity-primitives-decision.md)
@@ -111,7 +112,28 @@ This record is the Database-owned durable view object shape. The implementation 
 
 The shipped two-field SDK `FrozenAssertionView` may remain as a legacy compatibility adapter. If it remains, code and docs must clearly distinguish it from the canonical six-field durable view object.
 
-### 5.2 View digest
+### 5.2 Durable view creation API
+
+This slice uses a Database-owned substrate API:
+
+```python
+Database.create_view(
+    name: str,
+    asrt_ids: Iterable[str],
+    *,
+    base: DatabaseValue | None = None,
+) -> FrozenAssertionView
+```
+
+Rules:
+
+- `base=None` means the current `Database.head()`.
+- If `base` is supplied, this slice accepts only `base == Database.head()`.
+- Historical `base_tx_id` view creation is deferred until tx-chain replay or snapshot validation tooling exists.
+- This API is not a public read/evaluate `view=` surface. It only creates and persists a durable view object.
+- SDK `fg.views.create(...)` remains unchanged and continues to return the shipped two-field in-memory compatibility shape.
+
+### 5.3 View digest
 
 `view_digest` is `sha256:<hex>`.
 
@@ -123,7 +145,15 @@ Semantic inputs are locked by Q4:
 - `schema_digest`;
 - sorted `asrt_ids`.
 
-The exact byte protocol for combining these semantic inputs is a preflight decision. It must be deterministic, domain-separated, cross-process reproducible, and must not include:
+The canonical byte protocol is:
+
+- prefix: `VIEW_V1_PREFIX = b"factpy\x00subset_view_v1\x00"`
+- `db_id` as a length-delimited UTF-8 string
+- `base_tx_id` as a length-delimited UTF-8 string
+- `schema_digest` as a length-delimited UTF-8 string
+- sorted `asrt_ids`, encoded as a length-delimited sequence of length-delimited UTF-8 strings
+
+This follows Q3's shipped-stable `factpy\0` byte-prefix convention while preserving Q4's `subset-view-v1` semantic protocol family. It must not include:
 
 - `name`;
 - local path;
@@ -132,7 +162,7 @@ The exact byte protocol for combining these semantic inputs is a preflight decis
 - SQLite row ids;
 - current active/revoked state outside the frozen `asrt_ids` set.
 
-### 5.3 View object storage
+### 5.4 View object storage
 
 Persist immutable anonymous view objects under:
 
@@ -142,15 +172,19 @@ Persist immutable anonymous view objects under:
 
 Rules:
 
+- Durable view persistence applies only to new-layout workspace Databases.
+- Memory-mode and legacy-ledger-mode Database instances reject durable view persistence in this slice.
 - `<64hex>` is the raw lowercase hex suffix from `view_digest.removeprefix("sha256:")`.
 - Object content carries and validates the full `sha256:<hex>` `view_digest`.
 - Filename/content mismatch is an error.
 - Rewriting an existing view object with different content is an error.
 - Rewriting an existing view object with identical content is idempotent.
+- Object bytes use the same canonical JSON convention as Slice 2 tx/schema objects: sorted keys, compact separators, UTF-8 bytes, and no presentation newline.
+- Writes use the same write-once and temp-file plus `os.replace(...)` per-file atomic pattern as Slice 2 objects.
 
-The object content must include the six canonical DTO fields. Exact JSON field ordering and byte canonicalization are preflight decisions, but object bytes must be deterministic enough to support reliable validation.
+The object content must include the six canonical DTO fields.
 
-### 5.4 Base snapshot and membership validation
+### 5.5 Base snapshot and membership validation
 
 Creating a durable view object requires a base Database snapshot:
 
@@ -159,11 +193,14 @@ Creating a durable view object requires a base Database snapshot:
 - `schema_digest` comes from the selected base `DatabaseValue`.
 - `asrt_ids` are the requested frozen assertion ids.
 
-Validation must ensure every `asrt_id` belongs to the same Database base snapshot. The exact validation mechanism is a preflight item because the implemented workspace layout has transaction objects but does not yet claim full rebuild-from-objects tooling for arbitrary historical snapshots.
+Validation is current-head-only in this slice:
 
-This slice may choose to support only current-head view creation if historical snapshot membership cannot be validated without expanding scope.
+- `base` must be omitted or equal to `Database.head()`.
+- Every `asrt_id` must have a current ledger claim (`ledger.get_claim(asrt_id) is not None`).
+- Validation checks existence, not active status. Q5 allows revoked assertions to remain in a view scope.
+- Historical `base_tx_id` support is deferred until replay/snapshot tooling exists or a later attach/snapshot slice owns it.
 
-### 5.5 Scope-universe invariant
+### 5.6 Scope-universe invariant
 
 The persisted view object records a frozen scope universe. Per Q5:
 
@@ -173,7 +210,7 @@ The persisted view object records a frozen scope universe. Per Q5:
 
 This slice does not implement the public surfaces that consume the view. It only records the durable object semantics those later surfaces must consume.
 
-### 5.6 Compatibility with shipped SDK views
+### 5.7 Compatibility with shipped SDK views
 
 The shipped `_SDKViewsManager` remains in-memory and name-based during this slice.
 
@@ -189,10 +226,15 @@ Disallowed compatibility shapes:
 - Persist SDK in-memory view names as a durable named registry in this slice.
 - Infer `db_id`, `base_tx_id`, or `schema_digest` from a two-field view without an explicit Database base snapshot.
 
+SDK `fg.save(...)` remains unchanged: it must continue excluding `_SDKViewsManager` in-memory views from SDK workspace persistence. If a future SDK adapter creates durable views, it must call an explicit Database-backed creation path and must not silently persist the `_SDKViewsManager` dictionary as a named registry.
+
 ## 6. Boundaries And Invariants
 
 - The canonical durable view object has exactly the six Q4 fields.
+- Durable view persistence applies only to new-layout workspace Databases in this slice.
+- The durable creation API is Database-owned and current-head-only.
 - `view_digest` excludes `name`.
+- `view_digest` uses `VIEW_V1_PREFIX = b"factpy\x00subset_view_v1\x00"` and length-delimited fields.
 - `view_digest` is derived from sorted `asrt_ids`, not from caller order.
 - `view_digest` is independent of active/revoked state after the view is created.
 - With a view supplied, Q5's scope universe is exactly `view.asrt_ids`; projection policies must not redefine that universe.
@@ -200,17 +242,22 @@ Disallowed compatibility shapes:
 - The implementation must not implement evidence/explain metadata behavior in this slice.
 - The implementation must not add a persistent named view registry in this slice.
 - View object filenames use raw lowercase hex suffixes; object contents carry full digest tokens.
+- View object JSON and write-once semantics follow Slice 2 object conventions.
 - Existing shipped SDK in-memory view behavior must remain compatible unless an explicit migration plan is added to this blueprint first.
 
 ## 7. Acceptance
 
 - [ ] A canonical six-field durable `FrozenAssertionView` shape exists and is documented.
 - [ ] `view_digest` computation is deterministic, excludes `name`, and uses sorted `asrt_ids`.
+- [ ] `view_digest` uses `factpy\0subset_view_v1\0` domain-separated bytes.
 - [ ] View objects persist under `views/objects/<64hex>.json`.
 - [ ] View object filename/content mismatch is rejected.
 - [ ] Existing view objects are write-once: identical content is idempotent; conflicting content errors.
-- [ ] View creation validates Database/base snapshot membership or explicitly restricts scope to the validation surface implemented.
+- [ ] Durable view persistence rejects memory-mode and legacy-ledger-mode Databases.
+- [ ] `Database.create_view(...)` or equivalent Database-owned API creates current-head durable views.
+- [ ] View creation validates current-head claim existence without requiring `is_active`.
 - [ ] The shipped SDK two-field view shape is not treated as a durable view object.
+- [ ] SDK `fg.save(...)` still excludes `_SDKViewsManager` in-memory views.
 - [ ] No `fg.read.find(view=...)`, `fg.run(view=...)`, `fg.eval.evaluate(view=...)`, `FactGraph.attach(...)`, `EvidenceGraph.metadata`, failure envelope, or `rule_set_digest` implementation lands in this slice.
 - [ ] Existing DB identity substrate and DB workspace layout tests still pass.
 - [ ] New tests cover digest stability, name exclusion, sorted-id normalization, filename/content validation, and SDK compatibility boundaries.
@@ -218,21 +265,23 @@ Disallowed compatibility shapes:
 
 ## 8. Implementation Plan
 
-This section remains draft until implementation preflight completes. Before moving to `scoped`, perform a fresh source audit of the shipped SDK view manager, implemented Database workspace layout, transaction object read/write helpers, and current docs.
+This section reflects the post-preflight implementation plan after `docs/audit/2026-05-20_db-view-persistence-preflight.md`. Per audit execution discipline Rule 1, implementation must still re-read source files at task-execution time.
 
 1. Define the canonical durable view record.
-   - Decide module placement.
-   - Decide whether to reuse the SDK class name directly or introduce a core durable record plus SDK adapter.
+   - Prefer core-store placement for the durable record.
+   - Keep the SDK two-field class as compatibility unless a later adapter explicitly migrates it.
 2. Define view digest bytes.
-   - Choose the byte protocol for Q4's semantic inputs.
+   - Use `VIEW_V1_PREFIX = b"factpy\x00subset_view_v1\x00"`.
    - Validate `name` exclusion and sorted-id normalization.
 3. Add `views/objects/` persistence helpers.
    - Use raw hex filename segments and full digest tokens in content.
-   - Use write-once semantics consistent with tx/schema object helpers.
+   - Use Slice 2 JSON bytes and write-once object helper conventions.
 4. Add base snapshot validation.
-   - Decide current-head-only versus historical snapshot support based on implemented tx-object/replay capability.
+   - Implement current-head-only view creation.
+   - Validate claim existence, not active status.
 5. Add compatibility docs and tests.
    - Document the shipped two-field SDK view as compatibility-only.
+   - Preserve SDK `fg.save(...)` exclusion of in-memory views.
    - Add tests proving no public `view=` API surface is implemented.
 
 ## 9. Docs To Update

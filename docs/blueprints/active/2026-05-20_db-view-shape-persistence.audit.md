@@ -7,6 +7,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-20 | draft | Blueprint created | Scoped Slice 3 as canonical view shape, view digest, anonymous view-object persistence, and SDK compatibility boundary. |
+| 2026-05-20 | draft | Preflight amendments applied | PF-1 through PF-6 from `docs/audit/2026-05-20_db-view-persistence-preflight.md` folded into the draft. |
 
 ## Decision Notes
 
@@ -44,3 +45,19 @@ The draft intentionally leaves several choices to preflight before `scoped`:
 - current-head-only versus historical base snapshot membership validation;
 - exact JSON canonicalization for view object content;
 - whether to create `views/` eagerly or on first persisted view object.
+
+### 2026-05-20 — Preflight PF-1/PF-2/PF-3/PF-4 required amendments
+
+Preflight `a7105ba1` required four amendments before `scoped`;all are now applied:
+
+- PF-1: durable view persistence is new-layout workspace only. Memory-mode and legacy-ledger-mode Database instances reject durable view persistence in this slice.
+- PF-2: durable view creation uses a Database-owned API shape, `Database.create_view(name, asrt_ids, *, base=None)`, with `base=None` meaning current head.
+- PF-3: `view_digest` uses dedicated `factpy\0subset_view_v1\0` domain-separated bytes over `db_id`, `base_tx_id`, `schema_digest`, and sorted `asrt_ids`.
+- PF-4: view creation is current-head-only until replay/snapshot tooling exists. Membership validation checks current ledger claim existence and deliberately does not require active status.
+
+### 2026-05-20 — Preflight PF-5/PF-6 recommended amendments
+
+Preflight `a7105ba1` recommended two additional amendments;both are applied:
+
+- PF-5: view object content uses the same canonical JSON style, write-once behavior, and temp-file plus `os.replace(...)` per-file write pattern as Slice 2 tx/schema objects.
+- PF-6: SDK `fg.save(...)` remains unchanged and continues excluding `_SDKViewsManager` in-memory views. A future SDK adapter must require an explicit Database-backed path and must not silently persist the SDK view dictionary as a named registry.
