@@ -238,18 +238,35 @@ Trigger conditions verified from design §17 (lines 705-714). Each row confirms 
 
 **Cross-cutting observation**: the 2 non-clean rows (D4, D9) are both **already known** from Phase 2-3 — they surface here as commitment-level confirmations of A2 (B) ambiguity + A11 (c) / Q8 framing. §5 introduces no new audit findings; it serves as the deferred-list integrity check.
 
-## 6. Cross-doc Seams (§19) — Dependency-Only Enumeration
+## 6. Cross-doc Seams (§19) — Migration-Blocker Enumeration
 
-Listed for awareness; **not audited** in this round.
+Each seam lists: (i) **current shipped status** w.r.t. seam (does it currently work / reject / lack carrier);(ii) **open Qs blocking** (this audit's Q1-Q8);(iii) **upstream design redraft required** in sibling doc before the seam can be specified. **This section does NOT expand evidence-tree or rule-expression design content per audit guardrail**;the sibling-doc redraft references are pointers, not content commitments.
 
-| # | Seam item | Main doc owner | Notes |
-|---|---|---|---|
-| S1 | `fg.eval.evaluate(..., view=...)` from reject → supported | `rule-expression-and-proof-attempt.zh.md` |  |
-| S2 | `fg.read.find(..., view=...)` from reject → supported | `rule-expression-and-proof-attempt.zh.md` |  |
-| S3 | EvaluateResult context adds `db_id/tx_id/schema_digest/data_digest/view_digest` | `rule-expression-and-proof-attempt.zh.md` |  |
-| S4 | EvidenceGraph.metadata durable copy of S3 fields | `evidence-tree-rainbird-style-v1.zh.md` |  |
-| S5 | failure envelope stale / out-of-scope evidence ref → §13 | `evidence-tree-rainbird-style-v1.zh.md` |  |
-| S6 | `rule_set_digest` evaluate-time computation, attach API unchanged | `rule-expression-and-proof-attempt.zh.md` |  |
+| # | Seam item | Main doc owner | Current shipped status | Blocked-by Q-cluster | Required upstream design closure |
+|---|---|---|---|---|---|
+| S1 | `fg.eval.evaluate(..., view=...)` from reject → supported | `rule-expression-and-proof-attempt.zh.md` | **Rejected at SDK boundary**: `view=` raises `SDKStoreError("view=... is not supported in v0.1; pass FrozenAssertionView via fg.views.create(...)")` at `sdk/store.py:1049-1050` (eval path). No view-scope filter wired below the SDK boundary. | **Q1** (Database boundary determines call-site shape) + **Q4** (FrozenAssertionView shape resolution provides `view=` parameter type) + **Q5** (view ↔ `is_active` composition determines runtime semantics). I7 (d) is the substrate-side mirror. | **Rule-expression doc** evaluate API redraft to incorporate `view=` parameter (existence + type + behavior). Not specified by this audit's scope. |
+| S2 | `fg.read.find(..., view=...)` from reject → supported | `rule-expression-and-proof-attempt.zh.md` | **Rejected at SDK boundary**: `view=` raises analogous `SDKStoreError` at `sdk/store.py:1923-1924` (read.find path) + `:2241-2244` (a third reject site). No view-scope filter wired below the SDK boundary. | Same as S1 (Q1 + Q4 + Q5). | Same upstream design as S1 — read API redraft (or `application/protocol/entity_read.py` DTO redraft) in sibling doc. Not specified by this audit's scope. |
+| S3 | EvaluateResult context adds `db_id/tx_id/schema_digest/data_digest/view_digest` | `rule-expression-and-proof-attempt.zh.md` | **None of the 5 fields exist at evaluate-result level**: per I10 + A10, shipped `SupportArtifact` (§7.15 `_support.py:97-126`) and `ProvenanceEnvelope` (§7.15 `_support.py:147-162`) carry no `db_id` / `tx_id` / `data_digest` / `view_digest`; `schema_digest` exists at 4 other anchors (cross-cutting finding #6) but not at evaluate-result level. **`data_digest`** is a 5th design-side identity field (per design §3 line 103 / §5 line 227 / §6 line 334) — distinct from `tx_id`, derived from assertion-set state. | **Q1** (`db_id`) + **Q3** (`tx_id` formula primitives;`data_digest` formula derives from same DatabaseValue mechanism, currently absent from I-series as standalone but folded into I2 DatabaseValue absence) + **Q4** (`view_digest` formula) + cross-doc dependency on evidence service redraft. | **Rule-expression doc** + **evidence-tree doc** joint redraft of `EvaluateResult` metadata schema. Per Phase B closure memory: evidence service redraft was attempted in Phase C and **deleted** (M-EV 18-file deletion `e9506e42`). **Future redraft must close Q1+Q3+Q4 before specifying `EvaluateResult` metadata shape** — otherwise the metadata fields lack identity sources. |
+| S4 | EvidenceGraph.metadata durable copy of S3 fields | `evidence-tree-rainbird-style-v1.zh.md` | **No durable copy mechanism**: shipped has `SupportArtifact` + `ProvenanceEnvelope` in audit/evidence machinery (see §7.15 inventory) but neither carries the 5 S3 fields. Per I10: durable-copy carrier is part of evidence service redraft. | Transitively blocked: S4 depends on S3 closure (cannot durable-copy fields that aren't defined at source). Same Q-cluster (Q1+Q3+Q4) + evidence service redraft. | **Evidence-tree doc** redraft to define EvidenceGraph.metadata field set + durable-copy lifecycle from `EvaluateResult`. Same cross-doc dependency as S3;**S4 cannot be specified before S3 lands**. |
+| S5 | failure envelope stale / out-of-scope evidence ref → §13 | `evidence-tree-rainbird-style-v1.zh.md` | **No stale-detection at evidence-ref level**: shipped has no `tx_id` to detect stale-evidence against (per I2 (d));no view scope to detect out-of-scope ref against (per I7 (d)). Failure envelope carrier itself sits in evidence service surface — Phase C implementation attempt was deleted (per Phase B closure record);no shipped carrier exists in current code. | Q1 + Q3 (`tx_id` for stale-detection) + Q4 (`view_digest` for out-of-scope check). Plus this doc's **§13 finalization** (stale / scope 校验 rules) — §13 is in the DB-view doc itself and is referenced by the rule-expression / evidence-tree docs from outside. | **Evidence-tree doc** failure-envelope redraft (carrier shape + the cases §13 specifies) + this doc's §13 finalization. §13 currently describes scope-check intent but doesn't specify the carrier shape — that's an evidence-service-side decision. Per audit guardrail: this row does NOT expand the deleted evidence-tree blueprint content. |
+| S6 | `rule_set_digest` evaluate-time computation, attach API unchanged (per A15) | `rule-expression-and-proof-attempt.zh.md` | **`rule_set_digest` literally absent in shipped**: grep-verified 0 hits across `src/factgraph/` (per I12 (C)). **`attach()` API absent**: per I4 (c) + Q2. The seam asserts attach API does NOT change the rule_set_digest contract — but attach API itself is new, so "contract preservation" is forward-looking, not backward. | **Q2** (attach lifecycle: per A15 (D), attach signature contains no `rules=`, but attach itself doesn't exist) + **cross-doc** rule-expression doc `rule_set_digest` formula + this doc's A15 commitment alignment with I12 (C). | **Rule-expression doc** `rule_set_digest` formula specification (which rules participate, what canonicalization, what bytes encoding). Folded with this doc's A15 implementation post-Q2. **S6 cannot ship without both** (i) attach API landing per Q2 + (ii) rule_set_digest formula in sibling doc. |
+
+**S-series summary** (6 seams):
+
+**By Q-cluster dependency** (this audit's open Qs):
+- S1 + S2: blocked on **Q1 + Q4 + Q5** (read/eval `view=` parameter)
+- S3 + S4: blocked on **Q1 + Q3 + Q4** + evidence service redraft
+- S5: blocked on **Q1 + Q3 + Q4** + evidence service redraft + this doc's §13 finalization
+- S6: blocked on **Q2** + rule-expression doc rule_set_digest formula + A15 alignment
+
+**By upstream design redraft required**:
+- **Rule-expression doc redraft**: S1, S2, S3, S6 (4 of 6 seams). Touches eval API, read API, EvaluateResult metadata, `rule_set_digest` formula. Last-known state: Phase B design closed 2026-05-19; not currently being redrafted.
+- **Evidence-tree doc redraft**: S3, S4, S5 (3 of 6 seams). Touches EvaluateResult ↔ EvidenceGraph durable-copy seam, failure envelope. Last-known state per Phase B closure memory: Phase C implementation attempt **deleted** (M-EV 18-file deletion `e9506e42`). Not currently being redrafted.
+- **This doc's §13 finalization**: S5 only (stale/scope check rules at carrier level).
+
+**Cross-cutting observation**: **all 6 seams are blocked** — none can be specified without (i) closing Q1-Q8 inside this audit + (ii) at least one sibling-doc redraft. This is not a "stitch the seams" picture;it is a "seams depend on multi-doc redraft alignment" picture. Per audit guardrail: this section does NOT expand evidence-tree or rule-expression design content;the redraft references are pointers, not content commitments.
+
+**Implication for Phase 4c**: S1-S6 will appear in §9 under the **cross-doc blocked** bucket (per Phase 4 reframing). They are not implementable independently of upstream design redraft, regardless of how Q1-Q8 close.
 
 ## 7. Shipped Code Surface Inventory
 
