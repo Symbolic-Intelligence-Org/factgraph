@@ -20,3 +20,5 @@ Current records:
   - Resolves Q4 from the DB/view audit: design-target `FrozenAssertionView` keeps the existing name and upgrades to the anchored 6-field shape; shipped 2-field views become compatibility artifacts.
 - [2026-05-20_q5-view-revocation-composition-decision.md](/Users/zhenzhili/hnsm-backend/docs/decisions/2026-05-20_q5-view-revocation-composition-decision.md)
   - Resolves Q5 from the DB/view audit: View-replaces-active (option (b));`view=` specified scope universe is exactly `view.asrt_ids` with no `is_active` re-filter;`view=` omitted preserves shipped active-only universe;post-scope projection and evidence annotation are separate work.
+- [2026-05-20_q6-registry-workspace-migration-decision.md](/Users/zhenzhili/hnsm-backend/docs/decisions/2026-05-20_q6-registry-workspace-migration-decision.md)
+  - Resolves Q6 from the DB/view audit: phased registry exit under Q8=(c);workspace registry remains during Q8 Phase 1, becomes schema-only transition after Phase 2, and exits after A20(E).
