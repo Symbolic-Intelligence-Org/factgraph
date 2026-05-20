@@ -793,19 +793,184 @@ Q1-Q5 form a coherent dependency stack rather than 5 independent decisions. Reso
 
 ## 9. Next-step Recommendations
 
-*(populated at end of audit; categorizes A1-A20 by post-audit action)*
+Buckets by **primary row character** (what the row IS), with "Blocked by" notes inline. §9.3 is a Q-by-Q index across §9.2 drift items, not the main inventory.
 
-### 9.1 Skip — shipped already covers
-*(empty)*
+**Bucket policy**:
+- **§9.1 Already aligned / keep** — shipped honors design intent, no migration
+- **§9.2 Design drift / needs migration** — shape conflict identified (main audit inventory)
+- **§9.3 Open-Q blockers (Q-by-Q index)** — maps Q1-Q8 to gated §9.2 rows
+- **§9.4 Cross-doc blocked** — requires sibling-doc redraft
+- **§9.5 Deferred / v2+** — design defers + shipped honors
+- **§9.6 No independent action** — projection / future gate / follows another decision
 
-### 9.2 Targeted patch — small gap
-*(empty)*
+### 9.1 Already aligned / keep
 
-### 9.3 Doc revision needed — shape conflict
-*(empty)*
+Shipped satisfies design intent. No code change required.
 
-### 9.4 Implementable — genuinely new
-*(empty)*
+- **I12 (B)** — `RuleRegistry` in-memory dependency tracker aligned with rules-as-code runtime path
+- **I12 (D)** — rules persist to `FileAuthoringRegistry`, never `Ledger.append_*` (verified at file boundary)
+- **A4** — `SubsetView`/`FrozenAssertionView` is subset scope, not version/branch/working-copy (trivially-by-absence)
+- **A11 (4 of 5 items)** — branch / writable sub-fg / remote / multi-db absent across all 17 read files
+- **A15 (A-runtime)** — SDK `Rule`/`Inference` constructed in user code via `@entity` + `_compile_rule_input`/`_compile_derivation_input` + `RuleRegistry` in-memory tracker
+- **A15 (C)** — rules not in Database transaction (mirrors I12 (D))
+- **A15 (E)** — runtime internal reference via `_register_rule_dependencies` (`sdk/store.py:2421-2451`)
+- **A16 (A)** — schema authoring source IS user Python code under user's own version control
+- **A18 (B)** — in-memory named view registry consistent with "PERSISTED registry deferred" (natural reading of design A18 wording)
 
-### 9.5 Defer further — risk too high or context missing
-*(empty)*
+### 9.2 Design drift / needs migration
+
+The main audit inventory: shape conflicts identified between shipped and design. **Every row here is also gated by at least one Open-Q (see §9.3) and/or cross-doc redraft (see §9.4).** Listing here surfaces "what is wrong now"; §9.3/§9.4 surfaces "what must be decided before fixing".
+
+Organized by drift theme:
+
+#### A. Identity gaps (DatabaseValue + AssertionRecord identity)
+
+- **I2** — `DatabaseValue(db_id, base_tx_id, schema_digest, data_digest)` 4-field shape absent. **Blocked by Q1 + Q3.**
+- **I11** — cross-process identity reproducibility (consequence of I2 absence; shipped `asrt_id` uses `uuid.uuid4().hex` per `ledger.py:1066` + `write_protocol.py:120-121`). **Blocked by Q3.**
+- **A3** — explicit `tx_id` prohibition (no UUID, no AUTOINCREMENT). Reinforces Q3 framing. **Blocked by Q3.**
+- **A12 (A+B+C)** — `Database.create` db_id generation + `Database.open` round-trip + `mem:<uuid4>` prefix-typed non-durable identity. **Blocked by Q1 + Q3.**
+- **A13 (A)** — `AssertionRecord` 4-shape coexistence in shipped (`Claim` 4f / `AssertionRecordDTO` 4f / SDK `AssertionRecord` 8f) vs design 7-field. **Blocked by Q7.**
+- **A13 (B)** — content-addressed `asrt_id` requirement (shipped UUID rules out template per A3). **Blocked by Q3.**
+
+#### B. Boundary mismatches (Database class + attach lifecycle)
+
+- **I1 / A2-A** — `Ledger` boundary multi-method write surface (high-level `append_assertion`/`append_revocation` + low-level deprecated + lifecycle-meta + annotation-only) vs design single `Database.commit_assertions(...)` boundary. **Blocked by Q1.**
+- **I4** — `SDKStore.create` / `from_schema_classes` / `load` constructors vs design `FactGraph.attach(db, view=...)` lifecycle. **Blocked by Q1 + Q2.**
+- **I5** — attach `db.as_of(tx_id)` snapshot lifecycle absent. **Blocked by Q1 + Q2 + Q3.**
+- **I6** — attach `view=view` scope filtering absent at runtime layer. **Blocked by Q1 + Q2 + Q4.**
+- **A6 (A+B)** — attach-to-`DatabaseValue` (A) + attach-to-`FrozenAssertionView` (B), distinct dependency chains. **(A) Blocked by Q1+Q2+Q3; (B) Blocked by Q1+Q2+Q3+Q4.**
+- **I12 (A)** — `FactGraph.attach(...)` signature `rules=` exclusion per A15 (D); vacuously satisfied today (attach absent), becomes acceptance criterion when Q2 lands. **Blocked by Q2.**
+
+#### C. View shape gaps (FrozenAssertionView 2-field vs anchored)
+
+- **I3** — `FrozenAssertionView(name, asrt_ids)` 2-field shipped vs design 6-field `(name, db_id, base_tx_id, schema_digest, asrt_ids, view_digest)`. **Blocked by Q4.**
+- **A5** — 4 anchor fields (`db_id` / `base_tx_id` / `schema_digest` / `view_digest`) all absent on shipped view. **Blocked by Q4 (depends on I3 resolution).**
+- **I7** — `view=` scope filter rejected at SDK boundary (per S1/S2); no view-scope filter at any layer. **Blocked by Q4 + Q5.**
+- **I8** — `view=` omitted routes to default universe (trivially satisfied by absence); composition with `is_active` revocation filter undefined. **Blocked by Q5.**
+- **A18 (A)** — `views/objects/<view_digest>.json` content-addressed persistence absent. **Blocked by Q4.**
+
+#### D. Rules-as-code governance (workspace coupling + SavedRule existence)
+
+- **I12 (E) / A15-B** — `_resolve_workspace_constructor_paths` auto-derives `registry_root = workspace_path / "registry/"` (`sdk/store.py:667-695`) + `SDKStore.save()` rebinds `_authoring_registry` to `paths.registry` (`sdk/store.py:2063-2090`) → violates design strict prohibition "rules 不进 workspace" (§18 A15 line 734). **Blocked by Q6 (contingent on Q8).**
+- **A11 SavedRule** — full SavedRule layer shipped: `fg.rules.save/load/list/get` (`sdk/store.py:2092-2125`) → `application/authoring_runtime.py:54-79` → `FileAuthoringRegistry.register_rule_spec`/`register_inference_spec`. `SavedRuleRef`/`SavedInferenceRef` dataclasses (`authoring_runtime.py:20-51`) ARE literally the "SavedRule" design defers. **Blocked by Q8.**
+- **A15 A-persisted** — `FileAuthoringRegistry`-backed persistence is A11 SavedRule + A20 removal target. **Blocked by Q8 (cross-refs A11).**
+- **A20 (A)(B)(C)(D)(F)** — `registry/rules/` / `registry/inferences/` / `registry_manifest.json` / `authoring_apply_events.jsonl` removal + "rules 留在用户 Python 代码" governance. **Blocked by Q8.**
+- **D9** — Rule persistence / SavedRule deferred at design §17 line 713 but shipped exceeds. **Blocked by Q8.**
+
+#### E. Physical layout (workspace + manifest + schema persistence)
+
+- **I13** — flat workspace `factgraph_workspace.json` + `ledger.db` + `registry/` vs Git-style `db/objects/` + `db/refs/` + `db/assertions.db` + `views/`. **Blocked by Q1 + Q3 + Q4 + I2 + I11.**
+- **A16 (B)** — compiled schema persisted at 3 shipped anchors (ledger_meta value + `registry/schema/schema_ir.json` file + manifest field), none at design `db/objects/schema/<schema_digest>.json` content-addressed path. **Blocked by Q1 + layout cluster (A17/A19/A20).**
+- **A17 (A+B+C)** — Git-style layout absent: no `db/objects/` content-addressed write-once + no `db/refs/head.txt` ref + `ledger.db` is authoritative storage not derived index (architectural inversion). **Blocked by Q1 + Q3 + I2 + I11 + I13.**
+- **A19** — 6-field shipped manifest (`factgraph_workspace_version`, `save_scope`, `schema_digest`, `components.{ledger,registry}`, `created_at`, `last_saved_at`) vs 4-field design manifest. **Blocked by A16(B) + A17 + A18 + Q8.**
+- **A20 (E)** — `registry/schema/schema_ir.json` → `db/objects/schema/<schema_digest>.json` migration. **Blocked by A16(B) + A17 + I13.** Independent of Q8.
+
+#### F. Evidence / evaluate metadata (also cross-doc blocked — see §9.4)
+
+- **I10 / A10** — `schema_digest` at 4 shipped anchors but **not** at evaluate-result level;`db_id` / `tx_id` / `view_digest` / `data_digest` all absent from `SupportArtifact` / `ProvenanceEnvelope` / `CandidateSet`. **Blocked by Q1 + Q3 + Q4 AND evidence service redraft (cross-doc).** Listed here for visibility;authoritative entry in §9.4.
+
+### 9.3 Open-Q blockers (Q-by-Q index)
+
+Each Q maps to the §9.2 drift rows it gates. Resolution order matters — see §9.7 conclusion.
+
+| Q | Topic | Gates §9.2 rows |
+|---|---|---|
+| **Q1** | `Database` class boundary (new layer / rename Ledger / drop) | I1/A2-A, I4, I5, I6, A6, A12 (A+B+C), A16 (B), A17, I13, I10/A10 (db_id source) |
+| **Q2** | `FactGraph.attach(db)` lifecycle (new / rename of load) | I4, I5, I6, A6, I12 (A) |
+| **Q3** | `tx_id` formula primitives (reuse shipped / new `tx_v1` protocol) | I2, I11, A3, A12 (A+B+C), A13-B, A17, I13, I10/A10 (`tx_id` + `data_digest` source) |
+| **Q4** | `FrozenAssertionView` shape resolution (2-field / rename / breaking migration) | I3, A5, A6 (B), I7, A18 (A), I10/A10 (view_digest source) |
+| **Q5** | view scope filter ↔ `is_active` revocation filter composition | I7, I8 |
+| **Q6** | registry-in-workspace migration strategy | I12 (E), A15-B. **Contingent on Q8** — vacuous if Q8 = (a) remove. |
+| **Q7** | `AssertionRecord` shape reconciliation (adopt 7-field / layered / 4th layer) | A13 (A) |
+| **Q8** | SavedRule existence governance (hard remove / mark deferred / gradual deprecation) | A11 SavedRule, A15 A-persisted, A20 (A)(B)(C)(D)(F), D9. Implicitly determines A19 `components.registry` field. |
+
+**Q-chain shape**: Q1-Q5 form a coherent dependency stack (Q1 → Q3 → Q2 → Q4 → Q5). Q6/Q7/Q8 are parallel to the chain;Q6 is contingent on Q8.
+
+### 9.4 Cross-doc blocked
+
+Requires sibling-doc redraft before specification can land. Independent of (and parallel to) Q1-Q8 — even if all internal Qs close, these still wait.
+
+**Rule-expression doc redraft required**:
+- **S1** — `evaluate(view=)` API semantics
+- **S2** — `read.find(view=)` API semantics
+- **S6** — `rule_set_digest` formula (which rules participate + canonicalization + bytes encoding)
+- **A15 (F)** — `rule_set_digest` placement (cross-doc seam per I10)
+
+**Evidence-tree doc redraft required**:
+- **S4** — `EvidenceGraph.metadata` durable copy shape + lifecycle from `EvaluateResult`
+- **S5** — failure envelope carrier (+ this doc's §13 stale/scope rules finalization)
+
+**Joint rule-expression + evidence-tree redraft**:
+- **S3** — `EvaluateResult` 5-field context (`db_id`/`tx_id`/`schema_digest`/`data_digest`/`view_digest`)
+- **I10 / A10** — evidence/evaluate metadata carrier (consumer side undefined; Phase C M-EV redraft deleted)
+
+**Status anchor** (per Phase B closure record + Phase C abandonment memory): rule-expression doc closed Phase B 2026-05-19 as design baseline, not currently being redrafted;evidence-tree doc had Phase C implementation attempt deleted (M-EV 18-file deletion `e9506e42`).
+
+### 9.5 Deferred / v2+
+
+Design explicitly defers AND shipped does not accidentally implement. No action required today.
+
+- **D1** — persistent named views in Database (shipped `_SDKViewsManager` in-memory only, explicit "not included in `fg.save(...)`" code comment at `sdk/store.py:132`)
+- **D2** — branch / tag / refs (absent everywhere)
+- **D3** — writable sub-fg (no fork/merge/write-back semantics anywhere)
+- **D6** — materialized derived views (same-name shipped uses `materialize_id` / `materialize_certainty_summary` / `_materialize_edb_session` are distinct concerns — derivation provenance / audit precompute / PyReason adapter setup respectively)
+- **D7** — remote database (`Ledger` accepts only `":memory:"` or local file path)
+- **D8** — multi-db join (single `SDKStore` per process; no cross-db semantics)
+- **D10** — view set algebra API (no union/intersect/difference on views; Python `set` ops on `asrt_ids` are user-level only)
+
+### 9.6 No independent action
+
+Projection of another row / future acceptance gate / conditional follow-up. Action surfaces when the parent decision lands.
+
+- **A1** — meta scope claim; per-concept resolution at I1-I4
+- **A2 (B)** — "minimum version only append assertions" disambiguation folds into Q1
+- **A7** — direct I7 + I8 projection (3-part split)
+- **A8** — future acceptance gate (raise on view conflict + no nesting) when I6 lands
+- **A9** — future acceptance gate (no fallback to full universe) when I6 lands
+- **A10** — commitment-level projection of I10 (authoritative entry in §9.4)
+- **A14** — release-engineering acceptance gate (read-only co-ships with attach + scoped runtime)
+- **A15 (D)** — `FactGraph.attach(...)` no `rules=` parameter; vacuously aligned via attach absence (becomes acceptance criterion when Q2 lands)
+- **I9** — future acceptance gate (raise on stale/mismatch, no silent fallback) when I6 lands
+- **D4** — assertion retract/update **ambiguous**: shipped has `retract_by_asrt` / `replace_field` / `fg.retract` at API level but SQL-level revocation IS append-only; strict reading routes to §9.2 drift, loose reading routes to §9.1 aligned. **Conditional on Q1 reading.**
+- **D5** — schema migration tx **partial**: shipped has additive `add_schema_classes` (entities + fields, no breaking change, no tx envelope);full migration tx with breaking-change support is explicitly deferred per design §17 line 709. No immediate drift to resolve; if future Database tx semantics require schema-migration participation, it becomes a future design task.
+
+### 9.7 Final conclusion
+
+**Current DB/view design is NOT a directly-implementable patch; it is a large-range migration target.**
+
+**Distribution** (rows allocated to single primary bucket;cross-refs noted inline):
+- §9.1 Already aligned: **9 rows**
+- §9.2 Design drift (main inventory): **~30 rows + sub-assertions** across 6 themes (Identity, Boundary, View shape, Rules governance, Physical layout, Evidence metadata)
+- §9.3 Open-Q index: 8 Qs gate the drift inventory
+- §9.4 Cross-doc blocked: **8 entries** (S1-S6 + I10/A10)
+- §9.5 Deferred / v2+: **7 rows**
+- §9.6 No independent action: **10 rows** (8 projection/gate + D4/D5 conditional)
+
+**Q resolution order (ranked, must close in sequence where dependency exists)**:
+
+1. **Q1 — Database class boundary** *(first; gates everything)*. Decides whether `Database` is a new layer above `Ledger`, a doc revision over `Ledger`, or dropped from design. Without Q1, no other Q can resolve concretely — Q2/Q4 consume Q1's boundary decision;Q3 consumes Q1's tx envelope decision.
+
+2. **Q3 — `tx_id` formula primitives** *(second; gates identity)*. Decides reuse shipped (`sha256_token` + `canonical_bytes_tup_v1` with domain-separation marker) vs new `tx_v1` protocol. Also drives `data_digest` formula referenced in S3. Without Q3, I2 / I11 / A3 / A12 / A13-B / A17 cannot specify field formulas.
+
+3. **Q8 — SavedRule existence governance** *(parallel but urgent)*. Decides whether `FileAuthoringRegistry` / `SavedRule` exists at all in v1. Independent of Q1/Q3 timing but blocks ~6 §9.2 rows (A11/A15 A-persisted/A20 A-D-F/D9) + makes Q6 contingent + drives A19 `components.registry` decision.
+
+4. **Q7 — `AssertionRecord` shape reconciliation** *(parallel)*. Decides adopt-design-7-field / keep-shipped-layered / add-4th-layer. Independent of Q1-Q5 + Q6 + Q8. Gates A13-A only but has multi-layer impact (storage row + app DTO + SDK surface).
+
+5. **Q2 — attach lifecycle** *(downstream of Q1)*. Drafted speculatively but full closure requires Q1's boundary decision (does `db` outlive `FactGraph`? are multiple `FactGraph` instances possible?).
+
+6. **Q4 — `FrozenAssertionView` shape** *(downstream of Q1+Q3)*. Anchor fields `db_id` / `base_tx_id` / `schema_digest` / `view_digest` depend on Q1+Q3 producing identity sources;Q4's resolution (2-field reuse / rename / breaking migration) consumes them.
+
+7. **Q5 — view ↔ `is_active` composition** *(downstream of Q4)*. Only meaningful once the view shape is fixed and view-scope filter mechanism exists.
+
+8. **Q6 — registry-in-workspace migration** *(contingent on Q8)*. Vacuous if Q8 = (a) remove SavedRule. Mechanics-only question.
+
+**Cross-doc blocking is independent and parallel**: even with Q1-Q8 fully resolved, S1-S6 + I10/A10 still wait on rule-expression and evidence-tree doc redrafts. Per Phase B closure record + Phase C abandonment memory, neither sibling doc is currently being redrafted. The rule-expression doc was the Phase B baseline closure target;the evidence-tree doc had a Phase C implementation attempt deleted (M-EV 18-file deletion `e9506e42`).
+
+**Implication for direction-setting**:
+
+- **Do NOT open an implementation branch off the DB/view design** without first running explicit decision rounds on the 4 load-bearing Qs (Q1 / Q3 / Q8 / Q7 in that priority order).
+- **Do NOT treat any §9.2 drift item as a "small migration"** — every drift item is gated by at least one Q + most have multi-Q cascades (Q1+Q3+Q4 cluster especially) + several have additional cross-doc dependencies (I10/A10).
+- **Drift acknowledgment without Q closure is not actionable** — the §9.2 inventory establishes "what's wrong" but the gating Qs in §9.3 determine "what to fix it as".
+- **Starting implementation before Q closure** risks repeating the Phase C 2026-05-20 pattern (over-introduction of new concepts → amendment-chain rescue → rollback). The audit-first → Q-resolution → implementation cadence is the conservative path forward.
+
+**Audit deliverable status**: Phase 1-4 complete. §1-§9 fully populated. The audit is the input for the next-phase decision (Q1 / Q3 / Q8 / Q7 resolution rounds), not itself a design output.
