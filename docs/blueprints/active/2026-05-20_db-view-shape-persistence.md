@@ -1,6 +1,6 @@
 # Task Blueprint: DB View Shape And Persistence
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-20
 - Last Updated: 2026-05-20
 - Related Modules:
@@ -292,11 +292,75 @@ This section reflects the post-preflight implementation plan after `docs/audit/2
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+Implementation commit `c51ed752` landed the scoped slice without expanding into
+public `view=` APIs, `FactGraph.attach(...)`, evidence/explain metadata,
+persistent named view registries, view set algebra, SavedRule/registry
+migration, or DB identity protocol changes.
 
-- final landed modules;
-- exact view digest byte protocol;
-- exact Database/base snapshot validation boundary;
-- compatibility behavior for shipped SDK views;
-- any carry-forward issues;
-- archive commit references.
+### 10.1 Landed modules
+
+The implementation changed:
+
+- `src/factgraph/core/store/database.py`
+  - added `VIEW_V1_PREFIX = b"factpy\x00subset_view_v1\x00"`;
+  - added canonical `FrozenAssertionView`;
+  - added `canonical_bytes_view_v1(...)` and `view_digest_for(...)`;
+  - added `Database.create_view(name, asrt_ids, *, base=None)`;
+  - added `views/objects/<64hex>.json` write-once persistence.
+- `src/factgraph/core/store/__init__.py`
+  - exported the new durable view types and helpers.
+- `src/factgraph/core/store/docs/README.md`
+  - documented durable view persistence and SDK compatibility boundaries.
+- `tests/test_db_identity_substrate.py`
+  - added five slice-3 tests covering view digest bytes, object persistence,
+    mode rejection, current-head validation, revoked-in-view membership, and
+    write-once conflict behavior.
+
+### 10.2 Preflight finding alignment
+
+- PF-1: durable view persistence is enabled only for new-layout workspace
+  Databases. Memory-mode and legacy-ledger-mode Databases raise
+  `DatabaseError`.
+- PF-2: the durable creation surface is `Database.create_view(name, asrt_ids,
+  *, base=None)`.
+- PF-3: `view_digest` uses `factpy\0subset_view_v1\0` domain-separated bytes
+  over `db_id`, `base_tx_id`, `schema_digest`, and sorted `asrt_ids`.
+- PF-4: view creation is current-head-only. Membership validation uses
+  `ledger.get_claim(asrt_id) is not None` and does not require `is_active`.
+- PF-5: view objects reuse Slice 2 canonical JSON, raw-hex filename,
+  write-once, and temp-file plus `os.replace(...)` helper conventions.
+- PF-6: SDK `_SDKViewsManager` and `fg.save(...)` compatibility behavior are
+  unchanged.
+
+### 10.3 Tests
+
+Verified after implementation:
+
+- `PYTHONPATH=src python -m unittest tests.test_db_identity_substrate tests.test_sdk_frozen_assertion_view -v`
+  - 27/27 passing.
+- An explicit smoke check confirmed `FactGraph.save(...)` still excludes
+  in-memory SDK views from workspace persistence.
+
+Direct execution of
+`tests.test_factgraph_workspace_lifecycle.WorkspaceExclusionTests.test_workspace_save_excludes_views`
+still stops on the pre-existing `meta[confidence] was removed` helper failure
+before it reaches the `fg.save(...)` assertion. That failure is unrelated to
+this slice and is carried forward.
+
+### 10.4 Deviations And Carry-forward
+
+- No scoped Q4/Q5/Q3/Q7 decision was changed.
+- View object persistence is anonymous and content-addressed only; no persistent
+  named view registry was introduced.
+- `name` remains excluded from `view_digest`. Because the object content still
+  includes all six DTO fields, rewriting an existing view object with the same
+  digest but different object bytes remains a write-once conflict.
+- Historical `base_tx_id` support remains deferred until replay/snapshot
+  tooling or an attach/snapshot slice owns it.
+- Public `view=` consumption surfaces remain unimplemented and cross-doc
+  blocked as before.
+
+### 10.5 Archive
+
+Archive commit will be recorded when this implemented blueprint is moved from
+`docs/blueprints/active/` to `docs/blueprints/archive/`.
