@@ -1,6 +1,6 @@
 # Task Blueprint: DB Attach Lifecycle (Base Writable Form)
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-20
 - Last Updated: 2026-05-21
 - Related Modules:
