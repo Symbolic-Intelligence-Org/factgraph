@@ -14,3 +14,5 @@ Current records:
   - Resolves Q8 from the DB/view audit: gradual deprecation of the shipped SavedRule / `FileAuthoringRegistry` rule+inference persistence layer (option (c)); schema persistence stays out of scope per A16(B) / A20(E).
 - [2026-05-20_q7-assertionrecord-shape-reconciliation-decision.md](/Users/zhenzhili/hnsm-backend/docs/decisions/2026-05-20_q7-assertionrecord-shape-reconciliation-decision.md)
   - Resolves Q7 from the DB/view audit: canonical Database-owned durable assertion record with shipped storage/application/SDK adapters.
+- [2026-05-20_q2-attach-lifecycle-decision.md](/Users/zhenzhili/hnsm-backend/docs/decisions/2026-05-20_q2-attach-lifecycle-decision.md)
+  - Resolves Q2 from the DB/view audit: `FactGraph.attach(...)` is a new class-method-style constructor distinct from shipped constructors;`attach(db)` is writable against current head, while snapshot/view-scoped forms are read-only;no `rules=` per A15-D.
