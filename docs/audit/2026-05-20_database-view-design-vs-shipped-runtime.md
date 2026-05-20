@@ -213,18 +213,30 @@ Batch 4 classification distribution: **(a) shipped covers: 1 sub-assertion** (A1
 
 Per design doc §17. Audit each: does shipped have anything resembling this that should be flagged?
 
-| # | Deferred item | Shipped accidental implementation? (file:line if any) | Confirm deferred? |
+Trigger conditions verified from design §17 (lines 705-714). Each row confirms whether shipped has an accidental implementation that would violate the deferral.
+
+| # | Deferred item (trigger) | Shipped accidental implementation? (file:line if any) | Confirm deferred? |
 |---|---|---|---|
-| D1 | persistent named views in Database |  |  |
-| D2 | branch / tag / refs |  |  |
-| D3 | writable sub-fg |  |  |
-| D4 | assertion retract / update |  |  |
-| D5 | schema migration tx |  |  |
-| D6 | materialized derived views |  |  |
-| D7 | remote database |  |  |
-| D8 | multi-db join |  |  |
-| D9 | Rule persistence / SavedRule |  |  |
-| D10 | view set algebra API |  |  |
+| D1 | persistent named views in Database (用户需要跨 session view registry) | **No** — `_SDKViewsManager` is **in-memory only** (`sdk/store.py:101-179`); explicit code comment at `sdk/store.py:132` documents "not included in `fg.save(...)` workspace persistence". Per A18 (B): in-memory named registry consistent with "PERSISTED registry deferred". | **YES deferred-aligned** — shipped has named view registry but no cross-session persistence. (Note: A18 (B) caveat — a stricter reading of design might consider even in-memory named registry as deferred; not escalated this audit.) |
+| D2 | branch / tag / refs (需要 long-lived alternative heads) | **No** — no branch/tag/refs concept anywhere (verified §7 inventory absence across 17 read files;`grep src/factgraph -e "branch\\|tag\\|refs" -r` returns no semantically relevant hits). Per A4 audit: "shipped has no version-control semantics anywhere: no merge / parent-ref / clone / fork." | **YES deferred-aligned** — trivially absent. |
+| D3 | writable sub-fg (fork / merge / write-back 语义单独落定) | **No** — no fork/merge/write-back concept anywhere. Per A4: shipped views are subset scope only, not version/branch/working-copy semantics. | **YES deferred-aligned** — trivially absent. |
+| D4 | assertion retract / update (需要 deletion / correction semantics) | **PARTIAL — shipped has retract / update at API level**. `retract_by_asrt` (§7.17 `core/evidence/write_protocol.py:170-208`) appends a revocation row via `Ledger.append_revocation`; `replace_field` (`:211-228`) implements retract-old + append-new (correction semantics); SDK `fg.retract(asrt_id, meta)` (§7.12 `sdk/store.py:1886-1909`). Plus revocation-aware read filter `is_active` (§7.16 `core/policy/active.py:6-11`) + `has_active_revocation` (§7.5 `ledger.py`). | **AMBIGUOUS** per A2 (B) split: (i) **strict reading** of D4 (no retract API exists) → shipped EXCEEDS deferral, real conflict; (ii) **loose reading** (no breaking deletion;append-only at SQL level) → shipped ALIGNS (revocation IS append). Disambiguation **folds into Q1** (Database boundary determines whether shipped's `retract_by_asrt` / `replace_field` API stays in the "minimum version" per A2 (B)). |
+| D5 | schema migration tx (schema 演进需求明确) | **PARTIAL — shipped has additive schema evolution, NOT migration tx**. `SDKStore.add_schema_classes(*classes)` (`sdk/store.py:1080-1127`) allows incremental entity/field addition with anchor preflight (`_preflight_schema_digest_anchors:2588`) + update (`_update_schema_digest_anchors:2610`); updates `schema_digest`. **Not transactional in Database sense** (no `tx_id` involvement;happens outside any tx envelope). **Additive only**: no breaking-change migration (no field rename, type change, removal). | **YES deferred-aligned for "migration tx"** — shipped's additive evolution is a strict subset of full schema migration semantics; transactional migration with breaking-change support remains deferred. Note: shipped's `add_schema_classes` itself depends on Q1 (tx_id) if the design later requires schema changes to participate in tx envelopes. |
+| D6 | materialized derived views (derived fact lifecycle 明确) | **No** — no derived-view materialization anywhere in `core/view/` or `application/`. Distinguish from same-name uses in shipped: `materialize_id` (`core/derivation/accept.py:29`, `core/evidence/write_protocol.py:90`) is **derivation fact provenance**, not view materialization;`materialize_certainty_summary` (`core/store/_certainty_materializer.py:82`) is **audit precompute**, not derived-view persistence;`_materialize_edb_session` (`adapters/pyreason/engine_eval.py:82`) is **PyReason adapter session setup**, not view materialization. None are "materialized derived views" in the database sense. | **YES deferred-aligned** — no derived-view materialization layer in shipped Database/view substrate. |
+| D7 | remote database (本地 database semantics 稳定) | **No** — no remote/network concept;`Ledger(path)` accepts only `":memory:"` or local file path (§7.5 `ledger.py:255-279`). No HTTP/RPC/networked storage anywhere. | **YES deferred-aligned** — trivially absent. |
+| D8 | multi-db join (单 db snapshot + view scope 稳定后) | **No** — single `SDKStore` per process; no cross-db semantics (no `Ledger.attach_external` or similar); `FactGraph = SDKStore` (§7.12 `sdk/store.py:3432`) instantiates exactly one ledger per instance. | **YES deferred-aligned** — trivially absent. |
+| D9 | Rule persistence / SavedRule (需要 rule registry / deployment governance) | **YES — shipped has full SavedRule layer**. Per A11 (c) + A15 (A-persisted) + Q8: `fg.rules.save/load/list/get` (§7.12 `sdk/store.py:2092-2125`) → `application/authoring_runtime.save_rule:54-65` / `save_inference:68-79` → `FileAuthoringRegistry.register_rule_spec` / `register_inference_spec` (`authoring/registry_fs.py:83-118+`). Returned handles `SavedRuleRef(rule_id, version)` (`authoring_runtime.py:20-34`) + `SavedInferenceRef` (`:37-51`) ARE literally the "SavedRule" D9 defers. | **NO — shipped EXCEEDS D9 scope**. Per audit guardrail Q8 strict framing: this is governance-driven, not location-driven. **Defers to Q8** (SavedRule existence governance: hard remove / mark deferred / gradual deprecation). Matches A11 (c) + A20 (A)(B)(C)(D)(F) split. |
+| D10 | view set algebra API (Python set op 成为高频痛点) | **No** — no set algebra API on views (no union / intersect / difference / symmetric_difference on `FrozenAssertionView` or `_SDKViewsManager`). Shipped views support: create / update / delete / get / list operations on name → asrt_id set, but NO algebra between views. Users can do Python `set` operations on `view.asrt_ids` externally, but no first-class API. | **YES deferred-aligned** — no view set algebra API surface. Python-side `set` ops on `asrt_ids` are user-level, not a shipped API extension. |
+
+**D-series summary** (10 items):
+
+- **8 items confirmed deferred-aligned** (no shipped accidental implementation): D1, D2, D3, D6, D7, D8, D10. D5 partial (additive-only schema evolution is a strict subset of "schema migration tx"; aligned for the deferred portion).
+- **1 item ambiguous, folds into Q1**: D4 (assertion retract / update). Shipped has retract / update at API level (`retract_by_asrt`, `replace_field`, `fg.retract`) but at SQL level revocation IS append-only. Strict vs loose reading of D4 disambiguates via A2 (B) / Q1.
+- **1 item exceeds deferral, defers to Q8**: D9 (Rule persistence / SavedRule). Shipped has full SavedRule layer; per audit guardrail Q8 strict framing, this is governance-driven not location-driven. Matches A11 (c) + A15 (A-persisted) + A20 (A)(B)(C)(D)(F).
+
+**No new Qs raised in §5**. D4 reuses Q1;D9 reuses Q8;all other D-items are clean deferred-aligned. Q-state unchanged from Phase 3 closure (8 questions: Q1-Q5 chain + Q6/Q7/Q8 parallel; Q6 contingent on Q8).
+
+**Cross-cutting observation**: the 2 non-clean rows (D4, D9) are both **already known** from Phase 2-3 — they surface here as commitment-level confirmations of A2 (B) ambiguity + A11 (c) / Q8 framing. §5 introduces no new audit findings; it serves as the deferred-list integrity check.
 
 ## 6. Cross-doc Seams (§19) — Dependency-Only Enumeration
 
