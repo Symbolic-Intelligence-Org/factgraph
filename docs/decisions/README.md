@@ -8,3 +8,5 @@ Current records:
 
 - [2026-05-20_q1-database-class-boundary-decision.md](/Users/zhenzhili/hnsm-backend/docs/decisions/2026-05-20_q1-database-class-boundary-decision.md)
   - Resolves Q1 from the DB/view audit: `Database` is a new application/storage boundary above shipped `Ledger`.
+- [2026-05-20_q3-tx-identity-primitives-decision.md](/Users/zhenzhili/hnsm-backend/docs/decisions/2026-05-20_q3-tx-identity-primitives-decision.md)
+  - Resolves Q3 from the DB/view audit: dedicated Database identity protocols for `tx_id`, `data_digest`, and assertion digest envelope.
