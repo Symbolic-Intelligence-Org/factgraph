@@ -16,3 +16,5 @@ Current records:
   - Resolves Q7 from the DB/view audit: canonical Database-owned durable assertion record with shipped storage/application/SDK adapters.
 - [2026-05-20_q2-attach-lifecycle-decision.md](/Users/zhenzhili/hnsm-backend/docs/decisions/2026-05-20_q2-attach-lifecycle-decision.md)
   - Resolves Q2 from the DB/view audit: `FactGraph.attach(...)` is a new class-method-style constructor distinct from shipped constructors;`attach(db)` is writable against current head, while snapshot/view-scoped forms are read-only;no `rules=` per A15-D.
+- [2026-05-20_q4-frozenassertionview-shape-decision.md](/Users/zhenzhili/hnsm-backend/docs/decisions/2026-05-20_q4-frozenassertionview-shape-decision.md)
+  - Resolves Q4 from the DB/view audit: design-target `FrozenAssertionView` keeps the existing name and upgrades to the anchored 6-field shape; shipped 2-field views become compatibility artifacts.
