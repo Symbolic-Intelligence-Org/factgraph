@@ -95,11 +95,11 @@ This protocol is a guardrail against audit drift; it is not optional. It is the 
 
 | # | Doc invariant | Shipped state (file:line) | Gap | Risk | Recommendation |
 |---|---|---|---|---|---|
-| I1 | `Database` 是唯一持久写入点 |  |  |  |  |
-| I2 | `DatabaseValue` immutable;由稳定 `db_id` + content-addressed `tx_id` 唯一定位 |  |  |  |  |
-| I3 | `SubsetView`/`FrozenAssertionView` immutable;由 `db_id + base_tx_id + asrt_ids + schema_digest` 派生 `view_digest` |  |  |  |  |
-| I4 | `FactGraph.attach(db)` attach 当前 head,默认 writable |  |  |  |  |
-| I5 | `FactGraph.attach(db.as_of(tx_id))` attach snapshot,read-only |  |  |  |  |
+| I1 | `Database` 是唯一持久写入点 | No `Database` class shipped. **Primary / current high-level persistent write boundary is `Ledger`**: assertion / revocation high-level writes route through `Ledger.append_assertion / append_revocation` (§7.5 `ledger.py:363 / :453`); `write_protocol.set_field / retract_by_asrt / replace_field` (§7.17 `write_protocol.py:128 / :170 / :211`) all route through these. SDK `fg.set / add / retract` via `_apply_field_mutation` → `apply_write_plan` → `set_field` → ledger (§7.12 `sdk/store.py:1782-1839 / :1886-1909`). **However `Ledger` is NOT a single `commit_assertions` boundary** — it also exposes (i) **low-level / deprecated write methods** kept for compatibility: `append_claim`, `append_claim_args`, `append_meta`, `append_revokes` (§7.5 `ledger.py:512 / :531 / :553 / :598`, all 4 marked deprecated in docstrings); (ii) `append_annotations` (§7.5 `ledger.py:576`) for annotation-only writes; (iii) `set_ledger_meta / replace_ledger_meta` (§7.5 `ledger.py:780 / :788`) for lifecycle metadata writes that bypass the assertion path. SQL writer is `sqlite3.Connection.execute(...)` invoked from any of these methods (DDL at §7.5 `ledger.py:81-159`). | **(c) shape conflict** — shipped `Ledger` is the primary high-level write boundary at the SQL layer, but no `Database` class concept exists. Approximation is incomplete: (i) `Ledger` lacks `db_id` / `tx_id` / `commit_assertions(...)` API; (ii) `Ledger` exposes **multiple high-level + low-level write methods** rather than a single `commit_assertions(...)` boundary; (iii) deprecated paths (`append_claim*`, `append_meta`, `append_revokes`) coexist with the current `append_assertion / append_revocation` boundary;(iv) lifecycle-meta writes (`set_ledger_meta` / `replace_ledger_meta`) sit outside the assertion model entirely. | medium-high | doc revision needed before any implementation: decide whether `Database` is (a) a new layer above shipped `Ledger`, (b) **doc revision maps the `Database` concept to the existing `Ledger` boundary** (not a code rename), or (c) a design term dropped in favor of `Ledger`. Implementation cost depends entirely on this choice. See §8 Q1. |
+| I2 | `DatabaseValue` immutable;由稳定 `db_id` + content-addressed `tx_id` 唯一定位 | No `DatabaseValue` class shipped. `ledger_meta` (§7.5 `ledger.py:118-121`) is a **generic key/value table** — its DDL constrains only `(key PRIMARY KEY, value TEXT NOT NULL)` and does not enforce or reserve any specific keys at the SQL layer. A grep over the shipped code surface surfaces **no `db_id` / `tx_id` concept anywhere**. Current shipped lifecycle uses `SDKStore` to write+verify `schema_digest` into `ledger_meta`: `_from_schema_classes_impl` writes / checks on construction (`sdk/store.py:920-925`), `_preflight_schema_digest_anchors` checks pre-mutation (`sdk/store.py:2588-2607`), `_update_schema_digest_anchors` writes post-mutation (`sdk/store.py:2610-2623`). `_compute_ingest_key` (§7.17 `write_protocol.py:318`) is sha256-based via `canonical_bytes_tup_v1` but serves **idempotency dedup**, not snapshot identity. | **(d) genuinely new** — `DatabaseValue` DTO + `db_id` identity + `tx_id` identity all absent. Foundational primitives DO exist (`sha256_token` §7.1, `canonical_bytes_tup_v1` §7.3) so a `tx_id` formula could be built on top — but no shipped equivalent today. | high | defer until shipped uuid-based `asrt_id` model (§7.5 `ledger.py:1066` `_new_asrt_id`, §7.17 `write_protocol.py:120-121` `new_assertion_id`) is reconciled with content-addressed identity proposal. Implementation touches storage identity model, not just a new DTO. See §8 Q3. |
+| I3 | `SubsetView`/`FrozenAssertionView` immutable;由 `db_id + base_tx_id + asrt_ids + schema_digest` 派生 `view_digest` | `FrozenAssertionView` **shipped at §7.12 `sdk/store.py:88-92`** with only 2 fields: `(name: str, asrt_ids: frozenset[str])`. Stored in `_SDKViewsManager._views` dict (`sdk/store.py:101-179`); **explicitly NOT persisted to workspace** (`sdk/store.py:132` comment). No `db_id`, no `base_tx_id`, no `schema_digest`, no `view_digest` field. No view_digest derivation formula shipped. | **(c) shape conflict** — same name `FrozenAssertionView` collides between shipped (2 fields) and design (6 fields). 4 of 6 design anchor fields (`db_id` / `base_tx_id` / `schema_digest` / `view_digest`) are missing. The design's 4 missing anchors presuppose I2's identity model which is itself **(d)** genuinely new. | medium-high | doc revision needed: (a) reuse shipped 2-field shape + drop anchor fields from design, or (b) rename design's view (e.g., `AnchoredAssertionView`) to avoid name collision, or (c) breaking migration of shipped 2-field shape to 6-field shape (would invalidate existing `fg.views.create/update/get/list` API contracts). Decision blocked on I2. See §8 Q4. |
+| I4 | `FactGraph.attach(db)` attach 当前 head,默认 writable | **No `FactGraph.attach(db)` method shipped.** `FactGraph = SDKStore` literal alias (§7.12 `sdk/store.py:3432`). Constructors only: `SDKStore.create(...)` (`sdk/store.py:783`), `SDKStore.from_schema_classes(...)` (`sdk/store.py:837`), `SDKStore.load(...)` (`sdk/store.py:860`). No "attach" lifecycle method exists. `Ledger(path)` constructor at §7.5 `ledger.py:255` opens / creates SQLite. `Store(schema_ir, ledger, ...)` constructor at §7.6 `runtime.py:67`. Default-writable: shipped is **writable by absence of read-only mechanism**, not by attach semantics — no shipped read-only mode exists anywhere in `Ledger` / `Store` / `SDKStore`. | **(c) shape conflict** on the API surface — `attach()` lifecycle method is genuinely absent. The closest shipped API `SDKStore.load(path, schema_classes)` approximates "bind a runtime to existing storage" but: (i) named `load` not `attach`, (ii) requires `schema_classes` argument, (iii) has no "current head" semantics (depends on I2 `tx_id` which is **(d)**). The "default writable" subclause is satisfied **trivially by the absence of a read-only enforcement mechanism**, not by attach semantics — design's intent that attach decides writability cannot be evaluated against shipped because shipped has no writability decision point. Per user caution: constructor ≠ attach. | medium | doc revision needed: clarify whether `attach(db)` is a (a) **new lifecycle method distinct from constructors**, or (b) **rename of `SDKStore.load(...)`**. Until I2's `db_id` / `tx_id` model lands, "attach the current head" semantics have no foundation. See §8 Q2. |
+| I5 | `FactGraph.attach(db.as_of(tx_id))` attach snapshot,read-only | **No `as_of(tx_id)` method shipped** (depends on `tx_id` per I2, which is **(d)**). **No `attach(...)` method shipped** (per I4, which is **(c)**). **No "read-only attachment" lifecycle** anywhere in shipped runtime. Closest adjacencies: (i) application read layer **rejects** `at_time_ns` / `version` request params at execute time with `TEMPORAL_READ_NOT_IMPLEMENTED` / `VERSIONED_READ_NOT_IMPLEMENTED` (§7.9 `entity_view.py:524-537`); (ii) SDK has per-assertion `.at(t)` / `.version(v)` filters on `FieldAssertions` and `AssertionRecordSet` (§7.13 `facade.py:_is_assertion_visible_at` / `_read_assertion_version`) — but these filter **per-row via `meta.raw["valid_from"]` / `meta.raw["valid_to"]` / `meta.raw["version"]`**, NOT via a db-snapshot read-only scope. | **(d) genuinely new** at db level — `as_of(tx_id)` + `attach(...)` lifecycle + db-snapshot read-only enforcement infrastructure all absent. SDK per-assertion temporal/version filter is a different feature (per-row meta-based) and cannot be treated as a shipped equivalent for db-snapshot read. | high | defer — blocked on I2 (`db_id` / `tx_id` model) + I4 (`attach()` lifecycle decision) + new read-only enforcement infrastructure. No foundation to implement as designed until I2 + I4 resolved. |
 | I6 | `FactGraph.attach(db, view=view)` attach view scope,read-only |  |  |  |  |
 | I7 | `view=` 指定时,read/evaluate/explain 只能看见 `view.asrt_ids` 内 assertions |  |  |  |  |
 | I8 | `view=` 省略时,read/evaluate/explain 使用 attached snapshot 的 full assertion universe |  |  |  |  |
@@ -108,6 +108,10 @@ This protocol is a guardrail against audit drift; it is not optional. It is the 
 | I11 | `db_id` 是 database identity,持久存储;`tx_id` 是 transaction content identity,跨进程可复现 |  |  |  |  |
 | I12 | `FactGraph.attach(...)` 签名不包含 `rules=`;rules 不进 Database transaction、不进 workspace v1 |  |  |  |  |
 | I13 | Workspace 物理布局:`db/objects/` + `db/refs/` + `db/assertions.db`;views 同模式 |  |  |  |  |
+
+**I1-I5 cross-cutting observation** (informational, not a triage decision):
+
+I1-I5 are not 5 independent invariants — they form a coherent "missing Database / Snapshot / Attach layer" stack. I1 introduces the `Database` class concept; I2 introduces `DatabaseValue` immutable snapshot identified by `db_id + tx_id`; I3 anchors `FrozenAssertionView` to `db_id + base_tx_id + schema_digest + view_digest` (3 of 4 anchors flow from I1+I2); I4 introduces `attach()` lifecycle that binds runtime to `Database`; I5 introduces `as_of(tx_id)` snapshot read on top of I2+I4. Of the 5 rows: **2 are (d) genuinely new** (I2, I5) and **3 are (c) shape conflict** (I1, I3, I4). Implementation order is forced: I2 must land before I3 / I5; I4 must land before I5 / I6.
 
 ## 4. A-series Commitments Triage (A1-A20)
 
@@ -561,7 +565,55 @@ Three distinct meanings of "view" in shipped + design.
 
 ## 8. Open Questions for User
 
-*(populated during audit when ambiguity surfaces)*
+Questions surface here as audit rows are filled. Each one blocks (or constrains) downstream triage and ultimately Phase 4 recommendations.
+
+### Q1 — `Database` class concept: new layer, rename, or drop? (raised by I1)
+
+Shipped `Ledger` (§7.5) is the primary high-level write boundary at the SQLite layer (with additional low-level / deprecated entries + lifecycle-meta writes — see I1). No `Database` class concept exists. Three resolution options visible from I1 triage:
+
+- (a) **`Database` is a new layer above `Ledger`** — adds `db_id` / `tx_id` / `commit_assertions(...)` API on top of existing ledger. Implementation cost: significant (new API surface + identity wiring + boundary tightening from current multi-method shape to single-commit shape).
+- (b) **Doc revision maps the `Database` concept to the existing `Ledger` boundary** — keep shipped `Ledger` code as-is (no code rename), accept that `Ledger` is the boundary the design called `Database`. Add `db_id` / `tx_id` on top if needed by other commitments. Avoids implying a code rename of `Ledger`; only the design vocabulary is reconciled.
+- (c) **Drop `Database` from design** — accept shipped `Ledger` boundary + multi-path write surface as final; revise design doc to remove the `Database` term and revise I1 / I2 / I4 accordingly.
+
+This question blocks Phase 4 recommendations for I1 + I2 + I4.
+
+### Q2 — `FactGraph.attach(db)`: new lifecycle or rename of `SDKStore.load(...)`? (raised by I4)
+
+Shipped has `SDKStore.create / from_schema_classes / load`. No `attach(db)`. Two resolution options:
+
+- (a) **`attach(db)` is a new lifecycle distinct from constructors** — caller first creates / opens a `Database`, then calls `fg.attach(db)` to bind runtime. Lifecycle: `Database` is decoupled from runtime; multiple `FactGraph` instances can attach to the same `db`.
+- (b) **`attach(db)` is a rename of `SDKStore.load(path, schema_classes)`** — same lifecycle, different name. `Database` is just storage; `attach` just opens it.
+
+Choice (a) requires solving the question of when/how a `Database` is created independently of `FactGraph`, and what "same db" semantics across multiple FactGraph instances means. Choice (b) is simpler but loses the design intent of separating `Database` from runtime.
+
+This question blocks Phase 4 recommendations for I4 + I5 + I6.
+
+### Q3 — Where does `tx_id` content-addressed formula get its primitives? (raised by I2)
+
+Shipped has `sha256_token` (§7.1) + `canonical_bytes_tup_v1` (§7.3) as **foundational primitives** that a `tx_id` formula could reuse.
+
+**Crucially, `_compute_ingest_key` (§7.17 `write_protocol.py:318`) is NOT a candidate template for `tx_id`** — its canonical payload includes ingest-side idempotency material (`source`, `source_loc`, `trace_id`, `valid_from`, `valid_to`, `version` — `write_protocol.py:324-368`), not transaction-snapshot material. Treating `ingest_key` as a `tx_id` template would conflate two distinct semantics (ingest dedup vs snapshot identity).
+
+Two design-level decisions:
+
+- (a) **Reuse shipped primitives only** — build `tx_id` from `sha256_token(canonical_bytes_tup_v1(...))` with a domain-separation marker (e.g., first term `("string", "tx_v1")` as sentinel inside the tuple, or a fresh `tx_v1` prefix string-prepended to the canonical bytes). Tx payload would carry tx-relevant material (e.g., `parent_tx_id + sorted(asrt_id_set) + schema_digest`). Reuses primitives, **does NOT reuse `_compute_ingest_key`'s payload shape**.
+- (b) **Define a separate `tx_v1` canonical byte protocol** — analogous to `tup_v1_PREFIX = b"factpy\x00tup_v1\x00"` (§7.3) / `IDREF_V1_PREFIX = b"factpy\x00idref_v1\x00"` (§7.2), introduce `tx_v1_PREFIX = b"factpy\x00tx_v1\x00"` with its own byte encoding rules. Cleanest separation but adds a new protocol module in `core/protocol/`.
+
+Both options explicitly **reject reusing `_compute_ingest_key` as-is** because of payload-semantics mismatch. Cross-cuts I2 + I10 + I11.
+
+### Q4 — `FrozenAssertionView` collision: how to resolve 2-field vs 6-field? (raised by I3)
+
+Shipped `FrozenAssertionView(name, asrt_ids)` is a working SDK feature with shipped `fg.views.create/update/delete/get/list` API (§7.12 `_SDKViewsManager:101-179`). Design wants 6-field `(name, db_id, base_tx_id, schema_digest, asrt_ids, view_digest)`. Three options:
+
+- (a) **Reuse shipped 2-field shape** — drop `db_id / base_tx_id / schema_digest / view_digest` from design. Lowest cost; loses the view-anchor integrity check.
+- (b) **Rename design's shape** (e.g., `AnchoredAssertionView`) — both shipped and design coexist. Cost: term proliferation; users see two view types.
+- (c) **Breaking migration of shipped** — shipped 2-field shape is upgraded to 6-field. Cost: invalidates existing `fg.views.create(name, asrt_ids=...)` callers + needs `db_id / base_tx_id / schema_digest` to be populated (which depends on I2).
+
+Cross-cuts I3 + I6 + I7. Decision blocked on I2.
+
+### Cross-cutting observation (not a question)
+
+I1-I5 form a coherent dependency stack rather than 5 independent commitments. Resolution order is forced by data dependency: Q1 (Database class) → Q3 (tx_id primitives) → Q2 (attach lifecycle) → Q4 (FrozenAssertionView shape). Until Q1-Q4 are answered, I1-I5 cannot move past **(c) shape conflict** / **(d) genuinely new** classification into concrete implementation recommendations.
 
 ## 9. Next-step Recommendations
 
