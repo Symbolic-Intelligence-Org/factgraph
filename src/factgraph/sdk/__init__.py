@@ -29,6 +29,7 @@ from .store import FactGraph, SDKStore
 from factgraph.application.authoring_runtime import SavedInferenceRef, SavedRuleRef
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
+from factgraph.core.store import AssertionInput, CommitResult, Database, MetaEntry
 from .dsl import Branch, Inference, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
 from .ingest import IngestResult, ValidationReport
 
@@ -61,6 +62,10 @@ __all__ = [
     "SavedRuleRef",
     "SavedInferenceRef",
     "SchemaAddResult",
+    "AssertionInput",
+    "CommitResult",
+    "Database",
+    "MetaEntry",
     "Rule",
     "RuleRef",
     "Inference",

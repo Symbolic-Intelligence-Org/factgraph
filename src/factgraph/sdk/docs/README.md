@@ -26,6 +26,12 @@ print(snap.name)            # → Alice
 `FactGraph` is the canonical entry point — a literal alias of
 `SDKStore`. Both names refer to the same class.
 
+`FactGraph.attach(db, schema_classes=...)` is the Database-owned lifecycle for
+the base writable attach form. Attached runtimes write through
+`fg.commit_assertions(...)` and reject the shipped SDK mutation shortcuts that
+bypass the Database boundary. Snapshot and view-scoped attach forms remain
+future work.
+
 ## Doc Map
 
 The user-facing official quickstart lives at

@@ -75,3 +75,22 @@ Membership validation checks that each `asrt_id` exists as a ledger claim. It
 does not require assertions to be active; revoked assertions may remain in a
 frozen view scope per Q5. SDK in-memory `_SDKViewsManager` views and
 `fg.save(...)` compatibility behavior remain separate and unchanged.
+
+## Attach Lifecycle
+
+`FactGraph.attach(db, schema_classes=...)` binds the SDK runtime to an existing
+`Database` instance for the base writable attach form. The attached runtime
+shares the Database-owned Ledger substrate for reads, but Database-owned writes
+route through `fg.commit_assertions(...)`, which delegates to
+`Database.commit_assertions(...)` and returns `CommitResult` unchanged.
+
+Attached runtimes reject the shipped SDK mutation surfaces (`fg.set`,
+`fg.add`, `fg.retract`, `fg.edit`, `fg.ingest`, `fg.add_schema_classes`,
+`fg.save_rule`, `fg.save_inference`, `fg.accept`, `fg.accept_many`,
+`fg.batch`, `fg.save`, and the corresponding manager delegates) because those
+paths bypass the Database boundary. Non-attached `FactGraph.create`,
+`FactGraph.from_schema_classes`, and `FactGraph.load` runtimes keep the shipped
+behavior.
+
+Snapshot attach (`db.as_of(...)`), view-scoped attach, `ReadOnlyAttachmentError`,
+and public `view=` read/evaluate APIs remain future slices.

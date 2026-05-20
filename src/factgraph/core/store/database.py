@@ -368,6 +368,10 @@ class Database:
     def schema_digest(self) -> str:
         return self._schema_digest
 
+    def _ledger_for_attach(self) -> Ledger:
+        """Return the mutable Ledger substrate for FactGraph.attach internals."""
+        return self._ledger
+
     def head(self) -> DatabaseValue:
         if self._workspace_paths is not None:
             return _read_head_value(

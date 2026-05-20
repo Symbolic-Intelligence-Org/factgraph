@@ -56,6 +56,7 @@ from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
 from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
 from factgraph.adapters.souffle.runner import run_package
+from factgraph.core.store.database import AssertionInput, CommitResult, Database
 from factgraph.core.store.runtime import Store
 from factgraph.core.store.ledger import Ledger
 
@@ -96,6 +97,22 @@ _POLICY_TOMBSTONE = object()
 _PROFILE_KWARG_UNSET = object()
 _SEMANTICS_PROFILE_ENGINES = {"problog", "pyreason"}
 _READPOLICY_REMOVED_MESSAGE = "ReadPolicy was removed. Use raw_kind / bound for uncertainty inputs."
+_ATTACH_REJECTED_KWARGS = {
+    "artifact_store_root",
+    "ledger",
+    "ledger_path",
+    "path",
+    "policy",
+    "registry",
+    "registry_root",
+    "rules",
+    "view",
+    "workspace_path",
+}
+_ATTACHED_WRITE_ERROR = (
+    "attached FactGraph runtimes route writes only through fg.commit_assertions(...); "
+    "{method_name} is not available on attached runtimes"
+)
 
 
 class _SDKViewsManager:
@@ -106,13 +123,14 @@ class _SDKViewsManager:
     assertion view name when callers create it.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, sdk: "SDKStore") -> None:
         # Read-only attribute boundary per post-L redesign §5.4 lock.
         # Internal init bypasses ``__setattr__`` via ``object.__setattr__``;
         # external assignment (``fg.views.foo = ...``) raises
         # ``FrozenSnapshotError``. Dict mutation against ``self._views``
         # via ``create`` / ``update`` / ``delete`` is unaffected (it
         # mutates the dict, not the attribute).
+        object.__setattr__(self, "_sdk", sdk)
         object.__setattr__(self, "_views", {})
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -130,6 +148,7 @@ class _SDKViewsManager:
         A view stores assertion ids only. It does not store a read policy and
         it is not included in `fg.save(...)` workspace persistence.
         """
+        self._sdk._reject_attached_write("fg.views.create")
         normalized = _normalize_view_name(name)
         if normalized in self._views:
             raise SDKStoreError(f"view already exists: {normalized}")
@@ -149,6 +168,7 @@ class _SDKViewsManager:
         asrts: Iterable[Any] | None = None,
     ) -> FrozenAssertionView:
         """Replace the assertion ids for an existing frozen view."""
+        self._sdk._reject_attached_write("fg.views.update")
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -162,6 +182,7 @@ class _SDKViewsManager:
 
     def delete(self, name: str) -> None:
         """Delete a named frozen assertion view."""
+        self._sdk._reject_attached_write("fg.views.delete")
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -717,6 +738,12 @@ class SDKStore:
     registry, optional workspace path, and user-facing namespaces such as
     `schema`, `read`, `write`, `rules`, `inferences`, `eval`, `what_if`,
     `audit`, `package`, and `views`.
+
+    `FactGraph.attach(db, schema_classes=...)` is the Database-owned lifecycle
+    for new DB/view substrate work. Attached runtimes expose
+    `fg.commit_assertions(...)` for Database-routed writes; shipped
+    `create` / `from_schema_classes` / `load` constructors remain available as
+    compatibility lifecycles.
     """
 
     def __init__(
@@ -751,6 +778,8 @@ class SDKStore:
         self._schema_ir = self._store.schema_ir
         self._schema_digest = schema_digest(self._schema_ir)
         self._workspace_path = _normalize_workspace_path(workspace_path)
+        self._database: Database | None = None
+        self._attached_writable = False
         self._authoring_registry = _resolve_authoring_registry(
             registry_root=registry_root,
             registry=registry,
@@ -760,7 +789,7 @@ class SDKStore:
         self._field_decl_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._entity_spec_by_class: dict[type[Entity], dict[str, Any]] = {}
         self._identity_values_by_e_ref: dict[str, dict[str, Any]] = {}
-        self._views_manager = _SDKViewsManager()
+        self._views_manager = _SDKViewsManager(self)
         self._assertions_manager = _SDKAssertionsManager(self)
         self._schema_manager = _SDKSchemaManager(self)
         self._read_manager = _SDKReadManager(self)
@@ -778,6 +807,13 @@ class SDKStore:
 
     def __repr__(self) -> str:
         return f"SDKStore(entities={len(self._classes)}, schema={self._schema_digest!r})"
+
+    def _is_attached(self) -> bool:
+        return self._database is not None
+
+    def _reject_attached_write(self, method_name: str) -> None:
+        if self._is_attached():
+            raise SDKStoreError(_ATTACHED_WRITE_ERROR.format(method_name=method_name))
 
     @classmethod
     def create(
@@ -895,6 +931,39 @@ class SDKStore:
             raise SDKStoreError(str(exc)) from exc
 
     @classmethod
+    def attach(
+        cls,
+        db: Database,
+        *,
+        schema_classes: list[type[Entity]],
+        default_row_format: str | None = None,
+        **kwargs: Any,
+    ) -> "SDKStore":
+        if not isinstance(db, Database):
+            raise SDKStoreError("FactGraph.attach(db) expects a Database instance")
+        if kwargs:
+            rejected = sorted(_ATTACH_REJECTED_KWARGS.intersection(kwargs))
+            unknown = sorted(set(kwargs) - _ATTACH_REJECTED_KWARGS)
+            raise SDKStoreError(
+                "FactGraph.attach(...) does not accept keyword(s): "
+                + ", ".join(rejected + unknown)
+            )
+
+        schema_ir = compile_schema_from_classes(schema_classes)
+        digest = schema_digest(schema_ir)
+        if digest != db.schema_digest:
+            raise SDKStoreError(
+                f"schema mismatch: Database has schema_digest={db.schema_digest!r}, "
+                f"but schema_classes compile to {digest!r}"
+            )
+
+        store = Store(schema_ir=schema_ir, ledger=db._ledger_for_attach())
+        attached = cls(schema_classes, store=store, default_row_format=default_row_format)
+        attached._database = db
+        attached._attached_writable = True
+        return attached
+
+    @classmethod
     def _from_schema_classes_impl(
         cls,
         classes: list[type[Entity]],
@@ -1006,7 +1075,16 @@ class SDKStore:
         """`package` taxonomy namespace exposing ``export_package`` / ``run_package``."""
         return self._package_manager
 
+    def commit_assertions(self, assertions: Sequence[AssertionInput]) -> CommitResult:
+        if self._database is None:
+            raise SDKStoreError(
+                "fg.commit_assertions(...) is only available on FactGraph.attach(db) runtimes; "
+                "use shipped fg.set / fg.add / fg.write.* for non-attached SDKStores"
+            )
+        return self._database.commit_assertions(assertions)
+
     def batch(self, *, meta: dict[str, Any] | None = None):
+        self._reject_attached_write("fg.batch")
         from .batch import SDKBatchTx
 
         return SDKBatchTx(self, meta=meta)
@@ -1057,6 +1135,7 @@ class SDKStore:
         )
 
     def edit(self, entity_cls: type[Entity], **identity_kwargs: Any):
+        self._reject_attached_write("fg.edit")
         from .facade import sdk_edit
 
         return sdk_edit(self, entity_cls, **identity_kwargs)
@@ -1068,6 +1147,7 @@ class SDKStore:
         meta: dict[str, Any] | None = None,
         allow_sensitive_meta: bool = False,
     ):
+        self._reject_attached_write("fg.ingest")
         from .ingest import sdk_ingest
 
         return sdk_ingest(self, data, meta=meta, allow_sensitive_meta=allow_sensitive_meta)
@@ -1082,6 +1162,7 @@ class SDKStore:
         *schema_class_args: type[Entity],
         schema_classes: list[type[Entity]] | None = None,
     ) -> SchemaAddResult:
+        self._reject_attached_write("fg.add_schema_classes")
         if schema_class_args and schema_classes is not None:
             raise SDKStoreError("pass either positional schema classes or schema_classes=, not both")
         if schema_classes is None:
@@ -1739,6 +1820,7 @@ class SDKStore:
             SDKStoreError: ``code="FIELD_VALUE_TYPE_MISMATCH"`` if ``value``
                 does not match the field's declared type domain.
         """
+        self._reject_attached_write("fg.set")
         return self._apply_field_mutation(op="set", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def add(
@@ -1777,6 +1859,7 @@ class SDKStore:
             SDKStoreError: ``code="FIELD_VALUE_TYPE_MISMATCH"`` if ``value``
                 does not match the field's declared type domain.
         """
+        self._reject_attached_write("fg.add")
         return self._apply_field_mutation(op="add", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def _apply_field_mutation(
@@ -1902,6 +1985,7 @@ class SDKStore:
             no retraction was emitted (e.g. the target assertion is already
             retracted).
         """
+        self._reject_attached_write("fg.retract")
         try:
             return retract_by_asrt(self._store.ledger, asrt_id, meta)
         except WriteProtocolError as exc:
@@ -2068,6 +2152,7 @@ class SDKStore:
         be bound to a workspace path through `FactGraph.create(path=...)` or an
         earlier `fg.save(path)`.
         """
+        self._reject_attached_write("fg.save")
         workspace_path = _normalize_workspace_path(path) or self._workspace_path
         if workspace_path is None:
             raise SDKStoreError(
@@ -2090,6 +2175,7 @@ class SDKStore:
         return {"path": str(paths.root), "manifest": str(paths.manifest)}
 
     def save_rule(self, rule: Any) -> SavedRuleRef:
+        self._reject_attached_write("fg.save_rule")
         registry = self._require_authoring_registry()
         if not hasattr(rule, "to_authoring_payload"):
             raise SDKStoreError("fg.rules.save(...) expects SDK Rule")
@@ -2125,6 +2211,7 @@ class SDKStore:
             raise SDKStoreError(str(exc)) from exc
 
     def save_inference(self, inference: Any) -> SavedInferenceRef:
+        self._reject_attached_write("fg.save_inference")
         registry = self._require_authoring_registry()
         if not hasattr(inference, "to_authoring_payload"):
             raise SDKStoreError("fg.inferences.save(...) expects SDK Inference")
@@ -2348,6 +2435,7 @@ class SDKStore:
         return f"derive:{uuid4().hex[:8]}"
 
     def accept(self, *args: Any, **kwargs: Any) -> AcceptResult:
+        self._reject_attached_write("fg.accept")
         if args and isinstance(args[0], CandidateSet):
             if len(args) != 1:
                 raise SDKStoreError("accept(candidate_set, ...) accepts exactly one positional argument")
@@ -2371,6 +2459,7 @@ class SDKStore:
         mode: str = "atomic",
         idempotent_duplicate_ok: bool = True,
     ) -> list[dict[str, Any]]:
+        self._reject_attached_write("fg.accept_many")
         return self._store.accept_many(
             requests,
             mode=mode,
