@@ -7,6 +7,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-20 | draft | Blueprint created | Scoped Slice 4 as Option α (base writable form only): introduce `FactGraph.attach(db)` classmethod, `fg.commit_assertions(...)` Database-routed write API, rejection of shipped Ledger-direct write paths on attached SDKStores, and SDK public exports for `AssertionInput` / `CommitResult` / `Database`. |
+| 2026-05-21 | draft | Draft tightening applied | Applied review tightenings: cite fix (eleven top-level managers plus two `_SDKWhatIfManager` sub-managers), P1 (`Database.ledger` read-only property accessor), P2 (`MetaEntry` added to SDK exports alongside `AssertionInput`), T1 (`attach` carries `**kwargs` catch-all rejecting unknown kwargs with `SDKStoreError` rather than `TypeError`), T2 ("Ledger-direct" replaced with "Database-boundary-bypassing" wording across §1/§2/§4.3/§5.4), T3 (`_SDKViewsManager._sdk` back-reference scope localized to attached-runtime rejection guard with explicit non-attached invariance note). |
 
 ## Decision Notes
 
@@ -54,7 +55,20 @@ These choices are open to preflight challenge.
 The draft intentionally leaves several choices to preflight before `scoped`:
 
 - exact placement of rejection guards on flat methods (early-return helper versus inline per method);
-- whether `_SDKViewsManager` should gain a `_sdk` back-reference or receive the rejection check through a different mechanism;
+- whether `_SDKViewsManager` should gain a `_sdk` back-reference or receive the rejection check through a different mechanism (the draft picks the back-reference;preflight may revisit);
 - whether schema mismatch in `attach` should error with `SDKStoreError` or a Database-layer error;
 - whether the test file `tests/test_db_attach_lifecycle.py` should be split (lifecycle vs rejection vs multi-attach) or kept single;
 - exact wording of the rejection error messages.
+
+### 2026-05-21 — Draft tightening response to review
+
+Review on `9b527d54` surfaced one cite-precision item, two substantive items (P1 `Database._ledger` private-field reach-around and P2 incomplete SDK exports for non-empty meta writes), and three tightenings (T1 attach signature inconsistency with `SDKStoreError` claim, T2 narrow "Ledger-direct" wording miscategorizing `_SDKViewsManager` in-memory mutation, T3 `_SDKViewsManager` back-reference scope clarity).  The tightening commit applies all six in one pass without changing the slice direction or scope:
+
+- **Cite fix**: §4.1 now states eleven top-level private namespace managers instantiated in `__init__` at `:763-773`, with `_SDKWhatIfFactOverlayManager` and `_SDKWhatIfRuleManager` recorded as the two sub-managers built inside `_SDKWhatIfManager.__init__` at `:548-584`.  §5.6 and §6 wording updated accordingly.
+- **P1 — `Database.ledger` accessor**: §5.2 introduces a new read-only property `Database.ledger` on `src/factgraph/core/store/database.py` returning `self._ledger`.  Documented as a runtime-binding accessor whose sole intended caller is `FactGraph.attach(...)`.  Avoids the SDK layer reaching into `Database._ledger` private field.  Property does not provide write semantics — Database writes still route through `Database.commit_assertions(...)`.  §6 invariants, §7 acceptance, and §8 plan (new step 1) updated.  Chosen over the "explicitly allow same-package private field bridge" alternative for cleaner test/document surface.
+- **P2 — `MetaEntry` SDK export**: §5.7 adds `MetaEntry` to the SDK `__init__.py` export list alongside `AssertionInput` / `CommitResult` / `Database`.  `MetaEntry` is required at the SDK boundary because non-empty `AssertionInput.meta` is constructed from `MetaEntry` instances;exporting it keeps the attached commit API end-to-end usable without `factgraph.core.store` imports.  §7 acceptance and §8 plan (steps 2 and 9) updated.
+- **T1 — `attach` `**kwargs` reject**: §5.1 signature gains an explicit `**kwargs: Any` catch-all and the Rules text records that any unknown keyword raises `SDKStoreError` rather than Python's default `TypeError`.  Chosen for consistency with the SDK's canonical boundary error type and to make rejection assertions testable.  §6 invariants, §7 acceptance, and §8 plan (step 5) updated.
+- **T2 — "Ledger-direct" → "Database-boundary-bypassing"**: §1 problem, §2 goals, §4.3 surface enumeration heading prose, and §5.4 heading now use "shipped mutation paths that bypass the Database boundary" or equivalent wording.  `_SDKViewsManager.create / update / delete` is an in-memory dict mutation, not a Ledger write;the previous "Ledger-direct" wording risked miscategorizing it.  The Rule-2-bidirectionality check is now more precise.
+- **T3 — `_SDKViewsManager._sdk` back-reference scope**: §5.4 adds a paragraph after the implementation note explicitly recording that the new `_sdk` back-reference is added solely for the attached-runtime rejection check;non-attached SDKStore `_SDKViewsManager` behavior — dict mutation semantics, attribute-RO via `FrozenSnapshotError`, two-field `FrozenAssertionView` return shape, and object identity — is unchanged.  §6 records the same invariant.
+
+None of these changes expand the slice scope.  Snapshot form, view-scoped form, `ReadOnlyAttachmentError`, re-routing shipped flat write methods through `Database.commit_assertions(...)`, and `Database.as_of(...)` all remain Non-goals.

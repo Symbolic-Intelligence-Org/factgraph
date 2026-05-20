@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-20
-- Last Updated: 2026-05-20
+- Last Updated: 2026-05-21
 - Related Modules:
   - `src/factgraph/sdk/store.py`
   - `src/factgraph/sdk/__init__.py`
@@ -29,13 +29,13 @@ Slices 1-3 introduced the `Database` identity substrate, the new-layout workspac
 
 Q2 closed the attach lifecycle pattern with three forms — base writable, snapshot read-only, view-scoped read-only — and locked their read/write semantics from design §9.1-§9.2. Q2 §13 adds a Step-5 ship-gate: any scoped form (snapshot or view) MUST NOT ship before read-only enforcement on every write path is in place. Implementing all three forms in one slice would either drag in `Database.as_of(...)` (Q1-territory snapshot primitive that does not yet exist) and full per-write-path RO enforcement, or violate Q2 §13.
 
-This slice scopes the smallest implementable cut: the **base writable form** `FactGraph.attach(db)`. It wires `Database` into the SDK runtime, exposes a Database-routed write API on the attached runtime, blocks the shipped Ledger-direct mutation paths on attached SDKStores so that the Q1 boundary is materially enforced at runtime, and leaves the snapshot and view-scoped forms — together with the `ReadOnlyAttachmentError` type Q2 names — to a later slice that owns the Q2 §13 ship-gate work.
+This slice scopes the smallest implementable cut: the **base writable form** `FactGraph.attach(db)`. It wires `Database` into the SDK runtime, exposes a Database-routed write API on the attached runtime, blocks shipped mutation paths that bypass the Database boundary on attached SDKStores so that the Q1 boundary is materially enforced at runtime, and leaves the snapshot and view-scoped forms — together with the `ReadOnlyAttachmentError` type Q2 names — to a later slice that owns the Q2 §13 ship-gate work.
 
 ## 2. Goals
 
 - Introduce `FactGraph.attach(db: Database)` as a classmethod-style constructor distinct from `SDKStore.create / from_schema_classes / load`, returning a writable `SDKStore` bound to a Q1 `Database` object.
 - Define a Database-routed write API on attached SDKStores: `fg.commit_assertions(assertions: Sequence[AssertionInput]) -> CommitResult`, delegating to `Database.commit_assertions(...)`.
-- Reject all shipped Ledger-direct mutation paths on attached SDKStores so writes can only flow through the Q1 boundary;non-attached SDKStores keep these paths unchanged as compatibility surface.
+- Reject all shipped mutation paths that bypass the Database boundary on attached SDKStores so writes can only flow through the Q1 boundary;non-attached SDKStores keep these paths unchanged as compatibility surface.
 - Validate base-form multi-attach: multiple `FactGraph.attach(db)` instances on the same `Database` succeed and observe `db.head()` independently at each `commit_assertions` call.
 - Add `AssertionInput`, `CommitResult`, and `Database` to the SDK public surface so attached SDKStores can be used without callers importing from `factgraph.core.store`.
 - Preserve all slice 1-3 contracts (canonical byte protocols, `Database.commit_assertions` shape, `Database.head` resolution flow, `Database.create_view` substrate API, 6-field `FrozenAssertionView`) without modification.
@@ -60,7 +60,7 @@ This slice scopes the smallest implementable cut: the **base writable form** `Fa
 
 ### 4.1 Shipped `SDKStore` surface
 
-`SDKStore` is defined at `src/factgraph/sdk/store.py:712-3431`. The `__init__` signature at `:722-777` accepts `classes` plus optional `store`, `schema_ir`, `artifact_store_root`, `registry_root`, `registry`, `workspace_path`, `default_row_format`. It builds an internal `Store` over a `Ledger` and instantiates thirteen private namespace managers (`_SDKViewsManager`, `_SDKAssertionsManager`, `_SDKSchemaManager`, `_SDKReadManager`, `_SDKWriteManager`, `_SDKRulesManager`, `_SDKInferencesManager`, `_SDKEvalManager`, `_SDKWhatIfFactOverlayManager`, `_SDKWhatIfRuleManager`, `_SDKWhatIfManager`, `_SDKAuditManager`, `_SDKPackageManager`).
+`SDKStore` is defined at `src/factgraph/sdk/store.py:712-3431`. The `__init__` signature at `:722-777` accepts `classes` plus optional `store`, `schema_ir`, `artifact_store_root`, `registry_root`, `registry`, `workspace_path`, `default_row_format`. It builds an internal `Store` over a `Ledger` and instantiates eleven top-level private namespace managers in `__init__` at `:763-773` (`_SDKViewsManager`, `_SDKAssertionsManager`, `_SDKSchemaManager`, `_SDKReadManager`, `_SDKWriteManager`, `_SDKRulesManager`, `_SDKInferencesManager`, `_SDKEvalManager`, `_SDKWhatIfManager`, `_SDKAuditManager`, `_SDKPackageManager`). `_SDKWhatIfManager.__init__` (`:548-584`) internally constructs two sub-managers `_SDKWhatIfFactOverlayManager` (`:508-524`) and `_SDKWhatIfRuleManager` (`:526-546`).
 
 The three shipped constructors are:
 
@@ -76,7 +76,7 @@ All three route through `_from_schema_classes_impl(...)` at `:897` and ultimatel
 
 ### 4.3 Shipped write surfaces
 
-The Ledger-direct mutation paths exposed by `SDKStore` are:
+The shipped `SDKStore` mutation paths that bypass the Database boundary are:
 
 - `_SDKWriteManager.set / add / retract / edit` at `:328-354`, delegating to flat `SDKStore.set / add / retract / edit` (`fg.retract` flat impl at `:1886`).
 - `_SDKSchemaManager.add / ingest` at `:267-281`, delegating to flat `SDKStore.add_schema_classes / ingest`.
@@ -123,6 +123,7 @@ def attach(
     *,
     schema_classes: list[type[Entity]],
     default_row_format: str | None = None,
+    **kwargs: Any,
 ) -> "SDKStore":
     ...
 ```
@@ -132,7 +133,7 @@ Rules:
 - `db` is a `Database` instance (Q1 boundary).  Path arguments and raw `Ledger` arguments are rejected.
 - `schema_classes` is required and is compiled to a schema IR;the resulting `schema_digest` must equal `db.schema_digest` or `attach` raises `SDKStoreError`.  This protects against a caller attaching a Database whose schema does not match the Entity classes the SDK runtime will use.
 - The attached `SDKStore` instance carries an internal `_database` reference and an `_attached_writable: bool = True` marker.  Internally it constructs the existing thirteen managers exactly as today, sharing the `Ledger` instance held by `db`.
-- `attach` does NOT accept `rules=`, `view=`, `policy=`, `path=`, `ledger=`, `ledger_path=`, `registry=`, `registry_root=`, `artifact_store_root=`, or `workspace_path=`.  Any unknown keyword raises `SDKStoreError`.
+- `attach` carries an explicit `**kwargs` catch-all that is rejected: any unknown keyword raises `SDKStoreError` rather than Python's default `TypeError`.  The reject list always includes `rules=`, `view=`, `policy=`, `path=`, `ledger=`, `ledger_path=`, `registry=`, `registry_root=`, `artifact_store_root=`, and `workspace_path=` — these names match shipped constructors and are explicitly forbidden so callers do not silently fall back to shipped behavior — and any other unknown name is also rejected with `SDKStoreError`.
 
 Aliasing: because `FactGraph = SDKStore` (`:3432`), `FactGraph.attach(db, schema_classes=...)` is the user-facing form.
 
@@ -144,6 +145,8 @@ Two new fields on `SDKStore`:
 - `_attached_writable: bool` — `True` when attached via base form;reserved for later scoped-form work that may set it to `False`.
 
 Existing fields (`_classes`, `_store`, `_schema_ir`, `_schema_digest`, `_workspace_path`, `_authoring_registry`, manager instances, etc.) remain unchanged.  When `attach(db)` is used, `_workspace_path` is left as `None` and the existing `Ledger` from `db` is reused inside `_store`;no new workspace path is materialized.
+
+The attached SDKStore acquires the underlying `Ledger` via a new read-only property `Database.ledger` added by this slice in `src/factgraph/core/store/database.py`.  The property returns `self._ledger` and is documented as a runtime-binding accessor: its sole intended caller is `FactGraph.attach(...)`, and other callers should treat it as a Database-internal handle rather than a public Ledger manipulation surface.  This avoids the SDK layer reaching into the `Database._ledger` private field.  Writes to the Database still route through `Database.commit_assertions(...)`;`Database.ledger` does not provide a write API.
 
 Predicate helper:
 
@@ -174,7 +177,7 @@ Inputs use the slice-1 `AssertionInput` shape (`pred_id`, `fact_tuple`, `meta`).
 
 The method is NOT exposed on any namespace manager;it is a flat method on `SDKStore` to mirror the existing flat method style for write entry points (`fg.set`, `fg.add`, `fg.retract`, `fg.edit`).
 
-### 5.4 Rejection of shipped Ledger-direct write methods on attached SDKStores
+### 5.4 Rejection of shipped Database-boundary-bypassing write methods on attached SDKStores
 
 When `self._is_attached()` is true, the following methods raise `SDKStoreError` with a clear message pointing at `fg.commit_assertions(...)` or the appropriate alternative:
 
@@ -182,6 +185,8 @@ When `self._is_attached()` is true, the following methods raise `SDKStoreError` 
 - Manager-delegated: `_SDKWriteManager.set / add / retract / edit`, `_SDKSchemaManager.add / ingest`, `_SDKRulesManager.save`, `_SDKInferencesManager.save`, `_SDKViewsManager.create / update / delete`.
 
 Implementation note: because manager methods already delegate to flat methods (e.g., `_SDKWriteManager.set` → `self._sdk.set`), placing the rejection guard at each flat method covers both flat callsites and manager callsites.  Manager methods that do not delegate to a flat method (`_SDKViewsManager.create / update / delete` mutate `self._views` directly) need their own guard that checks the parent SDKStore.
+
+The new `_sdk` back-reference added to `_SDKViewsManager` for this rejection guard is the only change to `_SDKViewsManager`.  Non-attached SDKStore `_SDKViewsManager` behavior — dict mutation semantics, attribute-RO via `FrozenSnapshotError`, the two-field `FrozenAssertionView` returned to callers, and `_SDKViewsManager` object identity — is unchanged.  The back-reference is used only by the attached-runtime rejection check on `create / update / delete`.
 
 The error message format:
 
@@ -213,7 +218,7 @@ Multiple `FactGraph.attach(db, schema_classes=...)` calls on the same `Database`
 
 - Holds an independent reference to the same `db` and the same underlying `Ledger`.
 - Observes `db.head()` independently at each `commit_assertions(...)` call (no caching across calls).
-- Carries its own thirteen managers, its own `_schema_ir` snapshot, and its own `_application_schema_index`.
+- Carries its own private namespace managers (eleven top-level plus the two `_SDKWhatIfManager` sub-managers), its own `_schema_ir` snapshot, and its own `_application_schema_index`.
 
 When two attached SDKStores commit in interleaved order, each call sees whatever head exists at its own commit time;there is no batching, no transaction coordination, and no cross-instance head invalidation.  `Database.commit_assertions(...)` already enforces no-duplicate-asrt-id and head-advancement per slice 1;those guarantees are inherited.
 
@@ -225,7 +230,10 @@ Add to `src/factgraph/sdk/__init__.py` exports:
 
 - `AssertionInput` (from `factgraph.core.store`)
 - `CommitResult` (from `factgraph.core.store`)
+- `MetaEntry` (from `factgraph.core.store`)
 - `Database` (from `factgraph.core.store`)
+
+`MetaEntry` is exported alongside `AssertionInput` because non-empty `AssertionInput.meta` requires `MetaEntry` instances at construction time;keeping `MetaEntry` accessible from `factgraph.sdk` lets callers use the attached commit API end-to-end without importing from `factgraph.core.store`.
 
 This enables the canonical attach usage pattern:
 
@@ -240,7 +248,7 @@ result = fg.commit_assertions([
 ])
 ```
 
-`DatabaseValue`, `DatabaseError`, `DuplicateAssertionError`, `FrozenAssertionView`, `MetaEntry`, `AssertionRecord`, and the canonical-byte / digest helpers are NOT added to SDK exports in this slice.  Per `feedback_narrow_public_api`, only types that the attached write API requires at the SDK boundary are surfaced;the rest remain accessible via `factgraph.core.store` for advanced users.
+`DatabaseValue`, `DatabaseError`, `DuplicateAssertionError`, `FrozenAssertionView`, `AssertionRecord`, and the canonical-byte / digest helpers are NOT added to SDK exports in this slice.  Per `feedback_narrow_public_api`, only types that the attached write API requires at the SDK boundary are surfaced;the rest remain accessible via `factgraph.core.store` for advanced users.
 
 ## 6. Boundaries And Invariants
 
@@ -250,19 +258,22 @@ result = fg.commit_assertions([
 - The shipped flat write methods and their manager delegates are rejected on attached SDKStores;they are unchanged on non-attached SDKStores.
 - An attached SDKStore's `_database` field is non-`None`;a non-attached SDKStore's `_database` field is `None`.
 - `attach` rejects schema mismatch between `schema_classes` and `db.schema_digest`.
-- `attach` does NOT accept `rules=`, `view=`, `policy=`, `path=`, `ledger=`, `ledger_path=`, `registry=`, `registry_root=`, `artifact_store_root=`, or `workspace_path=`.
+- `attach` does NOT accept `rules=`, `view=`, `policy=`, `path=`, `ledger=`, `ledger_path=`, `registry=`, `registry_root=`, `artifact_store_root=`, or `workspace_path=`.  Unknown kwargs in the `**kwargs` catch-all raise `SDKStoreError` (not Python's default `TypeError`).
 - Multiple attached SDKStores on the same `Database` are permitted;each independently observes `db.head()` at commit time.
 - This slice does NOT introduce `ReadOnlyAttachmentError`;Q2 names it for scoped forms not shipped here.
 - This slice does NOT add `Database.as_of(...)`, snapshot-form attach, view-scoped-form attach, or any public `view=` consumption surface.
 - All slice 1-3 canonical byte protocols, identity helpers, Database APIs, and FrozenAssertionView shape are unchanged.
-- The existing thirteen SDK manager namespaces, their attribute-RO `FrozenSnapshotError` behavior, and their public read methods are unchanged on both attached and non-attached SDKStores.
+- The existing SDK manager namespaces, their attribute-RO `FrozenSnapshotError` behavior, and their public read methods are unchanged on both attached and non-attached SDKStores.
 - `fg.views.get / list` work on attached SDKStores;`fg.views.create / update / delete` are rejected on attached SDKStores (Database-level view creation goes through `db.create_view(...)`, slice 3 API).
+- `Database.ledger` is a read-only property exposing the `Ledger` substrate held by a `Database` instance;its sole intended caller is `FactGraph.attach(...)` runtime binding.  The property does not provide write semantics — Database writes still route through `Database.commit_assertions(...)`.
+- The new `_sdk` back-reference on `_SDKViewsManager` is added solely to support the attached-runtime rejection guard;non-attached `_SDKViewsManager` behavior, dict mutation semantics, attribute-RO via `FrozenSnapshotError`, two-field `FrozenAssertionView` return shape, and `_SDKViewsManager` object identity are unchanged.
 
 ## 7. Acceptance
 
-- [ ] `FactGraph.attach(db: Database, *, schema_classes, default_row_format=None)` exists as classmethod on `SDKStore`.
-- [ ] `FactGraph.attach(...)` rejects path arguments, raw `Ledger` arguments, `rules=`, `view=`, `policy=`, `path=`, `ledger=`, `ledger_path=`, `registry=`, `registry_root=`, `artifact_store_root=`, and `workspace_path=`.
+- [ ] `FactGraph.attach(db: Database, *, schema_classes, default_row_format=None, **kwargs)` exists as classmethod on `SDKStore`.
+- [ ] `FactGraph.attach(...)` rejects path arguments, raw `Ledger` arguments, `rules=`, `view=`, `policy=`, `path=`, `ledger=`, `ledger_path=`, `registry=`, `registry_root=`, `artifact_store_root=`, and `workspace_path=`.  Unknown kwargs raise `SDKStoreError` (not Python's default `TypeError`).
 - [ ] `FactGraph.attach(db, schema_classes=...)` rejects schema mismatch between compiled `schema_classes` digest and `db.schema_digest`.
+- [ ] `Database.ledger` is a read-only property returning the `Ledger` substrate held by Database;`FactGraph.attach(...)` uses this property instead of `db._ledger`.
 - [ ] An attached SDKStore's `_database` is the supplied `Database` instance;a non-attached SDKStore's `_database` is `None`.
 - [ ] `fg.commit_assertions(assertions)` on an attached SDKStore returns `CommitResult` from `db.commit_assertions(...)` verbatim.
 - [ ] `fg.commit_assertions(...)` on a non-attached SDKStore raises `SDKStoreError`.
@@ -271,7 +282,7 @@ result = fg.commit_assertions([
 - [ ] On non-attached SDKStores, all shipped flat write methods and manager methods listed above work unchanged.
 - [ ] On attached SDKStores, read methods (`fg.read.find / get / ref`, `fg.assertions.by_id / by_ids / active / all / field`, `fg.rules.inspect / load / list / get`, `fg.inferences.load`, `fg.views.get / list`, `fg.eval.*`, `fg.what_if.*`, `fg.audit.*`, `fg.package.*`) work and reflect the data in the shared `Ledger`.
 - [ ] Multiple attached SDKStores on the same `Database` succeed;each can commit independently and observes `db.head()` at its own commit time.
-- [ ] `AssertionInput`, `CommitResult`, and `Database` are exported from `factgraph.sdk`.
+- [ ] `AssertionInput`, `CommitResult`, `MetaEntry`, and `Database` are exported from `factgraph.sdk`.
 - [ ] No `ReadOnlyAttachmentError`, `Database.as_of(...)`, snapshot-form attach, view-scoped-form attach, or public `view=` consumption surface lands in this slice.
 - [ ] Existing slice 1-3 tests still pass (`tests.test_db_identity_substrate`, `tests.test_sdk_frozen_assertion_view`).
 - [ ] New tests cover: attach lifecycle (success + schema mismatch + unknown kwargs), `fg.commit_assertions` routing, rejection of each shipped write method on attached, preservation of each shipped write method on non-attached, multi-attach commit independence, and SDK public export presence.
@@ -281,17 +292,18 @@ result = fg.commit_assertions([
 
 This section is a draft baseline.  Per `feedback_audit_execution_discipline` Rule 1, implementation must re-read source files at task-execution time.  Preflight may produce required amendments before `scoped`.
 
-1. Add `Database`, `AssertionInput`, `CommitResult` imports to `src/factgraph/sdk/store.py` (top-of-file, alongside existing `Ledger` import).
-2. Add `_database: Database | None = None` and `_attached_writable: bool = False` fields to `SDKStore.__init__`;default values keep non-attached behavior identical.
-3. Add `SDKStore._is_attached()` predicate helper.
-4. Add `FactGraph.attach(db, *, schema_classes, default_row_format=None)` classmethod on `SDKStore`.  Build the SDKStore via the existing manager pattern;set `_database = db` and `_attached_writable = True`;validate schema match;reject unknown kwargs.
-5. Add flat `SDKStore.commit_assertions(assertions)` method that checks `_is_attached()` and delegates to `db.commit_assertions(...)`.
-6. Add rejection guards at the start of each shipped flat write method (`set`, `add`, `retract`, `edit`, `ingest`, `add_schema_classes`, `save_rule`, `save_inference`, `save`) that raises `SDKStoreError` when `_is_attached()` is true.
-7. Add rejection guards in `_SDKViewsManager.create / update / delete` that check the parent SDKStore (already accessible via the `_sdk` reference on sibling managers;`_SDKViewsManager` currently has no `_sdk` reference, so add one in `SDKStore.__init__`).
-8. Add `AssertionInput`, `CommitResult`, `Database` to `src/factgraph/sdk/__init__.py` `__all__` and import block.
-9. Add tests in `tests/test_db_attach_lifecycle.py` (new file) covering the acceptance items above.
-10. Update `src/factgraph/core/store/docs/README.md` with an "Attach lifecycle" section pointing at the base writable form and noting that scoped forms remain deferred.
-11. Update SDK store module docstring at `:712-720` to mention `FactGraph.attach(db)` as an alternative lifecycle for new code while keeping shipped constructors as compatibility.
+1. Add a read-only `Database.ledger` property to `src/factgraph/core/store/database.py` returning `self._ledger`.  Document as a runtime-binding accessor used by `FactGraph.attach(...)`;the property does not provide write semantics.
+2. Add `Database`, `AssertionInput`, `CommitResult`, `MetaEntry` imports to `src/factgraph/sdk/store.py` (top-of-file, alongside existing `Ledger` import).
+3. Add `_database: Database | None = None` and `_attached_writable: bool = False` fields to `SDKStore.__init__`;default values keep non-attached behavior identical.
+4. Add `SDKStore._is_attached()` predicate helper.
+5. Add `FactGraph.attach(db, *, schema_classes, default_row_format=None, **kwargs)` classmethod on `SDKStore`.  Build the SDKStore via the existing manager pattern;use `db.ledger` (the new read-only property from step 1) for the runtime `Ledger` reference;set `_database = db` and `_attached_writable = True`;validate schema match;reject `**kwargs` with `SDKStoreError` (not the default `TypeError`).
+6. Add flat `SDKStore.commit_assertions(assertions)` method that checks `_is_attached()` and delegates to `db.commit_assertions(...)`.
+7. Add rejection guards at the start of each shipped flat write method (`set`, `add`, `retract`, `edit`, `ingest`, `add_schema_classes`, `save_rule`, `save_inference`, `save`) that raises `SDKStoreError` when `_is_attached()` is true.
+8. Add rejection guards in `_SDKViewsManager.create / update / delete` that check the parent SDKStore.  `_SDKViewsManager` currently has no `_sdk` reference, so add one in `SDKStore.__init__`;this back-reference is used only by the attached-runtime rejection check and does not affect non-attached `_SDKViewsManager` behavior.
+9. Add `AssertionInput`, `CommitResult`, `MetaEntry`, `Database` to `src/factgraph/sdk/__init__.py` `__all__` and import block.
+10. Add tests in `tests/test_db_attach_lifecycle.py` (new file) covering the acceptance items above.
+11. Update `src/factgraph/core/store/docs/README.md` with an "Attach lifecycle" section pointing at the base writable form and noting that scoped forms remain deferred.
+12. Update SDK store module docstring at `:712-720` to mention `FactGraph.attach(db)` as an alternative lifecycle for new code while keeping shipped constructors as compatibility.
 
 ## 9. Docs To Update
 
