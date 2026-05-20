@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-05-20 | draft | Blueprint created | Scope derived from post-Q synthesis slice 2: workspace physical layout and schema object migration. |
 | 2026-05-20 | scoped | Preflight amendments and self-check passed | PF-1 through PF-6 covered by `c8c64c83`;implementation-plan stale text cleaned by `c12e0f64`;no remaining scoped blocker. |
+| 2026-05-20 | implemented | Scoped implementation landed | Implementation `203b4f21` added workspace-root Database layout, object/ref storage, schema object persistence, tests, and module docs without expanding into excluded slices. |
 
 ## Decision Notes
 

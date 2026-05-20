@@ -1,6 +1,6 @@
 # Task Blueprint: DB Workspace Physical Layout
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-20
 - Last Updated: 2026-05-20
 - Related Modules:
@@ -347,10 +347,73 @@ This section is the scoped implementation plan after preflight `5c84fd3d` and th
 
 ## 10. Outcome / Deviations
 
-Task completion will fill:
+Implementation commit `203b4f21` landed the scoped slice without expanding into
+views, attach lifecycle, SavedRule removal, evidence metadata, rule-expression
+carriers, or DB identity protocol changes.
 
-- final landed layout;
-- migration behavior;
-- compatibility behavior;
-- any deviations from target A16/A17/A19/A20(E);
-- remaining follow-up slices.
+### 10.1 Landed layout
+
+The implemented durable `Database.create(path=...)` / `Database.open(path=...)`
+path is a workspace root. Non-memory Databases now use:
+
+- `db/meta.json` for Database-local metadata (`db_id` and layout version);
+- `db/objects/tx/<64hex>.json` for immutable transaction objects;
+- `db/objects/schema/<64hex>.json` for exact
+  `canonicalize_schema_ir_jcs(schema_ir)` bytes;
+- `db/refs/head.txt` for the current head `tx_id`;
+- `db/assertions.db` as the mutable SQLite `Ledger` substrate/index;
+- `factgraph_workspace.json` with `components.db` and `components.views`, plus
+  `components.registry` only when an existing `registry/` directory is present.
+
+Transaction and schema object filenames use raw lowercase 64-hex token suffixes.
+Object content retains the full token form and validates filename/content
+agreement. Schema object bytes deliberately do not reuse the authoring-registry
+presentation newline or manifest envelope.
+
+### 10.2 Head and compatibility behavior
+
+New-layout `Database.head()` resolves
+`db/refs/head.txt -> db/objects/tx/<64hex>.json -> DatabaseValue`. Ledger
+metadata is maintained only as a compatibility cache and is not the durable head
+source for workspace-mode Databases.
+
+The implementation keeps three modes:
+
+- `:memory:` mode, using in-memory `Ledger` metadata for the head;
+- new workspace mode, using `db/refs/head.txt` and tx objects;
+- legacy direct-ledger open mode, preserving slice-1 compatibility for existing
+  direct SQLite paths that already carry Database metadata.
+
+### 10.3 PF alignment
+
+- PF-1: public new-layout path semantics are workspace-root semantics.
+- PF-2: head identity comes from `head.txt` plus the referenced tx object, not
+  durable `ledger_meta`.
+- PF-3: object and head writes use sibling temp files plus `os.replace(...)`;
+  `head.txt` is written only after the referenced tx object exists and validates.
+- PF-4: no implementation path calls `sync_registry_to_workspace(...)` or uses
+  its destructive registry copy/delete behavior;existing `registry/` content is
+  preserved.
+- PF-5: object filenames use raw 64-hex suffixes and validate against full-token
+  content.
+- PF-6: schema object bytes are exact canonical schema IR bytes.
+
+### 10.4 Deviations and carry-forward work
+
+No intentional deviations from the scoped A16(B) / A17 / A19 / A20(E) slice were
+introduced.
+
+Carry-forward items:
+
+- Cross-file atomicity across Ledger writes, tx object writes, `head.txt`, and
+  ledger metadata cache updates remains a storage-hardening follow-up. The
+  implementation preserves the scoped per-file atomic replacement rule and
+  writes `head.txt` after the tx object exists, but it does not make the whole
+  multi-file commit transactional.
+- Full replay/rebuild tooling from `db/objects/tx/` is still out of scope.
+- View object persistence, attach lifecycle, public `view=` APIs, registry
+  deprecation execution, and cross-doc evidence/rule-expression seams remain
+  separate slices.
+- Full-suite `unittest discover` still has unrelated pre-existing failures
+  around removed `meta[confidence]` inputs, SDK export expectations, and protocol
+  vectors. The scoped slice was verified with its targeted tests and ruff check.
