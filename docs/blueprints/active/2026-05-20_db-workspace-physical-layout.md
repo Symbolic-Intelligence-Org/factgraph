@@ -1,6 +1,6 @@
 # Task Blueprint: DB Workspace Physical Layout
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-20
 - Last Updated: 2026-05-20
 - Related Modules:
@@ -319,7 +319,6 @@ This section is the scoped implementation plan after preflight `5c84fd3d` and th
 2. Define Database object writers/readers.
    - Add write-once helpers for schema objects and tx objects.
    - Use raw 64hex filename segments and keep full token forms inside object content.
-   - Keep full token forms inside object content.
 3. Define head ref handling.
    - Add read/write helpers for `db/refs/head.txt`.
    - Use temp sibling writes plus `os.replace(...)`;document best-effort fsync behavior.
