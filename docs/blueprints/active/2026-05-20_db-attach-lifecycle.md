@@ -132,7 +132,7 @@ Rules:
 
 - `db` is a `Database` instance (Q1 boundary).  Path arguments and raw `Ledger` arguments are rejected.
 - `schema_classes` is required and is compiled to a schema IR;the resulting `schema_digest` must equal `db.schema_digest` or `attach` raises `SDKStoreError`.  This protects against a caller attaching a Database whose schema does not match the Entity classes the SDK runtime will use.
-- The attached `SDKStore` instance carries an internal `_database` reference and an `_attached_writable: bool = True` marker.  Internally it constructs the existing thirteen managers exactly as today, sharing the `Ledger` instance held by `db`.
+- The attached `SDKStore` instance carries an internal `_database` reference and an `_attached_writable: bool = True` marker.  Internally it constructs the existing private namespace managers (eleven top-level plus the two `_SDKWhatIfManager` sub-managers) exactly as today, sharing the `Ledger` instance held by `db`.
 - `attach` carries an explicit `**kwargs` catch-all that is rejected: any unknown keyword raises `SDKStoreError` rather than Python's default `TypeError`.  The reject list always includes `rules=`, `view=`, `policy=`, `path=`, `ledger=`, `ledger_path=`, `registry=`, `registry_root=`, `artifact_store_root=`, and `workspace_path=` — these names match shipped constructors and are explicitly forbidden so callers do not silently fall back to shipped behavior — and any other unknown name is also rejected with `SDKStoreError`.
 
 Aliasing: because `FactGraph = SDKStore` (`:3432`), `FactGraph.attach(db, schema_classes=...)` is the user-facing form.
