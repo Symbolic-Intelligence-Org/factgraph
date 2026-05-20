@@ -1,6 +1,6 @@
 # Task Blueprint: DB View Shape And Persistence
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-20
 - Last Updated: 2026-05-20
 - Related Modules:

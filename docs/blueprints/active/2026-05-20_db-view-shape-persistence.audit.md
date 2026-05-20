@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-05-20 | draft | Blueprint created | Scoped Slice 3 as canonical view shape, view digest, anonymous view-object persistence, and SDK compatibility boundary. |
 | 2026-05-20 | draft | Preflight amendments applied | PF-1 through PF-6 from `docs/audit/2026-05-20_db-view-persistence-preflight.md` folded into the draft. |
+| 2026-05-20 | scoped | Preflight amendments and self-check passed | PF-1 through PF-6 covered by `92c898e6`;preflight `a7105ba1` has no remaining scoped blocker. |
 
 ## Decision Notes
 
