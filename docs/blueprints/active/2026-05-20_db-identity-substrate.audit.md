@@ -9,6 +9,7 @@
 | 2026-05-20 | draft | Blueprint created | Scope derived from post-Q synthesis slice 1: Q1/Q3/Q7 rows only. |
 | 2026-05-20 | draft | Review polish applied | Added meta canonicalization boundary, opaque `path=` boundary, `commit_assertions` atomicity deferral, and engine projection non-identity invariant. |
 | 2026-05-20 | draft | Preflight amendment applied | Consumed preflight findings PF-1/PF-2/PF-3 before any `scoped` decision. |
+| 2026-05-20 | scoped | Preflight amendment and self-check passed | PF-1/PF-2/PF-3 covered;no remaining preflight blocker. |
 
 ## Decision Notes
 
