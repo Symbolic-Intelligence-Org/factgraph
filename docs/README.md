@@ -25,6 +25,8 @@
   - 任务蓝图工作流、状态机、模板与标准归档 / reconstructed 归档规则。
 - [decisions/README.md](/Users/zhenzhili/hnsm-backend/docs/decisions/README.md)
   - 设计审计后的 load-bearing Q-resolution 记录；先锁具体设计问题,再进入 blueprint 或实现。
+- [audit/2026-05-20_post-q-db-view-synthesis.md](/Users/zhenzhili/hnsm-backend/docs/audit/2026-05-20_post-q-db-view-synthesis.md)
+  - DB/view audit 在 Q1-Q8 全闭合后的 drift eligibility synthesis；区分 blueprint-eligible、cross-doc blocked、deferred 和 no-independent-action 项。
 - [module_docs_convention.md](/Users/zhenzhili/hnsm-backend/docs/module_docs_convention.md)
   - 模块文档最小结构要求、写作约定、触发更新的场景、起点模板。
 - [references/README.md](/Users/zhenzhili/hnsm-backend/docs/references/README.md)
