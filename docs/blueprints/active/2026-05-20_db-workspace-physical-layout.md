@@ -311,18 +311,18 @@ Compatibility expectations:
 
 ## 8. Implementation Plan
 
-This section is draft until implementation preflight completes. Before moving to `scoped`, perform a fresh source audit of `workspace_runtime.py`, `SDKStore.save/load`, `FileAuthoringRegistry.upsert_schema_ir(...)`, DB identity substrate APIs, and any migration helpers touched.
+This section is the scoped implementation plan after preflight `5c84fd3d` and the follow-up blueprint amendments. Per audit execution discipline Rule 1, re-read source files at task-execution time.
 
 1. Define target workspace path model.
    - Add or revise path DTOs/constants for `db/`, object dirs, refs, assertions index, and manifest.
    - Keep legacy path constants available for migration/compatibility.
 2. Define Database object writers/readers.
    - Add write-once helpers for schema objects and tx objects.
-   - Decide filename encoding during preflight.
+   - Use raw 64hex filename segments and keep full token forms inside object content.
    - Keep full token forms inside object content.
 3. Define head ref handling.
    - Add read/write helpers for `db/refs/head.txt`.
-   - Decide atomic write strategy during preflight.
+   - Use temp sibling writes plus `os.replace(...)`;document best-effort fsync behavior.
 4. Define manifest target and transition logic.
    - Add final manifest shape.
    - Add explicit legacy vs target manifest detection.
