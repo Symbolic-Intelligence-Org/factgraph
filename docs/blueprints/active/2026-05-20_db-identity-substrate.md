@@ -9,12 +9,15 @@
   - `src/factgraph/core/protocol/digests.py`
   - `src/factgraph/core/protocol/tup_v1.py`
   - `src/factgraph/core/schema/schema_ir.py`
+  - `src/factgraph/core/store/_support.py`
+  - `src/factgraph/core/view/projector.py`
   - `src/factgraph/sdk/store.py`
 - Related Docs:
   - [docs/audit/2026-05-20_database-view-design-vs-shipped-runtime.md](../../audit/2026-05-20_database-view-design-vs-shipped-runtime.md)
   - [docs/audit/2026-05-20_post-q-db-view-synthesis.md](../../audit/2026-05-20_post-q-db-view-synthesis.md)
   - [docs/decisions/2026-05-20_q1-database-class-boundary-decision.md](../../decisions/2026-05-20_q1-database-class-boundary-decision.md)
   - [docs/decisions/2026-05-20_q3-tx-identity-primitives-decision.md](../../decisions/2026-05-20_q3-tx-identity-primitives-decision.md)
+  - [docs/decisions/2026-05-20_q5-view-revocation-composition-decision.md](../../decisions/2026-05-20_q5-view-revocation-composition-decision.md)
   - [docs/decisions/2026-05-20_q7-assertionrecord-shape-reconciliation-decision.md](../../decisions/2026-05-20_q7-assertionrecord-shape-reconciliation-decision.md)
   - [docs/references/working/design-points/database-view-fg-layered-architecture.zh.md](../../references/working/design-points/database-view-fg-layered-architecture.zh.md)
 - Audit Log:
@@ -24,10 +27,11 @@
 
 The DB/view audit found that the shipped runtime has a `Ledger`-centered storage substrate, UUID-style assertion ids, no `Database` boundary, no `DatabaseValue`, no `tx_id`, and no canonical durable 7-field `AssertionRecord`.
 
-Q1, Q3, and Q7 closed the load-bearing design questions for this slice:
+Q1, Q3, Q5, and Q7 closed the load-bearing design questions for this slice:
 
 - Q1: `Database` is a new boundary above shipped `Ledger`.
 - Q3: `Database` owns transaction and data identity protocols (`tx_id`, `data_digest`, assertion id envelope).
+- Q5: no-view `DatabaseValue.data_digest` uses the active-only assertion universe for the snapshot.
 - Q7: the canonical durable assertion record is the design 7-field shape, with shipped `Claim` / application DTO / SDK record treated as projections or adapters.
 
 This blueprint scopes the first implementable DB/view slice: the identity substrate that later workspace layout, view persistence, and attach lifecycle work depend on.
@@ -125,6 +129,8 @@ This slice must follow Q3:
 
 `canonical_bytes_assertion_v1(...)` must use the `factpy\0assertion_v1\0` namespace.
 
+For this identity slice, `DatabaseValue.data_digest` is defined for the default no-view snapshot universe. Per Q5, that universe is active-only at the snapshot tx: assertions with an active revocation are excluded from the member set used by `canonical_bytes_dbdata_v1(...)`. View-scoped data-digest semantics are not implemented in this slice.
+
 ### 5.3 Assertion record rules
 
 The canonical durable `AssertionRecord` must keep the Q7 field semantics:
@@ -150,6 +156,8 @@ Canonical assertion `meta` encoding must be based on shipped `MetaRow` semantics
 
 - `META_KINDS = {"str", "int", "float", "bool", "time", "json"}`
 - ledger JSONable value domain from shipped `core/store/ledger.py`
+- raw user meta dictionaries are write-normalization inputs, not identity inputs;
+- assertion identity canonicalizes the normalized `MetaRow` sequence for the assertion, ordered deterministically by `(key, kind, canonical value bytes)`.
 
 This slice may introduce a Database-owned assertion-meta encoder, but it must not introduce a broad user-facing `canonical_meta(...)` API.
 
@@ -190,11 +198,12 @@ This slice may add adapters so new Database-owned writes project into `Ledger`, 
 - `schema_digest(...)` must be reused;no parallel schema digest algorithm.
 - `_compute_ingest_key(...)` must not be reused as `tx_id` or as transaction payload template.
 - `canonical_bytes_tup_v1(...)` may be used inside `assertion_v1`, but not as the whole transaction payload.
-- `data_digest` is path-independent over the chosen assertion universe.
+- `data_digest` is path-independent over the chosen assertion universe;for this no-view identity slice, that universe is the Q5 active-only snapshot universe.
 - `tx_id` is path-sensitive over parent tx, added assertion digests, schema digest, and data digest.
 - `AssertionRecord` 7-field canonical durable shape is not a public SDK read DTO by default.
 - Canonical assertion `meta` encoding must be based on shipped `MetaRow` semantics;no parallel broad meta canonicalization framework.
 - Engine projection `build_args_for_claim(...)` is not assertion identity payload;only `canonical_bytes_tup_v1(fact_tuple)` is the fact-argument identity input.
+- Shipped `ProjectedFact.fact_tuple` is an untagged engine-projection tuple and is not the canonical tagged identity `fact_tuple`.
 - No cross-doc evidence/evaluate metadata carrier is introduced in this slice.
 
 ## 7. Acceptance
@@ -203,12 +212,15 @@ This slice may add adapters so new Database-owned writes project into `Ledger`, 
 - [ ] `DatabaseValue` or equivalent immutable snapshot identity exists with `db_id`, `tx_id`, `schema_digest`, and `data_digest`.
 - [ ] `tx_id` uses a deterministic `factpy\0dbtx_v1\0` canonical byte protocol and `tx:<hex>` token form.
 - [ ] `data_digest` uses a deterministic `factpy\0dbdata_v1\0` canonical byte protocol and `sha256:<hex>` token form.
+- [ ] `data_digest` tests prove the no-view member set is active-only per Q5 and path-independent for equivalent active assertion universes.
 - [ ] `AssertionRecord` canonical durable 7-field shape exists and is separate from shipped `Claim`, application DTO, and SDK read record.
 - [ ] `asrt_id` / `assertion_digest` derive from `factpy\0assertion_v1\0` canonical bytes and are deterministic across processes.
 - [ ] `assertion_v1` canonical bytes include `pred_id`, canonical `fact_tuple`, `schema_digest`, and canonical assertion `meta`;they exclude `asrt_id`, `assertion_digest`, and `tx_id`.
+- [ ] Canonical assertion `meta` tests cover normalized `MetaRow` sequences rather than raw user meta dict identity.
 - [ ] Existing shipped retract/update compatibility paths are not folded into Database v1.
 - [ ] No workspace layout, view, attach, registry, evidence, or rule-expression surface is introduced.
 - [ ] A source-grep check confirms no new `evaluate(view=...)`, `read.find(view=...)`, `EvidenceGraph.metadata`, or `rule_set_digest` implementation was added by this slice.
+- [ ] A source-grep check confirms identity code does not import `ProjectedFact` or use `build_args_for_claim(...)`.
 - [ ] Affected module docs are updated.
 - [ ] If this blueprint or new decision artifacts add durable docs entries, `docs/README.md` is updated.
 
