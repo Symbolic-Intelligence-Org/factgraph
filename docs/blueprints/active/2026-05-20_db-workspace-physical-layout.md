@@ -153,7 +153,14 @@ Each transaction object must carry enough Database-owned data to replay or valid
 - `data_digest`
 - added assertion digests / assertion ids sufficient to reconstruct the tx's effect
 
-Exact JSON schema, filename encoding, and whether filenames use full tokens (`tx:<hex>`) or raw hex segments are implementation-preflight decisions. The object content must carry the full token form even if filenames use a filesystem-safe derived segment.
+Transaction object filenames use filesystem-safe raw lowercase hex segments:
+
+- path: `db/objects/tx/<64hex>.json`
+- `<64hex> = tx_id.removeprefix("tx:")`
+- object content carries and validates the full `tx:<hex>` token
+- filename/content mismatch is an error
+
+Exact transaction object JSON schema remains a scoped implementation decision, but the filename convention and full-token-in-content rule are locked by this blueprint.
 
 ### 5.4 `db/objects/schema/`
 
@@ -168,7 +175,15 @@ Rules:
 - Do not store authoring Python source in Database objects.
 - Do not invent a parallel schema digest algorithm.
 
-Exact JSON/byte envelope and filename encoding are implementation-preflight decisions, but the stored content must round-trip the compiled schema snapshot required for Database replay and validation.
+Schema object filenames use filesystem-safe raw lowercase hex segments:
+
+- path: `db/objects/schema/<64hex>.json`
+- `<64hex> = schema_digest.removeprefix("sha256:")`
+- object content is exactly `canonicalize_schema_ir_jcs(schema_ir)` bytes
+- object content must validate back to the full `sha256:<hex>` schema digest
+- filename/content mismatch is an error
+
+This explicitly does not reuse the registry presentation format (`data + b"\n"`) or `registry_manifest.json` envelope.
 
 ### 5.5 `db/refs/head.txt`
 
@@ -179,9 +194,20 @@ Rules:
 - Its content is the current head `tx_id`.
 - It is the only mutable Database ref file in this slice.
 - Updates must be atomic at the file-write level.
-- If implementation cannot guarantee atomic writes on a target filesystem, that limitation must be recorded before moving to `scoped`.
+- Implement using a sibling temp file followed by `os.replace(...)`;best-effort fsync should be used where available and documented where not available.
+- Update `head.txt` only after the referenced tx object exists and validates.
 
 Slice 2 implementation must adapt the DB identity substrate's `Database.create(...)`, `Database.open(...)`, `Database.head()`, and `Database.commit_assertions(...)` storage placement so the durable head pointer is read from and written to `db/refs/head.txt` rather than `ledger_meta`. The identity computation formulas from slice 1 (`canonical_bytes_dbtx_v1(...)`, `canonical_bytes_dbdata_v1(...)`, and `canonical_bytes_assertion_v1(...)`) are not changed.
+
+`Database.head()` resolution under the new layout is:
+
+1. read `db/refs/head.txt` to obtain the full `tx:<hex>` token;
+2. read `db/objects/tx/<64hex>.json`, using the raw hex suffix as the filename segment;
+3. validate the tx object carries the same `tx_id`;
+4. read `data_digest` and `schema_digest` from the tx object;
+5. validate schema context and return `DatabaseValue(db_id, tx_id, schema_digest, data_digest)`.
+
+Ledger metadata may be retained as a legacy compatibility cache only. It must not be the durable source of head identity for new-layout workspaces.
 
 Cross-file atomicity across transaction object write, `head.txt` update, and `db/assertions.db` mutation is an implementation-preflight question. This blueprint locks per-file atomic head-write rules and records that the slice inherits the DB identity substrate's current `commit_assertions(...)` atomicity limitation until a storage-hardening decision changes it.
 
@@ -236,24 +262,28 @@ Compatibility expectations:
 
 - Existing `factgraph_workspace.json` + `ledger.db` + `registry/` workspaces remain loadable or fail with a clear migration error.
 - New-layout workspaces must not be mistaken for legacy level-4 workspaces.
-- `Database.create(...)` / `Database.open(...)` path semantics under the new layout must be decided before `scoped`: workspace root path, direct `db/` path, or another explicit storage-handle convention. The decision must preserve the DB identity substrate's opaque-path boundary while making new-layout save/load behavior unambiguous.
+- New-layout `Database.create(path=...)` / `Database.open(path=...)` take the workspace root path. They resolve `db/`, `db/assertions.db`, object paths, and refs internally. Direct `db/` subdirectory paths and direct SQLite paths are internal helper concerns, not the public new-layout convention.
 - Migration must not silently discard `registry/rules/`, `registry/inferences/`, `registry_manifest.json`, or `authoring_apply_events.jsonl`.
+- New-layout save must not call `sync_registry_to_workspace(...)` as-is for registry copy/delete semantics. It must either leave legacy registry data untouched, use a non-destructive schema-only migration helper, raise an explicit migration-required error, or require an archive/export step before destructive movement.
 - If dual-format load/save is implemented, the format detection rules must be explicit and tested.
 
 ## 6. Boundaries And Invariants
 
 - `db/objects/` files are content-addressed write-once;do not overwrite or delete them in this slice.
 - `db/refs/head.txt` is the only mutable Database ref file.
+- `Database.head()` resolves `head.txt -> tx object -> DatabaseValue`;ledger metadata is not the durable head source.
 - `db/assertions.db` is mutable index state and is not an identity source.
-- Compiled schema snapshots move to Database objects;authoring source remains user code.
+- Compiled schema snapshots move to Database objects;object bytes are exactly `canonicalize_schema_ir_jcs(schema_ir)`, and authoring source remains user code.
 - Final manifest does not duplicate Database identity or snapshot identity.
 - DB identity formulas remain unchanged while head storage moves from `ledger_meta` to `db/refs/head.txt`.
-- New-layout `Database.create(...)` / `Database.open(...)` path semantics must be explicit before implementation starts.
+- New-layout `Database.create(...)` / `Database.open(...)` public path semantics are workspace-root semantics.
+- Tx and schema object filenames use raw 64-hex segments;object content carries and validates the full token.
 - `components.registry` removal is governed by Q6/Q8 phases;do not remove it early.
+- New-layout save must not reuse destructive registry deletion/copy semantics from `sync_registry_to_workspace(...)`.
 - View persistence is out of scope except for reserving the target `views/` component concept.
 - No public `view=` APIs, evidence metadata carriers, or rule-expression carriers are introduced.
 - Legacy `Ledger` can remain the SQLite implementation substrate, but root-level `ledger.db` is not the target layout.
-- Cross-file atomicity across object/ref/index writes is a preflight decision, not assumed by the draft.
+- Per-file writes for objects and head refs use temp sibling paths plus atomic replace;cross-file atomicity across object/ref/index writes remains a future storage-hardening concern.
 - If implementation keeps same-path save idempotence or SQLite checkpoint behavior, those are compatibility details, not identity semantics.
 
 ## 7. Acceptance
@@ -264,14 +294,16 @@ Compatibility expectations:
   - `db/refs/head.txt`
   - `db/assertions.db`
 - [ ] Compiled schema snapshots persist under Database-owned schema object paths, not only under `registry/schema/schema_ir.json`.
-- [ ] Transaction objects persist under Database-owned tx object paths and carry the full `tx_id`.
+- [ ] Transaction objects persist under `db/objects/tx/<64hex>.json`, carry the full `tx_id`, and validate filename/content match.
 - [ ] Object writes are content-addressed and write-once;tests cover existing-object idempotence and conflict behavior.
-- [ ] `db/refs/head.txt` is updated atomically or the implementation records why atomicity is not yet satisfied.
-- [ ] `Database.head()` and successful `Database.commit_assertions(...)` use the new-layout head ref storage rather than ledger metadata for the durable head pointer.
-- [ ] New-layout `Database.create(...)` / `Database.open(...)` path semantics are explicit and tested.
+- [ ] Schema objects persist under `db/objects/schema/<64hex>.json` with exact `canonicalize_schema_ir_jcs(schema_ir)` payload bytes and validate filename/content match.
+- [ ] `db/refs/head.txt` is updated via temp sibling path plus atomic replace and only after the referenced tx object exists.
+- [ ] `Database.head()` resolves `head.txt -> tx object -> DatabaseValue`, rather than reading durable head identity from ledger metadata.
+- [ ] New-layout `Database.create(...)` / `Database.open(...)` use workspace-root path semantics and are tested.
 - [ ] `db/assertions.db` is treated as rebuildable mutable index, not identity source.
 - [ ] Final manifest target shape excludes top-level `db_id`, `schema_digest`, `data_digest`, and `tx_id`.
 - [ ] Manifest transition behavior around `components.registry` follows Q6 and does not hard-remove registry during Q8 Phase 1.
+- [ ] New-layout save/load does not reuse destructive `sync_registry_to_workspace(...)` registry deletion/copy semantics.
 - [ ] Legacy workspaces either remain loadable or fail with an explicit migration-required error.
 - [ ] No view persistence, attach lifecycle, SavedRule removal, evidence metadata, or rule-expression API is introduced.
 - [ ] Affected module docs are updated.

@@ -70,3 +70,23 @@ Review identified four precision updates before preflight:
 - new-layout `Database.create(...)` / `Database.open(...)` path semantics must be explicit before `scoped` because the slice changes the storage layout beneath the previously opaque `path=` boundary;
 - concrete creation of an empty `views/` directory versus reserving only a manifest component is an implementation-preflight choice, while view object writes remain out of scope;
 - cross-file atomicity across transaction object, head ref, and SQLite index writes is an implementation-preflight question;the draft locks only per-file head write rules and carries forward the DB identity substrate's known commit atomicity limitation.
+
+### 2026-05-20 — Preflight PF-1/PF-2/PF-3/PF-4 required amendments
+
+Preflight `5c84fd3d` found four required amendments before `scoped`.
+
+Applied decisions:
+
+- PF-1: new-layout `Database.create(path=...)` / `Database.open(path=...)` use workspace-root path semantics. Direct `db/` paths and direct SQLite paths are internal helper concerns, not the public new-layout convention.
+- PF-2: `Database.head()` resolves `db/refs/head.txt -> db/objects/tx/<64hex>.json -> DatabaseValue`. Ledger metadata may exist only as compatibility cache;it is not the durable source of head identity for new-layout workspaces.
+- PF-3: per-file writes for `head.txt` and Database object files use a temp sibling path followed by `os.replace(...)`;best-effort fsync is documented where available. Cross-file atomicity remains a storage-hardening concern.
+- PF-4: new-layout save must not call `sync_registry_to_workspace(...)` as-is for registry copy/delete semantics. It must leave legacy registry data untouched, use a non-destructive helper, raise an explicit migration-required error, or require an archive/export step before destructive movement.
+
+### 2026-05-20 — Preflight PF-5/PF-6 recommended amendments
+
+Preflight also recommended locking two deterministic encoding details while the blueprint was open.
+
+Applied decisions:
+
+- PF-5: tx and schema object filenames use filesystem-safe raw lowercase 64-hex segments. Object content still carries the full token form and validates filename/content match.
+- PF-6: schema object payload bytes are exactly `canonicalize_schema_ir_jcs(schema_ir)` bytes. The new Database object path does not reuse the registry presentation newline or `registry_manifest.json` envelope.
