@@ -23,6 +23,8 @@
   - 仓库协作行为准则。
 - [blueprints/README.md](/Users/zhenzhili/hnsm-backend/docs/blueprints/README.md)
   - 任务蓝图工作流、状态机、模板与标准归档 / reconstructed 归档规则。
+- [decisions/README.md](/Users/zhenzhili/hnsm-backend/docs/decisions/README.md)
+  - 设计审计后的 load-bearing Q-resolution 记录；先锁具体设计问题,再进入 blueprint 或实现。
 - [module_docs_convention.md](/Users/zhenzhili/hnsm-backend/docs/module_docs_convention.md)
   - 模块文档最小结构要求、写作约定、触发更新的场景、起点模板。
 - [references/README.md](/Users/zhenzhili/hnsm-backend/docs/references/README.md)
