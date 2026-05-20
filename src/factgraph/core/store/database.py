@@ -22,6 +22,7 @@ from factgraph.core.store.ledger import Claim, ClaimArg, Ledger, META_KINDS, Met
 DBTX_V1_PREFIX = b"factpy\x00dbtx_v1\x00"
 DBDATA_V1_PREFIX = b"factpy\x00dbdata_v1\x00"
 ASSERTION_V1_PREFIX = b"factpy\x00assertion_v1\x00"
+VIEW_V1_PREFIX = b"factpy\x00subset_view_v1\x00"
 _JSON_BYTES_KEY = "__factpy_bytes_b64__"
 _INT64_MIN = -(1 << 63)
 _INT64_MAX = (1 << 63) - 1
@@ -71,6 +72,16 @@ class DatabaseValue:
 
 
 @dataclass(frozen=True)
+class FrozenAssertionView:
+    name: str
+    db_id: str
+    base_tx_id: str
+    schema_digest: str
+    asrt_ids: tuple[str, ...]
+    view_digest: str
+
+
+@dataclass(frozen=True)
 class CommitResult:
     parent_tx_id: str
     value: DatabaseValue
@@ -96,6 +107,28 @@ class DatabaseWorkspacePaths:
 def canonical_bytes_dbdata_v1(asrt_ids: Iterable[str]) -> bytes:
     sorted_ids = sorted(_require_token(asrt_id, prefix="asrt:", field="asrt_id") for asrt_id in asrt_ids)
     out = bytearray(DBDATA_V1_PREFIX)
+    out.extend(_u32be(len(sorted_ids)))
+    for asrt_id in sorted_ids:
+        out.extend(_str_field(asrt_id))
+    return bytes(out)
+
+
+def canonical_bytes_view_v1(
+    *,
+    db_id: str,
+    base_tx_id: str,
+    schema_digest: str,
+    asrt_ids: Iterable[str],
+) -> bytes:
+    _require_db_id(db_id)
+    _require_token(base_tx_id, prefix="tx:", field="base_tx_id")
+    _require_token(schema_digest, prefix="sha256:", field="schema_digest")
+    sorted_ids = _normalize_view_asrt_ids(asrt_ids)
+
+    out = bytearray(VIEW_V1_PREFIX)
+    out.extend(_str_field(db_id))
+    out.extend(_str_field(base_tx_id))
+    out.extend(_str_field(schema_digest))
     out.extend(_u32be(len(sorted_ids)))
     for asrt_id in sorted_ids:
         out.extend(_str_field(asrt_id))
@@ -181,6 +214,23 @@ def asrt_id_for(
             fact_tuple=fact_tuple,
             schema_digest=schema_digest,
             meta=meta,
+        )
+    )
+
+
+def view_digest_for(
+    *,
+    db_id: str,
+    base_tx_id: str,
+    schema_digest: str,
+    asrt_ids: Iterable[str],
+) -> str:
+    return sha256_token(
+        canonical_bytes_view_v1(
+            db_id=db_id,
+            base_tx_id=base_tx_id,
+            schema_digest=schema_digest,
+            asrt_ids=asrt_ids,
         )
     )
 
@@ -422,6 +472,42 @@ class Database:
             assertions=tuple(records),
         )
 
+    def create_view(
+        self,
+        name: str,
+        asrt_ids: Iterable[str],
+        *,
+        base: DatabaseValue | None = None,
+    ) -> FrozenAssertionView:
+        if self._workspace_paths is None:
+            raise DatabaseError("durable view persistence requires a new-layout Database workspace")
+
+        normalized_name = _normalize_view_name(name)
+        head = self.head()
+        if base is not None and base != head:
+            raise DatabaseError("view base must be the current Database head")
+        normalized_ids = _normalize_view_asrt_ids(asrt_ids)
+        for asrt_id in normalized_ids:
+            if self._ledger.get_claim(asrt_id) is None:
+                raise DatabaseError(f"view assertion does not exist: {asrt_id}")
+
+        view_digest = view_digest_for(
+            db_id=head.db_id,
+            base_tx_id=head.tx_id,
+            schema_digest=head.schema_digest,
+            asrt_ids=normalized_ids,
+        )
+        view = FrozenAssertionView(
+            name=normalized_name,
+            db_id=head.db_id,
+            base_tx_id=head.tx_id,
+            schema_digest=head.schema_digest,
+            asrt_ids=normalized_ids,
+            view_digest=view_digest,
+        )
+        _write_view_object(self._workspace_paths, view)
+        return view
+
     def _prepare_assertion(
         self, item: AssertionInput
     ) -> tuple[AssertionRecord, Claim, list[ClaimArg], list[MetaRow]]:
@@ -530,6 +616,29 @@ def _write_schema_object(
     if expected_digest != _require_token(schema_digest, prefix="sha256:", field="schema_digest"):
         raise DatabaseError("schema object bytes do not match schema_digest")
     _write_once_bytes(schema_path, schema_bytes)
+
+
+def _write_view_object(paths: DatabaseWorkspacePaths, view: FrozenAssertionView) -> None:
+    expected_digest = view_digest_for(
+        db_id=view.db_id,
+        base_tx_id=view.base_tx_id,
+        schema_digest=view.schema_digest,
+        asrt_ids=view.asrt_ids,
+    )
+    if expected_digest != _require_token(view.view_digest, prefix="sha256:", field="view_digest"):
+        raise DatabaseError("view object identity fields do not match view_digest")
+    _write_once_bytes(_view_object_path(paths, view.view_digest), _json_bytes(_view_object_payload(view)))
+
+
+def _view_object_payload(view: FrozenAssertionView) -> dict[str, Any]:
+    return {
+        "asrt_ids": list(view.asrt_ids),
+        "base_tx_id": _require_token(view.base_tx_id, prefix="tx:", field="base_tx_id"),
+        "db_id": _require_db_id(view.db_id),
+        "name": _normalize_view_name(view.name),
+        "schema_digest": _require_token(view.schema_digest, prefix="sha256:", field="schema_digest"),
+        "view_digest": _require_token(view.view_digest, prefix="sha256:", field="view_digest"),
+    }
 
 
 def _validate_schema_object(
@@ -716,6 +825,10 @@ def _schema_object_path(paths: DatabaseWorkspacePaths, schema_digest: str) -> Pa
     return paths.schema_objects / f"{_token_hex(schema_digest, prefix='sha256:', field='schema_digest')}.json"
 
 
+def _view_object_path(paths: DatabaseWorkspacePaths, view_digest: str) -> Path:
+    return paths.views / "objects" / f"{_token_hex(view_digest, prefix='sha256:', field='view_digest')}.json"
+
+
 def _token_hex(value: str, *, prefix: str, field: str) -> str:
     return _require_token(value, prefix=prefix, field=field).removeprefix(prefix)
 
@@ -813,6 +926,29 @@ def _normalize_fact_tuple(fact_tuple: Sequence[tuple[str, Any]]) -> tuple[tuple[
         raise DatabaseError("fact_tuple[0] must be ('entity_ref', e_ref)")
     canonical_bytes_tup_v1(list(fact_tuple))
     return tuple(fact_tuple)
+
+
+def _normalize_view_name(name: str) -> str:
+    if not isinstance(name, str) or not name.strip():
+        raise DatabaseError("view name must be non-empty string")
+    return name.strip()
+
+
+def _normalize_view_asrt_ids(values: Iterable[str]) -> tuple[str, ...]:
+    if isinstance(values, (str, bytes)):
+        raise DatabaseError("view asrt_ids must be iterable[str], not string")
+    try:
+        items = tuple(values)
+    except TypeError as exc:
+        raise DatabaseError("view asrt_ids must be iterable[str]") from exc
+    return tuple(
+        sorted(
+            {
+                _require_token(value, prefix="asrt:", field="view asrt_id")
+                for value in items
+            }
+        )
+    )
 
 
 def _normalize_meta_entries(
@@ -915,6 +1051,7 @@ __all__ = [
     "ASSERTION_V1_PREFIX",
     "DBDATA_V1_PREFIX",
     "DBTX_V1_PREFIX",
+    "VIEW_V1_PREFIX",
     "AssertionInput",
     "AssertionRecord",
     "CommitResult",
@@ -923,11 +1060,14 @@ __all__ = [
     "DatabaseValue",
     "DatabaseWorkspacePaths",
     "DuplicateAssertionError",
+    "FrozenAssertionView",
     "MetaEntry",
     "asrt_id_for",
     "assertion_digest_for",
     "canonical_bytes_assertion_v1",
     "canonical_bytes_dbdata_v1",
     "canonical_bytes_dbtx_v1",
+    "canonical_bytes_view_v1",
     "resolve_database_workspace_paths",
+    "view_digest_for",
 ]

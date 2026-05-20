@@ -11,19 +11,23 @@ from factgraph.core.store.database import (
     ASSERTION_V1_PREFIX,
     DBDATA_V1_PREFIX,
     DBTX_V1_PREFIX,
+    VIEW_V1_PREFIX,
     AssertionInput,
     Database,
     DatabaseError,
     DuplicateAssertionError,
+    FrozenAssertionView,
     MetaEntry,
     asrt_id_for,
     assertion_digest_for,
     canonical_bytes_assertion_v1,
     canonical_bytes_dbdata_v1,
     canonical_bytes_dbtx_v1,
+    canonical_bytes_view_v1,
     resolve_database_workspace_paths,
+    view_digest_for,
 )
-from factgraph.core.store.ledger import MetaRow, Revokes
+from factgraph.core.store.ledger import Ledger, MetaRow, Revokes
 
 
 def _schema_ir() -> dict:
@@ -272,6 +276,121 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
                     )
                 ]
             )
+
+    def test_view_digest_uses_subset_view_prefix_and_normalized_membership(self) -> None:
+        ids = ("asrt:" + "2" * 64, "asrt:" + "1" * 64, "asrt:" + "1" * 64)
+        view_bytes = canonical_bytes_view_v1(
+            db_id="db:test",
+            base_tx_id="tx:" + "3" * 64,
+            schema_digest="sha256:" + "4" * 64,
+            asrt_ids=ids,
+        )
+
+        self.assertTrue(view_bytes.startswith(VIEW_V1_PREFIX))
+        self.assertEqual(
+            view_digest_for(
+                db_id="db:test",
+                base_tx_id="tx:" + "3" * 64,
+                schema_digest="sha256:" + "4" * 64,
+                asrt_ids=ids,
+            ),
+            view_digest_for(
+                db_id="db:test",
+                base_tx_id="tx:" + "3" * 64,
+                schema_digest="sha256:" + "4" * 64,
+                asrt_ids=reversed(ids),
+            ),
+        )
+
+    def test_database_create_view_persists_content_addressed_object(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            db = Database.create(path, schema_ir=_schema_ir())
+            result = db.commit_assertions(
+                [
+                    _assertion("Ada"),
+                    AssertionInput(
+                        pred_id="person:name",
+                        fact_tuple=(("entity_ref", _person_ref("p2")), ("string", "Grace")),
+                    ),
+                ]
+            )
+            ids = tuple(record.asrt_id for record in result.assertions)
+
+            view = db.create_view(" review ", reversed(ids))
+
+            self.assertIsInstance(view, FrozenAssertionView)
+            self.assertEqual(view.name, "review")
+            self.assertEqual(view.asrt_ids, tuple(sorted(ids)))
+            self.assertEqual(view.db_id, db.db_id)
+            self.assertEqual(view.base_tx_id, result.value.tx_id)
+            self.assertEqual(view.schema_digest, result.value.schema_digest)
+            self.assertEqual(
+                view.view_digest,
+                view_digest_for(
+                    db_id=view.db_id,
+                    base_tx_id=view.base_tx_id,
+                    schema_digest=view.schema_digest,
+                    asrt_ids=ids,
+                ),
+            )
+
+            paths = resolve_database_workspace_paths(path)
+            view_path = paths.views / "objects" / f"{view.view_digest.removeprefix('sha256:')}.json"
+            payload = json.loads(view_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["name"], "review")
+            self.assertEqual(payload["view_digest"], view.view_digest)
+            self.assertEqual(payload["asrt_ids"], list(view.asrt_ids))
+
+            self.assertEqual(db.create_view("review", ids), view)
+
+    def test_database_create_view_rejects_memory_and_legacy_modes(self) -> None:
+        memory_db = Database.create(schema_ir=_schema_ir())
+        with self.assertRaisesRegex(DatabaseError, "new-layout Database workspace"):
+            memory_db.create_view("review", [])
+
+        legacy_db = Database(
+            ledger=Ledger(path=":memory:"),
+            db_id="db:legacy",
+            schema_digest="sha256:" + "4" * 64,
+        )
+        with self.assertRaisesRegex(DatabaseError, "new-layout Database workspace"):
+            legacy_db.create_view("review", [])
+
+    def test_database_create_view_validates_current_head_and_claim_existence_not_active(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            db = Database.create(path, schema_ir=_schema_ir())
+            initial = db.head()
+            ada = db.commit_assertions([_assertion("Ada")]).assertions[0]
+            db._ledger.append_revocation(
+                revokes=Revokes(revoker_asrt_id="asrt:" + "f" * 64, revoked_asrt_id=ada.asrt_id),
+                meta_rows=[],
+                revoker_asrt_id="asrt:" + "f" * 64,
+            )
+
+            view = db.create_view("includes-revoked", [ada.asrt_id])
+            self.assertEqual(view.asrt_ids, (ada.asrt_id,))
+
+            with self.assertRaisesRegex(DatabaseError, "current Database head"):
+                db.create_view("historical", [ada.asrt_id], base=initial)
+            with self.assertRaisesRegex(DatabaseError, "does not exist"):
+                db.create_view("missing", ["asrt:" + "0" * 64])
+
+    def test_view_object_conflicting_content_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            db = Database.create(path, schema_ir=_schema_ir())
+            record = db.commit_assertions([_assertion("Ada")]).assertions[0]
+            view = db.create_view("review", [record.asrt_id])
+            paths = resolve_database_workspace_paths(path)
+            view_path = paths.views / "objects" / f"{view.view_digest.removeprefix('sha256:')}.json"
+            payload = json.loads(view_path.read_text(encoding="utf-8"))
+            payload["view_digest"] = "sha256:" + "0" * 64
+            view_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+            with self.assertRaisesRegex(DatabaseError, "different bytes"):
+                db.create_view("review", [record.asrt_id])
 
 
 if __name__ == "__main__":

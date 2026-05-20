@@ -52,3 +52,26 @@ layout lives under `db/`:
 Object and head writes use sibling temporary files followed by `os.replace(...)`
 for per-file atomic replacement. Cross-file atomicity across object, ref, and
 SQLite writes remains a future storage-hardening concern.
+
+## Frozen Assertion View Persistence
+
+`Database.create_view(name, asrt_ids, *, base=None)` creates anonymous,
+content-addressed `FrozenAssertionView` objects for new-layout workspaces only.
+Memory-mode and legacy-ledger-mode Databases reject durable view persistence.
+
+The canonical view record has six fields: `name`, `db_id`, `base_tx_id`,
+`schema_digest`, sorted `asrt_ids`, and `view_digest`. The `view_digest` is a
+`sha256:<hex>` digest over `VIEW_V1_PREFIX = b"factpy\x00subset_view_v1\x00"`,
+the Database identity anchors, and the sorted assertion-id set. The `name`
+field is a label and is not part of the digest input.
+
+View objects are written under `views/objects/<64hex>.json`. The filename uses
+the raw hex suffix of `view_digest`; object content keeps the full token and is
+write-once. Creation is current-head-only: callers may omit `base` or pass the
+current `Database.head()` value. Historical-base validation is deferred to a
+future snapshot/attach slice.
+
+Membership validation checks that each `asrt_id` exists as a ledger claim. It
+does not require assertions to be active; revoked assertions may remain in a
+frozen view scope per Q5. SDK in-memory `_SDKViewsManager` views and
+`fg.save(...)` compatibility behavior remain separate and unchanged.
