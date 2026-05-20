@@ -23,10 +23,12 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-05-13 (Confidence / evidence meta release cleanup archived)
+最后更新：2026-05-20 (DB/view Slice 1-2 blueprints archived)
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
+| 2026-05-20 | db-identity-substrate | implemented | DB/view Slice 1: introduced Database boundary, DatabaseValue, canonical tx/data/assertion identity protocols, canonical durable AssertionRecord, active-only no-view data_digest, MetaRow-based assertion identity, and focused tests; implementation `6e4642d7`, closure `f3c4375f`. |
+| 2026-05-20 | db-workspace-physical-layout | implemented | DB/view Slice 2: moved durable Database workspace layout to `db/objects/tx/`, `db/objects/schema/`, `db/refs/head.txt`, and `db/assertions.db`; `Database.head()` resolves head ref through tx object; registry preserved during transition; implementation `203b4f21`, closure `b606a126`. |
 | 2026-03-15 | blueprint-workflow-foundation | archived | 建立可持续、可审计的 blueprint 工作流 |
 | 2026-03-15 | historical-blueprint-status-backfill | archived | 回填 blueprint_history/ 的状态一致性 |
 | 2026-03-15 | legacy-reconstructed-archive-rules | archived (reconstructed) | 定义 reconstructed archive 迁移规则 |
