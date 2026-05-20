@@ -9,11 +9,13 @@ __all__ = [
     "Database",
     "DatabaseError",
     "DatabaseValue",
+    "DatabaseWorkspacePaths",
     "DuplicateAssertionError",
     "Ledger",
     "MetaEntry",
     "Store",
     "register_engine_evaluator",
+    "resolve_database_workspace_paths",
 ]
 
 
@@ -29,8 +31,10 @@ def __getattr__(name: str) -> Any:
         "Database",
         "DatabaseError",
         "DatabaseValue",
+        "DatabaseWorkspacePaths",
         "DuplicateAssertionError",
         "MetaEntry",
+        "resolve_database_workspace_paths",
     }:
         from factgraph.core.store import database
 

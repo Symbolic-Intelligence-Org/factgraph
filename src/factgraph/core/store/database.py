@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import math
+import os
 import struct
 import uuid
 from dataclasses import dataclass
@@ -11,7 +12,10 @@ from typing import Any, Iterable, Sequence
 
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
-from factgraph.core.schema.schema_ir import schema_digest as compute_schema_digest
+from factgraph.core.schema.schema_ir import (
+    canonicalize_schema_ir_jcs,
+    schema_digest as compute_schema_digest,
+)
 from factgraph.core.store.ledger import Claim, ClaimArg, Ledger, META_KINDS, MetaRow
 
 
@@ -21,6 +25,8 @@ ASSERTION_V1_PREFIX = b"factpy\x00assertion_v1\x00"
 _JSON_BYTES_KEY = "__factpy_bytes_b64__"
 _INT64_MIN = -(1 << 63)
 _INT64_MAX = (1 << 63) - 1
+_WORKSPACE_MANIFEST_NAME = "factgraph_workspace.json"
+_DATABASE_WORKSPACE_VERSION = "1"
 
 
 class DatabaseError(Exception):
@@ -69,6 +75,22 @@ class CommitResult:
     parent_tx_id: str
     value: DatabaseValue
     assertions: tuple[AssertionRecord, ...]
+
+
+@dataclass(frozen=True)
+class DatabaseWorkspacePaths:
+    root: Path
+    manifest: Path
+    db: Path
+    db_meta: Path
+    objects: Path
+    tx_objects: Path
+    schema_objects: Path
+    refs: Path
+    head: Path
+    assertions: Path
+    views: Path
+    registry: Path
 
 
 def canonical_bytes_dbdata_v1(asrt_ids: Iterable[str]) -> bytes:
@@ -166,13 +188,28 @@ def asrt_id_for(
 class Database:
     """Database identity boundary above the append-only Ledger substrate."""
 
-    def __init__(self, *, ledger: Ledger, db_id: str, schema_digest: str) -> None:
+    def __init__(
+        self,
+        *,
+        ledger: Ledger,
+        db_id: str,
+        schema_digest: str,
+        workspace_paths: DatabaseWorkspacePaths | None = None,
+    ) -> None:
         self._ledger = ledger
         self._db_id = _require_db_id(db_id)
         self._schema_digest = _require_token(schema_digest, prefix="sha256:", field="schema_digest")
+        self._workspace_paths = workspace_paths
 
     @classmethod
     def create(cls, path: str | Path = ":memory:", *, schema_ir: dict[str, Any]) -> Database:
+        if _is_memory_path(path):
+            return cls._create_memory(schema_ir=schema_ir)
+        return cls._create_workspace(path=Path(path), schema_ir=schema_ir)
+
+    @classmethod
+    def _create_memory(cls, *, schema_ir: dict[str, Any]) -> Database:
+        path = ":memory:"
         ledger = Ledger(path=path)
         if ledger.get_ledger_meta("db_id") is not None:
             raise DatabaseError("Database already exists at path")
@@ -197,7 +234,55 @@ class Database:
         return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token)
 
     @classmethod
+    def _create_workspace(cls, *, path: Path, schema_ir: dict[str, Any]) -> Database:
+        paths = resolve_database_workspace_paths(path)
+        _ensure_new_database_workspace(paths)
+
+        schema_bytes = canonicalize_schema_ir_jcs(schema_ir)
+        schema_token = compute_schema_digest(schema_ir)
+        db_id = _new_db_id(path)
+        data_digest = sha256_token(canonical_bytes_dbdata_v1(()))
+        tx_id = _tx_id_for(
+            parent_tx_id=None,
+            schema_digest=schema_token,
+            added_assertion_digests=(),
+            data_digest=data_digest,
+        )
+        ledger = Ledger(path=paths.assertions)
+        if ledger.get_ledger_meta("db_id") is not None:
+            raise DatabaseError("Database already exists in db/assertions.db")
+        if ledger.find_claims() or ledger.revokes:
+            raise DatabaseError("Database.create requires an empty db/assertions.db substrate")
+
+        _write_schema_object(paths, schema_digest=schema_token, schema_bytes=schema_bytes)
+        _write_tx_object(
+            paths,
+            tx_id=tx_id,
+            parent_tx_id=None,
+            schema_digest=schema_token,
+            data_digest=data_digest,
+            added_assertion_digests=(),
+            added_asrt_ids=(),
+        )
+        _write_database_meta(paths, db_id=db_id)
+        _write_workspace_manifest(paths)
+        _write_head_ref(paths, tx_id)
+        _update_ledger_meta_cache(ledger, db_id=db_id, schema_digest=schema_token, tx_id=tx_id, data_digest=data_digest)
+        return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token, workspace_paths=paths)
+
+    @classmethod
     def open(cls, path: str | Path, *, schema_ir: dict[str, Any]) -> Database:
+        if _is_memory_path(path):
+            raise DatabaseError("Database.open does not support ':memory:'")
+        paths = resolve_database_workspace_paths(path)
+        if _is_new_database_workspace(paths):
+            return cls._open_workspace(paths=paths, schema_ir=schema_ir)
+        if paths.manifest.exists() or paths.db.exists():
+            raise DatabaseError("new-layout Database workspace metadata not found")
+        return cls._open_legacy_ledger(path=path, schema_ir=schema_ir)
+
+    @classmethod
+    def _open_legacy_ledger(cls, *, path: str | Path, schema_ir: dict[str, Any]) -> Database:
         ledger = Ledger(path=path)
         db_id = ledger.get_ledger_meta("db_id")
         if db_id is None:
@@ -214,6 +299,17 @@ class Database:
             raise DatabaseError("Database head_data_digest metadata missing")
         return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token)
 
+    @classmethod
+    def _open_workspace(cls, *, paths: DatabaseWorkspacePaths, schema_ir: dict[str, Any]) -> Database:
+        schema_bytes = canonicalize_schema_ir_jcs(schema_ir)
+        schema_token = compute_schema_digest(schema_ir)
+        _validate_schema_object(paths, schema_digest=schema_token, expected_bytes=schema_bytes)
+        meta = _read_database_meta(paths)
+        db_id = _require_db_id(meta["db_id"])
+        ledger = Ledger(path=paths.assertions)
+        _read_head_value(paths, expected_schema_digest=schema_token, db_id=db_id)
+        return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token, workspace_paths=paths)
+
     @property
     def db_id(self) -> str:
         return self._db_id
@@ -223,6 +319,12 @@ class Database:
         return self._schema_digest
 
     def head(self) -> DatabaseValue:
+        if self._workspace_paths is not None:
+            return _read_head_value(
+                self._workspace_paths,
+                expected_schema_digest=self._schema_digest,
+                db_id=self._db_id,
+            )
         tx_id = self._ledger.get_ledger_meta("head_tx_id")
         data_digest = self._ledger.get_ledger_meta("head_data_digest")
         if tx_id is None or data_digest is None:
@@ -250,13 +352,12 @@ class Database:
         active_ids = self._active_assertion_ids()
         active_ids.update(added_ids)
         data_digest = sha256_token(canonical_bytes_dbdata_v1(active_ids))
-        tx_id = "tx:" + sha256_hex(
-            canonical_bytes_dbtx_v1(
-                parent_tx_id=parent.tx_id,
-                schema_digest=self._schema_digest,
-                added_assertion_digests=[record.assertion_digest for record, *_ in prepared],
-                data_digest=data_digest,
-            )
+        added_assertion_digests = [record.assertion_digest for record, *_ in prepared]
+        tx_id = _tx_id_for(
+            parent_tx_id=parent.tx_id,
+            schema_digest=self._schema_digest,
+            added_assertion_digests=added_assertion_digests,
+            data_digest=data_digest,
         )
 
         records: list[AssertionRecord] = []
@@ -289,8 +390,27 @@ class Database:
             )
             records.append(record)
 
-        self._ledger.replace_ledger_meta("head_tx_id", tx_id)
-        self._ledger.replace_ledger_meta("head_data_digest", data_digest)
+        if self._workspace_paths is not None:
+            _write_tx_object(
+                self._workspace_paths,
+                tx_id=tx_id,
+                parent_tx_id=parent.tx_id,
+                schema_digest=self._schema_digest,
+                data_digest=data_digest,
+                added_assertion_digests=added_assertion_digests,
+                added_asrt_ids=added_ids,
+            )
+            _write_head_ref(self._workspace_paths, tx_id)
+            _update_ledger_meta_cache(
+                self._ledger,
+                db_id=self._db_id,
+                schema_digest=self._schema_digest,
+                tx_id=tx_id,
+                data_digest=data_digest,
+            )
+        else:
+            self._ledger.replace_ledger_meta("head_tx_id", tx_id)
+            self._ledger.replace_ledger_meta("head_data_digest", data_digest)
         return CommitResult(
             parent_tx_id=parent.tx_id,
             value=DatabaseValue(
@@ -342,6 +462,307 @@ class Database:
             for claim in self._ledger.find_claims()
             if not self._ledger.has_active_revocation(claim.asrt_id)
         }
+
+
+def resolve_database_workspace_paths(path: str | Path) -> DatabaseWorkspacePaths:
+    root = Path(path)
+    db = root / "db"
+    objects = db / "objects"
+    refs = db / "refs"
+    return DatabaseWorkspacePaths(
+        root=root,
+        manifest=root / _WORKSPACE_MANIFEST_NAME,
+        db=db,
+        db_meta=db / "meta.json",
+        objects=objects,
+        tx_objects=objects / "tx",
+        schema_objects=objects / "schema",
+        refs=refs,
+        head=refs / "head.txt",
+        assertions=db / "assertions.db",
+        views=root / "views",
+        registry=root / "registry",
+    )
+
+
+def _is_memory_path(path: str | Path) -> bool:
+    return str(path) == ":memory:"
+
+
+def _is_new_database_workspace(paths: DatabaseWorkspacePaths) -> bool:
+    return paths.db_meta.exists() and paths.head.exists() and paths.assertions.exists()
+
+
+def _ensure_new_database_workspace(paths: DatabaseWorkspacePaths) -> None:
+    if paths.root.exists() and not paths.root.is_dir():
+        raise DatabaseError("Database workspace path exists and is not a directory")
+    if paths.manifest.exists() or paths.db_meta.exists() or paths.head.exists() or paths.assertions.exists():
+        raise DatabaseError("Database workspace already exists at path")
+    for directory in (paths.root, paths.db, paths.objects, paths.tx_objects, paths.schema_objects, paths.refs):
+        directory.mkdir(parents=True, exist_ok=True)
+
+
+def _tx_id_for(
+    *,
+    parent_tx_id: str | None,
+    schema_digest: str,
+    added_assertion_digests: Sequence[str],
+    data_digest: str,
+) -> str:
+    return "tx:" + sha256_hex(
+        canonical_bytes_dbtx_v1(
+            parent_tx_id=parent_tx_id,
+            schema_digest=schema_digest,
+            added_assertion_digests=added_assertion_digests,
+            data_digest=data_digest,
+        )
+    )
+
+
+def _write_schema_object(
+    paths: DatabaseWorkspacePaths,
+    *,
+    schema_digest: str,
+    schema_bytes: bytes,
+) -> None:
+    schema_path = _schema_object_path(paths, schema_digest)
+    expected_digest = sha256_token(schema_bytes)
+    if expected_digest != _require_token(schema_digest, prefix="sha256:", field="schema_digest"):
+        raise DatabaseError("schema object bytes do not match schema_digest")
+    _write_once_bytes(schema_path, schema_bytes)
+
+
+def _validate_schema_object(
+    paths: DatabaseWorkspacePaths,
+    *,
+    schema_digest: str,
+    expected_bytes: bytes,
+) -> None:
+    schema_path = _schema_object_path(paths, schema_digest)
+    if not schema_path.exists():
+        raise DatabaseError(f"schema object missing: {schema_path}")
+    actual = schema_path.read_bytes()
+    if actual != expected_bytes:
+        raise DatabaseError("schema object bytes differ from canonical schema bytes")
+    expected_digest = sha256_token(actual)
+    if expected_digest != _require_token(schema_digest, prefix="sha256:", field="schema_digest"):
+        raise DatabaseError("schema object filename/content digest mismatch")
+
+
+def _write_tx_object(
+    paths: DatabaseWorkspacePaths,
+    *,
+    tx_id: str,
+    parent_tx_id: str | None,
+    schema_digest: str,
+    data_digest: str,
+    added_assertion_digests: Sequence[str],
+    added_asrt_ids: Sequence[str],
+) -> None:
+    tx_id = _require_token(tx_id, prefix="tx:", field="tx_id")
+    sorted_digests = sorted(
+        _require_token(digest, prefix="sha256:", field="assertion_digest")
+        for digest in added_assertion_digests
+    )
+    sorted_asrt_ids = sorted(_require_token(asrt_id, prefix="asrt:", field="asrt_id") for asrt_id in added_asrt_ids)
+    expected_tx_id = _tx_id_for(
+        parent_tx_id=parent_tx_id,
+        schema_digest=schema_digest,
+        added_assertion_digests=sorted_digests,
+        data_digest=data_digest,
+    )
+    if expected_tx_id != tx_id:
+        raise DatabaseError("tx object identity fields do not match tx_id")
+    payload = {
+        "added_assertion_digests": sorted_digests,
+        "added_asrt_ids": sorted_asrt_ids,
+        "data_digest": _require_token(data_digest, prefix="sha256:", field="data_digest"),
+        "parent_tx_id": None
+        if parent_tx_id is None
+        else _require_token(parent_tx_id, prefix="tx:", field="parent_tx_id"),
+        "schema_digest": _require_token(schema_digest, prefix="sha256:", field="schema_digest"),
+        "tx_id": tx_id,
+    }
+    _write_once_bytes(_tx_object_path(paths, tx_id), _json_bytes(payload))
+
+
+def _read_tx_object(paths: DatabaseWorkspacePaths, tx_id: str) -> dict[str, Any]:
+    tx_id = _require_token(tx_id, prefix="tx:", field="tx_id")
+    tx_path = _tx_object_path(paths, tx_id)
+    if not tx_path.exists():
+        raise DatabaseError(f"tx object missing: {tx_path}")
+    payload = json.loads(tx_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise DatabaseError("tx object must be JSON object")
+    if payload.get("tx_id") != tx_id:
+        raise DatabaseError("tx object filename/content tx_id mismatch")
+    parent_tx_id = payload.get("parent_tx_id")
+    if parent_tx_id is not None:
+        parent_tx_id = _require_token(parent_tx_id, prefix="tx:", field="parent_tx_id")
+    schema_token = _require_token(payload.get("schema_digest"), prefix="sha256:", field="schema_digest")
+    data_digest = _require_token(payload.get("data_digest"), prefix="sha256:", field="data_digest")
+    digests = payload.get("added_assertion_digests")
+    if not isinstance(digests, list):
+        raise DatabaseError("tx object added_assertion_digests must be list")
+    assertion_digests = [
+        _require_token(digest, prefix="sha256:", field="assertion_digest")
+        for digest in digests
+    ]
+    added_asrt_ids = payload.get("added_asrt_ids")
+    if not isinstance(added_asrt_ids, list):
+        raise DatabaseError("tx object added_asrt_ids must be list")
+    payload["added_asrt_ids"] = [
+        _require_token(asrt_id, prefix="asrt:", field="asrt_id")
+        for asrt_id in added_asrt_ids
+    ]
+    expected_tx_id = _tx_id_for(
+        parent_tx_id=parent_tx_id,
+        schema_digest=schema_token,
+        added_assertion_digests=assertion_digests,
+        data_digest=data_digest,
+    )
+    if expected_tx_id != tx_id:
+        raise DatabaseError("tx object identity fields do not recompute tx_id")
+    payload["parent_tx_id"] = parent_tx_id
+    payload["schema_digest"] = schema_token
+    payload["data_digest"] = data_digest
+    payload["added_assertion_digests"] = assertion_digests
+    return payload
+
+
+def _write_database_meta(paths: DatabaseWorkspacePaths, *, db_id: str) -> None:
+    payload = {
+        "database_workspace_version": _DATABASE_WORKSPACE_VERSION,
+        "db_id": _require_db_id(db_id),
+    }
+    _write_once_bytes(paths.db_meta, _json_bytes(payload))
+
+
+def _read_database_meta(paths: DatabaseWorkspacePaths) -> dict[str, str]:
+    if not paths.db_meta.exists():
+        raise DatabaseError("Database meta.json missing")
+    payload = json.loads(paths.db_meta.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise DatabaseError("Database meta.json must be JSON object")
+    version = payload.get("database_workspace_version")
+    if version != _DATABASE_WORKSPACE_VERSION:
+        raise DatabaseError(f"unsupported database_workspace_version: {version!r}")
+    db_id = payload.get("db_id")
+    if not isinstance(db_id, str):
+        raise DatabaseError("Database meta.json db_id missing")
+    return {"db_id": db_id}
+
+
+def _write_workspace_manifest(paths: DatabaseWorkspacePaths) -> None:
+    components = {
+        "db": "db/",
+        "views": "views/",
+    }
+    if paths.registry.exists():
+        components["registry"] = "registry/"
+    payload = {
+        "components": components,
+        "factgraph_workspace_version": _DATABASE_WORKSPACE_VERSION,
+    }
+    _atomic_write_bytes(paths.manifest, _json_bytes(payload))
+
+
+def _write_head_ref(paths: DatabaseWorkspacePaths, tx_id: str) -> None:
+    tx_id = _require_token(tx_id, prefix="tx:", field="tx_id")
+    _read_tx_object(paths, tx_id)
+    _atomic_write_bytes(paths.head, (tx_id + "\n").encode("ascii"))
+
+
+def _read_head_value(
+    paths: DatabaseWorkspacePaths,
+    *,
+    expected_schema_digest: str,
+    db_id: str,
+) -> DatabaseValue:
+    if not paths.head.exists():
+        raise DatabaseError("head.txt missing")
+    tx_id = _require_token(paths.head.read_text(encoding="ascii").strip(), prefix="tx:", field="tx_id")
+    tx_payload = _read_tx_object(paths, tx_id)
+    schema_token = tx_payload["schema_digest"]
+    if schema_token != _require_token(expected_schema_digest, prefix="sha256:", field="schema_digest"):
+        raise DatabaseError("head tx object schema_digest mismatch")
+    return DatabaseValue(
+        db_id=_require_db_id(db_id),
+        tx_id=tx_id,
+        schema_digest=schema_token,
+        data_digest=tx_payload["data_digest"],
+    )
+
+
+def _update_ledger_meta_cache(
+    ledger: Ledger,
+    *,
+    db_id: str,
+    schema_digest: str,
+    tx_id: str,
+    data_digest: str,
+) -> None:
+    ledger.replace_ledger_meta("db_id", _require_db_id(db_id))
+    ledger.replace_ledger_meta("schema_digest", _require_token(schema_digest, prefix="sha256:", field="schema_digest"))
+    ledger.replace_ledger_meta("head_tx_id", _require_token(tx_id, prefix="tx:", field="tx_id"))
+    ledger.replace_ledger_meta("head_data_digest", _require_token(data_digest, prefix="sha256:", field="data_digest"))
+
+
+def _tx_object_path(paths: DatabaseWorkspacePaths, tx_id: str) -> Path:
+    return paths.tx_objects / f"{_token_hex(tx_id, prefix='tx:', field='tx_id')}.json"
+
+
+def _schema_object_path(paths: DatabaseWorkspacePaths, schema_digest: str) -> Path:
+    return paths.schema_objects / f"{_token_hex(schema_digest, prefix='sha256:', field='schema_digest')}.json"
+
+
+def _token_hex(value: str, *, prefix: str, field: str) -> str:
+    return _require_token(value, prefix=prefix, field=field).removeprefix(prefix)
+
+
+def _json_bytes(payload: dict[str, Any]) -> bytes:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def _write_once_bytes(path: Path, data: bytes) -> None:
+    if path.exists():
+        if path.read_bytes() != data:
+            raise DatabaseError(f"object already exists with different bytes: {path}")
+        return
+    _atomic_write_bytes(path, data)
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp-{uuid.uuid4().hex}")
+    try:
+        with tmp.open("wb") as fh:
+            fh.write(data)
+            fh.flush()
+            with _suppress_os_error():
+                os.fsync(fh.fileno())
+        os.replace(tmp, path)
+        _fsync_parent(path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
+def _fsync_parent(path: Path) -> None:
+    with _suppress_os_error():
+        fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
+class _suppress_os_error:
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any) -> bool:
+        return exc_type is not None and issubclass(exc_type, OSError)
 
 
 def _u32be(number: int) -> bytes:
@@ -500,6 +921,7 @@ __all__ = [
     "Database",
     "DatabaseError",
     "DatabaseValue",
+    "DatabaseWorkspacePaths",
     "DuplicateAssertionError",
     "MetaEntry",
     "asrt_id_for",
@@ -507,4 +929,5 @@ __all__ = [
     "canonical_bytes_assertion_v1",
     "canonical_bytes_dbdata_v1",
     "canonical_bytes_dbtx_v1",
+    "resolve_database_workspace_paths",
 ]

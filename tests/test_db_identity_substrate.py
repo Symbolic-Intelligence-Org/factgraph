@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from factgraph.core.protocol.digests import sha256_hex
+from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs
 from factgraph.core.store.database import (
     ASSERTION_V1_PREFIX,
     DBDATA_V1_PREFIX,
     DBTX_V1_PREFIX,
     AssertionInput,
     Database,
+    DatabaseError,
     DuplicateAssertionError,
     MetaEntry,
     asrt_id_for,
@@ -18,6 +21,7 @@ from factgraph.core.store.database import (
     canonical_bytes_assertion_v1,
     canonical_bytes_dbdata_v1,
     canonical_bytes_dbtx_v1,
+    resolve_database_workspace_paths,
 )
 from factgraph.core.store.ledger import MetaRow, Revokes
 
@@ -125,7 +129,7 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
 
     def test_database_create_commit_and_open_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "db.sqlite"
+            path = Path(tmp) / "workspace"
             db = Database.create(path, schema_ir=_schema_ir())
             created = db.head()
             self.assertTrue(created.db_id.startswith("db:"))
@@ -147,6 +151,65 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             reopened = Database.open(path, schema_ir=_schema_ir())
             self.assertEqual(reopened.db_id, db.db_id)
             self.assertEqual(reopened.head(), result.value)
+
+    def test_database_workspace_layout_created_with_content_addressed_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            db = Database.create(path, schema_ir=_schema_ir())
+            head = db.head()
+            paths = resolve_database_workspace_paths(path)
+
+            self.assertTrue(paths.assertions.exists())
+            self.assertEqual(paths.head.read_text(encoding="ascii").strip(), head.tx_id)
+            self.assertTrue((paths.tx_objects / f"{head.tx_id.removeprefix('tx:')}.json").exists())
+
+            schema_path = paths.schema_objects / f"{head.schema_digest.removeprefix('sha256:')}.json"
+            self.assertEqual(schema_path.read_bytes(), canonicalize_schema_ir_jcs(_schema_ir()))
+
+            manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["components"], {"db": "db/", "views": "views/"})
+            self.assertNotIn("registry", manifest["components"])
+            self.assertNotIn("schema_digest", manifest)
+
+    def test_database_head_resolves_from_head_tx_object_not_ledger_meta(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            db = Database.create(path, schema_ir=_schema_ir())
+            result = db.commit_assertions([_assertion("Ada")])
+
+            db._ledger.replace_ledger_meta("head_data_digest", "sha256:" + "0" * 64)
+
+            self.assertEqual(db.head(), result.value)
+            reopened = Database.open(path, schema_ir=_schema_ir())
+            self.assertEqual(reopened.head(), result.value)
+
+    def test_tx_object_filename_content_mismatch_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            db = Database.create(path, schema_ir=_schema_ir())
+            result = db.commit_assertions([_assertion("Ada")])
+            paths = resolve_database_workspace_paths(path)
+            tx_path = paths.tx_objects / f"{result.value.tx_id.removeprefix('tx:')}.json"
+            payload = json.loads(tx_path.read_text(encoding="utf-8"))
+            payload["tx_id"] = "tx:" + "0" * 64
+            tx_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+            with self.assertRaisesRegex(DatabaseError, "filename/content|recompute"):
+                db.head()
+
+    def test_database_create_preserves_existing_registry_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            marker = path / "registry" / "rules" / "keep.json"
+            marker.parent.mkdir(parents=True)
+            marker.write_text("legacy registry data", encoding="utf-8")
+
+            Database.create(path, schema_ir=_schema_ir())
+
+            self.assertEqual(marker.read_text(encoding="utf-8"), "legacy registry data")
+            paths = resolve_database_workspace_paths(path)
+            manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["components"]["registry"], "registry/")
 
     def test_data_digest_is_path_independent_for_same_active_universe(self) -> None:
         db_ab = Database.create(schema_ir=_schema_ir())
