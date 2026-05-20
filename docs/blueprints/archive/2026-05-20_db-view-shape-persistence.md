@@ -12,8 +12,8 @@
   - [docs/audit/2026-05-20_database-view-design-vs-shipped-runtime.md](../../audit/2026-05-20_database-view-design-vs-shipped-runtime.md)
   - [docs/audit/2026-05-20_post-q-db-view-synthesis.md](../../audit/2026-05-20_post-q-db-view-synthesis.md)
   - [docs/audit/2026-05-20_db-view-persistence-preflight.md](../../audit/2026-05-20_db-view-persistence-preflight.md)
-  - [docs/blueprints/archive/2026-05-20_db-identity-substrate.md](../archive/2026-05-20_db-identity-substrate.md)
-  - [docs/blueprints/archive/2026-05-20_db-workspace-physical-layout.md](../archive/2026-05-20_db-workspace-physical-layout.md)
+  - [docs/blueprints/archive/2026-05-20_db-identity-substrate.md](./2026-05-20_db-identity-substrate.md)
+  - [docs/blueprints/archive/2026-05-20_db-workspace-physical-layout.md](./2026-05-20_db-workspace-physical-layout.md)
   - [docs/decisions/2026-05-20_q3-tx-identity-primitives-decision.md](../../decisions/2026-05-20_q3-tx-identity-primitives-decision.md)
   - [docs/decisions/2026-05-20_q4-frozenassertionview-shape-decision.md](../../decisions/2026-05-20_q4-frozenassertionview-shape-decision.md)
   - [docs/decisions/2026-05-20_q5-view-revocation-composition-decision.md](../../decisions/2026-05-20_q5-view-revocation-composition-decision.md)
@@ -362,5 +362,5 @@ this slice and is carried forward.
 
 ### 10.5 Archive
 
-Archive commit will be recorded when this implemented blueprint is moved from
-`docs/blueprints/active/` to `docs/blueprints/archive/`.
+Archived from `docs/blueprints/active/` to `docs/blueprints/archive/` after
+implementation closure.
