@@ -23,10 +23,11 @@ reconstructed 条目可以与标准 archive 共享 10 节结构，但必须显�
 
 ## Inventory
 
-最后更新：2026-05-20 (DB/view Slice 1-3 blueprints archived)
+最后更新：2026-05-22 (cross-doc seams quickstart refresh archived on implementation-derived docs branch)
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
+| 2026-05-22 | cross-doc-seams-quickstart-refresh | implemented | Documentation-only refresh on Slice 7C implementation branch: rewrote quickstart persistence around current workspace save/load and migration CLI, aligned rules/inferences and namespace map after registry adapter removal, preserved runtime `registry=None` evidence examples, and added current-truth pointers to rule-expression/evidence-tree design-point notes; implementation `69850a2d`, closure `d2cd83e4` + `c7ab669a`. |
 | 2026-05-20 | db-identity-substrate | implemented | DB/view Slice 1: introduced Database boundary, DatabaseValue, canonical tx/data/assertion identity protocols, canonical durable AssertionRecord, active-only no-view data_digest, MetaRow-based assertion identity, and focused tests; implementation `6e4642d7`, closure `f3c4375f`. |
 | 2026-05-20 | db-workspace-physical-layout | implemented | DB/view Slice 2: moved durable Database workspace layout to `db/objects/tx/`, `db/objects/schema/`, `db/refs/head.txt`, and `db/assertions.db`; `Database.head()` resolves head ref through tx object; registry preserved during transition; implementation `203b4f21`, closure `b606a126`. |
 | 2026-05-20 | db-view-shape-persistence | implemented | DB/view Slice 3: introduced canonical 6-field Database-owned FrozenAssertionView record, view_digest with VIEW_V1_PREFIX byte protocol, anonymous content-addressed `views/objects/<64hex>.json` persistence, `Database.create_view(...)` substrate API (new-layout workspace only, current-head-only, claim-existence validation), and tests; implementation `c51ed752`, closure `9bf55beb`. |
