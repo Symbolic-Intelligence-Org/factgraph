@@ -17,9 +17,9 @@ class RuleRef:
     """Reference another rule from a `where` clause.
 
     `RuleRef` is a rule-body carrier: calling it with logic variables creates
-    an atom that can appear in another `Rule`, `Inference`, or `Query`.
-    It is not a saved-asset handle; use `SavedRuleRef` for registry load/list
-    workflows.
+    an atom that can appear in another `Rule`, `Inference`, or `Query`. It is
+    not a persistence handle; SavedRule/SavedInference persistence was removed
+    by Q8 Phase 2 (Slice 6).
     """
 
     rule_id: str
