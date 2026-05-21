@@ -68,11 +68,27 @@ Use a docs-only workflow:
 
 1. Audit cross-doc seam references and quickstart/module docs with `rg` and
    targeted reads.
-2. Amend this blueprint if the audit surfaces new docs that must be in scope.
-3. Move the blueprint to `scoped` before broad multi-file edits.
-4. Update quickstart docs and affected module/service docs.
-5. Verify with stale-symbol grep and lightweight docs sanity checks.
-6. Fill Outcome / Deviations and archive the blueprint.
+2. Treat `docs/references/working/design-points/*` as non-authoritative
+   reference material. Add current-truth pointers / warning notes where a seam
+   could mislead users, but do not rewrite the full future design documents.
+3. Rewrite user-facing quickstart persistence content around current Slice 7C
+   behavior: in-memory rules/inferences, workspace save/load, and
+   `python -m factgraph migrate-workspace`.
+4. Fix quickstart namespace/rules pages that still teach saved-rule handles.
+5. Update affected module/service docs only when grep shows live-contract drift.
+6. Verify with stale-symbol grep and lightweight docs sanity checks.
+7. Fill Outcome / Deviations and archive the blueprint.
+
+## 5.1 Audit Findings
+
+| Finding | Severity | Resolution |
+| --- | --- | --- |
+| A-1 | Required | `docs/official/kernel/quickstart/persistence.md` is still built around `SavedRuleRef`, `SavedInferenceRef`, `fg.rules.save/load/list/get`, `fg.inferences.save/load/list/get`, and workspace `registry/`. Rewrite this page rather than patching small snippets. |
+| A-2 | Required | `docs/official/kernel/quickstart/rules-and-inferences.md` still points users to saved refs and a persistence surface. Remove that model; teach in-memory `Rule` / `Inference` values only. |
+| A-3 | Required | `docs/official/kernel/quickstart/namespace-map.md` still lists `fg.rules.save/load/list/get`, `fg.inferences.save/load/list/get`, `SavedRuleRef`, and `SavedInferenceRef`. Align namespace table with Slice 7C. |
+| A-4 | Recommended | `docs/official/kernel/quickstart/index.md` names the persistence page "Save rules, inferences, and workspaces". Rename the user path to workspace persistence / migration. |
+| A-5 | Recommended | `rule-expression-and-proof-attempt.zh.md` and `evidence-tree-rainbird-style-v1.zh.md` are working references, not current truth. Add or preserve explicit current-truth pointers so S1-S6 / I10-A10 do not block quickstart updates. |
+| A-6 | Verified | `docs/official/kernel/quickstart/evidence.md` preserves `registry=None` runtime `RuleRegistry` examples; keep these because they are not filesystem registry adapters. |
 
 ## 6. Boundaries And Invariants
 
@@ -85,6 +101,8 @@ Use a docs-only workflow:
   adapters.
 - Historical archive docs may mention removed APIs as history; do not rewrite
   them unless explicitly marked as reconstructed/current.
+- `docs/references/working/design-points/readme.md` is currently user-dirty;
+  do not edit it in this task unless the user explicitly brings it into scope.
 
 ## 7. Acceptance
 
@@ -105,17 +123,20 @@ Use a docs-only workflow:
 ## 8. Implementation Plan
 
 1. [Audit] Grep quickstart, module docs, service docs, and design-point refs for
-   registry-adapter and cross-doc seam symbols.
+   registry-adapter and cross-doc seam symbols. Completed in A-1 through A-6.
 2. [Audit] Read `rule-expression-and-proof-attempt.zh.md` and the evidence-tree
-   design point enough to classify S1-S6 / I10-A10 references as current,
-   stale, or deferred.
-3. [Blueprint] Amend scope if the audit surfaces additional current-truth docs.
-4. [Scope] Mark this blueprint `scoped`.
-5. [Quickstart] Update the relevant `docs/official/kernel/quickstart/` files.
-6. [Module docs] Update any affected `src/factgraph/*/docs/` and
+   design point enough to classify S1-S6 / I10-A10 references as reference-only
+   future design, not current implementation truth.
+3. [Scope] Mark this blueprint `scoped`.
+4. [Quickstart] Rewrite `persistence.md`.
+5. [Quickstart] Update `rules-and-inferences.md`, `namespace-map.md`, and
+   `index.md`.
+6. [References] Add narrow current-truth warning/pointer notes to the two
+   design-point documents if needed; do not edit the dirty design-points README.
+7. [Module docs] Update any affected `src/factgraph/*/docs/` and
    `src/service/docs/` files.
-7. [Verify] Run stale-symbol grep and lightweight docs sanity checks.
-8. [Close] Fill Outcome / Deviations, mark `implemented`, and archive.
+8. [Verify] Run stale-symbol grep and lightweight docs sanity checks.
+9. [Close] Fill Outcome / Deviations, mark `implemented`, and archive.
 
 ## 9. Docs To Update
 
@@ -124,6 +145,7 @@ Initial candidates:
 - `docs/official/kernel/quickstart/*.md`
 - `docs/references/working/design-points/rule-expression-and-proof-attempt.zh.md`
 - `docs/references/working/design-points/evidence-tree-rainbird-style-v1.zh.md`
+- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
 - `src/factgraph/*/docs/*.md`
 - `src/service/docs/*.md`
 
