@@ -164,8 +164,6 @@ def save_workspace(
     *,
     schema_digest: str,
     ledger: Ledger,
-    source_registry: FileAuthoringRegistry | None,
-    schema_ir: dict[str, Any],
 ) -> WorkspacePaths:
     paths = resolve_workspace_paths(path)
     paths.root.mkdir(parents=True, exist_ok=True)

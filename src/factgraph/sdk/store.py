@@ -2147,8 +2147,6 @@ class SDKStore:
                 workspace_path,
                 schema_digest=self._schema_digest,
                 ledger=self.ledger,
-                source_registry=self._authoring_registry,
-                schema_ir=self.schema_ir,
             )
         except Exception as exc:
             if isinstance(exc, SDKStoreError):
