@@ -1,6 +1,6 @@
 # Task Blueprint: Cross-Doc Seams And Quickstart Refresh
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-22
 - Last Updated: 2026-05-22
 - Related Modules:
@@ -153,10 +153,29 @@ Final list will be locked after audit.
 
 ## 10. Outcome / Deviations
 
-Task completion will record:
-
 - Final updated docs:
+  - `docs/official/kernel/quickstart/persistence.md` rewritten around
+    workspace save/load and `python -m factgraph migrate-workspace`.
+  - `docs/official/kernel/quickstart/rules-and-inferences.md` updated to teach
+    in-memory rules/inferences without saved refs.
+  - `docs/official/kernel/quickstart/namespace-map.md` aligned with Slice 7C
+    namespace state.
+  - `docs/official/kernel/quickstart/index.md` renamed the persistence entry.
+  - `docs/references/working/design-points/rule-expression-and-proof-attempt.zh.md`
+    and `evidence-tree-rainbird-style-v1.zh.md` gained current-truth pointers.
 - Audit findings:
+  - A-1 through A-4 resolved in quickstart docs.
+  - A-5 resolved with narrow reference-doc notes, not full design rewrites.
+  - A-6 preserved: `registry=None` runtime examples in `evidence.md` remain.
 - Deviations from this draft:
+  - No module/service docs needed further edits in this pass; Slice 7C P1-2 had
+    already aligned them.
+  - `docs/references/working/design-points/readme.md` stayed untouched because
+    it was pre-existing user dirty.
 - Verification:
+  - Stale-symbol grep over `docs/official/kernel/quickstart` leaves only
+    explicit removed-context examples and protected runtime `registry=None`
+    examples.
+  - Source code was not modified.
 - Archive note:
+  - Archived after this outcome commit under `docs/blueprints/archive/`.
