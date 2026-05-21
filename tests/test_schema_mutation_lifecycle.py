@@ -11,7 +11,8 @@ from tempfile import TemporaryDirectory
 import unittest
 import warnings
 
-from factgraph.authoring.registry_fs import FileAuthoringRegistry
+# Slice 7C / Q6-A (a.2): FileAuthoringRegistry was removed. Test methods
+# that exercised the legacy adapter directly are skipped below.
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.sdk import (

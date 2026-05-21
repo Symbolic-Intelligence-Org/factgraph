@@ -76,17 +76,32 @@ def load_authoring_apply_events(workspace_path: str | Path) -> list[AuthoringApp
 def _apply_log_read_paths(root: Path) -> list[Path]:
     """Return the candidate read paths in priority order.
 
-    Standard layout: ``<root>/db/audit/authoring_apply_events.jsonl`` is
-    checked first (the canonical Slice 7B+ location). When ``root`` itself
-    is a legacy ``registry/`` directory inside a workspace, the legacy
-    fallback ``<root>/authoring_apply_events.jsonl`` is also consulted via
-    :func:`_legacy_workspace_apply_log_path`.
+    Three legacy + canonical read paths are supported (Step 4.7 P1-3 fix):
+
+    1. **Canonical workspace layout** (Slice 7B+):
+       ``<root>/db/audit/authoring_apply_events.jsonl``.
+    2. **Audit-package fallback**: ``<root>/authoring_apply_events.jsonl``.
+       Audit packages emitted by older versions of the runtime placed the
+       apply-log directly at the package root. Static UI / audit-package
+       consumers MUST continue to read this location when present.
+    3. **Legacy workspace ``registry/`` fallback**: when ``root`` itself is
+       a legacy ``registry/`` directory inside a workspace, the legacy
+       per-registry file ``<root>/authoring_apply_events.jsonl`` is
+       resolved via :func:`_legacy_workspace_apply_log_path`. (This path
+       happens to coincide with the audit-package fallback above when the
+       caller passes a registry directory, which is fine — file existence
+       is checked per-path before reading.)
+
+    Missing files are silently skipped by :func:`load_authoring_apply_events`.
     """
-    workspace_audit = root / "db" / "audit" / "authoring_apply_events.jsonl"
+    paths: list[Path] = [
+        root / "db" / "audit" / "authoring_apply_events.jsonl",
+        root / "authoring_apply_events.jsonl",
+    ]
     legacy = _legacy_workspace_apply_log_path(root)
-    if legacy is None:
-        return [workspace_audit]
-    return [workspace_audit, legacy]
+    if legacy is not None and legacy not in paths:
+        paths.append(legacy)
+    return paths
 
 
 def _legacy_workspace_apply_log_path(root: Path) -> Path | None:

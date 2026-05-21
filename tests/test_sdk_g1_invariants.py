@@ -39,7 +39,6 @@ EXPECTED_SDK_ALL: tuple[str, ...] = (
     "RuleRef",
     "SchemaAddResult",
     "SDKDSLError",
-    "SDKRegistryError",
     "SDKSchemaError",
     "SDKStore",
     "SDKStoreError",

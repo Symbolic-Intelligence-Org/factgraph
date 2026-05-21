@@ -219,5 +219,68 @@ class ServiceRouteRemovalTests(unittest.TestCase):
         self.assertEqual(registry_routes, [])
 
 
+class ApplyLogReadbackTests(unittest.TestCase):
+    """Step 4.7 P1-3 fix + R-1: verify load_authoring_apply_events covers
+    all three legacy + canonical read paths.
+    """
+
+    def _write_jsonl(self, path: Path, rows: list[dict[str, object]]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+
+    def test_package_root_apply_log_is_read(self) -> None:
+        from factgraph.audit.authoring_events import load_authoring_apply_events
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._write_jsonl(
+                root / "authoring_apply_events.jsonl",
+                [{"action_id": "pkg-1", "status": "ok"}],
+            )
+            events = load_authoring_apply_events(root)
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0].action_id, "pkg-1")
+
+    def test_workspace_db_audit_apply_log_is_read(self) -> None:
+        from factgraph.audit.authoring_events import load_authoring_apply_events
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._write_jsonl(
+                root / "db" / "audit" / "authoring_apply_events.jsonl",
+                [{"action_id": "ws-1", "status": "ok"}],
+            )
+            events = load_authoring_apply_events(root)
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0].action_id, "ws-1")
+
+    def test_legacy_workspace_registry_apply_log_is_read(self) -> None:
+        from factgraph.audit.authoring_events import load_authoring_apply_events
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            (workspace / "factgraph_workspace.json").write_text("{}", encoding="utf-8")
+            (workspace / "db").mkdir()
+            registry_dir = workspace / "registry"
+            registry_dir.mkdir()
+            self._write_jsonl(
+                registry_dir / "authoring_apply_events.jsonl",
+                [{"action_id": "legacy-1", "status": "ok"}],
+            )
+            events = load_authoring_apply_events(registry_dir)
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0].action_id, "legacy-1")
+
+    def test_missing_apply_log_returns_empty_list(self) -> None:
+        from factgraph.audit.authoring_events import load_authoring_apply_events
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            events = load_authoring_apply_events(Path(tmp_dir))
+            self.assertEqual(events, [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from factgraph.authoring import FileAuthoringRegistry
 from agent import (
     AgentCheckpointStore,
     AgentScope,
@@ -199,6 +198,11 @@ class AgentLayer4AWorkflowTests(unittest.TestCase):
         self.assertEqual(outcome.status, "error")
         self.assertIn("target predicate not found", outcome.error_message or "")
 
+    @unittest.skip(
+        "Slice 7C / Q6-A (a.2): FileAuthoringRegistry was removed; FS-shadowed "
+        "rule evaluation path no longer exists. Replaced by in-session "
+        "ephemeral-rule registration which is covered elsewhere."
+    )
     def test_fs_shadowed_rule_still_evaluates_fs_version(self) -> None:
         close_runtime_session(self.runtime_session_id)
         self.cache.close()

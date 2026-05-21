@@ -89,7 +89,7 @@ class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):
                 where=[("ruleref", "q.user_name_rows", "1.0.0", ["$e", "$name"])],
                 query_rel="query__ruleref",
             )
-        self.assertIn("requires registry_root", str(ctx.exception))
+        self.assertIn("requires an in-memory rule resolver", str(ctx.exception))
 
     # Q8 Phase 2 (Slice 6):
     # - test_export_package_threads_query_registry_root_for_ruleref was removed

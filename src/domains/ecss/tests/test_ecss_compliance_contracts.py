@@ -36,7 +36,6 @@ from factgraph.audit.assertions import load_assertion_index
 from service.static_ui import _slug_id
 from factgraph.authoring import (
     AuthoringDerivationCompileError,
-    FileAuthoringRegistry,
     build_derivation_preview_dto,
     compile_authoring_schema_v1,
     compile_authoring_derivation_v1,

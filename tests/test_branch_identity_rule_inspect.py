@@ -7,7 +7,6 @@ import unittest
 
 from factgraph.authoring.rule_compile import AuthoringRuleCompileError, compile_authoring_rule_v1
 from factgraph.sdk import Branch, Inference, Pred, Rule, SDKStore, vars as sdk_vars
-from factgraph.sdk.registry import SDKRegistry
 from factgraph.sdk.dsl.errors import SDKDSLError
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError
@@ -202,15 +201,10 @@ class SingleHeadCutTests(unittest.TestCase):
 
         self.assertIn("multi-head", str(ctx.exception))
 
-    def test_sdk_registry_rejects_multi_head_if_it_reaches_runtime(self) -> None:
-        sdk = SDKStore([User])
-        with tempfile.TemporaryDirectory() as tmp:
-            registry = SDKRegistry(tmp)
-
-            with self.assertRaises(Exception) as ctx:
-                registry.register_inference(_multi_head_derivation_bypass(), schema_ir=sdk.schema_ir)
-
-        self.assertIn("multi-head", str(ctx.exception))
+    # Slice 7C / Q6-A (a.2): `test_sdk_registry_rejects_multi_head_if_it_reaches_runtime`
+    # was removed because the `SDKRegistry` class no longer exists. Multi-head
+    # rejection at the rule-compile / eval boundary is exercised by
+    # `test_multi_head_inference_eval_bypass_rejects` above.
 
 
 class BranchIdentityGuardTests(unittest.TestCase):
