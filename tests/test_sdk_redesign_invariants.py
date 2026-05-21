@@ -6,11 +6,11 @@ post-L taxonomy + manager structure + docs lint.
 
 Class 1: `factgraph.sdk.__all__` length 36 + `FactGraph` exported.
 Class 2: Manager classes private (underscore prefix); not in `__all__`.
-Class 3: No `DeprecationWarning` from flat `SDKStore.<method>` calls
+Class 3: No `DeprecationWarning` from non-deprecated flat `SDKStore.<method>` calls
          (parametrized across 6 method families per §5.4 lock; existing
          `row_format='tuple'` warning at `store.py:2133-2141` is
-         separately scoped and stays — this Class 3 only asserts the
-         flat-vs-nested case introduces no new warnings).
+         separately scoped and stays; SavedRule/SavedInference persistence
+         methods are deprecated in Slice 5 and are covered by dedicated tests).
 Class 4: Docs taxonomy-first lint via regex over markdown content
          (per §5.5 + §5.5.6 lock, Tier 1 / Tier 3 surfaces only).
 Class 5: Sub-namespace structure under `what_if` (`fact_overlay`,
@@ -123,11 +123,11 @@ class ManagerClassPrivacyInvariants(unittest.TestCase):
                 self.assertNotIn(cls.__name__, factgraph_sdk.__all__)
 
 
-# Class 3 — No DeprecationWarning from flat `SDKStore.<method>` calls
+# Class 3 — No DeprecationWarning from non-deprecated flat `SDKStore.<method>` calls
 
 
 class FlatMethodNoDeprecationWarningInvariants(unittest.TestCase):
-    """Flat `SDKStore.<method>` calls emit no DeprecationWarning per §5.4."""
+    """Non-deprecated flat `SDKStore.<method>` calls emit no DeprecationWarning."""
 
     def _assert_no_deprecation(self, fn) -> None:
         with warnings.catch_warnings(record=True) as caught:

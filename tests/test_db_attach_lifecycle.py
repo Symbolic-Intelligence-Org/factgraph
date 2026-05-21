@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 
 from factgraph.sdk import (
@@ -125,8 +126,10 @@ class DBAttachLifecycleTests(unittest.TestCase):
 
         for method_name, call in flat_calls.items():
             with self.subTest(method=method_name):
-                with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
-                    call()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", DeprecationWarning)
+                    with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
+                        call()
 
     def test_attached_batch_is_rejected_before_record_exists_plan_can_be_built(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
@@ -157,8 +160,10 @@ class DBAttachLifecycleTests(unittest.TestCase):
 
         for method_name, call in manager_calls.items():
             with self.subTest(method=method_name):
-                with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
-                    call()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", DeprecationWarning)
+                    with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
+                        call()
 
     def test_non_attached_views_and_batch_surface_still_work(self) -> None:
         fg = FactGraph.from_schema_classes([User])

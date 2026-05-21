@@ -113,6 +113,20 @@ _ATTACHED_WRITE_ERROR = (
     "attached FactGraph runtimes route writes only through fg.commit_assertions(...); "
     "{method_name} is not available on attached runtimes"
 )
+_SAVEDRULE_DEPRECATION_MESSAGE = (
+    "{method_name} uses SavedRule/SavedInference registry persistence, which is deprecated by "
+    "Q8 Phase 1. Construct in-memory Rule(...) / Inference(...) values and pass them directly "
+    "to fg.eval.run(...) / fg.eval.evaluate(...). See "
+    "docs/decisions/2026-05-20_q8-savedrule-existence-governance-decision.md."
+)
+
+
+def _warn_savedrule_deprecated(method_name: str) -> None:
+    warnings.warn(
+        _SAVEDRULE_DEPRECATION_MESSAGE.format(method_name=method_name),
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 class _SDKViewsManager:
@@ -2175,6 +2189,7 @@ class SDKStore:
         return {"path": str(paths.root), "manifest": str(paths.manifest)}
 
     def save_rule(self, rule: Any) -> SavedRuleRef:
+        _warn_savedrule_deprecated("fg.save_rule")
         self._reject_attached_write("fg.save_rule")
         registry = self._require_authoring_registry()
         if not hasattr(rule, "to_authoring_payload"):
@@ -2189,6 +2204,7 @@ class SDKStore:
             raise SDKStoreError(str(exc)) from exc
 
     def load_rule(self, rule: SavedRuleRef | str, *, version: str | None = None) -> Any:
+        _warn_savedrule_deprecated("fg.load_rule")
         registry = self._require_authoring_registry()
         try:
             payload = app_load_rule(registry, rule, version=version)
@@ -2197,6 +2213,7 @@ class SDKStore:
         return _rule_from_authoring_payload(payload)
 
     def list_rules(self) -> list[SavedRuleRef]:
+        _warn_savedrule_deprecated("fg.list_rules")
         registry = self._require_authoring_registry()
         try:
             return app_list_rules(registry)
@@ -2204,6 +2221,7 @@ class SDKStore:
             raise SDKStoreError(str(exc)) from exc
 
     def get_rule(self, rule_id: str) -> SavedRuleRef:
+        _warn_savedrule_deprecated("fg.get_rule")
         registry = self._require_authoring_registry()
         try:
             return app_get_rule(registry, rule_id)
@@ -2211,6 +2229,7 @@ class SDKStore:
             raise SDKStoreError(str(exc)) from exc
 
     def save_inference(self, inference: Any) -> SavedInferenceRef:
+        _warn_savedrule_deprecated("fg.save_inference")
         self._reject_attached_write("fg.save_inference")
         registry = self._require_authoring_registry()
         if not hasattr(inference, "to_authoring_payload"):
@@ -2225,6 +2244,7 @@ class SDKStore:
             raise SDKStoreError(str(exc)) from exc
 
     def load_inference(self, inference: SavedInferenceRef | str, *, version: str | None = None) -> Any:
+        _warn_savedrule_deprecated("fg.load_inference")
         registry = self._require_authoring_registry()
         try:
             payload = app_load_inference(registry, inference, version=version)
@@ -2233,6 +2253,7 @@ class SDKStore:
         return _inference_from_authoring_payload(payload)
 
     def list_inferences(self) -> list[SavedInferenceRef]:
+        _warn_savedrule_deprecated("fg.list_inferences")
         registry = self._require_authoring_registry()
         try:
             return app_list_inferences(registry)
@@ -2240,6 +2261,7 @@ class SDKStore:
             raise SDKStoreError(str(exc)) from exc
 
     def get_inference(self, inference_id: str) -> SavedInferenceRef:
+        _warn_savedrule_deprecated("fg.get_inference")
         registry = self._require_authoring_registry()
         try:
             return app_get_inference(registry, inference_id)
