@@ -118,19 +118,18 @@ Views are currently in-memory and are not part of the workspace save format.
 
 ## Rules, inferences, and evaluation
 
-The reasoning side. These three namespaces own how authoring assets are
-described, persisted, and executed.
+The reasoning side. These namespaces own how rule/inference values are
+described and executed.
 
 | Surface | Methods | Notes |
 | --- | --- | --- |
-| `fg.rules` | `inspect(rule_or_inference_or_query)`, `save(rule)`, `load(saved_rule_ref)`, `list()`, `get(rule_id)` | `inspect(...)` shows structure; `save(...)` returns `SavedRuleRef`; `get(...)` returns the latest `SavedRuleRef`; `load(...)` returns a `Rule`. |
-| `fg.inferences` | `save(inference)`, `load(saved_inference_ref)`, `list()`, `get(inference_id)` | `save(...)` returns `SavedInferenceRef`; `get(...)` returns the latest ref; `load(...)` returns an `Inference`. Structural inspection still goes through `fg.rules.inspect(...)`. |
+| `fg.rules` | `inspect(rule_or_inference_or_query)` | `inspect(...)` shows structure for in-memory `Rule`, `Inference`, or `Query` values. |
+| `fg.inferences` | *(empty namespace)* | Inferences are in-memory `Inference(...)` values evaluated through `fg.eval.evaluate(...)`. |
 | `fg.eval` | `run(rule_or_query)`, `evaluate(inference, *, engine=None, semantics=None)`, `accept(candidate)`, `accept_many(candidates)`, `inspect_semantics(semantics_or_profile)` | `run(...)` is read-only and returns rows. `evaluate(...)` is read-only and returns `CandidateSet[]`. `accept(...)` writes ledger assertions and returns `AcceptResult`. `inspect_semantics(...)` previews wrapper or profile shape without running an engine. |
 
 Public DSL value objects are `Rule`, `Inference`, `Query`, `Branch`, `Pred`,
-`Not`, `RuleRef`, and `vars`. `SavedRuleRef` and `SavedInferenceRef` are
-load-only handles produced by `save(...)` / `get(...)`; load them before
-passing to `fg.eval.*`.
+`Not`, `RuleRef`, and `vars`. Saved rule/inference handles were removed; pass
+the value objects directly to `fg.eval.*`.
 
 ## What-if and audit
 
@@ -223,10 +222,8 @@ same project; some are out of scope for `factpy-kernel` entirely.
   selections.
 - `fg.rules.inspect(...)` previews structure for rules, inferences, and
   queries.
-- `fg.rules.save(...)` and `fg.inferences.save(...)` persist authoring assets
-  and return saved refs.
-- `fg.rules.get(id)` and `fg.inferences.get(id)` return the latest saved ref;
-  call `load(ref)` to get a runtime value object.
+- Rules and inferences are in-memory value objects; keep reusable definitions in
+  Python code or application configuration.
 - `fg.eval.run(rule_or_query)` reads; `fg.eval.evaluate(inference, engine=...,
   semantics=...)` proposes; `fg.eval.accept(candidate)` writes.
 - `fg.eval.inspect_semantics(...)` previews semantics shape; it does not run an

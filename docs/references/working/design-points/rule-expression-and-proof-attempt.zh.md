@@ -5,6 +5,14 @@
 - Created: 2026-05-15
 - Intended Use: future redesign input for Rule / RuleExpr / head / evaluate / prove / evidence
 - Scope: 整合 "branch-first rule expression" 与 "engine proof attempt / why-not evidence" 两条设计线索为一份自包含设计文档
+- Current Truth Note (2026-05-22): this note remains future-design input.
+  Current user-facing behavior after Slice 7C is documented in
+  `docs/official/kernel/quickstart/rules-and-inferences.md`,
+  `docs/official/kernel/quickstart/persistence.md`, and
+  `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`. In particular,
+  filesystem registry adapters and saved rule/inference handles are removed;
+  runtime examples using `RuleRegistry` / `registry=None` refer to in-memory
+  rule composition, not filesystem registry persistence.
 - Related Current Docs:
   - `docs/references/working/design-points/rule-query-inference-head-semantics.zh.md`
   - `docs/references/working/design-points/query-view-and-inference-handles.zh.md`

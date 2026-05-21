@@ -6,6 +6,13 @@
 - Parent: `rule-expression-and-proof-attempt.zh.md`(主文档 §7 已 stub 化,引用本文档)
 - Sibling: `database-view-fg-layered-architecture.zh.md`(view 4-layer 子系统设计)
 - Scope: 基于 Rainbird Rule-instance-level granularity 的 v1 evidence tree 设计;承接主文档 §3-§5 已锁 Rule / RuleExpr / Head / API 架构
+- Current Truth Note (2026-05-22): this note remains future-design input, not
+  the current implementation contract. Current shipped evidence behavior lives
+  in `src/factgraph/audit/docs/02_evidence_graph.md`,
+  `src/factgraph/audit/docs/03_audit_package_contract.md`, and
+  `docs/official/kernel/quickstart/evidence.md`. S1-S6 / I10-A10 style seams
+  remain future design topics unless migrated into module docs or a scoped
+  blueprint.
 
 ## 目录
 

@@ -115,8 +115,9 @@ assert query_rows[0]["u"].ref == alice
 assert query_rows[0]["tag"] == "engineer"
 ```
 
-Queries are read-time projections. They are useful for one-off shapes. The
-durable authoring surfaces are saved rules and saved inferences.
+Queries are read-time projections. They are useful for one-off shapes. Rules
+and inferences remain Python value objects; keep reusable definitions in code
+or application configuration.
 
 ## Evaluate an Inference
 
@@ -197,26 +198,20 @@ Branch ids are structural names. Use explicit branch ids when a rule has
 meaningful pathways that you may want to inspect or configure later. If you do
 not provide an id, the SDK still exposes a fallback id such as `b0`.
 
-## RuleRef is not a saved-rule handle
+## RuleRef composes in-memory rules
 
 `RuleRef` is a lower-level body atom used when one rule body depends on another
-rule. It is not how you run a saved rule from the registry.
+rule. It is not a persistence handle and it does not read from a filesystem
+registry.
 
-For saved authoring assets, use the persistence surface:
-
-```text
-saved = fg.rules.save(rule)
-rule = fg.rules.load(saved)
-rows = fg.eval.run(rule)
-```
-
-That topic is covered later. In the quickstart, keep the model simple:
+In the quickstart, keep the model simple:
 
 - `Rule` reads.
 - `Inference` proposes.
 - `CandidateSet` waits for review.
 - `accept` writes.
-- `SavedRuleRef` and `SavedInferenceRef` must be loaded before runtime use.
+- Keep reusable rule/inference definitions in Python code and pass the value
+  objects directly to runtime methods.
 
 ## Where semantics engines fit
 
@@ -322,8 +317,8 @@ assert inspected["branches"][0]["fallback_id"] == "b0"
 - Accept candidates with `fg.eval.accept(candidate)` or
   `fg.eval.accept_many(candidates)`.
 - Inspect rule or inference structure with `fg.rules.inspect(...)`.
-- `RuleRef` is a body-composition tool, not a saved-rule handle.
-- `SavedRuleRef` and `SavedInferenceRef` are registry handles; load them
-  before passing value objects to runtime methods.
+- `RuleRef` is a body-composition tool, not a persistence handle.
+- Rule and inference persistence handles were removed; runtime methods consume
+  in-memory value objects directly.
 - Semantic engines are evaluation configuration; the evaluate/accept lifecycle
   stays the same.

@@ -9,7 +9,7 @@ A sequential path through the public `factpy-kernel` API.
 5. [Rules and inferences](rules-and-inferences.md)
 6. [Configure inference semantics](semantics.md)
 7. [Evidence: what-if and audit](evidence.md)
-8. [Save rules, inferences, and workspaces](persistence.md)
+8. [Save and load workspaces](persistence.md)
 9. [Namespace map](namespace-map.md)
 
 The order matters. Each page builds on the previous one, and each page ends
