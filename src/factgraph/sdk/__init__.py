@@ -26,7 +26,6 @@ from .error_codes import (
 from .schema import Entity, Field, Identity, Relationship
 from .semantics import ProbLogSemantics, PyReasonSemantics
 from .store import FactGraph, SDKStore
-from factgraph.application.authoring_runtime import SavedInferenceRef, SavedRuleRef
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store import AssertionInput, CommitResult, Database, MetaEntry
@@ -59,8 +58,6 @@ __all__ = [
     "SemanticsProfile",
     "ProbLogSemantics",
     "PyReasonSemantics",
-    "SavedRuleRef",
-    "SavedInferenceRef",
     "SchemaAddResult",
     "AssertionInput",
     "CommitResult",

@@ -911,9 +911,10 @@ reads or writes through superseded entity classes or descriptors raise
 `SDKStoreError`.
 
 The operation is immediate for the active graph: new classes can be used for
-`fg.ref`, `fg.write`, `fg.read`, `fg.rules.save`, and `fg.inferences.save`
-right away. If the graph is workspace-backed, call `fg.save()` to persist the
-new workspace manifest digest; the manifest is not rewritten implicitly.
+`fg.ref`, `fg.write`, `fg.read`, in-memory `Rule(...)`, and in-memory
+`Inference(...)` right away. If the graph is workspace-backed, call `fg.save()`
+to persist the new workspace manifest digest; the manifest is not rewritten
+implicitly.
 
 Only additive entity-class extension and additive non-identity field extension
 are implemented here. Identity-field changes, field rewrites, destructive
@@ -925,7 +926,7 @@ removal, deprecation metadata, and migration planning are deferred:
 
 ## 11. Registry
 
-The graph-bound authoring registry tracks schemas, rules, and inferences
+The graph-bound authoring registry tracks the schema and apply-log history
 across versions. Bind it at graph construction time:
 
 ```python
@@ -935,30 +936,34 @@ fg = FactGraph.create(
     schema_classes=[User, Document],
     path="/var/factpy/workspace",
 )
-
-rule_ref = fg.rules.save(my_rule)          # SavedRuleRef(rule_id, version)
-inf_ref = fg.inferences.save(my_inference) # SavedInferenceRef(inference_id, version)
-
-fg.rules.list()
-fg.rules.get("rule_alice")                 # latest SavedRuleRef
-fg.rules.load(rule_ref)                    # SDK Rule value object
-fg.rules.load("rule_alice", version="1.0.0")
 ```
 
-`SavedRuleRef` and `SavedInferenceRef` are registry load handles, not runtime
-selectors. Load first, then run or evaluate the returned value object:
+> Q8 Phase 2 removed the SavedRule/SavedInference persistence layer. The
+> graph-bound `fg.rules.*` namespace exposes `fg.rules.inspect(...)` only;
+> `fg.rules.save / load / list / get`, `fg.inferences.save / load / list / get`,
+> `SavedRuleRef`, and `SavedInferenceRef` are no longer part of the SDK
+> surface. Rules and inferences are now used as in-memory value objects:
 
 ```python
-loaded_rule = fg.rules.load(rule_ref)
-rows = fg.eval.run(loaded_rule)
+from factgraph.sdk import Rule, Inference, Pred, vars
 
-loaded_inf = fg.inferences.load(inf_ref)
-candidates = fg.eval.evaluate(loaded_inf)
+my_rule = Rule(
+    rule_id="rule_alice",
+    version="1.0.0",
+    select_vars=["x"],
+    where=[Pred("Likes", vars.x, "ai")],
+)
+rows = fg.eval.run(my_rule)
+
+my_inference = Inference(...)
+candidates = fg.eval.evaluate(my_inference)
 ```
 
 `SDKRegistry` is no longer part of `factgraph.sdk.__all__`. Advanced migration or
-debug code can still import `factgraph.sdk.registry.SDKRegistry`, but normal SDK
-code should use the graph-bound `fg.rules.*` and `fg.inferences.*` facades.
+debug code can still import `factgraph.sdk.registry.SDKRegistry`, but the
+registry surface is schema-only (`apply_schema_classes`, `read_manifest`,
+`upsert_schema_ir`, `get_schema_entry`, `list_apply_run_ids`, `list_apply_runs`,
+`show_apply_run`).
 
 The workspace layout is intentionally compact:
 
@@ -970,13 +975,18 @@ workspace/
 ```
 
 `factgraph_workspace.json` uses version `"1"` and save scope `"level_4"`.
-Level 4 includes ledger data, schema IR, and saved rules/inferences. It does
+Level 4 includes ledger data, schema IR, and apply-log history. It does
 not include artifact sidecars, in-memory views, audit/evidence round files, or
 package-export output. Use `fg.package.export_package(...)` when you need a
 distribution/reproduction artifact rather than an editable workspace.
 
+Old workspaces written before Q8 Phase 2 may contain `registry/rules/` and
+`registry/inferences/` directories on disk; those files are inert post-Phase-2
+(no SDK code reads them) and are tolerated for read-only manifest
+back-compat.
+
 See [`04_api_surface.en.md`](04_api_surface.en.md#27-rules-namespace-fgrules)
-for the `fg.rules.*` and `fg.inferences.*` method lists.
+for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.
 
 ---
 

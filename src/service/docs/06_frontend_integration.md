@@ -115,13 +115,25 @@ await del(`/v1/runtime/sessions/${sessionId}`);
 
 ```ts
 // 0. 假设 session 已开
-// 1. 执行一条 filesystem-registered rule
+
+// 1. 注册一条 ephemeral rule(in-memory Rule;Q8 Phase 2 已移除 FS-saved rule)
+await post(`/v1/runtime/sessions/${sessionId}/ephemeral-rules`, {
+  rule: {
+    rule_id: "q_country_rows",
+    version: "1.0.0",
+    select_vars: ["$E", "$V"],
+    where: [["pred", "person:country", ["$E", "$V"]]],
+    expose: true,
+  },
+});
+
+// 2. 执行该 ephemeral rule
 let r = await post(`/v1/runtime/sessions/${sessionId}/rules/run`, {
   rule_id: "q_country_rows",
   version: "1.0.0",
 });
 
-// 2. evaluate 一条 inference
+// 3. evaluate 一条 inference(in-memory Inference;Q8 Phase 2 已移除 FS-saved inference)
 r = await post(`/v1/runtime/sessions/${sessionId}/inferences/evaluate`, {
   inference: {
     derivation_id: "drv.country_copy",
@@ -132,7 +144,7 @@ r = await post(`/v1/runtime/sessions/${sessionId}/inferences/evaluate`, {
   },
 });
 
-// 3. accept 选中的 candidate —— 必须回传完整 payload
+// 4. accept 选中的 candidate —— 必须回传完整 payload
 for (const candidate of r.result.candidates) {
   await post(`/v1/runtime/sessions/${sessionId}/inferences/accept`, {
     candidate,                    // 完整 echo,不要裁 terms / identity
@@ -142,16 +154,15 @@ for (const candidate of r.result.candidates) {
 
 完整 DTO:[`02_runtime_sessions.md`](./02_runtime_sessions.md) §5.2 / [`03_runtime_queries_policy.md`](./03_runtime_queries_policy.md)。
 
-### 1.4 Chain D:registry 只读查询
+### 1.4 Chain D:registry 只读查询(schema/apply-log only)
 
 ```ts
 const manifest = (await post("/v1/registry/manifest", { root_dir: "/srv/registry" })).manifest;
-const schema = (await post("/v1/registry/schema/read", { root_dir: "/srv/registry" })).schema;
-const rule = (await post("/v1/registry/rules/read", {
-  root_dir: "/srv/registry",
-  rule_id: "q_country_rows",
-  version: "1.0.0",
-})).rule;
+const schema = (await post("/v1/registry/schema/read", { root_dir: "/srv/registry" })).schema_ir;
+const assets = (await post("/v1/registry/assets/list", { root_dir: "/srv/registry" })).registry;
+// assets = { schema_entry: {...}, apply_run_ids: [...] }
+// Q8 Phase 2 已移除 SavedRule/SavedInference 持久化:
+//   POST /v1/registry/rules/read 与 /inferences/read 均返回 removed envelope
 ```
 
 完整 DTO:[`04_rules_registry.md`](./04_rules_registry.md)。

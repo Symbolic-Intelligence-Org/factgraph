@@ -109,6 +109,9 @@ class DBAttachLifecycleTests(unittest.TestCase):
         db = Database.create(schema_ir=_schema_ir())
         fg = FactGraph.attach(db, schema_classes=[User])
 
+        # Q8 Phase 2 (Slice 6): fg.save_rule / fg.save_inference were removed
+        # entirely (no longer exist on SDKStore). Remaining flat write paths
+        # are still rejected when attached.
         flat_calls = {
             "fg.set": lambda: fg.set(User.name, _user_ref(), "Ada"),
             "fg.add": lambda: fg.add(User.tag, _user_ref(), "vip"),
@@ -116,8 +119,6 @@ class DBAttachLifecycleTests(unittest.TestCase):
             "fg.edit": lambda: fg.edit(User, user_id="u-1"),
             "fg.ingest": lambda: fg.ingest({}),
             "fg.add_schema_classes": lambda: fg.add_schema_classes(Account),
-            "fg.save_rule": lambda: fg.save_rule(object()),
-            "fg.save_inference": lambda: fg.save_inference(object()),
             "fg.accept": lambda: fg.accept(object()),
             "fg.accept_many": lambda: fg.accept_many([]),
             "fg.batch": lambda: fg.batch(),
@@ -142,6 +143,9 @@ class DBAttachLifecycleTests(unittest.TestCase):
         db = Database.create(schema_ir=_schema_ir())
         fg = FactGraph.attach(db, schema_classes=[User])
 
+        # Q8 Phase 2 (Slice 6): fg.rules.save / fg.inferences.save were removed
+        # entirely (no longer exist on rules/inferences namespaces). Remaining
+        # manager write paths are still rejected when attached.
         manager_calls = {
             "fg.write.set": lambda: fg.write.set(User.name, _user_ref(), "Ada"),
             "fg.write.add": lambda: fg.write.add(User.tag, _user_ref(), "vip"),
@@ -149,8 +153,6 @@ class DBAttachLifecycleTests(unittest.TestCase):
             "fg.write.edit": lambda: fg.write.edit(User, user_id="u-1"),
             "fg.schema.ingest": lambda: fg.schema.ingest({}),
             "fg.schema.add": lambda: fg.schema.add(Account),
-            "fg.rules.save": lambda: fg.rules.save(object()),
-            "fg.inferences.save": lambda: fg.inferences.save(object()),
             "fg.eval.accept": lambda: fg.eval.accept(object()),
             "fg.eval.accept_many": lambda: fg.eval.accept_many([]),
             "fg.views.create": lambda: fg.views.create("review", asrt_ids=[]),

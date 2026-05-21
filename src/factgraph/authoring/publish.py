@@ -243,10 +243,10 @@ def _build_action(*, idx: int, section_name: str, section: Any) -> dict[str, Any
 
 
 def _action_name_for_section(section_name: str) -> str | None:
+    # Q8 Phase 2 (Slice 6): `rule_preflight` and `derivation_preview` actions
+    # were removed. Only the schema_preflight action remains.
     mapping = {
         "schema_preflight": "upsert_schema_ir",
-        "rule_preflight": "register_rule_spec",
-        "derivation_preview": "preview_derivation",
     }
     return mapping.get(section_name)
 

@@ -89,10 +89,8 @@ class-first constructor name and does not accept workspace `path=`.
 |---|---|
 | `Branch` | Rule `where` branch constructor (alternative conjunction) |
 | `Rule` | Declarative rule (head + body) |
-| `RuleRef` | Where-clause reference to a registered/exposed rule; not a saved-asset handle |
-| `SavedRuleRef` | Registry-backed saved rule handle returned by `fg.rules.save/list/get` |
+| `RuleRef` | Where-clause reference to an exposed rule |
 | `Inference` | Multi-rule inference envelope |
-| `SavedInferenceRef` | Registry-backed saved inference handle returned by `fg.inferences.save/list/get` |
 | `SchemaAddResult` | Result returned by additive `fg.schema.add(...)`; fields are `old_digest`, `new_digest`, `added_entities`, `added_fields` |
 | `Query` | Query over the current store |
 | `Pred` | Predicate literal (fact reference) |
@@ -271,36 +269,26 @@ This namespace is read-only and by-id only. It does not ship graph-wide
 (`souffle`, `problog`, `pyreason`) consume `engine_options` at call time
 and never propagate to `Inference` or ledger.
 
-`SavedRuleRef` and `SavedInferenceRef` are registry load handles, not runtime
-selectors. Load them first (`fg.rules.load(ref)` or `fg.inferences.load(ref)`)
-to obtain a `Rule` or `Inference`, then pass the loaded value object to
-`run(...)` or `evaluate(...)`.
+Pass `Rule` / `Inference` value objects directly to `run(...)` or
+`evaluate(...)`. Registry-backed SavedRule/SavedInference persistence was
+removed by Q8 Phase 2.
 
 ### 2.7 Rules namespace (`fg.rules.*`)
 
 | Method | One-liner |
 |---|---|
 | `inspect(rule_or_inference)` | Inspect `Rule` / `Inference` branch ids, fallback ids, atom ids, and heads |
-| `save(rule)` | Persist a `Rule` to the graph-bound authoring registry; returns `SavedRuleRef` |
-| `load(ref_or_rule_id, *, version=None)` | Load a saved rule as a SDK `Rule`; `version=` is required when passing a raw id |
-| `list()` | Return `list[SavedRuleRef]` for all saved rule versions |
-| `get(rule_id)` | Return the latest `SavedRuleRef` for a rule id |
 
-Saving auto-upserts the graph schema into the registry when the registry has no
-schema yet. If a registry already has a different `schema_digest`, save raises
-`SDKStoreError` instead of silently overwriting the schema.
+> Q8 Phase 2 (Slice 6) removed `fg.rules.save / load / list / get`. The
+> namespace now exposes only `inspect(...)`. Construct `Rule(...)` values in
+> memory and pass them to `fg.eval.run(...)`.
 
 ### 2.8 Inferences namespace (`fg.inferences.*`)
 
-| Method | One-liner |
-|---|---|
-| `save(inference)` | Persist an `Inference` to the graph-bound authoring registry; returns `SavedInferenceRef` |
-| `load(ref_or_inference_id, *, version=None)` | Load a saved inference as a SDK `Inference`; `version=` is required when passing a raw id |
-| `list()` | Return `list[SavedInferenceRef]` for all saved inference versions |
-| `get(inference_id)` | Return the latest `SavedInferenceRef` for an inference id |
-
-`fg.inferences` is persistence-only. Runtime evaluation remains under
-`fg.eval.evaluate(...)`.
+> Q8 Phase 2 (Slice 6) removed the `fg.inferences.save / load / list / get`
+> persistence methods. The namespace is now empty (no methods) and remains
+> frozen via `FrozenSnapshotError` on attribute set. Construct `Inference(...)`
+> values in memory and pass them to `fg.eval.evaluate(...)`.
 
 ### 2.9 What-if namespace (`fg.what_if.*`)
 

@@ -19,8 +19,6 @@ from factgraph.sdk import (
     Inference,
     Pred,
     Rule,
-    SavedInferenceRef,
-    SavedRuleRef,
     vars as sdk_vars,
 )
 from factgraph.sdk.compile import compile_schema_from_classes
@@ -414,27 +412,11 @@ class SchemaMutationWorkspaceTests(unittest.TestCase):
         self.assertEqual(after_add_manifest["schema_digest"], old_manifest["schema_digest"])
         self.assertEqual(after_save_manifest["schema_digest"], result.new_digest)
 
-    def test_post_add_rule_save_uses_new_schema_digest(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            fg = FactGraph.create(schema_classes=[User], registry_root=tmp_dir)
-
-            result = fg.schema.add(Account)
-            ref = fg.rules.save(_account_rule())
-            entry = FileAuthoringRegistry(Path(tmp_dir)).get_schema_entry()
-
-        self.assertIsInstance(ref, SavedRuleRef)
-        self.assertEqual(entry["schema_digest"], result.new_digest)
-
-    def test_post_add_inference_save_uses_new_schema_digest(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            fg = FactGraph.create(schema_classes=[User], registry_root=tmp_dir)
-
-            result = fg.schema.add(Account)
-            ref = fg.inferences.save(_account_inference())
-            entry = FileAuthoringRegistry(Path(tmp_dir)).get_schema_entry()
-
-        self.assertIsInstance(ref, SavedInferenceRef)
-        self.assertEqual(entry["schema_digest"], result.new_digest)
+    # Q8 Phase 2 (Slice 6): test_post_add_rule_save_uses_new_schema_digest and
+    # test_post_add_inference_save_uses_new_schema_digest were removed.
+    # fg.rules.save / fg.inferences.save no longer exist; SavedRule/SavedInference
+    # persistence was removed. Schema-digest behavior on schema.add is still
+    # covered by other tests in this class.
 
 
 class SchemaMutationDeferralTests(unittest.TestCase):
@@ -485,16 +467,11 @@ class SchemaMutationPreservationTests(unittest.TestCase):
         self.assertEqual(row.name, "Alice")
         self.assertEqual(row.tag_seed, "vip")
 
-    def test_existing_rules_and_inferences_remain_loadable_after_add(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            fg = _seed_fg(registry_root=Path(tmp_dir))
-            rule_ref = fg.rules.save(_rule())
-            inference_ref = fg.inferences.save(_inference())
-
-            fg.schema.add(Account)
-
-            self.assertIsInstance(fg.rules.load(rule_ref), Rule)
-            self.assertIsInstance(fg.inferences.load(inference_ref), Inference)
+    # Q8 Phase 2 (Slice 6): test_existing_rules_and_inferences_remain_loadable_after_add
+    # was removed. fg.rules.save / fg.inferences.save / fg.rules.load /
+    # fg.inferences.load no longer exist. Runtime in-memory Rule/Inference
+    # usage is still covered by test_existing_runtime_paths_still_work_after_add
+    # below.
 
     def test_existing_runtime_paths_still_work_after_add(self) -> None:
         fg = _seed_fg()
@@ -529,17 +506,10 @@ class SchemaMutationPreservationTests(unittest.TestCase):
         self.assertEqual(fg.rules.inspect(_rule())["kind"], "Rule")
         self.assertEqual(fg.rules.inspect(_inference())["kind"], "Inference")
 
-    def test_blueprint2_authoring_facade_still_works(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            fg = _seed_fg(registry_root=Path(tmp_dir))
-
-            rule_ref = fg.rules.save(_rule())
-            inference_ref = fg.inferences.save(_inference())
-
-            self.assertEqual(fg.rules.list(), [rule_ref])
-            self.assertEqual(fg.inferences.list(), [inference_ref])
-            self.assertEqual(fg.rules.get(rule_ref.rule_id), rule_ref)
-            self.assertEqual(fg.inferences.get(inference_ref.inference_id), inference_ref)
+    # Q8 Phase 2 (Slice 6): test_blueprint2_authoring_facade_still_works was
+    # removed. fg.rules.{save,list,get} / fg.inferences.{save,list,get} no
+    # longer exist. The Blueprint 2 commitments are superseded by Q8 Phase 2
+    # removal scope.
 
     def test_blueprint3_workspace_lifecycle_still_works(self) -> None:
         with TemporaryDirectory() as tmp_dir:

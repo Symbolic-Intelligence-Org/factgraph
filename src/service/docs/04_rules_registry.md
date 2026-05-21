@@ -321,7 +321,7 @@
 }
 ```
 
-成功响应：
+成功响应（Q8 Phase 2 schema-only 形态）：
 
 ```json
 {
@@ -329,8 +329,7 @@
   "errors": [],
   "meta": {},
   "registry": {
-    "rule_ids": ["q_country_rows"],
-    "inference_ids": ["drv.country_copy"],
+    "schema_entry": {"schema_id": "demo", "version": "1.0.0", "digest": "..."},
     "apply_run_ids": ["apply-1"]
   }
 }
@@ -338,125 +337,68 @@
 
 说明：
 
-- `assets/list` 只返回 id 列表，不返回完整 spec 内容。
-- `apply_run_ids` 来自 `authoring_apply_execute_run` 事件日志的 latest-by-request 视图。
+- `assets/list` 现在只返回 schema entry 与 apply-log run id 列表。
+- `rule_ids` / `inference_ids` 字段在 Q8 Phase 2（Slice 6）随 SavedRule
+  持久化层一同移除，并未保留为永久空列表的兼容字段。
+- `apply_run_ids` 来自 `authoring_apply_execute_run` 事件日志的
+  latest-by-request 视图。
 
 错误 kinds：
 
 - `shape`
 - `runtime`
 
-## 7. `POST /v1/registry/rules/read`
+## 7. `POST /v1/registry/rules/read`（Q8 Phase 2 已移除）
 
-请求（读取最新版本）：
-
-```json
-{
-  "root_dir": "/tmp/registry",
-  "rule_id": "q_country_rows"
-}
-```
-
-请求（读取指定版本）：
+Q8 Phase 2（Slice 6）移除了 SavedRule 持久化层。该路由依旧存在，但永远返回
+removed envelope：
 
 ```json
 {
-  "root_dir": "/tmp/registry",
-  "rule_id": "q_country_rows",
-  "version": "1.0.0"
+  "ok": false,
+  "errors": [
+    {
+      "kind": "removed",
+      "path": "$",
+      "details": {
+        "message": "registry-backed SavedRule/SavedInference persistence was removed by Q8 Phase 2; use in-memory Rule(...) / Inference(...) instead of registry-backed reads"
+      }
+    }
+  ],
+  "meta": {}
 }
 ```
 
-成功响应：
+迁移方法：客户端构造 in-memory `Rule(...)` 并在 runtime session 内通过
+`/v1/runtime/sessions/{session_id}/ephemeral-rules` 注册 ephemeral rule，
+然后调用 `/rules/run`。
+
+## 8. `POST /v1/registry/inferences/read`（Q8 Phase 2 已移除）
+
+Q8 Phase 2（Slice 6）移除了 SavedInference 持久化层。该路由依旧存在，但永远
+返回 removed envelope：
 
 ```json
 {
-  "ok": true,
-  "errors": [],
-  "meta": {},
-  "rule_spec": {
-    "rule_id": "q_country_rows",
-    "version": "1.0.0",
-    "select_vars": ["$E", "$V"],
-    "where": [["pred", "person:country", ["$E", "$V"]]],
-    "description": "Country row helper",
-    "tags": ["demo", "query"],
-    "condition_weights": {"b0.a0": 0.75},
-    "expose": true
-  }
+  "ok": false,
+  "errors": [
+    {
+      "kind": "removed",
+      "path": "$",
+      "details": {
+        "message": "registry-backed SavedRule/SavedInference persistence was removed by Q8 Phase 2; use in-memory Rule(...) / Inference(...) instead of registry-backed reads"
+      }
+    }
+  ],
+  "meta": {}
 }
 ```
 
-说明：
-
-- `version` 可省略；省略时读取最新版本。
-- `rule_spec` 返回的是 registry 中持久化的 rule asset payload；除逻辑字段外，也会保留 `description`、`tags`、`condition_weights` 等 rule metadata。
-- `condition_weights` 保留为 certainty/explain projection input，不是
-  engine adapter 参数；未来运行时配置归
-  `SemanticsProfile.certainty_projection`。Track 3 / E 已让 runtime
-  inference evaluate 接受 top-level `semantics` profile，但 registry
-  payload 形态在本阶段不变。
-- 当指定 `rule_id` 或 `rule_id+version` 在 registry 中不存在时，当前 contract 返回 `rule_spec: null`，不是错误 envelope。
-
-错误 kinds：
-
-- `shape`
-- `runtime`
-
-## 8. `POST /v1/registry/inferences/read`
-
-请求（读取最新版本）：
-
-```json
-{
-  "root_dir": "/tmp/registry",
-  "inference_id": "drv.country_copy"
-}
-```
-
-请求（读取指定版本）：
-
-```json
-{
-  "root_dir": "/tmp/registry",
-  "inference_id": "drv.country_copy",
-  "version": "1.0.0"
-}
-```
-
-成功响应：
-
-```json
-{
-  "ok": true,
-  "errors": [],
-  "meta": {},
-  "inference_spec": {
-    "inference_id": "drv.country_copy",
-    "version": "1.0.0",
-    "target_pred_id": "person:country",
-    "head_vars": ["$E", "$V"],
-    "where": [["pred", "person:country", ["$E", "$V"]]],
-    "mode": "python"
-  }
-}
-```
-
-说明：
-
-- `version` 可省略；省略时读取最新版本。
-- 当指定 inference 不存在时，当前 contract 返回 `inference_spec: null`，不是错误 envelope。
-
-注：registry 文件布局在本切片使用 `inferences/{id}/{version}.json`
-和 JSON 内的 `inference_id`。compiler substrate 仍使用
-`derivation_id`；`FileAuthoringRegistry` 在文件边界做双向转换。
-开发工作区若仍有旧 `registry/derivations/`，请手动重命名为
-`registry/inferences/` 或重新生成该工作区。
-
-错误 kinds：
-
-- `shape`
-- `runtime`
+迁移方法：客户端构造 in-memory `Inference(...)` 并直接调用
+`/v1/runtime/sessions/{session_id}/inferences/evaluate`（请求 body 中携带
+`inference` payload）。registry 文件布局在 Q8 Phase 2 之后是 schema-only。
+旧工作区的 `registry/rules/` / `registry/inferences/` / `registry/derivations/`
+目录会被忽略，不再被读取。
 
 ## 相关文档
 

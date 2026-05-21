@@ -10,19 +10,6 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from factgraph.application import apply_write_plan, plan_write_command
-from factgraph.application.authoring_runtime import (
-    AuthoringRuntimeError,
-    SavedInferenceRef,
-    SavedRuleRef,
-    get_inference as app_get_inference,
-    get_rule as app_get_rule,
-    list_inferences as app_list_inferences,
-    list_rules as app_list_rules,
-    load_inference as app_load_inference,
-    load_rule as app_load_rule,
-    save_inference as app_save_inference,
-    save_rule as app_save_rule,
-)
 from factgraph.application.schema_mutation_runtime import (
     SchemaAddResult,
     add_schema_classes as app_add_schema_classes,
@@ -113,22 +100,6 @@ _ATTACHED_WRITE_ERROR = (
     "attached FactGraph runtimes route writes only through fg.commit_assertions(...); "
     "{method_name} is not available on attached runtimes"
 )
-_SAVEDRULE_DEPRECATION_MESSAGE = (
-    "{method_name} uses SavedRule/SavedInference registry persistence, which is deprecated by "
-    "Q8 Phase 1. Construct in-memory Rule(...) / Inference(...) values and pass them directly "
-    "to fg.eval.run(...) / fg.eval.evaluate(...). See "
-    "docs/decisions/2026-05-20_q8-savedrule-existence-governance-decision.md."
-)
-
-
-def _warn_savedrule_deprecated(method_name: str) -> None:
-    warnings.warn(
-        _SAVEDRULE_DEPRECATION_MESSAGE.format(method_name=method_name),
-        DeprecationWarning,
-        stacklevel=3,
-    )
-
-
 class _SDKViewsManager:
     """Read-only namespace for named frozen assertion-id selections.
 
@@ -407,79 +378,22 @@ class _SDKRulesManager:
         """
         return self._sdk.inspect_rule(*args, **kwargs)
 
-    def save(self, rule: Any) -> SavedRuleRef:
-        """Persist a `Rule` in the graph's authoring registry.
-
-        Returns a `SavedRuleRef` load handle. The graph must be bound to an
-        authoring registry through `registry_root=`, `registry=`, or
-        `FactGraph.create(path=...)`.
-        """
-        return self._sdk.save_rule(rule)
-
-    def load(self, rule: SavedRuleRef | str, *, version: str | None = None) -> Any:
-        """Load a saved rule as a `Rule` value object.
-
-        Pass a `SavedRuleRef`, or pass `rule_id` plus `version=...`. The
-        returned `Rule` can be used with `fg.eval.run(...)`.
-        """
-        return self._sdk.load_rule(rule, version=version)
-
-    def list(self) -> list[SavedRuleRef]:
-        """List saved rules in the authoring registry.
-
-        Returns `SavedRuleRef` handles; load one before executing it.
-        """
-        return self._sdk.list_rules()
-
-    def get(self, rule_id: str) -> SavedRuleRef:
-        """Return the latest saved-rule handle for `rule_id`.
-
-        This returns a `SavedRuleRef`, not a `Rule`. Call
-        `fg.rules.load(ref)` to retrieve the executable value object.
-        """
-        return self._sdk.get_rule(rule_id)
-
 
 class _SDKInferencesManager:
-    """Read-only namespace manager for Inference persistence."""
+    """Read-only namespace manager for Inference (post-Q8 Phase 2: empty namespace).
+
+    SavedInference persistence methods (``save`` / ``load`` / ``list`` / ``get``)
+    were removed in Slice 6. ``fg.inferences`` attribute access is preserved
+    for forward compatibility but exposes no public methods after Phase 2.
+    Future in-memory inference inspection (parallel to ``fg.rules.inspect``) is
+    a separate decision out of slice 6 scope.
+    """
 
     def __init__(self, sdk: "SDKStore") -> None:
         object.__setattr__(self, "_sdk", sdk)
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise FrozenSnapshotError("FactGraph.inferences namespace is read-only")
-
-    def save(self, inference: Any) -> SavedInferenceRef:
-        """Persist an `Inference` in the graph's authoring registry.
-
-        Returns a `SavedInferenceRef` load handle. The graph must be bound to
-        an authoring registry through `registry_root=`, `registry=`, or
-        `FactGraph.create(path=...)`.
-        """
-        return self._sdk.save_inference(inference)
-
-    def load(self, inference: SavedInferenceRef | str, *, version: str | None = None) -> Any:
-        """Load a saved inference as an `Inference` value object.
-
-        Pass a `SavedInferenceRef`, or pass `inference_id` plus `version=...`.
-        The returned `Inference` can be used with `fg.eval.evaluate(...)`.
-        """
-        return self._sdk.load_inference(inference, version=version)
-
-    def list(self) -> list[SavedInferenceRef]:
-        """List saved inferences in the authoring registry.
-
-        Returns `SavedInferenceRef` handles; load one before evaluating it.
-        """
-        return self._sdk.list_inferences()
-
-    def get(self, inference_id: str) -> SavedInferenceRef:
-        """Return the latest saved-inference handle for `inference_id`.
-
-        This returns a `SavedInferenceRef`, not an `Inference`. Call
-        `fg.inferences.load(ref)` to retrieve the evaluable value object.
-        """
-        return self._sdk.get_inference(inference_id)
 
 
 class _SDKEvalManager:
@@ -2188,94 +2102,6 @@ class SDKStore:
         self._authoring_registry = FileAuthoringRegistry(paths.registry)
         return {"path": str(paths.root), "manifest": str(paths.manifest)}
 
-    def save_rule(self, rule: Any) -> SavedRuleRef:
-        _warn_savedrule_deprecated("fg.save_rule")
-        self._reject_attached_write("fg.save_rule")
-        registry = self._require_authoring_registry()
-        if not hasattr(rule, "to_authoring_payload"):
-            raise SDKStoreError("fg.rules.save(...) expects SDK Rule")
-        try:
-            return app_save_rule(
-                registry,
-                rule.to_authoring_payload(),
-                schema_ir=self.schema_ir,
-            )
-        except AuthoringRuntimeError as exc:
-            raise SDKStoreError(str(exc)) from exc
-
-    def load_rule(self, rule: SavedRuleRef | str, *, version: str | None = None) -> Any:
-        _warn_savedrule_deprecated("fg.load_rule")
-        registry = self._require_authoring_registry()
-        try:
-            payload = app_load_rule(registry, rule, version=version)
-        except AuthoringRuntimeError as exc:
-            raise SDKStoreError(str(exc)) from exc
-        return _rule_from_authoring_payload(payload)
-
-    def list_rules(self) -> list[SavedRuleRef]:
-        _warn_savedrule_deprecated("fg.list_rules")
-        registry = self._require_authoring_registry()
-        try:
-            return app_list_rules(registry)
-        except AuthoringRuntimeError as exc:
-            raise SDKStoreError(str(exc)) from exc
-
-    def get_rule(self, rule_id: str) -> SavedRuleRef:
-        _warn_savedrule_deprecated("fg.get_rule")
-        registry = self._require_authoring_registry()
-        try:
-            return app_get_rule(registry, rule_id)
-        except AuthoringRuntimeError as exc:
-            raise SDKStoreError(str(exc)) from exc
-
-    def save_inference(self, inference: Any) -> SavedInferenceRef:
-        _warn_savedrule_deprecated("fg.save_inference")
-        self._reject_attached_write("fg.save_inference")
-        registry = self._require_authoring_registry()
-        if not hasattr(inference, "to_authoring_payload"):
-            raise SDKStoreError("fg.inferences.save(...) expects SDK Inference")
-        try:
-            return app_save_inference(
-                registry,
-                inference.to_authoring_payload(),
-                schema_ir=self.schema_ir,
-            )
-        except AuthoringRuntimeError as exc:
-            raise SDKStoreError(str(exc)) from exc
-
-    def load_inference(self, inference: SavedInferenceRef | str, *, version: str | None = None) -> Any:
-        _warn_savedrule_deprecated("fg.load_inference")
-        registry = self._require_authoring_registry()
-        try:
-            payload = app_load_inference(registry, inference, version=version)
-        except AuthoringRuntimeError as exc:
-            raise SDKStoreError(str(exc)) from exc
-        return _inference_from_authoring_payload(payload)
-
-    def list_inferences(self) -> list[SavedInferenceRef]:
-        _warn_savedrule_deprecated("fg.list_inferences")
-        registry = self._require_authoring_registry()
-        try:
-            return app_list_inferences(registry)
-        except AuthoringRuntimeError as exc:
-            raise SDKStoreError(str(exc)) from exc
-
-    def get_inference(self, inference_id: str) -> SavedInferenceRef:
-        _warn_savedrule_deprecated("fg.get_inference")
-        registry = self._require_authoring_registry()
-        try:
-            return app_get_inference(registry, inference_id)
-        except AuthoringRuntimeError as exc:
-            raise SDKStoreError(str(exc)) from exc
-
-    def _require_authoring_registry(self) -> FileAuthoringRegistry:
-        registry = self._authoring_registry
-        if registry is None:
-            raise SDKStoreError(
-                "FactGraph is not bound to an authoring registry; create it with registry_root= or registry="
-            )
-        return registry
-
     @staticmethod
     def _reject_shell_semantics(*, semantics: Any, semantics_profile: Any) -> None:
         if semantics is not _PROFILE_KWARG_UNSET:
@@ -3094,65 +2920,6 @@ def _inspect_rule_or_inference(obj: Any) -> dict[str, Any]:
             "branches": _inspect_where_branches(obj.where),
         }
     raise SDKStoreError("rules.inspect(...) expects SDK Rule or Inference")
-
-
-def _rule_from_authoring_payload(payload: dict[str, Any]) -> Any:
-    from .dsl.rule import Rule as SDKRule
-
-    if not isinstance(payload, dict):
-        raise SDKStoreError("registry rule payload must be object")
-    rule_id = payload.get("rule_id")
-    version = payload.get("version")
-    select = payload.get("select", payload.get("select_vars"))
-    where = payload.get("where")
-    if not isinstance(rule_id, str) or not rule_id:
-        raise SDKStoreError("registry rule payload missing rule_id")
-    if not isinstance(version, str) or not version:
-        raise SDKStoreError("registry rule payload missing version")
-    if not isinstance(select, list) or not select:
-        raise SDKStoreError("registry rule payload missing select")
-    if not isinstance(where, list) or not where:
-        raise SDKStoreError("registry rule payload missing where")
-    return SDKRule(
-        id=rule_id,
-        version=version,
-        select=list(select),
-        where=list(where),
-        expose=bool(payload.get("expose", False)),
-        status=payload.get("status") if isinstance(payload.get("status"), str) else None,
-        description=payload.get("description") if isinstance(payload.get("description"), str) else None,
-        tags=list(payload.get("tags", [])) if isinstance(payload.get("tags"), list) else [],
-        condition_weights=dict(payload.get("condition_weights", {}))
-        if isinstance(payload.get("condition_weights"), dict)
-        else {},
-    )
-
-
-def _inference_from_authoring_payload(payload: dict[str, Any]) -> Any:
-    from .dsl.rule import Inference as SDKInference
-
-    if not isinstance(payload, dict):
-        raise SDKStoreError("registry inference payload must be object")
-    inference_id = payload.get("derivation_id")
-    version = payload.get("version")
-    where = payload.get("where")
-    if not isinstance(inference_id, str) or not inference_id:
-        raise SDKStoreError("registry inference payload missing derivation_id")
-    if not isinstance(version, str) or not version:
-        raise SDKStoreError("registry inference payload missing version")
-    if not isinstance(where, list) or not where:
-        raise SDKStoreError("registry inference payload missing where")
-    return SDKInference(
-        id=inference_id,
-        version=version,
-        where=list(where),
-        head=payload.get("head"),
-        target=payload.get("target") if isinstance(payload.get("target"), str) else None,
-        head_vars=list(payload.get("head_vars")) if isinstance(payload.get("head_vars"), list) else None,
-        status=payload.get("status") if isinstance(payload.get("status"), str) else None,
-        description=payload.get("description") if isinstance(payload.get("description"), str) else None,
-        tags=list(payload.get("tags", [])) if isinstance(payload.get("tags"), list) else [],
-    )
 
 
 def _inspect_where_branches(where: Any) -> list[dict[str, Any]]:

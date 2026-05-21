@@ -10,7 +10,8 @@ Class 3: No `DeprecationWarning` from non-deprecated flat `SDKStore.<method>` ca
          (parametrized across 6 method families per §5.4 lock; existing
          `row_format='tuple'` warning at `store.py:2133-2141` is
          separately scoped and stays; SavedRule/SavedInference persistence
-         methods are deprecated in Slice 5 and are covered by dedicated tests).
+         methods were removed in Slice 6 (Q8 Phase 2) and no longer require
+         deprecation-warning coverage).
 Class 4: Docs taxonomy-first lint via regex over markdown content
          (per §5.5 + §5.5.6 lock, Tier 1 / Tier 3 surfaces only).
 Class 5: Sub-namespace structure under `what_if` (`fact_overlay`,
@@ -65,7 +66,11 @@ class SDKAllLengthAndFactGraphExportInvariants(unittest.TestCase):
     """`factgraph.sdk.__all__` length 39 + `FactGraph` exported, with `ReadPolicy`, Track 3 `SemanticsProfile`, and Track 2 public semantics wrappers."""
 
     def test_all_length_is_37(self) -> None:
-        self.assertEqual(len(factgraph_sdk.__all__), 41)
+        # Q8 Phase 2 (Slice 6): __all__ reduced by 2 (SavedRuleRef +
+        # SavedInferenceRef removed). Method name and class docstring length
+        # citations are pre-existing drift; only this assertion was updated
+        # for Slice 6.
+        self.assertEqual(len(factgraph_sdk.__all__), 42)
 
     def test_readpolicy_in_all(self) -> None:
         self.assertIn("ReadPolicy", factgraph_sdk.__all__)

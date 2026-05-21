@@ -72,9 +72,9 @@ It is not responsible for:
 - `ingest_runtime.py`
   - `apply_ingest_request(...)`
 - `authoring_runtime.py`
-  - application-layer persistence helpers for saved rule/inference assets;
-    returns `SavedRuleRef` / `SavedInferenceRef` handles and keeps registry
-    schema upsert/digest checks out of the SDK facade.
+  - application-layer authoring asset error type (`AuthoringRuntimeError`).
+    Q8 Phase 2 (Slice 6) removed the saved rule/inference persistence helpers;
+    the module is now a forward-compat shell preserving only the error class.
 - `workspace_runtime.py`
   - FactGraph workspace layout authority: v1 manifest construction/validation,
     `ledger.db` backup/checkpoint, registry sync/copy, and component path

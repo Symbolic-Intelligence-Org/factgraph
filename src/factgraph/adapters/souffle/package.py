@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from factgraph.authoring.registry_fs import FileAuthoringRegistry
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id
 from factgraph.adapters.souffle.tsv_v1 import write_tsv
 from factgraph.core.mapping.canon import MappingConflictError
@@ -22,7 +21,6 @@ from factgraph.adapters.souffle.where_compile import (
     compile_where_to_query_dl,
     query_rel_for_where,
 )
-from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factgraph.core.rules._trace import rule_trace_artifact_to_dict
 from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
 from factgraph.core.store._support import support_artifact_to_dict
@@ -149,12 +147,10 @@ def export_package(
             query_rel = query_rel_for_where(where)
         if not isinstance(query_rel, str) or not query_rel:
             raise ValueError("query.query_rel must be non-empty string")
+        # Q8 Phase 2 (Slice 6): FS-saved rule loading removed. `registry` stays
+        # None; query.registry_root field (if provided by caller) has no effect
+        # because FS-backed rule persistence is gone.
         registry = None
-        registry_root = query.get("registry_root")
-        if registry_root is not None:
-            if not isinstance(registry_root, str) or not registry_root:
-                raise ValueError("query.registry_root must be non-empty string when provided")
-            registry = _load_query_rule_registry(registry_root)
         idb_text = compile_where_to_query_dl(
             schema_ir=store.schema_ir,
             where=where,
@@ -1168,29 +1164,6 @@ def _stable_key_hash(value: Any) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:12]
-
-
-def _load_query_rule_registry(root_dir: str | Path) -> RuleRegistry:
-    file_registry = FileAuthoringRegistry(Path(root_dir))
-    registry = RuleRegistry()
-    for rule_id in file_registry.list_rule_ids():
-        for version_row in file_registry.list_rule_versions(rule_id):
-            version = version_row.get("version")
-            if not isinstance(version, str) or not version:
-                continue
-            payload = file_registry.read_rule_spec(rule_id, version)
-            if not isinstance(payload, dict):
-                continue
-            registry.register(
-                RuleSpec(
-                    rule_id=str(payload["rule_id"]),
-                    version=str(payload["version"]),
-                    select_vars=list(payload["select_vars"]),
-                    where=list(_json_where_to_ir(payload["where"])),
-                    expose=bool(payload.get("expose", False)),
-                )
-            )
-    return registry
 
 
 def _json_where_to_ir(where_json: Any) -> Any:

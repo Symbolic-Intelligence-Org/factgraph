@@ -3,10 +3,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from factgraph.authoring.derivation_compile import (
-    AuthoringDerivationCompileError,
-    compile_authoring_derivation_v1,
-)
 from factgraph.authoring.diagnostic_codes import (
     CODE_APPLY_BLOCKED_ACTION,
     CODE_APPLY_BLOCKED_ACTIONS_PRESENT,
@@ -22,7 +18,6 @@ from factgraph.authoring.publish import (
     build_authoring_publish_plan_dto,
 )
 from factgraph.authoring.registry_fs import AuthoringRegistryFSError, FileAuthoringRegistry
-from factgraph.authoring.rule_compile import AuthoringRuleCompileError, compile_authoring_rule_v1
 from factgraph.authoring.schema_compile import AuthoringSchemaCompileError, compile_authoring_schema_v1
 from factgraph.authoring.session import build_authoring_session_dto
 from factgraph.core.protocol.digests import sha256_token
@@ -271,19 +266,19 @@ def build_authoring_publish_workflow_apply_bundle_dto(
     apply_request_id: str | None = None,
     transaction_policy: str | None = None,
 ) -> dict[str, Any]:
+    # Q8 Phase 2 (Slice 6): rule_request / derivation_request are no longer
+    # processed. Callers (e.g., SDKRegistry.apply_authoring_bundle) reject
+    # these before reaching here; the kwargs are kept for signature backwards
+    # compat but ignored.
     session_dto = build_authoring_session_dto(
         store=store,
         schema_ir=schema_ir,
         authoring_schema=authoring_schema,
-        rule_request=rule_request,
-        derivation_request=derivation_request,
     )
     publish_plan = build_authoring_publish_plan_dto(session_dto)
     section_payloads = _build_section_payloads(
         schema_ir=schema_ir,
         authoring_schema=authoring_schema,
-        rule_request=rule_request,
-        derivation_request=derivation_request,
         plan_dto=publish_plan,
     )
     apply_dry_run = build_authoring_apply_dry_run_result_dto(publish_plan)
@@ -480,12 +475,6 @@ def _dispatch_registry_write(
     payload = payloads[section]
     if section == "schema_preflight" and action_name == "upsert_schema_ir":
         return registry.upsert_schema_ir(payload)
-    if section == "rule_preflight" and action_name == "register_rule_spec":
-        return registry.register_rule_spec(payload)
-    if section == "derivation_preview" and action_name == "preview_derivation":
-        result = registry.register_inference_spec(payload)
-        result["executed_action"] = "register_inference_spec"
-        return result
     raise AuthoringRegistryFSError(f"unsupported executable action: {section}/{action_name}")
 
 
@@ -503,12 +492,6 @@ def _dispatch_registry_prevalidate(
     payload = payloads[section]
     if section == "schema_preflight" and action_name == "upsert_schema_ir":
         return registry.preview_upsert_schema_ir(payload)
-    if section == "rule_preflight" and action_name == "register_rule_spec":
-        return registry.preview_register_rule_spec(payload)
-    if section == "derivation_preview" and action_name == "preview_derivation":
-        result = registry.preview_register_inference_spec(payload)
-        result["executed_action"] = "register_inference_spec"
-        return result
     raise AuthoringRegistryFSError(f"unsupported executable action: {section}/{action_name}")
 
 
@@ -516,10 +499,10 @@ def _build_section_payloads(
     *,
     schema_ir: dict[str, Any] | None,
     authoring_schema: dict[str, Any] | None,
-    rule_request: dict[str, Any] | None,
-    derivation_request: dict[str, Any] | None,
     plan_dto: dict[str, Any],
 ) -> dict[str, Any]:
+    # Q8 Phase 2 (Slice 6): only schema_preflight payload is built. rule and
+    # derivation payloads were removed along with their dispatch branches.
     payloads: dict[str, Any] = {}
     planned_sections = {
         str(action.get("section"))
@@ -534,36 +517,6 @@ def _build_section_payloads(
                 raise AuthoringApplyExecuteError(str(exc)) from exc
         elif schema_ir is not None:
             payloads["schema_preflight"] = schema_ir
-    if "rule_preflight" in planned_sections and rule_request is not None:
-        if "authoring_rule_payload" in rule_request:
-            try:
-                payloads["rule_preflight"] = compile_authoring_rule_v1(rule_request["authoring_rule_payload"])
-            except AuthoringRuleCompileError as exc:
-                raise AuthoringApplyExecuteError(str(exc)) from exc
-        elif "rule_spec_payload" in rule_request:
-            payloads["rule_preflight"] = rule_request["rule_spec_payload"]
-    if "derivation_preview" in planned_sections and derivation_request is not None:
-        if "authoring_derivation_payload" in derivation_request:
-            try:
-                payloads["derivation_preview"] = compile_authoring_derivation_v1(
-                    derivation_request["authoring_derivation_payload"]
-                )
-            except AuthoringDerivationCompileError as exc:
-                raise AuthoringApplyExecuteError(str(exc)) from exc
-        else:
-            canonical = {
-                key: derivation_request[key]
-                for key in (
-                    "derivation_id",
-                    "version",
-                    "target_pred_id",
-                    "head_vars",
-                    "where",
-                    "mode",
-                )
-                if key in derivation_request
-            }
-            payloads["derivation_preview"] = compile_authoring_derivation_v1(canonical)
     return payloads
 
 

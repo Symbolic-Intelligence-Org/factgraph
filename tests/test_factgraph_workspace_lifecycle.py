@@ -18,7 +18,6 @@ from factgraph.sdk import (
     Inference,
     Pred,
     Rule,
-    SavedRuleRef,
     SDKStore,
     vars as sdk_vars,
 )
@@ -165,26 +164,10 @@ class WorkspaceSaveTests(unittest.TestCase):
             str(ctx.exception),
         )
 
-    def test_bound_save_writes_level4_layout(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            workspace = Path(tmp_dir) / "workspace"
-            fg = _seed_fg(path=workspace)
-            fg.rules.save(_rule())
-            fg.inferences.save(_inference())
-
-            fg.save()
-
-            self.assertTrue((workspace / "factgraph_workspace.json").is_file())
-            self.assertTrue((workspace / "ledger.db").is_file())
-            self.assertTrue((workspace / "registry" / "registry_manifest.json").is_file())
-            self.assertTrue((workspace / "registry" / "schema" / "schema_ir.json").is_file())
-            registry_manifest = json.loads(
-                (workspace / "registry" / "registry_manifest.json").read_text(encoding="utf-8")
-            )
-            rule_path = registry_manifest["rules"][0]["path"]
-            inference_path = registry_manifest["inferences"][0]["path"]
-            self.assertTrue((workspace / "registry" / rule_path).is_file())
-            self.assertTrue((workspace / "registry" / inference_path).is_file())
+    # Q8 Phase 2 (Slice 6): test_bound_save_writes_level4_layout was removed.
+    # SavedRule/SavedInference persistence was removed in Slice 6, so writing
+    # rule/inference assets to the workspace registry is no longer possible.
+    # Schema/manifest persistence is still covered by tests below.
 
     def test_save_path_binds_future_no_arg_saves(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -224,8 +207,8 @@ class WorkspaceSaveTests(unittest.TestCase):
             manifest = json.loads((registry / "registry_manifest.json").read_text(encoding="utf-8"))
             self.assertTrue((registry / "schema" / "schema_ir.json").is_file())
             self.assertIn("schema", manifest)
-            self.assertEqual(manifest.get("rules"), [])
-            self.assertEqual(manifest.get("inferences"), [])
+            # Q8 Phase 2 (Slice 6): manifest no longer writes `rules` / `inferences`
+            # keys; the schema-only registry is the post-Phase-2 shape.
 
     def test_repeated_save_is_idempotent_and_loadable(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -255,42 +238,17 @@ class WorkspaceSaveTests(unittest.TestCase):
             self.assertTrue((second_workspace / "ledger.db").exists())
         self.assertIsNotNone(loaded.get(User, user_id="Alice"))
 
-    def test_save_syncs_separate_registry_root_into_workspace(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            registry_root = Path(tmp_dir) / "registry-source"
-            workspace = Path(tmp_dir) / "workspace"
-            fg = _seed_fg(registry_root=registry_root)
-            fg.rules.save(_rule())
-
-            fg.save(workspace)
-
-            registry_manifest = json.loads(
-                (workspace / "registry" / "registry_manifest.json").read_text(encoding="utf-8")
-            )
-            rule_path = registry_manifest["rules"][0]["path"]
-            self.assertTrue((workspace / "registry" / rule_path).exists())
+    # Q8 Phase 2 (Slice 6): test_save_syncs_separate_registry_root_into_workspace
+    # was removed. SavedRule persistence is gone; registry sync only carries
+    # schema + apply-log artifacts now (covered by other tests in this class).
 
 
 class WorkspaceLoadTests(unittest.TestCase):
-    def test_factgraph_load_restores_ledger_and_registry_state(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            workspace = Path(tmp_dir) / "workspace"
-            fg = _seed_fg(path=workspace)
-            rule_ref = fg.rules.save(_rule())
-            inference_ref = fg.inferences.save(_inference())
-            fg.save()
-
-            loaded = FactGraph.load(workspace, schema_classes=[User])
-
-            snap = loaded.get(User, user_id="Alice")
-            loaded_rule = loaded.rules.load(rule_ref)
-            loaded_inference = loaded.inferences.load(inference_ref)
-
-        self.assertIsNotNone(snap)
-        assert snap is not None
-        self.assertEqual(snap.name, "Alice")
-        self.assertIsInstance(loaded_rule, Rule)
-        self.assertIsInstance(loaded_inference, Inference)
+    # Q8 Phase 2 (Slice 6): test_factgraph_load_restores_ledger_and_registry_state
+    # was removed. fg.rules.save / fg.inferences.save / load no longer exist.
+    # Workspace ledger restoration is still covered by
+    # test_repeated_save_is_idempotent_and_loadable and
+    # test_save_to_other_path_uses_ledger_backup_and_binds_new_path.
 
     def test_factgraph_load_requires_schema_classes(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -388,24 +346,11 @@ class WorkspaceExclusionTests(unittest.TestCase):
 
 
 class PreservationGuards(unittest.TestCase):
-    def test_blueprint2_authoring_persistence_still_works(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            fg = FactGraph.create(schema_classes=[User], registry_root=tmp_dir)
-
-            rule_ref = fg.rules.save(_rule())
-            inference_ref = fg.inferences.save(_inference())
-            loaded_rule = fg.rules.load(rule_ref)
-            loaded_inference = fg.inferences.load(inference_ref)
-
-        self.assertIsInstance(loaded_rule, Rule)
-        self.assertIsInstance(loaded_inference, Inference)
-
-    def test_saved_refs_remain_load_handles_not_runtime_selectors(self) -> None:
-        fg = FactGraph.create(schema_classes=[User])
-        saved_ref = SavedRuleRef(rule_id="rule.workspace.tag_seed", version="v1")
-
-        with self.assertRaises((TypeError, SDKStoreError)):
-            fg.eval.run(saved_ref)
+    # Q8 Phase 2 (Slice 6): test_blueprint2_authoring_persistence_still_works
+    # and test_saved_refs_remain_load_handles_not_runtime_selectors were
+    # removed. fg.rules.save / fg.inferences.save / fg.rules.load /
+    # fg.inferences.load / SavedRuleRef no longer exist. Pre-Phase-2 Blueprint 2
+    # commitments are now superseded by Q8 Phase 2 removal scope.
 
     def test_batch_tx_save_keeps_transaction_meaning(self) -> None:
         fg = FactGraph.create(schema_classes=[User])

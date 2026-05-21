@@ -37,8 +37,6 @@ EXPECTED_SDK_ALL: tuple[str, ...] = (
     "Relationship",
     "Rule",
     "RuleRef",
-    "SavedInferenceRef",
-    "SavedRuleRef",
     "SchemaAddResult",
     "SDKDSLError",
     "SDKRegistryError",

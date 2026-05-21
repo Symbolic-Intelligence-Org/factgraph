@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
-import warnings
 
 from factgraph.authoring import (
     AuthoringApplyExecuteError,
@@ -11,31 +9,34 @@ from factgraph.authoring import (
     FileAuthoringRegistry,
     build_authoring_publish_workflow_apply_bundle_dto,
 )
-from factgraph.authoring.derivations import compile_authoring_derivation_v1
-from factgraph.authoring.rules import compile_authoring_rule_v1
 
 from .compile import build_authoring_schema_from_classes
 from .errors import SDKRegistryError
 from .schema import Entity
 
 
-_SAVEDRULE_DEPRECATION_MESSAGE = (
-    "{method_name} uses SavedRule/SavedInference registry persistence, which is deprecated by "
-    "Q8 Phase 1. Construct in-memory Rule(...) / Inference(...) values and pass them directly "
-    "to fg.eval.run(...) / fg.eval.evaluate(...). See "
+_SAVEDRULE_PHASE2_REMOVED_MESSAGE = (
+    "SavedRule/SavedInference persistence was removed by Q8 Phase 2. "
+    "Construct in-memory Rule(...) / Inference(...) values and pass them "
+    "directly to fg.eval.run(...) / fg.eval.evaluate(...). See "
     "docs/decisions/2026-05-20_q8-savedrule-existence-governance-decision.md."
 )
 
 
-def _warn_savedrule_deprecated(method_name: str) -> None:
-    warnings.warn(
-        _SAVEDRULE_DEPRECATION_MESSAGE.format(method_name=method_name),
-        DeprecationWarning,
-        stacklevel=3,
-    )
-
-
 class SDKRegistry:
+    """Schema-only registry facade after Q8 Phase 2 removal (Slice 6).
+
+    Rule/inference persistence methods (``register_rule_spec`` /
+    ``register_rule`` / ``register_inference_spec`` / ``register_inference`` /
+    ``list_rule_ids`` / ``list_inference_ids`` / ``list_rule_versions`` /
+    ``list_inference_versions`` / ``get_latest_rule_spec`` /
+    ``get_latest_inference_spec`` / ``read_rule_spec`` / ``read_inference_spec``)
+    were removed entirely. ``apply_authoring_bundle(...)`` continues to accept
+    ``authoring_schema=`` but rejects ``rule_request=`` / ``derivation_request=``
+    with ``SDKRegistryError``. Schema persistence, manifest read, and apply-log
+    audit methods are preserved per Q6 schema-only transition.
+    """
+
     def __init__(
         self,
         root_dir: str | Path | None = None,
@@ -82,15 +83,18 @@ class SDKRegistry:
         schema_ir: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if rule_request is not None or derivation_request is not None:
-            _warn_savedrule_deprecated("SDKRegistry.apply_authoring_bundle(rule/inference)")
+            raise SDKRegistryError(
+                "SDKRegistry.apply_authoring_bundle(rule_request=..., derivation_request=...) "
+                + _SAVEDRULE_PHASE2_REMOVED_MESSAGE
+            )
         try:
             return build_authoring_publish_workflow_apply_bundle_dto(
                 registry=self._registry,
                 store=store,
                 schema_ir=schema_ir,
                 authoring_schema=authoring_schema,
-                rule_request=rule_request,
-                derivation_request=derivation_request,
+                rule_request=None,
+                derivation_request=None,
                 apply_request_id=apply_request_id,
                 transaction_policy=transaction_policy,
             )
@@ -109,111 +113,9 @@ class SDKRegistry:
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
-    def register_rule_spec(self, rule_spec_payload: dict[str, Any]) -> dict[str, Any]:
-        _warn_savedrule_deprecated("SDKRegistry.register_rule_spec")
-        return self._register_rule_spec_no_warning(rule_spec_payload)
-
-    def _register_rule_spec_no_warning(self, rule_spec_payload: dict[str, Any]) -> dict[str, Any]:
-        try:
-            return self._registry.register_rule_spec(rule_spec_payload)
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-
-    def register_rule(self, rule: Any, *, schema_ir: dict[str, Any] | None = None) -> dict[str, Any]:
-        _warn_savedrule_deprecated("SDKRegistry.register_rule")
-        payload = rule.to_authoring_payload() if hasattr(rule, "to_authoring_payload") else rule
-        if not isinstance(payload, dict):
-            raise SDKRegistryError("rule must be SDK Rule object or authoring rule payload dict")
-        try:
-            compiled = compile_authoring_rule_v1(payload, schema_ir=schema_ir)
-        except Exception as exc:
-            raise SDKRegistryError(str(exc)) from exc
-        return self._register_rule_spec_no_warning(compiled)
-
-    def register_inference_spec(self, inference_spec_payload: dict[str, Any]) -> dict[str, Any]:
-        _warn_savedrule_deprecated("SDKRegistry.register_inference_spec")
-        return self._register_inference_spec_no_warning(inference_spec_payload)
-
-    def _register_inference_spec_no_warning(self, inference_spec_payload: dict[str, Any]) -> dict[str, Any]:
-        try:
-            return self._registry.register_inference_spec(inference_spec_payload)
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-
-    def register_inference(self, inference: Any, *, schema_ir: dict[str, Any] | None = None) -> dict[str, Any]:
-        _warn_savedrule_deprecated("SDKRegistry.register_inference")
-        payload = inference.to_authoring_payload() if hasattr(inference, "to_authoring_payload") else inference
-        if not isinstance(payload, dict):
-            raise SDKRegistryError("inference must be SDK Inference object or authoring inference payload dict")
-        _reject_multi_head_derivation_payload(payload)
-        try:
-            compiled = compile_authoring_derivation_v1(payload, schema_ir=schema_ir)
-        except Exception as exc:
-            if schema_ir is None:
-                fallback_schema_ir = self._read_registry_schema_ir()
-                if fallback_schema_ir is not None:
-                    try:
-                        compiled = compile_authoring_derivation_v1(payload, schema_ir=fallback_schema_ir)
-                    except Exception as retry_exc:
-                        raise SDKRegistryError(str(retry_exc)) from retry_exc
-                else:
-                    raise SDKRegistryError(str(exc)) from exc
-            else:
-                raise SDKRegistryError(str(exc)) from exc
-        return self._register_inference_spec_no_warning(compiled)
-
-    def _read_registry_schema_ir(self) -> dict[str, Any] | None:
-        try:
-            schema_entry = self._registry.get_schema_entry()
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-        if not isinstance(schema_entry, dict):
-            return None
-        rel_path = schema_entry.get("path")
-        if not isinstance(rel_path, str) or not rel_path:
-            return None
-        abs_path = self.root_dir / rel_path
-        if not abs_path.exists():
-            return None
-        try:
-            data = json.loads(abs_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise SDKRegistryError(f"failed to read registry schema_ir: {exc}") from exc
-        if not isinstance(data, dict):
-            raise SDKRegistryError("registry schema_ir file must contain JSON object")
-        return data
-
     def get_schema_entry(self) -> dict[str, Any] | None:
         try:
             return self._registry.get_schema_entry()
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-
-    def list_rule_ids(self) -> list[str]:
-        _warn_savedrule_deprecated("SDKRegistry.list_rule_ids")
-        try:
-            return self._registry.list_rule_ids()
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-
-    def list_inference_ids(self) -> list[str]:
-        _warn_savedrule_deprecated("SDKRegistry.list_inference_ids")
-        try:
-            return self._registry.list_inference_ids()
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-
-    def list_rule_versions(self, rule_id: str) -> list[dict[str, Any]]:
-        _warn_savedrule_deprecated("SDKRegistry.list_rule_versions")
-        try:
-            return self._registry.list_rule_versions(rule_id)
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-
-    def list_inference_versions(self, inference_id: str) -> list[dict[str, Any]]:
-        _warn_savedrule_deprecated("SDKRegistry.list_inference_versions")
-        try:
-            return self._registry.list_inference_versions(inference_id)
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
 
@@ -234,36 +136,3 @@ class SDKRegistry:
             return self._registry.find_apply_execute_run(apply_request_id)
         except AuthoringRegistryFSError as exc:
             raise SDKRegistryError(str(exc)) from exc
-
-    def get_latest_rule_spec(self, rule_id: str) -> dict[str, Any] | None:
-        _warn_savedrule_deprecated("SDKRegistry.get_latest_rule_spec")
-        try:
-            return self._registry.get_latest_rule_spec(rule_id)
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-
-    def get_latest_inference_spec(self, inference_id: str) -> dict[str, Any] | None:
-        _warn_savedrule_deprecated("SDKRegistry.get_latest_inference_spec")
-        try:
-            return self._registry.get_latest_inference_spec(inference_id)
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-
-    def read_rule_spec(self, rule_id: str, version: str) -> dict[str, Any] | None:
-        _warn_savedrule_deprecated("SDKRegistry.read_rule_spec")
-        try:
-            return self._registry.read_rule_spec(rule_id, version)
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-
-    def read_inference_spec(self, inference_id: str, version: str) -> dict[str, Any] | None:
-        _warn_savedrule_deprecated("SDKRegistry.read_inference_spec")
-        try:
-            return self._registry.read_inference_spec(inference_id, version)
-        except AuthoringRegistryFSError as exc:
-            raise SDKRegistryError(str(exc)) from exc
-
-
-def _reject_multi_head_derivation_payload(payload: dict[str, Any]) -> None:
-    if isinstance(payload.get("head"), list):
-        raise SDKRegistryError("multi-head Inference is not accepted in Track 1; use one Inference per head")

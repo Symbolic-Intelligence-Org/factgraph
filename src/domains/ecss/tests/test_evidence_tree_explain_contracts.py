@@ -38,7 +38,6 @@ from factgraph.audit.assertions import load_assertion_index
 from service.static_ui import _slug_id
 from factgraph.authoring import (
     AuthoringDerivationCompileError,
-    FileAuthoringRegistry,
     build_derivation_preview_dto,
     compile_authoring_schema_v1,
     compile_authoring_derivation_v1,
@@ -143,6 +142,7 @@ from service.runtime_v1 import (
     export_runtime_package,
     open_runtime_session,
     project_runtime_view_facts,
+    register_ephemeral_rule,
     retract_runtime_fact,
     reset_runtime_sessions_for_tests,
     run_runtime_rule,
@@ -165,18 +165,21 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                 expose=True,
             )
 
-        compiled_rule = sdk._compile_rule_input(helper_rule)
-
         with TemporaryDirectory() as tmp_dir:
-            registry = FileAuthoringRegistry(Path(tmp_dir))
-            registry.upsert_schema_ir(sdk.schema_ir)
-            registry.register_rule_spec(compiled_rule)
-
+            # Q8 Phase 2 (Slice 6): FS-saved rule loading removed. Open the
+            # runtime session with schema_ir and register the helper rule as
+            # an ephemeral rule instead of going through FileAuthoringRegistry.
             reset_runtime_sessions_for_tests()
-            open_resp = open_runtime_session({"registry_root": tmp_dir})
+            open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
             self.assertTrue(open_resp["ok"])
             session_id = open_resp["session"]["session_id"]
             try:
+                reg_resp = register_ephemeral_rule(
+                    session_id,
+                    {"rule": helper_rule.to_authoring_payload()},
+                )
+                self.assertTrue(reg_resp["ok"])
+
                 write_resp = write_runtime_fact(
                     session_id,
                     {

@@ -36,7 +36,6 @@ from service.static_ui import render_audit_static_site
 from factgraph.audit.assertions import load_assertion_index
 from factgraph.authoring import (
     AuthoringDerivationCompileError,
-    FileAuthoringRegistry,
     build_derivation_preview_dto,
     compile_authoring_schema_v1,
     compile_authoring_derivation_v1,
@@ -142,6 +141,7 @@ from service.runtime_v1 import (
     export_runtime_package,
     open_runtime_session,
     project_runtime_view_facts,
+    register_ephemeral_rule,
     retract_runtime_fact,
     reset_runtime_sessions_for_tests,
     run_runtime_rule,
@@ -1091,78 +1091,81 @@ Derivation(
                 expose=True,
             )
 
-        compiled_rule = sdk._compile_rule_input(helper_rule)
+        # Q8 Phase 2 (Slice 6): FS-saved rule loading removed. Open the
+        # runtime session with schema_ir and register the helper rule as an
+        # ephemeral rule instead of going through FileAuthoringRegistry. No
+        # TemporaryDirectory needed since no FS registry artifacts are written.
+        reset_runtime_sessions_for_tests()
+        open_resp = open_runtime_session({"schema_ir": sdk.schema_ir})
+        self.assertTrue(open_resp["ok"])
+        session_id = open_resp["session"]["session_id"]
+        try:
+            reg_resp = register_ephemeral_rule(
+                session_id,
+                {"rule": helper_rule.to_authoring_payload()},
+            )
+            self.assertTrue(reg_resp["ok"])
 
-        with TemporaryDirectory() as tmp_dir:
-            registry = FileAuthoringRegistry(Path(tmp_dir))
-            registry.upsert_schema_ir(sdk.schema_ir)
-            registry.register_rule_spec(compiled_rule)
+            write_resp = write_runtime_fact(
+                session_id,
+                {
+                    "pred_id": "user:tag",
+                    "e_ref": refs["u1"],
+                    "rest_terms": [["string", "vip"]],
+                },
+                kind="add",
+            )
+            self.assertTrue(write_resp["ok"])
+            eval_resp = evaluate_runtime_derivation(
+                session_id,
+                {
+                    "inference": {
+                        "derivation_id": "drv.runtime.user_tag_copy",
+                        "version": "1.0.0",
+                        "target": "user:tag",
+                        "head_vars": ["$u", "$tag"],
+                        "where": [
+                            ["ruleref", "q.user_tag_rows", "1.0.0", ["$u", "$tag"]],
+                            ["eq", "$tag", "vip"],
+                        ],
+                    }
+                },
+            )
+            self.assertTrue(eval_resp["ok"])
+            candidate = eval_resp["evaluation"]["candidates"][0]
+            self.assertEqual(candidate["payload"]["terms"][0]["value"], refs["u1"])
 
+            explain_support_resp = explain_runtime_support(
+                session_id,
+                {"support_digest": candidate["support_digest"]},
+            )
+            self.assertTrue(explain_support_resp["ok"])
+            self.assertEqual(explain_support_resp["explain"]["rule_refs"], ["q.user_tag_rows"])
+            self.assertEqual(
+                explain_support_resp["explain"]["rule_ref_edges"][0]["ruleref_atom_key"],
+                "b0.a0:ruleref",
+            )
+            self.assertEqual(
+                explain_support_resp["explain"]["rule_ref_edges"][0]["rule_ref_version"],
+                "1.0.0",
+            )
+            child_support_digest = explain_support_resp["explain"]["rule_ref_edges"][0]["child_support_digest"]
+            self.assertTrue(str(child_support_digest).startswith("sha256:"))
+
+            explain_tree_resp = explain_runtime_tree(session_id, {"kind": "candidate", "id": candidate["candidate_id"]})
+            self.assertTrue(explain_tree_resp["ok"])
+            rule_ref_section = explain_tree_resp["tree"]["root"]["children"][1]
+            self.assertEqual(rule_ref_section["node_kind"], "rule_ref_section")
+            rule_ref_node = rule_ref_section["children"][0]
+            self.assertEqual(rule_ref_node["ruleref_atom_key"], "b0.a0:ruleref")
+            self.assertEqual(rule_ref_node["child_support_digest"], child_support_digest)
+            referenced_support = rule_ref_node["children"][0]
+            self.assertEqual(referenced_support["node_kind"], "referenced_support")
+            self.assertEqual(referenced_support["root_result_kind"], "row")
+            self.assertEqual(referenced_support["support_digest"], child_support_digest)
+        finally:
+            close_runtime_session(session_id)
             reset_runtime_sessions_for_tests()
-            open_resp = open_runtime_session({"registry_root": tmp_dir})
-            self.assertTrue(open_resp["ok"])
-            session_id = open_resp["session"]["session_id"]
-            try:
-                write_resp = write_runtime_fact(
-                    session_id,
-                    {
-                        "pred_id": "user:tag",
-                        "e_ref": refs["u1"],
-                        "rest_terms": [["string", "vip"]],
-                    },
-                    kind="add",
-                )
-                self.assertTrue(write_resp["ok"])
-                eval_resp = evaluate_runtime_derivation(
-                    session_id,
-                    {
-                        "inference": {
-                            "derivation_id": "drv.runtime.user_tag_copy",
-                            "version": "1.0.0",
-                            "target": "user:tag",
-                            "head_vars": ["$u", "$tag"],
-                            "where": [
-                                ["ruleref", "q.user_tag_rows", "1.0.0", ["$u", "$tag"]],
-                                ["eq", "$tag", "vip"],
-                            ],
-                        }
-                    },
-                )
-                self.assertTrue(eval_resp["ok"])
-                candidate = eval_resp["evaluation"]["candidates"][0]
-                self.assertEqual(candidate["payload"]["terms"][0]["value"], refs["u1"])
-
-                explain_support_resp = explain_runtime_support(
-                    session_id,
-                    {"support_digest": candidate["support_digest"]},
-                )
-                self.assertTrue(explain_support_resp["ok"])
-                self.assertEqual(explain_support_resp["explain"]["rule_refs"], ["q.user_tag_rows"])
-                self.assertEqual(
-                    explain_support_resp["explain"]["rule_ref_edges"][0]["ruleref_atom_key"],
-                    "b0.a0:ruleref",
-                )
-                self.assertEqual(
-                    explain_support_resp["explain"]["rule_ref_edges"][0]["rule_ref_version"],
-                    "1.0.0",
-                )
-                child_support_digest = explain_support_resp["explain"]["rule_ref_edges"][0]["child_support_digest"]
-                self.assertTrue(str(child_support_digest).startswith("sha256:"))
-
-                explain_tree_resp = explain_runtime_tree(session_id, {"kind": "candidate", "id": candidate["candidate_id"]})
-                self.assertTrue(explain_tree_resp["ok"])
-                rule_ref_section = explain_tree_resp["tree"]["root"]["children"][1]
-                self.assertEqual(rule_ref_section["node_kind"], "rule_ref_section")
-                rule_ref_node = rule_ref_section["children"][0]
-                self.assertEqual(rule_ref_node["ruleref_atom_key"], "b0.a0:ruleref")
-                self.assertEqual(rule_ref_node["child_support_digest"], child_support_digest)
-                referenced_support = rule_ref_node["children"][0]
-                self.assertEqual(referenced_support["node_kind"], "referenced_support")
-                self.assertEqual(referenced_support["root_result_kind"], "row")
-                self.assertEqual(referenced_support["support_digest"], child_support_digest)
-            finally:
-                close_runtime_session(session_id)
-                reset_runtime_sessions_for_tests()
 
     def test_runtime_derivation_caches_recipe_by_run_id(self) -> None:
         sdk = SDKStore([User])

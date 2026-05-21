@@ -13,7 +13,6 @@ from uuid import uuid4
 
 from factgraph.adapters.problog.rule_ext import resolve_problog_engine_ext
 from factgraph.adapters.souffle.package import ExportOptions, export_package
-from factgraph.authoring.registry_fs import FileAuthoringRegistry
 from factgraph.authoring.derivation_compile import (
     AuthoringDerivationCompileError,
     compile_authoring_derivation_v1,
@@ -51,7 +50,6 @@ from factgraph.core.store._support import (
     PYREASON_PROVENANCE_KIND,
     SOUFFLE_WITNESS_KIND,
 )
-from factgraph.core.store._confidence_kind_resolver import CertaintyConfidenceKindResolver
 from factgraph.core.store.runtime import Store
 from factgraph.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
 from factgraph.core.view.projector import (
@@ -893,10 +891,9 @@ def run_runtime_rule(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(capture_trace, bool):
             raise facade_error("capture_trace must be bool", kind="shape", path="$.capture_trace")
         compiled = compile_authoring_rule_v1(normalized_rule, schema_ir=session.store.schema_ir)
+        # Q8 Phase 2 (Slice 6): FS-saved rule loading removed. Active registry
+        # is populated only from session ephemeral rules (in-memory).
         active_registry = RuleRegistry()
-        registry_root = _resolve_rule_registry_root(session, dto)
-        if registry_root is not None:
-            _load_registered_rules(active_registry, registry_root)
         _apply_ephemeral_rules(active_registry, session)
         rule_spec = RuleSpec(
             rule_id=compiled["rule_id"],
@@ -972,18 +969,15 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
         semantics_profile = _resolve_runtime_semantics_profile(dto, mode=mode)
         compiled = _compile_runtime_derivation(dto, schema_ir=session.store.schema_ir)
         limit = _optional_limit(dto.get("limit"), path="$.limit")
+        # Q8 Phase 2 (Slice 6): FS-saved rule loading removed; certainty
+        # confidence-kind resolver no longer constructed because no concrete
+        # reader implements the Protocol after FileAuthoringRegistry.read_rule_spec
+        # is gone. registry_root preserved for downstream _cache_derivation_recipe.
         active_registry = None
         registry_root = _resolve_rule_registry_root(session, dto)
         certainty_resolver = None
-        if registry_root is not None:
-            active_registry = RuleRegistry()
-            _load_registered_rules(active_registry, registry_root)
-            certainty_resolver = CertaintyConfidenceKindResolver(
-                FileAuthoringRegistry(registry_root),
-            )
         if session.ephemeral_rules:
-            if active_registry is None:
-                active_registry = RuleRegistry()
+            active_registry = RuleRegistry()
             _apply_ephemeral_rules(active_registry, session)
         runtime_engine_ext = _resolve_runtime_derivation_engine_ext(compiled, mode=mode)
         candidates = session.store.evaluate(
@@ -1197,38 +1191,15 @@ def get_runtime_session_rules(
     session_id: str,
     include_spec: bool = False,
 ) -> dict[str, Any]:
+    # Q8 Phase 2 (Slice 6): FS-backed rule listing removed. The function now
+    # surfaces only session ephemeral rules. `fs_count: 0` is preserved in the
+    # response for caller compatibility.
     try:
         session = _require_session(session_id)
         rule_map: dict[tuple[str, str], dict[str, Any]] = {}
-        fs_count = 0
-
-        if session.registry_root is not None:
-            file_registry = FileAuthoringRegistry(Path(session.registry_root))
-            for rule_id in file_registry.list_rule_ids():
-                for version_row in file_registry.list_rule_versions(rule_id):
-                    version = version_row.get("version")
-                    if not isinstance(version, str) or not version:
-                        continue
-                    entry: dict[str, Any] = {
-                        "rule_id": rule_id,
-                        "version": version,
-                        "source": "fs",
-                    }
-                    if include_spec:
-                        payload = file_registry.read_rule_spec(rule_id, version)
-                        if isinstance(payload, dict):
-                            entry["select_vars"] = payload.get("select_vars", [])
-                            entry["where"] = payload.get("where", [])
-                            entry["expose"] = bool(payload.get("expose", False))
-                    rule_map[(rule_id, version)] = entry
-                    fs_count += 1
 
         ephemeral_count = 0
         for rs in session.ephemeral_rules:
-            key = (rs.rule_id, rs.version)
-            if key in rule_map:
-                rule_map[key]["source"] = "ephemeral_shadowed_by_fs"
-                continue
             entry: dict[str, Any] = {
                 "rule_id": rs.rule_id,
                 "version": rs.version,
@@ -1238,14 +1209,14 @@ def get_runtime_session_rules(
                 entry["select_vars"] = list(rs.select_vars)
                 entry["where"] = list(rs.where)
                 entry["expose"] = rs.expose
-            rule_map[key] = entry
+            rule_map[(rs.rule_id, rs.version)] = entry
             ephemeral_count += 1
 
         return ok_response(
             result={
                 "rules": list(rule_map.values()),
                 "total": len(rule_map),
-                "fs_count": fs_count,
+                "fs_count": 0,
                 "ephemeral_count": ephemeral_count,
             }
         )
@@ -1844,7 +1815,6 @@ def _materialize_provenance_trees(
     import tempfile
 
     from factgraph.adapters.souffle.provenance import run_package_provenance
-    from factgraph.adapters.souffle.package import _load_query_rule_registry
     from factgraph.adapters.souffle.runner import run_package
     from factgraph.adapters.souffle.tsv_v1 import tsv_cell_v1_decode
     from factgraph.adapters.souffle.where_compile import (
@@ -1888,7 +1858,10 @@ def _materialize_provenance_trees(
         recipe = session.derivation_recipes[run_id]
         try:
             pred_type_domains = _schema_pred_type_domains(session.store.schema_ir)
-            registry = _load_query_rule_registry(recipe.registry_root) if recipe.registry_root is not None else None
+            # Q8 Phase 2 (Slice 6): FS-saved rule registry no longer constructed
+            # from recipe.registry_root because FileAuthoringRegistry rule methods
+            # are removed. ruleref relations passed to the export use None registry.
+            registry = None
             expanded = _expand_ruleref_relations_for_query_export(
                 where=recipe.where,
                 registry=registry,
@@ -2305,31 +2278,13 @@ def _meta_row_to_dict(row: MetaRow) -> dict[str, Any]:
     }
 
 
-def _load_registered_rules(registry: RuleRegistry, root_dir: str) -> None:
-    file_registry = FileAuthoringRegistry(Path(root_dir))
-    for rule_id in file_registry.list_rule_ids():
-        for version_row in file_registry.list_rule_versions(rule_id):
-            version = version_row.get("version")
-            if not isinstance(version, str) or not version:
-                continue
-            payload = file_registry.read_rule_spec(rule_id, version)
-            if not isinstance(payload, dict):
-                continue
-            registry.register(
-                RuleSpec(
-                    rule_id=str(payload["rule_id"]),
-                    version=str(payload["version"]),
-                    select_vars=list(payload["select_vars"]),
-                    where=list(_json_where_to_ir(payload["where"])),
-                    expose=bool(payload.get("expose", False)),
-                )
-            )
-
-
 def _apply_ephemeral_rules(registry: RuleRegistry, session: RuntimeSession) -> None:
     """Merge session ephemeral rules into an active registry.
 
-    FS rule wins on (rule_id, version) collision - duplicate silently skipped.
+    Q8 Phase 2 (Slice 6): FS-saved rule loading was removed, so ephemeral rules
+    are the only source of rule registrations here. Duplicate (rule_id, version)
+    registrations within ephemeral_rules raise RuleCompileError and are silently
+    skipped.
     """
     for rs in session.ephemeral_rules:
         try:

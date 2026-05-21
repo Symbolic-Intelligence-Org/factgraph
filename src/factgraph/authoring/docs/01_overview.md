@@ -240,16 +240,12 @@ These examples are compiler-facing payloads, so they intentionally use
 ## 6. Registry file layout
 
 `FileAuthoringRegistry(root_dir=...)` uses the filesystem to store
-authoring assets. A typical layout is:
+authoring assets. After Q8 Phase 2 (Slice 6) the layout is schema-only:
 
 ```text
 root_dir/
   schema/
     schema_ir.json
-  rules/
-    <rule_id>/<version>.json
-  inferences/
-    <inference_id>/<version>.json
   registry_manifest.json
   authoring_apply_events.jsonl
 ```
@@ -257,12 +253,13 @@ root_dir/
 These files form an **authoring asset repository**, not a runtime
 database.
 
-The compiler substrate still accepts and emits low-level payloads with
-`derivation_id`. The file registry translates those payloads at the storage
-boundary, so persisted inference specs use `inference_id` and live under
-`inferences/`. Developer workspaces created before this vocabulary rename
-should rename `registry/derivations/` to `registry/inferences/` or recreate
-the registry workspace.
+Pre-Phase-2 workspaces may contain `rules/<rule_id>/<version>.json` and
+`inferences/<inference_id>/<version>.json` files on disk. Those files are
+inert: Slice 6 removed all `FileAuthoringRegistry` rule/inference read
+methods (`list_rule_ids`, `list_rule_versions`, `read_rule_spec`, etc.) so
+no code paths consume the historical files. Manifests that still contain
+`rules: []` / `inferences: []` keys are tolerated on read and no longer
+written on save.
 
 ## 7. Typical workflows
 
@@ -277,34 +274,36 @@ the registry workspace.
 ### 7.2 Publish to a registry
 
 1. Create `FileAuthoringRegistry(root_dir=...)`
-2. Write the schema / rule / inference versions
+2. Write the schema version
 3. Update the manifest
 4. Record apply / publish events
 
+> Q8 Phase 2 (Slice 6) removed rule/inference persistence from the file
+> registry. Only schema upsert + apply-log writes remain.
+
 ### 7.3 Consumption by SDK / service
 
-- `FactGraph.create(..., registry_root=...)` binds a file authoring registry
-  to the SDK graph. `fg.rules.save/load/list/get` and
-  `fg.inferences.save/load/list/get` are the normal public SDK facade.
 - `FactGraph.create(..., path=...)` binds the graph to a workspace root. The
   workspace owns `ledger.db`, `factgraph_workspace.json`, and a nested
-  `registry/` directory. `fg.save()` synchronizes the graph into that layout,
-  while `FactGraph.load(path, schema_classes=[...])` restores it with explicit
-  schema-class validation.
-- `factgraph.application.authoring_runtime` owns the application-layer
-  save/load/list/get orchestration used by the SDK facade.
+  `registry/` directory (schema-only after Phase 2). `fg.save()` synchronizes
+  the graph into that layout, while `FactGraph.load(path, schema_classes=[...])`
+  restores it with explicit schema-class validation. Construct `Rule(...)` and
+  `Inference(...)` in memory each session.
+- `factgraph.application.authoring_runtime` is now a forward-compat shell:
+  Q8 Phase 2 removed the save/load/list/get orchestration; only the
+  `AuthoringRuntimeError` class remains.
 - `factgraph.application.workspace_runtime` owns workspace layout, manifest
   validation, ledger backup/checkpoint behavior, and registry sync/copy
   orchestration. It deliberately does not include artifact sidecars, in-memory
   views, audit/evidence round files, or package export output.
-- `factgraph.sdk.registry.SDKRegistry` remains an advanced/internal wrapper for
-  tests, migration, and lower-level registry workflows. It is not exported from
-  `factgraph.sdk`.
-- `service.registry_v1` exposes `FileAuthoringRegistry` over an HTTP
-  read interface
-- `service.runtime_v1` may also read schemas / rules from the
-  registry to support runtime sessions, `/rules/run`, and the native
-  `/inferences/evaluate` `RuleRef` resolution / execution
+- `factgraph.sdk.registry.SDKRegistry` is an advanced/internal wrapper around
+  the schema-only `FileAuthoringRegistry`. It rejects `rule_request` /
+  `derivation_request` arguments in `apply_authoring_bundle(...)`.
+- `service.registry_v1` exposes the schema/manifest/apply-log routes over HTTP.
+  The rule/inference read routes return removed envelopes.
+- `service.runtime_v1` reads schemas from the registry to support runtime
+  sessions. Runtime rule registration uses in-memory ephemeral rules only;
+  FS-saved rule loading was removed in Slice 6.
 
 ## 8. Boundaries with other layers
 
@@ -315,9 +314,11 @@ the registry workspace.
     validated and preserved here; core itself assigns them no
     execution semantics
 - `sdk`
-  - graph-bound `fg.rules.*` / `fg.inferences.*` provide the public persistence
-    facade over `authoring`
-  - advanced code may still import `factgraph.sdk.registry.SDKRegistry`
+  - graph-bound `fg.rules.inspect(...)` is the only remaining `fg.rules.*`
+    surface after Q8 Phase 2 (Slice 6); `fg.inferences.*` is an empty
+    namespace. Persistence helpers were removed.
+  - advanced code may still import `factgraph.sdk.registry.SDKRegistry` for
+    schema-only registry workflows
 - `service`
   - The service layer can expose the authoring registry as a
     front-end-consumable interface

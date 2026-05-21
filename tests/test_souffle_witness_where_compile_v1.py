@@ -1,12 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
-from factgraph.authoring.registry_fs import FileAuthoringRegistry
-from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id
 from factgraph.adapters.souffle.where_compile import (
     build_query_witness_layout,
@@ -15,9 +10,6 @@ from factgraph.adapters.souffle.where_compile import (
 from factgraph.core.rules.ruleref_common import internal_rule_pred_id
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factgraph.core.rules.where_eval import WhereValidationError
-from factgraph.core.store.runtime import Store
-from factgraph.sdk import Pred, Rule, RuleRef, SDKStore, vars as sdk_vars
-from tests._test_helpers import User, _schema_ir as _runtime_schema_ir
 
 
 class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):
@@ -99,74 +91,16 @@ class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):
             )
         self.assertIn("requires registry_root", str(ctx.exception))
 
-    def test_export_package_threads_query_registry_root_for_ruleref(self) -> None:
-        internal_rel = normalize_pred_id(internal_rule_pred_id("q.user_name_rows", "1.0.0"))
-        store = Store(_runtime_schema_ir())
-        with TemporaryDirectory() as package_dir:
-            with patch(
-                "factgraph.adapters.souffle.package._load_query_rule_registry",
-                return_value=_rule_registry(),
-            ) as mock_load_registry:
-                export_package(
-                    store,
-                    Path(package_dir),
-                    ExportOptions(package_kind="inference"),
-                    query={
-                        "where": [("ruleref", "q.user_name_rows", "1.0.0", ["$e", "$name"])],
-                        "query_rel": "query__export",
-                        "registry_root": "/tmp/fake-registry",
-                    },
-                )
-
-            mock_load_registry.assert_called_once_with("/tmp/fake-registry")
-            idb_text = (Path(package_dir) / "rules" / "idb.dl").read_text(encoding="utf-8")
-            self.assertIn(f".decl {internal_rel}(C0:symbol, C1:symbol)", idb_text)
-            self.assertIn(
-                f"query__export(C0, C1) :- {internal_rel}(C0, C1).",
-                idb_text,
-            )
-
-    def test_export_package_loads_nested_ruleref_rules_from_registry_files(self) -> None:
-        sdk = SDKStore([User], schema_ir=_runtime_schema_ir())
-        with TemporaryDirectory() as package_dir, TemporaryDirectory() as registry_dir:
-            registry = FileAuthoringRegistry(Path(registry_dir))
-            registry.upsert_schema_ir(sdk.schema_ir)
-            with sdk_vars("u", "tag") as (u, tag):
-                child_rule = Rule(
-                    id="q.child_rule",
-                    version="1.0.0",
-                    select=[u, tag],
-                    where=[Pred("user:tag", u, tag)],
-                    expose=True,
-                )
-                parent_rule = Rule(
-                    id="q.parent_rule",
-                    version="1.0.0",
-                    select=[u, tag],
-                    where=[RuleRef(child_rule)(u, tag)],
-                    expose=True,
-                )
-            registry.register_rule_spec(sdk._compile_rule_input(child_rule))
-            registry.register_rule_spec(sdk._compile_rule_input(parent_rule))
-
-            export_package(
-                sdk.store,
-                Path(package_dir),
-                ExportOptions(package_kind="inference"),
-                query={
-                    "where": [("ruleref", "q.parent_rule", "1.0.0", ["$u", "$tag"])],
-                    "query_rel": "query__nested",
-                    "registry_root": registry_dir,
-                },
-            )
-
-            idb_text = (Path(package_dir) / "rules" / "idb.dl").read_text(encoding="utf-8")
-            child_rel = normalize_pred_id(internal_rule_pred_id("q.child_rule", "1.0.0"))
-            parent_rel = normalize_pred_id(internal_rule_pred_id("q.parent_rule", "1.0.0"))
-            self.assertIn(f".decl {child_rel}(C0:symbol, C1:symbol)", idb_text)
-            self.assertIn(f".decl {parent_rel}(C0:symbol, C1:symbol)", idb_text)
-            self.assertIn(f"{parent_rel}(C0, C1) :- {child_rel}(C0, C1).", idb_text)
-            self.assertIn(f"query__nested(C0, C1) :- {parent_rel}(C1, C0).", idb_text)
+    # Q8 Phase 2 (Slice 6):
+    # - test_export_package_threads_query_registry_root_for_ruleref was removed
+    #   because `_load_query_rule_registry` was deleted; export_package no
+    #   longer loads FS-saved rules via `query.registry_root`.
+    # - test_export_package_loads_nested_ruleref_rules_from_registry_files was
+    #   removed because `FileAuthoringRegistry.register_rule_spec` was deleted
+    #   and export_package no longer supports FS-backed nested ruleref
+    #   expansion. Equivalent in-memory testing of `compile_where_to_query_dl`
+    #   with a `RuleRegistry` is covered by
+    #   `test_compile_where_to_query_dl_rewrites_ruleref_with_registry` above.
 
 
 def _schema_ir() -> dict[str, object]:

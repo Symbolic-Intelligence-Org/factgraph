@@ -164,38 +164,33 @@ Rules:
 - `RuleRef` is forbidden inside `Not(...)` body (compile-time error).
 - `sdk.run(..., registry=None)` auto-registers `RuleRef(RuleObj)` dependencies.
 - If `registry` is explicitly provided, SDK does not auto-fill dependencies.
-- `RuleRef` is a where-clause carrier. It is not the same as
-  `SavedRuleRef`, which is returned by `fg.rules.save(...)`.
+- `RuleRef` is a where-clause carrier. It is not a persistence handle;
+  SavedRule/SavedInference persistence was removed by Q8 Phase 2.
 
-## 4.1 Saved Rule and Inference Assets
+## 4.1 In-memory Rule and Inference Values
 
-Bind an authoring registry to the graph when you want durable rule and
-inference assets:
+> Q8 Phase 2 (Slice 6) removed the SavedRule/SavedInference persistence layer.
+> `fg.rules.save / load / list / get`, `fg.inferences.save / load / list / get`,
+> `SavedRuleRef`, and `SavedInferenceRef` are no longer part of the SDK.
+> Rules and inferences are used as in-memory value objects:
 
 ```python
 fg = FactGraph.create(schema_classes=[User], path="./workspace")
 
-rule_ref = fg.rules.save(rule)          # SavedRuleRef(rule_id, version)
-inf_ref = fg.inferences.save(inf)       # SavedInferenceRef(inference_id, version)
+my_rule = Rule(rule_id="rule_alice", version="1.0.0", select_vars=["x"], where=[...])
+rows = fg.eval.run(my_rule)
 
-latest_rule_ref = fg.rules.get(rule.id)
-saved_rules = fg.rules.list()
-
-loaded_rule = fg.rules.load(rule_ref)
-loaded_inf = fg.inferences.load(inf_ref)
+my_inference = Inference(id="drv.copy_name", version="1.0.0", where=[...], head=...)
+candidates = fg.eval.evaluate(my_inference)
 ```
 
-`load(...)` returns SDK value objects (`Rule` / `Inference`). Saved refs are not
-runtime selectors; pass the loaded objects to `fg.eval.run(...)` or
-`fg.eval.evaluate(...)`.
-
-`fg.rules.inspect(rule_or_inference)` remains the structural inspection API and
-lives next to the persistence methods.
+`fg.rules.inspect(rule_or_inference)` is the only remaining structural inspection
+API on the `fg.rules.*` namespace.
 
 When the graph is workspace-backed, `fg.save()` persists the ledger plus the
-schema-backed rule/inference registry. `FactGraph.load("./workspace",
-schema_classes=[User])` restores the workspace and returns loaded refs through
-the same `fg.rules.*` / `fg.inferences.*` facades.
+schema IR. `FactGraph.load("./workspace", schema_classes=[User])` restores the
+workspace; user code constructs Rule/Inference values in memory afresh each
+session.
 
 ## 5. Query DSL
 

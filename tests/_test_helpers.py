@@ -33,7 +33,21 @@ def _register_exposed_user_tag_rule(
     *,
     rule_id: str = "q.child_rule",
     condition_weights: dict[str, float] | None = None,
-) -> None:
+) -> Rule:
+    """Construct (and return) an exposed user.tag Rule for test scenarios.
+
+    Q8 Phase 2 (Slice 6) removed `FileAuthoringRegistry.register_rule_spec`,
+    so this helper no longer persists the rule to a registry. It now:
+    - upserts the schema (still supported by FileAuthoringRegistry),
+    - constructs the Rule value object, and
+    - returns the Rule for the caller to pass directly to `fg.eval.run(...)`
+      or to register as an ephemeral rule in a runtime session.
+
+    Callers that previously relied on this helper's side-effect of FS
+    registration must construct the rule via the returned value and register
+    it through whatever in-memory mechanism the caller uses
+    (`RuleRegistry.register(...)`, ephemeral-rule POST, etc.).
+    """
     from factgraph.authoring import FileAuthoringRegistry
 
     registry = FileAuthoringRegistry(Path(registry_root))
@@ -47,7 +61,7 @@ def _register_exposed_user_tag_rule(
             expose=True,
             condition_weights=condition_weights or {},
         )
-    registry.register_rule_spec(sdk._compile_rule_input(rule))
+    return rule
 
 
 def _schema_ir() -> dict[str, object]:

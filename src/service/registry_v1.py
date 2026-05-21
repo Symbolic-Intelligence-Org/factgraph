@@ -9,6 +9,24 @@ from ._common import error_response, exception_to_error, facade_error, ok_respon
 from ._registry_io import load_registry_schema_ir
 
 
+# Q8 Phase 2 (Slice 6) note:
+#   `read_registry_rule(...)` and `read_registry_inference(...)` now return
+#   removed envelopes because the underlying SavedRule/SavedInference
+#   persistence was removed in Slice 6. Callers should construct in-memory
+#   `Rule(...)` / `Inference(...)` values directly.
+#   `list_registry_assets(...)` no longer reports `rule_ids` / `inference_ids`
+#   fields; the response is locked to schema_entry + apply_run_ids.
+
+
+_SAVEDRULE_PHASE2_REMOVED_DETAILS = {
+    "message": (
+        "registry-backed SavedRule/SavedInference persistence was removed by "
+        "Q8 Phase 2; use in-memory Rule(...) / Inference(...) instead of "
+        "registry-backed reads"
+    ),
+}
+
+
 def read_registry_manifest(dto: dict[str, Any]) -> dict[str, Any]:
     try:
         registry = _registry_from_dto(dto)
@@ -30,8 +48,7 @@ def list_registry_assets(dto: dict[str, Any]) -> dict[str, Any]:
         registry = _registry_from_dto(dto)
         return ok_response(
             registry={
-                "rule_ids": registry.list_rule_ids(),
-                "inference_ids": registry.list_inference_ids(),
+                "schema_entry": registry.get_schema_entry(),
                 "apply_run_ids": registry.list_apply_run_ids(),
             }
         )
@@ -40,38 +57,27 @@ def list_registry_assets(dto: dict[str, Any]) -> dict[str, Any]:
 
 
 def read_registry_rule(dto: dict[str, Any]) -> dict[str, Any]:
-    try:
-        registry = _registry_from_dto(dto)
-        if not isinstance(dto, dict):
-            raise facade_error("dto must be object", kind="shape", path="$")
-        rule_id = _require_non_empty_str(dto.get("rule_id"), path="$.rule_id")
-        version = dto.get("version")
-        if version is None:
-            payload = registry.get_latest_rule_spec(rule_id)
-        else:
-            payload = registry.read_rule_spec(rule_id, _require_non_empty_str(version, path="$.version"))
-        return ok_response(rule_spec=payload)
-    except Exception as exc:
-        return error_response([exception_to_error(exc)])
+    return error_response(
+        [
+            {
+                "kind": "removed",
+                "path": "$",
+                "details": dict(_SAVEDRULE_PHASE2_REMOVED_DETAILS),
+            }
+        ]
+    )
 
 
 def read_registry_inference(dto: dict[str, Any]) -> dict[str, Any]:
-    try:
-        registry = _registry_from_dto(dto)
-        if not isinstance(dto, dict):
-            raise facade_error("dto must be object", kind="shape", path="$")
-        inference_id = _require_non_empty_str(dto.get("inference_id"), path="$.inference_id")
-        version = dto.get("version")
-        if version is None:
-            payload = registry.get_latest_inference_spec(inference_id)
-        else:
-            payload = registry.read_inference_spec(
-                inference_id,
-                _require_non_empty_str(version, path="$.version"),
-            )
-        return ok_response(inference_spec=payload)
-    except Exception as exc:
-        return error_response([exception_to_error(exc)])
+    return error_response(
+        [
+            {
+                "kind": "removed",
+                "path": "$",
+                "details": dict(_SAVEDRULE_PHASE2_REMOVED_DETAILS),
+            }
+        ]
+    )
 
 
 def _registry_from_dto(dto: dict[str, Any]) -> FileAuthoringRegistry:
