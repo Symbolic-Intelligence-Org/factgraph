@@ -85,16 +85,6 @@
 }
 ```
 
-请求（从 registry 打开）：
-
-```json
-{
-  "registry_root": "/tmp/registry",
-  "ledger_path": "/tmp/runtime/ledger.db",
-  "artifact_store_root": "/tmp/runtime/artifacts"
-}
-```
-
 成功响应：
 
 ```json
@@ -105,7 +95,6 @@
   "session": {
     "session_id": "rt_123",
     "ledger_path": "/tmp/runtime/ledger.db",
-    "registry_root": null,
     "schema_digest": "sha256:abc",
     "opened_at_ns": 1730000000000000000,
     "counts": {
@@ -120,8 +109,11 @@
 
 说明：
 
-- `schema_ir` 与 `registry_root` 二选一，不能同时提供。
-- 两者也不能同时缺失。
+- `schema_ir` 必须提供。A20(E) / Q6-A 已移除 filesystem
+  registry-root session opening；旧 workspace 请先运行
+  `python -m factgraph migrate-workspace <path>`，再用迁移后的 workspace /
+  schema IR 打开 session。
+- 缺失 `schema_ir` 返回 `shape`。
 - `ledger_path` 可省略；省略时使用进程内临时 ledger。
 - `artifact_store_root` 可省略；省略时 explain artifact 仍保持 session/process-local 语义。
 - 提供 `artifact_store_root` 时，service 会为该 session 构造 sidecar carrier；目录在第一次 artifact durable write 时按需创建。
@@ -132,10 +124,6 @@
 
 - `shape`
 - `schema_mismatch`
-- `registry_schema_missing`
-- `registry_schema_manifest_entry_invalid`
-- `registry_schema_read_failed`
-- `registry_schema_invalid`
 - `runtime`
 
 ## 2. `GET /v1/runtime/sessions/{session_id}`
@@ -147,11 +135,10 @@
   "ok": true,
   "errors": [],
   "meta": {},
-  "session": {
-    "session_id": "rt_123",
-    "ledger_path": "/tmp/runtime/ledger.db",
-    "registry_root": "/tmp/registry",
-    "schema_digest": "sha256:abc",
+    "session": {
+      "session_id": "rt_123",
+      "ledger_path": "/tmp/runtime/ledger.db",
+      "schema_digest": "sha256:abc",
     "opened_at_ns": 1730000000000000000,
     "counts": {
       "claims": 2,

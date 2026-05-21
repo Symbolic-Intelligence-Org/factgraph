@@ -2,13 +2,13 @@
 
 - 范围：`src/service`
 - 最后更新：2026-05-12
-- 目标读者：需要通过 HTTP 对接 runtime / registry 的前后端开发者
+- 目标读者：需要通过 HTTP 对接 runtime / rules 的前后端开发者
 
-前端 / 机读 API 参考：[`06_frontend_integration.md`](./06_frontend_integration.md)（集成指南）+ [`../../../docs/api/openapi.yaml`](../../../docs/api/openapi.yaml)（OpenAPI 3.0 机读契约，43 个 operation 全覆盖；漂移守卫：`scripts/export_openapi.py`，需 `PYTHONPATH=src` 执行）。
+前端 / 机读 API 参考：[`06_frontend_integration.md`](./06_frontend_integration.md)（集成指南）+ [`../../../docs/api/openapi.yaml`](../../../docs/api/openapi.yaml)（OpenAPI 3.0 机读契约，37 个 operation 全覆盖；漂移守卫：`scripts/export_openapi.py`，需 `PYTHONPATH=src` 执行）。
 
 ## 1. 模块职责
 
-`service` 是 **前端/BFF 层**。它把 runtime、rule authoring 校验和 registry 只读能力整理成前端可消费的 HTTP 接口。
+`service` 是 **前端/BFF 层**。它把 runtime 与 rule authoring 校验整理成前端可消费的 HTTP 接口。
 
 它负责：
 
@@ -21,13 +21,12 @@
 - inference evaluate / accept
 - explain/conflicts/view-facts 查询
 - package 导出
-- registry manifest / schema / assets / rule / inference 读取
 
 它不负责：
 
 - 直接实现 core 语义
 - 保存 authoring 资产
-- 替代 `SDKStore` / `SDKRegistry` 的 Python SDK 体验
+- 替代 `SDKStore` 的 Python SDK 体验
 
 ### 1.1 v0.1 公开 surface 边界(per Batch 8 closure decision @ `6b32972`)
 
@@ -51,19 +50,15 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
   - rule validate / compile-preview / profile 列表
 - `runtime_v1.py`
 - runtime session、facts 写入/查询、rule/inference 执行、package 导出
-- `registry_v1.py`
-  - registry 只读接口
 - `_common.py`
   - `ok/error` envelope 与错误转换
 - `_certainty_service.py`
   - certainty derivation helper（condition_weights lookup / summary 计算 / batch 预计算）
-  - 依赖 core（Store, _certainty_materializer）+ authoring（FileAuthoringRegistry）
+  - 依赖 core（Store, _certainty_materializer）
   - 不反向依赖 runtime_v1
   - `condition_weights` 在该链路中是 certainty/explain projection input，
     不是 engine adapter 参数；未来运行时配置归
     `SemanticsProfile.certainty_projection`
-- `_registry_io.py`
-  - 从 registry root 读取 schema 等底层辅助
 
 ## 3. 详细 DTO 文档
 
@@ -72,7 +67,7 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 - `03_runtime_queries_policy.md`
   - runtime query、rule/inference 执行、package export。
 - `04_rules_registry.md`
-  - rules facade 与 registry 只读接口。
+  - rules facade 与已删除 registry routes 的迁移说明。
 - `06_frontend_integration.md`
   - 前端/BFF 集成指南;envelope 解包模板、典型调用链路、HTTP 状态码速查表。
 - 文档抽取 HTTP surface 已迁至 agent service；本模块不再维护对应 route。
@@ -120,15 +115,10 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 
 ### 4.5 registry
 
-- `POST /v1/registry/manifest`
-- `POST /v1/registry/schema/read`
-- `POST /v1/registry/assets/list`
-- `POST /v1/registry/rules/read`
-- `POST /v1/registry/inferences/read`
-
-以上 `/v1/registry/*` 端点均返回 removed envelope。Q8 Phase 2 已移除
-SavedRule/SavedInference 持久化;A20(E) registry final-exit 进一步移除
-schema/manifest/assets 的 live service registry read surface。
+`/v1/registry/*` routes 已在 A20(E) / Q6-A 中从 `app_v1.py` 删除。
+Q8 Phase 2 先移除了 SavedRule/SavedInference 持久化;A20(E) registry
+final-exit 进一步移除了 schema/manifest/assets 的 service registry
+read surface。
 
 注:文档抽取 HTTP surface 已不在本 service 内,迁至 `agent.service.app`。
 
@@ -209,18 +199,18 @@ accept/proof/audit 链路 round-trip。
 
 ### 5.4 registry 读取
 
-1. 前端提供 `root_dir`
-2. service 使用 `FileAuthoringRegistry(root_dir)` 读取 schema / rule / inference
-3. 返回结构化 envelope
+registry 读取 routes 已删除。前端应通过 runtime session、in-memory
+ephemeral rules / inferences、以及 workspace APIs 工作。
 
 ## 6. 与其他层的关系
 
 - `core`
   - service 最终调用 `Store`、`Ledger`、`write_protocol`、`run_rule`
 - `authoring`
-  - service 通过 `compile_authoring_rule_v1(...)`、`compile_authoring_derivation_v1(...)` 和 `FileAuthoringRegistry(...)` 复用 authoring 能力
+  - service 通过 `compile_authoring_rule_v1(...)` 和
+    `compile_authoring_derivation_v1(...)` 复用 authoring 编译能力
 - `sdk`
-  - service 不是 `SDKStore` / `SDKRegistry` 的 HTTP 镜像，而是前端友好的 service facade
+  - service 不是 `SDKStore` 的 HTTP 镜像，而是前端友好的 service facade
 
 ## 7. 当前限制
 

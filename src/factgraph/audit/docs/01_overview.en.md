@@ -320,7 +320,8 @@ When a package is exported with `package_kind="audit"`, in addition to ledger / 
 - `audit/certainty_summaries.jsonl` (optional)
   - flat JSONL rows keyed by `candidate_id`
   - row shape: `{"candidate_id": "...", "certainty_summary": {...}}`
-  - written only when export-time has a `registry_root` and the candidate's certainty can be derived
+  - written only when the candidate's certainty can be derived from runtime
+    in-memory data
   - the `certainty_summary` payload is isomorphic to the `certainty_summary` field of the runtime `explain-summary`
   - older packages without this file: the reader returns an empty dict (backward compatible)
 - `audit/provenance_trees.jsonl` (optional)

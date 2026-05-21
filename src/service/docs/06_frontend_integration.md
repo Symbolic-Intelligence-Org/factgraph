@@ -2,7 +2,7 @@
 
 面向对接 kernel HTTP service 的前端/BFF 开发者。本文档把分散在 `01_overview.md` / `02_runtime_sessions.md` / `03_runtime_queries_policy.md` / `04_rules_registry.md` 里的信息,整合成"怎么真正调"。
 
-> **范围**:本文档**只覆盖 kernel runtime / rules / registry 路由**(`service.app_v1`)。extraction HTTP integration(`POST /v1/extraction/documents`)在 namespace split 后归 agent.service,见 [`src/agent/service/docs/`](../../../agent/service/docs/)。
+> **范围**:本文档**只覆盖 kernel runtime / rules 路由**(`service.app_v1`)。A20(E) / Q6-A 已删除 `/v1/registry/*` routes。extraction HTTP integration(`POST /v1/extraction/documents`)在 namespace split 后归 agent.service,见 [`src/agent/service/docs/`](../../../agent/service/docs/)。
 
 **机读契约**:`docs/api/openapi.yaml` 在 service 拆分后归属待定(见 OS-prep blueprint),当前文档与 live FastAPI spec 的同步状态以本目录文档为准。
 
@@ -54,18 +54,18 @@ OpenAPI spec 把这两种响应作为 `UnauthorizedError` / `AuthNotConfiguredEr
 
 | 维度 | 状态 |
 |---|---|
-| 43 个 operation 全部可发现 | ✅ |
+| 37 个 operation 全部可发现 | ✅ |
 | 每个 op 标注 `ApiKeyAuth` + 401 + 503 | ✅ |
 | `Envelope` / `Error` / `ExtractionResult` / `WriteRequest` 精确 schema | ✅ |
-| **~40 个 op 的 request / response 仍是 `type: object`** | ⚠️ |
+| **~35 个 op 的 request / response 仍是 `type: object`** | ⚠️ |
 
 **这意味着**:
 
-- 用 `openapi-typescript` 等工具生成 TS 类型时,~40 个 op 会拿到 `Record<string, unknown>` — 能发请求,但没强类型
+- 用 `openapi-typescript` 等工具生成 TS 类型时,~35 个 op 会拿到 `Record<string, unknown>` — 能发请求,但没强类型
 - Swagger UI "try it out" 对这些 op 会给一个空 JSON 编辑器,需要照 `02_runtime_sessions.md` / `03_runtime_queries_policy.md` / `04_rules_registry.md` 里的 DTO 形状手拼 body
 - **精确字段级契约现阶段在中文 DTO 文档里**,不在 yaml 里
 
-**为什么不一上来就补全**:43 个 op 全部手写精确 schema(~3000 行 yaml 增量)或给 handler 加 pydantic response model(大范围代码改造 + 可能碰 1023 tests)都是独立的大项工作,ROI 要看真实消费者卡在哪。当前策略是**等前端真实使用反馈**后按用量优先级增量补齐。
+**为什么不一上来就补全**:37 个 op 全部手写精确 schema(~2500 行 yaml 增量)或给 handler 加 pydantic response model(大范围代码改造 + 可能碰 1023 tests)都是独立的大项工作,ROI 要看真实消费者卡在哪。当前策略是**等前端真实使用反馈**后按用量优先级增量补齐。
 
 **如果你是前端**,建议现在走混合模式:
 - 拿 yaml 拉路由清单 + envelope 类型
@@ -154,20 +154,15 @@ for (const candidate of r.result.candidates) {
 
 完整 DTO:[`02_runtime_sessions.md`](./02_runtime_sessions.md) §5.2 / [`03_runtime_queries_policy.md`](./03_runtime_queries_policy.md)。
 
-### 1.4 Chain D:registry 只读查询(schema/apply-log only)
+### 1.4 Chain D:registry 路由已删除
 
-```ts
-const removed = await post("/v1/registry/schema/read", { root_dir: "/srv/registry" });
-// A20(E) registry final-exit:
-//   /v1/registry/manifest
-//   /v1/registry/schema/read
-//   /v1/registry/assets/list
-//   /v1/registry/rules/read
-//   /v1/registry/inferences/read
-// all return removed envelopes.
-```
+A20(E) / Q6-A 后，`/v1/registry/manifest`、
+`/v1/registry/schema/read`、`/v1/registry/assets/list`、
+`/v1/registry/rules/read`、`/v1/registry/inferences/read` 均不再注册。
+前端应通过 runtime session + in-memory `Rule(...)` / `Inference(...)`
+DTO 工作，不应继续调用 registry paths。
 
-完整 DTO:[`04_rules_registry.md`](./04_rules_registry.md)。
+迁移说明见 [`04_rules_registry.md`](./04_rules_registry.md)。
 
 ## 2. 错误处理模板
 

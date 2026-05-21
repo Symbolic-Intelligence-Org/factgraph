@@ -80,9 +80,8 @@ It is not responsible for:
     `ledger.db` backup/checkpoint, and component path resolution for
     `fg.save(...)` / `FactGraph.load(...)`. Clean SDK workspaces no longer use
     `registry/` as the live schema anchor; the SDK writes schema bytes to the
-    Database schema-object location. `sync_registry_to_workspace(...)` remains
-    as a legacy helper in its module but is no longer re-exported through the
-    package surface.
+    Database schema-object location. A20(E) / Q6-A removed the old registry-copy
+    helper entirely.
 - `schema_mutation_runtime.py`
   - additive schema-extension authority for `fg.schema.add(...)`: validates
     that existing entities and predicates are preserved, plans the next schema

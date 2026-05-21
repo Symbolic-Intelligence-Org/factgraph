@@ -1,6 +1,6 @@
 # FactPy Service 文档
 
-本目录记录 `src/service` 的当前实现口径,面向需要通过 HTTP 对接 kernel runtime 与 registry 的开发者。
+本目录记录 `src/service` 的当前实现口径,面向需要通过 HTTP 对接 kernel runtime 与 rules facade 的开发者。
 
 注:extraction HTTP surface(`POST /v1/extraction/documents`)在 namespace split 后已迁至 `agent.service`,文档见 [`src/agent/service/docs/`](../../agent/service/docs/)。
 
@@ -21,7 +21,7 @@
 - `src/service/docs/03_runtime_queries_policy.md`
   - runtime query、rule/derivation 执行、package export 的 DTO 契约。
 - `src/service/docs/04_rules_registry.md`
-  - rules facade 与 registry 只读接口的 DTO 契约。
+  - rules facade DTO 契约与已删除 registry routes 的迁移说明。
 - `src/service/docs/05_audit_static_site_contract.md`
   - audit static site renderer 的交付 contract；`site_manifest.json` / `ui_index.json` 与 rendered page layout 的稳定边界。
 - `src/service/docs/06_frontend_integration.md`

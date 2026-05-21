@@ -44,10 +44,9 @@ should enter from the following grouped modules:
   - `derivation_dry_run_preview(...)`
   - `compile_authoring_derivation_v1(...)`
   - `parse_authoring_derivation_dsl_v1(...)`
-- `factgraph.authoring.registry_workflow`
-  - `FileAuthoringRegistry`
-  - DTO builders and workflow entry points for session / publish /
-    apply
+- `factgraph.authoring.workflow`
+  - dry-run and publish DTO helpers that do not write filesystem registry
+    state
 
 `factgraph.authoring.__init__` already aggregates these public entry
 points. The older leaf modules still exist but are better treated as
@@ -237,35 +236,22 @@ These examples are compiler-facing payloads, so they intentionally use
 - `$.where[...]`: a where-sugar atom cannot find a corresponding
   exists / role predicate in the schema.
 
-## 6. Registry file layout
+## 6. Registry Adapter Removal
 
-`FileAuthoringRegistry(root_dir=...)` uses the filesystem to store
-legacy authoring assets. After Q8 Phase 2 (Slice 6) and A20(E) registry
-final-exit, the layout is schema/apply-log only:
+A20(E) / Q6-A removed the filesystem authoring registry adapters:
+`FileAuthoringRegistry`, `SDKRegistry`, `registry_root=`, `registry=`, and the
+apply-execute write path are gone. Authoring now focuses on schema/rule/inference
+DTO compilation, validation, and in-memory `Rule(...)` / `Inference(...)`
+values. Legacy workspaces that still carry `registry/schema/schema_ir.json`
+must be migrated explicitly:
 
-```text
-root_dir/
-  schema/
-    schema_ir.json
-  registry_manifest.json
-  authoring_apply_events.jsonl        # non-workspace legacy roots only
+```bash
+python -m factgraph migrate-workspace <path>
 ```
 
-For workspace registries (`<workspace>/registry`), new apply-log writes go to
-`<workspace>/db/audit/authoring_apply_events.jsonl`. Readers check that path and
-then the historical `registry/authoring_apply_events.jsonl` path for backward
-compatibility.
-
-These files form an **authoring asset repository**, not a runtime
-database.
-
-Pre-Phase-2 workspaces may contain `rules/<rule_id>/<version>.json` and
-`inferences/<inference_id>/<version>.json` files on disk. Those files are
-inert: Slice 6 removed all `FileAuthoringRegistry` rule/inference read
-methods (`list_rule_ids`, `list_rule_versions`, `read_rule_spec`, etc.) so
-no code paths consume the historical files. Manifests that still contain
-`rules: []` / `inferences: []` keys are tolerated on read and no longer
-written on save.
+Pre-Phase-2 workspaces may contain `registry/rules/` and
+`registry/inferences/` files on disk. Those files remain inert historical data:
+no runtime, SDK, service, or authoring path reads or migrates them.
 
 ## 7. Typical workflows
 
@@ -277,15 +263,11 @@ written on save.
    `schemas / rules / derivations` grouped modules
 3. Receive structured results or diagnostics
 
-### 7.2 Publish to a registry
+### 7.2 Registry publishing retired
 
-1. Create `FileAuthoringRegistry(root_dir=...)`
-2. Write the schema version
-3. Update the manifest
-4. Record apply / publish events
-
-> Q8 Phase 2 (Slice 6) removed rule/inference persistence from the file
-> registry. Only schema upsert + apply-log writes remain.
+Publishing to a filesystem registry is retired. Use `fg.schema.add(...)` /
+`fg.save()` for schema evolution, in-memory `Rule(...)` / `Inference(...)`
+values for execution, and the migration CLI for legacy workspaces.
 
 ### 7.3 Consumption by SDK / service
 
@@ -294,26 +276,19 @@ written on save.
   object under `db/objects/schema/<digest>.json`. Clean SDK workspaces no longer
   create or write a live `registry/` schema anchor. `FactGraph.load(path,
   schema_classes=[...])` restores the graph with explicit schema-class
-  validation and can copy a legacy `registry/schema/schema_ir.json` anchor into
-  the Database schema-object location without deleting the old file. Construct
+  validation. Legacy `registry/schema/schema_ir.json` anchors now require the
+  explicit `python -m factgraph migrate-workspace <path>` CLI. Construct
   `Rule(...)` and `Inference(...)` in memory each session.
 - `factgraph.application.authoring_runtime` is now a forward-compat shell:
   Q8 Phase 2 removed the save/load/list/get orchestration; only the
   `AuthoringRuntimeError` class remains.
 - `factgraph.application.workspace_runtime` owns workspace manifest validation
-  and ledger backup/checkpoint behavior. It keeps registry-copy helpers only for
-  legacy/debug compatibility; live SDK schema anchors are Database schema
-  objects. It deliberately does not include artifact sidecars, in-memory views,
-  audit/evidence round files, or package export output.
-- `factgraph.sdk.registry.SDKRegistry` is an advanced/internal legacy adapter
-  around the schema/apply-log-only `FileAuthoringRegistry`. It rejects
-  `rule_request` / `derivation_request` arguments in
-  `apply_authoring_bundle(...)`.
-- `service.registry_v1` no longer exposes live registry read data; all
-  `/v1/registry/*` read routes return removed envelopes.
-- `service.runtime_v1` reads schemas from the registry to support runtime
-  sessions. Runtime rule registration uses in-memory ephemeral rules only;
-  FS-saved rule loading was removed in Slice 6.
+  and ledger backup/checkpoint behavior. Live SDK schema anchors are Database
+  schema objects. It deliberately does not include artifact sidecars, in-memory
+  views, audit/evidence round files, registry data, or package export output.
+- `service.registry_v1` and `/v1/registry/*` routes were deleted.
+- `service.runtime_v1` opens sessions from `schema_ir`; runtime rule
+  registration uses in-memory ephemeral rules only.
 
 ## 8. Boundaries with other layers
 
@@ -327,11 +302,10 @@ written on save.
   - graph-bound `fg.rules.inspect(...)` is the only remaining `fg.rules.*`
     surface after Q8 Phase 2 (Slice 6); `fg.inferences.*` is an empty
     namespace. Persistence helpers were removed.
-  - advanced code may still import `factgraph.sdk.registry.SDKRegistry` for
-    schema-only registry workflows
+- filesystem registry adapters were removed in A20(E) / Q6-A.
 - `service`
-  - The service layer can expose the authoring registry as a
-    front-end-consumable interface
+  - The service layer exposes rules validation/preview and runtime execution,
+    not filesystem registry reads.
 - `ecss`
   - `domains.ecss` provides shared domain presets (e.g. ECSS VCD
     predicates, Scenario A's first-round temporal / uncertainty

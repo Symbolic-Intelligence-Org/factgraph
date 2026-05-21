@@ -119,7 +119,6 @@ class-first constructor name and does not accept workspace `path=`.
 |---|---|
 | `SDKSchemaError` | Schema compilation, descriptor binding, preflight |
 | `SDKStoreError` | Store operations (write, view, batch, query, eval shells) |
-| `SDKRegistryError` | Registry/rule registration failures |
 | `EntityNotFoundError` (← `SDKStoreError`) | `read.get(...)` / `write.edit(...)` on missing identity |
 | `FrozenSnapshotError` (← `SDKStoreError`) | Assigning to read-only attribute (snapshot or namespace) |
 | `CardinalityError` (← `SDKStoreError`) | `set` on multi-field, `add` on single-field |
@@ -153,8 +152,6 @@ FactGraph.create(
     ledger=None,
     ledger_path=None,
     artifact_store_root=None,
-    registry_root=None,
-    registry=None,
     default_row_format=None,
 )
 ```
@@ -162,15 +159,12 @@ FactGraph.create(
 Class-validation errors raise `SDKSchemaError`; constructor-path errors
 raise `SDKStoreError`. `path=` binds the graph to a compact workspace root and
 derives the default `ledger.db` component path and Database schema-object
-anchor. Explicit
-`ledger_path=` or `registry_root=` may be supplied with `path=` only when they
-match those workspace defaults; `registry_root=` is deprecated and remains only
-as a legacy/debug schema registry bridge, not the live workspace schema anchor.
+anchor. Explicit `ledger_path=` may be supplied with `path=` only when it
+matches the workspace default. `registry_root=` and `registry=` were removed by
+A20(E) / Q6-A; passing either raises `SDKStoreError` with migration guidance.
 `artifact_store_root` enables sidecar-backed
 explain artifact readback (ignored if a fully constructed `store=` is
-supplied). `registry_root` constructs a file-backed authoring registry for
-schema/apply-log compatibility; `registry` accepts a prebuilt
-`FileAuthoringRegistry`. If both are provided, their roots must match.
+supplied).
 `FactGraph.from_schema_classes(...)` remains available as the lower-level
 class-first constructor name.
 
@@ -391,26 +385,13 @@ DTOs. Import them directly from `factgraph.application.protocol` or
 
 ---
 
-## 3. Advanced Registry Access
+## 3. Registry Adapter Removal
 
-`SDKRegistry` is no longer exported from `factgraph.sdk`. The product facade is
-graph-bound persistence through `fg.rules.*` and `fg.inferences.*`.
-
-Advanced tests and migration/debug code may import the wrapper from
-`factgraph.sdk.registry`:
-
-```python
-from factgraph.sdk.registry import SDKRegistry
-```
-
-Normal SDK code should prefer:
-
-```python
-fg = FactGraph.create(schema_classes=[User], path="./workspace")
-rule_ref = fg.rules.save(rule)
-inf_ref = fg.inferences.save(inf)
-fg.save()
-```
+`SDKRegistry` and `FileAuthoringRegistry` were removed by A20(E) / Q6-A.
+SDK code should use `FactGraph.create(..., path=...)` for workspace
+persistence, `Rule(...)` / `Inference(...)` as in-memory values, and
+`python -m factgraph migrate-workspace <path>` for legacy workspaces that still
+carry a filesystem `registry/` directory.
 
 ---
 

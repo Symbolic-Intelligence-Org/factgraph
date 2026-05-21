@@ -51,11 +51,11 @@ principles run through the whole map:
    protocol, service payload, and proof/audit names still use `derivation_*`
    during the rename window. Tutorials prefer `Inference`.
 
-7. **Registry and workspace are mechanisms, not the teaching surface.**
-   `kernel.sdk.registry.SDKRegistry` and the workspace file layout remain
-   available for advanced use, but the normal product path is `fg.rules.*`,
-   `fg.inferences.*`, `FactGraph.create(path=...)`, `fg.save(...)`, and
-   `FactGraph.load(...)`.
+7. **Workspace is the persistence mechanism; filesystem registry adapters are gone.**
+   A20(E) / Q6-A removed `SDKRegistry`, `FileAuthoringRegistry`,
+   `registry_root=`, and `registry=`. The normal product path is in-memory
+   `Rule(...)` / `Inference(...)`, `FactGraph.create(path=...)`, `fg.save(...)`,
+   and `FactGraph.load(...)`.
 
 ## FactGraph entry points
 
@@ -64,7 +64,7 @@ that live directly on `FactGraph`, not on a namespace.
 
 | Surface | Use it for |
 | --- | --- |
-| `FactGraph.create(schema_classes=[...])` | Build a new graph. Pass `path=` for a path-backed workspace; pass `ledger_path=`, `registry_root=`, `registry=`, or `artifact_store_root=` for explicit components. |
+| `FactGraph.create(schema_classes=[...])` | Build a new graph. Pass `path=` for a path-backed workspace; pass `ledger_path=` or `artifact_store_root=` for explicit supported components. |
 | `FactGraph.load(path, schema_classes=[...])` | Restore a saved workspace. The loader validates the workspace schema digest against the supplied classes. |
 | `FactGraph.from_schema_classes([...])` | Lower-level class-first constructor. `create(...)` is the normal teaching path. |
 | `fg.save(path=None)` | Persist the graph to its workspace. No-arg save requires a bound path; passing `path` rebinds the graph. |
@@ -168,10 +168,10 @@ whole module.
 | Graph entry point | `FactGraph`, `SDKStore` | Create / load / save the graph. `FactGraph` is the alias used in docs; `SDKStore` is the same class for advanced use. |
 | Schema declaration | `Entity`, `Identity`, `Field`, `Relationship` | Define entity vocabulary and field coordinates. |
 | Rule DSL | `Rule`, `Inference`, `Query`, `Branch`, `Pred`, `Not`, `RuleRef`, `vars` | Author saved rules, inferences, ad-hoc queries, and rule-body atoms. |
-| Persistence handles | `SavedRuleRef`, `SavedInferenceRef`, `SchemaAddResult` | Return types from `fg.rules.save`, `fg.inferences.save`, and `fg.schema.add`. |
+| Persistence handles | `SchemaAddResult` | Return type from `fg.schema.add`. Rule/inference persistence handles were removed. |
 | Ingest results | `IngestResult`, `ValidationReport` | Return types from `fg.schema.ingest(...)` and `fg.schema.validate_provenance(...)`. |
 | Semantics | `ProbLogSemantics`, `PyReasonSemantics`, `SemanticsProfile` | Configure inference evaluation. Wrappers are the teaching path; `SemanticsProfile` is the canonical lower form. |
-| Error types | `SDKSchemaError`, `SDKStoreError`, `SDKRegistryError`, `EntityNotFoundError`, `FrozenSnapshotError`, `CardinalityError`, `EditorClosedError`, `SDKDSLError` | Catch these for kernel-level failure modes. |
+| Error types | `SDKSchemaError`, `SDKStoreError`, `EntityNotFoundError`, `FrozenSnapshotError`, `CardinalityError`, `EditorClosedError`, `SDKDSLError` | Catch these for kernel-level failure modes. |
 | Error codes (advanced) | `INVALID_ROW_FORMAT`, `QUERY_ALIAS_CONFLICT`, `QUERY_INVALID_ROW_FORMAT`, `QUERY_MISSING_REF`, `QUERY_NOT_IMPLEMENTED`, `QUERY_TYPE_MISMATCH`, `QUERY_UNBOUND_VAR` | Stable string constants used inside error messages. |
 | Schema compile helpers (advanced) | `build_authoring_schema_from_classes`, `compile_schema_from_classes`, `schema_preflight_from_classes` | Lower-level schema compilation. Not part of the normal teaching path. |
 
@@ -184,9 +184,9 @@ same project; some are out of scope for `factpy-kernel` entirely.
 - Agent workflows, dialog runtime, and conversation memory.
 - Extraction pipelines and document ingestion stacks.
 - Domain bundles and prepackaged applications.
-- Internal registry wrapper (`kernel.sdk.registry.SDKRegistry`); it is
-  importable for advanced use, but the standard path is the graph-bound
-  `fg.rules.*` and `fg.inferences.*` namespaces.
+- Filesystem registry wrappers; they were removed by A20(E) / Q6-A. Use
+  in-memory `Rule(...)` / `Inference(...)` values and migrate legacy workspaces
+  with `python -m factgraph migrate-workspace <path>`.
 - Substrate `derivation_*` names in protocol, registry, and proof internals;
   public SDK uses `Inference`.
 - Round capture (`start_round`, `record_round_event`, `finalize_round` in

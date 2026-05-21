@@ -823,7 +823,6 @@ except CardinalityError as e:
 | `CardinalityError` | `set` on multi-field, or `add` on single-field |
 | `FrozenSnapshotError` | Assigning to a snapshot or namespace attribute |
 | `EditorClosedError` | Operating on a committed/rolled-back editor |
-| `SDKRegistryError` | Registry/rule registration issues |
 
 ### Error code constants
 
@@ -925,10 +924,10 @@ removal, deprecation metadata, and migration planning are deferred:
 
 ---
 
-## 11. Registry
+## 11. Workspace Registry Removal
 
-The graph-bound authoring registry tracks the schema and apply-log history
-across versions. Bind it at graph construction time:
+Workspace persistence is now graph-bound and Database-owned. Bind a graph to a
+workspace with `path=`:
 
 ```python
 from factgraph.sdk import FactGraph
@@ -960,11 +959,14 @@ my_inference = Inference(...)
 candidates = fg.eval.evaluate(my_inference)
 ```
 
-`SDKRegistry` is no longer part of `factgraph.sdk.__all__`. Advanced migration or
-debug code can still import `factgraph.sdk.registry.SDKRegistry` as a legacy
-schema/apply-log adapter, but clean SDK workspaces no longer route their live
-schema anchor through this registry. Explicit `registry_root=` constructor usage
-is deprecated; pass `path=` for workspace persistence.
+`SDKRegistry`, `FileAuthoringRegistry`, `SDKRegistryError`, `registry_root=`,
+and `registry=` were removed by A20(E) / Q6-A. Pass `path=` for workspace
+persistence. If an old workspace still carries `registry/`, migrate it
+explicitly:
+
+```bash
+python -m factgraph migrate-workspace /var/factpy/workspace
+```
 
 The workspace layout is intentionally compact:
 
@@ -988,16 +990,15 @@ when you need a distribution/reproduction artifact rather than an editable
 workspace.
 
 Old workspaces written before Q8 Phase 2 may contain `registry/rules/` and
-`registry/inferences/` directories on disk; those files are inert post-Phase-2
-(no SDK code reads them) and are tolerated for read-only manifest
-back-compat. Old workspaces with `registry/schema/schema_ir.json` are copied
-forward into `db/objects/schema/<digest>.json` on load; the original registry
-file is not deleted.
-
-Authoring apply logs for workspace registries are written to
-`db/audit/authoring_apply_events.jsonl`; readers also tolerate the historical
-`registry/authoring_apply_events.jsonl` path. The service `/v1/registry/*`
-read endpoints now return removed envelopes.
+`registry/inferences/` directories on disk; those files are inert. Old
+workspaces with `registry/schema/schema_ir.json` are no longer auto-loaded:
+`FactGraph.load(...)` raises `SDKStoreError` with the migration command above.
+The migration writes the Database schema object and can archive the historical
+registry directory. Apply-log readers remain read-only compatible with
+historical `db/audit/authoring_apply_events.jsonl`,
+package-local `authoring_apply_events.jsonl`, and legacy
+`registry/authoring_apply_events.jsonl` inputs. The service `/v1/registry/*`
+routes were deleted.
 
 See [`04_api_surface.en.md`](04_api_surface.en.md#27-rules-namespace-fgrules)
 for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.

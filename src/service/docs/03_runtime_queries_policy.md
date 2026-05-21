@@ -59,7 +59,6 @@
     "where": [["pred", "person:country", ["$e", "$c"]]],
     "expose": true
   },
-  "override_registry_root": "/tmp/registry",
   "capture_trace": true
 }
 ```
@@ -87,13 +86,12 @@
 说明：
 
 - `rule` 必须是结构化对象；传 string 或其他非 object 值时返回 `shape` error。
-- `override_registry_root` 可选；未提供时默认复用 session 绑定的 `registry_root`。
-- 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供。
-- `run` 使用的 active registry 现在是 evaluate-time merge：
-  - 先加载 filesystem registry（若 `override_registry_root` / session `registry_root` 可用）
-  - 再追加当前 session 的 `ephemeral_rules`
-  - 若 `(rule_id, version)` 冲突，filesystem rule 优先，ephemeral rule 静默跳过
-- 因此即使 `registry_root` 缺失，只要 session 已注册了匹配的 ephemeral rule，`ruleref(...)` 仍可在 native rule path 上解析成功。
+- `registry_root` / `override_registry_root` 已被 A20(E) / Q6-A 移除；
+  传入任一字段都会返回 `registry_root_removed`。
+- `run` 使用的 active `RuleRegistry` 只由当前 session 的
+  `ephemeral_rules` 组成。
+- 因此只要 session 已注册了匹配的 ephemeral rule，`ruleref(...)` 仍可在
+  native rule path 上解析成功；filesystem registry 不再参与。
 - `capture_trace` 可选，默认 `false`；当为 `true` 时 service 会调用 traced sibling helper，并在 `result.trace.rule_run_id` 返回 trace handle。
 - 若 session 没有配置 `artifact_store_root`，该 handle 仍是 session-scoped。
 - 若 session 配置了共享的 `artifact_store_root`，后续 session 可继续用该 handle 做 explain readback。
@@ -650,12 +648,12 @@
   - 当 store 内部 candidate carrier 是 `confidence_kind="certainty"` 时，service 会尝试：
     - 从 `candidate_id` 回取内部 `confidence_kind`
     - 从 `support.rule_ref_edges` 定位单条 structured child rule edge
-    - 用该 edge 的 `rule_ref_id@version` 到 registry 读取 `condition_weights`
+    - 解析该 edge 的 `rule_ref_id@version` 对应的 in-memory rule metadata
     - 在唯一 `referenced_support` subtree 上调用 annotation prototype `derive_certainty_summary(...)`
   - `condition_weights` 在这里是 certainty/explain projection input，
     不是 engine adapter 参数，也不进入 `where` / adapter rule syntax；
     未来运行时配置归 `SemanticsProfile.certainty_projection`
-  - 若出现多 rule_ref_edges、nested referenced_support、unresolved child support、缺失 registry_root、rule payload 缺失等情况，则 graceful degrade 为 `certainty_summary=null`
+  - 若出现多 rule_ref_edges、nested referenced_support、unresolved child support、rule payload 缺失等情况，则 graceful degrade 为 `certainty_summary=null`
   - 若 rule payload 存在但未声明 `condition_weights`，则 `certainty_summary` 仍可返回；此时所有 condition 都是 unweighted
   - 对 runtime native inference 而言，eligible candidate 的 `confidence_kind="certainty"` 现在由 evaluate create-time routing 自动写入；不再依赖调用侧 patch
 - `certainty_summary` 的 stable shape 为：
@@ -682,10 +680,10 @@
 - `non_fact_step_groups` 也采用 flat semantic-key grouping：
   - grouping key = raw `non_fact_steps.kind`
   - group fields = `kind`、`count`、`invocation_ids`
-- `queries/explain-summary` 的 candidate 请求也支持可选 `override_registry_root`：
-  - 未提供时默认复用 session 绑定的 `registry_root`
-  - 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供
-  - 若 evaluate 时使用了 override root，summary 查询时必须传回同一个 root；否则 `certainty_summary` 可能降级为 `null`
+- `queries/explain-summary` 不接受 `registry_root` /
+  `override_registry_root`。certainty projection 只使用运行时已经持有的
+  in-memory rule metadata；缺失 metadata 时 `certainty_summary` 降级为
+  `null`。
 - 第一轮不把 `binding_index`、`step_key`、`details.atom` 提升进 `rule_run_summary` DTO；这些仍属于 raw payload 的消费层级。
 - `rule_run_id` 本身就是回跳 raw explain 的充分 handle。
 - `candidate_id` 本身就是回跳 raw tree explain 的充分 handle。
@@ -784,9 +782,9 @@
 - narrative 的字段来自 summary（聚合层）及可选的 tree 下探（fact_meta 层）；不直接下探 raw engine carrier。
 - 对 degraded candidate，narrative 也必须生成非空降级说明，而不是返回空段。
 - 第一轮故意不把 narrative 打包进 `explain-summary`；bundled delivery 若需要，后续另行评估。
-- `queries/explain-narrative` 的 candidate 请求也支持可选 `override_registry_root`：
-  - registry root 解析语义与 `queries/explain-summary` 一致
-  - 只影响 additive `certainty_lines` 是否可派生；基础 narrative output 不受影响
+- `queries/explain-narrative` 不接受 `registry_root` /
+  `override_registry_root`；基础 narrative output 与可选 certainty lines 均从
+  session/runtime 内存数据派生。
 - 第一轮不支持 `assertion` narrative；`kind` 取其他值时返回 `shape` error。
 
 错误 kinds：
@@ -864,9 +862,8 @@
 - 当 candidate narrative 含 `certainty_lines` 时，NL 再追加 certainty paragraph：
   - `Certainty summary: ...`
   - 该段只复述 narrative 的 certainty lines，不新增计算语义
-- `queries/explain-nl` 的 candidate 请求也支持可选 `override_registry_root`：
-  - registry root 解析语义与 `queries/explain-summary` / `queries/explain-narrative` 一致
-  - 只影响 certainty paragraph 是否可派生；基础 4 段与可选 probability paragraph 不受影响
+- `queries/explain-nl` 不接受 `registry_root` / `override_registry_root`；
+  certainty paragraph 只在 runtime 内存数据足够时派生。
 - `candidate` 调用链为：
   - canonical raw tree
   - `candidate_evidence_tree_summary`
@@ -1015,7 +1012,6 @@
     "where": [["pred", "person:country", ["$E", "$C"]]]
   },
   "engine": "native",
-  "override_registry_root": "/tmp/registry",
   "limit": 50
 }
 ```
@@ -1084,8 +1080,8 @@
   - 前提是 adapter 能通过 `_w` witness 变体为当前 where 产出 assertion witness
   - 此时 `support_digest` 为真实 digest，不再是 zero placeholder
   - runtime `explain` / `explain-tree` 会把它视为 witness-bearing support
-- `override_registry_root` 可选；未提供时默认复用 session 绑定的 `registry_root`。
-- 为兼容旧客户端，`registry_root` 仍可作为 `override_registry_root` 的别名；两者不能同时提供。
+- `registry_root` / `override_registry_root` 已被 A20(E) / Q6-A 移除；
+  传入任一字段都会返回 `registry_root_removed`。
 - runtime inference evaluation 使用 top-level `engine` 选择后端；
   `inference.mode` 和 top-level `mode` 都会被拒绝。
 - Track 3 / B 已引入 core `SemanticsProfile` scaffolding，Track 3 / C
@@ -1103,17 +1099,12 @@
   keys，例如 `branch_probabilities` / `timestep_delay` / `head_bound` /
   `branch_bounds`；
   service 仍只接受 top-level canonical `SemanticsProfile` shape。
-- native `engine="native"` inference 也会在 evaluate-time merge 当前 session 的 `ephemeral_rules`：
-  - 若已有 filesystem registry，ephemeral rules 在其后 merge
-  - 若 `registry_root is None` 但 session 有 ephemeral rules，service 会临时创建一个空 `RuleRegistry()` 并注入
-- 若两边重名，filesystem rule 优先
-- 该 merge 只对 native + `ruleref(...)` 路径承诺生效；Souffle / ProbLog / PyReason 模式不消费 session-scoped ephemeral rules。
-- native inference where 若使用字符串 `RuleRef("rule_id", version)`，必须通过：
-  - `override_registry_root`
-  - legacy `registry_root`
-  - 或 session-level `registry_root`
-  - 或当前 session 已注册的 matching ephemeral rule
-  提供显式 registry context；否则运行时会 fail fast。
+- native `engine="native"` inference 会在 evaluate-time 使用当前 session 的
+  `ephemeral_rules` 构造 in-memory `RuleRegistry`。
+- 该 registry 只对 native + `ruleref(...)` 路径承诺生效；Souffle /
+  ProbLog / PyReason 模式不消费 session-scoped ephemeral rules。
+- native inference where 若使用字符串 `RuleRef("rule_id", version)`，必须在
+  当前 session 注册 matching ephemeral rule；否则运行时会 fail fast。
 - native inference support 当前可记录 direct `rule_refs`，因此后续 `explain-support` / `explain-tree` 可能看到 minimal `rule_ref` 节点；这还不是递归 child proof。
 - native inference support 现在会优先记录 structured `rule_ref_edges`，因此后续 `explain-support` / `explain-tree` 已可沿 `child_support_digest` 继续展开 first-round recursive proof。
 - direct `rule_refs` 继续保留为兼容摘要字段；child row proof 复用既有 native `SupportArtifact` readback，而不是发明第二套 handle。
@@ -1696,23 +1687,25 @@
 
 - `package_kind` 只接受 `inference` 或 `audit`。
 - `query` 为可选透传字段，由底层 exporter 解释。
-- 当 `query.where` 含 `ruleref` 时，当前 exporter 额外接受 `query.registry_root`：
+- 当 `query.where` 含 `ruleref` 时，当前 exporter 使用 session/runtime 已持有的
+  in-memory rule resolver；不接受 filesystem registry root：
 
 ```json
 {
   "query": {
     "where": [["ruleref", "q.example_rule", "1.0.0", ["$e", "$status"]]],
     "query_rel": "example_query",
-    "registry_root": "/tmp/registry"
+    "engine": "souffle"
   }
 }
 ```
 
-  这不会改变 outer DTO；只是让 package exporter 在编译 `rules/idb.dl` 时能够读取 registry 中的 exposed rules，把 composed query 展开成 Souffle 可执行的 internal relations。
+  这不会改变 outer DTO；exporter 在编译 `rules/idb.dl` 时使用调用方提供的
+  in-memory rule resolver 展开 composed query。
 - 当 `package_kind="audit"` 时，当前 package 还会额外包含：
   - `audit/support_artifacts.jsonl`
   - `audit/rule_trace_artifacts.jsonl`
-  - `audit/certainty_summaries.jsonl`（可选 — 当 session 有 `registry_root` 且 candidate certainty 可派生时写入）
+  - `audit/certainty_summaries.jsonl`（可选 — 当 candidate certainty 可由 runtime 内存数据派生时写入）
   - `audit/provenance_trees.jsonl`（可选 — 当 accepted candidate 仍可通过当前 session 的 `run_id`-keyed derivation recipe replay 成 query-bearing Souffle package，并能匹配到具体 output row 时写入）
   - `audit/provenance_statuses.jsonl`（可选 — 当 `package_kind="audit"` 时与 provenance materialization 同步写入，按 candidate 记录 `present | missing_recipe | export_failed | no_matching_row | explain_failed` 等状态）
   - `audit/evidence_graphs.jsonl`（可选 — 当 accepted candidate 的 engine provenance / proof tree 可在 export-time 确定性转换为 `EvidenceGraph` 时写入）

@@ -104,9 +104,11 @@ paths:
   /v1/runtime/sessions/open:
     post:
       tags: [runtime-session]
-      summary: Open a runtime session bound to a schema IR (or registry root).
+      summary: Open a runtime session bound to a schema IR.
       description: |
-        Exactly one of `schema_ir` or `registry_root` must be provided.
+        `schema_ir` must be provided. Filesystem registry roots were removed by
+        A20(E) / Q6-A; legacy workspaces should be migrated with
+        `python -m factgraph migrate-workspace <path>`.
         See `service/docs/02_runtime_sessions.md` §1 for the full DTO.
       requestBody:
         required: true
@@ -116,7 +118,6 @@ paths:
               type: object
               properties:
                 schema_ir: { type: object }
-                registry_root: { type: string }
                 ledger_path: { type: string }
                 artifact_store_root: { type: string }
       responses:
@@ -655,81 +656,6 @@ paths:
         "401": { $ref: "#/components/responses/UnauthorizedError" }
         "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
 
-  # ── registry (removed envelopes) ───────────────────────────────────────
-  /v1/registry/manifest:
-    post:
-      tags: [registry]
-      summary: Removed by A20(E) registry final exit; returns a removed envelope.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [root_dir]
-              properties:
-                root_dir: { type: string }
-      responses:
-        "200": { $ref: "#/components/responses/Envelope200" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
-  /v1/registry/schema/read:
-    post:
-      tags: [registry]
-      summary: Removed by A20(E) registry final exit; returns a removed envelope.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object }
-      responses:
-        "200": { $ref: "#/components/responses/Envelope200" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
-  /v1/registry/assets/list:
-    post:
-      tags: [registry]
-      summary: Removed by A20(E) registry final exit; returns a removed envelope.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object }
-      responses:
-        "200": { $ref: "#/components/responses/Envelope200" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
-  /v1/registry/rules/read:
-    post:
-      tags: [registry]
-      summary: Removed by Q8 Phase 2 / A20(E); returns a removed envelope.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object }
-      responses:
-        "200": { $ref: "#/components/responses/Envelope200" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
-  /v1/registry/inferences/read:
-    post:
-      tags: [registry]
-      summary: Removed by Q8 Phase 2 / A20(E); returns a removed envelope.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object }
-      responses:
-        "200": { $ref: "#/components/responses/Envelope200" }
-        "401": { $ref: "#/components/responses/UnauthorizedError" }
-        "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
-
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -847,7 +773,6 @@ components:
               properties:
                 session_id: { type: string }
                 ledger_path: { type: string, nullable: true }
-                registry_root: { type: string, nullable: true }
                 schema_digest: { type: string }
                 opened_at_ns: { type: integer }
                 counts:
@@ -868,7 +793,6 @@ components:
               properties:
                 session_id: { type: string }
                 ledger_path: { type: string, nullable: true }
-                registry_root: { type: string, nullable: true }
                 schema_digest: { type: string }
                 opened_at_ns: { type: integer }
                 counts:

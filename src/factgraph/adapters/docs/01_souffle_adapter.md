@@ -172,9 +172,9 @@ helper**:
     package manifest
   - Locates the Souffle binary and calls
     `run_provenance_explain(...)`
-  - Works directly on flat query packages; for composed query
-    packages containing `ruleref`, the export must provide
-    `query.registry_root`
+  - Works directly on flat query packages; composed query packages containing
+    `ruleref` must have been exported with an in-memory `query.registry`
+    resolver
 - `parse_souffle_proof_json(...)`
   - Parses the Souffle JSON proof stream
   - Depth-limited `subproof ...` truncation nodes are kept as
@@ -222,8 +222,9 @@ query relation, and runs through the AST gate by default
 - Not-body and data-flow constraints are jointly enforced by the
   validator and compile-time checks
 - When the query where contains `ruleref`:
-  - The exporter can load exposed rules from the registry via
-    `query.registry_root`
+  - The exporter can resolve exposed rules from an in-memory resolver supplied
+    as `query.registry`. The object must implement
+    `resolve(rule_id, version)`, matching `core.rules.ruleref_common`.
   - The compiler recursively rewrites `ruleref` into adapter-local
     internal relations and writes those relations into the same
     `rules/idb.dl`

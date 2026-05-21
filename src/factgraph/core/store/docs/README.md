@@ -45,10 +45,10 @@ layout lives under `db/`:
 - `db/assertions.db` remains the SQLite `Ledger` storage substrate and mutable
   assertion index.
 - `factgraph_workspace.json` points to the Database-owned `db/` component and
-  reserves `views/`. Existing `registry/` data is preserved as inert historical
-  data when present, but new clean Database and SDK workspaces do not create
-  live registry content or use `registry/schema/schema_ir.json` as the schema
-  anchor.
+  reserves `views/`. New clean Database and SDK workspaces do not create live
+  registry content. Legacy workspaces that still contain `registry/` or
+  `registry/schema/schema_ir.json` must be migrated with
+  `python -m factgraph migrate-workspace <path>` before SDK load.
 
 Object and head writes use sibling temporary files followed by `os.replace(...)`
 for per-file atomic replacement. Cross-file atomicity across object, ref, and

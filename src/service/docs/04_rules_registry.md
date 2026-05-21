@@ -1,17 +1,14 @@
-# Rules And Registry DTO（service v1）
+# Rules DTO（service v1）
 
 范围：
 
 - `POST /v1/rules/validate`
 - `POST /v1/rules/compile-preview`
 - `GET /v1/profiles`
-- `POST /v1/registry/manifest`
-- `POST /v1/registry/schema/read`
-- `POST /v1/registry/assets/list`
-- `POST /v1/registry/rules/read`
-- `POST /v1/registry/inferences/read`
 
-本文记录 service v1 的 rules facade 与 registry 只读接口 DTO 契约。runtime session / writes / query / views / packages 不在本文范围内。
+本文记录 service v1 的 rules facade DTO 契约。runtime session /
+writes / query / views / packages 不在本文范围内。A20(E) / Q6-A 后
+`/v1/registry/*` routes 已从 `app_v1.py` 删除，不再返回 removed envelope。
 
 ## 通用约定
 
@@ -21,8 +18,8 @@
 - 只有通过认证后，应用层成功/失败才继续使用 `HTTP 200` JSON envelope。
 - 成功：`ok=true`，失败：`ok=false` 且 `errors[]` 非空。
 - rules 端点不依赖 runtime session。
-- registry 端点也不依赖 runtime session；它们直接访问 `root_dir` 指向的 registry 文件系统。
-- registry 端点是只读 contract，不应触发任何 registry 写操作。
+- service 不再暴露 registry 文件系统读取端点；schema 通过 runtime session /
+  workspace APIs 进入系统，rules/inferences 使用 in-memory DTO。
 
 成功 envelope 示例：
 
@@ -208,10 +205,10 @@
 - 当前 service v1 只暴露 `default` 和 `souffle_strict` 两个 profile。
 - 该端点不返回 `meta` 字段；结构与 rules validate/preview 略有不同，客户端应按端点 contract 处理。
 
-## 4. `POST /v1/registry/*`（A20(E) registry final-exit 已移除）
+## 4. `/v1/registry/*`（A20(E) registry final-exit 已删除）
 
-A20(E) registry final-exit 后，下列 registry read routes 仍注册在 service v1
-中，但全部返回 removed envelope：
+A20(E) registry final-exit 后，下列 registry read routes 已从 service v1
+删除：
 
 - `POST /v1/registry/manifest`
 - `POST /v1/registry/schema/read`
@@ -219,21 +216,7 @@ A20(E) registry final-exit 后，下列 registry read routes 仍注册在 servic
 - `POST /v1/registry/rules/read`
 - `POST /v1/registry/inferences/read`
 
-```json
-{
-  "ok": false,
-  "errors": [
-    {
-      "kind": "removed",
-      "path": "$",
-      "details": {
-        "message": "registry-backed authoring APIs were removed by A20(E) registry final exit; use FactGraph workspace APIs and in-memory Rule(...) / Inference(...) values instead of registry-backed service reads"
-      }
-    }
-  ],
-  "meta": {}
-}
-```
+客户端不应继续调用这些 paths；FastAPI 不再注册对应 operation。
 
 迁移方法：
 
@@ -243,8 +226,8 @@ A20(E) registry final-exit 后，下列 registry read routes 仍注册在 servic
   然后调用 `/rules/run`。
 - 客户端构造 in-memory `Inference(...)` 并直接调用
   `/v1/runtime/sessions/{session_id}/inferences/evaluate`。
-- authoring apply-log 对 workspace registry 写到
-  `db/audit/authoring_apply_events.jsonl`;audit readers 仍兼容历史
+- authoring apply-log 写入路径已退役；audit readers 仍兼容历史
+  `db/audit/authoring_apply_events.jsonl` 与
   `registry/authoring_apply_events.jsonl`。
 
 ## 相关文档
