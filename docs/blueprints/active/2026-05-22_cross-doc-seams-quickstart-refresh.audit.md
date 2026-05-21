@@ -10,6 +10,7 @@
 | 2026-05-22 | draft | Audit findings folded | A-1 through A-6 identify stale quickstart persistence/rules/namespace-map pages, reference-only cross-doc seam docs, and `registry=None` preservation in evidence docs. |
 | 2026-05-22 | scoped | Scope locked | Quickstart persistence/rules/namespace-map refresh, narrow reference-doc current-truth pointers, and stale module-doc cleanup are in scope; source code and Q-chain decisions remain out of scope. |
 | 2026-05-22 | implemented | Docs updated | Commit 69850a2d rewrote quickstart persistence, updated rules/inferences and namespace map, renamed the index entry, and added current-truth pointers to two design-point reference docs. |
+| 2026-05-22 | implemented | Sibling-link cleanup | Related-doc links to Slice 7C archive / Q6-A decision were replaced with commit lineage text because this docs branch is implementation-derived and does not contain sibling blueprint/decision files. |
 
 ## Decision Notes
 

@@ -10,8 +10,10 @@
   - `src/service/docs/`
 - Related Docs:
   - [docs/architecture_principles.md](../../architecture_principles.md)
-  - [Slice 7C registry final removal archive](../archive/2026-05-21_registry-final-removal.md)
-  - [Q6-A registry adapter final removal decision](../../decisions/2026-05-21_q6a-registry-adapter-final-removal-decision.md)
+  - Slice 7C implementation lineage on this branch:
+    `cc327987` + `ff79870b` + `f592733a`
+  - Q6-A decision lineage exists on sibling decision branch:
+    `3a32c25e` + `b2b7d41f` + `c9aeafae`
 - Audit Log:
   - [2026-05-22_cross-doc-seams-quickstart-refresh.audit.md](./2026-05-22_cross-doc-seams-quickstart-refresh.audit.md)
 
@@ -57,8 +59,12 @@ consistency pass. The main risks are:
 - Current implementation base: Slice 7C impl branch at `f592733a`.
 - Current docs feature branch:
   `v0.2.0-docs-cross-doc-quickstart-2026-05-22`.
-- Slice 7C archived the registry adapter final-removal blueprint at `a46771c6`.
-- Q6-A closed the registry adapter final-removal decision at `c9aeafae`.
+- Slice 7C archived the registry adapter final-removal blueprint at `a46771c6`
+  on a sibling blueprint branch; that archive file is not present on this
+  implementation-derived docs branch.
+- Q6-A closed the registry adapter final-removal decision at `c9aeafae` on a
+  sibling decision branch; that decision file is not present on this
+  implementation-derived docs branch.
 - Known unrelated dirty files remain outside this task unless independently
   accepted into scope.
 
