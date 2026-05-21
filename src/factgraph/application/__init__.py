@@ -61,7 +61,6 @@ from .walker import (
 from .workspace_runtime import (
     WORKSPACE_LEDGER,
     WORKSPACE_MANIFEST_NAME,
-    WORKSPACE_REGISTRY,
     WORKSPACE_SAVE_SCOPE,
     WORKSPACE_VERSION,
     WorkspacePaths,
@@ -134,7 +133,6 @@ __all__ = [
     "SupportArtifactView",
     "WORKSPACE_LEDGER",
     "WORKSPACE_MANIFEST_NAME",
-    "WORKSPACE_REGISTRY",
     "WORKSPACE_SAVE_SCOPE",
     "WORKSPACE_VERSION",
     "WorkspacePaths",

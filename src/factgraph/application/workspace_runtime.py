@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import json
-import shutil
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from factgraph.authoring.registry_fs import FileAuthoringRegistry
 from factgraph.core.store.ledger import Ledger
 
 
@@ -16,7 +14,6 @@ WORKSPACE_MANIFEST_NAME = "factgraph_workspace.json"
 WORKSPACE_VERSION = "1"
 WORKSPACE_SAVE_SCOPE = "level_4"
 WORKSPACE_LEDGER = "ledger.db"
-WORKSPACE_REGISTRY = "registry/"
 
 
 class WorkspaceRuntimeError(Exception):
@@ -28,7 +25,6 @@ class WorkspacePaths:
     root: Path
     manifest: Path
     ledger: Path
-    registry: Path
 
 
 def resolve_workspace_paths(path: str | Path) -> WorkspacePaths:
@@ -39,7 +35,6 @@ def resolve_workspace_paths(path: str | Path) -> WorkspacePaths:
         root=root,
         manifest=root / WORKSPACE_MANIFEST_NAME,
         ledger=root / WORKSPACE_LEDGER,
-        registry=root / WORKSPACE_REGISTRY.rstrip("/"),
     )
 
 
@@ -105,9 +100,6 @@ def validate_workspace_manifest(
         raise WorkspaceRuntimeError("workspace manifest components must be object")
     if components.get("ledger") != WORKSPACE_LEDGER:
         raise WorkspaceRuntimeError("workspace manifest ledger component mismatch")
-    registry_component = components.get("registry")
-    if registry_component is not None and registry_component != WORKSPACE_REGISTRY:
-        raise WorkspaceRuntimeError("workspace manifest registry component mismatch")
     manifest_digest = payload.get("schema_digest")
     if not isinstance(manifest_digest, str) or not manifest_digest:
         raise WorkspaceRuntimeError("workspace manifest schema_digest must be non-empty string")
@@ -138,27 +130,6 @@ def copy_ledger_to_workspace(*, ledger: Ledger, target_path: str | Path) -> None
         raise WorkspaceRuntimeError(f"failed to copy ledger into workspace: {exc}") from exc
 
 
-def sync_registry_to_workspace(
-    *,
-    source_registry: FileAuthoringRegistry | None,
-    target_registry: FileAuthoringRegistry,
-    schema_ir: dict[str, Any],
-) -> None:
-    if source_registry is None:
-        target_registry.upsert_schema_ir(schema_ir)
-        return
-    source_root = source_registry.root_dir
-    target_root = target_registry.root_dir
-    if source_root == target_root:
-        target_registry.upsert_schema_ir(schema_ir)
-        return
-    if target_root.exists():
-        shutil.rmtree(target_root)
-    if source_root.exists():
-        shutil.copytree(source_root, target_root)
-    target_registry.upsert_schema_ir(schema_ir)
-
-
 def save_workspace(
     path: str | Path,
     *,
@@ -174,13 +145,9 @@ def save_workspace(
 
 def load_workspace(path: str | Path, *, schema_digest: str) -> WorkspacePaths:
     paths = resolve_workspace_paths(path)
-    manifest = validate_workspace_manifest(paths.root, schema_digest=schema_digest)
+    validate_workspace_manifest(paths.root, schema_digest=schema_digest)
     if not paths.ledger.exists():
         raise WorkspaceRuntimeError("workspace ledger component missing")
-    components = manifest.get("components")
-    registry_component = components.get("registry") if isinstance(components, dict) else None
-    if registry_component == WORKSPACE_REGISTRY and not paths.registry.exists():
-        raise WorkspaceRuntimeError("workspace registry component missing")
     return paths
 
 
@@ -213,7 +180,6 @@ def _now_iso() -> str:
 __all__ = [
     "WORKSPACE_LEDGER",
     "WORKSPACE_MANIFEST_NAME",
-    "WORKSPACE_REGISTRY",
     "WORKSPACE_SAVE_SCOPE",
     "WORKSPACE_VERSION",
     "WorkspacePaths",

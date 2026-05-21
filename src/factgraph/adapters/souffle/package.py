@@ -147,10 +147,15 @@ def export_package(
             query_rel = query_rel_for_where(where)
         if not isinstance(query_rel, str) or not query_rel:
             raise ValueError("query.query_rel must be non-empty string")
-        # Q8 Phase 2 (Slice 6): FS-saved rule loading removed. `registry` stays
-        # None; query.registry_root field (if provided by caller) has no effect
-        # because FS-backed rule persistence is gone.
-        registry = None
+        # Q8 Phase 2 (Slice 6) + Slice 7C / Q6-A (c.1) + N-3:
+        # FileAuthoringRegistry was deleted in Slice 7C. Caller-provided
+        # in-memory ruleref resolvers (objects implementing
+        # `registry.resolve(rule_id, version)` per `core/rules/ruleref_common.py`)
+        # may be passed through the `query.registry` field if the where
+        # contains `ruleref` atoms. Callers without ruleref atoms can leave
+        # `registry` as None. The unchanged shared helper enforces the
+        # protocol; N-3 prevents broadening this beyond Souffle adapter.
+        registry = query.get("registry")
         idb_text = compile_where_to_query_dl(
             schema_ir=store.schema_ir,
             where=where,

@@ -10,7 +10,6 @@ from .errors import (
     EditorClosedError,
     EntityNotFoundError,
     FrozenSnapshotError,
-    SDKRegistryError,
     SDKSchemaError,
     SDKStoreError,
 )
@@ -35,7 +34,6 @@ from .ingest import IngestResult, ValidationReport
 __all__ = [
     "SDKSchemaError",
     "SDKStoreError",
-    "SDKRegistryError",
     "EntityNotFoundError",
     "FrozenSnapshotError",
     "CardinalityError",

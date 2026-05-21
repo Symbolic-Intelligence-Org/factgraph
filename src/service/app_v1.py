@@ -6,13 +6,6 @@ from typing import Any
 from fastapi import Body, Depends, FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from service.registry_v1 import (
-    list_registry_assets,
-    read_registry_inference,
-    read_registry_manifest,
-    read_registry_rule,
-    read_registry_schema,
-)
 from service.rules_v1 import compile_rule_preview, list_profiles, validate_rule
 from service.runtime_v1 import (
     accept_runtime_derivation,
@@ -262,29 +255,10 @@ def post_runtime_export_package(session_id: str, payload: dict[str, Any] = Body(
     return export_runtime_package(session_id, payload)
 
 
-@app.post("/v1/registry/manifest", dependencies=AUTH_DEPENDENCIES)
-def post_registry_manifest(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return read_registry_manifest(payload)
-
-
-@app.post("/v1/registry/schema/read", dependencies=AUTH_DEPENDENCIES)
-def post_registry_schema(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return read_registry_schema(payload)
-
-
-@app.post("/v1/registry/assets/list", dependencies=AUTH_DEPENDENCIES)
-def post_registry_assets(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return list_registry_assets(payload)
-
-
-@app.post("/v1/registry/rules/read", dependencies=AUTH_DEPENDENCIES)
-def post_registry_read_rule(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return read_registry_rule(payload)
-
-
-@app.post("/v1/registry/inferences/read", dependencies=AUTH_DEPENDENCIES)
-def post_registry_read_inference(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return read_registry_inference(payload)
+# Slice 7C / Q6-A (PF-6 amendment): the 5 `/v1/registry/*` routes (manifest /
+# schema/read / assets/list / rules/read / inferences/read) were removed
+# alongside `service/registry_v1.py`. Previously the routes returned
+# removed-envelope responses (Slice 7B); they are now gone entirely.
 
 
 @app.exception_handler(Exception)

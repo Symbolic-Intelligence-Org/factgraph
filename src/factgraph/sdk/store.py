@@ -31,7 +31,6 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.schema_runtime import build_schema_index, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
-from factgraph.authoring.registry_fs import FileAuthoringRegistry
 from factgraph.authoring.rules import compile_authoring_rule_v1
 from factgraph.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
 from factgraph.core.derivation.candidates import CandidateSet
@@ -590,42 +589,16 @@ class _SDKPackageManager:
         return self._sdk.run_package(*args, **kwargs)
 
 
-def _resolve_authoring_registry(
-    *,
-    registry_root: str | Path | None,
-    registry: FileAuthoringRegistry | None,
-) -> FileAuthoringRegistry | None:
-    if registry_root is not None:
-        _warn_registry_root_deprecated()
-    if registry is not None and not isinstance(registry, FileAuthoringRegistry):
-        raise SDKStoreError("registry must be FileAuthoringRegistry")
-    if registry is not None and registry_root is not None:
-        root = Path(registry_root)
-        if root != registry.root_dir:
-            raise SDKStoreError("registry_root conflicts with registry.root_dir")
-        return registry
-    if registry is not None:
-        return registry
-    if registry_root is not None:
-        return FileAuthoringRegistry(Path(registry_root))
-    return None
-
-
-_REGISTRY_ROOT_DEPRECATION_MESSAGE = (
-    "FactGraph.create(..., registry_root=...) is deprecated and will be "
-    "removed in a future slice. The workspace schema anchor lives at "
-    "db/objects/schema/<digest>.json per Slice 7A;legacy registry/ "
-    "surface is no longer the workspace authority. Pass workspace path "
-    "via `path=` only;avoid explicit registry_root=."
+_REGISTRY_ROOT_REMOVED_MESSAGE = (
+    "registry_root= and registry= were removed by A20(E) / Q6-A. "
+    "FactGraph workspace schema anchor lives at db/objects/schema/<digest>.json. "
+    "Pass workspace path via `path=` only; avoid explicit registry_root= / registry=. "
+    "Run `python -m factgraph migrate-workspace <path>` to migrate legacy workspaces."
 )
 
 
-def _warn_registry_root_deprecated() -> None:
-    warnings.warn(
-        _REGISTRY_ROOT_DEPRECATION_MESSAGE,
-        DeprecationWarning,
-        stacklevel=4,
-    )
+def _raise_registry_root_removed() -> None:
+    raise SDKStoreError(_REGISTRY_ROOT_REMOVED_MESSAGE)
 
 
 def _normalize_workspace_path(path: str | Path | None) -> Path | None:
@@ -644,15 +617,13 @@ def _resolve_workspace_constructor_paths(
     *,
     path: str | Path | None,
     ledger_path: str | None,
-    registry_root: str | Path | None,
-) -> tuple[Path | None, str | None, str | Path | None]:
+) -> tuple[Path | None, str | None]:
     workspace_path = _normalize_workspace_path(path)
     if workspace_path is None:
-        return None, ledger_path, registry_root
+        return None, ledger_path
 
     workspace_paths = resolve_workspace_paths(workspace_path)
     expected_ledger = workspace_paths.ledger
-    expected_registry = workspace_paths.registry
 
     if ledger_path is not None:
         if not _path_equivalent(ledger_path, expected_ledger):
@@ -661,64 +632,29 @@ def _resolve_workspace_constructor_paths(
     else:
         resolved_ledger_path = str(expected_ledger)
 
-    if registry_root is not None:
-        if not _path_equivalent(registry_root, expected_registry):
-            raise SDKStoreError("registry_root conflicts with workspace path")
-        resolved_registry_root = registry_root
-    else:
-        resolved_registry_root = None
-
-    return workspace_path, resolved_ledger_path, resolved_registry_root
+    return workspace_path, resolved_ledger_path
 
 
-def _registry_schema_digest(registry_root: str | Path) -> str | None:
-    try:
-        entry = FileAuthoringRegistry(Path(registry_root)).get_schema_entry()
-    except Exception as exc:
-        raise SDKStoreError(f"workspace registry schema digest unavailable: {exc}") from exc
-    if entry is None:
-        return None
-    actual_digest = entry.get("schema_digest")
-    if not isinstance(actual_digest, str):
-        return None
-    return actual_digest
-
-
-def _validate_legacy_registry_schema(registry_root: str | Path, expected_digest: str) -> bool:
-    actual_digest = _registry_schema_digest(registry_root)
-    if actual_digest is None:
-        return False
-    if actual_digest != expected_digest:
+def _reject_legacy_registry_marker(workspace_path: str | Path) -> None:
+    workspace_paths = resolve_workspace_paths(workspace_path)
+    legacy_registry = workspace_paths.root / "registry"
+    if legacy_registry.exists():
         raise SDKStoreError(
-            f"workspace schema digest mismatch: registry={actual_digest!r}, expected={expected_digest!r}"
+            f"workspace contains legacy registry/ marker (path={legacy_registry}); "
+            "run `python -m factgraph migrate-workspace <workspace>` "
+            "before loading."
         )
-    return True
 
 
-def _ensure_workspace_schema_object(path: str | Path, schema_ir: dict[str, Any], *, legacy_registry: Path | None) -> None:
+def _ensure_workspace_schema_object(path: str | Path, schema_ir: dict[str, Any]) -> None:
     expected_digest = schema_digest(schema_ir)
     if schema_object_exists_for_workspace(path, expected_digest):
         try:
             validate_schema_object_for_workspace(path, schema_ir)
         except DatabaseError as exc:
             raise SDKStoreError(f"workspace schema object invalid: {exc}") from exc
-        if legacy_registry is not None and legacy_registry.exists():
-            registry_digest = _registry_schema_digest(legacy_registry)
-            if registry_digest is not None and registry_digest != expected_digest:
-                raise SDKStoreError(
-                    "workspace schema digest mismatch: "
-                    f"db_object={expected_digest!r}, registry={registry_digest!r}"
-                )
         return
-
-    if legacy_registry is None or not legacy_registry.exists():
-        raise SDKStoreError("workspace schema object missing")
-    if not _validate_legacy_registry_schema(legacy_registry, expected_digest):
-        raise SDKStoreError("workspace registry schema digest missing")
-    try:
-        write_schema_object_for_workspace(path, schema_ir)
-    except DatabaseError as exc:
-        raise SDKStoreError(f"workspace schema object migration failed: {exc}") from exc
+    raise SDKStoreError("workspace schema object missing")
 
 
 class SDKStore:
@@ -745,10 +681,14 @@ class SDKStore:
         schema_ir: dict | None = None,
         artifact_store_root: str | None = None,
         registry_root: str | Path | None = None,
-        registry: FileAuthoringRegistry | None = None,
+        registry: Any | None = None,
         workspace_path: str | Path | None = None,
         default_row_format: str | None = None,
     ) -> None:
+        # Q6-A (e.1): registry_root= and registry= are kept in the signature
+        # for one-version grace, but raise immediately when provided.
+        if registry_root is not None or registry is not None:
+            _raise_registry_root_removed()
         if not isinstance(classes, list) or not classes:
             raise SDKStoreError("classes must be non-empty list[Entity]")
         self._classes = list(classes)
@@ -771,10 +711,6 @@ class SDKStore:
         self._workspace_path = _normalize_workspace_path(workspace_path)
         self._database: Database | None = None
         self._attached_writable = False
-        self._authoring_registry = _resolve_authoring_registry(
-            registry_root=registry_root,
-            registry=registry,
-        )
         self._application_schema_index = build_schema_index(self._schema_ir)
         self._field_pred_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._field_decl_by_descriptor: dict[Field, dict[str, Any]] = {}
@@ -816,7 +752,7 @@ class SDKStore:
         path: str | Path | None = None,
         artifact_store_root: str | None = None,
         registry_root: str | Path | None = None,
-        registry: FileAuthoringRegistry | None = None,
+        registry: Any | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
         """Create a `FactGraph` from Python `Entity` classes.
@@ -830,11 +766,12 @@ class SDKStore:
             ledger: Optional existing ledger object.
             ledger_path: Optional SQLite ledger path; mutually exclusive with
                 `ledger`.
-            path: Optional workspace directory. When provided, default ledger
-                and registry paths are derived from it.
+            path: Optional workspace directory.
             artifact_store_root: Optional artifact sidecar root.
-            registry_root: Optional authoring registry directory.
-            registry: Optional `FileAuthoringRegistry` instance.
+            registry_root: REMOVED by A20(E) / Q6-A; raises `SDKStoreError`
+                immediately if provided. Pass workspace path via `path=` only.
+            registry: REMOVED by A20(E) / Q6-A; raises `SDKStoreError`
+                immediately if provided.
             default_row_format: Optional default output row format for rule
                 evaluation.
 
@@ -842,12 +779,16 @@ class SDKStore:
             A `FactGraph` / `SDKStore` bound to the compiled schema.
 
         Raises:
-            SDKStoreError: If constructor paths or schema classes are invalid.
+            SDKStoreError: If `registry_root=` or `registry=` is provided, or
+                if constructor paths or schema classes are invalid.
         """
-        workspace_path, resolved_ledger_path, resolved_registry_root = _resolve_workspace_constructor_paths(
+        # Q6-A (e.1): explicit reject before any workspace path resolution so
+        # users get the migration message without ambiguous downstream errors.
+        if registry_root is not None or registry is not None:
+            _raise_registry_root_removed()
+        workspace_path, resolved_ledger_path = _resolve_workspace_constructor_paths(
             path=path,
             ledger_path=ledger_path,
-            registry_root=registry_root,
         )
         schema_ir = compile_schema_from_classes(schema_classes)
         if workspace_path is not None:
@@ -861,8 +802,6 @@ class SDKStore:
             ledger_path=resolved_ledger_path,
             artifact_store_root=artifact_store_root,
             schema_ir=schema_ir,
-            registry_root=resolved_registry_root,
-            registry=registry,
             workspace_path=workspace_path,
             default_row_format=default_row_format,
         )
@@ -876,16 +815,17 @@ class SDKStore:
         ledger_path: str | None = None,
         artifact_store_root: str | None = None,
         registry_root: str | Path | None = None,
-        registry: FileAuthoringRegistry | None = None,
+        registry: Any | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
+        # Q6-A (e.1): same rejection as create(...).
+        if registry_root is not None or registry is not None:
+            _raise_registry_root_removed()
         return cls._from_schema_classes_impl(
             classes,
             ledger=ledger,
             ledger_path=ledger_path,
             artifact_store_root=artifact_store_root,
-            registry_root=registry_root,
-            registry=registry,
             workspace_path=None,
             default_row_format=default_row_format,
         )
@@ -900,22 +840,30 @@ class SDKStore:
     ) -> "SDKStore":
         """Load a saved FactGraph workspace from disk.
 
-        Workspace load restores the ledger and authoring registry, then
-        validates the workspace schema digest against the supplied
-        `schema_classes`. Class-less dynamic load is not supported.
+        Workspace load restores the ledger and validates the workspace schema
+        digest against the supplied `schema_classes`. Class-less dynamic load
+        is not supported. Legacy workspaces still carrying a `registry/`
+        directory must first be migrated via
+        ``python -m factgraph migrate-workspace <path>``.
 
         Args:
             path: Workspace directory created by `fg.save(...)`.
             schema_classes: Entity classes matching the saved workspace schema.
             default_row_format: Optional default output row format.
+
+        Raises:
+            SDKStoreError: If the workspace contains a legacy `registry/`
+                marker (Q6-A (d.3): run the migration CLI first), or if the
+                schema digest does not match.
         """
         if schema_classes is None:
             raise SDKStoreError("schema_classes is required for FactGraph.load(...)")
         schema_ir = compile_schema_from_classes(schema_classes)
         digest = schema_digest(schema_ir)
         try:
+            _reject_legacy_registry_marker(path)
             paths = app_load_workspace(path, schema_digest=digest)
-            _ensure_workspace_schema_object(paths.root, schema_ir, legacy_registry=paths.registry)
+            _ensure_workspace_schema_object(paths.root, schema_ir)
             return cls._from_schema_classes_impl(
                 schema_classes,
                 ledger=Ledger(path=paths.ledger),
@@ -970,8 +918,6 @@ class SDKStore:
         ledger_path: str | None = None,
         artifact_store_root: str | None = None,
         schema_ir: dict[str, Any] | None = None,
-        registry_root: str | Path | None = None,
-        registry: FileAuthoringRegistry | None = None,
         workspace_path: str | Path | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
@@ -1000,8 +946,6 @@ class SDKStore:
         return cls(
             classes,
             store=Store(schema_ir=schema_ir, ledger=ledger, artifact_sidecar=_sidecar),
-            registry_root=registry_root,
-            registry=registry,
             workspace_path=workspace_path,
             default_row_format=default_row_format,
         )
@@ -2160,8 +2104,6 @@ class SDKStore:
             )
         try:
             write_schema_object_for_workspace(workspace_path, self.schema_ir)
-            if self._authoring_registry is not None:
-                self._authoring_registry.upsert_schema_ir(self.schema_ir)
             paths = app_save_workspace(
                 workspace_path,
                 schema_digest=self._schema_digest,
@@ -2609,21 +2551,6 @@ class SDKStore:
             except DatabaseError as exc:
                 raise SDKStoreError(f"workspace schema object invalid: {exc}") from exc
 
-        registry = self._authoring_registry
-        if registry is None:
-            return
-        try:
-            entry = registry.get_schema_entry()
-        except Exception as exc:
-            raise SDKStoreError(f"registry schema_digest unavailable: {exc}") from exc
-        if entry is None:
-            return
-        registry_digest = entry.get("schema_digest")
-        if registry_digest != old_digest:
-            raise SDKStoreError(
-                f"registry schema_digest mismatch: expected {old_digest!r}, got {registry_digest!r}"
-            )
-
     def _update_schema_digest_anchors(
         self,
         *,
@@ -2636,13 +2563,6 @@ class SDKStore:
                 write_schema_object_for_workspace(self._workspace_path, schema_ir)
             except DatabaseError as exc:
                 raise SDKStoreError(f"workspace schema object update failed: {exc}") from exc
-        registry = self._authoring_registry
-        if registry is None:
-            return
-        try:
-            registry.upsert_schema_ir(schema_ir)
-        except Exception as exc:
-            raise SDKStoreError(f"registry schema_digest update failed: {exc}") from exc
 
     def _schema_pred_for_field(self, field: Field) -> dict[str, Any]:
         if not isinstance(field, Field):

@@ -65,7 +65,6 @@ from ._certainty_service import (
     _compute_all_certainty_summaries,
     _compute_certainty_summary_from_tree,
 )
-from ._registry_io import load_registry_schema_ir
 
 _ATOM_TAGS = {
     "pred",
@@ -94,7 +93,6 @@ class RuntimeDerivationRecipe:
     target_pred_id: str
     head_vars: list[str]
     where: Any
-    registry_root: str | None
 
 
 @dataclass
@@ -102,7 +100,6 @@ class RuntimeSession:
     session_id: str
     store: Store
     ledger_path: str | None
-    registry_root: str | None
     schema_digest: str
     opened_at_ns: int
     derivation_recipes: dict[str, RuntimeDerivationRecipe] = field(default_factory=dict)
@@ -119,14 +116,12 @@ class _RuntimeSessionManager:
         *,
         store: Store,
         ledger_path: str | None,
-        registry_root: str | None,
         digest: str,
     ) -> RuntimeSession:
         session = RuntimeSession(
             session_id=f"rt_{uuid4().hex}",
             store=store,
             ledger_path=ledger_path,
-            registry_root=registry_root,
             schema_digest=digest,
             opened_at_ns=time_ns(),
         )
@@ -164,7 +159,7 @@ def open_runtime_session(dto: dict[str, Any]) -> dict[str, Any]:
     try:
         if not isinstance(dto, dict):
             raise facade_error("dto must be object", kind="shape", path="$")
-        schema_ir, registry_root = _resolve_schema_ir(dto)
+        schema_ir = _resolve_schema_ir(dto)
         digest = schema_digest(schema_ir)
         ledger_path = _optional_str(dto.get("ledger_path"), path="$.ledger_path")
         artifact_store_root = _optional_str(dto.get("artifact_store_root"), path="$.artifact_store_root")
@@ -179,7 +174,6 @@ def open_runtime_session(dto: dict[str, Any]) -> dict[str, Any]:
         session = _SESSIONS.open(
             store=store,
             ledger_path=ledger_path,
-            registry_root=registry_root,
             digest=digest,
         )
         return ok_response(session=_session_to_dict(session))
@@ -387,7 +381,6 @@ def explain_runtime_summary(session_id: str, dto: dict[str, Any]) -> dict[str, A
                         kind="candidate_provenance_timeline_summary",
                         summary=tl_summary,
                     )
-            registry_root = _resolve_rule_registry_root(session, dto)
             aggregation = dto.get("certainty_aggregation", "bottleneck")
             tree = _get_candidate_tree(session, id_)
             summary = summarize_candidate_evidence_tree_dict(tree)
@@ -395,7 +388,6 @@ def explain_runtime_summary(session_id: str, dto: dict[str, Any]) -> dict[str, A
                 session.store,
                 id_,
                 tree,
-                registry_root=registry_root,
                 aggregation=aggregation,
             )
             return ok_response(
@@ -443,7 +435,6 @@ def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str,
                         kind="candidate_provenance_timeline_narrative",
                         narrative=tl_narrative,
                     )
-            registry_root = _resolve_rule_registry_root(session, dto)
             aggregation = dto.get("certainty_aggregation", "bottleneck")
             tree = _get_candidate_tree(session, id_)
             summary = summarize_candidate_evidence_tree_dict(tree)
@@ -451,7 +442,6 @@ def explain_runtime_narrative(session_id: str, dto: dict[str, Any]) -> dict[str,
                 session.store,
                 id_,
                 tree,
-                registry_root=registry_root,
                 aggregation=aggregation,
             )
             return ok_response(
@@ -511,7 +501,6 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
                             locale="en",
                         ),
                     )
-            registry_root = _resolve_rule_registry_root(session, dto)
             aggregation = dto.get("certainty_aggregation", "bottleneck")
             tree = _get_candidate_tree(session, id_)
             summary = summarize_candidate_evidence_tree_dict(tree)
@@ -519,7 +508,6 @@ def explain_runtime_nl(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
                 session.store,
                 id_,
                 tree,
-                registry_root=registry_root,
                 aggregation=aggregation,
             )
             narrative = _render_candidate_tree_narrative_from_summary(
@@ -972,9 +960,9 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
         # Q8 Phase 2 (Slice 6): FS-saved rule loading removed; certainty
         # confidence-kind resolver no longer constructed because no concrete
         # reader implements the Protocol after FileAuthoringRegistry.read_rule_spec
-        # is gone. registry_root preserved for downstream _cache_derivation_recipe.
+        # is gone. Slice 7C: registry_root propagation removed entirely
+        # (N-2 amendment); only ephemeral in-memory rules survive.
         active_registry = None
-        registry_root = _resolve_rule_registry_root(session, dto)
         certainty_resolver = None
         if session.ephemeral_rules:
             active_registry = RuleRegistry()
@@ -997,7 +985,6 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             session,
             candidates=candidates,
             compiled=compiled,
-            registry_root=registry_root,
         )
         returned_candidates = candidates if limit is None else candidates[:limit]
         return ok_response(
@@ -1077,13 +1064,11 @@ def export_runtime_package(session_id: str, dto: dict[str, Any]) -> dict[str, An
         provenance_status_map: dict[str, dict[str, Any]] | None = None
         evidence_graph_map: dict[str, dict[str, Any]] | None = None
         provenance_timeline_map: dict[str, dict[str, Any]] | None = None
-        if package_kind == "audit" and session.registry_root is not None:
+        if package_kind == "audit":
             certainty_map = _compute_all_certainty_summaries(
                 session.store,
-                registry_root=session.registry_root,
                 get_candidate_tree=lambda cid: _get_candidate_tree(session, cid),
             )
-        if package_kind == "audit":
             provenance_map, provenance_status_map = _materialize_provenance_trees(session)
             evidence_graph_map = _materialize_evidence_graphs(
                 session,
@@ -1262,27 +1247,36 @@ def clear_ephemeral_rules(session_id: str) -> dict[str, Any]:
         return error_response([exception_to_error(exc)])
 
 
-def _resolve_schema_ir(dto: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
-    raw_schema_ir = dto.get("schema_ir")
+def _resolve_schema_ir(dto: dict[str, Any]) -> dict[str, Any]:
+    # Slice 7C / Q6-A (b.3): `registry_root` / `override_registry_root` are
+    # rejected at the service input layer with the established removed-envelope
+    # error shape. Runtime sessions now require inline `schema_ir`.
     raw_registry_root = dto.get("registry_root")
-    if raw_schema_ir is not None and raw_registry_root is not None:
+    if raw_registry_root is not None:
         raise facade_error(
-            "provide either schema_ir or registry_root, not both",
+            "registry_root= was removed by A20(E) / Q6-A; "
+            "provide inline schema_ir or use workspace-based loading",
+            kind="registry_root_removed",
+            path="$.registry_root",
+        )
+    raw_override_registry_root = dto.get("override_registry_root")
+    if raw_override_registry_root is not None:
+        raise facade_error(
+            "override_registry_root= was removed by A20(E) / Q6-A; "
+            "provide inline schema_ir or use workspace-based loading",
+            kind="registry_root_removed",
+            path="$.override_registry_root",
+        )
+    raw_schema_ir = dto.get("schema_ir")
+    if raw_schema_ir is None:
+        raise facade_error(
+            "schema_ir is required",
             kind="shape",
             path="$",
         )
-    if raw_schema_ir is None and raw_registry_root is None:
-        raise facade_error(
-            "schema_ir or registry_root is required",
-            kind="shape",
-            path="$",
-        )
-    if raw_schema_ir is not None:
-        if not isinstance(raw_schema_ir, dict):
-            raise facade_error("schema_ir must be object", kind="shape", path="$.schema_ir")
-        return dict(raw_schema_ir), None
-    registry_root = _require_non_empty_str(raw_registry_root, path="$.registry_root")
-    return load_registry_schema_ir(registry_root), registry_root
+    if not isinstance(raw_schema_ir, dict):
+        raise facade_error("schema_ir must be object", kind="shape", path="$.schema_ir")
+    return dict(raw_schema_ir)
 
 
 def _open_ledger(ledger_path: str | None) -> Ledger:
@@ -1319,22 +1313,6 @@ def _require_session(session_id: str) -> RuntimeSession:
             details={"session_id": session_id},
         )
     return session
-
-
-def _resolve_rule_registry_root(session: RuntimeSession, dto: dict[str, Any]) -> str | None:
-    override_registry_root = dto.get("override_registry_root")
-    legacy_registry_root = dto.get("registry_root")
-    if override_registry_root is not None and legacy_registry_root is not None:
-        raise facade_error(
-            "provide either override_registry_root or registry_root, not both",
-            kind="shape",
-            path="$",
-        )
-    if override_registry_root is not None:
-        return _optional_str(override_registry_root, path="$.override_registry_root")
-    if legacy_registry_root is not None:
-        return _optional_str(legacy_registry_root, path="$.registry_root")
-    return session.registry_root
 
 
 def _compile_runtime_derivation(dto: Any, *, schema_ir: dict[str, Any]) -> dict[str, Any]:
@@ -1774,7 +1752,6 @@ def _session_to_dict(session: RuntimeSession) -> dict[str, Any]:
     return {
         "session_id": session.session_id,
         "ledger_path": session.ledger_path,
-        "registry_root": session.registry_root,
         "schema_digest": session.schema_digest,
         "opened_at_ns": session.opened_at_ns,
         "counts": {
@@ -1791,7 +1768,6 @@ def _cache_derivation_recipe(
     *,
     candidates: list[CandidateSet],
     compiled: dict[str, Any],
-    registry_root: str | None,
 ) -> None:
     run_ids = {candidate.run_id for candidate in candidates if candidate.run_id}
     if not run_ids:
@@ -1802,7 +1778,6 @@ def _cache_derivation_recipe(
         target_pred_id=str(compiled["target_pred_id"]),
         head_vars=list(compiled["head_vars"]),
         where=deepcopy(compiled["where"]),
-        registry_root=registry_root,
     )
     for run_id in run_ids:
         session.derivation_recipes[run_id] = recipe
@@ -1858,13 +1833,12 @@ def _materialize_provenance_trees(
         recipe = session.derivation_recipes[run_id]
         try:
             pred_type_domains = _schema_pred_type_domains(session.store.schema_ir)
-            # Q8 Phase 2 (Slice 6): FS-saved rule registry no longer constructed
-            # from recipe.registry_root because FileAuthoringRegistry rule methods
-            # are removed. ruleref relations passed to the export use None registry.
-            registry = None
+            # Slice 7C (N-2): FS-saved rule registry was already removed in
+            # Slice 6; this slice drops the lingering recipe.registry_root
+            # field. ruleref relations passed to the export use no registry.
             expanded = _expand_ruleref_relations_for_query_export(
                 where=recipe.where,
-                registry=registry,
+                registry=None,
                 pred_type_domains=pred_type_domains,
             )
             query_variables = extract_where_variables(expanded.rewritten_where)
@@ -1878,7 +1852,6 @@ def _materialize_provenance_trees(
                     query={
                         "where": recipe.where,
                         "query_rel": query_rel,
-                        "registry_root": recipe.registry_root,
                     },
                 )
                 run_manifest_path = run_package(package_dir, ["__query__"], engine="souffle")

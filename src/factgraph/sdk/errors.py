@@ -16,10 +16,6 @@ class SDKStoreError(SDKError):
     pass
 
 
-class SDKRegistryError(SDKError):
-    pass
-
-
 class EntityNotFoundError(SDKStoreError):
     def __init__(
         self,

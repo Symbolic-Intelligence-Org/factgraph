@@ -101,7 +101,6 @@ class DatabaseWorkspacePaths:
     head: Path
     assertions: Path
     views: Path
-    registry: Path
 
 
 def canonical_bytes_dbdata_v1(asrt_ids: Iterable[str]) -> bytes:
@@ -571,7 +570,6 @@ def resolve_database_workspace_paths(path: str | Path) -> DatabaseWorkspacePaths
         head=refs / "head.txt",
         assertions=db / "assertions.db",
         views=root / "views",
-        registry=root / "registry",
     )
 
 
@@ -795,8 +793,6 @@ def _write_workspace_manifest(paths: DatabaseWorkspacePaths) -> None:
         "db": "db/",
         "views": "views/",
     }
-    if paths.registry.exists():
-        components["registry"] = "registry/"
     payload = {
         "components": components,
         "factgraph_workspace_version": _DATABASE_WORKSPACE_VERSION,

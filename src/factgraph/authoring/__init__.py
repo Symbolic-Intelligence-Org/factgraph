@@ -23,22 +23,20 @@ from .derivations import (
     derivation_dry_run_preview_authoring,
     parse_authoring_derivation_dsl_v1,
 )
-from .registry_workflow import (
-    AuthoringApplyExecuteError,
-    AuthoringDSLBridgeError,
+from .publish import (
     AuthoringPublishError,
-    AuthoringRegistryFSError,
-    AuthoringSessionError,
-    AuthoringWorkflowError,
-    FileAuthoringRegistry,
     build_authoring_apply_dry_run_result_dto,
-    build_authoring_apply_execute_result_dto,
     build_authoring_publish_plan_dto,
-    build_authoring_publish_workflow_apply_bundle_dto,
+)
+from .session import AuthoringSessionError, build_authoring_session_dto
+from .workflow import (
+    AuthoringWorkflowError,
     build_authoring_publish_workflow_dry_run_bundle_dto,
+)
+from .dsl_bridge import (
+    AuthoringDSLBridgeError,
     build_authoring_publish_workflow_from_dsl_inputs_dry_run_bundle_dto,
     build_authoring_publish_workflow_from_dsl_inputs_dry_run_bundle_safe_dto,
-    build_authoring_session_dto,
     build_authoring_session_from_dsl_inputs_dto,
     build_authoring_session_from_dsl_inputs_safe_dto,
 )
@@ -83,13 +81,8 @@ __all__ = [
     "AuthoringPublishError",
     "build_authoring_publish_plan_dto",
     "build_authoring_apply_dry_run_result_dto",
-    "AuthoringApplyExecuteError",
-    "build_authoring_apply_execute_result_dto",
-    "build_authoring_publish_workflow_apply_bundle_dto",
     "AuthoringWorkflowError",
     "build_authoring_publish_workflow_dry_run_bundle_dto",
-    "AuthoringRegistryFSError",
-    "FileAuthoringRegistry",
     "AuthoringDSLBridgeError",
     "build_authoring_session_from_dsl_inputs_dto",
     "build_authoring_session_from_dsl_inputs_safe_dto",

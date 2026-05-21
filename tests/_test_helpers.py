@@ -29,29 +29,20 @@ class User(Entity):
 
 def _register_exposed_user_tag_rule(
     sdk: SDKStore,
-    registry_root: str | Path,
+    registry_root: str | Path | None = None,
     *,
     rule_id: str = "q.child_rule",
     condition_weights: dict[str, float] | None = None,
 ) -> Rule:
     """Construct (and return) an exposed user.tag Rule for test scenarios.
 
-    Q8 Phase 2 (Slice 6) removed `FileAuthoringRegistry.register_rule_spec`,
-    so this helper no longer persists the rule to a registry. It now:
-    - upserts the schema (still supported by FileAuthoringRegistry),
-    - constructs the Rule value object, and
-    - returns the Rule for the caller to pass directly to `fg.eval.run(...)`
-      or to register as an ephemeral rule in a runtime session.
-
-    Callers that previously relied on this helper's side-effect of FS
-    registration must construct the rule via the returned value and register
-    it through whatever in-memory mechanism the caller uses
-    (`RuleRegistry.register(...)`, ephemeral-rule POST, etc.).
+    Slice 7C / Q6-A (a.2): FileAuthoringRegistry was deleted in this slice.
+    This helper now constructs and returns an in-memory ``Rule`` value only.
+    The ``registry_root`` parameter is preserved (defaulted to ``None``) for
+    call-site signature compatibility but is otherwise ignored — callers
+    must register the returned Rule via an in-memory mechanism (e.g.
+    ``RuleRegistry.register(...)`` or the runtime ephemeral-rule endpoint).
     """
-    from factgraph.authoring import FileAuthoringRegistry
-
-    registry = FileAuthoringRegistry(Path(registry_root))
-    registry.upsert_schema_ir(sdk.schema_ir)
     with sdk_vars("u", "tag") as (u, tag):
         rule = Rule(
             id=rule_id,

@@ -347,7 +347,15 @@ def _expand_ruleref_relations_for_query_export(
         if atom[0] != "ruleref":
             return atom
         if registry is None:
-            raise WhereValidationError("query export with ruleref requires registry_root")
+            # Slice 7C / Q6-A (c.1): the filesystem-registry gate was replaced
+            # with a caller-provided in-memory resolver satisfying the
+            # `registry.resolve(rule_id, version)` protocol in
+            # `core/rules/ruleref_common.py`. The core helper is unchanged
+            # (N-3 preservation); only the wording of this gate changes.
+            raise WhereValidationError(
+                "query export with ruleref requires an in-memory rule resolver "
+                "implementing registry.resolve(rule_id, version)"
+            )
         if len(atom) != 4:
             raise WhereValidationError("ruleref atom must be ('ruleref', rule_id, version, [terms...])")
         _, rule_id, version, terms = atom

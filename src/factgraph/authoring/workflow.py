@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from factgraph.authoring.apply_execute import (
-    build_authoring_publish_workflow_apply_bundle_dto,
-)
 from factgraph.authoring.publish import (
     AuthoringPublishError,
     build_authoring_apply_dry_run_result_dto,
@@ -19,7 +16,6 @@ class AuthoringWorkflowError(Exception):
 __all__ = [
     "AuthoringWorkflowError",
     "build_authoring_publish_workflow_dry_run_bundle_dto",
-    "build_authoring_publish_workflow_apply_bundle_dto",
 ]
 
 
