@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-05-22 | draft | Blueprint created | Docs-only post-Slice-7C scope recorded before cross-doc seam and quickstart edits. |
 | 2026-05-22 | draft | Audit findings folded | A-1 through A-6 identify stale quickstart persistence/rules/namespace-map pages, reference-only cross-doc seam docs, and `registry=None` preservation in evidence docs. |
+| 2026-05-22 | scoped | Scope locked | Quickstart persistence/rules/namespace-map refresh, narrow reference-doc current-truth pointers, and stale module-doc cleanup are in scope; source code and Q-chain decisions remain out of scope. |
 
 ## Decision Notes
 

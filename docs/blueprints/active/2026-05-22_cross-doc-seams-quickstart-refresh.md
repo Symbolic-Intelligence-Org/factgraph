@@ -1,6 +1,6 @@
 # Task Blueprint: Cross-Doc Seams And Quickstart Refresh
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-22
 - Last Updated: 2026-05-22
 - Related Modules:
