@@ -93,8 +93,6 @@ class SDKRegistry:
                 store=store,
                 schema_ir=schema_ir,
                 authoring_schema=authoring_schema,
-                rule_request=None,
-                derivation_request=None,
                 apply_request_id=apply_request_id,
                 transaction_policy=transaction_policy,
             )

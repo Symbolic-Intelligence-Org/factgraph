@@ -569,15 +569,12 @@ Query 参数：
 说明：
 
 - 返回的是当前 session 的 effective rule inventory：
-  - filesystem registry rules（若 `registry_root` 非空）
-  - `RuntimeSession.ephemeral_rules`
-- `source` 取值：
-  - `"fs"`：来自 filesystem registry
-  - `"ephemeral"`：来自当前 session 的临时规则
-  - `"ephemeral_shadowed_by_fs"`：相同 `(rule_id, version)` 同时存在于 session ephemeral 与 filesystem registry；effective 行为仍以 FS rule 为准，因此列表中只出现一次，并显式标记 shadowed 状态
-- `include_spec=false` 只返回 inventory summary，适合 agent/session readback。
-- `include_spec=true` 额外返回规则 body；FS rule body 来自 `FileAuthoringRegistry.read_rule_spec(...)`，ephemeral body 来自当前 session 内存中的 `RuleSpec`。
-- 该 endpoint 不改变 `GET /ephemeral-rules` 的响应结构；后者仍只返回最小 `{rule_id, version}` 列表。
+  - `RuntimeSession.ephemeral_rules`(in-memory `RuleSpec`)
+- Q8 Phase 2(Slice 6)之后,filesystem registry rules 不再被加载;只有 ephemeral rules 出现在此响应中。`fs_count` 字段在响应中保留但永远为 `0`。
+- `source` 取值固定为 `"ephemeral"`。
+- `include_spec=false` 只返回 inventory summary,适合 agent/session readback。
+- `include_spec=true` 额外返回规则 body,来自当前 session 内存中的 `RuleSpec`(`select_vars` / `where` / `expose`)。
+- 该 endpoint 不改变 `GET /ephemeral-rules` 的响应结构;后者仍只返回最小 `{rule_id, version}` 列表。
 
 错误 kinds：
 

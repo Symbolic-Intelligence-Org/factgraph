@@ -261,15 +261,13 @@ def build_authoring_publish_workflow_apply_bundle_dto(
     store: Any | None = None,
     schema_ir: dict[str, Any] | None = None,
     authoring_schema: dict[str, Any] | None = None,
-    rule_request: dict[str, Any] | None = None,
-    derivation_request: dict[str, Any] | None = None,
     apply_request_id: str | None = None,
     transaction_policy: str | None = None,
 ) -> dict[str, Any]:
-    # Q8 Phase 2 (Slice 6): rule_request / derivation_request are no longer
-    # processed. Callers (e.g., SDKRegistry.apply_authoring_bundle) reject
-    # these before reaching here; the kwargs are kept for signature backwards
-    # compat but ignored.
+    # Q8 Phase 2 (Slice 6): `rule_request` / `derivation_request` kwargs were
+    # removed from the signature. Callers (e.g., SDKRegistry.apply_authoring_bundle)
+    # reject those inputs before reaching here. No no-op compatibility shim per
+    # blueprint §5.10.4 + §8 step 9.
     session_dto = build_authoring_session_dto(
         store=store,
         schema_ir=schema_ir,

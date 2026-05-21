@@ -3,16 +3,24 @@
 Extracted from runtime_v1.py to isolate certainty derivation from session
 lifecycle orchestration. This module depends on:
   - core (Store, _certainty_materializer)
-  - authoring (FileAuthoringRegistry)
 It does NOT import runtime_v1 — the callable-based API prevents reverse
 dependency.
+
+Q8 Phase 2 (Slice 6) note:
+  The registry-backed `condition_weights` lookup via
+  ``FileAuthoringRegistry.read_rule_spec(...)`` was removed alongside the
+  SavedRule persistence layer. ``_lookup_condition_weights_for_candidate``
+  now always returns ``None`` because no FS-backed source for
+  ``condition_weights`` survives Phase 2. Eligibility-check structure is
+  preserved as documentation of the dead path; the function returns at the
+  same logical step where the registry read used to occur. Per blueprint
+  §5.10.3 + N-1 family minimum-change scope, no core/store refactor.
 """
 
 from __future__ import annotations
 
 from typing import Any, Callable
 
-from factgraph.authoring.registry_fs import FileAuthoringRegistry
 from factgraph.core.store._certainty_materializer import materialize_certainty_summary
 from factgraph.core.store._confidence_kind_resolver import check_certainty_artifact_eligibility
 from factgraph.core.store.runtime import Store
@@ -40,28 +48,10 @@ def _lookup_condition_weights_for_candidate(
     if edge is None:
         return None
 
-    payload = FileAuthoringRegistry(registry_root).read_rule_spec(
-        edge.rule_ref_id,
-        edge.rule_ref_version,
-    )
-    if not isinstance(payload, dict):
-        return None
-    raw_condition_weights = payload.get("condition_weights")
-    if raw_condition_weights is None:
-        return {}
-    if not isinstance(raw_condition_weights, dict):
-        return None
-    condition_weights: dict[str, float] = {}
-    for key, value in raw_condition_weights.items():
-        if (
-            not isinstance(key, str)
-            or not key
-            or isinstance(value, bool)
-            or not isinstance(value, (int, float))
-        ):
-            return None
-        condition_weights[key] = float(value)
-    return condition_weights
+    # Q8 Phase 2 (Slice 6): FileAuthoringRegistry.read_rule_spec(...) was
+    # removed. No FS-backed source for `condition_weights` exists post-Phase-2,
+    # so the lookup returns None at this point.
+    return None
 
 
 def _compute_certainty_summary_from_tree(
