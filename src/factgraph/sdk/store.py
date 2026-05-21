@@ -43,7 +43,15 @@ from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
 from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
 from factgraph.adapters.souffle.runner import run_package
-from factgraph.core.store.database import AssertionInput, CommitResult, Database
+from factgraph.core.store.database import (
+    AssertionInput,
+    CommitResult,
+    Database,
+    DatabaseError,
+    schema_object_exists_for_workspace,
+    validate_schema_object_for_workspace,
+    write_schema_object_for_workspace,
+)
 from factgraph.core.store.runtime import Store
 from factgraph.core.store.ledger import Ledger
 
@@ -639,23 +647,59 @@ def _resolve_workspace_constructor_paths(
             raise SDKStoreError("registry_root conflicts with workspace path")
         resolved_registry_root = registry_root
     else:
-        resolved_registry_root = expected_registry
+        resolved_registry_root = None
 
     return workspace_path, resolved_ledger_path, resolved_registry_root
 
 
-def _validate_workspace_registry_schema(registry_root: str | Path, expected_digest: str) -> None:
+def _registry_schema_digest(registry_root: str | Path) -> str | None:
     try:
         entry = FileAuthoringRegistry(Path(registry_root)).get_schema_entry()
     except Exception as exc:
         raise SDKStoreError(f"workspace registry schema digest unavailable: {exc}") from exc
     if entry is None:
-        raise SDKStoreError("workspace registry schema digest missing")
+        return None
     actual_digest = entry.get("schema_digest")
+    if not isinstance(actual_digest, str):
+        return None
+    return actual_digest
+
+
+def _validate_legacy_registry_schema(registry_root: str | Path, expected_digest: str) -> bool:
+    actual_digest = _registry_schema_digest(registry_root)
+    if actual_digest is None:
+        return False
     if actual_digest != expected_digest:
         raise SDKStoreError(
             f"workspace schema digest mismatch: registry={actual_digest!r}, expected={expected_digest!r}"
         )
+    return True
+
+
+def _ensure_workspace_schema_object(path: str | Path, schema_ir: dict[str, Any], *, legacy_registry: Path | None) -> None:
+    expected_digest = schema_digest(schema_ir)
+    if schema_object_exists_for_workspace(path, expected_digest):
+        try:
+            validate_schema_object_for_workspace(path, schema_ir)
+        except DatabaseError as exc:
+            raise SDKStoreError(f"workspace schema object invalid: {exc}") from exc
+        if legacy_registry is not None and legacy_registry.exists():
+            registry_digest = _registry_schema_digest(legacy_registry)
+            if registry_digest is not None and registry_digest != expected_digest:
+                raise SDKStoreError(
+                    "workspace schema digest mismatch: "
+                    f"db_object={expected_digest!r}, registry={registry_digest!r}"
+                )
+        return
+
+    if legacy_registry is None or not legacy_registry.exists():
+        raise SDKStoreError("workspace schema object missing")
+    if not _validate_legacy_registry_schema(legacy_registry, expected_digest):
+        raise SDKStoreError("workspace registry schema digest missing")
+    try:
+        write_schema_object_for_workspace(path, schema_ir)
+    except DatabaseError as exc:
+        raise SDKStoreError(f"workspace schema object migration failed: {exc}") from exc
 
 
 class SDKStore:
@@ -786,11 +830,18 @@ class SDKStore:
             ledger_path=ledger_path,
             registry_root=registry_root,
         )
+        schema_ir = compile_schema_from_classes(schema_classes)
+        if workspace_path is not None:
+            try:
+                write_schema_object_for_workspace(workspace_path, schema_ir)
+            except DatabaseError as exc:
+                raise SDKStoreError(f"workspace schema object write failed: {exc}") from exc
         return cls._from_schema_classes_impl(
             schema_classes,
             ledger=ledger,
             ledger_path=resolved_ledger_path,
             artifact_store_root=artifact_store_root,
+            schema_ir=schema_ir,
             registry_root=resolved_registry_root,
             registry=registry,
             workspace_path=workspace_path,
@@ -845,11 +896,11 @@ class SDKStore:
         digest = schema_digest(schema_ir)
         try:
             paths = app_load_workspace(path, schema_digest=digest)
-            _validate_workspace_registry_schema(paths.registry, digest)
+            _ensure_workspace_schema_object(paths.root, schema_ir, legacy_registry=paths.registry)
             return cls._from_schema_classes_impl(
                 schema_classes,
                 ledger=Ledger(path=paths.ledger),
-                registry_root=paths.registry,
+                schema_ir=schema_ir,
                 workspace_path=paths.root,
                 default_row_format=default_row_format,
             )
@@ -899,6 +950,7 @@ class SDKStore:
         ledger: Ledger | None = None,
         ledger_path: str | None = None,
         artifact_store_root: str | None = None,
+        schema_ir: dict[str, Any] | None = None,
         registry_root: str | Path | None = None,
         registry: FileAuthoringRegistry | None = None,
         workspace_path: str | Path | None = None,
@@ -907,7 +959,8 @@ class SDKStore:
         if ledger is not None and ledger_path is not None:
             raise SDKStoreError("provide either ledger or ledger_path, not both")
 
-        schema_ir = compile_schema_from_classes(classes)
+        if schema_ir is None:
+            schema_ir = compile_schema_from_classes(classes)
         digest = schema_digest(schema_ir)
 
         if ledger_path is not None:
@@ -2087,6 +2140,9 @@ class SDKStore:
                 "workspace path not bound; pass fg.save(path=...) or create with FactGraph.create(path=...)"
             )
         try:
+            write_schema_object_for_workspace(workspace_path, self.schema_ir)
+            if self._authoring_registry is not None:
+                self._authoring_registry.upsert_schema_ir(self.schema_ir)
             paths = app_save_workspace(
                 workspace_path,
                 schema_digest=self._schema_digest,
@@ -2099,7 +2155,6 @@ class SDKStore:
                 raise
             raise SDKStoreError(str(exc)) from exc
         self._workspace_path = paths.root
-        self._authoring_registry = FileAuthoringRegistry(paths.registry)
         return {"path": str(paths.root), "manifest": str(paths.manifest)}
 
     @staticmethod
@@ -2529,6 +2584,14 @@ class SDKStore:
                 f"ledger schema_digest mismatch: expected {old_digest!r}, got {ledger_digest!r}"
             )
 
+        if self._workspace_path is not None:
+            if not schema_object_exists_for_workspace(self._workspace_path, old_digest):
+                raise SDKStoreError("workspace schema object missing")
+            try:
+                validate_schema_object_for_workspace(self._workspace_path, self.schema_ir)
+            except DatabaseError as exc:
+                raise SDKStoreError(f"workspace schema object invalid: {exc}") from exc
+
         registry = self._authoring_registry
         if registry is None:
             return
@@ -2551,6 +2614,11 @@ class SDKStore:
         schema_digest_value: str,
     ) -> None:
         self.ledger.replace_ledger_meta("schema_digest", schema_digest_value)
+        if self._workspace_path is not None:
+            try:
+                write_schema_object_for_workspace(self._workspace_path, schema_ir)
+            except DatabaseError as exc:
+                raise SDKStoreError(f"workspace schema object update failed: {exc}") from exc
         registry = self._authoring_registry
         if registry is None:
             return

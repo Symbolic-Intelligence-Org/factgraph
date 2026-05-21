@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from factgraph.core.protocol.digests import sha256_hex
-from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs
+from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
 from factgraph.core.store.database import (
     ASSERTION_V1_PREFIX,
     DBDATA_V1_PREFIX,
@@ -25,7 +25,10 @@ from factgraph.core.store.database import (
     canonical_bytes_dbtx_v1,
     canonical_bytes_view_v1,
     resolve_database_workspace_paths,
+    schema_object_exists_for_workspace,
+    validate_schema_object_for_workspace,
     view_digest_for,
+    write_schema_object_for_workspace,
 )
 from factgraph.core.store.ledger import Ledger, MetaRow, Revokes
 
@@ -174,6 +177,23 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             self.assertEqual(manifest["components"], {"db": "db/", "views": "views/"})
             self.assertNotIn("registry", manifest["components"])
             self.assertNotIn("schema_digest", manifest)
+
+    def test_schema_object_workspace_helpers_write_validate_and_check_existence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            schema_ir = _schema_ir()
+            digest = schema_digest(schema_ir)
+
+            self.assertFalse(schema_object_exists_for_workspace(path, digest))
+            written_digest = write_schema_object_for_workspace(path, schema_ir)
+            validated_digest = validate_schema_object_for_workspace(path, schema_ir)
+
+            self.assertEqual(written_digest, digest)
+            self.assertEqual(validated_digest, digest)
+            self.assertTrue(schema_object_exists_for_workspace(path, digest))
+            paths = resolve_database_workspace_paths(path)
+            schema_path = paths.schema_objects / f"{digest.removeprefix('sha256:')}.json"
+            self.assertEqual(schema_path.read_bytes(), canonicalize_schema_ir_jcs(schema_ir))
 
     def test_database_head_resolves_from_head_tx_object_not_ledger_meta(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

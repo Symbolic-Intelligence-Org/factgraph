@@ -364,22 +364,18 @@ class ApplicationAuthoringRuntimeShellTests(unittest.TestCase):
 
 
 class WorkspaceRegistryLayoutTests(unittest.TestCase):
-    def test_factgraph_save_creates_schema_only_registry(self) -> None:
+    def test_factgraph_save_creates_database_schema_object_without_registry(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
             fg = FactGraph.create(schema_classes=[_UserForPhase2], path=workspace)
             fg.save()
 
-            registry_root = workspace / "registry"
-            self.assertTrue((registry_root / "schema" / "schema_ir.json").is_file())
-            manifest_path = registry_root / "registry_manifest.json"
-            self.assertTrue(manifest_path.is_file())
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            self.assertNotIn("rules", manifest)
-            self.assertNotIn("inferences", manifest)
-            # rules/ and inferences/ directories must NOT be created on fresh save
-            self.assertFalse((registry_root / "rules").exists())
-            self.assertFalse((registry_root / "inferences").exists())
+            manifest = json.loads((workspace / "factgraph_workspace.json").read_text(encoding="utf-8"))
+            self.assertNotIn("registry", manifest["components"])
+            schema_digest = manifest["schema_digest"]
+            schema_object = workspace / "db" / "objects" / "schema" / f"{schema_digest.removeprefix('sha256:')}.json"
+            self.assertTrue(schema_object.is_file())
+            self.assertFalse((workspace / "registry").exists())
 
     def test_factgraph_load_tolerates_pre_phase2_workspace_with_inert_rule_files(self) -> None:
         """Pre-Phase-2 workspaces may have registry/rules/* and registry/inferences/* on

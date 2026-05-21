@@ -575,6 +575,30 @@ def resolve_database_workspace_paths(path: str | Path) -> DatabaseWorkspacePaths
     )
 
 
+def write_schema_object_for_workspace(path: str | Path, schema_ir: dict[str, Any]) -> str:
+    """Write the canonical schema object for a workspace and return its digest."""
+    paths = resolve_database_workspace_paths(path)
+    schema_bytes = canonicalize_schema_ir_jcs(schema_ir)
+    schema_token = compute_schema_digest(schema_ir)
+    _write_schema_object(paths, schema_digest=schema_token, schema_bytes=schema_bytes)
+    return schema_token
+
+
+def validate_schema_object_for_workspace(path: str | Path, schema_ir: dict[str, Any]) -> str:
+    """Validate the canonical schema object for a workspace and return its digest."""
+    paths = resolve_database_workspace_paths(path)
+    schema_bytes = canonicalize_schema_ir_jcs(schema_ir)
+    schema_token = compute_schema_digest(schema_ir)
+    _validate_schema_object(paths, schema_digest=schema_token, expected_bytes=schema_bytes)
+    return schema_token
+
+
+def schema_object_exists_for_workspace(path: str | Path, schema_digest: str) -> bool:
+    """Return whether a workspace contains the schema object for `schema_digest`."""
+    paths = resolve_database_workspace_paths(path)
+    return _schema_object_path(paths, schema_digest).exists()
+
+
 def _is_memory_path(path: str | Path) -> bool:
     return str(path) == ":memory:"
 
@@ -1073,5 +1097,8 @@ __all__ = [
     "canonical_bytes_dbtx_v1",
     "canonical_bytes_view_v1",
     "resolve_database_workspace_paths",
+    "schema_object_exists_for_workspace",
+    "validate_schema_object_for_workspace",
     "view_digest_for",
+    "write_schema_object_for_workspace",
 ]

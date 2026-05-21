@@ -161,12 +161,14 @@ FactGraph.create(
 
 Class-validation errors raise `SDKSchemaError`; constructor-path errors
 raise `SDKStoreError`. `path=` binds the graph to a compact workspace root and
-derives default `ledger.db` / `registry/` component paths. Explicit
+derives the default `ledger.db` component path and Database schema-object
+anchor. Explicit
 `ledger_path=` or `registry_root=` may be supplied with `path=` only when they
-match those workspace defaults. `artifact_store_root` enables sidecar-backed
+match those workspace defaults; `registry_root=` is a legacy/debug schema
+registry bridge, not the live workspace schema anchor. `artifact_store_root` enables sidecar-backed
 explain artifact readback (ignored if a fully constructed `store=` is
 supplied). `registry_root` constructs a file-backed authoring registry for
-`fg.rules.*` / `fg.inferences.*`; `registry` accepts a prebuilt
+schema/apply-log compatibility; `registry` accepts a prebuilt
 `FileAuthoringRegistry`. If both are provided, their roots must match.
 `FactGraph.from_schema_classes(...)` remains available as the lower-level
 class-first constructor name.
@@ -179,9 +181,10 @@ fg.save(path=None)
 `fg.save()` writes the bound workspace. `fg.save(path)` writes and rebinds the
 graph to that workspace. An unbound graph raises
 `SDKStoreError("workspace path not bound; pass fg.save(path=...) or create with FactGraph.create(path=...)")`.
-`FactGraph.load(...)` requires Python schema classes and validates four anchors:
-workspace manifest digest, ledger schema digest, registry schema digest, and
-the digest compiled from the supplied classes.
+`FactGraph.load(...)` requires Python schema classes and validates the workspace
+manifest digest, ledger schema digest, Database schema object, any legacy
+registry schema entry that is still present, and the digest compiled from the
+supplied classes.
 
 Workspace v1 layout:
 
@@ -189,14 +192,19 @@ Workspace v1 layout:
 workspace/
   factgraph_workspace.json
   ledger.db
-  registry/
+  db/
+    objects/
+      schema/
+        <schema-digest>.json
 ```
 
 `factgraph_workspace.json` records `factgraph_workspace_version="1"`,
 `save_scope="level_4"`, `schema_digest`, component paths, and timestamps.
-Level 4 includes the ledger, schema IR, and saved rules/inferences. It excludes
-artifact sidecars, in-memory views, audit/evidence round files, and package
-exports.
+Level 4 includes the ledger and Database schema object. The top-level
+`schema_digest` is a compatibility cross-check; the authoritative schema bytes
+live under `db/objects/schema/`. Level 4 excludes artifact sidecars, in-memory
+views, audit/evidence round files, package exports, saved rules/inferences, and
+new registry content.
 
 ### 2.2 Schema namespace (`fg.schema.*`)
 
@@ -211,8 +219,9 @@ new `Entity` classes and replacement declarations with the same Python class
 name when they add only non-identity fields. It validates that every existing
 entity, identity field, and predicate remains compatible, then updates the
 in-memory graph schema, core store schema, ledger schema digest, and
-graph-bound registry schema entry. If the graph is bound to a workspace, the
-workspace manifest is not rewritten until a later explicit `fg.save(...)`.
+graph-bound registry schema entry if one was explicitly configured. If the graph
+is bound to a workspace, the Database schema object is updated immediately, but
+the workspace manifest is not rewritten until a later explicit `fg.save(...)`.
 
 Field-add uses a replacement class object. After a field-add succeeds, reads
 or writes through superseded entity classes or their descriptors raise

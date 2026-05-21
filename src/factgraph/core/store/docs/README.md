@@ -45,9 +45,10 @@ layout lives under `db/`:
 - `db/assertions.db` remains the SQLite `Ledger` storage substrate and mutable
   assertion index.
 - `factgraph_workspace.json` points to the Database-owned `db/` component and
-  reserves `views/`. Existing `registry/` data is preserved and kept in the
-  manifest during the transition window, but new clean Database workspaces do
-  not create registry content.
+  reserves `views/`. Existing `registry/` data is preserved as inert historical
+  data when present, but new clean Database and SDK workspaces do not create
+  live registry content or use `registry/schema/schema_ir.json` as the schema
+  anchor.
 
 Object and head writes use sibling temporary files followed by `os.replace(...)`
 for per-file atomic replacement. Cross-file atomicity across object, ref, and

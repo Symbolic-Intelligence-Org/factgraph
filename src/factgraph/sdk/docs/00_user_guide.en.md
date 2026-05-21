@@ -111,7 +111,7 @@ fg = FactGraph.create(schema_classes=[User, Document])
 ```
 
 Pass `path=` when the graph should own a durable workspace. A workspace stores
-the ledger, schema IR, and authoring registry together:
+the ledger plus a Database-owned schema object:
 
 ```python
 fg = FactGraph.create(schema_classes=[User, Document], path="./workspace")
@@ -121,8 +121,9 @@ same_graph = FactGraph.load("./workspace", schema_classes=[User, Document])
 ```
 
 `FactGraph.load(...)` requires the same Python `Entity` classes used to create
-the workspace. It validates the manifest, ledger schema digest, registry schema
-digest, and supplied classes before returning a graph.
+the workspace. It validates the manifest, ledger schema digest, Database schema
+object, any legacy registry schema entry that is still present, and supplied
+classes before returning a graph.
 
 You can also compile separately:
 
@@ -963,7 +964,8 @@ candidates = fg.eval.evaluate(my_inference)
 debug code can still import `factgraph.sdk.registry.SDKRegistry`, but the
 registry surface is schema-only (`apply_schema_classes`, `read_manifest`,
 `upsert_schema_ir`, `get_schema_entry`, `list_apply_run_ids`, `list_apply_runs`,
-`show_apply_run`).
+`show_apply_run`). Clean SDK workspaces no longer route their live schema anchor
+through this registry.
 
 The workspace layout is intentionally compact:
 
@@ -971,19 +973,27 @@ The workspace layout is intentionally compact:
 workspace/
   factgraph_workspace.json
   ledger.db
-  registry/
+  db/
+    objects/
+      schema/
+        <schema-digest>.json
 ```
 
 `factgraph_workspace.json` uses version `"1"` and save scope `"level_4"`.
-Level 4 includes ledger data, schema IR, and apply-log history. It does
-not include artifact sidecars, in-memory views, audit/evidence round files, or
-package-export output. Use `fg.package.export_package(...)` when you need a
-distribution/reproduction artifact rather than an editable workspace.
+Level 4 includes ledger data and the Database schema object. The top-level
+`schema_digest` is a compatibility cross-check; the live schema anchor is the
+content-addressed object under `db/objects/schema/`. Level 4 does not include
+artifact sidecars, in-memory views, audit/evidence round files, package-export
+output, or a new `registry/` directory. Use `fg.package.export_package(...)`
+when you need a distribution/reproduction artifact rather than an editable
+workspace.
 
 Old workspaces written before Q8 Phase 2 may contain `registry/rules/` and
 `registry/inferences/` directories on disk; those files are inert post-Phase-2
 (no SDK code reads them) and are tolerated for read-only manifest
-back-compat.
+back-compat. Old workspaces with `registry/schema/schema_ir.json` are copied
+forward into `db/objects/schema/<digest>.json` on load; the original registry
+file is not deleted.
 
 See [`04_api_surface.en.md`](04_api_surface.en.md#27-rules-namespace-fgrules)
 for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.

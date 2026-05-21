@@ -58,7 +58,8 @@ def workspace_manifest_payload(
         "schema_digest": schema_digest,
         "components": {
             "ledger": WORKSPACE_LEDGER,
-            "registry": WORKSPACE_REGISTRY,
+            "db": "db/",
+            "views": "views/",
         },
         "created_at": created_at or now,
         "last_saved_at": last_saved_at or now,
@@ -104,7 +105,8 @@ def validate_workspace_manifest(
         raise WorkspaceRuntimeError("workspace manifest components must be object")
     if components.get("ledger") != WORKSPACE_LEDGER:
         raise WorkspaceRuntimeError("workspace manifest ledger component mismatch")
-    if components.get("registry") != WORKSPACE_REGISTRY:
+    registry_component = components.get("registry")
+    if registry_component is not None and registry_component != WORKSPACE_REGISTRY:
         raise WorkspaceRuntimeError("workspace manifest registry component mismatch")
     manifest_digest = payload.get("schema_digest")
     if not isinstance(manifest_digest, str) or not manifest_digest:
@@ -168,21 +170,18 @@ def save_workspace(
     paths = resolve_workspace_paths(path)
     paths.root.mkdir(parents=True, exist_ok=True)
     copy_ledger_to_workspace(ledger=ledger, target_path=paths.ledger)
-    sync_registry_to_workspace(
-        source_registry=source_registry,
-        target_registry=FileAuthoringRegistry(paths.registry),
-        schema_ir=schema_ir,
-    )
     save_workspace_manifest(paths.root, schema_digest=schema_digest)
     return paths
 
 
 def load_workspace(path: str | Path, *, schema_digest: str) -> WorkspacePaths:
     paths = resolve_workspace_paths(path)
-    validate_workspace_manifest(paths.root, schema_digest=schema_digest)
+    manifest = validate_workspace_manifest(paths.root, schema_digest=schema_digest)
     if not paths.ledger.exists():
         raise WorkspaceRuntimeError("workspace ledger component missing")
-    if not paths.registry.exists():
+    components = manifest.get("components")
+    registry_component = components.get("registry") if isinstance(components, dict) else None
+    if registry_component == WORKSPACE_REGISTRY and not paths.registry.exists():
         raise WorkspaceRuntimeError("workspace registry component missing")
     return paths
 

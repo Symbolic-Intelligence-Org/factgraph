@@ -77,8 +77,10 @@ It is not responsible for:
     the module is now a forward-compat shell preserving only the error class.
 - `workspace_runtime.py`
   - FactGraph workspace layout authority: v1 manifest construction/validation,
-    `ledger.db` backup/checkpoint, registry sync/copy, and component path
-    resolution for `fg.save(...)` / `FactGraph.load(...)`.
+    `ledger.db` backup/checkpoint, and component path resolution for
+    `fg.save(...)` / `FactGraph.load(...)`. Clean SDK workspaces no longer use
+    `registry/` as the live schema anchor; the SDK writes schema bytes to the
+    Database schema-object location.
 - `schema_mutation_runtime.py`
   - additive schema-extension authority for `fg.schema.add(...)`: validates
     that existing entities and predicates are preserved, plans the next schema

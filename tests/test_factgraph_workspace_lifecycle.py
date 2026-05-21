@@ -9,6 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
+from factgraph.authoring.registry_fs import FileAuthoringRegistry
 from factgraph.adapters.souffle.package import ExportOptions
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.schema.schema_ir import schema_digest
@@ -19,6 +20,7 @@ from factgraph.sdk import (
     Pred,
     Rule,
     SDKStore,
+    compile_schema_from_classes,
     vars as sdk_vars,
 )
 from factgraph.sdk.store import SDKStoreError
@@ -88,6 +90,10 @@ def _read_manifest(workspace: Path) -> dict[str, object]:
     return json.loads((workspace / "factgraph_workspace.json").read_text(encoding="utf-8"))
 
 
+def _schema_object_file(workspace: Path, digest: str) -> Path:
+    return workspace / "db" / "objects" / "schema" / f"{digest.removeprefix('sha256:')}.json"
+
+
 class WorkspaceCreatePathTests(unittest.TestCase):
     def test_factgraph_create_accepts_path_and_binds_workspace(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -98,6 +104,12 @@ class WorkspaceCreatePathTests(unittest.TestCase):
 
             self.assertIsInstance(fg, FactGraph)
             self.assertTrue((workspace / "factgraph_workspace.json").exists())
+            manifest = _read_manifest(workspace)
+            self.assertEqual(manifest["components"]["ledger"], "ledger.db")
+            self.assertEqual(manifest["components"]["db"], "db/")
+            self.assertEqual(manifest["components"]["views"], "views/")
+            self.assertNotIn("registry", manifest["components"])
+            self.assertTrue(_schema_object_file(workspace, schema_digest(fg.schema_ir)).is_file())
 
     def test_create_rejects_path_with_different_ledger_path(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -192,23 +204,21 @@ class WorkspaceSaveTests(unittest.TestCase):
         self.assertEqual(manifest["save_scope"], "level_4")
         self.assertEqual(manifest["schema_digest"], schema_digest(fg.schema_ir))
         self.assertEqual(manifest["components"]["ledger"], "ledger.db")
-        self.assertEqual(manifest["components"]["registry"], "registry/")
+        self.assertEqual(manifest["components"]["db"], "db/")
+        self.assertEqual(manifest["components"]["views"], "views/")
+        self.assertNotIn("registry", manifest["components"])
         self.assertIsInstance(manifest["created_at"], str)
         self.assertIsInstance(manifest["last_saved_at"], str)
 
-    def test_registryless_save_creates_empty_registry_with_schema_only(self) -> None:
+    def test_registryless_save_creates_db_schema_object_without_registry(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg()
 
             fg.save(workspace)
 
-            registry = workspace / "registry"
-            manifest = json.loads((registry / "registry_manifest.json").read_text(encoding="utf-8"))
-            self.assertTrue((registry / "schema" / "schema_ir.json").is_file())
-            self.assertIn("schema", manifest)
-            # Q8 Phase 2 (Slice 6): manifest no longer writes `rules` / `inferences`
-            # keys; the schema-only registry is the post-Phase-2 shape.
+            self.assertFalse((workspace / "registry").exists())
+            self.assertTrue(_schema_object_file(workspace, schema_digest(fg.schema_ir)).is_file())
 
     def test_repeated_save_is_idempotent_and_loadable(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -236,6 +246,8 @@ class WorkspaceSaveTests(unittest.TestCase):
 
             loaded = FactGraph.load(second_workspace, schema_classes=[User])
             self.assertTrue((second_workspace / "ledger.db").exists())
+            self.assertFalse((second_workspace / "registry").exists())
+            self.assertTrue(_schema_object_file(second_workspace, schema_digest(fg.schema_ir)).is_file())
         self.assertIsNotNone(loaded.get(User, user_id="Alice"))
 
     # Q8 Phase 2 (Slice 6): test_save_syncs_separate_registry_root_into_workspace
@@ -281,6 +293,36 @@ class WorkspaceLoadTests(unittest.TestCase):
                 FactGraph.load(workspace, schema_classes=[User])
 
         self.assertIn("factgraph_workspace.json", str(ctx.exception))
+
+    def test_factgraph_load_migrates_legacy_registry_schema_to_db_schema_object(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "workspace"
+            registry_root = workspace / "registry"
+            fg = FactGraph.create(schema_classes=[User], path=workspace, registry_root=registry_root)
+            fg.save()
+            digest = schema_digest(fg.schema_ir)
+            schema_object = _schema_object_file(workspace, digest)
+            schema_object.unlink()
+
+            loaded = FactGraph.load(workspace, schema_classes=[User])
+            self.assertTrue(schema_object.is_file())
+
+        self.assertIsNotNone(loaded)
+
+    def test_factgraph_load_rejects_legacy_registry_conflicting_with_db_schema_object(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "workspace"
+            registry_root = workspace / "registry"
+            fg = FactGraph.create(schema_classes=[User], path=workspace, registry_root=registry_root)
+            fg.save()
+
+            FileAuthoringRegistry(registry_root).upsert_schema_ir(compile_schema_from_classes([Account]))
+
+            with self.assertRaises(SDKStoreError) as ctx:
+                FactGraph.load(workspace, schema_classes=[User])
+
+        self.assertIn("workspace schema digest mismatch", str(ctx.exception))
+        self.assertIn("registry", str(ctx.exception))
 
 
 class ApplicationWorkspaceRuntimeTests(unittest.TestCase):

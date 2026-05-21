@@ -284,18 +284,21 @@ written on save.
 ### 7.3 Consumption by SDK / service
 
 - `FactGraph.create(..., path=...)` binds the graph to a workspace root. The
-  workspace owns `ledger.db`, `factgraph_workspace.json`, and a nested
-  `registry/` directory (schema-only after Phase 2). `fg.save()` synchronizes
-  the graph into that layout, while `FactGraph.load(path, schema_classes=[...])`
-  restores it with explicit schema-class validation. Construct `Rule(...)` and
-  `Inference(...)` in memory each session.
+  workspace owns `ledger.db`, `factgraph_workspace.json`, and the Database schema
+  object under `db/objects/schema/<digest>.json`. Clean SDK workspaces no longer
+  create or write a live `registry/` schema anchor. `FactGraph.load(path,
+  schema_classes=[...])` restores the graph with explicit schema-class
+  validation and can copy a legacy `registry/schema/schema_ir.json` anchor into
+  the Database schema-object location without deleting the old file. Construct
+  `Rule(...)` and `Inference(...)` in memory each session.
 - `factgraph.application.authoring_runtime` is now a forward-compat shell:
   Q8 Phase 2 removed the save/load/list/get orchestration; only the
   `AuthoringRuntimeError` class remains.
-- `factgraph.application.workspace_runtime` owns workspace layout, manifest
-  validation, ledger backup/checkpoint behavior, and registry sync/copy
-  orchestration. It deliberately does not include artifact sidecars, in-memory
-  views, audit/evidence round files, or package export output.
+- `factgraph.application.workspace_runtime` owns workspace manifest validation
+  and ledger backup/checkpoint behavior. It keeps registry-copy helpers only for
+  legacy/debug compatibility; live SDK schema anchors are Database schema
+  objects. It deliberately does not include artifact sidecars, in-memory views,
+  audit/evidence round files, or package export output.
 - `factgraph.sdk.registry.SDKRegistry` is an advanced/internal wrapper around
   the schema-only `FileAuthoringRegistry`. It rejects `rule_request` /
   `derivation_request` arguments in `apply_authoring_bundle(...)`.
