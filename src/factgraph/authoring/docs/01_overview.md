@@ -240,15 +240,21 @@ These examples are compiler-facing payloads, so they intentionally use
 ## 6. Registry file layout
 
 `FileAuthoringRegistry(root_dir=...)` uses the filesystem to store
-authoring assets. After Q8 Phase 2 (Slice 6) the layout is schema-only:
+legacy authoring assets. After Q8 Phase 2 (Slice 6) and A20(E) registry
+final-exit, the layout is schema/apply-log only:
 
 ```text
 root_dir/
   schema/
     schema_ir.json
   registry_manifest.json
-  authoring_apply_events.jsonl
+  authoring_apply_events.jsonl        # non-workspace legacy roots only
 ```
+
+For workspace registries (`<workspace>/registry`), new apply-log writes go to
+`<workspace>/db/audit/authoring_apply_events.jsonl`. Readers check that path and
+then the historical `registry/authoring_apply_events.jsonl` path for backward
+compatibility.
 
 These files form an **authoring asset repository**, not a runtime
 database.
@@ -299,11 +305,12 @@ written on save.
   legacy/debug compatibility; live SDK schema anchors are Database schema
   objects. It deliberately does not include artifact sidecars, in-memory views,
   audit/evidence round files, or package export output.
-- `factgraph.sdk.registry.SDKRegistry` is an advanced/internal wrapper around
-  the schema-only `FileAuthoringRegistry`. It rejects `rule_request` /
-  `derivation_request` arguments in `apply_authoring_bundle(...)`.
-- `service.registry_v1` exposes the schema/manifest/apply-log routes over HTTP.
-  The rule/inference read routes return removed envelopes.
+- `factgraph.sdk.registry.SDKRegistry` is an advanced/internal legacy adapter
+  around the schema/apply-log-only `FileAuthoringRegistry`. It rejects
+  `rule_request` / `derivation_request` arguments in
+  `apply_authoring_bundle(...)`.
+- `service.registry_v1` no longer exposes live registry read data; all
+  `/v1/registry/*` read routes return removed envelopes.
 - `service.runtime_v1` reads schemas from the registry to support runtime
   sessions. Runtime rule registration uses in-memory ephemeral rules only;
   FS-saved rule loading was removed in Slice 6.

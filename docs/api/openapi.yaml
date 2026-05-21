@@ -655,11 +655,11 @@ paths:
         "401": { $ref: "#/components/responses/UnauthorizedError" }
         "503": { $ref: "#/components/responses/AuthNotConfiguredError" }
 
-  # ── registry (read-only) ───────────────────────────────────────────────
+  # ── registry (removed envelopes) ───────────────────────────────────────
   /v1/registry/manifest:
     post:
       tags: [registry]
-      summary: Read the manifest for a registry root.
+      summary: Removed by A20(E) registry final exit; returns a removed envelope.
       requestBody:
         required: true
         content:
@@ -677,7 +677,7 @@ paths:
   /v1/registry/schema/read:
     post:
       tags: [registry]
-      summary: Read the schema IR from a registry root.
+      summary: Removed by A20(E) registry final exit; returns a removed envelope.
       requestBody:
         required: true
         content:
@@ -691,7 +691,7 @@ paths:
   /v1/registry/assets/list:
     post:
       tags: [registry]
-      summary: List registered assets in a registry root.
+      summary: Removed by A20(E) registry final exit; returns a removed envelope.
       requestBody:
         required: true
         content:
@@ -705,7 +705,7 @@ paths:
   /v1/registry/rules/read:
     post:
       tags: [registry]
-      summary: Read one rule spec from a registry root.
+      summary: Removed by Q8 Phase 2 / A20(E); returns a removed envelope.
       requestBody:
         required: true
         content:
@@ -719,7 +719,7 @@ paths:
   /v1/registry/inferences/read:
     post:
       tags: [registry]
-      summary: Read one inference spec from a registry root.
+      summary: Removed by Q8 Phase 2 / A20(E); returns a removed envelope.
       requestBody:
         required: true
         content:

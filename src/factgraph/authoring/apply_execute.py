@@ -17,7 +17,11 @@ from factgraph.authoring.publish import (
     build_authoring_apply_dry_run_result_dto,
     build_authoring_publish_plan_dto,
 )
-from factgraph.authoring.registry_fs import AuthoringRegistryFSError, FileAuthoringRegistry
+from factgraph.authoring.registry_fs import (
+    AuthoringRegistryFSError,
+    FileAuthoringRegistry,
+    resolve_apply_log_write_path,
+)
 from factgraph.authoring.schema_compile import AuthoringSchemaCompileError, compile_authoring_schema_v1
 from factgraph.authoring.session import build_authoring_session_dto
 from factgraph.core.protocol.digests import sha256_token
@@ -29,6 +33,16 @@ class AuthoringApplyExecuteError(Exception):
 
 TRANSACTION_POLICY_V1 = "best_effort_no_rollback_v1"
 TRANSACTION_POLICY_V2_STRICT = "prevalidate_no_partial_strict_v2"
+
+
+def _append_apply_event(registry: FileAuthoringRegistry, event: dict[str, Any]) -> None:
+    if not isinstance(event, dict):
+        raise AuthoringRegistryFSError("event must be object")
+    path = resolve_apply_log_write_path(registry.root_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(event, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+        fh.write("\n")
 
 
 def build_authoring_apply_execute_result_dto(
@@ -239,7 +253,8 @@ def build_authoring_apply_execute_result_dto(
             "warning_count": len(warnings),
         },
     }
-    registry.append_apply_event(
+    _append_apply_event(
+        registry,
         {
             "kind": "authoring_apply_execute_run",
             "apply_request_id": apply_request_id,
@@ -250,7 +265,7 @@ def build_authoring_apply_execute_result_dto(
             "idempotency": result["idempotency"],
             "transaction": result["transaction"],
             "summary": result["summary"],
-        }
+        },
     )
     return result
 
@@ -421,7 +436,8 @@ def _execute_action(
             )
         ]
         out["reason_code"] = CODE_APPLY_BLOCKED_ACTION
-        registry.append_apply_event(
+        _append_apply_event(
+            registry,
             {
                 "kind": "authoring_apply_execute_action",
                 "action_id": out.get("action_id"),
@@ -439,13 +455,14 @@ def _execute_action(
                 },
                 "diagnostics": _json_safe(out.get("diagnostics") or []),
                 "apply_request_id": out.get("apply_request_id"),
-            }
+            },
         )
         return out
 
     out["status"] = str(backend_result.get("status", "applied"))
     out["backend_result"] = _json_safe(backend_result)
-    registry.append_apply_event(
+    _append_apply_event(
+        registry,
         {
             "kind": "authoring_apply_execute_action",
             "action_id": out.get("action_id"),
@@ -454,7 +471,7 @@ def _execute_action(
             "status": out.get("status"),
             "backend_result": out.get("backend_result"),
             "apply_request_id": out.get("apply_request_id"),
-        }
+        },
     )
     return out
 

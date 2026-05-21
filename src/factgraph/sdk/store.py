@@ -595,6 +595,8 @@ def _resolve_authoring_registry(
     registry_root: str | Path | None,
     registry: FileAuthoringRegistry | None,
 ) -> FileAuthoringRegistry | None:
+    if registry_root is not None:
+        _warn_registry_root_deprecated()
     if registry is not None and not isinstance(registry, FileAuthoringRegistry):
         raise SDKStoreError("registry must be FileAuthoringRegistry")
     if registry is not None and registry_root is not None:
@@ -607,6 +609,23 @@ def _resolve_authoring_registry(
     if registry_root is not None:
         return FileAuthoringRegistry(Path(registry_root))
     return None
+
+
+_REGISTRY_ROOT_DEPRECATION_MESSAGE = (
+    "FactGraph.create(..., registry_root=...) is deprecated and will be "
+    "removed in a future slice. The workspace schema anchor lives at "
+    "db/objects/schema/<digest>.json per Slice 7A;legacy registry/ "
+    "surface is no longer the workspace authority. Pass workspace path "
+    "via `path=` only;avoid explicit registry_root=."
+)
+
+
+def _warn_registry_root_deprecated() -> None:
+    warnings.warn(
+        _REGISTRY_ROOT_DEPRECATION_MESSAGE,
+        DeprecationWarning,
+        stacklevel=4,
+    )
 
 
 def _normalize_workspace_path(path: str | Path | None) -> Path | None:

@@ -51,7 +51,10 @@ It is not responsible for:
   - writes the optional `audit/round_events.jsonl` inside the audit package
   - buffered by default; `finalize_round(...)` lands atomically via tempfile + `os.replace`
 - `load_authoring_apply_events(...)`
-  - reads the authoring apply event log
+  - reads the authoring apply event log; workspace registry inputs read
+    `db/audit/authoring_apply_events.jsonl` with legacy
+    `registry/authoring_apply_events.jsonl` fallback, while audit package
+    inputs keep the historical package-local path
 - `EvidenceGraph` / `EvidenceNode` / `EvidenceEdge`
   - the audit-layer unified explainability DTO
   - `render_evidence_graph_html(...)` standalone HTML fragment renderer

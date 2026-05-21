@@ -164,8 +164,9 @@ raise `SDKStoreError`. `path=` binds the graph to a compact workspace root and
 derives the default `ledger.db` component path and Database schema-object
 anchor. Explicit
 `ledger_path=` or `registry_root=` may be supplied with `path=` only when they
-match those workspace defaults; `registry_root=` is a legacy/debug schema
-registry bridge, not the live workspace schema anchor. `artifact_store_root` enables sidecar-backed
+match those workspace defaults; `registry_root=` is deprecated and remains only
+as a legacy/debug schema registry bridge, not the live workspace schema anchor.
+`artifact_store_root` enables sidecar-backed
 explain artifact readback (ignored if a fully constructed `store=` is
 supplied). `registry_root` constructs a file-backed authoring registry for
 schema/apply-log compatibility; `registry` accepts a prebuilt

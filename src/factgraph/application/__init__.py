@@ -71,7 +71,6 @@ from .workspace_runtime import (
     resolve_workspace_paths,
     save_workspace,
     save_workspace_manifest,
-    sync_registry_to_workspace,
     validate_workspace_manifest,
     workspace_manifest_payload,
 )
@@ -187,7 +186,6 @@ __all__ = [
     "save_workspace",
     "save_workspace_manifest",
     "resolve_selector",
-    "sync_registry_to_workspace",
     "validate_workspace_manifest",
     "workspace_manifest_payload",
 ]

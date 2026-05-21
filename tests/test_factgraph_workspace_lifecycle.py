@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+import warnings
 
 from factgraph.authoring.registry_fs import FileAuthoringRegistry
 from factgraph.adapters.souffle.package import ExportOptions
@@ -131,12 +132,14 @@ class WorkspaceCreatePathTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             other_registry = Path(tmp_dir) / "other-registry"
 
-            with self.assertRaises(SDKStoreError) as ctx:
-                FactGraph.create(
-                    schema_classes=[User],
-                    path=workspace,
-                    registry_root=other_registry,
-                )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                with self.assertRaises(SDKStoreError) as ctx:
+                    FactGraph.create(
+                        schema_classes=[User],
+                        path=workspace,
+                        registry_root=other_registry,
+                    )
 
         self.assertIn("registry_root", str(ctx.exception))
         self.assertIn("workspace", str(ctx.exception))
@@ -147,12 +150,13 @@ class WorkspaceCreatePathTests(unittest.TestCase):
             ledger_path = workspace / "ledger.db"
             registry_root = workspace / "registry"
 
-            fg = FactGraph.create(
-                schema_classes=[User],
-                path=workspace,
-                ledger_path=str(ledger_path),
-                registry_root=registry_root,
-            )
+            with self.assertWarnsRegex(DeprecationWarning, "registry_root"):
+                fg = FactGraph.create(
+                    schema_classes=[User],
+                    path=workspace,
+                    ledger_path=str(ledger_path),
+                    registry_root=registry_root,
+                )
             fg.save()
 
             self.assertTrue((workspace / "ledger.db").exists())

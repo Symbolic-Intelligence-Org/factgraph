@@ -961,11 +961,10 @@ candidates = fg.eval.evaluate(my_inference)
 ```
 
 `SDKRegistry` is no longer part of `factgraph.sdk.__all__`. Advanced migration or
-debug code can still import `factgraph.sdk.registry.SDKRegistry`, but the
-registry surface is schema-only (`apply_schema_classes`, `read_manifest`,
-`upsert_schema_ir`, `get_schema_entry`, `list_apply_run_ids`, `list_apply_runs`,
-`show_apply_run`). Clean SDK workspaces no longer route their live schema anchor
-through this registry.
+debug code can still import `factgraph.sdk.registry.SDKRegistry` as a legacy
+schema/apply-log adapter, but clean SDK workspaces no longer route their live
+schema anchor through this registry. Explicit `registry_root=` constructor usage
+is deprecated; pass `path=` for workspace persistence.
 
 The workspace layout is intentionally compact:
 
@@ -994,6 +993,11 @@ Old workspaces written before Q8 Phase 2 may contain `registry/rules/` and
 back-compat. Old workspaces with `registry/schema/schema_ir.json` are copied
 forward into `db/objects/schema/<digest>.json` on load; the original registry
 file is not deleted.
+
+Authoring apply logs for workspace registries are written to
+`db/audit/authoring_apply_events.jsonl`; readers also tolerate the historical
+`registry/authoring_apply_events.jsonl` path. The service `/v1/registry/*`
+read endpoints now return removed envelopes.
 
 See [`04_api_surface.en.md`](04_api_surface.en.md#27-rules-namespace-fgrules)
 for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.

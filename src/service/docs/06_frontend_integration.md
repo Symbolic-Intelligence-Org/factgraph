@@ -157,12 +157,14 @@ for (const candidate of r.result.candidates) {
 ### 1.4 Chain D:registry 只读查询(schema/apply-log only)
 
 ```ts
-const manifest = (await post("/v1/registry/manifest", { root_dir: "/srv/registry" })).manifest;
-const schema = (await post("/v1/registry/schema/read", { root_dir: "/srv/registry" })).schema_ir;
-const assets = (await post("/v1/registry/assets/list", { root_dir: "/srv/registry" })).registry;
-// assets = { schema_entry: {...}, apply_run_ids: [...] }
-// Q8 Phase 2 已移除 SavedRule/SavedInference 持久化:
-//   POST /v1/registry/rules/read 与 /inferences/read 均返回 removed envelope
+const removed = await post("/v1/registry/schema/read", { root_dir: "/srv/registry" });
+// A20(E) registry final-exit:
+//   /v1/registry/manifest
+//   /v1/registry/schema/read
+//   /v1/registry/assets/list
+//   /v1/registry/rules/read
+//   /v1/registry/inferences/read
+// all return removed envelopes.
 ```
 
 完整 DTO:[`04_rules_registry.md`](./04_rules_registry.md)。

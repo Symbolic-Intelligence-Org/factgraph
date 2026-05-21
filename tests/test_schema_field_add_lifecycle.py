@@ -8,6 +8,7 @@ from dataclasses import fields
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+import warnings
 
 from factgraph.authoring.registry_fs import FileAuthoringRegistry
 from factgraph.core.evidence.write_protocol import set_field
@@ -141,7 +142,9 @@ def _seed_fg(*, registry_root: Path | None = None, path: Path | None = None):
     if path is not None:
         kwargs["path"] = path
     User = _user_class()
-    fg = FactGraph.create(schema_classes=[User], **kwargs)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        fg = FactGraph.create(schema_classes=[User], **kwargs)
     alice_ref = fg.ref(User, user_id="u-1")
     set_field(
         fg.ledger,

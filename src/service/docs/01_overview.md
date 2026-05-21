@@ -122,9 +122,13 @@ Round Story Completion routemap(Batch 3-7)新增的 application + audit-layer ca
 
 - `POST /v1/registry/manifest`
 - `POST /v1/registry/schema/read`
-- `POST /v1/registry/assets/list`(schema/apply-log only — `rule_ids` / `inference_ids` fields removed by Q8 Phase 2)
-- `POST /v1/registry/rules/read`(返回 removed envelope — Q8 Phase 2 移除 SavedRule 持久化)
-- `POST /v1/registry/inferences/read`(返回 removed envelope — Q8 Phase 2 移除 SavedInference 持久化)
+- `POST /v1/registry/assets/list`
+- `POST /v1/registry/rules/read`
+- `POST /v1/registry/inferences/read`
+
+以上 `/v1/registry/*` 端点均返回 removed envelope。Q8 Phase 2 已移除
+SavedRule/SavedInference 持久化;A20(E) registry final-exit 进一步移除
+schema/manifest/assets 的 live service registry read surface。
 
 注:文档抽取 HTTP surface 已不在本 service 内,迁至 `agent.service.app`。
 

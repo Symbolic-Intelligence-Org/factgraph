@@ -208,150 +208,16 @@
 - 当前 service v1 只暴露 `default` 和 `souffle_strict` 两个 profile。
 - 该端点不返回 `meta` 字段；结构与 rules validate/preview 略有不同，客户端应按端点 contract 处理。
 
-## 4. `POST /v1/registry/manifest`
+## 4. `POST /v1/registry/*`（A20(E) registry final-exit 已移除）
 
-请求：
+A20(E) registry final-exit 后，下列 registry read routes 仍注册在 service v1
+中，但全部返回 removed envelope：
 
-```json
-{
-  "root_dir": "/tmp/registry"
-}
-```
-
-成功响应：
-
-```json
-{
-  "ok": true,
-  "errors": [],
-  "meta": {},
-  "manifest": {
-    "authoring_registry_fs_version": "authoring_registry_fs_v1",
-    "schema": {
-      "path": "schema/schema_ir.json",
-      "schema_digest": "sha256:abc",
-      "bytes_digest": "sha256:def"
-    },
-    "rules": [
-      {
-        "rule_id": "q_country_rows",
-        "version": "1.0.0",
-        "path": "rules/q_country_rows/1.0.0.json",
-        "digest": "sha256:aaa"
-      }
-    ],
-    "inferences": [
-      {
-        "inference_id": "drv.country_copy",
-        "version": "1.0.0",
-        "path": "inferences/drv.country_copy/1.0.0.json",
-        "digest": "sha256:bbb",
-        "target_pred_id": "person:country"
-      }
-    ]
-  }
-}
-```
-
-说明：
-
-- 该端点直接返回 registry manifest 文件内容。
-- 如果 manifest 文件不存在，底层 registry 会返回默认空 manifest，而不是报错。
-
-错误 kinds：
-
-- `shape`
-- `runtime`
-
-## 5. `POST /v1/registry/schema/read`
-
-请求：
-
-```json
-{
-  "root_dir": "/tmp/registry"
-}
-```
-
-成功响应：
-
-```json
-{
-  "ok": true,
-  "errors": [],
-  "meta": {},
-  "schema_ir": {
-    "schema_ir_version": "v1",
-    "entities": [],
-    "predicates": [],
-    "projection": {
-      "entities": [],
-      "predicates": []
-    },
-    "protocol_version": {
-      "idref_v1": "idref_v1",
-      "tup_v1": "tup_v1",
-      "export_v1": "export_v1"
-    },
-    "generated_at": "2026-01-01T00:00:00Z"
-  }
-}
-```
-
-说明：
-
-- `schema/read` 不经过 runtime session；它只根据 `root_dir` 读取 registry manifest 中登记的 schema 文件。
-- 这也是 runtime session `open` 在传 `registry_root` 时复用的 schema 加载路径。
-
-错误 kinds：
-
-- `shape`
-- `registry_schema_missing`
-- `registry_schema_manifest_entry_invalid`
-- `registry_schema_read_failed`
-- `registry_schema_invalid`
-
-## 6. `POST /v1/registry/assets/list`
-
-请求：
-
-```json
-{
-  "root_dir": "/tmp/registry"
-}
-```
-
-成功响应（Q8 Phase 2 schema-only 形态）：
-
-```json
-{
-  "ok": true,
-  "errors": [],
-  "meta": {},
-  "registry": {
-    "schema_entry": {"schema_id": "demo", "version": "1.0.0", "digest": "..."},
-    "apply_run_ids": ["apply-1"]
-  }
-}
-```
-
-说明：
-
-- `assets/list` 现在只返回 schema entry 与 apply-log run id 列表。
-- `rule_ids` / `inference_ids` 字段在 Q8 Phase 2（Slice 6）随 SavedRule
-  持久化层一同移除，并未保留为永久空列表的兼容字段。
-- `apply_run_ids` 来自 `authoring_apply_execute_run` 事件日志的
-  latest-by-request 视图。
-
-错误 kinds：
-
-- `shape`
-- `runtime`
-
-## 7. `POST /v1/registry/rules/read`（Q8 Phase 2 已移除）
-
-Q8 Phase 2（Slice 6）移除了 SavedRule 持久化层。该路由依旧存在，但永远返回
-removed envelope：
+- `POST /v1/registry/manifest`
+- `POST /v1/registry/schema/read`
+- `POST /v1/registry/assets/list`
+- `POST /v1/registry/rules/read`
+- `POST /v1/registry/inferences/read`
 
 ```json
 {
@@ -361,7 +227,7 @@ removed envelope：
       "kind": "removed",
       "path": "$",
       "details": {
-        "message": "registry-backed SavedRule/SavedInference persistence was removed by Q8 Phase 2; use in-memory Rule(...) / Inference(...) instead of registry-backed reads"
+        "message": "registry-backed authoring APIs were removed by A20(E) registry final exit; use FactGraph workspace APIs and in-memory Rule(...) / Inference(...) values instead of registry-backed service reads"
       }
     }
   ],
@@ -369,36 +235,17 @@ removed envelope：
 }
 ```
 
-迁移方法：客户端构造 in-memory `Rule(...)` 并在 runtime session 内通过
-`/v1/runtime/sessions/{session_id}/ephemeral-rules` 注册 ephemeral rule，
-然后调用 `/rules/run`。
+迁移方法：
 
-## 8. `POST /v1/registry/inferences/read`（Q8 Phase 2 已移除）
-
-Q8 Phase 2（Slice 6）移除了 SavedInference 持久化层。该路由依旧存在，但永远
-返回 removed envelope：
-
-```json
-{
-  "ok": false,
-  "errors": [
-    {
-      "kind": "removed",
-      "path": "$",
-      "details": {
-        "message": "registry-backed SavedRule/SavedInference persistence was removed by Q8 Phase 2; use in-memory Rule(...) / Inference(...) instead of registry-backed reads"
-      }
-    }
-  ],
-  "meta": {}
-}
-```
-
-迁移方法：客户端构造 in-memory `Inference(...)` 并直接调用
-`/v1/runtime/sessions/{session_id}/inferences/evaluate`（请求 body 中携带
-`inference` payload）。registry 文件布局在 Q8 Phase 2 之后是 schema-only。
-旧工作区的 `registry/rules/` / `registry/inferences/` / `registry/derivations/`
-目录会被忽略，不再被读取。
+- schema/workspace 读取走 `FactGraph.load(...)` / workspace APIs。
+- 客户端构造 in-memory `Rule(...)` 并在 runtime session 内通过
+  `/v1/runtime/sessions/{session_id}/ephemeral-rules` 注册 ephemeral rule，
+  然后调用 `/rules/run`。
+- 客户端构造 in-memory `Inference(...)` 并直接调用
+  `/v1/runtime/sessions/{session_id}/inferences/evaluate`。
+- authoring apply-log 对 workspace registry 写到
+  `db/audit/authoring_apply_events.jsonl`;audit readers 仍兼容历史
+  `registry/authoring_apply_events.jsonl`。
 
 ## 相关文档
 

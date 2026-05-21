@@ -24,7 +24,7 @@ _SAVEDRULE_PHASE2_REMOVED_MESSAGE = (
 
 
 class SDKRegistry:
-    """Schema-only registry facade after Q8 Phase 2 removal (Slice 6).
+    """Legacy schema-only registry adapter after A20(E) registry final exit.
 
     Rule/inference persistence methods (``register_rule_spec`` /
     ``register_rule`` / ``register_inference_spec`` / ``register_inference`` /
@@ -34,7 +34,8 @@ class SDKRegistry:
     were removed entirely. ``apply_authoring_bundle(...)`` continues to accept
     ``authoring_schema=`` but rejects ``rule_request=`` / ``derivation_request=``
     with ``SDKRegistryError``. Schema persistence, manifest read, and apply-log
-    audit methods are preserved per Q6 schema-only transition.
+    audit methods are preserved for explicit legacy-adapter callers; FactGraph
+    workspace lifecycle no longer routes through this adapter.
     """
 
     def __init__(

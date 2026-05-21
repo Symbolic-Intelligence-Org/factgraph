@@ -225,7 +225,7 @@ class ServiceRouteRemovedEnvelopeTests(unittest.TestCase):
         self.assertEqual(len(resp["errors"]), 1)
         err = resp["errors"][0]
         self.assertEqual(err["kind"], "removed")
-        self.assertIn("Q8 Phase 2", err["details"]["message"])
+        self.assertIn("A20(E)", err["details"]["message"])
 
     def test_read_registry_inference_returns_removed_envelope(self) -> None:
         from service.registry_v1 import read_registry_inference
@@ -235,20 +235,18 @@ class ServiceRouteRemovedEnvelopeTests(unittest.TestCase):
         self.assertEqual(len(resp["errors"]), 1)
         err = resp["errors"][0]
         self.assertEqual(err["kind"], "removed")
-        self.assertIn("Q8 Phase 2", err["details"]["message"])
+        self.assertIn("A20(E)", err["details"]["message"])
 
-    def test_list_registry_assets_schema_only_response_shape(self) -> None:
+    def test_list_registry_assets_returns_removed_envelope(self) -> None:
         from service.registry_v1 import list_registry_assets
 
         with TemporaryDirectory() as tmp_dir:
             registry = FileAuthoringRegistry(Path(tmp_dir))
             registry.upsert_schema_ir(compile_schema_from_classes([_UserForPhase2]))
             resp = list_registry_assets({"root_dir": tmp_dir})
-            self.assertTrue(resp["ok"])
-            self.assertIn("schema_entry", resp["registry"])
-            self.assertIn("apply_run_ids", resp["registry"])
-            self.assertNotIn("rule_ids", resp["registry"])
-            self.assertNotIn("inference_ids", resp["registry"])
+            self.assertFalse(resp["ok"])
+            self.assertEqual(resp["errors"][0]["kind"], "removed")
+            self.assertIn("A20(E)", resp["errors"][0]["details"]["message"])
 
 
 # Class 6 — Cross-layer consumer removal

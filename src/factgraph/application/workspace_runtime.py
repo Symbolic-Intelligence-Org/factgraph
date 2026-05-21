@@ -223,7 +223,6 @@ __all__ = [
     "resolve_workspace_paths",
     "save_workspace",
     "save_workspace_manifest",
-    "sync_registry_to_workspace",
     "validate_workspace_manifest",
     "workspace_manifest_payload",
 ]

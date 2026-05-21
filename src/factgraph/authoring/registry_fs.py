@@ -10,6 +10,32 @@ from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs, ensure_s
 
 
 _SAFE_SEGMENT_RE = re.compile(r"[^A-Za-z0-9_.-]+")
+_APPLY_LOG_FILE_NAME = "authoring_apply_events.jsonl"
+
+
+def _workspace_apply_log_path_for_registry(root_dir: str | Path) -> Path | None:
+    root = Path(root_dir)
+    workspace = root.parent
+    if (
+        root.name == "registry"
+        and (workspace / "factgraph_workspace.json").exists()
+        and (workspace / "db").exists()
+    ):
+        return workspace / "db" / "audit" / _APPLY_LOG_FILE_NAME
+    return None
+
+
+def resolve_apply_log_write_path(root_dir: str | Path) -> Path:
+    return _workspace_apply_log_path_for_registry(root_dir) or (Path(root_dir) / _APPLY_LOG_FILE_NAME)
+
+
+def resolve_apply_log_read_paths(root_dir: str | Path) -> list[Path]:
+    root = Path(root_dir)
+    legacy = root / _APPLY_LOG_FILE_NAME
+    workspace_path = _workspace_apply_log_path_for_registry(root)
+    if workspace_path is None:
+        return [legacy]
+    return [legacy, workspace_path]
 
 
 class AuthoringRegistryFSError(Exception):
@@ -28,14 +54,16 @@ class AuthoringRegistryFSError(Exception):
 
 
 class FileAuthoringRegistry:
-    """Schema-only transition registry per Q6 Phase 2.
+    """Legacy schema/apply-log adapter after A20(E) registry final exit.
 
     After Q8 Phase 2 removal (Slice 6), this class retains only schema
     persistence and apply-log responsibilities. Rule/inference persistence
     methods were removed entirely. Historical workspace files under
     ``registry/rules/`` and ``registry/inferences/`` are left inert; new
-    manifests are schema-only and do not write ``rules`` / ``inferences``
-    keys, though old manifests containing those keys still load tolerantly.
+    manifests are schema-only and do not write ``rules`` / ``inferences`` keys.
+    Workspace apply logs write to ``db/audit/authoring_apply_events.jsonl`` and
+    read both the new and legacy registry paths; non-workspace registry roots
+    keep the historical ``registry/authoring_apply_events.jsonl`` behavior.
     """
 
     def __init__(self, root_dir: str | Path) -> None:
@@ -47,7 +75,7 @@ class FileAuthoringRegistry:
 
     @property
     def apply_log_path(self) -> Path:
-        return self.root_dir / "authoring_apply_events.jsonl"
+        return self.root_dir / _APPLY_LOG_FILE_NAME
 
     def upsert_schema_ir(self, schema_ir: dict[str, Any]) -> dict[str, Any]:
         validated = ensure_schema_ir(schema_ir)
@@ -96,20 +124,8 @@ class FileAuthoringRegistry:
     def find_apply_execute_run(self, apply_request_id: str) -> dict[str, Any] | None:
         if not isinstance(apply_request_id, str) or not apply_request_id:
             raise AuthoringRegistryFSError("apply_request_id must be non-empty string")
-        if not self.apply_log_path.exists():
-            return None
         matched: dict[str, Any] | None = None
-        for line_no, line in enumerate(self.apply_log_path.read_text(encoding="utf-8").splitlines(), start=1):
-            if not line.strip():
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise AuthoringRegistryFSError(
-                    f"invalid apply event JSON at line {line_no}: {exc}",
-                    code="registry_apply_event_json_invalid",
-                    path=f"$.authoring_apply_events[{line_no}]",
-                ) from exc
+        for payload in self._iter_apply_events():
             if not isinstance(payload, dict):
                 continue
             if payload.get("kind") != "authoring_apply_execute_run":
@@ -120,20 +136,8 @@ class FileAuthoringRegistry:
         return matched
 
     def list_apply_execute_runs(self) -> list[dict[str, Any]]:
-        if not self.apply_log_path.exists():
-            return []
         latest_by_request: dict[str, dict[str, Any]] = {}
-        for line_no, line in enumerate(self.apply_log_path.read_text(encoding="utf-8").splitlines(), start=1):
-            if not line.strip():
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise AuthoringRegistryFSError(
-                    f"invalid apply event JSON at line {line_no}: {exc}",
-                    code="registry_apply_event_json_invalid",
-                    path=f"$.authoring_apply_events[{line_no}]",
-                ) from exc
+        for payload in self._iter_apply_events():
             if not isinstance(payload, dict):
                 continue
             if payload.get("kind") != "authoring_apply_execute_run":
@@ -166,6 +170,26 @@ class FileAuthoringRegistry:
                 path="$.schema",
             )
         return dict(schema)
+
+    def _iter_apply_events(self) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for path in resolve_apply_log_read_paths(self.root_dir):
+            if not path.exists():
+                continue
+            for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                if not line.strip():
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise AuthoringRegistryFSError(
+                        f"invalid apply event JSON at line {line_no}: {exc}",
+                        code="registry_apply_event_json_invalid",
+                        path=f"$.authoring_apply_events[{line_no}]",
+                    ) from exc
+                if isinstance(payload, dict):
+                    out.append(payload)
+        return out
 
     def _load_manifest(self) -> dict[str, Any]:
         if not self.manifest_path.exists():

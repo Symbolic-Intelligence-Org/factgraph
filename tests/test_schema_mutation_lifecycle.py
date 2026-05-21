@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+import warnings
 
 from factgraph.authoring.registry_fs import FileAuthoringRegistry
 from factgraph.core.evidence.write_protocol import set_field
@@ -123,7 +124,9 @@ def _seed_fg(*, registry_root: Path | None = None, path: Path | None = None):
         kwargs["registry_root"] = registry_root
     if path is not None:
         kwargs["path"] = path
-    fg = FactGraph.create(schema_classes=[User], **kwargs)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        fg = FactGraph.create(schema_classes=[User], **kwargs)
     alice_ref = fg.ref(User, user_id="Alice")
     set_field(
         fg.ledger,
@@ -339,7 +342,9 @@ class SchemaMutationStrictValidatorTests(unittest.TestCase):
 class SchemaMutationDigestAnchorTests(unittest.TestCase):
     def test_registry_old_digest_upserts_to_new_digest(self) -> None:
         with TemporaryDirectory() as tmp_dir:
-            fg = FactGraph.create(schema_classes=[User], registry_root=tmp_dir)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                fg = FactGraph.create(schema_classes=[User], registry_root=tmp_dir)
             registry = FileAuthoringRegistry(Path(tmp_dir))
             registry.upsert_schema_ir(fg.schema_ir)
 
@@ -350,7 +355,9 @@ class SchemaMutationDigestAnchorTests(unittest.TestCase):
 
     def test_registry_absent_digest_creates_schema_entry(self) -> None:
         with TemporaryDirectory() as tmp_dir:
-            fg = FactGraph.create(schema_classes=[User], registry_root=tmp_dir)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                fg = FactGraph.create(schema_classes=[User], registry_root=tmp_dir)
 
             result = fg.schema.add(Account)
             entry = FileAuthoringRegistry(Path(tmp_dir)).get_schema_entry()
@@ -359,7 +366,9 @@ class SchemaMutationDigestAnchorTests(unittest.TestCase):
 
     def test_registry_mismatched_digest_raises(self) -> None:
         with TemporaryDirectory() as tmp_dir:
-            fg = FactGraph.create(schema_classes=[User], registry_root=tmp_dir)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                fg = FactGraph.create(schema_classes=[User], registry_root=tmp_dir)
             registry = FileAuthoringRegistry(Path(tmp_dir))
             registry.upsert_schema_ir(compile_schema_from_classes([Account]))
 
