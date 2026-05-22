@@ -1,14 +1,14 @@
-# Heritage
+# Heritage(历史归档)
 
-Append-only legacy archive for content that has lasting reference value but no active maintenance role.
+只追加(append-only)的历史归档区,容纳有长期参考价值但无 active 维护角色的内容。
 
-## Contents
+## 内容
 
-- `blueprint_history/` — legacy historical blueprints (predates the modern `workflow/blueprints/` active→archive lifecycle). May be cited as rationale; do NOT open new tasks here.
-- `bundles/` — closed work bundles from the pre-`workflow/` era (e.g., routemap design inputs, load test artifacts, namespace-test proposals). Each bundle keeps its original internal structure.
+- `blueprint_history/` — 历史遗留 blueprints(早于现代 `workflow/blueprints/` active→archive 生命周期)。可作 rationale 引用;**不要在此开新任务**。
+- `bundles/` — pre-`workflow/` 时代的已闭合工作 bundles(例如 routemap design inputs、load test artifacts、namespace-test 提议等)。每个 bundle 保留原有内部结构。
 
-## Authority
+## 权威
 
-Heritage content is **historical rationale**, not current truth. Do not treat any file here as a current binding constraint; constraints live in `workflow/foundations/`, `workflow/design/decisions/` (`adopted`), or `src/factgraph/*/docs/`.
+Heritage 内容是**历史 rationale**,不是当前真相。不要把这里的任何文件当作当前的约束;当前约束位于 `workflow/foundations/`、`workflow/design/decisions/`(`adopted` 状态)或 `src/factgraph/*/docs/`。
 
-Heritage entries are write-once after landing here. Updates require explicit slice work; no in-place editing of legacy material.
+Heritage 条目**落地后只读** — 更新需明确的 slice 工作,不允许就地编辑历史材料。

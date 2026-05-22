@@ -126,84 +126,84 @@ Manual drafting (not from template) is discouraged; see [`workflow/templates/REA
 
 ---
 
-# Detailed Governance Rules
+# 详细治理规则
 
-以下是 blueprint pillar 的正式 governance 规则(原 `AGENTS.md` 内容,已合并到此 README 内)。
+以下是 blueprint pillar 的正式 governance 规则(原 `AGENTS.md` 内容,SC-1 合并后已纳入此 README)。
 
-## Role
+## 角色
 
-- `active/` contains live task blueprints and audit logs.
-- `archive/` contains completed blueprints that still matter as rationale, plus explicitly marked reconstructed legacy archive entries.
-- Templates live at `workflow/templates/blueprints/` (centralized per Q4).
+- `active/` 容纳 live 任务蓝图与对应的 paired audit log。
+- `archive/` 容纳已完成、仍作 rationale 引用的蓝图,以及显式标注的 reconstructed legacy 归档条目。
+- 模板位于 `workflow/templates/blueprints/`(per Q4 集中)。
 
 ## Required Practice
 
-- Create both the blueprint file and the sibling audit file together.
-- Use the same basename for the pair.
-- Keep status in one of: `draft`, `scoped`, `implementing`, `implemented`, `blocked`, `abandoned`, `archived`, `superseded`.
-- Blueprints describe problem, scope, constraints, acceptance, docs impact, and deviations.
-- Audit files record decision events, scope changes, and implementation checkpoints in chronological order.
-- Reconstructed legacy archive entries must use the dedicated legacy templates and must state their provenance explicitly.
+- 蓝图和 sibling audit 文件**一起创建**。
+- 配对使用同 basename。
+- 状态值必须是其中之一:`draft`、`scoped`、`implementing`、`implemented`、`blocked`、`abandoned`、`archived`、`superseded`。
+- 蓝图描述问题、scope、约束、验收、文档影响、偏差。
+- audit 文件按时间顺序记录决策事件、scope 变更、实现检查点。
+- Reconstructed legacy 归档条目必须使用 legacy 模板,并显式标注 provenance。
 
-## State Rules
+## 状态规则
 
-- `draft`: exploration and open questions are still allowed.
-- `scoped`: boundaries are frozen enough for implementation to begin.
-- `implementing`: code generation or refactoring is in progress.
-- `implemented`: code and module docs are updated; archive is still pending.
-- `archived`: blueprint moved to `archive/` with final outcome recorded.
-- `blocked`: stalled on an external dependency; record reason in audit, resume to `implementing` when unblocked.
-- `abandoned`: explicitly cancelled; record reason in audit, move to `archive/`.
-- `superseded`: replaced by a newer blueprint; record the successor link in audit, move to `archive/`.
+- `draft` — 仍允许探索 + open questions
+- `scoped` — 边界已冻结,可以开始实现
+- `implementing` — 代码生成 / refactor 进行中
+- `implemented` — 代码完成、模块 docs 已更新;归档待行
+- `archived` — 蓝图已移到 `archive/`,outcome 已记录
+- `blocked` — 受阻于外部依赖;在 audit 记录原因;依赖解除后回到 `implementing`
+- `abandoned` — 显式取消;在 audit 记录原因后归档
+- `superseded` — 被新蓝图替代;在 audit 记录后继 link 后归档
 
-## Valid State Transitions
+## 允许的状态转换
 
-Forward path:
+主路径:
 - `draft` → `scoped` → `implementing` → `implemented` → `archived`
 
-Allowed deviations:
-- `implementing` → `scoped`: scope needs re-freezing; update blueprint and audit before resuming.
-- `implementing` ↔ `blocked`: pause on external dependency; resume to `implementing` when resolved.
-- any active state → `abandoned`: decision to cancel; must record reason in audit before archiving.
-- any active state → `superseded`: replaced by a new blueprint; record successor link in audit before archiving.
+允许的偏离:
+- `implementing` → `scoped` — scope 需要重锁;先更新蓝图和 audit 再恢复
+- `implementing` ↔ `blocked` — 受阻于外部依赖;解除后恢复 `implementing`
+- 任一 active 状态 → `abandoned` — 决定取消;归档前在 audit 记录原因
+- 任一 active 状态 → `superseded` — 被新蓝图替代;归档前在 audit 记录后继 link
 
-Not allowed:
-- Skipping `implementing` between `scoped` and `implemented`.
-- Transitioning out of `archived` back to any active state (open a new blueprint instead).
+不允许:
+- 从 `scoped` 跳过 `implementing` 到 `implemented`
+- 从 `archived` 回到任一 active 状态(改为开新蓝图)
 
-Exception:
-- A legacy reconstructed archive entry may be created directly in `archive/` only when its source document already lives in `workflow/heritage/blueprint_history/` and the entry is explicitly marked `Archive Mode: reconstructed`.
+例外:
+- legacy reconstructed 归档条目可直接在 `archive/` 创建,前提是源文件已在 `workflow/heritage/blueprint_history/` 且条目显式标 `Archive Mode: reconstructed`。
 
-## Archive Rules
+## 归档规则
 
-- Do not archive until affected module docs are updated.
-- Do not archive until `docs/README.md` is updated when a new durable docs entry was introduced.
-- Before archiving, complete the blueprint's `Outcome / Deviations` section.
-- Archive by moving both files from `active/` to `archive/` without changing the basename.
+- 受影响的模块 docs 未更新前不可归档。
+- 引入新持久文档入口时,`docs/README.md` 未更新前不可归档。
+- 归档前必须填齐 `Outcome / Deviations` 段。
+- 归档动作:`active/` 和 `archive/` 之间 mv 配对,basename 不变。
 
-## Reconstructed Archive Rules
+## Reconstructed 归档规则
 
-- Use [legacy_reconstructed_archive.md](../templates/blueprints/legacy_reconstructed_archive.md) and [legacy_reconstructed_archive.audit.md](../templates/blueprints/legacy_reconstructed_archive.audit.md).
-- Required metadata fields:
+- 使用模板 [legacy_reconstructed_archive.md](../templates/blueprints/legacy_reconstructed_archive.md) 和 [legacy_reconstructed_archive.audit.md](../templates/blueprints/legacy_reconstructed_archive.audit.md)。
+- 必填 metadata 字段:
   - `Archive Mode: reconstructed`
   - `Migration Date`
   - `Git First Seen`
   - `Historical Source`
-- Reconstructed entries may mirror the standard 10-section shape, but they must describe historical context honestly.
-- Do not invent a fake `draft -> scoped -> implementing -> implemented` chain for the past.
-- In the audit file, separate reconstructed historical notes from verified migration events.
-- If current module docs or current code cannot verify an intended outcome, leave the acceptance item unchecked or explain the uncertainty in `Outcome / Deviations`.
+- reconstructed 条目可镜像标准 10-section 形状,但必须如实描述历史 context。
+- 不可伪造过去的 `draft -> scoped -> implementing -> implemented` 链。
+- audit 文件中,reconstructed 历史摘录与现代迁移事件**分开**记录。
+- 当前模块 docs 或代码无法验证某 acceptance 项时,留空或在 `Outcome / Deviations` 中说明不确定性。
 
-## Legacy Boundary
+## Legacy 边界
 
-- `workflow/heritage/blueprint_history/` is not the active blueprint area.
-- Legacy files may be cited as rationale, but new tasks should not be opened there.
+- `workflow/heritage/blueprint_history/` 不是 active blueprint 区。
+- Legacy 文件可作 rationale 引用,但不应在那里开新任务。
 
-## Paired vs standalone audit (per Q3 §4.2)
+## Paired vs standalone audit(per Q3 §4.2)
 
-The word "audit" in this repo refers to two distinct concepts:
+本仓库的 "audit" 指**两个不同概念**:
 
-- **Paired blueprint audit log** (`<basename>.audit.md` sibling, governed by this file) — per-blueprint event log of state transitions + decision notes. Authority: `paired blueprint audit log`. Lives next to the blueprint it pairs with.
-- **Standalone audit record** (in `workflow/audit/`, governed by `workflow/audit/README.md`) — cross-cutting drift triage (`vs-shipped`), pre-implementation safety check (`preflight`), or post-Q re-bucketing (`synthesis`). Authority: `working triage document`.
+- **Paired blueprint audit log**(`<basename>.audit.md` sibling,由本文件治理)— 每蓝图的状态转换事件日志 + 决策注释。Authority:`paired blueprint audit log`。与配对蓝图同位置。
+- **Standalone audit record**(位于 `workflow/audit/`,由 [`workflow/audit/README.md`](../audit/README.md) 治理)— 跨切面漂移审计(`vs-shipped`)、实施前安全检查(`preflight`)、Q 闭合后重分桶(`synthesis`)。Authority:`working triage document`。
 
-These are NOT interchangeable. See [`workflow/audit/README.md`](../audit/README.md) for the standalone-audit conventions.
+两者**不可互换**。Standalone audit 约定见 [`workflow/audit/README.md`](../audit/README.md)。

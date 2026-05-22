@@ -1,30 +1,30 @@
-# Design-Points
+# Design-Points(概念性设计 essays)
 
-Conceptual design essays. Iterative; user-completed in multiple steps over time; substantive but **not current behavior**.
+概念性设计 essays。迭代;用户多步骤逐步完成;实质性但**不是当前行为**。
 
-## Authority boundary (per Q2 §4.4)
+## 权威边界(per Q2 §4.4)
 
-> A design-point is a **candidate design / non-authoritative reference**. It becomes a constraint **only when cited by**:
+> 一个 design-point 是**候选设计 / 非权威参考**。它仅当被以下任一引用时才成为约束:
 >
-> - An adopted decision in `workflow/design/decisions/`, OR
-> - An implemented blueprint in `workflow/blueprints/archive/`, OR
-> - Current module docs at `src/factgraph/*/docs/`, OR
+> - 一个 `workflow/design/decisions/` 中 adopted 的 decision,或
+> - 一个 `workflow/blueprints/archive/` 中 implemented 的 blueprint,或
+> - 当前模块 docs(`src/factgraph/*/docs/`),或
 > - `workflow/foundations/architecture_principles.md`
 >
-> A design-point **cannot directly override shipped behavior**. Implementation must reach the codebase via the downstream consumption chain (decision → blueprint → impl).
+> design-point **不能直接覆盖 shipped 行为**。实现必须通过下游消费链(decision → blueprint → impl)到达代码。
 
-Each essay's header includes a verbatim copy of this statement.
+每个 essay 的 header 包含此声明的逐字 copy。
 
-## Lifecycle
+## 生命周期
 
-`active/` — currently-iterating. May produce new questions / decisions / blueprints over weeks to months.
+`active/` — 还在迭代,跨越数周到数月,仍可能产生新问题 / decisions / blueprints。
 
-`archive/` — moved when **all three** conditions hold (per Q2 §4.3):
+`archive/` — **同时满足以下三条**时归档(per Q2 §4.3):
 
-1. All load-bearing questions raised by this design-point are closed in `workflow/design/decisions/` (any closed ADR state: `adopted` / `superseded` / `withdrawn`).
-2. All implementation-eligible content has shipped (cited by an `implemented` blueprint) or been explicitly deferred / superseded.
-3. No `active`-state blueprint cites this design-point as the live design lens.
+1. 该 design-point 提出的所有 load-bearing 问题都在 `workflow/design/decisions/` 中闭合(任一 closed ADR 状态:`adopted` / `superseded` / `withdrawn`)
+2. 所有实现-eligible 内容已 ship(被 `implemented` blueprint 引用),或已被显式 defer / superseded
+3. 没有 `active` 状态的 blueprint 仍把该 design-point 当作 live 设计依据
 
-A design-point may also be superseded by a newer essay (successor cites predecessor in `Inputs`; predecessor archived).
+也可通过**被新 essay supersede** 归档(后继在 `Inputs` 引用前者,前者归档,即便上述三条未全部满足)。
 
-See [`workflow/design/AGENTS.md`](../AGENTS.md) for full state machine + authority semantics. Template: `workflow/templates/design/design-point.md`.
+完整状态机 + 权威语义见 [`workflow/design/README.md`](../README.md)。模板:`workflow/templates/design/design-point.md`。

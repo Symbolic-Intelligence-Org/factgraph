@@ -1,30 +1,30 @@
-# Working Area
+# Working(临时工作区)
 
-Temporary work area for short-lived artifacts: experimental scripts, ad-hoc test outputs, exploratory data, prototype code.
+短生命周期 artifact 的临时工作区:实验脚本、ad-hoc 测试输出、探索性数据、prototype 代码。
 
-## Lifecycle
+## 生命周期
 
-- Contents are **gitignored** (per `.gitignore` `workflow/working/*` rule from Step 0.1). Only this README and `.gitkeep` are tracked.
-- Short-lived: hours to days; not persistent across sessions.
-- Distinct from `/tmp/`: project-scoped, persists across reboots.
-- Distinct from `workflow/heritage/`: heritage is permanent legacy archive; working is ephemeral.
+- 内容**全部 gitignored**(per Step 0.1 的 `.gitignore` `workflow/working/*` 规则)。只有本 README 和 `.gitkeep` 被跟踪。
+- 短生命周期:小时-数天;不跨 session 持久。
+- 与 `/tmp/` 区别:project-scoped,跨 reboot 持久。
+- 与 `workflow/heritage/` 区别:heritage 是永久 legacy 归档;working 是临时易逝。
 
-## What goes here
+## 什么进来
 
-- One-off scripts not worth packaging as a skill yet
-- Test inputs / outputs being explored
+- 还没值得打包成 skill 的一次性脚本
+- 调试中的测试输入 / 输出
 - Notebook scratch
-- API response captures during debugging
-- Prototype code not yet ready for `src/`
+- 调试时的 API response captures
+- 还没准备进 `src/` 的 prototype 代码
 
-## What does NOT go here
+## 什么不进来
 
-- Persistent work products (→ appropriate module / docs)
-- Reference material (→ obsidian / `workflow/heritage/`)
-- Module implementation truth (→ `src/factgraph/*/docs/`)
+- 持久工作产物(→ 相应模块 / docs)
+- 参考材料(→ obsidian / `workflow/heritage/`)
+- 模块实现真相(→ `src/factgraph/*/docs/`)
 
-## Convention
+## 约定
 
-If a working artifact proves valuable, package it as a Claude skill or promote it to a permanent location via a proper slice. Otherwise it can be safely deleted at any time.
+如果一个 working artifact 证明有价值,把它包成 Claude skill 或通过正式 slice 提升到持久位置。否则随时可安全删除。
 
-No `Status` field, no metadata, no governance — this is a free-form work area.
+无 `Status` 字段,无 metadata,无 governance — 这是自由格式工作区。

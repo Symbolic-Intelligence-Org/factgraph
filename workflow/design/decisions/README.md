@@ -1,24 +1,24 @@
-# Decisions
+# Decisions(ADR 决策)
 
-ADR-style discrete decision records. Each decision locks one load-bearing design question before downstream blueprint / implementation can proceed.
+ADR 风格的离散决策记录。每个 decision 锁定一个 load-bearing 设计问题,在下游 blueprint / 实现工作开始之前。
 
-## ADR 4-state lifecycle (per Q2 §4.5)
+## ADR 4-state 生命周期(per Q2 §4.5)
 
-| Status | Meaning | Directory |
+| Status | 含义 | 目录 |
 |---|---|---|
-| `proposed` | Under deliberation; not yet binding | `active/` |
-| `adopted` | **Current binding constraint**; downstream must honor | `active/` |
-| `superseded` | Replaced by a newer decision | `archive/` |
-| `withdrawn` | Cancelled; cite rationale | `archive/` |
+| `proposed` | 审议中,尚非约束 | `active/` |
+| `adopted` | **当前约束**;下游必须遵守 | `active/` |
+| `superseded` | 被新 decision 替代 | `archive/` |
+| `withdrawn` | 撤回;需写明理由 | `archive/` |
 
-**`adopted` decisions stay in `active/`** because they remain current constraints. Only `superseded` / `withdrawn` move to `archive/`. This differs from `workflow/blueprints/` where `implemented` blueprints archive (the blueprint is historical rationale; an adopted decision is a current rule).
+**`adopted` decisions 留在 `active/`**,因为它们仍是**当前约束**。只有 `superseded` / `withdrawn` 进 `archive/`。这与 `workflow/blueprints/` 不同 — blueprint `implemented` 后立即归档(blueprint 是历史 rationale;adopted decision 是当前规则)。
 
-## Index of currently-adopted decisions
+## 当前 adopted decisions 索引
 
-(populated as decisions land)
+(decisions 落地后填充)
 
-## See also
+## 相关
 
-- [`workflow/design/AGENTS.md`](../AGENTS.md) — full state machine, allowed transitions, archive mv convention.
-- `workflow/templates/design/decision.md` — authoritative starting point for new decisions.
-- `workflow/CADENCE.md` Stage 2 — Q-resolution phase in the broader audit→Q→synthesis→blueprint flow.
+- [`workflow/design/README.md`](../README.md) — 完整状态机、允许转换、跨边界 mv 约定
+- `workflow/templates/design/decision.md` — 新 decision 的权威起点
+- [`workflow/CADENCE.md`](../../CADENCE.md) Stage 2 — audit → Q → synthesis → blueprint 流程中的 Q-resolution 阶段

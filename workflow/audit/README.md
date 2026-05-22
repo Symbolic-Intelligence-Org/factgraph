@@ -1,115 +1,115 @@
-# Audit Pillar
+# Audit Pillar(审计层)
 
-Drift / anti-drift records: design-doc-vs-shipped triage, pre-implementation safety checks, and post-Q re-bucketing syntheses. Governs the `workflow/audit/` pillar per Q3 (commit `ae375ce5`).
+Drift / anti-drift 记录:设计文档 vs shipped runtime 漂移审计、实施前安全检查、Q 闭合后重分桶 synthesis。本 pillar 由 Q3 锁定(commit `ae375ce5`)。
 
-For the umbrella governance see [`workflow/AGENTS.md`](../AGENTS.md). For the canonical methodology see [`workflow/CADENCE.md`](../CADENCE.md).
+总入口治理见 [`workflow/AGENTS.md`](../AGENTS.md);canonical 方法论见 [`workflow/CADENCE.md`](../CADENCE.md)。
 
-## ⚠️ Two distinct "audit" concepts (per Q3 §4.2)
+## ⚠️ 两个 "audit" 概念,不要混淆(per Q3 §4.2)
 
-The word "audit" in this repo refers to **two distinct things**. Do not confuse them:
+本仓库的 "audit" 一词指**两件不同的事**:
 
-| Concept | Filename | Location | Role | Governed by |
+| 概念 | 文件名 | 位置 | 角色 | 治理位置 |
 |---|---|---|---|---|
-| **Paired blueprint audit log** | `<basename>.audit.md` (sibling to blueprint) | `workflow/blueprints/{active,archive}/` | Per-blueprint event log of state transitions + decision notes | [`workflow/blueprints/README.md`](../blueprints/README.md) |
-| **Standalone audit record** | `YYYY-MM-DD_<topic>-<subtype>.md` | `workflow/audit/{active,archive}/` | Cross-cutting drift triage, preflight safety check, post-Q synthesis | this file |
+| **Paired blueprint audit log**(配对蓝图审计日志)| `<basename>.audit.md`(与 blueprint 同 basename 配对)| `workflow/blueprints/{active,archive}/` | 每蓝图的状态转换事件日志 + 决策注释 | [`workflow/blueprints/README.md`](../blueprints/README.md) |
+| **Standalone audit record**(独立审计记录)| `YYYY-MM-DD_<topic>-<subtype>.md` | `workflow/audit/{active,archive}/` | 跨切面漂移审计、preflight 安全检查、post-Q synthesis | 本文件 |
 
-This document governs the **standalone audit record** concept. For the paired blueprint audit log, see [`workflow/blueprints/README.md`](../blueprints/README.md) §Paired vs standalone audit.
+本文档治理 **standalone audit record**。配对蓝图审计日志见 [`workflow/blueprints/README.md`](../blueprints/README.md) §Paired vs standalone audit。
 
-## Layout
+## 布局
 
 ```
 workflow/audit/
-├── README.md            (this file — pillar governance + orientation)
-├── active/              (audits whose consuming blueprint is in workflow/blueprints/active/)
-└── archive/             (audits whose consuming blueprint has archived)
+├── README.md            (本文件 — pillar 治理 + 导航)
+├── active/              (consuming blueprint 在 workflow/blueprints/active/ 期间)
+└── archive/             (consuming blueprint 已归档后随之归档)
 ```
 
-Flat `active/archive` split — no sub-type subdirectories. Sub-type is encoded in the filename suffix.
+扁平 active/archive 切分 — 无 sub-type 子目录。Sub-type 由文件名后缀编码。
 
-## Three standalone sub-types (per Q3 §4.3)
+## 三种 standalone sub-types(per Q3 §4.3)
 
-| Sub-type | Filename suffix | Purpose | CADENCE stage |
+| Sub-type | 文件名后缀 | 用途 | CADENCE 阶段 |
 |---|---|---|---|
-| **`vs-shipped`** | `YYYY-MM-DD_<topic>-vs-shipped.md` | Compares a design doc against shipped runtime code completely (not grep snippets). Builds 5-state triage table + open question list. | Stage 1 audit |
-| **`preflight`** | `YYYY-MM-DD_<topic>-preflight.md` | Re-reads blueprint-referenced shipped files at preflight-row-drafting time. Surfaces 5-bucket severity findings before scoped anchor. | Step 4.3 |
-| **`synthesis`** | `YYYY-MM-DD_post-q-<topic>-synthesis.md` (with `post-q-` prefix when Q chain exists) | Re-buckets audit drift after Q decisions close. 5-bucket output. | Stage 3 |
+| **`vs-shipped`** | `YYYY-MM-DD_<topic>-vs-shipped.md` | 把设计文档对照 shipped runtime 完整 re-read(不用 grep snippet),建 5-state 分类表 + 暴露 open questions。 | Stage 1 audit |
+| **`preflight`** | `YYYY-MM-DD_<topic>-preflight.md` | 在 preflight-row 起草时重读 blueprint 引用的 shipped 文件。Surface 5-bucket 严重度 findings,在 scoped anchor 之前。 | Step 4.3 |
+| **`synthesis`** | `YYYY-MM-DD_post-q-<topic>-synthesis.md`(有 Q chain 时带 `post-q-` 前缀)| Q decisions 闭合后对 audit drift 重新分桶。5-bucket 输出。 | Stage 3 |
 
-No other sub-types are recognized; adding one requires a Q-delta-decision against Q3.
+没有其他 sub-types;新增需对 Q3 做 Q-delta-decision。
 
-## Preflight trigger conditions (per Q3 §4.4)
+## Preflight 触发条件(per Q3 §4.4)
 
-Standalone preflight is **REQUIRED** when any of the following applies:
+Standalone preflight **REQUIRED** when 任一适用:
 
-1. **Subtractive removal** — slice deletes a shipped public symbol / method / route.
-2. **Cross-module protocol change** — DTO shape / ledger format / identity formula spanning ≥2 modules.
-3. **Namespace migration** — package rename or structural restructure.
-4. **Historical-design compatibility** — implementation must precisely match a historical design (e.g., compatibility shim).
-5. **Pre-release verification** — rc.N → release tag or PyPI publish.
+1. **Subtractive removal** — slice 删除 shipped public symbol / method / route
+2. **Cross-module protocol change** — DTO 形状 / ledger format / identity formula 跨 ≥2 模块
+3. **Namespace migration** — 包重命名或结构调整
+4. **Historical-design compatibility** — 实现必须精确匹配历史设计(例如 compatibility shim)
+5. **Pre-release verification** — rc.N → release tag 或 PyPI publish
 
-Standalone preflight is **OPTIONAL** when:
+Standalone preflight **OPTIONAL** when:
 
-1. Pure additive feature within a single module.
-2. Bug fix in established API surface.
-3. Pure refactor with full test coverage + no observable behavior change.
-4. Cleanup-style slice (per [`workflow/blueprints/README.md`](../blueprints/README.md) cleanup-slice cadence section).
-5. Tiny local fix (per [`workflow/CADENCE.md`](../CADENCE.md) Scope-and-Applicability).
+1. 单模块内的纯 additive feature
+2. 已建面内的 bug fix
+3. 纯 refactor + 完整 test 覆盖 + 无可观察行为变化
+4. cleanup-style slice(per [`workflow/blueprints/README.md`](../blueprints/README.md) cleanup-slice cadence 段)
+5. Tiny local fix(per [`workflow/CADENCE.md`](../CADENCE.md) Scope-and-Applicability)
 
-**Voluntary preflight is permitted** when not required, provided the rationale is recorded in the blueprint §6 or §10. Default on doubt: **required**.
+**自愿 preflight 允许** — 不必须时仍可做,前提是在 blueprint §6 或 §10 记录理由。**有疑问时默认 required**。
 
-## Synthesis trigger conditions (per Q3 §4.5)
+## Synthesis 触发条件(per Q3 §4.5)
 
-Standalone synthesis is **REQUIRED** when:
+Standalone synthesis **REQUIRED** when:
 
-1. ≥3 Q decisions close in a single audit's chain, AND
-2. Audit findings span ≥2 of the 5 buckets (blueprint-eligible / cross-doc blocked / no independent action / already aligned / deferred).
+1. ≥3 Q decisions 在一条 audit chain 中闭合,**且**
+2. Audit findings 跨 ≥2 个 5-bucket(blueprint-eligible / cross-doc blocked / no independent action / already aligned / deferred)
 
-Standalone synthesis is **OPTIONAL** when:
-- Single Q decision closes (Q1-only slice), OR
-- All audit findings are obviously single-bucket, OR
-- Cleanup-style slice with no Q-resolution chain.
+Standalone synthesis **OPTIONAL** when:
+- 单 Q decision 闭合(Q1-only slice),或
+- 所有 audit findings 显然单 bucket,或
+- cleanup-style slice 无 Q-resolution chain
 
-## Lifecycle (per Q3 §4.6)
+## 生命周期(per Q3 §4.6)
 
-- `active/` while the consuming blueprint is `draft` / `scoped` / `implementing` / `implemented` (i.e., still in `workflow/blueprints/active/`).
-- `archive/` moves in the same commit batch as the consuming blueprint's Step 4.9 archive.
-- An audit serving multiple consuming slices moves to archive when the **last** consumer archives.
+- `active/` — consuming blueprint 处于 `draft` / `scoped` / `implementing` / `implemented`(即在 `workflow/blueprints/active/`)期间
+- `archive/` — 在 consuming blueprint Step 4.9 archive 的**同一 commit batch** 中归档
+- 一个 audit 服务多个 consuming slices 时,等**最后一个** consumer 归档才移
 
-Optional `Status:` header field for drafting visibility: `skeleton` / `complete` / `superseded`. The directory placement (`active/` vs `archive/`) is the canonical lifecycle signal; `Status` is convenience only.
+可选 `Status:` header 字段:`skeleton` / `complete` / `superseded`,仅做起草可见性 — 目录归属(`active/` vs `archive/`)才是 canonical 信号。
 
-## Cross-branch visibility (per Q3 §4.7)
+## 跨 branch 可见性(per Q3 §4.7)
 
-Standalone audit files are **slice-scoped artifacts**, not globally-visible reference documents:
+Standalone audit 文件是 **slice-scoped artifacts**,不是全局可见的参考文档:
 
-- An audit lives on the branch that created it (typically the audit-only branch or the consuming blueprint branch).
-- Within the consuming slice's lifetime, audits are branch-local. Cross-slice reference requires explicit branch checkout.
-- At slice closure (Step 4.9 archive), the audit + decision + blueprint chain is completed on the slice branch. Archive itself does **not** integrate to `master` or any release branch.
-- Integration into `master` is a **separate, explicit, user-authorized push or merge** governed by CADENCE Sacred-branch isolation rule.
-- "Globally visible" means **authorized canonical-branch integration**, not the archive commit itself.
+- 一个 audit 存在于创建它的 branch(通常 audit-only branch 或 consuming blueprint branch)
+- 在 consuming slice 生命周期内,audits 是 branch-local。跨 slice 引用需显式 branch checkout
+- Slice 闭合(Step 4.9 archive)时,audit + decision + blueprint chain 在 slice branch 上完成。Archive 本身**不**集成到 `master` 或任何 release branch
+- 集成到 `master` 是**独立、显式、用户授权的 push 或 merge**,受 CADENCE Sacred-branch isolation rule 管辖
+- "Globally visible" 指**用户授权的 canonical branch 集成**,不是 archive commit 本身
 
-## Header convention (per Q3 §4.8)
+## Header 约定(per Q3 §4.8)
 
-Every standalone audit file includes the 7-field metadata header per Q4 §4.3, with audit-specific values:
+每个 standalone audit 文件包含 Q4 §4.3 的 7-field metadata header,audit-specific 值:
 
-- `Status: <skeleton | complete | superseded>` (optional; directory placement is canonical)
+- `Status: <skeleton | complete | superseded>`(可选;目录归属才是 canonical)
 - `Authority: working triage document; informs but does not lock implementation`
 
-Plus sub-type-specific extensions:
+加 sub-type-specific extensions:
 
-- **vs-shipped**: `Source intent:` (link to design doc being audited)
-- **preflight**: `Blueprint:` (link to consuming blueprint)
-- **synthesis**: `Source audit:` (link to vs-shipped) + `Closed Q decisions:` (list of Q decision links)
+- **vs-shipped**:`Source intent:`(链接到被审计的设计文档)
+- **preflight**:`Blueprint:`(链接到 consuming blueprint)
+- **synthesis**:`Source audit:`(链接到 vs-shipped)+ `Closed Q decisions:`(Q decision 链接列表)
 
-## Templates (per Q4 §4.4)
+## 模板(per Q4 §4.4)
 
-Authoritative starting points live in `workflow/templates/audit/`:
+权威起点位于 `workflow/templates/audit/`:
 
-- [vs-shipped.md](../templates/audit/vs-shipped.md) — Stage 1 audit template
-- [preflight.md](../templates/audit/preflight.md) — Step 4.3 preflight template (includes trigger condition check)
-- [synthesis.md](../templates/audit/synthesis.md) — Stage 3 synthesis template (includes 5-bucket structure)
+- [vs-shipped.md](../templates/audit/vs-shipped.md) — Stage 1 audit 模板
+- [preflight.md](../templates/audit/preflight.md) — Step 4.3 preflight 模板(含触发条件 check)
+- [synthesis.md](../templates/audit/synthesis.md) — Stage 3 synthesis 模板(含 5-bucket 结构)
 
-Manual drafting (not from template) is discouraged; see [`workflow/templates/README.md`](../templates/README.md) §customization policy.
+不鼓励手工起草;见 [`workflow/templates/README.md`](../templates/README.md) §customization policy。
 
-## See also
+## 相关
 
-- [`workflow/blueprints/README.md`](../blueprints/README.md) §Paired vs standalone audit — the other "audit" concept
-- [`workflow/CADENCE.md`](../CADENCE.md) Stage 1 / Step 4.3 / Stage 3 — how the 3 sub-types integrate with the broader cadence
+- [`workflow/blueprints/README.md`](../blueprints/README.md) §Paired vs standalone audit — 另一个 "audit" 概念
+- [`workflow/CADENCE.md`](../CADENCE.md) Stage 1 / Step 4.3 / Stage 3 — 3 sub-types 如何嵌入 cadence
