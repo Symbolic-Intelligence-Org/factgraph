@@ -31,13 +31,13 @@ class ProbLogExportTests(unittest.TestCase):
         )
         return sdk
 
-    def _export_program(self, sdk: SDKStore) -> str:
+    def _export_program(self, sdk: SDKStore, where: list[object] | None = None) -> str:
         rule_spec = {
             "derivation_id": "drv.problog_export",
             "version": "v1",
             "target_pred_id": "user:name",
             "head_vars": ["$u", "$name"],
-            "where": [("pred", "user:name", ["$u", "$name"])],
+            "where": where or [("pred", "user:name", ["$u", "$name"])],
             "query_pred": "answer",
         }
         with TemporaryDirectory() as tmpdir:
@@ -113,6 +113,32 @@ class ProbLogExportTests(unittest.TestCase):
             self._export_program(sdk)
 
         self.assertIn("problog/semantic/probability out of range", str(ctx.exception))
+
+    def test_export_supports_ne_filter(self) -> None:
+        sdk = self._make_sdk()
+
+        program = self._export_program(
+            sdk,
+            where=[
+                ("pred", "user:name", ["$u", "$name"]),
+                ("ne", "$name", "blocked"),
+            ],
+        )
+
+        self.assertIn("V_NAME \\= 'blocked'", program)
+
+    def test_export_supports_ne_filter_inside_not_body(self) -> None:
+        sdk = self._make_sdk()
+
+        program = self._export_program(
+            sdk,
+            where=[
+                ("pred", "user:name", ["$u", "$name"]),
+                ("not", [("ne", "$name", "blocked")]),
+            ],
+        )
+
+        self.assertIn("\\+(V_NAME \\= 'blocked')", program)
 
 
 class TestProbLogExportReadsSharedProbability(unittest.TestCase):

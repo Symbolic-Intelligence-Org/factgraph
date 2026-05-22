@@ -240,6 +240,11 @@ def _compile_atom(atom: Any) -> str:
             raise ProbLogExportError("eq atom must be ('eq', lhs, rhs)")
         return f"{_to_problog_term(atom[1])} = {_to_problog_term(atom[2])}"
 
+    if kind == "ne":
+        if len(atom) != 3:
+            raise ProbLogExportError("ne atom must be ('ne', lhs, rhs)")
+        return f"{_to_problog_term(atom[1])} \\= {_to_problog_term(atom[2])}"
+
     if kind in {"gt", "ge", "lt", "le"}:
         if len(atom) != 3:
             raise ProbLogExportError(f"{kind} atom must have 2 operands")

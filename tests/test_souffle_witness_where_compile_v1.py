@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import unittest
+from unittest.mock import patch
 
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id
 from factgraph.adapters.souffle.where_compile import (
@@ -90,6 +92,62 @@ class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):
                 query_rel="query__ruleref",
             )
         self.assertIn("requires an in-memory rule resolver", str(ctx.exception))
+
+    def test_compile_where_to_query_dl_supports_ne_filter(self) -> None:
+        dl = compile_where_to_query_dl(
+            schema_ir=_schema_ir(),
+            where=[
+                ("pred", "user:name", ["$e", "$name"]),
+                ("ne", "$name", "blocked"),
+            ],
+            query_rel="query__ne",
+        )
+
+        self.assertIn('query__ne(C0, C1) :- p_user_name(C0, C1), C1 != "blocked".', dl)
+
+    def test_compile_where_to_query_dl_rejects_unbound_ne_filter(self) -> None:
+        with patch.dict(os.environ, {"FACTPY_WHERE_AST_VALIDATE": "0"}):
+            with self.assertRaises(WhereValidationError) as ctx:
+                compile_where_to_query_dl(
+                    schema_ir=_schema_ir(),
+                    where=[("ne", "$name", "blocked")],
+                    query_rel="query__ne_unbound",
+                )
+
+        self.assertIn("ne variable must be bound before filter: $name", str(ctx.exception))
+
+    def test_compile_where_to_query_dl_supports_ne_in_not_body(self) -> None:
+        dl = compile_where_to_query_dl(
+            schema_ir=_schema_ir(),
+            where=[
+                ("pred", "user:name", ["$e", "$name"]),
+                ("not", [("ne", "$name", "blocked")]),
+            ],
+            query_rel="query__not_ne",
+        )
+
+        self.assertIn('C1 != "blocked"', dl)
+        self.assertIn("!__not_", dl)
+
+    def test_compile_where_to_query_dl_rejects_malformed_ne_shape(self) -> None:
+        with self.assertRaises(WhereValidationError) as ctx:
+            compile_where_to_query_dl(
+                schema_ir=_schema_ir(),
+                where=[("ne", "$name")],
+                query_rel="query__ne_bad",
+            )
+
+        self.assertIn("ne atom must be", str(ctx.exception))
+
+    def test_ne_variables_participate_in_query_variable_extraction(self) -> None:
+        layout = build_query_witness_layout(
+            [
+                ("pred", "user:name", ["$e", "$name"]),
+                ("ne", "$name", "$other"),
+            ]
+        )
+
+        self.assertEqual(layout.query_variables, ("$e", "$name", "$other"))
 
     # Q8 Phase 2 (Slice 6):
     # - test_export_package_threads_query_registry_root_for_ruleref was removed

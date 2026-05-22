@@ -503,6 +503,14 @@ def _compile_atom(
         rhs_expr = var_symbols[rhs] if rhs_is_var else _literal_to_symbol(rhs)
         return f"{lhs_expr} = {rhs_expr}"
 
+    if kind == "ne":
+        return _compile_ne_filter(
+            atom=atom,
+            var_symbols=var_symbols,
+            bound_vars=bound_vars,
+            ast_gate_on=ast_gate_on,
+        )
+
     if kind == "in":
         _, var, values = atom
         if var not in bound_vars:
@@ -701,7 +709,7 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
             raise WhereValidationError("in values must be list")
         return atom
 
-    if kind in {"gt", "ge", "lt", "le"}:
+    if kind in {"ne", "gt", "ge", "lt", "le"}:
         if len(atom) != 3:
             raise WhereValidationError(f"{kind} atom must be ('{kind}', lhs, rhs)")
         _, lhs, rhs = atom
@@ -770,7 +778,7 @@ def _normalize_not_body_subset(not_body: Any) -> list[list[tuple[Any, ...]]]:
     if not isinstance(not_body, list) or not not_body:
         raise WhereValidationError("not body must be non-empty list")
 
-    allowed_not_kinds = {"pred", "eq", "in", "gt", "ge", "lt", "le", *_ARITH_KINDS}
+    allowed_not_kinds = {"pred", "eq", "ne", "in", "gt", "ge", "lt", "le", *_ARITH_KINDS}
 
     def validate_not_atom(not_atom: Any) -> tuple[Any, ...]:
         if not _is_atom(not_atom):
@@ -863,6 +871,35 @@ def _assert_cmp_var_allowed(
         raise WhereValidationError(f"{kind} variable type unknown: {var}")
     if any(domain not in {"int", "time"} for domain in domains):
         raise WhereValidationError(f"{kind} supports only int/time variables: {var}")
+
+
+def _compile_ne_filter(
+    *,
+    atom: tuple[Any, ...],
+    var_symbols: dict[str, str],
+    bound_vars: set[str],
+    ast_gate_on: bool,
+) -> str:
+    _, lhs, rhs = atom
+    lhs_is_var = _is_var(lhs)
+    rhs_is_var = _is_var(rhs)
+    if not lhs_is_var and not rhs_is_var:
+        raise WhereValidationError("ne requires at least one variable side")
+    if lhs_is_var and lhs not in bound_vars:
+        _raise_dataflow_or_runtime(
+            ast_gate_on=ast_gate_on,
+            message=f"ne variable must be bound before filter: {lhs}",
+            op="ne",
+        )
+    if rhs_is_var and rhs not in bound_vars:
+        _raise_dataflow_or_runtime(
+            ast_gate_on=ast_gate_on,
+            message=f"ne variable must be bound before filter: {rhs}",
+            op="ne",
+        )
+    lhs_expr = _symbol_for_var(var_symbols, lhs) if lhs_is_var else _literal_to_symbol(lhs)
+    rhs_expr = _symbol_for_var(var_symbols, rhs) if rhs_is_var else _literal_to_symbol(rhs)
+    return f"{lhs_expr} != {rhs_expr}"
 
 
 def _compile_cmp_side(term: Any, var_symbols: dict[str, str], kind: str) -> str:
@@ -958,6 +995,14 @@ def _compile_not_body_atom(
         lhs_expr = _symbol_for_var(var_symbols, lhs) if lhs_is_var else _literal_to_symbol(lhs)
         rhs_expr = _symbol_for_var(var_symbols, rhs) if rhs_is_var else _literal_to_symbol(rhs)
         return f"{lhs_expr} = {rhs_expr}"
+
+    if kind == "ne":
+        return _compile_ne_filter(
+            atom=atom,
+            var_symbols=var_symbols,
+            bound_vars=local_bound_vars,
+            ast_gate_on=ast_gate_on,
+        )
 
     if kind == "in":
         _, var, values = atom
@@ -1109,7 +1154,7 @@ def _vars_in_atom(atom: tuple[Any, ...], *, include_not_body_vars: bool) -> list
         _, var, _ = atom
         if _is_var(var):
             found.add(var)
-    elif kind in {"gt", "ge", "lt", "le"}:
+    elif kind in {"ne", "gt", "ge", "lt", "le"}:
         _, lhs, rhs = atom
         if _is_var(lhs):
             found.add(lhs)
