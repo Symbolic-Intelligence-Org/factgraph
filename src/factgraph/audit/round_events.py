@@ -6,11 +6,17 @@ import tempfile
 import time
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping, TypeAlias
 
-from factgraph.application.protocol.common import JSONValue, WarningDTO
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.store._support import BindingItems, SupportArtifact, compute_support_digest
+
+if TYPE_CHECKING:
+    from factgraph.application.protocol.common import WarningDTO
+else:
+    WarningDTO = Any
+
+JSONValue: TypeAlias = None | bool | int | float | str | list["JSONValue"] | dict[str, "JSONValue"]
 
 
 ROUND_EVENT_SCHEMA_VERSION = "1.0"
@@ -523,7 +529,9 @@ def make_warning(
     path: tuple[str, ...] = (),
     details: Mapping[str, JSONValue] | None = None,
 ) -> WarningDTO:
-    return WarningDTO(code=code, message=message, path=path, details=dict(details or {}))
+    from factgraph.application.protocol.common import WarningDTO as _WarningDTO
+
+    return _WarningDTO(code=code, message=message, path=path, details=dict(details or {}))
 
 
 def _project_overlay_phase(phase: Any) -> dict[str, JSONValue] | None:
