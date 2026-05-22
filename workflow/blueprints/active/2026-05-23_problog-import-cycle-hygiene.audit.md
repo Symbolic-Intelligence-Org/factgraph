@@ -19,6 +19,7 @@
 | 2026-05-23 | draft | Blueprint created | Scope locked to import-cycle hygiene follow-up from T2.1 closure. |
 | 2026-05-23 | review | Step 4.2 tightening applied | P1 narrows preferred fix to lazy `round_events` only; P2 adds precondition check; P3 tightens acceptance wording. |
 | 2026-05-23 | scoped | Blueprint moved to scoped | Implementation may proceed on paired impl branch. |
+| 2026-05-23 | amendment | Precondition failed; boundary amended | `import factgraph.audit.evidence_graph` still hit `assertions -> reader -> round_events`; preferred fix moved to decoupling `audit.round_events` from top-level application imports. |
 
 ## Decision Notes
 
@@ -54,6 +55,25 @@ Reproduced chain:
 - P1 required: changed the implementation boundary from broad "cycle-heavy audit submodules" wording to the specific `audit.__init__` eager `round_events` import.
 - P2 minor: added a pre-edit implementation step to verify `import factgraph.audit.evidence_graph` does not itself trigger the application/capability-helper chain.
 - P3 minor: rewrote the combined ProbLog gate acceptance so any unrelated baseline failure must be documented explicitly in closure §10.
+
+### 2026-05-23 — Implementation Precondition Failed
+
+The precondition check failed before code edits:
+
+```text
+PYTHONPATH=src python -c "import factgraph.audit.evidence_graph"
+```
+
+The observed chain was:
+
+1. `factgraph.audit.__init__` imports `assertions`.
+2. `assertions` imports `reader`.
+3. `reader` imports `round_events`.
+4. `round_events` imports `factgraph.application.protocol.common`.
+5. `application.__init__` imports `capability_helpers`.
+6. `capability_helpers.round_events` imports projector functions from partially initialized `audit.round_events`.
+
+This invalidated the narrower "lazy only the direct `round_events` import in `audit/__init__.py`" plan. The revised boundary is smaller and more direct: remove the top-level `application.protocol.common` dependency from `audit.round_events` itself, using a local `JSONValue` alias and a lazy `WarningDTO` import inside `make_warning(...)`.
 
 ### Carry-Forward Checks For Review
 

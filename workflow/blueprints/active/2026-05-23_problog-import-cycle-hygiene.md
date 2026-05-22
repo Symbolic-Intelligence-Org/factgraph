@@ -157,26 +157,31 @@ Any lazy export strategy must preserve these identity expectations.
 
 ## 5. Proposed Shape
 
-### 5.1 Preferred fix: reduce `factgraph.audit` eager imports
+### 5.1 Preferred fix after precondition: decouple `audit.round_events` from application package import
 
-The preferred implementation is to make `src/factgraph/audit/__init__.py` stop importing `round_events` as a side effect of unrelated audit submodule imports.
+Implementation-time precondition checking showed that normal `import factgraph.audit.evidence_graph` still fails before any code edit because `audit/__init__.py` imports `assertions`, `assertions` imports `reader`, and `reader` imports `round_events`. That means lazying only the direct `round_events` import from `audit/__init__.py` is insufficient.
+
+The revised preferred implementation is to make `src/factgraph/audit/round_events.py` stop importing `factgraph.application.protocol.common` at module import time.
 
 Rationale:
 
-- The cycle begins because `provenance.py` needs `factgraph.audit.evidence_graph`, not `factgraph.audit.round_events`.
-- The most direct hygiene boundary is the audit package facade: importing one audit submodule should not initialize every audit feature.
-- This avoids changing ProbLog evaluator registration and avoids touching `application.__init__` unless needed.
+- The actual cycle is enabled when `round_events` imports `factgraph.application.protocol.common` while `audit.round_events` is still partially initialized.
+- `JSONValue` is used as a type alias and can be defined locally in `round_events` without changing runtime payload validation.
+- `WarningDTO` is needed at runtime only when `make_warning(...)` constructs a warning DTO; import it lazily inside that function.
+- This boundary keeps the existing `audit/__init__.py` eager public facade intact and avoids an eight-submodule lazy facade refactor.
+- This boundary avoids changing ProbLog evaluator registration and avoids touching `application.__init__`.
 
 Acceptable tactics:
 
-- Replace the eager `round_events` import in `audit/__init__.py` with module-level `__getattr__` lazy exports.
-- Leave the other currently eager audit submodules unchanged unless implementation-time verification proves they share the same cycle path.
-- Do not broaden this into an eight-submodule audit facade lazification pass; verifying every audit submodule's transitive imports is out of scope.
-- Preserve `__all__` and public name availability for existing `from factgraph.audit import ...` users.
+- Remove the top-level `from factgraph.application.protocol.common import JSONValue, WarningDTO` import from `audit/round_events.py`.
+- Add a local `JSONValue` type alias equivalent to `application.protocol.common.JSONValue`.
+- Import `WarningDTO` inside `make_warning(...)` only.
+- Keep `warning_to_row(...)` duck-typed: it only reads `code`, `message`, `path`, and `details`.
+- Keep every `audit/__init__.py` public export intact.
 
 ### 5.2 Fallback fix: defer capability-helper export from `factgraph.application`
 
-If the audit facade cannot be made lazy safely in this slice, the fallback is to defer `capability_helpers` imports from `src/factgraph/application/__init__.py` while preserving public attribute access and identity.
+If the `round_events` import-time decoupling does not break the cycle safely, the fallback is to defer `capability_helpers` imports from `src/factgraph/application/__init__.py` while preserving public attribute access and identity.
 
 Rationale:
 
@@ -207,8 +212,9 @@ The implementation should be judged by normal import and unittest behavior, not 
 - ProbLog engine registration remains eager enough that `import factgraph.adapters.problog` registers the `"problog"` evaluator.
 - Registered evaluator identity remains exactly `evaluate_problog`.
 - Round-event projector functions keep their existing names and behavior.
-- If lazy exports are introduced, missing-name behavior should remain normal `AttributeError`, not silent fallback.
 - If a public export is intentionally no longer available from a package root, that is a scope expansion and requires blueprint amendment before implementation continues.
+- `make_warning(...)` must still return the canonical `factgraph.application.protocol.common.WarningDTO` object.
+- `warning_to_row(...)` must still accept the canonical `WarningDTO` object and preserve row shape.
 
 ## 7. Acceptance
 
@@ -217,6 +223,7 @@ The implementation should be judged by normal import and unittest behavior, not 
 - [ ] `PYTHONPATH=src python -m unittest tests.test_problog_export tests.test_problog_engine_eval` passes; if a new baseline failure unrelated to this import-cycle fix appears, closure §10 documents the failure mode and evidence that it is unrelated.
 - [ ] `PYTHONPATH=src python -c "from factgraph.adapters.problog.problog_export import export_problog; print(export_problog.__name__)"` succeeds.
 - [ ] `PYTHONPATH=src python -c "import factgraph.adapters.problog; from factgraph.adapters.problog.engine_eval import evaluate_problog; from factgraph.core.store.runtime import get_engine_evaluator; assert get_engine_evaluator('problog') is evaluate_problog"` succeeds.
+- [ ] If `factgraph.audit.round_events` changes: `make_warning(...)` still returns a canonical `WarningDTO`, and `warning_to_row(make_warning(...))` preserves current row shape.
 - [ ] If `factgraph.audit.__init__` changes: targeted imports from `factgraph.audit` still expose the names used by the existing tests.
 - [ ] If `factgraph.application.__init__` changes: `tests.test_capability_helpers_round_events` still validates application/capability-helper identity for `build_round_event_payload`.
 - [ ] Scope diff does not change ProbLog export semantics, provenance parsing, round-event projection behavior, or atom-language behavior.
@@ -226,8 +233,8 @@ The implementation should be judged by normal import and unittest behavior, not 
 ## 8. Implementation Plan
 
 1. Reproduce `tests.test_problog_export` import failure on the implementation branch and save the exact trace for the closure note.
-2. Verify the primary-boundary precondition before editing: run `PYTHONPATH=src python -c "import factgraph.audit.evidence_graph"` and confirm direct evidence-graph import does not itself trigger `application.__init__` / `capability_helpers` initialization. If this fails, amend the blueprint before implementation.
-3. Apply the smallest import-boundary change, starting with `factgraph.audit.__init__` lazy `round_events` export unless the precondition check shows that boundary is unsafe.
+2. Verify the primary-boundary precondition before editing: run `PYTHONPATH=src python -c "import factgraph.audit.evidence_graph"` and confirm direct evidence-graph import does not itself trigger `application.__init__` / `capability_helpers` initialization. This failed before implementation and is recorded as the reason for the §5.1 boundary amendment.
+3. Apply the smallest import-boundary change: decouple `factgraph.audit.round_events` from top-level `factgraph.application` imports by localizing `JSONValue` and lazily importing `WarningDTO` inside `make_warning(...)`.
 4. Preserve facade compatibility with focused import smoke tests or existing unittest coverage.
 5. Run the ProbLog gates:
    - `PYTHONPATH=src python -m unittest tests.test_problog_export`
