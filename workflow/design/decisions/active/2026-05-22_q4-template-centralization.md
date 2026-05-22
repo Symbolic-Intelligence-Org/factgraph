@@ -23,7 +23,7 @@
   - `feedback_refactor_execution_traps.md` (auto-memory) — git-history-preserving mv guidance for Phase 3
 - Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
 
-> **Status note**: this decision is opened with `Status: proposed`. ADR 4-state semantics defined in Q2 §4.5 apply here. Q1-Q5 batch status flip will apply after Q5 closes.
+> **Status note**: this decision was initially drafted with `Status: proposed`. ADR 4-state semantics defined in Q2 §4.5 apply here. It was adopted in the Q1-Q5 batch commit `ae375ce5` (2026-05-22), and its header was retrofitted to the Q4 §4.3 7-field schema (its own schema) in the same commit. See §9 Decision Record for the transition log.
 
 ## 1. Inputs
 
@@ -301,4 +301,4 @@ Post-implementing-blueprint, the templates pillar must satisfy:
 | 2026-05-22 | proposed | Decision drafted | Q4 of 5; centralizes templates and locks unified 7-field metadata schema |
 | 2026-05-22 | adopted | Status flip + header retrofit via Q1-Q5 batch commit | Header retrofitted to Q4 §4.3 7-field schema (own schema): added `Last Updated` / `Outputs / Downstream` / `Related`; recast `Audit source` and peer `Depends on` (Q1, Q2, Q3) as `Inputs:` bullets; `Branch` preserved as extension. |
 
-This decision will not be acted upon (no template authoring or `references/templates/` deletion) until **all five Q decisions are closed and the implementing blueprint reaches `Status: scoped`**.
+This decision will not trigger template authoring or `references/templates/` deletion until the implementing blueprint reaches `Status: scoped`.

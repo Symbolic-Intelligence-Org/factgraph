@@ -19,7 +19,7 @@
   - [docs/references/working/design-points/readme.md](/Users/zhenzhili/hnsm-backend/docs/references/working/design-points/readme.md) — current partial authority statement to be strengthened during mv
 - Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
 
-> **Status note**: this decision is opened with `Status: proposed`. ADR 4-state semantics (defined in §4.5 below) are first formally introduced by **this** Q2 decision. Q5 will codify how those ADR states apply across the canonical `workflow/design/decisions/` pillar and govern the Q1-Q5 batch status flip. Until then, Q2 itself uses `proposed` consistent with the Q-ordering convention chosen by the user.
+> **Status note**: this decision was initially drafted with `Status: proposed`. It is the first decision to formally introduce the ADR 4-state semantics (defined in §4.5 below). It was adopted in the Q1-Q5 batch commit `ae375ce5` (2026-05-22), and its header was retrofitted to the Q4 §4.3 7-field schema in the same commit. See §9 Decision Record for the transition log.
 
 ## 1. Inputs
 
@@ -262,4 +262,4 @@ Post-implementing-blueprint, the design pillar must satisfy:
 | 2026-05-22 | proposed | Decision drafted | Q2 of 5; first decision to define ADR 4-state semantics for this slice's design pillar |
 | 2026-05-22 | adopted | Status flip + header retrofit via Q1-Q5 batch commit | Header retrofitted to Q4 §4.3 7-field schema: added `Last Updated` / `Outputs / Downstream` / `Related`; recast `Audit source` and peer `Depends on` (Q1) as `Inputs:` bullets; `Branch` preserved as extension. |
 
-This decision will not be acted upon (no mv operations on design-points or decisions) until **all five Q decisions are closed and the implementing blueprint reaches `Status: scoped`**.
+This decision will not trigger mv operations on design-points or decisions until the implementing blueprint reaches `Status: scoped`.

@@ -18,7 +18,7 @@
   - Future obsidian-integration slice (handles parked `docs/references/external/` + `docs/references/bridges/`)
 - Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
 
-> **Status note**: this decision is opened with `Status: proposed`. The ADR 4-state semantics (proposed / adopted / superseded / withdrawn) are themselves under decision in Q5. Once Q5 closes, a separate batch commit will flip Q1-Q4 from `proposed` to `adopted` to reflect formal lock. See §9 Decision Record below for the planned transition.
+> **Status note**: this decision was initially drafted with `Status: proposed`. The ADR 4-state semantics (proposed / adopted / superseded / withdrawn) were locked by Q2 §4.5. This decision was adopted in the Q1-Q5 batch commit `ae375ce5` (2026-05-22), and its header was retrofitted to the Q4 §4.3 7-field schema in the same commit. See §9 Decision Record for the transition log.
 
 ## 1. Inputs
 
@@ -169,4 +169,4 @@ Post-implementing-blueprint, the repo state must satisfy:
 | 2026-05-22 | proposed | Decision drafted | Per cadence Stage 2, Q1 load-bearing priority; first of 5 Q docs for this slice |
 | 2026-05-22 | adopted | Status flip + header retrofit via Q1-Q5 batch commit | Header retrofitted to Q4 §4.3 7-field schema: added `Last Updated` / `Outputs / Downstream` / `Related` fields; recast `Audit source` as `Inputs:` bullet; `Branch` preserved as pillar-specific extension. |
 
-This decision will not be acted upon (no mv operations) until **all five Q decisions are closed and the implementing blueprint reaches `Status: scoped`**.
+This decision will not trigger mv operations until the implementing blueprint reaches `Status: scoped`.

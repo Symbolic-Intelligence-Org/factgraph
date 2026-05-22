@@ -25,7 +25,7 @@
 - Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
 - Depends on: Q1, Q2, Q3, Q4
 
-> **Status note**: this is the final Q decision of this slice's Stage 2. The Q1-Q5 batch flip (`proposed → adopted` for all five) follows Q5 closure as a single commit per Q4 §7.3. That batch flip commit also retrofits Q1-Q4 headers to the Q4 §4.3 7-field schema (Q5 itself uses the schema from this first draft, per the user's authorization).
+> **Status note**: this is the final Q decision of this slice's Stage 2. It was adopted in the Q1-Q5 batch commit `ae375ce5` (2026-05-22) per Q4 §7.3. Q5 was authored under the Q4 §4.3 7-field schema from its first draft per user authorization; Q1-Q4 headers were retrofitted to the same schema in the same batch commit. See §9 Decision Record for the transition log.
 
 ## 1. Inputs
 
@@ -330,4 +330,4 @@ Post-implementing-blueprint, the AGENTS hierarchy must satisfy:
 | 2026-05-22 | proposed | Decision drafted | Q5 of 5; first decision authored under the Q4 §4.3 7-field schema (used from initial draft per user authorization) |
 | 2026-05-22 | adopted | Status flip via Q1-Q5 batch commit | Q5 already 7-field compliant from first draft; this commit only flips `Status: proposed → adopted` and adds this Decision Record row. Q1-Q4 retrofit to 7-field schema performed in the same batch commit per §4.8. |
 
-This decision will not be acted upon (no AGENTS authoring or batch flip) until **review approval is granted and the batch flip commit is authorized**.
+This decision will not trigger AGENTS authoring until the implementing blueprint reaches `Status: scoped`.

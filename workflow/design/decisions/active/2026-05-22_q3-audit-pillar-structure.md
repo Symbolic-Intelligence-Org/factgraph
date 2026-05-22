@@ -21,7 +21,7 @@
   - Slice 7C `docs/audit/2026-05-21_registry-final-removal-vs-shipped.md` (branch-isolated audit example per audit §3.3 D6)
 - Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
 
-> **Status note**: this decision is opened with `Status: proposed`. ADR 4-state semantics defined in Q2 §4.5 apply here (decisions ADR semantics drive synthesis re-bucketing). Q1-Q5 batch status flip will apply after Q5 closes.
+> **Status note**: this decision was initially drafted with `Status: proposed`. ADR 4-state semantics defined in Q2 §4.5 apply here (decisions ADR semantics drive synthesis re-bucketing). It was adopted in the Q1-Q5 batch commit `ae375ce5` (2026-05-22), and its header was retrofitted to the Q4 §4.3 7-field schema in the same commit. See §9 Decision Record for the transition log.
 
 ## 1. Inputs
 
@@ -281,4 +281,4 @@ Post-implementing-blueprint, the audit pillar must satisfy:
 | 2026-05-22 | proposed | Decision drafted | Q3 of 5; formalizes audit pillar that has been operating informally since 2026-05-20 |
 | 2026-05-22 | adopted | Status flip + header retrofit via Q1-Q5 batch commit | Header retrofitted to Q4 §4.3 7-field schema: added `Last Updated` / `Outputs / Downstream` / `Related`; recast `Audit source` and peer `Depends on` (Q1, Q2) as `Inputs:` bullets; `Branch` preserved as extension. |
 
-This decision will not be acted upon (no audit file convention enforcement) until **all five Q decisions are closed and the implementing blueprint reaches `Status: scoped`**.
+This decision will not trigger audit file convention enforcement until the implementing blueprint reaches `Status: scoped`.
