@@ -169,8 +169,9 @@ Rationale:
 
 Acceptable tactics:
 
-- Replace eager imports for cycle-heavy audit submodules with module-level `__getattr__` lazy exports.
-- Keep eagerly imported lightweight exports where they are proven safe, but do not leave `round_events` eager if that preserves the cycle.
+- Replace the eager `round_events` import in `audit/__init__.py` with module-level `__getattr__` lazy exports.
+- Leave the other currently eager audit submodules unchanged unless implementation-time verification proves they share the same cycle path.
+- Do not broaden this into an eight-submodule audit facade lazification pass; verifying every audit submodule's transitive imports is out of scope.
 - Preserve `__all__` and public name availability for existing `from factgraph.audit import ...` users.
 
 ### 5.2 Fallback fix: defer capability-helper export from `factgraph.application`
@@ -213,7 +214,7 @@ The implementation should be judged by normal import and unittest behavior, not 
 
 - [ ] `PYTHONPATH=src python -m unittest tests.test_problog_export` runs through the normal unittest entrypoint without the import-cycle failure.
 - [ ] `PYTHONPATH=src python -m unittest tests.test_problog_engine_eval` runs through the normal unittest entrypoint.
-- [ ] `PYTHONPATH=src python -m unittest tests.test_problog_export tests.test_problog_engine_eval` passes or fails only on an unrelated, newly documented baseline issue.
+- [ ] `PYTHONPATH=src python -m unittest tests.test_problog_export tests.test_problog_engine_eval` passes; if a new baseline failure unrelated to this import-cycle fix appears, closure §10 documents the failure mode and evidence that it is unrelated.
 - [ ] `PYTHONPATH=src python -c "from factgraph.adapters.problog.problog_export import export_problog; print(export_problog.__name__)"` succeeds.
 - [ ] `PYTHONPATH=src python -c "import factgraph.adapters.problog; from factgraph.adapters.problog.engine_eval import evaluate_problog; from factgraph.core.store.runtime import get_engine_evaluator; assert get_engine_evaluator('problog') is evaluate_problog"` succeeds.
 - [ ] If `factgraph.audit.__init__` changes: targeted imports from `factgraph.audit` still expose the names used by the existing tests.
@@ -225,17 +226,18 @@ The implementation should be judged by normal import and unittest behavior, not 
 ## 8. Implementation Plan
 
 1. Reproduce `tests.test_problog_export` import failure on the implementation branch and save the exact trace for the closure note.
-2. Apply the smallest import-boundary change, starting with `factgraph.audit.__init__` lazy/reduced eager imports unless a local verification shows that boundary is unsafe.
-3. Preserve facade compatibility with focused import smoke tests or existing unittest coverage.
-4. Run the ProbLog gates:
+2. Verify the primary-boundary precondition before editing: run `PYTHONPATH=src python -c "import factgraph.audit.evidence_graph"` and confirm direct evidence-graph import does not itself trigger `application.__init__` / `capability_helpers` initialization. If this fails, amend the blueprint before implementation.
+3. Apply the smallest import-boundary change, starting with `factgraph.audit.__init__` lazy `round_events` export unless the precondition check shows that boundary is unsafe.
+4. Preserve facade compatibility with focused import smoke tests or existing unittest coverage.
+5. Run the ProbLog gates:
    - `PYTHONPATH=src python -m unittest tests.test_problog_export`
    - `PYTHONPATH=src python -m unittest tests.test_problog_engine_eval`
    - `PYTHONPATH=src python -m unittest tests.test_problog_export tests.test_problog_engine_eval`
-5. Run any package-facade regression tests relevant to the chosen boundary:
+6. Run any package-facade regression tests relevant to the chosen boundary:
    - audit facade tests if `factgraph.audit.__init__` changes
    - capability-helper tests if `factgraph.application.__init__` changes
-6. Run ruff on touched files.
-7. Fill §10 with the chosen boundary, test results, and any baseline failures that remain.
+7. Run ruff on touched files.
+8. Fill §10 with the chosen boundary, test results, and any baseline failures that remain.
 
 ## 9. Docs To Update
 

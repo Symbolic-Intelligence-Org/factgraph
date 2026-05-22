@@ -17,6 +17,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-23 | draft | Blueprint created | Scope locked to import-cycle hygiene follow-up from T2.1 closure. |
+| 2026-05-23 | review | Step 4.2 tightening applied | P1 narrows preferred fix to lazy `round_events` only; P2 adds precondition check; P3 tightens acceptance wording. |
 
 ## Decision Notes
 
@@ -43,8 +44,15 @@ Reproduced chain:
 ### 2026-05-23 — Preferred Boundary
 
 - Preferred boundary is `factgraph.audit.__init__`: importing `factgraph.audit.evidence_graph` for ProbLog provenance should not initialize `audit.round_events`.
+- Step 4.2 review narrowed this further: only the eager `round_events` import is in scope for lazy export. Other eager audit submodules remain unchanged unless implementation-time verification proves they share the same cycle path.
 - Fallback boundary is `factgraph.application.__init__`: importing `application.protocol.common` should not initialize capability helpers.
 - ProbLog package registration workaround is not preferred because existing tests require `get_engine_evaluator("problog") is evaluate_problog` after `import factgraph.adapters.problog`.
+
+### 2026-05-23 — Step 4.2 Review Findings Applied
+
+- P1 required: changed the implementation boundary from broad "cycle-heavy audit submodules" wording to the specific `audit.__init__` eager `round_events` import.
+- P2 minor: added a pre-edit implementation step to verify `import factgraph.audit.evidence_graph` does not itself trigger the application/capability-helper chain.
+- P3 minor: rewrote the combined ProbLog gate acceptance so any unrelated baseline failure must be documented explicitly in closure §10.
 
 ### Carry-Forward Checks For Review
 
