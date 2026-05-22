@@ -249,9 +249,9 @@ Recommended commit batching: 1 commit for templates (steps 1-6) + 1 commit for A
 1. `git mv docs/architecture_principles.md workflow/foundations/architecture_principles.md`
 2. `git mv docs/module_docs_convention.md workflow/foundations/module_docs_convention.md`
 3. `git mv docs/decisions/*.md workflow/design/decisions/active/` (8 existing DB/view decisions; assign `Status: adopted` per Q4 §7.3; optional 7-field retrofit per §7.4 — recommended)
-4. `git mv docs/decisions/README.md workflow/design/decisions/README.md` (then update or merge with Phase 1.5 README)
+4. Delete `docs/decisions/README.md` (superseded by Phase 1.5 step 9's freshly-authored `workflow/design/decisions/README.md`). Any substantive content not yet captured in Q5 / `design/AGENTS.md` / `design/decisions/README.md` must be absorbed into the Phase 1.5 fresh README before deletion. Do **NOT** `git mv` the legacy README into the pillar — that would create a dual-README at the pillar level (the Phase 1.5 fresh one + the legacy one) and reintroduce the dual-source-of-truth ambiguity PF-Rec1 flagged.
 5. `git mv docs/audit/*.md workflow/audit/active/` (2 existing audits; backfill 7-field header per Q4 §7.4 warning-level)
-6. `git mv docs/references/working/design-points/*.md workflow/design/design-points/active/` (6 essays + readme.md; readme updates header to Q2 §4.4 strengthened authority statement)
+6. `git mv` each of the **12 essay `.md` files** in `docs/references/working/design-points/` into `workflow/design/design-points/active/`. Per PF-R1 (preflight `c43ab22b`), the actual count is 12 essays + 1 readme (not "6 essays" as the pre-amendment draft claimed). Concrete essay list to mv: `database-view-fg-layered-architecture.zh.md`, `evidence-tree-rainbird-style-v1.zh.md`, `factgraph-lifecycle-and-assets.zh.md`, `identity-primary-key-coordinate-semantics.md`, `identity-primary-key-coordinate-semantics.zh.md`, `possibility-probability-transmission.zh.md`, `post-track3-semantics-public-api.zh.md`, `query-view-and-inference-handles.zh.md`, `read-write-snapshot-assertion-selection.zh.md`, `rule-expression-and-proof-attempt.zh.md`, `rule-policy-function-tree-and-syntax.zh.md`, `rule-query-inference-head-semantics.zh.md`. The legacy `docs/references/working/design-points/readme.md` (lowercase, pillar-level) is **NOT mv'd as the new pillar README** — its content is absorbed into the Phase 1.5 fresh `workflow/design/design-points/README.md` (uppercase) and the legacy lowercase file is then deleted in this Phase or in Phase 7 cleanup. Per PF-Rec1, this avoids creating a dual-README at the pillar level.
 
 Update internal cross-links broken by mv (relative path adjustments).
 
@@ -328,7 +328,7 @@ For each remaining `docs/references/working/` content:
 - **`product-readiness-audit-2026-04-09.md`** (expired audit): mv to `workflow/heritage/bundles/` or delete.
 - **`extraction_benchmark_report.json`** (data file): mv to `workflow/heritage/bundles/` or delete.
 - **`factpy_esa_demo.pptx`** (binary): mv to `workflow/heritage/bundles/` or delete.
-- **`factgraph-namespace-test-proposals/`** (subdir, status unknown): mv to `workflow/heritage/bundles/` (default; preserve until confirmed unneeded).
+- **`factgraph-namespace-test-proposals/`** (subdir, status unknown at preflight time): **before classification**, perform reconnaissance read at Step 4.7 Phase 7 time — `ls -la` the subdir + read any `README.md` it contains — to determine status. Per PF-Rec2 (preflight `c43ab22b`). Classification rules: CLOSED bundle → `workflow/heritage/bundles/`; in-flight active test proposals → `workflow/working/` or keep separate; clearly unused → delete. Default fallback if reconnaissance is inconclusive: mv to `workflow/heritage/bundles/` and preserve. Avoids blind AskUserQuestion at Phase 7 implementation time.
 - **`load-test-2026-04-11/`** (load test bundle): mv to `workflow/heritage/bundles/` or delete.
 
 Then:
