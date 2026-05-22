@@ -66,18 +66,21 @@ The following items **move into** `workflow/`:
 | `memory/` (project-root entire tree) | `workflow/memory/` | memory |
 | `docs/references/working/` CLOSED bundles (e.g., `rule-replay-line-redesign-input/`, `post-routemap-direction-selection-input/`) | `workflow/heritage/bundles/` | heritage |
 
-### 4.3 `docs/references/` dissolution
+### 4.3 `docs/references/` partial dissolution
 
-The `docs/references/` directory is **fully dissolved** in this slice (subdirectory disposition is finalized by other Qs and later phases):
+`docs/references/working/` and `docs/references/templates/` are **dissolved in this slice**. `docs/references/external/` and `docs/references/bridges/` remain as **explicitly parked deferred subtrees** until the future obsidian-integration slice. The parent `docs/references/` directory therefore persists at slice end holding only those two parked subtrees plus an updated README; it is deleted only after the obsidian slice migrates the remaining content out.
 
-| Subdir | Disposition |
+| Item | Disposition this slice |
 |---|---|
-| `docs/references/working/design-points/` | Migrated to `workflow/design/design-points/active/` (per Q2; this slice) |
+| `docs/references/working/design-points/` | Migrated to `workflow/design/design-points/active/` (per Q2) |
 | `docs/references/working/` heterogeneous content (load-test bundle, pre-OSS market materials, .pptx, .json data, namespace-test proposals) | Case-by-case in implementing blueprint Phase 7; survivors go to `workflow/heritage/bundles/` or `workflow/working/` per user judgment |
-| `docs/references/external/` | **Parked** in current location with deferred marker until obsidian-integration slice (next-next slice) |
-| `docs/references/bridges/` | **Parked** in current location with deferred marker until obsidian-integration slice |
+| `docs/references/working/` parent dir | Deleted at end of Phase 7 once empty |
 | `docs/references/templates/reference_note.md` | Deleted after Q4 confirms it is not needed for the centralized template inventory |
-| `docs/references/README.md` | Deleted after subdirectory dissolution completes |
+| `docs/references/templates/` parent dir | Deleted once empty |
+| `docs/references/external/` | **Parked** — explicitly deferred subtree; not touched in this slice; awaits obsidian-integration slice |
+| `docs/references/bridges/` | **Parked** — explicitly deferred subtree; not touched in this slice; awaits obsidian-integration slice |
+| `docs/references/README.md` | Updated this slice to declare partial-dissolution state (`working/` + `templates/` gone; `external/` + `bridges/` deferred). Deleted only after the obsidian slice migrates `external/` + `bridges/` out. |
+| `docs/references/` parent dir | Persists at slice end holding only `external/` + `bridges/` + updated `README.md`. Deleted only after obsidian slice. |
 
 ### 4.4 Root governance updates
 
@@ -139,7 +142,9 @@ This split is meant to be **permanent**. Once `workflow/` exists with full pilla
 
 Post-implementing-blueprint, the repo state must satisfy:
 
-1. `docs/` contains **exactly** these items at top level: `README.md`, `SECURITY.md`, `SECURITY_monorepo.md`, `api/`, `official/`. (Plus the parked `references/external/` and `references/bridges/` subdirectories until obsidian integration completes.)
+1. `docs/` top-level contents — two-stage acceptance:
+   - **End of this slice** (acceptance gate for the workflow-governance-promotion blueprint): `README.md`, `SECURITY.md`, `SECURITY_monorepo.md`, `api/`, `official/`, plus a partially-dissolved `references/` directory containing only `external/` + `bridges/` + an updated `README.md` declaring the partial-dissolution state.
+   - **End of future obsidian-integration slice** (out of scope here; recorded for traceability): exactly 5 items — `README.md`, `SECURITY.md`, `SECURITY_monorepo.md`, `api/`, `official/`. `docs/references/` no longer exists.
 2. `workflow/` contains all 8 pillars per `workflow/AGENTS.md` pillar map with each pillar populated per Q2-Q5 decisions.
 3. [/AGENTS.md](/Users/zhenzhili/hnsm-backend/AGENTS.md) points readers at `workflow/AGENTS.md` for governance.
 4. [docs/README.md](/Users/zhenzhili/hnsm-backend/docs/README.md) has no entries for `blueprints/`, `decisions/`, `audit/`, `references/working/design-points/`, `blueprint_history/`, or workflow-related architecture/module-docs documents (those entries now live in `workflow/README.md`).
