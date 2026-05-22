@@ -275,8 +275,9 @@ tests/application/protocol/
   - 这两条不冲突(不同 module 路径 + 不同语义)
 - **Invariants**:
   - 构造期所有失败 → `RuleValidationError`(domain exception);不抛 generic `ValueError` / `TypeError`
-  - `where: tuple[Atom, ...]` immutable + atom 顺序固定(stable order = 用户传入顺序;atom_id positional)
-  - `ports` 通过 `MappingProxyType` 或等价 frozen mapping 保持 immutable
+  - `where: tuple[Atom, ...]` outer container immutable(无法替换 tuple 本身)+ atom 顺序固定(stable order = 用户传入顺序;atom_id positional)
+  - `ports` 通过 `MappingProxyType` 或等价 frozen mapping 保持 outer immutable(无法 setitem / delitem;`ports` values 是 `Var` 已经 frozen,内部无 list)
+  - **Shallow immutability only**(per Step 4.2 v2 P1 finding):`PredAtom.terms` / `InAtom.values` / `BuiltinAtom.args` / `NotAtom.body` 等 core AST atom 内部仍是 mutable lists(shipped `core/rules/where_ast.py` 现状)。`frozen=True` dataclass 仅冻结 attribute 赋值,不冻结 list 内容 — 故 Rule 实例的 **container shallow immutable**,not recursively。Recursive immutability hardening **deferred**(留给后续 T1 sub-slice 或 dedicated hardening slice;**违反 `feedback_invariant_defense_in_depth` 已知,user 在 Step 4.2 v2 review 显式选择此 trade-off 以保持 T1.1 atomic — 不修改 shipped core AST types 为前提**)
   - `content_digest` 基于 canonical serialization,跨进程 deterministic
   - **依赖方向**:`application.protocol.rule` 只 import `core.rules.where_ast`(forward),**不**import `sdk.*`(no reverse)
 
@@ -289,7 +290,7 @@ tests/application/protocol/
 - [ ] Ports 校验:value 必须是 `core.rules.where_ast.Var`(1 unit test);Var 必须在 where 出现(1 unit test)
 - [ ] Desc rendering:模板态 / 绑定态 / 未声明 port 引用 reject 三场景(3 unit tests pass)
 - [ ] Atom_id positional 格式 `<rule_id>:atom_<index>`(1 unit test pass)
-- [ ] Rule frozen / `where` tuple / `ports` MappingProxyType immutability(3 unit tests pass)
+- [ ] Rule **shallow** immutability:frozen `setattr` 失败 + `where` tuple 无法替换 + `ports` MappingProxyType 无法 setitem(3 unit tests pass)— **note**:atom 内部 list mutability per shipped core AST,recursive immutability deferred(§6 已声明)
 - [ ] `content_digest` deterministic + atom 顺序影响 digest(2 unit tests pass)
 - [ ] Port kind 推断:entity_ref via pred `XYZ:exists` / 其他 → value(2 unit tests pass)
 - [ ] 旧 `factgraph.sdk.Rule` legacy 仍工作,所有现有 tests pass(non-regression)
@@ -337,4 +338,5 @@ tests/application/protocol/
 - 与 blueprint 不同的地方:
 - 为什么会有这些调整:
 - **Parent essay deviation** — essay §3.5 F6 写 "复用 `ExistsAtom` / `AttrRef` / `CompareExpr` / `LogicVar` primitives" 是 SDK DSL 角度;本 slice 用更深一层 core AST(`PredAtom` / `CmpAtom`)作为 `Rule.where` 存储类型。理由:依赖方向(`sdk → application → core`)+ slice 原子性(application 层不导入 SDK DSL)。Essay 高层意图(复用现有 primitive,不重写 IR)保留 — 只是复用方向变为 core 而非 SDK。Deviation 不引入新 commitment,Track plan 已同步更新(T1.2 absorb DSL ergonomic 扩展)。
+- **Recursive immutability deferred**(per Step 4.2 v2 P1 finding)— T1.1 Rule 仅 shallow immutable;`PredAtom.terms` / `InAtom.values` / `BuiltinAtom.args` 等 core AST 内部 list 保持 shipped 现状(mutable)。这是 `feedback_invariant_defense_in_depth` 已知 trade-off,user 选择以保 slice atomic 不修改 shipped core AST。后续 immutability hardening slice 触发条件:出现实际 mutation 漂移事件 / 跨 Rule 构造-evaluation 之间 atom internals 被改的 bug / 用户社区报告。
 - 归档说明:

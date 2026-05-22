@@ -9,6 +9,7 @@
 | --- | --- | --- | --- |
 | 2026-05-22 | draft | Blueprint created | Initial scope recorded.T1.1 是 5-Track 实施分解的第 1 个 sub-slice,foundation 角色;additive 引入新 `Rule` 类到 `factgraph.application.protocol.rule`,与旧 `factgraph.sdk.Rule` 共存。Parent essay 真源 §3.1-§3.14(C1-C21 + C45-C48,共 25 commitments)。轻量 cadence 模式:跳过 Stage 1 audit / Stage 2 Q / Stage 3 synthesis,blueprint draft → scoped → impl → closure → archive 主路径保留(per Track plan §1.2)。 |
 | 2026-05-22 | draft | Step 4.2 review tightening applied | User-driven review surfaced P1+P2 blockers + P3+P4 minors;blueprint restructured to Option A1 (scope degrade).P1+P2 → drop unified canonical authoring + SDK DSL extensions from T1.1;`Rule.where` storage 改为 core AST atoms;deferred 项 absorbed by T1.2 (Track plan §2 同步更新).P3 → docs path corrected to `application/docs/`.P4 → §5.3 wording fixed.Blueprint stays `Status: draft` pending next reviewer pass. |
+| 2026-05-22 | draft | Step 4.2 v2 tightening applied | Second user review pass surfaced 3 findings.P1 (Blocker) — `frozen=True` Rule + tuple where + MappingProxyType ports gives only **shallow** immutability;core AST atom internals (`PredAtom.terms` / `InAtom.values` / `BuiltinAtom.args`) remain mutable lists per shipped `core/rules/where_ast.py`.`feedback_invariant_defense_in_depth` violation acknowledged.User chose downgrade (Option a) over deep-freeze (Option b) to keep slice atomic — recursive immutability hardening deferred to later slice.Blueprint §6 invariants + §7 acceptance + §10 outcome updated.P2 (Required) — audit log "Scope boundary lock" section had stale initial scope referring to "unified atom canonical normalization (~50-75 LOC lowering 扩展)";fixed to reflect post-tightening scope (DTO + core AST storage + validation + desc + atom_id/content_digest).P3 (Required) — Track plan §2 T1.1 row still asserted old scope ("unified atom canonical IR + lowering 复用 ExistsAtom/AttrRef/CompareExpr");rewritten to match Option A1 (additive application Rule DTO storing core AST atoms only). After this commit blueprint ready for Step 4.6 scoped anchor pending user confirmation. |
 
 ## Decision Notes
 
@@ -29,9 +30,9 @@
 - 保留 Step 4.1 draft / Step 4.2 review tightening / Step 4.6 scoped / Step 4.7 impl / Step 4.8 closure / Step 4.9 archive
 - 保留 sacred branch isolation + dirty 集保留 + per-commit verification ritual + 可以推进 mutual authorization
 
-**Scope boundary lock**(initial draft,2026-05-22):
-- 包含:新 Rule 类引入 + unified atom canonical normalization(~50-75 LOC lowering 扩展)+ ports 类型推断 + desc rendering + immutability + atom_id positional
-- 排除:旧 SDK Rule hard-cut(T1.2)、SDK re-export(T1.3)、port + alias 完整锁定(T1.4)、atom kind canonical 9-list 文档化(T2.1)、RuleExpr(T3)、head(T4)、.eval(T5)
+**Scope boundary lock**(post Step 4.2 v2 tightening,2026-05-22):
+- 包含:application Rule DTO + core AST atom storage(`PredAtom`/`CmpAtom`/`InAtom`/`BuiltinAtom`/`NotAtom`,reject `RuleRefAtom`)+ construction validation(atom kind allowlist + port var reachability + desc template)+ desc rendering(`%port_name` 插值)+ atom_ids positional property + content_digest deterministic property + shallow Rule immutability(frozen + tuple where + MappingProxyType ports)
+- 排除:SDK DSL ergonomic syntax / unified canonical authoring `User(u).field == value` / DSL→core normalization / Ellipsis anonymous Var / cross-entity ref / atom dedup(全部 T1.2);旧 SDK Rule hard-cut(T1.2);SDK re-export(T1.3);port + alias 完整锁定(T1.4);**recursive immutability hardening**(deferred per Step 4.2 v2 P1 — `feedback_invariant_defense_in_depth` 已知 trade-off);atom kind canonical 9-list 文档化(T2.1);RuleExpr(T3);head(T4);.eval(T5)
 
 ### 2026-05-22 — Step 4.2 review tightening (P1-P4 applied)
 
@@ -64,3 +65,15 @@ User-driven Step 4.2 review surfaced 4 findings:
 **Cascading**:Track plan §2 T1 row 同步更新 — T1.2 scope 从 "纯 subtractive(reject legacy)" 扩为 "additive(DSL ergonomic 扩展 + DSL→core normalization)+ subtractive(reject legacy in new Rule path)"。
 
 **Blueprint 仍 Status: draft**;不进入 Step 4.6 scoped anchor 直到用户复核本 tightening 通过。
+
+### 2026-05-22 — Step 4.2 v2 tightening (P1+P2+P3 applied)
+
+Second user review pass after Step 4.2 v1 tightening landed (`58ed1742`).Surfaced 3 findings — all valid.
+
+**P1 (Blocker)** — Recursive immutability claim was false:Step 4.2 v1 §6 invariant said `frozen=True` + tuple where + MappingProxyType ports gives "recursively immutable",但实际上 core AST atom 内部 list 字段(`PredAtom.terms` / `RuleRefAtom.terms` / `InAtom.values` / `BuiltinAtom.args` / `AndExpr.atoms` / `OrExpr.branches`)全部是 `list[...]`,frozen dataclass 不冻结 list 内容。这是 `feedback_invariant_defense_in_depth` 所谓 "freezing theatre"。User 给二选:**(a)** downgrade invariant claim 为 "shallow Rule container immutable;atom internals per shipped" 或 **(b)** deep-freeze / canonical-clone atoms inside Rule 构造期。**User 选 (a) downgrade** 以保 T1.1 atomic(不需修改 shipped core AST types)。Blueprint §6 加 explicit "Shallow immutability only" paragraph + recursive hardening deferred 触发条件;§7 acceptance immutability test 改 phrasing 强调 shallow only;§10 outcome placeholder 加 deferred 条目。
+
+**P2 (Required)** — Audit log Decision Notes 中 "Scope boundary lock (initial draft, 2026-05-22)" 区块的 "包含:" 行仍写旧 scope(`unified atom canonical normalization (~50-75 LOC lowering 扩展)`)— Step 4.2 v1 tightening 已经 degrade,这行 stale。**Adopted**:rewrite 该行为 post-tightening 当前 scope("application Rule DTO + core AST atom storage + validation + desc rendering + atom_ids/content_digest properties + shallow immutability");"排除:" 行同步加 "DSL ergonomic syntax / unified canonical authoring / DSL→core normalization (T1.2)" + "recursive immutability hardening (deferred per Step 4.2 v2 P1)";section heading 改为 "Scope boundary lock (post Step 4.2 v2 tightening, 2026-05-22)" 标明 supersede 关系。
+
+**P3 (Required)** — Track plan §2 T1.1 row 仍写旧 scope("unified atom canonical IR + lowering 复用 `ExistsAtom`/`AttrRef`/`CompareExpr`")— Step 4.2 v1 tightening 只更新了 T1.2 row,T1.1 row 漏改。**Adopted**:rewrite T1.1 row 为 Option A1 scope("引入新 application Rule DTO + core AST atom storage + DTO validation + desc rendering + atom_id positional + content_digest;**不**触 SDK DSL;**不**实现 unified canonical authoring [T1.2]");性质标 Additive(unchanged)。
+
+**After this tightening commit**:Blueprint + audit log + Track plan T1.1 row 三处 scope assertion 一致;user 表态 "comfortable moving to scoped" 即可走 Step 4.6 scoped anchor。
