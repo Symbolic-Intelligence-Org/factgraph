@@ -1,6 +1,6 @@
 # T1.2 — DSL ergonomic 扩展 + DSL→application Rule 桥接 + legacy 形态拒绝(新 Rule path)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-22
 - Last Updated: 2026-05-22
 - Track: T1 Rule body 重塑(per [rule-expression-and-proof-track-plan.zh.md](../../design/design-points/active/rule-expression-and-proof-track-plan.zh.md))
@@ -623,12 +623,24 @@ tests/sdk/
 
 ## 10. Outcome / Deviations
 
-待 implementation 完成后填写:
+Implemented in `3aa229c6` on branch
+`v0.2.0-impl-t1-2-dsl-to-application-rule-2026-05-22`.
 
 - 最终落地结果:
+  - `AttrRef.entity_type` additive 字段 + `ExistsAtom.__getattr__` 已落地;`LogicVar.__getattr__` 保持 legacy `entity_type=None`。
+  - `User(...)` positional Ellipsis 已落地;`_is_sdk_dsl_value(Ellipsis)` 仍为 False;kwarg Ellipsis 不触发 DSL call。
+  - `_lower_compare` 在 unified AttrRef path 自动 emit `EntityType:exists` pred,并支持 RHS/LHS `ExistsAtom` cross-entity ref。
+  - 新增 `factgraph.sdk.dsl.build_application_rule(...)` + `DSLToApplicationRuleError`,输出 T1.1 `application.protocol.Rule`。
+  - 新 Rule path reject bare AttrRef / 2-line legacy form / raw `Pred(...)` / raw RuleRef / OR shape / anonymous port。
+  - `src/factgraph/application/docs/rule.md` 增补 bridge usage、6 个 supported unified forms、legacy rejection 说明。
 - 与 blueprint 不同的地方:
-- 为什么会有这些调整:
-- **AttrRef.entity_type additive 扩展** — 复用既有 frozen dataclass + default value 加字段,legacy 路径行为不变(`entity_type=None` 时 `_lower_compare` 走 bindings 表 fallback);若实施期发现下游 lowering / bindings 表与 AttrRef.entity_type 冗余冲突,记录于此 + 决策保留方向
-- **依赖于 T1.1 shipped impl 行为**:`application.protocol.Rule` 接受 `tuple[Atom, ...]` 直接;若 T1.1 future hardening 改变 acceptance,本 slice 桥接需同步更新
-- **Recursive immutability** 继承 T1.1 deferred(per `feedback_invariant_defense_in_depth` trade-off)
-- 归档说明:
+  - 实施中额外加入 core `Var` canonicalization by name。原因是 `parse_where_ir_to_ast` 会给同名变量生成不同 `Origin.path`,若不 canonicalize,ports 与 field predicates 中的同名变量对象不相等。该处理保持用户语义按 token/name 统一。
+  - 未新增 SDK 顶层 `factgraph.sdk.__all__` export;保持 T1.3 处理 SDK surface 命名冲突。
+- 验证:
+  - `PYTHONPATH=src python -m unittest tests.sdk.dsl.test_application_rule tests.sdk.dsl.test_existsatom_getattr tests.sdk.test_schema_ellipsis tests.application.protocol.test_rule tests.test_sdk_validation tests.test_relationship_schema tests.test_application_protocol` — 87 tests OK。
+  - `python -m ruff check src/factgraph/sdk/dsl/expr.py src/factgraph/sdk/schema.py src/factgraph/sdk/dsl/application_rule.py src/factgraph/sdk/dsl/__init__.py tests/sdk/dsl/test_application_rule.py tests/sdk/dsl/test_existsatom_getattr.py tests/sdk/test_schema_ellipsis.py` — clean。
+  - `PYTHONPATH=src python -m unittest discover tests` — still fails on pre-existing baseline drift unrelated to this slice(registry removal, removed `meta[confidence]`, SDK `ReadPolicy` export expectations, and other stale invariant tests).
+- Carry-forward:
+  - non-eq AttrRef compare(`User(u).field > lit`) remains deferred per Step 4.2 v2.
+  - Recursive immutability hardening remains deferred from T1.1(per `feedback_invariant_defense_in_depth` trade-off).
+  - T1.3 still owns SDK top-level `Rule` / `__all__` surface decision.
