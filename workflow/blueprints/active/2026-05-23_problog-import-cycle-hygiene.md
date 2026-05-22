@@ -1,6 +1,6 @@
 # ProbLog import cycle hygiene
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-23
 - Last Updated: 2026-05-23
 - Authority: task blueprint
@@ -254,10 +254,59 @@ The implementation should be judged by normal import and unittest behavior, not 
 
 ## 10. Outcome / Deviations
 
-To be filled during closure:
+### 10.1 Final Landed Boundary
 
-- Final landed import boundary:
-- Test gates run:
-- Public facade compatibility notes:
-- Deviations from blueprint:
-- Archive note:
+Implemented in `d0fec968` by changing `src/factgraph/audit/round_events.py`:
+
+- Removed the top-level `from factgraph.application.protocol.common import JSONValue, WarningDTO` import.
+- Added a local `JSONValue` type alias equivalent to the application protocol type alias.
+- Lazily imports canonical `WarningDTO` inside `make_warning(...)`.
+- Left `audit/__init__.py`, `application/__init__.py`, and `adapters/problog/__init__.py` unchanged.
+
+This is a deliberate boundary deviation from the scoped draft's original preferred `audit/__init__.py` lazy export plan. The implementation-time precondition failed, and amendment commit `57b838e0` recorded the reason: `audit/__init__.py -> assertions -> reader -> round_events` still reached the same cycle before the direct `round_events` export mattered. Fixing the submodule's top-level application import is smaller and more robust.
+
+### 10.2 Test Gates Run
+
+Passing:
+
+- `PYTHONPATH=src python -m unittest tests.test_problog_import_cycle_hygiene`
+- `PYTHONPATH=src python -m unittest tests.test_capability_helpers_round_events`
+- `PYTHONPATH=src python -c "from factgraph.adapters.problog.problog_export import export_problog; print(export_problog.__name__)"`
+- `PYTHONPATH=src python -c "import factgraph.adapters.problog; from factgraph.adapters.problog.engine_eval import evaluate_problog; from factgraph.core.store.runtime import get_engine_evaluator; assert get_engine_evaluator('problog') is evaluate_problog; print('identity ok')"`
+- `PYTHONPATH=src python -c "from factgraph.audit.round_events import make_warning, warning_to_row; from factgraph.application.protocol.common import WarningDTO; w = make_warning(code='TEST_WARNING', message='ok'); assert isinstance(w, WarningDTO); assert warning_to_row(w)['code'] == 'TEST_WARNING'; print('warning ok')"`
+- `python -m ruff check src/factgraph/audit/round_events.py tests/test_problog_import_cycle_hygiene.py`
+
+ProbLog gates now import and execute test bodies, but still fail on a separate baseline fixture drift:
+
+- `PYTHONPATH=src python -m unittest tests.test_problog_export`
+- `PYTHONPATH=src python -m unittest tests.test_problog_engine_eval`
+- `PYTHONPATH=src python -m unittest tests.test_problog_export tests.test_problog_engine_eval`
+
+Failure mode:
+
+```text
+factgraph.core.evidence.write_protocol.WriteProtocolError:
+meta[confidence] was removed. Use raw_kind / bound for uncertainty inputs.
+```
+
+This is unrelated to the import-cycle fix:
+
+- Error class changed from `ImportError` during module import to `WriteProtocolError` during test fixture setup.
+- Error path is `src/factgraph/core/evidence/write_protocol.py:263` / `:272`, not package import initialization.
+- The affected tests construct fixture data using removed `meta[confidence]` input.
+- Direct `problog_export` import and evaluator identity smoke tests now pass.
+
+### 10.3 Public Facade Compatibility
+
+- `factgraph.adapters.problog` still registers the canonical `"problog"` evaluator object.
+- `make_warning(...)` still returns canonical `factgraph.application.protocol.common.WarningDTO`.
+- `warning_to_row(make_warning(...))` preserves row shape.
+- `tests.test_capability_helpers_round_events` passes, including application/capability-helper identity assertions.
+
+### 10.4 Follow-Up
+
+Open a separate hygiene slice, or fold into T2.2 if appropriate, to migrate ProbLog test fixtures away from removed `meta[confidence]` and toward `raw_kind` / `bound` uncertainty inputs.
+
+### 10.5 Archive Note
+
+Ready to archive after reviewer verification. The slice achieved its primary objective: the ProbLog import cycle is gone, and the remaining ProbLog test failures are now visible baseline fixture drift rather than import-time failure.

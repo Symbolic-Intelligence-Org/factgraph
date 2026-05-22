@@ -1,6 +1,6 @@
 # Task Blueprint Audit: ProbLog import cycle hygiene
 
-- Status: draft
+- Status: implemented
 - Created: 2026-05-23
 - Last Updated: 2026-05-23
 - Authority: paired blueprint audit log
@@ -20,6 +20,7 @@
 | 2026-05-23 | review | Step 4.2 tightening applied | P1 narrows preferred fix to lazy `round_events` only; P2 adds precondition check; P3 tightens acceptance wording. |
 | 2026-05-23 | scoped | Blueprint moved to scoped | Implementation may proceed on paired impl branch. |
 | 2026-05-23 | amendment | Precondition failed; boundary amended | `import factgraph.audit.evidence_graph` still hit `assertions -> reader -> round_events`; preferred fix moved to decoupling `audit.round_events` from top-level application imports. |
+| 2026-05-23 | implemented | Import-cycle fix landed | `d0fec968` decouples `audit.round_events` from top-level application imports and adds fresh-interpreter regression tests. |
 
 ## Decision Notes
 
@@ -81,3 +82,10 @@ This invalidated the narrower "lazy only the direct `round_events` import in `au
 - Verify public facade identities, especially `application.build_round_event_payload`.
 - Verify normal ProbLog unittest gates run without isolated module loading.
 - Verify unrelated dirty files remain untouched.
+
+### 2026-05-23 — Closure Notes
+
+- Landed boundary: `audit.round_events` now owns a local `JSONValue` alias and lazily imports canonical `WarningDTO` only inside `make_warning(...)`.
+- `audit/__init__.py`, `application/__init__.py`, and `adapters/problog/__init__.py` stayed unchanged.
+- New fresh-interpreter tests in `tests/test_problog_import_cycle_hygiene.py` lock the two paths that failed before: direct `problog_export` import and direct `audit.evidence_graph` import.
+- ProbLog unittest modules now import and execute; remaining failures are `WriteProtocolError: meta[confidence] was removed`, caused by stale test fixture inputs and unrelated to this import-cycle hygiene slice.
