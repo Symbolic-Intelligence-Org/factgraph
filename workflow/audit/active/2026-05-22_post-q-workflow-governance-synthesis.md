@@ -14,7 +14,7 @@
   - Step 0.1 commit `0199ab20` — `workflow/` skeleton + `CADENCE.md` + `AGENTS.md` (already in place)
   - Q1-Q5 batch flip commit `ae375ce5` (2026-05-22) — Status flips + Q1-Q4 7-field retrofit
 - Outputs / Downstream:
-  - Implementing blueprint at `workflow/blueprints/active/2026-05-22_workflow-governance-promotion.md` (Step 0.4; §4 lock table cites Q1-Q5; §8 phase plan derives from §4 recommended order below)
+  - Implementing blueprint at `workflow/blueprints/active/2026-05-22_workflow-governance-promotion.md` (Step 0.4; §4 lock table cites Q1-Q5; §8 phase plan derives from §3 recommended phase order below)
 - Related:
   - [workflow/CADENCE.md](../../CADENCE.md) §Stage 3 — defines this synthesis sub-type
   - [Q3 §4.3 + §4.5](../../design/decisions/active/2026-05-22_q3-audit-pillar-structure.md) — synthesis sub-type definition and trigger conditions; this slice qualifies as required-synthesis per Q3 §4.5 (5 Q closures + ≥2 buckets)
