@@ -18,6 +18,7 @@
 | --- | --- | --- | --- |
 | 2026-05-23 | draft | Blueprint created | Scope locked to import-cycle hygiene follow-up from T2.1 closure. |
 | 2026-05-23 | review | Step 4.2 tightening applied | P1 narrows preferred fix to lazy `round_events` only; P2 adds precondition check; P3 tightens acceptance wording. |
+| 2026-05-23 | scoped | Blueprint moved to scoped | Implementation may proceed on paired impl branch. |
 
 ## Decision Notes
 

@@ -1,6 +1,6 @@
 # ProbLog import cycle hygiene
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-23
 - Last Updated: 2026-05-23
 - Authority: task blueprint
