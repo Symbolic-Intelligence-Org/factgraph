@@ -1,11 +1,27 @@
 # Q4 Decision: template centralization
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-22
-- Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
-- Audit source: [workflow/audit/active/2026-05-22_workflow-governance-vs-shipped.md](../../../audit/active/2026-05-22_workflow-governance-vs-shipped.md) (§3.1 A3, A18; §3.2 I14; §3.3 D3; §4 Q4)
+- Last Updated: 2026-05-22
 - Authority: design constraint; locks the centralized template location, the 9-template inventory, the unified metadata schema, and the template authoritative role before Phase 1.5 (template authoring) and Phase 3 (existing template mv) of the implementing blueprint.
-- Depends on: Q1 (split scope), Q2 (design pillar templates depend on Q2 ADR + design-point conventions), Q3 (audit pillar templates depend on Q3 sub-type taxonomy).
+- Inputs:
+  - [workflow/audit/active/2026-05-22_workflow-governance-vs-shipped.md](../../../audit/active/2026-05-22_workflow-governance-vs-shipped.md) §3.1 A3, A18; §3.2 I14; §3.3 D3; §4 Q4
+  - [Q1 decision](./2026-05-22_q1-docs-workflow-split.md) — split scope; `workflow/templates/` placed under `workflow/`
+  - [Q2 decision](./2026-05-22_q2-design-pillar-structure.md) — design pillar templates encode Q2 ADR + design-point conventions
+  - [Q3 decision](./2026-05-22_q3-audit-pillar-structure.md) — audit pillar templates encode Q3 sub-type taxonomy
+  - 2026-05-22 design conversation: user proposed unified 7-field metadata schema + per-pillar pointer rule
+- Outputs / Downstream:
+  - [Q5 decision](./2026-05-22_q5-cadence-as-primary-and-agents-hierarchy.md) — AGENTS hierarchy adopts Q4 §4.4 per-pillar pointer rule
+  - `workflow/templates/README.md` (Phase 1.5) — codifies the 7-field schema + customization policy
+  - 5 new templates (Phase 1.5: design-point, decision, vs-shipped, preflight, synthesis)
+  - 4 mv'd templates (Phase 3: blueprint task + audit + legacy + legacy.audit)
+  - Q1-Q5 batch flip commit (this commit) — performs Q1-Q4 retrofit per §7.3
+  - Phase 4 validator (stratified per §7.2)
+- Related:
+  - [Q2 decision](./2026-05-22_q2-design-pillar-structure.md) — decision + design-point templates depend on Q2 semantics
+  - [Q3 decision](./2026-05-22_q3-audit-pillar-structure.md) — audit sub-type templates depend on Q3 taxonomy
+  - `feedback_refactor_execution_traps.md` (auto-memory) — git-history-preserving mv guidance for Phase 3
+- Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
 
 > **Status note**: this decision is opened with `Status: proposed`. ADR 4-state semantics defined in Q2 §4.5 apply here. Q1-Q5 batch status flip will apply after Q5 closes.
 
@@ -283,6 +299,6 @@ Post-implementing-blueprint, the templates pillar must satisfy:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-22 | proposed | Decision drafted | Q4 of 5; centralizes templates and locks unified 7-field metadata schema |
-| TBD | adopted | Status flip via Q5 closure batch | Same batch as Q1-Q3 + the Q5 status field retrofit to 7-field schema per §7.3 |
+| 2026-05-22 | adopted | Status flip + header retrofit via Q1-Q5 batch commit | Header retrofitted to Q4 §4.3 7-field schema (own schema): added `Last Updated` / `Outputs / Downstream` / `Related`; recast `Audit source` and peer `Depends on` (Q1, Q2, Q3) as `Inputs:` bullets; `Branch` preserved as extension. |
 
 This decision will not be acted upon (no template authoring or `references/templates/` deletion) until **all five Q decisions are closed and the implementing blueprint reaches `Status: scoped`**.

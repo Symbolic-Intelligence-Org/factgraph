@@ -1,10 +1,22 @@
 # Q1 Decision: docs / workflow split scope
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-22
-- Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
-- Audit source: [workflow/audit/active/2026-05-22_workflow-governance-vs-shipped.md](../../../audit/active/2026-05-22_workflow-governance-vs-shipped.md) (§3.1 A1, A16; §3.3 D-series; §4 Q1)
+- Last Updated: 2026-05-22
 - Authority: design constraint; locks the directory boundary between `docs/` and `workflow/` before any mv operation in the implementing blueprint.
+- Inputs:
+  - [workflow/audit/active/2026-05-22_workflow-governance-vs-shipped.md](../../../audit/active/2026-05-22_workflow-governance-vs-shipped.md) §3.1 A1, A16; §3.3 D-series; §4 Q1
+  - 2026-05-22 design conversation: user lock of Option (b) split-with-retention
+- Outputs / Downstream:
+  - [Q2 decision](./2026-05-22_q2-design-pillar-structure.md) — design pillar placement depends on Q1 split scope
+  - [Q3 decision](./2026-05-22_q3-audit-pillar-structure.md) — audit pillar placement depends on Q1
+  - [Q4 decision](./2026-05-22_q4-template-centralization.md) — templates placement depends on Q1
+  - [Q5 decision](./2026-05-22_q5-cadence-as-primary-and-agents-hierarchy.md) — AGENTS hierarchy placement depends on Q1
+  - Implementing blueprint Phase 1 (skeleton) + Phase 8 (root governance update for `/AGENTS.md` and `docs/README.md`)
+- Related:
+  - [workflow/AGENTS.md](../../../AGENTS.md) (Step 0.1 @ `0199ab20`) — already enforces the split via pillar map
+  - Future obsidian-integration slice (handles parked `docs/references/external/` + `docs/references/bridges/`)
+- Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
 
 > **Status note**: this decision is opened with `Status: proposed`. The ADR 4-state semantics (proposed / adopted / superseded / withdrawn) are themselves under decision in Q5. Once Q5 closes, a separate batch commit will flip Q1-Q4 from `proposed` to `adopted` to reflect formal lock. See §9 Decision Record below for the planned transition.
 
@@ -155,6 +167,6 @@ Post-implementing-blueprint, the repo state must satisfy:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-22 | proposed | Decision drafted | Per cadence Stage 2, Q1 load-bearing priority; first of 5 Q docs for this slice |
-| TBD | adopted | Status flip via Q5 closure batch | Will be applied in a single batch commit after Q5 closes the ADR semantics for the decisions pillar |
+| 2026-05-22 | adopted | Status flip + header retrofit via Q1-Q5 batch commit | Header retrofitted to Q4 §4.3 7-field schema: added `Last Updated` / `Outputs / Downstream` / `Related` fields; recast `Audit source` as `Inputs:` bullet; `Branch` preserved as pillar-specific extension. |
 
 This decision will not be acted upon (no mv operations) until **all five Q decisions are closed and the implementing blueprint reaches `Status: scoped`**.

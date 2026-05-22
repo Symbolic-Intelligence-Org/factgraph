@@ -1,11 +1,23 @@
 # Q2 Decision: design pillar structure
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-22
-- Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
-- Audit source: [workflow/audit/active/2026-05-22_workflow-governance-vs-shipped.md](../../../audit/active/2026-05-22_workflow-governance-vs-shipped.md) (§3.1 A4, A5; §3.2 I9, I12; §4 Q2)
+- Last Updated: 2026-05-22
 - Authority: design constraint; locks the internal structure, naming, lifecycle, and authority semantics of the `workflow/design/` pillar before Q4 templates and the Phase 1.5 `design/AGENTS.md` author work.
-- Depends on: Q1 (split scope locked; `workflow/design/` exists as a pillar).
+- Inputs:
+  - [workflow/audit/active/2026-05-22_workflow-governance-vs-shipped.md](../../../audit/active/2026-05-22_workflow-governance-vs-shipped.md) §3.1 A4, A5; §3.2 I9, I12; §4 Q2
+  - [Q1 decision](./2026-05-22_q1-docs-workflow-split.md) — split scope locked; `workflow/design/` exists as a pillar
+  - 2026-05-22 design conversation: user lock of design-points naming + 3-condition archive + ADR 4-state semantics with adopted-stays-active
+- Outputs / Downstream:
+  - [Q4 decision](./2026-05-22_q4-template-centralization.md) — design pillar templates encode Q2 §4.3 + §4.5 state machines
+  - [Q5 decision](./2026-05-22_q5-cadence-as-primary-and-agents-hierarchy.md) — AGENTS hierarchy locks `workflow/design/AGENTS.md` content per Q2
+  - `workflow/design/AGENTS.md` (Phase 1.5)
+  - `workflow/templates/design/design-point.md` + `decision.md` (Phase 1.5)
+  - Implementing blueprint Phase 2 (decisions mv) + Phase 6 (design-points mv)
+- Related:
+  - [Q3 decision](./2026-05-22_q3-audit-pillar-structure.md) — parallel pillar; audit synthesis sub-type depends on Q2 ADR semantics
+  - [docs/references/working/design-points/readme.md](/Users/zhenzhili/hnsm-backend/docs/references/working/design-points/readme.md) — current partial authority statement to be strengthened during mv
+- Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
 
 > **Status note**: this decision is opened with `Status: proposed`. ADR 4-state semantics (defined in §4.5 below) are first formally introduced by **this** Q2 decision. Q5 will codify how those ADR states apply across the canonical `workflow/design/decisions/` pillar and govern the Q1-Q5 batch status flip. Until then, Q2 itself uses `proposed` consistent with the Q-ordering convention chosen by the user.
 
@@ -248,6 +260,6 @@ Post-implementing-blueprint, the design pillar must satisfy:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-22 | proposed | Decision drafted | Q2 of 5; first decision to define ADR 4-state semantics for this slice's design pillar |
-| TBD | adopted | Status flip via Q5 closure batch | Will be applied in a single batch commit after Q5 closes the ADR semantics codification |
+| 2026-05-22 | adopted | Status flip + header retrofit via Q1-Q5 batch commit | Header retrofitted to Q4 §4.3 7-field schema: added `Last Updated` / `Outputs / Downstream` / `Related`; recast `Audit source` and peer `Depends on` (Q1) as `Inputs:` bullets; `Branch` preserved as extension. |
 
 This decision will not be acted upon (no mv operations on design-points or decisions) until **all five Q decisions are closed and the implementing blueprint reaches `Status: scoped`**.

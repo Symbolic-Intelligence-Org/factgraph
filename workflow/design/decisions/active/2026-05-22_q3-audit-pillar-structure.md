@@ -1,11 +1,25 @@
 # Q3 Decision: audit pillar structure
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-22
-- Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
-- Audit source: [workflow/audit/active/2026-05-22_workflow-governance-vs-shipped.md](../../../audit/active/2026-05-22_workflow-governance-vs-shipped.md) (§3.1 A6; §3.2 I10, I11, I13; §3.3 D6; §4 Q3)
+- Last Updated: 2026-05-22
 - Authority: design constraint; locks the internal structure, naming disambiguation, sub-type taxonomy, trigger conditions, and cross-branch visibility convention of the `workflow/audit/` pillar before Q4 templates and the Phase 1.5 `audit/AGENTS.md` author work.
-- Depends on: Q1 (split scope; `workflow/audit/` exists as a pillar), Q2 (ADR 4-state for decisions, since synthesis sub-type re-buckets per ADR-closed decision state).
+- Inputs:
+  - [workflow/audit/active/2026-05-22_workflow-governance-vs-shipped.md](../../../audit/active/2026-05-22_workflow-governance-vs-shipped.md) §3.1 A6; §3.2 I10, I11, I13; §3.3 D6; §4 Q3
+  - [Q1 decision](./2026-05-22_q1-docs-workflow-split.md) — split scope; `workflow/audit/` exists as a pillar
+  - [Q2 decision](./2026-05-22_q2-design-pillar-structure.md) — ADR 4-state for decisions, since synthesis sub-type re-buckets per ADR-closed decision state
+  - 2026-05-22 design conversation: user call-out of two-audit terminology overlap + preflight over-application risk
+- Outputs / Downstream:
+  - [Q4 decision](./2026-05-22_q4-template-centralization.md) — audit pillar templates encode Q3 §4.3 sub-type taxonomy
+  - [Q5 decision](./2026-05-22_q5-cadence-as-primary-and-agents-hierarchy.md) — AGENTS hierarchy locks `workflow/audit/AGENTS.md` content per Q3
+  - `workflow/audit/AGENTS.md` (Phase 1.5)
+  - `workflow/templates/audit/{vs-shipped,preflight,synthesis}.md` (Phase 1.5)
+  - Implementing blueprint Phase 2 (audit mv)
+- Related:
+  - [Q2 decision](./2026-05-22_q2-design-pillar-structure.md) — parallel pillar
+  - `workflow/blueprints/AGENTS.md` (Phase 3 mv) — paired-vs-standalone cross-reference target
+  - Slice 7C `docs/audit/2026-05-21_registry-final-removal-vs-shipped.md` (branch-isolated audit example per audit §3.3 D6)
+- Branch: `v0.2.0-blueprint-workflow-governance-promotion-2026-05-22`
 
 > **Status note**: this decision is opened with `Status: proposed`. ADR 4-state semantics defined in Q2 §4.5 apply here (decisions ADR semantics drive synthesis re-bucketing). Q1-Q5 batch status flip will apply after Q5 closes.
 
@@ -265,6 +279,6 @@ Post-implementing-blueprint, the audit pillar must satisfy:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-22 | proposed | Decision drafted | Q3 of 5; formalizes audit pillar that has been operating informally since 2026-05-20 |
-| TBD | adopted | Status flip via Q5 closure batch | Will be applied in a single batch commit after Q5 closes |
+| 2026-05-22 | adopted | Status flip + header retrofit via Q1-Q5 batch commit | Header retrofitted to Q4 §4.3 7-field schema: added `Last Updated` / `Outputs / Downstream` / `Related`; recast `Audit source` and peer `Depends on` (Q1, Q2) as `Inputs:` bullets; `Branch` preserved as extension. |
 
 This decision will not be acted upon (no audit file convention enforcement) until **all five Q decisions are closed and the implementing blueprint reaches `Status: scoped`**.

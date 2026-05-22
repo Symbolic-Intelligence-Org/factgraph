@@ -1,6 +1,6 @@
 # Q5 Decision: cadence as primary mode and AGENTS hierarchy
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-22
 - Last Updated: 2026-05-22
 - Authority: design constraint; ratifies the CADENCE.md promotion + lock-in statement done in Step 0.1, locks the two-level four-file AGENTS hierarchy, the cross-pillar soft-trigger flow, and the companion-rules deferred-promotion plan
@@ -328,6 +328,6 @@ Post-implementing-blueprint, the AGENTS hierarchy must satisfy:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-22 | proposed | Decision drafted | Q5 of 5; first decision authored under the Q4 §4.3 7-field schema (used from initial draft per user authorization) |
-| TBD | adopted | Status flip via Q1-Q5 batch commit | Commit also retrofits Q1-Q4 to the 7-field schema per §4.8 |
+| 2026-05-22 | adopted | Status flip via Q1-Q5 batch commit | Q5 already 7-field compliant from first draft; this commit only flips `Status: proposed → adopted` and adds this Decision Record row. Q1-Q4 retrofit to 7-field schema performed in the same batch commit per §4.8. |
 
 This decision will not be acted upon (no AGENTS authoring or batch flip) until **review approval is granted and the batch flip commit is authorized**.
