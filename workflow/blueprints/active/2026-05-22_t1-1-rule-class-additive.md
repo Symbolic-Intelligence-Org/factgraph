@@ -56,7 +56,7 @@ Parent essay 2066 行 / ~100 commitments 的 §3 commits 25 项(C1-C21 + C45-C48
 - **`atom_ids` property**:positional format `<rule_id>:atom_<index>`(per C19)
 - **`content_digest` property**:`sha256_hex(canonical_bytes(where, ports))`,跨进程 deterministic stable(per C68;复用 `core/protocol/digests.py` 若已存在,否则 inline)
 - **`render_desc(bindings=None)` method**:`%port_name` 插值;未绑定时输出 `<port_name>` 占位(per C5);未声明 port 引用构造期 reject
-- **Immutability**:frozen dataclass + `where: tuple[Atom, ...]`(tuple,非 list)+ `ports` 用 `MappingProxyType` 或等价 frozen mapping;recursively immutable
+- **Immutability(shallow / container only)**:frozen dataclass + `where: tuple[Atom, ...]`(tuple,非 list)+ `ports` 用 `MappingProxyType` 或等价 frozen mapping。**仅** Rule container 与 outer where/ports 不可变;**内部 core AST atom 的 list 字段(如 `PredAtom.terms`)仍 mutable per shipped 现状**。Recursive immutability hardening 显式 deferred — 详见 §6 Invariants
 - **Application 层 export**:`src/factgraph/application/protocol/__init__.py` 新增 re-export `Rule` + `RuleValidationError`(本 slice **不**进 SDK `__all__`)
 - **Tests**:`tests/application/protocol/test_rule.py` 新建,覆盖构造期校验 / 5 atom kinds 允许 / RuleRefAtom 拒绝 / port-var dangling 拒绝 / desc 模板校验 + 渲染 / atom_id 位置 / immutability / content_digest deterministic
 
@@ -104,7 +104,7 @@ Parent essay 2066 行 / ~100 commitments 的 §3 commits 25 项(C1-C21 + C45-C48
 - **依赖方向**:`sdk → application → core`(per `application/docs/README.md` 明确)— **T1.1 application Rule 不导入 sdk.dsl 任何类型**;`where` 内部存储类型限于 `core.rules.where_ast.Atom`
 - **Application-first**:`feedback_application_first_runtime_authority` — DTO + pure function 在 application 层;SDK 只作 ergonomic shell(本 slice 不建 SDK shell)
 - **Narrow public API**:`feedback_narrow_public_api` — 本 slice 不暴露到 SDK `__all__`
-- **Invariant defense in depth**:frozen Rule + tuple where + frozen mapping ports;recursively immutable
+- **Invariant defense in depth**(per `feedback_invariant_defense_in_depth`):T1.1 仅 **container shallow immutability**(frozen Rule + tuple where + frozen mapping ports);recursive immutability hardening 显式 deferred — `feedback_invariant_defense_in_depth` "freezing theatre" 已知 trade-off,user 在 Step 4.2 v2 显式选择此 trade-off 以保持 slice atomic(不修改 shipped core AST types)。详见 §6 Invariants 与 §10 Outcome deferred 触发条件
 - **Parent essay deviation**:essay §3.5 F6 写 "复用 `ExistsAtom` / `AttrRef` / `CompareExpr` / `LogicVar` primitives" 是 SDK DSL 角度;本 slice 用更深一层 core AST(`PredAtom` / `CmpAtom`)作为 Rule.where 的存储类型 — **架构改进,不破坏 essay 意图**;essay 意图是"复用现有 primitive,不重写 IR",本 slice 复用 core IR 而非 SDK DSL,deviation 记录于 §10
 
 ### 4.3 当前相关历史蓝图
