@@ -196,7 +196,7 @@ For traceability, the 14-commit lineage of Step 0.1 + Step 0.2 culminating in th
 
 Step 0.3 (this synthesis) adds commit 15. Step 0.4 (blueprint + sibling audit log) will add commit 16.
 
-The implementing blueprint may cite this synthesis as `workflow/audit/active/2026-05-22_workflow-governance-synthesis.md` in its §4 lock table and §8 phase plan inputs.
+The implementing blueprint may cite this synthesis as `workflow/audit/active/2026-05-22_post-q-workflow-governance-synthesis.md` in its §4 lock table and §8 phase plan inputs.
 
 ## 6. Acceptance for this synthesis
 
