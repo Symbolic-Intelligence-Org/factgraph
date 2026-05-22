@@ -7,7 +7,7 @@
 - Authority: design constraint; locks the internal structure, naming, lifecycle, and authority semantics of the `workflow/design/` pillar before Q4 templates and the Phase 1.5 `design/AGENTS.md` author work.
 - Depends on: Q1 (split scope locked; `workflow/design/` exists as a pillar).
 
-> **Status note**: this decision is opened with `Status: proposed`. ADR 4-state semantics (defined in §4.4 below) are first formally introduced by **this** Q2 decision. Q5 will codify how those ADR states apply across the canonical `workflow/design/decisions/` pillar and govern the Q1-Q5 batch status flip. Until then, Q2 itself uses `proposed` consistent with the Q-ordering convention chosen by the user.
+> **Status note**: this decision is opened with `Status: proposed`. ADR 4-state semantics (defined in §4.5 below) are first formally introduced by **this** Q2 decision. Q5 will codify how those ADR states apply across the canonical `workflow/design/decisions/` pillar and govern the Q1-Q5 batch status flip. Until then, Q2 itself uses `proposed` consistent with the Q-ordering convention chosen by the user.
 
 ## 1. Inputs
 
@@ -38,7 +38,7 @@ This decision locks:
 - The 4-level AGENTS hierarchy and which AGENTS file codifies the state machines authored here (covered by Q5; though the relevant file is `workflow/design/AGENTS.md` per Q5 lock-in plan).
 - Cross-pillar trigger conditions linking design-points → audit → decisions → blueprint (covered by Q5 soft-trigger flow).
 - Migration ordering of existing 6 design-points and 8 decisions into the new pillar (covered by the implementing blueprint's Phase 2 low-cardinality mv plan and Phase 6 design-points mv plan).
-- Existing decision Status retrofit semantics: existing 8 decisions were closed in their original slices; the implementing blueprint will assign them `Status: adopted` at mv time and may add backfilled Decision Record rows. The retrofit policy itself is implementation detail recorded in the blueprint, not a Q2 decision constraint.
+- Retrofit **execution details** for existing decisions: Phase 2 mv mechanics, backfilled Decision Record row format, exact commit ordering, mv batching — all covered by the implementing blueprint, not by Q2. The **design constraint** that the 8 existing closed DB/view decisions receive `Status: adopted` at mv time is IN scope of this Q2 decision and is recorded as a constraint in §7.3 + an acceptance gate in §8 item 2.
 
 ## 4. Decision
 
