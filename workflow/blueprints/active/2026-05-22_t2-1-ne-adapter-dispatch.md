@@ -1,8 +1,8 @@
 # T2.1 — `ne` adapter dispatch gap close
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-22
-- Last Updated: 2026-05-22
+- Last Updated: 2026-05-23
 - Track: T2 Atom 语言闭合 + adapter gap(per [rule-expression-and-proof-track-plan.zh.md](../../design/design-points/active/rule-expression-and-proof-track-plan.zh.md))
 - Related Modules:
   - `src/factgraph/core/rules/where_ast.py` — `_CMP_OPS` already includes `ne`; parser accepts `("ne", lhs, rhs)`.
@@ -211,10 +211,25 @@ The implementation should keep `eq` separate for readability because `=` and `\=
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation:
-
 - Final landed behavior:
+  - Commit `575d48d7` added raw tuple `ne` dispatch to Souffle and ProbLog adapters.
+  - Souffle now validates `("ne", lhs, rhs)`, compiles main-body and `not`-body disequality, and includes `ne` variables in `_vars_in_atom(...)`.
+  - Souffle `ne` uses a dedicated term disequality helper instead of the numeric comparison path, preserving string/symbol filter behavior and avoiding `to_number(...)`.
+  - ProbLog now compiles raw tuple `ne` to `\=`; nested `not` bodies are covered through existing recursive `_compile_atom(...)`.
+  - Added adapter-level tests for Souffle main-body `ne`, malformed `ne`, unbound `ne`, `not`-body `ne`, variable extraction, plus ProbLog top-level and nested `not` `ne` output.
 - Tests run:
+  - `PYTHONPATH=src python -m unittest tests.test_souffle_witness_where_compile_v1` — pass, 10 tests.
+  - `python -m ruff check src/factgraph/adapters/souffle/where_compile.py src/factgraph/adapters/problog/problog_export.py tests/test_souffle_witness_where_compile_v1.py tests/test_problog_export.py` — pass.
+  - `python -m py_compile src/factgraph/adapters/problog/problog_export.py src/factgraph/adapters/souffle/where_compile.py tests/test_souffle_witness_where_compile_v1.py tests/test_problog_export.py` — pass.
+  - Isolated ProbLog `_compile_atom` smoke — pass for `("ne", "$name", "blocked")` and `("not", [("ne", "$name", "blocked")])`.
+  - Reviewer reran T1.1/T1.2 cross-slice non-regression set — pass, 26 tests.
 - Deviations from blueprint:
+  - Combined gate `PYTHONPATH=src python -m unittest tests.test_souffle_witness_where_compile_v1 tests.test_problog_export` could not complete because `tests.test_problog_export` is blocked by a pre-existing import cycle:
+    `factgraph.adapters.problog.__init__ -> engine_eval -> provenance -> audit -> application -> capability_helpers -> audit.round_events`.
+  - Reviewer verified the same import-cycle failure exists at scoped anchor `5ed881fd`, before the T2.1 implementation commit, and the implementation diff does not touch the import-cycle chain.
+  - Mitigation: ProbLog output behavior was verified through isolated module-load smoke testing, and ruff/py_compile passed.
 - Known follow-up:
+  - The ProbLog package import cycle should be handled in a separate hygiene slice; it is outside T2.1 adapter dispatch scope.
+  - Numeric type-mixing semantics for ProbLog `\=` vs value-level arithmetic disequality remain deferred to T2.2/T2.3 expression work, as scoped.
 - Archive note:
+  - Ready for Step 4.9 archive after this closure commit lands.
