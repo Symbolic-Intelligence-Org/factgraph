@@ -6,7 +6,7 @@
 - Track: T1 Rule body 重塑(per [rule-expression-and-proof-track-plan.zh.md](../../design/design-points/active/rule-expression-and-proof-track-plan.zh.md))
 - Related Modules:
   - `src/factgraph/sdk/dsl/expr.py` — `ExistsAtom`(line 175)需添加 `__getattr__`;`AttrRef`(line 101)需添加 optional `entity_type` 字段;`build_entity_dsl_call`(line 225)处理 Ellipsis;`_lower_compare`(line 345)可短路 AttrRef.entity_type 已知情况
-  - `src/factgraph/sdk/schema.py` — `_looks_like_sdk_dsl_entity_call`(line 407)识别 Ellipsis;`_is_sdk_dsl_value` 接受 Ellipsis
+  - `src/factgraph/sdk/schema.py` — `_looks_like_sdk_dsl_entity_call`(line 407)positional single-Ellipsis arg 分支 special-case;`_is_sdk_dsl_value` **不动**(共用 head-call kwargs 检测,见 Step 4.2 v1 P1)
   - `src/factgraph/sdk/dsl/__init__.py` — 新增 `build_application_rule` re-export(可选 SDK `__all__` — 待 T1.3 锁名)
   - **新文件** `src/factgraph/sdk/dsl/application_rule.py` — DSL→application Rule 桥接
   - `src/factgraph/application/protocol/rule.py` — **消费,不修改**(T1.1 frozen)
@@ -137,15 +137,14 @@ __all__ = [
 ### 2.5 (e) Tests
 
 - **新文件** `tests/sdk/dsl/test_application_rule.py`:
-  - **Unified canonical 7 pure forms**(per parent §3.5,无 mixed 形态):
+  - **Unified canonical 6 pure forms**(per parent §3.5 — form `User(u).field > lit` 因 non-eq AttrRef lowering 限制 deferred,详 §3 Non-goals):
     1. `User(u)` — bare existence
-    2. `User(u).user_id == "u-2"` — identity literal
-    3. `User(u).status == "active"` — field literal
-    4. `User(u).score > 0.5` — field compare
-    5. `User(...).name == "alice"` — anonymous Ellipsis + field
-    6. `LivesIn(li).user == User(u)` — cross-entity ref(验证 existence pred 双 emit:`LivesIn:exists(li)` + `User:exists(u)` + field cross-ref)
-    7. `LivesIn(li).country == country` — field-to-Var(命名)compare
-  - **Existence pred emission verification**:Form 2-7 都验证 lowered output 含对应 `EntityType:exists(var.token)` 顶部 pred(不只是 field pred)
+    2. `User(u).user_id == "u-2"` — identity literal(equality)
+    3. `User(u).status == "active"` — field literal(equality only)
+    4. `User(...).name == "alice"` — anonymous Ellipsis + field equality
+    5. `LivesIn(li).user == User(u)` — cross-entity ref(验证 existence pred 双 emit:`LivesIn:exists(li)` + `User:exists(u)` + field cross-ref)
+    6. `LivesIn(li).country == country` — field-to-Var(命名)equality
+  - **Existence pred emission verification**:Form 2-6 都验证 lowered output 含对应 `EntityType:exists(var.token)` 顶部 pred(不只是 field pred)
   - **Bindings dedup**:用户写 `[User(u), User(u).field == "x"]` 2-line(legacy 形态)→ 桥接 reject(`u.field` 走 LogicVar.__getattr__,AttrRef.entity_type=None);**不**测试"dedup 行为"(本 slice 不做 dedup pass,natural dedup via bindings 表)
   - **Legacy reject** 4 形态:`u.field == "x"`(裸 AttrRef)/ `User(u), u.field == "x"`(2-line)/ `Pred("user:exists", u)`(raw)/ `RuleRefAtom`(raw)→ 都 raise `DSLToApplicationRuleError`
   - OR-shape reject:`[[User(u)], [User(v)]]` 形态(2 分支)→ raise
@@ -172,6 +171,7 @@ __all__ = [
 - **不实现** recursive immutability hardening(`feedback_invariant_defense_in_depth` deferred trade-off,继承自 T1.1)
 - **不实现** atom kind canonical 9-list 文档化(T2.1)
 - **不实现** ArithExpr / AggregateExpr value-producing forms(T2.2 / T2.3)— `BuiltinAtom` 经 lower_where 自动产出,通过 application Rule allowlist 接受;不扩 expression form 语义
+- **不扩展** non-eq AttrRef compare(`User(u).field > lit` / `<` / `>=` / `<=` / `!=`)— 当前 shipped `_lower_compare`(`expr.py:348/372`)对 AttrRef 路径**仅支持 `==`**,非等值会 raise `SDKDSLError("entity attribute comparison sugar currently supports only '==' in SDK object DSL v1")`;扩展涉及 temp var 生成 + CmpAtom IR 接入,本 slice 不实施。**Deferred to** 后续 T1.x sub-slice 或 T2.x atom expression slice。本 slice 6 unified forms 全部 equality only(或 bare existence);用户面 non-eq compare 需要在新 Rule path 上 暂时无法使用 unified syntax — 与 legacy 2-line 路径 `User(u), u.score > 0.5` 同样受此限制
 - **不进 SDK 顶层 `__all__`**(待 T1.3)
 - **不实现** dedup of same `(entity_type, var)` ExistsAtom — parent §3.5 F6 提到,但 lower_where 已通过 bindings 表确保唯一;T1.2 不显式实现"dedup pass"(可由用户主观使用 unified syntax 自然避免;若 2-line 被 reject,基本无 dedup 场景)
 - **不引入** ArithExpr 增强 — 用户用 BinaryExpr(已 ship)+ lower_where 路径,产出 BuiltinAtom — application Rule 接受为 atom kind allowlist 成员;**不在本 slice 改 BuiltinAtom 语义或扩 ArithExpr API**(T2.2)
@@ -237,9 +237,9 @@ src/factgraph/sdk/dsl/expr.py     (修改 — 4 个局部 edit)
 ├── ExistsAtom               + `__getattr__(field) -> AttrRef(record_var=self.var, field_name=field, entity_type=self.entity_type)`
 ├── (其他不动)
 
-src/factgraph/sdk/schema.py       (修改 — 2 个局部 edit)
-├── _is_sdk_dsl_value        + 接受 Ellipsis(`value is Ellipsis`)
-├── _looks_like_sdk_dsl_entity_call  + 接受 single-Ellipsis arg
+src/factgraph/sdk/schema.py       (修改 — 1 个局部 edit)
+├── _looks_like_sdk_dsl_entity_call  + positional single-Ellipsis arg special-case (NOT in _is_sdk_dsl_value — Step 4.2 v1 P1)
+├── _is_sdk_dsl_value        **UNCHANGED** (shared by head-call kwargs path)
 ├── build_entity_dsl_call(via import)  + Ellipsis 路径生成 anonymous LogicVar → ExistsAtom
 
 src/factgraph/sdk/dsl/expr.py:build_entity_dsl_call (修改)
@@ -507,7 +507,7 @@ def _convert_ports(dsl_ports):
 tests/sdk/dsl/
 ├── test_application_rule.py             (新文件 ~350-450 LOC)
 │   ├── TestUnifiedSyntax              # 7 unified 形态 pass
-│   ├── TestEllipsisAnonymous          # User(...) 每次独立;User(...) 多次互不冲突
+│   ├── TestEllipsisAnonymous          # 两个独立 User(...) 调用产生不同 anonymous tokens(不测试 User(..., ...) 多参形态;build_entity_dsl_call 只接 1 positional arg)
 │   ├── TestCrossEntityRef             # LivesIn(li).user == User(u)
 │   ├── TestLegacyReject               # bare AttrRef / 2-line / Pred / RuleRef raise DSLToApplicationRuleError
 │   ├── TestORShapeReject              # [[atom1], [atom2]] OR-shape raise
@@ -522,8 +522,9 @@ tests/sdk/dsl/
 tests/sdk/
 ├── test_schema_ellipsis.py               (新文件 ~80-120 LOC)
 │   ├── TestEntityEllipsis             # User(...) 产 ExistsAtom + anon Var
-│   ├── TestMultipleEllipsis           # User(...) * 2 不同 anon Var(? 当前 build_entity_dsl_call 只接 1 arg)
-│   └── TestEllipsisAsDslValue         # _is_sdk_dsl_value(Ellipsis) returns True
+│   ├── TestEllipsisIndependence       # 两个独立 User(...) 调用生成不同 anonymous tokens(不测试 multi-arg User(..., ...) 形态)
+│   ├── TestEllipsisNotInDslValue      # `_is_sdk_dsl_value(Ellipsis) returns False`(P1 regression guard)
+│   └── TestEllipsisInPositionalEntityCall  # `_looks_like_sdk_dsl_entity_call((...,), {})` returns True;`_looks_like_sdk_dsl_entity_call((), {"f": Ellipsis})` returns False
 ```
 
 预估 ~510-690 LOC tests 总。
@@ -574,7 +575,7 @@ tests/sdk/
   - `User(u).field == "x"` lowered → `[("pred", "User:exists", ["$u"]), ("pred", "user:field", ["$u", "x"])]`(2 preds,1 unit test)
   - `LivesIn(li).user == User(u)` lowered → 3 preds 含 `LivesIn:exists($li)` + `User:exists($u)` + field cross-ref(1 unit test)
   - Bindings 表 dedup:`[User(u).a == 1, User(u).b == 2]` lowered → 只 emit `User:exists($u)` **一次**(natural dedup;1 unit test)
-- [ ] `build_application_rule(...)` 接受 7 种 unified canonical pure forms 产正确 application Rule(7 unit tests pass;**无 mixed `User(u), User(u).field == ...` 形态** — P3 修复)
+- [ ] `build_application_rule(...)` 接受 **6 种** unified canonical pure forms 产正确 application Rule(6 unit tests pass;**无 mixed `User(u), User(u).field == ...` 形态** — P3 修复;**无 non-eq AttrRef compare `User(u).field > lit`** — Step 4.2 v2 P1 deferred)
 - [ ] `build_application_rule(...)` reject:bare AttrRef compare(`u.field == "x"`)/ 2-line form(`User(u), u.field == "x"`)/ `Pred(...)` raw / RuleRefAtom — 4 negative tests pass with `DSLToApplicationRuleError`
 - [ ] OR-shape where reject(1 negative test)
 - [ ] **Anonymous LogicVar(`label is None`)作 ports value reject**(P4 修复;`_convert_ports` 检查 `lv.label is None`,**非** `not lv.token` — anonymous LogicVar 有 auto token)(1 negative test)
@@ -597,7 +598,7 @@ tests/sdk/
 3. **[blueprint] Step 4.6 scoped anchor commit**:`Status: draft` → `Status: scoped` + audit log "scoped" 事件。
 4. **[impl] 主 feat commit**:
    - 修改 `src/factgraph/sdk/dsl/expr.py`(`AttrRef` 加 `entity_type`;`ExistsAtom.__getattr__`;`build_entity_dsl_call` Ellipsis 分支)
-   - 修改 `src/factgraph/sdk/schema.py`(`_is_sdk_dsl_value` Ellipsis)
+   - 修改 `src/factgraph/sdk/schema.py`(仅 `_looks_like_sdk_dsl_entity_call` positional single-Ellipsis 特判;`_is_sdk_dsl_value` 不动)
    - 新建 `src/factgraph/sdk/dsl/application_rule.py`(~200-280 LOC)
    - 更新 `src/factgraph/sdk/dsl/__init__.py`(re-export)
    - 新建 `tests/sdk/dsl/test_application_rule.py`(~350-450 LOC)
