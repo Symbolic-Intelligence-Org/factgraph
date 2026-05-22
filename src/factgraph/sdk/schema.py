@@ -410,6 +410,8 @@ def _looks_like_sdk_dsl_entity_call(args: tuple[Any, ...], kwargs: dict[str, Any
     if kwargs:
         return any(_is_sdk_dsl_value(v) for v in kwargs.values())
     if len(args) == 1:
+        if args[0] is Ellipsis:
+            return True
         return _is_sdk_dsl_value(args[0])
     return False
 

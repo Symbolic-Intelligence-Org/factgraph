@@ -101,10 +101,15 @@ class LogicVar:
 class AttrRef:
     record_var: LogicVar
     field_name: str
+    entity_type: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.field_name, str) or not self.field_name:
             raise SDKDSLError("AttrRef.field_name must be non-empty string")
+        if self.entity_type is not None and (
+            not isinstance(self.entity_type, str) or not self.entity_type
+        ):
+            raise SDKDSLError("AttrRef.entity_type must be non-empty string or None")
 
     def __eq__(self, other: Any) -> CompareExpr:  # type: ignore[override]
         return CompareExpr("eq", self, other)
@@ -176,6 +181,11 @@ class ExistsAtom:
     entity_type: str
     var: LogicVar
 
+    def __getattr__(self, item: str) -> AttrRef:
+        if item.startswith("_"):
+            raise AttributeError(item)
+        return AttrRef(self.var, item, entity_type=self.entity_type)
+
 
 @dataclass(frozen=True)
 class PredAtom:
@@ -235,10 +245,13 @@ def build_entity_dsl_call(entity_cls: type, args: tuple[Any, ...], kwargs: dict[
             field=None,
             kwargs=dict(kwargs),
         )
-    if len(args) == 1 and isinstance(args[0], LogicVar):
-        return ExistsAtom(entity_type=entity_type, var=args[0])
+    if len(args) == 1:
+        if args[0] is Ellipsis:
+            return ExistsAtom(entity_type=entity_type, var=LogicVar())
+        if isinstance(args[0], LogicVar):
+            return ExistsAtom(entity_type=entity_type, var=args[0])
     raise SDKDSLError(
-        "entity DSL call expects exactly one LogicVar for where exists syntax, or keyword args for derivation head"
+        "entity DSL call expects exactly one LogicVar or Ellipsis for where exists syntax, or keyword args for derivation head"
     )
 
 
@@ -346,17 +359,11 @@ def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str], *, temp_seq
     if isinstance(expr.left, AttrRef) and isinstance(expr.right, AttrRef):
         if expr.op != "eq":
             raise SDKDSLError("entity attribute comparison sugar currently supports only '==' in SDK object DSL v1")
-        left_record_type = bindings.get(expr.left.record_var)
-        right_record_type = bindings.get(expr.right.record_var)
-        if left_record_type is None:
-            raise SDKDSLError(
-                f"entity variable {expr.left.record_var.token} used in path comparison before {expr.left.record_var.token} is bound"
-            )
-        if right_record_type is None:
-            raise SDKDSLError(
-                f"entity variable {expr.right.record_var.token} used in path comparison before {expr.right.record_var.token} is bound"
-            )
+        prefix: list[Any] = []
+        _ensure_attr_record_binding(expr.left, bindings, prefix)
+        _ensure_attr_record_binding(expr.right, bindings, prefix)
         return [
+            *prefix,
             (
                 "attr_eq",
                 (expr.left.record_var.token, expr.left.field_name),
@@ -370,13 +377,11 @@ def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str], *, temp_seq
             raise SDKDSLError("internal attr compare lowering error")
         if expr.op != "eq":
             raise SDKDSLError("entity attribute comparison sugar currently supports only '==' in SDK object DSL v1")
-        record_type = bindings.get(attr.record_var)
-        if record_type is None:
-            raise SDKDSLError(
-                f"entity variable {attr.record_var.token} used in path comparison before {attr.record_var.token} is bound"
-            )
+        prefix: list[Any] = []
+        record_type = _ensure_attr_record_binding(attr, bindings, prefix)
         pred_id = f"{record_type.lower()}:{attr.field_name}"
-        return [("pred", pred_id, [attr.record_var.token, lower_term(other, in_where=True)])]
+        other_term = _lower_attr_compare_other(other, bindings, prefix)
+        return [*prefix, ("pred", pred_id, [attr.record_var.token, other_term])]
 
     pre_left, left = _lower_expr_term(expr.left, temp_seq=temp_seq)
     pre_right, right = _lower_expr_term(expr.right, temp_seq=temp_seq)
@@ -391,6 +396,37 @@ def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str], *, temp_seq
         out.append((expr.op, left, right))
         return out
     raise SDKDSLError(f"unsupported compare op: {expr.op}")
+
+
+def _ensure_attr_record_binding(
+    attr: AttrRef,
+    bindings: dict[LogicVar, str],
+    prefix: list[Any],
+) -> str:
+    record_type = bindings.get(attr.record_var)
+    if record_type is not None:
+        return record_type
+    if attr.entity_type is None:
+        raise SDKDSLError(
+            f"entity variable {attr.record_var.token} used in path comparison before {attr.record_var.token} is bound"
+        )
+    bindings[attr.record_var] = attr.entity_type
+    prefix.append(("pred", f"{attr.entity_type}:exists", [attr.record_var.token]))
+    return attr.entity_type
+
+
+def _lower_attr_compare_other(
+    value: Any,
+    bindings: dict[LogicVar, str],
+    prefix: list[Any],
+) -> Any:
+    if isinstance(value, ExistsAtom):
+        bound_type = bindings.get(value.var)
+        if bound_type is None:
+            bindings[value.var] = value.entity_type
+            prefix.append(("pred", f"{value.entity_type}:exists", [value.var.token]))
+        return value.var.token
+    return lower_term(value, in_where=True)
 
 
 def _lower_expr_term(value: Any, *, temp_seq: Any) -> tuple[list[Any], Any]:

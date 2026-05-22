@@ -29,9 +29,9 @@ This DTO does not accept SDK DSL objects such as `LogicVar`, `ExistsAtom`,
 sdk -> application -> core
 ```
 
-The SDK will later own ergonomic authoring syntax such as
-`User(u).field == value` and lowering into the core AST shape consumed here.
-Until that bridge exists, callers construct core AST atoms directly.
+The SDK owns ergonomic authoring syntax such as `User(u).field == value`
+and lowers that syntax into the core AST shape consumed here through
+`factgraph.sdk.dsl.build_application_rule(...)`.
 
 ## Validation
 
@@ -47,6 +47,48 @@ Construction validates the DTO shape:
 The DTO provides positional `atom_ids` using `<rule_id>:atom_<index>`, a
 deterministic `content_digest`, shallow container immutability, and
 `render_desc(...)` for template rendering.
+
+## Unified Syntax via SDK DSL Bridge
+
+Use `factgraph.sdk.dsl.build_application_rule(...)` when starting from SDK DSL
+objects:
+
+```python
+from factgraph.sdk.dsl import build_application_rule, vars
+
+with vars("u") as (u,):
+    rule = build_application_rule(
+        id="active_user",
+        where=[User(u).status == "active"],
+        ports={"user": u},
+        desc="active user %user",
+    )
+```
+
+T1.2 supports six equality-only / bare-existence forms:
+
+- `User(u)`
+- `User(u).user_id == "u-2"`
+- `User(u).status == "active"`
+- `User(...).name == "alice"`
+- `LivesIn(li).user == User(u)`
+- `LivesIn(li).country == country`
+
+The bridge emits the required `EntityType:exists` predicate for unified field
+syntax, including cross-entity references such as
+`LivesIn(li).user == User(u)`.
+
+## Bridge Rejections
+
+The new application Rule path rejects legacy SDK authoring forms that are still
+accepted by the legacy SDK Rule surface:
+
+- bare attribute comparisons such as `u.status == "active"`
+- two-line legacy forms such as `User(u), u.status == "active"`
+- raw `Pred(...)` atoms
+- raw rule-reference atoms
+- OR-shaped where bodies
+- anonymous `User(...)` variables declared as public ports
 
 ## Immutability
 
