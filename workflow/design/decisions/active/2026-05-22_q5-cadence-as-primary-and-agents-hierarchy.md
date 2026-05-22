@@ -3,7 +3,7 @@
 - Status: proposed
 - Created: 2026-05-22
 - Last Updated: 2026-05-22
-- Authority: design constraint; ratifies the CADENCE.md promotion + lock-in statement done in Step 0.1, locks the 4-level AGENTS hierarchy, the cross-pillar soft-trigger flow, and the companion-rules deferred-promotion plan
+- Authority: design constraint; ratifies the CADENCE.md promotion + lock-in statement done in Step 0.1, locks the two-level four-file AGENTS hierarchy, the cross-pillar soft-trigger flow, and the companion-rules deferred-promotion plan
 - Inputs:
   - [workflow/audit/active/2026-05-22_workflow-governance-vs-shipped.md](../../../audit/active/2026-05-22_workflow-governance-vs-shipped.md) (§3.1 A11, A12, A13, A14, A15; §3.2 I15; §4 Q5)
   - [workflow/CADENCE.md](../../../CADENCE.md) (Step 0.1 @ `0199ab20`) — already canonical
@@ -12,7 +12,7 @@
   - [Q2 decision](./2026-05-22_q2-design-pillar-structure.md) — design pillar AGENTS specification
   - [Q3 decision](./2026-05-22_q3-audit-pillar-structure.md) — audit pillar AGENTS specification
   - [Q4 decision](./2026-05-22_q4-template-centralization.md) — per-pillar template pointer rule + 7-field metadata schema
-  - 2026-05-22 design conversation: user-provided verbatim lock-in statement; 4-level AGENTS hierarchy proposal; companion-files promotion deferred; cross-pillar flow soft-trigger correction
+  - 2026-05-22 design conversation: user-provided verbatim lock-in statement; two-level four-file AGENTS hierarchy proposal; companion-files promotion deferred; cross-pillar flow soft-trigger correction
 - Outputs / Downstream:
   - `workflow/design/AGENTS.md` (Phase 1.5; new) — codifies Q2 §4.3-4.7 state machines
   - `workflow/audit/AGENTS.md` (Phase 1.5; new) — codifies Q3 §4.2-4.7 rules
@@ -45,7 +45,7 @@ This decision locks:
 
 - **Ratification of Step 0.1 promotion**: `workflow/CADENCE.md` is the canonical source of truth for the Audit-to-Archive Cadence; the auto-memory copy may persist as a session-priming pointer but is no longer authoritative.
 - **Ratification of the lock-in statement**: the verbatim user-provided text in `workflow/AGENTS.md` line 23 is the project-canonical primary-work-mode declaration.
-- **The 4-level AGENTS hierarchy**: which directories receive an `AGENTS.md` and which do not, plus their respective scopes.
+- **The two-level four-file AGENTS hierarchy**: which directories receive an `AGENTS.md` and which do not, plus their respective scopes.
 - **The conflict priority** between `workflow/CADENCE.md`, per-pillar `AGENTS.md`, and `README.md` files (also locked in Step 0.1 `workflow/AGENTS.md` line 32-37; Q5 ratifies and codifies).
 - **The cross-pillar soft-trigger flow**: blueprint is the only hard gate; design / audit / decisions are trigger-based prerequisites enumerated in `workflow/CADENCE.md` Scope-and-Applicability.
 - **The 6 companion auto-memory files deferred-promotion plan**: identifies the files, their planned canonical target locations, and the slice-level deferral rationale.
@@ -80,9 +80,9 @@ The verbatim text in `workflow/AGENTS.md` line 23:
 
 is **locked verbatim**. Future revisions require an explicit new Q-delta-decision per the Q-delta-decision pattern from Slice 7C.
 
-### 4.3 4-level AGENTS hierarchy
+### 4.3 two-level four-file AGENTS hierarchy
 
-The `workflow/` directory uses a **4-level hierarchical AGENTS layout**:
+The `workflow/` directory uses a **two-level four-file AGENTS layout** (Level 0 umbrella + 3 Level 1 per-pillar AGENTS files):
 
 ```
 workflow/AGENTS.md                  (Level 0: umbrella; done Step 0.1)
@@ -190,7 +190,7 @@ This priority is also stated in `workflow/AGENTS.md` (Step 0.1 line 32-37). Q5 r
 
 ### 4.7 6 companion auto-memory files deferred-promotion plan
 
-The CADENCE.md "Companion rules (currently in auto-memory)" section lists 6 auto-memory files that remain authoritative for Claude session behavior. Their canonical promotion is **deferred to later slices** per this Q5 plan:
+The CADENCE.md "Companion rules (currently in auto-memory)" section lists 6 auto-memory files. During the deferral window, those files serve as **supplemental session-behavior inputs** for Claude; they are not the canonical workflow source of truth, but they remain in effect **where the canonical workflow docs are silent**. Their canonical promotion is **deferred to later slices** per this Q5 plan:
 
 | Auto-memory file | Planned canonical target | Proposed promotion slice |
 |---|---|---|
@@ -203,7 +203,7 @@ The CADENCE.md "Companion rules (currently in auto-memory)" section lists 6 auto
 
 **Deferral rationale**: this workflow-governance-promotion slice already covers 9 Q-decision-level locks + 14 documents (1 audit + 5 decisions + 1 synthesis + 1 blueprint + 6 file mvs) + 8 implementation phases. Absorbing 6 additional auto-memory file promotions would over-saturate the slice. Each future slice can promote 1-2 companion files with its own audit + decision + blueprint cycle.
 
-**Until promotion**: the 6 auto-memory files remain authoritative for Claude session behavior; `workflow/CADENCE.md` and `workflow/AGENTS.md` carry forward-pointer references so future agents know to read the auto-memory files as supplementary canon.
+**Until promotion**: the 6 auto-memory files serve as **supplemental session-behavior inputs** that are authoritative **only where the canonical workflow docs are silent**. On any divergence with `workflow/CADENCE.md` or `workflow/AGENTS.md`, the canonical workflow docs win (per §4.6 conflict priority). Both canonical files carry forward-pointer references so future agents know to read the companion files as supplementary inputs, not as the canonical source.
 
 ### 4.8 Q1-Q5 batch flip commit specification
 
@@ -288,7 +288,7 @@ Commit message convention: `docs: batch adopt q1-q5 + retrofit headers to 7-fiel
 
 Between this slice closure and the future companion-promotion slices:
 
-- The 6 auto-memory companion files remain authoritative for Claude session behavior.
+- The 6 auto-memory companion files serve as **supplemental session-behavior inputs**, authoritative **only where the canonical workflow docs are silent**. On any divergence with `workflow/CADENCE.md` or `workflow/AGENTS.md`, the canonical workflow docs win (per §4.6).
 - `workflow/CADENCE.md` and `workflow/AGENTS.md` already contain pointer references; no additional sync action is required this slice.
 - Future Claude sessions following the cadence will read both the canonical `workflow/CADENCE.md` and the auto-memory companion files; if these two diverge during the deferral window, the canonical file wins (per §4.6 conflict priority).
 
@@ -302,7 +302,7 @@ The implementing blueprint §10 closure will record the retrofit as a deviation-
 
 ### 7.5 No retroactive enforcement on legacy artifacts
 
-The 4-level AGENTS hierarchy and the cross-pillar soft-trigger flow apply to **new and active workflow content** post-this slice. Pre-existing artifacts (491 archived blueprints, 8 DB/view Q1-Q8 decisions, etc.) are not retroactively re-evaluated against §4.4 content specifications or §4.5 trigger conditions.
+The two-level four-file AGENTS hierarchy and the cross-pillar soft-trigger flow apply to **new and active workflow content** post-this slice. Pre-existing artifacts (491 archived blueprints, 8 DB/view Q1-Q8 decisions, etc.) are not retroactively re-evaluated against §4.4 content specifications or §4.5 trigger conditions.
 
 ## 8. Acceptance Criteria
 
@@ -318,7 +318,7 @@ Post-implementing-blueprint, the AGENTS hierarchy must satisfy:
 5. No `AGENTS.md` exists at `workflow/foundations/`, `workflow/templates/`, `workflow/memory/`, `workflow/working/`, or `workflow/heritage/` (per §4.3 rationale).
 6. Q1-Q5 all have `Status: adopted` post-batch-flip, with Q1-Q4 also retrofitted to the 7-field schema.
 7. Validator (Phase 4) passes:
-   - Each Level 1 pillar has its expected `AGENTS.md`.
+   - The 3 expected Level 1 AGENTS files exist: `workflow/blueprints/AGENTS.md`, `workflow/design/AGENTS.md`, `workflow/audit/AGENTS.md`. No `AGENTS.md` exists in `foundations/`, `templates/`, `memory/`, `working/`, or `heritage/` (per §4.3).
    - Each `AGENTS.md` includes a "Templates" pointer section (per Q4 §4.4 + Phase 4 check).
    - Lock-in statement in `workflow/AGENTS.md` matches verbatim text from §4.2 (string match).
 8. `workflow/CADENCE.md` provenance line still points at the auto-memory source; no deletion of auto-memory `feedback_audit_to_archive_cadence.md` is gated by this slice.
