@@ -157,7 +157,7 @@ __all__ = [
   - `_lower_compare` 在 AttrRef.entity_type 已知时正确工作
 - **新文件** `tests/sdk/test_schema_ellipsis.py`(或加入现有 schema tests):
   - `User(...)` 返回 ExistsAtom + anonymous Var
-  - `User(..., ...)` 两个独立 anonymous Var(if allowed — 当前 build_entity_dsl_call 只接 1 arg)— 或 reject
+  - 两个独立 `User(...)` 调用生成不同 anonymous Var tokens;不测试 `User(..., ...)` 多参形态(`build_entity_dsl_call` 只接 1 positional arg)
 - **Non-regression**:运行 T1.1 tests + 全 SDK tests + 全 application tests 全部 pass
 
 ## 3. Non-goals
@@ -614,7 +614,7 @@ tests/sdk/
 ## 9. Docs To Update
 
 - **更新** `src/factgraph/application/docs/rule.md`(T1.1 已 ship)— 新增:
-  - §**Unified syntax(via SDK DSL bridge)**:展示 `User(u).field == value` 等 7 形态 + Ellipsis + cross-entity ref
+  - §**Unified syntax(via SDK DSL bridge)**:展示 `User(u).field == value` 等 6 个 equality-only / bare-existence 形态 + Ellipsis + cross-entity ref
   - §**Bridge usage**:从 `factgraph.sdk.dsl` import `build_application_rule` 的端到端 example
   - §**Legacy form rejection**:列出 3 种被 reject 的 legacy 形态 + 各自 error message 模式
 - **不**新建 `src/factgraph/sdk/dsl/docs/`(若不存在;若已有 SDK DSL docs 入口可加 §pointing)— 待确认
