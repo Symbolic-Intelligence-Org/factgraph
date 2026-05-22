@@ -73,11 +73,15 @@ Hard-cut 实施关键:
 - **`AttrRef` 添加 `entity_type: str | None = None`** 字段(default None;additive,不破坏 legacy AttrRef 用法)
 - **`ExistsAtom.__getattr__(field) → AttrRef`** — 新方法;构造 AttrRef 时 set `entity_type=self.entity_type`
 - **`LogicVar.__getattr__` 保持不变**(legacy 路径用)— 返回 AttrRef 时 `entity_type=None`
-- **`_looks_like_sdk_dsl_entity_call` 识别 Ellipsis** — single Ellipsis arg → True
+- **`_looks_like_sdk_dsl_entity_call` 识别 Ellipsis** — 仅在 **positional single Ellipsis arg** 分支 special-case `args[0] is Ellipsis`;**不动** `_is_sdk_dsl_value` 全局行为(per Step 4.2 v1 P1 — `_is_sdk_dsl_value` 同时被 `Field.__call__` kwargs / `EntityMeta.__call__` kwargs 共用,全局接 Ellipsis 会让 `User(field=...)` 走 head-call 路径生成坏 HeadCall payload)
 - **`build_entity_dsl_call` 处理 Ellipsis** — `len(args)==1 and args[0] is Ellipsis` → 生成 unique anonymous `LogicVar`(`label=None`,token 自动)→ 返回 `ExistsAtom(entity_type, anon_var)`
-- **`_is_sdk_dsl_value` 接受 Ellipsis**(若需要)— 视实现具体看是否插入到 `_looks_like_sdk_dsl_entity_call`
-- **`_lower_compare` 可短路** AttrRef.entity_type 已知时(可选,不必须;保持 bindings 表 fallback)
-- 全部 additive — legacy SDK Rule 路径行为不变;legacy AttrRef-without-entity_type 路径(`u.field == ...`)仍 lower
+- **`_lower_compare` MUST emit existence pred** when `AttrRef.entity_type` 已知(per Step 4.2 v1 P2):
+  - 当 `CompareExpr.lhs` 是 `AttrRef(record_var, field, entity_type="X")` 且 `record_var not in bindings` → **prepend** `("pred", "X:exists", [record_var.token])` 到输出 + 更新 bindings;然后 emit field compare pred
+  - 当 `CompareExpr.rhs` 是 `ExistsAtom(entity_type="Y", var=v)` (cross-entity ref,如 `LivesIn(li).user == User(u)`)→ prepend `("pred", "Y:exists", [v.token])` + 更新 bindings;然后 emit field compare pred(rhs term 取 v.token)
+  - Symmetric for `expr.right` AttrRef.entity_type / `expr.left` ExistsAtom
+  - **关键**:若 record_var 已在 bindings 中(用户已显式写了 `EntityType(var)` 或同一 var 已被其他 unified compare 引入)→ 不重复 emit existence pred(natural dedup via bindings 表)
+- **`lower_term` 不需扩展**(因为 ExistsAtom 在 `_lower_compare` 内被直接消费,不进入 generic `lower_term`)
+- 全部 additive — legacy SDK Rule 路径行为不变;legacy AttrRef-without-entity_type 路径(`u.field == ...` via `LogicVar.__getattr__`)仍走 bindings 表 fallback;legacy 用户**也可受益**于 unified syntax 扩展(legacy 接 `factgraph.sdk.Rule(where=[User(u).status == "active"])` 现在能 work — 之前要求 2-line)
 
 ### 2.2 (b) DSL → application Rule 桥接(新文件 `src/factgraph/sdk/dsl/application_rule.py`)
 
@@ -133,8 +137,17 @@ __all__ = [
 ### 2.5 (e) Tests
 
 - **新文件** `tests/sdk/dsl/test_application_rule.py`:
-  - Unified syntax 7 形态(per parent §3.5):`User(u)` / `User(u).field == lit` / `User(u).field == Var` / `User(u).field > lit` / `User(...)` Ellipsis / cross-entity ref `LivesIn(li).user == User(u)` / `User(u), User(u).field == "x"`(重复 ExistsAtom 通过 application Rule normalization — 实际由 lower_where dedup 或不 dedup,看 ~50-75 LOC dedup 是否进本 slice)
-  - Legacy reject:`u.field == "x"`(裸 AttrRef)/ `User(u), u.field == "x"`(2-line)/ `Pred("user:exists", u)`(raw)→ 都 raise `DSLToApplicationRuleError`
+  - **Unified canonical 7 pure forms**(per parent §3.5,无 mixed 形态):
+    1. `User(u)` — bare existence
+    2. `User(u).user_id == "u-2"` — identity literal
+    3. `User(u).status == "active"` — field literal
+    4. `User(u).score > 0.5` — field compare
+    5. `User(...).name == "alice"` — anonymous Ellipsis + field
+    6. `LivesIn(li).user == User(u)` — cross-entity ref(验证 existence pred 双 emit:`LivesIn:exists(li)` + `User:exists(u)` + field cross-ref)
+    7. `LivesIn(li).country == country` — field-to-Var(命名)compare
+  - **Existence pred emission verification**:Form 2-7 都验证 lowered output 含对应 `EntityType:exists(var.token)` 顶部 pred(不只是 field pred)
+  - **Bindings dedup**:用户写 `[User(u), User(u).field == "x"]` 2-line(legacy 形态)→ 桥接 reject(`u.field` 走 LogicVar.__getattr__,AttrRef.entity_type=None);**不**测试"dedup 行为"(本 slice 不做 dedup pass,natural dedup via bindings 表)
+  - **Legacy reject** 4 形态:`u.field == "x"`(裸 AttrRef)/ `User(u), u.field == "x"`(2-line)/ `Pred("user:exists", u)`(raw)/ `RuleRefAtom`(raw)→ 都 raise `DSLToApplicationRuleError`
   - OR-shape reject:`[[User(u)], [User(v)]]` 形态(2 分支)→ raise
   - Anonymous `...`:`User(...)` 每次独立 anonymous Var;tests 验证生成的 Var 不同 token
   - Ports validation 通过 application Rule(non-regression for T1.1 tests)
@@ -176,7 +189,8 @@ __all__ = [
 | `LogicVar.__getattr__` | `src/factgraph/sdk/dsl/expr.py:55-58` | 返回 AttrRef(record_var=self, field_name=item)— 不带 entity_type |
 | `ExistsAtom` | `src/factgraph/sdk/dsl/expr.py:174-178` | `(entity_type, var)`;无 `__getattr__` |
 | `AttrRef` | `src/factgraph/sdk/dsl/expr.py:101-126` | `(record_var, field_name)`;无 entity_type 字段 |
-| `_lower_compare` | `src/factgraph/sdk/dsl/expr.py:345-393` | 使用 bindings dict 查 record_var → entity_type |
+| `_lower_compare` | `src/factgraph/sdk/dsl/expr.py:345-393` | 使用 bindings dict 查 record_var → entity_type;**T1.2 扩展** emit existence pred when AttrRef.entity_type known + handle CompareExpr RHS/LHS = ExistsAtom(cross-entity ref)|
+| `lower_term` | `src/factgraph/sdk/dsl/expr.py:444-460` | DSL term → IR atom value;**当前 raise SDKDSLError on ExistsAtom**(本 slice 不直接扩展 `lower_term`;cross-entity ref 在 `_lower_compare` 内处理 ExistsAtom,不进入 generic `lower_term`)|
 | `lower_where` | `src/factgraph/sdk/dsl/expr.py:290-300` | DSL atoms list → IR tuples list |
 | `lower_where_branch` | `src/factgraph/sdk/dsl/expr.py:303-315` | DSL atoms branch → IR tuples branch(bindings 表生成于此) |
 | `parse_where_ir_to_ast` | `src/factgraph/core/rules/where_ast.py:99-127` | IR tuples → AndExpr/OrExpr 树 |
@@ -282,33 +296,56 @@ def build_application_rule(
     )
 ```
 
-### 5.3 Anonymous `...` Ellipsis 实施
+### 5.3 Anonymous `...` Ellipsis 实施(Step 4.2 v1 P1 修正)
+
+**关键约束**:`_is_sdk_dsl_value` 是 `Field.__call__` kwargs 检测 + `EntityMeta.__call__` kwargs 检测共用;全局把 Ellipsis 视为 DSL value 会让 `User(field=...)` 这类 head-call 路径误判 → 生成坏 HeadCall payload。故 Ellipsis special-case **只在** `_looks_like_sdk_dsl_entity_call` 的 **positional single arg** 分支处理。
 
 ```python
-# sdk/dsl/expr.py:build_entity_dsl_call (extended)
+# sdk/schema.py:_looks_like_sdk_dsl_entity_call (modified — positional Ellipsis only)
+def _looks_like_sdk_dsl_entity_call(args, kwargs):
+    if args and kwargs:
+        return False
+    if kwargs:
+        return any(_is_sdk_dsl_value(v) for v in kwargs.values())   # UNCHANGED
+    if len(args) == 1:
+        if args[0] is Ellipsis:                                       # NEW: positional Ellipsis
+            return True
+        return _is_sdk_dsl_value(args[0])
+    return False
+```
+
+```python
+# sdk/schema.py:_is_sdk_dsl_value (UNCHANGED — Ellipsis not added here)
+def _is_sdk_dsl_value(value):
+    try:
+        from .dsl.expr import is_dsl_head_kwarg_value
+    except Exception:
+        return False
+    return bool(is_dsl_head_kwarg_value(value))
+```
+
+```python
+# sdk/dsl/expr.py:build_entity_dsl_call (extended — Ellipsis branch)
 def build_entity_dsl_call(entity_cls, args, kwargs):
-    ...
-    if len(args) == 1 and args[0] is Ellipsis:
-        anon_var = LogicVar()  # label=None, token auto $v<N>
+    entity_type = getattr(entity_cls, "__name__", None)
+    if not isinstance(entity_type, str) or not entity_type:
+        raise SDKDSLError("invalid entity class for DSL call")
+    if kwargs:
+        if args:
+            raise SDKDSLError("...")
+        return HeadCall(...)
+    if len(args) == 1 and args[0] is Ellipsis:                        # NEW
+        anon_var = LogicVar()                                          # label=None, token auto $v<N>
         return ExistsAtom(entity_type=entity_type, var=anon_var)
     if len(args) == 1 and isinstance(args[0], LogicVar):
         return ExistsAtom(entity_type=entity_type, var=args[0])
-    ...
+    raise SDKDSLError("entity DSL call expects exactly one LogicVar or Ellipsis ...")
 ```
 
-```python
-# sdk/schema.py:_is_sdk_dsl_value (extended)
-def _is_sdk_dsl_value(value):
-    if value is Ellipsis:
-        return True
-    ...
-```
-
-```python
-# sdk/schema.py:_looks_like_sdk_dsl_entity_call (extended via _is_sdk_dsl_value)
-# No direct change needed if _is_sdk_dsl_value accepts Ellipsis;
-# len(args)==1 case naturally handles it
-```
+**结果**:
+- `User(u)`(LogicVar)→ 走 `_is_sdk_dsl_value(LogicVar)=True` 分支 → ExistsAtom
+- `User(...)`(positional Ellipsis)→ 走 special-case 分支 → ExistsAtom(anonymous var)
+- `User(field=...)`(kwarg Ellipsis)→ 走 kwargs 分支:`_is_sdk_dsl_value(Ellipsis)=False` → `_looks_like_sdk_dsl_entity_call` returns False → 不被识别为 DSL call → 走 `super().__call__` 正常 Entity 构造 → 不生成坏 HeadCall(P1 修复)
 
 ### 5.4 ExistsAtom.__getattr__ + AttrRef.entity_type
 
@@ -337,6 +374,63 @@ class ExistsAtom:
 ```
 
 **注**:`@dataclass(frozen=True)` 与 `__getattr__` 共存 — `__getattr__` 仅在标准属性查找失败后调用(dataclass 字段 `entity_type` / `var` 通过 `__dict__` 直接命中,不走 `__getattr__`)。
+
+### 5.4b `_lower_compare` 扩展(Step 4.2 v1 P2 — emit existence pred)
+
+**问题**:unified syntax `User(u).field == "x"` 的 where list 仅含 `[CompareExpr(AttrRef(u, "field", entity_type="User"), "==", "x")]`;**ExistsAtom 不在 list 中**。若 `_lower_compare` 只产 field pred,缺少 `User:exists(u)` 顶部 pred,违反 parent §3.5 unified canonical 的 "existence + field predicate" 语义。
+
+**解决**:`_lower_compare` 接受 AttrRef.entity_type 时**主动 emit existence pred**;并处理 CompareExpr 一端为 ExistsAtom 的 cross-entity ref 情况。
+
+```python
+# sdk/dsl/expr.py:_lower_compare (extended)
+def _lower_compare(expr, bindings, *, temp_seq):
+    extra_existence: list[Any] = []
+
+    # LHS AttrRef with entity_type → emit existence + register binding
+    if isinstance(expr.left, AttrRef) and expr.left.entity_type is not None:
+        rv = expr.left.record_var
+        if rv not in bindings:
+            extra_existence.append(("pred", f"{expr.left.entity_type}:exists", [rv.token]))
+            bindings[rv] = expr.left.entity_type
+
+    # RHS AttrRef with entity_type → same
+    if isinstance(expr.right, AttrRef) and expr.right.entity_type is not None:
+        rv = expr.right.record_var
+        if rv not in bindings:
+            extra_existence.append(("pred", f"{expr.right.entity_type}:exists", [rv.token]))
+            bindings[rv] = expr.right.entity_type
+
+    # RHS = ExistsAtom (cross-entity ref): emit existence + extract var token for compare
+    if isinstance(expr.right, ExistsAtom):
+        ev = expr.right.var
+        if ev not in bindings:
+            extra_existence.append(("pred", f"{expr.right.entity_type}:exists", [ev.token]))
+            bindings[ev] = expr.right.entity_type
+        # treat right side as the LogicVar for subsequent comparison lowering
+        right_for_compare = ev   # used by existing AttrRef-vs-Var path below
+
+    # LHS = ExistsAtom (rare symmetric case): same
+    if isinstance(expr.left, ExistsAtom):
+        ev = expr.left.var
+        if ev not in bindings:
+            extra_existence.append(("pred", f"{expr.left.entity_type}:exists", [ev.token]))
+            bindings[ev] = expr.left.entity_type
+        # ... mirror
+
+    # === Existing field compare logic continues, prepending extra_existence ===
+    # (existing AttrRef-AttrRef / AttrRef-Other / Other-AttrRef branches unchanged
+    #  except they now MAY have bindings auto-populated, so the
+    #  "variable not bound" SDKDSLError won't trigger for unified syntax)
+    
+    existing_field_compare_output = _existing_lower_compare_logic(expr, bindings, temp_seq=temp_seq)
+    return extra_existence + existing_field_compare_output
+```
+
+**关键性质**:
+- **Bindings 表共享 dedup**:若同一 record_var 已在 bindings(用户已显式 `EntityType(var)` 在 where 早期,或上一个 unified compare 已注入)→ 不重复 emit `EntityType:exists`(自然 dedup via bindings 表)
+- **Legacy 路径不变**:`AttrRef.entity_type is None`(LogicVar.__getattr__ 来源)→ 不进入新分支 → 走原有 bindings 表 fallback(若 record_var 未绑定则 raise legacy SDKDSLError)
+- **Cross-entity ref 输出 3 preds**:`LivesIn(li).user == User(u)` →`[("pred", "LivesIn:exists", ["$li"]), ("pred", "User:exists", ["$u"]), ("pred", "livesin:user", ["$li", "$u"])]`(field pred 走 existing logic)
+- **lower_term 不需扩展**:ExistsAtom 在 `_lower_compare` 内被识别并消费,不进入 `lower_term` generic path
 
 ### 5.5 legacy 形态 reject 实施
 
@@ -373,16 +467,26 @@ def _check_compare_expr_attrrefs(cmp_expr, where_path):
 
 **关键**:`entity_type=None` 是检测 legacy 形态的精确标记 — 不依赖启发式,不依赖语法层重新解析。
 
-### 5.6 LogicVar → core Var ports 转换
+### 5.6 LogicVar → core Var ports 转换(Step 4.2 v1 P4 — anonymous reject 精确化)
 
 ```python
 def _convert_ports(dsl_ports):
-    """Convert SDK DSL LogicVar ports → core Var ports."""
+    """Convert SDK DSL LogicVar ports → core Var ports.
+
+    Rejects anonymous LogicVars (label=None) per parent C45: anonymous Vars
+    from User(...) Ellipsis cannot be declared as ports.
+    """
     out = {}
     for name, lv in dsl_ports.items():
         if not isinstance(lv, LogicVar):
             raise DSLToApplicationRuleError(
                 f"ports[{name!r}] must be LogicVar (got {type(lv).__name__})"
+            )
+        if lv.label is None:                                       # NEW (P4 fix)
+            raise DSLToApplicationRuleError(
+                f"ports[{name!r}] cannot be anonymous LogicVar (label=None); "
+                f"anonymous Vars from User(...) Ellipsis cannot be declared as ports "
+                f"per parent essay C45"
             )
         if not lv.token:
             raise DSLToApplicationRuleError(f"ports[{name!r}] LogicVar has no token")
@@ -390,7 +494,12 @@ def _convert_ports(dsl_ports):
     return out
 ```
 
-**注**:application Rule `__post_init__` 会 reject ports value 不是 `core.Var` — 桥接保证转换。Anonymous LogicVar(`label=None`)由 build_entity_dsl_call 生成,**不应**出现在 ports(用户面 ports 期待 named LogicVar);桥接 reject anonymous 无显式 port 名(per parent C45 anonymous 不可为 port)。
+**关键**:anonymous LogicVar(`label=None`)由 `build_entity_dsl_call` 在 Ellipsis 路径生成 —`LogicVar()` 默认 `label=None`,但 `token` 会被 `__post_init__` auto-generated 为 `$v<N>`(非空)。故仅 `not lv.token` 检测**无法**捕获 anonymous;**必须** `lv.label is None` 精确检测。
+
+**Test**:
+- `with vars("u") as (u,): build_application_rule(ports={"user": u})` → pass(u.label="u")
+- `anon = User(...)  # 产 ExistsAtom; anon.var.label is None`
+- `build_application_rule(ports={"user": anon.var})` → raise `DSLToApplicationRuleError`(label=None)
 
 ### 5.7 测试结构
 
@@ -457,14 +566,19 @@ tests/sdk/
 - [ ] `from factgraph.sdk.dsl import build_application_rule, DSLToApplicationRuleError` 可 import
 - [ ] `ExistsAtom.__getattr__("field")` 返回 AttrRef + `entity_type` 已 set 为 ExistsAtom.entity_type(2 unit tests pass)
 - [ ] `LogicVar.__getattr__("field")` 仍返回 AttrRef + entity_type=None(legacy non-regression test pass)
-- [ ] `_is_sdk_dsl_value(Ellipsis)` returns True(1 unit test)
-- [ ] `_looks_like_sdk_dsl_entity_call((...,), {})` returns True(1 unit test)
+- [ ] **`_is_sdk_dsl_value` UNCHANGED** — `_is_sdk_dsl_value(Ellipsis)` returns **False**(1 unit test 防回归;P1 修复)
+- [ ] `_looks_like_sdk_dsl_entity_call((...,), {})` returns True(positional Ellipsis,1 unit test)
+- [ ] `_looks_like_sdk_dsl_entity_call((), {"field": Ellipsis})` returns **False**(kwarg Ellipsis 不被识别为 DSL call,1 unit test 防 P1 回归)
 - [ ] `User(...)` 产 ExistsAtom + anonymous LogicVar(不同 token,1 unit test)
-- [ ] `build_application_rule(...)` 接受 7 种 unified canonical 形态产正确 application Rule(7 unit tests pass)
-- [ ] `build_application_rule(...)` reject:bare AttrRef compare / 2-line form / `Pred(...)` raw / RuleRefAtom — 4 negative tests pass with `DSLToApplicationRuleError`
+- [ ] **`_lower_compare` emit existence pred** 验证(Step 4.2 v1 P2):
+  - `User(u).field == "x"` lowered → `[("pred", "User:exists", ["$u"]), ("pred", "user:field", ["$u", "x"])]`(2 preds,1 unit test)
+  - `LivesIn(li).user == User(u)` lowered → 3 preds 含 `LivesIn:exists($li)` + `User:exists($u)` + field cross-ref(1 unit test)
+  - Bindings 表 dedup:`[User(u).a == 1, User(u).b == 2]` lowered → 只 emit `User:exists($u)` **一次**(natural dedup;1 unit test)
+- [ ] `build_application_rule(...)` 接受 7 种 unified canonical pure forms 产正确 application Rule(7 unit tests pass;**无 mixed `User(u), User(u).field == ...` 形态** — P3 修复)
+- [ ] `build_application_rule(...)` reject:bare AttrRef compare(`u.field == "x"`)/ 2-line form(`User(u), u.field == "x"`)/ `Pred(...)` raw / RuleRefAtom — 4 negative tests pass with `DSLToApplicationRuleError`
 - [ ] OR-shape where reject(1 negative test)
-- [ ] Anonymous LogicVar 作 ports value reject(1 negative test)
-- [ ] LogicVar ports → core Var 转换 token 保留(1 unit test)
+- [ ] **Anonymous LogicVar(`label is None`)作 ports value reject**(P4 修复;`_convert_ports` 检查 `lv.label is None`,**非** `not lv.token` — anonymous LogicVar 有 auto token)(1 negative test)
+- [ ] LogicVar(label 非 None) ports → core Var 转换 token 保留(1 unit test)
 - [ ] Bridge → application Rule `content_digest` 跨进程 deterministic(1 unit test)
 - [ ] Bridge → application Rule `render_desc("user %user")` 双绑定态正确(2 unit tests)
 - [ ] **Non-regression**:T1.1 tests (20) + 全 SDK tests + 全 application tests + 全 core tests pass(`PYTHONPATH=src python -m unittest discover tests`)

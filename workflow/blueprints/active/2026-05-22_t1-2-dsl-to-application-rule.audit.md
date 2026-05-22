@@ -8,6 +8,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-22 | draft | Blueprint created | T1 Track 第 2 个 sub-slice;Track plan v1 expanded scope 锁定后第一个落地的 expanded slice。Scope:(a) SDK DSL ergonomic 扩展(`ExistsAtom.__getattr__` / `AttrRef.entity_type` / `User(...)` Ellipsis);(b) DSL→application Rule 桥接(新文件 `sdk/dsl/application_rule.py`,复用 shipped `lower_where` + `parse_where_ir_to_ast` 链);(c) legacy 形态 reject in 新 Rule path(bare AttrRef / 2-line / Pred / RuleRef)。轻量 cadence 模式:跳过 Stage 1 audit + Stage 2 Q + Stage 3 synthesis,blueprint draft → scoped → impl → closure → archive 主路径(per Track plan §1.2)。依赖方向 `sdk → application → core` 严格 forward — application 与 core 不被本 slice 修改。 |
+| 2026-05-22 | draft | Step 4.2 v1 tightening applied | User read-only review surfaced 4 findings(2 Blockers + 2 Required)。P1: 不动 `_is_sdk_dsl_value` 全局语义(防 head-call kwargs 路径误判) — Ellipsis special-case 只在 `_looks_like_sdk_dsl_entity_call` positional arg 分支。P2: `_lower_compare` MUST emit existence pred when AttrRef.entity_type known + handle CompareExpr 一端为 ExistsAtom(cross-entity ref)— 缺少 existence emit 会让 unified syntax 产生语义假阳性。P3: drop test 计划中 `User(u), User(u).field == "x"` mixed form,7 unified forms 保持 pure。P4: `_convert_ports` 添加 `lv.label is None` 检查 — anonymous LogicVar 有 auto token 但 label=None,`not lv.token` 不会捕获。Blueprint §2.1 + §2.5 + §4.1 + §5.3 + §5.4b(new) + §5.6 + §7 + audit Decision Notes 全部更新。等用户复核 v1。 |
 
 ## Decision Notes
 
@@ -51,3 +52,19 @@
 - 排除:legacy SDK Rule path hard-cut(T1.3)、SDK 顶层 `__all__` migration(T1.3)、新 Rule SDK 顶层 Re-export(T1.3)、RuleExpr 组合(T3)、head(T4)、`.eval`(T5)、ArithExpr / AggregateExpr 扩展(T2.2 / T2.3)、atom kind 9-list 文档化(T2.1)、recursive immutability hardening(deferred)、atom dedup pass(由 lower_where bindings 表覆盖,本 slice 不显式实现)
 
 **Blueprint 仍 Status: draft**;等用户 Step 4.2 review。
+
+### 2026-05-22 — Step 4.2 v1 tightening (P1+P2+P3+P4 applied)
+
+User Step 4.2 read-only review surfaced 4 findings — 2 Blockers + 2 Required。All valid。Applied per finding:
+
+**P1 (Blocker)** — `_is_sdk_dsl_value` 共用于 `Field.__call__` kwargs + `EntityMeta.__call__` kwargs;全局接 Ellipsis 让 `User(field=...)` head-call 路径生成坏 HeadCall payload(lower 时炸)。**Adopted**:Ellipsis special-case **只在** `_looks_like_sdk_dsl_entity_call` 的 positional `len(args)==1 and args[0] is Ellipsis` 分支处理;`_is_sdk_dsl_value` 全局**不动**。§2.1 bullet 改写;§5.3 完整改写为新 Ellipsis 实施伪代码;§7 acceptance 加 `_is_sdk_dsl_value(Ellipsis) returns False` 防回归 test + kwarg Ellipsis 不被识别为 DSL call test。
+
+**P2 (Blocker)** — Unified syntax `User(u).field == "x"` 的 where list 仅含 `[CompareExpr(AttrRef(...,entity_type="User"), "==", "x")]`,**ExistsAtom 不在 list**。若 `_lower_compare` 只用 `entity_type` 短路 bindings lookup 而不 emit existence pred → 缺少 `User:exists(u)`,违反 parent §3.5 unified canonical 的 "existence + field predicate" 语义。Cross-entity ref `LivesIn(li).user == User(u)` 同理需要双 existence emit。**Adopted**:`_lower_compare` 扩展为 emit existence pred 当 AttrRef.entity_type known + handle CompareExpr 一端为 ExistsAtom(cross-entity ref)。Bindings 表共享自然 dedup。§2.1 bullet 改写为 explicit emit requirement;§4.1 表格加 `lower_term` 行说明不需扩展(ExistsAtom 在 `_lower_compare` 内消费);新增 §5.4b `_lower_compare` 扩展 详细伪代码 + 3 关键性质;§7 acceptance 加 3 个 existence emit verification tests。
+
+**P3 (Required)** — Test 计划列了 `User(u), User(u).field == "x"` 重复 ExistsAtom 形态 + "dedup 或不 dedup" 的模糊文字;与 §3 Non-goals 中"不实现 atom dedup" 矛盾。**Adopted**:7 unified canonical forms 重写为 **pure** unified syntax(无 explicit ExistsAtom + unified compare 混合);drop "重复 ExistsAtom" 形态;§2.5 改为列 7 显式 pure forms;§7 acceptance 加 "无 mixed 形态" 注解。Bindings dedup 仍 verify(natural,via bindings 表)— 不是 explicit dedup pass。
+
+**P4 (Required)** — `_convert_ports` 当前伪代码只检查 `isinstance(lv, LogicVar)` 和 `not lv.token`;anonymous LogicVar(`label=None`)有 auto-generated token(非空),`not lv.token` 不会 trip → anonymous 通过桥接成为 port → 违反 parent C45(anonymous 不可为 port)。**Adopted**:`_convert_ports` 添加 `if lv.label is None: raise DSLToApplicationRuleError(...)` 显式检测;§5.6 改写;§7 acceptance test 改为用 `User(...).var` 或 `LogicVar()` 验证 label=None 反应,**非** token-emptiness 验证。
+
+**Cross-cutting**:P2 修复让 unified syntax 在 legacy SDK Rule path **也能 work**(legacy 用户传 `factgraph.sdk.Rule(where=[User(u).status == "active"])` 现在不再 raise "variable not bound") — additive benefit,not breaking。
+
+**Blueprint 仍 Status: draft**;等用户复核本 tightening 通过。
