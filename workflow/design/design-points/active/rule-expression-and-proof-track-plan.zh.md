@@ -34,10 +34,10 @@ parent essay 体量过大(2066 行 / ~100 commitments / §3-§10 跨越 Rule bod
 | Per-Track Stage 1 audit | 单独 audit doc(`audit/active/...vs-shipped.md`)| **跳过** — parent essay 内 commitments 已锁(`C<N>` 序号),直接进 blueprint |
 | Per-Track Stage 2 Q-resolution | 单独 decision doc per Q + 单独分支 | **跳过 by default** — parent essay 内 PENDING 项(`fg.eval.why_not` / §6 task split / §9 joins 等)进 blueprint Non-goals;真正出现 load-bearing 歧义时才回退到 decision doc |
 | Per-Track Stage 3 synthesis | 单独 synthesis doc | **跳过** — 本 track plan 自身充当 sub-slice ordering source |
-| Per-sub-slice Stage 4 blueprint | 完整 8-state + 配对 audit log + preflight + scoped anchor + impl + closure + archive | **保留** — blueprint 是实施粒度的真单元;每 sub-slice 一份 |
+| Per-sub-slice Stage 4 blueprint | 完整 8-state + 配对 audit log + preflight + scoped anchor + impl + closure + archive | **轻量保留** — blueprint 是实施粒度的真单元;每 sub-slice 一份;独立 preflight 仅在用户或风险触发时启用 |
 | Per-commit verification ritual | 全量保留 | **保留** — sacred branch + dirty 集 + branch check |
 | 可以推进 mutual authorization | 全量保留 | **保留** — 每 sub-slice 之间用户授权 |
-| Pre-impl grep amendment (Step 4.6.5) | 大型 subtractive slice 触发 | **保留** — T1.2 / T5.9 等 hard-cut slice 必走 |
+| Pre-impl grep amendment (Step 4.6.5) | 大型 subtractive slice 触发 | **未来大型 subtractive slice 保留** — T1.2 已按轻量模式完成且 skipped independent pre-impl grep(closure deviation 已记录);T5.9 等大 hard-cut slice 仍应执行 |
 | Sacred branch isolation | 全量保留 | **保留** |
 
 **触发回退到 heavy cadence 的条件**(任一发生则当前 Track 升级):
@@ -59,9 +59,9 @@ parent essay 体量过大(2066 行 / ~100 commitments / §3-§10 跨越 Rule bod
 | ID | 范围 | 性质 | 备注 |
 |---|---|---|---|
 | **T1.1** | 引入新 application Rule DTO 在 `factgraph.application.protocol.rule:Rule`(additive;与旧 `factgraph.sdk.Rule` 共存,类名直接是 `Rule`,无 V2/Atomic 后缀)。`Rule.where` 内部存储 **core AST atoms**(`PredAtom`/`CmpAtom`/`InAtom`/`BuiltinAtom`/`NotAtom`,from `core/rules/where_ast.py`;**reject `RuleRefAtom`** per parent C9)。构造期 validation + desc rendering(`%port_name` 插值)+ atom_ids positional property + content_digest deterministic property + **shallow** Rule immutability(frozen + tuple where + MappingProxyType ports)。**不**触 SDK DSL;**不**实现 unified canonical authoring `User(u).field == value`(T1.2);**不**做 recursive immutability hardening(deferred per `feedback_invariant_defense_in_depth` trade-off 选择)| Additive | T2.x / T1.2 / T1.3 / T1.4 / T3.x / T4.x / T5.x 的 prerequisite |
-| **T1.2** | **Additive + Subtractive**(2026-05-22 T1.1 Step 4.2 review 触发的 scope expansion):(a) **SDK DSL ergonomic 扩展** — `ExistsAtom.__getattr__` 返回 AttrRef-equivalent / `User(...)` Ellipsis → anonymous Var / cross-entity ref `LivesIn(li).user == User(u)` 支持 / DSL atom dedup;(b) **DSL → core AST normalization bridge** — 把 SDK DSL atoms lower 到 `core.rules.where_ast` Atom types,作为 application Rule 构造的输入(替代 T1.1 时考虑过的 ~50-75 LOC lowering 扩展,但放到 SDK 侧而非 application 侧 — 保持依赖方向);(c) **拒绝 legacy 2-line 形态 + `Pred(...)` + 裸 AttrRef 比较** in 新 Rule path(alpha 直接 hard-cut,无 transition;**旧 SDK Rule 不动直到 T1.3**)| Additive + Subtractive | 走 Step 4.6.5 pre-impl grep;blast radius 在 `sdk/dsl/expr.py` + `sdk/schema.py`(若 schema 控制 Entity callable)+ tests |
+| **T1.2** | **Implemented + archived 2026-05-22**(`3aa229c6` impl / `ca68103e` archive):(a) **SDK DSL ergonomic 扩展** — `ExistsAtom.__getattr__` 返回 `AttrRef(entity_type=...)`;`User(...)` positional Ellipsis → anonymous `LogicVar`;cross-entity ref `LivesIn(li).user == User(u)` 支持并 emit 双 existence pred;(b) **DSL → application Rule bridge** — `factgraph.sdk.dsl.build_application_rule(...)` 把 SDK DSL atoms lower 到 `core.rules.where_ast` Atom types 并构造 T1.1 `application.protocol.Rule`;bridge 内部按 core `Var.name` canonicalize 同名变量,避免 `Origin.path` 导致 ports 与 predicates object inequality;(c) **新 Rule path reject** legacy 2-line 形态 + `Pred(...)` + 裸 AttrRef 比较 + RuleRef + OR shape + anonymous port。**旧 SDK Rule 不动直到 T1.3**。Canonical forms 降为 **6 equality-only / bare-existence forms**;form 4 `User(u).score > 0.5` / non-eq AttrRef compare deferred(需要 temp var + CmpAtom IR 接入)。| Additive + Subtractive | 已按轻量手动模式完成;未跑独立 Step 4.6.5 pre-impl grep,作为 T1.2 closure deviation 记录在 archived blueprint。后续 T2.2/T2.3 处理 ArithExpr/AggregateExpr 时需重新审视 non-eq AttrRef compare |
 | **T1.3** | 新旧 Rule 命名冲突方案锁定与执行(C14 deferred 项:A/B/C 三选一)— 涉及现行 `kernel.sdk.Rule` 的迁移 | 半 subtractive | 与 T5 协调:`.eval` API 完成前不能彻底替换旧 Rule;**可能 defer 到 T5 中段** |
-| **T1.4** | ports 显式声明 + `.as_(...)` template-stable + immutable after construction + atom_id 位置语义 + desc 渲染 + anonymous `...` Var 处理 | Additive | T3 RuleExpr `.as_()` 实施依赖此处的 alias 基础设施 |
+| **T1.4** | **剩余 alias / port contract slice**:ports 显式声明的用户面语义 + `.as_(...)` template-stable alias + occurrence alias validation + RuleExpr `.as_()` 所需 alias 基础设施。**不再包含**:Rule shallow immutability / atom_id 位置语义 / basic desc rendering(T1.1 已落地),anonymous `User(...)` Var handling(T1.2 已落地)。| Additive | T3 RuleExpr `.as_()` 实施依赖此处的 alias 基础设施 |
 
 **依赖**:无(foundation)
 
@@ -192,11 +192,11 @@ parent essay 体量过大(2066 行 / ~100 commitments / §3-§10 跨越 Rule bod
 ### 3.1 严格依赖图
 
 ```
-T1.1 (additive 新 Rule)
+T1.1 (additive 新 Rule) [DONE 2026-05-22]
  │
  ├── T2.1 (atom kinds ne dispatch) ───── parallel-OK after T1.1
  │
- ├── T1.2 (legacy hard-cut, subtractive)
+ ├── T1.2 (legacy hard-cut, subtractive) [DONE 2026-05-22; non-eq AttrRef deferred]
  │    │
  │    ├── T2.2 (ArithExpr)
  │    │    │
@@ -231,9 +231,9 @@ T1.1 (additive 新 Rule)
 ### 3.3 推荐串行最小执行序
 
 ```
-1. T1.1 (additive 新 Rule)        ── prerequisite for everything
+1. T1.1 (additive 新 Rule)        ── DONE / archived 2026-05-22
 2. T2.1 (ne adapter dispatch)     ── parallel-OK with later T1
-3. T1.2 (legacy hard-cut)
+3. T1.2 (legacy hard-cut)         ── DONE / archived 2026-05-22;non-eq AttrRef deferred
 4. T1.4 (port + alias)
 5. T2.2 (ArithExpr)
 6. T2.3 (AggregateExpr)

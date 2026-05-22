@@ -1,5 +1,87 @@
 # Current Operational Memory
 
+最后更新:2026-05-22(rule-expression T1.1 + T1.2 implemented and archived locally; source `ca68103e`, not pushed)
+
+## 当前阶段(2026-05-22 — RULE EXPRESSION T1.1 + T1.2 IMPLEMENTED LOCALLY)
+
+**Current local branch:** `v0.2.0-impl-t1-2-dsl-to-application-rule-2026-05-22 @ ca68103e`.
+
+**Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched during T1.1/T1.2.
+
+**Known dirty worktree outside this slice:**
+- `docs/references/working/design-points/readme.md`
+- `examples/01_sdk_check_diagnose.ipynb`
+- `examples/02_overlay_why_not_frontier.ipynb`
+- `examples/archive/01_sdk_basics.ipynb`
+- untracked `rainbird-ai sdk code/`
+
+**Workflow mode:** lightweight manual mode per
+`workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md`.
+T1 sub-slices used small blueprints and skipped full audit/Q/synthesis/preflight cadence.
+
+**T1.1 shipped state:**
+- Archived blueprint:
+  `workflow/blueprints/archive/2026-05-22_t1-1-rule-class-additive.md`.
+- Key implementation commit: `c155f3b1 feat(application): add Rule protocol DTO`.
+- Closure/archive commits: `237db48d`, `40c1c70e`.
+- Landed `factgraph.application.protocol.Rule` in
+  `src/factgraph/application/protocol/rule.py`.
+- Rule stores core AST atoms directly, exposes `atom_ids`, deterministic
+  `content_digest`, `render_desc(...)`, shallow/container immutability, and
+  rejects `RuleRefAtom`.
+- Recursive immutability hardening is explicitly deferred; core AST atom list
+  internals remain mutable.
+
+**T1.2 shipped state:**
+- Archived blueprint:
+  `workflow/blueprints/archive/2026-05-22_t1-2-dsl-to-application-rule.md`.
+- Key implementation commit: `3aa229c6 feat(sdk): add DSL to application Rule bridge`.
+- Closure/archive commits: `8df0446b`, `ca68103e`.
+- Landed `factgraph.sdk.dsl.build_application_rule(...)` and
+  `DSLToApplicationRuleError`.
+- Landed `ExistsAtom.__getattr__`, additive `AttrRef.entity_type`, positional
+  `User(...)` Ellipsis support, and unified AttrRef lowering that emits required
+  `EntityType:exists` predicates.
+- Cross-entity ref such as `LivesIn(li).user == User(u)` emits both existence
+  predicates and the field predicate.
+- Bridge rejects legacy bare AttrRef, two-line legacy form, raw `Pred(...)`,
+  raw RuleRef, OR-shaped where, and anonymous ports.
+- Bridge canonicalizes core `Var` objects by name after `parse_where_ir_to_ast`
+  so ports and predicates share object identity despite differing `Origin.path`.
+- Supported unified forms are 6 equality-only / bare-existence forms. Non-eq
+  AttrRef compare such as `User(u).score > 0.5` is deferred.
+- SDK top-level `factgraph.sdk.Rule` / `__all__` naming remains for T1.3.
+
+**Validation at T1.2 closure:**
+- Targeted and related regression command:
+  `PYTHONPATH=src python -m unittest tests.sdk.dsl.test_application_rule tests.sdk.dsl.test_existsatom_getattr tests.sdk.test_schema_ellipsis tests.application.protocol.test_rule tests.test_sdk_validation tests.test_relationship_schema tests.test_application_protocol`
+  — 87 tests OK.
+- Ruff command:
+  `python -m ruff check src/factgraph/sdk/dsl/expr.py src/factgraph/sdk/schema.py src/factgraph/sdk/dsl/application_rule.py src/factgraph/sdk/dsl/__init__.py tests/sdk/dsl/test_application_rule.py tests/sdk/dsl/test_existsatom_getattr.py tests/sdk/test_schema_ellipsis.py`
+  — clean.
+- Full `PYTHONPATH=src python -m unittest discover tests` still fails on
+  pre-existing baseline drift unrelated to T1.2(registry removal,
+  removed `meta[confidence]`, SDK `ReadPolicy` export expectations, etc.).
+
+**Known workflow deviations recorded after closure:**
+- T1.1 implementation happened on the blueprint branch instead of a paired
+  implementation branch. T1.2 corrected this with
+  `v0.2.0-impl-t1-2-dsl-to-application-rule-2026-05-22`.
+- T1.1 and T1.2 each needed 3 Step 4.2 tightening rounds; sweep discipline
+  should be stricter for future sub-slices.
+- T1.2 skipped independent Step 4.6.5 pre-impl grep despite the original track
+  plan saying hard-cut slices should run it. Treat this as a lightweight-mode
+  deviation, not a new precedent for larger subtractive slices.
+
+**Recommended next sub-slices:**
+- T1.3: SDK `Rule` naming / top-level surface conflict, possibly deferred to
+  T5 midstream.
+- T1.4: remaining ports / alias contract for RuleExpr `.as_()`; do not repeat
+  T1.1 immutability / atom_id / desc basics or T1.2 anonymous Ellipsis work.
+- T2.1: atom kind `ne` adapter gap can proceed after T1.1/T1.2.
+
+<!-- Historical 2026-05-13 official docs state follows. -->
+
 最后更新:2026-05-13(official kernel docs quickstart-only consolidation implemented locally; source pending commit, not pushed)
 
 ## 当前阶段(2026-05-13 — OFFICIAL KERNEL DOCS QUICKSTART-ONLY CONSOLIDATION IMPLEMENTED LOCALLY)
